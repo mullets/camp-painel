@@ -9,12 +9,14 @@ from . import auth
 from .db import connect, init_db, aplicar_migracoes
 from .rotas_admin import router as rotas_admin
 from .rotas_auth import router as rotas_auth
+from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
 
 app = FastAPI(title="CAMP Acervos", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(rotas_auth)
 app.include_router(rotas_admin)
+app.include_router(rotas_site)
 
 
 @app.on_event("startup")
@@ -54,7 +56,7 @@ def listar_fundos(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
 
 
 @app.get("/api/fundos/proximo")
-def proximo_fundo(u: dict = Depends(auth.exige("operador"))) -> dict:
+def proximo_fundo(u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     codigo = con.execute("SELECT codigo FROM v_proximo_fundo").fetchone()[0]
     con.close()

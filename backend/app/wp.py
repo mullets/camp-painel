@@ -1,0 +1,118 @@
+"""Cliente REST do WordPress + Tainacan. Só leitura nesta versão.
+
+Credenciais: usuário WP + Application Password (Basic Auth por HTTPS).
+Prioridade: valor em `configuracao` (editável pelo master no painel) > .env.
+"""
+from __future__ import annotations
+
+import base64
+import re
+from typing import Iterator
+
+import httpx
+
+from .config import settings
+from .db import connect
+
+RE_CODIGO = re.compile(r"\bF(\d{3})(?:-P(\d{4}))?(?:-(\d{4}))?(?:-S(\d{2}))?(?:-D(\d{5}))?\b", re.I)
+
+
+def _cfg(chave: str, padrao: str = "") -> str:
+    con = connect()
+    r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+    con.close()
+    return r[0] if r and r[0] else padrao
+
+
+def detectar_codigo(*textos: str) -> tuple[str | None, str | None, str | None]:
+    """Devolve (codigo_completo_encontrado, fundo, projeto) a partir de título/slug/metadados."""
+    for t in textos:
+        if not t:
+            continue
+        m = RE_CODIGO.search(t.replace("_", "-"))
+        if m:
+            f = f"F{m.group(1)}"
+            p = f"{f}-P{m.group(2)}" if m.group(2) else None
+            partes = [f] + [f"P{m.group(2)}" if m.group(2) else None, m.group(3), f"S{m.group(4)}" if m.group(4) else None, f"D{m.group(5)}" if m.group(5) else None]
+            codigo = "-".join(x for x in partes if x)
+            return codigo.upper(), f, p
+    return None, None, None
+
+
+class WP:
+    def __init__(self) -> None:
+        self.base = (_cfg("wp.url", settings.WP_BASE_URL)).rstrip("/")
+        usuario = _cfg("wp.usuario", settings.WP_USER)
+        senha = _cfg("wp.app_password", settings.WP_APP_PASSWORD)
+        if not senha:
+            raise RuntimeError("Application Password não configurada (Configurações → wp.app_password ou WP_APP_PASSWORD no .env)")
+        tok = base64.b64encode(f"{usuario}:{senha}".encode()).decode()
+        self.h = httpx.Client(base_url=self.base, headers={"Authorization": f"Basic {tok}", "User-Agent": "CAMP-Painel/0.3"},
+                              timeout=60, follow_redirects=True)
+
+    def _get(self, path: str, **params) -> httpx.Response:
+        r = self.h.get(path, params=params)
+        if r.status_code == 401:
+            raise RuntimeError("Site recusou as credenciais (401). Confira usuário e Application Password.")
+        r.raise_for_status()
+        return r
+
+    def _paginado(self, path: str, **params) -> Iterator[dict]:
+        page = 1
+        while True:
+            r = self._get(path, per_page=100, perpage=100, paged=page, page=page, **params)
+            dados = r.json()
+            if isinstance(dados, dict) and "items" in dados:
+                dados = dados["items"]
+            if not dados:
+                return
+            yield from dados
+            total = int(r.headers.get("X-WP-TotalPages") or r.headers.get("x-wp-totalpages") or 0)
+            if total and page >= total:
+                return
+            if not total and len(dados) < 100:
+                return
+            page += 1
+
+    # ---- Tainacan ----
+    def colecoes(self) -> list[dict]:
+        return self._get("/wp-json/tainacan/v2/collections", perpage=100).json()
+
+    def metadados_da_colecao(self, cid: int) -> list[dict]:
+        return self._get(f"/wp-json/tainacan/v2/collection/{cid}/metadata").json()
+
+    def itens(self, cid: int, status: str = "publish,draft,private,pending") -> Iterator[dict]:
+        yield from self._paginado(f"/wp-json/tainacan/v2/collection/{cid}/items", status=status, order="ASC", orderby="ID")
+
+    def taxonomias(self) -> list[dict]:
+        return self._get("/wp-json/tainacan/v2/taxonomies", perpage=100).json()
+
+    def termos(self, tid: int) -> Iterator[dict]:
+        yield from self._paginado(f"/wp-json/tainacan/v2/taxonomy/{tid}/terms", hideempty=0)
+
+    # ---- WordPress ----
+    def paginas(self) -> Iterator[dict]:
+        yield from self._paginado("/wp-json/wp/v2/pages", status="publish,draft,private", context="edit")
+
+    def quem_sou(self) -> dict:
+        return self._get("/wp-json/wp/v2/users/me", context="edit").json()
+
+
+def metadados_texto(item: dict) -> dict:
+    """Achata os metadados do item do Tainacan em {nome: texto}."""
+    out = {}
+    md = item.get("metadata") or {}
+    valores = md.values() if isinstance(md, dict) else md
+    for m in valores:
+        if not isinstance(m, dict):
+            continue
+        nome = m.get("name") or (m.get("metadatum") or {}).get("name") or "?"
+        v = m.get("value_as_string")
+        if v in (None, ""):
+            v = m.get("value")
+            if isinstance(v, list):
+                v = "; ".join(x.get("name", str(x)) if isinstance(x, dict) else str(x) for x in v)
+            elif isinstance(v, dict):
+                v = v.get("name") or str(v)
+        out[nome] = "" if v is None else str(v)
+    return out
