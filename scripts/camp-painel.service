@@ -3,10 +3,10 @@ Description=CAMP Acervos — painel de administração
 After=network.target
 
 [Service]
-User=campvision
-WorkingDirectory=/home/campvision/camp-painel
-EnvironmentFile=/home/campvision/camp-painel/backend/.env
-ExecStart=/home/campvision/camp-painel/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+User=camp
+WorkingDirectory=/home/camp/camp-painel
+EnvironmentFile=/home/camp/camp-painel/backend/.env
+ExecStart=/home/camp/camp-painel/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 Restart=always
 
 [Install]
