@@ -120,7 +120,7 @@ def autenticar(request: Request, response: Response, email: str, senha: str, lem
         con.commit(); con.close()
         raise erro
 
-    if u["totp_secret"]:
+    if u["totp_secret"] and not u["totp_secret"].startswith("PENDENTE:"):
         if not codigo_totp or not _totp_ok(u["totp_secret"], codigo_totp):
             con.close()
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Código do autenticador inválido")
@@ -154,7 +154,7 @@ def usuario_atual(camp_sessao: str | None = Cookie(default=None)) -> dict:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Faça login")
     con = connect()
     row = con.execute(
-        "SELECT u.id, u.nome, u.email, u.papel, u.precisa_trocar_senha, s.expira_em FROM sessao s "
+        "SELECT u.id, u.nome, u.email, u.papel, u.precisa_trocar_senha, s.expira_em, (u.totp_secret IS NOT NULL AND u.totp_secret NOT LIKE 'PENDENTE:%') AS totp FROM sessao s "
         "JOIN usuario u ON u.id=s.usuario_id WHERE s.id=? AND s.revogada=0 AND u.ativo=1",
         (_hash_token(camp_sessao),)).fetchone()
     con.close()

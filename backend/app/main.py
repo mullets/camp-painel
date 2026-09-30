@@ -9,6 +9,7 @@ from . import auth
 from .db import connect, init_db, aplicar_migracoes
 from .rotas_admin import router as rotas_admin
 from .rotas_auth import router as rotas_auth
+from .rotas_fundos import router as rotas_fundos
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -17,6 +18,7 @@ app = FastAPI(title="CAMP Acervos", version="0.2.0", docs_url=None, redoc_url=No
 app.include_router(rotas_auth)
 app.include_router(rotas_admin)
 app.include_router(rotas_site)
+app.include_router(rotas_fundos)
 
 
 @app.on_event("startup")
