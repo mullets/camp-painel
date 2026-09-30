@@ -32,7 +32,7 @@ MAX_TENTATIVAS = 5              # por usuário antes de bloquear
 BLOQUEIO_MIN = 15               # dobra a cada novo bloqueio
 IP_MAX_POR_MIN = 20             # tentativas por IP por minuto
 
-PAPEIS = {"leitura": 0, "operador": 1, "admin": 2}
+PAPEIS = {"leitura": 0, "operador": 1, "admin": 2, "master": 3}
 
 pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 _ip_tentativas: dict[str, deque] = defaultdict(deque)

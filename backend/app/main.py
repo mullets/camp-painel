@@ -7,12 +7,14 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from . import auth
 from .db import connect, init_db, aplicar_migracoes
+from .rotas_admin import router as rotas_admin
 from .rotas_auth import router as rotas_auth
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
 
 app = FastAPI(title="CAMP Acervos", version="0.2.0", docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(rotas_auth)
+app.include_router(rotas_admin)
 
 
 @app.on_event("startup")

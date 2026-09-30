@@ -12,7 +12,7 @@ from app.db import init_db, aplicar_migracoes  # noqa: E402
 ap = argparse.ArgumentParser()
 ap.add_argument("--nome", required=True)
 ap.add_argument("--email", required=True)
-ap.add_argument("--papel", choices=["admin", "operador", "leitura"], default="leitura")
+ap.add_argument("--papel", choices=["master", "admin", "operador", "leitura"], default="leitura")
 a = ap.parse_args()
 init_db(); aplicar_migracoes()
 s1 = getpass.getpass("Senha inicial (mín. 12 caracteres): ")
