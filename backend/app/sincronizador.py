@@ -4,7 +4,6 @@ Regras checadas (todas com a tabela de autoridade como referência):
 - item sem código detectável no título/slug/metadados
 - item com código de fundo que não existe na tabela de autoridade
 - item publicado em fundo marcado como fora do ar ou não autorizado
-- item publicado sem crédito ("Acervo ... /CAMP")
 - termo de taxonomia com código de fundo inexistente
 - fundo da tabela de autoridade sem nenhum item/termo no site (informativo)
 """
@@ -83,10 +82,6 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
                     fundos_vistos.add(f)
                     if publicado and fundos[f]["status_site"] == "fora_do_ar":
                         _divergencia(con, "item", cod, "publicado_em_fundo_fora_do_ar", "fora_do_ar", "publish"); n["divergencias"] += 1
-                if publicado:
-                    tem_credito = any("acervo" in v.lower() and "camp" in v.lower() for v in md.values())
-                    if not tem_credito:
-                        _divergencia(con, "item", cod or str(it["id"]), "sem_credito", "Acervo {agente}/CAMP", ""); n["divergencias"] += 1
                 total += 1; n["itens"] += 1
             con.execute("INSERT INTO wp_colecao (id, nome, slug, url, total_itens, json) VALUES (?,?,?,?,?,?)",
                         (cid, c.get("name"), c.get("slug"), c.get("url"), total, json.dumps(c, ensure_ascii=False)))
