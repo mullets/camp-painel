@@ -23,3 +23,20 @@ def init_db() -> None:
         con.executescript(SCHEMA.read_text(encoding="utf-8"))
         con.commit()
     con.close()
+
+
+MIGRACOES = Path(__file__).resolve().parents[2] / "db" / "migrations"
+
+
+def aplicar_migracoes() -> None:
+    """Aplica db/migrations/*.sql em ordem, uma vez cada (registro em tabela migracao)."""
+    con = connect()
+    con.execute("CREATE TABLE IF NOT EXISTS migracao (nome TEXT PRIMARY KEY, aplicada_em TEXT DEFAULT (datetime('now')))")
+    feitas = {r[0] for r in con.execute("SELECT nome FROM migracao")}
+    for arq in sorted(MIGRACOES.glob("*.sql")):
+        if arq.name in feitas:
+            continue
+        con.executescript(arq.read_text(encoding="utf-8"))
+        con.execute("INSERT INTO migracao (nome) VALUES (?)", (arq.name,))
+        con.commit()
+    con.close()

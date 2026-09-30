@@ -11,7 +11,7 @@ Acesso externo em `painel.camp.arq.br` via Cloudflare Tunnel.
 ## Estrutura
 
 ```
-backend/   API FastAPI (Python 3.11+)
+backend/   API FastAPI (Python 3.10+)
 db/        schema.sql — modelo de dados (ISAD(G)/NOBRADE + ISAAR(CPF))
 frontend/  index.html — painel (arquivo único, sem build)
 docs/      decisões e referências

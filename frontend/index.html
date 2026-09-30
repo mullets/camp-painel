@@ -260,6 +260,18 @@ tr[data-nav]:hover td:last-child::after{border-color:var(--blue)}
 .backbar .crumb{display:none}
 @media (max-width:720px){.gcrumb{padding:0 14px 8px;font-size:12.5px}}
 
+/* login */
+.login{position:fixed;inset:0;background:var(--bg);display:none;place-items:center;z-index:100;padding:16px}
+.login.on{display:grid}
+.login .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;width:min(380px,100%);padding:28px 26px;display:grid;gap:14px}
+.login .brand{padding:0 0 6px}
+.login .err{color:var(--red);font-size:13px;min-height:18px}
+.login .btn.pri{justify-content:center;padding:10px}
+.login small{color:var(--ink3);font-size:12px}
+.who{cursor:pointer}
+body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
+body:not(.admin) [data-v="config"]{display:none}
+
 /* toast */
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:var(--r);opacity:0;transition:.25s;pointer-events:none;z-index:50;font-size:13px}
 .toast.on{opacity:1;transform:translateX(-50%)}
@@ -568,6 +580,29 @@ D    sequencial contínuo no projeto</div>
 
 <div class="toast" id="toast"></div>
 
+<div class="login" id="login"><form class="box" onsubmit="fazerLogin(event)">
+  <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
+  <label class="field">E-mail<input id="lg-email" type="email" autocomplete="username" required></label>
+  <label class="field">Senha<input id="lg-senha" type="password" autocomplete="current-password" required></label>
+  <label class="field" id="lg-totp-wrap" style="display:none">Código do autenticador<input id="lg-totp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code"></label>
+  <label class="field"><span><input type="checkbox" id="lg-lembrar"> Manter conectado por 14 dias</span></label>
+  <div class="err" id="lg-err"></div>
+  <button class="btn pri" type="submit">Entrar</button>
+  <small>Acesso restrito à equipe da CAMP. Tentativas são registradas.</small>
+</form></div>
+
+<div class="modal" id="m-senha"><div class="box">
+  <div class="ph"><h2>Trocar senha</h2></div>
+  <div class="pb">
+    <p class="sub" style="margin:0">Você precisa definir uma senha nova antes de continuar. Mínimo de 12 caracteres.</p>
+    <label class="field">Senha atual<input id="ts-atual" type="password" autocomplete="current-password"></label>
+    <label class="field">Senha nova<input id="ts-nova" type="password" autocomplete="new-password"></label>
+    <label class="field">Repita<input id="ts-nova2" type="password" autocomplete="new-password"></label>
+    <div class="err" id="ts-err" style="color:var(--red);font-size:13px"></div>
+  </div>
+  <div class="pf"><button class="btn pri" onclick="trocarSenha()">Salvar senha</button></div>
+</div></div>
+
 <script>
 // ---------- dados (protótipo: substituir pela API) ----------
 const FUNDOS=[
@@ -704,7 +739,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('.search'))qres.class
 // ---------- modais / toast / tema ----------
 function openModal(id){document.getElementById(id).classList.add('on');if(id==='m-proj')nextP()}
 function closeModal(){document.querySelectorAll('.modal').forEach(m=>m.classList.remove('on'))}
-document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal()}));
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m&&m.id!=='m-senha')closeModal()}));
 let tt;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2600)}
 const th=document.getElementById('theme');th.addEventListener('change',()=>{document.documentElement.dataset.theme=th.value;try{localStorage.setItem('camp.theme',th.value)}catch(e){}});
 try{const t=localStorage.getItem('camp.theme');if(t){th.value=t;document.documentElement.dataset.theme=t}}catch(e){}
@@ -787,7 +822,17 @@ document.addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='f'){const f=document.querySelector('.content.on [data-filter]');if(f){e.preventDefault();f.focus()}}
 });
 
-renderFundos();renderFilas();renderProjetos();renderLabel();route_to(location.hash.slice(1)||'painel');
+
+// ---------- sessão ----------
+const API=async(path,opt={})=>{const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.erro||r.statusText),{status:r.status});return j};
+let EU=null;
+function aplicarUsuario(u){EU=u;document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;document.querySelector('.who .av').textContent=u.nome.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();document.querySelector('.who').title='Sair';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}}
+async function checarSessao(){try{aplicarUsuario(await API('/api/auth/eu'))}catch(e){if(location.protocol==='file:'||e.status===undefined){/* protótipo aberto sem servidor: segue sem login */return}document.getElementById('login').classList.add('on')}}
+async function fazerLogin(ev){ev.preventDefault();const err=document.getElementById('lg-err');err.textContent='';try{const u=await API('/api/auth/login',{method:'POST',body:JSON.stringify({email:document.getElementById('lg-email').value,senha:document.getElementById('lg-senha').value,lembrar:document.getElementById('lg-lembrar').checked,codigo_totp:document.getElementById('lg-totp').value||null})});aplicarUsuario(u);toast(`Bem-vindo, ${u.nome}`)}catch(e){err.textContent=e.message;if(/autenticador/i.test(e.message))document.getElementById('lg-totp-wrap').style.display=''}}
+async function trocarSenha(){const err=document.getElementById('ts-err');const n=document.getElementById('ts-nova').value;if(n!==document.getElementById('ts-nova2').value){err.textContent='As senhas não coincidem';return}try{await API('/api/auth/trocar-senha',{method:'POST',body:JSON.stringify({senha_atual:document.getElementById('ts-atual').value,senha_nova:n})});document.getElementById('m-senha').classList.remove('on');toast('Senha alterada. Entre de novo.');location.reload()}catch(e){err.textContent=e.message}}
+document.querySelector('.who').addEventListener('click',async()=>{if(!EU)return;if(confirm('Sair do painel?')){await API('/api/auth/logout',{method:'POST'}).catch(()=>{});location.reload()}});
+
+renderFundos();renderFilas();renderProjetos();renderLabel();route_to(location.hash.slice(1)||'painel');checarSessao();
 </script>
 </body>
 </html>

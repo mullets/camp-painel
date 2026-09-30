@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     WP_BASE_URL: str = "https://camp.arq.br"
     WP_USER: str = "camp"
     WP_APP_PASSWORD: str = ""
+    # True quando o acesso é por HTTPS (túnel Cloudflare). False só em rede local por http://.
+    CAMP_COOKIE_SECURE: bool = True
 
 
 settings = Settings()
