@@ -72,13 +72,9 @@ FORA_DO_AR = {"F006": "retirado do ar a pedido da família"}
 def caminho_banco(arg: str | None) -> str:
     if arg:
         return arg
-    env = RAIZ / "backend" / ".env"
-    if env.exists():
-        for linha in env.read_text().splitlines():
-            if linha.startswith("CAMP_DB_PATH="):
-                valor = linha.split("=", 1)[1].strip()
-                return str((RAIZ / "backend" / valor).resolve()) if not os.path.isabs(valor) else valor
-    return str(RAIZ / "backend" / "camp.db")
+    sys.path.insert(0, str(RAIZ / "backend"))
+    from app.config import settings  # mesmo caminho que o serviço usa
+    return settings.CAMP_DB_PATH
 
 
 def main() -> int:

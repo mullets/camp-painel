@@ -19,3 +19,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Caminho relativo do banco é SEMPRE relativo à pasta backend/, não à pasta atual.
+if not Path(settings.CAMP_DB_PATH).is_absolute():
+    settings.CAMP_DB_PATH = str((ENV.parent / settings.CAMP_DB_PATH).resolve())

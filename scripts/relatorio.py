@@ -8,7 +8,9 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]
 from app.db import connect  # noqa: E402
 
 ap = argparse.ArgumentParser(); ap.add_argument("--site", action="store_true"); a = ap.parse_args()
+from app.config import settings  # noqa: E402
 con = connect()
+print(f"banco: {settings.CAMP_DB_PATH}")
 
 def bloco(titulo, sql, largura=None):
     print(f"\n### {titulo}")
