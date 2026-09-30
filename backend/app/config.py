@@ -1,8 +1,12 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ENV = Path(__file__).resolve().parents[1] / ".env"   # sempre backend/.env, de onde quer que rode
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(ENV), env_prefix="", extra="ignore")
 
     CAMP_DB_PATH: str = "./camp.db"
     CAMP_QNAP_ROOT: str = "/mnt/qnap/acervos"
