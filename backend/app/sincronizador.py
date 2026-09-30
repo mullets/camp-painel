@@ -28,7 +28,7 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
     con.commit()
     n = {"colecoes": 0, "itens": 0, "termos": 0, "paginas": 0, "divergencias": 0}
     try:
-        wp = WP()
+        wp = WP(log=log)
         eu = wp.quem_sou()
         log(f"conectado a {wp.base} como {eu.get('name')} ({', '.join(eu.get('roles', []))})")
 
@@ -54,8 +54,11 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
 
         # coleções e itens
         fundos_vistos = set()
-        for c in wp.colecoes():
+        cols = wp.colecoes()
+        log(f"{len(cols)} coleções encontradas")
+        for c in cols:
             cid = c["id"]; total = 0
+            log(f"  coleção {c.get('name')} (id {cid})…")
             for it in wp.itens(cid):
                 md = metadados_texto(it)
                 cod, f, p = detectar_codigo(it.get("title", ""), it.get("slug", ""), *md.values())
@@ -88,7 +91,7 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
             con.execute("INSERT INTO wp_colecao (id, nome, slug, url, total_itens, json) VALUES (?,?,?,?,?,?)",
                         (cid, c.get("name"), c.get("slug"), c.get("url"), total, json.dumps(c, ensure_ascii=False)))
             n["colecoes"] += 1
-            log(f"  coleção {c.get('name')}: {total} itens")
+            log(f"  coleção {c.get('name')}: {total} itens gravados")
             con.commit()
 
         for f, r in fundos.items():

@@ -40,7 +40,8 @@ def detectar_codigo(*textos: str) -> tuple[str | None, str | None, str | None]:
 
 
 class WP:
-    def __init__(self) -> None:
+    def __init__(self, log=None) -> None:
+        self.log = log or (lambda *_: None)
         self.base = (_cfg("wp.url", settings.WP_BASE_URL)).rstrip("/")
         usuario = _cfg("wp.usuario", settings.WP_USER)
         senha = _cfg("wp.app_password", settings.WP_APP_PASSWORD)
@@ -57,20 +58,31 @@ class WP:
         r.raise_for_status()
         return r
 
-    def _paginado(self, path: str, **params) -> Iterator[dict]:
-        page = 1
-        while True:
-            r = self._get(path, per_page=100, perpage=100, paged=page, page=page, **params)
+    def _paginado(self, path: str, log=None, **params) -> Iterator[dict]:
+        """Pagina com proteção: para se a página repetir (servidor ignorando `paged`) ou passar de 500 páginas."""
+        page, vistos = 1, set()
+        while page <= 500:
+            q = {"perpage": 100, "paged": page, **params}
+            if "per_page" in q: q["page"] = page; q.pop("perpage"); q.pop("paged")
+            q = {k: v for k, v in q.items() if v is not None}
+            r = self._get(path, **q)
             dados = r.json()
             if isinstance(dados, dict) and "items" in dados:
                 dados = dados["items"]
             if not dados:
                 return
-            yield from dados
-            total = int(r.headers.get("X-WP-TotalPages") or r.headers.get("x-wp-totalpages") or 0)
-            if total and page >= total:
+            ids = {d.get("id") for d in dados if isinstance(d, dict)}
+            if ids and ids <= vistos:          # mesma página de novo -> servidor não paginou
                 return
-            if not total and len(dados) < 100:
+            vistos |= ids
+            total_pag = int(r.headers.get("X-WP-TotalPages") or r.headers.get("x-wp-totalpages") or 0)
+            total = r.headers.get("X-WP-Total") or r.headers.get("x-wp-total") or "?"
+            if log:
+                log(f"    página {page}{'/'+str(total_pag) if total_pag else ''} · {len(vistos)} de {total}")
+            yield from dados
+            if total_pag and page >= total_pag:
+                return
+            if not total_pag and len(dados) < 100:
                 return
             page += 1
 
@@ -82,17 +94,17 @@ class WP:
         return self._get(f"/wp-json/tainacan/v2/collection/{cid}/metadata").json()
 
     def itens(self, cid: int, status: str = "publish,draft,private,pending") -> Iterator[dict]:
-        yield from self._paginado(f"/wp-json/tainacan/v2/collection/{cid}/items", status=status, order="ASC", orderby="ID")
+        yield from self._paginado(f"/wp-json/tainacan/v2/collection/{cid}/items", log=self.log, status=status, order="ASC", orderby="id")
 
     def taxonomias(self) -> list[dict]:
         return self._get("/wp-json/tainacan/v2/taxonomies", perpage=100).json()
 
     def termos(self, tid: int) -> Iterator[dict]:
-        yield from self._paginado(f"/wp-json/tainacan/v2/taxonomy/{tid}/terms", hideempty=0)
+        yield from self._paginado(f"/wp-json/tainacan/v2/taxonomy/{tid}/terms", log=None, hideempty=0)
 
     # ---- WordPress ----
     def paginas(self) -> Iterator[dict]:
-        yield from self._paginado("/wp-json/wp/v2/pages", status="publish,draft,private", context="edit")
+        yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None)
 
     def quem_sou(self) -> dict:
         return self._get("/wp-json/wp/v2/users/me", context="edit").json()

@@ -3,7 +3,8 @@
     python scripts/sincronizar_site.py            # sincroniza e imprime resumo
     python scripts/sincronizar_site.py --relatorio  # só mostra as divergências da última execução
 """
-import argparse, sys
+import argparse, functools, sys
+print = functools.partial(print, flush=True)  # progresso aparece na hora, mesmo redirecionado
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "backend"))
 from app.db import init_db, aplicar_migracoes, connect  # noqa: E402
 
@@ -11,7 +12,7 @@ ap = argparse.ArgumentParser(); ap.add_argument("--relatorio", action="store_tru
 init_db(); aplicar_migracoes()
 if not a.relatorio:
     from app.sincronizador import executar
-    r = executar()
+    r = executar(log=print)
     if not r["ok"]:
         sys.exit(1)
 con = connect()
