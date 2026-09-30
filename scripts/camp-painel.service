@@ -6,7 +6,7 @@ After=network.target
 User=camp
 WorkingDirectory=/home/camp/camp-painel
 EnvironmentFile=/home/camp/camp-painel/backend/.env
-ExecStart=/home/camp/camp-painel/.venv/bin/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+ExecStart=/home/camp/camp-painel/.venv/bin/uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
 Restart=always
 
 [Install]
