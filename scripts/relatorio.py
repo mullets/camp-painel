@@ -3,7 +3,8 @@
     python scripts/relatorio.py            # tudo
     python scripts/relatorio.py --site     # só o espelho do site
 """
-import argparse, sys
+import argparse, signal, sys
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)  # permite "| head" sem traceback
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "backend"))
 from app.db import connect  # noqa: E402
 

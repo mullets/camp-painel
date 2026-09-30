@@ -10,6 +10,7 @@ from .db import connect, init_db, aplicar_migracoes
 from .rotas_admin import router as rotas_admin
 from .rotas_auth import router as rotas_auth
 from .rotas_fundos import router as rotas_fundos
+from .rotas_projetos import router as rotas_projetos
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -19,6 +20,7 @@ app.include_router(rotas_auth)
 app.include_router(rotas_admin)
 app.include_router(rotas_site)
 app.include_router(rotas_fundos)
+app.include_router(rotas_projetos)
 
 
 @app.on_event("startup")
