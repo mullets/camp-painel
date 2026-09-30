@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CAMP Acervos — Administração</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#E9EBEC; --surface:#FFFFFF; --surface2:#F3F4F5; --line:#D3D7DB; --line2:#E6E8EA;
+  --ink:#1B2430; --ink2:#4C5866; --ink3:#7C8794;
+  --blue:#1E4B8F; --blue-soft:#E3EAF6; --amber:#B7761A; --amber-soft:#F8EEDC;
+  --red:#B22E2E; --red-soft:#F7E1E1; --green:#2A7A57; --green-soft:#DDEFE6;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:6px; --side:232px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#141920; --surface:#1C222B; --surface2:#232B35; --line:#33404D; --line2:#2A3440;
+  --ink:#ECEFF2; --ink2:#B1BAC4; --ink3:#7E8894;
+  --blue:#7FA6E6; --blue-soft:#22314A; --amber:#E0A040; --amber-soft:#3A2E17;
+  --red:#E37070; --red-soft:#3E2020; --green:#5EBB8F; --green-soft:#1B3529;
+}}
+:root[data-theme="dark"]{
+  --bg:#141920; --surface:#1C222B; --surface2:#232B35; --line:#33404D; --line2:#2A3440;
+  --ink:#ECEFF2; --ink2:#B1BAC4; --ink3:#7E8894;
+  --blue:#7FA6E6; --blue-soft:#22314A; --amber:#E0A040; --amber-soft:#3A2E17;
+  --red:#E37070; --red-soft:#3E2020; --green:#5EBB8F; --green-soft:#1B3529;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*{box-sizing:border-box}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--blue)}
+code,.mono{font-family:var(--mono);font-size:.92em}
+
+/* layout */
+.app{display:grid;grid-template-columns:var(--side) 1fr;height:100%}
+.side{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+.brand .mark{width:30px;height:30px;border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:.5px}
+.brand b{font-weight:600;display:block;line-height:1.2}
+.brand small{color:var(--ink3)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:var(--r);color:var(--ink2);cursor:pointer}
+.nav button svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav button:hover{background:var(--surface2);color:var(--ink)}
+.nav button.on{background:var(--blue-soft);color:var(--blue);font-weight:500}
+.nav button .n{margin-left:auto;font-family:var(--mono);font-size:11px;background:var(--surface2);color:var(--ink2);padding:1px 6px;border-radius:10px}
+.nav button.on .n{background:var(--surface);color:var(--blue)}
+.nav .grp{margin:12px 10px 4px;font-size:11.5px;color:var(--ink3)}
+.side .foot{margin-top:auto;padding:10px;font-size:12px;color:var(--ink3);border-top:1px solid var(--line2)}
+.main{display:flex;flex-direction:column;min-width:0;overflow:auto}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:12px;padding:14px 26px 10px}
+.search{flex:1;max-width:520px;position:relative}
+.search input{width:100%;padding:9px 12px 9px 36px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);outline:none}
+.search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.search svg{position:absolute;left:12px;top:11px;width:15px;height:15px;stroke:var(--ink3);fill:none;stroke-width:1.8}
+.search .hint{position:absolute;right:10px;top:9px;font-size:11px;color:var(--ink3);font-family:var(--mono)}
+.search .res{position:absolute;left:0;right:0;top:42px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 12px 30px rgba(0,0,0,.14);display:none;overflow:hidden}
+.search .res.open{display:block}
+.search .res div{padding:9px 12px;display:flex;gap:10px;align-items:center;cursor:pointer;border-top:1px solid var(--line2)}
+.search .res div:first-child{border-top:0}
+.search .res div:hover{background:var(--surface2)}
+.top .who{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:13px}
+.av{width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:11px;font-weight:600}
+.content{padding:8px 26px 40px;display:none}
+.content.on{display:block}
+h1{font-size:20px;font-weight:600;margin:6px 0 2px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 18px;max-width:70ch}
+h2{font-size:14px;font-weight:600;margin:0 0 10px}
+.hdr{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.hdr .sub{margin:0}
+.hdr .act{margin-left:auto;display:flex;gap:8px}
+
+/* controls */
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:var(--r);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--surface2)}
+.btn.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.sm{padding:4px 9px;font-size:12.5px}
+.btn:focus-visible,input:focus-visible,select:focus-visible,.nav button:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.tag{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
+.tag.b{background:var(--blue-soft);color:var(--blue)}.tag.a{background:var(--amber-soft);color:var(--amber)}
+.tag.r{background:var(--red-soft);color:var(--red)}.tag.g{background:var(--green-soft);color:var(--green)}
+.code{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--surface2);padding:1px 6px;border-radius:4px;white-space:nowrap}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2)}
+.field input,.field select,.field textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink)}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px var(--blue-soft)}
+.field .help{font-size:12px;color:var(--ink3)}
+
+/* panels & tables */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.panel .ph{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line2)}
+.panel .ph h2{margin:0}
+.panel .ph .act{margin-left:auto;display:flex;gap:6px}
+.panel .pb{padding:16px}
+.grid{display:grid;gap:16px}
+.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:500;color:var(--ink3);font-size:12.5px;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--line2);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--surface2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.stat{padding:14px 16px}
+.stat .v{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.stat .l{color:var(--ink2);font-size:13px;margin-top:2px}
+.stat .d{font-size:12px;margin-top:6px}
+.bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue)}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line2)}
+.list li:first-child{border-top:0}
+.list .t{flex:1;min-width:0}
+.list .t small{display:block;color:var(--ink3)}
+.empty{padding:28px;text-align:center;color:var(--ink3)}
+.steps{display:flex;gap:0;font-size:12px}
+.steps span{flex:1;text-align:center;padding:6px 4px;background:var(--surface2);color:var(--ink3);border-right:1px solid var(--surface)}
+.steps span:first-child{border-radius:var(--r) 0 0 var(--r)}.steps span:last-child{border-radius:0 var(--r) var(--r) 0;border-right:0}
+.steps span.done{background:var(--green-soft);color:var(--green)}
+.steps span.cur{background:var(--blue-soft);color:var(--blue);font-weight:500}
+.steps span.err{background:var(--red-soft);color:var(--red)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.tabs button{background:none;border:0;padding:8px 12px;color:var(--ink2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--blue);border-color:var(--blue);font-weight:500}
+.mono-block{font-family:var(--mono);font-size:12.5px;white-space:pre;background:var(--surface2);padding:12px 14px;border-radius:var(--r);overflow:auto;line-height:1.6}
+
+/* fundos register */
+.sig{display:inline-grid;place-items:center;width:44px;height:30px;border:1.5px solid var(--ink);font-family:var(--mono);font-weight:500;font-size:12px;letter-spacing:.5px}
+.sig.na{border-style:dashed;color:var(--ink3);border-color:var(--ink3)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px}
+.kv dt{color:var(--ink3)}.kv dd{margin:0}
+
+/* labels */
+.lab-wrap{display:grid;grid-template-columns:320px 1fr;gap:16px}
+.lab-preview{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);padding:28px;display:grid;place-items:center;min-height:360px;overflow:auto}
+.label{background:#fff;color:#111;border:1px solid #999;font-family:var(--sans);position:relative;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.2)}
+.label .sidebar{position:absolute;left:0;top:0;bottom:0;width:22px;border-right:1.5px solid #111;display:grid;place-items:center}
+.label .sidebar span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:8px;letter-spacing:1.2px;white-space:nowrap}
+.label .body{position:absolute;left:22px;top:0;right:0;bottom:0;padding:9px 10px}
+.label .logo{font-family:var(--mono);font-weight:500;font-size:9px;letter-spacing:1px;border:1.5px solid #111;padding:1px 4px;display:inline-block}
+.label .big{font-family:var(--mono);font-weight:500;letter-spacing:.5px}
+.label .row{display:flex;gap:10px;font-size:9px;line-height:1.3}
+.label .row b{display:block;font-weight:600;font-size:8px;color:#555}
+.label svg{display:block}
+.qty{display:flex;align-items:center;gap:8px}
+.qty input{width:64px}
+.printgrid{display:none}
+@media print{
+  body{background:#fff}
+  .app,.top,.side,.content{display:block!important;padding:0;border:0}
+  .side,.top,.content:not(#v-etiquetas),#v-etiquetas .hdr,#v-etiquetas .lab-form,#v-etiquetas .lab-preview,#v-etiquetas .tabs,.lab-note{display:none!important}
+  .lab-wrap{display:block}
+  .printgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6mm;padding:8mm}
+  .label{box-shadow:none;page-break-inside:avoid}
+}
+
+/* desktop: drawer, sidebar collapse, sorting, filters */
+.app.collapsed{--side:64px}
+.app.collapsed .brand div,.app.collapsed .nav button span:not(.n),.app.collapsed .nav .grp,.app.collapsed .side .foot,.app.collapsed .nav button .n{display:none}
+.app.collapsed .nav button{justify-content:center;padding:10px}
+.app.collapsed .brand{justify-content:center;padding-bottom:14px}
+.collapse{position:absolute;right:-12px;top:22px;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--surface);cursor:pointer;display:grid;place-items:center;color:var(--ink3);z-index:6}
+.collapse svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
+.side{position:relative}
+.side .nav button .n{transition:none}
+kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--ink3);background:var(--surface)}
+.nav button kbd{margin-left:auto;opacity:0;transition:opacity .15s}
+.nav button:hover kbd{opacity:1}
+.nav button .n+kbd{margin-left:6px}
+.filterbar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.filterbar input{padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-width:220px}
+.filterbar input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px var(--blue-soft)}
+.filterbar .cnt{margin-left:auto;font-size:12.5px;color:var(--ink3)}
+thead th{position:sticky;top:0;background:var(--surface);z-index:1}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--ink)}
+th.sortable::after{content:"";display:inline-block;width:0;height:0;margin-left:6px;border:4px solid transparent;border-top-color:var(--line);vertical-align:-3px}
+th.sortable.asc::after{border-top-color:transparent;border-bottom-color:var(--ink);vertical-align:2px}
+th.sortable.desc::after{border-top-color:var(--ink)}
+tbody tr[data-row]{cursor:pointer}
+tbody tr.sel td{background:var(--blue-soft)}
+.tw{max-height:calc(100vh - 230px);overflow:auto}
+.main.with-drawer{display:grid;grid-template-columns:1fr 400px;grid-template-rows:auto 1fr}
+.main.with-drawer .top{grid-column:1/-1}
+.drawer{display:none;border-left:1px solid var(--line);background:var(--surface);position:sticky;top:0;height:calc(100vh - env(safe-area-inset-top,0px));overflow:auto}
+.main.with-drawer .drawer{display:block}
+.drawer .dh{display:flex;align-items:flex-start;gap:10px;padding:18px 20px 14px;border-bottom:1px solid var(--line2)}
+.drawer .dh h2{margin:0;font-size:16px}
+.drawer .dh small{display:block;color:var(--ink3);margin-top:2px}
+.drawer .db{padding:16px 20px;display:grid;gap:18px}
+.drawer .db h3{font-size:12.5px;color:var(--ink3);font-weight:500;margin:0 0 8px}
+.drawer .kv{grid-template-columns:120px 1fr}
+.drawer .act{display:flex;gap:8px;flex-wrap:wrap}
+.drawer textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);resize:vertical}
+.hist li{padding:6px 0;border-top:1px solid var(--line2);font-size:13px;display:flex;gap:10px}
+.hist li:first-child{border-top:0}
+.hist li time{color:var(--ink3);font-family:var(--mono);font-size:11.5px;white-space:nowrap;padding-top:2px}
+.hist{list-style:none;margin:0;padding:0}
+.shortcuts{font-size:12px;color:var(--ink3);display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+@media (min-width:1500px){.content{padding-left:40px;padding-right:40px}.g2.wide3{grid-template-columns:1fr 1fr 1fr}}
+@media (max-width:1180px){.main.with-drawer{grid-template-columns:1fr}.main.with-drawer .drawer{position:fixed;right:0;top:0;bottom:0;width:min(420px,92vw);z-index:30;box-shadow:-12px 0 30px rgba(0,0,0,.18);height:auto}}
+@media (max-width:720px){.collapse,.nav button kbd{display:none}.tw{max-height:none}}
+
+/* navegação em profundidade: fundo > projeto > item */
+.crumb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink3);margin:4px 0 10px;flex-wrap:wrap}
+.crumb a{color:var(--ink2);text-decoration:none;cursor:pointer}.crumb a:hover{color:var(--blue);text-decoration:underline}
+.crumb b{color:var(--ink);font-weight:500}
+.code{cursor:pointer}.code:hover{background:var(--blue-soft);color:var(--blue)}
+.dethdr{display:flex;gap:18px;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap}
+.dethdr .sig{width:64px;height:44px;font-size:17px}
+.dethdr h1{margin:0}
+.dethdr .meta{color:var(--ink2);font-size:13.5px;margin-top:2px}
+.dethdr .act{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.thumb{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;position:relative}
+.thumb:hover{border-color:var(--blue)}
+.thumb svg{width:100%;display:block;background:#fff}
+.thumb .cap{padding:6px 8px;font-size:11.5px;line-height:1.35}
+.thumb .cap .code{font-size:10.5px;display:block;background:none;padding:0;color:var(--ink3)}
+.thumb .flag{position:absolute;top:6px;right:6px}
+.viewer{display:grid;grid-template-columns:1fr 360px;gap:16px}
+.viewer .img{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);display:grid;place-items:center;padding:18px;min-height:420px}
+.viewer .img svg{max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+.pager{display:flex;gap:8px;align-items:center;margin-left:auto}
+.pager span{font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.contacts{background:#fff;border:1px solid var(--line);padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.contacts svg{width:100%;display:block;border:1px solid #ddd}
+@media (max-width:980px){.viewer{grid-template-columns:1fr}}
+
+/* orientação: voltar, trilha, linhas abríveis */
+.backbar{display:flex;align-items:center;gap:10px;margin:2px 0 14px;flex-wrap:wrap}
+.backbar .btn.back{padding-left:8px}
+.backbar .btn.back svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.crumb{margin:0;font-size:13.5px;padding:6px 10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.crumb a{padding:2px 0}
+.crumb .home svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-2px}
+tr[data-nav] td:last-child{position:relative;padding-right:34px}
+tr[data-nav] td:last-child::after{content:"";position:absolute;right:14px;top:50%;width:7px;height:7px;border-right:1.5px solid var(--ink3);border-bottom:1.5px solid var(--ink3);transform:translateY(-50%) rotate(-45deg)}
+tr[data-nav]:hover td:last-child::after{border-color:var(--blue)}
+.drawer .dh .btn{margin-top:2px}
+.hint-rows{font-size:12.5px;color:var(--ink3);padding:8px 14px;border-bottom:1px solid var(--line2)}
+.top .where{font-size:13px;color:var(--ink2);display:flex;align-items:center;gap:6px;min-width:0}
+.top .where b{font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+.top .where .btn.sm{padding:3px 8px}
+@media (max-width:720px){.top .where{display:none}.backbar .crumb{font-size:12.5px}}
+
+.gcrumb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink3);padding:0 26px 10px;flex-wrap:wrap}
+.gcrumb a{color:var(--ink2);cursor:pointer;text-decoration:none;padding:2px 4px;border-radius:4px}
+.gcrumb a:hover{background:var(--surface);color:var(--blue)}
+.gcrumb b{color:var(--ink);font-weight:500;padding:2px 4px}
+.gcrumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-2px}
+.gcrumb .sep{color:var(--line)}
+.backbar .crumb{display:none}
+@media (max-width:720px){.gcrumb{padding:0 14px 8px;font-size:12.5px}}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:var(--r);opacity:0;transition:.25s;pointer-events:none;z-index:50;font-size:13px}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.modal{position:fixed;inset:0;background:rgba(10,14,20,.5);display:none;place-items:center;z-index:40;padding:16px}
+.modal.on{display:grid}
+.modal .box{background:var(--surface);border-radius:8px;width:min(560px,100%);max-height:90vh;overflow:auto;border:1px solid var(--line)}
+.modal .box .ph{padding:14px 18px;border-bottom:1px solid var(--line2);display:flex;align-items:center}
+.modal .box .pb{padding:18px;display:grid;gap:14px}
+.modal .box .pf{padding:12px 18px;border-top:1px solid var(--line2);display:flex;justify-content:flex-end;gap:8px}
+.x{margin-left:auto;background:none;border:0;font-size:18px;cursor:pointer;color:var(--ink3)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:980px){
+  .g3,.g4{grid-template-columns:repeat(2,1fr)}
+  .lab-wrap{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  .app{grid-template-columns:1fr;grid-template-rows:1fr auto}
+  .side{order:2;flex-direction:row;padding:6px 8px;border-right:0;border-top:1px solid var(--line);overflow-x:auto;gap:0;position:sticky;bottom:0;background:var(--surface);padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+  .brand,.side .foot,.nav .grp{display:none}
+  .nav{flex-direction:row;gap:2px;width:100%}
+  .nav button{flex-direction:column;gap:3px;font-size:10.5px;padding:6px 8px;min-width:64px;justify-content:center}
+  .nav button .n{display:none}
+  .top{padding:12px 14px 8px}.top .who span{display:none}
+  .content{padding:4px 14px 30px}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .hdr .act{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side"><button class="collapse" id="collapse" title="Recolher barra lateral (Cmd+B)"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
+  <nav class="nav" id="nav">
+    <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Painel<kbd>1</kbd></button>
+    <div class="grp">Operação</div>
+    <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Filas de processamento<span class="n" id="n-filas">3</span><kbd>2</kbd></button>
+    <button data-v="solicitacoes"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg>Solicitações<span class="n" id="n-sol">4</span><kbd>3</kbd></button>
+    <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Erros relatados<span class="n" id="n-err">5</span><kbd>4</kbd></button>
+    <div class="grp">Acervo</div>
+    <button data-v="fundos"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M3 10h18"/></svg>Fundos<kbd>5</kbd></button>
+    <button data-v="arquitetos"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Arquitetos<kbd>6</kbd></button>
+    <button data-v="projetos"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Projetos<kbd>7</kbd></button>
+    <button data-v="etiquetas"><svg viewBox="0 0 24 24"><path d="M3 12l9-9h9v9l-9 9z"/><circle cx="16" cy="8" r="1.5"/></svg>Etiquetas<kbd>8</kbd></button>
+    <div class="grp">Sistema</div>
+    <button data-v="config"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>Configurações<kbd>9</kbd></button>
+  </nav>
+  <div class="foot">Servidor: campvision · QNAP montado<br>Sincronizado há 4 min</div>
+</aside>
+
+<main class="main">
+  <div class="top">
+    <div class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="q" placeholder="Buscar por código, arquiteto ou projeto" autocomplete="off">
+      <span class="hint">F0xx-P000x</span>
+      <div class="res" id="qres"></div>
+    </div>
+    <div class="where" id="where"></div><div class="who"><span>Rafael</span><div class="av">RM</div></div>
+  </div>
+
+  <div class="gcrumb" id="gcrumb"></div>
+  <!-- PAINEL -->
+  <section class="content on" id="v-painel">
+    <div class="hdr"><div><h1>Sábado, 26 de setembro</h1><p class="sub">Estado do acervo hoje. Tudo o que precisa de decisão sua aparece primeiro.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções</span><span><kbd>F</kbd> filtrar tabela</span><span><kbd>⌘B</kbd> barra lateral</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
+    <div class="grid g4" style="margin-bottom:16px">
+      <div class="panel stat"><div class="v">3</div><div class="l">projetos na fila do CAMP Vision</div><div class="d"><span class="tag b">1 processando</span></div></div>
+      <div class="panel stat"><div class="v">4</div><div class="l">solicitações de material em alta</div><div class="d"><span class="tag a">2 aguardam resposta</span></div></div>
+      <div class="panel stat"><div class="v">5</div><div class="l">erros relatados em aberto</div><div class="d"><span class="tag r">1 autoria divergente</span></div></div>
+      <div class="panel stat"><div class="v">30</div><div class="l">fundos cadastrados</div><div class="d">próximo código livre <span class="code">F031</span></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="panel"><div class="ph"><h2>Precisa de você</h2></div><div class="pb">
+        <ul class="list">
+          <li><span class="tag r">erro</span><div class="t">Prancha de Salvador Candia dentro do Safra Mooca<small><span class="code">F014-P0004</span> autoria divergente · bloqueia publicação</small></div><button class="btn sm" onclick="nav('projeto/F014-P0004')">Abrir</button></li>
+          <li><span class="tag a">pedido</span><div class="t">Editora Romano Guerra pede 6 pranchas em TIFF<small>F024 Paulo Mendes da Rocha · aguarda orçamento</small></div><button class="btn sm" onclick="go('solicitacoes')">Ver</button></li>
+          <li><span class="tag b">fila</span><div class="t">Lote "PLANTAS 9" concluído, aguarda sua revisão<small><span class="code">F023-P0011</span> 274 folhas · contatos.jpg gerado</small></div><button class="btn sm" onclick="nav('projeto/F023-P0011')">Revisar</button></li>
+          <li><span class="tag">fundo</span><div class="t">Carlos Henrique Heck sem código de fundo<small>material já em digitalização, precisa reservar F031</small></div><button class="btn sm" onclick="go('fundos')">Reservar</button></li>
+        </ul>
+      </div></div>
+      <div class="panel"><div class="ph"><h2>Pipeline hoje</h2><span class="tag" style="margin-left:auto">Windows → QNAP → CAMP Vision → Tainacan</span></div><div class="pb">
+        <div class="kv">
+          <dt>Aguardando F12 na estação Contex</dt><dd>2 projetos (~1,4 GB)</dd>
+          <dt>Enviados ao QNAP hoje</dt><dd>3 projetos · 118 TIF</dd>
+          <dt>CAMP Vision 2</dt><dd>1 processando · 1 concluído · 1 na fila</dd>
+          <dt>Rascunhos no Tainacan</dt><dd>41 itens esperando publicação</dd>
+          <dt>Publicados esta semana</dt><dd>58 itens em 11 fundos</dd>
+        </div>
+        <div style="margin-top:14px"><h2>Digitalização por fundo (mês)</h2>
+          <div style="display:grid;gap:8px;font-size:13px">
+            <div>Barillari <span class="code">F020</span><div class="bar"><i style="width:82%"></i></div></div>
+            <div>Francisco Segnini Jr. <span class="code">F010</span><div class="bar"><i style="width:55%"></i></div></div>
+            <div>Oswaldo Corrêa Gonçalves <span class="code">F023</span><div class="bar"><i style="width:40%"></i></div></div>
+            <div>Joaquim Barretto <span class="code">F014</span><div class="bar"><i style="width:22%"></i></div></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- FILAS -->
+  <section class="content" id="v-filas">
+    <div class="hdr"><div><h1>Filas de processamento</h1><p class="sub">Listas de pastas para o CAMP Vision catalogar. Cada lista aponta para uma pasta do QNAP e segue os portões de aprovação até virar rascunho no Tainacan.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-lista')">Nova lista</button></div></div>
+    <div class="panel"><div class="filterbar"><input placeholder="Filtrar listas… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+      <thead><tr><th>Lista</th><th>Fundo / projeto</th><th>Pasta no QNAP</th><th class="num">Folhas</th><th>Etapa</th><th>Aprovação</th><th></th></tr></thead>
+      <tbody id="filas-body"></tbody>
+    </table></div></div>
+    <p class="sub" style="margin-top:14px;font-size:13px">Etapas: <b>enviado</b> (status.json = enviado_windows) → <b>processando</b> (CAMP Vision 2) → <b>revisão</b> (você confere contatos.jpg e outliers) → <b>rascunho</b> (itens no Tainacan) → <b>publicado</b>. Uma lista só avança para rascunho se o projeto tiver a flag <em>autorizado para o site</em>.</p>
+  </section>
+
+  <!-- SOLICITAÇÕES -->
+  <section class="content" id="v-solicitacoes">
+    <div class="hdr"><div><h1>Solicitações de material em alta</h1><p class="sub">Pedidos de TIFF ou JPG em resolução total feitos pelo site ou por e-mail. Registre quem pediu, para quê, e o que foi entregue.</p></div><div class="act"><button class="btn" onclick="toast('Exportado solicitacoes.csv')">Exportar CSV</button><button class="btn pri" onclick="toast('Formulário de nova solicitação (protótipo)')">Registrar pedido</button></div></div>
+    <div class="tabs"><button class="on">Abertas (4)</button><button>Entregues (23)</button><button>Recusadas (2)</button></div>
+    <div class="panel"><div class="filterbar"><input placeholder="Filtrar pedidos… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+      <thead><tr><th>Solicitante</th><th>Material</th><th>Finalidade</th><th>Recebido</th><th>Situação</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Editora Romano Guerra<br><small class="mono">livros@romanoguerra.com.br</small></td><td><span class="code">F024-P0007</span> 6 pranchas TIFF</td><td>Publicação impressa</td><td>23 set</td><td><span class="tag a">aguarda orçamento</span></td><td><button class="btn sm">Abrir</button></td></tr>
+        <tr><td>Marina Costa (FAU USP)<br><small class="mono">marina.costa@usp.br</small></td><td><span class="code">F020-P0003</span> 17 folhas JPG 3000px</td><td>Dissertação</td><td>24 set</td><td><span class="tag a">aguarda resposta</span></td><td><button class="btn sm">Abrir</button></td></tr>
+        <tr><td>Família Barretto<br><small class="mono">via formulário do site</small></td><td><span class="code">F014-P0002</span> Agência Banespa, todas</td><td>Uso pessoal / família</td><td>25 set</td><td><span class="tag b">em preparação</span></td><td><button class="btn sm">Abrir</button></td></tr>
+        <tr><td>Revista Projeto<br><small class="mono">redacao@revistaprojeto.com.br</small></td><td><span class="code">F021-P0001</span> 3 fotografias TIFF</td><td>Matéria editorial</td><td>25 set</td><td><span class="tag b">aguardando crédito confirmado</span></td><td><button class="btn sm">Abrir</button></td></tr>
+      </tbody>
+    </table></div></div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="panel stat"><div class="v">29</div><div class="l">pedidos no ano</div></div>
+      <div class="panel stat"><div class="v">F024</div><div class="l">fundo mais solicitado (Paulo Mendes da Rocha)</div></div>
+      <div class="panel stat"><div class="v">3,5 d</div><div class="l">tempo médio até entrega</div></div>
+    </div>
+  </section>
+
+  <!-- ERROS -->
+  <section class="content" id="v-erros">
+    <div class="hdr"><div><h1>Erros relatados</h1><p class="sub">Problemas encontrados no material: pelo CAMP Vision (automático), por você na revisão, ou por visitantes do site. Os de autoria divergente bloqueiam publicação até resolver.</p></div><div class="act"><button class="btn pri" onclick="toast('Formulário de relato (protótipo)')">Relatar erro</button></div></div>
+    <div class="panel"><div class="filterbar"><input placeholder="Filtrar erros… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+      <thead><tr><th>Gravidade</th><th>Item</th><th>Problema</th><th>Origem</th><th>Situação</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag r">bloqueia</span></td><td><span class="code">F014-P0004-1982-S01-D00019</span></td><td>Autoria divergente: carimbo de Salvador Candia dentro do Safra Mooca</td><td>CAMP Vision</td><td><span class="tag a">aberto</span></td><td><button class="btn sm">Resolver</button></td></tr>
+        <tr><td><span class="tag r">bloqueia</span></td><td><span class="code">F010-P0001</span></td><td>Folhas de Araruama dentro da pasta A. Abreu (outro projeto)</td><td>Revisão manual</td><td><span class="tag a">aberto</span></td><td><button class="btn sm">Resolver</button></td></tr>
+        <tr><td><span class="tag a">corrigir</span></td><td><span class="code">F010-P0006</span></td><td>13 folhas digitalizadas pelo verso (espelhadas) — Residência Cynthia</td><td>Revisão manual</td><td><span class="tag b">em correção</span></td><td><button class="btn sm">Abrir</button></td></tr>
+        <tr><td><span class="tag a">corrigir</span></td><td><span class="code">F020-CD03</span></td><td>Duplicata byte a byte de 4 arquivos; manter só a de menor número</td><td>CAMP Vision</td><td><span class="tag a">aberto</span></td><td><button class="btn sm">Abrir</button></td></tr>
+        <tr><td><span class="tag">site</span></td><td><span class="code">F029-P0002-2005-S03-D00041</span></td><td>Visitante informa: fotógrafa é Lucia Hashizu, não Lucia Sawaya</td><td>Formulário do site</td><td><span class="tag g">corrigido, fechar</span></td><td><button class="btn sm">Fechar</button></td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <!-- FUNDOS -->
+  <section class="content" id="v-fundos">
+    <div class="hdr"><div><h1>Fundos</h1><p class="sub">Tabela de autoridade. O código de um fundo nasce aqui e nunca muda: estação Contex, CAMP Vision e site consultam esta lista, não o nome da pasta.</p></div><div class="act"><button class="btn" onclick="toast('fundos.json exportado — a estação Contex lê este arquivo')">Exportar fundos.json</button><button class="btn pri" onclick="openModal('m-fundo')">Reservar próximo código</button></div></div>
+    <div class="panel"><div class="hint-rows">Clique num fundo para abrir sua página, com projetos, agentes e descrição.</div><div class="filterbar"><input placeholder="Filtrar fundos… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+      <thead><tr><th>Código</th><th>Sigla</th><th>Nome do fundo</th><th>Período</th><th class="num">Projetos</th><th class="num">Publicados</th><th>Site</th></tr></thead>
+      <tbody id="fundos-body"></tbody>
+    </table></div></div>
+  </section>
+
+  <!-- ARQUITETOS -->
+  <section class="content" id="v-arquitetos">
+    <div class="hdr"><div><h1>Arquitetos</h1><p class="sub">Pessoas e escritórios, com as grafias que aparecem nos carimbos. Um arquiteto pode estar em mais de um fundo (parcerias) e um fundo pode ter mais de um arquiteto.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-arq')">Cadastrar arquiteto</button></div></div>
+    <div class="panel"><div class="filterbar"><input placeholder="Filtrar arquitetos… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+      <thead><tr><th>Nome</th><th>Grafias no carimbo</th><th>Fundos</th><th>Atuação</th><th>Biografia</th></tr></thead>
+      <tbody>
+        <tr><td><b>Joaquim Barretto</b></td><td><span class="code">JOAQUIM BARRETTO</span> <span class="code">J. BARRETTO ARQ. ASSOC.</span></td><td><span class="code">F002</span> <span class="code">F014</span></td><td>1966–1990</td><td><span class="tag">só fatos do documento</span></td></tr>
+        <tr><td><b>Francisco Segnini Jr.</b></td><td><span class="code">F. SEGNINI JR</span> <span class="code">SEGNINI BARRETTO</span></td><td><span class="code">F002</span> <span class="code">F010</span></td><td>1966–</td><td><span class="tag">só fatos do documento</span></td></tr>
+        <tr><td><b>Oswaldo Corrêa Gonçalves</b></td><td><span class="code">OSWALDO CORREA GONÇALVES</span> <span class="code">O. C. GONÇALVES</span></td><td><span class="code">F023</span></td><td>1950–1997</td><td><span class="tag">só fatos do documento</span></td></tr>
+        <tr><td><b>Chu Ming Silveira</b></td><td><span class="code">CHU MING SILVEIRA</span></td><td><span class="code">F006</span></td><td>—</td><td><span class="tag r">fora do ar a pedido da família</span></td></tr>
+        <tr><td><b>Fernando e Ana Karazawa</b></td><td><span class="code">KARAZAWA</span></td><td><span class="code">F030</span></td><td>—</td><td><span class="tag">só fatos do documento</span></td></tr>
+        <tr><td><b>Carlos Henrique Heck</b></td><td><span class="code">C. H. HECK</span></td><td><span class="tag a">sem fundo — reservar F031</span></td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <!-- PROJETOS -->
+  <section class="content" id="v-projetos">
+    <div class="hdr"><div><h1>Projetos</h1><p class="sub">Um projeto é o dossiê: reúne pranchas, fotos e documentos sob um número P que nunca é reusado. O ano é o do projeto, não de cada folha.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-proj')">Novo projeto</button></div></div>
+    <div class="panel"><div class="hint-rows">Clique num projeto para abrir o dossiê com as folhas.</div><div class="filterbar"><input placeholder="Filtrar projetos… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+      <thead><tr><th>Código</th><th>Projeto</th><th>Fundo</th><th>Ano</th><th>Séries</th><th class="num">Folhas</th><th>Site</th><th>Última atividade</th></tr></thead>
+      <tbody id="projetos-body"></tbody>
+    </table></div></div>
+  </section>
+
+  <!-- ETIQUETAS -->
+  <section class="content" id="v-etiquetas">
+    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. O código impresso é o mesmo do arquivo digital e do site.</p></div><div class="act"><button class="btn pri" onclick="window.print()">Imprimir</button></div></div>
+    <div class="tabs" id="lab-tabs">
+      <button class="on" data-t="projeto">Pasta de projeto</button>
+      <button data-t="documento">Folha / documento</button>
+      <button data-t="caixa">Caixa ou gaveta</button>
+      <button data-t="tubo">Lombada de tubo</button>
+      <button data-t="fundo">Fundo</button>
+    </div>
+    <div class="lab-wrap">
+      <div class="panel lab-form"><div class="pb" style="display:grid;gap:12px">
+        <label class="field">Fundo<select id="l-fundo"></select></label>
+        <label class="field" id="f-proj">Projeto<select id="l-proj"><option value="P0002|Agência Banespa|1982">P0002 · Agência Banespa · 1982</option><option value="P0004|Estudo Safra Mooca|1982">P0004 · Estudo Safra Mooca · 1982</option></select></label>
+        <div class="grid g2" id="f-doc" style="display:none">
+          <label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S05</option></select></label>
+          <label class="field">Documento<input id="l-doc" value="D00019"></label>
+        </div>
+        <div class="grid g2" id="f-caixa" style="display:none">
+          <label class="field">Caixa nº<input id="l-caixa" value="07"></label>
+          <label class="field">Conteúdo<input id="l-cont" value="P0001–P0006"></label>
+        </div>
+        <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option></select></label>
+        <div class="qty"><label class="field" style="flex:1">Quantidade<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field" style="flex:2">Observação<input id="l-obs" placeholder="opcional, sai em letra pequena"></label></div>
+        <div class="lab-note" style="font-size:12px;color:var(--ink3)">Sequências: informe D00019 e quantidade 6 para gerar D00019–D00024.</div>
+      </div></div>
+      <div class="lab-preview" id="lab-preview"></div>
+    </div>
+    <div class="printgrid" id="printgrid"></div>
+  </section>
+
+  <!-- FUNDO (detalhe) -->
+  <section class="content" id="v-fundo"><div class="backbar"><button class="btn back" onclick="voltar('fundos')"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Voltar</button><div class="crumb" id="fd-crumb"></div></div><div id="fd"></div></section>
+  <!-- PROJETO (detalhe) -->
+  <section class="content" id="v-projeto"><div class="backbar"><button class="btn back" id="pd-back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Voltar</button><div class="crumb" id="pd-crumb"></div></div><div id="pd"></div></section>
+  <!-- ITEM (detalhe) -->
+  <section class="content" id="v-item"><div class="backbar"><button class="btn back" id="id-back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Voltar ao projeto</button><div class="crumb" id="id-crumb"></div></div><div id="idet"></div></section>
+
+  <!-- CONFIG -->
+  <section class="content" id="v-config">
+    <div class="hdr"><div><h1>Configurações</h1><p class="sub">Regras que os outros sistemas consultam.</p></div></div>
+    <div class="grid g2">
+      <div class="panel"><div class="ph"><h2>Nomenclatura de arquivo</h2></div><div class="pb">
+        <div class="mono-block">F0xx-P000x-AAAA-S0x-DNNNNN.jpg
+
+F    fundo (esta tabela)
+P    projeto, nunca reusado
+AAAA ano do projeto, 0000 sem data
+S    série: S01 desenhos · S02 textuais
+             S03 fotografias · S05 redesenhos
+D    sequencial contínuo no projeto</div>
+        <p class="sub" style="margin-top:10px;font-size:13px">Crédito padrão: <em>Acervo {Arquiteto}/CAMP - Casa da Arquitetura Moderna Paulista</em></p>
+      </div></div>
+      <div class="panel"><div class="ph"><h2>Integrações</h2></div><div class="pb">
+        <ul class="list">
+          <li><div class="t">QNAP TS-932PX <small>/mnt/qnap/acervos · status.json lido a cada 60 s</small></div><span class="tag g">ok</span></li>
+          <li><div class="t">CAMP Vision 2 <small>máquina campvision (Ubuntu) · envia erros e catalogação</small></div><span class="tag g">ok</span></li>
+          <li><div class="t">Tainacan (camp.arq.br) <small>REST com Application Password · itens sobem como rascunho</small></div><span class="tag a">configurar</span></li>
+          <li><div class="t">Estação Contex (Windows) <small>baixa fundos.json daqui; sem internet, só rede local</small></div><span class="tag g">ok</span></li>
+          <li><div class="t">Relatório diário por e-mail <small>18h · SMTP do QNAP</small></div><span class="tag g">ok</span></li>
+        </ul>
+      </div></div>
+      <div class="panel"><div class="ph"><h2>Usuários</h2></div><div class="pb">
+        <ul class="list">
+          <li><div class="av">RM</div><div class="t">Rafael Moreira D'Andrea<small>administrador</small></div></li>
+          <li><div class="av" style="background:var(--ink3)">OP</div><div class="t">Operador de digitalização<small>filas e etiquetas</small></div></li>
+          <li><div class="av" style="background:var(--ink3)">PQ</div><div class="t">Pesquisador convidado<small>somente leitura</small></div></li>
+        </ul>
+      </div></div>
+      <div class="panel"><div class="ph"><h2>Aparência</h2></div><div class="pb">
+        <label class="field">Tema<select id="theme"><option value="">Automático</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label>
+      </div></div>
+    </div>
+  </section>
+  <aside class="drawer" id="drawer"><div class="dh"><div style="flex:1"><h2 id="d-title"></h2><small id="d-sub"></small></div><button class="btn sm" id="d-open" style="display:none">Abrir página</button><button class="btn sm" onclick="closeDrawer()">Fechar</button></div><div class="db" id="d-body"></div></aside>
+</main>
+</div>
+
+<!-- modais -->
+<div class="modal" id="m-lista"><div class="box">
+  <div class="ph"><h2>Nova lista de processamento</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="pb">
+    <label class="field">Nome da lista<input id="nl-nome" placeholder="ex. PLANTAS 10"></label>
+    <label class="field">Fundo<select id="nl-fundo"></select><span class="help">O código vem daqui, nunca da pasta.</span></label>
+    <label class="field">Pasta no QNAP<input id="nl-pasta" placeholder="/mnt/qnap/acervos/F023 - OCG - Oswaldo Corrêa Gonçalves/P0012 - ..."></label>
+    <label class="field">Folhas esperadas<input id="nl-folhas" type="number" placeholder="contagem física, para conferir contra o que chegou"></label>
+    <label class="field"><span><input type="checkbox" id="nl-auto"> Autorizar publicação no site ao terminar (sobe como rascunho)</span></label>
+    <label class="field"><span><input type="checkbox"> Lote de teste (não entra no inventário)</span></label>
+  </div>
+  <div class="pf"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="addLista()">Adicionar à fila</button></div>
+</div></div>
+
+<div class="modal" id="m-fundo"><div class="box">
+  <div class="ph"><h2>Reservar próximo código de fundo</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="pb">
+    <div class="kv"><dt>Código reservado</dt><dd><span class="code" id="nf-code">F031</span></dd></div>
+    <label class="field">Nome do fundo<input id="nf-nome" placeholder="ex. Carlos Henrique Heck"></label>
+    <label class="field">Sigla (3 letras)<input id="nf-sigla" maxlength="3" placeholder="CHH" style="text-transform:uppercase;font-family:var(--mono)"><span class="help">Precisa ser única. Vai para o nome dos arquivos.</span></label>
+    <label class="field">Período de atuação<input placeholder="ex. 1960–1998"></label>
+  </div>
+  <div class="pf"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="addFundo()">Reservar</button></div>
+</div></div>
+
+<div class="modal" id="m-arq"><div class="box">
+  <div class="ph"><h2>Cadastrar arquiteto</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="pb">
+    <label class="field">Nome<input></label>
+    <label class="field">Grafias que aparecem nos carimbos<input placeholder="separe por ;"><span class="help">Usadas pelo CAMP Vision para reconhecer o autor.</span></label>
+    <label class="field">Fundos<select id="na-fundo"></select></label>
+    <label class="field">Fatos verificáveis (opcional)<textarea rows="3" placeholder="Só o que está no documento ou em fonte citada. Nada de biografia inferida."></textarea></label>
+  </div>
+  <div class="pf"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="closeModal();toast('Arquiteto cadastrado')">Salvar</button></div>
+</div></div>
+
+<div class="modal" id="m-proj"><div class="box">
+  <div class="ph"><h2>Novo projeto</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="pb">
+    <label class="field">Fundo<select id="np-fundo" onchange="nextP()"></select></label>
+    <div class="kv"><dt>Número reservado</dt><dd><span class="code" id="np-code">F001-P0005</span></dd></div>
+    <label class="field">Nome do projeto<input placeholder="ex. Residência Cynthia"></label>
+    <div class="grid g2"><label class="field">Ano do projeto<input placeholder="0000 se desconhecido"></label><label class="field">Cidade<input></label></div>
+    <label class="field">Endereço da obra<input></label>
+  </div>
+  <div class="pf"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn pri" onclick="closeModal();toast('Projeto criado — pasta padrão gerada no QNAP')">Criar projeto</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- dados (protótipo: substituir pela API) ----------
+const FUNDOS=[
+["F001","ARM","Arnaldo Martino","",4,4,1],["F002","BSG","Barretto Segnini","1966–1981",3,3,1],["F003","BMX","Burle Marx","",1,1,1],["F004","CBM","Carlos Barjas Millan","",0,0,0],["F005","CEN","CENPLA","",0,0,0],["F006","CMS","Chu Ming Silveira","",2,0,2],["F007","DLB","David Libeskind","",0,0,0],["F008","EDA","Eduardo de Almeida","",0,0,0],["F009","EOL","Euclides Oliveira","",0,0,0],["F010","FSJ","Francisco Segnini Jr.","",9,9,1],
+["F011","HBR","Hans Broos","",0,0,0],["F012","JVA","João Valente","",0,0,0],["F013","JXA","João Xavier","",0,0,0],["F014","JBR","Joaquim Barretto","1982–",5,4,1],["F015","JAB","José Augusto Bellucci","",0,0,0],["F016","JCB","José Carlos Bellucci","",0,0,0],["F017","JGU","José Gugliotta","",0,0,0],["F018","JOL","José Olympio","",0,0,0],["F019","LCL","Lauro da Costa Lima","",0,0,0],["F020","LCB","Luiz Cesar Barillari","",17,17,1],
+["F021","MAC","Marcos Acayaba","",0,0,0],["F022","MSL","Marklen Siag Landa","",6,6,1],["F023","OCG","Oswaldo Corrêa Gonçalves","1950–1997",11,10,1],["F024","PMR","Paulo Mendes da Rocha","",0,0,0],["F025","","Ruth Verde Zein","",0,0,0],["F026","SBU","Sami Bussab","",43,1,1],["F027","","Sandra Valente","",0,0,0],["F028","","Sidnei Magalhães","",0,0,0],["F029","","Sylvio Sawaya","",2,2,1],["F030","KWA","Fernando e Ana Karazawa","",1,1,1]];
+let FILAS=[
+{n:"PLANTAS 9",f:"F023",p:"P0011 · Teatro de Santos",pasta:"/acervos/F023 - OCG/P0011",fl:274,et:2,aut:true},
+{n:"Safra Mooca",f:"F014",p:"P0004 · Estudo Safra Mooca",pasta:"/acervos/F014 - JBR/P0004",fl:28,et:1,aut:false,err:true},
+{n:"Barillari CD03",f:"F020",p:"P0009 · CD03 (PLT/CDR)",pasta:"/acervos/F020 - LCB/P0009",fl:60,et:0,aut:true},
+];
+const ETAPAS=["enviado","processando","revisão","rascunho","publicado"];
+const fundoNome=c=>{const f=FUNDOS.find(x=>x[0]===c);return f?f[2]:c};
+
+// ---------- projetos e itens (protótipo) ----------
+const STATUS={no_ar:'<span class="tag g">publicado</span>',rascunho:'<span class="tag b">rascunho</span>',em_revisao:'<span class="tag a">em revisão</span>',bloqueado:'<span class="tag r">bloqueado</span>',nao_publicado:'<span class="tag">não publicado</span>',fora_do_ar:'<span class="tag r">fora do ar</span>'};
+const PROJETOS=[
+{c:'F014-P0002',t:'Agência Banespa',f:'F014',a:1982,cid:'São Paulo',end:'Av. Paulista',s:['S01','S02'],n:31,st:'no_ar',u:'22 set'},
+{c:'F014-P0004',t:'Estudo Safra Mooca',f:'F014',a:1982,cid:'São Paulo',end:'Rua da Mooca',s:['S01'],n:28,st:'bloqueado',u:'hoje'},
+{c:'F014-P0001',t:'Residência em Campos do Jordão',f:'F014',a:1984,cid:'Campos do Jordão',end:'',s:['S01'],n:14,st:'no_ar',u:'20 set'},
+{c:'F010-P0001',t:'Residência A. Abreu, Chácara Anália Franco',f:'F010',a:1989,cid:'São Paulo',end:'Chácara Anália Franco',s:['S01','S03'],n:10,st:'rascunho',u:'ontem'},
+{c:'F010-P0006',t:'Residência Cynthia',f:'F010',a:1991,cid:'São Paulo',end:'',s:['S01'],n:13,st:'em_revisao',u:'hoje'},
+{c:'F010-P0003',t:'Residência José Baia',f:'F010',a:1987,cid:'Guarujá',end:'',s:['S01'],n:22,st:'no_ar',u:'20 set'},
+{c:'F023-P0011',t:'Teatro de Santos',f:'F023',a:1959,cid:'Santos',end:'Praça Mauá',s:['S01','S05'],n:274,st:'em_revisao',u:'hoje'},
+{c:'F023-P0004',t:'Fórum de Duartina',f:'F023',a:1966,cid:'Duartina',end:'',s:['S01'],n:18,st:'no_ar',u:'22 set'},
+{c:'F023-P0007',t:'Riviera de São Lourenço, plano urbanístico',f:'F023',a:1979,cid:'Bertioga',end:'',s:['S01','S02'],n:41,st:'no_ar',u:'23 set'},
+{c:'F002-P0003',t:'Edifício Piracicaba, anteprojeto',f:'F002',a:1979,cid:'Piracicaba',end:'',s:['S01'],n:12,st:'no_ar',u:'20 set'},
+{c:'F002-P0001',t:'Paróquia',f:'F002',a:1972,cid:'São Paulo',end:'',s:['S01'],n:10,st:'no_ar',u:'21 set'},
+{c:'F029-P0002',t:'Residência Sawaya, fotografias 2005',f:'F029',a:2005,cid:'São Paulo',end:'',s:['S03'],n:39,st:'no_ar',u:'21 set'},
+{c:'F020-P0003',t:'Residência em Ubatuba',f:'F020',a:1994,cid:'Ubatuba',end:'',s:['S01','S05'],n:17,st:'no_ar',u:'22 set'},
+{c:'F020-P0009',t:'CD03 — projetos digitais',f:'F020',a:2001,cid:'',end:'',s:['S01'],n:60,st:'nao_publicado',u:'hoje'},
+{c:'F030-P0001',t:'Residência Karazawa',f:'F030',a:0,cid:'São Paulo',end:'',s:['S01'],n:6,st:'no_ar',u:'21 set'},
+{c:'F026-P0012',t:'Clube Sírio',f:'F026',a:1961,cid:'São Paulo',end:'',s:['S01'],n:24,st:'no_ar',u:'21 set'},
+];
+const TIPOS=['Planta','Corte','Elevação','Detalhe','Planta','Perspectiva','Estrutura','Planta'];
+function itensDe(p){const out=[];for(let k=0;k<p.n;k++){const serie=p.s[0]==='S03'?'S03':(k>=p.n-2&&p.s.includes('S02')?'S02':p.s[0]);const tipo=serie==='S03'?'Fotografia':serie==='S02'?'Documento':TIPOS[k%TIPOS.length];
+  out.push({c:`${p.c}-${String(p.a).padStart(4,'0')}-${serie}-D${String(k+1).padStart(5,'0')}`,p:p.c,serie,tipo,folha:`${String(k+1).padStart(2,'0')}/${p.n}`,esc:tipo==='Detalhe'?'1:20':tipo==='Fotografia'||tipo==='Documento'?'':'1:100',st:p.st,flag:(p.c==='F014-P0004'&&k===18)?'autoria divergente':(p.c==='F010-P0006'&&k<13)?'espelhado':(p.c==='F020-P0009'&&k%15===7)?'duplicata':''})}return out}
+function sheetSVG(it,w=300){const h=Math.round(w*0.7);const seed=[...it.c].reduce((a,c)=>a+c.charCodeAt(0),0);let g='';const r=(n)=>((seed*9301+49297*n)%233280)/233280;
+  if(it.tipo==='Fotografia')g=`<rect x="${w*.1}" y="${h*.1}" width="${w*.8}" height="${h*.65}" fill="#c9cdd2"/><rect x="${w*.15}" y="${h*.45}" width="${w*.7}" height="${h*.3}" fill="#9aa1a8"/><rect x="${w*.3}" y="${h*.25}" width="${w*.4}" height="${h*.2}" fill="#e8eaec"/>`;
+  else if(it.tipo==='Documento'){for(let k=0;k<9;k++)g+=`<rect x="${w*.15}" y="${h*.15+k*h*.07}" width="${w*(.4+r(k)*.4)}" height="2" fill="#555"/>`}
+  else if(it.tipo==='Corte'||it.tipo==='Elevação'){g=`<path d="M${w*.12} ${h*.7} H${w*.88} M${w*.2} ${h*.7} V${h*.3} H${w*.8} V${h*.7} M${w*.2} ${h*.5} H${w*.8}" stroke="#333" stroke-width="1.5" fill="none"/>`;for(let k=0;k<5;k++)g+=`<rect x="${w*(.25+k*.11)}" y="${h*.35}" width="${w*.06}" height="${h*.1}" fill="none" stroke="#333"/>`}
+  else if(it.tipo==='Detalhe')g=`<circle cx="${w*.5}" cy="${h*.45}" r="${h*.28}" fill="none" stroke="#333" stroke-width="1.5"/><path d="M${w*.3} ${h*.45} H${w*.7} M${w*.5} ${h*.2} V${h*.7}" stroke="#333" stroke-dasharray="4 3"/>`;
+  else{g=`<rect x="${w*.12}" y="${h*.15}" width="${w*.76}" height="${h*.55}" fill="none" stroke="#333" stroke-width="1.5"/>`;for(let k=0;k<4;k++){const x=w*(.15+r(k)*.6),y=h*(.18+r(k+9)*.4);g+=`<rect x="${x}" y="${y}" width="${w*(.08+r(k+3)*.18)}" height="${h*(.08+r(k+5)*.2)}" fill="none" stroke="#333"/>`}}
+  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><rect width="${w}" height="${h}" fill="#fff"/><rect x="4" y="4" width="${w-8}" height="${h-8}" fill="none" stroke="#888" stroke-width=".8"/>${g}<rect x="${w*.62}" y="${h*.78}" width="${w*.34}" height="${h*.17}" fill="none" stroke="#333" stroke-width="1"/><rect x="${w*.64}" y="${h*.81}" width="${w*.18}" height="2" fill="#333"/><rect x="${w*.64}" y="${h*.86}" width="${w*.28}" height="1.5" fill="#777"/><rect x="${w*.64}" y="${h*.9}" width="${w*.22}" height="1.5" fill="#777"/></svg>`}
+const projOf=c=>PROJETOS.find(p=>p.c===c);
+function renderProjetos(){document.getElementById('projetos-body').innerHTML=PROJETOS.map(p=>`<tr data-nav="projeto/${p.c}"><td><span class="code">${p.c}</span></td><td><b>${p.t}</b></td><td>${fundoNome(p.f)}</td><td>${p.a||'<span style="color:var(--ink3)">0000</span>'}</td><td>${p.s.map(x=>`<span class="tag">${x}</span>`).join(' ')}</td><td class="num">${p.n}</td><td>${STATUS[p.st]}</td><td>${p.u}</td></tr>`).join('')}
+
+function showFundo(code){const f=FUNDOS.find(x=>x[0]===code);if(!f)return;const ps=PROJETOS.filter(p=>p.f===code);const folhas=ps.reduce((a,p)=>a+p.n,0);
+  document.getElementById('fd-crumb').innerHTML=`<a class="home" onclick="go('painel')" title="Painel"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg></a><span>/</span><a onclick="go('fundos')">Fundos</a><span>/</span><b>${code} ${f[2]}</b>`;
+  document.getElementById('fd').innerHTML=`<div class="dethdr"><span class="sig ${f[1]?'':'na'}">${f[1]||'—'}</span><div><h1>${f[2]}</h1><div class="meta"><span class="code">${code}</span> · ${f[3]||'período não informado'} · ${ps.length} projetos · ${folhas} folhas · ${f[6]===2?'fora do ar':f[6]?'no ar':'não publicado'}</div></div>
+    <div class="act"><button class="btn" onclick="toast('Abrindo camp.arq.br/colecoes/${code.toLowerCase()}')">Ver no site</button><button class="btn" onclick="go('etiquetas')">Etiqueta do fundo</button><button class="btn pri" onclick="openModal('m-proj');document.getElementById('np-fundo').value='${code}';nextP()">Novo projeto</button></div></div>
+    <div class="grid g2 wide3" style="margin-bottom:16px">
+      <div class="panel"><div class="ph"><h2>Descrição do fundo</h2><div class="act"><button class="btn sm">Editar</button></div></div><div class="pb"><dl class="kv"><dt>Título</dt><dd>${f[2]}</dd><dt>Datas extremas</dt><dd>${f[3]||'—'}</dd><dt>Nível</dt><dd>fundo</dd><dt>Dimensão</dt><dd>${folhas} documentos digitalizados</dd><dt>Procedência</dt><dd><span style="color:var(--ink3)">não preenchida</span></dd><dt>Crédito</dt><dd>Acervo ${f[2]}/CAMP - Casa da Arquitetura Moderna Paulista</dd></dl></div></div>
+      <div class="panel"><div class="ph"><h2>Agentes (proveniência)</h2><div class="act"><button class="btn sm" onclick="openModal('m-arq')">Vincular</button></div></div><div class="pb"><ul class="list"><li><div class="t"><b>${f[2]}</b><small>produtor · ${f[3]||'datas não informadas'}</small></div><span class="tag">pessoa</span></li>${code==='F014'?'<li><div class="t"><b>Barretto Segnini</b><small>antecessor · 1966–1981 · <span class="code">F002</span></small></div><span class="tag">entidade coletiva</span></li>':''}</ul></div></div>
+      <div class="panel"><div class="ph"><h2>Atividade</h2></div><div class="pb"><ul class="hist">${HIST.join('')}</ul></div></div>
+    </div>
+    <div class="panel"><div class="ph"><h2>Projetos</h2><span class="cnt" style="margin-left:auto;font-size:12.5px;color:var(--ink3)">${ps.length}</span></div><div class="tw"><table><thead><tr><th>Código</th><th>Projeto</th><th>Ano</th><th>Cidade</th><th>Séries</th><th class="num">Folhas</th><th>Site</th></tr></thead><tbody>${ps.length?ps.map(p=>`<tr data-nav="projeto/${p.c}"><td><span class="code">${p.c}</span></td><td><b>${p.t}</b></td><td>${p.a||'0000'}</td><td>${p.cid||'—'}</td><td>${p.s.map(x=>`<span class="tag">${x}</span>`).join(' ')}</td><td class="num">${p.n}</td><td>${STATUS[p.st]}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Nenhum projeto cadastrado ainda. Crie o primeiro para reservar P0001.</td></tr>'}</tbody></table></div></div>`}
+
+let pdTab='itens';
+function showProjeto(code,tab){const p=projOf(code);if(!p)return;if(tab)pdTab=tab;const its=itensDe(p);const flags=its.filter(i=>i.flag);const f=FUNDOS.find(x=>x[0]===p.f);
+  document.getElementById('pd-back').onclick=()=>voltar('fundo/'+p.f);document.getElementById('pd-crumb').innerHTML=`<a class="home" onclick="go('painel')" title="Painel"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg></a><span>/</span><a onclick="go('fundos')">Fundos</a><span>/</span><a onclick="nav('fundo/${p.f}')">${p.f} ${f[2]}</a><span>/</span><b>${p.c}</b>`;
+  const tabs=[['itens',`Itens (${its.length})`],['erros',`Problemas (${flags.length})`],['pedidos','Pedidos'],['historico','Histórico']];
+  let body='';
+  if(pdTab==='itens')body=`<div class="thumbs">${its.map((it,k)=>`<div class="thumb" data-nav="item/${it.c}">${sheetSVG(it,220)}${it.flag?`<span class="tag r flag">${it.flag}</span>`:''}<div class="cap"><b>${it.tipo}</b> · folha ${it.folha}<span class="code">${it.c.slice(-13)}</span></div></div>`).join('')}</div>`;
+  else if(pdTab==='erros')body=flags.length?`<div class="panel"><div class="tw"><table><thead><tr><th>Item</th><th>Problema</th><th>Situação</th><th></th></tr></thead><tbody>${flags.map(i=>`<tr><td><span class="code">${i.c}</span></td><td>${i.flag}</td><td><span class="tag a">aberto</span></td><td><button class="btn sm">Resolver</button></td></tr>`).join('')}</tbody></table></div></div>`:'<div class="panel"><div class="empty">Nenhum problema aberto neste projeto.</div></div>';
+  else if(pdTab==='pedidos')body=`<div class="panel"><div class="empty">${p.c==='F014-P0002'?'1 pedido: Família Barretto, todas as folhas, em preparação.':'Nenhum pedido de material para este projeto.'}</div></div>`;
+  else body=`<div class="panel"><div class="pb"><ul class="hist">${HIST.join('')}<li><time>${p.a||'—'}</time><span>Data do projeto (lida no carimbo)</span></li></ul></div></div>`;
+  document.getElementById('pd').innerHTML=`<div class="dethdr"><div><h1>${p.t}</h1><div class="meta"><span class="code">${p.c}</span> · ${p.a||'sem data'} · ${p.cid||'cidade não informada'} · ${its.length} folhas · ${STATUS[p.st]}</div></div>
+    <div class="act"><button class="btn" onclick="toast('Abrindo pasta no QNAP')">Pasta no QNAP</button><button class="btn" onclick="toast('Folha de contatos (contatos.jpg)')">Contatos</button><button class="btn" onclick="go('etiquetas')">Etiquetas</button>${p.st==='bloqueado'?'<button class="btn" disabled title="Resolva os problemas primeiro">Autorizar publicação</button>':p.st==='no_ar'?'<button class="btn">Ver no site</button>':'<button class="btn pri" onclick="toast(\'Projeto autorizado — itens sobem como rascunho no Tainacan\')">Autorizar publicação</button>'}</div></div>
+    ${p.st==='bloqueado'?`<div class="panel" style="border-color:var(--red);margin-bottom:16px"><div class="pb" style="display:flex;gap:10px;align-items:center"><span class="tag r">bloqueado</span><div>Este projeto tem ${flags.length} problema(s) que impedem publicação. <a onclick="showProjeto('${p.c}','erros')" style="cursor:pointer">Ver problemas</a></div></div></div>`:''}
+    <div class="grid g2" style="margin-bottom:16px"><div class="panel"><div class="ph"><h2>Descrição do dossiê</h2><div class="act"><button class="btn sm">Editar</button></div></div><div class="pb"><dl class="kv"><dt>Fundo</dt><dd><span class="code">${p.f}</span> ${f[2]}</dd><dt>Número</dt><dd>${p.c.split('-')[1]} (reservado, não reusável)</dd><dt>Ano do projeto</dt><dd>${p.a||'0000 — sem data no documento'}</dd><dt>Endereço da obra</dt><dd>${p.end||'—'}</dd><dt>Séries</dt><dd>${p.s.join(', ')}</dd><dt>Contagem esperada</dt><dd>${p.n} folhas · ${its.length} presentes</dd></dl></div></div>
+    <div class="panel"><div class="ph"><h2>Pipeline</h2></div><div class="pb"><div class="steps">${ETAPAS.map((e,k)=>`<span class="${({no_ar:4,rascunho:3,em_revisao:2,bloqueado:2,nao_publicado:0})[p.st]>k?'done':({no_ar:4,rascunho:3,em_revisao:2,bloqueado:2,nao_publicado:0})[p.st]===k?(p.st==='bloqueado'?'err':'cur'):''}">${e}</span>`).join('')}</div><dl class="kv" style="margin-top:12px"><dt>Autorizado para o site</dt><dd>${p.st==='no_ar'||p.st==='rascunho'?'sim':'não'}</dd><dt>No Tainacan</dt><dd>${p.st==='no_ar'?`${its.length} itens publicados`:p.st==='rascunho'?`${its.length} rascunhos`:'nada ainda'}</dd><dt>Última atividade</dt><dd>${p.u}</dd></dl></div></div></div>
+    <div class="tabs">${tabs.map(([k,l])=>`<button class="${pdTab===k?'on':''}" onclick="showProjeto('${p.c}','${k}')">${l}</button>`).join('')}</div>${body}`}
+
+function showItem(code){const pc=code.slice(0,10);const p=projOf(pc);if(!p)return;const its=itensDe(p);const k=its.findIndex(i=>i.c===code);if(k<0)return;const it=its[k];const f=FUNDOS.find(x=>x[0]===p.f);
+  document.getElementById('id-back').onclick=()=>voltar('projeto/'+p.c);document.getElementById('id-crumb').innerHTML=`<a class="home" onclick="go('painel')" title="Painel"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg></a><span>/</span><a onclick="go('fundos')">Fundos</a><span>/</span><a onclick="nav('fundo/${p.f}')">${p.f}</a><span>/</span><a onclick="nav('projeto/${p.c}')">${p.c} ${p.t}</a><span>/</span><b>folha ${code.slice(-6)}</b>`;
+  document.getElementById('idet').innerHTML=`<div class="dethdr"><div><h1>${it.tipo} · folha ${it.folha}</h1><div class="meta"><span class="code">${code}</span> · ${p.t}</div></div><div class="pager"><button class="btn sm" ${k===0?'disabled':''} onclick="nav('item/${k>0?its[k-1].c:''}')">← anterior</button><span>${k+1} / ${its.length}</span><button class="btn sm" ${k===its.length-1?'disabled':''} onclick="nav('item/${k<its.length-1?its[k+1].c:''}')">próxima →</button></div></div>
+    <div class="viewer"><div class="img">${sheetSVG(it,900)}</div><div style="display:grid;gap:16px;align-content:start">
+      ${it.flag?`<div class="panel" style="border-color:var(--red)"><div class="pb"><span class="tag r">${it.flag}</span><p style="margin:8px 0 0;font-size:13px">${it.flag==='autoria divergente'?'O carimbo lê "Salvador Candia", não o autor do fundo. Publicar seria atribuição falsa.':it.flag==='espelhado'?'Digitalizada pelo verso. Precisa espelhar o preview antes de publicar.':'Conteúdo idêntico a outra folha do projeto. Publicar só a de menor número.'}</p><div class="act" style="margin-top:10px"><button class="btn sm pri">Resolver</button><button class="btn sm">Mover para outro projeto</button></div></div></div>`:''}
+      <div class="panel"><div class="ph"><h2>Descrição do item</h2><div class="act"><button class="btn sm">Editar</button></div></div><div class="pb"><dl class="kv"><dt>Série</dt><dd>${it.serie}</dd><dt>Tipo</dt><dd>${it.tipo}</dd><dt>Folha</dt><dd>${it.folha}</dd><dt>Escala</dt><dd>${it.esc||'—'}</dd><dt>Data da folha</dt><dd>${p.a||'—'}</dd><dt>Projeto (carimbo)</dt><dd>${p.t.toUpperCase()}</dd><dt>Autor (carimbo)</dt><dd>${it.flag==='autoria divergente'?'SALVADOR CANDIA':f[2].toUpperCase()}</dd><dt>Crédito</dt><dd>Acervo ${f[2]}/CAMP</dd></dl></div></div>
+      <div class="panel"><div class="ph"><h2>Arquivos</h2></div><div class="pb"><dl class="kv"><dt>TIFF</dt><dd class="mono" style="font-size:12px">${code}.tif · 312 MB</dd><dt>Preview</dt><dd class="mono" style="font-size:12px">${code}.jpg · 0,9 MB</dd><dt>Rotação</dt><dd>${it.flag==='espelhado'?'espelhado (pendente)':'0°'}</dd><dt>Site</dt><dd>${STATUS[it.st]}</dd></dl><div class="act" style="margin-top:10px"><button class="btn sm">Abrir TIFF</button><button class="btn sm" onclick="go('etiquetas')">Etiqueta</button><button class="btn sm">Ver no site</button></div></div></div>
+    </div></div>`}
+
+// ---------- navegação ----------
+const navEl=document.getElementById('nav');
+function show(v,sec){document.querySelectorAll('.content').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));navEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===sec));document.querySelector('.main').scrollTo(0,0);closeDrawer()}
+const TITLES={painel:'Painel',filas:'Filas de processamento',solicitacoes:'Solicitações',erros:'Erros relatados',fundos:'Fundos',arquitetos:'Arquitetos',projetos:'Projetos',etiquetas:'Etiquetas',config:'Configurações'};
+let histDepth=0;
+function voltar(fallback){if(histDepth>0){histDepth-=2;history.back()}else nav(fallback)}
+function setWhere(route){const [v,arg]=route.split('/');const w=document.getElementById('where');if(v==='fundo'||v==='projeto'||v==='item'){const lbl=v==='fundo'?fundoNome(arg):v==='projeto'?(projOf(arg)||{}).t:arg.slice(-9);w.innerHTML=`<button class="btn sm" onclick="voltar('${v==='item'?'projeto/'+arg.slice(0,10):v==='projeto'?'fundo/'+arg.slice(0,4):'fundos'}')">← Voltar</button><span>${({fundo:'fundo',projeto:'projeto',item:'folha'})[v]}</span><b>${lbl}</b>`}else w.innerHTML=`<b>${TITLES[v]||''}</b>`}
+function nav(route){if(location.hash!=='#'+route)location.hash=route;else route_to(route)}
+function go(v){nav(v)}
+function crumbs(route){const [v,arg]=route.split('/');const H=`<a onclick="go('painel')" title="Painel"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg></a>`;const S='<span class="sep">/</span>';let out=[H];
+  if(v==='fundo'){out.push(`<a onclick="go('fundos')">Fundos</a>`,`<b>${arg} ${fundoNome(arg)}</b>`)}
+  else if(v==='projeto'){const p=projOf(arg)||{f:arg.slice(0,4),t:arg};out.push(`<a onclick="go('fundos')">Fundos</a>`,`<a onclick="nav('fundo/${p.f}')">${p.f} ${fundoNome(p.f)}</a>`,`<b>${arg} · ${p.t}</b>`)}
+  else if(v==='item'){const pc=arg.slice(0,10),p=projOf(pc)||{f:pc.slice(0,4),t:pc};out.push(`<a onclick="go('fundos')">Fundos</a>`,`<a onclick="nav('fundo/${p.f}')">${p.f} ${fundoNome(p.f)}</a>`,`<a onclick="nav('projeto/${pc}')">${pc} · ${p.t}</a>`,`<b>folha ${arg.slice(-6)}</b>`)}
+  else if(v&&v!=='painel'){const grp={filas:'Operação',solicitacoes:'Operação',erros:'Operação',fundos:'Acervo',arquitetos:'Acervo',projetos:'Acervo',etiquetas:'Acervo',config:'Sistema'}[v];if(grp)out.push(`<span>${grp}</span>`);out.push(`<b>${TITLES[v]}</b>`)}
+  else out.push('<b>Painel</b>');
+  document.getElementById('gcrumb').innerHTML=out.join(S)}
+function route_to(route){setWhere(route);crumbs(route);const [v,arg]=route.split('/');if(v==='fundo'&&arg){showFundo(arg);show('fundo','fundos')}else if(v==='projeto'&&arg){showProjeto(arg);show('projeto','projetos')}else if(v==='item'&&arg){showItem(arg);show('item','projetos')}else if(document.getElementById('v-'+v))show(v,v);else show('painel','painel')}
+window.addEventListener('hashchange',()=>{histDepth++;route_to(location.hash.slice(1))});
+navEl.addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
+// qualquer código ou linha marcada leva à sua página
+function routeCode(c){c=c.trim();if(/^F\d{3}$/.test(c))return 'fundo/'+c;if(/^F\d{3}-P\d{4}$/.test(c))return 'projeto/'+c;if(/^F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}$/.test(c))return 'item/'+c;if(/^F\d{3}-P\d{4}/.test(c))return 'projeto/'+c.slice(0,10);return null}
+document.addEventListener('click',e=>{const nv=e.target.closest('[data-nav]');if(nv&&!e.target.closest('button,a,.code')){nav(nv.dataset.nav);return}
+  const cd=e.target.closest('.code');if(cd&&!e.target.closest('.res,.crumb')){const r=routeCode(cd.textContent);if(r){e.stopPropagation();nav(r)}}},true);
+
+// ---------- render ----------
+function renderFundos(){
+  document.getElementById('fundos-body').innerHTML=FUNDOS.map(([c,s,n,per,pr,pub,site])=>`<tr data-nav="fundo/${c}"><td><span class="code">${c}</span></td><td>${s?`<span class="sig">${s}</span>`:`<span class="sig na">—</span>`}</td><td><b>${n}</b>${s?'':'<br><small style="color:var(--amber)">sigla não definida</small>'}</td><td>${per||'<span style="color:var(--ink3)">—</span>'}</td><td class="num">${pr}</td><td class="num">${pub}</td><td>${site===2?'<span class="tag r">fora do ar</span>':site?'<span class="tag g">no ar</span>':'<span class="tag">não publicado</span>'}</td></tr>`).join('');
+  const opts=FUNDOS.map(f=>`<option value="${f[0]}">${f[0]} · ${f[1]||'—'} · ${f[2]}</option>`).join('');
+  ['l-fundo','nl-fundo','na-fundo','np-fundo'].forEach(id=>document.getElementById(id).innerHTML=opts);
+  document.getElementById('l-fundo').value='F014';
+}
+function renderFilas(){
+  document.getElementById('filas-body').innerHTML=FILAS.map((l,i)=>`<tr><td><b>${l.n}</b></td><td><span class="code">${l.f}</span> ${fundoNome(l.f)}<br><small style="color:var(--ink3)">${l.p}</small></td><td><span class="mono" style="font-size:12px">${l.pasta}</span></td><td class="num">${l.fl}</td><td style="min-width:260px"><div class="steps">${ETAPAS.map((e,k)=>`<span class="${k<l.et?'done':k===l.et?(l.err?'err':'cur'):''}">${e}</span>`).join('')}</div></td><td>${l.aut?'<span class="tag g">autorizado</span>':'<span class="tag a">não autorizado</span>'}</td><td><button class="btn sm" onclick="avancar(${i})">${l.err?'Ver erro':l.et>=4?'Concluído':'Avançar'}</button></td></tr>`).join('');
+  document.getElementById('n-filas').textContent=FILAS.filter(l=>l.et<4).length;
+}
+function avancar(i){const l=FILAS[i];if(l.err){go('erros');return}if(l.et===2&&!l.aut){toast('Projeto não autorizado para o site. Autorize antes de gerar rascunhos.');return}if(l.et<4){l.et++;renderFilas();toast(`${l.n}: ${ETAPAS[l.et]}`)}}
+function addLista(){const nome=document.getElementById('nl-nome').value.trim();if(!nome){toast('Dê um nome à lista');return}
+  FILAS.unshift({n:nome,f:document.getElementById('nl-fundo').value,p:'novo lote',pasta:document.getElementById('nl-pasta').value||'/acervos/…',fl:+document.getElementById('nl-folhas').value||0,et:0,aut:document.getElementById('nl-auto').checked});
+  renderFilas();closeModal();toast('Lista adicionada à fila do CAMP Vision')}
+function addFundo(){const n=document.getElementById('nf-nome').value.trim(),s=document.getElementById('nf-sigla').value.trim().toUpperCase();if(!n||s.length!==3){toast('Informe nome e sigla de 3 letras');return}if(FUNDOS.some(f=>f[1]===s)){toast(`Sigla ${s} já existe`);return}
+  const c='F'+String(FUNDOS.length+1).padStart(3,'0');FUNDOS.push([c,s,n,'',0,0,0]);renderFundos();closeModal();toast(`${c} ${s} reservado para ${n}`);document.getElementById('nf-code').textContent='F'+String(FUNDOS.length+1).padStart(3,'0')}
+function nextP(){const f=document.getElementById('np-fundo').value,r=FUNDOS.find(x=>x[0]===f);document.getElementById('np-code').textContent=`${f}-P${String((r?r[4]:0)+1).padStart(4,'0')}`}
+
+// ---------- busca global ----------
+const q=document.getElementById('q'),qres=document.getElementById('qres');
+q.addEventListener('input',()=>{const t=q.value.trim().toLowerCase();if(!t){qres.classList.remove('open');return}
+  const hits=FUNDOS.filter(f=>f[0].toLowerCase().includes(t)||f[1].toLowerCase().includes(t)||f[2].toLowerCase().includes(t)).slice(0,4);const ph=PROJETOS.filter(p=>p.c.toLowerCase().includes(t)||p.t.toLowerCase().includes(t)).slice(0,4);
+  qres.innerHTML=(hits.length||ph.length)?ph.map(p=>`<div onclick="nav('projeto/${p.c}');qres.classList.remove('open');q.value=''"><span class="code">${p.c}</span><span>${p.t}</span><span style="margin-left:auto;color:var(--ink3);font-size:12px">${fundoNome(p.f)}</span></div>`).join('')+hits.map(f=>`<div onclick="nav('fundo/${f[0]}');qres.classList.remove('open');q.value=''"><span class="code">${f[0]}</span><span class="sig" style="width:38px;height:24px;font-size:10px">${f[1]||'—'}</span><span>${f[2]}</span></div>`).join(''):`<div style="color:var(--ink3)">Nenhum fundo, arquiteto ou projeto com “${q.value}”.</div>`;qres.classList.add('open')});
+document.addEventListener('click',e=>{if(!e.target.closest('.search'))qres.classList.remove('open')});
+
+// ---------- modais / toast / tema ----------
+function openModal(id){document.getElementById(id).classList.add('on');if(id==='m-proj')nextP()}
+function closeModal(){document.querySelectorAll('.modal').forEach(m=>m.classList.remove('on'))}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal()}));
+let tt;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2600)}
+const th=document.getElementById('theme');th.addEventListener('change',()=>{document.documentElement.dataset.theme=th.value;try{localStorage.setItem('camp.theme',th.value)}catch(e){}});
+try{const t=localStorage.getItem('camp.theme');if(t){th.value=t;document.documentElement.dataset.theme=t}}catch(e){}
+
+// ---------- etiquetas: Code 39 real ----------
+const C39={'0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn','A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn','K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn','U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','*':'nwnnwnwnn'};
+function barcode(text,h,w){const t=('*'+text.toUpperCase().replace(/[^0-9A-Z\-\. ]/g,'-')+'*');let x=0,rects='';const N=1,W=2.6;for(const ch of t){const p=C39[ch]||C39['-'];for(let i=0;i<9;i++){const bw=p[i]==='w'?W:N;if(i%2===0)rects+=`<rect x="${x.toFixed(1)}" y="0" width="${bw}" height="${h}"/>`;x+=bw}x+=N}
+  return `<svg viewBox="0 0 ${x.toFixed(1)} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" fill="#111">${rects}</svg>`}
+let labType='projeto';
+document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
+  document.getElementById('l-fmt').value=labType==='tubo'?'20x140':'100x50';renderLabel()});
+['l-fundo','l-proj','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id).addEventListener('input',renderLabel));
+function labelHTML(k){
+  const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc),sig=f[1]||'—',nome=f[2];
+  const [pc,pn,py]=document.getElementById('l-proj').value.split('|');
+  const [mw,mh]=document.getElementById('l-fmt').value.split('x').map(Number);const S=3.6;const obs=document.getElementById('l-obs').value;
+  let code,lines,big;
+  if(labType==='projeto'){code=`${fc}-${pc}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn],['Ano',py]]}
+  else if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';const n='D'+String(+d+k).padStart(5,'0');code=`${fc}-${pc}-${py}-${document.getElementById('l-serie').value}-${n}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn]]}
+  else if(labType==='caixa'){code=`${fc}-CX${document.getElementById('l-caixa').value.padStart(2,'0')}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Conteúdo',document.getElementById('l-cont').value]]}
+  else if(labType==='fundo'){code=fc;big=`${fc} ${sig}`;lines=[['Fundo',nome],['Período',f[3]||'—']]}
+  else {code=`${fc}-${pc}`;big=code;lines=[]}
+  const vert=mh>mw;
+  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px"><span class="logo">CAMP</span><span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${big}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${pn} · ${sig}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
+  return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${sig} · CAMP</span></div><div class="body">
+    <div style="display:flex;align-items:center;gap:6px"><span class="logo">CAMP</span><span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
+    <div class="big" style="font-size:${big.length>18?12:16}px;margin:6px 0 4px">${big}</div>
+    <div class="row">${lines.map(([a,b])=>`<div><b>${a}</b>${b}</div>`).join('')}</div>
+    ${obs?`<div style="font-size:7.5px;color:#555;margin-top:2px">${obs}</div>`:''}
+    <div style="position:absolute;left:10px;right:10px;bottom:7px">${barcode(code,20,'100%')}<div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-align:center;margin-top:1px">${code}</div></div></div></div>`}
+function renderLabel(){document.getElementById('lab-preview').innerHTML=labelHTML(0);const n=Math.min(60,Math.max(1,+document.getElementById('l-qty').value||1));document.getElementById('printgrid').innerHTML=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0)).join('')}
+
+
+// ---------- desktop: drawer de detalhes ----------
+const mainEl=document.querySelector('.main');
+function openDrawer(title,sub,body){document.getElementById('d-title').textContent=title;document.getElementById('d-sub').textContent=sub;document.getElementById('d-body').innerHTML=body;const ob=document.getElementById('d-open');const r=routeCode(sub||'');ob.style.display=r?'':'none';ob.onclick=()=>nav(r);mainEl.classList.add('with-drawer')}
+function closeDrawer(){mainEl.classList.remove('with-drawer');document.querySelectorAll('tr.sel').forEach(t=>t.classList.remove('sel'))}
+const HIST=['<li><time>hoje 09:12</time><span>CAMP Vision 2 concluiu a catalogação (contatos.jpg gerado)</span></li>','<li><time>ontem 18:00</time><span>Relatório diário enviado por e-mail</span></li>','<li><time>24 set</time><span>Enviado ao QNAP pela estação Contex (F12)</span></li>'];
+document.addEventListener('click',e=>{
+  const tr=e.target.closest('tbody tr');if(!tr||tr.dataset.nav||e.target.closest('button,a,input,select,.code'))return;
+  const table=tr.closest('table');const view=tr.closest('.content').id.replace('v-','');
+  const heads=[...table.querySelectorAll('thead th')].map(t=>t.textContent.trim());
+  const cells=[...tr.children];
+  const code=(tr.querySelector('.code')||{}).textContent||'';
+  const title=(tr.querySelector('b')||cells[1]||cells[0]).textContent.trim();
+  document.querySelectorAll('tr.sel').forEach(t=>t.classList.remove('sel'));tr.classList.add('sel');
+  const kv=heads.map((h,i)=>h&&cells[i]?`<dt>${h}</dt><dd>${cells[i].innerHTML}</dd>`:'').join('');
+  const acts={filas:'<button class="btn pri">Abrir contatos.jpg</button><button class="btn">Ver outliers</button><button class="btn">Reprocessar</button>',
+    solicitacoes:'<button class="btn pri">Responder por e-mail</button><button class="btn">Preparar arquivos</button><button class="btn">Recusar</button>',
+    erros:'<button class="btn pri">Marcar como corrigido</button><button class="btn">Abrir no Finder</button><button class="btn">Mover para outro projeto</button>',
+    fundos:'<button class="btn pri">Editar</button><button class="btn">Abrir no site</button><button class="btn">Imprimir etiqueta</button>',
+    arquitetos:'<button class="btn pri">Editar</button><button class="btn">Ver no site</button>',
+    projetos:'<button class="btn pri">Abrir pasta no QNAP</button><button class="btn">Ver no site</button><button class="btn">Imprimir etiquetas</button><button class="btn">Autorizar publicação</button>'};
+  openDrawer(title,code||heads[0],`<div><h3>Detalhes</h3><dl class="kv">${kv}</dl></div><div><h3>Ações</h3><div class="act">${acts[view]||''}</div></div><div><h3>Histórico</h3><ul class="hist">${HIST.join('')}</ul></div><div><h3>Anotação interna</h3><textarea rows="3" placeholder="Visível só para a equipe"></textarea></div>`);
+});
+
+// ---------- ordenação e filtro ----------
+document.querySelectorAll('thead th').forEach(th=>{if(!th.textContent.trim())return;th.classList.add('sortable');th.addEventListener('click',()=>{
+  const table=th.closest('table'),idx=[...th.parentNode.children].indexOf(th),tb=table.tBodies[0];
+  const dir=th.classList.contains('asc')?'desc':'asc';table.querySelectorAll('th').forEach(t=>t.classList.remove('asc','desc'));th.classList.add(dir);
+  const rows=[...tb.rows];const val=r=>r.children[idx]?r.children[idx].textContent.trim():'';const num=rows.every(r=>!isNaN(parseFloat(val(r).replace(',','.'))));
+  rows.sort((a,b)=>{let x=val(a),y=val(b);if(num){x=parseFloat(x.replace(',','.'));y=parseFloat(y.replace(',','.'))}return (x>y?1:x<y?-1:0)*(dir==='asc'?1:-1)});
+  rows.forEach(r=>tb.appendChild(r))})});
+document.querySelectorAll('[data-filter]').forEach(inp=>{const panel=inp.closest('.panel'),cnt=panel.querySelector('.cnt');const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});cnt.textContent=t?`${n} de ${tot}`:`${tot} registros`};inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
+
+// ---------- atalhos e barra lateral ----------
+const appEl=document.querySelector('.app');
+function setCollapsed(c){appEl.classList.toggle('collapsed',c);try{localStorage.setItem('camp.side',c?'1':'')}catch(e){}}
+document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!appEl.classList.contains('collapsed')));
+try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
+const KEYS={'1':'painel','2':'filas','3':'solicitacoes','4':'erros','5':'fundos','6':'arquitetos','7':'projetos','8':'etiquetas','9':'config'};
+document.addEventListener('keydown',e=>{
+  const typing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();q.focus();q.select();return}
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='b'){e.preventDefault();setCollapsed(!appEl.classList.contains('collapsed'));return}
+  if(e.key==='Escape'){closeModal();closeDrawer();qres.classList.remove('open');e.target.blur();return}
+  if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(KEYS[e.key]){go(KEYS[e.key]);return}
+  if(e.key.toLowerCase()==='f'){const f=document.querySelector('.content.on [data-filter]');if(f){e.preventDefault();f.focus()}}
+});
+
+renderFundos();renderFilas();renderProjetos();renderLabel();route_to(location.hash.slice(1)||'painel');
+</script>
+</body>
+</html>
