@@ -335,6 +335,24 @@ CREATE TABLE divergencia_site (
   resolvida    INTEGER NOT NULL DEFAULT 0
 );
 
+-- Heartbeat dos apps das estações de captura.
+CREATE TABLE estacao_heartbeat (
+  estacao_id       TEXT PRIMARY KEY,
+  tipo_estacao     TEXT NOT NULL,
+  app              TEXT NOT NULL,
+  versao           TEXT,
+  hostname         TEXT,
+  ip_local         TEXT,
+  estado           TEXT NOT NULL DEFAULT 'ocioso',
+  fundo_codigo     TEXT,
+  projeto_codigo   TEXT,
+  operador         TEXT,
+  ultimo_erro      TEXT,
+  recebido_de_ip   TEXT,
+  atualizado_em    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_estacao_heartbeat_atualizado ON estacao_heartbeat(atualizado_em);
+
 -- =====================================================================
 -- 5. VISÕES DE APOIO
 -- =====================================================================
