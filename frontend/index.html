@@ -275,6 +275,8 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
 .cfg{display:grid;grid-template-columns:1fr;gap:10px}.cfg .row2{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.cfg small{color:var(--ink3);display:block}
 .papel{font-family:var(--mono);font-size:11.5px}
 
+.aviso-exemplo{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber);border-radius:var(--r);padding:8px 12px;font-size:13px;margin:4px 0 14px}
+
 /* toast */
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:var(--r);opacity:0;transition:.25s;pointer-events:none;z-index:50;font-size:13px}
 .toast.on{opacity:1;transform:translateX(-50%)}
@@ -764,7 +766,7 @@ document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.targe
   document.getElementById('l-fmt').value=labType==='tubo'?'20x140':'100x50';renderLabel()});
 ['l-fundo','l-proj','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id).addEventListener('input',renderLabel));
 function labelHTML(k){
-  const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc),sig=f[1]||'—',nome=f[2];
+  const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc)||[fc||'F000','—','(selecione um fundo)',''],sig=f[1]||'—',nome=f[2];
   const [pc,pn,py]=document.getElementById('l-proj').value.split('|');
   const [mw,mh]=document.getElementById('l-fmt').value.split('x').map(Number);const S=3.6;const obs=document.getElementById('l-obs').value;
   let code,lines,big;
@@ -845,7 +847,7 @@ async function salvarCfg(chave){const v=document.getElementById('cfg-'+chave.rep
 
 // ---------- fundos e agentes via API ----------
 let FUNDOS_API=null;
-async function carregarFundosAPI(){try{const fs=await API('/api/fundos/resumo');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();
+async function carregarFundosAPI(){try{const fs=await API('/api/fundos/resumo');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();
   document.getElementById('fundos-body').innerHTML=fs.map(f=>f.so_no_site?`<tr style="background:var(--amber-soft)"><td><span class="tag a">sem código</span></td><td><span class="sig na">—</span></td><td><b>${f.titulo}</b><br><small style="color:var(--ink3)">${f.observacao}</small></td><td>—</td><td class="num">—</td><td class="num">${f.no_site}${f.rascunhos_site?` <small style="color:var(--ink3)">+${f.rascunhos_site} rasc.</small>`:''}</td><td>${f.no_site?'<span class="tag g">no ar</span>':'<span class="tag">não publicado</span>'} <span class="tag">só no site</span></td></tr>`:`<tr data-nav="fundo/${f.codigo}"><td><span class="code">${f.codigo}</span></td><td>${f.sigla?`<span class="sig">${f.sigla}</span>`:`<button class="btn sm" onclick="event.stopPropagation();definirSigla('${f.codigo}','${f.titulo.replace(/'/g,"\\'")}')">definir sigla</button>`}</td><td><b>${f.titulo}</b>${f.produtores&&f.produtores!==f.titulo?`<br><small style="color:var(--ink3)">${f.produtores}</small>`:''}</td><td>${f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'<span style="color:var(--ink3)">—</span>'}</td><td class="num">${f.projetos}</td><td class="num">${f.no_site}${f.rascunhos_site?` <small style="color:var(--ink3)">+${f.rascunhos_site} rasc.</small>`:''}</td><td>${STATUS[f.status_site]||f.status_site}</td></tr>`).join('');
   const prox=await API('/api/fundos/proximo').catch(()=>null);if(prox)document.getElementById('nf-code').textContent=prox.codigo}catch(e){tabelaErro('#fundos-body',e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.status===428?'Troque a senha para continuar.':'Erro ao carregar: '+e.message)}}
 async function definirSigla(codigo,titulo){const s=prompt(`Sigla de 3 letras para ${codigo} ${titulo}.\nAtenção: depois de definida não muda mais (entra no nome dos arquivos).`);if(!s)return;try{await API('/api/fundos/'+codigo,{method:'PATCH',body:JSON.stringify({sigla:s.trim().toUpperCase()})});toast(`${codigo} = ${s.toUpperCase()}`);carregarFundosAPI()}catch(e){toast(e.message)}}
@@ -904,7 +906,7 @@ const _showItemMock=showItem;
 showItem=async function(code){if(!EU&&!MODO_SERVIDOR)return _showItemMock(code);if(!EU){document.getElementById('login').classList.add('on');return}let d;try{d=await API(`/api/itens/${code}`)}catch(e){toast(e.message);return}const it=d.item;
   document.getElementById('id-back').onclick=()=>voltar('projeto/'+it.projeto_codigo);
   const img=it.thumb_url?`<img src="${it.thumb_url}" style="max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)">`:sheetSVG({c:code,tipo:it.tipo_documento||'Planta'},900);
-  const md=Object.entries(d.metadados_site).map(([k,v])=>`<dt>${k}</dt><dd>${String(v).slice(0,300)}</dd>`).join('');
+  const md=Object.entries(it.metadados_site||{}).map(([k,v])=>`<dt>${k}</dt><dd>${String(v).slice(0,300)}</dd>`).join('');
   document.getElementById('idet').innerHTML=`<div class="dethdr"><div><h1>${it.tipo_documento||it.serie_codigo}${it.folha?` · folha ${it.folha}`:''}</h1><div class="meta"><span class="code">${code}</span> · ${it.projeto_titulo}</div></div><div class="pager"><button class="btn sm" ${d.anterior?'':'disabled'} onclick="nav('item/${d.anterior||''}')">← anterior</button><span>${d.posicao} / ${d.total}</span><button class="btn sm" ${d.proxima?'':'disabled'} onclick="nav('item/${d.proxima||''}')">próxima →</button></div></div>
     <div class="viewer"><div class="img">${img}</div><div style="display:grid;gap:16px;align-content:start">
       ${it.autoria_divergente?'<div class="panel" style="border-color:var(--red)"><div class="pb"><span class="tag r">autoria divergente</span><p style="margin:8px 0 0;font-size:13px">O autor lido no carimbo não é o do fundo. Não publica até resolver.</p></div></div>':''}
@@ -927,17 +929,17 @@ async function sair(){if(confirm('Sair do painel?')){await API('/api/auth/logout
 
 document.getElementById('proj-q').addEventListener('input',()=>{if(!EU)return;clearTimeout(window._pq);window._pq=setTimeout(()=>carregarProjetosAPI({q:document.getElementById('proj-q').value}),300)});
 
+// ---------- sessão ----------
+const API=async(path,opt={})=>{const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.erro||r.statusText),{status:r.status});return j};
+let EU=null;
 const MODO_SERVIDOR=location.protocol.startsWith('http');
 function tabelaErro(sel,msg){const tb=document.querySelector(sel);if(tb)tb.innerHTML=`<tr><td colspan="9" class="empty">${msg}</td></tr>`}
 function limparExemplos(){ // em modo servidor, nunca mostrar dado de exemplo como se fosse real
   tabelaErro('#fundos-body','Carregando fundos do servidor…');tabelaErro('#projetos-body','Carregando projetos do servidor…');tabelaErro('#v-arquitetos tbody','Carregando arquitetos do servidor…');
-  document.querySelectorAll('#v-painel .panel, #v-filas .panel, #v-solicitacoes .panel, #v-erros .panel').forEach(p=>{if(!p.querySelector('.aviso-exemplo')){const a=document.createElement('div');a.className='aviso-exemplo';a.style.cssText='font-size:11.5px;color:var(--amber);padding:4px 14px;border-bottom:1px solid var(--line2)';a.textContent='Dados de exemplo — módulo ainda não ligado ao servidor';p.prepend(a)}});
+  ['painel','filas','solicitacoes','erros'].forEach(v=>{const sec=document.getElementById('v-'+v);if(sec&&!sec.querySelector('.aviso-exemplo')){const a=document.createElement('div');a.className='aviso-exemplo';a.innerHTML='<b>Dados de exemplo.</b> Este módulo ainda não está ligado ao servidor — nada aqui é real.';sec.insertBefore(a,sec.firstChild)}});
   FUNDOS.length=0;PROJETOS.length=0}
 if(MODO_SERVIDOR){limparExemplos();API('/api/versao').then(v=>{document.getElementById('foot').textContent='Servidor · versão '+v.versao}).catch(()=>{document.getElementById('foot').textContent='Servidor não respondeu'})}
 
-// ---------- sessão ----------
-const API=async(path,opt={})=>{const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.erro||r.statusText),{status:r.status});return j};
-let EU=null;
 function aplicarUsuario(u){EU=u;if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}carregarFundosAPI();carregarAgentesAPI();carregarProjetosAPI();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;document.querySelector('.who .av').textContent=u.nome.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}}
 async function checarSessao(){try{aplicarUsuario(await API('/api/auth/eu'))}catch(e){if(!MODO_SERVIDOR){return}document.getElementById('login').classList.add('on')}}
 async function fazerLogin(ev){ev.preventDefault();const err=document.getElementById('lg-err');err.textContent='';try{const u=await API('/api/auth/login',{method:'POST',body:JSON.stringify({email:document.getElementById('lg-email').value,senha:document.getElementById('lg-senha').value,lembrar:document.getElementById('lg-lembrar').checked,codigo_totp:document.getElementById('lg-totp').value||null})});try{await API('/api/auth/eu')}catch(e2){err.textContent='Login aceito, mas o navegador não guardou a sessão (cookie recusado). Confira se o endereço é http://192.168.15.60:8000 e se o servidor está atualizado.';return}aplicarUsuario(u);toast(`Bem-vindo, ${u.nome}`);route_to(location.hash.slice(1)||'painel')}catch(e){err.textContent=e.message;if(/autenticador/i.test(e.message))document.getElementById('lg-totp-wrap').style.display=''}}
