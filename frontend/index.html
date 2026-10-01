@@ -431,7 +431,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <!-- FUNDOS -->
   <section class="content" id="v-fundos">
     <div class="hdr"><div><h1>Fundos</h1><p class="sub">Tabela de autoridade. O código de um fundo nasce aqui e nunca muda: estação Contex, CAMP Vision e site consultam esta lista, não o nome da pasta.</p></div><div class="act"><button class="btn" onclick="toast('fundos.json exportado — a estação Contex lê este arquivo')">Exportar fundos.json</button><button class="btn pri" onclick="openModal('m-fundo')">Reservar próximo código</button></div></div>
-    <div class="panel"><div class="hint-rows">Clique num fundo para abrir sua página, com projetos, agentes e descrição.</div><div class="filterbar"><input placeholder="Filtrar fundos… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+    <div class="panel"><div class="hint-rows">Clique num fundo para abrir sua página, com projetos, agentes e descrição.</div><div class="filterbar" id="fundos-filterbar"><input id="fundos-q" placeholder="Buscar por código, sigla ou nome…" autocomplete="off"><div class="fundos-filtros" id="fundos-filtros"><button class="btn sm on" data-ff="todos">Todos <span class="n" id="ffc-todos"></span></button><button class="btn sm" data-ff="publicado">Publicados <span class="n" id="ffc-publicado"></span></button><button class="btn sm" data-ff="rascunho">Rascunhos <span class="n" id="ffc-rascunho"></span></button><button class="btn sm" data-ff="nao_publicado">Não publicados <span class="n" id="ffc-nao_publicado"></span></button><button class="btn sm" data-ff="fora_do_ar">Fora do ar <span class="n" id="ffc-fora_do_ar"></span></button><button class="btn sm" data-ff="direitos">Direitos pendentes <span class="n" id="ffc-direitos"></span></button><button class="btn sm" data-ff="sem_sigla">Sem sigla <span class="n" id="ffc-sem_sigla"></span></button><button class="btn sm" data-ff="so_site">Só no site <span class="n" id="ffc-so_site"></span></button></div><span class="cnt" id="fundos-cnt"></span></div><div class="tw"><table>
       <thead><tr><th>Código</th><th>Sigla</th><th>Nome do fundo</th><th>Período</th><th class="num">Projetos</th><th class="num">Publicados</th><th>Site</th></tr></thead>
       <tbody id="fundos-body"></tbody>
     </table></div></div>
@@ -974,8 +974,48 @@ function fmtDetalhe(d){if(!d)return'';try{const o=JSON.parse(d);if(o&&typeof o==
 
 // ---------- fundos e agentes via API ----------
 let FUNDOS_API=null;
-async function carregarFundosAPI(){try{const fs=await API('/api/fundos/resumo');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();
-  document.getElementById('fundos-body').innerHTML=fs.map(f=>f.so_no_site?`<tr style="background:var(--amber-soft)"><td><span class="tag a">sem código</span></td><td><span class="sig na">—</span></td><td><b>${f.titulo}</b><br><small style="color:var(--ink3)">${f.observacao}</small></td><td>—</td><td class="num">—</td><td class="num">${f.no_site}${f.rascunhos_site?` <small style="color:var(--ink3)">+${f.rascunhos_site} rasc.</small>`:''}</td><td>${f.no_site?'<span class="tag g">no ar</span>':'<span class="tag">não publicado</span>'} <span class="tag">só no site</span></td></tr>`:`<tr data-nav="fundo/${f.codigo}"><td><span class="code">${f.codigo}</span></td><td>${f.sigla?`<span class="sig">${f.sigla}</span>`:`<button class="btn sm" onclick="event.stopPropagation();definirSigla('${f.codigo}','${f.titulo.replace(/'/g,"\\'")}')">definir sigla</button>`}</td><td><b>${f.titulo}</b>${f.produtores&&f.produtores!==f.titulo?`<br><small style="color:var(--ink3)">${f.produtores}</small>`:''}</td><td>${f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'<span style="color:var(--ink3)">—</span>'}</td><td class="num">${f.projetos}</td><td class="num">${f.no_site}${f.rascunhos_site?` <small style="color:var(--ink3)">+${f.rascunhos_site} rasc.</small>`:''}</td><td>${STATUS[f.status_site]||f.status_site}${f.direitos==='autorizado'?'':f.direitos==='nao_definida'?' <span class="tag a" title="direitos não definidos">direitos?</span>':` <span class="tag r">${f.direitos.replace('_',' ')}</span>`}</td></tr>`).join('');
+let FUNDO_FILTRO='todos';
+function fundoPassaFiltro(f){
+  if(FUNDO_FILTRO==='todos')return true;
+  if(FUNDO_FILTRO==='publicado')return f.status_site==='no_ar'||f.no_site>0;
+  if(FUNDO_FILTRO==='rascunho')return f.status_site==='rascunho'||f.rascunhos_site>0;
+  if(FUNDO_FILTRO==='nao_publicado')return !f.so_no_site&&f.status_site==='nao_publicado'&&!(f.no_site>0)&&!(f.rascunhos_site>0);
+  if(FUNDO_FILTRO==='fora_do_ar')return f.status_site==='fora_do_ar';
+  if(FUNDO_FILTRO==='direitos')return !f.so_no_site&&f.direitos!=='autorizado';
+  if(FUNDO_FILTRO==='sem_sigla')return !f.so_no_site&&!f.sigla;
+  if(FUNDO_FILTRO==='so_site')return !!f.so_no_site;
+  return true;
+}
+function renderTabelaFundos(){
+  const fs=FUNDOS_API||[],q=(document.getElementById('fundos-q')?.value||'').trim().toLowerCase();
+  const filtrados=fs.filter(f=>fundoPassaFiltro(f)&&(!q||[f.codigo,f.sigla,f.titulo,f.produtores].filter(Boolean).join(' ').toLowerCase().includes(q)));
+  const body=document.getElementById('fundos-body');if(!body)return;
+  body.innerHTML=filtrados.map(f=>f.so_no_site?`<tr style="background:var(--amber-soft)"><td><span class="tag a">sem código</span></td><td><span class="sig na">—</span></td><td><b>${escHtml(f.titulo)}</b><br><small style="color:var(--ink3)">${escHtml(f.observacao||'')}</small></td><td>—</td><td class="num">—</td><td class="num">${f.no_site}${f.rascunhos_site?` <small style="color:var(--ink3)">+${f.rascunhos_site} rasc.</small>`:''}</td><td>${f.no_site?'<span class="tag g">publicado</span>':f.rascunhos_site?'<span class="tag b">rascunho</span>':'<span class="tag">não publicado</span>'} <span class="tag">só no site</span></td></tr>`:`<tr data-nav="fundo/${f.codigo}"><td><span class="code">${f.codigo}</span></td><td>${f.sigla?`<span class="sig">${escHtml(f.sigla)}</span>`:`<button class="btn sm" onclick="event.stopPropagation();definirSigla('${f.codigo}','${String(f.titulo).replace(/'/g,"\\'")}')">definir sigla</button>`}</td><td><b>${escHtml(f.titulo)}</b>${f.produtores&&f.produtores!==f.titulo?`<br><small style="color:var(--ink3)">${escHtml(f.produtores)}</small>`:''}</td><td>${f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'<span style="color:var(--ink3)">—</span>'}</td><td class="num">${f.projetos}</td><td class="num">${f.no_site}${f.rascunhos_site?` <small style="color:var(--ink3)">+${f.rascunhos_site} rasc.</small>`:''}</td><td>${STATUS[f.status_site]||f.status_site}${f.direitos==='autorizado'?'':f.direitos==='nao_definida'?' <span class="tag a" title="direitos não definidos">direitos?</span>':` <span class="tag r">${String(f.direitos).replace(/_/g,' ')}</span>`}</td></tr>`).join('');
+  const cnt=document.getElementById('fundos-cnt');if(cnt)cnt.textContent=`${filtrados.length} de ${fs.length}`;
+}
+function atualizarContadoresFundos(){
+  const fs=FUNDOS_API||[];
+  const counts={
+    todos:fs.length,
+    publicado:fs.filter(f=>f.status_site==='no_ar'||f.no_site>0).length,
+    rascunho:fs.filter(f=>f.status_site==='rascunho'||f.rascunhos_site>0).length,
+    nao_publicado:fs.filter(f=>!f.so_no_site&&f.status_site==='nao_publicado'&&!(f.no_site>0)&&!(f.rascunhos_site>0)).length,
+    fora_do_ar:fs.filter(f=>f.status_site==='fora_do_ar').length,
+    direitos:fs.filter(f=>!f.so_no_site&&f.direitos!=='autorizado').length,
+    sem_sigla:fs.filter(f=>!f.so_no_site&&!f.sigla).length,
+    so_site:fs.filter(f=>f.so_no_site).length
+  };
+  Object.entries(counts).forEach(([k,v])=>{const e=document.getElementById('ffc-'+k);if(e)e.textContent=v});
+}
+function setFiltroFundos(k){
+  FUNDO_FILTRO=k;
+  document.querySelectorAll('#fundos-filtros [data-ff]').forEach(b=>b.classList.toggle('on',b.dataset.ff===k));
+  renderTabelaFundos();
+}
+document.getElementById('fundos-filtros')?.addEventListener('click',e=>{const b=e.target.closest('[data-ff]');if(b)setFiltroFundos(b.dataset.ff)});
+document.getElementById('fundos-q')?.addEventListener('input',renderTabelaFundos);
+
+async function carregarFundosAPI(){try{const fs=await API('/api/fundos/resumo');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();atualizarContadoresFundos();renderTabelaFundos();
   const prox=await API('/api/fundos/proximo').catch(()=>null);if(prox)document.getElementById('nf-code').textContent=prox.codigo}catch(e){tabelaErro('#fundos-body',e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.status===428?'Troque a senha para continuar.':'Erro ao carregar: '+e.message)}}
 async function definirSigla(codigo,titulo){const s=prompt(`Sigla de 3 letras para ${codigo} ${titulo}.\nAtenção: depois de definida não muda mais (entra no nome dos arquivos).`);if(!s)return;try{await API('/api/fundos/'+codigo,{method:'PATCH',body:JSON.stringify({sigla:s.trim().toUpperCase()})});toast(`${codigo} = ${s.toUpperCase()}`);carregarFundosAPI()}catch(e){toast(e.message)}}
 const _addFundoMock=addFundo;
