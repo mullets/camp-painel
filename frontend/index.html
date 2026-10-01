@@ -1140,60 +1140,88 @@ function rankHTML(items,tipo,lim=5){
   if(!xs.length)return '<li class="empty">Sem dados ainda.</li>';
   return xs.map((x,i)=>`<li><span class="pos">${i+1}</span><div class="name"><b>${escHtml(x.titulo||x.caminho||'—')}</b><small>${escHtml(x.codigo||x.fundo||x.caminho||'')}</small></div><span class="num">${Number(x.visualizacoes||0).toLocaleString('pt-BR')}</span></li>`).join('');
 }
-function maqEstado(m){return m.online===true?'ok':m.online===false?'bad':'warn'}
+function maqEstado(m){return m?.online===true?'ok':m?.online===false?'bad':'warn'}
+function machineChip(m){
+  const st=maqEstado(m),label=m?.nome||'Estação',state=m?.online===true?'online':m?.online===false?'offline':'não configurada';
+  return `<div class="machine-chip ${st}" onclick="go('estacoes')" title="${escHtml([label,m?.funcao,m?.ip].filter(Boolean).join(' · '))}"><div class="topline"><span class="dot"></span><b>${escHtml(label)}</b></div><small>${state}</small></div>`;
+}
 async function carregarPainel(){try{
   const [d,e,a]=await Promise.all([
     API('/api/painel'),
     API('/api/estacoes').catch(()=>null),
-    API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}}))
+    API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}}))
   ]);
   const sec=document.getElementById('v-painel');sec.querySelector('.aviso-exemplo')?.remove();
   const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
-  const q=e?.qnap||{}, site=e?.site||{}, pipe=e?.pipeline||{}, maquinas=e?.maquinas||[];
-  const cv=maquinas.find(m=>m.tipo==='processamento'), qnapM=maquinas.find(m=>m.tipo==='armazenamento');
-  const capturas=maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo));
-  const captOn=capturas.filter(m=>m.online===true).length,captCfg=capturas.filter(m=>m.ip).length;
-  const sync=site.ultima_sincronizacao,ultSync=sync&&(sync.terminada_em||sync.iniciada_em);
-  const intervalo=+(site.intervalo_sync_min||15),proxSync=ultSync?proximaSincronizacao(ultSync,intervalo):null;
-  const p=a?.periodos||{}, ph=p.hoje||{}, p7=p['7d']||{}, p30=p['30d']||{};
-  const onlineAgora=a?.agora?.disponivel?Number(a.agora.usuarios||0).toLocaleString('pt-BR'):'—';
-  const analyticsErro=!a?.disponivel;
-  sec.innerHTML=`<div class="hdr"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p class="sub">Operação, publicação e uso público do acervo em uma tela.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções</span><span><kbd>F</kbd> filtrar</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
+  const q=e?.qnap||{},site=e?.site||{},pipe=e?.pipeline||{},maquinas=e?.maquinas||[];
+  const captura=maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo));
+  const cv=maquinas.find(m=>m.tipo==='processamento');
+  const qnap=maquinas.find(m=>m.tipo==='armazenamento');
+  const ult=site.ultima_sincronizacao&&(site.ultima_sincronizacao.terminada_em||site.ultima_sincronizacao.iniciada_em);
+  const prox=ult?proximaSincronizacao(ult,+(site.intervalo_sync_min||15)):null;
+  const operacaoRuim=[...captura,cv,qnap].filter(Boolean).some(m=>m.online===false)||!q.montado||!site.http?.ok;
+  const pend=d.erros.bloqueantes+d.solicitacoes.aguardam+d.filas.revisao;
+  const geral=operacaoRuim?'bad':pend?'warn':'ok';
+  const geralTxt=geral==='bad'?'Há algo offline':geral==='warn'?'Operação com pendências':'Operação saudável';
+  const p=a?.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
+  const analyticsPerm=a?.erro_codigo==='sitekit_permissoes';
 
-  <div class="panel" style="margin-bottom:16px"><div class="ph"><h2>Operação agora</h2><button class="btn sm" onclick="carregarPainel()">Atualizar</button></div><div class="pb">
-    <div class="dash-health">
-      <div class="health-card ${captCfg?captOn===captCfg?'ok':captOn?'warn':'bad':'warn'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>Estações de captura</b></div><small>${captOn} online de ${captCfg||capturas.length} configuradas</small><small>${capturas.filter(m=>m.online===false).map(m=>m.nome).join(' · ')||'sem falhas detectadas'}</small></div>
-      <div class="health-card ${cv?maqEstado(cv):'warn'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>CAMP Vision 2</b></div><small>${cv?.online===true?'online':cv?.online===false?'sem resposta':'IP não configurado'}</small><small>${pipe.entrada_bruta??0} na entrada · ${pipe.aguardando_revisao??0} prontos para revisão</small></div>
-      <div class="health-card ${q.montado?'ok':'bad'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>QNAP</b></div><small>${q.montado?'montado':'não montado'}${q.uso_pct!=null?' · '+q.uso_pct+'% usado':''}</small><small>${q.livre_gb!=null?Number(q.livre_gb).toLocaleString('pt-BR')+' GB livres de '+Number(q.total_gb).toLocaleString('pt-BR')+' GB':escHtml(q.raiz||'')}</small></div>
-      <div class="health-card ${site.http?.ok?'ok':'bad'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>Site público</b></div><small>${site.http?.ok?'online · '+site.http.ms+' ms':'sem resposta'}</small><small>${ultSync?'sync '+fmtDataHora(ultSync):'nunca sincronizado'}${proxSync?' · próxima '+fmtDataHora(proxSync):''}</small></div>
+  sec.innerHTML=`<div class="dash-v2">
+    <div class="dash-hero">
+      <div class="panel dash-hero-main">
+        <div class="dash-hero-head"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p>Visão rápida da operação do acervo.</p></div><div class="dash-state ${geral}"><span class="dot"></span>${geralTxt}</div></div>
+        <div class="machine-strip">
+          ${captura.map(machineChip).join('')}
+          ${cv?machineChip(cv):machineChip({nome:'CAMP Vision 2'})}
+          ${qnap?machineChip(qnap):machineChip({nome:'QNAP'})}
+        </div>
+      </div>
+      <div class="dash-side-stack">
+        <div class="panel qnap-card" data-nav="estacoes" style="cursor:pointer">
+          <div class="ph" style="padding:0;border:0"><h2>QNAP</h2><span class="tag ${q.montado?'g':'r'}">${q.montado?'online':'offline'}</span></div>
+          <div class="storage">${q.livre_gb!=null?Number(q.livre_gb).toLocaleString('pt-BR')+' GB':'—'}</div>
+          <div class="sub">livres${q.total_gb!=null?' de '+Number(q.total_gb).toLocaleString('pt-BR')+' GB':''}</div>
+          ${q.uso_pct!=null?`<div class="bar"><i style="width:${q.uso_pct}%"></i></div><div class="sub">${q.uso_pct}% usado</div>`:''}
+        </div>
+        <div class="panel site-card" data-nav="estacoes" style="cursor:pointer">
+          <div class="ph" style="padding:0 0 6px;border:0"><h2>Site público</h2><span class="tag ${site.http?.ok?'g':'r'}">${site.http?.ok?'online':'offline'}</span></div>
+          <div class="site-line"><b>Última sync</b><span>${ult?fmtDataHora(ult):'nunca'}</span></div>
+          <div class="site-line"><b>Próxima</b><span>${prox?fmtDataHora(prox):'—'}</span></div>
+          <div class="site-line"><b>Divergências</b><span>${site.divergencias??d.site.divergencias??0}</span></div>
+        </div>
+      </div>
     </div>
-  </div></div>
 
-  <div class="panel" style="margin-bottom:16px"><div class="ph"><h2>Audiência do site</h2><span class="tag">${escHtml(a?.origem||'Google Analytics')}</span></div><div class="pb">
-    <div class="audience-stats">
-      <div class="audience-stat"><div class="v">${onlineAgora}</div><div class="l">ativos agora</div><div class="s">${a?.agora?.disponivel?'últimos 30 min':'realtime ainda não disponível'}</div></div>
-      <div class="audience-stat"><div class="v">${Number(ph.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas hoje</div><div class="s">${Number(ph.screenPageViews||0).toLocaleString('pt-BR')} visualizações</div></div>
-      <div class="audience-stat"><div class="v">${Number(p7.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · 7 dias</div><div class="s">${Number(p7.screenPageViews||0).toLocaleString('pt-BR')} visualizações</div></div>
-      <div class="audience-stat"><div class="v">${Number(p30.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · 30 dias</div><div class="s">${Number(p30.screenPageViews||0).toLocaleString('pt-BR')} visualizações</div></div>
+    <div class="dash-mid">
+      <div class="panel action-card"><div class="ph"><h2>Precisa de atenção</h2><span class="tag">${d.precisa_de_voce.length}</span></div><div class="pb"><ul class="action-list">${d.precisa_de_voce.length?d.precisa_de_voce.slice(0,6).map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${x.tipo}</span><div class="t"><b>${escHtml(x.titulo)}</b>${x.codigo?`<small>${escHtml(x.codigo)}</small>`:''}</div><button class="btn sm" onclick="nav('${x.rota}')">Abrir</button></li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
+      <div class="panel"><div class="ph"><h2>Hoje no acervo</h2></div><div class="pb"><div class="kpi-grid">
+        <div class="kpi" data-nav="filas" style="cursor:pointer"><div class="v">${d.filas.revisao}</div><div class="l">lotes prontos para revisão</div></div>
+        <div class="kpi" data-nav="erros" style="cursor:pointer"><div class="v">${d.erros.bloqueantes}</div><div class="l">erros que bloqueiam publicação</div></div>
+        <div class="kpi" data-nav="solicitacoes" style="cursor:pointer"><div class="v">${d.solicitacoes.abertas}</div><div class="l">pedidos de material abertos</div></div>
+        <div class="kpi" data-nav="fundos" style="cursor:pointer"><div class="v">${d.fundos.no_ar}</div><div class="l">fundos publicados</div></div>
+      </div></div></div>
     </div>
-    ${analyticsErro?`<div class="empty" style="padding:12px">Analytics indisponível: ${escHtml(a?.erro||'sem permissão do Site Kit para esta conta')}</div>`:`<div class="grid g2 wide3">
-      <div><h2 style="margin:0 0 8px">Fundos mais acessados</h2><ol class="rank">${rankHTML(a.top_fundos,'fundo',5)}</ol></div>
-      <div><h2 style="margin:0 0 8px">Projetos mais acessados</h2><ol class="rank">${rankHTML(a.top_projetos,'projeto',5)}</ol></div>
-      <div><h2 style="margin:0 0 8px">Páginas mais acessadas</h2><ol class="rank">${rankHTML(a.top_paginas,'pagina',5)}</ol></div>
-    </div><div class="act" style="margin-top:12px"><button class="btn sm" onclick="mostrarTop10Analytics()">Ver Top 10</button></div>`}
-  </div></div>
 
-  <div class="grid g4" style="margin-bottom:16px">
-    <div class="panel stat" data-nav="filas" style="cursor:pointer"><div class="v">${d.filas.total}</div><div class="l">lotes em andamento</div><div class="d">${d.filas.processando?`<span class="tag b">${d.filas.processando} processando</span> `:''}${d.filas.revisao?`<span class="tag a">${d.filas.revisao} em revisão</span> `:''}${d.filas.erro?`<span class="tag r">${d.filas.erro} com erro</span>`:''}${!d.filas.total?'<span class="tag">fila vazia</span>':''}</div></div>
-    <div class="panel stat" data-nav="solicitacoes" style="cursor:pointer"><div class="v">${d.solicitacoes.abertas}</div><div class="l">pedidos de material abertos</div><div class="d">${d.solicitacoes.aguardam?`<span class="tag a">${d.solicitacoes.aguardam} aguardam resposta</span>`:'<span class="tag">nenhum pendente</span>'}</div></div>
-    <div class="panel stat" data-nav="erros" style="cursor:pointer"><div class="v">${d.erros.abertos}</div><div class="l">problemas em aberto</div><div class="d">${d.erros.bloqueantes?`<span class="tag r">${d.erros.bloqueantes} bloqueiam publicação</span>`:'<span class="tag g">nenhum bloqueante</span>'}</div></div>
-    <div class="panel stat" data-nav="fundos" style="cursor:pointer"><div class="v">${d.fundos.total}</div><div class="l">fundos · ${d.fundos.no_ar} publicados</div><div class="d">próximo <span class="code">${d.fundos.proximo}</span>${d.fundos.sem_sigla?` <span class="tag a">${d.fundos.sem_sigla} sem sigla</span>`:''}</div></div>
-  </div>
-  <div class="grid g2">
-    <div class="panel"><div class="ph"><h2>Precisa de você</h2></div><div class="pb"><ul class="list">${d.precisa_de_voce.length?d.precisa_de_voce.map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${x.tipo}</span><div class="t">${escHtml(x.titulo)}${x.codigo?`<small><span class="code">${escHtml(x.codigo)}</span></small>`:''}</div><button class="btn sm" onclick="nav('${x.rota}')">Abrir</button></li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
-    <div class="panel"><div class="ph"><h2>Acervo em números</h2></div><div class="pb"><dl class="kv"><dt>Projetos</dt><dd>${d.projetos.total} · ${d.projetos.no_ar} publicados · ${d.projetos.rascunho} rascunho${d.projetos.bloqueados?` · <span style="color:var(--red)">${d.projetos.bloqueados} bloqueados</span>`:''}</dd><dt>Folhas</dt><dd>${d.itens.total} · ${d.itens.no_ar} publicadas · ${d.itens.rascunho} rascunho${d.itens.autoria_divergente?` · <span style="color:var(--red)">${d.itens.autoria_divergente} autoria divergente</span>`:''}</dd><dt>Publicação</dt><dd>${ultSync?`sincronizada ${fmtDataHora(ultSync)} · ${d.site.divergencias} divergências`:'nunca sincronizada'}</dd></dl>
-      ${d.por_fundo_mes.length?`<h2 style="margin-top:14px">Folhas catalogadas nos últimos 30 dias</h2><div style="display:grid;gap:8px;font-size:13px">${d.por_fundo_mes.map(f=>`<div>${escHtml(f.titulo)} <span class="code">${f.fundo}</span> · ${f.n}<div class="bar"><i style="width:${Math.round(100*f.n/d.por_fundo_mes[0].n)}%"></i></div></div>`).join('')}</div>`:''}
-      <h2 style="margin-top:14px">Últimos eventos</h2><ul class="hist">${d.eventos.map(e=>`<li><time>${fmtDataHora(e.quando)}</time><span>${e.entidade} <span class="code">${e.codigo}</span> ${e.tipo} · ${escHtml(e.ator)}</span></li>`).join('')||'<li class="empty">—</li>'}</ul></div></div>
+    <div class="panel"><div class="ph"><h2>Audiência do acervo</h2>${a?.disponivel?'<span class="tag g">Google Analytics</span>':'<span class="tag a">configuração pendente</span>'}</div><div class="pb">
+      ${a?.disponivel?`<div class="analytics-ok">
+        <div class="analytics-overview">
+          <div class="metric"><div class="v">${Number(p7.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · últimos 7 dias</div></div>
+          <div class="metric"><div class="v">${Number(p30.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · últimos 30 dias</div></div>
+          <div class="metric"><div class="v">${Number(p30.screenPageViews||0).toLocaleString('pt-BR')}</div><div class="l">visualizações · 30 dias</div></div>
+        </div>
+        <div class="grid g2 wide3">
+          <div><h2 style="margin:0 0 8px">Fundos mais vistos</h2><ol class="rank">${rankHTML(a.top_fundos,'fundo',5)}</ol></div>
+          <div><h2 style="margin:0 0 8px">Projetos mais vistos</h2><ol class="rank">${rankHTML(a.top_projetos,'projeto',5)}</ol></div>
+          <div><h2 style="margin:0 0 8px">Páginas mais vistas</h2><ol class="rank">${rankHTML(a.top_paginas,'pagina',5)}</ol></div>
+        </div>
+        <div class="act"><button class="btn sm" onclick="mostrarTop10Analytics()">Ver Top 10</button></div>
+      </div>`:`<div class="analytics-lock"><div class="ico">!</div><div><b>${analyticsPerm?'Reconectar o Google Analytics no Site Kit':'Analytics ainda não disponível'}</b><p>${analyticsPerm?'O Site Kit está conectado, mas a conta não concedeu todas as permissões do Analytics. Enquanto isso, o painel não mostra números incompletos ou zerados como se fossem reais.':'Assim que o Analytics estiver acessível, visitantes e rankings aparecem aqui automaticamente.'}</p>${analyticsPerm?`<div class="act" style="margin-top:10px"><a class="btn sm" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div>`:''}</div></div>`}
+    </div></div>
+
+    <div class="grid g2">
+      <div class="panel"><div class="ph"><h2>Acervo em números</h2></div><div class="pb"><dl class="kv"><dt>Projetos</dt><dd>${d.projetos.total} · ${d.projetos.no_ar} publicados · ${d.projetos.rascunho} rascunho</dd><dt>Documentos</dt><dd>${d.itens.total} · ${d.itens.no_ar} publicados · ${d.itens.rascunho} rascunho</dd><dt>Entrada bruta</dt><dd>${pipe.entrada_bruta??0} lote(s)</dd><dt>Prontos pelo CAMP Vision 2</dt><dd>${pipe.aguardando_revisao??0} lote(s)</dd></dl></div></div>
+      <div class="panel"><div class="ph"><h2>Atividade recente</h2></div><div class="pb"><ul class="hist">${d.eventos.slice(0,8).map(e=>`<li><time>${fmtDataHora(e.quando)}</time><span>${escHtml(e.entidade)} <span class="code">${escHtml(e.codigo||'')}</span> ${escHtml(e.tipo)} · ${escHtml(e.ator)}</span></li>`).join('')||'<li class="empty">—</li>'}</ul></div></div>
+    </div>
   </div>`;
   window._analyticsAtual=a;
 }catch(e){if(e.status!==401&&e.status!==428)toast(e.message)}}

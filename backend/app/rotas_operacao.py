@@ -275,7 +275,14 @@ def analytics(u: dict = Depends(auth.exige("leitura"))) -> dict:
         out["disponivel"] = True
         out["agora"]["motivo"] = "Realtime requer acesso específico à GA4 Realtime API; o Site Kit desta integração fornece os relatórios consolidados."
     except Exception as e:  # noqa: BLE001
-        out["erro"] = str(e)[:300]
+        msg = str(e)[:300]
+        out["erro"] = msg
+        low = msg.lower()
+        if "403" in msg and ("permiss" in low or "site kit" in low):
+            out["erro_codigo"] = "sitekit_permissoes"
+            out["acao"] = "Reconectar o Google Analytics no Site Kit concedendo todas as permissões."
+        else:
+            out["erro_codigo"] = "indisponivel"
     return out
 
 
