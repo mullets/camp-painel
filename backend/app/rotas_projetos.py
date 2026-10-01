@@ -160,7 +160,7 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
     if campos:
         campos.append("atualizado_em=datetime('now')")
         con.execute(f"UPDATE projeto SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'editado',?,?)", (codigo, u["email"], json.dumps(mud, ensure_ascii=False)))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'editado',?,?)", (codigo, u["email"], json.dumps({"antes": {k: p[k] for k in mud}, "depois": mud}, ensure_ascii=False)))
         con.commit()
     con.close()
     site = None
