@@ -72,9 +72,9 @@ def configurar() -> Path:
     return LOG_FILE
 
 
-def registrar(nivel: int, evento: str, mensagem: str = "", **campos: Any) -> None:
+def registrar(nivel: int, evento: str, mensagem: str = "", exc_info: bool = False, **campos: Any) -> None:
     configurar()
-    logger.log(nivel, mensagem or evento, extra={"evento": evento, **campos})
+    logger.log(nivel, mensagem or evento, exc_info=exc_info, extra={"evento": evento, **campos})
 
 
 def ler_logs(limite: int = 200, nivel: str | None = None, q: str | None = None) -> list[dict[str, Any]]:
