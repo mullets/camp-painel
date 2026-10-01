@@ -41,6 +41,9 @@ PY
 echo "== git pull main"
 git pull --ff-only origin main
 
+echo "== checagem estrutural da UI"
+python scripts/check_ui.py
+
 echo "== dependências"
 pip install -q -r backend/requirements.txt
 
