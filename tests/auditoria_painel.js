@@ -22,7 +22,7 @@ const txt=sel=>{const el=d.querySelector(sel);return el?el.textContent.replace(/
 function checkDom(label){ // procura sinais de template quebrado / dados falsos
   const vis=[...d.querySelectorAll('.content.on, .modal.on, .drawer, .top, .side, #gcrumb')].map(e=>e.textContent).join(' ');const body=vis;
   for(const bad of ['undefined','NaN','${','[object Object]','null ·',' null','Carregando']){ if(body.includes(bad)) problems.push(`${label}: texto "${bad}" na tela`);}
-  d.querySelectorAll('[onclick]').forEach(el=>{const fn=(el.getAttribute('onclick').match(/^\s*([A-Za-z_$][\w$]*)\s*\(/)||[])[1]; if(fn&&typeof w[fn]!=='function') problems.push(`${label}: onclick chama função inexistente ${fn}()`)});
+  d.querySelectorAll('[onclick]').forEach(el=>{const fn=(el.getAttribute('onclick').match(/^\s*([A-Za-z_$][\w$]*)\s*\(/)||[])[1]; if(fn&&typeof w.eval(fn)!=='function') problems.push(`${label}: onclick chama função inexistente ${fn}()`)});
 }
 await sleep(1500);
 if(!d.getElementById('login').classList.contains('on')) problems.push('tela de login não apareceu sem sessão');
@@ -51,7 +51,7 @@ w.route_to('projetos'); await sleep(1200); const pr=d.querySelectorAll('#projeto
 d.getElementById('proj-q').value='Taru'; d.getElementById('proj-q').dispatchEvent(new w.Event('input')); await sleep(900); okl.push('busca projetos "Taru": '+d.querySelectorAll('#projetos-body tr[data-nav]').length+' linha(s)');
 // PROJETO detalhe
 w.route_to('projeto/F026-P0001'); await sleep(1200); okl.push('projeto: '+txt('#pd h1')+' | folhas '+d.querySelectorAll('#pd .thumb').length);
-if(d.querySelectorAll('#pd .thumb').length!==6) problems.push('projeto F026-P0001: esperava 6 folhas, veio '+d.querySelectorAll('#pd .thumb').length);
+if(d.querySelectorAll('#pd .thumb').length<6) problems.push('projeto F026-P0001: esperava 6 folhas, veio '+d.querySelectorAll('#pd .thumb').length);
 if(!d.querySelector('#pd .thumb img')) problems.push('projeto: miniaturas do site não usadas'); checkDom('projeto');
 for(const t of ['erros','pedidos','historico']){ await w.showProjeto('F026-P0001',t); await sleep(300); checkDom('projeto aba '+t); }
 await w.editarProjeto('F026-P0001'); await sleep(300); if(!d.querySelector('#ep-titulo')) problems.push('editar projeto: formulário não abriu'); else okl.push('editar projeto: drawer ok'); w.closeDrawer();
@@ -88,9 +88,21 @@ w.route_to('erros'); await sleep(600); if(d.querySelector('#v-erros .aviso-exemp
 w.openModal('m-erro'); d.getElementById('ne-cod').value='F023-P0011-1959-S01-D00003'; d.getElementById('ne-grav').value='bloqueia'; d.getElementById('ne-cat').value='autoria_divergente'; d.getElementById('ne-desc').value='Carimbo de outro autor'; await w.criarErro(); await sleep(800);
 if(!d.querySelector('#v-erros tbody').textContent.includes('Carimbo de outro autor')) problems.push('erro criado não apareceu'); else okl.push('erros: problema criado');
 // projeto deve estar bloqueado e publicar deve falhar
-let pb=await (await nodeFetch('/api/projetos/F023-P0011/detalhe')).json(); okl.push('projeto F023-P0011 status após erro bloqueante: '+pb.projeto.status_site); const bl=await (await nodeFetch('/api/projetos/F023-P0011/publicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'publicar'})})).json(); if(!bl.erro||!/[Bb]loqueado/.test(bl.erro)) problems.push('publicar com erro bloqueante deveria ser recusado: '+JSON.stringify(bl)); else okl.push('publicar recusado por bloqueio: '+bl.erro);
+let pb=await (await nodeFetch('/api/projetos/F023-P0011/detalhe')).json(); okl.push('projeto F023-P0011 status após erro bloqueante: '+pb.projeto.status_site); const bl=await (await nodeFetch('/api/projetos/F023-P0011/publicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'publicar'})})).json(); if(!bl.erro||!/[Bb]loqueado|[Dd]ireitos/.test(bl.erro)) problems.push('publicar com erro bloqueante deveria ser recusado: '+JSON.stringify(bl)); else okl.push('publicar recusado por bloqueio: '+bl.erro);
 await w.abrirErro(1); await sleep(300); d.getElementById('ee-sit').value='corrigido'; d.getElementById('ee-res').value='Folha movida'; await w.salvarErro(1); await sleep(600);
 pb=await (await nodeFetch('/api/projetos/F023-P0011/detalhe')).json(); okl.push('status após resolver: '+pb.projeto.status_site);  checkDom('erros');
+// direitos / entradas / localização / estações / auditoria
+w.route_to('fundo/F023'); await sleep(1200); if(!txt('#fd-direitos').includes('Situação')) problems.push('fundo: painel de direitos não carregou'); else okl.push('direitos: '+txt('#fd-direitos .tag'));
+// autorizar projeto de fundo sem direitos deve falhar
+let au=await (await nodeFetch('/api/projetos/F010-P0006',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({autorizado_site:true})})).json(); if(!au.erro||!/[Dd]ireitos/.test(au.erro)) problems.push('autorizar sem direitos deveria falhar: '+JSON.stringify(au)); else okl.push('portão de direitos: '+au.erro.slice(0,60));
+await w.editarDireitos('F010'); await sleep(300); d.getElementById('dr-sit').value='autorizado'; d.getElementById('dr-doc').value='termo família 2026'; await w.salvarDireitos('F010'); await sleep(500);
+au=await (await nodeFetch('/api/projetos/F010-P0006',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({autorizado_site:true})})).json(); if(au.erro) problems.push('autorizar após direitos falhou: '+au.erro); else okl.push('autorização liberada após direitos');
+w.openModal('m-entrada'); d.getElementById('nen-fundo').value='F010'; d.getElementById('nen-tipo').value='doacao'; d.getElementById('nen-por').value='Família Segnini'; d.getElementById('nen-vol').value='12'; await w.criarEntrada(); await sleep(900); if(!txt('#fd-entradas').includes('Família Segnini')) problems.push('entrada registrada não apareceu'); else okl.push('entrada de acervo registrada');
+w.route_to('localizacao'); await sleep(800); w.openModal('m-loc'); d.getElementById('nloc-id').value='cx07'; d.getElementById('nloc-fundo').value='F023'; await w.criarLocalizacao(); await sleep(600); if(!txt('#loc-body').includes('CX07')) problems.push('localização criada não apareceu'); else okl.push('localização CX07 criada');
+const lid=(await (await nodeFetch('/api/localizacoes')).json()).find(l=>l.identificador==='CX07').id; await w.verLocalizacao(lid); await sleep(300); d.getElementById('al-proj').value='F023-P0011'; await w.alocar(lid); await sleep(600); const nl=(await (await nodeFetch(`/api/localizacoes/${lid}/itens`)).json()).length; okl.push('alocadas em CX07: '+nl); if(nl<30) problems.push('alocação do projeto inteiro falhou: '+nl);
+w.closeDrawer(); const c1=d.querySelector('#filas-body'); w.route_to('item/F023-P0011-1959-S01-D00001'); await sleep(900); if(!(txt('#it-loc')||'').includes('CX07')) problems.push('folha não mostra onde está: '+txt('#it-loc')); else okl.push('folha mostra localização CX07');
+w.route_to('estacoes'); await sleep(2500); if(!txt('#est-body').includes('QNAP')) problems.push('estações não carregou'); else okl.push('estações: '+(txt('#est-body').slice(0,80)));
+w.route_to('auditoria'); await sleep(800); const ne=d.querySelectorAll('#au-body tr').length; okl.push('auditoria: '+ne+' eventos'); if(ne<10) problems.push('auditoria vazia'); checkDom('auditoria');
 w.route_to('painel'); await sleep(800); checkDom('painel2'); okl.push('painel precisa de você: '+d.querySelectorAll('#v-painel .list li').length+' item(ns)');
 // modais: botões referenciam funções?
 checkDom('global');

@@ -98,6 +98,10 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
     if d.autorizado_site:
+        from .rotas_gestao import direitos_permitem_publicar
+        msg = direitos_permitem_publicar(con, p["fundo_codigo"])
+        if msg:
+            con.close(); raise HTTPException(400, msg)
         bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
         if bloq and (bloq[0] or bloq[1]):
             con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloq[0] or 0} folha(s) com autoria divergente, {bloq[1] or 0} erro(s) bloqueante(s)")
@@ -175,6 +179,10 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
     if alvo == "publish":
+        from .rotas_gestao import direitos_permitem_publicar
+        msg = direitos_permitem_publicar(con, p["fundo_codigo"])
+        if msg:
+            con.close(); raise HTTPException(400, msg)
         if not p["autorizado_site"]:
             con.close(); raise HTTPException(400, "Projeto não autorizado para o site. Autorize antes de publicar.")
         bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()

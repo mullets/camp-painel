@@ -70,7 +70,8 @@ def resumo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='publish') AS no_site,
                (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='draft') AS rascunhos_site,
                (SELECT GROUP_CONCAT(a.forma_autorizada, ' · ') FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id
-                 WHERE fa.fundo_codigo=f.codigo AND fa.papel='produtor') AS produtores
+                 WHERE fa.fundo_codigo=f.codigo AND fa.papel='produtor') AS produtores,
+               COALESCE((SELECT situacao FROM direitos_fundo d WHERE d.fundo_codigo=f.codigo),'nao_definida') AS direitos
         FROM fundo f ORDER BY f.codigo""").fetchall()
     out = [dict(r) for r in rows]
     # termos que existem no site mas não têm código na tabela
