@@ -282,6 +282,13 @@ tbody tr.sel td{background:var(--blue-soft)}
 .thumb .cap{padding:6px 8px;font-size:11.5px;line-height:1.35}
 .thumb .cap .code{font-size:10.5px;display:block;background:none;padding:0;color:var(--ink3)}
 .thumb .flag{position:absolute;top:6px;right:6px}
+.project-source{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);font-size:12px;color:var(--ink2)}
+.project-source.warn{border-color:var(--amber);background:var(--amber-soft)}
+.project-series{display:grid;gap:10px;margin:0 0 22px}
+.project-series-head{display:flex;align-items:baseline;gap:8px;border-bottom:1px solid var(--line);padding-bottom:7px}
+.project-series-head h3{margin:0;font-size:14px}.project-series-head span{font-size:11px;color:var(--ink3);font-family:var(--mono)}
+.project-series .thumbs{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.thumb .origin{position:absolute;left:6px;top:6px;font-size:9px}
 .viewer{display:grid;grid-template-columns:1fr 360px;gap:16px}
 .viewer .img{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);display:grid;place-items:center;padding:18px;min-height:420px}
 .viewer .img svg{max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)}
@@ -920,7 +927,7 @@ function showProjeto(code,tab){const p=projOf(code);if(!p)return;if(tab)pdTab=ta
   document.getElementById('pd-back').onclick=()=>voltar('fundo/'+p.f);document.getElementById('pd-crumb').innerHTML=`<a class="home" onclick="go('painel')" title="Painel"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10h-6v-6H9v6H3z"/></svg></a><span>/</span><a onclick="go('fundos')">Fundos</a><span>/</span><a onclick="nav('fundo/${p.f}')">${p.f} ${f[2]}</a><span>/</span><b>${p.c}</b>`;
   const tabs=[['itens',`Itens (${its.length})`],['erros',`Problemas (${flags.length})`],['pedidos','Pedidos'],['historico','Histórico']];
   let body='';
-  if(pdTab==='itens')body=`<div class="thumbs">${its.map((it,k)=>`<div class="thumb" data-nav="item/${it.c}">${sheetSVG(it,220)}${it.flag?`<span class="tag r flag">${it.flag}</span>`:''}<div class="cap"><b>${it.tipo}</b> · folha ${it.folha}<span class="code">${it.c.slice(-13)}</span></div></div>`).join('')}</div>`;
+  if(pdTab==='itens')body=renderItensProjeto(d,p);
   else if(pdTab==='erros')body=flags.length?`<div class="panel"><div class="tw"><table><thead><tr><th>Item</th><th>Problema</th><th>Situação</th><th></th></tr></thead><tbody>${flags.map(i=>`<tr><td><span class="code">${i.c}</span></td><td>${i.flag}</td><td><span class="tag a">aberto</span></td><td><button class="btn sm">Resolver</button></td></tr>`).join('')}</tbody></table></div></div>`:'<div class="panel"><div class="empty">Nenhum problema aberto neste projeto.</div></div>';
   else if(pdTab==='pedidos')body=`<div class="panel"><div class="empty">${p.c==='F014-P0002'?'1 pedido: Família Barretto, todas as folhas, em preparação.':'Nenhum pedido de material para este projeto.'}</div></div>`;
   else body=`<div class="panel"><div class="pb"><ul class="hist">${HIST.join('')}<li><time>${p.a||'—'}</time><span>Data do projeto (lida no carimbo)</span></li></ul></div></div>`;
@@ -1330,6 +1337,26 @@ async function carregarProjetosAPI(filtro={}){const tinha=document.querySelector
   const cnt=document.querySelector('#v-projetos .cnt');if(cnt)cnt.textContent=`${r.itens.length} de ${r.total} projetos`;
   PROJETOS.length=0;r.itens.forEach(p=>PROJETOS.push({c:p.codigo,t:p.titulo,f:p.fundo_codigo,a:p.ano,cid:p.cidade,s:(p.series||'').split(',').filter(Boolean),n:p.folhas,st:p.status_site,u:(p.atualizado_em||'').slice(0,10)}));atualizarBarraLoteProjetos()}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.message;if(tinha)marcarStale('projetos',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`);else tabelaErro('#projetos-body',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`)}}
 const _showProjetoMock=showProjeto;
+function nomeSerieProjeto(c){return ({S01:'Desenhos e pranchas',S02:'Documentos textuais',S03:'Fotografias',S04:'Negativos',S05:'Slides',S06:'Materiais e especificações',SEM_SERIE:'Sem série'})[c]||c||'Sem série'}
+function cardItemProjeto(it){
+  const codigo=it.codigo||('TAINACAN-'+it.tainacan_item_id);
+  const navegavel=/^F\d{3}-P\d{4}-.+/.test(codigo);
+  const imagem=it.thumb_url?`<img src="${escHtml(it.thumb_url)}" loading="lazy" style="width:100%;aspect-ratio:1.4;object-fit:contain;background:#fff;display:block">`:sheetSVG({c:codigo,tipo:it.tipo_documento||'Documento'},220);
+  const flag=it.autoria_divergente?'<span class="tag r flag">autoria divergente</span>':it.duplicata_de?'<span class="tag a flag">duplicata</span>':it.espelhado?'<span class="tag a flag">espelhado</span>':'';
+  const status=it.status_site==='rascunho'?' <span class="tag b" style="font-size:9.5px">rascunho</span>':it.status_site==='fora_do_ar'?' <span class="tag" style="font-size:9.5px">fora do ar</span>':'';
+  const origem=it.origem_catalogacao==='site'?'<span class="tag origin">só no site</span>':'';
+  return `<div class="thumb" ${navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}<span class="code">${escHtml(codigo)}</span></div></div>`
+}
+function renderItensProjeto(d,p){
+  const its=d.itens||[], fonte=d.fonte_visual||{};
+  if(!its.length)return `<div class="panel"><div class="empty">Nenhum documento digitalizado reconhecido para este projeto.</div></div>`;
+  const diverge=fonte.documentos_site!==fonte.documentos_locais;
+  const source=`<div class="project-source ${diverge?'warn':''}"><b>Fonte visual:</b><span>${escHtml(fonte.colecao_itens_nome||('coleção '+(fonte.colecao_itens_id||'—')))}</span><span>· ${fonte.documentos_site??0} documento(s) reconhecidos no site</span><span>· ${fonte.documentos_locais??0} no catálogo local</span>${diverge?'<span class="tag a">divergência</span>':''}</div>`;
+  const ordem=['S01','S02','S03','S04','S05','S06','SEM_SERIE'];
+  const grupos={};for(const it of its){const k=it.serie_codigo||'SEM_SERIE';(grupos[k]||(grupos[k]=[])).push(it)}
+  const html=[...ordem,...Object.keys(grupos).filter(k=>!ordem.includes(k))].filter(k=>grupos[k]?.length).map(k=>`<section class="project-series"><div class="project-series-head"><h3>${escHtml(nomeSerieProjeto(k))}</h3><span>${grupos[k].length}</span></div><div class="thumbs">${grupos[k].map(cardItemProjeto).join('')}</div></section>`).join('');
+  return source+html;
+}
 showProjeto=async function(code,tab){if(!EU&&!MODO_SERVIDOR)return _showProjetoMock(code,tab);if(!EU){document.getElementById('login').classList.add('on');return}if(tab)pdTab=tab;let d;try{d=await API(`/api/projetos/${code}/detalhe`)}catch(e){if(e.status===404){mostrarNaoEncontrado('Projeto não encontrado',code+' não existe.','projetos')}else toast(e.message);return}const p=d.projeto;registrarRecente('projeto/'+code,code+' · '+p.titulo,'projeto');const its=d.itens;const flags=its.filter(i=>i.autoria_divergente||i.duplicata_de||i.espelhado);const podeEditar=['admin','master'].includes(EU.papel);
   document.getElementById('pd-back').onclick=()=>voltar('fundo/'+p.fundo_codigo);
   const tabs=[['itens',`Folhas (${its.length})`],['erros',`Problemas (${d.erros.length+flags.length})`],['pedidos',`Pedidos (${d.pedidos.length})`],['historico','Histórico']];
