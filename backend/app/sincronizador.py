@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import traceback
+import threading
 
 from .db import connect
 from .wp import WP, detectar_codigo, metadados_texto
@@ -21,7 +22,7 @@ def _divergencia(con, entidade, codigo, campo, painel, site):
                 (entidade, codigo, campo, painel, site))
 
 
-def executar(gravar_espelho: bool = True, log=print) -> dict:
+def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
     con = connect()
     sid = con.execute("INSERT INTO sincronizacao DEFAULT VALUES").lastrowid
     con.commit()
@@ -201,3 +202,18 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
         return {"ok": False, "erro": str(e)}
     finally:
         con.close()
+
+
+# Uma única sincronização por processo. Evita sobreposição entre o ciclo automático
+# e o botão manual, que antes podiam disputar o SQLite e o espelho do site.
+_SYNC_LOCK = threading.Lock()
+
+
+def executar(gravar_espelho: bool = True, log=print) -> dict:
+    if not _SYNC_LOCK.acquire(blocking=False):
+        log("sincronização ignorada: já existe uma em andamento")
+        return {"ok": False, "em_andamento": True, "erro": "Já existe uma sincronização em andamento."}
+    try:
+        return _executar_impl(gravar_espelho=gravar_espelho, log=log)
+    finally:
+        _SYNC_LOCK.release()
