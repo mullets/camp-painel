@@ -127,6 +127,7 @@ CREATE TABLE projeto (
   ano_fim             INTEGER,                             -- para 1982–83
   cidade              TEXT,
   endereco_obra       TEXT,
+  identificacao_original TEXT,                           -- referência física/legada: CX039, Tubo 07, Pasta 03...
   cliente             TEXT,                                -- só se lido no documento
   tipologia           TEXT,                                -- residencial, institucional...
   ambito_conteudo     TEXT,                                -- 3.3.1 resumo do que há no dossiê
