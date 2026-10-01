@@ -176,7 +176,7 @@ def exige(papel_minimo: str) -> Callable:
     return _dep
 
 
-def trocar_senha(u: dict, senha_atual: str, senha_nova: str) -> None:
+def trocar_senha(u: dict, senha_atual: str, senha_nova: str, token_atual: str | None = None) -> None:
     verificar_senha_forte(senha_nova)
     con = connect()
     row = con.execute("SELECT senha_hash FROM usuario WHERE id=?", (u["id"],)).fetchone()
@@ -184,7 +184,7 @@ def trocar_senha(u: dict, senha_atual: str, senha_nova: str) -> None:
         con.close()
         raise HTTPException(400, "Senha atual incorreta")
     con.execute("UPDATE usuario SET senha_hash=?, precisa_trocar_senha=0 WHERE id=?", (pwd.hash(senha_nova), u["id"]))
-    con.execute("UPDATE sessao SET revogada=1 WHERE usuario_id=?", (u["id"],))   # derruba as outras sessões
+    con.execute("UPDATE sessao SET revogada=1 WHERE usuario_id=? AND id<>?", (u["id"], _hash_token(token_atual or "")))   # derruba só as OUTRAS sessões
     _evento(con, u["email"], "senha_trocada", u["email"])
     con.commit(); con.close()
 

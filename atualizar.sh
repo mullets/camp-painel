@@ -9,6 +9,7 @@ if ! cmp -s scripts/camp-painel.service /etc/systemd/system/camp-painel.service;
   echo "== arquivo do serviço mudou; atualizando systemd"
   sudo cp scripts/camp-painel.service /etc/systemd/system/camp-painel.service && sudo systemctl daemon-reload
 fi
+git log -1 --format="%h %ad" --date=short > backend/VERSION
 echo "== reiniciando serviço"; sudo systemctl restart camp-painel
 sleep 2; systemctl is-active camp-painel && echo "serviço ativo" || { echo "SERVIÇO PAROU — log:"; journalctl -u camp-painel -n 30 --no-pager; exit 1; }
 echo "== escutando em:"; ss -ltn | grep ":8000" || echo "porta 8000 não está aberta"

@@ -45,6 +45,12 @@ async def _http_exc(request: Request, exc: HTTPException):
     return JSONResponse({"erro": exc.detail}, status_code=exc.status_code)
 
 
+@app.get("/api/versao")
+def versao() -> dict:
+    v = Path(__file__).resolve().parents[1] / "VERSION"
+    return {"versao": v.read_text().strip() if v.exists() else "dev"}
+
+
 @app.get("/", include_in_schema=False)
 def painel() -> FileResponse:
     # a página em si é pública (só HTML); todo dado vem da API, que exige sessão

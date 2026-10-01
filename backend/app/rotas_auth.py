@@ -36,9 +36,9 @@ def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
 
 
 @router.post("/trocar-senha")
-def trocar(dados: TrocaSenha, u: dict = Depends(auth.usuario_atual)) -> dict:
-    auth.trocar_senha(u, dados.senha_atual, dados.senha_nova)
-    return {"ok": True, "aviso": "Outras sessões foram encerradas. Entre de novo."}
+def trocar(dados: TrocaSenha, u: dict = Depends(auth.usuario_atual), camp_sessao: str | None = Cookie(default=None)) -> dict:
+    auth.trocar_senha(u, dados.senha_atual, dados.senha_nova, camp_sessao)
+    return {"ok": True, "aviso": "Senha alterada. Outras sessões foram encerradas; esta continua."}
 
 
 # ---- perfil ----
