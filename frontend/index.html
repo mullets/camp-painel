@@ -1111,6 +1111,40 @@ async function verLocalizacao(id){const [ls,its]=await Promise.all([API('/api/lo
 async function alocar(id){try{const r=await API('/api/localizacoes/alocar',{method:'POST',body:JSON.stringify({localizacao_id:id,projeto_codigo:document.getElementById('al-proj').value||null,codigos:document.getElementById('al-cods').value.split('\n')})});toast(`${r.alocados} folha(s) alocadas${r.nao_encontrados.length?` · não encontradas: ${r.nao_encontrados.slice(0,3).join(', ')}`:''}`);verLocalizacao(id);carregarLocalizacoes()}catch(e){toast(e.message)}}
 
 function escHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function iconeEstacao(tipo){
+  if(tipo==='armazenamento')return '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>';
+  if(tipo==='processamento')return '<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4"/><circle cx="12" cy="12" r="3"/></svg>';
+  if(tipo==='contex')return '<svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM7 4h10M7 20h10"/><path d="M8 10h8M8 13h8"/></svg>';
+  if(tipo==='foto')return '<svg viewBox="0 0 24 24"><path d="M4 7h4l2-2h4l2 2h4v11H4z"/><circle cx="12" cy="13" r="3"/></svg>';
+  return '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>';
+}
+function iconeWordpress(){return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M7.5 8.5l3 8 1.8-5 2 5 2.3-8"/></svg>'}
+function proximaSincronizacao(ultima,intervalo){
+  if(!ultima||!intervalo)return null;
+  const s=String(ultima).trim();
+  const iso=/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)&&!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)?s.replace(' ','T')+'Z':s;
+  const d=new Date(iso);if(Number.isNaN(d.getTime()))return null;
+  return new Date(d.getTime()+(+intervalo||0)*60000).toISOString();
+}
+async function atualizarTopoEstacoes(){
+  const el=document.getElementById('machine-status');if(!el||!EU)return;
+  try{
+    const d=await API('/api/estacoes');
+    const maquinas=d.maquinas.map(m=>{
+      const st=m.online===true?'on':m.online===false?'off':'unknown';
+      const extra=m.tipo==='processamento'?' proc':m.tipo==='armazenamento'?' qnap':'';
+      const ttl=[m.nome,m.funcao,m.ip?('IP '+m.ip):'IP não configurado',m.online===true?'online':m.online===false?'offline':'sem teste'].filter(Boolean).join(' · ');
+      return `<span class="ms ${st}${extra}" onclick="go('estacoes')" title="${escHtml(ttl)}">${iconeEstacao(m.tipo)}</span>`;
+    }).join('');
+    const s=d.site||{},ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em);
+    const prox=proximaSincronizacao(ult,s.intervalo_sync_min);
+    const wpSt=s.http?.ok?'on':'off';
+    const wpTitle=['WordPress / página pública',s.http?.ok?'online':'offline',ult?'última sincronização '+fmtDataHora(ult):'ainda não sincronizado',prox?'próxima '+fmtDataHora(prox):null].filter(Boolean).join(' · ');
+    const wp=`<span class="ms ${wpSt}" onclick="go('estacoes')" title="${escHtml(wpTitle)}">${iconeWordpress()}</span>`;
+    const syncTxt=ult?`<span class="sync-mini" title="${escHtml(wpTitle)}">sync ${fmtDataHora(ult).replace(/^\d{2}\/\d{2}\/\d{4},\s*/,'')}</span>`:'';
+    el.innerHTML=maquinas+wp+syncTxt;
+  }catch(e){}
+}
 async function carregarEstacoes(){const el=document.getElementById('est-body');try{const d=await API('/api/estacoes');const s=d.site,p=d.pipeline,q=d.qnap;el.innerHTML=`
   <div class="grid g2 wide3">
     <div class="panel"><div class="ph"><h2>Captura</h2></div><div class="pb"><ul class="list">${d.maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo)).map(m=>`<li><div class="t"><b>${escHtml(m.nome)}</b><small>${escHtml(m.funcao||'')}</small><small>${m.ip?escHtml(m.ip):'IP não configurado'}</small></div>${m.online===null?'<span class="tag">—</span>':m.online?'<span class="tag g">online</span>':'<span class="tag r">sem resposta</span>'}</li>`).join('')}</ul></div></div>
@@ -1157,7 +1191,7 @@ function limparExemplos(){ // em modo servidor, nunca mostrar dado de exemplo co
   FUNDOS.length=0;PROJETOS.length=0}
 if(MODO_SERVIDOR){limparExemplos();API('/api/versao').then(v=>{document.getElementById('foot').textContent='Servidor · versão '+v.versao}).catch(()=>{document.getElementById('foot').textContent='Servidor não respondeu'})}
 
-function aplicarUsuario(u){EU=u;if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();carregarProjetosAPI();carregarPainel();carregarFilas();carregarSolicitacoes();carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;document.querySelector('.who .av').textContent=u.nome.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}}
+function aplicarUsuario(u){EU=u;atualizarTopoEstacoes();clearInterval(window._estTopTimer);window._estTopTimer=setInterval(atualizarTopoEstacoes,30000);if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();carregarProjetosAPI();carregarPainel();carregarFilas();carregarSolicitacoes();carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;document.querySelector('.who .av').textContent=u.nome.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}}
 async function checarSessao(){try{aplicarUsuario(await API('/api/auth/eu'))}catch(e){if(!MODO_SERVIDOR){return}document.getElementById('login').classList.add('on')}}
 async function fazerLogin(ev){ev.preventDefault();const err=document.getElementById('lg-err');err.textContent='';try{const u=await API('/api/auth/login',{method:'POST',body:JSON.stringify({email:document.getElementById('lg-email').value,senha:document.getElementById('lg-senha').value,lembrar:document.getElementById('lg-lembrar').checked,codigo_totp:document.getElementById('lg-totp').value||null})});try{await API('/api/auth/eu')}catch(e2){err.textContent='Login aceito, mas o navegador não guardou a sessão (cookie recusado). Confira se o endereço é http://192.168.15.60:8000 e se o servidor está atualizado.';return}aplicarUsuario(u);toast(`Bem-vindo, ${u.nome}`);route_to(location.hash.slice(1)||'painel')}catch(e){err.textContent=e.message;if(/autenticador/i.test(e.message))document.getElementById('lg-totp-wrap').style.display=''}}
 async function trocarSenha(){const err=document.getElementById('ts-err');const n=document.getElementById('ts-nova').value;if(n!==document.getElementById('ts-nova2').value){err.textContent='As senhas não coincidem';return}try{await API('/api/auth/trocar-senha',{method:'POST',body:JSON.stringify({senha_atual:document.getElementById('ts-atual').value,senha_nova:n})});document.getElementById('m-senha').classList.remove('on');toast('Senha alterada.');EU.precisa_trocar_senha=false;aplicarUsuario(EU)}catch(e){err.textContent=e.message}}
