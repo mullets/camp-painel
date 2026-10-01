@@ -107,6 +107,55 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
             log(f"  coleção {c.get('name')}: {total} itens gravados")
             con.commit()
 
+        # Reconcilia os vínculos locais exclusivamente por código exato.
+        # Isso corrige IDs antigos/errados e evita miniaturas de outro item.
+        con.execute("""
+            UPDATE projeto
+               SET tainacan_item_id = (
+                   SELECT w.id FROM wp_item w
+                    WHERE w.codigo_detectado = projeto.codigo
+                    ORDER BY w.id DESC LIMIT 1
+               )
+             WHERE EXISTS (
+                   SELECT 1 FROM wp_item w
+                    WHERE w.codigo_detectado = projeto.codigo
+             )
+        """)
+        con.execute("""
+            UPDATE item
+               SET tainacan_item_id = (
+                   SELECT w.id FROM wp_item w
+                    WHERE w.codigo_detectado = item.codigo
+                    ORDER BY w.id DESC LIMIT 1
+               )
+             WHERE EXISTS (
+                   SELECT 1 FROM wp_item w
+                    WHERE w.codigo_detectado = item.codigo
+             )
+        """)
+        # Se o ID salvo aponta para um item cujo código é diferente, limpa o vínculo.
+        con.execute("""
+            UPDATE projeto
+               SET tainacan_item_id = NULL
+             WHERE tainacan_item_id IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM wp_item w
+                    WHERE w.id = projeto.tainacan_item_id
+                      AND w.codigo_detectado = projeto.codigo
+               )
+        """)
+        con.execute("""
+            UPDATE item
+               SET tainacan_item_id = NULL
+             WHERE tainacan_item_id IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM wp_item w
+                    WHERE w.id = item.tainacan_item_id
+                      AND w.codigo_detectado = item.codigo
+               )
+        """)
+        con.commit()
+
         for f, r in fundos.items():
             if f not in fundos_vistos and r["ativo"]:
                 _divergencia(con, "fundo", f, "sem_itens_no_site", r["titulo"], None); n["divergencias"] += 1
