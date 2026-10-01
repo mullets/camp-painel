@@ -7,6 +7,8 @@ Regras:
 """
 from __future__ import annotations
 
+import json
+
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -87,18 +89,19 @@ def editar(uid: int, d: EdicaoUsuario, u: dict = Depends(auth.exige("admin"))) -
         n = con.execute("SELECT COUNT(*) FROM usuario WHERE papel='master' AND ativo=1").fetchone()[0]
         if n <= 1:
             con.close(); raise HTTPException(400, "Não é possível remover o último admin master")
-    campos, vals = [], []
+    campos, vals, antes, depois = [], [], {}, {}
     for k in ("nome", "papel"):
-        if getattr(d, k) is not None:
-            campos.append(f"{k}=?"); vals.append(getattr(d, k))
-    if d.ativo is not None:
-        campos.append("ativo=?"); vals.append(int(d.ativo))
+        v = getattr(d, k)
+        if v is not None and v != alvo[k]:
+            campos.append(f"{k}=?"); vals.append(v); antes[k] = alvo[k]; depois[k] = v
+    if d.ativo is not None and int(d.ativo) != alvo["ativo"]:
+        campos.append("ativo=?"); vals.append(int(d.ativo)); antes["ativo"] = bool(alvo["ativo"]); depois["ativo"] = bool(d.ativo)
     if campos:
         con.execute(f"UPDATE usuario SET {', '.join(campos)} WHERE id=?", (*vals, uid))
         if d.ativo is False:
             con.execute("UPDATE sessao SET revogada=1 WHERE usuario_id=?", (uid,))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('usuario',?,'editado',?,?)",
-                    (alvo["email"], u["email"], ", ".join(campos)))
+                    (alvo["email"], u["email"], json.dumps({"antes": antes, "depois": depois}, ensure_ascii=False)))
         con.commit()
     con.close()
     return {"ok": True}
@@ -151,13 +154,17 @@ def listar_config(u: dict = Depends(auth.exige("admin"))) -> list[dict]:
 @router.put("/config/{chave}")
 def salvar_config(chave: str, d: Valor, u: dict = Depends(auth.exige("master"))) -> dict:
     con = connect()
-    if not con.execute("SELECT 1 FROM configuracao WHERE chave=?", (chave,)).fetchone():
+    atual = con.execute("SELECT valor, sensivel FROM configuracao WHERE chave=?", (chave,)).fetchone()
+    if not atual:
         con.close(); raise HTTPException(404, "Configuração desconhecida")
     if chave.endswith(".ip") and d.valor and not all(p.isdigit() and 0 <= int(p) <= 255 for p in d.valor.split(".")) or (chave.endswith(".ip") and d.valor and d.valor.count(".") != 3):
         con.close(); raise HTTPException(400, "IP inválido")
     con.execute("UPDATE configuracao SET valor=?, atualizado_em=datetime('now'), atualizado_por=? WHERE chave=?",
                 (d.valor, u["email"], chave))
-    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator) VALUES ('config',?,'alterada',?)", (chave, u["email"]))
+    antes = "definido" if atual["sensivel"] and atual["valor"] else ("" if atual["sensivel"] else atual["valor"])
+    depois = "definido" if atual["sensivel"] and d.valor else ("" if atual["sensivel"] else d.valor)
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('config',?,'alterada',?,?)",
+                (chave, u["email"], json.dumps({"antes": {"valor": antes}, "depois": {"valor": depois}}, ensure_ascii=False)))
     con.commit(); con.close()
     return {"ok": True}
 
