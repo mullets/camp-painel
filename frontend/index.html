@@ -1398,10 +1398,16 @@ function rankHTML(items,tipo,lim=5){
   if(!xs.length)return '<li class="empty">Sem dados ainda.</li>';
   return xs.map((x,i)=>`<li><span class="pos">${i+1}</span><div class="name"><b>${escHtml(x.titulo||x.caminho||'—')}</b><small>${escHtml(x.codigo||x.fundo||x.caminho||'')}</small></div><span class="num">${Number(x.visualizacoes||0).toLocaleString('pt-BR')}</span></li>`).join('');
 }
-function maqEstado(m){return m?.online===true?'ok':m?.online===false?'bad':'warn'}
+function maqEstado(m){
+  if(m?.app_online===false&&m?.online===true)return 'warn';
+  return m?.online===true?'ok':m?.online===false?'bad':'warn'
+}
 function machineChip(m){
-  const st=maqEstado(m),label=m?.nome||'Estação',state=m?.online===true?'online':m?.online===false?'offline':'não configurada';
-  return `<div class="machine-chip ${st}" onclick="go('estacoes')" title="${escHtml([label,m?.funcao,m?.ip].filter(Boolean).join(' · '))}"><div class="topline"><span class="dot"></span><b>${escHtml(label)}</b></div><small>${state}</small></div>`;
+  const st=maqEstado(m),label=m?.nome||'Estação';
+  let state=m?.online===true?'máquina online':m?.online===false?'máquina offline':'não configurada';
+  if(m?.app_online===true)state+=' · app '+(m.app_estado||'online');
+  else if(m?.app_online===false&&m?.estacao_id)state+=' · app offline';
+  return `<div class="machine-chip ${st}" onclick="go('estacoes')" title="${escHtml([label,m?.funcao,m?.ip,m?.app_versao].filter(Boolean).join(' · '))}"><div class="topline"><span class="dot"></span><b>${escHtml(label)}</b></div><small>${escHtml(state)}</small></div>`;
 }
 async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.dash-v2');if(!tinha)sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando visão da operação…</div></div></div>';try{
   const [d,e,a]=await Promise.all([
