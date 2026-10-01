@@ -37,6 +37,16 @@ w.route_to('fundos'); await sleep(1200);
 const fr=d.querySelectorAll('#fundos-body tr').length; okl.push(`fundos: ${fr} linhas`); if(fr<30) problems.push('fundos: menos de 30 linhas ('+fr+')');
 if(d.querySelector('#fundos-body').textContent.includes('Arnaldo') && d.querySelector('#fundos-body tr[data-nav="fundo/F001"]').textContent.includes('no ar')) problems.push('fundos: F001 aparece "no ar" indevidamente');
 const siglas=[...d.querySelectorAll('#fundos-body .sig')].filter(e=>!e.classList.contains('na')).length; okl.push('fundos: siglas visíveis '+siglas); if(siglas<28) problems.push('fundos: siglas não aparecem ('+siglas+')');
+// filtros operacionais de fundos
+if(!d.querySelector('#fundos-filtros [data-ff="publicado"]')) problems.push('fundos: filtro Publicados não existe');
+else {
+  d.querySelector('#fundos-filtros [data-ff="publicado"]').click(); await sleep(100);
+  const pubs=d.querySelectorAll('#fundos-body tr').length; okl.push('fundos: filtro publicados -> '+pubs+' linha(s)');
+  d.querySelector('#fundos-filtros [data-ff="todos"]').click();
+  d.getElementById('fundos-q').value='Sami'; d.getElementById('fundos-q').dispatchEvent(new w.Event('input')); await sleep(100);
+  if(!txt('#fundos-body').includes('Sami')) problems.push('fundos: busca Sami não retornou');
+  d.getElementById('fundos-q').value=''; d.getElementById('fundos-q').dispatchEvent(new w.Event('input'));
+}
 checkDom('fundos');
 // FUNDO detalhe
 w.route_to('fundo/F026'); await sleep(1200); okl.push('fundo F026: '+txt('#fd h1')+' | '+(txt('#fd .meta')||'').slice(0,80));
@@ -66,13 +76,20 @@ w.route_to('arquitetos'); await sleep(1000); const ar=d.querySelectorAll('#v-arq
 w.route_to('config'); await sleep(1000); okl.push('config: usuários '+d.querySelectorAll('#usr-body tr').length+' | campos config '+d.querySelectorAll('#cfg-body input').length);
 if(d.querySelectorAll('#usr-body tr').length<2) problems.push('config: usuários não carregaram'); if(d.querySelectorAll('#cfg-body input').length<10) problems.push('config: configurações não carregaram'); checkDom('config');
 // ETIQUETAS
-w.route_to('etiquetas'); await sleep(300); if(!d.querySelector('#lab-preview .label')) problems.push('etiquetas: preview vazio'); else okl.push('etiquetas: preview ok'); 
+w.route_to('etiquetas'); await sleep(900); if(!d.querySelector('#lab-preview .label')) problems.push('etiquetas: preview vazio'); else okl.push('etiquetas: preview ok');
+if(!d.querySelector('.lab-section')||!d.querySelector('.lab-preview-shell')) problems.push('etiquetas: novo layout em blocos/prévia não carregou');
+if(!d.getElementById('l-local')||!d.getElementById('l-docs-volume')) problems.push('etiquetas: localização/quantidade por volume ausentes'); 
 for(const t of ['documento','caixa','tubo','fundo']){ d.querySelector(`#lab-tabs [data-t="${t}"]`).click(); await sleep(100); if(!d.querySelector('#lab-preview .label')) problems.push('etiqueta '+t+' sem preview'); }
 checkDom('etiquetas');
 // PERFIL
 await w.abrirPerfil(); await sleep(600); if(!d.querySelector('#pf-nova')) problems.push('perfil: não abriu'); else okl.push('perfil: ok'); w.closeModal();
 // PAINEL / FILAS / SOLICITACOES / ERROS (reais)
-w.route_to('painel'); await sleep(900); if(d.querySelector('#v-painel .aviso-exemplo')) problems.push('painel ainda com aviso de exemplo'); okl.push('painel: '+(txt('#v-painel .grid.g4')||'').slice(0,120)); checkDom('painel');
+w.route_to('painel'); await sleep(1800); if(d.querySelector('#v-painel .aviso-exemplo')) problems.push('painel ainda com aviso de exemplo');
+if(!txt('#v-painel').includes('Operação agora')) problems.push('painel: bloco Operação agora ausente');
+if(!txt('#v-painel').includes('Audiência do site')) problems.push('painel: bloco Audiência do site ausente');
+if(!txt('#v-painel').includes('QNAP')) problems.push('painel: status QNAP ausente');
+if(!txt('#v-painel').includes('Site público')) problems.push('painel: status do site ausente');
+okl.push('painel operacional e audiência renderizados'); checkDom('painel');
 // filas: criar lista, avançar
 w.route_to('filas'); await sleep(600); if(d.querySelector('#v-filas .aviso-exemplo')) problems.push('filas ainda com aviso de exemplo');
 w.openModal('m-lista'); d.getElementById('nl-nome').value='LOTE AUDIT'; d.getElementById('nl-proj').value='F023-P0011'; d.getElementById('nl-pasta').value='/mnt/qnap/acervos/F023/P0011'; await w.addLista(); await sleep(800);
