@@ -20,8 +20,17 @@ def _slug_publico(texto: str) -> str:
     return s
 
 
-def _url_publica_projeto(codigo: str, titulo: str) -> str:
-    return f"https://camp.arq.br/acervo/projetos/{codigo.lower()}-{_slug_publico(titulo)}/"
+def _url_publica_projeto(codigo: str, titulo: str, cidade: str | None = None) -> str:
+    """Monta a rota pública da CAMP sem repetir cidade/UF no slug."""
+    base = (titulo or "").strip()
+    if cidade:
+        base = re.sub(
+            rf"\s*[,\-–]\s*{re.escape(cidade)}(?:\s*[,\-–]\s*[A-Z]{{2}})?\s*$",
+            "",
+            base,
+            flags=re.I,
+        ).strip(" ,-–")
+    return f"https://camp.arq.br/acervo/projetos/{codigo.lower()}-{_slug_publico(base)}/"
 
 
 @router.get("/projetos")
@@ -77,7 +86,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
     con.close()
     md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
-    site_url = _url_publica_projeto(codigo, p["titulo"])
+    site_url = _url_publica_projeto(codigo, p["titulo"], p["cidade"])
     projeto = dict(p)
     projeto["tainacan_item_id_salvo"] = projeto.get("tainacan_item_id")
     projeto["tainacan_item_id"] = site["id"] if site else None
