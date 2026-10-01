@@ -261,25 +261,86 @@ def _porta(ip: str, porta: int, timeout: float = 0.8) -> bool:
 def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     raiz = Path(_cfg(con, "qnap.raiz", settings.CAMP_QNAP_ROOT))
-    out = {"qnap": {"raiz": str(raiz), "montado": raiz.exists()}, "maquinas": [], "pendentes": {}, "site": {}}
+    entrada_txt = _cfg(con, "qnap.entrada_captura", "")
+    prontos_txt = _cfg(con, "qnap.prontos_raiz", "")
+    entrada = Path(entrada_txt) if entrada_txt else None
+    prontos = Path(prontos_txt) if prontos_txt else raiz
+
+    out = {
+        "qnap": {
+            "raiz": str(raiz),
+            "montado": raiz.exists(),
+            "entrada_captura": str(entrada) if entrada else None,
+            "entrada_montada": entrada.exists() if entrada else None,
+            "prontos_raiz": str(prontos),
+            "prontos_montada": prontos.exists(),
+        },
+        "maquinas": [],
+        "pipeline": {
+            "entrada_bruta": 0,
+            "prontos": 0,
+            "aguardando_revisao": 0,
+        },
+        "site": {},
+    }
+
     if raiz.exists():
         try:
             du = shutil.disk_usage(raiz)
-            out["qnap"].update({"total_gb": round(du.total / 1e9), "livre_gb": round(du.free / 1e9), "uso_pct": round(100 * du.used / du.total)})
+            out["qnap"].update({
+                "total_gb": round(du.total / 1e9),
+                "livre_gb": round(du.free / 1e9),
+                "uso_pct": round(100 * du.used / du.total),
+            })
         except OSError:
             pass
-        contagem = {}
-        for sj in list(raiz.glob("*/status.json")) + list(raiz.glob("*/*/status.json")):
-            try:
-                st = json.loads(sj.read_text(encoding="utf-8") or "{}")
-                st = st.get("status") if isinstance(st, dict) else str(st)
-            except Exception:  # noqa: BLE001
-                st = "json_invalido"
-            contagem[st or "sem_status"] = contagem.get(st or "sem_status", 0) + 1
-        out["pendentes"] = contagem
-    for nome, chave, porta in (("QNAP TS-932PX", "qnap.ip", 445), ("QNAP TS-231P (backup)", "qnap.backup_ip", 445), ("Estação Contex (Windows)", "contex.ip", 445), ("Mac VueScan", "vuescan.ip", 548)):
+
+    if entrada and entrada.exists():
+        try:
+            out["pipeline"]["entrada_bruta"] = sum(
+                1 for p in entrada.iterdir() if not p.name.startswith(".")
+            )
+        except OSError:
+            pass
+
+    if prontos.exists():
+        try:
+            pastas = {p.parent.resolve() for p in prontos.rglob("info_projeto.json")}
+            pastas |= {p.parent.resolve() for p in prontos.rglob("status.json")}
+            out["pipeline"]["prontos"] = len(pastas)
+        except OSError:
+            pass
+
+    out["pipeline"]["aguardando_revisao"] = con.execute(
+        "SELECT COUNT(*) FROM lista_processamento WHERE etapa='revisao'"
+    ).fetchone()[0]
+
+    estacoes_cfg = [
+        ("Estação Foto 1", "estacao.foto1.ip", 548, "foto",
+         "Fotos, negativos, slides, transparências"),
+        ("Estação Foto 2", "estacao.foto2.ip", 548, "foto",
+         "Fotos, negativos, slides, transparências"),
+        ("Estação Contex", "estacao.contex.ip", 445, "contex",
+         "Pranchas, croquis, desenhos e materiais grandes"),
+        ("Estação Universal 1", "estacao.universal1.ip", 548, "universal",
+         "Qualquer material; operador escolhe tipo e informa dados"),
+        ("Estação Universal 2", "estacao.universal2.ip", 548, "universal",
+         "Qualquer material; operador escolhe tipo e informa dados"),
+        ("CAMP Vision 2", "campvision2.ip", 22, "processamento",
+         "Lê imagens, gera JSON/EXIF e organiza na pasta final"),
+        ("QNAP TS-932PX", "qnap.ip", 445, "armazenamento",
+         "Entrada bruta e acervo final"),
+    ]
+    for nome, chave, porta, tipo, funcao in estacoes_cfg:
         ip = _cfg(con, chave)
-        out["maquinas"].append({"nome": nome, "ip": ip or None, "online": _porta(ip, porta) if ip else None})
+        out["maquinas"].append({
+            "nome": nome,
+            "tipo": tipo,
+            "funcao": funcao,
+            "ip": ip or None,
+            "online": _porta(ip, porta) if ip else None,
+        })
+
     s = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     out["site"] = {
         "ultima_sincronizacao": dict(s) if s else None,
@@ -292,8 +353,13 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     url = _cfg(con, "wp.url", settings.WP_BASE_URL)
     try:
         import httpx
-        t0 = time.time(); r = httpx.get(url + "/wp-json/", timeout=8, follow_redirects=True)
-        out["site"]["http"] = {"status": r.status_code, "ms": round((time.time() - t0) * 1000), "ok": r.status_code == 200}
+        t0 = time.time()
+        r = httpx.get(url + "/wp-json/", timeout=8, follow_redirects=True)
+        out["site"]["http"] = {
+            "status": r.status_code,
+            "ms": round((time.time() - t0) * 1000),
+            "ok": r.status_code == 200,
+        }
     except Exception as e:  # noqa: BLE001
         out["site"]["http"] = {"status": None, "ok": False, "erro": str(e)[:120]}
     con.close()
