@@ -374,30 +374,49 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
         "SELECT COUNT(*) FROM lista_processamento WHERE etapa='revisao'"
     ).fetchone()[0]
 
+    heartbeats = {r["estacao_id"]: dict(r) for r in con.execute("""
+        SELECT *,
+               CAST((julianday('now') - julianday(atualizado_em)) * 86400 AS INTEGER) AS idade_segundos
+          FROM estacao_heartbeat
+    """).fetchall()}
     estacoes_cfg = [
-        ("Estação Foto 1", "estacao.foto1.ip", 548, "foto",
+        ("foto1", "Estação Foto 1", "estacao.foto1.ip", 548, "foto",
          "Fotos, negativos, slides, transparências"),
-        ("Estação Foto 2", "estacao.foto2.ip", 548, "foto",
+        ("foto2", "Estação Foto 2", "estacao.foto2.ip", 548, "foto",
          "Fotos, negativos, slides, transparências"),
-        ("Estação Contex", "estacao.contex.ip", 445, "contex",
+        ("contex1", "Estação Contex", "estacao.contex.ip", 445, "contex",
          "Pranchas, croquis, desenhos e materiais grandes"),
-        ("Estação Universal 1", "estacao.universal1.ip", 548, "universal",
+        ("universal1", "Estação Universal 1", "estacao.universal1.ip", 548, "universal",
          "Qualquer material; operador escolhe tipo e informa dados"),
-        ("Estação Universal 2", "estacao.universal2.ip", 548, "universal",
+        ("universal2", "Estação Universal 2", "estacao.universal2.ip", 548, "universal",
          "Qualquer material; operador escolhe tipo e informa dados"),
-        ("CAMP Vision 2", "campvision2.ip", 22, "processamento",
+        (None, "CAMP Vision 2", "campvision2.ip", 22, "processamento",
          "Lê imagens, gera JSON/EXIF e organiza na pasta final"),
-        ("QNAP TS-932PX", "qnap.ip", 445, "armazenamento",
+        (None, "QNAP TS-932PX", "qnap.ip", 445, "armazenamento",
          "Entrada bruta e acervo final"),
     ]
-    for nome, chave, porta, tipo, funcao in estacoes_cfg:
+    for estacao_id, nome, chave, porta, tipo, funcao in estacoes_cfg:
         ip = _cfg(con, chave)
+        hb = heartbeats.get(estacao_id) if estacao_id else None
+        app_online = bool(hb and hb["idade_segundos"] is not None and hb["idade_segundos"] <= 75)
         out["maquinas"].append({
+            "estacao_id": estacao_id,
             "nome": nome,
             "tipo": tipo,
             "funcao": funcao,
             "ip": ip or None,
             "online": _porta(ip, porta) if ip else None,
+            "app_online": app_online if estacao_id else None,
+            "app_estado": hb.get("estado") if hb else None,
+            "app_versao": hb.get("versao") if hb else None,
+            "app_hostname": hb.get("hostname") if hb else None,
+            "app_ip_local": hb.get("ip_local") if hb else None,
+            "app_operador": hb.get("operador") if hb else None,
+            "app_fundo": hb.get("fundo_codigo") if hb else None,
+            "app_projeto": hb.get("projeto_codigo") if hb else None,
+            "app_ultimo_erro": hb.get("ultimo_erro") if hb else None,
+            "app_heartbeat_em": hb.get("atualizado_em") if hb else None,
+            "app_heartbeat_idade_segundos": hb.get("idade_segundos") if hb else None,
         })
 
     s = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
