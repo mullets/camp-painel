@@ -464,7 +464,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
 
   <!-- ETIQUETAS -->
   <section class="content" id="v-etiquetas">
-    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. O código impresso é o mesmo do arquivo digital e do site.</p></div><div class="act"><button class="btn pri" onclick="window.print()">Imprimir</button></div></div>
+    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn pri" onclick="window.print()">Imprimir</button></div></div>
     <div class="tabs" id="lab-tabs">
       <button class="on" data-t="projeto">Pasta de projeto</button>
       <button data-t="documento">Folha / documento</button>
@@ -475,7 +475,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
     <div class="lab-wrap">
       <div class="panel lab-form"><div class="pb" style="display:grid;gap:12px">
         <label class="field">Fundo<select id="l-fundo"></select></label>
-        <label class="field" id="f-proj">Projeto<select id="l-proj"><option value="P0002|Agência Banespa|1982">P0002 · Agência Banespa · 1982</option><option value="P0004|Estudo Safra Mooca|1982">P0004 · Estudo Safra Mooca · 1982</option></select></label>
+        <label class="field" id="f-proj">Projeto<select id="l-proj"></select></label><div class="grid g2" id="f-volume"><label class="field">Volume / embalagem<select id="l-volume"><option value="1">1 de 1</option></select></label><label class="field">Tipo de embalagem<input id="l-tipo-emb" value="pasta" readonly></label></div><div class="grid g2" id="f-local"><label class="field">Localização<input id="l-local" placeholder="ex. TUBO 03 / MAP-02-G3" readonly></label><label class="field">Documentos neste volume<input id="l-docs-volume" type="number" value="0" min="0" readonly></label></div><div class="grid g2" id="f-cadastro"><label class="field">Ano<input id="l-ano" readonly></label><label class="field">Cliente<input id="l-cliente" readonly></label></div><label class="field" id="f-endereco">Endereço<input id="l-endereco" readonly></label>
         <div class="grid g2" id="f-doc" style="display:none">
           <label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S05</option></select></label>
           <label class="field">Documento<input id="l-doc" value="D00019"></label>
