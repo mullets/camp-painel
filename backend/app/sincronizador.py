@@ -157,9 +157,9 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                    SELECT 1 FROM wp_item w
                     WHERE w.id = projeto.tainacan_item_id
                       AND w.codigo_detectado = projeto.codigo
-                      AND w.colecao_id = projetos_cid
+                      AND w.colecao_id = ?
                )
-        """)
+        """, (projetos_cid,))
         con.execute("""
             UPDATE item
                SET tainacan_item_id = NULL
@@ -168,9 +168,9 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                    SELECT 1 FROM wp_item w
                     WHERE w.id = item.tainacan_item_id
                       AND w.codigo_detectado = item.codigo
-                      AND w.colecao_id = itens_cid
+                      AND w.colecao_id = ?
                )
-        """)
+        """, (itens_cid,))
         con.commit()
 
         for f, r in fundos.items():
