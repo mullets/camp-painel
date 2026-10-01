@@ -187,10 +187,12 @@ th.sortable.desc::after{border-top-color:var(--ink)}
 tbody tr[data-row]{cursor:pointer}
 tbody tr.sel td{background:var(--blue-soft)}
 .tw{max-height:calc(100vh - 230px);overflow:auto}
-.main.with-drawer{display:grid;grid-template-columns:1fr 400px;grid-template-rows:auto 1fr}
-.main.with-drawer .top{grid-column:1/-1}
+.main.with-drawer{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,420px);grid-template-rows:auto auto minmax(0,1fr)}
+.main.with-drawer .top{grid-column:1/-1;grid-row:1}
+.main.with-drawer .gcrumb{grid-column:1;grid-row:2}
+.main.with-drawer > .content.on{grid-column:1;grid-row:3;min-width:0}
 .drawer{display:none;border-left:1px solid var(--line);background:var(--surface);position:sticky;top:0;height:calc(100vh - env(safe-area-inset-top,0px));overflow:auto}
-.main.with-drawer .drawer{display:block}
+.main.with-drawer .drawer{display:block;grid-column:2;grid-row:2/4;min-width:0}
 .drawer .dh{display:flex;align-items:flex-start;gap:10px;padding:18px 20px 14px;border-bottom:1px solid var(--line2)}
 .drawer .dh h2{margin:0;font-size:16px}
 .drawer .dh small{display:block;color:var(--ink3);margin-top:2px}
@@ -205,7 +207,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .hist{list-style:none;margin:0;padding:0}
 .shortcuts{font-size:12px;color:var(--ink3);display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
 @media (min-width:1500px){.content{padding-left:40px;padding-right:40px}.g2.wide3{grid-template-columns:1fr 1fr 1fr}}
-@media (max-width:1180px){.main.with-drawer{grid-template-columns:1fr}.main.with-drawer .drawer{position:fixed;right:0;top:0;bottom:0;width:min(420px,92vw);z-index:30;box-shadow:-12px 0 30px rgba(0,0,0,.18);height:auto}}
+@media (max-width:1180px){.main.with-drawer{display:flex;flex-direction:column}.main.with-drawer .top,.main.with-drawer .gcrumb,.main.with-drawer > .content.on{width:100%}.main.with-drawer .drawer{position:fixed;right:0;top:0;bottom:0;width:min(420px,92vw);z-index:30;box-shadow:-12px 0 30px rgba(0,0,0,.18);height:auto}}
 @media (max-width:720px){.collapse,.nav button kbd{display:none}.tw{max-height:none}}
 
 /* navegação em profundidade: fundo > projeto > item */
