@@ -126,7 +126,9 @@ def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))) -> dict:
                 (codigo, aid, d.data_inicio, d.data_fim))
     _evento(con, "fundo", codigo, "criado", u["email"], {"sigla": sigla, "titulo": d.titulo})
     con.commit(); con.close()
-    return {"codigo": codigo, "sigla": sigla}
+    from .publicador import criar_fundo_no_site
+    site = criar_fundo_no_site(codigo, u["email"])
+    return {"codigo": codigo, "sigla": sigla, "site": site}
 
 
 @router.patch("/fundos/{codigo}")
@@ -163,7 +165,17 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
     con.execute(f"UPDATE fundo SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
     _evento(con, "fundo", codigo, "editado", u["email"], mud)
     con.commit(); con.close()
-    return {"ok": True, "mudou": True, "campos": list(mud)}
+    site = None
+    if "titulo" in mud:
+        from .publicador import renomear_fundo_no_site
+        site = renomear_fundo_no_site(codigo, mud["titulo"], u["email"])
+    return {"ok": True, "mudou": True, "campos": list(mud), "site": site}
+
+
+@router.post("/fundos/{codigo}/criar-no-site")
+def criar_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    from .publicador import criar_fundo_no_site
+    return criar_fundo_no_site(codigo, u["email"])
 
 
 # ---- agentes ----

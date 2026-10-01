@@ -143,7 +143,15 @@ def criar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
                 (codigo, d.fundo_codigo, numero, d.titulo.strip(), d.ano or 0, d.cidade, d.endereco_obra))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'criado',?,?)", (codigo, u["email"], json.dumps({"titulo": d.titulo})))
     con.commit(); con.close()
-    return {"codigo": codigo}
+    from .publicador import criar_dossie_no_site
+    site = criar_dossie_no_site(codigo, u["email"])
+    return {"codigo": codigo, "site": site}
+
+
+@router.post("/projetos/{codigo}/criar-no-site")
+def criar_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    from .publicador import criar_dossie_no_site
+    return criar_dossie_no_site(codigo, u["email"])
 
 
 class Publicacao(BaseModel):

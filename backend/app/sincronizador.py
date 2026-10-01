@@ -55,8 +55,18 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
         fundos_vistos = set()
         cols = wp.colecoes()
         log(f"{len(cols)} coleções encontradas")
+        con.execute("DELETE FROM wp_metadado")
         for c in cols:
             cid = c["id"]; total = 0
+            try:
+                for m in wp.metadados_da_colecao(cid):
+                    mo = m.get("metadata_type_options") or {}
+                    con.execute("INSERT OR REPLACE INTO wp_metadado (id, colecao_id, nome, tipo, taxonomia_id, json) VALUES (?,?,?,?,?,?)",
+                                (m["id"], cid, m.get("name"), (m.get("metadata_type") or "").split("\\")[-1],
+                                 int(mo["taxonomy_id"]) if str(mo.get("taxonomy_id", "")).isdigit() else None,
+                                 json.dumps({k: m.get(k) for k in ("slug", "required", "multiple", "status")}, ensure_ascii=False)))
+            except Exception as e:  # noqa: BLE001
+                log(f"  (metadados da coleção {cid}: {e})")
             log(f"  coleção {c.get('name')} (id {cid})…")
             for it in wp.itens(cid):
                 md = metadados_texto(it)

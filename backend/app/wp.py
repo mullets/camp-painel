@@ -118,6 +118,24 @@ class WP:
             raise RuntimeError(f"Tainacan recusou criar termo: {r.status_code} {r.text[:200]}")
         return r.json()
 
+    def atualizar_termo(self, taxonomia_id: int, termo_id: int, **campos) -> dict:
+        r = self.h.patch(f"/wp-json/tainacan/v2/taxonomy/{taxonomia_id}/terms/{termo_id}", json=campos)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Tainacan recusou editar termo {termo_id}: {r.status_code} {r.text[:200]}")
+        return r.json()
+
+    def criar_item(self, colecao_id: int, titulo: str, status: str = "draft", descricao: str = "") -> dict:
+        r = self.h.post(f"/wp-json/tainacan/v2/collection/{colecao_id}/items", json={"title": titulo, "status": status, "description": descricao})
+        if r.status_code >= 400:
+            raise RuntimeError(f"Tainacan recusou criar item: {r.status_code} {r.text[:200]}")
+        return r.json()
+
+    def definir_metadado(self, item_id: int, metadado_id: int, valor) -> dict:
+        r = self.h.patch(f"/wp-json/tainacan/v2/item/{item_id}/metadata/{metadado_id}", json={"values": valor})
+        if r.status_code >= 400:
+            raise RuntimeError(f"Tainacan recusou metadado {metadado_id} no item {item_id}: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     # ---- WordPress ----
     def paginas(self) -> Iterator[dict]:
         yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None)
