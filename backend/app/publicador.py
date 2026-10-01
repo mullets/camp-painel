@@ -114,3 +114,138 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         _pendencia(con, "projeto", codigo, "pendente_criar_no_site", out["erro"])
     con.commit(); con.close()
     return out
+
+
+COL_ACERVO = 8013
+CAMPOS_PROJETO_SITE = {"ano": "Ano", "cidade": "Cidade", "cliente": "Cliente (divulgável)", "tipologia": "Programa / uso"}
+
+
+def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
+    """Edição de campos do projeto no painel -> metadados do dossiê no Tainacan."""
+    con = connect()
+    p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    out = {"enviados": [], "erro": None}
+    if not p or not p["tainacan_item_id"]:
+        con.close(); return out
+    try:
+        wp = WP()
+        if "titulo" in campos or "cidade" in campos or "ambito_conteudo" in campos:
+            titulo = f"{codigo.split('-')[1]} — {p['titulo']}" + (f", {p['cidade']}" if p["cidade"] else "")
+            wp.patch_item(COL_PROJETOS, p["tainacan_item_id"], title=titulo, description=p["ambito_conteudo"] or "")
+            out["enviados"].append("título/descrição")
+        for campo, nome in CAMPOS_PROJETO_SITE.items():
+            if campo in campos:
+                mid, _ = _meta(con, COL_PROJETOS, nome)
+                if mid:
+                    v = p[campo]
+                    wp.definir_metadado(p["tainacan_item_id"], mid, "" if v in (None, 0) else str(v))
+                    out["enviados"].append(nome)
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_metadados',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]; _pendencia(con, "projeto", codigo, "pendente_metadados_no_site", out["erro"])
+    con.commit(); con.close()
+    return out
+
+
+def renomear_agente_no_site(agente_id: int, novo_nome: str, ator: str) -> dict:
+    con = connect()
+    a = con.execute("SELECT tainacan_term_id FROM agente WHERE id=?", (agente_id,)).fetchone()
+    out = {"ok": False, "erro": None}
+    try:
+        if a and a[0]:
+            WP().atualizar_termo(_tax(con, "Arquitetos"), a[0], name=novo_nome)
+            con.execute("UPDATE wp_termo SET nome=? WHERE id=?", (novo_nome, a[0])); out["ok"] = True
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]; _pendencia(con, "agente", str(agente_id), "pendente_renomear_no_site", out["erro"])
+    con.commit(); con.close()
+    return out
+
+
+def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
+    """no_ar | rascunho | fora_do_ar para TODOS os dossiês e folhas do fundo no Tainacan. Só o master chama."""
+    alvo = {"no_ar": "publish", "rascunho": "draft", "fora_do_ar": "private"}[acao]
+    st_painel = acao
+    con = connect()
+    wp = WP()
+    feitos, falhas = 0, []
+    for p in con.execute("SELECT codigo, tainacan_item_id, autorizado_site FROM projeto WHERE fundo_codigo=? AND tainacan_item_id IS NOT NULL", (codigo,)).fetchall():
+        if alvo == "publish" and not p["autorizado_site"]:
+            continue
+        alvos = [("projeto", p["codigo"], COL_PROJETOS, p["tainacan_item_id"])]
+        alvos += [("item", i[0], COL_ACERVO, i[1]) for i in con.execute("SELECT codigo, tainacan_item_id FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0", (p["codigo"],))]
+        for tipo, cod, cid, wid in alvos:
+            try:
+                wp.atualizar_status_item(cid, wid, alvo)
+                con.execute(f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?", (st_painel, cod))
+                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid)); feitos += 1
+            except Exception as e:  # noqa: BLE001
+                falhas.append({"codigo": cod, "erro": str(e)[:160]})
+    con.execute("UPDATE fundo SET status_site=? WHERE codigo=?", (acao, codigo))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,?,?,?)", (codigo, f"site_{acao}", ator, json.dumps({"ok": feitos, "falhas": len(falhas)})))
+    con.commit(); con.close()
+    return {"alterados": feitos, "falhas": falhas}
+
+
+def _termo_por_nome(con, taxonomia_nome: str, nome: str):
+    tid = _tax(con, taxonomia_nome)
+    if not tid or not nome:
+        return None
+    r = con.execute("SELECT id FROM wp_termo WHERE taxonomia_id=? AND lower(nome)=lower(?)", (tid, nome)).fetchone()
+    return r[0] if r else None
+
+
+def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
+    """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
+    con = connect()
+    i = con.execute("""SELECT i.*, p.tainacan_item_id AS dossie_id, p.titulo AS projeto_titulo, p.fundo_codigo, p.ano AS projeto_ano,
+                              f.titulo AS fundo_titulo, f.tainacan_term_id AS fundo_termo, s.nome AS serie_nome
+                       FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo JOIN serie s ON s.codigo=i.serie_codigo
+                       WHERE i.codigo=?""", (codigo,)).fetchone()
+    out = {"item_id": i["tainacan_item_id"] if i else None, "metadados": [], "imagem": None, "erro": None}
+    if not i:
+        con.close(); out["erro"] = "folha não existe"; return out
+    if i["tainacan_item_id"]:
+        con.close(); return out
+    if i["autoria_divergente"] or i["duplicata_de"]:
+        con.close(); out["erro"] = "folha com autoria divergente ou duplicata não sobe ao site"; return out
+    if not i["dossie_id"]:
+        con.close(); out["erro"] = "o projeto ainda não tem dossiê no site (crie o projeto no site primeiro)"; return out
+    try:
+        wp = WP()
+        p_num = codigo.split("-")[1]
+        titulo = f"{(i['titulo'] or i['tipo_documento'] or i['serie_nome'])} — {p_num} — {i['projeto_titulo']}"
+        it = wp.criar_item(COL_ACERVO, titulo, "draft", f"{i['titulo'] or ''}. {i['serie_nome']} do projeto {i['projeto_titulo']} ({i['projeto_ano'] or 's.d.'}) — fundo {i['fundo_titulo']}.")
+        iid = it["id"]
+        con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
+        con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (iid, COL_ACERVO, "draft", titulo, it.get("slug"), it.get("url"), codigo, i["fundo_codigo"], i["projeto_codigo"], "{}", json.dumps(it, ensure_ascii=False)))
+        arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (i["fundo_codigo"],)).fetchone()
+        valores = {"Código do documento": codigo, "Projeto": str(i["dossie_id"]), "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
+                   "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
+                   "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
+                   "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
+                   "Suporte original": i["suporte"]}
+        for nome, valor in valores.items():
+            if valor in (None, ""):
+                continue
+            mid, _ = _meta(con, COL_ACERVO, nome)
+            if not mid:
+                continue
+            try:
+                wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
+            except Exception as e:  # noqa: BLE001
+                _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
+        if enviar_imagem and i["arquivo_jpg"] and not str(i["arquivo_jpg"]).startswith("http"):
+            try:
+                m = wp.upload_media(i["arquivo_jpg"], titulo)
+                wp.definir_documento(COL_ACERVO, iid, m["id"])
+                con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
+                out["imagem"] = m.get("source_url")
+            except Exception as e:  # noqa: BLE001
+                _pendencia(con, "item", codigo, "pendente_imagem_no_site", str(e)[:200]); out["imagem"] = f"falhou: {e}"[:120]
+        out["item_id"] = iid
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_item_criado',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]; _pendencia(con, "item", codigo, "pendente_criar_no_site", out["erro"])
+    con.commit(); con.close()
+    return out

@@ -26,9 +26,32 @@ app.include_router(rotas_operacao)
 
 
 @app.on_event("startup")
-def _startup() -> None:
+async def _startup() -> None:
     init_db()
     aplicar_migracoes()
+    import asyncio
+    asyncio.create_task(_sincronizacao_periodica())
+
+
+async def _sincronizacao_periodica() -> None:
+    """Site -> painel a cada N minutos (configuracao 'sync.intervalo_min'; 0 desliga)."""
+    import asyncio
+    from .sincronizador import executar
+    await asyncio.sleep(60)
+    while True:
+        try:
+            con = connect()
+            r = con.execute("SELECT valor FROM configuracao WHERE chave='sync.intervalo_min'").fetchone()
+            con.close()
+            minutos = int(r[0]) if r and r[0] and str(r[0]).isdigit() else 15
+        except Exception:  # noqa: BLE001
+            minutos = 15
+        if minutos > 0:
+            try:
+                await asyncio.to_thread(executar, True, lambda *_: None)
+            except Exception:  # noqa: BLE001
+                pass
+        await asyncio.sleep(max(1, minutos or 15) * 60)
 
 
 @app.middleware("http")

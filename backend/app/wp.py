@@ -162,3 +162,39 @@ def metadados_texto(item: dict) -> dict:
                 v = v.get("name") or str(v)
         out[nome] = "" if v is None else str(v)
     return out
+
+
+# ---- extensões de escrita (01/10) ----
+def _wp_patch_item(self, colecao_id: int, item_id: int, **campos) -> dict:
+    r = self.h.patch(f"/wp-json/tainacan/v2/collection/{colecao_id}/items/{item_id}", json=campos)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Tainacan recusou editar item {item_id}: {r.status_code} {r.text[:200]}")
+    return r.json()
+
+
+def _wp_upload_media(self, caminho: str, titulo: str = "") -> dict:
+    """Sobe um arquivo para a biblioteca de mídia (wp/v2/media). Devolve o JSON do anexo (id, source_url)."""
+    import mimetypes
+    from pathlib import Path
+    p = Path(caminho)
+    if not p.exists():
+        raise FileNotFoundError(f"arquivo não encontrado: {caminho}")
+    mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    with p.open("rb") as fh:
+        r = self.h.post("/wp-json/wp/v2/media", content=fh.read(),
+                        headers={"Content-Disposition": f'attachment; filename="{p.name}"', "Content-Type": mime}, timeout=300)
+    if r.status_code >= 400:
+        raise RuntimeError(f"WordPress recusou o upload de {p.name}: {r.status_code} {r.text[:200]}")
+    j = r.json()
+    if titulo:
+        self.h.post(f"/wp-json/wp/v2/media/{j['id']}", json={"title": titulo, "alt_text": titulo})
+    return j
+
+
+def _wp_definir_documento(self, colecao_id: int, item_id: int, media_id: int) -> dict:
+    return self.patch_item(colecao_id, item_id, document=str(media_id), document_type="attachment", _thumbnail_id=media_id)
+
+
+WP.patch_item = _wp_patch_item
+WP.upload_media = _wp_upload_media
+WP.definir_documento = _wp_definir_documento

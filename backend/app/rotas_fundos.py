@@ -262,4 +262,30 @@ def editar_agente(aid: int, d: EdicaoAgente, u: dict = Depends(auth.exige("admin
     if mud:
         _evento(con, "agente", str(aid), "editado", u["email"], mud)
     con.commit(); con.close()
-    return {"ok": True, "campos": list(mud)}
+    site = None
+    if "forma_autorizada" in mud:
+        from .publicador import renomear_agente_no_site
+        site = renomear_agente_no_site(aid, mud["forma_autorizada"], u["email"])
+    return {"ok": True, "campos": list(mud), "site": site}
+
+
+class StatusFundo(BaseModel):
+    acao: str            # no_ar | rascunho | fora_do_ar
+    motivo: str | None = None
+
+
+@router.post("/fundos/{codigo}/status-site")
+def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("master"))) -> dict:
+    """Propaga para TODOS os dossiês e folhas do fundo no Tainacan. Exige master."""
+    if d.acao not in ("no_ar", "rascunho", "fora_do_ar"):
+        raise HTTPException(400, "Ação inválida")
+    if d.acao == "fora_do_ar" and not d.motivo:
+        raise HTTPException(400, "Informe o motivo para tirar o fundo do ar")
+    from .publicador import propagar_status_fundo
+    con = connect()
+    if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+        con.close(); raise HTTPException(404, "Fundo não existe")
+    if d.motivo:
+        con.execute("UPDATE fundo SET motivo_fora_do_ar=? WHERE codigo=?", (d.motivo, codigo)); con.commit()
+    con.close()
+    return propagar_status_fundo(codigo, d.acao, u["email"])

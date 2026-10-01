@@ -118,7 +118,11 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'editado',?,?)", (codigo, u["email"], json.dumps(mud, ensure_ascii=False)))
         con.commit()
     con.close()
-    return {"ok": True, "campos": list(mud)}
+    site = None
+    if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo")):
+        from .publicador import atualizar_dossie_no_site
+        site = atualizar_dossie_no_site(codigo, mud, u["email"])
+    return {"ok": True, "campos": list(mud), "site": site}
 
 
 class NovoProjeto(BaseModel):
@@ -203,3 +207,23 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
                 (codigo, f"site_{d.acao}", u["email"], json.dumps({"ok": len(feitos), "falhas": len(falhas)})))
     con.commit(); con.close()
     return {"ok": not falhas, "alterados": len(feitos), "falhas": falhas}
+
+
+@router.post("/projetos/{codigo}/subir-folhas")
+def subir_folhas(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Cria no Tainacan (rascunho) todas as folhas do projeto que ainda não existem lá."""
+    from .publicador import criar_folha_no_site
+    con = connect()
+    p = con.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    if not p:
+        con.close(); raise HTTPException(404, "Projeto não existe")
+    if not p["tainacan_item_id"]:
+        con.close(); raise HTTPException(400, "O projeto ainda não tem dossiê no site. Use 'Criar no site' primeiro.")
+    pend = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND autoria_divergente=0 AND duplicata_de IS NULL ORDER BY serie_codigo, sequencial", (codigo,))]
+    con.close()
+    ok, falhas = 0, []
+    for c in pend:
+        r = criar_folha_no_site(c, u["email"])
+        if r["erro"]: falhas.append({"codigo": c, "erro": r["erro"]})
+        else: ok += 1
+    return {"pendentes": len(pend), "criadas": ok, "falhas": falhas}
