@@ -22,6 +22,14 @@ def _divergencia(con, entidade, codigo, campo, painel, site):
                 (entidade, codigo, campo, painel, site))
 
 
+def _colecao_config(con, chave: str, padrao: int) -> int:
+    r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+    try:
+        return int(r[0]) if r and str(r[0]).strip() else padrao
+    except (TypeError, ValueError):
+        return padrao
+
+
 def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
     con = connect()
     sid = con.execute("INSERT INTO sincronizacao DEFAULT VALUES").lastrowid
@@ -108,32 +116,38 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
             log(f"  coleção {c.get('name')}: {total} itens gravados")
             con.commit()
 
-        # Reconcilia os vínculos locais exclusivamente por código exato.
-        # Isso corrige IDs antigos/errados e evita miniaturas de outro item.
+        # Reconcilia os vínculos por código exato E pela coleção correta.
+        # Projeto nunca pode apontar para uma folha/documento e vice-versa.
+        projetos_cid = _colecao_config(con, "tainacan.projetos_collection_id", 8007)
+        itens_cid = _colecao_config(con, "tainacan.itens_collection_id", 8013)
         con.execute("""
             UPDATE projeto
                SET tainacan_item_id = (
                    SELECT w.id FROM wp_item w
                     WHERE w.codigo_detectado = projeto.codigo
+                      AND w.colecao_id = ?
                     ORDER BY w.id DESC LIMIT 1
                )
              WHERE EXISTS (
                    SELECT 1 FROM wp_item w
                     WHERE w.codigo_detectado = projeto.codigo
+                      AND w.colecao_id = ?
              )
-        """)
+        """, (projetos_cid, projetos_cid))
         con.execute("""
             UPDATE item
                SET tainacan_item_id = (
                    SELECT w.id FROM wp_item w
                     WHERE w.codigo_detectado = item.codigo
+                      AND w.colecao_id = ?
                     ORDER BY w.id DESC LIMIT 1
                )
              WHERE EXISTS (
                    SELECT 1 FROM wp_item w
                     WHERE w.codigo_detectado = item.codigo
+                      AND w.colecao_id = ?
              )
-        """)
+        """, (itens_cid, itens_cid))
         # Se o ID salvo aponta para um item cujo código é diferente, limpa o vínculo.
         con.execute("""
             UPDATE projeto
@@ -143,8 +157,9 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                    SELECT 1 FROM wp_item w
                     WHERE w.id = projeto.tainacan_item_id
                       AND w.codigo_detectado = projeto.codigo
+                      AND w.colecao_id = ?
                )
-        """)
+        """, (projetos_cid,))
         con.execute("""
             UPDATE item
                SET tainacan_item_id = NULL
@@ -153,8 +168,9 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                    SELECT 1 FROM wp_item w
                     WHERE w.id = item.tainacan_item_id
                       AND w.codigo_detectado = item.codigo
+                      AND w.colecao_id = ?
                )
-        """)
+        """, (itens_cid,))
         con.commit()
 
         for f, r in fundos.items():

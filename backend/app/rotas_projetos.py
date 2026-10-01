@@ -14,6 +14,14 @@ from .db import connect
 router = APIRouter(prefix="/api", tags=["projetos"])
 
 
+def _colecao_config(con, chave: str, padrao: int) -> int:
+    r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+    try:
+        return int(r[0]) if r and str(r[0]).strip() else padrao
+    except (TypeError, ValueError):
+        return padrao
+
+
 def _slug_publico(texto: str) -> str:
     s = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").lower()
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
@@ -72,6 +80,31 @@ def codigos_projetos(fundo: str | None = None, q: str | None = None, status: str
 
 
 
+@router.get("/diagnostico/codigos-entre-colecoes")
+def diagnostico_codigos_entre_colecoes(codigo: str | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    sql = """
+        SELECT w.codigo_detectado,
+               GROUP_CONCAT(DISTINCT w.colecao_id) AS colecoes,
+               COUNT(DISTINCT w.colecao_id) AS n_colecoes,
+               COUNT(*) AS ocorrencias
+          FROM wp_item w
+         WHERE w.codigo_detectado IS NOT NULL AND w.codigo_detectado<>''
+    """
+    par: list = []
+    if codigo:
+        sql += " AND w.codigo_detectado=?"
+        par.append(codigo)
+    sql += " GROUP BY w.codigo_detectado HAVING COUNT(DISTINCT w.colecao_id)>1 ORDER BY ocorrencias DESC, w.codigo_detectado LIMIT 200"
+    rows = [dict(r) for r in con.execute(sql, par).fetchall()]
+    projetos_id = _colecao_config(con, "tainacan.projetos_collection_id", 8007)
+    itens_id = _colecao_config(con, "tainacan.itens_collection_id", 8013)
+    nomes = {r["id"]: r["nome"] for r in con.execute("SELECT id, nome FROM wp_colecao").fetchall()}
+    con.close()
+    return {"projetos_collection_id": projetos_id, "projetos_collection_nome": nomes.get(projetos_id),
+            "itens_collection_id": itens_id, "itens_collection_nome": nomes.get(itens_id), "duplicidades": rows}
+
+
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
@@ -88,14 +121,17 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         LEFT JOIN wp_item w ON w.id=(
             SELECT w2.id FROM wp_item w2
             WHERE w2.codigo_detectado=i.codigo
+              AND w2.colecao_id=?
             ORDER BY w2.id DESC LIMIT 1
         )
-        WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""", (codigo,))]
+        WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""",
+        (_colecao_config(con, "tainacan.itens_collection_id", 8013), codigo))]
     site = con.execute("""
         SELECT * FROM wp_item
         WHERE codigo_detectado=?
+          AND colecao_id=?
         ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, id DESC LIMIT 1
-    """, (codigo, p["tainacan_item_id"] or -1)).fetchone()
+    """, (codigo, _colecao_config(con, "tainacan.projetos_collection_id", 8007), p["tainacan_item_id"] or -1)).fetchone()
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
@@ -119,8 +155,12 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                               w.id AS wp_id_exato, i.tainacan_item_id AS tainacan_item_id_salvo
                        FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                        LEFT JOIN wp_item w ON w.id=(
-                           SELECT w2.id FROM wp_item w2 WHERE w2.codigo_detectado=i.codigo ORDER BY w2.id DESC LIMIT 1
-                       ) WHERE i.codigo=?""", (codigo,)).fetchone()
+                           SELECT w2.id FROM wp_item w2
+                            WHERE w2.codigo_detectado=i.codigo
+                              AND w2.colecao_id=?
+                            ORDER BY w2.id DESC LIMIT 1
+                       ) WHERE i.codigo=?""",
+                       (_colecao_config(con, "tainacan.itens_collection_id", 8013), codigo)).fetchone()
     if not i:
         con.close(); raise HTTPException(404, "Folha não existe")
     vizinhos = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (i["projeto_codigo"],))]
