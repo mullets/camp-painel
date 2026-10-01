@@ -54,6 +54,23 @@ def listar(fundo: str | None = None, q: str | None = None, status: str | None = 
     con.close()
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "itens": [dict(r) for r in rows]}
 
+@router.get("/projetos/codigos")
+def codigos_projetos(fundo: str | None = None, q: str | None = None, status: str | None = None,
+                     u: dict = Depends(auth.exige("leitura"))) -> dict:
+    sql = "SELECT p.codigo FROM projeto p WHERE 1=1"
+    par: list = []
+    if fundo:
+        sql += " AND p.fundo_codigo=?"; par.append(fundo)
+    if status:
+        sql += " AND p.status_site=?"; par.append(status)
+    if q:
+        sql += " AND (p.titulo LIKE ? OR p.codigo LIKE ? OR p.cidade LIKE ?)"; par += [f"%{q}%"] * 3
+    con = connect()
+    rows = [r[0] for r in con.execute(sql + " ORDER BY p.codigo", par).fetchall()]
+    con.close()
+    return {"total": len(rows), "codigos": rows}
+
+
 
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
@@ -256,6 +273,39 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
                 (codigo, f"site_{d.acao}", u["email"], json.dumps({"ok": len(feitos), "falhas": len(falhas)})))
     con.commit(); con.close()
     return {"ok": not falhas, "alterados": len(feitos), "falhas": falhas}
+
+class AcaoProjetosLote(BaseModel):
+    codigos: list[str]
+    acao: str
+
+
+@router.post("/projetos/lote")
+def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+    if d.acao not in ("publicar", "rascunho", "tirar_do_ar"):
+        raise HTTPException(400, "Ação em lote inválida")
+    codigos = list(dict.fromkeys(c.strip().upper() for c in d.codigos if c.strip()))
+    if not codigos:
+        raise HTTPException(400, "Selecione ao menos um projeto")
+    if len(codigos) > 500:
+        raise HTTPException(400, "Ação em lote limitada a 500 projetos por vez")
+    ok, falhas = [], []
+    for codigo in codigos:
+        try:
+            r = publicar(codigo, Publicacao(acao=d.acao), u)
+            if r.get("ok"):
+                ok.append({"codigo": codigo, "alterados": r.get("alterados", 0)})
+            else:
+                falhas.append({"codigo": codigo, "erro": (r.get("falhas") or [{"erro": "Falha na publicação"}])[0].get("erro")})
+        except HTTPException as e:
+            falhas.append({"codigo": codigo, "erro": str(e.detail)})
+        except Exception as e:  # noqa: BLE001
+            falhas.append({"codigo": codigo, "erro": str(e)[:240]})
+    con = connect()
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto','lote',?,?,?)",
+                (f"lote_{d.acao}", u["email"], json.dumps({"selecionados": len(codigos), "ok": [x["codigo"] for x in ok], "falhas": falhas}, ensure_ascii=False)))
+    con.commit(); con.close()
+    return {"selecionados": len(codigos), "ok": ok, "falhas": falhas}
+
 
 
 @router.post("/projetos/{codigo}/subir-folhas")
