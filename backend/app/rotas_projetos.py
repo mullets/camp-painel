@@ -181,6 +181,7 @@ class EdicaoProjeto(BaseModel):
     ano_fim: int | None = None
     cidade: str | None = None
     endereco_obra: str | None = None
+    identificacao_original: str | None = None
     cliente: str | None = None
     tipologia: str | None = None
     ambito_conteudo: str | None = None
@@ -206,7 +207,7 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
     if d.ano is not None and not (d.ano == 0 or 1800 <= d.ano <= 2100):
         con.close(); raise HTTPException(400, "Ano inválido (0000 para sem data)")
     campos, vals, mud = [], [], {}
-    for k in ("titulo", "ano", "ano_fim", "cidade", "endereco_obra", "cliente", "tipologia", "ambito_conteudo", "contagem_esperada"):
+    for k in ("titulo", "ano", "ano_fim", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo", "contagem_esperada"):
         v = getattr(d, k)
         if v is not None and v != p[k]:
             campos.append(f"{k}=?"); vals.append(v); mud[k] = v
@@ -233,6 +234,7 @@ class NovoProjeto(BaseModel):
     ano: int = 0
     cidade: str | None = None
     endereco_obra: str | None = None
+    identificacao_original: str | None = None
 
 
 @router.post("/projetos")
@@ -245,8 +247,8 @@ def criar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
     prox = con.execute("SELECT proximo FROM v_proximo_p WHERE fundo_codigo=?", (d.fundo_codigo,)).fetchone()[0]
     numero = int(prox[1:]); codigo = f"{d.fundo_codigo}-{prox}"
     con.execute("INSERT INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,?)", (d.fundo_codigo, numero, u["id"]))
-    con.execute("INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, cidade, endereco_obra) VALUES (?,?,?,?,?,?,?)",
-                (codigo, d.fundo_codigo, numero, d.titulo.strip(), d.ano or 0, d.cidade, d.endereco_obra))
+    con.execute("INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, cidade, endereco_obra, identificacao_original) VALUES (?,?,?,?,?,?,?,?)",
+                (codigo, d.fundo_codigo, numero, d.titulo.strip(), d.ano or 0, d.cidade, d.endereco_obra, d.identificacao_original))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'criado',?,?)", (codigo, u["email"], json.dumps({"titulo": d.titulo})))
     con.commit(); con.close()
     from .publicador import criar_dossie_no_site
