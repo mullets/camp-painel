@@ -36,6 +36,8 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
         if gravar_espelho:
             for t in ("wp_colecao", "wp_taxonomia", "wp_termo", "wp_item", "wp_pagina"):
                 con.execute(f"DELETE FROM {t}")
+        # Não manter um write lock aberto enquanto esperamos a rede/WordPress.
+        con.commit()
 
         # taxonomias e termos
         for tx in wp.taxonomias():
@@ -49,6 +51,9 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
                 if f and f not in fundos:
                     _divergencia(con, "termo", te.get("slug"), "fundo_inexistente", None, f); n["divergencias"] += 1
                 n_tx += 1; n["termos"] += 1
+                if n_tx % 100 == 0:
+                    con.commit()
+            con.commit()
             log(f"  taxonomia {tx.get('name')}: {n_tx} termos")
 
         # coleções e itens
@@ -56,6 +61,7 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
         cols = wp.colecoes()
         log(f"{len(cols)} coleções encontradas")
         con.execute("DELETE FROM wp_metadado")
+        con.commit()
         for c in cols:
             cid = c["id"]; total = 0
             try:
@@ -93,6 +99,8 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
                     if publicado and fundos[f]["status_site"] == "fora_do_ar":
                         _divergencia(con, "item", cod, "publicado_em_fundo_fora_do_ar", "fora_do_ar", "publish"); n["divergencias"] += 1
                 total += 1; n["itens"] += 1
+                if total % 100 == 0:
+                    con.commit()
             con.execute("INSERT INTO wp_colecao (id, nome, slug, url, total_itens, json) VALUES (?,?,?,?,?,?)",
                         (cid, c.get("name"), c.get("slug"), c.get("url"), total, json.dumps(c, ensure_ascii=False)))
             n["colecoes"] += 1
@@ -127,6 +135,8 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
                         (pg["id"], titulo, pg.get("slug"), pg.get("link"), pg.get("status"), pg.get("parent"), cod,
                          json.dumps({k: pg.get(k) for k in ("id", "slug", "link", "status", "parent", "modified")}, ensure_ascii=False)))
             n["paginas"] += 1
+            if n["paginas"] % 100 == 0:
+                con.commit()
 
         con.execute("UPDATE sincronizacao SET terminada_em=datetime('now'), ok=1, colecoes=?, itens=?, termos=?, paginas=?, divergencias=? WHERE id=?",
                     (n["colecoes"], n["itens"], n["termos"], n["paginas"], n["divergencias"], sid))
@@ -134,6 +144,8 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
         log(f"ok: {n}")
         return {"ok": True, **n}
     except Exception as e:  # noqa: BLE001
+        # Desfaz qualquer lote incompleto antes de registrar a falha.
+        con.rollback()
         con.execute("UPDATE sincronizacao SET terminada_em=datetime('now'), ok=0, erro=? WHERE id=?", (f"{e}\n{traceback.format_exc()[-800:]}", sid))
         con.commit()
         log(f"ERRO: {e}")
