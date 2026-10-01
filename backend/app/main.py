@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 from . import auth
 from .db import connect, init_db, aplicar_migracoes
@@ -146,3 +147,110 @@ def fundos_json(request: Request) -> dict:
     dados = con.execute("SELECT fundos FROM v_fundos_json").fetchone()[0]
     con.close()
     return {"fundos": json.loads(dados or "[]")}
+
+
+def _exigir_rede_local(request: Request) -> str:
+    """Endpoints das estações: sem login, mas restritos à LAN da CAMP."""
+    ip = request.client.host if request.client else ""
+    if not (ip.startswith("192.168.") or ip.startswith("10.") or ip == "127.0.0.1"):
+        raise HTTPException(403, "Somente rede local")
+    return ip
+
+
+@app.get("/api/estacoes/contexto")
+def contexto_estacoes(request: Request, fundo: str | None = None) -> dict:
+    """Fonte única para fundos e numeração de projetos usada pelas estações.
+
+    Sem `fundo`, devolve os fundos ativos com último/próximo P. Com `fundo`,
+    inclui também os projetos existentes daquele fundo para seleção na estação.
+    """
+    _exigir_rede_local(request)
+    con = connect()
+    fundos = [dict(r) for r in con.execute("""
+        SELECT f.codigo AS codigo_fundo, f.sigla AS prefixo, f.titulo AS nome,
+               CASE WHEN COALESCE(MAX(n.numero), 0) = 0 THEN NULL
+                    ELSE printf('P%04d', MAX(n.numero)) END AS ultimo_projeto,
+               v.proximo AS proximo_projeto
+          FROM fundo f
+          LEFT JOIN numero_p n ON n.fundo_codigo=f.codigo
+          LEFT JOIN v_proximo_p v ON v.fundo_codigo=f.codigo
+         WHERE f.ativo=1 AND f.sigla IS NOT NULL
+         GROUP BY f.codigo, f.sigla, f.titulo, v.proximo
+         ORDER BY f.codigo
+    """).fetchall()]
+    resposta = {"fundos": fundos}
+    if fundo:
+        if not any(f["codigo_fundo"] == fundo for f in fundos):
+            con.close()
+            raise HTTPException(404, f"Fundo {fundo} não existe ou está inativo")
+        resposta["projetos"] = [dict(r) for r in con.execute("""
+            SELECT codigo, printf('P%04d', numero) AS numero_projeto, titulo AS projeto,
+                   ano, cidade, identificacao_original
+              FROM projeto
+             WHERE fundo_codigo=?
+             ORDER BY numero
+        """, (fundo,)).fetchall()]
+    con.close()
+    return resposta
+
+
+class ReservaProjetoEstacao(BaseModel):
+    fundo_codigo: str
+    titulo: str
+    ano: int = 0
+    cidade: str | None = None
+    identificacao_original: str | None = None
+
+
+@app.post("/api/estacoes/projetos/reservar")
+def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict:
+    """Reserva e cria um projeto para a estação usando o contador autoritativo do painel."""
+    ip = _exigir_rede_local(request)
+    titulo = d.titulo.strip()
+    if not titulo:
+        raise HTTPException(400, "Nome do projeto é obrigatório")
+    if d.ano and not (1800 <= d.ano <= 2100):
+        raise HTTPException(400, "Ano inválido (0 para sem data)")
+    identificacao = (d.identificacao_original or "").strip() or None
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        f = con.execute("SELECT codigo FROM fundo WHERE codigo=? AND ativo=1", (d.fundo_codigo,)).fetchone()
+        if not f:
+            raise HTTPException(404, "Fundo não existe ou está inativo")
+        prox = con.execute("SELECT proximo FROM v_proximo_p WHERE fundo_codigo=?", (d.fundo_codigo,)).fetchone()[0]
+        numero = int(prox[1:])
+        codigo = f"{d.fundo_codigo}-{prox}"
+        con.execute("INSERT INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,NULL)",
+                    (d.fundo_codigo, numero))
+        con.execute("""
+            INSERT INTO projeto
+                (codigo, fundo_codigo, numero, titulo, ano, cidade, identificacao_original)
+            VALUES (?,?,?,?,?,?,?)
+        """, (codigo, d.fundo_codigo, numero, titulo, d.ano or 0, d.cidade, identificacao))
+        con.execute("""
+            INSERT INTO evento (entidade, codigo, tipo, ator, detalhe)
+            VALUES ('projeto',?,'criado',?,?)
+        """, (codigo, f"estacao@{ip}", json.dumps({
+            "titulo": titulo,
+            "origem": "estacao",
+            "identificacao_original": identificacao,
+        }, ensure_ascii=False)))
+        con.commit()
+    except HTTPException:
+        con.rollback()
+        raise
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return {
+        "codigo": codigo,
+        "numero_projeto": prox,
+        "fundo_codigo": d.fundo_codigo,
+        "titulo": titulo,
+        "ano": d.ano or 0,
+        "cidade": d.cidade,
+        "identificacao_original": identificacao,
+    }
