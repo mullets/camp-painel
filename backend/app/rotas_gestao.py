@@ -398,33 +398,48 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
           FROM estacao_heartbeat
     """).fetchall()}
     estacoes_cfg = [
-        ("Estação Foto 1", "estacao.foto1.ip", "foto",
+        ("foto1", "Estação Foto 1", "estacao.foto1.ip", "foto",
          "Fotos, negativos, slides, transparências", None),
-        ("Estação Foto 2", "estacao.foto2.ip", "foto",
+        ("foto2", "Estação Foto 2", "estacao.foto2.ip", "foto",
          "Fotos, negativos, slides, transparências", None),
-        ("Estação Contex 1", "estacao.contex1.ip", "contex",
+        ("contex1", "Estação Contex 1", "estacao.contex1.ip", "contex",
          "Pranchas, croquis, desenhos e materiais grandes", None),
-        ("Estação Contex 2", "estacao.contex2.ip", "contex",
+        ("contex2", "Estação Contex 2", "estacao.contex2.ip", "contex",
          "Pranchas, croquis, desenhos e materiais grandes", None),
-        ("Estação Universal 1", "estacao.universal1.ip", "universal",
+        ("universal1", "Estação Universal 1", "estacao.universal1.ip", "universal",
          "Qualquer material; operador escolhe tipo e informa dados", None),
-        ("Estação Universal 2", "estacao.universal2.ip", "universal",
+        ("universal2", "Estação Universal 2", "estacao.universal2.ip", "universal",
          "Qualquer material; operador escolhe tipo e informa dados", None),
-        ("CAMP Vision 2", "campvision2.ip", "processamento",
+        (None, "CAMP Vision 2", "campvision2.ip", "processamento",
          "Lê imagens, gera JSON/EXIF e organiza na pasta final", 22),
-        ("QNAP TS-932PX", "qnap.ip", "armazenamento",
+        (None, "QNAP TS-932PX", "qnap.ip", "armazenamento",
          "Entrada bruta e acervo final", 445),
     ]
-    for nome, chave, tipo, funcao, porta_servico in estacoes_cfg:
+    for estacao_id, nome, chave, tipo, funcao, porta_servico in estacoes_cfg:
         ip = _cfg(con, chave)
         online = _ping(ip) if ip else None
+        hb = heartbeats.get(estacao_id) if estacao_id else None
+        app_online = bool(hb and hb["idade_segundos"] is not None and hb["idade_segundos"] <= 75)
         item = {
+            "estacao_id": estacao_id,
+            "config_chave": chave,
             "nome": nome,
             "tipo": tipo,
             "funcao": funcao,
             "ip": ip or None,
             "online": online,
             "metodo": "ping" if ip else None,
+            "app_online": app_online if estacao_id else None,
+            "app_estado": hb.get("estado") if hb else None,
+            "app_versao": hb.get("versao") if hb else None,
+            "app_hostname": hb.get("hostname") if hb else None,
+            "app_ip_local": hb.get("ip_local") if hb else None,
+            "app_operador": hb.get("operador") if hb else None,
+            "app_fundo": hb.get("fundo_codigo") if hb else None,
+            "app_projeto": hb.get("projeto_codigo") if hb else None,
+            "app_ultimo_erro": hb.get("ultimo_erro") if hb else None,
+            "app_heartbeat_em": hb.get("atualizado_em") if hb else None,
+            "app_heartbeat_idade_segundos": hb.get("idade_segundos") if hb else None,
         }
         if ip and porta_servico:
             item["servico"] = {
