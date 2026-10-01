@@ -22,11 +22,20 @@ def _evento(con, entidade, codigo, tipo, ator, detalhe=None):
                 (entidade, str(codigo), tipo, ator, json.dumps(detalhe, ensure_ascii=False) if detalhe else None))
 
 
-def _qnap_raiz() -> Path:
+def _cfg(chave: str, padrao: str = "") -> str:
     con = connect()
-    r = con.execute("SELECT valor FROM configuracao WHERE chave='qnap.raiz'").fetchone()
+    r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
     con.close()
-    return Path((r[0] if r and r[0] else settings.CAMP_QNAP_ROOT))
+    return r[0] if r and r[0] else padrao
+
+
+def _qnap_raiz() -> Path:
+    return Path(_cfg("qnap.raiz", settings.CAMP_QNAP_ROOT))
+
+
+def _qnap_prontos_raiz() -> Path:
+    """Raiz final já organizada pelo CAMP Vision 2."""
+    return Path(_cfg("qnap.prontos_raiz", str(_qnap_raiz())))
 
 
 # ---------------- painel inicial ----------------
@@ -144,49 +153,169 @@ def mudar_etapa(lid: int, d: EtapaFila, u: dict = Depends(auth.exige("operador")
     return {"ok": True}
 
 
+@router.get("/estacoes/contexto")
+def contexto_estacao(u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Contexto único consumido pelos apps das estações de captura.
+
+    Os apps não mantêm cadastro próprio de fundos nem operadores.
+    """
+    con = connect()
+    fundos = [
+        dict(r) for r in con.execute(
+            """SELECT codigo, sigla, titulo, data_inicio, data_fim
+                 FROM fundo
+                WHERE ativo=1
+                ORDER BY codigo"""
+        ).fetchall()
+    ]
+    con.close()
+    return {
+        "operador": {
+            "id": u["id"],
+            "nome": u["nome"],
+            "email": u["email"],
+            "papel": u["papel"],
+        },
+        "fundos": fundos,
+        "tipos_estacao": [
+            {"codigo": "foto", "nome": "Estação de fotografia", "materiais": ["fotografia", "negativo", "slide", "transparencia"]},
+            {"codigo": "contex", "nome": "Estação Contex", "materiais": ["prancha", "croqui", "desenho", "documento_grande"]},
+            {"codigo": "universal", "nome": "Estação universal", "materiais": ["qualquer"]},
+        ],
+    }
+
+
 @router.post("/filas/varrer-qnap")
 def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Lê status.json / info_projeto.json das pastas do QNAP e atualiza/cria listas. Não grava no QNAP."""
-    raiz = _qnap_raiz()
+    """Lê somente material FINAL organizado pelo CAMP Vision 2.
+
+    Fluxo:
+      estações de captura -> entrada bruta do QNAP -> CAMP Vision 2 ->
+      JSON/EXIF/organização -> raiz final -> painel.
+
+    Material na entrada bruta nunca vira fila nem aviso de publicação.
+    """
+    raiz = _qnap_prontos_raiz()
+    entrada_txt = _cfg("qnap.entrada_captura", "")
+    entrada = Path(entrada_txt) if entrada_txt else None
     if not raiz.exists():
-        raise HTTPException(503, f"QNAP não montado em {raiz}")
+        raise HTTPException(503, f"Pasta final do QNAP não montada em {raiz}")
+
     con = connect()
     novas, atualizadas, ignoradas = 0, 0, []
-    mapa = {"enviado_windows": "enviado", "campvision_processando": "processando", "campvision_concluido": "revisao", "sincronizado": "rascunho"}
-    for sj in list(raiz.glob("*/status.json")) + list(raiz.glob("*/*/status.json")):
-        pasta = sj.parent
+    vistos: set[Path] = set()
+
+    manifestos = list(raiz.rglob("info_projeto.json")) + list(raiz.rglob("status.json"))
+    for arq in manifestos:
+        pasta = arq.parent.resolve()
+        if pasta in vistos:
+            continue
+        vistos.add(pasta)
+
+        if entrada:
+            try:
+                entrada_resolvida = entrada.resolve()
+                if pasta == entrada_resolvida or entrada_resolvida in pasta.parents:
+                    continue
+            except OSError:
+                pass
+
         try:
-            status = json.loads(sj.read_text(encoding="utf-8")) if sj.stat().st_size else {}
-            info = json.loads((pasta / "info_projeto.json").read_text(encoding="utf-8")) if (pasta / "info_projeto.json").exists() else {}
+            info_path = pasta / "info_projeto.json"
+            status_path = pasta / "status.json"
+            info = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() and info_path.stat().st_size else {}
+            status = json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() and status_path.stat().st_size else {}
         except Exception as e:  # noqa: BLE001
-            ignoradas.append({"pasta": str(pasta), "motivo": f"json inválido: {e}"}); continue
+            ignoradas.append({"pasta": str(pasta), "motivo": f"manifesto inválido: {e}"})
+            continue
+
         if info.get("teste") or pasta.name.lower() in ("teste", "asd", "sei la"):
-            ignoradas.append({"pasta": str(pasta), "motivo": "lote de teste"}); continue
-        st = status.get("status") if isinstance(status, dict) else str(status)
-        etapa = mapa.get(st, "enviado")
+            ignoradas.append({"pasta": str(pasta), "motivo": "lote de teste"})
+            continue
+
         cod = None
-        for texto in (info.get("codigo"), info.get("projeto_codigo"), pasta.name, pasta.parent.name + " " + pasta.name):
+        for texto in (
+            info.get("codigo"),
+            info.get("projeto_codigo"),
+            status.get("codigo") if isinstance(status, dict) else None,
+            pasta.name,
+            pasta.parent.name + " " + pasta.name,
+        ):
             if texto:
                 from .wp import detectar_codigo
-                c, f, p = detectar_codigo(str(texto))
+                _, _, p = detectar_codigo(str(texto))
                 if p:
-                    cod = p; break
+                    cod = p
+                    break
         if not cod or not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (cod,)).fetchone():
-            ignoradas.append({"pasta": str(pasta), "motivo": "sem código de projeto reconhecido na pasta/info_projeto.json"}); continue
-        n_arq = len(list((pasta / "JPG").glob("*.jp*g"))) if (pasta / "JPG").exists() else len([x for x in pasta.rglob("*.jp*g")])
-        ex = con.execute("SELECT id, etapa FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1", (str(pasta),)).fetchone()
+            ignoradas.append({"pasta": str(pasta), "motivo": "sem código de projeto reconhecido no material final"})
+            continue
+
+        exts = {".jpg", ".jpeg", ".tif", ".tiff", ".dng", ".png"}
+        arquivos = [x for x in pasta.rglob("*") if x.is_file() and x.suffix.lower() in exts]
+        n_arq = len(arquivos)
+
+        st = status.get("status") if isinstance(status, dict) else None
+        nome = info.get("nome") or info.get("titulo") or pasta.name
+        esperadas = info.get("folhas_esperadas") or info.get("itens_esperados") or info.get("quantidade")
+        contexto = {
+            "origem": "campvision2",
+            "estacao": info.get("estacao") or info.get("estacao_id") or info.get("origem_estacao"),
+            "tipo_estacao": info.get("tipo_estacao"),
+            "operador": info.get("operador") or info.get("operador_nome"),
+            "operador_email": info.get("operador_email"),
+            "fundo_codigo": info.get("fundo_codigo") or info.get("fundo"),
+            "manifesto": info,
+            "status": status,
+        }
+
+        ex = con.execute(
+            "SELECT id, etapa, folhas_encontradas FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1",
+            (str(pasta),),
+        ).fetchone()
+
         if ex:
-            if ex["etapa"] not in ("publicado", "rascunho") and ex["etapa"] != etapa:
-                con.execute("UPDATE lista_processamento SET etapa=?, status_json=?, folhas_encontradas=?, atualizado_em=datetime('now') WHERE id=?", (etapa, st, n_arq, ex["id"]))
-                _evento(con, "lista", ex["id"], f"qnap_{etapa}", "qnap"); atualizadas += 1
+            if ex["etapa"] not in ("publicado", "rascunho") and ex["etapa"] != "revisao":
+                con.execute(
+                    "UPDATE lista_processamento SET etapa='revisao', status_json=?, folhas_encontradas=?, resultado=?, atualizado_em=datetime('now') WHERE id=?",
+                    (st or "pronto_campvision2", n_arq, json.dumps(contexto, ensure_ascii=False), ex["id"]),
+                )
+                _evento(con, "lista", ex["id"], "material_pronto", "campvision2", {"pasta": str(pasta), "arquivos": n_arq})
+                atualizadas += 1
             else:
-                con.execute("UPDATE lista_processamento SET folhas_encontradas=?, status_json=? WHERE id=?", (n_arq, st, ex["id"]))
+                con.execute(
+                    "UPDATE lista_processamento SET folhas_encontradas=?, status_json=?, resultado=?, atualizado_em=datetime('now') WHERE id=?",
+                    (n_arq, st or "pronto_campvision2", json.dumps(contexto, ensure_ascii=False), ex["id"]),
+                )
         else:
-            lid = con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json) VALUES (?,?,?,?,?,?,?)",
-                              (info.get("nome") or pasta.name, cod, str(pasta), info.get("folhas_esperadas"), n_arq, etapa, st)).lastrowid
-            _evento(con, "lista", lid, "criada", "qnap", {"pasta": str(pasta)}); novas += 1
-    con.commit(); con.close()
-    return {"novas": novas, "atualizadas": atualizadas, "ignoradas": ignoradas[:50], "raiz": str(raiz)}
+            lid = con.execute(
+                """INSERT INTO lista_processamento
+                   (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json, resultado)
+                   VALUES (?,?,?,?,?,'revisao',?,?)""",
+                (
+                    nome,
+                    cod,
+                    str(pasta),
+                    esperadas,
+                    n_arq,
+                    st or "pronto_campvision2",
+                    json.dumps(contexto, ensure_ascii=False),
+                ),
+            ).lastrowid
+            _evento(con, "lista", lid, "material_pronto", "campvision2", {"pasta": str(pasta), "arquivos": n_arq})
+            _evento(con, "projeto", cod, "material_novo_pronto", "campvision2", contexto)
+            novas += 1
+
+    con.commit()
+    con.close()
+    return {
+        "novas": novas,
+        "atualizadas": atualizadas,
+        "ignoradas": ignoradas[:50],
+        "raiz_final": str(raiz),
+        "entrada_bruta": str(entrada) if entrada else None,
+        "mensagem": "Somente material já organizado pelo CAMP Vision 2 é considerado pronto.",
+    }
 
 
 # ---------------- solicitações ----------------
