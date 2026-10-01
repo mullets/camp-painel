@@ -834,14 +834,49 @@ let labType='projeto';
 document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
   document.getElementById('l-fmt').value=labType==='tubo'?'20x140':'100x50';renderLabel()});
-['l-fundo','l-proj','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id).addEventListener('input',renderLabel));
+['l-fundo','l-proj','l-volume','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderLabel));
+document.getElementById('l-fundo').addEventListener('change',carregarProjetosEtiqueta);
+document.getElementById('l-proj').addEventListener('change',carregarDadosProjetoEtiqueta);
+document.getElementById('l-volume').addEventListener('change',aplicarVolumeEtiqueta);
+let LABEL_PROJETO=null,LABEL_VOLUMES=[];
+function codigoProjetoEtiqueta(pc){const n=parseInt(String(pc||'').replace(/\D/g,''),10)||0;return 'P'+String(n).padStart(3,'0')}
+async function carregarProjetosEtiqueta(){
+  const fc=document.getElementById('l-fundo').value,sel=document.getElementById('l-proj');
+  if(!EU||!fc)return;
+  try{
+    const r=await API('/api/projetos?fundo='+encodeURIComponent(fc)+'&por_pagina=500');
+    sel.innerHTML=r.itens.map(p=>`<option value="${p.codigo}">${p.codigo} · ${p.titulo}${p.ano?' · '+p.ano:''}</option>`).join('');
+    if(r.itens.length)await carregarDadosProjetoEtiqueta();else{LABEL_PROJETO=null;LABEL_VOLUMES=[];renderLabel()}
+  }catch(e){toast('Etiquetas: '+e.message)}
+}
+async function carregarDadosProjetoEtiqueta(){
+  const code=document.getElementById('l-proj').value;if(!EU||!code)return;
+  try{
+    const [d,vs]=await Promise.all([API('/api/projetos/'+code+'/detalhe'),API('/api/projetos/'+code+'/volumes')]);
+    LABEL_PROJETO=d.projeto;LABEL_VOLUMES=vs;
+    document.getElementById('l-ano').value=LABEL_PROJETO.ano||'';
+    document.getElementById('l-endereco').value=LABEL_PROJETO.endereco_obra||'';
+    document.getElementById('l-cliente').value=LABEL_PROJETO.cliente||'';
+    const sel=document.getElementById('l-volume');
+    sel.innerHTML=vs.length?vs.map(v=>`<option value="${v.volume}">${v.volume} de ${v.total_volumes} · ${v.tipo} ${v.identificador}</option>`).join(''):'<option value="1">1 de 1 · sem localização cadastrada</option>';
+    aplicarVolumeEtiqueta();
+  }catch(e){toast('Etiquetas: '+e.message)}
+}
+function aplicarVolumeEtiqueta(){
+  const n=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===n);
+  document.getElementById('l-local').value=v?.identificador||'';
+  document.getElementById('l-tipo-emb').value=v?.tipo||'';
+  document.getElementById('l-docs-volume').value=v?.quantidade_documentos||0;
+  renderLabel();
+}
 function labelHTML(k){
   const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc)||[fc||'F000','—','(selecione um fundo)',''],sig=f[1]||'—',nome=f[2];
-  const [pc,pn,py]=document.getElementById('l-proj').value.split('|');
+  const projeto=LABEL_PROJETO||{},pc=(projeto.codigo||document.getElementById('l-proj').value||'F000-P0000').split('-').pop(),pn=projeto.titulo||'(selecione um projeto)',py=projeto.ano||document.getElementById('l-ano').value||'';
+  const volume=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===volume),totalVolumes=v?.total_volumes||Math.max(1,LABEL_VOLUMES.length),local=document.getElementById('l-local').value||'—',tipoEmb=document.getElementById('l-tipo-emb').value||'—',docs=document.getElementById('l-docs-volume').value||'0',endereco=document.getElementById('l-endereco').value||'—',cliente=document.getElementById('l-cliente').value||'—';
   const [mw,mh]=document.getElementById('l-fmt').value.split('x').map(Number);const S=3.6;const obs=document.getElementById('l-obs').value;
   let code,lines,big;
-  if(labType==='projeto'){code=`${fc}-${pc}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn],['Ano',py]]}
-  else if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';const n='D'+String(+d+k).padStart(5,'0');code=`${fc}-${pc}-${py}-${document.getElementById('l-serie').value}-${n}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn]]}
+  if(labType==='projeto'){code=`${sig}-${codigoProjetoEtiqueta(pc)}.${volume}`;big=code;lines=[['Fundo',fc],['Sigla',sig],['Nome',nome],['Projeto',pn],['Ano',py||'—'],['Endereço',endereco],['Cliente',cliente],['Volume',`${volume} de ${totalVolumes}`],['Embalagem',tipoEmb],['Documentos',docs],['Local',local]]}
+  else if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';const n='D'+String(+d+k).padStart(5,'0');code=`${fc}-${pc}-${py||'0000'}-${document.getElementById('l-serie').value}-${n}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn]]}
   else if(labType==='caixa'){code=`${fc}-CX${document.getElementById('l-caixa').value.padStart(2,'0')}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Conteúdo',document.getElementById('l-cont').value]]}
   else if(labType==='fundo'){code=fc;big=`${fc} ${sig}`;lines=[['Fundo',nome],['Período',f[3]||'—']]}
   else {code=`${fc}-${pc}`;big=code;lines=[]}
@@ -850,7 +885,7 @@ function labelHTML(k){
   return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${sig} · CAMP</span></div><div class="body">
     <div style="display:flex;align-items:center;gap:6px"><span class="logo">CAMP</span><span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
     <div class="big" style="font-size:${big.length>18?12:16}px;margin:6px 0 4px">${big}</div>
-    <div class="row">${lines.map(([a,b])=>`<div><b>${a}</b>${b}</div>`).join('')}</div>
+    <div class="row" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px 8px;font-size:7.5px">${lines.map(([a,b])=>`<div style="min-width:0"><b>${a}</b><span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(b)}</span></div>`).join('')}</div>
     ${obs?`<div style="font-size:7.5px;color:#555;margin-top:2px">${obs}</div>`:''}
     <div style="position:absolute;left:10px;right:10px;bottom:7px">${barcode(code,20,'100%')}<div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-align:center;margin-top:1px">${code}</div></div></div></div>`}
 function renderLabel(){document.getElementById('lab-preview').innerHTML=labelHTML(0);const n=Math.min(60,Math.max(1,+document.getElementById('l-qty').value||1));document.getElementById('printgrid').innerHTML=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0)).join('')}
