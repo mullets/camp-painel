@@ -164,7 +164,7 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
         con.close(); return {"ok": True, "mudou": False}
     campos.append("atualizado_em=datetime('now')")
     con.execute(f"UPDATE fundo SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
-    _evento(con, "fundo", codigo, "editado", u["email"], mud)
+    _evento(con, "fundo", codigo, "editado", u["email"], {"antes": {k: f[k] for k in mud}, "depois": mud})
     con.commit(); con.close()
     site = None
     if "titulo" in mud:
@@ -261,7 +261,7 @@ def editar_agente(aid: int, d: EdicaoAgente, u: dict = Depends(auth.exige("admin
                 con.execute("INSERT OR IGNORE INTO agente_forma_variante (agente_id, forma, contexto) VALUES (?,?,'carimbo')", (aid, f.strip().upper()))
         mud["formas_variantes"] = d.formas_variantes
     if mud:
-        _evento(con, "agente", str(aid), "editado", u["email"], mud)
+        _evento(con, "agente", str(aid), "editado", u["email"], {"antes": {k: a[k] if k in a.keys() else None for k in mud}, "depois": mud})
     con.commit(); con.close()
     site = None
     if "forma_autorizada" in mud:
