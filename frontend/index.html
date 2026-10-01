@@ -1106,6 +1106,35 @@ function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||
 function abrirAjuda(){const a=ajudaDaRota();openDrawer('Ajuda · '+a.titulo,'guia rápido',`<p style="margin:0;color:var(--ink2)">${escHtml(a.intro)}</p><div class="help-steps">${a.passos.map(([t,d])=>`<div class="help-step"><div><b>${escHtml(t)}</b><small>${escHtml(d)}</small></div></div>`).join('')}</div><div><h3>Atalhos</h3><div class="shortcut-grid">${AJUDA_ATALHOS.map(([k,d])=>`<kbd>${escHtml(k)}</kbd><span>${escHtml(d)}</span>`).join('')}</div></div>`)}
 function onboardingOperador(u){if(!u||u.papel!=='operador')return;const key='camp.onboarding.v1.'+u.email;try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch(_){}setTimeout(()=>openDrawer('Bem-vindo ao CAMP Acervos','primeiro acesso',`<p style="margin:0;color:var(--ink2)">O painel acompanha o material desde a digitalização até a publicação. Você não precisa conhecer a infraestrutura por trás dele.</p><div class="help-steps"><div class="help-step"><div><b>Comece pelas filas</b><small>Veja o que chegou do CAMP Vision 2 e o que precisa de revisão.</small></div></div><div class="help-step"><div><b>Trabalhe pelo código</b><small>Fundos são Fxxx; projetos são Fxxx-Pxxxx. Use a busca do topo quando souber o código.</small></div></div><div class="help-step"><div><b>Não publique com bloqueio</b><small>Problemas e direitos pendentes aparecem antes das ações de publicação.</small></div></div></div><div class="act"><button class="btn pri" onclick="closeDrawer(true);go('filas')">Ir para Filas</button><button class="btn" onclick="abrirAjuda()">Ver ajuda desta tela</button></div>`),500)}
 
+function csvEscape(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
+function textoCelulaExport(td){const clone=td.cloneNode(true);clone.querySelectorAll('button,input,select,textarea,svg').forEach(x=>x.remove());return clone.textContent.replace(/\s+/g,' ').trim()}
+function exportarVisaoAtual(view){
+  const sec=document.getElementById('v-'+view),table=sec?.querySelector('table');if(!table){toast('Esta tela não tem tabela para exportar');return}
+  const ths=[...table.querySelectorAll('thead th')];
+  const indices=ths.map((th,i)=>({i,nome:th.textContent.replace(/\s+/g,' ').trim()})).filter(x=>x.nome);
+  const rows=[...table.querySelectorAll('tbody tr')].filter(tr=>getComputedStyle(tr).display!=='none'&&!tr.querySelector('td.empty'));
+  const filtros=[...sec.querySelectorAll('.filterbar input,.filterbar select')].map(x=>x.value).filter(Boolean).join(' · ');
+  const sort=ths.find(th=>th.classList.contains('asc')||th.classList.contains('desc'));
+  const meta=[
+    ['Tela',TITLES[view]||view],
+    ['Exportado em',new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'medium'}).format(new Date())],
+    ['Filtro atual',filtros||'sem filtro textual'],
+    ['Ordenação',sort?sort.textContent.trim()+' '+(sort.classList.contains('desc')?'descendente':'ascendente'):'ordem atual da tela'],
+    []
+  ];
+  const data=[indices.map(x=>x.nome),...rows.map(tr=>{const tds=[...tr.children];return indices.map(x=>textoCelulaExport(tds[x.i]||document.createElement('td')))})];
+  const csv='\uFEFF'+[...meta,...data].map(r=>r.map(csvEscape).join(';')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='camp-'+view+'-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast(rows.length+' linha(s) exportadas');
+}
+function instalarExportacoes(){
+  for(const view of ['fundos','projetos','solicitacoes','erros']){
+    const bar=document.querySelector('#v-'+view+' .filterbar');if(!bar||bar.querySelector('[data-export-view]'))continue;
+    const b=document.createElement('button');b.className='btn sm';b.dataset.exportView=view;b.textContent='Exportar visão';b.onclick=()=>exportarVisaoAtual(view);
+    const cnt=bar.querySelector('.cnt');bar.insertBefore(b,cnt||null);
+  }
+}
+
 // ---------- atalhos e barra lateral ----------
 const appEl=document.querySelector('.app');
 function setCollapsed(c){appEl.classList.toggle('collapsed',c);try{localStorage.setItem('camp.side',c?'1':'')}catch(e){}}
@@ -1592,7 +1621,7 @@ async function fazerLogin(ev){ev.preventDefault();const err=document.getElementB
 async function trocarSenha(){const err=document.getElementById('ts-err');const n=document.getElementById('ts-nova').value;if(n!==document.getElementById('ts-nova2').value){err.textContent='As senhas não coincidem';return}try{await API('/api/auth/trocar-senha',{method:'POST',body:JSON.stringify({senha_atual:document.getElementById('ts-atual').value,senha_nova:n})});document.getElementById('m-senha').classList.remove('on');toast('Senha alterada.');EU.precisa_trocar_senha=false;aplicarUsuario(EU)}catch(e){err.textContent=e.message}}
 document.querySelector('.who').addEventListener('click',()=>{if(EU)abrirPerfil()});
 
-renderFundos();renderFilas();renderProjetos();renderLabel();route_to(rotaAtual());checarSessao();
+renderFundos();renderFilas();renderProjetos();renderLabel();instalarExportacoes();route_to(rotaAtual());checarSessao();
 </script>
 </body>
 </html>
