@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import shutil
 import socket
+import subprocess
 import time
 from pathlib import Path
 
@@ -316,6 +317,23 @@ def _porta(ip: str, porta: int, timeout: float = 0.8) -> bool:
         return False
 
 
+def _ping(ip: str, timeout: float = 1.2) -> bool:
+    """Saúde primária da máquina: responde na rede, sem exigir serviço específico."""
+    if not ip:
+        return False
+    try:
+        r = subprocess.run(
+            ["ping", "-c", "1", "-W", str(max(1, int(timeout))), ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout + 0.8,
+            check=False,
+        )
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 @router.get("/estacoes")
 def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
@@ -375,30 +393,42 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     ).fetchone()[0]
 
     estacoes_cfg = [
-        ("Estação Foto 1", "estacao.foto1.ip", 548, "foto",
-         "Fotos, negativos, slides, transparências"),
-        ("Estação Foto 2", "estacao.foto2.ip", 548, "foto",
-         "Fotos, negativos, slides, transparências"),
-        ("Estação Contex", "estacao.contex.ip", 445, "contex",
-         "Pranchas, croquis, desenhos e materiais grandes"),
-        ("Estação Universal 1", "estacao.universal1.ip", 548, "universal",
-         "Qualquer material; operador escolhe tipo e informa dados"),
-        ("Estação Universal 2", "estacao.universal2.ip", 548, "universal",
-         "Qualquer material; operador escolhe tipo e informa dados"),
-        ("CAMP Vision 2", "campvision2.ip", 22, "processamento",
-         "Lê imagens, gera JSON/EXIF e organiza na pasta final"),
-        ("QNAP TS-932PX", "qnap.ip", 445, "armazenamento",
-         "Entrada bruta e acervo final"),
+        ("Estação Foto 1", "estacao.foto1.ip", "foto",
+         "Fotos, negativos, slides, transparências", None),
+        ("Estação Foto 2", "estacao.foto2.ip", "foto",
+         "Fotos, negativos, slides, transparências", None),
+        ("Estação Contex 1", "estacao.contex1.ip", "contex",
+         "Pranchas, croquis, desenhos e materiais grandes", None),
+        ("Estação Contex 2", "estacao.contex2.ip", "contex",
+         "Pranchas, croquis, desenhos e materiais grandes", None),
+        ("Estação Universal 1", "estacao.universal1.ip", "universal",
+         "Qualquer material; operador escolhe tipo e informa dados", None),
+        ("Estação Universal 2", "estacao.universal2.ip", "universal",
+         "Qualquer material; operador escolhe tipo e informa dados", None),
+        ("CAMP Vision 2", "campvision2.ip", "processamento",
+         "Lê imagens, gera JSON/EXIF e organiza na pasta final", 22),
+        ("QNAP TS-932PX", "qnap.ip", "armazenamento",
+         "Entrada bruta e acervo final", 445),
     ]
-    for nome, chave, porta, tipo, funcao in estacoes_cfg:
+    for nome, chave, tipo, funcao, porta_servico in estacoes_cfg:
         ip = _cfg(con, chave)
-        out["maquinas"].append({
+        online = _ping(ip) if ip else None
+        item = {
             "nome": nome,
             "tipo": tipo,
             "funcao": funcao,
             "ip": ip or None,
-            "online": _porta(ip, porta) if ip else None,
-        })
+            "online": online,
+            "metodo": "ping" if ip else None,
+        }
+        if ip and porta_servico:
+            item["servico"] = {
+                "porta": porta_servico,
+                "online": _porta(ip, porta_servico),
+                "nome": "SSH" if porta_servico == 22 else "SMB",
+            }
+        out["maquinas"].append(item)
+
 
     s = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     out["site"] = {
