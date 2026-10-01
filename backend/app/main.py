@@ -202,6 +202,20 @@ class ReservaProjetoEstacao(BaseModel):
     identificacao_original: str | None = None
 
 
+class HeartbeatEstacao(BaseModel):
+    estacao_id: str
+    tipo_estacao: str
+    app: str
+    versao: str | None = None
+    hostname: str | None = None
+    ip_local: str | None = None
+    estado: str = "ocioso"
+    fundo_codigo: str | None = None
+    projeto_codigo: str | None = None
+    operador: str | None = None
+    ultimo_erro: str | None = None
+
+
 @app.post("/api/estacoes/projetos/reservar")
 def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict:
     """Reserva e cria um projeto para a estação usando o contador autoritativo do painel."""
@@ -254,3 +268,43 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         "cidade": d.cidade,
         "identificacao_original": identificacao,
     }
+
+
+@app.post("/api/estacoes/heartbeat")
+def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
+    """Heartbeat leve dos apps de captura. Restrito à rede local e sem bloquear a operação."""
+    ip_origem = _exigir_rede_local(request)
+    estacao_id = d.estacao_id.strip().lower()
+    tipo = d.tipo_estacao.strip().lower()
+    estado = d.estado.strip().lower()
+    if not estacao_id or len(estacao_id) > 64:
+        raise HTTPException(400, "estacao_id inválido")
+    if tipo not in ("foto", "contex", "universal"):
+        raise HTTPException(400, "tipo_estacao inválido")
+    if estado not in ("ocioso", "capturando", "finalizando", "backup", "erro"):
+        raise HTTPException(400, "estado inválido")
+    con = connect()
+    con.execute("""
+        INSERT INTO estacao_heartbeat
+            (estacao_id, tipo_estacao, app, versao, hostname, ip_local, estado,
+             fundo_codigo, projeto_codigo, operador, ultimo_erro, recebido_de_ip, atualizado_em)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+        ON CONFLICT(estacao_id) DO UPDATE SET
+            tipo_estacao=excluded.tipo_estacao,
+            app=excluded.app,
+            versao=excluded.versao,
+            hostname=excluded.hostname,
+            ip_local=excluded.ip_local,
+            estado=excluded.estado,
+            fundo_codigo=excluded.fundo_codigo,
+            projeto_codigo=excluded.projeto_codigo,
+            operador=excluded.operador,
+            ultimo_erro=excluded.ultimo_erro,
+            recebido_de_ip=excluded.recebido_de_ip,
+            atualizado_em=datetime('now')
+    """, (estacao_id, tipo, d.app[:80], (d.versao or "")[:120] or None,
+          (d.hostname or "")[:120] or None, (d.ip_local or "")[:64] or None,
+          estado, (d.fundo_codigo or "")[:16] or None, (d.projeto_codigo or "")[:32] or None,
+          (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem))
+    con.commit(); con.close()
+    return {"ok": True, "estacao_id": estacao_id, "estado": estado}
