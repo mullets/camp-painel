@@ -15,11 +15,62 @@ router = APIRouter(prefix="/api", tags=["projetos"])
 
 
 def _colecao_config(con, chave: str, padrao: int) -> int:
+    """Resolve coleção pelo conteúdo real do espelho, usando configuração só quando coerente."""
     r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+    configurada = None
     try:
-        return int(r[0]) if r and str(r[0]).strip() else padrao
+        configurada = int(r[0]) if r and str(r[0]).strip() else None
     except (TypeError, ValueError):
-        return padrao
+        configurada = None
+
+    papel = "projetos" if "projetos" in chave else "itens"
+    rows = con.execute("""
+        SELECT colecao_id,
+               COUNT(*) AS total,
+               SUM(CASE WHEN projeto_detectado IS NOT NULL
+                         AND codigo_detectado=projeto_detectado THEN 1 ELSE 0 END) AS projetos,
+               SUM(CASE WHEN projeto_detectado IS NOT NULL
+                         AND codigo_detectado<>projeto_detectado THEN 1 ELSE 0 END) AS documentos
+          FROM wp_item
+         WHERE codigo_detectado IS NOT NULL
+         GROUP BY colecao_id
+    """).fetchall()
+    stats = {int(x["colecao_id"]): dict(x) for x in rows}
+
+    def coerente(cid: int | None) -> bool:
+        if not cid or cid not in stats:
+            return False
+        s = stats[cid]
+        return (s["projetos"] or 0) >= (s["documentos"] or 0) if papel == "projetos" else (s["documentos"] or 0) > (s["projetos"] or 0)
+
+    if coerente(configurada):
+        return configurada
+    if stats:
+        campo = "projetos" if papel == "projetos" else "documentos"
+        melhor = max(stats.values(), key=lambda x: (x.get(campo) or 0, x.get("total") or 0))
+        if (melhor.get(campo) or 0) > 0:
+            return int(melhor["colecao_id"])
+    return configurada or padrao
+
+
+def _serie_do_item(codigo: str | None, md: dict) -> str | None:
+    m = re.search(r"-(S\d{2})-", codigo or "")
+    if m:
+        return m.group(1)
+    texto = " ".join(str(md.get(k) or "") for k in ("Série", "Serie", "Tipo de acervo", "Categoria"))
+    mapa = {
+        "desenho": "S01", "prancha": "S01",
+        "documento textual": "S02", "textual": "S02",
+        "fotografia": "S03", "foto": "S03",
+        "negativo": "S04",
+        "slide": "S05", "diapositivo": "S05",
+        "material": "S06", "especifica": "S06",
+    }
+    low = texto.lower()
+    for termo, serie in mapa.items():
+        if termo in low:
+            return serie
+    return None
 
 
 def _slug_publico(texto: str) -> str:
@@ -111,39 +162,125 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     p = con.execute("SELECT p.*, f.titulo AS fundo, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
-    itens = [dict(r) for r in con.execute("""
+
+    itens_local = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
-               w.id AS tainacan_item_id, i.tainacan_item_id AS tainacan_item_id_salvo,
-               w.thumb_url, w.url,
-               CASE WHEN w.id IS NOT NULL AND i.tainacan_item_id IS NOT NULL AND w.id != i.tainacan_item_id THEN 1 ELSE 0 END AS vinculo_corrigido
-        FROM item i
-        LEFT JOIN wp_item w ON w.id=(
-            SELECT w2.id FROM wp_item w2
-            WHERE w2.codigo_detectado=i.codigo
-              AND w2.colecao_id=?
-            ORDER BY w2.id DESC LIMIT 1
-        )
-        WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""",
-        (_colecao_config(con, "tainacan.itens_collection_id", 8013), codigo))]
+               i.tainacan_item_id AS tainacan_item_id_salvo
+          FROM item i
+         WHERE i.projeto_codigo=?
+         ORDER BY i.serie_codigo, i.sequencial
+    """, (codigo,))]
+    itens_por_codigo = {x["codigo"]: x for x in itens_local}
+
+    itens_cid = _colecao_config(con, "tainacan.itens_collection_id", 8013)
+    itens_site = []
+    for w in con.execute("""
+        SELECT id, colecao_id, status, titulo, slug, url, documento_url, thumb_url,
+               codigo_detectado, fundo_detectado, projeto_detectado, metadados, modificado_em
+          FROM wp_item
+         WHERE projeto_detectado=?
+           AND fundo_detectado=?
+           AND colecao_id=?
+           AND codigo_detectado LIKE ?
+         ORDER BY codigo_detectado, id
+    """, (codigo, p["fundo_codigo"], itens_cid, codigo + "-%")).fetchall():
+        d = dict(w)
+        local = itens_por_codigo.get(d.get("codigo_detectado"))
+        mdw = json.loads(d.get("metadados") or "{}")
+        d["metadados_site"] = mdw
+        if local:
+            d.update({
+                "serie_codigo": local.get("serie_codigo"),
+                "sequencial": local.get("sequencial"),
+                "tipo_documento": local.get("tipo_documento") or mdw.get("Tipo de documento"),
+                "folha": local.get("folha") or mdw.get("Folha"),
+                "escala": local.get("escala") or mdw.get("Escala"),
+                "ano_folha": local.get("ano_folha"),
+                "autoria_divergente": local.get("autoria_divergente"),
+                "duplicata_de": local.get("duplicata_de"),
+                "espelhado": local.get("espelhado"),
+                "rotacao_aplicada": local.get("rotacao_aplicada"),
+                "status_site_local": local.get("status_site"),
+                "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
+                "origem_catalogacao": "local+site",
+            })
+        else:
+            d.update({
+                "serie_codigo": _serie_do_item(d.get("codigo_detectado"), mdw),
+                "sequencial": None,
+                "tipo_documento": mdw.get("Tipo de documento") or mdw.get("Tipo") or mdw.get("Natureza do documento"),
+                "folha": mdw.get("Folha"),
+                "escala": mdw.get("Escala"),
+                "ano_folha": None,
+                "autoria_divergente": 0,
+                "duplicata_de": None,
+                "espelhado": 0,
+                "rotacao_aplicada": 0,
+                "status_site_local": None,
+                "tainacan_item_id_salvo": None,
+                "origem_catalogacao": "site",
+            })
+        d["tainacan_item_id"] = d["id"]
+        d["codigo"] = d.get("codigo_detectado") or f"TAINACAN-{d['id']}"
+        d["status_site"] = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar", "pending": "rascunho"}.get(d.get("status"), d.get("status") or "nao_publicado")
+        itens_site.append(d)
+
+    itens = itens_site if itens_site else itens_local
+    for d in itens:
+        d.setdefault("thumb_url", None)
+        d.setdefault("url", None)
+        d.setdefault("tainacan_item_id", None)
+        d.setdefault("metadados_site", {})
+        d.setdefault("origem_catalogacao", "local")
+
+    projetos_cid = _colecao_config(con, "tainacan.projetos_collection_id", 8007)
     site = con.execute("""
         SELECT * FROM wp_item
-        WHERE codigo_detectado=?
-          AND colecao_id=?
-        ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, id DESC LIMIT 1
-    """, (codigo, _colecao_config(con, "tainacan.projetos_collection_id", 8007), p["tainacan_item_id"] or -1)).fetchone()
+         WHERE codigo_detectado=?
+           AND colecao_id=?
+         ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, id DESC LIMIT 1
+    """, (codigo, projetos_cid, p["tainacan_item_id"] or -1)).fetchone()
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     eventos = [dict(r) for r in con.execute("SELECT tipo, ator, quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 20", (codigo,))]
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
+    colecoes = {r["id"]: r["nome"] for r in con.execute("SELECT id, nome FROM wp_colecao").fetchall()}
+    fonte_visual = {
+        "colecao_projetos_id": projetos_cid,
+        "colecao_projetos_nome": colecoes.get(projetos_cid),
+        "colecao_itens_id": itens_cid,
+        "colecao_itens_nome": colecoes.get(itens_cid),
+        "documentos_site": len(itens_site),
+        "documentos_locais": len(itens_local),
+        "codigos_site": [x.get("codigo") for x in itens_site],
+        "codigos_locais": [x.get("codigo") for x in itens_local],
+    }
     con.close()
+
     md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
     site_url = _url_publica_projeto(codigo, p["titulo"], p["cidade"])
     projeto = dict(p)
     projeto["tainacan_item_id_salvo"] = projeto.get("tainacan_item_id")
     projeto["tainacan_item_id"] = site["id"] if site else None
-    return {"projeto": projeto, "itens": itens, "site_url": site_url,
+
+    series_nomes = {
+        "S01": "Desenhos e pranchas",
+        "S02": "Documentos textuais",
+        "S03": "Fotografias",
+        "S04": "Negativos",
+        "S05": "Slides",
+        "S06": "Materiais e especificações",
+    }
+    categorias = {}
+    for x in itens:
+        chave = x.get("serie_codigo") or "SEM_SERIE"
+        categorias.setdefault(chave, {"codigo": chave, "nome": series_nomes.get(chave, "Sem série"), "itens": 0})
+        categorias[chave]["itens"] += 1
+
+    return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
+            "fonte_visual": fonte_visual, "site_url": site_url,
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
             "erros": erros, "pedidos": pedidos, "eventos": eventos, "filas": filas}
 
