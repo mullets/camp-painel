@@ -25,18 +25,36 @@ def _cfg(chave: str, padrao: str = "") -> str:
 
 
 def detectar_codigo(*textos: str) -> tuple[str | None, str | None, str | None]:
-    """Devolve (codigo_completo_encontrado, fundo, projeto) a partir de título/slug/metadados."""
+    """Devolve o código MAIS ESPECÍFICO encontrado em título/slug/metadados.
+
+    Um item pode conter o código do projeto (Fxxx-Pxxxx) e, em outro metadado,
+    o código completo da folha. Antes retornávamos a primeira ocorrência e isso
+    podia associar miniaturas/itens ao projeto errado. Agora todas as ocorrências
+    são avaliadas e vence a que contém mais partes.
+    """
+    candidatos: list[tuple[int, int, str, str, str | None]] = []
+    ordem = 0
     for t in textos:
         if not t:
             continue
-        m = RE_CODIGO.search(t.replace("_", "-"))
-        if m:
+        normalizado = str(t).replace("_", "-")
+        for m in RE_CODIGO.finditer(normalizado):
             f = f"F{m.group(1)}"
             p = f"{f}-P{m.group(2)}" if m.group(2) else None
-            partes = [f] + [f"P{m.group(2)}" if m.group(2) else None, m.group(3), f"S{m.group(4)}" if m.group(4) else None, f"D{m.group(5)}" if m.group(5) else None]
-            codigo = "-".join(x for x in partes if x)
-            return codigo.upper(), f, p
-    return None, None, None
+            partes = [f] + [
+                f"P{m.group(2)}" if m.group(2) else None,
+                m.group(3),
+                f"S{m.group(4)}" if m.group(4) else None,
+                f"D{m.group(5)}" if m.group(5) else None,
+            ]
+            codigo = "-".join(x for x in partes if x).upper()
+            especificidade = sum(x is not None for x in m.groups())
+            candidatos.append((especificidade, -ordem, codigo, f, p))
+            ordem += 1
+    if not candidatos:
+        return None, None, None
+    _, _, codigo, fundo, projeto = max(candidatos)
+    return codigo, fundo, projeto
 
 
 class WP:

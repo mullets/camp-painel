@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -10,6 +12,16 @@ from . import auth
 from .db import connect
 
 router = APIRouter(prefix="/api", tags=["projetos"])
+
+
+def _slug_publico(texto: str) -> str:
+    s = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s
+
+
+def _url_publica_projeto(codigo: str, titulo: str) -> str:
+    return f"https://camp.arq.br/acervo/projetos/{codigo.lower()}-{_slug_publico(titulo)}/"
 
 
 @router.get("/projetos")
@@ -42,28 +54,47 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close(); raise HTTPException(404, "Projeto não existe")
     itens = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
-               i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada, i.tainacan_item_id, w.thumb_url, w.url
-        FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""", (codigo,))]
-    site = con.execute("SELECT url, metadados FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone() if p["tainacan_item_id"] else None
+               i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
+               w.id AS tainacan_item_id, i.tainacan_item_id AS tainacan_item_id_salvo,
+               w.thumb_url, w.url,
+               CASE WHEN w.id IS NOT NULL AND i.tainacan_item_id IS NOT NULL AND w.id != i.tainacan_item_id THEN 1 ELSE 0 END AS vinculo_corrigido
+        FROM item i
+        LEFT JOIN wp_item w ON w.id=(
+            SELECT w2.id FROM wp_item w2
+            WHERE w2.codigo_detectado=i.codigo
+            ORDER BY w2.id DESC LIMIT 1
+        )
+        WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""", (codigo,))]
+    site = con.execute("""
+        SELECT * FROM wp_item
+        WHERE codigo_detectado=?
+        ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, id DESC LIMIT 1
+    """, (codigo, p["tainacan_item_id"] or -1)).fetchone()
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     eventos = [dict(r) for r in con.execute("SELECT tipo, ator, quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 20", (codigo,))]
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
     con.close()
-    md_uteis = {k: v for k, v in md.items() if v and k in ("Programa / uso", "Natureza do trabalho", "Situação da obra", "Cliente (divulgável)",
-                "Colaboradores", "Cálculo estrutural", "Construtora", "UF", "Lacunas conhecidas", "Fases documentadas", "Versões e relações",
-                "Nomes alternativos", "Publicações e bibliografia", "Autoria do projeto", "Papel no projeto")}
-    return {"projeto": dict(p), "itens": itens, "site_url": site["url"] if site else None, "metadados_site": md_uteis,
+    md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
+    site_url = _url_publica_projeto(codigo, p["titulo"])
+    projeto = dict(p)
+    projeto["tainacan_item_id_salvo"] = projeto.get("tainacan_item_id")
+    projeto["tainacan_item_id"] = site["id"] if site else None
+    return {"projeto": projeto, "itens": itens, "site_url": site_url,
+            "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
             "erros": erros, "pedidos": pedidos, "eventos": eventos, "filas": filas}
 
 
 @router.get("/itens/{codigo}")
 def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
-    i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, w.thumb_url, w.url AS site_url, w.documento_url, w.metadados
+    i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, w.thumb_url, w.url AS site_url, w.documento_url, w.metadados,
+                              w.id AS wp_id_exato, i.tainacan_item_id AS tainacan_item_id_salvo
                        FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
-                       LEFT JOIN wp_item w ON w.id=i.tainacan_item_id WHERE i.codigo=?""", (codigo,)).fetchone()
+                       LEFT JOIN wp_item w ON w.id=(
+                           SELECT w2.id FROM wp_item w2 WHERE w2.codigo_detectado=i.codigo ORDER BY w2.id DESC LIMIT 1
+                       ) WHERE i.codigo=?""", (codigo,)).fetchone()
     if not i:
         con.close(); raise HTTPException(404, "Folha não existe")
     vizinhos = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (i["projeto_codigo"],))]
@@ -71,6 +102,7 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     agentes = [dict(r) for r in con.execute("SELECT a.forma_autorizada, ia.papel, ia.fonte FROM item_agente ia JOIN agente a ON a.id=ia.agente_id WHERE ia.item_codigo=?", (codigo,))]
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
+    d["tainacan_item_id"] = d.pop("wp_id_exato", None)
     d["metadados_site"] = {k2: v for k2, v in md.items() if v and k2 in ("Tipo de desenho", "Técnica", "Suporte original", "Endereço", "Cliente",
                            "Fotógrafo", "Data do registro fotográfico", "Informação atribuída pela catalogação", "Descrição", "Arquiteto")}
     return {"item": d, "anterior": vizinhos[k - 1] if k > 0 else None, "proxima": vizinhos[k + 1] if k < len(vizinhos) - 1 else None,
