@@ -82,8 +82,9 @@ def ler_logs(limite: int = 200, nivel: str | None = None, q: str | None = None) 
     configurar()
     nivel = (nivel or "").upper().strip()
     qn = (q or "").lower().strip()
-    arquivos = [LOG_FILE]
-    arquivos += [Path(str(LOG_FILE) + f".{i}") for i in range(1, 6)]
+    # RotatingFileHandler: .1 é o rotacionado mais recente e .5 o mais antigo.
+    # Lemos do mais antigo ao arquivo atual e depois invertimos as linhas.
+    arquivos = [Path(str(LOG_FILE) + f".{i}") for i in range(5, 0, -1)] + [LOG_FILE]
     linhas: list[str] = []
     for arq in arquivos:
         if not arq.exists():
