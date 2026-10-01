@@ -111,21 +111,79 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     p = con.execute("SELECT p.*, f.titulo AS fundo, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
-    itens = [dict(r) for r in con.execute("""
+    itens_local = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
-               w.id AS tainacan_item_id, i.tainacan_item_id AS tainacan_item_id_salvo,
-               w.thumb_url, w.url,
-               CASE WHEN w.id IS NOT NULL AND i.tainacan_item_id IS NOT NULL AND w.id != i.tainacan_item_id THEN 1 ELSE 0 END AS vinculo_corrigido
+               i.tainacan_item_id AS tainacan_item_id_salvo
         FROM item i
-        LEFT JOIN wp_item w ON w.id=(
-            SELECT w2.id FROM wp_item w2
-            WHERE w2.codigo_detectado=i.codigo
-              AND w2.colecao_id=?
-            ORDER BY w2.id DESC LIMIT 1
-        )
-        WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""",
-        (_colecao_config(con, "tainacan.itens_collection_id", 8013), codigo))]
+        WHERE i.projeto_codigo=? ORDER BY i.serie_codigo, i.sequencial""", (codigo,))]
+    itens_por_codigo = {x["codigo"]: x for x in itens_local}
+    itens_cid = _colecao_config(con, "tainacan.itens_collection_id", 8013)
+    itens_site = []
+    for w in con.execute("""
+        SELECT id, colecao_id, status, titulo, slug, url, documento_url, thumb_url,
+               codigo_detectado, fundo_detectado, projeto_detectado, metadados, modificado_em
+          FROM wp_item
+         WHERE projeto_detectado=?
+           AND colecao_id=?
+         ORDER BY id
+    """, (codigo, itens_cid)).fetchall():
+        d = dict(w)
+        local = itens_por_codigo.get(d.get("codigo_detectado"))
+        mdw = json.loads(d.get("metadados") or "{}")
+        d["metadados_site"] = mdw
+        if local:
+            d.update({
+                "serie_codigo": local.get("serie_codigo"),
+                "sequencial": local.get("sequencial"),
+                "tipo_documento": local.get("tipo_documento") or mdw.get("Tipo de documento"),
+                "folha": local.get("folha") or mdw.get("Folha"),
+                "escala": local.get("escala") or mdw.get("Escala"),
+                "ano_folha": local.get("ano_folha"),
+                "autoria_divergente": local.get("autoria_divergente"),
+                "duplicata_de": local.get("duplicata_de"),
+                "espelhado": local.get("espelhado"),
+                "rotacao_aplicada": local.get("rotacao_aplicada"),
+                "status_site_local": local.get("status_site"),
+                "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
+                "origem_catalogacao": "local+site",
+            })
+        else:
+            cod = d.get("codigo_detectado") or ""
+            serie = None
+            import re as _re
+            m = _re.search(r"-(S\d{2})-", cod)
+            if m:
+                serie = m.group(1)
+            d.update({
+                "serie_codigo": serie,
+                "sequencial": None,
+                "tipo_documento": mdw.get("Tipo de documento") or mdw.get("Tipo") or mdw.get("Natureza do documento"),
+                "folha": mdw.get("Folha"),
+                "escala": mdw.get("Escala"),
+                "ano_folha": None,
+                "autoria_divergente": 0,
+                "duplicata_de": None,
+                "espelhado": 0,
+                "rotacao_aplicada": 0,
+                "status_site_local": None,
+                "tainacan_item_id_salvo": None,
+                "origem_catalogacao": "site",
+            })
+        d["tainacan_item_id"] = d["id"]
+        d["codigo"] = d.get("codigo_detectado") or f"TAINACAN-{d['id']}"
+        itens_site.append(d)
+
+    # A grade visual precisa espelhar o conjunto público do projeto. Se ainda não
+    # houver espelho do site, usamos a catalogação local como fallback explícito.
+    itens = itens_site if itens_site else itens_local
+    for d in itens:
+        d.setdefault("thumb_url", None)
+        d.setdefault("url", None)
+        d.setdefault("tainacan_item_id", None)
+        d.setdefault("metadados_site", {})
+        d.setdefault("origem_catalogacao", "local")
+
     site = con.execute("""
         SELECT * FROM wp_item
         WHERE codigo_detectado=?
@@ -143,7 +201,22 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     projeto = dict(p)
     projeto["tainacan_item_id_salvo"] = projeto.get("tainacan_item_id")
     projeto["tainacan_item_id"] = site["id"] if site else None
-    return {"projeto": projeto, "itens": itens, "site_url": site_url,
+    series_nomes = {r["codigo"]: r["nome"] for r in con.execute("SELECT codigo, nome FROM serie").fetchall()} if False else {}
+    # con já está fechado; nomes fixos seguem o vocabulário institucional do schema.
+    series_nomes = {
+        "S01": "Desenhos e pranchas",
+        "S02": "Documentos textuais",
+        "S03": "Fotografias",
+        "S04": "Negativos",
+        "S05": "Slides",
+        "S06": "Materiais e especificações",
+    }
+    categorias = {}
+    for x in itens:
+        chave = x.get("serie_codigo") or "SEM_SERIE"
+        categorias.setdefault(chave, {"codigo": chave, "nome": series_nomes.get(chave, "Sem série"), "itens": 0})
+        categorias[chave]["itens"] += 1
+    return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()), "site_url": site_url,
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
             "erros": erros, "pedidos": pedidos, "eventos": eventos, "filas": filas}
 
