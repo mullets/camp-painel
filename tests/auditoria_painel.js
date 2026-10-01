@@ -42,9 +42,12 @@ if(!d.querySelector('#fundos-filtros [data-ff="publicado"]')) problems.push('fun
 else {
   d.querySelector('#fundos-filtros [data-ff="publicado"]').click(); await sleep(100);
   const pubs=d.querySelectorAll('#fundos-body tr').length; okl.push('fundos: filtro publicados -> '+pubs+' linha(s)');
+  if(!d.querySelector('#fundos-filtros [data-ff="publicado"]').classList.contains('on')) problems.push('fundos: filtro ativo não ficou destacado');
+  if(w.localStorage.getItem('camp.fundos.filtro')!=='publicado') problems.push('fundos: filtro ativo não foi persistido');
   d.querySelector('#fundos-filtros [data-ff="todos"]').click();
   d.getElementById('fundos-q').value='Sami'; d.getElementById('fundos-q').dispatchEvent(new w.Event('input')); await sleep(100);
   if(!txt('#fundos-body').includes('Sami')) problems.push('fundos: busca Sami não retornou');
+  if(w.localStorage.getItem('camp.fundos.busca')!=='Sami') problems.push('fundos: busca não foi persistida');
   d.getElementById('fundos-q').value=''; d.getElementById('fundos-q').dispatchEvent(new w.Event('input'));
 }
 checkDom('fundos');
