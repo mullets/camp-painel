@@ -428,6 +428,27 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
 }
 
 @media(max-width:850px){.machine-status .sync-mini{display:none}.machine-status{gap:3px}.machine-status .ms{width:26px;height:26px}.system-banner .when{display:none}}
+
+/* CAMP UI primitives — use estes padrões antes de criar estilos inline */
+:root{
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;
+  --r-sm:4px;--r-md:8px;--r-lg:12px;
+}
+.stack{display:grid;gap:var(--sp-4)}
+.cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
+.toolbar{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
+.toolbar>.spacer{margin-left:auto}
+.surface{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md)}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
+.status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
+.bulkbar{display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--blue-soft)}
+.bulkbar.on{display:flex}.bulkbar .spacer{flex:1}.bulkbar .count{font-weight:600;color:var(--blue)}
+.fundos-filtros{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fundos-filtros .btn{position:relative}
+.fundos-filtros .btn.on{background:var(--ink);color:var(--surface);border-color:var(--ink);box-shadow:0 0 0 2px color-mix(in srgb,var(--ink) 12%, transparent)}
+.fundos-filtros .btn.on::before{content:"✓";font-weight:700;margin-right:5px}
+.fundos-filtros .n{font-family:var(--mono);font-size:10px;opacity:.75;margin-left:2px}
+
 </style>
 </head>
 <body>
