@@ -1135,20 +1135,69 @@ showItem=async function(code){if(!EU&&!MODO_SERVIDOR)return _showItemMock(code);
 
 // ---------- operação (painel, filas, solicitações, erros) via API ----------
 const TIPO_TAG={erro:'r',pedido:'a',fila:'b',fundo:''};
-async function carregarPainel(){try{const d=await API('/api/painel');const sec=document.getElementById('v-painel');sec.querySelector('.aviso-exemplo')?.remove();const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
-  sec.innerHTML=`<div class="hdr"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p class="sub">Estado real do acervo. O que precisa de decisão sua aparece primeiro.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções</span><span><kbd>F</kbd> filtrar</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
+function rankHTML(items,tipo,lim=5){
+  const xs=(items||[]).slice(0,lim);
+  if(!xs.length)return '<li class="empty">Sem dados ainda.</li>';
+  return xs.map((x,i)=>`<li><span class="pos">${i+1}</span><div class="name"><b>${escHtml(x.titulo||x.caminho||'—')}</b><small>${escHtml(x.codigo||x.fundo||x.caminho||'')}</small></div><span class="num">${Number(x.visualizacoes||0).toLocaleString('pt-BR')}</span></li>`).join('');
+}
+function maqEstado(m){return m.online===true?'ok':m.online===false?'bad':'warn'}
+async function carregarPainel(){try{
+  const [d,e,a]=await Promise.all([
+    API('/api/painel'),
+    API('/api/estacoes').catch(()=>null),
+    API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}}))
+  ]);
+  const sec=document.getElementById('v-painel');sec.querySelector('.aviso-exemplo')?.remove();
+  const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  const q=e?.qnap||{}, site=e?.site||{}, pipe=e?.pipeline||{}, maquinas=e?.maquinas||[];
+  const cv=maquinas.find(m=>m.tipo==='processamento'), qnapM=maquinas.find(m=>m.tipo==='armazenamento');
+  const capturas=maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo));
+  const captOn=capturas.filter(m=>m.online===true).length,captCfg=capturas.filter(m=>m.ip).length;
+  const sync=site.ultima_sincronizacao,ultSync=sync&&(sync.terminada_em||sync.iniciada_em);
+  const intervalo=+(site.intervalo_sync_min||15),proxSync=ultSync?proximaSincronizacao(ultSync,intervalo):null;
+  const p=a?.periodos||{}, ph=p.hoje||{}, p7=p['7d']||{}, p30=p['30d']||{};
+  const onlineAgora=a?.agora?.disponivel?Number(a.agora.usuarios||0).toLocaleString('pt-BR'):'—';
+  const analyticsErro=!a?.disponivel;
+  sec.innerHTML=`<div class="hdr"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p class="sub">Operação, publicação e uso público do acervo em uma tela.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções</span><span><kbd>F</kbd> filtrar</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
+
+  <div class="panel" style="margin-bottom:16px"><div class="ph"><h2>Operação agora</h2><button class="btn sm" onclick="carregarPainel()">Atualizar</button></div><div class="pb">
+    <div class="dash-health">
+      <div class="health-card ${captCfg?captOn===captCfg?'ok':captOn?'warn':'bad':'warn'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>Estações de captura</b></div><small>${captOn} online de ${captCfg||capturas.length} configuradas</small><small>${capturas.filter(m=>m.online===false).map(m=>m.nome).join(' · ')||'sem falhas detectadas'}</small></div>
+      <div class="health-card ${cv?maqEstado(cv):'warn'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>CAMP Vision 2</b></div><small>${cv?.online===true?'online':cv?.online===false?'sem resposta':'IP não configurado'}</small><small>${pipe.entrada_bruta??0} na entrada · ${pipe.aguardando_revisao??0} prontos para revisão</small></div>
+      <div class="health-card ${q.montado?'ok':'bad'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>QNAP</b></div><small>${q.montado?'montado':'não montado'}${q.uso_pct!=null?' · '+q.uso_pct+'% usado':''}</small><small>${q.livre_gb!=null?Number(q.livre_gb).toLocaleString('pt-BR')+' GB livres de '+Number(q.total_gb).toLocaleString('pt-BR')+' GB':escHtml(q.raiz||'')}</small></div>
+      <div class="health-card ${site.http?.ok?'ok':'bad'}" data-nav="estacoes" style="cursor:pointer"><div class="hh"><span class="dot"></span><b>Site público</b></div><small>${site.http?.ok?'online · '+site.http.ms+' ms':'sem resposta'}</small><small>${ultSync?'sync '+fmtDataHora(ultSync):'nunca sincronizado'}${proxSync?' · próxima '+fmtDataHora(proxSync):''}</small></div>
+    </div>
+  </div></div>
+
+  <div class="panel" style="margin-bottom:16px"><div class="ph"><h2>Audiência do site</h2><span class="tag">${escHtml(a?.origem||'Google Analytics')}</span></div><div class="pb">
+    <div class="audience-stats">
+      <div class="audience-stat"><div class="v">${onlineAgora}</div><div class="l">ativos agora</div><div class="s">${a?.agora?.disponivel?'últimos 30 min':'realtime ainda não disponível'}</div></div>
+      <div class="audience-stat"><div class="v">${Number(ph.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas hoje</div><div class="s">${Number(ph.screenPageViews||0).toLocaleString('pt-BR')} visualizações</div></div>
+      <div class="audience-stat"><div class="v">${Number(p7.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · 7 dias</div><div class="s">${Number(p7.screenPageViews||0).toLocaleString('pt-BR')} visualizações</div></div>
+      <div class="audience-stat"><div class="v">${Number(p30.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · 30 dias</div><div class="s">${Number(p30.screenPageViews||0).toLocaleString('pt-BR')} visualizações</div></div>
+    </div>
+    ${analyticsErro?`<div class="empty" style="padding:12px">Analytics indisponível: ${escHtml(a?.erro||'sem permissão do Site Kit para esta conta')}</div>`:`<div class="grid g2 wide3">
+      <div><h2 style="margin:0 0 8px">Fundos mais acessados</h2><ol class="rank">${rankHTML(a.top_fundos,'fundo',5)}</ol></div>
+      <div><h2 style="margin:0 0 8px">Projetos mais acessados</h2><ol class="rank">${rankHTML(a.top_projetos,'projeto',5)}</ol></div>
+      <div><h2 style="margin:0 0 8px">Páginas mais acessadas</h2><ol class="rank">${rankHTML(a.top_paginas,'pagina',5)}</ol></div>
+    </div><div class="act" style="margin-top:12px"><button class="btn sm" onclick="mostrarTop10Analytics()">Ver Top 10</button></div>`}
+  </div></div>
+
   <div class="grid g4" style="margin-bottom:16px">
-    <div class="panel stat" data-nav="filas" style="cursor:pointer"><div class="v">${d.filas.total}</div><div class="l">listas na fila do CAMP Vision</div><div class="d">${d.filas.processando?`<span class="tag b">${d.filas.processando} processando</span> `:''}${d.filas.revisao?`<span class="tag a">${d.filas.revisao} em revisão</span> `:''}${d.filas.erro?`<span class="tag r">${d.filas.erro} com erro</span>`:''}${!d.filas.total?'<span class="tag">fila vazia</span>':''}</div></div>
+    <div class="panel stat" data-nav="filas" style="cursor:pointer"><div class="v">${d.filas.total}</div><div class="l">lotes em andamento</div><div class="d">${d.filas.processando?`<span class="tag b">${d.filas.processando} processando</span> `:''}${d.filas.revisao?`<span class="tag a">${d.filas.revisao} em revisão</span> `:''}${d.filas.erro?`<span class="tag r">${d.filas.erro} com erro</span>`:''}${!d.filas.total?'<span class="tag">fila vazia</span>':''}</div></div>
     <div class="panel stat" data-nav="solicitacoes" style="cursor:pointer"><div class="v">${d.solicitacoes.abertas}</div><div class="l">pedidos de material abertos</div><div class="d">${d.solicitacoes.aguardam?`<span class="tag a">${d.solicitacoes.aguardam} aguardam resposta</span>`:'<span class="tag">nenhum pendente</span>'}</div></div>
     <div class="panel stat" data-nav="erros" style="cursor:pointer"><div class="v">${d.erros.abertos}</div><div class="l">problemas em aberto</div><div class="d">${d.erros.bloqueantes?`<span class="tag r">${d.erros.bloqueantes} bloqueiam publicação</span>`:'<span class="tag g">nenhum bloqueante</span>'}</div></div>
-    <div class="panel stat" data-nav="fundos" style="cursor:pointer"><div class="v">${d.fundos.total}</div><div class="l">fundos · ${d.fundos.no_ar} no ar</div><div class="d">próximo código <span class="code">${d.fundos.proximo}</span>${d.fundos.sem_sigla?` <span class="tag a">${d.fundos.sem_sigla} sem sigla</span>`:''}</div></div>
+    <div class="panel stat" data-nav="fundos" style="cursor:pointer"><div class="v">${d.fundos.total}</div><div class="l">fundos · ${d.fundos.no_ar} publicados</div><div class="d">próximo <span class="code">${d.fundos.proximo}</span>${d.fundos.sem_sigla?` <span class="tag a">${d.fundos.sem_sigla} sem sigla</span>`:''}</div></div>
   </div>
   <div class="grid g2">
-    <div class="panel"><div class="ph"><h2>Precisa de você</h2></div><div class="pb"><ul class="list">${d.precisa_de_voce.length?d.precisa_de_voce.map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${x.tipo}</span><div class="t">${x.titulo}${x.codigo?`<small><span class="code">${x.codigo}</span></small>`:''}</div><button class="btn sm" onclick="nav('${x.rota}')">Abrir</button></li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
-    <div class="panel"><div class="ph"><h2>Acervo em números</h2></div><div class="pb"><dl class="kv"><dt>Projetos</dt><dd>${d.projetos.total} · ${d.projetos.no_ar} no ar · ${d.projetos.rascunho} rascunho${d.projetos.bloqueados?` · <span style="color:var(--red)">${d.projetos.bloqueados} bloqueados</span>`:''}</dd><dt>Folhas</dt><dd>${d.itens.total} · ${d.itens.no_ar} no ar · ${d.itens.rascunho} rascunho${d.itens.autoria_divergente?` · <span style="color:var(--red)">${d.itens.autoria_divergente} autoria divergente</span>`:''}</dd><dt>Site</dt><dd>${d.site.ultima_sincronizacao?`sincronizado ${d.site.ultima_sincronizacao.terminada_em||'(em andamento)'} · ${d.site.divergencias} divergências`:'nunca sincronizado'}</dd></dl>
-      ${d.por_fundo_mes.length?`<h2 style="margin-top:14px">Folhas catalogadas nos últimos 30 dias</h2><div style="display:grid;gap:8px;font-size:13px">${d.por_fundo_mes.map(f=>`<div>${f.titulo} <span class="code">${f.fundo}</span> · ${f.n}<div class="bar"><i style="width:${Math.round(100*f.n/d.por_fundo_mes[0].n)}%"></i></div></div>`).join('')}</div>`:''}
-      <h2 style="margin-top:14px">Últimos eventos</h2><ul class="hist">${d.eventos.map(e=>`<li><time>${fmtDataHora(e.quando)}</time><span>${e.entidade} <span class="code">${e.codigo}</span> ${e.tipo} · ${e.ator}</span></li>`).join('')||'<li class="empty">—</li>'}</ul></div></div>
-  </div>`}catch(e){if(e.status!==401&&e.status!==428)toast(e.message)}}
+    <div class="panel"><div class="ph"><h2>Precisa de você</h2></div><div class="pb"><ul class="list">${d.precisa_de_voce.length?d.precisa_de_voce.map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${x.tipo}</span><div class="t">${escHtml(x.titulo)}${x.codigo?`<small><span class="code">${escHtml(x.codigo)}</span></small>`:''}</div><button class="btn sm" onclick="nav('${x.rota}')">Abrir</button></li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
+    <div class="panel"><div class="ph"><h2>Acervo em números</h2></div><div class="pb"><dl class="kv"><dt>Projetos</dt><dd>${d.projetos.total} · ${d.projetos.no_ar} publicados · ${d.projetos.rascunho} rascunho${d.projetos.bloqueados?` · <span style="color:var(--red)">${d.projetos.bloqueados} bloqueados</span>`:''}</dd><dt>Folhas</dt><dd>${d.itens.total} · ${d.itens.no_ar} publicadas · ${d.itens.rascunho} rascunho${d.itens.autoria_divergente?` · <span style="color:var(--red)">${d.itens.autoria_divergente} autoria divergente</span>`:''}</dd><dt>Publicação</dt><dd>${ultSync?`sincronizada ${fmtDataHora(ultSync)} · ${d.site.divergencias} divergências`:'nunca sincronizada'}</dd></dl>
+      ${d.por_fundo_mes.length?`<h2 style="margin-top:14px">Folhas catalogadas nos últimos 30 dias</h2><div style="display:grid;gap:8px;font-size:13px">${d.por_fundo_mes.map(f=>`<div>${escHtml(f.titulo)} <span class="code">${f.fundo}</span> · ${f.n}<div class="bar"><i style="width:${Math.round(100*f.n/d.por_fundo_mes[0].n)}%"></i></div></div>`).join('')}</div>`:''}
+      <h2 style="margin-top:14px">Últimos eventos</h2><ul class="hist">${d.eventos.map(e=>`<li><time>${fmtDataHora(e.quando)}</time><span>${e.entidade} <span class="code">${e.codigo}</span> ${e.tipo} · ${escHtml(e.ator)}</span></li>`).join('')||'<li class="empty">—</li>'}</ul></div></div>
+  </div>`;
+  window._analyticsAtual=a;
+}catch(e){if(e.status!==401&&e.status!==428)toast(e.message)}}
+function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
 async function carregarFilas(){try{const fs=await API('/api/filas');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
   document.getElementById('filas-body').innerHTML=fs.length?fs.map(l=>{const k=ETAPAS.indexOf(l.etapa);return`<tr><td><b>${l.nome}</b><br><small style="color:var(--ink3)">${(l.atualizado_em||'').slice(0,16)}</small></td><td><span class="code">${l.projeto_codigo}</span> ${l.projeto_titulo}<br><small style="color:var(--ink3)">${l.fundo}</small></td><td><span class="mono" style="font-size:12px">${l.pasta_qnap}</span></td><td class="num">${l.folhas_encontradas??'—'}${l.folhas_esperadas?` / ${l.folhas_esperadas}`:''}${l.folhas_esperadas&&l.folhas_encontradas!=null&&l.folhas_encontradas<l.folhas_esperadas?' <span class="tag r">faltam</span>':''}</td><td style="min-width:260px"><div class="steps">${ETAPAS.map((e,i)=>`<span class="${l.etapa==='erro'?(i===0?'err':''):i<k?'done':i===k?'cur':''}">${e}</span>`).join('')}</div></td><td>${l.lote_teste?'<span class="tag a">teste</span> ':''}${l.autorizado_site?'<span class="tag g">autorizado</span>':'<span class="tag">não autorizado</span>'}</td><td style="white-space:nowrap">${l.etapa==='erro'?`<button class="btn sm" onclick="etapaFila(${l.id},'enviado')">Retomar</button>`:l.etapa==='publicado'?'<span class="tag g">concluído</span>':`<button class="btn sm pri" onclick="etapaFila(${l.id},'${ETAPAS[k+1]}')">→ ${ETAPAS[k+1]}</button>`} <button class="btn sm" onclick="nav('projeto/${l.projeto_codigo}')">Projeto</button></td></tr>`}).join(''):'<tr><td colspan="7" class="empty">Nenhuma lista. Clique em "Varrer QNAP" para ler as pastas do acervo, ou crie uma lista à mão.</td></tr>';
