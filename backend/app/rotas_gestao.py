@@ -82,8 +82,36 @@ class Direitos(BaseModel):
 
 @router.get("/fundos/{codigo}/direitos")
 def direitos(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    con = connect(); r = con.execute("SELECT * FROM direitos_fundo WHERE fundo_codigo=?", (codigo,)).fetchone(); con.close()
-    return dict(r) if r else {"fundo_codigo": codigo, "situacao": "nao_definida", "resolucao_max": "jpg_3000"}
+    con = connect()
+    r = con.execute("SELECT * FROM direitos_fundo WHERE fundo_codigo=?", (codigo,)).fetchone()
+    f = con.execute("SELECT titulo FROM fundo WHERE codigo=?", (codigo,)).fetchone()
+    con.close()
+    d = dict(r) if r else {"fundo_codigo": codigo, "situacao": "nao_definida", "resolucao_max": "jpg_3000"}
+    nome = f["titulo"] if f else codigo
+    # Modelo operacional derivado do Termo de Doação padrão CAMP.
+    # Não muda a situação jurídica: só é autorizado se houver termo/documento registrado.
+    d["modelo_padrao"] = {
+        "nome": "Termo de Doação de Acervo — CAMP",
+        "propriedade_fisica_digital": True,
+        "preservacao_higienizacao_catalogacao": True,
+        "digitalizacao": True,
+        "restauracao_quando_necessaria": True,
+        "consulta_publica": True,
+        "pesquisa": True,
+        "exposicoes": True,
+        "publicacoes": True,
+        "redes_sociais_plataformas_digitais": True,
+        "uso_educativo_cientifico": True,
+        "uso_editorial": True,
+        "uso_comercial_reproducoes": True,
+        "licenciamento_cultural": True,
+        "identificacao_doador_autor": True,
+        "irrevogavel_irretratavel": True,
+        "sem_contrapartida_financeira": True,
+        "credito_sugerido": f"Acervo {nome} / CAMP",
+        "validade_padrao": "sem prazo",
+    }
+    return d
 
 
 @router.put("/fundos/{codigo}/direitos")
@@ -195,6 +223,27 @@ def localizacao_do_item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -
     r = con.execute("SELECT l.* FROM item_localizacao il JOIN localizacao_fisica l ON l.id=il.localizacao_id WHERE il.item_codigo=?", (codigo,)).fetchone()
     con.close()
     return dict(r) if r else None
+
+@router.get("/projetos/{codigo}/volumes")
+def volumes_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    """Embalagens/localizações físicas de um projeto, com contagem real de documentos."""
+    con = connect()
+    rows = con.execute("""
+        SELECT l.id, l.tipo, l.identificador, l.descricao,
+               COUNT(DISTINCT il.item_codigo) AS quantidade_documentos
+          FROM item_localizacao il
+          JOIN item i ON i.codigo=il.item_codigo
+          JOIN localizacao_fisica l ON l.id=il.localizacao_id
+         WHERE i.projeto_codigo=?
+         GROUP BY l.id, l.tipo, l.identificador, l.descricao
+         ORDER BY l.id
+    """, (codigo,)).fetchall()
+    con.close()
+    return [
+        {**dict(r), "volume": n, "total_volumes": len(rows)}
+        for n, r in enumerate(rows, 1)
+    ]
+
 
 
 # ---------------- estações e saúde do site ----------------
