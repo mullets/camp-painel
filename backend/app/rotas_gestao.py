@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from . import auth
 from .config import settings
 from .db import connect
+from .log_tecnico import LOG_FILE, ler_logs
 
 router = APIRouter(prefix="/api", tags=["gestao"])
 
@@ -249,6 +250,21 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con.close()
     return out
 
+
+
+# ---------------- logs técnicos ----------------
+@router.get("/logs")
+def logs_tecnicos(nivel: str | None = None, q: str | None = None, limite: int = 200,
+                  u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Últimos eventos técnicos. Nunca inclui corpo de requisição, senha, cookie ou token."""
+    itens = ler_logs(limite=min(limite, 1000), nivel=nivel, q=q)
+    resumo = {
+        "total_retornado": len(itens),
+        "erros": sum(1 for x in itens if x.get("nivel") == "ERROR"),
+        "avisos": sum(1 for x in itens if x.get("nivel") == "WARNING"),
+        "arquivo": str(LOG_FILE),
+    }
+    return {"resumo": resumo, "itens": itens}
 
 # ---------------- auditoria ----------------
 @router.get("/eventos")

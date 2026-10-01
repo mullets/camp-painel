@@ -8,14 +8,20 @@ SCHEMA = Path(__file__).resolve().parents[2] / "db" / "schema.sql"
 
 
 def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(settings.CAMP_DB_PATH, check_same_thread=False)
+    # Espera por locks curtos em vez de derrubar a requisição com "database is locked".
+    # WAL é ativado no startup; busy_timeout protege inclusive operações concorrentes.
+    con = sqlite3.connect(settings.CAMP_DB_PATH, timeout=30, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
+    con.execute("PRAGMA busy_timeout = 30000")
     return con
 
 
 def init_db() -> None:
     con = connect()
+    # WAL permite leitores durante uma escrita longa do sincronizador.
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA synchronous = NORMAL")
     existe = con.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fundo'"
     ).fetchone()
