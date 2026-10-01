@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+import re
+import unicodedata
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -79,6 +81,202 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
     con.close()
     return d
+
+
+
+def _slug_dashboard(texto: str) -> str:
+    s = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+
+def _sitekit_report(wp, *, start_date: str, end_date: str, metrics: list[str], dimensions: list[str] | None = None, limit: int | None = None) -> dict:
+    params: list[tuple[str, str | int | bool]] = [
+        ("startDate", start_date),
+        ("endDate", end_date),
+    ]
+    for i, m in enumerate(metrics):
+        params.append((f"metrics[{i}][name]", m))
+    for i, d in enumerate(dimensions or []):
+        params.append((f"dimensions[{i}][name]", d))
+    if dimensions:
+        params.extend([
+            ("orderby[0][metric][metricName]", metrics[0]),
+            ("orderby[0][desc]", "true"),
+        ])
+    if limit:
+        params.append(("limit", limit))
+    r = wp.h.get("/wp-json/google-site-kit/v1/modules/analytics-4/data/report", params=params)
+    if r.status_code >= 400:
+        msg = ""
+        try:
+            j = r.json()
+            msg = j.get("message") or j.get("code") or ""
+        except Exception:
+            msg = r.text[:180]
+        raise RuntimeError(f"Site Kit Analytics recusou ({r.status_code}): {msg}")
+    return r.json()
+
+
+def _metric_values(report: dict, names: list[str]) -> dict:
+    rows = report.get("rows") or []
+    if not rows:
+        return {n: 0 for n in names}
+    vals = rows[0].get("metricValues") or []
+    out = {}
+    for i, n in enumerate(names):
+        try:
+            raw = vals[i].get("value") if i < len(vals) else 0
+            out[n] = float(raw) if "." in str(raw) else int(raw or 0)
+        except Exception:
+            out[n] = 0
+    return out
+
+
+def _top_rows(report: dict) -> list[dict]:
+    out = []
+    dim_headers = [x.get("name") for x in report.get("dimensionHeaders") or []]
+    met_headers = [x.get("name") for x in report.get("metricHeaders") or []]
+    for row in report.get("rows") or []:
+        dims = [x.get("value", "") for x in row.get("dimensionValues") or []]
+        mets = [x.get("value", "0") for x in row.get("metricValues") or []]
+        d = {k: (dims[i] if i < len(dims) else "") for i, k in enumerate(dim_headers)}
+        for i, k in enumerate(met_headers):
+            try:
+                v = mets[i] if i < len(mets) else "0"
+                d[k] = float(v) if "." in str(v) else int(v or 0)
+            except Exception:
+                d[k] = 0
+        out.append(d)
+    return out
+
+
+@router.get("/analytics")
+def analytics(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Audiência do site via Google Site Kit / GA4.
+
+    Realtime não é inventado: se a instalação não expuser um endpoint realtime,
+    o campo agora volta indisponível e o restante do dashboard continua funcionando.
+    """
+    from .wp import WP
+
+    hoje = datetime.utcnow().date()
+    periodos = {
+        "hoje": (hoje.isoformat(), hoje.isoformat()),
+        "7d": ((hoje - timedelta(days=6)).isoformat(), hoje.isoformat()),
+        "30d": ((hoje - timedelta(days=29)).isoformat(), hoje.isoformat()),
+    }
+    out = {
+        "disponivel": False,
+        "origem": "Google Site Kit / GA4",
+        "agora": {"disponivel": False, "usuarios": None, "janela_min": 30},
+        "periodos": {},
+        "top_fundos": [],
+        "top_projetos": [],
+        "top_paginas": [],
+        "erro": None,
+    }
+    try:
+        wp = WP()
+        for chave, (ini, fim) in periodos.items():
+            rep = _sitekit_report(
+                wp,
+                start_date=ini,
+                end_date=fim,
+                metrics=["activeUsers", "screenPageViews"],
+            )
+            out["periodos"][chave] = _metric_values(rep, ["activeUsers", "screenPageViews"])
+
+        ini30, fim30 = periodos["30d"]
+        top = _sitekit_report(
+            wp,
+            start_date=ini30,
+            end_date=fim30,
+            metrics=["screenPageViews"],
+            dimensions=["pagePath", "pageTitle"],
+            limit=100,
+        )
+        paginas = _top_rows(top)
+        out["top_paginas"] = [
+            {
+                "caminho": r.get("pagePath") or "",
+                "titulo": r.get("pageTitle") or r.get("pagePath") or "",
+                "visualizacoes": int(r.get("screenPageViews") or 0),
+            }
+            for r in paginas[:10]
+        ]
+
+        con = connect()
+        fundos = [
+            dict(r) for r in con.execute(
+                "SELECT codigo, sigla, titulo FROM fundo WHERE ativo=1"
+            ).fetchall()
+        ]
+        projetos = [
+            dict(r) for r in con.execute(
+                "SELECT codigo, titulo, fundo_codigo FROM projeto"
+            ).fetchall()
+        ]
+        con.close()
+
+        fundos_slug = {}
+        for f in fundos:
+            for slug in {_slug_dashboard(f["titulo"]), _slug_dashboard(f"{f['codigo']}-{f['titulo']}")}:
+                if slug:
+                    fundos_slug[slug] = f
+        projetos_slug = {}
+        for p in projetos:
+            cod = p["codigo"].lower()
+            projetos_slug[_slug_dashboard(f"{cod}-{p['titulo']}")] = p
+            projetos_slug[_slug_dashboard(p["titulo"])] = p
+
+        soma_fundos: dict[str, dict] = {}
+        soma_projetos: dict[str, dict] = {}
+        for r in paginas:
+            path = (r.get("pagePath") or "").strip("/")
+            views = int(r.get("screenPageViews") or 0)
+            if path.startswith("acervo/arquitetos/"):
+                slug = path.split("/", 2)[2].strip("/")
+                achado = None
+                for s, f in fundos_slug.items():
+                    if slug == s or slug.endswith(s) or s.endswith(slug):
+                        achado = f
+                        break
+                key = achado["codigo"] if achado else slug
+                item = soma_fundos.setdefault(key, {
+                    "codigo": achado["codigo"] if achado else None,
+                    "sigla": achado["sigla"] if achado else None,
+                    "titulo": achado["titulo"] if achado else slug.replace("-", " ").title(),
+                    "visualizacoes": 0,
+                })
+                item["visualizacoes"] += views
+            elif path.startswith("acervo/projetos/"):
+                slug = path.split("/", 2)[2].strip("/")
+                achado = None
+                m = re.match(r"(f\d{3}-p\d{4})-", slug, re.I)
+                if m:
+                    cod = m.group(1).upper()
+                    achado = next((p for p in projetos if p["codigo"] == cod), None)
+                if not achado:
+                    for s, p in projetos_slug.items():
+                        if slug == s or slug.endswith(s) or s.endswith(slug):
+                            achado = p
+                            break
+                key = achado["codigo"] if achado else slug
+                item = soma_projetos.setdefault(key, {
+                    "codigo": achado["codigo"] if achado else None,
+                    "titulo": achado["titulo"] if achado else slug.replace("-", " ").title(),
+                    "fundo": achado["fundo_codigo"] if achado else None,
+                    "visualizacoes": 0,
+                })
+                item["visualizacoes"] += views
+
+        out["top_fundos"] = sorted(soma_fundos.values(), key=lambda x: x["visualizacoes"], reverse=True)[:10]
+        out["top_projetos"] = sorted(soma_projetos.values(), key=lambda x: x["visualizacoes"], reverse=True)[:10]
+        out["disponivel"] = True
+        out["agora"]["motivo"] = "Realtime requer acesso específico à GA4 Realtime API; o Site Kit desta integração fornece os relatórios consolidados."
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]
+    return out
 
 
 # ---------------- filas ----------------
