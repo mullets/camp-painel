@@ -71,8 +71,27 @@ for(const t of ['documento','caixa','tubo','fundo']){ d.querySelector(`#lab-tabs
 checkDom('etiquetas');
 // PERFIL
 await w.abrirPerfil(); await sleep(600); if(!d.querySelector('#pf-nova')) problems.push('perfil: não abriu'); else okl.push('perfil: ok'); w.closeModal();
-// PAINEL / FILAS / SOLICITACOES / ERROS (módulos de exemplo)
-for(const v of ['painel','filas','solicitacoes','erros']){ w.route_to(v); await sleep(200); const av=d.querySelectorAll(`#v-${v} .aviso-exemplo`).length; okl.push(`${v}: ${av} aviso(s) de exemplo`); }
+// PAINEL / FILAS / SOLICITACOES / ERROS (reais)
+w.route_to('painel'); await sleep(900); if(d.querySelector('#v-painel .aviso-exemplo')) problems.push('painel ainda com aviso de exemplo'); okl.push('painel: '+(txt('#v-painel .grid.g4')||'').slice(0,120)); checkDom('painel');
+// filas: criar lista, avançar
+w.route_to('filas'); await sleep(600); if(d.querySelector('#v-filas .aviso-exemplo')) problems.push('filas ainda com aviso de exemplo');
+w.openModal('m-lista'); d.getElementById('nl-nome').value='LOTE AUDIT'; d.getElementById('nl-proj').value='F023-P0011'; d.getElementById('nl-pasta').value='/mnt/qnap/acervos/F023/P0011'; await w.addLista(); await sleep(800);
+const fl=d.querySelectorAll('#filas-body tr').length; okl.push('filas: '+fl+' linha(s) após criar'); if(!d.querySelector('#filas-body').textContent.includes('LOTE AUDIT')) problems.push('filas: lista criada não apareceu');
+const btn=d.querySelector('#filas-body .btn.pri'); if(btn){btn.click(); await sleep(800); okl.push('filas: avançou etapa -> '+(d.querySelector('#filas-body .steps .cur')||{}).textContent);} checkDom('filas');
+// solicitacoes
+w.route_to('solicitacoes'); await sleep(600); if(d.querySelector('#v-solicitacoes .aviso-exemplo')) problems.push('solicitações ainda com aviso de exemplo');
+w.openModal('m-sol'); d.getElementById('ns-nome').value='Editora Teste'; d.getElementById('ns-itens').value='F023-P0011 tif\nF026-P0001-1968-S01-D00001 jpg_3000'; await w.criarSolicitacao(); await sleep(800);
+if(!d.querySelector('#v-solicitacoes tbody').textContent.includes('Editora Teste')) problems.push('solicitação criada não apareceu'); else okl.push('solicitações: pedido criado e listado');
+await w.abrirSolicitacao(1); await sleep(300); if(!d.querySelector('#es-sit')) problems.push('solicitação: drawer não abriu'); else {d.getElementById('es-sit').value='em_preparacao'; await w.salvarSolicitacao(1); await sleep(600); okl.push('solicitações: situação alterada');} checkDom('solicitacoes');
+// erros
+w.route_to('erros'); await sleep(600); if(d.querySelector('#v-erros .aviso-exemplo')) problems.push('erros ainda com aviso de exemplo');
+w.openModal('m-erro'); d.getElementById('ne-cod').value='F023-P0011-1959-S01-D00003'; d.getElementById('ne-grav').value='bloqueia'; d.getElementById('ne-cat').value='autoria_divergente'; d.getElementById('ne-desc').value='Carimbo de outro autor'; await w.criarErro(); await sleep(800);
+if(!d.querySelector('#v-erros tbody').textContent.includes('Carimbo de outro autor')) problems.push('erro criado não apareceu'); else okl.push('erros: problema criado');
+// projeto deve estar bloqueado e publicar deve falhar
+let pb=await (await nodeFetch('/api/projetos/F023-P0011/detalhe')).json(); okl.push('projeto F023-P0011 status após erro bloqueante: '+pb.projeto.status_site); const bl=await (await nodeFetch('/api/projetos/F023-P0011/publicar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'publicar'})})).json(); if(!bl.erro||!/[Bb]loqueado/.test(bl.erro)) problems.push('publicar com erro bloqueante deveria ser recusado: '+JSON.stringify(bl)); else okl.push('publicar recusado por bloqueio: '+bl.erro);
+await w.abrirErro(1); await sleep(300); d.getElementById('ee-sit').value='corrigido'; d.getElementById('ee-res').value='Folha movida'; await w.salvarErro(1); await sleep(600);
+pb=await (await nodeFetch('/api/projetos/F023-P0011/detalhe')).json(); okl.push('status após resolver: '+pb.projeto.status_site);  checkDom('erros');
+w.route_to('painel'); await sleep(800); checkDom('painel2'); okl.push('painel precisa de você: '+d.querySelectorAll('#v-painel .list li').length+' item(ns)');
 // modais: botões referenciam funções?
 checkDom('global');
 // novo fundo via modal

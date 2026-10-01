@@ -352,13 +352,11 @@ CREATE VIEW v_proximo_p AS
 -- Projetos que não podem ir ao site e por quê
 CREATE VIEW v_bloqueios_publicacao AS
   SELECT p.codigo,
-         SUM(i.autoria_divergente) AS itens_autoria_divergente,
-         SUM(CASE WHEN e.situacao IN ('aberto','em_correcao') AND e.gravidade='bloqueia' THEN 1 ELSE 0 END) AS erros_bloqueantes,
+         (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo AND i.autoria_divergente=1) AS itens_autoria_divergente,
+         (SELECT COUNT(*) FROM erro e WHERE (e.codigo=p.codigo OR e.codigo LIKE p.codigo || '-%')
+             AND e.situacao IN ('aberto','em_correcao') AND e.gravidade='bloqueia') AS erros_bloqueantes,
          CASE WHEN p.autorizado_site = 0 THEN 1 ELSE 0 END AS nao_autorizado
-  FROM projeto p
-  LEFT JOIN item i ON i.projeto_codigo = p.codigo
-  LEFT JOIN erro e ON e.codigo = p.codigo OR e.codigo LIKE p.codigo || '-%'
-  GROUP BY p.codigo;
+  FROM projeto p;
 
 -- Export fundos.json para a estação Contex (nome + prefixo)
 CREATE VIEW v_fundos_json AS
