@@ -292,8 +292,10 @@ def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -
     for codigo in codigos:
         try:
             r = publicar(codigo, Publicacao(acao=d.acao), u)
-            if r.get("ok"):
+            if r.get("ok") and r.get("alterados", 0) > 0:
                 ok.append({"codigo": codigo, "alterados": r.get("alterados", 0)})
+            elif r.get("ok"):
+                falhas.append({"codigo": codigo, "erro": "Nenhum registro público vinculado a este projeto."})
             else:
                 falhas.append({"codigo": codigo, "erro": (r.get("falhas") or [{"erro": "Falha na publicação"}])[0].get("erro")})
         except HTTPException as e:
@@ -305,6 +307,31 @@ def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -
                 (f"lote_{d.acao}", u["email"], json.dumps({"selecionados": len(codigos), "ok": [x["codigo"] for x in ok], "falhas": falhas}, ensure_ascii=False)))
     con.commit(); con.close()
     return {"selecionados": len(codigos), "ok": ok, "falhas": falhas}
+
+@router.post("/projetos/exportar-selecao")
+def exportar_selecao(d: AcaoProjetosLote, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    codigos = list(dict.fromkeys(c.strip().upper() for c in d.codigos if c.strip()))
+    if not codigos:
+        return {"itens": []}
+    if len(codigos) > 5000:
+        raise HTTPException(400, "Exportação limitada a 5.000 projetos")
+    con = connect()
+    itens = []
+    for i in range(0, len(codigos), 400):
+        bloco = codigos[i:i + 400]
+        ph = ",".join("?" for _ in bloco)
+        rows = con.execute(f"""
+            SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo, p.ano, p.cidade,
+                   p.status_site, p.autorizado_site, p.atualizado_em,
+                   (SELECT COUNT(*) FROM item x WHERE x.projeto_codigo=p.codigo) AS folhas
+              FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo
+             WHERE p.codigo IN ({ph})
+             ORDER BY p.codigo
+        """, bloco).fetchall()
+        itens.extend(dict(r) for r in rows)
+    con.close()
+    return {"itens": itens}
+
 
 
 
