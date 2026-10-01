@@ -72,8 +72,18 @@ def resumo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                (SELECT GROUP_CONCAT(a.forma_autorizada, ' · ') FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id
                  WHERE fa.fundo_codigo=f.codigo AND fa.papel='produtor') AS produtores
         FROM fundo f ORDER BY f.codigo""").fetchall()
+    out = [dict(r) for r in rows]
+    # termos que existem no site mas não têm código na tabela
+    for r in con.execute("""SELECT x.id, x.nome, e.observacao FROM wp_termo x JOIN wp_taxonomia t ON t.id=x.taxonomia_id
+                            LEFT JOIN fundo_termo_site e ON e.nome_site=x.nome WHERE t.nome='Fundos' AND (e.fundo_codigo IS NULL)"""):
+        nome = r[1]
+        pub = con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND json_extract(metadados,'$.Fundo')=?", (nome,)).fetchone()[0]
+        rasc = con.execute("SELECT COUNT(*) FROM wp_item WHERE status='draft' AND json_extract(metadados,'$.Fundo')=?", (nome,)).fetchone()[0]
+        out.append({"codigo": None, "sigla": None, "titulo": nome, "data_inicio": None, "data_fim": None, "status_site": "no_ar" if pub else ("rascunho" if rasc else "nao_publicado"),
+                    "motivo_fora_do_ar": None, "ativo": 1, "projetos": 0, "itens": 0, "no_site": pub, "rascunhos_site": rasc, "produtores": None,
+                    "so_no_site": True, "termo_id": r[0], "observacao": r[2] or "existe no site, sem código na tabela de autoridade"})
     con.close()
-    return [dict(r) for r in rows]
+    return out
 
 
 @router.get("/fundos/{codigo}/detalhe")

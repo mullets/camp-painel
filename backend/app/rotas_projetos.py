@@ -144,3 +144,54 @@ def criar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'criado',?,?)", (codigo, u["email"], json.dumps({"titulo": d.titulo})))
     con.commit(); con.close()
     return {"codigo": codigo}
+
+
+class Publicacao(BaseModel):
+    acao: str                 # publicar | rascunho | tirar_do_ar
+    incluir_folhas: bool = True
+
+
+@router.post("/projetos/{codigo}/publicar")
+def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Escreve no Tainacan: muda status do dossiê e das folhas. publicar exige projeto autorizado e sem bloqueios."""
+    from .wp import WP
+    alvo = {"publicar": "publish", "rascunho": "draft", "tirar_do_ar": "private"}.get(d.acao)
+    if not alvo:
+        raise HTTPException(400, "Ação inválida")
+    con = connect()
+    p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    if not p:
+        con.close(); raise HTTPException(404, "Projeto não existe")
+    if alvo == "publish":
+        if not p["autorizado_site"]:
+            con.close(); raise HTTPException(400, "Projeto não autorizado para o site. Autorize antes de publicar.")
+        bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
+        if bloq and (bloq[0] or bloq[1]):
+            con.close(); raise HTTPException(400, f"Bloqueado: {bloq[0] or 0} autoria divergente, {bloq[1] or 0} erro(s) bloqueante(s)")
+        if p["lote_teste"]:
+            con.close(); raise HTTPException(400, "Lote de teste não vai ao ar")
+    if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
+        con.close(); raise HTTPException(403, "Tirar do ar o que já está publicado exige o admin master")
+    wp = WP()
+    feitos, falhas = [], []
+    alvos = []
+    if p["tainacan_item_id"]:
+        col = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone()
+        alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
+    if d.incluir_folhas:
+        for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
+                                WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.autoria_divergente=0 AND i.duplicata_de IS NULL""", (codigo,)):
+            alvos.append(("item", i[0], i[2] or 8013, i[1]))
+    st_painel = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar"}[alvo]
+    for tipo, cod, cid, wid in alvos:
+        try:
+            wp.atualizar_status_item(cid, wid, alvo)
+            con.execute(f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?", (st_painel, cod))
+            con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
+            feitos.append(cod)
+        except Exception as e:  # noqa: BLE001
+            falhas.append({"codigo": cod, "erro": str(e)[:200]})
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,?,?,?)",
+                (codigo, f"site_{d.acao}", u["email"], json.dumps({"ok": len(feitos), "falhas": len(falhas)})))
+    con.commit(); con.close()
+    return {"ok": not falhas, "alterados": len(feitos), "falhas": falhas}

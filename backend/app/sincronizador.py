@@ -93,6 +93,22 @@ def executar(gravar_espelho: bool = True, log=print) -> dict:
             if f not in fundos_vistos and r["ativo"]:
                 _divergencia(con, "fundo", f, "sem_itens_no_site", r["titulo"], None); n["divergencias"] += 1
 
+        # situação real de cada fundo a partir do que está no site + id do termo
+        equiv = {r[0]: r[1] for r in con.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
+        for r in con.execute("SELECT x.id, x.nome FROM wp_termo x JOIN wp_taxonomia t ON t.id=x.taxonomia_id WHERE t.nome='Fundos'").fetchall():
+            if equiv.get(r[1]):
+                con.execute("UPDATE fundo SET tainacan_term_id=? WHERE codigo=?", (r[0], equiv[r[1]]))
+        for f in fundos:
+            pub, dr, pr = [con.execute("SELECT COUNT(*) FROM wp_item WHERE fundo_detectado=? AND status=?", (f, st)).fetchone()[0]
+                           for st in ("publish", "draft", "private")]
+            novo = "no_ar" if pub else ("rascunho" if dr else ("fora_do_ar" if pr else "nao_publicado"))
+            atual = fundos[f]["status_site"]
+            if atual == "fora_do_ar" and fundos[f]["motivo_fora_do_ar"] and novo != "no_ar":
+                continue   # decisão humana de tirar do ar prevalece enquanto não há nada publicado
+            if novo != atual:
+                con.execute("UPDATE fundo SET status_site=? WHERE codigo=?", (novo, f))
+        con.commit()
+
         # páginas (dossiês, fundos, institucionais)
         for pg in wp.paginas():
             titulo = (pg.get("title") or {}).get("rendered", "") if isinstance(pg.get("title"), dict) else str(pg.get("title"))

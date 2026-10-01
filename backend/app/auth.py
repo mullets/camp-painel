@@ -136,7 +136,9 @@ def autenticar(request: Request, response: Response, email: str, senha: str, lem
     _evento(con, email, "login", ip)
     con.commit(); con.close()
 
-    response.set_cookie(COOKIE, token, max_age=horas * 3600, httponly=True, secure=settings.CAMP_COOKIE_SECURE, samesite="strict", path="/")
+    https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").startswith("https")
+    response.set_cookie(COOKIE, token, max_age=horas * 3600, httponly=True, secure=bool(settings.CAMP_COOKIE_SECURE and https),
+                        samesite="lax", path="/")
     return {"nome": u["nome"], "email": u["email"], "papel": u["papel"],
             "precisa_trocar_senha": bool(u["precisa_trocar_senha"])}
 

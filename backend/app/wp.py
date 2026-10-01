@@ -102,6 +102,22 @@ class WP:
     def termos(self, tid: int) -> Iterator[dict]:
         yield from self._paginado(f"/wp-json/tainacan/v2/taxonomy/{tid}/terms", log=None, hideempty=0)
 
+    # ---- escrita (Tainacan) ----
+    def atualizar_status_item(self, colecao_id: int, item_id: int, status: str) -> dict:
+        """status: publish | draft | private. Única escrita permitida nesta versão."""
+        if status not in ("publish", "draft", "private"):
+            raise ValueError("status inválido")
+        r = self.h.patch(f"/wp-json/tainacan/v2/collection/{colecao_id}/items/{item_id}", json={"status": status})
+        if r.status_code >= 400:
+            raise RuntimeError(f"Tainacan recusou ({r.status_code}) item {item_id}: {r.text[:200]}")
+        return r.json()
+
+    def criar_termo(self, taxonomia_id: int, nome: str, descricao: str = "") -> dict:
+        r = self.h.post(f"/wp-json/tainacan/v2/taxonomy/{taxonomia_id}/terms", json={"name": nome, "description": descricao})
+        if r.status_code >= 400:
+            raise RuntimeError(f"Tainacan recusou criar termo: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     # ---- WordPress ----
     def paginas(self) -> Iterator[dict]:
         yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None)
