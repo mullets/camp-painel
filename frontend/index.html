@@ -1090,7 +1090,9 @@ function fmtDetalhe(d){if(!d)return'';try{const o=JSON.parse(d);if(o&&typeof o==
 
 // ---------- fundos e agentes via API ----------
 let FUNDOS_API=null;
-let FUNDO_FILTRO='todos';
+const FUNDO_FILTRO_KEY='camp.fundos.filtro';
+const FUNDO_BUSCA_KEY='camp.fundos.busca';
+let FUNDO_FILTRO=localStorage.getItem(FUNDO_FILTRO_KEY)||'todos';
 function fundoPassaFiltro(f){
   if(FUNDO_FILTRO==='todos')return true;
   if(FUNDO_FILTRO==='publicado')return f.status_site==='no_ar'||f.no_site>0;
@@ -1125,13 +1127,18 @@ function atualizarContadoresFundos(){
 }
 function setFiltroFundos(k){
   FUNDO_FILTRO=k;
+  localStorage.setItem(FUNDO_FILTRO_KEY,k);
   document.querySelectorAll('#fundos-filtros [data-ff]').forEach(b=>b.classList.toggle('on',b.dataset.ff===k));
   renderTabelaFundos();
 }
 document.getElementById('fundos-filtros')?.addEventListener('click',e=>{const b=e.target.closest('[data-ff]');if(b)setFiltroFundos(b.dataset.ff)});
-document.getElementById('fundos-q')?.addEventListener('input',renderTabelaFundos);
+document.getElementById('fundos-q')?.addEventListener('input',e=>{localStorage.setItem(FUNDO_BUSCA_KEY,e.target.value||'');renderTabelaFundos()});
 
-async function carregarFundosAPI(){try{const fs=await API('/api/fundos/resumo');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();atualizarContadoresFundos();renderTabelaFundos();
+async function carregarFundosAPI(){try{const fs=await API('/api/fundos/resumo');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${f.data_fim||''}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();atualizarContadoresFundos();
+  const q=document.getElementById('fundos-q');if(q)q.value=localStorage.getItem(FUNDO_BUSCA_KEY)||'';
+  if(!document.querySelector(`#fundos-filtros [data-ff="${FUNDO_FILTRO}"]`))FUNDO_FILTRO='todos';
+  document.querySelectorAll('#fundos-filtros [data-ff]').forEach(b=>b.classList.toggle('on',b.dataset.ff===FUNDO_FILTRO));
+  renderTabelaFundos();
   const prox=await API('/api/fundos/proximo').catch(()=>null);if(prox)document.getElementById('nf-code').textContent=prox.codigo}catch(e){tabelaErro('#fundos-body',e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.status===428?'Troque a senha para continuar.':'Erro ao carregar: '+e.message)}}
 async function definirSigla(codigo,titulo){const s=prompt(`Sigla de 3 letras para ${codigo} ${titulo}.\nAtenção: depois de definida não muda mais (entra no nome dos arquivos).`);if(!s)return;try{await API('/api/fundos/'+codigo,{method:'PATCH',body:JSON.stringify({sigla:s.trim().toUpperCase()})});toast(`${codigo} = ${s.toUpperCase()}`);carregarFundosAPI()}catch(e){toast(e.message)}}
 const _addFundoMock=addFundo;
