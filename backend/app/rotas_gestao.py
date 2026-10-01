@@ -196,6 +196,27 @@ def localizacao_do_item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -
     con.close()
     return dict(r) if r else None
 
+@router.get("/projetos/{codigo}/volumes")
+def volumes_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    """Embalagens/localizações físicas de um projeto, com contagem real de documentos."""
+    con = connect()
+    rows = con.execute("""
+        SELECT l.id, l.tipo, l.identificador, l.descricao,
+               COUNT(DISTINCT il.item_codigo) AS quantidade_documentos
+          FROM item_localizacao il
+          JOIN item i ON i.codigo=il.item_codigo
+          JOIN localizacao_fisica l ON l.id=il.localizacao_id
+         WHERE i.projeto_codigo=?
+         GROUP BY l.id, l.tipo, l.identificador, l.descricao
+         ORDER BY l.id
+    """, (codigo,)).fetchall()
+    con.close()
+    return [
+        {**dict(r), "volume": n, "total_volumes": len(rows)}
+        for n, r in enumerate(rows, 1)
+    ]
+
+
 
 # ---------------- estações e saúde do site ----------------
 def _porta(ip: str, porta: int, timeout: float = 0.8) -> bool:
