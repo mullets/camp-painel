@@ -177,9 +177,11 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                codigo_detectado, fundo_detectado, projeto_detectado, metadados, modificado_em
           FROM wp_item
          WHERE projeto_detectado=?
+           AND fundo_detectado=?
            AND colecao_id=?
-         ORDER BY id
-    """, (codigo, itens_cid)).fetchall():
+           AND codigo_detectado LIKE ?
+         ORDER BY codigo_detectado, id
+    """, (codigo, p["fundo_codigo"], itens_cid, codigo + "-%")).fetchall():
         d = dict(w)
         local = itens_por_codigo.get(d.get("codigo_detectado"))
         mdw = json.loads(d.get("metadados") or "{}")
@@ -220,6 +222,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             })
         d["tainacan_item_id"] = d["id"]
         d["codigo"] = d.get("codigo_detectado") or f"TAINACAN-{d['id']}"
+        d["status_site"] = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar", "pending": "rascunho"}.get(d.get("status"), d.get("status") or "nao_publicado")
         itens_site.append(d)
 
     # A grade visual precisa espelhar o conjunto público do projeto. Se ainda não
