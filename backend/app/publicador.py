@@ -162,62 +162,79 @@ def renomear_agente_no_site(agente_id: int, novo_nome: str, ator: str) -> dict:
 
 
 def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
-    """Propaga o status remoto sem deixar falha de conexão virar HTTP 500 cru."""
+    """Propaga status remoto sem manter transação SQLite aberta durante chamadas de rede.
+
+    Em WAL, uma conexão que leu dados e depois tenta virar escritora pode receber
+    SQLITE_BUSY/SQLITE_BUSY_SNAPSHOT se outra escrita ocorreu no intervalo. Por isso:
+    1) lemos e fechamos o banco;
+    2) atualizamos WordPress/Tainacan sem conexão SQLite aberta;
+    3) abrimos uma conexão nova, curta, só para persistir o resultado local.
+    """
     alvo = {"no_ar": "publish", "rascunho": "draft", "fora_do_ar": "private"}[acao]
     st_painel = acao
-    con = connect()
     feitos, falhas, tentados = 0, [], 0
 
-    def colecao_do_item(wid: int, padrao: int) -> int:
-        r = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (wid,)).fetchone()
-        if r and r[0]:
-            return int(r[0])
-        chave = "tainacan.projetos_collection_id" if padrao == COL_PROJETOS else "tainacan.itens_collection_id"
-        cfg = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
-        try:
-            return int(cfg[0]) if cfg and str(cfg[0]).strip() else padrao
-        except (TypeError, ValueError):
-            return padrao
+    # Fase 1: snapshot somente leitura. Nada de conexão aberta durante chamadas HTTP.
+    con = connect()
+    try:
+        cfg_proj = con.execute(
+            "SELECT valor FROM configuracao WHERE chave='tainacan.projetos_collection_id'"
+        ).fetchone()
+        cfg_item = con.execute(
+            "SELECT valor FROM configuracao WHERE chave='tainacan.itens_collection_id'"
+        ).fetchone()
 
+        def cfg_int(row, padrao):
+            try:
+                return int(row[0]) if row and str(row[0]).strip() else padrao
+            except (TypeError, ValueError):
+                return padrao
+
+        padrao_proj = cfg_int(cfg_proj, COL_PROJETOS)
+        padrao_item = cfg_int(cfg_item, COL_ACERVO)
+
+        projetos = con.execute(
+            "SELECT codigo, tainacan_item_id, autorizado_site "
+            "FROM projeto WHERE fundo_codigo=? AND tainacan_item_id IS NOT NULL",
+            (codigo,),
+        ).fetchall()
+
+        alvos = []
+        for p in projetos:
+            if alvo == "publish" and not p["autorizado_site"]:
+                continue
+
+            wid = int(p["tainacan_item_id"])
+            r = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (wid,)).fetchone()
+            alvos.append(("projeto", p["codigo"], wid, int(r[0]) if r and r[0] else padrao_proj))
+
+            itens = con.execute(
+                "SELECT codigo, tainacan_item_id FROM item "
+                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0",
+                (p["codigo"],),
+            ).fetchall()
+            for i in itens:
+                iwid = int(i["tainacan_item_id"])
+                ir = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (iwid,)).fetchone()
+                alvos.append(("item", i["codigo"], iwid, int(ir[0]) if ir and ir[0] else padrao_item))
+    finally:
+        con.close()
+
+    # Fase 2: rede. Não segura qualquer lock/transação SQLite.
     try:
         wp = WP()
     except Exception as e:  # noqa: BLE001
         erro = str(e)[:300]
         falhas.append({"codigo": codigo, "erro": erro, "etapa": "conexao_wordpress"})
-        _pendencia(con, "fundo", codigo, "pendente_status_no_site", erro)
-        con.execute(
-            "INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,?,?,?)",
-            (codigo, f"site_{acao}_falhou", ator, json.dumps({"ok": 0, "falhas": 1, "erro": erro}, ensure_ascii=False)),
-        )
-        con.commit(); con.close()
-        return {"ok": False, "alterados": 0, "tentados": 0, "falhas": falhas, "erro": erro}
+        alvos = []
 
-    projetos = con.execute(
-        "SELECT codigo, tainacan_item_id, autorizado_site FROM projeto WHERE fundo_codigo=? AND tainacan_item_id IS NOT NULL",
-        (codigo,),
-    ).fetchall()
-
-    for p in projetos:
-        if alvo == "publish" and not p["autorizado_site"]:
-            continue
-        alvos = [("projeto", p["codigo"], p["tainacan_item_id"], COL_PROJETOS)]
-        alvos += [
-            ("item", i[0], i[1], COL_ACERVO)
-            for i in con.execute(
-                "SELECT codigo, tainacan_item_id FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0",
-                (p["codigo"],),
-            )
-        ]
-        for tipo, cod, wid, padrao in alvos:
+    sucessos = []
+    if not falhas:
+        for tipo, cod, wid, cid in alvos:
             tentados += 1
-            cid = colecao_do_item(wid, padrao)
             try:
                 wp.atualizar_status_item(cid, wid, alvo)
-                con.execute(
-                    f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?",
-                    (st_painel, cod),
-                )
-                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
+                sucessos.append((tipo, cod, wid))
                 feitos += 1
             except Exception as e:  # noqa: BLE001
                 falhas.append({
@@ -228,27 +245,86 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
                 })
 
     completo = tentados > 0 and not falhas and feitos == tentados
-    if completo:
-        con.execute(
-            "UPDATE fundo SET status_site=?, motivo_fora_do_ar=CASE WHEN ?='fora_do_ar' THEN motivo_fora_do_ar ELSE NULL END WHERE codigo=?",
-            (acao, acao, codigo),
-        )
-    else:
-        detalhe = falhas[0]["erro"] if falhas else "Nenhum projeto autorizado/com vínculo ao site foi encontrado para alterar."
-        _pendencia(con, "fundo", codigo, "pendente_status_no_site", detalhe)
 
-    con.execute(
-        "INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,?,?,?)",
-        (
-            codigo,
-            f"site_{acao}" if completo else f"site_{acao}_parcial",
-            ator,
-            json.dumps({"ok": feitos, "tentados": tentados, "falhas": len(falhas), "completo": completo}, ensure_ascii=False),
-        ),
+    # Fase 3: escrita local curta numa conexão NOVA. BEGIN IMMEDIATE evita
+    # upgrade de transação de leitura e o busy_timeout aguarda outro escritor.
+    import sqlite3
+    import time
+
+    ultimo_erro_db = None
+    for tentativa in range(4):
+        con = connect()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            for tipo, cod, wid in sucessos:
+                con.execute(
+                    f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?",
+                    (st_painel, cod),
+                )
+                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
+
+            if completo:
+                con.execute(
+                    "UPDATE fundo SET status_site=?, "
+                    "motivo_fora_do_ar=CASE WHEN ?='fora_do_ar' THEN motivo_fora_do_ar ELSE NULL END "
+                    "WHERE codigo=?",
+                    (acao, acao, codigo),
+                )
+            else:
+                detalhe = (
+                    falhas[0]["erro"] if falhas
+                    else "Nenhum projeto autorizado/com vínculo ao site foi encontrado para alterar."
+                )
+                _pendencia(con, "fundo", codigo, "pendente_status_no_site", detalhe)
+
+            con.execute(
+                "INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) "
+                "VALUES ('fundo',?,?,?,?)",
+                (
+                    codigo,
+                    f"site_{acao}" if completo else f"site_{acao}_parcial",
+                    ator,
+                    json.dumps(
+                        {
+                            "ok": feitos,
+                            "tentados": tentados,
+                            "falhas": len(falhas),
+                            "completo": completo,
+                        },
+                        ensure_ascii=False,
+                    ),
+                ),
+            )
+            con.commit()
+            ultimo_erro_db = None
+            break
+        except sqlite3.OperationalError as e:
+            con.rollback()
+            ultimo_erro_db = str(e)
+            if "locked" not in ultimo_erro_db.lower() or tentativa == 3:
+                break
+            time.sleep(0.5 * (tentativa + 1))
+        finally:
+            con.close()
+
+    if ultimo_erro_db:
+        falhas.append({
+            "codigo": codigo,
+            "erro": f"Falha ao registrar resultado local após publicação: {ultimo_erro_db}"[:300],
+            "etapa": "sqlite",
+        })
+        completo = False
+
+    erro = falhas[0]["erro"] if falhas else (
+        None if completo else "Nenhum item elegível foi encontrado para publicar."
     )
-    con.commit(); con.close()
-    erro = falhas[0]["erro"] if falhas else (None if completo else "Nenhum item elegível foi encontrado para publicar.")
-    return {"ok": completo, "alterados": feitos, "tentados": tentados, "falhas": falhas, "erro": erro}
+    return {
+        "ok": completo,
+        "alterados": feitos,
+        "tentados": tentados,
+        "falhas": falhas,
+        "erro": erro,
+    }
 
 def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     tid = _tax(con, taxonomia_nome)
