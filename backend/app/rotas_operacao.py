@@ -480,7 +480,7 @@ def mudar_etapa(lid: int, d: EtapaFila, u: dict = Depends(auth.exige("operador")
     return {"ok": True}
 
 
-@router.get("/estacoes/contexto")
+@router.get("/estacoes/contexto-operador")
 def contexto_estacao(u: dict = Depends(auth.exige("operador"))) -> dict:
     """Contexto único consumido pelos apps das estações de captura.
 
