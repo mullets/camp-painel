@@ -284,9 +284,23 @@ def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("maste
         raise HTTPException(400, "Informe o motivo para tirar o fundo do ar")
     from .publicador import propagar_status_fundo
     con = connect()
-    if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
-        con.close(); raise HTTPException(404, "Fundo não existe")
-    if d.motivo:
-        con.execute("UPDATE fundo SET motivo_fora_do_ar=? WHERE codigo=?", (d.motivo, codigo)); con.commit()
-    con.close()
-    return propagar_status_fundo(codigo, d.acao, u["email"])
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+        if d.motivo:
+            con.execute("UPDATE fundo SET motivo_fora_do_ar=? WHERE codigo=?", (d.motivo, codigo))
+            con.commit()
+    finally:
+        con.close()
+    try:
+        return propagar_status_fundo(codigo, d.acao, u["email"])
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        return {
+            "ok": False,
+            "alterados": 0,
+            "tentados": 0,
+            "falhas": [{"codigo": codigo, "erro": str(e)[:300], "etapa": "publicacao_fundo"}],
+            "erro": str(e)[:300],
+        }
