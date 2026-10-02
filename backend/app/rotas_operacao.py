@@ -117,6 +117,70 @@ def _sitekit_report(wp, *, start_date: str, end_date: str, metrics: list[str], d
     return r.json()
 
 
+def _sitekit_json(resp) -> dict:
+    try:
+        j = resp.json()
+        return j if isinstance(j, dict) else {"dados": j}
+    except Exception:
+        return {"texto": (resp.text or "")[:500]}
+
+
+def _sitekit_diagnostico(wp) -> dict:
+    """Explica a cadeia WP -> usuário -> Site Kit -> GA4 sem expor segredos."""
+    out = {
+        "wp_ok": False,
+        "wp_usuario": None,
+        "wp_usuario_id": None,
+        "wp_roles": [],
+        "sitekit_auth_status": None,
+        "sitekit_autenticado": None,
+        "sitekit_reautenticar": None,
+        "sitekit_escopos_faltantes": [],
+        "analytics_modulo": None,
+        "analytics_report_status": None,
+        "mensagem": None,
+    }
+    try:
+        me = wp.quem_sou()
+        out["wp_ok"] = True
+        out["wp_usuario"] = me.get("slug") or me.get("username") or me.get("name")
+        out["wp_usuario_id"] = me.get("id")
+        out["wp_roles"] = me.get("roles") or []
+    except Exception as e:
+        out["mensagem"] = f"Falha ao autenticar no WordPress: {str(e)[:220]}"
+        return out
+
+    try:
+        r = wp.h.get("/wp-json/google-site-kit/v1/core/user/data/authentication")
+        out["sitekit_auth_status"] = r.status_code
+        j = _sitekit_json(r)
+        if r.status_code < 400:
+            out["sitekit_autenticado"] = j.get("isAuthenticated")
+            out["sitekit_reautenticar"] = j.get("needReauthenticate")
+            out["sitekit_escopos_faltantes"] = j.get("unsatisfiedScopes") or []
+        else:
+            out["mensagem"] = j.get("message") or j.get("code") or f"Site Kit respondeu HTTP {r.status_code}"
+    except Exception as e:
+        out["mensagem"] = f"Falha ao consultar autenticação do Site Kit: {str(e)[:220]}"
+        return out
+
+    try:
+        r = wp.h.get("/wp-json/google-site-kit/v1/core/modules/data/list")
+        j = _sitekit_json(r)
+        if r.status_code < 400:
+            mods = j.get("modules") if isinstance(j.get("modules"), list) else j.get("dados")
+            if isinstance(mods, list):
+                ga = next((m for m in mods if isinstance(m, dict) and m.get("slug") == "analytics-4"), None)
+                if ga:
+                    out["analytics_modulo"] = {
+                        k: ga.get(k) for k in ("slug", "active", "connected", "ownerID", "shareable")
+                        if k in ga
+                    }
+    except Exception:
+        pass
+    return out
+
+
 def _metric_values(report: dict, names: list[str]) -> dict:
     rows = report.get("rows") or []
     if not rows:
@@ -177,6 +241,17 @@ def analytics(u: dict = Depends(auth.exige("leitura"))) -> dict:
     }
     try:
         wp = WP()
+        out["diagnostico"] = _sitekit_diagnostico(wp)
+        if out["diagnostico"].get("wp_ok") and out["diagnostico"].get("sitekit_autenticado") is False:
+            raise RuntimeError(
+                "Site Kit não está autenticado para o usuário WordPress "
+                + str(out["diagnostico"].get("wp_usuario") or "usado pelo painel")
+            )
+        if out["diagnostico"].get("sitekit_reautenticar"):
+            raise RuntimeError(
+                "Site Kit exige nova autenticação para o usuário WordPress "
+                + str(out["diagnostico"].get("wp_usuario") or "usado pelo painel")
+            )
         for chave, (ini, fim) in periodos.items():
             rep = _sitekit_report(
                 wp,
@@ -275,16 +350,63 @@ def analytics(u: dict = Depends(auth.exige("leitura"))) -> dict:
         out["disponivel"] = True
         out["agora"]["motivo"] = "Realtime requer acesso específico à GA4 Realtime API; o Site Kit desta integração fornece os relatórios consolidados."
     except Exception as e:  # noqa: BLE001
-        msg = str(e)[:300]
+        msg = str(e)[:500]
         out["erro"] = msg
         low = msg.lower()
-        if "403" in msg and ("permiss" in low or "site kit" in low):
-            out["erro_codigo"] = "sitekit_permissoes"
-            out["acao"] = "Reconectar o Google Analytics no Site Kit concedendo todas as permissões."
+        diag = out.get("diagnostico") or {}
+        usuario = diag.get("wp_usuario")
+        if not diag.get("wp_ok", True):
+            out["erro_codigo"] = "wordpress_auth"
+            out["acao"] = "Confira wp.usuario e wp.app_password em Configurações."
+        elif diag.get("sitekit_autenticado") is False:
+            out["erro_codigo"] = "sitekit_usuario_nao_conectado"
+            out["acao"] = (
+                f'Entre no WordPress como "{usuario}" e conecte esse usuário ao Site Kit/Google.'
+                if usuario else "Conecte ao Site Kit o mesmo usuário WordPress usado pelo painel."
+            )
+        elif diag.get("sitekit_reautenticar") or diag.get("sitekit_escopos_faltantes"):
+            out["erro_codigo"] = "sitekit_reautenticar"
+            out["acao"] = (
+                f'Reautentique o Google no Site Kit logado como "{usuario}" e conceda os escopos solicitados.'
+                if usuario else "Reautentique o Google no Site Kit e conceda os escopos solicitados."
+            )
+        elif "403" in msg and ("permission" in low or "permiss" in low or "caller" in low or "site kit" in low):
+            out["erro_codigo"] = "analytics_permissao_propriedade"
+            out["acao"] = (
+                f'O usuário WordPress "{usuario}" está conectado ao Site Kit, mas a conta Google dele não tem acesso suficiente à propriedade GA4 configurada.'
+                if usuario else "A conta Google conectada ao Site Kit não tem acesso suficiente à propriedade GA4."
+            )
+        elif "module must be active" in low or "analytics" in low and "active" in low:
+            out["erro_codigo"] = "analytics_modulo_inativo"
+            out["acao"] = "Ative e configure o Google Analytics no Site Kit."
         else:
             out["erro_codigo"] = "indisponivel"
+            out["acao"] = "Use o diagnóstico do Analytics para ver a resposta exata do WordPress/Site Kit."
     return out
 
+
+
+@router.get("/analytics/diagnostico")
+def analytics_diagnostico(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Teste explícito da identidade WordPress e da autorização Site Kit/GA4."""
+    from .wp import WP
+    try:
+        wp = WP()
+    except Exception as e:
+        return {"ok": False, "etapa": "wordpress_config", "erro": str(e)[:500]}
+    d = _sitekit_diagnostico(wp)
+    hoje = datetime.utcnow().date().isoformat()
+    try:
+        _sitekit_report(wp, start_date=hoje, end_date=hoje, metrics=["activeUsers"])
+        d["analytics_report_status"] = 200
+        d["ok"] = True
+        d["mensagem"] = "WordPress, Site Kit e GA4 responderam corretamente para o usuário usado pelo painel."
+    except Exception as e:
+        d["ok"] = False
+        d["erro"] = str(e)[:500]
+        m = re.search(r"\((\d{3})\)", d["erro"])
+        d["analytics_report_status"] = int(m.group(1)) if m else None
+    return d
 
 # ---------------- filas ----------------
 class NovaLista(BaseModel):
