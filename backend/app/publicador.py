@@ -162,29 +162,93 @@ def renomear_agente_no_site(agente_id: int, novo_nome: str, ator: str) -> dict:
 
 
 def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
-    """no_ar | rascunho | fora_do_ar para TODOS os dossiês e folhas do fundo no Tainacan. Só o master chama."""
+    """Propaga o status remoto sem deixar falha de conexão virar HTTP 500 cru."""
     alvo = {"no_ar": "publish", "rascunho": "draft", "fora_do_ar": "private"}[acao]
     st_painel = acao
     con = connect()
-    wp = WP()
-    feitos, falhas = 0, []
-    for p in con.execute("SELECT codigo, tainacan_item_id, autorizado_site FROM projeto WHERE fundo_codigo=? AND tainacan_item_id IS NOT NULL", (codigo,)).fetchall():
+    feitos, falhas, tentados = 0, [], 0
+
+    def colecao_do_item(wid: int, padrao: int) -> int:
+        r = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (wid,)).fetchone()
+        if r and r[0]:
+            return int(r[0])
+        chave = "tainacan.projetos_collection_id" if padrao == COL_PROJETOS else "tainacan.itens_collection_id"
+        cfg = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+        try:
+            return int(cfg[0]) if cfg and str(cfg[0]).strip() else padrao
+        except (TypeError, ValueError):
+            return padrao
+
+    try:
+        wp = WP()
+    except Exception as e:  # noqa: BLE001
+        erro = str(e)[:300]
+        falhas.append({"codigo": codigo, "erro": erro, "etapa": "conexao_wordpress"})
+        _pendencia(con, "fundo", codigo, "pendente_status_no_site", erro)
+        con.execute(
+            "INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,?,?,?)",
+            (codigo, f"site_{acao}_falhou", ator, json.dumps({"ok": 0, "falhas": 1, "erro": erro}, ensure_ascii=False)),
+        )
+        con.commit(); con.close()
+        return {"ok": False, "alterados": 0, "tentados": 0, "falhas": falhas, "erro": erro}
+
+    projetos = con.execute(
+        "SELECT codigo, tainacan_item_id, autorizado_site FROM projeto WHERE fundo_codigo=? AND tainacan_item_id IS NOT NULL",
+        (codigo,),
+    ).fetchall()
+
+    for p in projetos:
         if alvo == "publish" and not p["autorizado_site"]:
             continue
-        alvos = [("projeto", p["codigo"], COL_PROJETOS, p["tainacan_item_id"])]
-        alvos += [("item", i[0], COL_ACERVO, i[1]) for i in con.execute("SELECT codigo, tainacan_item_id FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0", (p["codigo"],))]
-        for tipo, cod, cid, wid in alvos:
+        alvos = [("projeto", p["codigo"], p["tainacan_item_id"], COL_PROJETOS)]
+        alvos += [
+            ("item", i[0], i[1], COL_ACERVO)
+            for i in con.execute(
+                "SELECT codigo, tainacan_item_id FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0",
+                (p["codigo"],),
+            )
+        ]
+        for tipo, cod, wid, padrao in alvos:
+            tentados += 1
+            cid = colecao_do_item(wid, padrao)
             try:
                 wp.atualizar_status_item(cid, wid, alvo)
-                con.execute(f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?", (st_painel, cod))
-                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid)); feitos += 1
+                con.execute(
+                    f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?",
+                    (st_painel, cod),
+                )
+                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
+                feitos += 1
             except Exception as e:  # noqa: BLE001
-                falhas.append({"codigo": cod, "erro": str(e)[:160]})
-    con.execute("UPDATE fundo SET status_site=? WHERE codigo=?", (acao, codigo))
-    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,?,?,?)", (codigo, f"site_{acao}", ator, json.dumps({"ok": feitos, "falhas": len(falhas)})))
-    con.commit(); con.close()
-    return {"alterados": feitos, "falhas": falhas}
+                falhas.append({
+                    "codigo": cod,
+                    "colecao_id": cid,
+                    "tainacan_item_id": wid,
+                    "erro": str(e)[:220],
+                })
 
+    completo = tentados > 0 and not falhas and feitos == tentados
+    if completo:
+        con.execute(
+            "UPDATE fundo SET status_site=?, motivo_fora_do_ar=CASE WHEN ?='fora_do_ar' THEN motivo_fora_do_ar ELSE NULL END WHERE codigo=?",
+            (acao, acao, codigo),
+        )
+    else:
+        detalhe = falhas[0]["erro"] if falhas else "Nenhum projeto autorizado/com vínculo ao site foi encontrado para alterar."
+        _pendencia(con, "fundo", codigo, "pendente_status_no_site", detalhe)
+
+    con.execute(
+        "INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,?,?,?)",
+        (
+            codigo,
+            f"site_{acao}" if completo else f"site_{acao}_parcial",
+            ator,
+            json.dumps({"ok": feitos, "tentados": tentados, "falhas": len(falhas), "completo": completo}, ensure_ascii=False),
+        ),
+    )
+    con.commit(); con.close()
+    erro = falhas[0]["erro"] if falhas else (None if completo else "Nenhum item elegível foi encontrado para publicar.")
+    return {"ok": completo, "alterados": feitos, "tentados": tentados, "falhas": falhas, "erro": erro}
 
 def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     tid = _tax(con, taxonomia_nome)
