@@ -1439,6 +1439,23 @@ function machineChip(m){
   else if(m?.app_online===false&&m?.estacao_id)state+=' · app offline';
   return `<div class="machine-chip ${st}" onclick="go('estacoes')" title="${escHtml([label,m?.funcao,m?.ip,m?.app_versao].filter(Boolean).join(' · '))}"><div class="topline"><span class="dot"></span><b>${escHtml(label)}</b></div><small>${escHtml(state)}</small></div>`;
 }
+async function diagnosticarAnalytics(){
+  try{
+    const d=await API('/api/analytics/diagnostico');
+    const linhas=[
+      ['Usuário WordPress',d.wp_usuario||'—'],
+      ['ID WordPress',d.wp_usuario_id??'—'],
+      ['WordPress',d.wp_ok?'autenticado':'falhou'],
+      ['Site Kit',d.sitekit_auth_status==null?'—':'HTTP '+d.sitekit_auth_status],
+      ['Google neste usuário',d.sitekit_autenticado===true?'conectado':d.sitekit_autenticado===false?'não conectado':'—'],
+      ['Reautenticação',d.sitekit_reautenticar===true?'necessária':d.sitekit_reautenticar===false?'não':'—'],
+      ['GA4 report',d.analytics_report_status==null?'—':'HTTP '+d.analytics_report_status],
+    ];
+    const escopos=(d.sitekit_escopos_faltantes||[]).length?'<div class="stale-note"><span class="status-dot warn"></span><span><b>Escopos Google faltando:</b> '+escHtml((d.sitekit_escopos_faltantes||[]).join(', '))+'</span></div>':'';
+    const msg=d.ok?'<div class="stale-note" style="border-color:var(--green);background:var(--green-soft)"><span class="status-dot ok"></span><span><b>Analytics funcionando.</b> '+escHtml(d.mensagem||'')+'</span></div>':'<div class="stale-note"><span class="status-dot warn"></span><span><b>Falha:</b> '+escHtml(d.erro||d.mensagem||'não identificada')+'</span></div>';
+    openDrawer('Diagnóstico do Google Analytics',d.ok?'integração funcionando':'verificação da identidade usada pelo painel',msg+escopos+'<dl class="kv">'+linhas.map(([k,v])=>'<dt>'+escHtml(k)+'</dt><dd>'+escHtml(v)+'</dd>').join('')+'</dl><div class="act"><button class="btn" onclick="abrirConfigMaquina(\'wp.usuario\')">Configurar usuário WordPress</button><a class="btn pri" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div>');
+  }catch(e){toast(e.message)}
+}
 async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.dash-v2');if(!tinha)sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando visão da operação…</div></div></div>';try{
   const [d,e,a]=await Promise.all([
     API('/api/painel'),
@@ -1496,7 +1513,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
       </div></div></div>
     </div>
 
-    <div class="panel"><div class="ph"><h2>Audiência do acervo</h2>${a?.disponivel?'<span class="tag g">Google Analytics</span>':'<span class="tag a">configuração pendente</span>'}</div><div class="pb">
+    <div class="panel"><div class="ph"><h2>Audiência do acervo</h2>${a?.disponivel?'<span class="tag g">Google Analytics</span>':'<span class="tag a">configuração pendente</span>'}<button class="btn sm" style="margin-left:auto" onclick="diagnosticarAnalytics()">Diagnosticar</button></div><div class="pb">
       ${a?.disponivel?`<div class="analytics-ok">
         <div class="analytics-overview">
           <div class="metric"><div class="v">${Number(p7.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · últimos 7 dias</div></div>
