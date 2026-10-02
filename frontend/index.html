@@ -1475,7 +1475,6 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   const geral=operacaoRuim?'bad':pend?'warn':'ok';
   const geralTxt=geral==='bad'?'Há algo offline':geral==='warn'?'Operação com pendências':'Operação saudável';
   const p=a?.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
-  const analyticsPerm=a?.erro_codigo==='sitekit_permissoes';
 
   sec.innerHTML=`<div class="dash-v2">
     <div class="dash-hero">
@@ -1526,7 +1525,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
           <div><h2 style="margin:0 0 8px">Páginas mais vistas</h2><ol class="rank">${rankHTML(a.top_paginas,'pagina',5)}</ol></div>
         </div>
         <div class="act"><button class="btn sm" onclick="mostrarTop10Analytics()">Ver Top 10</button></div>
-      </div>`:`<div class="analytics-lock"><div class="ico">!</div><div><b>${analyticsPerm?'Reconectar o Google Analytics no Site Kit':'Analytics ainda não disponível'}</b><p>${analyticsPerm?'O Site Kit está conectado, mas a conta não concedeu todas as permissões do Analytics. Enquanto isso, o painel não mostra números incompletos ou zerados como se fossem reais.':'Assim que o Analytics estiver acessível, visitantes e rankings aparecem aqui automaticamente.'}</p>${analyticsPerm?`<div class="act" style="margin-top:10px"><a class="btn sm" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div>`:''}</div></div>`}
+      </div>`:`<div class="analytics-lock"><div class="ico">!</div><div><b>${escHtml(a?.acao||'Analytics ainda não disponível')}</b><p>${a?.diagnostico?.wp_usuario?`O painel entra no WordPress como <b>${escHtml(a.diagnostico.wp_usuario)}</b>. `:''}${escHtml(a?.erro||'A integração ainda não respondeu corretamente.')}</p><div class="act" style="margin-top:10px"><button class="btn sm pri" onclick="diagnosticarAnalytics()">Diagnosticar Analytics</button><button class="btn sm" onclick="abrirConfigMaquina('wp.usuario')">Usuário WordPress</button><a class="btn sm" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div></div></div>`}`}
     </div></div>
 
     <div class="grid g2">
