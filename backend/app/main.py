@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from . import auth
+from .rede import exigir_estacao
 from .db import connect, init_db, aplicar_migracoes
 from .log_tecnico import configurar as configurar_logs, registrar as log_registrar
 from .rotas_admin import router as rotas_admin
@@ -140,9 +141,7 @@ def obter_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
 @app.get("/api/fundos.json")
 def fundos_json(request: Request) -> dict:
     """Lido pela estação Contex, que não tem login. Só responde para a rede local."""
-    ip = request.client.host if request.client else ""
-    if not (ip.startswith("192.168.") or ip.startswith("10.") or ip == "127.0.0.1"):
-        raise HTTPException(403, "Somente rede local")
+    exigir_estacao(request)
     con = connect()
     dados = con.execute("SELECT fundos FROM v_fundos_json").fetchone()[0]
     con.close()
@@ -150,11 +149,8 @@ def fundos_json(request: Request) -> dict:
 
 
 def _exigir_rede_local(request: Request) -> str:
-    """Endpoints das estações: sem login, mas restritos à LAN da CAMP."""
-    ip = request.client.host if request.client else ""
-    if not (ip.startswith("192.168.") or ip.startswith("10.") or ip == "127.0.0.1"):
-        raise HTTPException(403, "Somente rede local")
-    return ip
+    """Endpoints das estações: sem login; ver app/rede.py (LAN verdadeira ou token)."""
+    return exigir_estacao(request)
 
 
 @app.get("/api/estacoes/contexto")

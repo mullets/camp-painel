@@ -1,4 +1,5 @@
 """Conexão SQLite e aplicação do schema (db/schema.sql)."""
+import re
 import sqlite3
 from pathlib import Path
 
@@ -34,6 +35,40 @@ def init_db() -> None:
 MIGRACOES = Path(__file__).resolve().parents[2] / "db" / "migrations"
 
 
+_ADD_COLUNA = re.compile(r"^\s*ALTER\s+TABLE\s+(\w+)\s+ADD\s+(?:COLUMN\s+)?(\w+)", re.I)
+
+
+def _sem_comentarios_iniciais(sql: str) -> str:
+    return re.sub(r"^(?:\s*--[^\n]*\n)+", "", sql + "\n").strip()
+
+
+def executar_script_idempotente(con: sqlite3.Connection, texto: str) -> None:
+    """Executa um script SQL statement a statement.
+
+    Diferença para executescript(): `ALTER TABLE ... ADD COLUMN` de uma coluna que já existe
+    é ignorado. O SQLite não tem ADD COLUMN IF NOT EXISTS, e o schema.sql de um banco novo
+    já inclui colunas que migrações antigas adicionam em bancos existentes.
+    """
+    buf = ""
+    for linha in texto.splitlines(keepends=True):
+        buf += linha
+        if not sqlite3.complete_statement(buf):
+            continue
+        sql, buf = buf.strip(), ""
+        limpo = _sem_comentarios_iniciais(sql)
+        if not limpo:
+            continue
+        m = _ADD_COLUNA.match(limpo)
+        if m:
+            tabela, coluna = m.groups()
+            existentes = {r[1].lower() for r in con.execute(f"PRAGMA table_info({tabela})")}
+            if coluna.lower() in existentes:
+                continue
+        con.execute(sql)
+    if re.sub(r"--[^\n]*", "", buf).strip():
+        con.execute(buf)
+
+
 def aplicar_migracoes() -> None:
     """Aplica db/migrations/*.sql em ordem, uma vez cada (registro em tabela migracao)."""
     con = connect()
@@ -42,7 +77,11 @@ def aplicar_migracoes() -> None:
     for arq in sorted(MIGRACOES.glob("*.sql")):
         if arq.name in feitas:
             continue
-        con.executescript(arq.read_text(encoding="utf-8"))
+        try:
+            executar_script_idempotente(con, arq.read_text(encoding="utf-8"))
+        except Exception:
+            con.rollback()
+            raise
         con.execute("INSERT INTO migracao (nome) VALUES (?)", (arq.name,))
         con.commit()
     con.close()
