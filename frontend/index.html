@@ -254,6 +254,10 @@ tbody tr.sel td{background:var(--blue-soft)}
 .drawer .dh{display:flex;align-items:flex-start;gap:10px;padding:18px 20px 14px;border-bottom:1px solid var(--line2)}
 .drawer .dh h2{margin:0;font-size:16px}
 .drawer .dh small{display:block;color:var(--ink3);margin-top:2px}
+.edit-sec{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
+.edit-aviso{background:var(--amber-soft);color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12.5px}
+.edit-alerta{border-color:var(--amber)}
+.edit-lista{margin:6px 0 8px;padding-left:18px;font-size:12.5px}
 .dirty-state{display:none;margin-left:auto;font-size:11.5px;color:var(--amber);background:var(--amber-soft);padding:3px 8px;border-radius:999px;white-space:nowrap}
 .dirty-state.on{display:inline-flex;align-items:center;gap:5px}
 .dirty-state.on::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--amber)}
@@ -1428,14 +1432,68 @@ async function autorizarProjeto(code){if(!confirm(`Autorizar ${code} para public
 const _showItemMock=showItem;
 showItem=async function(code){if(!EU&&!MODO_SERVIDOR)return _showItemMock(code);if(!EU){document.getElementById('login').classList.add('on');return}let d;try{d=await API(`/api/itens/${code}`)}catch(e){if(e.status===404){mostrarNaoEncontrado('Documento não encontrado',code+' não existe.','projetos')}else toast(e.message);return}const it=d.item;registrarRecente('item/'+code,code+' · '+(it.tipo_documento||it.serie_codigo||'Documento'),'documento');
   document.getElementById('id-back').onclick=()=>voltar('projeto/'+it.projeto_codigo);
-  const img=it.thumb_url?`<img src="${it.thumb_url}" style="max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)">`:sheetSVG({c:code,tipo:it.tipo_documento||'Planta'},900);
-  const md=Object.entries(it.metadados_site||{}).map(([k,v])=>`<dt>${k}</dt><dd>${String(v).slice(0,300)}</dd>`).join('');
-  document.getElementById('idet').innerHTML=`<div class="dethdr"><div><h1>${it.tipo_documento||it.serie_codigo}${it.folha?` · folha ${it.folha}`:''}</h1><div class="meta"><span class="code">${code}</span> · ${it.projeto_titulo}</div></div><div class="pager"><button class="btn sm" ${d.anterior?'':'disabled'} onclick="nav('item/${d.anterior||''}')">← anterior</button><span>${d.posicao} / ${d.total}</span><button class="btn sm" ${d.proxima?'':'disabled'} onclick="nav('item/${d.proxima||''}')">próxima →</button></div></div>
+  const img=it.thumb_url?`<img src="${escHtml(it.thumb_url)}" style="max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)">`:sheetSVG({c:code,tipo:it.tipo_documento||'Planta'},900);
+  const avisoSite=(AVISO_SITE_ITEM&&AVISO_SITE_ITEM.codigo===code)?`<div class="panel edit-alerta"><div class="pb"><b>Salvo no painel, mas o site não aceitou:</b><ul class="edit-lista">${AVISO_SITE_ITEM.falhas.map(f=>`<li><b>${escHtml(f.campo)}</b>: ${escHtml(f.erro)}</li>`).join('')}</ul><small>Fica registrado como pendência de sincronização. Corrija o motivo (ex.: credencial do WordPress em Configurações) e edite de novo.</small></div></div>`:'';AVISO_SITE_ITEM=null;
+  const md=Object.entries(it.metadados_site||{}).map(([k,v])=>`<dt>${escHtml(k)}</dt><dd>${escHtml(String(v).slice(0,300))}</dd>`).join('');
+  document.getElementById('idet').innerHTML=`<div class="dethdr"><div><h1>${escHtml(it.tipo_documento||it.serie_codigo)}${it.folha?` · folha ${escHtml(it.folha)}`:''}</h1><div class="meta"><span class="code">${code}</span> · ${escHtml(it.projeto_titulo)}</div></div><div class="pager"><button class="btn sm" ${d.anterior?'':'disabled'} onclick="nav('item/${d.anterior||''}')">← anterior</button><span>${d.posicao} / ${d.total}</span><button class="btn sm" ${d.proxima?'':'disabled'} onclick="nav('item/${d.proxima||''}')">próxima →</button></div></div>
     <div class="viewer"><div class="img">${img}</div><div style="display:grid;gap:16px;align-content:start">
       ${it.autoria_divergente?'<div class="panel" style="border-color:var(--red)"><div class="pb"><span class="tag r">autoria divergente</span><p style="margin:8px 0 0;font-size:13px">O autor lido no carimbo não é o do fundo. Não publica até resolver.</p></div></div>':''}
-      <div class="panel"><div class="ph"><h2>Descrição</h2></div><div class="pb"><dl class="kv"><dt>Título</dt><dd>${it.titulo||'—'}</dd><dt>Série</dt><dd>${it.serie_codigo}</dd><dt>Tipo</dt><dd>${it.tipo_documento||'—'}</dd><dt>Folha</dt><dd>${it.folha||'—'}</dd><dt>Escala</dt><dd>${it.escala||'—'}</dd><dt>Data da folha</dt><dd>${it.ano_folha||'—'}</dd><dt>Suporte</dt><dd>${it.suporte||'—'}</dd>${md}<dt>Crédito</dt><dd>${it.credito||'—'}</dd></dl></div></div>
-      <div class="panel"><div class="ph"><h2>Arquivos e publicação</h2></div><div class="pb"><dl class="kv"><dt>Preview</dt><dd class="mono" style="font-size:11.5px;word-break:break-all">${it.arquivo_jpg||it.documento_url||'—'}</dd><dt>TIFF</dt><dd class="mono" style="font-size:11.5px">${it.arquivo_tif||'não localizado no QNAP ainda'}</dd><dt>Publicação</dt><dd>${STATUS[it.status_site]||it.status_site}</dd><dt>Origem</dt><dd>${it.origem}</dd><dt>Onde está</dt><dd id="it-loc">…</dd></dl><div class="act" style="margin-top:10px">${it.site_url?`<a class="btn sm" href="${it.site_url}" target="_blank">Ver página pública</a>`:''}<button class="btn sm" onclick="go('etiquetas')">Etiqueta</button></div></div></div>
+      ${avisoSite}<div class="panel"><div class="ph"><h2>Descrição</h2>${EU&&EU.papel!=='leitura'?`<div class="act"><button class="btn sm" id="it-editar" onclick="editarItem('${code}')">Editar</button></div>`:''}</div><div class="pb"><dl class="kv"><dt>Título</dt><dd>${escHtml(it.titulo||'—')}</dd><dt>Série</dt><dd>${escHtml(it.serie_codigo)}</dd><dt>Tipo</dt><dd>${escHtml(it.tipo_documento||'—')}</dd><dt>Folha</dt><dd>${escHtml(it.folha||'—')}</dd><dt>Escala</dt><dd>${escHtml(it.escala||'—')}</dd><dt>Data da folha</dt><dd>${escHtml(it.ano_folha||'—')}</dd><dt>Suporte</dt><dd>${escHtml(it.suporte||'—')}</dd>${md}<dt>Crédito</dt><dd>${escHtml(it.credito||'—')}</dd></dl></div></div>
+      <div class="panel"><div class="ph"><h2>Arquivos e publicação</h2></div><div class="pb"><dl class="kv"><dt>Preview</dt><dd class="mono" style="font-size:11.5px;word-break:break-all">${escHtml(it.arquivo_jpg||it.documento_url||'—')}</dd><dt>TIFF</dt><dd class="mono" style="font-size:11.5px">${escHtml(it.arquivo_tif||'não localizado no QNAP ainda')}</dd><dt>Publicação</dt><dd>${STATUS[it.status_site]||it.status_site}</dd><dt>Origem</dt><dd>${it.origem}</dd><dt>Onde está</dt><dd id="it-loc">…</dd></dl><div class="act" style="margin-top:10px">${it.site_url?`<a class="btn sm" href="${escHtml(it.site_url)}" target="_blank">Ver página pública</a>`:''}<button class="btn sm" onclick="go('etiquetas')">Etiqueta</button></div></div></div>
     </div></div>`;API(`/api/itens/${code}/localizacao`).then(l=>{const el=document.getElementById('it-loc');if(el)el.innerHTML=l?`<span class="code">${l.identificador}</span> ${l.tipo}${l.descricao?' · '+l.descricao:''}`:'<span style="color:var(--ink3)">não localizada</span>'}).catch(e=>{const el=document.getElementById('it-loc');if(el)el.innerHTML=`<span style="color:var(--amber)">localização indisponível: ${escHtml(e.message)}</span>`})}
+
+let AVISO_SITE_ITEM=null,EDICAO_ITEM=null;
+async function editarItem(code){
+  let d;try{d=await API(`/api/itens/${code}/edicao`)}catch(e){toast(e.message);return}
+  EDICAO_ITEM=d;const L=d.local,S=d.site,A=v=>escHtml(v==null?'':v);
+  const tipos=['',...d.tipos_documento].map(t=>`<option value="${A(t)}" ${t===(L.tipo_documento||'')?'selected':''}>${t?A(t):'—'}</option>`).join('');
+  const publicada=S&&S.status==='publish';
+  let campos='';
+  if(S){
+    campos=`<div class="edit-sec">Textos públicos (site)</div>
+      <label class="field">Título da página no site<input id="ei-titulo_site" required maxlength="300" value="${A(S.titulo)}"></label>
+      <label class="field">Descrição<textarea id="ei-descricao_site" rows="4" maxlength="5000">${A(S.descricao)}</textarea></label>`;
+    S.campos.forEach((c,i)=>{const id='ei-md-'+i;
+      if(c.tipo==='taxonomia'){const ach=c.opcoes.some(o=>o.toLowerCase()===(c.valor||'').toLowerCase());
+        const manter=c.valor&&!ach?`<option value="__manter__" selected>${A(c.valor)} (manter)</option>`:'';
+        campos+=`<label class="field">${A(c.nome)}<select id="${id}" data-nome="${A(c.nome)}">${manter}<option value="">—</option>${c.opcoes.map(o=>`<option value="${A(o)}" ${ach&&o.toLowerCase()===(c.valor||'').toLowerCase()?'selected':''}>${A(o)}</option>`).join('')}</select><span class="help">Só termos que já existem no site.</span></label>`}
+      else if(c.tipo==='textarea')campos+=`<label class="field">${A(c.nome)}<textarea id="${id}" data-nome="${A(c.nome)}" rows="3" maxlength="5000">${A(c.valor)}</textarea></label>`;
+      else campos+=`<label class="field">${A(c.nome)}<input id="${id}" data-nome="${A(c.nome)}" maxlength="5000" value="${A(c.valor)}"></label>`});
+    if(S.somente_leitura.length)campos+=`<small class="help">Somente leitura aqui: ${S.somente_leitura.map(x=>A(x.nome)+' ('+A(x.valor)+')').join('; ')}.</small>`;
+  }else campos=`<div class="edit-aviso">Esta folha ainda não existe no site: só a catalogação do painel pode ser editada.</div>`;
+  openDrawer(`Editar ${code}`,'textos da folha',`<div class="cfg">
+    ${publicada?`<div class="edit-aviso">Esta folha está <b>publicada</b>. Ao salvar, os textos públicos mudam no site na hora.</div>`:''}
+    <div class="edit-sec">Catalogação (painel)</div>
+    <label class="field">Título do documento<input id="ei-titulo" maxlength="300" value="${A(L.titulo)}"></label>
+    <div class="grid g2"><label class="field">Tipo<select id="ei-tipo_documento">${tipos}</select></label><label class="field">Folha<input id="ei-folha" maxlength="40" value="${A(L.folha)}"></label></div>
+    <div class="grid g2"><label class="field">Escala<input id="ei-escala" maxlength="60" value="${A(L.escala)}"></label><label class="field">Ano da folha (0 = limpar)<input id="ei-ano_folha" type="number" min="0" max="2100" value="${A(L.ano_folha)}"></label></div>
+    <div class="grid g2"><label class="field">Suporte<input id="ei-suporte" maxlength="160" value="${A(L.suporte)}"></label><label class="field">Dimensões<input id="ei-dimensoes" maxlength="120" value="${A(L.dimensoes)}"></label></div>
+    <label class="field">Crédito<input id="ei-credito" maxlength="300" value="${A(L.credito)}"></label>
+    ${campos}
+    <div class="act"><button class="btn pri" id="ei-salvar" onclick="salvarItem('${code}')">Salvar</button><button class="btn" onclick="closeDrawer()">Cancelar</button></div>
+    <small class="help">Só o que você mudar é enviado. O painel salva primeiro; se o site recusar, o texto continua salvo aqui e o aviso aparece na folha.</small></div>`);
+}
+async function salvarItem(code){
+  const dr=document.getElementById('drawer');if(!validarCampos(dr))return;
+  const d=EDICAO_ITEM,L=d.local,S=d.site,b={},v=id=>document.getElementById(id).value;
+  for(const k of ['titulo','tipo_documento','folha','escala','suporte','dimensoes','credito']){const x=v('ei-'+k).trim();if(x!==(L[k]||''))b[k]=x}
+  const a=v('ei-ano_folha').trim(),an=a===''?0:+a;if(an!==(L.ano_folha||0))b.ano_folha=an;
+  if(S){
+    const t=v('ei-titulo_site').trim();if(t!==(S.titulo||''))b.titulo_site=t;
+    const ds=v('ei-descricao_site').trim();if(ds!==(S.descricao||''))b.descricao_site=ds;
+    const md={};S.campos.forEach((c,i)=>{const el=document.getElementById('ei-md-'+i);if(!el||el.value==='__manter__')return;const x=el.value.trim();if(x!==(c.valor||''))md[c.nome]=x});
+    if(Object.keys(md).length)b.metadados_site=md;
+  }
+  if(!Object.keys(b).length){toast('Nada mudou');limparAlteracoes('drawer');closeDrawer(true);return}
+  try{
+    const r=await API('/api/itens/'+code,{method:'PATCH',body:JSON.stringify(b)});
+    limparAlteracoes('drawer');closeDrawer(true);
+    if(r.site&&r.site.falhas.length)AVISO_SITE_ITEM={codigo:code,falhas:r.site.falhas};
+    toast(r.site?(r.site.falhas.length?`Salvo no painel · o site recusou ${r.site.falhas.length} campo(s)`:'Salvo no painel e enviado ao site'):`Salvo: ${r.campos.length} campo(s)`);
+    showItem(code);
+  }catch(e){toast(e.message)}
+}
+
 
 // ---------- operação (painel, filas, solicitações, erros) via API ----------
 const TIPO_TAG={erro:'r',pedido:'a',fila:'b',fundo:''};

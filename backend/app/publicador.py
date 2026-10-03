@@ -389,3 +389,70 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         out["erro"] = str(e)[:300]; _pendencia(con, "item", codigo, "pendente_criar_no_site", out["erro"])
     con.commit(); con.close()
     return out
+
+
+def atualizar_folha_no_site(codigo: str, wid: int, colecao_id: int, titulo: str | None, descricao: str | None,
+                            metadados: dict, ator: str) -> dict:
+    """Envia ao Tainacan os textos públicos editados de uma folha.
+
+    metadados: {nome: (metadado_id, valor_para_api, valor_texto_para_espelho)}.
+    Nunca levanta exceção: cada campo falha isoladamente, vira pendência e é devolvido em `falhas`,
+    para o salvamento local (já feito) nunca ser desfeito por uma falha do site.
+    """
+    out = {"enviados": [], "falhas": []}
+    con = connect()
+
+    def falha(campo, erro):
+        out["falhas"].append({"campo": campo, "erro": str(erro)[:240]})
+        _pendencia(con, "item", codigo, f"pendente_{campo}_no_site", str(erro))
+
+    try:
+        try:
+            wp = WP()
+        except Exception as e:  # noqa: BLE001  (ex.: Application Password não configurada)
+            for campo in ([("título", 1)] if titulo is not None else []) + ([("descrição", 1)] if descricao is not None else []) \
+                    + [(n, 1) for n in metadados]:
+                falha(campo[0], e)
+            return out
+        if titulo is not None or descricao is not None:
+            corpo = {}
+            if titulo is not None:
+                corpo["title"] = titulo
+            if descricao is not None:
+                corpo["description"] = descricao
+            try:
+                wp.patch_item(colecao_id, wid, **corpo)
+                if titulo is not None:
+                    out["enviados"].append("título da página"); con.execute("UPDATE wp_item SET titulo=? WHERE id=?", (titulo, wid))
+                if descricao is not None:
+                    out["enviados"].append("descrição")
+                    row = con.execute("SELECT json, metadados FROM wp_item WHERE id=?", (wid,)).fetchone()
+                    try:
+                        j = json.loads(row["json"] or "{}") if row else {}
+                    except ValueError:
+                        j = {}
+                    j["description"] = descricao
+                    con.execute("UPDATE wp_item SET json=? WHERE id=?", (json.dumps(j, ensure_ascii=False), wid))
+            except Exception as e:  # noqa: BLE001
+                if titulo is not None:
+                    falha("título", e)
+                if descricao is not None:
+                    falha("descrição", e)
+        for nome, (mid, valor_api, valor_txt) in metadados.items():
+            try:
+                wp.definir_metadado(wid, mid, valor_api)
+                out["enviados"].append(nome)
+                row = con.execute("SELECT metadados FROM wp_item WHERE id=?", (wid,)).fetchone()
+                try:
+                    md = json.loads((row["metadados"] if row else None) or "{}")
+                except ValueError:
+                    md = {}
+                md[nome] = valor_txt
+                con.execute("UPDATE wp_item SET metadados=? WHERE id=?", (json.dumps(md, ensure_ascii=False), wid))
+            except Exception as e:  # noqa: BLE001
+                falha(nome, e)
+    finally:
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_texto_editado',?,?)",
+                    (codigo, ator, json.dumps(out, ensure_ascii=False)))
+        con.commit(); con.close()
+    return out

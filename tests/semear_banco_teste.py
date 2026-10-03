@@ -12,6 +12,7 @@ subprocess.run([sys.executable, str(RAIZ / "scripts/importar_fundos.py"), "--db"
                check=True, capture_output=True)
 auth.criar_usuario("Rafael", "rafael@camp.arq.br", "senha-bem-longa-123", "master", forcar_troca=False)
 auth.criar_usuario("Estagiária", "operador@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+auth.criar_usuario("Leitor", "leitor@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
 
 c = connect()
 c.execute("INSERT OR REPLACE INTO wp_colecao (id,nome,slug,total_itens) VALUES (8007,'Projetos CAMP','projetos',0),(8013,'Acervo CAMP','acervo',0)")
@@ -35,6 +36,14 @@ for cod, fundo, num, titulo, ano, nf in PROJ:
         c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_url,thumb_url,codigo_detectado,fundo_detectado,projeto_detectado) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                   (wid, 8013, "draft", f"Planta {s} — {ic}", ic.lower(), f"https://exemplo.test/{ic}",
                    f"https://exemplo.test/img/{ic}.jpg", f"https://exemplo.test/img/{ic}-t.jpg", ic, fundo, cod))
+MT = "Tainacan\\Metadata_Types\\"
+for mid, nome, tipo, tax in ((501, "Técnica", "Text", None), (502, "Tipo de desenho", "Taxonomy", 77), (503, "Endereço", "Textarea", None), (504, "Data do registro fotográfico", "Date", None)):
+    c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id) VALUES (?,?,?,?,?)", (mid, 8013, nome, MT + tipo, tax))
+c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (77,'Tipos de desenho')")
+c.execute("INSERT INTO wp_termo (id,taxonomia_id,nome) VALUES (9001,77,'Planta'),(9002,77,'Corte'),(9003,77,'Elevação')")
+import json
+c.execute("UPDATE wp_item SET metadados=?, json=? WHERE codigo_detectado='F023-P0011-1959-S01-D00001' AND colecao_id=8013",
+          (json.dumps({"Técnica": "nanquim sobre vegetal", "Tipo de desenho": "Planta", "Data do registro fotográfico": "1972"}), json.dumps({"description": "Planta baixa do pavimento térreo."})))
 for i in range(12):
     c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,'visto','seed','{}')", (PROJ[i % len(PROJ)][0],))
 c.commit(); c.close()
