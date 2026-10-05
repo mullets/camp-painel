@@ -254,6 +254,12 @@ tbody tr.sel td{background:var(--blue-soft)}
 .drawer .dh{display:flex;align-items:flex-start;gap:10px;padding:18px 20px 14px;border-bottom:1px solid var(--line2)}
 .drawer .dh h2{margin:0;font-size:16px}
 .drawer .dh small{display:block;color:var(--ink3);margin-top:2px}
+.thumb .img-real{width:100%;aspect-ratio:1.4;object-fit:contain;background:#fff;display:block}
+.img-grande{max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+.sem-imagem{display:grid;place-content:center;gap:4px;text-align:center;aspect-ratio:1.4;padding:10px;background:var(--bg);border:1px dashed var(--line);color:var(--ink3)}
+.sem-imagem b{font-size:12.5px;color:var(--ink2)}
+.sem-imagem small{font-size:10.5px;line-height:1.35}
+.viewer .sem-imagem{min-height:320px}
 .edit-sec{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
 .edit-aviso{background:var(--amber-soft);color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12.5px}
 .edit-alerta{border-color:var(--amber)}
@@ -1375,7 +1381,7 @@ function nomeSerieProjeto(c){return ({S01:'Desenhos e pranchas',S02:'Documentos 
 function cardItemProjeto(it){
   const codigo=it.codigo||('TAINACAN-'+it.tainacan_item_id);
   const navegavel=/^F\d{3}-P\d{4}-.+/.test(codigo);
-  const imagem=it.thumb_url?`<img src="${escHtml(it.thumb_url)}" loading="lazy" style="width:100%;aspect-ratio:1.4;object-fit:contain;background:#fff;display:block">`:sheetSVG({c:codigo,tipo:it.tipo_documento||'Documento'},220);
+  const imagem=it.thumb_url?`<img class="img-real" src="${escHtml(it.thumb_url)}" loading="lazy" alt="${escHtml(codigo)}">`:semImagemHTML();
   const flag=it.autoria_divergente?'<span class="tag r flag">autoria divergente</span>':it.duplicata_de?'<span class="tag a flag">duplicata</span>':it.espelhado?'<span class="tag a flag">espelhado</span>':'';
   const status=it.status_site==='rascunho'?' <span class="tag b" style="font-size:9.5px">rascunho</span>':it.status_site==='fora_do_ar'?' <span class="tag" style="font-size:9.5px">fora do ar</span>':'';
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin">só no site</span>':'';
@@ -1432,16 +1438,18 @@ async function autorizarProjeto(code){if(!confirm(`Autorizar ${code} para public
 const _showItemMock=showItem;
 showItem=async function(code){if(!EU&&!MODO_SERVIDOR)return _showItemMock(code);if(!EU){document.getElementById('login').classList.add('on');return}let d;try{d=await API(`/api/itens/${code}`)}catch(e){if(e.status===404){mostrarNaoEncontrado('Documento não encontrado',code+' não existe.','projetos')}else toast(e.message);return}const it=d.item;registrarRecente('item/'+code,code+' · '+(it.tipo_documento||it.serie_codigo||'Documento'),'documento');
   document.getElementById('id-back').onclick=()=>voltar('projeto/'+it.projeto_codigo);
-  const img=it.thumb_url?`<img src="${escHtml(it.thumb_url)}" style="max-width:100%;max-height:70vh;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.15)">`:sheetSVG({c:code,tipo:it.tipo_documento||'Planta'},900);
+  const fonteImg=it.imagem_grande||it.thumb_url;const img=fonteImg?`<img class="img-real img-grande" src="${escHtml(fonteImg)}" alt="${escHtml(code)}">`:semImagemHTML('Esta folha não tem imagem utilizável no site (sem arquivo, ou o arquivo não é JPG/PNG).');
   const avisoSite=(AVISO_SITE_ITEM&&AVISO_SITE_ITEM.codigo===code)?`<div class="panel edit-alerta"><div class="pb"><b>Salvo no painel, mas o site não aceitou:</b><ul class="edit-lista">${AVISO_SITE_ITEM.falhas.map(f=>`<li><b>${escHtml(f.campo)}</b>: ${escHtml(f.erro)}</li>`).join('')}</ul><small>Fica registrado como pendência de sincronização. Corrija o motivo (ex.: credencial do WordPress em Configurações) e edite de novo.</small></div></div>`:'';AVISO_SITE_ITEM=null;
   const md=Object.entries(it.metadados_site||{}).map(([k,v])=>`<dt>${escHtml(k)}</dt><dd>${escHtml(String(v).slice(0,300))}</dd>`).join('');
   document.getElementById('idet').innerHTML=`<div class="dethdr"><div><h1>${escHtml(it.tipo_documento||it.serie_codigo)}${it.folha?` · folha ${escHtml(it.folha)}`:''}</h1><div class="meta"><span class="code">${code}</span> · ${escHtml(it.projeto_titulo)}</div></div><div class="pager"><button class="btn sm" ${d.anterior?'':'disabled'} onclick="nav('item/${d.anterior||''}')">← anterior</button><span>${d.posicao} / ${d.total}</span><button class="btn sm" ${d.proxima?'':'disabled'} onclick="nav('item/${d.proxima||''}')">próxima →</button></div></div>
     <div class="viewer"><div class="img">${img}</div><div style="display:grid;gap:16px;align-content:start">
       ${it.autoria_divergente?'<div class="panel" style="border-color:var(--red)"><div class="pb"><span class="tag r">autoria divergente</span><p style="margin:8px 0 0;font-size:13px">O autor lido no carimbo não é o do fundo. Não publica até resolver.</p></div></div>':''}
       ${avisoSite}<div class="panel"><div class="ph"><h2>Descrição</h2>${EU&&EU.papel!=='leitura'?`<div class="act"><button class="btn sm" id="it-editar" onclick="editarItem('${code}')">Editar</button></div>`:''}</div><div class="pb"><dl class="kv"><dt>Título</dt><dd>${escHtml(it.titulo||'—')}</dd><dt>Série</dt><dd>${escHtml(it.serie_codigo)}</dd><dt>Tipo</dt><dd>${escHtml(it.tipo_documento||'—')}</dd><dt>Folha</dt><dd>${escHtml(it.folha||'—')}</dd><dt>Escala</dt><dd>${escHtml(it.escala||'—')}</dd><dt>Data da folha</dt><dd>${escHtml(it.ano_folha||'—')}</dd><dt>Suporte</dt><dd>${escHtml(it.suporte||'—')}</dd>${md}<dt>Crédito</dt><dd>${escHtml(it.credito||'—')}</dd></dl></div></div>
-      <div class="panel"><div class="ph"><h2>Arquivos e publicação</h2></div><div class="pb"><dl class="kv"><dt>Preview</dt><dd class="mono" style="font-size:11.5px;word-break:break-all">${escHtml(it.arquivo_jpg||it.documento_url||'—')}</dd><dt>TIFF</dt><dd class="mono" style="font-size:11.5px">${escHtml(it.arquivo_tif||'não localizado no QNAP ainda')}</dd><dt>Publicação</dt><dd>${STATUS[it.status_site]||it.status_site}</dd><dt>Origem</dt><dd>${it.origem}</dd><dt>Onde está</dt><dd id="it-loc">…</dd></dl><div class="act" style="margin-top:10px">${it.site_url?`<a class="btn sm" href="${escHtml(it.site_url)}" target="_blank">Ver página pública</a>`:''}<button class="btn sm" onclick="go('etiquetas')">Etiqueta</button></div></div></div>
+      <div class="panel"><div class="ph"><h2>Arquivos e publicação</h2></div><div class="pb"><dl class="kv"><dt>Imagem mostrada</dt><dd>${({miniatura:'miniatura do site',documento:'arquivo do documento'})[it.imagem_origem]||'nenhuma'}</dd><dt>Preview</dt><dd class="mono" style="font-size:11.5px;word-break:break-all">${escHtml(it.arquivo_jpg||it.documento_url||'—')}</dd><dt>TIFF</dt><dd class="mono" style="font-size:11.5px">${escHtml(it.arquivo_tif||'não localizado no QNAP ainda')}</dd><dt>Publicação</dt><dd>${STATUS[it.status_site]||it.status_site}</dd><dt>Origem</dt><dd>${it.origem}</dd><dt>Onde está</dt><dd id="it-loc">…</dd></dl><div class="act" style="margin-top:10px">${it.site_url?`<a class="btn sm" href="${escHtml(it.site_url)}" target="_blank">Ver página pública</a>`:''}<button class="btn sm" onclick="go('etiquetas')">Etiqueta</button></div></div></div>
     </div></div>`;API(`/api/itens/${code}/localizacao`).then(l=>{const el=document.getElementById('it-loc');if(el)el.innerHTML=l?`<span class="code">${l.identificador}</span> ${l.tipo}${l.descricao?' · '+l.descricao:''}`:'<span style="color:var(--ink3)">não localizada</span>'}).catch(e=>{const el=document.getElementById('it-loc');if(el)el.innerHTML=`<span style="color:var(--amber)">localização indisponível: ${escHtml(e.message)}</span>`})}
 
+function semImagemHTML(txt){return `<div class="sem-imagem"><b>Sem imagem</b><small>${escHtml(txt||'Sem arquivo de imagem no site')}</small></div>`}
+document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.classList&&t.classList.contains('img-real')){const d=document.createElement('div');d.innerHTML=semImagemHTML('A imagem não carregou (arquivo ausente ou removido no site)');t.replaceWith(d.firstChild)}},true);
 let AVISO_SITE_ITEM=null,EDICAO_ITEM=null;
 async function editarItem(code){
   let d;try{d=await API(`/api/itens/${code}/edicao`)}catch(e){toast(e.message);return}

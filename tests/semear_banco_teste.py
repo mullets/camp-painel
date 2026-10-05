@@ -36,6 +36,13 @@ for cod, fundo, num, titulo, ano, nf in PROJ:
         c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_url,thumb_url,codigo_detectado,fundo_detectado,projeto_detectado) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                   (wid, 8013, "draft", f"Planta {s} — {ic}", ic.lower(), f"https://exemplo.test/{ic}",
                    f"https://exemplo.test/img/{ic}.jpg", f"https://exemplo.test/img/{ic}-t.jpg", ic, fundo, cod))
+# folhas SEM imagem no site (miniatura ausente e documento TIFF): a tela não pode inventar desenho
+for n, doc in ((1, None), (2, "https://exemplo.test/img/scan.tif")):
+    ic = f"F001-P0001-1961-S01-D0000{n}"
+    c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,ano_folha,tainacan_item_id,origem) VALUES (?,?,?,?,?,?,?,?,'importado')",
+              (ic, "F001-P0001", "S01", n, f"Sem imagem {n}", f"0{n}/02", 1961, 3000 + n))
+    c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_url,thumb_url,imagem_origem,codigo_detectado,fundo_detectado,projeto_detectado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              (3000 + n, 8013, "draft", f"Sem imagem {n} — {ic}", ic.lower(), f"https://exemplo.test/{ic}", doc, None, "", ic, "F001", "F001-P0001"))
 MT = "Tainacan\\Metadata_Types\\"
 for mid, nome, tipo, tax in ((501, "Técnica", "Text", None), (502, "Tipo de desenho", "Taxonomy", 77), (503, "Endereço", "Textarea", None), (504, "Data do registro fotográfico", "Date", None)):
     c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id) VALUES (?,?,?,?,?)", (mid, 8013, nome, MT + tipo, tax))

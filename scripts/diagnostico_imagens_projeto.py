@@ -5,6 +5,7 @@ import sqlite3, sys, re, json, collections
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from app.config import settings
+from app.imagens import radical, e_imagem
 
 cod = (sys.argv[1] if len(sys.argv) > 1 else "").strip().upper()
 if not re.fullmatch(r"F\d{3}-P\d{4}", cod):
@@ -28,11 +29,22 @@ print(f"espelho do site atualizado em: {ult}")
 print(f"última sincronização: início {sd.get('iniciada_em')} · fim {sd.get('terminada_em')} · ok={sd.get('ok')}" if s else "última sincronização: nenhuma registrada")
 
 # EXATAMENTE o filtro que a tela do projeto usa
-tela = con.execute("""SELECT id,colecao_id,status,titulo,codigo_detectado,thumb_url,documento_url FROM wp_item
-    WHERE projeto_detectado=? AND fundo_detectado=? AND colecao_id=? AND codigo_detectado LIKE ?
-    ORDER BY codigo_detectado,id""", (cod, p["fundo_codigo"], itens_cid, cod + "-%")).fetchall()
+tem_origem = "imagem_origem" in {r[1] for r in con.execute("PRAGMA table_info(wp_item)")}
+col_origem = "imagem_origem" if tem_origem else "NULL"
+tela = con.execute("SELECT id,colecao_id,status,titulo,codigo_detectado,thumb_url,documento_url," + col_origem + " AS imagem_origem FROM wp_item "
+    "WHERE projeto_detectado=? AND fundo_detectado=? AND colecao_id=? AND codigo_detectado LIKE ? ORDER BY codigo_detectado,id",
+    (cod, p["fundo_codigo"], itens_cid, cod + "-%")).fetchall()
 print(f"\n== O QUE A TELA MOSTRA: {len(tela)} folha(s) do site")
 sem = [r for r in tela if not r["thumb_url"]]
+if not tem_origem or all(r["imagem_origem"] is None for r in tela):
+    print("   ATENÇÃO: o espelho ainda é de uma versão anterior (sem origem da imagem). Rode a sincronização e repita.")
+por_origem = collections.Counter((r["imagem_origem"] if r["imagem_origem"] is not None else "(não sincronizado)") or "nenhuma" for r in tela)
+print(f"   origem da imagem: {dict(por_origem)}")
+print(f"   documento_url é URL de verdade: {len([r for r in tela if (r['documento_url'] or '').startswith('http')])} de {len(tela)}")
+dif = [r for r in tela if r["thumb_url"] and r["imagem_origem"] == "miniatura" and (r["documento_url"] or "").startswith("http")
+       and e_imagem(r["documento_url"]) and radical(r["thumb_url"]) != radical(r["documento_url"])]
+print(f"   MINIATURA DE OUTRO ARQUIVO (diferente do documento do item): {len(dif)}")
+for r in dif[:8]: print(f"      {r['codigo_detectado']}: miniatura={base(r['thumb_url'])}  documento={base(r['documento_url'])}")
 print(f"   sem miniatura: {len(sem)}")
 dup_cod = {k: v for k, v in collections.Counter(r["codigo_detectado"] for r in tela).items() if v > 1}
 print(f"   códigos que aparecem em mais de um item do site: {len(dup_cod)}" + (f"  -> {list(dup_cod.items())[:6]}" if dup_cod else ""))
@@ -64,4 +76,4 @@ for d in div[:8]: print(f"      {d[0]}: local={d[1]}  site={d[2]}")
 print(f"   no catálogo local mas sem item no site: {len([c for c in loc if c not in {r['codigo_detectado'] for r in tela}])}")
 
 print("\n== AMOSTRA (primeiras 12 folhas da tela)")
-for r in tela[:12]: print(f"   id {r['id']:>6} {r['status']:7} {r['codigo_detectado']:32} thumb={base(r['thumb_url'])}")
+for r in tela[:12]: print(f"   id {r['id']:>6} {r['status']:7} {r['codigo_detectado']:32} thumb={base(r['thumb_url'])}  doc={base(r['documento_url'])}  origem={r['imagem_origem']}")

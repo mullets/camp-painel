@@ -157,6 +157,29 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
   dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.close(); }
+
+// ---------- IMAGENS: nunca desenhar planta falsa ----------
+await w.showProjeto('F001-P0001','itens'); await sleep(1000);
+const cardsSem=[...d.querySelectorAll('#pd .thumb')]; chk(cardsSem.length>=2,'projeto sem imagens: cards não apareceram ('+cardsSem.length+')');
+chk(cardsSem.every(c=>c.querySelector('.sem-imagem')),'folha sem imagem deveria mostrar a caixa "Sem imagem"');
+chk(!d.querySelector('#pd .thumb svg'),'PLANTA FALSA: a grade ainda desenha SVG inventado no lugar da imagem');
+chk(txt('#pd .sem-imagem').includes('Sem imagem'),'texto "Sem imagem" ausente');
+await w.showProjeto('F026-P0001','itens'); await sleep(1000);
+chk(d.querySelectorAll('#pd .thumb img.img-real').length>=6,'folhas com miniatura do site deveriam mostrar a imagem real');
+chk(!d.querySelector('#pd .thumb svg'),'projeto com imagens também não pode ter SVG sintético');
+okl.push('grade do projeto: folhas sem imagem mostram "Sem imagem"; com miniatura mostram a imagem real; zero SVG inventado');
+w.route_to('item/F001-P0001-1961-S01-D00001'); await sleep(1000);
+chk(!!d.querySelector('#idet .sem-imagem')&&!d.querySelector('#idet .viewer svg'),'folha sem imagem: deveria mostrar aviso, não desenho');
+w.route_to('item/F001-P0001-1961-S01-D00002'); await sleep(1000);
+chk(!!d.querySelector('#idet .sem-imagem'),'documento TIFF não é imagem de navegador: deveria dizer "Sem imagem"');
+w.route_to('item/'+IT3); await sleep(1000);
+const big=d.querySelector('#idet .viewer img.img-grande'); chk(big&&big.getAttribute('src').endsWith('D00003.jpg'),'folha com documento JPG deveria mostrar o arquivo do documento: '+(big&&big.getAttribute('src')));
+chk(txt('#idet').includes('Imagem mostrada'),'folha não informa de onde vem a imagem');
+// imagem que não carrega -> aviso em vez de ícone quebrado
+const im=d.querySelector('#idet .viewer img.img-real'); chk(!!im,'folha com imagem não usa <img class="img-real"> (sem tratamento de imagem quebrada)');
+if(im){im.dispatchEvent(new w.Event('error')); await sleep(100);
+ chk(!d.querySelector('#idet .viewer img.img-real')&&!!d.querySelector('#idet .viewer .sem-imagem'),'imagem quebrada deveria virar aviso "não carregou"'); chk(txt('#idet .sem-imagem').includes('não carregou'),'mensagem de imagem quebrada');}
+okl.push('folha: imagem grande vem do documento; sem imagem/TIFF/imagem quebrada mostram aviso explícito');
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

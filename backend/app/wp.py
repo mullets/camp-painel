@@ -216,3 +216,23 @@ def _wp_definir_documento(self, colecao_id: int, item_id: int, media_id: int) ->
 WP.patch_item = _wp_patch_item
 WP.upload_media = _wp_upload_media
 WP.definir_documento = _wp_definir_documento
+
+
+def _wp_anexos(self, ids) -> dict:
+    """Resolve IDs de anexo -> {id: {url, mime, large, medium}} (lotes de 100)."""
+    out: dict = {}
+    ids = sorted({int(i) for i in ids})
+    for k in range(0, len(ids), 100):
+        lote = ids[k:k + 100]
+        r = self.h.get("/wp-json/wp/v2/media", params={"include": ",".join(map(str, lote)), "per_page": 100,
+                                                       "_fields": "id,source_url,mime_type,media_details"})
+        if r.status_code >= 400:
+            raise RuntimeError(f"WordPress recusou listar anexos ({r.status_code}): {r.text[:160]}")
+        for m in r.json():
+            sizes = (m.get("media_details") or {}).get("sizes") or {}
+            out[m["id"]] = {"url": m.get("source_url"), "mime": m.get("mime_type"),
+                            "large": (sizes.get("large") or {}).get("source_url"), "medium": (sizes.get("medium") or {}).get("source_url")}
+    return out
+
+
+WP.anexos = _wp_anexos

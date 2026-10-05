@@ -15,6 +15,7 @@ import threading
 
 from .db import connect
 from .wp import WP, detectar_codigo, metadados_texto
+from .imagens import documento_do_item, resolver_anexos, thumb_do_item
 
 
 def _divergencia(con, entidade, codigo, campo, painel, site):
@@ -86,13 +87,8 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
             for it in wp.itens(cid):
                 md = metadados_texto(it)
                 cod, f, p = detectar_codigo(it.get("title", ""), it.get("slug", ""), *md.values())
-                doc = it.get("document") if isinstance(it.get("document"), str) else (it.get("document_as_html") or "")
-                thumb = it.get("thumbnail", {})
-                thumb_url = ""
-                if isinstance(thumb, dict):
-                    for k in ("large", "tainacan-medium", "medium", "full"):
-                        if isinstance(thumb.get(k), list) and thumb[k]:
-                            thumb_url = thumb[k][0]; break
+                doc, _anexo = documento_do_item(it)
+                thumb_url = thumb_do_item(it)
                 if gravar_espelho:
                     con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, documento_url, thumb_url, "
                                 "codigo_detectado, fundo_detectado, projeto_detectado, metadados, modificado_em, json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -110,6 +106,15 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                 total += 1; n["itens"] += 1
                 if total % 100 == 0:
                     con.commit()
+            if gravar_espelho:
+                con.commit()
+                try:
+                    ri = resolver_anexos(con, wp, cid, _divergencia, log)
+                    n["divergencias"] += ri["divergentes"]
+                    log(f"  imagens da coleção {c.get('name')}: {ri['com_miniatura']} com miniatura, {ri['via_documento']} pelo documento, "
+                        f"{ri['sem_imagem']} sem imagem, {ri['divergentes']} miniatura diferente do documento")
+                except Exception as e:  # noqa: BLE001
+                    log(f"  (imagens da coleção {cid}: {e})")
             con.execute("INSERT INTO wp_colecao (id, nome, slug, url, total_itens, json) VALUES (?,?,?,?,?,?)",
                         (cid, c.get("name"), c.get("slug"), c.get("url"), total, json.dumps(c, ensure_ascii=False)))
             n["colecoes"] += 1

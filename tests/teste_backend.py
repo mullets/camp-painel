@@ -156,6 +156,63 @@ def filho(modo):
         r = op.patch(f"/api/itens/{I1}", json={"descricao_site": "Outra"}); j = r.json()
         ver("sem credencial do WordPress: 200, salvo, aviso por campo", r.status_code == 200 and j["site"]["falhas"][0]["campo"] == "descrição", str(j["site"])[:100])
         for l in res: print(l)
+    elif modo == "imagens":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app.imagens import thumb_do_item, documento_do_item, radical, e_imagem, resolver_anexos
+        from app.sincronizador import _divergencia
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # --- funções puras ---
+        gen = {"thumbnail": {"large": ["https://camp.arq.br/wp-content/plugins/tainacan/assets/images/placeholder_square.png", 1, 1, False]}}
+        ver("miniatura genérica do plugin é descartada", thumb_do_item(gen) == "")
+        ver("thumbnail com valores false não quebra", thumb_do_item({"thumbnail": {"large": False, "full": False}}) == "" and thumb_do_item({}) == "")
+        ver("miniatura real é aceita", thumb_do_item({"thumbnail": {"medium": ["https://s/up/a-300x200.jpg", 300, 200, True]}}) == "https://s/up/a-300x200.jpg")
+        ver("documento: anexo vem como ID, nunca como URL", documento_do_item({"document_type": "attachment", "document": "321"}) == (None, 321))
+        ver("documento: URL no src do HTML é usada como reserva", documento_do_item({"document_type": "attachment", "document": "321", "document_as_html": '<div><img src="https://s/up/a.jpg"></div>'}) == ("https://s/up/a.jpg", 321))
+        ver("documento: tipo url", documento_do_item({"document_type": "url", "document": "https://s/y.png"}) == ("https://s/y.png", None))
+        ver("documento: vazio", documento_do_item({"document_type": "empty", "document": ""}) == (None, None))
+        ver("radical ignora -1024x768 e -scaled", radical("https://s/up/a-1024x768.jpg") == radical("https://s/up/a-scaled.jpg") == radical("https://s/up/a.JPG") == "a")
+        ver("radical distingue arquivos diferentes", radical("https://s/up/a.jpg") != radical("https://s/up/b-300x200.jpg"))
+        ver("TIFF/PDF não são imagem de navegador", not e_imagem("https://s/a.tif") and not e_imagem(None, "application/pdf") and e_imagem("https://s/a.jpg"))
+        # --- passo da sincronização ---
+        c = connect()
+        def linha(i, cod, thumb, doc, mime_ok=True):
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,thumb_url,json) VALUES (?,8013,'draft','t',?,?,?)", (i, cod, thumb, _j.dumps(doc)))
+        A = lambda n: {"document_type": "attachment", "document": str(n)}
+        linha(1, "C1", "https://s/up/a-1024x768.jpg", A(11))                                  # miniatura certa
+        linha(2, "C2", "", A(12))                                                           # sem miniatura, documento JPG
+        linha(3, "C3", "https://s/up/zzz-300x200.jpg", A(13))                               # miniatura de OUTRO arquivo
+        linha(4, "C4", "", A(14))                                                           # documento TIFF
+        linha(5, "C5", "", {"document_type": "url", "document": "https://s/y.png"})        # url direta
+        linha(6, "C6", "", {"document_type": "empty", "document": ""})                      # nada
+        linha(7, "C7", "", {**A(99), "document_as_html": '<img src="https://s/up/h.jpg">'})  # anexo que a API não devolve
+        c.commit()
+        class Fake:
+            def anexos(self, ids):
+                return {11: {"url": "https://s/up/a.jpg", "mime": "image/jpeg", "large": None, "medium": None},
+                        12: {"url": "https://s/up/b.jpg", "mime": "image/jpeg", "large": "https://s/up/b-1024x768.jpg", "medium": None},
+                        13: {"url": "https://s/up/outro.jpg", "mime": "image/jpeg", "large": None, "medium": None},
+                        14: {"url": "https://s/up/c.tif", "mime": "image/tiff", "large": None, "medium": None}}
+        r = resolver_anexos(c, Fake(), 8013, _divergencia, log=lambda *a: None)
+        L = {x["codigo_detectado"]: x for x in c.execute("SELECT * FROM wp_item")}
+        ver("miniatura certa fica e é marcada 'miniatura'", L["C1"]["imagem_origem"] == "miniatura" and L["C1"]["documento_url"] == "https://s/up/a.jpg")
+        ver("sem miniatura: usa o próprio documento (versão large)", L["C2"]["thumb_url"] == "https://s/up/b-1024x768.jpg" and L["C2"]["imagem_origem"] == "documento")
+        ver("documento TIFF não vira imagem (sem imagem, sem inventar)", L["C4"]["thumb_url"] is None and L["C4"]["imagem_origem"] == "" and L["C4"]["documento_url"] == "https://s/up/c.tif")
+        ver("url direta vira imagem", L["C5"]["thumb_url"] == "https://s/y.png" and L["C5"]["imagem_origem"] == "documento")
+        ver("item sem documento: sem imagem", L["C6"]["thumb_url"] is None and L["C6"]["imagem_origem"] == "")
+        ver("anexo ausente na API: usa o src do HTML", L["C7"]["thumb_url"] == "https://s/up/h.jpg" and L["C7"]["imagem_origem"] == "documento")
+        dv = c.execute("SELECT codigo, valor_painel, valor_site FROM divergencia_site WHERE campo='miniatura_diferente_do_documento'").fetchall()
+        ver("miniatura de outro arquivo vira divergência", len(dv) == 1 and dv[0][0] == "C3" and dv[0][1] == "outro" and dv[0][2] == "zzz", str([tuple(x) for x in dv]))
+        ver("contagens", (r["com_miniatura"], r["via_documento"], r["sem_imagem"], r["divergentes"]) == (2, 3, 2, 1), str(r))
+        # API fora do ar: não derruba a sincronização
+        c.execute("UPDATE wp_item SET thumb_url=NULL, documento_url=NULL, imagem_origem=NULL"); c.commit()
+        class Quebrado:
+            def anexos(self, ids): raise RuntimeError("WordPress fora do ar")
+        r = resolver_anexos(c, Quebrado(), 8013, _divergencia, log=lambda *a: None)
+        L = {x["codigo_detectado"]: x for x in c.execute("SELECT * FROM wp_item")}
+        ver("anexos indisponíveis: não quebra e usa o que o item já trazia", L["C7"]["imagem_origem"] == "documento" and L["C5"]["imagem_origem"] == "documento" and L["C2"]["imagem_origem"] == "", str(r))
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -218,6 +275,14 @@ else:
 print("5) Edição de textos da folha (rota nova, com Tainacan falso)")
 rc, out = rodar("edicao", f"{tmp}/edicao.db")
 if rc != 0: ok(False, f"teste de edição não rodou -> {out[-600:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st, nome, det = (l.split("|") + [""])[:3]; ok(st == "ok", f"{nome}" + (f" ({det})" if det and st != "ok" else ""))
+
+print("6) Imagens do site (miniatura x documento, sem planta falsa)")
+rc, out = rodar("imagens", f"{tmp}/imagens.db")
+if rc != 0: ok(False, f"teste de imagens não rodou -> {out[-600:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

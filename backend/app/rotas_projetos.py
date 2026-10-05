@@ -288,7 +288,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
 @router.get("/itens/{codigo}")
 def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
-    i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, w.thumb_url, w.url AS site_url, w.documento_url, w.metadados,
+    i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, w.thumb_url, w.url AS site_url, w.documento_url, w.imagem_origem, w.metadados,
                               w.id AS wp_id_exato, i.tainacan_item_id AS tainacan_item_id_salvo
                        FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                        LEFT JOIN wp_item w ON w.id=(
@@ -306,6 +306,8 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
     d["tainacan_item_id"] = d.pop("wp_id_exato", None)
+    from .imagens import e_imagem
+    d["imagem_grande"] = d.get("documento_url") if e_imagem(d.get("documento_url")) else None
     d["metadados_site"] = {k2: v for k2, v in md.items() if v and k2 in ("Tipo de desenho", "Técnica", "Suporte original", "Endereço", "Cliente",
                            "Fotógrafo", "Data do registro fotográfico", "Informação atribuída pela catalogação", "Descrição", "Arquiteto")}
     return {"item": d, "anterior": vizinhos[k - 1] if k > 0 else None, "proxima": vizinhos[k + 1] if k < len(vizinhos) - 1 else None,
