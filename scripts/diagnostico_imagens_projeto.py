@@ -7,9 +7,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from app.config import settings
 from app.imagens import radical, e_imagem
 
-cod = (sys.argv[1] if len(sys.argv) > 1 else "").strip().upper()
-if not re.fullmatch(r"F\d{3}-P\d{4}", cod):
-    sys.exit("Uso: diagnostico_imagens_projeto.py F006-P0001")
+arg = (sys.argv[1] if len(sys.argv) > 1 else "").strip()
+RE_PROJ, RE_ITEM = r"F\d{3}-P\d{4}", r"F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}"
+modo = "projeto" if re.fullmatch(RE_PROJ, arg.upper()) else "item" if re.fullmatch(RE_ITEM, arg.upper()) else "url" if arg else None
+if not modo:
+    sys.exit("Uso: diagnostico_imagens_projeto.py F006-P0001 | F006-P0001-1972-S01-D00003 | https://camp.arq.br/acervo-camp/<slug>/")
+cod = arg.upper()
 con = sqlite3.connect(f"file:{settings.CAMP_DB_PATH}?mode=ro", uri=True); con.row_factory = sqlite3.Row
 def base(u): return (u or "").split("?")[0].rsplit("/", 1)[-1] or "—"
 def cfg(k, pad):
@@ -17,6 +20,47 @@ def cfg(k, pad):
     return int(r[0]) if r and str(r[0]).strip().isdigit() else pad
 
 print(f"banco: {settings.CAMP_DB_PATH}")
+
+def _linha(r):
+    return (f"id {r['id']:>6} · coleção {r['colecao_id']} · {r['status']:7} · código {r['codigo_detectado'] or '—'}\n"
+            f"        título : {r['titulo']}\n        url    : {r['url']}\n        thumb  : {base(r['thumb_url'])}   documento: {base(r['documento_url'])}")
+
+def _quem_aponta(wid):
+    return [x["codigo"] for x in con.execute("SELECT codigo FROM item WHERE tainacan_item_id=?", (wid,))] + \
+           [x["codigo"] for x in con.execute("SELECT codigo FROM projeto WHERE tainacan_item_id=?", (wid,))]
+
+def modo_url(entrada):
+    from urllib.parse import urlparse
+    slug = [x for x in urlparse(entrada).path.split("/") if x][-1] if "/" in entrada else entrada
+    print(f"\n== PÁGINA PÚBLICA: slug '{slug}'")
+    rs = con.execute("SELECT * FROM wp_item WHERE slug=? OR url LIKE ?", (slug, f"%{slug}%")).fetchall()
+    if not rs: sys.exit("   nenhum item do espelho tem esse slug/URL (espelho desatualizado? ou a página não é de um item do Tainacan)")
+    for r in rs:
+        print("   " + _linha(r))
+        print(f"        painel aponta para este item: {_quem_aponta(r['id']) or 'NINGUÉM'}")
+        if r["codigo_detectado"]:
+            outros = con.execute("SELECT id,colecao_id,status,slug FROM wp_item WHERE codigo_detectado=? AND id<>?", (r["codigo_detectado"], r["id"])).fetchall()
+            print(f"        outros itens do site com o MESMO código {r['codigo_detectado']}: {len(outros)}" + ("  -> " + ", ".join(f"id {o['id']} ({o['status']}, {o['slug']})" for o in outros) if outros else ""))
+    sys.exit(0)
+
+def modo_item(codigo):
+    i = con.execute("SELECT codigo,titulo,tainacan_item_id,status_site,arquivo_jpg FROM item WHERE codigo=?", (codigo,)).fetchone()
+    if not i: sys.exit(f"Folha {codigo} não existe no painel")
+    print(f"\n== FOLHA: {i['codigo']} · {i['titulo']} · status {i['status_site']} · item local aponta para id {i['tainacan_item_id']} · arquivo local {base(i['arquivo_jpg'])}")
+    cid = cfg("tainacan.itens_collection_id", 8013)
+    rs = con.execute("SELECT * FROM wp_item WHERE codigo_detectado=? OR id=? ORDER BY id", (codigo, i["tainacan_item_id"] or -1)).fetchall()
+    print(f"\n== ITENS DO SITE LIGADOS A ESTA FOLHA: {len(rs)}")
+    for r in rs: print("   " + _linha(r))
+    usado = con.execute("SELECT id,url FROM wp_item WHERE codigo_detectado=? AND colecao_id=? ORDER BY id DESC LIMIT 1", (codigo, cid)).fetchone()
+    print(f"\n== O QUE A TELA DA FOLHA USA (maior id com esse código na coleção {cid}): " + (f"id {usado['id']} -> {usado['url']}" if usado else "nenhum"))
+    if i["tainacan_item_id"] and usado and usado["id"] != i["tainacan_item_id"]:
+        print(f"   ATENÇÃO: a folha aponta para o id {i['tainacan_item_id']}, mas a tela usa o id {usado['id']} (itens diferentes!)")
+    if len([r for r in rs if r["colecao_id"] == cid]) > 1:
+        print("   ATENÇÃO: mais de um item do site com o mesmo código — a tela pode estar mostrando o item errado.")
+    sys.exit(0)
+
+if modo == "url": modo_url(arg)
+if modo == "item": modo_item(cod)
 p = con.execute("SELECT codigo,fundo_codigo,titulo,status_site,tainacan_item_id FROM projeto WHERE codigo=?", (cod,)).fetchone()
 if not p: sys.exit(f"Projeto {cod} não existe no painel")
 print(f"\n== PROJETO: {p['codigo']} · {p['titulo']} · status {p['status_site']} · dossiê no site id {p['tainacan_item_id']}")
