@@ -238,6 +238,101 @@ def filho(modo):
         ver("caminho local existente é preservado", jpg.get("4") == "/mnt/qnap/acervos/D00004.jpg", str(jpg.get("4")))
         ver("URL existente é preservada", jpg.get("5") == "https://velho/x5.jpg", str(jpg.get("5")))
         ver("importador criou 2 e atualizou 3", r["itens_novos"] == 2 and r["itens_atualizados"] == 3, str({k: r[k] for k in ("itens_novos", "itens_atualizados")}))
+    elif modo == "sync":
+        init_db(); aplicar_migracoes()
+        import json as _j, sqlite3 as _s, time as _t
+        import app.sincronizador as sz
+        from app.imagens import resolver_anexos  # noqa: F401
+        db = os.environ["CAMP_DB_PATH"]
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)")
+        # ---- espelho ANTERIOR (rodada de ontem) ----
+        c.execute("INSERT INTO wp_colecao (id,nome) VALUES (8007,'Projetos'),(8013,'Acervo')")
+        c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (77,'Fundos'),(78,'Velha')")
+        c.execute("INSERT INTO wp_termo (id,taxonomia_id,nome) VALUES (1,77,'Fundo teste'),(2,77,'Termo que sumiu'),(3,78,'Outro')")
+        old = "2020-01-01 00:00:00"
+        c.execute("UPDATE wp_colecao SET visto_em=?", (old,)); c.execute("UPDATE wp_taxonomia SET visto_em=?", (old,)); c.execute("UPDATE wp_termo SET visto_em=?", (old,))
+        for i in (1, 2):
+            cod = f"F099-P0001-1970-S01-D0000{i}"
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,fundo_detectado,projeto_detectado,thumb_url,documento_url,imagem_origem,visto_em) VALUES (?,8013,'publish',?,?,'F099','F099-P0001','https://velho/x.jpg','https://velho/x.jpg','documento',?)",
+                      (i, f"Antigo {i}", cod, old))
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,visto_em) VALUES (501,8013,'Técnica','Text',?)", (old,))
+        # divergências: da sincronização (somem), pendência de escrita (fica) e uma já resolvida (fica)
+        c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,resolvida) VALUES ('item','X','sem_codigo',0),('item','D00001','pendente_Técnica_no_site',0),('item','Y','sem_codigo',1)")
+        c.commit(); c.close()
+        def mirror():
+            k = _s.connect(db, timeout=5)
+            r = {t: {x[0] for x in k.execute(f"SELECT id FROM {t}")} for t in ("wp_item", "wp_termo", "wp_taxonomia", "wp_colecao", "wp_metadado")}
+            k.close(); return r
+        def contem(depois, antes_):   # nada do que havia pode ter sumido (pode ter entrado coisa nova)
+            return all(antes_[t] <= depois[t] for t in antes_)
+        antes = mirror()
+        def item(i, cod, titulo, anexo=None):
+            return {"id": i, "title": titulo, "slug": titulo.lower().replace(" ", "-"), "url": f"https://fake/{i}/", "status": "publish", "modification_date": "2026-10-05",
+                    "document_type": "attachment", "document": str(anexo or i), "document_mimetype": "image/jpeg", "thumbnail": {},
+                    "metadata": {"1": {"name": "Código do documento", "value_as_string": cod}}}
+        sonda = {"durante": [], "escrita_ms": []}
+        class Fake:
+            falha_na_2a = False
+            def __init__(self, log=print): self.base = "https://fake"
+            def quem_sou(self): return {"name": "teste", "roles": ["administrator"]}
+            def taxonomias(self): return [{"id": 77, "name": "Fundos", "slug": "fundos"}]
+            def termos(self, tid): return [{"id": 1, "name": "Fundo teste", "slug": "fundo-teste"}, {"id": 9, "name": "Termo novo", "slug": "termo-novo"}]
+            def colecoes(self): return [{"id": 8007, "name": "Projetos", "slug": "p", "url": "u"}, {"id": 8013, "name": "Acervo", "slug": "a", "url": "u"}]
+            def metadados_da_colecao(self, cid): return [{"id": 501, "name": "Técnica", "metadata_type": "Tainacan\\Metadata_Types\\Text", "metadata_type_options": {}}] if cid == 8013 else []
+            def itens(self, cid):
+                if cid == 8007:
+                    yield {"id": 100, "title": "P0001 — Casa", "slug": "p0001-casa", "url": "u", "status": "publish", "metadata": {"1": {"name": "Código de Catalogação", "value_as_string": "F099-P0001"}}}
+                    return
+                yield item(1, "F099-P0001-1970-S01-D00001", "Planta atualizada")
+                # ---- no MEIO da rede: o painel precisa continuar enxergando o espelho ANTIGO inteiro ----
+                sonda["durante"].append(mirror())
+                k = _s.connect(db, timeout=2); t0 = _t.time()
+                try:
+                    k.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('x','x','x','login')"); k.commit()
+                    sonda["escrita_ms"].append(int((_t.time() - t0) * 1000))
+                except _s.OperationalError:   # o painel ficaria travado (é o que o código antigo fazia)
+                    sonda["escrita_ms"].append(99999)
+                k.close()
+                if Fake.falha_na_2a: raise RuntimeError("WordPress caiu no meio")
+                yield item(3, "F099-P0001-1970-S01-D00003", "Planta nova")
+                yield {"id": 4, "title": "Sem código nenhum", "slug": "sem-codigo", "url": "u", "status": "draft", "metadata": {}}
+            def anexos(self, ids): return {i: {"url": f"https://fake/up/{i}.jpg", "mime": "image/jpeg", "large": f"https://fake/up/{i}-1024x768.jpg", "medium": None} for i in ids}
+            def paginas(self): return []
+        sz.WP = Fake
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # ===== rodada que FALHA no meio: nada do espelho antigo pode ser perdido =====
+        Fake.falha_na_2a = True
+        r = sz.executar(True, lambda *a, **k: None)
+        ver("rodada com falha devolve ok=False", r["ok"] is False, str(r)[:80])
+        ver("falha no meio: NADA do espelho anterior foi apagado", contem(mirror(), antes), str({t: sorted(antes[t] - mirror()[t]) for t in antes}))
+        k = connect(); ver("falha registrada na tabela de sincronizações", k.execute("SELECT ok FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()[0] == 0)
+        ver("falha: divergências antigas intactas", k.execute("SELECT count(*) FROM divergencia_site WHERE resolvida=0").fetchone()[0] == 2); k.close()
+        # ===== rodada completa =====
+        Fake.falha_na_2a = False; sonda["durante"].clear()
+        r = sz.executar(True, lambda *a, **k: None)
+        ver("rodada completa ok=True", r["ok"] is True, str(r)[:100])
+        ver("DURANTE a rede o espelho nunca ficou vazio/parcial (tudo o que havia continuava lá)", bool(sonda["durante"]) and all(contem(m, antes) for m in sonda["durante"]), str({t: sorted(antes[t] - sonda["durante"][0][t]) for t in antes}))
+        ver("DURANTE a rede o painel consegue GRAVAR (nenhum lock longo)", max(sonda["escrita_ms"]) < 500, f"{sonda['escrita_ms']} ms")
+        k = connect()
+        ids = {x[0] for x in k.execute("SELECT id FROM wp_item WHERE colecao_id=8013")}
+        ver("item que o site tem continua e foi atualizado", 1 in ids and k.execute("SELECT titulo FROM wp_item WHERE id=1").fetchone()[0] == "Planta atualizada")
+        ver("item novo do site entrou", 3 in ids and 4 in ids)
+        ver("item que sumiu do site saiu do espelho", 2 not in ids)
+        ver("termo que sumiu saiu; termo novo entrou", {x[0] for x in k.execute("SELECT id FROM wp_termo")} == {1, 9})
+        ver("taxonomia que sumiu saiu", {x[0] for x in k.execute("SELECT id FROM wp_taxonomia")} == {77})
+        ver("imagem resolvida pelo anexo, na mesma gravação", k.execute("SELECT documento_url, thumb_url, imagem_origem FROM wp_item WHERE id=3").fetchone()[:] == ("https://fake/up/3.jpg", "https://fake/up/3-1024x768.jpg", "documento"), str(tuple(k.execute("SELECT documento_url, thumb_url, imagem_origem FROM wp_item WHERE id=3").fetchone())))
+        ver("item sem imagem do site fica sem imagem (nunca herda a do antigo)", k.execute("SELECT imagem_origem FROM wp_item WHERE id=4").fetchone()[0] in ("", None))
+        dv = {(x["codigo"], x["campo"], x["resolvida"]) for x in k.execute("SELECT codigo,campo,resolvida FROM divergencia_site")}
+        ver("divergência antiga da sincronização foi substituída", ("X", "sem_codigo", 0) not in dv)
+        ver("PENDÊNCIA de escrita no site é preservada", ("D00001", "pendente_Técnica_no_site", 0) in dv)
+        ver("divergência já resolvida é preservada", ("Y", "sem_codigo", 1) in dv)
+        ver("divergência nova (item sem código) foi registrada", ("4", "sem_codigo", 0) in dv)
+        ver("metadados da coleção atualizados", k.execute("SELECT count(*) FROM wp_metadado WHERE visto_em > '2021'").fetchone()[0] == 1)
+        ver("contagem do projeto reconciliada com o dossiê do site", k.execute("SELECT count(*) FROM wp_item WHERE colecao_id=8007").fetchone()[0] == 1)
+        k.close()
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -324,6 +419,14 @@ else:
 print("7) Importador do site não grava mais ID de anexo como arquivo")
 rc, out = rodar("importador", f"{tmp}/importador.db")
 if rc != 0: ok(False, f"teste do importador não rodou -> {out[-500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st, nome, det = (l.split("|") + [""])[:3]; ok(st == "ok", f"{nome}" + (f" ({det})" if det and st != "ok" else ""))
+
+print("8) Sincronização: espelho nunca vazio nem parcial; pendências preservadas")
+rc, out = rodar("sync", f"{tmp}/sync.db")
+if rc != 0: ok(False, f"teste de sincronização não rodou -> {out[-700:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

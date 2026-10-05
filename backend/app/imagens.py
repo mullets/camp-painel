@@ -66,7 +66,7 @@ def radical(url: str | None) -> str:
     return stem
 
 
-def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print) -> dict:
+def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print, info: dict | None = None) -> dict:
     """Passo da sincronização: troca o ID do anexo pela URL real do arquivo, completa a miniatura que falta
     com o próprio documento (quando for imagem) e aponta miniaturas que não são do arquivo do item."""
     out = {"itens": 0, "com_miniatura": 0, "via_documento": 0, "sem_imagem": 0, "divergentes": 0, "anexos": 0}
@@ -81,12 +81,13 @@ def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print) -> di
         dados.append((r, it, url, anexo))
         if anexo:
             ids.add(anexo)
-    info: dict = {}
-    if ids:
-        try:
-            info = wp.anexos(sorted(ids))
-        except Exception as e:  # noqa: BLE001  (sem resolver: segue com o que veio no próprio item)
-            log(f"  (anexos da coleção {colecao_id}: {e})")
+    if info is None:   # chamada avulsa: busca na rede aqui. Na sincronização os anexos já vêm buscados (sem rede dentro da transação).
+        info = {}
+        if ids:
+            try:
+                info = wp.anexos(sorted(ids))
+            except Exception as e:  # noqa: BLE001  (sem resolver: segue com o que veio no próprio item)
+                log(f"  (anexos da coleção {colecao_id}: {e})")
     out["anexos"] = len(info)
     for r, it, url, anexo in dados:
         a = info.get(anexo) if anexo else None
