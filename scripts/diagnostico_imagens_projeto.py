@@ -111,6 +111,31 @@ fora = [r for r in fora if r["colecao_id"] != proj_cid]   # o dossiê (coleção
 print(f"\n== CITAM {cod} MAS FICAM FORA DA TELA: {len(fora)}")
 for r in fora[:8]: print(f"   id {r['id']} coleção {r['colecao_id']} {r['status']} código {r['codigo_detectado']} fundo {r['fundo_detectado']} projeto {r['projeto_detectado']}")
 
+# ---- por onde o site liga itens a este projeto (3 caminhos independentes) ----
+def _md(r):
+    try: return json.loads(r["metadados"] or "{}")
+    except ValueError: return {}
+def _agrupa(rs):
+    g = collections.Counter((r["fundo_detectado"] or "—", r["projeto_detectado"] or "—", r["status"]) for r in rs)
+    return ", ".join(f"[fundo {a} · projeto {b} · {c}] x{n}" for (a, b, c), n in g.most_common(5)) or "nenhum"
+dossie = p["tainacan_item_id"]
+todos = con.execute("SELECT id,colecao_id,status,titulo,slug,codigo_detectado,fundo_detectado,projeto_detectado,metadados FROM wp_item WHERE colecao_id=?", (itens_cid,)).fetchall()
+por_rel = [r for r in todos if dossie and str(_md(r).get("Projeto") or "").strip() == str(dossie)]
+por_txt = [r for r in todos if cod in f"{r['titulo'] or ''} {r['slug'] or ''} {r['metadados'] or ''}".upper().replace(" ", "")]
+print(f"\n== COMO O SITE LIGA ITENS A ESTE PROJETO (dossiê id {dossie})")
+print(f"   1) pelo vínculo 'Projeto' do Tainacan : {len(por_rel)} item(ns) -> classificados como {_agrupa(por_rel)}")
+print(f"   2) pelo texto (título/slug/metadados)  : {len(por_txt)} item(ns) citam {cod} -> {_agrupa(por_txt)}")
+locais_id = [(x["codigo"], x["tainacan_item_id"]) for x in con.execute("SELECT codigo,tainacan_item_id FROM item WHERE projeto_codigo=?", (cod,))]
+com_id = [(c, i) for c, i in locais_id if i]
+espelho = {r["id"]: r for r in todos}
+achados = [(c, espelho[i]) for c, i in com_id if i in espelho]
+ok_cls = [c for c, r in achados if r["projeto_detectado"] == cod and r["fundo_detectado"] == p["fundo_codigo"] and (r["codigo_detectado"] or "").startswith(cod + "-")]
+print(f"   3) pelo ID guardado em cada folha local: {len(com_id)} de {len(locais_id)} folhas têm ID do site; {len(achados)} desses IDs existem no espelho; {len(ok_cls)} estão classificados neste projeto")
+for c, r in [(c, r) for c, r in achados if c not in ok_cls][:6]:
+    print(f"      {c} -> item {r['id']} ({r['status']}) classificado como código={r['codigo_detectado']} fundo={r['fundo_detectado']} projeto={r['projeto_detectado']}")
+sumidos = [c for c, i in com_id if i not in espelho]
+if sumidos: print(f"      {len(sumidos)} folha(s) apontam para um ID que NÃO existe mais no espelho (apagado/na lixeira no site?), ex.: {sumidos[:3]}")
+
 # conferência com o catálogo local
 loc = {r["codigo"]: r for r in con.execute("SELECT codigo,arquivo_jpg,arquivo_tif,tainacan_item_id FROM item WHERE projeto_codigo=?", (cod,))}
 def _sujo(v): return bool(re.fullmatch(r"\d+", str(v).strip())) or str(v).lstrip().startswith("<")
