@@ -177,6 +177,13 @@ def contexto_estacoes(request: Request, fundo: str | None = None) -> dict:
          ORDER BY f.codigo
     """).fetchall()]
     resposta = {"fundos": fundos}
+    # Operadores: só NOMES (sem e-mail/papel) para a estação mostrar "Quem está
+    # operando?". As estações não fazem login; o nome é só identificação.
+    resposta["operadores"] = [dict(r) for r in con.execute("""
+        SELECT id, nome FROM usuario
+         WHERE ativo=1 AND papel IN ('master', 'admin', 'operador') AND TRIM(COALESCE(nome, '')) <> ''
+         ORDER BY nome COLLATE NOCASE
+    """).fetchall()]
     if fundo:
         if not any(f["codigo_fundo"] == fundo for f in fundos):
             con.close()
@@ -198,6 +205,8 @@ class ReservaProjetoEstacao(BaseModel):
     ano: int = 0
     cidade: str | None = None
     identificacao_original: str | None = None
+    operador: str | None = None        # nome informado na estação (sem login)
+    chave_reserva: str | None = None   # uuid gerado pela estação: repetir a chamada não cria outro projeto
 
 
 class HeartbeatEstacao(BaseModel):
@@ -218,6 +227,11 @@ class HeartbeatEstacao(BaseModel):
 def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict:
     """Reserva e cria um projeto para a estação usando o contador autoritativo do painel."""
     ip = _exigir_rede_local(request)
+    operador = " ".join((d.operador or "").split())[:80]
+    ator = f"{operador} (estacao@{ip})" if operador else f"estacao@{ip}"
+    chave = (d.chave_reserva or "").strip().lower()
+    if chave and not (len(chave) == 32 and all(c in "0123456789abcdef" for c in chave)):
+        chave = ""
     titulo = d.titulo.strip()
     if not titulo:
         raise HTTPException(400, "Nome do projeto é obrigatório")
@@ -227,6 +241,20 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
     con = connect()
     try:
         con.execute("BEGIN IMMEDIATE")
+        if chave:
+            # A estação repete a reserva quando a resposta se perde (timeout): devolve a mesma.
+            ja = con.execute(
+                "SELECT codigo FROM evento WHERE entidade='projeto' AND tipo='criado' AND detalhe LIKE ?",
+                (f'%"chave_reserva": "{chave}"%',)).fetchone()
+            if ja:
+                p = con.execute("SELECT codigo, fundo_codigo, numero, titulo, ano, cidade, identificacao_original "
+                                "FROM projeto WHERE codigo=?", (ja[0],)).fetchone()
+                con.rollback()
+                if p:
+                    return {"codigo": p[0], "numero_projeto": f"P{p[2]:04d}", "fundo_codigo": p[1],
+                            "titulo": p[3], "ano": p[4] or 0, "cidade": p[5],
+                            "identificacao_original": p[6], "repetida": True}
+                con.execute("BEGIN IMMEDIATE")
         f = con.execute("SELECT codigo FROM fundo WHERE codigo=? AND ativo=1", (d.fundo_codigo,)).fetchone()
         if not f:
             raise HTTPException(404, "Fundo não existe ou está inativo")
@@ -243,10 +271,12 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         con.execute("""
             INSERT INTO evento (entidade, codigo, tipo, ator, detalhe)
             VALUES ('projeto',?,'criado',?,?)
-        """, (codigo, f"estacao@{ip}", json.dumps({
+        """, (codigo, ator, json.dumps({
             "titulo": titulo,
             "origem": "estacao",
             "identificacao_original": identificacao,
+            "operador": operador or None,
+            "chave_reserva": chave or None,
         }, ensure_ascii=False)))
         con.commit()
     except HTTPException:
