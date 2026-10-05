@@ -12,7 +12,7 @@ def ok(cond, msg):
     if not cond: falhas.append(msg)
 
 def rodar(modo, db):
-    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"))
+    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"))
     r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
 
@@ -51,6 +51,15 @@ def filho(modo):
         ]
         for nome, got, esp in casos:
             print(f"{'ok' if got == esp else 'FALHA'}|{nome}|esperado {esp} obtido {got}")
+        import json as _j2
+        from app.log_tecnico import LOG_FILE
+        linhas = [_j2.loads(l) for l in open(LOG_FILE, encoding="utf-8")] if LOG_FILE.exists() else []
+        neg = [l for l in linhas if l.get("evento") == "estacao_negada"]
+        motivos = {l["motivo"] for l in neg}
+        print(f"{'ok' if {'fora_da_lan', 'via_proxy_sem_token', 'token_ausente_ou_invalido'} <= motivos else 'FALHA'}|recusa registra o MOTIVO no log técnico|{sorted(motivos)}")
+        print(f"{'ok' if all('segredo-de-teste' not in _j2.dumps(l) and 'errado' not in _j2.dumps(l) for l in neg) else 'FALHA'}|o log nunca grava o token enviado|")
+        proxy = [l for l in neg if l["motivo"] == "via_proxy_sem_token"]
+        print(f"{'ok' if proxy and 'cf-connecting-ip' in proxy[0]['cabecalhos_proxy'] or proxy and 'x-forwarded-for' in proxy[0]['cabecalhos_proxy'] else 'FALHA'}|log diz quais cabeçalhos de proxy vieram|{proxy[0]['cabecalhos_proxy'] if proxy else ''}")
     elif modo == "lock":
         import threading, time
         init_db(); aplicar_migracoes()
