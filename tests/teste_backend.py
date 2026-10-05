@@ -12,7 +12,7 @@ def ok(cond, msg):
     if not cond: falhas.append(msg)
 
 def rodar(modo, db):
-    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"))
+    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"), CAMP_BACKUP_DIR=str(pathlib.Path(db).parent / "backups"))
     r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
 
@@ -342,6 +342,101 @@ def filho(modo):
         ver("contagem do projeto reconciliada com o dossiê do site", k.execute("SELECT count(*) FROM wp_item WHERE colecao_id=8007").fetchone()[0] == 1)
         k.close()
         for l in res: print(l)
+    elif modo == "backup":
+        init_db(); aplicar_migracoes()
+        import gzip as _gz, json as _j, threading, time as _t, tempfile as _tf
+        from datetime import datetime, timedelta
+        from pathlib import Path as _P
+        from app import backup as bk, auth
+        from app.config import settings as _cfg
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa',1970)")
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,?,?,'importado')", (f"F099-P0001-1970-S01-D0000{n}", "F099-P0001", "S01", n))
+        c.commit(); c.close()
+        tmp = _P(_tf.mkdtemp()); res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        agora = datetime.now()
+        # ---- backup básico + restauração verificada ----
+        n_fundos = connect().execute("SELECT count(*) FROM fundo").fetchone()[0]   # inclui F031/F032 criados pela migração 007
+        r = bk.fazer_backup(agora=agora)
+        ver("backup cria arquivo compactado", (bk.PASTA / r["arquivo"]).is_file() and r["arquivo"].endswith(".db.gz"), r["arquivo"])
+        ver("contagens da cópia batem com o banco", (r["contagens"]["fundo"], r["contagens"]["projeto"], r["contagens"]["item"]) == (n_fundos, 1, 3) and r["contagens"]["usuario"] == 0, str(r["contagens"]))
+        ver("ULTIMO.json gravado com ok=True", bk.estado()["ok"] is True and bk.estado()["existe"])
+        v = bk.restaurar_para(bk.PASTA / r["arquivo"], tmp / "rest.db")
+        ver("restauração verificada: íntegra e com os mesmos dados", v["integridade"] == "ok" and v["item"] == 3 and v["projeto"] == 1, str(v))
+        try:
+            bk.restaurar_para(bk.PASTA / r["arquivo"], _P(_cfg.CAMP_DB_PATH)); ver("RECUSA restaurar por cima do banco em uso", False)
+        except bk.BackupErro:
+            ver("RECUSA restaurar por cima do banco em uso", True)
+        # ---- consistência com o banco sendo gravado durante a cópia ----
+        stop, n = threading.Event(), [0]
+        def escreve():
+            k = __import__("sqlite3").connect(_cfg.CAMP_DB_PATH, timeout=30)
+            while not stop.is_set():
+                k.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('x','x','x','escritor')"); k.commit(); n[0] += 1
+            k.close()
+        t = threading.Thread(target=escreve); t.start(); _t.sleep(0.3)
+        r2 = bk.fazer_backup(agora=agora + timedelta(seconds=1)); stop.set(); t.join()
+        ver("backup feito DURANTE gravações continua íntegro", r2["contagens"]["integridade"] == "ok" and n[0] > 0, f"{n[0]} gravações concorrentes")
+        # ---- cópia extra ----
+        ex = tmp / "qnap"; ex.mkdir()
+        r3 = bk.fazer_backup(destino_extra=str(ex), agora=agora + timedelta(seconds=2))
+        ver("cópia extra criada e conferida", r3["extra"]["ok"] and (ex / "camp-painel" / r3["arquivo"]).is_file())
+        r4 = bk.fazer_backup(destino_extra="/pasta/que/nao/existe", agora=agora + timedelta(seconds=3))
+        ver("cópia extra que falha NÃO invalida o backup local", r4["extra"]["ok"] is False and (bk.PASTA / r4["arquivo"]).is_file(), str(r4["extra"]))
+        # ---- verificação reprovada: nada é aceito e o anterior continua ----
+        antes = sorted(p.name for p in bk.PASTA.iterdir() if p.name.startswith("camp-"))
+        original = bk._inspeciona
+        bk._inspeciona = lambda p: {"integridade": "corrompido"}
+        try:
+            bk.fazer_backup(agora=agora + timedelta(seconds=4)); ver("cópia reprovada é recusada", False)
+        except bk.BackupErro:
+            ver("cópia reprovada é recusada", True)
+        bk._inspeciona = original
+        depois = sorted(p.name for p in bk.PASTA.iterdir() if p.name.startswith("camp-"))
+        ver("falha não apaga nem cria backup e não deixa lixo (.tmp)", antes == depois and not list(bk.PASTA.glob(".camp-*.tmp")))
+        e = bk.estado()
+        ver("estado registra a falha mas mantém o último sucesso", e["ok"] is False and e["erro"] and e["existe"] and e["idade_horas"] is not None, f"ok={e['ok']} idade={e['idade_horas']}")
+        # ---- retenção com datas simuladas ----
+        ret = tmp / "ret"; ret.mkdir()
+        agora_ret = datetime(2026, 10, 5, 12, 0, 0)
+        d = datetime(2026, 8, 1, 3, 30)
+        while d <= datetime(2026, 10, 5, 3, 30):
+            (ret / f"camp-{d:%Y%m%d-%H%M%S}.db.gz").write_bytes(b"x"); d += timedelta(days=1)
+        for nome in ("camp-20261005-100000.db", "camp-20261001-153000.db.gz", "leia-me.txt", "camp-manual.db", "ULTIMO.json"):
+            (ret / nome).write_bytes(b"x")
+        rem = bk.aplicar_retencao(ret, agora_ret)
+        fica = {p.name for p in ret.iterdir()}
+        ver("retenção: tudo das últimas 24 h fica", {"camp-20261005-033000.db.gz", "camp-20261005-100000.db"} <= fica)
+        dias_ok = all(sum(1 for f in fica if f.startswith(f"camp-{(datetime(2026,10,5).date()-timedelta(days=k)):%Y%m%d}-")) == (2 if k == 0 else 1) for k in range(0, 14))
+        ver("retenção: 1 por dia nos últimos 14 dias (2 hoje, pois ambos <24h)", dias_ok)
+        ver("retenção: no dia com 2 backups fica o mais novo", "camp-20261001-153000.db.gz" in fica and "camp-20261001-033000.db.gz" not in fica)
+        antigos = [f for f in fica if (lambda q: q and q < datetime(2026, 9, 22))(bk._quando(f))]
+        semanas = [tuple(bk._quando(f).date().isocalendar())[:2] for f in antigos]
+        ver("retenção: no máx. 1 por semana entre 14 dias e 8 semanas", len(semanas) == len(set(semanas)) and len(semanas) >= 5, f"{len(semanas)} semanas")
+        ver("retenção: nada com mais de 8 semanas", not [f for f in fica if (lambda q: q and q.date() < datetime(2026, 8, 10).date())(bk._quando(f))])
+        ver("retenção: arquivos que não são backup NÃO são tocados", {"leia-me.txt", "camp-manual.db", "ULTIMO.json"} <= fica)
+        e2 = bk.estado(pasta=ret, agora=agora_ret)
+        ver("estado sem ULTIMO.json usa o backup mais recente (do atualizar.sh)", e2["existe"] and e2["origem"] == "atualizar.sh" and e2["idade_horas"] == 2.0, f"{e2['arquivo']} {e2['idade_horas']}h")
+        ver("estado sem nenhum backup", bk.estado(pasta=tmp / "vazio", agora=agora_ret)["existe"] is False)
+        # ---- API e permissões ----
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(em, se):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": se}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-admin-12345"), cli("op@camp.arq.br", "senha-operador-123")
+        ver("API: operador NÃO vê backup (403)", op.get("/api/backup").status_code == 403 and op.post("/api/backup/agora").status_code == 403)
+        g = adm.get("/api/backup"); ver("API: admin vê o estado", g.status_code == 200 and g.json()["existe"], f"HTTP {g.status_code}")
+        a = adm.post("/api/backup/agora"); ver("API: admin faz backup agora", a.status_code == 200 and a.json()["ok"] and (bk.PASTA / a.json()["arquivo"]).is_file(), f"HTTP {a.status_code} {a.text[:80]}")
+        evs = connect().execute("SELECT count(*) FROM evento WHERE tipo='backup_manual'").fetchone()[0]
+        ver("API: backup manual fica na auditoria", evs == 1)
+        pub = op.get("/api/estacoes").json().get("backup", {})
+        ver("estações: leitura recebe o estado do backup SEM caminhos", "existe" in pub and "idade_horas" in pub and "arquivo" not in pub and "extra" not in pub, str(sorted(pub)))
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -436,6 +531,14 @@ else:
 print("8) Sincronização: espelho nunca vazio nem parcial; pendências preservadas")
 rc, out = rodar("sync", f"{tmp}/sync.db")
 if rc != 0: ok(False, f"teste de sincronização não rodou -> {out[-700:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st, nome, det = (l.split("|") + [""])[:3]; ok(st == "ok", f"{nome}" + (f" ({det})" if det and st != "ok" else ""))
+
+print("9) Backup do banco: consistente, verificado, com retenção e permissões")
+rc, out = rodar("backup", f"{tmp}/backup.db")
+if rc != 0: ok(False, f"teste de backup não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -47,6 +47,14 @@ python scripts/check_ui.py
 echo "== dependências"
 pip install -q -r backend/requirements.txt
 
+for u in camp-painel-backup.service camp-painel-backup.timer; do
+  if [ -f "/etc/systemd/system/$u" ] && ! cmp -s "scripts/$u" "/etc/systemd/system/$u"; then
+    echo "== unidade $u mudou; atualizando systemd"
+    sudo cp "scripts/$u" "/etc/systemd/system/$u"
+    sudo systemctl daemon-reload
+  fi
+done
+
 if ! cmp -s scripts/camp-painel.service /etc/systemd/system/camp-painel.service; then
   echo "== arquivo do serviço mudou; atualizando systemd"
   sudo cp scripts/camp-painel.service /etc/systemd/system/camp-painel.service
@@ -78,5 +86,8 @@ git log --oneline -1
 
 echo "== base em uso:"
 PYTHONPATH=backend python scripts/diagnostico_base.py
+
+echo "== poda de backups antigos (mantém 24h + 14 dias + 8 semanas)"
+python scripts/backup_banco.py --so-retencao || true
 
 echo "== backup preservado em: $BACKUP"

@@ -1,0 +1,10 @@
+[Unit]
+Description=CAMP Acervos — backup do banco do painel
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=camp
+WorkingDirectory=/home/camp/camp-painel
+EnvironmentFile=/home/camp/camp-painel/backend/.env
+ExecStart=/home/camp/camp-painel/.venv/bin/python scripts/backup_banco.py

@@ -156,7 +156,7 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 // leitura não vê o botão
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
-  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.close(); }
+  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
 
 // ---------- IMAGENS: nunca desenhar planta falsa ----------
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
@@ -193,6 +193,21 @@ chk(!txt('#v-projeto').includes('Ver página pública')&&!txt('#v-projeto').incl
 w.route_to('projeto/F003-P0001'); await sleep(1300);
 chk(txt('#v-projeto').includes('Ver página pública')&&[...d.querySelectorAll('#v-projeto a')].some(a=>/\/acervo\/projetos\/f003-p0001-/.test(a.href)),'projeto PUBLICADO deveria ter link /acervo/projetos/f003-p0001-...');
 okl.push('link da página pública: só em item/projeto publicado; rascunho/privado explica por que não abre');
+
+// ---------- BACKUP DO BANCO ----------
+r=await J(ope,'/api/backup'); chk(r.s===403,'operador vendo /api/backup: '+r.s);
+r=await J(ope,'/api/backup/agora',{method:'POST'}); chk(r.s===403,'operador fazendo backup: '+r.s);
+r=await J(adm,'/api/backup'); chk(r.s===200&&r.b.existe===false,'sem backup ainda deveria dar existe=false: '+JSON.stringify(r.b).slice(0,80));
+w.route_to('estacoes'); await sleep(3000);
+chk(!!d.getElementById('bk-painel')&&txt('#bk-painel').includes('sem backup'),'painel de backup deveria dizer "sem backup": '+txt('#est-body').slice(0,60));
+chk(txt('#system-banner').includes('nenhum backup do banco'),'banner global deveria avisar "nenhum backup do banco": "'+txt('#system-banner').slice(0,80)+'"');
+chk(!!d.getElementById('bk-agora'),'botão "Fazer backup agora" não aparece para master');
+await w.backupAgora(); await sleep(3500);
+chk(txt('#bk-painel').includes('em dia'),'depois do backup o painel deveria dizer "em dia": '+txt('#bk-painel').slice(0,90));
+chk(!txt('#system-banner').includes('nenhum backup do banco'),'banner continua acusando falta de backup depois do backup');
+r=await J(adm,'/api/backup'); chk(r.b.existe&&r.b.ok===true&&r.b.quantidade===1&&r.b.contagens.integridade==='ok','API depois do backup: '+JSON.stringify(r.b).slice(0,120));
+r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!('arquivo' in r.b.backup),'operador deveria receber o estado do backup sem caminhos');
+okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

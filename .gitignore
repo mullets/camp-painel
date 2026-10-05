@@ -8,3 +8,5 @@ backend/.env
 node_modules/
 
 backend/logs/
+backend/backups/
+*.db.gz

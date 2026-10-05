@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from . import auth
+from . import backup as bk
 from .config import settings
 from .db import connect
 from .log_tecnico import LOG_FILE, ler_logs
@@ -472,7 +473,33 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     except Exception as e:  # noqa: BLE001
         out["site"]["http"] = {"status": None, "ok": False, "erro": str(e)[:120]}
     con.close()
+    try:
+        out["backup"] = bk.estado_publico()
+    except Exception as e:  # noqa: BLE001  (o painel nunca cai por causa do indicador de backup)
+        out["backup"] = {"existe": False, "erro": str(e)[:120]}
     return out
+
+
+@router.get("/backup")
+def backup_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
+    return {**bk.estado(), "destino_extra": bk.destino_extra_configurado()}
+
+
+@router.post("/backup/agora")
+def backup_agora(u: dict = Depends(auth.exige("admin"))) -> dict:
+    try:
+        r = bk.fazer_backup(destino_extra=bk.destino_extra_configurado())
+    except bk.BackupErro as e:
+        raise HTTPException(500, f"O backup falhou: {e}")
+    con = connect()
+    try:
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('sistema','backup','backup_manual',?,?)",
+                    (u["email"], json.dumps({"arquivo": r["arquivo"], "tamanho_bytes": r["tamanho_bytes"],
+                                             "extra": r["extra"], "removidos": r["removidos"]}, ensure_ascii=False)))
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, **r}
 
 
 

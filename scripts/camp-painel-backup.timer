@@ -1,0 +1,11 @@
+[Unit]
+Description=CAMP Acervos — backup diário do banco do painel (03:30)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=10min
+Persistent=true
+Unit=camp-painel-backup.service
+
+[Install]
+WantedBy=timers.target
