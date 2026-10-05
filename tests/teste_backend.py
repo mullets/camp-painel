@@ -213,6 +213,31 @@ def filho(modo):
         L = {x["codigo_detectado"]: x for x in c.execute("SELECT * FROM wp_item")}
         ver("anexos indisponíveis: não quebra e usa o que o item já trazia", L["C7"]["imagem_origem"] == "documento" and L["C5"]["imagem_origem"] == "documento" and L["C2"]["imagem_origem"] == "", str(r))
         for l in res: print(l)
+    elif modo == "importador":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app.importador_site import executar as importar
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa de teste',1970)")
+        for n, jpg in ((3, "16204"), (4, "/mnt/qnap/acervos/D00004.jpg"), (5, "https://velho/x5.jpg")):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,arquivo_jpg,origem) VALUES (?,?,?,?,?,'importado')",
+                      (f"F099-P0001-1970-S01-D0000{n}", "F099-P0001", "S01", n, jpg))
+        docs = {1: "https://camp.arq.br/u/x1.jpg", 2: "16200", 3: "https://camp.arq.br/u/x3.jpg", 4: "https://camp.arq.br/u/x4.jpg", 5: "https://camp.arq.br/u/x5.jpg"}
+        for n, doc in docs.items():
+            cod = f"F099-P0001-1970-S01-D0000{n}"
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,documento_url,codigo_detectado,metadados) VALUES (?,8013,'private',?,?,?,?,?)",
+                      (8000 + n, f"Folha {n}", f"folha-{n}", doc, cod, _j.dumps({"Código do documento": cod})))
+        c.commit(); c.close()
+        r = importar(log=lambda *a, **k: None)
+        c = connect(); jpg = {r_[0][-1]: r_[1] for r_ in c.execute("SELECT codigo, arquivo_jpg FROM item")}
+        def ver(nome, cond, det=""): print(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("item novo recebe a URL real do documento", jpg.get("1") == "https://camp.arq.br/u/x1.jpg", str(jpg.get("1")))
+        ver("item novo com ID de anexo NÃO grava o ID", jpg.get("2") is None, str(jpg.get("2")))
+        ver("item existente com ID de anexo é corrigido para a URL", jpg.get("3") == "https://camp.arq.br/u/x3.jpg", str(jpg.get("3")))
+        ver("caminho local existente é preservado", jpg.get("4") == "/mnt/qnap/acervos/D00004.jpg", str(jpg.get("4")))
+        ver("URL existente é preservada", jpg.get("5") == "https://velho/x5.jpg", str(jpg.get("5")))
+        ver("importador criou 2 e atualizou 3", r["itens_novos"] == 2 and r["itens_atualizados"] == 3, str({k: r[k] for k in ("itens_novos", "itens_atualizados")}))
     return 0
 
 if "--filho" in sys.argv:
@@ -246,6 +271,10 @@ else:
     c.execute("INSERT INTO fundo (codigo, titulo) VALUES ('F099','Fundo de teste')")
     c.execute("INSERT INTO numero_p (fundo_codigo, numero) VALUES ('F099',1)")
     c.execute("INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano) VALUES ('F099-P0001','F099',1,'Casa de teste',1960)")
+    for n, jpg in ((1, "16200"), (2, "16202"), (3, "<img src='x'>"), (4, "/mnt/qnap/acervos/a.jpg"), (5, "https://camp.arq.br/u/b.jpg")):
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,arquivo_jpg,tainacan_item_id,origem) VALUES (?,?,?,?,?,?,'importado')",
+                  (f"F099-P0001-1960-S01-D0000{n}", "F099-P0001", "S01", n, jpg, 9000 + n))
+    c.execute("INSERT INTO wp_item (id,colecao_id,documento_url) VALUES (9001,8013,'https://camp.arq.br/u/a-scaled.jpg')")   # só o item 1 tem URL real no espelho
     c.commit(); c.close()
     rc, out = rodar("antigo", db)
     ok(rc == 0, "migra sem erro" + ("" if rc == 0 else f" -> {out[-200:]}"))
@@ -255,6 +284,10 @@ else:
         ok("identificacao_original" in [r[1] for r in c.execute("PRAGMA table_info(projeto)")], "coluna identificacao_original adicionada")
         ok(c.execute("SELECT valor FROM configuracao WHERE chave='qnap.ip'").fetchone()[0] == "192.168.15.30", "IP do QNAP preenchido pela migração 023")
         ok(c.execute("SELECT count(*) FROM configuracao WHERE chave='estacao.token'").fetchone()[0] == 1, "chave estacao.token criada")
+        jpg = {r[0][-1]: r[1] for r in c.execute("SELECT codigo, arquivo_jpg FROM item ORDER BY codigo")}
+        ok(jpg["1"] == "https://camp.arq.br/u/a-scaled.jpg", "migração 028: ID de anexo trocado pelo endereço real quando o espelho tem")
+        ok(jpg["2"] is None and jpg["3"] is None, "migração 028: ID sem URL conhecida e HTML viram vazio (a tela usa o documento do site)")
+        ok(jpg["4"] == "/mnt/qnap/acervos/a.jpg" and jpg["5"] == "https://camp.arq.br/u/b.jpg", "migração 028: caminho local e URL existentes NÃO são tocados")
 
 print("3) Guarda de rede das rotas sem login")
 rc, out = rodar("rede", f"{tmp}/rede.db")
@@ -283,6 +316,14 @@ else:
 print("6) Imagens do site (miniatura x documento, sem planta falsa)")
 rc, out = rodar("imagens", f"{tmp}/imagens.db")
 if rc != 0: ok(False, f"teste de imagens não rodou -> {out[-600:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st, nome, det = (l.split("|") + [""])[:3]; ok(st == "ok", f"{nome}" + (f" ({det})" if det and st != "ok" else ""))
+
+print("7) Importador do site não grava mais ID de anexo como arquivo")
+rc, out = rodar("importador", f"{tmp}/importador.db")
+if rc != 0: ok(False, f"teste do importador não rodou -> {out[-500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

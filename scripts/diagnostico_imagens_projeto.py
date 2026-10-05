@@ -38,6 +38,11 @@ def modo_url(entrada):
     for r in rs:
         print("   " + _linha(r))
         print(f"        painel aponta para este item: {_quem_aponta(r['id']) or 'NINGUÉM'}")
+        for c in _quem_aponta(r["id"]):
+            t = con.execute("SELECT titulo FROM item WHERE codigo=?", (c,)).fetchone()
+            if t: print(f"        título no catálogo do painel ({c}): {t['titulo']}")
+        if r["status"] != "publish":
+            print(f"        ⚠ ESTA PÁGINA NÃO É PÚBLICA (status '{r['status']}'): visitante sem login recebe erro 404. Só abre para quem está logado no WordPress.")
         if r["codigo_detectado"]:
             outros = con.execute("SELECT id,colecao_id,status,slug FROM wp_item WHERE codigo_detectado=? AND id<>?", (r["codigo_detectado"], r["id"])).fetchall()
             print(f"        outros itens do site com o MESMO código {r['codigo_detectado']}: {len(outros)}" + ("  -> " + ", ".join(f"id {o['id']} ({o['status']}, {o['slug']})" for o in outros) if outros else ""))
@@ -102,16 +107,20 @@ for k, v in list(rep.items())[:6]: print(f"      {k}  <- {', '.join(v[:5])}{' �
 fora = con.execute("""SELECT id,colecao_id,status,codigo_detectado,fundo_detectado,projeto_detectado FROM wp_item
     WHERE (codigo_detectado LIKE ? OR projeto_detectado=?) AND id NOT IN (%s)""" % (",".join(str(r["id"]) for r in tela) or "0"),
     (cod + "-%", cod)).fetchall()
+fora = [r for r in fora if r["colecao_id"] != proj_cid]   # o dossiê (coleção Projetos) é esperado, não é problema
 print(f"\n== CITAM {cod} MAS FICAM FORA DA TELA: {len(fora)}")
 for r in fora[:8]: print(f"   id {r['id']} coleção {r['colecao_id']} {r['status']} código {r['codigo_detectado']} fundo {r['fundo_detectado']} projeto {r['projeto_detectado']}")
 
 # conferência com o catálogo local
 loc = {r["codigo"]: r for r in con.execute("SELECT codigo,arquivo_jpg,arquivo_tif,tainacan_item_id FROM item WHERE projeto_codigo=?", (cod,))}
+def _sujo(v): return bool(re.fullmatch(r"\d+", str(v).strip())) or str(v).lstrip().startswith("<")
+sujos = [c for c, l in loc.items() if l["arquivo_jpg"] and _sujo(l["arquivo_jpg"])]
 print(f"\n== CATÁLOGO LOCAL: {len(loc)} folha(s)")
+if sujos: print(f"   ATENÇÃO: {len(sujos)} folha(s) com arquivo_jpg sujo (ID de anexo/HTML de versão antiga, ex.: {loc[sujos[0]]['arquivo_jpg']!r}). Corrige sozinho ao atualizar o painel (migração 028).")
 div = []
 for r in tela:
     l = loc.get(r["codigo_detectado"])
-    if l and l["arquivo_jpg"]:
+    if l and l["arquivo_jpg"] and not _sujo(l["arquivo_jpg"]):
         a, b = Path(l["arquivo_jpg"]).stem.lower(), Path(base(r["thumb_url"])).stem.lower()
         if a not in b and b not in a: div.append((r["codigo_detectado"], Path(l["arquivo_jpg"]).name, base(r["thumb_url"])))
     if l and l["tainacan_item_id"] and l["tainacan_item_id"] != r["id"]: div.append((r["codigo_detectado"], f"item local aponta id {l['tainacan_item_id']}", f"tela usa id {r['id']}"))

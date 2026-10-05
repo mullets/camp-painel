@@ -23,6 +23,12 @@ RE_PREFIXO_TITULO = re.compile(r"^\s*P\d{4}\s*[—–-]\s*")
 RE_SUFIXO_TITULO = re.compile(r"\s*[—–-]\s*P\d{4}\s*[—–-].*$")
 
 
+def _arquivo_preview(v):
+    """Só aceita URL de verdade. ID de anexo ou trecho de HTML (gravados por versões antigas do sincronizador) são descartados."""
+    v = (v or "").strip()
+    return v if v.lower().startswith(("http://", "https://")) else None
+
+
 def _int(v):
     try:
         m = re.search(r"\d{4}", str(v or ""))
@@ -105,8 +111,8 @@ def executar(log=print) -> dict:
         status = STATUS.get(it["status"], "nao_publicado")
         ex = con.execute("SELECT codigo FROM item WHERE codigo=?", (cod,)).fetchone()
         if ex:
-            con.execute("""UPDATE item SET tainacan_item_id=?, status_site=?, arquivo_jpg=COALESCE(arquivo_jpg,?),
-                           atualizado_em=datetime('now') WHERE codigo=?""", (it["id"], status, it["documento_url"], cod))
+            con.execute("""UPDATE item SET tainacan_item_id=?, status_site=?, arquivo_jpg=CASE WHEN arquivo_jpg IS NULL OR arquivo_jpg NOT GLOB '*[^0-9]*' OR arquivo_jpg LIKE '<%' THEN ? ELSE arquivo_jpg END,
+                           atualizado_em=datetime('now') WHERE codigo=?""", (it["id"], status, _arquivo_preview(it["documento_url"]), cod))
             n["itens_atualizados"] += 1
         else:
             con.execute("""INSERT OR IGNORE INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, tipo_documento, folha,
@@ -114,7 +120,7 @@ def executar(log=print) -> dict:
                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'importado',?)""",
                         (cod, p, serie, seq, titulo, _tipo(md.get("Tipo de desenho")), md.get("Folha") or None,
                          md.get("Escala") or None, _int(md.get("Ano")), md.get("Suporte original") or None,
-                         it["documento_url"], status, it["id"],
+                         _arquivo_preview(it["documento_url"]), status, it["id"],
                          f"Acervo {md.get('Arquiteto') or md.get('Fundo') or ''}/CAMP - Casa da Arquitetura Moderna Paulista"))
             n["itens_novos"] += 1
     con.commit()

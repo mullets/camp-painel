@@ -288,7 +288,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
 @router.get("/itens/{codigo}")
 def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
-    i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, w.thumb_url, w.url AS site_url, w.documento_url, w.imagem_origem, w.metadados,
+    i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, w.thumb_url, w.url AS site_url, w.status AS site_status, w.documento_url, w.imagem_origem, w.metadados,
                               w.id AS wp_id_exato, i.tainacan_item_id AS tainacan_item_id_salvo
                        FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                        LEFT JOIN wp_item w ON w.id=(

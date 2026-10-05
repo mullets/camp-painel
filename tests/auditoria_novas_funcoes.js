@@ -180,6 +180,19 @@ const im=d.querySelector('#idet .viewer img.img-real'); chk(!!im,'folha com imag
 if(im){im.dispatchEvent(new w.Event('error')); await sleep(100);
  chk(!d.querySelector('#idet .viewer img.img-real')&&!!d.querySelector('#idet .viewer .sem-imagem'),'imagem quebrada deveria virar aviso "não carregou"'); chk(txt('#idet .sem-imagem').includes('não carregou'),'mensagem de imagem quebrada');}
 okl.push('folha: imagem grande vem do documento; sem imagem/TIFF/imagem quebrada mostram aviso explícito');
+
+// ---------- LINK DA PÁGINA PÚBLICA SÓ QUANDO É PÚBLICA ----------
+w.route_to('item/'+IT); await sleep(1100);
+chk(!txt('#idet').includes('Ver página pública')&&txt('#idet').includes('Abrir no site (não pública)'),'folha em RASCUNHO não pode oferecer "Ver página pública": '+txt('#idet .act').slice(0,90));
+chk(/No site\s*rascunho/.test(txt('#idet')),'folha em rascunho deveria mostrar "No site: rascunho": '+(txt('#idet').match(/No site.{0,40}/)||[''])[0]);
+w.route_to('item/F023-P0011-1959-S01-D00002'); await sleep(1100);
+chk(txt('#idet').includes('Ver página pública')&&!txt('#idet').includes('Abrir no site (não pública)'),'folha PUBLICADA deveria oferecer "Ver página pública"');
+chk(/No site\s*publicada/.test(txt('#idet')),'folha publicada deveria mostrar "No site: publicada"');
+w.route_to('projeto/F026-P0001'); await sleep(1300);
+chk(!txt('#v-projeto').includes('Ver página pública')&&!txt('#v-projeto').includes('abrir página pública'),'projeto NÃO publicado oferece link de página pública'); chk(txt('#v-projeto').includes('ainda não é pública'),'projeto não publicado deveria explicar que a página ainda não é pública');
+w.route_to('projeto/F003-P0001'); await sleep(1300);
+chk(txt('#v-projeto').includes('Ver página pública')&&[...d.querySelectorAll('#v-projeto a')].some(a=>/\/acervo\/projetos\/f003-p0001-/.test(a.href)),'projeto PUBLICADO deveria ter link /acervo/projetos/f003-p0001-...');
+okl.push('link da página pública: só em item/projeto publicado; rascunho/privado explica por que não abre');
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');
