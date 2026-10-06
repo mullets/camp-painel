@@ -55,6 +55,13 @@ c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_u
           (json.dumps({"Código do documento": "F002-P0002-1977-S01-D00001"}),))
 c.execute("UPDATE wp_item SET status='publish' WHERE codigo_detectado='F023-P0011-1959-S01-D00002' AND colecao_id=8013")
 c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F003-P0001'")
+# estados "despublicado" e "rascunho" em fundo, projeto, agente e folha: exercitam os rótulos do vocabulário único
+c.execute("UPDATE fundo SET status_site='fora_do_ar', motivo_fora_do_ar='a pedido da família' WHERE codigo='F029'")
+c.execute("UPDATE projeto SET status_site='fora_do_ar' WHERE codigo='F002-P0001'")
+c.execute("UPDATE projeto SET status_site='rascunho' WHERE codigo='F001-P0001'")
+c.execute("UPDATE agente SET status_site='fora_do_ar' WHERE id=(SELECT min(id) FROM agente)")
+c.execute("UPDATE item SET status_site='fora_do_ar' WHERE codigo='F023-P0011-1959-S01-D00003'")
+c.execute("UPDATE item SET status_site='rascunho' WHERE codigo='F023-P0011-1959-S01-D00004'")
 for i in range(12):
     c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,'visto','seed','{}')", (PROJ[i % len(PROJ)][0],))
 c.commit(); c.close()

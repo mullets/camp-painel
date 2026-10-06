@@ -183,11 +183,11 @@ okl.push('folha: imagem grande vem do documento; sem imagem/TIFF/imagem quebrada
 
 // ---------- LINK DA PÁGINA PÚBLICA SÓ QUANDO É PÚBLICA ----------
 w.route_to('item/'+IT); await sleep(1100);
-chk(!txt('#idet').includes('Ver página pública')&&txt('#idet').includes('Abrir no site (não pública)'),'folha em RASCUNHO não pode oferecer "Ver página pública": '+txt('#idet .act').slice(0,90));
+chk(!txt('#idet').includes('Ver página pública')&&txt('#idet').includes('Abrir no site (não publicado)'),'folha em RASCUNHO não pode oferecer "Ver página pública": '+txt('#idet .act').slice(0,90));
 chk(/No site\s*rascunho/.test(txt('#idet')),'folha em rascunho deveria mostrar "No site: rascunho": '+(txt('#idet').match(/No site.{0,40}/)||[''])[0]);
 w.route_to('item/F023-P0011-1959-S01-D00002'); await sleep(1100);
-chk(txt('#idet').includes('Ver página pública')&&!txt('#idet').includes('Abrir no site (não pública)'),'folha PUBLICADA deveria oferecer "Ver página pública"');
-chk(/No site\s*publicada/.test(txt('#idet')),'folha publicada deveria mostrar "No site: publicada"');
+chk(txt('#idet').includes('Ver página pública')&&!txt('#idet').includes('Abrir no site (não publicado)'),'folha PUBLICADA deveria oferecer "Ver página pública"');
+chk(/No site\s*publicado/.test(txt('#idet')),'folha publicada deveria mostrar "No site: publicado"');
 w.route_to('projeto/F026-P0001'); await sleep(1300);
 chk(!txt('#v-projeto').includes('Ver página pública')&&!txt('#v-projeto').includes('abrir página pública'),'projeto NÃO publicado oferece link de página pública'); chk(txt('#v-projeto').includes('ainda não é pública'),'projeto não publicado deveria explicar que a página ainda não é pública');
 w.route_to('projeto/F003-P0001'); await sleep(1300);

@@ -3,7 +3,7 @@
 Regras checadas (todas com a tabela de autoridade como referência):
 - item sem código detectável no título/slug/metadados
 - item com código de fundo que não existe na tabela de autoridade
-- item publicado em fundo marcado como fora do ar ou não autorizado
+- item publicado em fundo marcado como despublicado ou não autorizado
 - termo de taxonomia com código de fundo inexistente
 - fundo da tabela de autoridade sem nenhum item/termo no site (informativo)
 """
@@ -251,7 +251,7 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                 novo = "no_ar" if pub else ("rascunho" if dr else ("fora_do_ar" if pr else "nao_publicado"))
                 atual = fundos[f]["status_site"]
                 if atual == "fora_do_ar" and fundos[f]["motivo_fora_do_ar"] and novo != "no_ar":
-                    continue   # decisão humana de tirar do ar prevalece enquanto não há nada publicado
+                    continue   # decisão humana de despublicar prevalece enquanto não há nada publicado
                 if novo != atual:
                     con.execute("UPDATE fundo SET status_site=? WHERE codigo=?", (novo, f))
 

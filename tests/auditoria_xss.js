@@ -13,10 +13,12 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  d.getElementById('lg-email').value='rafael@camp.arq.br'; d.getElementById('lg-senha').value='senha-bem-longa-123'; await w.fazerLogin({preventDefault(){}}); await sleep(900);
  const vazou={}, visto=new Set();   // "tela/passo" -> ["contêiner ← campo"]; cada par só conta na PRIMEIRA vez
  const ondeEstou=e=>{ const c=e.closest('[id]'); return c?c.id:'(sem id)'; };
+ const vocab={};   // frase antiga ou valor interno cru VISÍVEL na tela (ver docs/vocabulario.md)
+ const PROIB=/\bno ar\b|fora do ar|tirar do ar|colocar no ar|retirar da publica|\b(?:no_ar|fora_do_ar|nao_publicado|tirar_do_ar)\b/i;
  const sobre={};   // fragmento de HTML mostrado como TEXTO = escapou demais
  const RX_FRAG=/<(span|div|tr|td|b|small|button|li|ul|dl|dt|dd|table|a)\b[^>]*>/i;
- const checa=(onde)=>{ const cl=d.body.cloneNode(true); cl.querySelectorAll('script,style').forEach(e=>e.remove()); const tx=cl.textContent||''; const mm=tx.match(RX_FRAG); if(mm&&!Object.values(sobre).includes(mm[0])) sobre[onde]=mm[0]; for(const e of d.querySelectorAll('[data-xss]')){ const par=ondeEstou(e)+' ← '+e.getAttribute('data-xss'); if(visto.has(par)) continue; visto.add(par); (vazou[onde]=vazou[onde]||[]).push(par); } };
- const passos=[['painel'],['fundos'],['fundo/F026'],['fundo/F023'],['arquitetos'],['projetos'],['projeto/F026-P0001'],['projeto/F023-P0011'],['item/F023-P0011-1959-S01-D00001'],['filas'],['solicitacoes'],['erros'],['etiquetas'],['config'],['localizacao'],['estacoes'],['auditoria']];
+ const checa=(onde)=>{ const cl=d.body.cloneNode(true); cl.querySelectorAll('script,style').forEach(e=>e.remove()); const tx=cl.textContent||''; const pv=tx.match(PROIB); if(pv&&!Object.values(vocab).includes(pv[0])) vocab[onde]=pv[0]; const mm=tx.match(RX_FRAG); if(mm&&!Object.values(sobre).includes(mm[0])) sobre[onde]=mm[0]; for(const e of d.querySelectorAll('[data-xss]')){ const par=ondeEstou(e)+' ← '+e.getAttribute('data-xss'); if(visto.has(par)) continue; visto.add(par); (vazou[onde]=vazou[onde]||[]).push(par); } };
+ const passos=[['painel'],['fundos'],['fundo/F026'],['fundo/F023'],['arquitetos'],['projetos'],['projeto/F026-P0001'],['projeto/F023-P0011'],['item/F023-P0011-1959-S01-D00001'],['item/F023-P0011-1959-S01-D00003'],['item/F023-P0011-1959-S01-D00004'],['fundo/F029'],['projeto/F002-P0001'],['projeto/F001-P0001'],['filas'],['solicitacoes'],['erros'],['etiquetas'],['config'],['localizacao'],['estacoes'],['auditoria']];
  for(const [rota] of passos){ try{ w.route_to(rota); await sleep(1500); checa(rota);
      // abre o detalhe de até 5 linhas (drawer)
      const trs=[...d.querySelectorAll('.content.on tbody tr, #v-'+rota.split('/')[0]+' tbody tr')].slice(0,5);
@@ -45,6 +47,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  for(const [k,v] of Object.entries(vazou)) { console.log(' ✗ '+k); v.forEach(x=>console.log('      '+x)); }
  console.log('\n=== SOBRE-ESCAPE (HTML do próprio painel aparecendo como texto): '+Object.keys(sobre).length+' ===');
  for(const [k,v] of Object.entries(sobre)) console.log(' ✗ '+k+'  →  '+v.slice(0,90));
+ console.log('\n=== VOCABULÁRIO (frase antiga/valor interno visível): '+Object.keys(vocab).length+' ===');
+ for(const [k,v] of Object.entries(vocab)) console.log(' ✗ '+k+'  →  "'+v+'"');
  console.log('\nCAMPOS_QUE_VAZAM='+JSON.stringify([...campos].sort()));
- process.exit(visto.size||Object.keys(sobre).length?1:0);
+ process.exit(visto.size||Object.keys(sobre).length||Object.keys(vocab).length?1:0);
 })().catch(e=>{console.log('FALHA DO TESTE',e);process.exit(1)});

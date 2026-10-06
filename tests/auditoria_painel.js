@@ -35,7 +35,7 @@ okl.push('rodapé: '+txt('#foot'));
 // FUNDOS
 w.route_to('fundos'); await sleep(1200);
 const fr=d.querySelectorAll('#fundos-body tr').length; okl.push(`fundos: ${fr} linhas`); if(fr<30) problems.push('fundos: menos de 30 linhas ('+fr+')');
-if(d.querySelector('#fundos-body').textContent.includes('Arnaldo') && d.querySelector('#fundos-body tr[data-nav="fundo/F001"]').textContent.includes('no ar')) problems.push('fundos: F001 aparece "no ar" indevidamente');
+if(d.querySelector('#fundos-body').textContent.includes('Arnaldo') && d.querySelector('#fundos-body tr[data-nav="fundo/F001"]').textContent.match(/(?<!n[ãa]o )(?<!des)publicado/i)) problems.push('fundos: F001 aparece "publicado" indevidamente');
 const siglas=[...d.querySelectorAll('#fundos-body .sig')].filter(e=>!e.classList.contains('na')).length; okl.push('fundos: siglas visíveis '+siglas); if(siglas<28) problems.push('fundos: siglas não aparecem ('+siglas+')');
 // filtros operacionais de fundos
 if(!d.querySelector('#fundos-filtros [data-ff="publicado"]')) problems.push('fundos: filtro Publicados não existe');

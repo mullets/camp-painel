@@ -150,7 +150,7 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
         if d.status_site not in ("nao_publicado", "rascunho", "no_ar", "fora_do_ar"):
             con.close(); raise HTTPException(400, "Situação inválida")
         if d.status_site == "fora_do_ar" and not (d.motivo_fora_do_ar or f["motivo_fora_do_ar"]):
-            con.close(); raise HTTPException(400, "Informe o motivo para tirar do ar")
+            con.close(); raise HTTPException(400, "Informe o motivo para despublicar")
         if u["papel"] != "master" and d.status_site != f["status_site"] and d.status_site in ("no_ar", "fora_do_ar"):
             con.close(); raise HTTPException(403, "Colocar ou tirar um fundo inteiro do ar exige o admin master")
     if d.historia_arquivistica and not (d.fonte_historia or f["fonte_historia"]):
@@ -281,7 +281,7 @@ def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("maste
     if d.acao not in ("no_ar", "rascunho", "fora_do_ar"):
         raise HTTPException(400, "Ação inválida")
     if d.acao == "fora_do_ar" and not d.motivo:
-        raise HTTPException(400, "Informe o motivo para tirar o fundo do ar")
+        raise HTTPException(400, "Informe o motivo para despublicar o fundo")
     from .publicador import propagar_status_fundo
     con = connect()
     try:

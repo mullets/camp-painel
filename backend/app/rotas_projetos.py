@@ -430,7 +430,7 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if p["lote_teste"]:
             con.close(); raise HTTPException(400, "Lote de teste não vai ao ar")
     if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
-        con.close(); raise HTTPException(403, "Tirar do ar o que já está publicado exige o admin master")
+        con.close(); raise HTTPException(403, "Despublicar o que já está publicado exige o admin master")
     wp = WP()
     feitos, falhas = [], []
     alvos = []

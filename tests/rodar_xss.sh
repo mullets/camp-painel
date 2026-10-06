@@ -3,10 +3,13 @@
 set -u
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"; PY="${PYTHON:-python3}"
 export CAMP_DB_PATH=/tmp/camp_xss.db CAMP_COOKIE_SECURE=false CAMP_BACKUP_DIR=/tmp/camp_xss_backups NODE_PATH="$(npm root -g)"
+# um servidor de teste esquecido na porta 8765 faria a auditoria bater no banco ERRADO: encerra e confere
+pkill -f "uvicorn app.main:app --port 8765" 2>/dev/null; sleep 1
+if curl -sf http://127.0.0.1:8765/api/versao >/dev/null 2>&1; then echo "ERRO: a porta 8765 continua ocupada por outro processo; libere-a e rode de novo"; exit 3; fi
 rm -rf "$CAMP_DB_PATH"* "$CAMP_BACKUP_DIR"
 "$PY" "$RAIZ/tests/semear_banco_teste.py" >/dev/null || exit 1
 ( cd "$RAIZ/backend" && "$PY" -m uvicorn app.main:app --port 8765 --log-level warning >/tmp/camp_xss.log 2>&1 ) &
-SRV=$!; trap 'kill $SRV 2>/dev/null' EXIT
+SRV=$!; trap 'kill $SRV 2>/dev/null; pkill -f "uvicorn app.main:app --port 8765" 2>/dev/null' EXIT   # o filho do subshell também
 for i in $(seq 1 30); do curl -sf http://127.0.0.1:8765/api/versao >/dev/null && break; sleep 0.5; done
 "$PY" "$RAIZ/tests/envenenar_banco.py"
 node "$RAIZ/tests/auditoria_xss.js"
