@@ -15,4 +15,8 @@ echo
 echo "################ FUNÇÕES NOVAS ################"
 node "$RAIZ/tests/auditoria_novas_funcoes.js"
 echo
+echo "################ XSS: HTML digitado nos campos de texto ################"
+"$PY" "$RAIZ/tests/envenenar_banco.py"
+node "$RAIZ/tests/auditoria_xss.js"
+echo
 echo "--- erros 500 / tracebacks no log do servidor: $(grep -c 'Traceback\|Internal Server' /tmp/camp_auditoria.log)"
