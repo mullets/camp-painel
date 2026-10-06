@@ -487,6 +487,128 @@ def filho(modo):
         pv2 = adm.get("/api/importacao/previa").json()
         ver("depois de importar, a prévia não tem mais nada novo (idempotente)", (pv2["projetos_novos"], pv2["itens_novos"]) == (0, 0) and pv2["itens_atualizados"] == 3 and pv2["total_local"] == 3, str((pv2["projetos_novos"], pv2["itens_novos"], pv2["itens_atualizados"])))
         for l in res: print(l)
+    elif modo == "publicacao":
+        init_db(); aplicar_migracoes()
+        import json as _j, sqlite3 as _s, time as _t
+        from app import auth
+        import app.wp as wpmod, app.publicador as pubmod
+        from fastapi.testclient import TestClient
+        from app.main import app
+        db = os.environ["CAMP_DB_PATH"]
+        c = connect()
+        for f in ("F099", "F098", "F097"):
+            c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES (?,?,1)", (f, f"Fundo {f}"))
+        def proj(f, n, wid, aut=0, teste=0):
+            cod = f"{f}-P000{n}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id,autorizado_site,lote_teste) VALUES (?,?,?,?,1970,?,?,?)", (cod, f, n, f"Casa {cod}", wid, aut, teste))
+            if wid: c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft',?,?)", (wid, f"Dossiê {cod}", cod))
+            return cod
+        P1 = proj("F099", 1, 100); P2 = proj("F099", 2, 101); P3 = proj("F099", 3, 102, aut=1, teste=1); P4 = proj("F099", 4, None)
+        Q1 = proj("F098", 1, 200)
+        def item(proj_cod, n, wid, dup=None):
+            cod = f"{proj_cod}-1970-S01-D0000{n}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,tainacan_item_id,duplicata_de,tipo_duplicata,origem) VALUES (?,?,?,?,?,?,?,'importado')",
+                      (cod, proj_cod, "S01", n, wid, dup, "exata" if dup else None))
+            if wid: c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft',?,?)", (wid, f"Folha {n}", cod))
+            return cod
+        D1, D2, D3, D4 = item(P1, 1, 8001), item(P1, 2, 8002), item(P1, 3, 8003), item(P1, 4, None)
+        D5 = item(P1, 5, 8005, dup=D1)       # duplicada: tem id no site mas NÃO entra na publicação
+        c.commit(); c.close()
+        for em, nome, papel in (("m@camp.arq.br", "M", "master"), ("adm@camp.arq.br", "A", "admin"), ("op@camp.arq.br", "O", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        mst, adm, op = cli("m@camp.arq.br"), cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        sonda = []
+        class Fake:
+            chamadas, falhar = [], set()
+            def atualizar_status_item(self, cid, wid, status):
+                k = _s.connect(db, timeout=1)   # o painel precisa conseguir GRAVAR durante a rede (nenhum lock longo)
+                try: k.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('x','x','x','sonda')"); k.commit(); sonda.append(True)
+                except _s.OperationalError: sonda.append(False)
+                finally: k.close()
+                if wid in Fake.falhar: raise RuntimeError(f"Tainacan recusou (403) item {wid}: rest_forbidden")
+                Fake.chamadas.append((cid, wid, status)); return {}
+        wpmod.WP = Fake; pubmod.WP = Fake
+        def err(r):
+            try: return r.json().get("erro") or ""
+            except Exception: return r.text
+        def st(tab, cod):
+            k = connect(); r = k.execute(f"SELECT status_site FROM {tab} WHERE codigo=?", (cod,)).fetchone()[0]; k.close(); return r
+        # ---- checklist ----
+        r = op.get(f"/api/projetos/{P1}/publicacao"); g = r.json()
+        ids_falta = {x["id"] for x in g["condicoes"] if x["bloqueia"] and not x["ok"]}
+        ver("operador VÊ o checklist (leitura)", r.status_code == 200 and g["pode_agir"] is False, f"HTTP {r.status_code}")
+        ver("checklist mostra o que falta: direitos e autorização (nada mais)", ids_falta == {"direitos", "autorizado"}, str(ids_falta))
+        ver("cada pendência traz o botão que resolve", {x["acao"]["tipo"] for x in g["condicoes"] if x["bloqueia"] and not x["ok"]} == {"direitos", "autorizar"})
+        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"]} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
+        # ---- publicar bloqueado: TODAS as razões de uma vez ----
+        r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"})
+        ver("publicar bloqueado devolve TODAS as pendências (400)", r.status_code == 400 and "Direitos do fundo" in err(r) and "não foi autorizado" in err(r), err(r)[:140])
+        ver("nada foi enviado ao site e nada mudou", Fake.chamadas == [] and st("projeto", P1) == "nao_publicado")
+        # ---- satisfaz as condições pela própria API ----
+        r = adm.put("/api/fundos/F099/direitos", json={"situacao": "autorizado", "titular": "Família X", "documento_autorizacao": "Termo 001"}); ver("direitos autorizados pela API", r.status_code == 200, f"HTTP {r.status_code} {r.text[:80]}")
+        r = adm.patch(f"/api/projetos/{P1}", json={"autorizado_site": True}); ver("projeto autorizado pela API", r.status_code == 200, f"HTTP {r.status_code} {r.text[:80]}")
+        g = op.get(f"/api/projetos/{P1}/publicacao").json(); ver("checklist libera a publicação", g["pode_publicar"] is True)
+        # ---- publicar ----
+        Fake.chamadas.clear(); sonda.clear()
+        r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"}); j = r.json()
+        ver("publicar OK: dossiê + 3 folhas (duplicada e sem vínculo ficam de fora)", r.status_code == 200 and j["ok"] and (j["alterados"], j["total"]) == (4, 4), str(j)[:140])
+        ver("enviou ao Tainacan a coleção e o status certos", sorted(Fake.chamadas) == sorted([(8007, 100, "publish"), (8013, 8001, "publish"), (8013, 8002, "publish"), (8013, 8003, "publish")]), str(Fake.chamadas))
+        ver("estado local atualizado só para o que foi publicado", st("projeto", P1) == "no_ar" and st("item", D1) == "no_ar" and st("item", D3) == "no_ar" and st("item", D5) == "nao_publicado" and st("item", D4) == "nao_publicado")
+        ver("DURANTE a rede o painel consegue gravar (nenhum lock longo)", sonda and all(sonda), str(sonda))
+        ver("resposta traz mensagem em português", "4 registro(s) publicados" in j["mensagem"], j["mensagem"])
+        k = connect(); ver("publicação fica na auditoria", k.execute("SELECT count(*) FROM evento WHERE codigo=? AND tipo='site_publicar'", (P1,)).fetchone()[0] == 1); k.close()
+        # ---- falha parcial do Tainacan: lista TODAS e salva o resto ----
+        Fake.falhar = {8002}; Fake.chamadas.clear()
+        r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "rascunho"})
+        ver("admin comum NÃO volta para rascunho o que está publicado (403): tira do público como despublicar", r.status_code == 403 and "Despublicar" in err(r), err(r)[:90])
+        r = mst.post(f"/api/projetos/{P1}/publicar", json={"acao": "rascunho"}); j = r.json()
+        ver("falha parcial: ok=False, 3 de 4 voltaram a rascunho, 1 falha explicada", r.status_code == 200 and not j["ok"] and (j["alterados"], j["total"], len(j["falhas"])) == (3, 4, 1) and "Tainacan recusou (403)" in j["falhas"][0]["erro"] and j["falhas"][0]["codigo"] == D2, str(j)[:160])
+        ver("falha parcial: o que falhou continua publicado, o resto mudou", st("item", D2) == "no_ar" and st("item", D1) == "rascunho" and st("projeto", P1) == "rascunho")
+        ver("mensagem diz quantos falharam", "1 falharam" in j["mensagem"], j["mensagem"])
+        Fake.falhar = set()
+        # ---- WordPress inacessível: 503 claro, não 500 ----
+        class SemWP:
+            def __init__(self): raise RuntimeError("senha de aplicação não configurada")
+        wpmod.WP = SemWP; pubmod.WP = SemWP
+        r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"})
+        ver("WordPress inacessível: 503 com explicação (não 500 genérico)", r.status_code == 503 and "WordPress" in err(r) and "Configurações" in err(r), f"HTTP {r.status_code} {r.text[:120]}")
+        ver("o painel segue respondendo depois disso (conexão não vazou)", adm.get(f"/api/projetos/{P1}/publicacao").status_code == 200)
+        wpmod.WP = Fake; pubmod.WP = Fake
+        # ---- permissões de despublicar ----
+        Fake.chamadas.clear(); adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"})
+        r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "tirar_do_ar"})
+        ver("admin comum NÃO despublica o que está publicado (403, vocabulário novo)", r.status_code == 403 and "Despublicar" in err(r), r.text[:100])
+        r = mst.post(f"/api/projetos/{P1}/publicar", json={"acao": "tirar_do_ar"})
+        ver("master despublica: vai para 'fora_do_ar' (Despublicado)", r.status_code == 200 and r.json()["ok"] and st("projeto", P1) == "fora_do_ar", r.text[:100])
+        # ---- projeto sem nenhum registro no site ----
+        g = op.get(f"/api/projetos/{P4}/publicacao").json(); site = next(x for x in g["condicoes"] if x["id"] == "site")
+        ver("projeto sem registros no site: o checklist diz e oferece 'Enviar folhas ao site'", not site["ok"] and site["acao"]["tipo"] == "subir_folhas")
+        r = adm.post(f"/api/projetos/{P4}/publicar", json={"acao": "rascunho"}); j = r.json()
+        ver("mudar publicação sem registros no site NÃO responde '0 atualizados' mudo", r.status_code == 200 and not j["ok"] and "ainda não tem registros no site" in j["mensagem"], str(j)[:120])
+        # ---- lote ----
+        Fake.chamadas.clear()
+        r = adm.post("/api/projetos/lote", json={"codigos": [P1, P2], "acao": "publicar"}); j = r.json()
+        ver("lote: um publica e o outro volta com o MOTIVO", r.status_code == 200 and [x["codigo"] for x in j["ok"]] == [P1] and len(j["falhas"]) == 1 and j["falhas"][0]["codigo"] == P2 and "não foi autorizado" in j["falhas"][0]["erro"], str(j)[:200])
+        # ---- fundo inteiro: mesmas regras ----
+        Fake.chamadas.clear()
+        r = mst.post("/api/fundos/F099/status-site", json={"acao": "no_ar"}); j = r.json()
+        feitos_cods = {(w, st_) for (_c, w, st_) in Fake.chamadas}
+        ver("fundo inteiro: publica só o que está pronto (P1: dossiê + 3 folhas)", r.status_code == 200 and j["ok"] and j["alterados"] == 4 and feitos_cods == {(100, "publish"), (8001, "publish"), (8002, "publish"), (8003, "publish")}, str(j)[:160])
+        ver("fundo inteiro NÃO publica a folha duplicada", all(w != 8005 for (_c, w, _s2) in Fake.chamadas))
+        mot = {x["codigo"]: x["motivo"] for x in j["ignorados"]}
+        ver("fundo inteiro explica quem ficou de fora e por quê (não autorizado, lote de teste, sem dossiê)", j["ignorados_total"] == 3 and "não foi autorizado" in mot[P2] and "teste" in mot[P3].lower() and "dossiê" in mot[P4], str(mot)[:200])
+        k = connect(); ver("fundo ficou 'no_ar' (Publicado) e a ação ficou na auditoria", k.execute("SELECT status_site FROM fundo WHERE codigo='F099'").fetchone()[0] == "no_ar" and k.execute("SELECT count(*) FROM evento WHERE entidade='fundo' AND tipo='site_no_ar'").fetchone()[0] == 1); k.close()
+        mst.put("/api/fundos/F098/direitos", json={"situacao": "autorizado", "titular": "Família Y", "documento_autorizacao": "Termo 002"})
+        r = mst.post("/api/fundos/F097/status-site", json={"acao": "no_ar"})
+        ver("fundo SEM direitos definidos: recusa com a explicação (400) em vez de '0 alterados'", r.status_code == 400 and "Direitos do fundo" in err(r) and "F097" in err(r), err(r)[:140])
+        r = mst.post("/api/fundos/F098/status-site", json={"acao": "no_ar"}); j = r.json()
+        ver("fundo sem NADA pronto: não diz '0 alterados' mudo, explica o motivo", r.status_code == 200 and not j["ok"] and "Nenhum projeto estava pronto" in (j["erro"] or "") and j["ignorados_total"] == 1, str(j)[:200])
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -601,6 +723,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st, nome, det = (l.split("|") + [""])[:3]; ok(st == "ok", f"{nome}" + (f" ({det})" if det and st != "ok" else ""))
+
+print("11) Publicar: checklist, portões, falhas do WordPress, permissões, lote e fundo inteiro")
+rc, out = rodar("publicacao", f"{tmp}/publicacao.db")
+if rc != 0: ok(False, f"teste de publicação não rodou -> {out[-1100:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det})" if det and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -193,16 +193,20 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         padrao_proj = cfg_int(cfg_proj, COL_PROJETOS)
         padrao_item = cfg_int(cfg_item, COL_ACERVO)
 
-        projetos = con.execute(
-            "SELECT codigo, tainacan_item_id, autorizado_site "
-            "FROM projeto WHERE fundo_codigo=? AND tainacan_item_id IS NOT NULL",
-            (codigo,),
-        ).fetchall()
-
+        from .publicacao import condicoes_projeto, motivos_bloqueio
+        projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? ORDER BY codigo", (codigo,)).fetchall()
+        ignorados = []
         alvos = []
         for p in projetos:
-            if alvo == "publish" and not p["autorizado_site"]:
+            if not p["tainacan_item_id"]:
+                if alvo == "publish":
+                    ignorados.append({"codigo": p["codigo"], "motivo": "ainda não tem dossiê no site"})
                 continue
+            if alvo == "publish":   # mesmas regras do botão do projeto: nada de publicar por um atalho o que ele recusaria
+                falta = motivos_bloqueio(condicoes_projeto(con, p))
+                if falta:
+                    ignorados.append({"codigo": p["codigo"], "motivo": "; ".join(falta)})
+                    continue
 
             wid = int(p["tainacan_item_id"])
             r = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (wid,)).fetchone()
@@ -210,7 +214,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             itens = con.execute(
                 "SELECT codigo, tainacan_item_id FROM item "
-                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0",
+                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0 AND duplicata_de IS NULL",
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
@@ -273,7 +277,8 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
             else:
                 detalhe = (
                     falhas[0]["erro"] if falhas
-                    else "Nenhum projeto autorizado/com vínculo ao site foi encontrado para alterar."
+                    else (f"Nenhum projeto estava pronto para publicar ({len(ignorados)} ficaram de fora). Primeiro motivo: {ignorados[0]['codigo']} — {ignorados[0]['motivo']}"
+                          if ignorados else "Nenhum projeto com vínculo ao site foi encontrado para alterar.")
                 )
                 _pendencia(con, "fundo", codigo, "pendente_status_no_site", detalhe)
 
@@ -315,15 +320,27 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         })
         completo = False
 
-    erro = falhas[0]["erro"] if falhas else (
-        None if completo else "Nenhum item elegível foi encontrado para publicar."
-    )
+    verbo = {"publish": "publicados", "draft": "voltaram para rascunho", "private": "despublicados"}[alvo]
+    if falhas:
+        erro = falhas[0]["erro"]
+    elif completo:
+        erro = None
+    elif ignorados:
+        erro = (f"Nenhum projeto estava pronto para publicar: {len(ignorados)} ficaram de fora. "
+                f"Primeiro motivo: {ignorados[0]['codigo']} — {ignorados[0]['motivo']}")
+    else:
+        erro = "Nenhum projeto deste fundo tem registro no site para alterar."
+    mensagem = (f"{feitos} registro(s) {verbo}." if feitos else "Nada foi alterado.") + \
+               (f" {len(ignorados)} projeto(s) ficaram de fora por não estarem prontos." if ignorados and feitos else "")
     return {
         "ok": completo,
         "alterados": feitos,
         "tentados": tentados,
         "falhas": falhas,
         "erro": erro,
+        "mensagem": mensagem,
+        "ignorados_total": len(ignorados),
+        "ignorados": ignorados[:50],
     }
 
 def _termo_por_nome(con, taxonomia_nome: str, nome: str):

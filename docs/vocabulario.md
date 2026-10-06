@@ -15,7 +15,7 @@ Uma só linguagem em **todas** as telas, mensagens da API e documentos. Quem esc
 | Botão | Efeito | Observação |
 |---|---|---|
 | **Publicar** | vai para `no_ar` | exige direitos autorizados, projeto autorizado e sem bloqueios |
-| **Voltar para rascunho** | vai para `rascunho` | continua salvo para revisão |
+| **Voltar para rascunho** | vai para `rascunho` | continua salvo para revisão; se estava publicado, exige admin master (tira do público, como despublicar) |
 | **Despublicar** | vai para `fora_do_ar` | exige admin master quando já estava publicado; fundo pede o motivo |
 | **Autorizar publicação** | marca o projeto como autorizado | não publica sozinho |
 

@@ -406,54 +406,92 @@ class Publicacao(BaseModel):
     incluir_folhas: bool = True
 
 
+RESULTADO = {"publish": "publicados", "draft": "voltaram para rascunho", "private": "despublicados"}
+
+
+@router.get("/projetos/{codigo}/publicacao")
+def condicoes_de_publicacao(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """O que falta para publicar este projeto (cada requisito com o botão que o resolve)."""
+    from .publicacao import condicoes_projeto
+    con = connect()
+    try:
+        p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        r = condicoes_projeto(con, p)
+        r.update({"estado": p["status_site"], "pode_agir": u["papel"] in ("admin", "master"),
+                  "pode_despublicar": u["papel"] == "master" or p["status_site"] != "no_ar"})
+        return r
+    finally:
+        con.close()
+
+
 @router.post("/projetos/{codigo}/publicar")
 def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Escreve no Tainacan: muda status do dossiê e das folhas. publicar exige projeto autorizado e sem bloqueios."""
+    """Escreve no Tainacan o status do dossiê e das folhas.
+
+    Três fases, para nunca segurar transação do banco durante a rede: (1) ler e validar; (2) falar com o WordPress;
+    (3) gravar o resultado local numa conexão nova e curta. Publicar exige todas as condições de publicacao.condicoes_projeto.
+    """
+    from .publicacao import condicoes_projeto, motivos_bloqueio, persistir_resultado
     from .wp import WP
     alvo = {"publicar": "publish", "rascunho": "draft", "tirar_do_ar": "private"}.get(d.acao)
     if not alvo:
         raise HTTPException(400, "Ação inválida")
-    con = connect()
-    p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
-    if not p:
-        con.close(); raise HTTPException(404, "Projeto não existe")
-    if alvo == "publish":
-        from .rotas_gestao import direitos_permitem_publicar
-        msg = direitos_permitem_publicar(con, p["fundo_codigo"])
-        if msg:
-            con.close(); raise HTTPException(400, msg)
-        if not p["autorizado_site"]:
-            con.close(); raise HTTPException(400, "Projeto não autorizado para o site. Autorize antes de publicar.")
-        bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
-        if bloq and (bloq[0] or bloq[1]):
-            con.close(); raise HTTPException(400, f"Bloqueado: {bloq[0] or 0} autoria divergente, {bloq[1] or 0} erro(s) bloqueante(s)")
-        if p["lote_teste"]:
-            con.close(); raise HTTPException(400, "Lote de teste não vai ao ar")
-    if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
-        con.close(); raise HTTPException(403, "Despublicar o que já está publicado exige o admin master")
-    wp = WP()
-    feitos, falhas = [], []
-    alvos = []
-    if p["tainacan_item_id"]:
-        col = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone()
-        alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
-    if d.incluir_folhas:
-        for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
-                                WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.autoria_divergente=0 AND i.duplicata_de IS NULL""", (codigo,)):
-            alvos.append(("item", i[0], i[2] or 8013, i[1]))
     st_painel = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar"}[alvo]
+
+    # fase 1: ler e validar (conexão fechada antes da rede)
+    con = connect()
+    try:
+        p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        if alvo == "publish":
+            falta = motivos_bloqueio(condicoes_projeto(con, p))
+            if falta:
+                raise HTTPException(400, "Não dá para publicar ainda: " + " | ".join(falta))
+        if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
+            raise HTTPException(403, "Despublicar o que já está publicado exige o admin master")
+        alvos = []
+        if p["tainacan_item_id"]:
+            col = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone()
+            alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
+        if d.incluir_folhas:
+            for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
+                                    WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.autoria_divergente=0 AND i.duplicata_de IS NULL""", (codigo,)):
+                alvos.append(("item", i[0], i[2] or 8013, i[1]))
+    finally:
+        con.close()
+    if not alvos:
+        return {"ok": False, "alterados": 0, "total": 0, "falhas": [],
+                "mensagem": "Este projeto ainda não tem registros no site: envie as folhas ao site (como rascunho) antes de mudar a publicação."}
+
+    # fase 2: rede
+    try:
+        wp = WP()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(503, f"Não consegui acessar o WordPress ({str(e)[:160]}). Confira a senha de aplicação em Configurações.")
+    sucessos, falhas = [], []
     for tipo, cod, cid, wid in alvos:
         try:
             wp.atualizar_status_item(cid, wid, alvo)
-            con.execute(f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?", (st_painel, cod))
-            con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
-            feitos.append(cod)
+            sucessos.append((tipo, cod, wid))
         except Exception as e:  # noqa: BLE001
-            falhas.append({"codigo": cod, "erro": str(e)[:200]})
-    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,?,?,?)",
-                (codigo, f"site_{d.acao}", u["email"], json.dumps({"ok": len(feitos), "falhas": len(falhas)})))
-    con.commit(); con.close()
-    return {"ok": not falhas, "alterados": len(feitos), "falhas": falhas}
+            falhas.append({"codigo": cod, "erro": str(e)[:240]})
+
+    # fase 3: gravar o resultado local
+    erro_db = persistir_resultado(sucessos, st_painel, alvo, "projeto", codigo, f"site_{d.acao}", u["email"],
+                                  {"ok": len(sucessos), "falhas": len(falhas)})
+    if erro_db:
+        falhas.append({"codigo": codigo, "erro": f"O site foi atualizado, mas não consegui registrar aqui ({erro_db[:120]}). A próxima sincronização acerta."})
+    if sucessos and not falhas:
+        msg = f"{len(sucessos)} registro(s) {RESULTADO[alvo]}."
+    elif sucessos:
+        msg = f"{len(sucessos)} de {len(alvos)} registro(s) {RESULTADO[alvo]}; {len(falhas)} falharam (veja a lista)."
+    else:
+        msg = f"Nenhum registro foi alterado: {len(falhas)} falha(s) ao falar com o site."
+    return {"ok": bool(sucessos) and not falhas, "alterados": len(sucessos), "total": len(alvos), "falhas": falhas, "mensagem": msg}
+
 
 class AcaoProjetosLote(BaseModel):
     codigos: list[str]
@@ -476,9 +514,9 @@ def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -
             if r.get("ok") and r.get("alterados", 0) > 0:
                 ok.append({"codigo": codigo, "alterados": r.get("alterados", 0)})
             elif r.get("ok"):
-                falhas.append({"codigo": codigo, "erro": "Nenhum registro público vinculado a este projeto."})
+                falhas.append({"codigo": codigo, "erro": r.get("mensagem") or "Nenhum registro vinculado a este projeto no site."})
             else:
-                falhas.append({"codigo": codigo, "erro": (r.get("falhas") or [{"erro": "Falha na publicação"}])[0].get("erro")})
+                falhas.append({"codigo": codigo, "erro": ((r.get("falhas") or [{}])[0].get("erro")) or r.get("mensagem") or "Falha na publicação"})
         except HTTPException as e:
             falhas.append({"codigo": codigo, "erro": str(e.detail)})
         except Exception as e:  # noqa: BLE001

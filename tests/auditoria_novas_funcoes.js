@@ -156,7 +156,7 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 // leitura não vê o botão
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
-  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
+  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
 
 // ---------- IMAGENS: nunca desenhar planta falsa ----------
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
@@ -222,6 +222,37 @@ await w.executarImportacao(); await sleep(2500);
 r=await J(adm,'/api/itens/F002-P0002-1977-S01-D00001'); chk(r.s===200,'item importado deveria existir no painel: '+r.s);
 chk(!d.getElementById('imp-exec'),'depois de importar não deveria sobrar botão de importar');
 okl.push('importação: prévia, botão com os números certos, importou 1 item e a prévia zerou');
+
+// ---------- PUBLICAÇÃO: checklist antes de clicar + resultado que FICA na tela ----------
+w.route_to('projeto/F026-P0001'); await sleep(1800);
+chk(!!d.getElementById('pd-pub-corpo')&&/Situação:\s*(não publicado|rascunho)/.test(txt('#pd-pub')),'painel "Publicação" não apareceu com a situação: '+txt('#pd-pub').slice(0,80));
+const faltam=[...d.querySelectorAll('#pd-pub .chk.falta')].map(e=>e.textContent);
+chk(faltam.length===2&&faltam.some(t=>t.includes('Direitos do fundo F026'))&&faltam.some(t=>t.includes('autorizado para publicação')),'checklist deveria mostrar exatamente 2 pendências (direitos e autorização): '+faltam.length);
+chk(!!d.querySelector('#pd-pub .chk.falta button')&&txt('#pd-pub').includes('Definir direitos do fundo')&&txt('#pd-pub').includes('Autorizar publicação'),'cada pendência deveria ter o botão que a resolve');
+const bp=d.getElementById('pd-publicar'); chk(bp&&bp.disabled&&/pendências/.test(bp.title),'botão Publicar deveria estar desabilitado dizendo por quê');
+chk(!d.querySelector('.dethdr #pd-publicar'),'o botão Publicar não deveria mais ficar no cabeçalho (escondia o porquê)');
+chk(txt('#pd-pub').includes('Sem autoria divergente nem erros bloqueantes'),'checklist deveria listar também o que JÁ está ok');
+// força o clique (como se o botão estivesse ativo): o erro vira um painel que FICA, com tudo o que falta e os botões
+await w.publicarProjeto('F026-P0001','publicar'); await sleep(1800);
+chk(txt('#d-title').includes('Não foi possível publicar'),'recusa deveria abrir painel fixo "Não foi possível publicar": '+txt('#d-title'));
+chk(txt('#d-body').includes('Direitos do fundo')&&txt('#d-body').includes('não foi autorizado'),'o painel deveria trazer TODAS as razões, não só a primeira');
+chk(d.querySelectorAll('#d-body .chk.falta').length===2&&d.querySelectorAll('#d-body .chk.falta button').length===2,'o painel de erro deveria listar o que falta COM botões');
+await sleep(3500); chk(w.eval('mainEl').classList.contains('with-drawer'),'o resultado sumiu sozinho (como o balão de 2,6 s)');
+d.querySelector('#d-body .chk.falta button').click(); await sleep(1200);
+chk(txt('#d-title').includes('Direitos e licença'),'o botão "Definir direitos do fundo" deveria abrir a edição de direitos: '+txt('#d-title')); w.closeDrawer(true);
+// satisfaz os requisitos pela API e confere que o painel libera
+r=await J(adm,'/api/fundos/F026/direitos',{method:'PUT',body:JSON.stringify({situacao:'autorizado',titular:'Família teste',documento_autorizacao:'Termo 001'})}); chk(r.s===200,'não consegui autorizar direitos no teste: '+r.s);
+r=await J(adm,'/api/projetos/F026-P0001',{method:'PATCH',body:JSON.stringify({autorizado_site:true})}); chk(r.s===200,'não consegui autorizar o projeto no teste: '+r.s+' '+JSON.stringify(r.b).slice(0,80));
+await w.carregarPublicacao('F026-P0001'); await sleep(900);
+chk(d.querySelectorAll('#pd-pub .chk.falta').length===0&&d.getElementById('pd-publicar')&&!d.getElementById('pd-publicar').disabled,'com os requisitos cumpridos o botão Publicar deveria ficar ativo');
+// WordPress sem credencial neste ambiente: o erro tem que ser EXPLICADO e FICAR na tela
+await w.publicarProjeto('F026-P0001','publicar'); await sleep(1800);
+chk(txt('#d-title').includes('Não foi possível publicar')&&txt('#d-body').includes('WordPress')&&txt('#d-body').includes('Configurações'),'sem credencial do WordPress deveria explicar e apontar Configurações: '+txt('#d-body').slice(0,120));
+w.closeDrawer(true);
+// fundo inteiro sem direitos: o erro vira painel fixo com o botão que resolve (caso real do F001)
+await w.statusFundoSite('F003','no_ar'); await sleep(1800);
+chk(txt('#d-title').includes('Não foi possível publicar o fundo')&&txt('#d-body').includes('F003')&&txt('#d-body').includes('Direitos do fundo')&&txt('#d-body').includes('Definir direitos do fundo'),'fundo sem direitos deveria abrir painel fixo com o botão: '+txt('#d-title')+' | '+txt('#d-body').slice(0,100)); w.closeDrawer(true);
+okl.push('publicação: checklist antes de clicar, erro com todas as razões e botões, resultado fixo, WordPress sem credencial explicado');
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

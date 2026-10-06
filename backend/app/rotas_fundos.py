@@ -287,6 +287,11 @@ def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("maste
     try:
         if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
             raise HTTPException(404, "Fundo não existe")
+        if d.acao == "no_ar":
+            from .rotas_gestao import direitos_permitem_publicar
+            msg = direitos_permitem_publicar(con, codigo)
+            if msg:
+                raise HTTPException(400, f"Não dá para publicar o fundo {codigo}: {msg}")
         if d.motivo:
             con.execute("UPDATE fundo SET motivo_fora_do_ar=? WHERE codigo=?", (d.motivo, codigo))
             con.commit()
