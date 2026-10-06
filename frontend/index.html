@@ -1616,21 +1616,16 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   const qnap=maquinas.find(m=>m.tipo==='armazenamento');
   const ult=site.ultima_sincronizacao&&(site.ultima_sincronizacao.terminada_em||site.ultima_sincronizacao.iniciada_em);
   const prox=ult?proximaSincronizacao(ult,+(site.intervalo_sync_min||15)):null;
-  const operacaoRuim=[...captura,cv,qnap].filter(Boolean).some(m=>m.online===false)||!q.montado||!site.http?.ok;
+  const operacaoRuim=!q.montado||!site.http?.ok;   // máquinas desligadas são normais e aparecem na barra do topo
   const pend=d.erros.bloqueantes+d.solicitacoes.aguardam+d.filas.revisao;
   const geral=operacaoRuim?'bad':pend?'warn':'ok';
-  const geralTxt=geral==='bad'?'Há algo offline':geral==='warn'?'Operação com pendências':'Operação saudável';
+  const geralTxt=geral==='bad'?'Problema na infraestrutura':geral==='warn'?'Operação com pendências':'Operação saudável';
   const p=a?.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
 
   sec.innerHTML=`<div class="dash-v2">
     <div class="dash-hero">
       <div class="panel dash-hero-main">
         <div class="dash-hero-head"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p>Visão rápida da operação do acervo.</p></div><div class="dash-state ${geral}"><span class="dot"></span>${geralTxt}</div></div>
-        <div class="machine-strip">
-          ${captura.map(machineChip).join('')}
-          ${cv?machineChip(cv):machineChip({nome:'CAMP Vision 2'})}
-          ${qnap?machineChip(qnap):machineChip({nome:'QNAP'})}
-        </div>
       </div>
       <div class="dash-side-stack">
         <div class="panel qnap-card" data-nav="estacoes" style="cursor:pointer">
@@ -1754,11 +1749,8 @@ function dataUtc(v){if(!v)return null;const s=String(v).trim();const iso=/^\d{4}
 function atualizarBannerSistema(d){
   const el=document.getElementById('system-banner');if(!el)return;
   const problemas=[],criticos=[];
-  const maquinas=d?.maquinas||[];
-  maquinas.filter(m=>m.ip&&m.online===false).forEach(m=>{
-    const msg=m.tipo==='processamento'?'CAMP Vision 2 sem resposta':m.tipo==='armazenamento'?'QNAP sem resposta':m.nome+' sem resposta';
-    (['processamento','armazenamento'].includes(m.tipo)?criticos:problemas).push(msg);
-  });
+  // Máquina desligada/sem resposta NÃO entra aqui: é o estado normal fora do expediente e o indicador de cada máquina
+  // na barra do topo (e a tela Estações) já mostra. O banner só avisa o que é problema de verdade.
   const q=d?.qnap||{};if(q.montado===false)criticos.push('QNAP não montado');
   const s=d?.site||{};if(s.http&&s.http.ok===false)criticos.push('página pública sem resposta');
   const bk=d?.backup;if(bk){if(!bk.existe)problemas.push('nenhum backup do banco');else{const h=+bk.idade_horas;if(bk.ok===false)criticos.push('o último backup do banco falhou');else if(h>96)criticos.push('último backup do banco há '+Math.round(h/24)+' dias');else if(h>36)problemas.push('último backup do banco há '+Math.round(h)+' h')}}

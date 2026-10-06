@@ -207,6 +207,14 @@ chk(txt('#bk-painel').includes('em dia'),'depois do backup o painel deveria dize
 chk(!txt('#system-banner').includes('nenhum backup do banco'),'banner continua acusando falta de backup depois do backup');
 r=await J(adm,'/api/backup'); chk(r.b.existe&&r.b.ok===true&&r.b.quantidade===1&&r.b.contagens.integridade==='ok','API depois do backup: '+JSON.stringify(r.b).slice(0,120));
 r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!('arquivo' in r.b.backup),'operador deveria receber o estado do backup sem caminhos');
+// máquinas sem resposta são normais: NÃO podem aparecer no banner global nem no resumo do painel inicial
+{ const est=await J(adm,'/api/estacoes'); const off=(est.b.maquinas||[]).filter(m=>m.ip&&m.online===false).map(m=>m.nome);
+  chk(off.length>0,'precondição: o ambiente de teste deveria ter máquinas sem resposta ('+off.length+')');
+  chk(!off.some(n=>txt('#system-banner').includes(n))&&!/CAMP Vision 2 sem resposta|QNAP sem resposta/.test(txt('#system-banner')),'o banner global não deveria citar máquina sem resposta: "'+txt('#system-banner').slice(0,140)+'"');
+  w.route_to('painel'); await sleep(2500);
+  chk(!d.querySelector('#v-painel .machine-strip'),'o painel inicial não deveria repetir a faixa de máquinas (a barra do topo já mostra)');
+  chk(!/offline/i.test(txt('#v-painel .dash-state')),'o resumo do painel não deveria dizer "offline" por causa de máquinas: '+txt('#v-painel .dash-state'));
+  chk(!!d.querySelector('.machine-status button, .machine-status .ms'),'a barra do topo deve continuar mostrando as máquinas'); }
 okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
 
 // ---------- CATÁLOGO LOCAL × SITE (prévia e importação) ----------
