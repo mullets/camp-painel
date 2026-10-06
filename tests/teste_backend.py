@@ -656,6 +656,38 @@ def filho(modo):
         r = op.post("/api/projetos/F099-P0001/importar-folhas", json={}); ver("repetir é idempotente (0 novas)", r.json()["itens_novos"] == 0)
         k = connect(); ver("importações ficam na auditoria", k.execute("SELECT count(*) FROM evento WHERE tipo='importacao_folhas'").fetchone()[0] == 3); k.close()
         for l in res: print(l)
+    elif modo == "urlpublica":
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)")
+        for n, tit, cid in ((1, "Igreja Paróquia Mãe do Salvador, São Paulo/SP", "São Paulo"), (2, "Casa Dois", "Santos"), (3, "Casa Três", "Santos"), (4, "Casa Quatro", "Santos")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES (?,?,?,?,1970,?)", (f"F099-P000{n}", "F099", n, tit, cid))
+        pg = lambda i, slug, st, cod: c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (?,?,?,?,?,?)", (i, slug, slug, f"https://camp.arq.br/acervo/projetos/{slug}/", st, cod))
+        pg(1, "f099-p0002-slug-do-plugin-publicado", "publish", "F099-P0002")
+        pg(2, "f099-p0002-slug-antigo-rascunho", "draft", "F099-P0002")        # a PUBLICADA tem preferência
+        pg(3, "f099-p0003-pagina-sem-codigo-detectado", "publish", None)       # achada pelo slug que começa com o código
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (9,'Outra','f099-p0004-fora','https://camp.arq.br/quem-somos/f099-p0004-fora/','publish','F099-P0004')")  # fora de /acervo/projetos/: ignorada
+        c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def det(cod): return x.get(f"/api/projetos/{cod}/detalhe").json()
+        d1 = det("F099-P0001")
+        ver("sem página no espelho: monta o endereço SEM cidade/UF (caso 'São Paulo/SP' com barra)", d1["site_url"] == "https://camp.arq.br/acervo/projetos/f099-p0001-igreja-paroquia-mae-do-salvador/" and d1["site_url_origem"] == "presumido" and d1["pagina_status"] is None, d1["site_url"])
+        ver("o endereço montado NÃO tem '-sao-paulo-sp' (o defeito do link que não abria)", "sao-paulo" not in d1["site_url"])
+        d2 = det("F099-P0002")
+        ver("com página no espelho: usa o endereço REAL (não o montado)", d2["site_url"] == "https://camp.arq.br/acervo/projetos/f099-p0002-slug-do-plugin-publicado/" and d2["site_url_origem"] == "site", d2["site_url"])
+        ver("duas páginas: a PUBLICADA tem preferência sobre o rascunho", d2["pagina_status"] == "publish")
+        d3 = det("F099-P0003")
+        ver("página sem código detectado é achada pelo slug que começa com o código", d3["site_url"].endswith("f099-p0003-pagina-sem-codigo-detectado/") and d3["site_url_origem"] == "site", d3["site_url"])
+        d4 = det("F099-P0004")
+        ver("página FORA de /acervo/projetos/ é ignorada (volta ao endereço montado)", d4["site_url_origem"] == "presumido" and "quem-somos" not in d4["site_url"], d4["site_url"])
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -786,6 +818,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det})" if det and st_ != "ok" else ""))
+
+print("13) Endereço da página pública: o real do site, ou o montado sem cidade/UF")
+rc, out = rodar("urlpublica", f"{tmp}/urlpublica.db")
+if rc != 0: ok(False, f"teste do endereço público não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

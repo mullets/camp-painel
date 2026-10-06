@@ -79,17 +79,28 @@ def _slug_publico(texto: str) -> str:
     return s
 
 
+_RE_CIDADE_UF = re.compile(r"\s*[,\-–(]\s*[^,\-–/()]+/[A-Za-z]{2}\s*\)?\s*$")
+
+
 def _url_publica_projeto(codigo: str, titulo: str, cidade: str | None = None) -> str:
-    """Monta a rota pública da CAMP sem repetir cidade/UF no slug."""
+    """Monta a rota pública presumida da CAMP, SEM cidade/UF no slug (ex.: "..., São Paulo/SP" não entra).
+    Só é usada quando o espelho do site não tem a página real (ver _pagina_publica_projeto)."""
     base = (titulo or "").strip()
     if cidade:
-        base = re.sub(
-            rf"\s*[,\-–]\s*{re.escape(cidade)}(?:\s*[,\-–]\s*[A-Z]{{2}})?\s*$",
-            "",
-            base,
-            flags=re.I,
-        ).strip(" ,-–")
+        base = re.sub(rf"\s*[,\-–(]\s*{re.escape(cidade)}(?:\s*[,/\-–]\s*[A-Za-z]{{2}})?\s*\)?\s*$", "", base, flags=re.I).strip(" ,-–")
+    base = _RE_CIDADE_UF.sub("", base).strip(" ,-–")
     return f"https://camp.arq.br/acervo/projetos/{codigo.lower()}-{_slug_publico(base)}/"
+
+
+def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -> dict:
+    """Endereço da página pública do projeto: o REAL (espelho das páginas do site) quando existe; senão o presumido.
+    status é o status da página no WordPress (publish = qualquer visitante abre)."""
+    r = con.execute("""SELECT url, status FROM wp_pagina
+                        WHERE (codigo_detectado=? OR lower(slug) LIKE ?) AND url LIKE '%/acervo/projetos/%'
+                        ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (codigo, codigo.lower() + "-%")).fetchone()
+    if r and r["url"]:
+        return {"url": r["url"], "origem": "site", "status": r["status"]}
+    return {"url": _url_publica_projeto(codigo, titulo, cidade), "origem": "presumido", "status": None}
 
 
 @router.get("/projetos")
@@ -257,10 +268,11 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "codigos_site": [x.get("codigo") for x in itens_site],
         "codigos_locais": [x.get("codigo") for x in itens_local],
     }
+    pub = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])
     con.close()
 
     md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
-    site_url = _url_publica_projeto(codigo, p["titulo"], p["cidade"])
+    site_url = pub["url"]
     projeto = dict(p)
     projeto["tainacan_item_id_salvo"] = projeto.get("tainacan_item_id")
     projeto["tainacan_item_id"] = site["id"] if site else None
@@ -280,7 +292,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         categorias[chave]["itens"] += 1
 
     return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
-            "fonte_visual": fonte_visual, "site_url": site_url,
+            "fonte_visual": fonte_visual, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
             "erros": erros, "pedidos": pedidos, "eventos": eventos, "filas": filas}
 

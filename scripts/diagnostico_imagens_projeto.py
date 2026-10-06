@@ -136,6 +136,15 @@ for c, r in [(c, r) for c, r in achados if c not in ok_cls][:6]:
 sumidos = [c for c, i in com_id if i not in espelho]
 if sumidos: print(f"      {len(sumidos)} folha(s) apontam para um ID que NÃO existe mais no espelho (apagado/na lixeira no site?), ex.: {sumidos[:3]}")
 
+# ---- página pública do projeto: a real (espelho do site) e a que o painel montaria ----
+from app.rotas_projetos import _url_publica_projeto
+pags = con.execute("""SELECT url, status, codigo_detectado FROM wp_pagina WHERE (codigo_detectado=? OR lower(slug) LIKE ?) AND url LIKE '%/acervo/projetos/%'""", (cod, cod.lower() + "-%")).fetchall()
+print(f"\n== PÁGINA PÚBLICA DO PROJETO")
+print(f"   no espelho do site: {len(pags)} página(s)")
+for r in pags: print(f"      {r['status']:8} {r['url']}")
+print(f"   endereço que o painel monta se não achar a página: {_url_publica_projeto(cod, p['titulo'], None)}")
+if not pags: print("   ⚠ nenhuma página em /acervo/projetos/ no espelho: a página ainda não foi gerada, ou o espelho está desatualizado")
+
 # conferência com o catálogo local
 loc = {r["codigo"]: r for r in con.execute("SELECT codigo,arquivo_jpg,arquivo_tif,tainacan_item_id FROM item WHERE projeto_codigo=?", (cod,))}
 def _sujo(v): return bool(re.fullmatch(r"\d+", str(v).strip())) or str(v).lstrip().startswith("<")

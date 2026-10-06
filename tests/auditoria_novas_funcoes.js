@@ -192,6 +192,10 @@ w.route_to('projeto/F026-P0001'); await sleep(1300);
 chk(!txt('#v-projeto').includes('Ver página pública')&&!txt('#v-projeto').includes('abrir página pública'),'projeto NÃO publicado oferece link de página pública'); chk(txt('#v-projeto').includes('ainda não é pública'),'projeto não publicado deveria explicar que a página ainda não é pública');
 w.route_to('projeto/F003-P0001'); await sleep(1300);
 chk(txt('#v-projeto').includes('Ver página pública')&&[...d.querySelectorAll('#v-projeto a')].some(a=>/\/acervo\/projetos\/f003-p0001-/.test(a.href)),'projeto PUBLICADO deveria ter link /acervo/projetos/f003-p0001-...');
+w.route_to('projeto/F003-P0001'); await sleep(1500);
+chk([...d.querySelectorAll('#v-projeto a')].some(a=>a.href==='https://camp.arq.br/acervo/projetos/f003-p0001-slug-real-do-plugin/'),'o link deveria usar o endereço REAL da página (do espelho do site), não o montado: '+[...d.querySelectorAll('#v-projeto a')].map(a=>a.href).filter(h=>/acervo\/projetos/.test(h)).join(' | '));
+w.route_to('projeto/F001-P0001'); await sleep(1500);
+chk(!txt('#v-projeto').includes('Ver página pública')&&txt('#v-projeto').includes('Abrir no site (não publicado)'),'página real em RASCUNHO no site não pode oferecer "Ver página pública": '+txt('#v-projeto .act').slice(0,100));
 okl.push('link da página pública: só em item/projeto publicado; rascunho/privado explica por que não abre');
 
 // ---------- BACKUP DO BANCO ----------
