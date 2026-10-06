@@ -156,7 +156,7 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 // leitura não vê o botão
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
-  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
+  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
 
 // ---------- IMAGENS: nunca desenhar planta falsa ----------
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
@@ -208,6 +208,20 @@ chk(!txt('#system-banner').includes('nenhum backup do banco'),'banner continua a
 r=await J(adm,'/api/backup'); chk(r.b.existe&&r.b.ok===true&&r.b.quantidade===1&&r.b.contagens.integridade==='ok','API depois do backup: '+JSON.stringify(r.b).slice(0,120));
 r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!('arquivo' in r.b.backup),'operador deveria receber o estado do backup sem caminhos');
 okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
+
+// ---------- CATÁLOGO LOCAL × SITE (prévia e importação) ----------
+r=await J(ope,'/api/importacao/previa'); chk(r.s===403,'operador vendo a prévia do importador: '+r.s);
+r=await J(adm,'/api/importacao/previa'); chk(r.s===200&&r.b.itens_novos===1&&r.b.projetos_novos===0,'prévia do seed deveria ter exatamente 1 item novo: '+JSON.stringify(r.b).slice(0,120));
+w.route_to('estacoes'); await sleep(3000);
+chk(!!d.getElementById('imp-painel')&&!!d.getElementById('imp-ver'),'painel "Catálogo local × site" ou botão não aparece para master');
+await w.previaImportacao(); await sleep(1800);
+chk(txt('#imp-corpo').includes('Itens no painel × no site')&&txt('#imp-corpo').includes('Entrariam'),'prévia não renderizou: '+txt('#imp-corpo').slice(0,90));
+chk(!!d.getElementById('imp-exec')&&txt('#imp-exec').includes('1 item'),'botão de importar deveria mostrar "1 item(ns)": '+txt('#imp-exec'));
+chk(txt('#imp-corpo').includes('F002-P0002-1977-S01-D00001'),'o item novo deveria estar listado');
+await w.executarImportacao(); await sleep(2500);
+r=await J(adm,'/api/itens/F002-P0002-1977-S01-D00001'); chk(r.s===200,'item importado deveria existir no painel: '+r.s);
+chk(!d.getElementById('imp-exec'),'depois de importar não deveria sobrar botão de importar');
+okl.push('importação: prévia, botão com os números certos, importou 1 item e a prévia zerou');
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

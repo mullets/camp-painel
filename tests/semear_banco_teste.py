@@ -51,6 +51,8 @@ c.execute("INSERT INTO wp_termo (id,taxonomia_id,nome) VALUES (9001,77,'Planta')
 import json
 c.execute("UPDATE wp_item SET metadados=?, json=? WHERE codigo_detectado='F023-P0011-1959-S01-D00001' AND colecao_id=8013",
           (json.dumps({"Técnica": "nanquim sobre vegetal", "Tipo de desenho": "Planta", "Data do registro fotográfico": "1972"}), json.dumps({"description": "Planta baixa do pavimento térreo."})))
+c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_url,thumb_url,codigo_detectado,fundo_detectado,projeto_detectado,metadados) VALUES (2999,8013,'draft','Folha nova só no site','folha-nova','https://exemplo.test/folha-nova','https://exemplo.test/img/novo.jpg','https://exemplo.test/img/novo-t.jpg','F002-P0002-1977-S01-D00001','F002','F002-P0002',?)",
+          (json.dumps({"Código do documento": "F002-P0002-1977-S01-D00001"}),))
 c.execute("UPDATE wp_item SET status='publish' WHERE codigo_detectado='F023-P0011-1959-S01-D00002' AND colecao_id=8013")
 c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F003-P0001'")
 for i in range(12):

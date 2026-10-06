@@ -33,6 +33,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  for(const [nome,fn] of funcoes){ try{ await fn(); await sleep(600); checa('abre: '+nome); try{w.closeDrawer(true)}catch(_){ } }catch(e){ vazou['abre: '+nome+' (exceção)']=[e.message.slice(0,80)] } }
  // modais de criação (selects com fundos/projetos envenenados)
  for(const m of ['m-arq','m-entrada','m-erro','m-fundo','m-lista','m-loc','m-proj','m-sol','m-usr']){ try{ w.openModal(m); await sleep(400); checa('modal '+m); w.closeModal() }catch(e){ } }
+ try{ w.route_to('estacoes'); await sleep(2500); await w.previaImportacao(); await sleep(1500); checa('prévia do importador'); if(!(d.getElementById('imp-corpo').textContent||'').includes('wp_item.sem_codigo')) vazou['prévia do importador: TESTE VAZIO']=['o dado envenenado nem apareceu nas listas']; }catch(e){ vazou['prévia do importador (exceção)']=[e.message.slice(0,80)] }
  // formulários de edição e criação
  for(const [nome,fn] of [['editarFundo F026',()=>w.editarFundo('F026')],['editarProjeto F026-P0001',()=>w.editarProjeto('F026-P0001')],['editarItem',()=>w.editarItem('F023-P0011-1959-S01-D00001')],['abrirAjuda',()=>w.abrirAjuda()]]){
    try{ await fn(); await sleep(700); checa('formulário: '+nome); try{w.closeDrawer(true)}catch(_){ } }catch(e){ vazou['formulário: '+nome+' (exceção)']=[e.message.slice(0,80)] } }

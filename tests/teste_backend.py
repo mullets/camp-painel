@@ -437,6 +437,56 @@ def filho(modo):
         pub = op.get("/api/estacoes").json().get("backup", {})
         ver("estações: leitura recebe o estado do backup SEM caminhos", "existe" in pub and "idade_horas" in pub and "arquivo" not in pub and "extra" not in pub, str(sorted(pub)))
         for l in res: print(l)
+    elif modo == "previa":
+        init_db(); aplicar_migracoes()
+        import json as _j, subprocess as _sp, sys as _sys
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        db = os.environ["CAMP_DB_PATH"]
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)")
+        def wp(i, col, status, titulo, md, doc=None, thumb=None, cod=None):
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,documento_url,thumb_url,codigo_detectado,metadados) VALUES (?,?,?,?,?,?,?,?,?)",
+                      (i, col, status, titulo, f"s-{i}", doc, thumb, cod, _j.dumps(md)))
+        wp(100, 8007, "publish", "P0001 — Casa de teste", {"Código de Catalogação": "F099-P0001", "Ano": "1970"})
+        C = lambda n: f"F099-P0001-1970-S01-D0000{n}"
+        wp(8001, 8013, "publish", "Planta 1", {"Código do documento": C(1)}, doc="https://s/1.jpg", cod=C(1))
+        wp(8002, 8013, "draft", "Planta 2 sem imagem", {"Código do documento": C(2)}, cod=C(2))
+        wp(8003, 8013, "publish", "Planta 3", {"Código do documento": C(3)}, doc="https://s/3.jpg", cod=C(3))
+        wp(8010, 8013, "draft", "Teste sem código nenhum", {})
+        wp(8011, 8013, "draft", "Orfã", {"Código do documento": "F099-P0009-1970-S01-D00001"}, doc="https://s/o.jpg", cod="F099-P0009-1970-S01-D00001")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(em, se):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": se}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-admin-12345"), cli("op@camp.arq.br", "senha-operador-123")
+        def estado():
+            k = connect(); r = tuple(k.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in ("projeto", "item", "numero_p", "evento")); k.close(); return r
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("operador NÃO vê a prévia nem importa (403)", op.get("/api/importacao/previa").status_code == 403 and op.post("/api/importacao/executar", json={"esperado_itens_novos": 3, "esperado_projetos_novos": 1}).status_code == 403)
+        antes = estado()
+        r = adm.get("/api/importacao/previa"); pv = r.json()
+        ver("prévia calcula o que entraria", r.status_code == 200 and (pv["projetos_novos"], pv["itens_novos"]) == (1, 3), f"HTTP {r.status_code} {pv.get('projetos_novos')} {pv.get('itens_novos')}")
+        ver("SIMULAR NÃO GRAVA NADA (projetos, itens, numero_p e eventos intactos)", estado() == antes, f"{antes} -> {estado()}")
+        ver("prévia lista novos por fundo", pv["novos_por_fundo"] == [{"fundo": "F099", "itens": 3, "projetos": 1}], str(pv["novos_por_fundo"]))
+        ver("prévia aponta os itens do site SEM imagem (inclusive o sem código)", pv["site_sem_imagem_total"] == 2 and {x["id"] for x in pv["site_sem_imagem"]} == {8002, 8010} and C(2) in {x["codigo"] for x in pv["site_sem_imagem"]}, str(pv["site_sem_imagem"]))
+        ver("prévia aponta item sem código e folha sem projeto", pv["sem_codigo_total"] == 1 and len(pv["item_sem_projeto"]) == 1 and pv["item_sem_projeto"][0]["codigo"] == "F099-P0009-1970-S01-D00001")
+        ver("prévia conta itens locais x site", pv["total_local"] == 0 and pv["total_site"] == 5 and pv["locais_sem_item_no_site"] == 0)
+        out = _sp.run([_sys.executable, os.path.join(os.path.dirname(os.environ["PYTHONPATH"]), "scripts", "importar_site.py"), "--simular"], env=os.environ, capture_output=True, text=True)
+        ver("CLI --simular mostra a prévia e não grava", "SIMULAÇÃO: nada foi gravado. Novos: 1 projetos, 3 itens" in out.stdout and estado() == antes, (out.stdout + out.stderr)[-120:])
+        r = adm.post("/api/importacao/executar", json={"esperado_itens_novos": 0, "esperado_projetos_novos": 0})
+        ver("execução com números diferentes da prévia é RECUSADA (409) e não grava", r.status_code == 409 and estado() == antes, f"HTTP {r.status_code}")
+        r = adm.post("/api/importacao/executar", json={"esperado_itens_novos": 3, "esperado_projetos_novos": 1}); ex = r.json()
+        ver("execução confirmada importa exatamente o que a prévia mostrou", r.status_code == 200 and (ex["projetos_novos"], ex["itens_novos"]) == (1, 3), str(ex))
+        k = connect()
+        ver("itens e projeto realmente criados", {x[0] for x in k.execute("SELECT codigo FROM item")} == {C(1), C(2), C(3)} and k.execute("SELECT count(*) FROM projeto WHERE codigo='F099-P0001'").fetchone()[0] == 1)
+        ver("importação fica na auditoria", k.execute("SELECT count(*) FROM evento WHERE tipo='importacao_site'").fetchone()[0] == 1); k.close()
+        pv2 = adm.get("/api/importacao/previa").json()
+        ver("depois de importar, a prévia não tem mais nada novo (idempotente)", (pv2["projetos_novos"], pv2["itens_novos"]) == (0, 0) and pv2["itens_atualizados"] == 3 and pv2["total_local"] == 3, str((pv2["projetos_novos"], pv2["itens_novos"], pv2["itens_atualizados"])))
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -539,6 +589,14 @@ else:
 print("9) Backup do banco: consistente, verificado, com retenção e permissões")
 rc, out = rodar("backup", f"{tmp}/backup.db")
 if rc != 0: ok(False, f"teste de backup não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st, nome, det = (l.split("|") + [""])[:3]; ok(st == "ok", f"{nome}" + (f" ({det})" if det and st != "ok" else ""))
+
+print("10) Importador: prévia fiel (simulação não grava) e execução protegida")
+rc, out = rodar("previa", f"{tmp}/previa.db")
+if rc != 0: ok(False, f"teste da prévia não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

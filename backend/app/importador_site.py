@@ -47,10 +47,12 @@ def _tipo(v: str | None):
     return None
 
 
-def executar(log=print) -> dict:
+def executar(log=print, simular: bool = False) -> dict:
+    """simular=True roda EXATAMENTE o mesmo código, mas desfaz tudo no fim (prévia fiel do que a importação faria)."""
     con = connect()
     n = {"projetos_novos": 0, "projetos_atualizados": 0, "itens_novos": 0, "itens_atualizados": 0,
-         "sem_codigo": [], "fundo_desconhecido": [], "item_sem_projeto": []}
+         "sem_codigo": [], "fundo_desconhecido": [], "item_sem_projeto": [],
+         "projetos_novos_lista": [], "itens_novos_lista": []}
     fundos = {r[0] for r in con.execute("SELECT codigo FROM fundo")}
     equiv = {r[0]: r[1] for r in con.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
 
@@ -86,7 +88,9 @@ def executar(log=print) -> dict:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'importado','site',?)",
                         (p, json.dumps({"tainacan_id": it["id"]})))
             n["projetos_novos"] += 1
-    con.commit()
+            n["projetos_novos_lista"].append((p, titulo, f))
+    if not simular:
+        con.commit()
     log(f"projetos: {n['projetos_novos']} novos, {n['projetos_atualizados']} atualizados, {len(n['sem_codigo'])} sem código")
 
     # ---- itens ----
@@ -123,7 +127,9 @@ def executar(log=print) -> dict:
                          _arquivo_preview(it["documento_url"]), status, it["id"],
                          f"Acervo {md.get('Arquiteto') or md.get('Fundo') or ''}/CAMP - Casa da Arquitetura Moderna Paulista"))
             n["itens_novos"] += 1
-    con.commit()
+            n["itens_novos_lista"].append((cod, titulo, p, f))
+    if not simular:
+        con.commit()
     log(f"itens: {n['itens_novos']} novos, {n['itens_atualizados']} atualizados, {len(n['item_sem_projeto'])} sem projeto")
 
     # ids dos termos de fundo no site
@@ -131,5 +137,9 @@ def executar(log=print) -> dict:
         f = equiv.get(r[1])
         if f:
             con.execute("UPDATE fundo SET tainacan_term_id=? WHERE codigo=?", (r[0], f))
-    con.commit(); con.close()
+    if simular:
+        con.rollback()
+    else:
+        con.commit()
+    con.close()
     return n
