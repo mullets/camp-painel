@@ -1392,20 +1392,31 @@ async function carregarProjetosAPI(filtro={}){const tinha=document.querySelector
   PROJETOS.length=0;r.itens.forEach(p=>PROJETOS.push({c:p.codigo,t:p.titulo,f:p.fundo_codigo,a:p.ano,cid:p.cidade,s:(p.series||'').split(',').filter(Boolean),n:p.folhas,st:p.status_site,u:(p.atualizado_em||'').slice(0,10)}));atualizarBarraLoteProjetos()}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.message;if(tinha)marcarStale('projetos',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`);else tabelaErro('#projetos-body',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`)}}
 const _showProjetoMock=showProjeto;
 function nomeSerieProjeto(c){return ({S01:'Desenhos e pranchas',S02:'Documentos textuais',S03:'Fotografias',S04:'Negativos',S05:'Slides',S06:'Materiais e especificações',SEM_SERIE:'Sem série'})[c]||c||'Sem série'}
+const ADOCAO_TENTADA=new Set();
+async function adotarFolhaDoSite(code){
+  const proj=code.slice(0,10),valida=/^F\d{3}-P\d{4}-.+/.test(code);
+  if(!valida||ADOCAO_TENTADA.has(code)){mostrarNaoEncontrado('Documento não encontrado',code+' não existe.','projetos');return false}
+  if(!EU||EU.papel==='leitura'){mostrarNaoEncontrado('Folha só no site',code+' existe só no site e ainda não foi importada para o painel. Peça a um operador abrir esta folha para importá-la.','projetos');return false}
+  ADOCAO_TENTADA.add(code);toast('Importando a folha do site…');
+  try{await API(`/api/projetos/${proj}/importar-folhas`,{method:'POST',body:JSON.stringify({item:code})});toast('Folha importada do site: agora ela pode ser editada aqui');return true}
+  catch(e){mostrarNaoEncontrado('Documento não encontrado',`${code} não está no catálogo do painel. ${e.message}`,'projetos');return false}}
+async function importarFolhasDoSite(code,n){
+  if(!confirm(`Importar ${n} folha(s) que existem só no site para o catálogo do painel?\nElas passam a poder ser editadas aqui; o projeto não é alterado.`))return;
+  try{const r=await API(`/api/projetos/${code}/importar-folhas`,{method:'POST',body:JSON.stringify({})});toast(`${r.itens_novos} folha(s) importada(s) do site`);showProjeto(code)}catch(e){toast(e.message)}}
 function cardItemProjeto(it){
   const codigo=it.codigo||('TAINACAN-'+it.tainacan_item_id);
   const navegavel=/^F\d{3}-P\d{4}-.+/.test(codigo);
   const imagem=it.thumb_url?`<img class="img-real" src="${escHtml(it.thumb_url)}" loading="lazy" alt="${escHtml(codigo)}">`:semImagemHTML();
   const flag=it.autoria_divergente?'<span class="tag r flag">autoria divergente</span>':it.duplicata_de?'<span class="tag a flag">duplicata</span>':it.espelhado?'<span class="tag a flag">espelhado</span>':'';
   const status=it.status_site==='rascunho'?' <span class="tag b" style="font-size:9.5px">rascunho</span>':it.status_site==='fora_do_ar'?' <span class="tag" style="font-size:9.5px">despublicado</span>':'';
-  const origem=it.origem_catalogacao==='site'?'<span class="tag origin">só no site</span>':'';
+  const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
   return `<div class="thumb" ${navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}<span class="code">${escHtml(codigo)}</span></div></div>`
 }
 function renderItensProjeto(d,p){
   const its=d.itens||[], fonte=d.fonte_visual||{};
   if(!its.length)return `<div class="panel"><div class="empty">Nenhum documento digitalizado reconhecido para este projeto.</div></div>`;
-  const diverge=fonte.documentos_site!==fonte.documentos_locais;
-  const source=`<div class="project-source ${diverge?'warn':''}"><b>Fonte visual:</b><span>${escHtml(fonte.colecao_itens_nome||('coleção '+(fonte.colecao_itens_id||'—')))}</span><span>· ${escHtml(fonte.documentos_site??0)} documento(s) reconhecidos no site</span><span>· ${escHtml(fonte.documentos_locais??0)} no catálogo local</span>${diverge?'<span class="tag a">divergência</span>':''}</div>`;
+  const diverge=fonte.documentos_site!==fonte.documentos_locais,soSite=its.filter(i=>i.origem_catalogacao==='site').length;
+  const source=`<div class="project-source ${diverge?'warn':''}"><b>Fonte visual:</b><span>${escHtml(fonte.colecao_itens_nome||('coleção '+(fonte.colecao_itens_id||'—')))}</span><span>· ${escHtml(fonte.documentos_site??0)} documento(s) reconhecidos no site</span><span>· ${escHtml(fonte.documentos_locais??0)} no catálogo local</span>${diverge?'<span class="tag a">divergência</span>':''}${soSite>0&&EU&&EU.papel!=='leitura'?`<button class="btn sm" id="pd-importar" onclick="importarFolhasDoSite('${escHtml(p.codigo)}',${soSite})">Importar ${soSite} folha(s) só no site</button>`:''}</div>`;
   const ordem=['S01','S02','S03','S04','S05','S06','SEM_SERIE'];
   const grupos={};for(const it of its){const k=it.serie_codigo||'SEM_SERIE';(grupos[k]||(grupos[k]=[])).push(it)}
   const html=[...ordem,...Object.keys(grupos).filter(k=>!ordem.includes(k))].filter(k=>grupos[k]?.length).map(k=>`<section class="project-series"><div class="project-series-head"><h3>${escHtml(nomeSerieProjeto(k))}</h3><span>${grupos[k].length}</span></div><div class="thumbs">${grupos[k].map(cardItemProjeto).join('')}</div></section>`).join('');
@@ -1500,7 +1511,7 @@ function blocoIgnorados(r){const l=r.ignorados||[];if(!l.length)return '';return
 function mostrarIgnorados(code,r){openDrawer('Projetos que ficaram de fora',code,`<div class="stale-note"><span class="status-dot bad"></span><span>${escHtml(r.mensagem||'')}</span></div>${blocoIgnorados(r)}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}
 async function autorizarProjeto(code){if(!confirm(`Autorizar ${code} para publicação?\nAs folhas revisadas poderão ser preparadas e publicadas.`))return;try{await API('/api/projetos/'+code,{method:'PATCH',body:JSON.stringify({autorizado_site:true})});toast('Projeto autorizado');showProjeto(code)}catch(e){toast(e.message)}}
 const _showItemMock=showItem;
-showItem=async function(code){if(!EU&&!MODO_SERVIDOR)return _showItemMock(code);if(!EU){document.getElementById('login').classList.add('on');return}let d;try{d=await API(`/api/itens/${code}`)}catch(e){if(e.status===404){mostrarNaoEncontrado('Documento não encontrado',code+' não existe.','projetos')}else toast(e.message);return}const it=d.item;registrarRecente('item/'+code,code+' · '+(it.tipo_documento||it.serie_codigo||'Documento'),'documento');
+showItem=async function(code){if(!EU&&!MODO_SERVIDOR)return _showItemMock(code);if(!EU){document.getElementById('login').classList.add('on');return}let d;try{d=await API(`/api/itens/${code}`)}catch(e){if(e.status===404){if(await adotarFolhaDoSite(code))return showItem(code)}else toast(e.message);return}const it=d.item;registrarRecente('item/'+code,code+' · '+(it.tipo_documento||it.serie_codigo||'Documento'),'documento');
   document.getElementById('id-back').onclick=()=>voltar('projeto/'+it.projeto_codigo);
   const fonteImg=it.imagem_grande||it.thumb_url;const img=fonteImg?`<img class="img-real img-grande" src="${escHtml(fonteImg)}" alt="${escHtml(code)}">`:semImagemHTML('Esta folha não tem imagem utilizável no site (sem arquivo, ou o arquivo não é JPG/PNG).');
   const avisoSite=(AVISO_SITE_ITEM&&AVISO_SITE_ITEM.codigo===code)?`<div class="panel edit-alerta"><div class="pb"><b>Salvo no painel, mas o site não aceitou:</b><ul class="edit-lista">${AVISO_SITE_ITEM.falhas.map(f=>`<li><b>${escHtml(f.campo)}</b>: ${escHtml(f.erro)}</li>`).join('')}</ul><small>Fica registrado como pendência de sincronização. Corrija o motivo (ex.: credencial do WordPress em Configurações) e edite de novo.</small></div></div>`:'';AVISO_SITE_ITEM=null;

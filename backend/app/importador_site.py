@@ -47,8 +47,10 @@ def _tipo(v: str | None):
     return None
 
 
-def executar(log=print, simular: bool = False) -> dict:
-    """simular=True roda EXATAMENTE o mesmo código, mas desfaz tudo no fim (prévia fiel do que a importação faria)."""
+def executar(log=print, simular: bool = False, projeto: str | None = None, item: str | None = None, so_itens: bool = False) -> dict:
+    """simular=True roda EXATAMENTE o mesmo código, mas desfaz tudo no fim (prévia fiel do que a importação faria).
+    projeto/item restringem às folhas daquele projeto ou àquela folha; so_itens NÃO mexe em projetos (importar uma folha
+    "só no site" não pode alterar o projeto que já existe no painel)."""
     con = connect()
     n = {"projetos_novos": 0, "projetos_atualizados": 0, "itens_novos": 0, "itens_atualizados": 0,
          "sem_codigo": [], "fundo_desconhecido": [], "item_sem_projeto": [],
@@ -57,9 +59,11 @@ def executar(log=print, simular: bool = False) -> dict:
     equiv = {r[0]: r[1] for r in con.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
 
     # ---- projetos ----
-    for it in con.execute("SELECT * FROM wp_item WHERE colecao_id=?", (COL_PROJETOS,)).fetchall():
+    for it in ([] if so_itens else con.execute("SELECT * FROM wp_item WHERE colecao_id=?", (COL_PROJETOS,)).fetchall()):
         md = json.loads(it["metadados"] or "{}")
         cod, f, p = detectar_codigo(md.get("Código de Catalogação", ""), it["titulo"] or "", it["slug"] or "")
+        if projeto and p != projeto:
+            continue
         if not p:
             n["sem_codigo"].append((it["id"], it["titulo"], md.get("Fundo")))
             continue
@@ -100,7 +104,10 @@ def executar(log=print, simular: bool = False) -> dict:
         md = json.loads(it["metadados"] or "{}")
         cod, f, p = detectar_codigo(md.get("Código do documento", ""), it["titulo"] or "", it["slug"] or "")
         if not cod or cod.count("-") != 4:
-            n["sem_codigo"].append((it["id"], it["titulo"], md.get("Fundo")))
+            if not projeto and not item:   # numa importação de uma folha/projeto só, "sem código" dos outros não interessa
+                n["sem_codigo"].append((it["id"], it["titulo"], md.get("Fundo")))
+            continue
+        if item and cod != item:
             continue
         # projeto pelo código, ou pelo id do dossiê no metadado "Projeto"
         if p not in projetos:
@@ -109,6 +116,8 @@ def executar(log=print, simular: bool = False) -> dict:
             if not p_alt:
                 n["item_sem_projeto"].append((it["id"], cod)); continue
             p = p_alt
+        if projeto and p != projeto:
+            continue
         partes = cod.split("-")
         serie, seq = partes[3], int(partes[4][1:])
         titulo = RE_SUFIXO_TITULO.sub("", md.get("Título") or it["titulo"] or "").strip() or None
@@ -133,7 +142,7 @@ def executar(log=print, simular: bool = False) -> dict:
     log(f"itens: {n['itens_novos']} novos, {n['itens_atualizados']} atualizados, {len(n['item_sem_projeto'])} sem projeto")
 
     # ids dos termos de fundo no site
-    for r in con.execute("SELECT x.id, x.nome FROM wp_termo x JOIN wp_taxonomia t ON t.id=x.taxonomia_id WHERE t.nome='Fundos'").fetchall():
+    for r in ([] if (projeto or item or so_itens) else con.execute("SELECT x.id, x.nome FROM wp_termo x JOIN wp_taxonomia t ON t.id=x.taxonomia_id WHERE t.nome='Fundos'").fetchall()):
         f = equiv.get(r[1])
         if f:
             con.execute("UPDATE fundo SET tainacan_term_id=? WHERE codigo=?", (r[0], f))

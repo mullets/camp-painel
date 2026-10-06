@@ -609,6 +609,53 @@ def filho(modo):
         r = mst.post("/api/fundos/F098/status-site", json={"acao": "no_ar"}); j = r.json()
         ver("fundo sem NADA pronto: não diz '0 alterados' mudo, explica o motivo", r.status_code == 200 and not j["ok"] and "Nenhum projeto estava pronto" in (j["erro"] or "") and j["ignorados_total"] == 1, str(j)[:200])
         for l in res: print(l)
+    elif modo == "adotar":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)")
+        for n in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES (?,?,?,?,1970,'nao_publicado',?)", (f"F099-P000{n}", "F099", n, f"Casa {n}", 100 + n))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,metadados) VALUES (?,8007,'publish',?,?,?)", (100 + n, f"Dossiê {n}", f"F099-P000{n}", _j.dumps({"Código de Catalogação": f"F099-P000{n}"})))
+        def wp(i, cod, titulo):
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,documento_url,codigo_detectado,metadados) VALUES (?,8013,'draft',?,?,?,?,?)",
+                      (i, titulo, f"s-{i}", f"https://s/{i}.jpg", cod, _j.dumps({"Código do documento": cod, "Folha": "01"})))
+        D = lambda p_, n: f"F099-P000{p_}-1970-S01-D0000{n}"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,tainacan_item_id,origem) VALUES (?,?,?,?,?,'importado')", (D(1, 1), "F099-P0001", "S01", 1, 8001))
+        wp(8001, D(1, 1), "Planta 1"); wp(8002, D(1, 2), "Planta 2 só no site"); wp(8003, D(1, 3), "Planta 3 só no site"); wp(8101, D(2, 1), "Outro projeto só no site")
+        c.commit(); c.close()
+        for em, nome, papel in (("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        op, le = cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def existe(cod):
+            k = connect(); r = k.execute("SELECT origem FROM item WHERE codigo=?", (cod,)).fetchone(); k.close(); return r[0] if r else None
+        ver("antes: a folha só no site NÃO existe no catálogo do painel (por isso dava 'não encontrado')", op.get(f"/api/itens/{D(1, 2)}").status_code == 404 and existe(D(1, 2)) is None)
+        ver("leitura NÃO importa (403)", le.post("/api/projetos/F099-P0001/importar-folhas", json={"item": D(1, 2)}).status_code == 403)
+        r = op.post("/api/projetos/F099-P0001/importar-folhas", json={"item": D(1, 2)}); j = r.json()
+        ver("operador importa UMA folha só no site", r.status_code == 200 and (j["itens_novos"], j["itens_atualizados"]) == (1, 0), str(j))
+        ver("a folha importada passa a existir e abre normalmente", existe(D(1, 2)) == "importado" and op.get(f"/api/itens/{D(1, 2)}").status_code == 200)
+        ver("só aquela folha entrou (escopo certo): outra do projeto e a de outro projeto NÃO", existe(D(1, 3)) is None and existe(D(2, 1)) is None)
+        k = connect(); pj = k.execute("SELECT status_site FROM projeto WHERE codigo='F099-P0001'").fetchone()[0]; k.close()
+        ver("o projeto NÃO é alterado (o dossiê está publicado no site mas o painel segue 'nao_publicado')", pj == "nao_publicado", pj)
+        r = op.patch(f"/api/itens/{D(1, 2)}", json={"titulo": "Planta baixa térrea", "escala": "1:50"})
+        ver("depois de importada, EDITA como as outras (PATCH 200)", r.status_code == 200 and op.get(f"/api/itens/{D(1, 2)}").json()["item"]["titulo"] == "Planta baixa térrea", f"HTTP {r.status_code}")
+        ver("folha de OUTRO projeto é recusada (400)", op.post("/api/projetos/F099-P0001/importar-folhas", json={"item": D(2, 1)}).status_code == 400)
+        ver("folha que não está no site: 404 claro", op.post("/api/projetos/F099-P0001/importar-folhas", json={"item": D(1, 9)}).status_code == 404)
+        ver("projeto que não existe: 404", op.post("/api/projetos/F099-P0077/importar-folhas", json={}).status_code == 404)
+        r = op.post("/api/projetos/F099-P0001/importar-folhas", json={}); j = r.json()
+        ver("projeto inteiro: traz as que faltam (só a D3) e atualiza as já existentes", r.status_code == 200 and j["itens_novos"] == 1 and existe(D(1, 3)) == "importado" and existe(D(2, 1)) is None, str(j))
+        ver("a edição feita antes NÃO é sobrescrita pela reimportação", op.get(f"/api/itens/{D(1, 2)}").json()["item"]["titulo"] == "Planta baixa térrea")
+        r = op.post("/api/projetos/F099-P0001/importar-folhas", json={}); ver("repetir é idempotente (0 novas)", r.json()["itens_novos"] == 0)
+        k = connect(); ver("importações ficam na auditoria", k.execute("SELECT count(*) FROM evento WHERE tipo='importacao_folhas'").fetchone()[0] == 3); k.close()
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -727,6 +774,14 @@ else:
 print("11) Publicar: checklist, portões, falhas do WordPress, permissões, lote e fundo inteiro")
 rc, out = rodar("publicacao", f"{tmp}/publicacao.db")
 if rc != 0: ok(False, f"teste de publicação não rodou -> {out[-1100:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det})" if det and st_ != "ok" else ""))
+
+print("12) Folhas só no site: importar no clique e editar como as demais")
+rc, out = rodar("adotar", f"{tmp}/adotar.db")
+if rc != 0: ok(False, f"teste de importar folhas não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

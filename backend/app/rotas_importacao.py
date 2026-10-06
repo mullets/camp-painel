@@ -79,3 +79,34 @@ def executar_importacao(d: Execucao, u: dict = Depends(auth.exige("admin"))) -> 
     finally:
         con.close()
     return {"ok": True, **{k: n[k] for k in ("projetos_novos", "projetos_atualizados", "itens_novos", "itens_atualizados")}}
+
+
+class ImportarFolhas(BaseModel):
+    item: str | None = None
+
+
+@router.post("/projetos/{codigo}/importar-folhas")
+def importar_folhas(codigo: str, d: ImportarFolhas, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Traz para o catálogo do painel as folhas que existem SÓ no site (uma, ou todas as do projeto), para poderem ser
+    editadas como as demais. Usa o mesmo importador (mesma lógica), sem mexer no projeto."""
+    codigo = codigo.strip().upper()
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe no painel")
+    finally:
+        con.close()
+    alvo = d.item.strip().upper() if d.item else None
+    if alvo and not alvo.startswith(codigo + "-"):
+        raise HTTPException(400, "Essa folha não pertence a este projeto")
+    n = executar(log=lambda *a, **k: None, projeto=codigo, item=alvo, so_itens=True)
+    if alvo and not (n["itens_novos"] or n["itens_atualizados"]):
+        raise HTTPException(404, "Esta folha não foi encontrada no site (o espelho pode estar desatualizado)")
+    con = connect()
+    try:
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'importacao_folhas',?,?)",
+                    (codigo, u["email"], json.dumps({"escopo": alvo or "projeto inteiro", "novas": n["itens_novos"], "atualizadas": n["itens_atualizados"]})))
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "itens_novos": n["itens_novos"], "itens_atualizados": n["itens_atualizados"]}

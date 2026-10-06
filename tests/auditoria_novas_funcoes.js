@@ -217,6 +217,29 @@ r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!(
   chk(!!d.querySelector('.machine-status button, .machine-status .ms'),'a barra do topo deve continuar mostrando as máquinas'); }
 okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
 
+
+// ---------- FOLHAS SÓ NO SITE: abrir importa e passa a editar como as demais ----------
+{ const SO='F002-P0002-1977-S01-D00002', SO1='F002-P0002-1977-S01-D00001';
+  // quem só lê: recebe a explicação e NADA é importado
+  const dl2=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
+  await sleep(1500); dl2.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl2.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl2.window.fazerLogin({preventDefault(){}}); await sleep(800);
+  dl2.window.route_to('item/'+SO1); await sleep(2000);
+  chk(/existe só no site/.test(dl2.window.document.body.textContent)&&/operador/.test(dl2.window.document.body.textContent),'leitura deveria ver a explicação "existe só no site… peça a um operador"');
+  r=await J(adm,'/api/itens/'+SO1); chk(r.s===404,'leitura NÃO pode ter importado a folha: '+r.s); dl2.window.close();
+  // master/operador: vê a tag e o botão no projeto
+  w.route_to('projeto/F002-P0002'); await sleep(2000);
+  chk(!!d.querySelector('[data-nav="item/'+SO+'"] .tag.origin'),'a folha só no site deveria ter a tag "só no site"');
+  chk(!!d.getElementById('pd-importar')&&txt('#pd-importar').includes('2 folha(s)'),'o projeto deveria oferecer "Importar 2 folha(s) só no site": '+txt('#pd-source, .project-source').slice(0,120));
+  // clicar no cartão abre a folha (importa na hora)
+  d.querySelector('[data-nav="item/'+SO+'"]').click(); await sleep(3000);
+  chk(w.location.hash==='#item/'+SO&&!!d.getElementById('it-editar')&&!/não encontrado/i.test(txt('.content.on')),'abrir a folha só no site deveria abrir a página dela com o botão Editar, não "não encontrado": '+txt('.content.on').slice(0,100));
+  r=await J(adm,'/api/itens/'+SO); chk(r.s===200,'a folha deveria agora existir no catálogo: '+r.s);
+  // EDITA como as outras
+  await w.editarItem(SO); await sleep(600); const ti=d.getElementById('ei-titulo'); ti.value='Foto editada no painel'; ti.dispatchEvent(new w.Event('input',{bubbles:true})); await w.salvarItem(SO); await sleep(1800);
+  r=await J(adm,'/api/itens/'+SO); chk(r.s===200&&r.b.item.titulo==='Foto editada no painel','a folha importada deveria salvar a edição: '+JSON.stringify(r.b&&r.b.item&&r.b.item.titulo));
+  w.route_to('projeto/F002-P0002'); await sleep(2000);
+  chk(!!d.getElementById('pd-importar')&&txt('#pd-importar').includes('1 folha(s)'),'depois de importar uma, o botão deveria contar 1: '+(d.getElementById('pd-importar')?txt('#pd-importar'):'(sem botão)'));
+  okl.push('folha só no site: leitura recebe explicação sem importar; abrir importa e edita como as demais; botão do projeto conta certo'); }
 // ---------- CATÁLOGO LOCAL × SITE (prévia e importação) ----------
 r=await J(ope,'/api/importacao/previa'); chk(r.s===403,'operador vendo a prévia do importador: '+r.s);
 r=await J(adm,'/api/importacao/previa'); chk(r.s===200&&r.b.itens_novos===1&&r.b.projetos_novos===0,'prévia do seed deveria ter exatamente 1 item novo: '+JSON.stringify(r.b).slice(0,120));

@@ -53,6 +53,8 @@ c.execute("UPDATE wp_item SET metadados=?, json=? WHERE codigo_detectado='F023-P
           (json.dumps({"Técnica": "nanquim sobre vegetal", "Tipo de desenho": "Planta", "Data do registro fotográfico": "1972"}), json.dumps({"description": "Planta baixa do pavimento térreo."})))
 c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_url,thumb_url,codigo_detectado,fundo_detectado,projeto_detectado,metadados) VALUES (2999,8013,'draft','Folha nova só no site','folha-nova','https://exemplo.test/folha-nova','https://exemplo.test/img/novo.jpg','https://exemplo.test/img/novo-t.jpg','F002-P0002-1977-S01-D00001','F002','F002-P0002',?)",
           (json.dumps({"Código do documento": "F002-P0002-1977-S01-D00001"}),))
+c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_url,thumb_url,codigo_detectado,fundo_detectado,projeto_detectado,metadados) VALUES (2998,8013,'draft','Segunda folha só no site','folha-nova-2','https://exemplo.test/folha-nova-2','https://exemplo.test/img/novo2.jpg','https://exemplo.test/img/novo2-t.jpg','F002-P0002-1977-S01-D00002','F002','F002-P0002',?)",
+          (json.dumps({"Código do documento": "F002-P0002-1977-S01-D00002"}),))
 c.execute("UPDATE wp_item SET status='publish' WHERE codigo_detectado='F023-P0011-1959-S01-D00002' AND colecao_id=8013")
 c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F003-P0001'")
 # estados "despublicado" e "rascunho" em fundo, projeto, agente e folha: exercitam os rótulos do vocabulário único
