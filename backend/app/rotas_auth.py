@@ -20,7 +20,17 @@ class TrocaSenha(BaseModel):
 
 @router.post("/login")
 def login(dados: Login, request: Request, response: Response) -> dict:
-    return auth.autenticar(request, response, dados.email, dados.senha, dados.lembrar, dados.codigo_totp)
+    r = auth.autenticar(request, response, dados.email, dados.senha, dados.lembrar, dados.codigo_totp)
+    if isinstance(r, dict) and r.get("email"):   # mesmo perfil do /eu: o avatar aparece logo após o login, sem recarregar
+        from .db import connect
+        con = connect()
+        try:
+            row = con.execute("SELECT id, foto IS NOT NULL FROM usuario WHERE lower(email)=lower(?)", (r["email"],)).fetchone()
+        finally:
+            con.close()
+        if row:
+            r = {**r, "id": row[0], "tem_foto": bool(row[1])}
+    return r
 
 
 @router.post("/logout")
@@ -31,7 +41,13 @@ def logout(response: Response, camp_sessao: str | None = Cookie(default=None)) -
 
 @router.get("/eu")
 def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
-    return {"nome": u["nome"], "email": u["email"], "papel": u["papel"],
+    from .db import connect
+    con = connect()
+    try:
+        tem_foto = bool(con.execute("SELECT foto IS NOT NULL FROM usuario WHERE id=?", (u["id"],)).fetchone()[0])
+    finally:
+        con.close()
+    return {"id": u["id"], "nome": u["nome"], "email": u["email"], "papel": u["papel"], "tem_foto": tem_foto,
             "precisa_trocar_senha": bool(u["precisa_trocar_senha"]), "totp": bool(u.get("totp"))}
 
 

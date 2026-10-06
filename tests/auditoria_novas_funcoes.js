@@ -288,6 +288,29 @@ w.closeDrawer(true);
 await w.statusFundoSite('F003','no_ar'); await sleep(1800);
 chk(txt('#d-title').includes('Não foi possível publicar o fundo')&&txt('#d-body').includes('F003')&&txt('#d-body').includes('Direitos do fundo')&&txt('#d-body').includes('Definir direitos do fundo'),'fundo sem direitos deveria abrir painel fixo com o botão: '+txt('#d-title')+' | '+txt('#d-body').slice(0,100)); w.closeDrawer(true);
 okl.push('publicação: checklist antes de clicar, erro com todas as razões e botões, resultado fixo, WordPress sem credencial explicado');
+
+// ---------- FOTO DE PERFIL ----------
+{ const {Blob:NB}=require('buffer'); const JPG=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDIooor5E+4P//Z','base64');
+  w.prepararFoto=async()=>new NB([JPG],{type:'image/jpeg'});   // jsdom não tem canvas: o recorte/redução é do navegador real
+  const eu0=await J(adm,'/api/auth/eu'); const meuId=eu0.b.id;
+  chk(typeof meuId==='number'&&eu0.b.tem_foto===false,'o /eu deveria trazer id e tem_foto=false: '+JSON.stringify(eu0.b));
+  chk(!d.querySelector('.who .av img')&&d.querySelector('.who .av').textContent.trim().length>0,'sem foto o topo deveria mostrar as iniciais');
+  await w.trocarFoto(meuId,{files:[{name:'x.jpg'}],value:'x'}); await sleep(1800);
+  const img=d.querySelector('.who .av img'); chk(img&&img.getAttribute('src').startsWith('/api/usuarios/'+meuId+'/foto'),'depois de enviar, o topo deveria mostrar a foto: '+(img?img.getAttribute('src'):'(sem img)'));
+  const g=await adm.f('/api/usuarios/'+meuId+'/foto'); chk(g.status===200&&g.headers.get('content-type')==='image/jpeg'&&g.headers.get('x-content-type-options')==='nosniff','a foto deveria ser servida como JPEG com nosniff');
+  w.route_to('config'); await sleep(1800);
+  chk(!!d.querySelector('#usr-body .av img'),'a tabela de usuários deveria mostrar a foto de quem tem');
+  chk([...d.querySelectorAll('#usr-body button')].some(b=>b.textContent.trim()==='Foto'),'a tabela de usuários deveria ter o botão "Foto" para o master');
+  // arquivo inválido: mensagem clara e a foto anterior continua
+  w.prepararFoto=async()=>new NB([Buffer.from('<html><script>alert(1)</script></html>')],{type:'image/jpeg'});
+  await w.trocarFoto(meuId,{files:[{name:'y.jpg'}],value:'y'}); await sleep(1500);
+  chk(/JPEG ou PNG/.test(txt('#toast')),'arquivo inválido deveria dizer "Envie uma foto JPEG ou PNG": '+txt('#toast'));
+  chk((await adm.f('/api/usuarios/'+meuId+'/foto')).status===200,'a recusa não pode apagar a foto anterior');
+  // remover
+  await w.removerFoto(meuId); await sleep(1800);
+  chk(!d.querySelector('.who .av img'),'depois de remover, o topo deveria voltar às iniciais');
+  chk((await adm.f('/api/usuarios/'+meuId+'/foto')).status===404,'depois de remover a foto deveria dar 404');
+  okl.push('foto de perfil: envia, aparece no topo e na tabela de usuários, recusa arquivo inválido com mensagem, remove'); }
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

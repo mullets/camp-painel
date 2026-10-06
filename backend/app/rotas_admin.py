@@ -11,7 +11,7 @@ import json
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 
 from . import auth
@@ -51,9 +51,9 @@ def listar(u: dict = Depends(auth.exige("admin"))) -> list[dict]:
     con = connect()
     rows = con.execute(
         "SELECT id, nome, email, papel, ativo, ultimo_login, bloqueado_ate, precisa_trocar_senha, "
-        "totp_secret IS NOT NULL AS totp FROM usuario ORDER BY papel DESC, nome").fetchall()
+        "totp_secret IS NOT NULL AS totp, foto IS NOT NULL AS tem_foto FROM usuario ORDER BY papel DESC, nome").fetchall()
     con.close()
-    return [dict(r) for r in rows]
+    return [{**dict(r), "tem_foto": bool(r["tem_foto"])} for r in rows]
 
 
 @router.post("/usuarios")
@@ -175,3 +175,76 @@ def config(chave: str, padrao: str = "") -> str:
     r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
     con.close()
     return (r[0] if r and r[0] else padrao)
+
+
+# ---------------- foto de perfil ----------------
+LIMITE_FOTO = 300_000
+
+
+def _tipo_imagem(b: bytes) -> str | None:
+    """Tipo pelo CONTEÚDO (não pelo cabeçalho que o cliente manda): só JPEG e PNG. SVG/HTML nunca entram."""
+    if b[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return None
+
+
+def _checa_permissao_foto(con, u: dict, uid: int):
+    alvo = con.execute("SELECT id, papel FROM usuario WHERE id=?", (uid,)).fetchone()
+    if not alvo:
+        raise HTTPException(404, "Usuário não existe")
+    if uid != u["id"]:
+        if auth.PAPEIS[u["papel"]] < auth.PAPEIS["admin"]:
+            raise HTTPException(403, "Só você (ou um administrador) pode trocar esta foto")
+        _pode_gerir(u, alvo["papel"])
+    return alvo
+
+
+@router.get("/usuarios/{uid}/foto")
+def ver_foto(uid: int, u: dict = Depends(auth.usuario_atual)) -> Response:
+    con = connect()
+    try:
+        r = con.execute("SELECT foto, foto_tipo FROM usuario WHERE id=?", (uid,)).fetchone()
+    finally:
+        con.close()
+    if not r or not r["foto"]:
+        raise HTTPException(404, "Sem foto")
+    return Response(bytes(r["foto"]), media_type=r["foto_tipo"] or "image/jpeg",
+                    headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=300", "Content-Disposition": "inline"})
+
+
+@router.put("/usuarios/{uid}/foto")
+async def definir_foto(uid: int, request: Request, u: dict = Depends(auth.usuario_atual)) -> dict:
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > LIMITE_FOTO:
+        raise HTTPException(413, "Foto grande demais (máximo 300 KB). Use uma imagem menor.")
+    dados = await request.body()
+    if len(dados) > LIMITE_FOTO:
+        raise HTTPException(413, "Foto grande demais (máximo 300 KB). Use uma imagem menor.")
+    tipo = _tipo_imagem(dados)
+    if not tipo:
+        raise HTTPException(400, "Envie uma foto JPEG ou PNG.")
+    con = connect()
+    try:
+        _checa_permissao_foto(con, u, uid)
+        con.execute("UPDATE usuario SET foto=?, foto_tipo=? WHERE id=?", (dados, tipo, uid))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('usuario',?,'foto_atualizada',?,?)",
+                    (str(uid), u["email"], json.dumps({"bytes": len(dados), "tipo": tipo})))
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "bytes": len(dados)}
+
+
+@router.delete("/usuarios/{uid}/foto")
+def remover_foto(uid: int, u: dict = Depends(auth.usuario_atual)) -> dict:
+    con = connect()
+    try:
+        _checa_permissao_foto(con, u, uid)
+        con.execute("UPDATE usuario SET foto=NULL, foto_tipo=NULL WHERE id=?", (uid,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('usuario',?,'foto_removida',?,'{}')", (str(uid), u["email"]))
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True}

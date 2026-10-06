@@ -688,6 +688,47 @@ def filho(modo):
         d4 = det("F099-P0004")
         ver("página FORA de /acervo/projetos/ é ignorada (volta ao endereço montado)", d4["site_url_origem"] == "presumido" and "quem-somos" not in d4["site_url"], d4["site_url"])
         for l in res: print(l)
+    elif modo == "foto":
+        init_db(); aplicar_migracoes()
+        import base64
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        JPG = base64.b64decode("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDIooor5E+4P//Z")
+        PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+        ids = {}
+        for chave, em, papel in (("master", "m@camp.arq.br", "master"), ("admin", "adm@camp.arq.br", "admin"), ("admin2", "adm2@camp.arq.br", "admin"), ("operador", "op@camp.arq.br", "operador"), ("leitura", "le@camp.arq.br", "leitura")):
+            ids[chave] = auth.criar_usuario(em.split("@")[0], em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        mst, adm, op, le, anon = cli("m@camp.arq.br"), cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        put = lambda cl, uid, corpo, tipo="image/jpeg": cl.put(f"/api/usuarios/{uid}/foto", content=corpo, headers={"Content-Type": tipo})
+        ver("sem foto: GET dá 404 e /eu diz tem_foto=false", op.get(f"/api/usuarios/{ids['operador']}/foto").status_code == 404 and op.get("/api/auth/eu").json()["tem_foto"] is False)
+        r = put(op, ids["operador"], JPG); ver("a pessoa troca a PRÓPRIA foto (operador)", r.status_code == 200, f"HTTP {r.status_code} {r.text[:60]}")
+        r = op.get(f"/api/usuarios/{ids['operador']}/foto")
+        ver("GET devolve a imagem com o tipo certo e nosniff", r.status_code == 200 and r.content == JPG and r.headers["content-type"] == "image/jpeg" and r.headers.get("x-content-type-options") == "nosniff", r.headers.get("content-type", ""))
+        ver("colegas veem a foto (qualquer logado) e /eu traz id e tem_foto", le.get(f"/api/usuarios/{ids['operador']}/foto").status_code == 200 and op.get("/api/auth/eu").json()["tem_foto"] is True and op.get("/api/auth/eu").json()["id"] == ids["operador"])
+        ver("sem login não vê foto (401)", anon.get(f"/api/usuarios/{ids['operador']}/foto").status_code == 401)
+        ver("leitura NÃO troca a foto de outra pessoa (403)", put(le, ids["operador"], JPG).status_code == 403)
+        ver("operador NÃO troca a foto de outra pessoa (403)", put(op, ids["leitura"], JPG).status_code == 403)
+        ver("admin troca a foto de operador/leitura", put(adm, ids["leitura"], JPG).status_code == 200 and put(adm, ids["operador"], PNG, "image/png").status_code == 200)
+        ver("PNG também vale e é servido como PNG", op.get(f"/api/usuarios/{ids['operador']}/foto").headers["content-type"] == "image/png")
+        ver("admin NÃO troca a foto de outro admin nem do master (403)", put(adm, ids["admin2"], JPG).status_code == 403 and put(adm, ids["master"], JPG).status_code == 403)
+        ver("admin troca a PRÓPRIA foto (é o caso da Beatriz)", put(adm, ids["admin"], JPG).status_code == 200)
+        ver("master troca a foto de qualquer um", all(put(mst, i, JPG).status_code == 200 for i in ids.values()))
+        ver("HTML disfarçado de JPEG é RECUSADO (valida o conteúdo, não o cabeçalho)", put(op, ids["operador"], b"<html><script>alert(1)</script></html>").status_code == 400)
+        ver("SVG (com script) disfarçado de JPEG é RECUSADO", put(op, ids["operador"], b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>', "image/jpeg").status_code == 400)
+        ver("arquivo enorme é recusado (413)", put(op, ids["operador"], JPG + b"0" * 310000).status_code == 413)
+        ver("a recusa NÃO apagou a foto anterior", op.get(f"/api/usuarios/{ids['operador']}/foto").status_code == 200)
+        ver("usuário inexistente: 404", put(mst, 99999, JPG).status_code == 404)
+        lista = {u["id"]: u["tem_foto"] for u in adm.get("/api/usuarios").json()}
+        ver("a lista de usuários traz tem_foto", lista[ids["operador"]] is True)
+        ver("operador NÃO remove a foto de outro (403) mas remove a própria", op.delete(f"/api/usuarios/{ids['leitura']}/foto").status_code == 403 and op.delete(f"/api/usuarios/{ids['operador']}/foto").status_code == 200 and op.get(f"/api/usuarios/{ids['operador']}/foto").status_code == 404)
+        k = connect(); ev = {r[0]: r[1] for r in k.execute("SELECT tipo, count(*) FROM evento WHERE entidade='usuario' AND tipo LIKE 'foto_%' GROUP BY tipo")}; k.close()
+        ver("trocas e remoções ficam na auditoria", ev.get("foto_atualizada", 0) >= 5 and ev.get("foto_removida") == 1, str(ev))
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -822,6 +863,14 @@ else:
 print("13) Endereço da página pública: o real do site, ou o montado sem cidade/UF")
 rc, out = rodar("urlpublica", f"{tmp}/urlpublica.db")
 if rc != 0: ok(False, f"teste do endereço público não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("14) Foto de perfil: permissões, validação pelo conteúdo, limite e auditoria")
+rc, out = rodar("foto", f"{tmp}/foto.db")
+if rc != 0: ok(False, f"teste de foto não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
