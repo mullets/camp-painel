@@ -22,6 +22,7 @@ from .rotas_projetos import router as rotas_projetos
 from .rotas_itens import router as rotas_itens
 from .rotas_importacao import router as rotas_importacao
 from .guia_publicacao import router as guia_publicacao
+from .rotas_qnap import router as rotas_qnap
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -35,6 +36,7 @@ app.include_router(rotas_projetos)
 app.include_router(rotas_itens)
 app.include_router(rotas_importacao)
 app.include_router(guia_publicacao)
+app.include_router(rotas_qnap)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 
@@ -47,6 +49,7 @@ async def _startup() -> None:
     aplicar_migracoes()
     import asyncio
     asyncio.create_task(_sincronizacao_periodica())
+    asyncio.create_task(_coleta_qnap_periodica())
 
 
 async def _sincronizacao_periodica() -> None:
@@ -340,3 +343,24 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
           (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem))
     con.commit(); con.close()
     return {"ok": True, "estacao_id": estacao_id, "estado": estado}
+
+
+async def _coleta_qnap_periodica() -> None:
+    """Coleta as informações do QNAP a cada N minutos (configuração 'qnap.coleta_min'; 0 desliga), em segundo plano."""
+    import asyncio
+    from .qnap_coletor import coletar
+    await asyncio.sleep(20)
+    while True:
+        try:
+            con = connect()
+            r = con.execute("SELECT valor FROM configuracao WHERE chave='qnap.coleta_min'").fetchone()
+            con.close()
+            minutos = int(r[0]) if r and r[0] and str(r[0]).isdigit() else 10
+        except Exception:  # noqa: BLE001
+            minutos = 10
+        if minutos > 0:
+            try:
+                await asyncio.to_thread(coletar)
+            except Exception as e:  # noqa: BLE001
+                log_registrar(logging.ERROR, "qnap_coleta", f"Falha na coleta do QNAP: {str(e)[:200]}")
+        await asyncio.sleep(max(1, minutos) * 60)

@@ -156,7 +156,7 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 // leitura não vê o botão
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
-  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('fundo/F003'); await sleep(2200); chk(!!dl.window.document.getElementById('fd-guia')&&!dl.window.document.querySelector('#fd-guia .chk button'),'leitura deveria ver o guia do fundo SEM botões de ação'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
+  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('painel'); await sleep(2500); chk(!!dl.window.document.getElementById('qnap-card')&&!dl.window.document.getElementById('qnap-atualizar'),'leitura deveria ver o cartão do QNAP SEM o botão Atualizar agora'); dl.window.route_to('fundo/F003'); await sleep(2200); chk(!!dl.window.document.getElementById('fd-guia')&&!dl.window.document.querySelector('#fd-guia .chk button'),'leitura deveria ver o guia do fundo SEM botões de ação'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
 
 // ---------- IMAGENS: nunca desenhar planta falsa ----------
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
@@ -225,6 +225,20 @@ chk(txt('#v-painel .dash-state').includes('QNAP não está conectado a este serv
 chk(txt('#system-banner').includes('QNAP não está conectado a este servidor'),'o banner deveria dizer que o QNAP não está conectado a este servidor: "'+txt('#system-banner').slice(0,100)+'"');
 w.route_to('estacoes'); await sleep(2800);
 chk(!!d.getElementById('qnap-ajuda')&&txt('#qnap-ajuda').includes('diagnostico_qnap.sh')&&txt('#qnap-ajuda').includes('montar_qnap.sh')&&txt('#qnap-ajuda').includes('Macs'),'a tela Estações deveria explicar como conectar o QNAP (com os dois comandos)');
+// cartão do QNAP no painel inicial: informações úteis lidas do que o coletor guardou
+w.route_to('painel'); await sleep(2800);
+{ const c=txt('#qnap-card');
+  chk(/11\.?880 GB/.test(c)&&/de 20\.?000 GB/.test(c),'o cartão deveria mostrar o espaço livre/total: '+c.slice(0,90));
+  chk(!!d.querySelector('#qnap-card svg.qnap-spark'),'o cartão deveria ter o gráfico de espaço dos últimos 7 dias');
+  chk(/Tendência/.test(c)&&/GB\/dia/.test(c)&&/enche em ~\d/.test(c),'o cartão deveria mostrar a tendência e quantos dias até encher: '+c.slice(0,200));
+  chk(/Último material/.test(c)&&/há 3 h/.test(c)&&c.includes('F002-P0002-IGREJA/lote-12'),'o cartão deveria mostrar o último material recebido (há 3 h + nome)');
+  chk(/Entrada bruta/.test(c)&&/14 pasta\(s\)/.test(c)&&/2 parada\(s\) há mais de 3 dias/.test(c),'o cartão deveria mostrar a entrada bruta e as pastas paradas');
+  chk(/Lotes prontos/.test(c)&&/230/.test(c)&&/Resposta/.test(c)&&/42 ms/.test(c),'o cartão deveria mostrar os lotes prontos e a resposta em ms');
+  chk(/Atualizado há \d+ min/.test(c),'o cartão deveria dizer há quanto tempo foi atualizado: '+c.slice(-80));
+  chk(!!d.getElementById('qnap-atualizar'),'o master deveria ver o botão "Atualizar agora"');
+  // atualizar agora: pede a coleta, espera e recarrega o cartão
+  d.getElementById('qnap-atualizar').click(); await sleep(7000);
+  chk(/Atualizado (agora há pouco|há 0 min)/.test(txt('#qnap-card'))&&!!d.getElementById('qnap-atualizar')&&!d.getElementById('qnap-atualizar').disabled,'depois de "Atualizar agora" o cartão deveria mostrar a coleta nova: '+txt('#qnap-card').slice(-90)); }
 okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
 
 

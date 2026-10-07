@@ -57,6 +57,10 @@ c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_u
           (json.dumps({"Código do documento": "F002-P0002-1977-S01-D00002"}),))
 c.execute("UPDATE wp_item SET status='publish' WHERE codigo_detectado='F023-P0011-1959-S01-D00002' AND colecao_id=8013")
 c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F003-P0001'")
+# histórico do QNAP (7 dias, ~17 GB/dia) e a última coleta completa, para o cartão do painel inicial
+for i in range(8):
+    c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?, '-1 hours'), 1, 20000, ?)", (f"-{7 - i} days", 12000 - 17 * i))
+c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, latencia_ms, total_gb, livre_gb, entrada_bruta, parados, prontos, ultimo_material_em, ultimo_material_nome, duracao_ms) VALUES (datetime('now','-4 minutes'), 1, 42, 20000, 11880, 14, 2, 230, datetime('now','-3 hours'), 'F002-P0002-IGREJA/lote-12', 800)")
 c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (5001,'Jardim','f003-p0001-slug-real-do-plugin','https://camp.arq.br/acervo/projetos/f003-p0001-slug-real-do-plugin/','publish','F003-P0001')")
 c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (5002,'Pag rascunho','f001-p0001-pagina-em-rascunho','https://camp.arq.br/acervo/projetos/f001-p0001-pagina-em-rascunho/','draft',NULL)")
 # estados "despublicado" e "rascunho" em fundo, projeto, agente e folha: exercitam os rótulos do vocabulário único

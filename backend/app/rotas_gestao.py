@@ -379,32 +379,19 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
         "site": {},
     }
 
-    if raiz.exists():
-        try:
-            du = shutil.disk_usage(raiz)
-            out["qnap"].update({
-                "total_gb": round(du.total / 1e9),
-                "livre_gb": round(du.free / 1e9),
-                "uso_pct": round(100 * du.used / du.total),
-            })
-        except OSError:
-            pass
-
-    if entrada and entrada.exists():
-        try:
-            out["pipeline"]["entrada_bruta"] = sum(
-                1 for p in entrada.iterdir() if not p.name.startswith(".")
-            )
-        except OSError:
-            pass
-
-    if prontos.exists():
-        try:
-            pastas = {p.parent.resolve() for p in prontos.rglob("info_projeto.json")}
-            pastas |= {p.parent.resolve() for p in prontos.rglob("status.json")}
-            out["pipeline"]["prontos"] = len(pastas)
-        except OSError:
-            pass
+    # espaço, entrada bruta e lotes prontos vêm da ÚLTIMA COLETA (qnap_coletor): varrer o QNAP por SMB a cada abertura
+    # da tela era lento e travava o painel com a montagem presa.
+    from .qnap_coletor import ultima
+    snap = ultima(con)
+    if snap:
+        if snap["total_gb"]:
+            out["qnap"].update({"total_gb": round(snap["total_gb"]), "livre_gb": round(snap["livre_gb"] or 0),
+                                "uso_pct": round(100 * (snap["total_gb"] - (snap["livre_gb"] or 0)) / snap["total_gb"])})
+        out["pipeline"]["entrada_bruta"] = snap["entrada_bruta"] or 0
+        out["pipeline"]["prontos"] = snap["prontos"] or 0
+        out["qnap"]["coletado_em"] = snap["coletado_em"]
+    else:
+        out["qnap"]["coletando"] = True
 
     out["pipeline"]["aguardando_revisao"] = con.execute(
         "SELECT COUNT(*) FROM lista_processamento WHERE etapa='revisao'"

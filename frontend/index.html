@@ -277,6 +277,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .pg-ctl{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 2px;font-size:12.5px;color:var(--ink2)}
 .pg-ctl[hidden]{display:none}.pg-nav{display:flex;gap:10px;align-items:center}.pg-pos{white-space:nowrap}.pg-por{display:flex;gap:6px;align-items:center}.pg-por select{font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
 .pg-oculta{display:none!important}
+.qnap-spark{width:100%;height:34px;color:var(--ink2);margin:6px 0 2px;display:block}.qnap-card .site-line span{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qnap-rodape{margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
 .edit-lista{margin:6px 0 8px;padding-left:18px;font-size:12.5px}
@@ -1721,11 +1722,43 @@ async function diagnosticarAnalytics(){
     openDrawer('Diagnóstico do Google Analytics',d.ok?'integração funcionando':'verificação da identidade usada pelo painel',msg+escopos+'<dl class="kv">'+linhas.map(([k,v])=>'<dt>'+escHtml(k)+'</dt><dd>'+escHtml(v)+'</dd>').join('')+'</dl><div class="act"><button class="btn" onclick="abrirConfigMaquina(\'wp.usuario\')">Configurar usuário WordPress</button><a class="btn pri" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div>');
   }catch(e){toast(e.message)}
 }
+function haTempo(ts){if(!ts)return '—';const t=new Date(String(ts).replace(' ','T')+'Z').getTime();if(isNaN(t))return '—';const sg=Math.max(0,Math.round((Date.now()-t)/1000));if(sg<60)return 'agora há pouco';const m=Math.round(sg/60);if(m<60)return `há ${m} min`;const h=Math.round(m/60);if(h<48)return `há ${h} h`;return `há ${Math.round(h/24)} dias`}
+function sparkQnap(serie){if(!serie||serie.length<2)return '';const v=serie.map(p=>p.livre_gb),min=Math.min(...v),max=Math.max(...v),span=(max-min)||1,W=200,H=34;
+  const pts=v.map((y,i)=>`${(i/(v.length-1)*W).toFixed(1)},${(H-2-((y-min)/span)*(H-4)).toFixed(1)}`).join(' ');
+  return `<svg class="qnap-spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Espaço livre nos últimos 7 dias: de ${fmtN(Math.round(v[0]))} GB para ${fmtN(Math.round(v[v.length-1]))} GB"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`}
+function qnapInnerHTML(q,qi){
+  const c=qi&&qi.coleta,admin=EU&&['admin','master'].includes(EU.papel),n=x=>(x==null?'—':fmtN(x));
+  const cresc=qi&&qi.crescimento_gb_dia,dias=qi&&qi.dias_ate_encher;
+  const tend=cresc==null?'<span style="color:var(--ink3)">reunindo histórico…</span>':cresc>0.5?`+${fmtN(cresc)} GB/dia${dias?` · <span class="tag ${dias<30?'r':dias<90?'a':''}">enche em ~${fmtN(dias)} dias</span>`:''}`:cresc<-0.5?`liberando ${fmtN(-cresc)} GB/dia`:'estável';
+  const entrada=c&&c.entrada_bruta!=null?`${fmtN(c.entrada_bruta)} pasta(s)${c.parados>0?` · <span class="tag a">${fmtN(c.parados)} parada(s) há mais de ${escHtml(qi.config.dias_parado)} dias</span>`:''}`:'<span style="color:var(--ink3)">não configurada</span>';
+  const prontos=c&&c.prontos!=null?`${fmtN(c.prontos)}${c.prontos_parcial?' <small>(contagem parcial)</small>':''}`:'—';
+  const resp=c&&c.latencia_ms!=null?`${fmtN(c.latencia_ms)} ms${c.latencia_ms>1500?' <span class="tag a">lento</span>':''}`:'—';
+  const ult=c&&c.ultimo_material_em?`${escHtml(haTempo(c.ultimo_material_em))} · <span class="mono" title="${escHtml(c.ultimo_material_nome||'')}">${escHtml(c.ultimo_material_nome||'')}</span>`:'—';
+  const rodape=!qi?'<span style="color:var(--ink3)">informações indisponíveis</span>':!c?(qi.coletando?'Coletando as informações do QNAP…':'Ainda não houve coleta'):c.erro?`<span class="tag r">última coleta falhou</span> ${escHtml(c.erro)}`:`Atualizado ${escHtml(haTempo(c.coletado_em))}`;
+  return `<div class="ph" style="padding:0;border:0"><h2>QNAP</h2><span class="tag ${q.montado?'g':'r'}">${q.montado?'conectado':'desconectado'}</span></div>
+    <div class="storage">${q.livre_gb!=null?fmtN(q.livre_gb)+' GB':'—'}</div>
+    <div class="sub">livres${q.total_gb!=null?' de '+fmtN(q.total_gb)+' GB':''}</div>
+    ${q.uso_pct!=null?`<div class="bar"><i style="width:${escHtml(q.uso_pct)}%"></i></div><div class="sub">${escHtml(q.uso_pct)}% usado</div>`:''}
+    ${sparkQnap(qi&&qi.serie)}
+    <div class="site-line"><b>Tendência</b><span>${tend}</span></div>
+    <div class="site-line"><b>Último material</b><span>${ult}</span></div>
+    <div class="site-line"><b>Entrada bruta</b><span>${entrada}</span></div>
+    <div class="site-line"><b>Lotes prontos</b><span>${prontos}</span></div>
+    <div class="site-line"><b>Resposta</b><span>${resp}</span></div>
+    <div class="sub qnap-rodape">${rodape}${admin?` <button class="btn sm" id="qnap-atualizar" onclick="event.stopPropagation();atualizarQnapAgora()">Atualizar agora</button>`:''}</div>`}
+async function recarregarCartaoQnap(){const el=document.getElementById('qnap-card');if(!el)return;try{const[e,i]=await Promise.all([API('/api/estacoes'),API('/api/qnap')]);el.innerHTML=qnapInnerHTML(e.qnap||{},i)}catch(_){}}
+async function atualizarQnapAgora(){
+  const b=document.getElementById('qnap-atualizar');if(b){b.disabled=true;b.textContent='Atualizando…'}
+  try{await API('/api/qnap/coletar',{method:'POST'});
+    for(let k=0;k<14;k++){await new Promise(r=>setTimeout(r,2000));const i=await API('/api/qnap');if(!i.coletando&&(i.idade_s==null||i.idade_s<20)){await recarregarCartaoQnap();return}}
+    toast('A coleta está demorando: o QNAP pode estar lento')}catch(e){toast(e.message)}
+  await recarregarCartaoQnap()}
 async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.dash-v2');if(!tinha)sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando visão da operação…</div></div></div>';try{
-  const [d,e,a]=await Promise.all([
+  const [d,e,a,qi]=await Promise.all([
     API('/api/painel'),
     API('/api/estacoes').catch(()=>null),
-    API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}}))
+    API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}})),
+    API('/api/qnap').catch(()=>null)
   ]);
   limparStale('painel');sec.querySelector('.aviso-exemplo')?.remove();
   const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
@@ -1748,12 +1781,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
         <div class="dash-hero-head"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p>Visão rápida da operação do acervo.</p></div><div class="dash-state ${geral}"${geral==='bad'?` onclick="go('estacoes')" title="Abrir Estações e ver como resolver"`:''}><span class="dot"></span>${escHtml(geralTxt)}</div></div>
       </div>
       <div class="dash-side-stack">
-        <div class="panel qnap-card" data-nav="estacoes" style="cursor:pointer">
-          <div class="ph" style="padding:0;border:0"><h2>QNAP</h2><span class="tag ${q.montado?'g':'r'}">${q.montado?'online':'offline'}</span></div>
-          <div class="storage">${q.livre_gb!=null?Number(q.livre_gb).toLocaleString('pt-BR')+' GB':'—'}</div>
-          <div class="sub">livres${q.total_gb!=null?' de '+Number(q.total_gb).toLocaleString('pt-BR')+' GB':''}</div>
-          ${q.uso_pct!=null?`<div class="bar"><i style="width:${escHtml(q.uso_pct)}%"></i></div><div class="sub">${escHtml(q.uso_pct)}% usado</div>`:''}
-        </div>
+        <div class="panel qnap-card" id="qnap-card" data-nav="estacoes" style="cursor:pointer">${qnapInnerHTML(q,qi)}</div>
         <div class="panel site-card" data-nav="estacoes" style="cursor:pointer">
           <div class="ph" style="padding:0 0 6px;border:0"><h2>Site público</h2><span class="tag ${site.http?.ok?'g':'r'}">${site.http?.ok?'online':'offline'}</span></div>
           <div class="site-line"><b>Última sync</b><span>${ult?fmtDataHora(ult):'nunca'}</span></div>

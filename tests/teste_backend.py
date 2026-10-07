@@ -836,6 +836,87 @@ def filho(modo):
         ver("auditoria: o parâmetro antigo 'limite' continua funcionando", len(x.get("/api/eventos?limite=7&tipo=evento_teste").json()["eventos"]) == 7)
         ver("auditoria: por_pagina enorme é limitado a 1000", x.get("/api/eventos?por_pagina=99999").json()["por_pagina"] == 1000)
         for l in res: print(l)
+    elif modo == "qnap":
+        init_db(); aplicar_migracoes()
+        import os as _os, time as _t, threading as _th
+        from pathlib import Path as _P
+        from app import auth
+        import app.qnap_coletor as qc
+        from fastapi.testclient import TestClient
+        from app.main import app
+        base = _P(os.environ["CAMP_DB_PATH"]).parent / "qnap_fake"; entrada = base / "99 - Entrada"; prontos = base / "100 - Scanners"
+        for d in ("A", "B", "C", ".oculta", "@Recycle"): (entrada / d).mkdir(parents=True)
+        agora = _t.time()
+        _os.utime(entrada / "A", (agora - 3600, agora - 3600)); _os.utime(entrada / "B", (agora - 2 * 86400, agora - 2 * 86400)); _os.utime(entrada / "C", (agora - 5 * 86400, agora - 5 * 86400))
+        (prontos / "lot1").mkdir(parents=True); (prontos / "lot1" / "info_projeto.json").write_text("{}")
+        (prontos / "grp" / "lot2").mkdir(parents=True); (prontos / "grp" / "lot2" / "status.json").write_text("{}")
+        (prontos / "grp" / "lot3" / "img").mkdir(parents=True); (prontos / "grp" / "lot3" / "info_projeto.json").write_text("{}"); (prontos / "grp" / "lot3" / "img" / "status.json").write_text("{}")  # dentro de lote: não conta
+        (prontos / "vazio").mkdir(); (prontos / "@Recycle" / "lixo").mkdir(parents=True); (prontos / "@Recycle" / "lixo" / "status.json").write_text("{}")  # lixeira: ignorada
+        _os.utime(prontos / "lot1" / "info_projeto.json", (agora - 86400, agora - 86400)); _os.utime(prontos / "grp" / "lot2" / "status.json", (agora - 7200, agora - 7200)); _os.utime(prontos / "grp" / "lot3" / "info_projeto.json", (agora - 1800, agora - 1800))
+        c = connect()
+        for k, v in (("qnap.raiz", str(base)), ("qnap.entrada_captura", str(entrada)), ("qnap.prontos_raiz", str(prontos))):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v, k))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "A", "admin"), ("le@camp.arq.br", "L", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, le, anon = cli("adm@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        r = qc.coletar()
+        ver("coleta mede o espaço (total e livre)", r.get("montado") == 1 and (r.get("total_gb") or 0) > 0 and r.get("livre_gb") is not None, str(r)[:140])
+        ver("entrada bruta: 3 pastas (oculta e @Recycle ignoradas)", r.get("entrada_bruta") == 3, str(r.get("entrada_bruta")))
+        ver("pastas PARADAS há mais de 3 dias: só a C", r.get("parados") == 1, str(r.get("parados")))
+        ver("lotes prontos: 3 (não entra dentro de lote nem na lixeira)", r.get("prontos") == 3 and r.get("prontos_parcial") == 0, f"{r.get('prontos')} parcial={r.get('prontos_parcial')}")
+        ver("último material = o lote mais recente ('grp/lot3'), com data", r.get("ultimo_material_nome") == "grp/lot3" and r.get("ultimo_material_em"), str(r.get("ultimo_material_nome")))
+        ver("mede a latência (ms) e a duração, sem erro", isinstance(r.get("latencia_ms"), int) and r.get("duracao_ms") is not None and not r.get("erro"))
+        # ---- QNAP não montado ----
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(base / "nada"),)); c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.entrada_captura','qnap.prontos_raiz')"); c.commit(); c.close()
+        r2 = qc.coletar()
+        ver("QNAP não montado: guarda montado=0 e o motivo, sem exceção", r2.get("montado") == 0 and r2.get("motivo") == "nao_existe" and "total_gb" not in r2, str(r2)[:120])
+        # ---- montagem TRAVADA: nunca pendura ----
+        qc.ORCAMENTO_S = 1
+        orig = qc._medir
+        qc._medir = lambda *a, **k: _t.sleep(3)
+        t0 = _t.monotonic(); r3 = qc.coletar(); dt = _t.monotonic() - t0
+        ver("montagem TRAVADA: a coleta volta no limite de tempo (não pendura) com o erro explicado", dt < 2.5 and "tempo esgotado" in (r3.get("erro") or ""), f"{dt:.1f}s {r3.get('erro')}")
+        r4 = qc.coletar()
+        ver("enquanto a coleta presa não termina, não empilha outra (sem vazar threads)", "ainda está presa" in (r4.get("erro") or ""), str(r4.get("erro")))
+        _t.sleep(3.2); qc._medir = orig; qc.ORCAMENTO_S = 25
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(base),)); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.entrada_captura'", (str(entrada),)); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),)); c.commit(); c.close()
+        r5 = qc.coletar(); ver("depois de destravar, volta a coletar normalmente", r5.get("montado") == 1 and r5.get("prontos") == 3 and not r5.get("erro"), str(r5)[:100])
+        # ---- retenção ----
+        c = connect(); c.execute("INSERT INTO qnap_snapshot (coletado_em, montado) VALUES (datetime('now','-100 days'), 1)"); c.commit()
+        qc.coletar(); ver("retenção: snapshot de 100 dias é apagado", c.execute("SELECT count(*) FROM qnap_snapshot WHERE coletado_em < datetime('now','-95 days')").fetchone()[0] == 0); c.close()
+        # ---- tendência: 20 GB/dia ----
+        c = connect(); c.execute("DELETE FROM qnap_snapshot")
+        for i in range(8):
+            c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?), 1, 10000, ?)", (f"-{7 - i} days", 5000 - 20 * i))
+        c.commit(); c.close()
+        j = adm.get("/api/qnap").json()
+        ver("tendência: ~20 GB/dia e ~240 dias até encher (livre 4.860 GB)", j["crescimento_gb_dia"] is not None and 18 <= j["crescimento_gb_dia"] <= 22 and 215 <= (j["dias_ate_encher"] or 0) <= 265, f"{j['crescimento_gb_dia']} GB/dia, {j['dias_ate_encher']} dias")
+        ver("série dos últimos 7 dias para o gráfico (≤ 60 pontos, em ordem)", 2 <= len(j["serie"]) <= 60 and j["serie"][0]["livre_gb"] > j["serie"][-1]["livre_gb"])
+        c = connect(); c.execute("DELETE FROM qnap_snapshot"); c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now'), 1, 10000, 5000)"); c.commit(); c.close()
+        ver("com 1 ponto só não inventa tendência", adm.get("/api/qnap").json()["dias_ate_encher"] is None)
+        c = connect(); c.execute("DELETE FROM qnap_snapshot")
+        for i in range(6): c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?), 1, 10000, ?)", (f"-{5 - i} days", 5000 + 30 * i))
+        c.commit(); c.close()
+        j = adm.get("/api/qnap").json(); ver("espaço sobrando (liberando): não há 'dias até encher'", j["dias_ate_encher"] is None and (j["crescimento_gb_dia"] or 0) < 0, str(j["crescimento_gb_dia"]))
+        # ---- API e permissões ----
+        ver("leitura vê as informações; sem login 401", le.get("/api/qnap").status_code == 200 and anon.get("/api/qnap").status_code == 401)
+        ver("só admin pede coleta agora (leitura 403)", le.post("/api/qnap/coletar").status_code == 403)
+        r = adm.post("/api/qnap/coletar"); ver("admin pede coleta e ela roda em segundo plano", r.status_code == 200 and (r.json().get("iniciada") or r.json().get("ja_em_andamento")), r.text[:80])
+        for _ in range(40):
+            if not qc.em_andamento(): break
+            _t.sleep(0.25)
+        ver("depois da coleta o snapshot novo aparece (idade pequena)", (adm.get("/api/qnap").json()["idade_s"] or 999) < 30)
+        # ---- /api/estacoes lê o guardado e NÃO varre o QNAP ----
+        def proibido(*a, **k): raise AssertionError("varreu o QNAP dentro da requisição")
+        qc._lotes = proibido
+        e = adm.get("/api/estacoes")
+        ver("/api/estacoes responde SEM varrer o QNAP (usa o guardado)", e.status_code == 200 and "pipeline" in e.json(), f"HTTP {e.status_code} {e.text[:80]}")
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -994,6 +1075,14 @@ else:
 print("16) Paginação no servidor: projetos e auditoria (sem repetir nem perder linhas)")
 rc, out = rodar("paginacao", f"{tmp}/paginacao.db")
 if rc != 0: ok(False, f"teste de paginação não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("17) QNAP: coletor em segundo plano, limite de tempo, histórico e tendência")
+rc, out = rodar("qnap", f"{tmp}/qnap.db")
+if rc != 0: ok(False, f"teste do QNAP não rodou -> {out[-1000:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
