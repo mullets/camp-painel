@@ -434,6 +434,13 @@ def filho(modo):
         a = adm.post("/api/backup/agora"); ver("API: admin faz backup agora", a.status_code == 200 and a.json()["ok"] and (bk.PASTA / a.json()["arquivo"]).is_file(), f"HTTP {a.status_code} {a.text[:80]}")
         evs = connect().execute("SELECT count(*) FROM evento WHERE tipo='backup_manual'").fetchone()[0]
         ver("API: backup manual fica na auditoria", evs == 1)
+        from app.rotas_gestao import _estado_qnap
+        vazia, cheia = tmp / "qnap_vazia", tmp / "qnap_cheia"; vazia.mkdir(); cheia.mkdir(); (cheia / "lote1").mkdir()
+        ver("QNAP: pasta que não existe = não conectado (nao_existe)", _estado_qnap(tmp / "nada") == (False, "nao_existe"))
+        ver("QNAP: pasta VAZIA criada à mão NÃO conta como conectada (vazia)", _estado_qnap(vazia) == (False, "vazia"))
+        ver("QNAP: pasta com conteúdo conta como conectada", _estado_qnap(cheia) == (True, None))
+        est = op.get("/api/estacoes").json()["qnap"]
+        ver("/api/estacoes devolve montado e o motivo", est["montado"] is False and est["motivo"] in ("nao_existe", "vazia"), str(est.get("motivo")))
         pub = op.get("/api/estacoes").json().get("backup", {})
         ver("estações: leitura recebe o estado do backup SEM caminhos", "existe" in pub and "idade_horas" in pub and "arquivo" not in pub and "extra" not in pub, str(sorted(pub)))
         for l in res: print(l)

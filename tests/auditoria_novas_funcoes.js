@@ -219,6 +219,12 @@ r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!(
   chk(!d.querySelector('#v-painel .machine-strip'),'o painel inicial não deveria repetir a faixa de máquinas (a barra do topo já mostra)');
   chk(!/offline/i.test(txt('#v-painel .dash-state')),'o resumo do painel não deveria dizer "offline" por causa de máquinas: '+txt('#v-painel .dash-state'));
   chk(!!d.querySelector('.machine-status button, .machine-status .ms'),'a barra do topo deve continuar mostrando as máquinas'); }
+// QNAP: a mensagem diz O QUE é e o que fazer (antes: "Problema na infraestrutura")
+w.route_to('painel'); await sleep(2500);
+chk(txt('#v-painel .dash-state').includes('QNAP não está conectado a este servidor')&&!/infraestrutura/i.test(txt('#v-painel .dash-state')),'o painel inicial deveria dizer exatamente o que está errado: "'+txt('#v-painel .dash-state')+'"');
+chk(txt('#system-banner').includes('QNAP não está conectado a este servidor'),'o banner deveria dizer que o QNAP não está conectado a este servidor: "'+txt('#system-banner').slice(0,100)+'"');
+w.route_to('estacoes'); await sleep(2800);
+chk(!!d.getElementById('qnap-ajuda')&&txt('#qnap-ajuda').includes('diagnostico_qnap.sh')&&txt('#qnap-ajuda').includes('montar_qnap.sh')&&txt('#qnap-ajuda').includes('Macs'),'a tela Estações deveria explicar como conectar o QNAP (com os dois comandos)');
 okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
 
 

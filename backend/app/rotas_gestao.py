@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -335,6 +336,21 @@ def _ping(ip: str, timeout: float = 1.2) -> bool:
         return False
 
 
+def _estado_qnap(raiz: Path) -> tuple[bool, str | None]:
+    """(montado, motivo). Montado de verdade = a pasta existe E é ponto de montagem ou tem conteúdo.
+    Uma pasta VAZIA criada à mão não conta (era o falso "ok" de antes). motivo: nao_existe | vazia | None."""
+    try:
+        if not raiz.is_dir():
+            return False, "nao_existe"
+        if os.path.ismount(raiz):
+            return True, None
+        if any(True for _ in raiz.iterdir()):
+            return True, None
+        return False, "vazia"
+    except OSError:
+        return False, "nao_existe"
+
+
 @router.get("/estacoes")
 def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
@@ -347,7 +363,8 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
     out = {
         "qnap": {
             "raiz": str(raiz),
-            "montado": raiz.exists(),
+            "montado": _estado_qnap(raiz)[0],
+            "motivo": _estado_qnap(raiz)[1],
             "entrada_captura": str(entrada) if entrada else None,
             "entrada_montada": entrada.exists() if entrada else None,
             "prontos_raiz": str(prontos),
