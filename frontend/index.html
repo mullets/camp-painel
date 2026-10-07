@@ -540,7 +540,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <div class="gcrumb" id="gcrumb"></div>
   <!-- PAINEL -->
   <section class="content on" id="v-painel">
-    <div class="hdr"><div><h1>Sábado, 26 de setembro</h1><p class="sub">Estado do acervo hoje. Tudo o que precisa de decisão sua aparece primeiro.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções</span><span><kbd>F</kbd> filtrar tabela</span><span><kbd>⌘B</kbd> barra lateral</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
+    <div class="hdr"><div><h1>Sábado, 26 de setembro</h1><p class="sub">Estado do acervo hoje. Tudo o que precisa de decisão sua aparece primeiro.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções · <kbd>E</kbd> <kbd>A</kbd> <kbd>C</kbd> sistema</span><span><kbd>F</kbd> filtrar tabela</span><span><kbd>⌘B</kbd> barra lateral</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
     <div class="grid g4" style="margin-bottom:16px">
       <div class="panel stat"><div class="v">3</div><div class="l">projetos na fila do CAMP Vision</div><div class="d"><span class="tag b">1 processando</span></div></div>
       <div class="panel stat"><div class="v">4</div><div class="l">solicitações de material em alta</div><div class="d"><span class="tag a">2 aguardam resposta</span></div></div>
@@ -1194,7 +1194,7 @@ const AJUDA_TELAS={
   auditoria:{titulo:'Auditoria',intro:'Histórico institucional de alterações no painel.',passos:[['Filtre por ator ou entidade','Encontre quem alterou um registro.'],['Abra o evento','Veja Antes → Depois quando o evento possui diff.'],['Exporte se necessário','O CSV respeita a visão filtrada atual.']]},
   config:{titulo:'Configurações',intro:'Infraestrutura, usuários e preferências administrativas.',passos:[['Altere somente o necessário','Configurações de integração podem afetar toda a operação.'],['Salve campo a campo','O painel avisa quando existem alterações não salvas.'],['Use usuários e papéis','Dê somente as permissões necessárias para cada função.']]}
 };
-const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–9','Abrir seções principais'],['F','Focar filtro da tela'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
+const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–9','Painel até Etiquetas, na ordem do menu'],['E · A · C','Estações e site · Auditoria · Configurações'],['F','Focar filtro da tela'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
 function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||AJUDA_TELAS.painel}
 function abrirAjuda(){const a=ajudaDaRota();openDrawer('Ajuda · '+a.titulo,'guia rápido',`<p style="margin:0;color:var(--ink2)">${escHtml(a.intro)}</p><div class="help-steps">${a.passos.map(([t,d])=>`<div class="help-step"><div><b>${escHtml(t)}</b><small>${escHtml(d)}</small></div></div>`).join('')}</div><div><h3>Atalhos</h3><div class="shortcut-grid">${AJUDA_ATALHOS.map(([k,d])=>`<kbd>${escHtml(k)}</kbd><span>${escHtml(d)}</span>`).join('')}</div></div>`)}
 function onboardingOperador(u){if(!u||u.papel!=='operador')return;const key='camp.onboarding.v1.'+u.email;try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch(_){}setTimeout(()=>openDrawer('Bem-vindo ao CAMP Acervos','primeiro acesso',`<p style="margin:0;color:var(--ink2)">O painel acompanha o material desde a digitalização até a publicação. Você não precisa conhecer a infraestrutura por trás dele.</p><div class="help-steps"><div class="help-step"><div><b>Comece pelas filas</b><small>Veja o que chegou do CAMP Vision 2 e o que precisa de revisão.</small></div></div><div class="help-step"><div><b>Trabalhe pelo código</b><small>Fundos são Fxxx; projetos são Fxxx-Pxxxx. Use a busca do topo quando souber o código.</small></div></div><div class="help-step"><div><b>Não publique com bloqueio</b><small>Problemas e direitos pendentes aparecem antes das ações de publicação.</small></div></div></div><div class="act"><button class="btn pri" onclick="closeDrawer(true);go('filas')">Ir para Filas</button><button class="btn" onclick="abrirAjuda()">Ver ajuda desta tela</button></div>`),500)}
@@ -1234,7 +1234,11 @@ const appEl=document.querySelector('.app');
 function setCollapsed(c){appEl.classList.toggle('collapsed',c);try{localStorage.setItem('camp.side',c?'1':'')}catch(e){}}
 document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!appEl.classList.contains('collapsed')));
 try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
-const KEYS={'1':'painel','2':'filas','3':'solicitacoes','4':'erros','5':'fundos','6':'arquitetos','7':'projetos','8':'etiquetas','9':'config'};
+// ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
+// Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
+const NAV_ATALHOS={painel:'1',filas:'2',solicitacoes:'3',erros:'4',fundos:'5',arquitetos:'6',projetos:'7',localizacao:'8',etiquetas:'9',estacoes:'E',auditoria:'A',config:'C'};
+const KEYS=Object.fromEntries(Object.entries(NAV_ATALHOS).map(([v,k])=>[k.toLowerCase(),v]));
+document.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=NAV_ATALHOS[b.dataset.v];let el=b.querySelector('kbd');if(!k){if(el)el.remove();return}if(!el){el=document.createElement('kbd');b.appendChild(el)}el.textContent=k});
 document.addEventListener('keydown',e=>{
   const typing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();q.focus();q.select();return}
@@ -1242,8 +1246,9 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){closeModal();closeDrawer();qres.classList.remove('open');e.target.blur();return}
   if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
   if(e.key==='?'){e.preventDefault();abrirAjuda();return}
-  if(KEYS[e.key]){go(KEYS[e.key]);return}
-  if(e.key.toLowerCase()==='f'){const f=document.querySelector('.content.on [data-filter]');if(f){e.preventDefault();f.focus()}}
+  const dest=KEYS[e.key.length===1?e.key.toLowerCase():e.key];
+  if(dest){const b=document.querySelector(`#nav button[data-v="${dest}"]`);if(b&&getComputedStyle(b).display==='none')return;go(dest);return}   // item escondido para o seu papel: a tecla não abre
+  if(e.key.toLowerCase()==='f'){const f=document.querySelector('.content.on [data-filter], .content.on .filterbar input:not([type]), .content.on .filterbar input[type="search"], .content.on .filterbar input[type="text"]');if(f){e.preventDefault();f.focus()}}   // F: o 1º campo de texto da barra de filtro da tela (Fundos e Auditoria não tinham data-filter)
 });
 
 

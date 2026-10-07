@@ -66,5 +66,5 @@ elif [ $SMB -ne 0 ];     then echo "  Responde, mas o SMB está fechado. Ative o
 elif [ $MONTADO -eq 0 ]; then echo "  Está conectado e com conteúdo: o painel deve mostrar 'conectado'. Se não mostra: sudo systemctl restart camp-painel"
 else
   echo "  O servidor de arquivos está no ar e o SMB aberto, mas NÃO está conectado a este servidor. Próximo passo:"
-  echo "    sudo bash scripts/montar_qnap.sh --host $HOST --compartilhamento \"${SHARE_ARG:-NOME}\" --usuario USUARIO --raiz /mnt/server-camp${SUB_ARG:+ --subpasta \"$SUB_ARG\"}"
+  echo "    sudo bash scripts/montar_qnap.sh --host $HOST --compartilhamento \"${SHARE_ARG:-NOME}\" --usuario USUARIO${SUB_ARG:+ --subpasta \"$SUB_ARG\"}"
 fi

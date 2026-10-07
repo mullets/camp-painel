@@ -61,10 +61,37 @@ for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
             linha = conteudo.count("\n", 0, m.start()) + 1
             errors.append(f"vocabulário: '{m.group(0)}' em {arq.relative_to(ROOT)}:{linha} — {dica}")
 
+# --- atalhos do menu: a tabela NAV_ATALHOS tem que seguir a ORDEM VISUAL do menu (dígitos 1-9 em sequência, depois letras) ---
+mapa = re.search(r"const NAV_ATALHOS=\{([^}]*)\}", text)
+menu = re.search(r'<nav class="nav" id="nav">(.*?)</nav>', text, re.S)
+if not mapa or not menu:
+    errors.append("atalhos: não achei NAV_ATALHOS ou o <nav> do menu")
+else:
+    teclas = dict(re.findall(r"(\w+):'(.)'", mapa.group(1)))
+    ordem = re.findall(r'<button data-v="(\w+)"', menu.group(1))
+    for v in ordem:
+        if v not in teclas:
+            errors.append(f"atalhos: o item de menu '{v}' não tem tecla em NAV_ATALHOS")
+    for v in teclas:
+        if v not in ordem:
+            errors.append(f"atalhos: NAV_ATALHOS tem '{v}', que não existe no menu")
+    digitos = [teclas[v] for v in ordem if v in teclas and teclas[v].isdigit()]
+    if digitos != [str(i) for i in range(1, len(digitos) + 1)] or len(digitos) > 9:
+        errors.append(f"atalhos: os dígitos deveriam ser 1..N na ordem do menu, mas estão {digitos}")
+    primeiros = [v for v in ordem if v in teclas][: len(digitos)]
+    if [v for v in ordem if v in teclas and teclas[v].isdigit()] != primeiros:
+        errors.append("atalhos: os dígitos têm que ficar nas PRIMEIRAS entradas do menu; as letras vêm depois")
+    todas = [k.lower() for k in teclas.values()]
+    if len(set(todas)) != len(todas):
+        errors.append("atalhos: há teclas repetidas em NAV_ATALHOS")
+    for k in todas:
+        if k in ("f", "k", "b", "?"):
+            errors.append(f"atalhos: a tecla '{k}' é reservada (F filtro, ⌘K busca, ⌘B barra, ? ajuda)")
+
 if errors:
     print("UI CHECK FALHOU")
     for e in errors:
         print(" -", e)
     sys.exit(1)
 
-print(f"UI CHECK OK · {len(required_css)} seletores · {len(required_dom)} estruturas · {inline} estilos inline · vocabulário único ok")
+print(f"UI CHECK OK · {len(required_css)} seletores · {len(required_dom)} estruturas · {inline} estilos inline · vocabulário único ok · atalhos ok")

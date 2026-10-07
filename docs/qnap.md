@@ -6,18 +6,21 @@ O QNAP pode estar funcionando perfeitamente nos Macs e **mesmo assim não estar 
 
 O painel mostra **"QNAP não está conectado a este servidor"** quando essa pasta não existe ou está vazia (uma pasta vazia criada à mão não conta).
 
-## Exemplo real: pasta do material pronto em `smb://Server-Camp/Backup Servidor CAMP/Arquivos/100 - Scanners`
-O endereço `Server-Camp._smb._tcp.local` é o nome que o **Mac** enxerga. O servidor Ubuntu geralmente **não** resolve nomes `.local`: use o **IP** do Server-Camp
-(no Mac: Finder > Server-Camp > Arquivo > Obter Informações, ou na tela do roteador; o ideal é reservar esse IP fixo). O compartilhamento é `Backup Servidor CAMP`
-e `Arquivos/100 - Scanners` é a subpasta. Então (troque o IP e o usuário):
+## O caso da CAMP (confirmado pelo Rafael em 07/10)
+O QNAP TS-932PX (`192.168.15.30`) aparece no Mac como **`Server-Camp`**. O caminho `smb://Server-Camp._smb._tcp.local/...` é o que o Mac mostra
+*depois de montar e logar*: é a **mesma máquina**, não outra. O servidor Ubuntu não entende o nome `.local`; ele usa o IP, que o painel já tem em `qnap.ip`.
+- Compartilhamento: `Backup Servidor CAMP`
+- Material pronto: `Arquivos/100 - Scanners`
+- Montagem neste servidor: `/mnt/qnap/acervos` (a raiz do compartilhamento), que já é o padrão do painel
+
+Comandos (troque só `USUARIO`; a senha é pedida no terminal):
 ```
-bash scripts/diagnostico_qnap.sh --host 192.168.15.X --compartilhamento "Backup Servidor CAMP" --usuario USUARIO --subpasta "Arquivos/100 - Scanners"
-sudo bash scripts/montar_qnap.sh --host 192.168.15.X --compartilhamento "Backup Servidor CAMP" --usuario USUARIO --raiz /mnt/server-camp --subpasta "Arquivos/100 - Scanners"
+bash scripts/diagnostico_qnap.sh --compartilhamento "Backup Servidor CAMP" --subpasta "Arquivos/100 - Scanners"
+sudo bash scripts/montar_qnap.sh --compartilhamento "Backup Servidor CAMP" --usuario USUARIO --subpasta "Arquivos/100 - Scanners"
 sudo systemctl restart camp-painel
 ```
-O segundo comando monta o compartilhamento em `/mnt/server-camp`, deixa permanente e configura o painel: `qnap.raiz = /mnt/server-camp` (é o que o painel testa) e
-`qnap.prontos_raiz = /mnt/server-camp/Arquivos/100 - Scanners` (o material pronto). Se o Mac entra sem senha, use `--convidado` em vez de `--usuario`.
-`scripts/configurar_qnap_painel.py` faz só a parte do painel (ou edite em Configurações).
+O segundo comando monta, deixa permanente e configura o painel (`qnap.prontos_raiz = /mnt/qnap/acervos/Arquivos/100 - Scanners`).
+Se o Mac entra sem senha, use `--convidado` no lugar de `--usuario`. `scripts/configurar_qnap_painel.py` faz só a parte do painel.
 
 ## Conectar (3 passos, no servidor)
 1. **Descobrir o que falta** (só lê, não muda nada):
