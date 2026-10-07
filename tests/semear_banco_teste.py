@@ -57,6 +57,12 @@ c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,documento_u
           (json.dumps({"Código do documento": "F002-P0002-1977-S01-D00002"}),))
 c.execute("UPDATE wp_item SET status='publish' WHERE codigo_detectado='F023-P0011-1959-S01-D00002' AND colecao_id=8013")
 c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F003-P0001'")
+# divergências entre o painel e o site (4 tipos reais + 1 desconhecido) para o topo do painel e a lista explicada
+for campo, ent, cod, vp, vs in (("sem_codigo", "item", "9001", None, "Foto de teste"), ("sem_codigo", "item", "9002", None, "Outra de teste"), ("sem_itens_no_site", "fundo", "F029", "Fundo sem folhas", None), ("publicado_em_fundo_fora_do_ar", "item", "F023-P0011-1959-S01-D00002", "fora_do_ar", "publish"), ("fundo_inexistente", "item", "F999-P0001-1970-S01-D00001", None, "F999")):
+    c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES (?,?,?,?,?)", (ent, cod, campo, vp, vs))
+# o coletor automático dispara 20 s depois de o servidor subir e gravaria uma coleta VAZIA (o QNAP de teste não existe) por cima da semente:
+# os testes não podem depender de relógio. 0 desliga a coleta automática; "Atualizar agora" (manual) continua funcionando.
+c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")
 # histórico do QNAP (7 dias, ~17 GB/dia) e a última coleta completa, para o cartão do painel inicial
 for i in range(8):
     c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?, '-1 hours'), 1, 20000, ?)", (f"-{7 - i} days", 12000 - 17 * i))

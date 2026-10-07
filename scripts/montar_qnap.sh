@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Conecta um compartilhamento SMB neste servidor de forma PERMANENTE (volta sozinho após reiniciar) e configura o painel.
 #   sudo bash scripts/montar_qnap.sh --host Server-Camp.local --compartilhamento "Backup Servidor CAMP" --usuario USUARIO \
-#        --raiz /mnt/server-camp --subpasta "Arquivos/100 - Scanners"
+#        --entrada "Arquivos/100 - Scanners" --prontos "Fundos e Escritorios/ACERVOS_CAMP"
 #   --host: nome ou IP (nome é resolvido para IP na hora: o fstab guarda o IP, porque nome .local não existe no boot)
 #   --convidado: sem usuário/senha   --simular: só mostra o que faria   --senha-de-stdin: senha vem da entrada padrão
-#   --subpasta: pasta do MATERIAL PRONTO dentro do compartilhamento (o painel passa a ler dali)
+#   --entrada: onde os SCANNERS gravam e o CAMP Vision lê. --prontos: onde o CAMP Vision grava o material FINAL (o painel lê só daqui)
 set -euo pipefail
-HOST=192.168.15.30; RAIZ=/mnt/qnap/acervos; SHARE=""; USUARIO=""; SUB=""; DONO=camp; VERS=3.0; SIMULAR=0; STDIN=0; CONVIDADO=0
+HOST=192.168.15.30; RAIZ=/mnt/qnap/acervos; SHARE=""; USUARIO=""; ENTRADA=""; PRONTOS=""; AVISO_SUBPASTA=0; DONO=camp; VERS=3.0; SIMULAR=0; STDIN=0; CONVIDADO=0
 while [ $# -gt 0 ]; do case "$1" in
   --host|--ip) HOST="$2"; shift 2;; --compartilhamento) SHARE="$2"; shift 2;; --usuario) USUARIO="$2"; shift 2;;
-  --raiz) RAIZ="$2"; shift 2;; --subpasta) SUB="$2"; shift 2;; --dono) DONO="$2"; shift 2;; --vers) VERS="$2"; shift 2;;
+  --raiz) RAIZ="$2"; shift 2;; --entrada) ENTRADA="$2"; shift 2;; --prontos) PRONTOS="$2"; shift 2;; --subpasta) ENTRADA="$2"; AVISO_SUBPASTA=1; shift 2;; --dono) DONO="$2"; shift 2;; --vers) VERS="$2"; shift 2;;
   --simular) SIMULAR=1; shift;; --senha-de-stdin) STDIN=1; shift;; --convidado) CONVIDADO=1; shift;;
   *) echo "Opção desconhecida: $1"; exit 2;; esac; done
+[ "$AVISO_SUBPASTA" = 1 ] && echo "AVISO: --subpasta é antigo e agora significa a ENTRADA (onde os scanners gravam). Use --entrada e --prontos."
 [ -n "$SHARE" ] && { [ -n "$USUARIO" ] || [ "$CONVIDADO" -eq 1 ]; } || { echo "Uso: sudo bash scripts/montar_qnap.sh --host NOME_OU_IP --compartilhamento NOME (--usuario USUARIO | --convidado) [--raiz $RAIZ] [--subpasta PASTA] [--simular]"; exit 2; }
 if [ "$SIMULAR" -eq 0 ] && [ "$EUID" -ne 0 ]; then exec sudo bash "$0" "$@"; fi
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,7 +35,8 @@ if [ "$SIMULAR" -eq 1 ]; then
   [ "$CONVIDADO" -eq 1 ] && echo "   2. montar como convidado (sem senha)" || echo "   2. gravar usuário/senha em $CRED (permissão 600, só root)"
   echo "   3. guardar cópia do /etc/fstab e acrescentar/atualizar esta linha:"; echo "      $LINHA"
   echo "   4. recarregar o systemd, montar e testar leitura e escrita como o usuário '$DONO'"
-  [ -n "$SUB" ] && echo "   5. configurar o painel: pasta do material pronto = $RAIZ/$SUB (e a raiz = $RAIZ)"
+  [ -n "$ENTRADA" ] && echo "   5. configurar o painel: ENTRADA (onde os scanners gravam e o CAMP Vision lê) = $RAIZ/$ENTRADA"
+  [ -n "$PRONTOS" ] && echo "   6. configurar o painel: PRONTO (onde o CAMP Vision grava o material final; o painel lê só daqui) = $RAIZ/$PRONTOS"
   exit 0
 fi
 if [ "$CONVIDADO" -eq 0 ]; then
@@ -67,10 +69,15 @@ echo "== testando LEITURA e ESCRITA como '$DONO' (é com esse usuário que o pai
 sudo -u "$DONO" ls "$RAIZ" >/dev/null && echo "✔ leitura ok" || { echo "✖ '$DONO' não consegue ler"; exit 1; }
 T="$RAIZ/.camp-teste-escrita-$$"
 if sudo -u "$DONO" sh -c "echo ok > '$T' && rm -f '$T'"; then echo "✔ escrita ok (arquivo de teste criado e apagado)"; else echo "– sem permissão de escrita (ok se o painel só precisa LER; confira as permissões do compartilhamento)"; fi
-if [ -n "$SUB" ]; then
-  if [ -d "$RAIZ/$SUB" ]; then echo "✔ a pasta do material pronto existe: $RAIZ/$SUB"
-    PYX="$REPO/.venv/bin/python"; [ -x "$PYX" ] || PYX=python3
-    if sudo -u "$DONO" "$PYX" "$REPO/scripts/configurar_qnap_painel.py" --raiz "$RAIZ" --prontos "$RAIZ/$SUB" --ip "$IP"; then :; else echo "– não consegui configurar o painel sozinho; faça em Configurações: qnap.raiz=$RAIZ e qnap.prontos_raiz=$RAIZ/$SUB"; fi
-  else echo "✖ montou, mas a subpasta '$SUB' NÃO existe. O que há no compartilhamento:"; ls -1 "$RAIZ" | head -20 | sed 's/^/    /'; echo "  (confira o nome exato, incluindo maiúsculas e espaços)"; fi
+if [ -n "$ENTRADA$PRONTOS" ]; then
+  ARGS=(--raiz "$RAIZ" --ip "$IP")
+  for par in "ENTRADA:--entrada" "PRONTOS:--prontos"; do
+    nome="${par%%:*}"; flag="${par##*:}"; valor="${!nome}"
+    [ -z "$valor" ] && continue
+    if [ -d "$RAIZ/$valor" ]; then echo "✔ $nome existe: $RAIZ/$valor"; ARGS+=("$flag" "$RAIZ/$valor")
+    else echo "✖ $nome NÃO existe: $RAIZ/$valor. O que há no compartilhamento:"; ls -1 "$RAIZ" | head -20 | sed 's/^/    /'; echo "  (confira o nome exato, incluindo maiúsculas e espaços)"; fi
+  done
+  PYX="$REPO/.venv/bin/python"; [ -x "$PYX" ] || PYX=python3
+  if sudo -u "$DONO" "$PYX" "$REPO/scripts/configurar_qnap_painel.py" "${ARGS[@]}"; then :; else echo "– não consegui configurar o painel sozinho; faça em Configurações (qnap.entrada_captura e qnap.prontos_raiz)"; fi
 fi
 echo; echo "Pronto. Reinicie o painel para ele enxergar: sudo systemctl restart camp-painel"

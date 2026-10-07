@@ -239,6 +239,46 @@ w.route_to('painel'); await sleep(2800);
   // atualizar agora: pede a coleta, espera e recarrega o cartão
   d.getElementById('qnap-atualizar').click(); await sleep(7000);
   chk(/Atualizado (agora há pouco|há 0 min)/.test(txt('#qnap-card'))&&!!d.getElementById('qnap-atualizar')&&!d.getElementById('qnap-atualizar').disabled,'depois de "Atualizar agora" o cartão deveria mostrar a coleta nova: '+txt('#qnap-card').slice(-90)); }
+// ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------
+{ w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3000);   // fecha qualquer painel lateral de testes anteriores (o painel protege edição pendente)
+  const hj=(await J(adm,'/api/hoje')).b;
+  chk(/pedem você hoje|Nada urgente hoje/.test(txt('#v-painel .hoje-frase')),'o topo deveria ter a frase do dia: "'+txt('#v-painel .hoje-frase')+'"');
+  chk(!/Visão rápida da operação do acervo/.test(txt('#v-painel .dash-hero-main')),'a frase fixa antiga não deveria mais aparecer quando há dados do dia');
+  chk(d.querySelectorAll('#v-painel .hoje-kpi').length===4&&/pendências/.test(txt('#v-painel .hoje-kpis'))&&/travados por direitos/.test(txt('#v-painel .hoje-kpis'))&&/prontos para publicar/.test(txt('#v-painel .hoje-kpis')),'o topo deveria ter os 4 números do dia');
+  chk(new RegExp('prontos para publicar').test(txt('#v-painel .hoje-kpis'))&&txt('#v-painel .hoje-kpis').includes(String(hj.kpis.prontos.valor)),'o número de prontos para publicar deveria bater com a API ('+hj.kpis.prontos.valor+')');
+  if(hj.kpis.prontos.valor===0) chk(/nenhum projeto foi autorizado ainda|nenhum passa em todos os requisitos/.test(txt('#v-painel .hoje-kpis')),'zero precisa de EXPLICAÇÃO ("nenhum projeto foi autorizado ainda"): '+txt('#v-painel .hoje-kpis').slice(0,260));
+  const n=Math.min(3,hj.acoes.length+(txt('#v-painel .action-card .tag')&&0)); chk(d.querySelectorAll('#v-painel .hoje-acao').length>=Math.min(3,hj.acoes.length),'o topo deveria listar até 3 ações do dia: '+d.querySelectorAll('#v-painel .hoje-acao').length+' (API tem '+hj.acoes.length+')');
+  chk(/Por onde começar|Tudo em dia/.test(txt('#v-painel .dash-hero-main')),'o topo deveria ter o título "Por onde começar"');
+  // "Hoje no acervo": só o que é DE HOJE, com o dia anterior ao lado
+  chk(/folhas trabalhadas hoje/.test(txt('#v-painel'))&&/projetos novos hoje/.test(txt('#v-painel'))&&/publicações hoje/.test(txt('#v-painel'))&&/pedidos e erros novos hoje/.test(txt('#v-painel'))&&/ontem: \d+/.test(txt('#v-painel')),'"Hoje no acervo" deveria mostrar só números de hoje, com "ontem: N"');
+  chk(!/fundos publicados/.test(txt('#v-painel'))&&!/lotes prontos para revisão/.test(txt('#v-painel .kpi-grid')),'os totais gerais ("fundos publicados") não pertencem a "Hoje no acervo"');
+  // divergências: o número leva a uma lista em português
+  chk(/Divergências/.test(txt('#v-painel .site-card'))&&!!d.querySelector('#v-painel .site-card .lnk'),'o cartão do site deveria ter o link "ver o que são" nas divergências');
+  d.querySelector('#v-painel .site-card .lnk').click(); await sleep(2500);
+  chk(txt('#d-title').includes('Divergências entre o painel e o site')&&txt('#d-body').includes('Item do site sem código CAMP')&&txt('#d-body').includes('Fundo sem nenhuma folha no site'),'a lista de divergências deveria explicar cada tipo em português: título="'+txt('#d-title')+'" corpo="'+txt('#d-body').slice(0,80)+'"');
+  chk(d.querySelector('#v-painel .site-card .lnk').tagName==='BUTTON','"ver o que são" deveria ser um botão (acessível por teclado), não um <a> sem href');
+  chk(!/sem_codigo|fundo_inexistente|sem_itens_no_site|_fora_do_ar/.test(txt('#d-body')),'a lista não pode mostrar o código cru das divergências'); w.closeDrawer(true);
+  // selo geral: o espaço do QNAP conta (função pura, testada com os números reais do painel)
+  { const E=w.estadoGeral, base={q:{montado:true},site:{http:{ok:true}},pend:0};
+    let r=E({...base,qi:{nivel_espaco:'critico',livre_pct:2.2,coleta:{livre_gb:28}}}); chk(r.geral==='bad'&&/QNAP quase cheio: 28 GB livres \(2,2%\)/.test(r.texto),'28 GB de 1.255 (2,2%) deveria deixar o selo VERMELHO e dizer o espaço: '+JSON.stringify(r));
+    r=E({...base,qi:{nivel_espaco:'aviso',livre_pct:11.9,coleta:{livre_gb:150}}}); chk(r.geral==='warn'&&/QNAP com pouco espaço/.test(r.texto),'espaço em aviso deveria deixar o selo ÂMBAR: '+JSON.stringify(r));
+    r=E({...base,qi:{nivel_espaco:'ok',livre_pct:60,coleta:{livre_gb:700}}}); chk(r.geral==='ok'&&r.texto==='Operação saudável','espaço ok = saudável');
+    r=E({...base,pend:3,qi:{nivel_espaco:'ok',coleta:{livre_gb:700}}}); chk(r.geral==='warn'&&/3 pendência/.test(r.texto),'pendências = âmbar');
+    r=E({q:{montado:false},site:{http:{ok:true}},pend:0,qi:{nivel_espaco:'critico',livre_pct:1,coleta:{livre_gb:5}}}); chk(r.geral==='bad'&&/não está conectado/.test(r.texto)&&!/quase cheio/.test(r.texto),'QNAP desconectado: não usa o espaço velho da última coleta: '+JSON.stringify(r)); }
+  // cartão do QNAP: barra vermelha, aviso de cota e explicação dos zeros
+  { const cfgv={entrada_caminho:'',prontos_caminho:'/mnt/qnap/acervos/Arquivos/100 - Scanners',dias_parado:3};
+    let h=w.qnapInnerHTML({montado:true,livre_gb:28,total_gb:1255,uso_pct:98},{nivel_espaco:'critico',coleta:{prontos:0,prontos_pastas:5,prontos_existe:1,entrada_bruta:null,latencia_ms:2,coletado_em:'2026-01-01 00:00:00'},config:cfgv});
+    chk(/<i class="critico"/.test(h)&&/quase cheio/.test(h)&&/cota/i.test(h),'o cartão crítico deveria ter barra vermelha, a etiqueta "quase cheio" e o aviso de cota');
+    chk(/há 5 pasta\(s\), mas nenhuma com info_projeto\.json ou status\.json/.test(h),'"Lotes prontos 0" deveria explicar: há 5 pastas, mas nenhuma com info_projeto.json ou status.json');
+    chk(/não configurada/.test(h)&&/definir/.test(h),'"Entrada bruta" sem caminho deveria dizer "não configurada" e oferecer "definir" ao admin');
+    chk(/nenhum lote lido ainda/.test(h),'"Último material" sem dado deveria dizer "nenhum lote lido ainda", não só "—"');
+    h=w.qnapInnerHTML({montado:true,livre_gb:700,total_gb:1255,uso_pct:44},{nivel_espaco:'ok',coleta:{prontos:0,prontos_pastas:0,prontos_existe:1,entrada_bruta:3,entrada_existe:1,latencia_ms:2,coletado_em:'2026-01-01 00:00:00'},config:{...cfgv,entrada_caminho:'/x'}});
+    chk(/está vazia/.test(h)&&!/cota/i.test(h)&&!/class="critico"/.test(h),'espaço ok não mostra aviso de cota; pasta de lotes vazia é explicada');
+    h=w.qnapInnerHTML({montado:true,livre_gb:700,total_gb:1255,uso_pct:44},{nivel_espaco:'ok',coleta:{prontos:0,prontos_existe:0,entrada_bruta:null,entrada_existe:0,latencia_ms:2,coletado_em:'2026-01-01 00:00:00'},config:{...cfgv,entrada_caminho:'/x/entrada'}});
+    chk(/pasta do material pronto não existe/.test(h)&&/a pasta configurada não existe/.test(h),'pasta de lotes e de entrada que não existem deveriam ser ditas'); }
+  // banner global
+  w.atualizarBannerSistema({qnap:{montado:true,nivel_espaco:'critico',livre_gb:28,livre_pct:2.2},site:{http:{ok:true}}}); chk(/QNAP quase cheio \(28 GB livres, 2,2%\)/.test(txt('#system-banner')),'o banner global deveria avisar o QNAP quase cheio: "'+txt('#system-banner')+'"');
+  w.atualizarBannerSistema({qnap:{montado:true,nivel_espaco:'ok'},site:{http:{ok:true}}}); }
 okl.push('backup: painel na tela de Estações, banner global (some depois do backup), botão e permissões');
 
 

@@ -6,21 +6,26 @@ O QNAP pode estar funcionando perfeitamente nos Macs e **mesmo assim não estar 
 
 O painel mostra **"QNAP não está conectado a este servidor"** quando essa pasta não existe ou está vazia (uma pasta vazia criada à mão não conta).
 
-## O caso da CAMP (confirmado pelo Rafael em 07/10)
-O QNAP TS-932PX (`192.168.15.30`) aparece no Mac como **`Server-Camp`**. O caminho `smb://Server-Camp._smb._tcp.local/...` é o que o Mac mostra
-*depois de montar e logar*: é a **mesma máquina**, não outra. O servidor Ubuntu não entende o nome `.local`; ele usa o IP, que o painel já tem em `qnap.ip`.
-- Compartilhamento: `Backup Servidor CAMP`
-- Material pronto: `Arquivos/100 - Scanners`
-- Montagem neste servidor: `/mnt/qnap/acervos` (a raiz do compartilhamento), que já é o padrão do painel
+## O caso da CAMP (confirmado)
+O QNAP TS-932PX é o **`Server-Camp`**: é o nome que o Mac mostra (`smb://Server-Camp._smb._tcp.local`, caminho que o Mac usa depois de montar e logar).
+IP `192.168.15.30`, compartilhamento **`Backup Servidor CAMP`**, usuário do painel `camp-panel`. Duas pastas importam:
+- **ENTRADA** — `Arquivos/100 - Scanners`: onde os scanners gravam e o CAMP Vision 2 **lê**. O painel não lê lotes daqui (só mede e conta).
+- **PRONTO** — `Fundos e Escritorios/ACERVOS_CAMP`: onde o CAMP Vision 2 grava o material final. **O painel lê os lotes só daqui.** Contrato: `campvision.md`.
 
-Comandos (troque só `USUARIO`; a senha é pedida no terminal):
+O servidor Ubuntu usa o IP (não resolve nomes `.local`) e monta o compartilhamento inteiro em `/mnt/qnap/acervos` (padrão do painel):
 ```
-bash scripts/diagnostico_qnap.sh --compartilhamento "Backup Servidor CAMP" --subpasta "Arquivos/100 - Scanners"
-sudo bash scripts/montar_qnap.sh --compartilhamento "Backup Servidor CAMP" --usuario USUARIO --subpasta "Arquivos/100 - Scanners"
+bash scripts/diagnostico_qnap.sh --compartilhamento "Backup Servidor CAMP" --usuario camp-panel --entrada "Arquivos/100 - Scanners" --prontos "Fundos e Escritorios/ACERVOS_CAMP"
+sudo bash scripts/montar_qnap.sh --compartilhamento "Backup Servidor CAMP" --usuario camp-panel --entrada "Arquivos/100 - Scanners" --prontos "Fundos e Escritorios/ACERVOS_CAMP"
 sudo systemctl restart camp-painel
 ```
-O segundo comando monta, deixa permanente e configura o painel (`qnap.prontos_raiz = /mnt/qnap/acervos/Arquivos/100 - Scanners`).
-Se o Mac entra sem senha, use `--convidado` no lugar de `--usuario`. `scripts/configurar_qnap_painel.py` faz só a parte do painel.
+O segundo comando instala o `cifs-utils`, monta, deixa permanente e configura o painel: `qnap.raiz = /mnt/qnap/acervos`,
+`qnap.entrada_captura = /mnt/qnap/acervos/Arquivos/100 - Scanners` e `qnap.prontos_raiz = /mnt/qnap/acervos/Fundos e Escritorios/ACERVOS_CAMP`.
+
+**Se você já montou usando `--subpasta "Arquivos/100 - Scanners"`** (versão antiga, que tratava essa pasta como a de lotes prontos), corrija só a configuração, sem remontar:
+```
+cd ~/camp-painel && .venv/bin/python scripts/configurar_qnap_painel.py --entrada "/mnt/qnap/acervos/Arquivos/100 - Scanners" --prontos "/mnt/qnap/acervos/Fundos e Escritorios/ACERVOS_CAMP"
+sudo systemctl restart camp-painel
+```
 
 ## Conectar (3 passos, no servidor)
 1. **Descobrir o que falta** (só lê, não muda nada):

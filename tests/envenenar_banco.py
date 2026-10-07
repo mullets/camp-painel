@@ -40,6 +40,7 @@ for cod in ("F026-P0001", "F023-P0011"):
     c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,'editado',?,?)", (cod, P("evento", "ator"), det))
 # item do site sem código e sem imagem: aparece nas listas da prévia do importador
 c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,metadados) VALUES (3999,8013,'draft',?,'sem-codigo-xss','{}')", (P("wp_item", "sem_codigo"),))
+c.execute("UPDATE divergencia_site SET codigo=?, valor_painel=?, valor_site=? WHERE id=(SELECT min(id) FROM divergencia_site)", (P("divergencia_site", "codigo"), P("divergencia_site", "valor_painel"), P("divergencia_site", "valor_site")))
 c.execute("UPDATE qnap_snapshot SET ultimo_material_nome=?, erro=? WHERE id=(SELECT max(id) FROM qnap_snapshot)", (P("qnap_snapshot", "ultimo_material_nome"), P("qnap_snapshot", "erro")))
 c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (P("configuracao", "valor"),))
 c.commit(); c.close()

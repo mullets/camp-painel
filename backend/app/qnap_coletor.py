@@ -101,7 +101,15 @@ def _medir(raiz: Path, entrada: Path | None, prontos: Path, dias_parado: int, pr
         except OSError:
             pass
         r["entrada_bruta"], r["parados"] = n, int(parados)
+    if entrada is not None:
+        r["entrada_existe"] = int(entrada.is_dir())
+    r["prontos_existe"] = int(prontos is not None and prontos.is_dir())
     if prontos is not None and prontos.is_dir():
+        try:
+            with os.scandir(prontos) as it:
+                r["prontos_pastas"] = sum(1 for e in it if not e.name.startswith(IGNORAR) and e.is_dir(follow_symlinks=False))
+        except OSError:
+            pass
         n, rec, parcial = _lotes(prontos, prazo)
         r["prontos"], r["prontos_parcial"] = n, int(parcial)
         if rec[0] > recente[0]:
@@ -112,7 +120,7 @@ def _medir(raiz: Path, entrada: Path | None, prontos: Path, dias_parado: int, pr
 
 
 COLUNAS = ("montado", "motivo", "latencia_ms", "total_gb", "livre_gb", "entrada_bruta", "parados", "prontos", "prontos_parcial",
-           "ultimo_material_em", "ultimo_material_nome", "erro")
+           "ultimo_material_em", "ultimo_material_nome", "erro", "prontos_existe", "prontos_pastas", "entrada_existe")
 
 
 def _gravar(dados: dict, duracao_ms: int) -> dict:
@@ -191,6 +199,27 @@ def _tendencia(con, livre: float | None) -> tuple[float | None, int | None]:
     return round(slope, 1), dias
 
 
+def _num(con, chave: str, padrao: float) -> float:
+    v = _cfg(con, chave, str(padrao))
+    try:
+        return float(v)
+    except ValueError:
+        return padrao
+
+
+def nivel_espaco(con, total_gb: float | None, livre_gb: float | None) -> tuple[str | None, float | None]:
+    """('ok' | 'aviso' | 'critico' | None, % livre). Crítico: < qnap.espaco_critico_pct % OU < qnap.espaco_critico_gb GB;
+    aviso: < qnap.espaco_aviso_pct %. Sem medida: (None, None). É a ÚNICA regra: selo, banner, cartão e ações usam esta."""
+    if not total_gb or livre_gb is None:
+        return None, None
+    pct = 100 * livre_gb / total_gb
+    if pct < _num(con, "qnap.espaco_critico_pct", 5) or livre_gb < _num(con, "qnap.espaco_critico_gb", 50):
+        return "critico", round(pct, 1)
+    if pct < _num(con, "qnap.espaco_aviso_pct", 15):
+        return "aviso", round(pct, 1)
+    return "ok", round(pct, 1)
+
+
 def resumo(con) -> dict:
     snap = ultima(con)
     idade = None
@@ -200,7 +229,10 @@ def resumo(con) -> dict:
     pontos = con.execute("""SELECT coletado_em, livre_gb FROM qnap_snapshot WHERE coletado_em >= datetime('now','-7 days')
                              AND livre_gb IS NOT NULL ORDER BY id""").fetchall()
     passo = max(1, -(-len(pontos) // 60))
+    nivel, livre_pct = nivel_espaco(con, snap["total_gb"] if snap else None, snap["livre_gb"] if snap else None)
     return {"coleta": snap, "idade_s": idade, "crescimento_gb_dia": cresc, "dias_ate_encher": dias,
+            "nivel_espaco": nivel, "livre_pct": livre_pct,
             "serie": [{"em": p[0], "livre_gb": p[1]} for p in pontos[::passo]], "coletando": em_andamento(),
-            "config": {"coleta_min": int(_cfg(con, "qnap.coleta_min", "10") or 10) if str(_cfg(con, "qnap.coleta_min", "10")).isdigit() else 10,
+            "config": {"entrada_caminho": _cfg(con, "qnap.entrada_captura"), "prontos_caminho": _cfg(con, "qnap.prontos_raiz") or _cfg(con, "qnap.raiz"),
+                       "coleta_min": int(_cfg(con, "qnap.coleta_min", "10") or 10) if str(_cfg(con, "qnap.coleta_min", "10")).isdigit() else 10,
                        "dias_parado": int(_cfg(con, "qnap.dias_parado", "3")) if str(_cfg(con, "qnap.dias_parado", "3")).isdigit() else 3}}

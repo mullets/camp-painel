@@ -390,6 +390,9 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
         out["pipeline"]["entrada_bruta"] = snap["entrada_bruta"] or 0
         out["pipeline"]["prontos"] = snap["prontos"] or 0
         out["qnap"]["coletado_em"] = snap["coletado_em"]
+        from .qnap_coletor import nivel_espaco
+        nivel, pct = nivel_espaco(con, snap["total_gb"], snap["livre_gb"])
+        out["qnap"].update({"nivel_espaco": nivel, "livre_pct": pct})
     else:
         out["qnap"]["coletando"] = True
 
@@ -415,7 +418,7 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
          "Qualquer material; operador escolhe tipo e informa dados", None),
         ("universal2", "Estação Universal 2", "estacao.universal2.ip", "universal",
          "Qualquer material; operador escolhe tipo e informa dados", None),
-        (None, "CAMP Vision 2", "campvision2.ip", "processamento",
+        ("campvision2", "CAMP Vision 2", "campvision2.ip", "processamento",
          "Lê imagens, gera JSON/EXIF e organiza na pasta final", 22),
         (None, "QNAP TS-932PX", "qnap.ip", "armazenamento",
          "Entrada bruta e acervo final", 445),

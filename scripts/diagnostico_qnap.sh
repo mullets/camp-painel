@@ -4,10 +4,10 @@
 #   bash scripts/diagnostico_qnap.sh --host Server-Camp.local --compartilhamento "Backup Servidor CAMP" --subpasta "Arquivos/100 - Scanners"
 # (--host aceita nome ou IP; sem argumentos usa o que está em Configurações do painel)
 cd "$(dirname "$0")/.." || exit 1
-HOST_ARG=""; SHARE_ARG=""; USR_ARG=""; SUB_ARG=""; RAIZ_ARG=""
+HOST_ARG=""; SHARE_ARG=""; USR_ARG=""; SUB_ARG=""; PRONTOS_ARG=""; RAIZ_ARG=""
 while [ $# -gt 0 ]; do case "$1" in
   --host|--ip) HOST_ARG="$2"; shift 2;; --compartilhamento) SHARE_ARG="$2"; shift 2;; --usuario) USR_ARG="$2"; shift 2;;
-  --subpasta) SUB_ARG="$2"; shift 2;; --raiz) RAIZ_ARG="$2"; shift 2;; *) echo "Opção desconhecida: $1"; exit 2;; esac; done
+  --subpasta|--entrada) SUB_ARG="$2"; shift 2;; --prontos) PRONTOS_ARG="$2"; shift 2;; --raiz) RAIZ_ARG="$2"; shift 2;; *) echo "Opção desconhecida: $1"; exit 2;; esac; done
 PY="${PY:-.venv/bin/python}"; [ -x "$PY" ] || PY=python3
 mapfile -t CFG < <("$PY" - <<'PYEOF'
 import sqlite3, sys
@@ -45,7 +45,8 @@ if [ -d "$RAIZ" ]; then
   elif [ -n "$(ls -A "$RAIZ" 2>/dev/null | head -1)" ]; then info "não é ponto de montagem, mas tem arquivos"; MONTADO=0
   else ruim "existe mas está VAZIA e nada está montado nela (é isto que o painel chama de \"não conectado\")"; fi
 else ruim "a pasta não existe"; fi
-if [ $MONTADO -eq 0 ] && [ -n "$SUB_ARG" ]; then [ -d "$RAIZ/$SUB_ARG" ] && ok "a subpasta '$SUB_ARG' existe" || ruim "montado, mas a subpasta '$SUB_ARG' NÃO existe aqui (nome diferente? veja: ls \"$RAIZ\")"; fi
+if [ $MONTADO -eq 0 ] && [ -n "$SUB_ARG" ]; then [ -d "$RAIZ/$SUB_ARG" ] && ok "a ENTRADA '$SUB_ARG' existe" || ruim "montado, mas a ENTRADA '$SUB_ARG' NÃO existe aqui (nome diferente? veja: ls \"$RAIZ\")"; fi
+if [ $MONTADO -eq 0 ] && [ -n "$PRONTOS_ARG" ]; then [ -d "$RAIZ/$PRONTOS_ARG" ] && ok "a pasta PRONTA '$PRONTOS_ARG' existe" || ruim "montado, mas a pasta PRONTA '$PRONTOS_ARG' NÃO existe aqui (nome diferente? veja: ls \"$RAIZ\")"; fi
 [ $MONTADO -eq 0 ] && [ -n "$PRONTOS" ] && { [ -d "$PRONTOS" ] && ok "pasta do material pronto configurada no painel existe: $PRONTOS" || ruim "pasta do material pronto configurada no painel NÃO existe: $PRONTOS"; }
 echo; echo "6) Montagem permanente (/etc/fstab)"
 if grep -q -i -E "qnap|$IP|$RAIZ|server-camp" /etc/fstab 2>/dev/null; then ok "há linha no fstab:"; grep -n -i -E "qnap|$IP|$RAIZ|server-camp" /etc/fstab | sed 's/password=[^, ]*/password=***/; s/^/      /'
@@ -66,5 +67,5 @@ elif [ $SMB -ne 0 ];     then echo "  Responde, mas o SMB está fechado. Ative o
 elif [ $MONTADO -eq 0 ]; then echo "  Está conectado e com conteúdo: o painel deve mostrar 'conectado'. Se não mostra: sudo systemctl restart camp-painel"
 else
   echo "  O servidor de arquivos está no ar e o SMB aberto, mas NÃO está conectado a este servidor. Próximo passo:"
-  echo "    sudo bash scripts/montar_qnap.sh --host $HOST --compartilhamento \"${SHARE_ARG:-NOME}\" --usuario USUARIO${SUB_ARG:+ --subpasta \"$SUB_ARG\"}"
+  echo "    sudo bash scripts/montar_qnap.sh --host $HOST --compartilhamento \"${SHARE_ARG:-NOME}\" --usuario USUARIO${SUB_ARG:+ --entrada \"$SUB_ARG\"}${PRONTOS_ARG:+ --prontos \"$PRONTOS_ARG\"}"
 fi

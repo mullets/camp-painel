@@ -512,6 +512,25 @@ def contexto_estacao(u: dict = Depends(auth.exige("operador"))) -> dict:
     }
 
 
+# Valores de `status` (status.json) que o painel entende. Contrato: docs/campvision.md.
+STATUS_PRONTO = {"pronto", "campvision_concluido", "pronto_campvision2"}   # os dois últimos são valores antigos do CV2
+STATUS_PROCESSANDO = {"processando", "enviado_windows"}
+STATUS_ERRO = {"erro", "falha"}
+EVENTO_POR_ETAPA = {"revisao": "material_pronto", "processando": "material_processando", "erro": "material_com_erro"}
+
+
+def _classificar_status(st) -> tuple[str, bool]:
+    """(etapa da lista, status_conhecido). Sem status = pronto (comportamento antigo); valor desconhecido = pronto + aviso."""
+    s = str(st or "").strip().lower()
+    if not s or s in STATUS_PRONTO:
+        return "revisao", True
+    if s in STATUS_PROCESSANDO:
+        return "processando", True
+    if s in STATUS_ERRO:
+        return "erro", True
+    return "revisao", False
+
+
 @router.post("/filas/varrer-qnap")
 def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
     """Lê somente material FINAL organizado pelo CAMP Vision 2.
@@ -529,7 +548,8 @@ def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
         raise HTTPException(503, f"Pasta final do QNAP não montada em {raiz}")
 
     con = connect()
-    novas, atualizadas, ignoradas = 0, 0, []
+    novas, atualizadas, ignoradas, avisos = 0, 0, [], []
+    n_processando = n_erro = 0
     vistos: set[Path] = set()
 
     manifestos = list(raiz.rglob("info_projeto.json")) + list(raiz.rglob("status.json"))
@@ -583,6 +603,11 @@ def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
         n_arq = len(arquivos)
 
         st = status.get("status") if isinstance(status, dict) else None
+        etapa_alvo, conhecido = _classificar_status(st)
+        if not conhecido:
+            avisos.append({"pasta": str(pasta), "motivo": f"status desconhecido '{st}': tratado como pronto"})
+        n_processando += etapa_alvo == "processando"
+        n_erro += etapa_alvo == "erro"
         nome = info.get("nome") or info.get("titulo") or pasta.name
         esperadas = info.get("folhas_esperadas") or info.get("itens_esperados") or info.get("quantidade")
         contexto = {
@@ -602,12 +627,12 @@ def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
         ).fetchone()
 
         if ex:
-            if ex["etapa"] not in ("publicado", "rascunho") and ex["etapa"] != "revisao":
+            if ex["etapa"] not in ("publicado", "rascunho") and ex["etapa"] != etapa_alvo:   # nunca regride lote já publicado/em rascunho
                 con.execute(
-                    "UPDATE lista_processamento SET etapa='revisao', status_json=?, folhas_encontradas=?, resultado=?, atualizado_em=datetime('now') WHERE id=?",
-                    (st or "pronto_campvision2", n_arq, json.dumps(contexto, ensure_ascii=False), ex["id"]),
+                    "UPDATE lista_processamento SET etapa=?, status_json=?, folhas_encontradas=?, resultado=?, atualizado_em=datetime('now') WHERE id=?",
+                    (etapa_alvo, st or "pronto_campvision2", n_arq, json.dumps(contexto, ensure_ascii=False), ex["id"]),
                 )
-                _evento(con, "lista", ex["id"], "material_pronto", "campvision2", {"pasta": str(pasta), "arquivos": n_arq})
+                _evento(con, "lista", ex["id"], EVENTO_POR_ETAPA[etapa_alvo], "campvision2", {"pasta": str(pasta), "arquivos": n_arq})
                 atualizadas += 1
             else:
                 con.execute(
@@ -618,19 +643,21 @@ def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
             lid = con.execute(
                 """INSERT INTO lista_processamento
                    (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json, resultado)
-                   VALUES (?,?,?,?,?,'revisao',?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?)""",
                 (
                     nome,
                     cod,
                     str(pasta),
                     esperadas,
                     n_arq,
+                    etapa_alvo,
                     st or "pronto_campvision2",
                     json.dumps(contexto, ensure_ascii=False),
                 ),
             ).lastrowid
-            _evento(con, "lista", lid, "material_pronto", "campvision2", {"pasta": str(pasta), "arquivos": n_arq})
-            _evento(con, "projeto", cod, "material_novo_pronto", "campvision2", contexto)
+            _evento(con, "lista", lid, EVENTO_POR_ETAPA[etapa_alvo], "campvision2", {"pasta": str(pasta), "arquivos": n_arq})
+            if etapa_alvo == "revisao":
+                _evento(con, "projeto", cod, "material_novo_pronto", "campvision2", contexto)
             novas += 1
 
     con.commit()
@@ -638,10 +665,13 @@ def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
     return {
         "novas": novas,
         "atualizadas": atualizadas,
+        "processando": n_processando,
+        "com_erro": n_erro,
+        "avisos": avisos[:50],
         "ignoradas": ignoradas[:50],
         "raiz_final": str(raiz),
         "entrada_bruta": str(entrada) if entrada else None,
-        "mensagem": "Somente material já organizado pelo CAMP Vision 2 é considerado pronto.",
+        "mensagem": "Somente material já organizado pelo CAMP Vision 2 entra; lotes em processamento ou com erro aparecem nas Filas, mas não pedem revisão.",
     }
 
 

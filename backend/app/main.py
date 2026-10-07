@@ -23,6 +23,7 @@ from .rotas_itens import router as rotas_itens
 from .rotas_importacao import router as rotas_importacao
 from .guia_publicacao import router as guia_publicacao
 from .rotas_qnap import router as rotas_qnap
+from .rotas_hoje import router as rotas_hoje
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -37,6 +38,7 @@ app.include_router(rotas_itens)
 app.include_router(rotas_importacao)
 app.include_router(guia_publicacao)
 app.include_router(rotas_qnap)
+app.include_router(rotas_hoje)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 
@@ -314,9 +316,9 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
     estado = d.estado.strip().lower()
     if not estacao_id or len(estacao_id) > 64:
         raise HTTPException(400, "estacao_id inválido")
-    if tipo not in ("foto", "contex", "universal"):
+    if tipo not in ("foto", "contex", "universal", "campvision"):
         raise HTTPException(400, "tipo_estacao inválido")
-    if estado not in ("ocioso", "capturando", "finalizando", "backup", "erro"):
+    if estado not in ("ocioso", "capturando", "finalizando", "backup", "processando", "erro"):
         raise HTTPException(400, "estado inválido")
     con = connect()
     con.execute("""

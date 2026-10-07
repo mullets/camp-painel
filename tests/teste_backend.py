@@ -844,7 +844,8 @@ def filho(modo):
         import app.qnap_coletor as qc
         from fastapi.testclient import TestClient
         from app.main import app
-        base = _P(os.environ["CAMP_DB_PATH"]).parent / "qnap_fake"; entrada = base / "99 - Entrada"; prontos = base / "100 - Scanners"
+        import shutil as _sh
+        base = _P(os.environ["CAMP_DB_PATH"]).parent / "qnap_fake"; _sh.rmtree(base, ignore_errors=True); entrada = base / "99 - Entrada"; prontos = base / "100 - Scanners"
         for d in ("A", "B", "C", ".oculta", "@Recycle"): (entrada / d).mkdir(parents=True)
         agora = _t.time()
         _os.utime(entrada / "A", (agora - 3600, agora - 3600)); _os.utime(entrada / "B", (agora - 2 * 86400, agora - 2 * 86400)); _os.utime(entrada / "C", (agora - 5 * 86400, agora - 5 * 86400))
@@ -871,6 +872,7 @@ def filho(modo):
         ver("lotes prontos: 3 (não entra dentro de lote nem na lixeira)", r.get("prontos") == 3 and r.get("prontos_parcial") == 0, f"{r.get('prontos')} parcial={r.get('prontos_parcial')}")
         ver("último material = o lote mais recente ('grp/lot3'), com data", r.get("ultimo_material_nome") == "grp/lot3" and r.get("ultimo_material_em"), str(r.get("ultimo_material_nome")))
         ver("mede a latência (ms) e a duração, sem erro", isinstance(r.get("latencia_ms"), int) and r.get("duracao_ms") is not None and not r.get("erro"))
+        ver("diagnóstico: a pasta de lotes existe e tem 3 pastas no topo (a lixeira não conta); a entrada existe", r.get("prontos_existe") == 1 and r.get("prontos_pastas") == 3 and r.get("entrada_existe") == 1, f"{r.get('prontos_existe')} {r.get('prontos_pastas')} {r.get('entrada_existe')}")
         # ---- QNAP não montado ----
         c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(base / "nada"),)); c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.entrada_captura','qnap.prontos_raiz')"); c.commit(); c.close()
         r2 = qc.coletar()
@@ -910,12 +912,174 @@ def filho(modo):
         for _ in range(40):
             if not qc.em_andamento(): break
             _t.sleep(0.25)
-        ver("depois da coleta o snapshot novo aparece (idade pequena)", (adm.get("/api/qnap").json()["idade_s"] or 999) < 30)
+        _j2 = adm.get("/api/qnap").json(); ver("depois da coleta o snapshot novo aparece (idade pequena)", (_j2["idade_s"] if _j2["idade_s"] is not None else 999) < 30, f"idade={_j2['idade_s']} coleta={str(_j2['coleta'])[:150]}")
         # ---- /api/estacoes lê o guardado e NÃO varre o QNAP ----
         def proibido(*a, **k): raise AssertionError("varreu o QNAP dentro da requisição")
         qc._lotes = proibido
         e = adm.get("/api/estacoes")
         ver("/api/estacoes responde SEM varrer o QNAP (usa o guardado)", e.status_code == 200 and "pipeline" in e.json(), f"HTTP {e.status_code} {e.text[:80]}")
+        for l in res: print(l)
+    elif modo == "hoje":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        import app.qnap_coletor as qc
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = connect()
+        for f in ("F091", "F092", "F093"): c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES (?,?,?,1)", (f, f"Fundo {f}", "T" + f[-2:]))
+        def proj(f, n, aut=0, teste=0, wid=None, st="nao_publicado"):
+            cod = f"{f}-P000{n}"; c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,lote_teste,tainacan_item_id,status_site) VALUES (?,?,?,?,1970,?,?,?,?)", (cod, f, n, f"Casa {cod}", aut, teste, wid, st)); return cod
+        for n in (1, 2, 3): proj("F091", n)                       # F091: sem direitos, segura 3 projetos
+        proj("F092", 1, aut=1, wid=700); proj("F092", 2)           # F092: direitos ok; P1 pronto, P2 sem autorização
+        proj("F093", 1, aut=1, teste=1, wid=701)                   # F093: autorizado, mas é lote de teste -> NÃO está pronto
+        proj("F093", 2, aut=1, wid=702, st="no_ar")                # já publicado: não conta
+        for w in (700, 701, 702): c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo) VALUES (?,8007,'draft','x')", (w,))
+        for f in ("F092", "F093"): c.execute("INSERT OR REPLACE INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES (?, 'autorizado','Fam','Termo')", (f,))
+        # eventos: 3 folhas hoje (uma com 2 eventos), 1 ontem; 1 publicação hoje
+        for cod, q in (("F092-P0001-1970-S01-D00001", "now"), ("F092-P0001-1970-S01-D00001", "now"), ("F092-P0001-1970-S01-D00002", "now"), ("F092-P0001-1970-S01-D00003", "now"), ("F092-P0001-1970-S01-D00009", "-1 days")):
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,quando) VALUES ('item',?,'editado','x',datetime('now',?))", (cod, "+0 days" if q == "now" else q))
+        c.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('projeto','F093-P0002','site_publicar','x')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,situacao) VALUES ('aviso','outro','operador','F092-P0001','erro de hoje','aberto')")
+        for campo, ent, cod in (("sem_codigo", "item", "9001"), ("sem_codigo", "item", "9002"), ("sem_itens_no_site", "fundo", "F091"), ("publicado_em_fundo_fora_do_ar", "item", "F092-P0001-1970-S01-D00001"), ("campo_novo_desconhecido", "item", "X")):
+            c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES (?,?,?,?,?)", (ent, cod, campo, "p", "s"))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,documento_url,thumb_url) VALUES (8001,8013,'draft','sem imagem 1',NULL,NULL),(8002,8013,'draft','sem imagem 2','','')")
+        c.execute("INSERT INTO qnap_snapshot (montado,total_gb,livre_gb,parados,entrada_bruta,prontos) VALUES (1, 1255, 28, 2, 5, 3)")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "A", "admin"), ("le@camp.arq.br", "L", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, le, anon = cli("adm@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # ---- níveis de espaço: UMA regra ----
+        k = connect(); nv = lambda t, l: qc.nivel_espaco(k, t, l)[0]
+        ver("espaço: 28 GB de 1.255 (2,2%) = CRÍTICO (o caso real do painel)", nv(1255, 28) == "critico")
+        ver("espaço: 150 GB de 1.255 (11,9%) = aviso", nv(1255, 150) == "aviso")
+        ver("espaço: 700 GB de 1.255 = ok", nv(1255, 700) == "ok")
+        ver("espaço: 49 GB livres é crítico mesmo num volume enorme (limite em GB)", nv(100000, 49) == "critico" and nv(100000, 10000) == "aviso" and nv(100000, 4000) == "critico")
+        ver("espaço: sem medida não inventa nível", nv(None, None) is None and nv(0, 0) is None); k.close()
+        j = adm.get("/api/qnap").json(); ver("/api/qnap traz o nível e o % livre", j["nivel_espaco"] == "critico" and j["livre_pct"] == 2.2, str((j["nivel_espaco"], j["livre_pct"])))
+        ver("/api/estacoes também (é o que o banner lê)", adm.get("/api/estacoes").json()["qnap"]["nivel_espaco"] == "critico")
+        # ---- /api/hoje ----
+        r = le.get("/api/hoje"); h = r.json()
+        ver("leitura vê o topo do painel (200); sem login 401", r.status_code == 200 and anon.get("/api/hoje").status_code == 401, f"HTTP {r.status_code}")
+        ver("travados por direitos: 1 fundo (F091) que segura 3 projetos", h["kpis"]["travados"] == {"fundos": 1, "projetos": 3} and h["publicacao"]["fundos_travados"][0]["codigo"] == "F091", str(h["kpis"]["travados"]))
+        ver("prontos para publicar: SÓ 1 (lote de teste e já publicado não contam), com 3 autorizados no total", h["kpis"]["prontos"] == {"valor": 1, "autorizados": 3}, str(h["kpis"]["prontos"]))
+        ver("a ação 'autorizar' lista F092 com 1 projeto sem autorização", [(f["codigo"], f["nao_autorizados"]) for f in h["publicacao"]["fundos_para_autorizar"]] == [("F092", 1)], str(h["publicacao"]["fundos_para_autorizar"]))
+        ver("folhas trabalhadas: 3 hoje (a mesma folha com 2 eventos conta UMA vez) e 1 ontem", h["hoje"]["folhas"] == {"hoje": 3, "ontem": 1}, str(h["hoje"]["folhas"]))
+        ver("publicações hoje: 1; projetos novos hoje: os 7 criados agora", h["hoje"]["publicacoes"]["hoje"] == 1 and h["hoje"]["projetos_novos"]["hoje"] == 7, str(h["hoje"]))
+        ver("pedidos e erros novos hoje: conta o erro de hoje (2 parâmetros no SQL)", h["hoje"]["pedidos_e_erros"]["hoje"] == 1, str(h["hoje"]["pedidos_e_erros"]))
+        ids = [a["id"] for a in h["acoes"]]
+        ver("ordem das ações: QNAP crítico, publicar pronto, direitos, autorizar, paradas, sem imagem, divergências", ids == ["qnap_espaco", "publicar", "direitos_F091", "autorizar_F092", "parados", "sem_imagem", "divergencias"], str(ids))
+        ver("a ação do QNAP diz o espaço em GB e %", h["acoes"][0]["detalhe"] == "28 GB livres (2,2%)", h["acoes"][0]["detalhe"])
+        ver("as ações de fundo levam à página do fundo", next(a for a in h["acoes"] if a["id"] == "direitos_F091")["rota"] == "fundo/F091" and next(a for a in h["acoes"] if a["id"] == "direitos_F091")["impacto"] == 3)
+        ver("folhas do site sem imagem: 2 (NULL e vazio contam)", next(a for a in h["acoes"] if a["id"] == "sem_imagem")["impacto"] == 2)
+        # ---- divergências em português ----
+        d = le.get("/api/site/divergencias/resumo").json()
+        titulos = {g["titulo"]: g["n"] for g in d["grupos"]}
+        ver("divergências: total 5, agrupadas e com título em português", d["total"] == 5 and titulos.get("Item do site sem código CAMP") == 2 and titulos.get("Fundo sem nenhuma folha no site") == 1, str(titulos))
+        ver("divergência 'publicado em fundo despublicado' explicada sem o código cru", "Público no site, mas o fundo está despublicado no painel" in titulos and not any("_" in t for t in titulos), str(list(titulos)))
+        ver("tipo desconhecido não quebra: vira 'Outra divergência'", titulos.get("Outra divergência") == 1)
+        ver("cada grupo traz a explicação e os itens (código e valores)", all(g["explicacao"] and g["itens"] for g in d["grupos"]))
+        ver("o topo resume as divergências por tipo", h["divergencias"]["total"] == 5 and h["divergencias"]["tipos"][0]["n"] == 2)
+        for l in res: print(l)
+    elif modo == "campvision":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil as _sh
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        base = _P(os.environ["CAMP_DB_PATH"]).parent / "cv_fake"; _sh.rmtree(base, ignore_errors=True)
+        entrada = base / "Arquivos" / "100 - Scanners"; prontos = base / "Fundos e Escritorios" / "ACERVOS_CAMP"
+        pd = prontos / "F099 - Fundo de teste" / "01 - Projetos"; entrada.mkdir(parents=True)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F099','Fundo de teste','TST',1)")
+        for n in (1, 2, 3, 4, 7):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P{n:04d}", "F099", n, f"Casa {n}"))
+        for k, v in (("qnap.raiz", str(base)), ("qnap.entrada_captura", str(entrada)), ("qnap.prontos_raiz", str(prontos))): c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v, k))
+        c.commit(); c.close()
+        def lote(pasta, info=None, status=None, imgs=(), bruto_info=None):
+            d = pd / pasta; d.mkdir(parents=True, exist_ok=True)
+            if info is not None: (d / "info_projeto.json").write_text(_j.dumps(info))
+            if bruto_info is not None: (d / "info_projeto.json").write_text(bruto_info)
+            if status is not None: (d / "status.json").write_text(_j.dumps(status))
+            for sub, nome in imgs: (d / sub).mkdir(exist_ok=True); (d / sub / nome).write_bytes(b"x")
+            return d
+        base_info = lambda cod, **k: {"codigo": cod, "nome": f"Casa {cod}", "folhas_esperadas": 3, "estacao": "contex1", "tipo_estacao": "contex", "operador": "Beatriz", "operador_email": "b@camp.arq.br", "fundo_codigo": "F099", **k}
+        lote("F099-P0001 - Casa 1", base_info("F099-P0001"), {"status": "pronto", "codigo": "F099-P0001"}, [("Plantas", "a.jpg"), ("Plantas", "b.jpg"), ("Fotografias", "c.tif")])
+        lote("F099-P0002 - Casa 2", base_info("F099-P0002"), {"status": "processando", "codigo": "F099-P0002"}, [("Plantas", "a.jpg")])
+        lote("F099-P0003 - Casa 3", base_info("F099-P0003"), {"status": "erro", "codigo": "F099-P0003", "mensagem": "OCR falhou"}, [])
+        lote("F099-P0004 - Casa 4", None, {"status": "campvision_concluido"}, [("Plantas", "a.jpg")])      # legado: sem info, código pelo NOME da pasta
+        lote("F099-P0007 - Casa 7", base_info("F099-P0007"), {"status": "valor_estranho", "codigo": "F099-P0007"}, [("Plantas", "a.jpg")])
+        lote("F099-P0001 - Teste", base_info("F099-P0001", teste=True), {"status": "pronto"}, [])
+        lote("F099-P0096 - Fora do painel", base_info("F099-P0096"), {"status": "pronto"}, [])
+        lote("Sem Codigo Nenhum", {"nome": "x"}, {"status": "pronto"}, [])
+        lote("F099-P0005 - JSON quebrado", None, None, [], bruto_info="{nao e json")
+        for em, nome, papel in (("op@camp.arq.br", "Op", "operador"), ("adm@camp.arq.br", "Adm", "admin")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        def com_ip(ip):   # fixa o IP de origem da requisição (a versão do Starlette instalada não aceita client=)
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        op, adm = cli("op@camp.arq.br"), cli("adm@camp.arq.br")
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def etapas():
+            k = connect(); r = {x[0].rsplit("/", 1)[-1].split(" - ")[0]: (x[1], x[2], x[3]) for x in k.execute("SELECT pasta_qnap, etapa, folhas_encontradas, folhas_esperadas FROM lista_processamento")}; k.close(); return r
+        r = op.post("/api/filas/varrer-qnap").json()
+        ver("varredura: 5 lotes entram (pronto, processando, erro, legado e status desconhecido)", r["novas"] == 5, str({k: r[k] for k in ("novas", "processando", "com_erro")}))
+        e = etapas()
+        ver("status 'pronto' vai para REVISÃO, com as 3 imagens contadas nas subpastas e as 3 esperadas", e["F099-P0001"] == ("revisao", 3, 3), str(e.get("F099-P0001")))
+        ver("status 'processando' fica em PROCESSANDO (não pede revisão)", e["F099-P0002"][0] == "processando" and r["processando"] == 1, str(e.get("F099-P0002")))
+        ver("status 'erro' fica em ERRO", e["F099-P0003"][0] == "erro" and r["com_erro"] == 1, str(e.get("F099-P0003")))
+        ver("legado: sem info_projeto.json e status 'campvision_concluido' = pronto; o código vem do NOME da pasta", e["F099-P0004"][0] == "revisao", str(e.get("F099-P0004")))
+        ver("status desconhecido: entra como pronto e gera AVISO", e["F099-P0007"][0] == "revisao" and len(r["avisos"]) == 1 and "valor_estranho" in r["avisos"][0]["motivo"], str(r["avisos"]))
+        motivos = " | ".join(i["motivo"] for i in r["ignoradas"])
+        ver("ignorados com motivo: teste=true, código que o painel não conhece, sem código e JSON inválido", len(r["ignoradas"]) == 4 and "lote de teste" in motivos and "sem código de projeto reconhecido" in motivos and "manifesto inválido" in motivos, motivos[:200])
+        k = connect(); ctx = _j.loads(k.execute("SELECT resultado FROM lista_processamento WHERE projeto_codigo='F099-P0001'").fetchone()[0]); evs = {x[0] for x in k.execute("SELECT tipo FROM evento WHERE ator='campvision2'")}; k.close()
+        ver("o contexto do operador/estação é guardado (estacao, operador, e-mail, fundo)", ctx["estacao"] == "contex1" and ctx["operador"] == "Beatriz" and ctx["operador_email"] == "b@camp.arq.br" and ctx["fundo_codigo"] == "F099", str({k_: ctx.get(k_) for k_ in ("estacao", "operador", "fundo_codigo")}))
+        ver("a auditoria registra pronto, processando e erro", {"material_pronto", "material_processando", "material_com_erro"} <= evs, str(evs))
+        ver("varrer de novo é idempotente (0 novas)", op.post("/api/filas/varrer-qnap").json()["novas"] == 0)
+        (pd / "F099-P0002 - Casa 2" / "status.json").write_text(_j.dumps({"status": "pronto", "codigo": "F099-P0002"}))
+        r2 = op.post("/api/filas/varrer-qnap").json()
+        ver("processando -> pronto: o lote passa para REVISÃO", r2["atualizadas"] == 1 and etapas()["F099-P0002"][0] == "revisao", str(r2["atualizadas"]))
+        k = connect(); k.execute("UPDATE lista_processamento SET etapa='publicado' WHERE projeto_codigo='F099-P0001'"); k.commit(); k.close()
+        (pd / "F099-P0001 - Casa 1" / "status.json").write_text(_j.dumps({"status": "processando", "codigo": "F099-P0001"})); op.post("/api/filas/varrer-qnap")
+        ver("lote JÁ PUBLICADO nunca regride, mesmo que o CV2 mande 'processando' de novo", etapas()["F099-P0001"][0] == "publicado")
+        # entrada bruta nunca vira lote, mesmo se a raiz final contiver a entrada
+        k = connect(); k.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(base),)); k.commit(); k.close()
+        (entrada / "F099-P0001 - Casa 1").mkdir(); (entrada / "F099-P0001 - Casa 1" / "status.json").write_text(_j.dumps({"status": "pronto", "codigo": "F099-P0001"}))
+        op.post("/api/filas/varrer-qnap"); k = connect(); n_ent = k.execute("SELECT count(*) FROM lista_processamento WHERE pasta_qnap LIKE '%100 - Scanners%'").fetchone()[0]; k.close()
+        ver("a ENTRADA bruta (100 - Scanners) nunca vira lote, mesmo dentro da raiz varrida", n_ent == 0, str(n_ent))
+        # ---------------- HTTP das estações (rede local) ----------------
+        lan = com_ip("192.168.15.40"); fora = com_ip("8.8.8.8")
+        hb = {"estacao_id": "campvision2", "tipo_estacao": "campvision", "app": "campvision-new", "versao": "2.0.0", "hostname": "campvision", "ip_local": "192.168.15.40", "estado": "processando", "fundo_codigo": "F099", "projeto_codigo": "F099-P0002"}
+        r = lan.post("/api/estacoes/heartbeat", json=hb); ver("heartbeat do CAMP Vision (tipo 'campvision', estado 'processando') é aceito", r.status_code == 200 and r.json()["estado"] == "processando", f"HTTP {r.status_code} {r.text[:80]}")
+        ver("heartbeat com tipo ou estado inválido: 400", lan.post("/api/estacoes/heartbeat", json={**hb, "tipo_estacao": "xyz"}).status_code == 400 and lan.post("/api/estacoes/heartbeat", json={**hb, "estado": "dormindo"}).status_code == 400)
+        ver("de fora da rede local: 403", fora.post("/api/estacoes/heartbeat", json=hb).status_code == 403)
+        cv = next(m for m in adm.get("/api/estacoes").json()["maquinas"] if m["nome"] == "CAMP Vision 2")
+        ver("em Estações o CAMP Vision 2 mostra o app online e o estado (estacao_id 'campvision2')", cv["estacao_id"] == "campvision2" and cv["app_online"] is True and cv["app_estado"] == "processando" and cv["app_projeto"] == "F099-P0002", str({k_: cv.get(k_) for k_ in ("estacao_id", "app_online", "app_estado")}))
+        k = connect(); k.execute("UPDATE configuracao SET valor='segredo-cv' WHERE chave='estacao.token'"); k.commit(); k.close()
+        ver("com token configurado: sem o cabeçalho = 401; com X-Camp-Token certo = 200", lan.post("/api/estacoes/heartbeat", json=hb).status_code == 401 and lan.post("/api/estacoes/heartbeat", json=hb, headers={"X-Camp-Token": "segredo-cv"}).status_code == 200 and lan.post("/api/estacoes/heartbeat", json=hb, headers={"X-Camp-Token": "errado"}).status_code == 401)
+        T = {"X-Camp-Token": "segredo-cv"}
+        ctx = lan.get("/api/estacoes/contexto", headers=T).json()
+        f99 = next((f for f in ctx["fundos"] if f["codigo_fundo"] == "F099"), {})
+        ver("/contexto: cada fundo traz codigo_fundo, prefixo, nome, ultimo_projeto, proximo_projeto (F099: último P0007, próximo P0008)", {"codigo_fundo", "prefixo", "nome", "ultimo_projeto", "proximo_projeto"} <= set(f99) and f99.get("ultimo_projeto") == "P0007" and f99.get("proximo_projeto") == "P0008", str(f99))
+        cf = lan.get("/api/estacoes/contexto?fundo=F099", headers=T).json()
+        ver("/contexto?fundo=: traz também os projetos (codigo, numero_projeto, projeto, ano, cidade, identificacao_original)", {"codigo", "numero_projeto", "projeto", "ano", "cidade", "identificacao_original"} <= set(cf["projetos"][0]) and len(cf["projetos"]) == 5, str(cf["projetos"][0]))
+        chave = "a" * 32; corpo = {"fundo_codigo": "F099", "titulo": "Casa Nova", "ano": 1975, "cidade": "Campinas/SP", "operador": "Beatriz", "chave_reserva": chave}
+        a = lan.post("/api/estacoes/projetos/reservar", json=corpo, headers=T); b = lan.post("/api/estacoes/projetos/reservar", json=corpo, headers=T)
+        ver("/reservar devolve codigo, numero_projeto, fundo_codigo, titulo, ano, cidade, identificacao_original", a.status_code == 200 and {"codigo", "numero_projeto", "fundo_codigo", "titulo", "ano", "cidade", "identificacao_original"} <= set(a.json()) and a.json()["codigo"] == "F099-P0008", a.text[:160])
+        ver("repetir a reserva com a MESMA chave devolve o MESMO projeto (não duplica)", b.json()["codigo"] == a.json()["codigo"])
+        c3 = lan.post("/api/estacoes/projetos/reservar", json={**corpo, "chave_reserva": "b" * 32}, headers=T)
+        ver("outra chave = próximo número (P0009)", c3.json()["codigo"] == "F099-P0009", c3.text[:100])
+        ver("/reservar sem título: 400; fundo inexistente: 404", lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": " ", "chave_reserva": "c" * 32}, headers=T).status_code == 400 and lan.post("/api/estacoes/projetos/reservar", json={**corpo, "fundo_codigo": "F000", "chave_reserva": "d" * 32}, headers=T).status_code in (400, 404))
         for l in res: print(l)
     return 0
 
@@ -1083,6 +1247,22 @@ else:
 print("17) QNAP: coletor em segundo plano, limite de tempo, histórico e tendência")
 rc, out = rodar("qnap", f"{tmp}/qnap.db")
 if rc != 0: ok(False, f"teste do QNAP não rodou -> {out[-1000:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("18) Topo do painel: níveis de espaço, ações do dia, hoje x ontem e divergências explicadas")
+rc, out = rodar("hoje", f"{tmp}/hoje.db")
+if rc != 0: ok(False, f"teste do topo do painel não rodou -> {out[-1100:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("19) Contrato com o CAMP Vision 2: lotes, status, heartbeat, token e reserva de projeto")
+rc, out = rodar("campvision", f"{tmp}/campvision.db")
+if rc != 0: ok(False, f"teste do contrato do CAMP Vision não rodou -> {out[-1100:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

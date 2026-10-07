@@ -4,11 +4,11 @@ Este é o registro único do que já foi decidido. Antes de mexer em algo daqui,
 
 ## 1. Infraestrutura (fatos)
 - **Painel**: servidor Ubuntu `camp@camp`, `192.168.15.60:8000`, serviço `camp-painel`, repositório `~/camp-painel`. Atualiza com `./atualizar.sh` (faz backup antes).
-- **QNAP TS-932PX**: `192.168.15.30`. **O nome que o Mac mostra é `Server-Camp`** (mesma máquina; `smb://Server-Camp._smb._tcp.local` é o caminho do Mac depois de montar e logar).
-  Compartilhamento `Backup Servidor CAMP`; material pronto em `Arquivos/100 - Scanners`; usuário do painel `camp-panel`.
-  Neste servidor: `/mnt/qnap/acervos` (raiz do compartilhamento); `qnap.prontos_raiz` = `/mnt/qnap/acervos/Arquivos/100 - Scanners`. Ver `qnap.md`.
+- **QNAP TS-932PX**: `192.168.15.30`. **O nome que o Mac mostra é `Server-Camp`** (mesma máquina). Compartilhamento `Backup Servidor CAMP`; usuário do painel `camp-panel`; montado neste servidor em `/mnt/qnap/acervos` (raiz do compartilhamento). Ver `qnap.md`.
+  - **ENTRADA** (`qnap.entrada_captura`): `Arquivos/100 - Scanners`. Os scanners gravam aqui e o CAMP Vision 2 lê. O painel não lê lotes daqui.
+  - **PRONTO** (`qnap.prontos_raiz`): `Fundos e Escritorios/ACERVOS_CAMP`, no padrão `<Fundo>/01 - Projetos/<Fxxx-Pxxxx - Nome>/<série>`. O CAMP Vision 2 grava aqui e **o painel lê os lotes só daqui**.
+- **CAMP Vision 2** (repositório oficial `github.com/mullets/campvision-new`; o `campvision2` é o app antigo): roda num Ubuntu dedicado (`.40`). O **contrato** com o painel (arquivos, valores de `status`, heartbeat, token, reserva de projeto) está em `campvision.md`; quem mexer em um lado confere o outro.
 - **Informações do QNAP no painel** (espaço, tendência, último material, entrada bruta, paradas, lotes prontos, resposta) vêm do **coletor em segundo plano** (`qnap_coletor.py`, a cada 10 min, limite de 25 s, histórico de 90 dias). **Nunca varrer o QNAP dentro de uma requisição**: por SMB é lento e, com a montagem presa, trava o painel. A tela só lê o guardado (`GET /api/qnap`; admin pede `POST /api/qnap/coletar`). Configurações: `qnap.coleta_min`, `qnap.dias_parado`.
-- A pasta de ENTRADA das estações (`qnap.entrada_captura`) só é configurada quando o Rafael confirmar o caminho.
 - Mudanças que alteram o site `camp.arq.br` (publicar, despublicar, escrever no Tainacan) só depois das 21h.
 
 ## 2. Vocabulário de publicação → `vocabulario.md`

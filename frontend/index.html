@@ -277,6 +277,21 @@ tbody tr.sel td{background:var(--blue-soft)}
 .pg-ctl{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 2px;font-size:12.5px;color:var(--ink2)}
 .pg-ctl[hidden]{display:none}.pg-nav{display:flex;gap:10px;align-items:center}.pg-pos{white-space:nowrap}.pg-por{display:flex;gap:6px;align-items:center}.pg-por select{font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
 .pg-oculta{display:none!important}
+.hoje-frase{margin:4px 0 0;color:var(--ink2);font-size:14px}.hoje-frase b{color:var(--ink)}
+.hoje-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 16px}
+.hoje-kpi{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface2)}
+.hoje-kpi .v{font-family:var(--mono,monospace);font-size:26px;line-height:1.1}.hoje-kpi .l{font-size:12.5px;font-weight:600;margin-top:2px}.hoje-kpi .d{font-size:11.5px;color:var(--ink3);margin-top:2px}
+.hoje-h{font-size:12.5px;color:var(--ink3);margin:0 0 8px;font-weight:600}
+.hoje-acoes{display:grid;gap:8px}.hoje-acao{display:flex;gap:12px;align-items:center;text-align:left;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);color:inherit;cursor:pointer;font:inherit}
+.hoje-acao:hover{border-color:var(--ink3)}.hoje-acao .n{width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:11px;flex:none}
+.hoje-acao b{display:block;font-size:13.5px}.hoje-acao small{color:var(--ink3);font-size:12px}.hoje-acao .seta{margin-left:auto;color:var(--ink3)}
+.hoje-acao.critica{border-color:var(--red)}.hoje-acao.critica .n{background:var(--red)}
+@media (max-width:900px){.hoje-kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi .d{font-size:11px;color:var(--ink3);margin-top:2px}
+.div-grupo{margin-top:14px}.div-grupo h3{font-size:13px;margin:0 0 4px;display:flex;gap:8px;align-items:center}
+.lnk{color:var(--blue);cursor:pointer;text-decoration:underline;background:none;border:0;padding:0;font:inherit}.lnk:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:3px}
+.bar i.critico{background:var(--red)!important}.bar i.aviso{background:var(--amber)!important}
+.qnap-cota{margin-top:6px;color:var(--ink3);font-size:11.5px;line-height:1.45}.qnap-expl{display:block;color:var(--ink3);font-size:11px;white-space:normal;text-align:right}
 .qnap-spark{width:100%;height:34px;color:var(--ink2);margin:6px 0 2px;display:block}.qnap-card .site-line span{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qnap-rodape{margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
@@ -1726,19 +1741,61 @@ function haTempo(ts){if(!ts)return '—';const t=new Date(String(ts).replace(' '
 function sparkQnap(serie){if(!serie||serie.length<2)return '';const v=serie.map(p=>p.livre_gb),min=Math.min(...v),max=Math.max(...v),span=(max-min)||1,W=200,H=34;
   const pts=v.map((y,i)=>`${(i/(v.length-1)*W).toFixed(1)},${(H-2-((y-min)/span)*(H-4)).toFixed(1)}`).join(' ');
   return `<svg class="qnap-spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Espaço livre nos últimos 7 dias: de ${fmtN(Math.round(v[0]))} GB para ${fmtN(Math.round(v[v.length-1]))} GB"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`}
+function estadoGeral({q,qi,site,pend}){   // o selo do painel: crítico (vermelho), atenção (âmbar) ou saudável
+  const ruins=[],avisos=[];
+  if(!q.montado)ruins.push('QNAP não está conectado a este servidor');
+  if(!site.http?.ok)ruins.push('página pública sem resposta');
+  const niv=q.montado&&qi&&qi.nivel_espaco,livre=qi&&qi.coleta&&qi.coleta.livre_gb,txt=livre!=null?`${fmtN(Math.round(livre))} GB livres (${String(qi.livre_pct).replace('.',',')}%)`:'';
+  if(niv==='critico')ruins.push(`QNAP quase cheio: ${txt}`);else if(niv==='aviso')avisos.push(`QNAP com pouco espaço: ${txt}`);
+  if(pend)avisos.push(`${pend} pendência(s) de decisão`);
+  const geral=ruins.length?'bad':avisos.length?'warn':'ok';
+  return {geral,texto:geral==='bad'?ruins.join(' · '):geral==='warn'?avisos.join(' · '):'Operação saudável'}}
+let HOJE_ACOES=[];
+function acoesDoDia(hj,d){const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0);
+  return [...(pend?[{id:'pendencias',prioridade:95,titulo:`${pend} pendência(s) de decisão`,detalhe:'Erros que bloqueiam, pedidos aguardando e lotes para revisar (veja "Precisa de atenção")',rota:null}]:[]),...((hj&&hj.acoes)||[])].sort((a,b)=>b.prioridade-a.prioridade)}
+function hojeFraseHTML(hj,d){
+  if(!hj)return 'Visão rápida da operação do acervo.';
+  const ac=acoesDoDia(hj,d),urg=ac.filter(a=>a.prioridade>=60).length,partes=[];
+  const esp=ac.find(a=>a.id==='qnap_espaco');if(esp)partes.push(esp.titulo.toLowerCase());
+  if(hj.kpis.travados.fundos)partes.push(`${hj.kpis.travados.fundos} fundo(s) travam a publicação`);
+  if(hj.kpis.prontos.valor)partes.push(`${hj.kpis.prontos.valor} projeto(s) prontos para publicar`);
+  const par=ac.find(a=>a.id==='parados');if(par)partes.push(par.titulo.replace(' na entrada do QNAP',' no QNAP'));
+  return `<b>${urg?`${urg} coisa(s) pedem você hoje`:'Nada urgente hoje'}</b>${partes.length?' · '+partes.map(escHtml).join(' · '):''}`}
+function kpisHojeHTML(hj){const h=(hj&&hj.hoje)||{},t=(k,l)=>`<div class="kpi"><div class="v">${hj?fmtN((h[k]||{}).hoje||0):'—'}</div><div class="l">${l}</div><div class="d">${hj?'ontem: '+fmtN((h[k]||{}).ontem||0):''}</div></div>`;
+  return `${t('folhas','folhas trabalhadas hoje')}${t('projetos_novos','projetos novos hoje')}${t('publicacoes','publicações hoje')}${t('pedidos_e_erros','pedidos e erros novos hoje')}`}   // o contêiner .kpi-grid já existe no painel
+function heroHojeHTML(hj,d){
+  if(!hj)return '';
+  const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0),k=hj.kpis;
+  const kp=(v,l,det)=>`<div class="hoje-kpi"><div class="v">${fmtN(v)}</div><div class="l">${l}</div><div class="d">${escHtml(det)}</div></div>`;
+  HOJE_ACOES=acoesDoDia(hj,d);const top=HOJE_ACOES.slice(0,3);
+  const prontosDet=k.prontos.valor?'podem ser publicados agora':(k.prontos.autorizados===0?'nenhum projeto foi autorizado ainda':'nenhum passa em todos os requisitos');
+  return `<div class="hoje-kpis">${kp(pend,'pendências',pend?'aguardam decisão':'nada aguardando')}${kp(k.travados.fundos,'travados por direitos',k.travados.fundos?`seguram ${fmtN(k.travados.projetos)} projeto(s)`:'nenhum fundo travado')}${kp(k.prontos.valor,'prontos para publicar',prontosDet)}${kp((hj.hoje.folhas||{}).hoje||0,'folhas trabalhadas hoje','ontem: '+fmtN((hj.hoje.folhas||{}).ontem||0))}</div>
+    <h3 class="hoje-h">${top.length?'Por onde começar':'Tudo em dia'}</h3>
+    ${top.length?`<div class="hoje-acoes">${top.map((a,i)=>`<button class="hoje-acao${a.prioridade>=100?' critica':''}" onclick="irAcaoHoje(${i})"><span class="n">${i+1}</span><div><b>${escHtml(a.titulo)}</b><small>${escHtml(a.detalhe||'')}</small></div><span class="seta" aria-hidden="true">›</span></button>`).join('')}</div>${HOJE_ACOES.length>3?`<small class="help">e mais ${HOJE_ACOES.length-3} item(ns) menos urgentes</small>`:''}`:'<div class="empty">Nada pendente: o acervo está em dia.</div>'}`}
+function irAcaoHoje(i){const a=HOJE_ACOES[i];if(!a)return;
+  if(a.id==='divergencias')abrirDivergencias();
+  else if(a.id==='pendencias'){const h=[...document.querySelectorAll('#v-painel h2')].find(x=>x.textContent.trim().startsWith('Precisa de atenção'));if(h)h.closest('.panel').scrollIntoView({behavior:'smooth',block:'center'})}
+  else if(a.rota)go(a.rota)}
+async function abrirDivergencias(){
+  try{const r=await API('/api/site/divergencias/resumo');
+    openDrawer('Divergências entre o painel e o site',`${fmtN(r.total)} aberta(s)`,`<p style="margin:0;color:var(--ink2)">Diferenças que o painel achou ao comparar com o site na última sincronização. Nenhuma altera nada sozinha.</p>${r.grupos.length?r.grupos.map(g=>`<div class="div-grupo"><h3>${escHtml(g.titulo)} <span class="tag">${fmtN(g.n)}</span></h3><p class="help">${escHtml(g.explicacao)}</p><ul class="list">${g.itens.slice(0,20).map(i=>`<li><span class="code">${escHtml(i.codigo)}</span><div class="t"><small>${escHtml(i.valor_site||i.valor_painel||'')}</small></div></li>`).join('')}</ul>${g.n>20?`<small class="help">… e mais ${fmtN(g.n-20)}</small>`:''}</div>`).join(''):'<div class="empty">Nenhuma divergência aberta.</div>'}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}catch(e){toast(e.message)}}
 function qnapInnerHTML(q,qi){
-  const c=qi&&qi.coleta,admin=EU&&['admin','master'].includes(EU.papel),n=x=>(x==null?'—':fmtN(x));
+  const c=qi&&qi.coleta,admin=EU&&['admin','master'].includes(EU.papel),n=x=>(x==null?'—':fmtN(x)),nivel=qi&&qi.nivel_espaco,cfg=(qi&&qi.config)||{};
   const cresc=qi&&qi.crescimento_gb_dia,dias=qi&&qi.dias_ate_encher;
   const tend=cresc==null?'<span style="color:var(--ink3)">reunindo histórico…</span>':cresc>0.5?`+${fmtN(cresc)} GB/dia${dias?` · <span class="tag ${dias<30?'r':dias<90?'a':''}">enche em ~${fmtN(dias)} dias</span>`:''}`:cresc<-0.5?`liberando ${fmtN(-cresc)} GB/dia`:'estável';
-  const entrada=c&&c.entrada_bruta!=null?`${fmtN(c.entrada_bruta)} pasta(s)${c.parados>0?` · <span class="tag a">${fmtN(c.parados)} parada(s) há mais de ${escHtml(qi.config.dias_parado)} dias</span>`:''}`:'<span style="color:var(--ink3)">não configurada</span>';
-  const prontos=c&&c.prontos!=null?`${fmtN(c.prontos)}${c.prontos_parcial?' <small>(contagem parcial)</small>':''}`:'—';
+  const defin=admin?` <button type="button" class="lnk" onclick="event.stopPropagation();go('config')">definir</button>`:'';
+  const semEntrada=!cfg.entrada_caminho?`<span style="color:var(--ink3)">não configurada</span>${defin}`:(c&&c.entrada_existe===0?`<span class="tag a" title="${escHtml(cfg.entrada_caminho)}">a pasta configurada não existe</span>${defin}`:'<span style="color:var(--ink3)">—</span>');
+  const entrada=c&&c.entrada_bruta!=null?`${fmtN(c.entrada_bruta)} pasta(s)${c.parados>0?` · <span class="tag a">${fmtN(c.parados)} parada(s) há mais de ${escHtml(qi.config.dias_parado)} dias</span>`:''}`:semEntrada;
+  const explicaProntos=!c?'':c.prontos_existe===0?'a pasta do material pronto não existe':c.prontos===0&&c.prontos_pastas===0?'a pasta do material pronto está vazia':c.prontos===0?`há ${fmtN(c.prontos_pastas)} pasta(s), mas nenhuma com info_projeto.json ou status.json`:'';
+  const prontos=c&&c.prontos!=null?`${fmtN(c.prontos)}${c.prontos_parcial?' <small>(contagem parcial)</small>':''}${explicaProntos?` <small class="qnap-expl" title="${escHtml(cfg.prontos_caminho||'')}">${escHtml(explicaProntos)}</small>`:''}`:'—';
   const resp=c&&c.latencia_ms!=null?`${fmtN(c.latencia_ms)} ms${c.latencia_ms>1500?' <span class="tag a">lento</span>':''}`:'—';
-  const ult=c&&c.ultimo_material_em?`${escHtml(haTempo(c.ultimo_material_em))} · <span class="mono" title="${escHtml(c.ultimo_material_nome||'')}">${escHtml(c.ultimo_material_nome||'')}</span>`:'—';
+  const ult=c&&c.ultimo_material_em?`${escHtml(haTempo(c.ultimo_material_em))} · <span class="mono" title="${escHtml(c.ultimo_material_nome||'')}">${escHtml(c.ultimo_material_nome||'')}</span>`:(c?'<span style="color:var(--ink3)">nenhum lote lido ainda</span>':'—');
   const rodape=!qi?'<span style="color:var(--ink3)">informações indisponíveis</span>':!c?(qi.coletando?'Coletando as informações do QNAP…':'Ainda não houve coleta'):c.erro?`<span class="tag r">última coleta falhou</span> ${escHtml(c.erro)}`:`Atualizado ${escHtml(haTempo(c.coletado_em))}`;
   return `<div class="ph" style="padding:0;border:0"><h2>QNAP</h2><span class="tag ${q.montado?'g':'r'}">${q.montado?'conectado':'desconectado'}</span></div>
     <div class="storage">${q.livre_gb!=null?fmtN(q.livre_gb)+' GB':'—'}</div>
     <div class="sub">livres${q.total_gb!=null?' de '+fmtN(q.total_gb)+' GB':''}</div>
-    ${q.uso_pct!=null?`<div class="bar"><i style="width:${escHtml(q.uso_pct)}%"></i></div><div class="sub">${escHtml(q.uso_pct)}% usado</div>`:''}
+    ${q.uso_pct!=null?`<div class="bar"><i class="${nivel==='critico'?'critico':nivel==='aviso'?'aviso':''}" style="width:${escHtml(q.uso_pct)}%"></i></div><div class="sub">${escHtml(q.uso_pct)}% usado${nivel==='critico'?' <span class="tag r">quase cheio</span>':nivel==='aviso'?' <span class="tag a">pouco espaço</span>':''}</div>`:''}
+    ${nivel&&nivel!=='ok'?'<div class="qnap-cota">O QNAP pode limitar o espaço por <b>cota</b> do usuário camp-panel: confira em QTS → Painel de controle → Privilégios → Cota. Se o volume for maior, o número real é outro.</div>':''}
     ${sparkQnap(qi&&qi.serie)}
     <div class="site-line"><b>Tendência</b><span>${tend}</span></div>
     <div class="site-line"><b>Último material</b><span>${ult}</span></div>
@@ -1754,11 +1811,12 @@ async function atualizarQnapAgora(){
     toast('A coleta está demorando: o QNAP pode estar lento')}catch(e){toast(e.message)}
   await recarregarCartaoQnap()}
 async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.dash-v2');if(!tinha)sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando visão da operação…</div></div></div>';try{
-  const [d,e,a,qi]=await Promise.all([
+  const [d,e,a,qi,hj]=await Promise.all([
     API('/api/painel'),
     API('/api/estacoes').catch(()=>null),
     API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}})),
-    API('/api/qnap').catch(()=>null)
+    API('/api/qnap').catch(()=>null),
+    API('/api/hoje').catch(()=>null)
   ]);
   limparStale('painel');sec.querySelector('.aviso-exemplo')?.remove();
   const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
@@ -1768,17 +1826,15 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   const qnap=maquinas.find(m=>m.tipo==='armazenamento');
   const ult=site.ultima_sincronizacao&&(site.ultima_sincronizacao.terminada_em||site.ultima_sincronizacao.iniciada_em);
   const prox=ult?proximaSincronizacao(ult,+(site.intervalo_sync_min||15)):null;
-  const motivosRuins=[...(!q.montado?['QNAP não está conectado a este servidor']:[]),...(!site.http?.ok?['página pública sem resposta']:[])];
-  const operacaoRuim=motivosRuins.length>0;   // máquinas desligadas são normais e aparecem na barra do topo
+  const nDiv=site.divergencias??d.site?.divergencias??0;
   const pend=d.erros.bloqueantes+d.solicitacoes.aguardam+d.filas.revisao;
-  const geral=operacaoRuim?'bad':pend?'warn':'ok';
-  const geralTxt=geral==='bad'?motivosRuins.join(' · '):geral==='warn'?'Operação com pendências':'Operação saudável';
+  const {geral,texto:geralTxt}=estadoGeral({q,qi,site,pend});   // máquinas desligadas são normais e aparecem na barra do topo
   const p=a?.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
 
   sec.innerHTML=`<div class="dash-v2">
     <div class="dash-hero">
       <div class="panel dash-hero-main">
-        <div class="dash-hero-head"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p>Visão rápida da operação do acervo.</p></div><div class="dash-state ${geral}"${geral==='bad'?` onclick="go('estacoes')" title="Abrir Estações e ver como resolver"`:''}><span class="dot"></span>${escHtml(geralTxt)}</div></div>
+        <div class="dash-hero-head"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p class="hoje-frase">${hojeFraseHTML(hj,d)}</p></div><div class="dash-state ${geral}"${geral==='bad'?` onclick="go('estacoes')" title="Abrir Estações e ver como resolver"`:''}><span class="dot"></span>${escHtml(geralTxt)}</div></div>${heroHojeHTML(hj,d)}
       </div>
       <div class="dash-side-stack">
         <div class="panel qnap-card" id="qnap-card" data-nav="estacoes" style="cursor:pointer">${qnapInnerHTML(q,qi)}</div>
@@ -1786,7 +1842,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
           <div class="ph" style="padding:0 0 6px;border:0"><h2>Site público</h2><span class="tag ${site.http?.ok?'g':'r'}">${site.http?.ok?'online':'offline'}</span></div>
           <div class="site-line"><b>Última sync</b><span>${ult?fmtDataHora(ult):'nunca'}</span></div>
           <div class="site-line"><b>Próxima</b><span>${prox?fmtDataHora(prox):'—'}</span></div>
-          <div class="site-line"><b>Divergências</b><span>${site.divergencias??d.site.divergencias??0}</span></div>
+          <div class="site-line"><b>Divergências</b><span>${fmtN(nDiv)}${nDiv>0?` · <button type="button" class="lnk" onclick="event.stopPropagation();abrirDivergencias()">ver o que são</button>`:''}</span></div>
         </div>
       </div>
     </div>
@@ -1794,11 +1850,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
     <div class="dash-mid">
       <div class="panel action-card"><div class="ph"><h2>Precisa de atenção</h2><span class="tag">${escHtml(d.precisa_de_voce.length)}</span></div><div class="pb"><ul class="action-list">${d.precisa_de_voce.length?d.precisa_de_voce.slice(0,6).map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${escHtml(x.tipo)}</span><div class="t"><b>${escHtml(x.titulo)}</b>${x.codigo?`<small>${escHtml(x.codigo)}</small>`:''}</div><button class="btn sm" onclick="nav('${escHtml(x.rota)}')">Abrir</button></li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
       <div class="panel"><div class="ph"><h2>Hoje no acervo</h2></div><div class="pb"><div class="kpi-grid">
-        <div class="kpi" data-nav="filas" style="cursor:pointer"><div class="v">${escHtml(d.filas.revisao)}</div><div class="l">lotes prontos para revisão</div></div>
-        <div class="kpi" data-nav="erros" style="cursor:pointer"><div class="v">${escHtml(d.erros.bloqueantes)}</div><div class="l">erros que bloqueiam publicação</div></div>
-        <div class="kpi" data-nav="solicitacoes" style="cursor:pointer"><div class="v">${escHtml(d.solicitacoes.abertas)}</div><div class="l">pedidos de material abertos</div></div>
-        <div class="kpi" data-nav="fundos" style="cursor:pointer"><div class="v">${escHtml(d.fundos.no_ar)}</div><div class="l">fundos publicados</div></div>
-      </div></div></div>
+        ${kpisHojeHTML(hj)}</div></div>
     </div>
 
     <div class="panel"><div class="ph"><h2>Audiência do acervo</h2>${a?.disponivel?'<span class="tag g">Google Analytics</span>':'<span class="tag a">configuração pendente</span>'}<button class="btn sm" style="margin-left:auto" onclick="diagnosticarAnalytics()">Diagnosticar</button></div><div class="pb">
@@ -1900,6 +1952,8 @@ function atualizarBannerSistema(d){
   // Máquina desligada/sem resposta NÃO entra aqui: é o estado normal fora do expediente e o indicador de cada máquina
   // na barra do topo (e a tela Estações) já mostra. O banner só avisa o que é problema de verdade.
   const q=d?.qnap||{};if(q.montado===false)criticos.push('QNAP não está conectado a este servidor');
+  else if(q.nivel_espaco==='critico')criticos.push(`QNAP quase cheio (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%)`);
+  else if(q.nivel_espaco==='aviso')problemas.push(`QNAP com pouco espaço (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%)`);
   const s=d?.site||{};if(s.http&&s.http.ok===false)criticos.push('página pública sem resposta');
   const bk=d?.backup;if(bk){if(!bk.existe)problemas.push('nenhum backup do banco');else{const h=+bk.idade_horas;if(bk.ok===false)criticos.push('o último backup do banco falhou');else if(h>96)criticos.push('último backup do banco há '+Math.round(h/24)+' dias');else if(h>36)problemas.push('último backup do banco há '+Math.round(h)+' h')}}
   const ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em);

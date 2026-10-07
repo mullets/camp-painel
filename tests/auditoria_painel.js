@@ -88,7 +88,7 @@ checkDom('etiquetas');
 await w.abrirPerfil(); await sleep(600); if(!d.querySelector('#pf-nova')) problems.push('perfil: não abriu'); else okl.push('perfil: ok'); w.closeModal();
 // PAINEL / FILAS / SOLICITACOES / ERROS (reais)
 w.route_to('painel'); await sleep(1800); if(d.querySelector('#v-painel .aviso-exemplo')) problems.push('painel ainda com aviso de exemplo');
-if(!txt('#v-painel').includes('Visão rápida da operação do acervo')) problems.push('painel: visão operacional ausente');
+if(!/pedem você hoje|Nada urgente hoje|Visão rápida da operação do acervo/.test(txt('#v-painel .hoje-frase'))) problems.push('painel: a frase do dia (ou o texto de reserva) está ausente no topo: "'+txt('#v-painel .dash-hero-main').slice(0,120)+'"');
 if(!txt('#v-painel').includes('Audiência do acervo')) problems.push('painel: bloco Audiência do acervo ausente');
 if(!txt('#v-painel').includes('QNAP')) problems.push('painel: status QNAP ausente');
 if(!txt('#v-painel').includes('Site público')) problems.push('painel: status do site ausente');
