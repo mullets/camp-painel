@@ -71,6 +71,28 @@ def verificar_senha_forte(senha: str) -> None:
         raise HTTPException(400, "Senha fraca demais")
 
 
+def _tem_corrida(s: str, n: int = 8) -> bool:
+    """Sequência óbvia: n caracteres seguidos subindo ou descendo de 1 em 1 (12345678, abcdefgh, 87654321)."""
+    for i in range(len(s) - n + 1):
+        d = [ord(s[i + k + 1]) - ord(s[i + k]) for k in range(n - 1)]
+        if all(x == 1 for x in d) or all(x == -1 for x in d):
+            return True
+    return False
+
+
+def verificar_senha_da_troca(senha_nova: str, senha_atual: str) -> None:
+    """Regras da TROCA feita pela própria pessoa (a senha temporária escolhida pelo administrador não passa por aqui).
+    Sem isso, a troca obrigatória do primeiro acesso podia ser contornada digitando a mesma senha."""
+    if senha_nova == senha_atual:
+        raise HTTPException(400, "A nova senha precisa ser diferente da atual")
+    if len(set(senha_nova)) <= 3:
+        raise HTTPException(400, "Senha fraca demais: use mais variedade de caracteres")
+    if any(senha_nova == senha_nova[:k] * (len(senha_nova) // k) and len(senha_nova) % k == 0 for k in range(1, 9) if len(senha_nova) // k >= 2):
+        raise HTTPException(400, "Senha fraca demais: não repita o mesmo trecho")
+    if _tem_corrida(senha_nova.lower()):
+        raise HTTPException(400, "Senha fraca demais: evite sequências como 12345678 ou abcdefgh")
+
+
 def criar_usuario(nome: str, email: str, senha: str, papel: str, forcar_troca: bool = True) -> int:
     if papel not in PAPEIS:
         raise ValueError(f"papel inválido: {papel}")
@@ -178,6 +200,7 @@ def exige(papel_minimo: str) -> Callable:
 
 def trocar_senha(u: dict, senha_atual: str, senha_nova: str, token_atual: str | None = None) -> None:
     verificar_senha_forte(senha_nova)
+    verificar_senha_da_troca(senha_nova, senha_atual)
     con = connect()
     row = con.execute("SELECT senha_hash FROM usuario WHERE id=?", (u["id"],)).fetchone()
     if not pwd.verify(senha_atual, row["senha_hash"]):

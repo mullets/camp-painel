@@ -733,6 +733,18 @@ def filho(modo):
         lista = {u["id"]: u["tem_foto"] for u in adm.get("/api/usuarios").json()}
         ver("a lista de usuários traz tem_foto", lista[ids["operador"]] is True)
         ver("operador NÃO remove a foto de outro (403) mas remove a própria", op.delete(f"/api/usuarios/{ids['leitura']}/foto").status_code == 403 and op.delete(f"/api/usuarios/{ids['operador']}/foto").status_code == 200 and op.get(f"/api/usuarios/{ids['operador']}/foto").status_code == 404)
+        # ---- troca obrigatória do primeiro acesso: não pode ser contornada ----
+        auth.criar_usuario("Nova", "nova@camp.arq.br", "1234567812345678", "admin")   # senha temporária escolhida pelo administrador: aceita
+        nv = TestClient(app, raise_server_exceptions=False); lr = nv.post("/api/auth/login", json={"email": "nova@camp.arq.br", "senha": "1234567812345678"})
+        ver("a senha temporária escolhida pelo administrador é aceita e o login exige troca", lr.status_code == 200 and lr.json()["precisa_trocar_senha"] is True and nv.get("/api/estacoes").status_code == 428)
+        troca = lambda nova: nv.post("/api/auth/trocar-senha", json={"senha_atual": "1234567812345678", "senha_nova": nova}).status_code
+        ver("trocar pela MESMA senha é recusado (antes passava e liberava o painel)", troca("1234567812345678") == 400 and nv.get("/api/estacoes").status_code == 428)
+        ver("sequência óbvia é recusada (12345678abcd)", troca("12345678abcd") == 400)
+        ver("trecho repetido é recusado (abcabcabcabc)", troca("abcabcabcabc") == 400)
+        ver("caractere repetido é recusado (aaaaaaaaaaaa)", troca("aaaaaaaaaaaa") == 400)
+        ver("senha curta continua recusada", troca("Abc-123") == 400)
+        ver("senha boa troca de verdade e libera o painel", troca("Rio-Azul-Verde-77") == 200 and nv.get("/api/estacoes").status_code == 200)
+        ver("a senha temporária deixa de funcionar", TestClient(app, raise_server_exceptions=False).post("/api/auth/login", json={"email": "nova@camp.arq.br", "senha": "1234567812345678"}).status_code == 401)
         k = connect(); ev = {r[0]: r[1] for r in k.execute("SELECT tipo, count(*) FROM evento WHERE entidade='usuario' AND tipo LIKE 'foto_%' GROUP BY tipo")}; k.close()
         ver("trocas e remoções ficam na auditoria", ev.get("foto_atualizada", 0) >= 5 and ev.get("foto_removida") == 1, str(ev))
         for l in res: print(l)
