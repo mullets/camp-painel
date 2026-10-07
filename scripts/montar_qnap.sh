@@ -41,7 +41,14 @@ if [ "$CONVIDADO" -eq 0 ]; then
   if [ "$STDIN" -eq 1 ]; then IFS= read -r SENHA; else read -rsp "Senha do usuário '$USUARIO': " SENHA; echo; fi
   [ -n "$SENHA" ] || { echo "Senha vazia."; exit 2; }
 fi
-command -v mount.cifs >/dev/null 2>&1 || { echo "== instalando cifs-utils"; apt-get install -y cifs-utils >/dev/null; }
+if ! command -v mount.cifs >/dev/null 2>&1; then
+  echo "== instalando cifs-utils (sem perguntas; no máximo 5 minutos)"
+  # needrestart (Ubuntu) abre uma tela de perguntas após o apt: com a saída escondida ela ficava INVISÍVEL e esperando resposta (travava).
+  # NEEDRESTART_MODE=a = automático; DEBIAN_FRONTEND=noninteractive = sem perguntas; a saída do apt aparece.
+  if ! DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a timeout 300 apt-get install -y cifs-utils </dev/null; then
+    echo "✖ não consegui instalar o cifs-utils. Rode à mão: sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y cifs-utils   (se acusar dpkg interrompido: sudo dpkg --configure -a)"; exit 1
+  fi
+fi
 mkdir -p "$RAIZ"
 if [ "$CONVIDADO" -eq 0 ]; then umask 077; printf 'username=%s\npassword=%s\n' "$USUARIO" "$SENHA" > "$CRED"; chmod 600 "$CRED"; chown root:root "$CRED"; fi
 cp /etc/fstab "/etc/fstab.bak-$(date +%Y%m%d-%H%M%S)"
