@@ -274,6 +274,9 @@ tbody tr.sel td{background:var(--blue-soft)}
 .edit-sec{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
 .edit-aviso{background:var(--amber-soft);color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12.5px}
 .edit-alerta{border-color:var(--amber)}
+.pg-ctl{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 2px;font-size:12.5px;color:var(--ink2)}
+.pg-ctl[hidden]{display:none}.pg-nav{display:flex;gap:10px;align-items:center}.pg-pos{white-space:nowrap}.pg-por{display:flex;gap:6px;align-items:center}.pg-por select{font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.pg-oculta{display:none!important}
 .guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
 .edit-lista{margin:6px 0 8px;padding-left:18px;font-size:12.5px}
@@ -647,9 +650,9 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <section class="content" id="v-projetos">
     <div class="hdr"><div><h1>Projetos</h1><p class="sub">Um projeto é o dossiê: reúne pranchas, fotos e documentos sob um número P que nunca é reusado. O ano é o do projeto, não de cada folha.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-proj')">Novo projeto</button></div></div>
     <div class="panel"><div class="hint-rows">Clique num projeto para abrir o dossiê com as folhas.</div><div class="filterbar"><input placeholder="Buscar projeto por nome, código ou cidade… (tecla F)" data-filter id="proj-q"><button class="btn sm" onclick="selecionarTodosProjetosDoFiltro()">Selecionar todos os resultados</button><span class="cnt"></span></div><div class="bulkbar" id="proj-bulk"><span class="count" id="proj-bulk-count">0 selecionados</span><button class="btn sm" onclick="exportarProjetosSelecionados()">Exportar CSV</button><span class="spacer"></span><button class="btn sm" onclick="acaoLoteProjetos('rascunho')">Voltar para rascunho</button><button class="btn sm pri" onclick="acaoLoteProjetos('publicar')">Publicar</button><button class="btn sm" onclick="limparSelecaoProjetos()">Limpar seleção</button></div><div class="tw"><table>
-      <thead><tr><th><input id="proj-sel-visiveis" type="checkbox" title="Selecionar projetos visíveis" onclick="event.stopPropagation();selecionarProjetosVisiveis(this.checked)"></th><th>Código</th><th>Projeto</th><th>Fundo</th><th>Ano</th><th>Séries</th><th class="num">Folhas</th><th>Publicação</th><th>Última atividade</th></tr></thead>
+      <thead><tr><th><input id="proj-sel-visiveis" type="checkbox" title="Selecionar os projetos desta página" onclick="event.stopPropagation();selecionarProjetosVisiveis(this.checked)"></th><th>Código</th><th>Projeto</th><th>Fundo</th><th>Ano</th><th>Séries</th><th class="num">Folhas</th><th>Publicação</th><th>Última atividade</th></tr></thead>
       <tbody id="projetos-body"></tbody>
-    </table></div></div>
+    </table></div><div class="pg-ctl" id="projetos-pag" hidden></div></div>
   </section>
 
   <!-- ETIQUETAS -->
@@ -732,7 +735,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <!-- AUDITORIA -->
   <section class="content" id="v-auditoria">
     <div class="hdr"><div><h1>Auditoria</h1><p class="sub">Tudo o que aconteceu no painel e no site: quem fez, o quê, quando. Só admin e master veem.</p></div></div>
-    <div class="panel"><div class="filterbar" style="gap:6px"><select id="au-ent" class="btn" onchange="carregarAuditoria()"><option value="">todas as entidades</option></select><select id="au-ator" class="btn" onchange="carregarAuditoria()"><option value="">todos os atores</option></select><input id="au-q" placeholder="código ou texto" oninput="clearTimeout(window._aq);window._aq=setTimeout(carregarAuditoria,300)" style="min-width:200px"><input id="au-desde" type="date" class="btn" onchange="carregarAuditoria()"><button class="btn sm" onclick="exportarAuditoriaCSV()">Exportar CSV</button><span class="cnt" id="au-cnt"></span></div><div class="tw"><table><thead><tr><th>Quando</th><th>Quem</th><th>Entidade</th><th>Código</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody id="au-body"><tr><td colspan="6" class="empty">Carregando…</td></tr></tbody></table></div></div>
+    <div class="panel"><div class="filterbar" style="gap:6px"><select id="au-ent" class="btn" onchange="carregarAuditoria()"><option value="">todas as entidades</option></select><select id="au-ator" class="btn" onchange="carregarAuditoria()"><option value="">todos os atores</option></select><input id="au-q" placeholder="código ou texto" oninput="clearTimeout(window._aq);window._aq=setTimeout(carregarAuditoria,300)" style="min-width:200px"><input id="au-desde" type="date" class="btn" onchange="carregarAuditoria()"><button class="btn sm" onclick="exportarAuditoriaCSV()">Exportar CSV</button><span class="cnt" id="au-cnt"></span></div><div class="tw"><table><thead><tr><th>Quando</th><th>Quem</th><th>Entidade</th><th>Código</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody id="au-body"><tr><td colspan="6" class="empty">Carregando…</td></tr></tbody></table></div><div class="pg-ctl" id="au-pag" hidden></div></div>
   </section>
 
   <!-- CONFIG -->
@@ -1173,7 +1176,7 @@ document.querySelectorAll('thead th').forEach(th=>{if(!th.textContent.trim())ret
   const rows=[...tb.rows];const val=r=>r.children[idx]?r.children[idx].textContent.trim():'';const num=rows.every(r=>!isNaN(parseFloat(val(r).replace(',','.'))));
   rows.sort((a,b)=>{let x=val(a),y=val(b);if(num){x=parseFloat(x.replace(',','.'));y=parseFloat(y.replace(',','.'))}return (x>y?1:x<y?-1:0)*(dir==='asc'?1:-1)});
   rows.forEach(r=>tb.appendChild(r))})});
-document.querySelectorAll('[data-filter]').forEach(inp=>{const panel=inp.closest('.panel'),cnt=panel.querySelector('.cnt');const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});cnt.textContent=t?`${n} de ${tot}`:`${tot} registros`};inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
+document.querySelectorAll('[data-filter]').forEach(inp=>{const panel=inp.closest('.panel'),cnt=panel.querySelector('.cnt');const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});if(cnt.dataset.servidor!=='1')cnt.textContent=t?`${n} de ${tot}`:`${tot} registros`};inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
 
 const AJUDA_TELAS={
   painel:{titulo:'Painel',intro:'Resumo da operação. Comece pelos avisos e pelo bloco Precisa de atenção.',passos:[['Veja a saúde','Máquinas, QNAP e publicação mostram se a operação está funcionando.'],['Resolva pendências','Abra os itens em Precisa de atenção antes de publicar material.'],['Use os atalhos','A busca global é o caminho mais rápido para um código conhecido.']]},
@@ -1198,11 +1201,12 @@ function onboardingOperador(u){if(!u||u.papel!=='operador')return;const key='cam
 
 function csvEscape(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
 function textoCelulaExport(td){const clone=td.cloneNode(true);clone.querySelectorAll('button,input,select,textarea,svg').forEach(x=>x.remove());return clone.textContent.replace(/\s+/g,' ').trim()}
-function exportarVisaoAtual(view){
+function exportarVisaoAtual(view,linhasExtras){
+  if(view==='projetos'&&!linhasExtras&&PROJ_TOTAL>document.querySelectorAll('#projetos-body tr[data-nav]').length)return exportarProjetosTodos();
   const sec=document.getElementById('v-'+view),table=sec?.querySelector('table');if(!table){toast('Esta tela não tem tabela para exportar');return}
   const ths=[...table.querySelectorAll('thead th')];
   const indices=ths.map((th,i)=>({i,nome:th.textContent.replace(/\s+/g,' ').trim()})).filter(x=>x.nome);
-  const rows=[...table.querySelectorAll('tbody tr')].filter(tr=>getComputedStyle(tr).display!=='none'&&!tr.querySelector('td.empty'));
+  const rows=linhasExtras||[...table.querySelectorAll('tbody tr')].filter(tr=>(tr.classList.contains('pg-oculta')||getComputedStyle(tr).display!=='none')&&!tr.querySelector('td.empty'));
   const filtros=[...sec.querySelectorAll('.filterbar input,.filterbar select')].map(x=>x.value).filter(Boolean).join(' · ');
   const sort=ths.find(th=>th.classList.contains('asc')||th.classList.contains('desc'));
   const meta=[
@@ -1391,10 +1395,62 @@ async function selecionarTodosProjetosDoFiltro(){try{const q=(document.getElemen
 function csvProjetos(rows){const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';return '\uFEFF'+[['codigo','projeto','fundo','ano','cidade','folhas','status'],...rows.map(p=>[p.c,p.t,p.f,p.a,p.cid,p.n,p.st])].map(r=>r.map(q).join(';')).join('\n')}
 async function exportarProjetosSelecionados(){const codigos=projetosSelecionados();if(!codigos.length)return;try{const d=await API('/api/projetos/exportar-selecao',{method:'POST',body:JSON.stringify({codigos,acao:'exportar'})});const rows=d.itens.map(p=>({c:p.codigo,t:p.titulo,f:p.fundo_codigo,a:p.ano,cid:p.cidade,n:p.folhas,st:p.status_site}));const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csvProjetos(rows)],{type:'text/csv;charset=utf-8'}));a.download='camp-projetos-selecionados-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){toast(e.message)}}
 async function acaoLoteProjetos(acao){const codigos=projetosSelecionados();if(!codigos.length)return;const verbo=acao==='publicar'?'publicar':'voltar para rascunho';if(!confirm(`Deseja ${verbo} ${codigos.length} projeto(s)? O painel mostrará quais falharam.`))return;const ok=[],falhas=[];for(let i=0;i<codigos.length;i+=50){try{const r=await API('/api/projetos/lote',{method:'POST',body:JSON.stringify({codigos:codigos.slice(i,i+50),acao})});ok.push(...r.ok);falhas.push(...r.falhas)}catch(e){falhas.push(...codigos.slice(i,i+50).map(c=>({codigo:c,erro:e.message})))}}toast(`${ok.length} projeto(s) concluídos · ${falhas.length} falha(s)`);if(falhas.length)openDrawer('Resultado da ação em lote',`${ok.length} concluídos · ${falhas.length} falhas`,`<ul class="list">${falhas.map(x=>`<li><span class="code">${escHtml(x.codigo)}</span><div class="t"><small>${escHtml(x.erro)}</small></div></li>`).join('')}</ul>`);limparSelecaoProjetos();await Promise.all([carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA}),carregarFundosAPI(),carregarPainel()])}
-async function carregarProjetosAPI(filtro={}){const tinha=document.querySelectorAll('#projetos-body tr[data-nav]').length>0;if(!tinha)tabelaCarregando('#projetos-body','Carregando projetos…');try{if(Object.prototype.hasOwnProperty.call(filtro,'q'))PROJETOS_ULTIMA_BUSCA=filtro.q||'';const qs=new URLSearchParams({por_pagina:200,...filtro}).toString();const r=await API('/api/projetos?'+qs);limparStale('projetos');
-  document.getElementById('projetos-body').innerHTML=r.itens.map(p=>`<tr data-nav="projeto/${escHtml(p.codigo)}"><td><input class="proj-sel" type="checkbox" value="${escHtml(p.codigo)}" ${PROJETOS_SELECIONADOS.has(p.codigo)?'checked':''} onclick="event.stopPropagation();toggleProjetoSelecionado(this.value,this.checked)"></td><td><span class="code">${escHtml(p.codigo)}</span></td><td><b>${escHtml(p.titulo)}</b></td><td>${escHtml(p.fundo)}</td><td>${p.ano?escHtml(p.ano):'<span style="color:var(--ink3)">0000</span>'}</td><td>${(p.series||'').split(',').filter(Boolean).map(x=>`<span class="tag">${escHtml(x)}</span>`).join(' ')||'<span style="color:var(--ink3)">—</span>'}</td><td class="num">${escHtml(p.folhas)}</td><td>${STATUS[p.status_site]||escHtml(p.status_site)}</td><td>${fmtData(p.atualizado_em)}</td></tr>`).join('');
-  const cnt=document.querySelector('#v-projetos .cnt');if(cnt)cnt.textContent=`${r.itens.length} de ${r.total} projetos`;
-  PROJETOS.length=0;r.itens.forEach(p=>PROJETOS.push({c:p.codigo,t:p.titulo,f:p.fundo_codigo,a:p.ano,cid:p.cidade,s:(p.series||'').split(',').filter(Boolean),n:p.folhas,st:p.status_site,u:(p.atualizado_em||'').slice(0,10)}));atualizarBarraLoteProjetos()}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.message;if(tinha)marcarStale('projetos',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`);else tabelaErro('#projetos-body',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`)}}
+const fmtN=n=>Number(n).toLocaleString('pt-BR');
+function paginadorHTML({total,pagina,por,opcoes=[25,50,100,200]}){
+  const pags=Math.max(1,Math.ceil(total/por)),ini=total?(pagina-1)*por+1:0,fim=Math.min(total,pagina*por);
+  return `<span class="pg-info">Mostrando ${fmtN(ini)}–${fmtN(fim)} de ${fmtN(total)}</span><span class="pg-nav"><button class="btn sm" data-pg="ant"${pagina<=1?' disabled':''}>‹ Anterior</button><span class="pg-pos">Página ${fmtN(pagina)} de ${fmtN(pags)}</span><button class="btn sm" data-pg="prox"${pagina>=pags?' disabled':''}>Próxima ›</button></span><label class="pg-por">Por página <select data-pg="por">${[...new Set([...opcoes,por])].sort((a,b)=>a-b).map(o=>`<option value="${o}"${o===por?' selected':''}>${o}</option>`).join('')}</select></label>`}
+// Paginação NO SERVIDOR (listas grandes de verdade: Projetos e Auditoria). est={total,pagina,por}
+function montarPaginadorServidor(sel,est,irPara,mudarPor){
+  const el=document.querySelector(sel);if(!el)return;el._pg={irPara,mudarPor,est};
+  if(!el._pgLigado){el._pgLigado=true;
+    el.addEventListener('click',ev=>{const b=ev.target.closest('button[data-pg]');if(!b||b.disabled)return;const{est,irPara}=el._pg;irPara(b.dataset.pg==='ant'?est.pagina-1:est.pagina+1)});
+    el.addEventListener('change',ev=>{const sl=ev.target.closest('select[data-pg="por"]');if(sl)el._pg.mudarPor(+sl.value)})}
+  el.innerHTML=paginadorHTML(est);el.hidden=!(est.total>est.por||est.pagina>1)}
+// Paginação NA TELA para qualquer lista já desenhada (tbody ou grade). Só aparece quando passa de "por" linhas e
+// reaplica sozinha quando a lista é redesenhada ou filtrada. modo 'mais' = botão "Mostrar mais" (grades de folhas).
+// As linhas escondidas pela página levam a classe pg-oculta e CONTINUAM entrando na exportação.
+function ativarPaginacao(el,{por=50,modo='paginas'}={}){
+  if(typeof el==='string')el=document.querySelector(el);
+  if(!el||el.dataset.pg)return;el.dataset.pg=modo;
+  const est={pagina:1,por,total:-1,vistas:por},ctl=document.createElement('div');
+  ctl.className='pg-ctl';ctl.setAttribute('role','navigation');ctl.setAttribute('aria-label','Paginação');ctl.hidden=true;
+  (el.closest('.tw')||el.closest('table')||el).after(ctl);
+  const filhos=()=>[...el.children],ativos=()=>filhos().filter(c=>!c.hidden&&c.style.display!=='none'&&!(c.firstElementChild&&c.firstElementChild.classList.contains('empty')));
+  const aplicar=()=>{
+    const l=ativos(),total=l.length;
+    if(total!==est.total){if(est.total!==-1){est.pagina=1;est.vistas=est.por}est.total=total}
+    filhos().forEach(c=>c.classList.remove('pg-oculta'));
+    if(total<=est.por){ctl.hidden=true;return}
+    if(modo==='mais'){
+      l.forEach((c,i)=>c.classList.toggle('pg-oculta',i>=est.vistas));
+      ctl.innerHTML=`<span class="pg-info">Mostrando ${fmtN(Math.min(est.vistas,total))} de ${fmtN(total)}</span>${est.vistas<total?`<span class="pg-nav"><button class="btn sm" data-pg="mais">Mostrar mais ${fmtN(Math.min(est.por,total-est.vistas))}</button><button class="btn sm" data-pg="tudo">Mostrar todas</button></span>`:''}`;
+    }else{
+      const pags=Math.ceil(total/est.por);est.pagina=Math.min(Math.max(1,est.pagina),pags);const ini=(est.pagina-1)*est.por;
+      l.forEach((c,i)=>c.classList.toggle('pg-oculta',i<ini||i>=ini+est.por));
+      ctl.innerHTML=paginadorHTML({total,pagina:est.pagina,por:est.por});
+    }
+    ctl.hidden=false};
+  ctl.addEventListener('click',ev=>{const b=ev.target.closest('button[data-pg]');if(!b||b.disabled)return;const a=b.dataset.pg;
+    if(a==='ant')est.pagina--;else if(a==='prox')est.pagina++;else if(a==='mais')est.vistas+=est.por;else if(a==='tudo')est.vistas=1e9;aplicar()});
+  ctl.addEventListener('change',ev=>{const sl=ev.target.closest('select[data-pg="por"]');if(sl){est.por=+sl.value;est.pagina=1;aplicar()}});
+  let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(aplicar,0)}).observe(el,{childList:true,attributes:true,subtree:true,attributeFilter:['style','hidden']});
+  aplicar()}
+const PAG_ALVOS=[['#filas-body',50,'paginas'],['#fundos-body',50,'paginas'],['#loc-body',50,'paginas'],['#usr-body',50,'paginas'],['#v-solicitacoes tbody',50,'paginas'],['#v-erros tbody',50,'paginas'],['#v-arquitetos tbody',50,'paginas'],['.project-series .thumbs',60,'mais']];
+function ativarPaginacoes(){PAG_ALVOS.forEach(([sel,por,modo])=>document.querySelectorAll(sel).forEach(el=>ativarPaginacao(el,{por,modo})))}
+let _pgT=0;new MutationObserver(()=>{clearTimeout(_pgT);_pgT=setTimeout(ativarPaginacoes,150)}).observe(document.body,{childList:true,subtree:true});
+const linhaProjetoHTML=p=>`<tr data-nav="projeto/${escHtml(p.codigo)}"><td><input class="proj-sel" type="checkbox" value="${escHtml(p.codigo)}" ${PROJETOS_SELECIONADOS.has(p.codigo)?'checked':''} onclick="event.stopPropagation();toggleProjetoSelecionado(this.value,this.checked)"></td><td><span class="code">${escHtml(p.codigo)}</span></td><td><b>${escHtml(p.titulo)}</b></td><td>${escHtml(p.fundo)}</td><td>${p.ano?escHtml(p.ano):'<span style="color:var(--ink3)">0000</span>'}</td><td>${(p.series||'').split(',').filter(Boolean).map(x=>`<span class="tag">${escHtml(x)}</span>`).join(' ')||'<span style="color:var(--ink3)">—</span>'}</td><td class="num">${escHtml(p.folhas)}</td><td>${STATUS[p.status_site]||escHtml(p.status_site)}</td><td>${fmtData(p.atualizado_em)}</td></tr>`;
+let PROJ_PAG={pagina:1,por:100},PROJ_CHAVE=null,PROJ_FILTRO_ULT={q:''},PROJ_TOTAL=0,AUD_PAG={pagina:1,por:100},AUD_CHAVE=null,AUDITORIA_TOTAL=0;
+async function exportarProjetosTodos(){   // o filtro atual inteiro, não só a página que está na tela
+  toast(`Preparando a exportação de ${fmtN(PROJ_TOTAL)} projetos…`);const rows=[];
+  try{for(let pg=1;rows.length<PROJ_TOTAL;pg++){const r=await API('/api/projetos?'+new URLSearchParams({...PROJ_FILTRO_ULT,por_pagina:500,pagina:pg}));if(!r.itens.length)break;
+    r.itens.forEach(p=>{const t=document.createElement('tbody');t.innerHTML=linhaProjetoHTML(p);rows.push(t.firstElementChild)})}}catch(e){toast(e.message);return}
+  exportarVisaoAtual('projetos',rows)}
+async function carregarProjetosAPI(filtro={}){const tinha=document.querySelectorAll('#projetos-body tr[data-nav]').length>0;if(!tinha)tabelaCarregando('#projetos-body','Carregando projetos…');try{if(Object.prototype.hasOwnProperty.call(filtro,'q'))PROJETOS_ULTIMA_BUSCA=filtro.q||'';if(!Object.keys(filtro).length)filtro={q:PROJETOS_ULTIMA_BUSCA||''};PROJ_FILTRO_ULT=filtro;const chave=JSON.stringify(filtro);if(chave!==PROJ_CHAVE){PROJ_CHAVE=chave;PROJ_PAG.pagina=1}
+  const qs=new URLSearchParams({...filtro,por_pagina:PROJ_PAG.por,pagina:PROJ_PAG.pagina}).toString();const r=await API('/api/projetos?'+qs);limparStale('projetos');PROJ_TOTAL=r.total;
+  if(!r.itens.length&&r.total>0&&PROJ_PAG.pagina>1){PROJ_PAG.pagina=Math.max(1,Math.ceil(r.total/PROJ_PAG.por));return carregarProjetosAPI(filtro)}
+  document.getElementById('projetos-body').innerHTML=r.itens.map(linhaProjetoHTML).join('');
+  const cnt=document.querySelector('#v-projetos .cnt');if(cnt){cnt.dataset.servidor='1';cnt.textContent=r.total?`${fmtN((r.pagina-1)*r.por_pagina+1)}–${fmtN((r.pagina-1)*r.por_pagina+r.itens.length)} de ${fmtN(r.total)} projetos`:'0 projetos'}
+  PROJETOS.length=0;r.itens.forEach(p=>PROJETOS.push({c:p.codigo,t:p.titulo,f:p.fundo_codigo,a:p.ano,cid:p.cidade,s:(p.series||'').split(',').filter(Boolean),n:p.folhas,st:p.status_site,u:(p.atualizado_em||'').slice(0,10)}));atualizarBarraLoteProjetos();montarPaginadorServidor('#projetos-pag',{total:r.total,pagina:r.pagina,por:r.por_pagina},p=>{PROJ_PAG.pagina=p;carregarProjetosAPI(PROJ_FILTRO_ULT)},n=>{PROJ_PAG.por=n;PROJ_PAG.pagina=1;carregarProjetosAPI(PROJ_FILTRO_ULT)})}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.message;if(tinha)marcarStale('projetos',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`);else tabelaErro('#projetos-body',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`)}}
 const _showProjetoMock=showProjeto;
 function nomeSerieProjeto(c){return ({S01:'Desenhos e pranchas',S02:'Documentos textuais',S03:'Fotografias',S04:'Negativos',S05:'Slides',S06:'Materiais e especificações',SEM_SERIE:'Sem série'})[c]||c||'Sem série'}
 const ADOCAO_TENTADA=new Set();
@@ -1933,10 +1989,16 @@ function detalheAuditoriaHTML(e){let o=null;try{o=e.detalhe?JSON.parse(e.detalhe
   return `<div class="mono-block">${escHtml(e.detalhe||'Sem detalhe adicional.')}</div>`
 }
 function abrirEventoAuditoria(id){const e=AUDITORIA_EVENTOS.find(x=>x.id===id);if(!e)return;const rota=rotaDoEvento(e);openDrawer(e.tipo,`${e.entidade} · ${escHtml(e.codigo||'—')}`,`<dl class="kv"><dt>Quando</dt><dd>${fmtDataHora(e.quando,true)}</dd><dt>Quem</dt><dd>${escHtml(e.ator||'—')}</dd><dt>Entidade</dt><dd>${escHtml(e.entidade||'—')}</dd><dt>Código</dt><dd><span class="code">${escHtml(e.codigo||'—')}</span></dd></dl><div><h3>Alteração</h3>${detalheAuditoriaHTML(e)}</div>${rota?`<div class="act"><button class="btn pri" onclick="nav('${rota}')">Abrir registro relacionado</button></div>`:''}`)}
-function exportarAuditoriaCSV(){if(!AUDITORIA_EVENTOS.length){toast('Não há eventos para exportar');return}const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const linhas=[['quando','ator','entidade','codigo','evento','detalhe'],...AUDITORIA_EVENTOS.map(e=>[e.quando,e.ator,e.entidade,e.codigo,e.tipo,fmtDetalhe(e.detalhe)])];const csv='\uFEFF'+linhas.map(r=>r.map(q).join(';')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='camp-auditoria-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+async function exportarAuditoriaCSV(){if(!AUDITORIA_EVENTOS.length){toast('Não há eventos para exportar');return}
+  let eventos=AUDITORIA_EVENTOS;
+  if(AUDITORIA_TOTAL>eventos.length){toast(`Preparando a exportação de ${fmtN(AUDITORIA_TOTAL)} eventos…`);eventos=[];const f=JSON.parse(AUD_CHAVE||'{}');
+    try{for(let pg=1;eventos.length<Math.min(AUDITORIA_TOTAL,50000);pg++){const d=await API('/api/eventos?'+new URLSearchParams({...f,pagina:pg,por_pagina:1000}));if(!d.eventos.length)break;eventos.push(...d.eventos)}}catch(e){toast(e.message);return}}
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const linhas=[['quando','ator','entidade','codigo','evento','detalhe'],...eventos.map(e=>[e.quando,e.ator,e.entidade,e.codigo,e.tipo,fmtDetalhe(e.detalhe)])];const csv='\uFEFF'+linhas.map(r=>r.map(q).join(';')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='camp-auditoria-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function carregarAuditoria(){const tinha=AUDITORIA_EVENTOS.length>0;if(!tinha)tabelaCarregando('#au-body','Carregando auditoria…');try{const sec=document.getElementById('v-auditoria');if(!sec.dataset.restaurou){try{const s=JSON.parse(localStorage.getItem(AUDITORIA_STATE_KEY)||'{}');if(s.entidade)document.getElementById('au-ent').dataset.restore=s.entidade;if(s.ator)document.getElementById('au-ator').dataset.restore=s.ator;document.getElementById('au-q').value=s.q||'';document.getElementById('au-desde').value=s.desde||''}catch(_){}sec.dataset.restaurou='1'}
   const filtros={entidade:document.getElementById('au-ent').value,ator:document.getElementById('au-ator').value,q:document.getElementById('au-q').value,desde:document.getElementById('au-desde').value};try{localStorage.setItem(AUDITORIA_STATE_KEY,JSON.stringify(filtros))}catch(_){}
-  const qs=new URLSearchParams(filtros).toString();const d=await API('/api/eventos?'+qs);limparStale('auditoria');AUDITORIA_EVENTOS=d.eventos;
+  const chaveAu=JSON.stringify(filtros);if(chaveAu!==AUD_CHAVE){AUD_CHAVE=chaveAu;AUD_PAG.pagina=1}
+  const qs=new URLSearchParams({...filtros,pagina:AUD_PAG.pagina,por_pagina:AUD_PAG.por}).toString();const d=await API('/api/eventos?'+qs);limparStale('auditoria');AUDITORIA_EVENTOS=d.eventos;AUDITORIA_TOTAL=d.total;
+  montarPaginadorServidor('#au-pag',{total:d.total,pagina:d.pagina,por:d.por_pagina},p=>{AUD_PAG.pagina=p;carregarAuditoria()},n=>{AUD_PAG.por=n;AUD_PAG.pagina=1;carregarAuditoria()});
   const crit=e=>/site_|fora_do_ar|direit|recod|senha|usuario|config/i.test((e.tipo||'')+' '+(e.entidade||''));
   document.getElementById('au-body').innerHTML=d.eventos.length?d.eventos.map(e=>`<tr data-audit-id="${escHtml(e.id)}" onclick="abrirEventoAuditoria(${escHtml(e.id)})" style="cursor:pointer"><td style="white-space:nowrap">${fmtDataHora(e.quando)}</td><td>${escHtml(e.ator||'')}</td><td>${escHtml(e.entidade||'')}</td><td>${routeCode(String(e.codigo||''))?`<span class="code">${escHtml(e.codigo)}</span>`:`<span class="mono" style="font-size:12px">${escHtml(e.codigo||'')}</span>`}</td><td>${crit(e)?'<span class="tag a">crítico</span> ':''}${escHtml(e.tipo||'')}</td><td style="font-size:12.5px;color:var(--ink2)">${escHtml(fmtDetalhe(e.detalhe).slice(0,160))}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Nenhum evento com esses filtros.</td></tr>';
   document.getElementById('au-cnt').textContent=`${d.eventos.length} de ${d.total}`;

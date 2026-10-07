@@ -537,7 +537,10 @@ def logs_tecnicos(nivel: str | None = None, q: str | None = None, limite: int = 
 # ---------------- auditoria ----------------
 @router.get("/eventos")
 def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | None = None, q: str | None = None,
-            desde: str | None = None, limite: int = 200, u: dict = Depends(auth.exige("admin"))) -> dict:
+            desde: str | None = None, limite: int = 200, pagina: int = 1, por_pagina: int | None = None,
+            u: dict = Depends(auth.exige("admin"))) -> dict:
+    # paginação: pagina/por_pagina (máx. 1000). Sem por_pagina vale o antigo "limite" (compatibilidade).
+    por = max(1, min(por_pagina if por_pagina else limite, 1000)); pagina = max(1, pagina)
     con = connect()
     sql = "SELECT * FROM evento WHERE 1=1"; p: list = []
     if entidade: sql += " AND entidade=?"; p.append(entidade)
@@ -546,9 +549,9 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
     if q: sql += " AND (codigo LIKE ? OR detalhe LIKE ?)"; p += [f"%{q}%", f"%{q}%"]
     if desde: sql += " AND quando >= ?"; p.append(desde)
     total = con.execute(f"SELECT COUNT(*) FROM ({sql})", p).fetchone()[0]
-    rows = con.execute(sql + " ORDER BY id DESC LIMIT ?", [*p, min(limite, 1000)]).fetchall()
+    rows = con.execute(sql + " ORDER BY id DESC LIMIT ? OFFSET ?", [*p, por, (pagina - 1) * por]).fetchall()
     facetas = {"entidades": [r[0] for r in con.execute("SELECT DISTINCT entidade FROM evento ORDER BY 1")],
                "atores": [r[0] for r in con.execute("SELECT ator FROM evento GROUP BY ator ORDER BY COUNT(*) DESC LIMIT 20")],
                "tipos": [r[0] for r in con.execute("SELECT tipo FROM evento GROUP BY tipo ORDER BY COUNT(*) DESC LIMIT 40")]}
     con.close()
-    return {"total": total, "eventos": [dict(r) for r in rows], "facetas": facetas}
+    return {"total": total, "pagina": pagina, "por_pagina": por, "eventos": [dict(r) for r in rows], "facetas": facetas}

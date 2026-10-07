@@ -803,6 +803,39 @@ def filho(modo):
         ver("próximo passo do arquiteto aponta o wp-admin", "wp-admin" in g["proximo_passo"], g["proximo_passo"][:100])
         ver("arquiteto inexistente: 404", adm.get("/api/agentes/99999/publicacao").status_code == 404)
         for l in res: print(l)
+    elif modo == "paginacao":
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)")
+        for n in range(1, 231):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P{n:04d}", "F099", n, f"Casa {n}"))
+        for n in range(250):
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('teste',?, 'evento_teste','ator')", (f"E{n:04d}",))
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pg = lambda n, por=100: x.get(f"/api/projetos?pagina={n}&por_pagina={por}").json()
+        p1, p2, p3, p4 = pg(1), pg(2), pg(3), pg(4)
+        ver("projetos: 230 no total, páginas de 100 = 100 + 100 + 30 e a 4ª vazia", (p1["total"], len(p1["itens"]), len(p2["itens"]), len(p3["itens"]), len(p4["itens"])) == (230, 100, 100, 30, 0), str((p1["total"], len(p1["itens"]), len(p2["itens"]), len(p3["itens"]))))
+        cods = [i["codigo"] for p in (p1, p2, p3) for i in p["itens"]]
+        ver("projetos: as páginas não repetem nem perdem nenhum (230 códigos distintos, em ordem)", len(set(cods)) == 230 and cods == sorted(cods))
+        ver("projetos: por_pagina enorme é limitado a 500", x.get("/api/projetos?por_pagina=99999").json()["por_pagina"] == 500)
+        ver("projetos: a busca respeita a paginação (total do filtro, não do banco)", x.get("/api/projetos?q=Casa 22&por_pagina=5&pagina=1").json()["total"] == 11 and len(x.get("/api/projetos?q=Casa 22&por_pagina=5&pagina=3").json()["itens"]) == 1)
+        e = lambda n, por=100: x.get(f"/api/eventos?pagina={n}&por_pagina={por}&tipo=evento_teste").json()
+        e1, e2, e3 = e(1), e(2), e(3)
+        ver("auditoria: 250 eventos = páginas de 100 + 100 + 50 (antes só os 200 mais recentes eram visíveis)", (e1["total"], len(e1["eventos"]), len(e2["eventos"]), len(e3["eventos"])) == (250, 100, 100, 50), str((e1["total"], len(e1["eventos"]), len(e2["eventos"]), len(e3["eventos"]))))
+        ids = [ev["id"] for p in (e1, e2, e3) for ev in p["eventos"]]
+        ver("auditoria: sem repetição e do mais novo para o mais antigo", len(set(ids)) == 250 and ids == sorted(ids, reverse=True))
+        ver("auditoria: a resposta informa pagina e por_pagina", (e2["pagina"], e2["por_pagina"]) == (2, 100))
+        ver("auditoria: o parâmetro antigo 'limite' continua funcionando", len(x.get("/api/eventos?limite=7&tipo=evento_teste").json()["eventos"]) == 7)
+        ver("auditoria: por_pagina enorme é limitado a 1000", x.get("/api/eventos?por_pagina=99999").json()["por_pagina"] == 1000)
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -953,6 +986,14 @@ else:
 print("15) Guia de publicação: checklist vivo do fundo e do arquiteto")
 rc, out = rodar("guia", f"{tmp}/guia.db")
 if rc != 0: ok(False, f"teste do guia não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("16) Paginação no servidor: projetos e auditoria (sem repetir nem perder linhas)")
+rc, out = rodar("paginacao", f"{tmp}/paginacao.db")
+if rc != 0: ok(False, f"teste de paginação não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -336,6 +336,79 @@ w.location.hash='#arquitetos'; await sleep(2200);
 await w.abrirAjuda(); await sleep(500);
 chk(txt('#d-title').includes('Publicar um arquiteto')&&txt('#d-body').includes('Completar no WordPress'),'a ajuda (?) de Arquitetos deveria trazer o passo a passo: '+txt('#d-title')); w.closeDrawer(true);
 okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão que resolve e ajuda (?) contextual');
+
+// ---------- PAGINAÇÃO: projetos e auditoria (servidor) + paginador genérico + exportação completa ----------
+{ const lerBlob=b=>new Promise(r=>{const fr=new w.FileReader();fr.onload=()=>r(fr.result);fr.readAsText(b)});
+  w.URL.createObjectURL=b=>{w.__ultimoBlob=b;return 'blob:teste'};
+  const tot=(await J(adm,'/api/projetos?por_pagina=1')).b.total;
+  chk(tot>=10,'precondição: o ambiente de teste deveria ter pelo menos 10 projetos: '+tot);
+  w.eval('PROJ_PAG.por=5;PROJ_PAG.pagina=1');   // o banco de teste é pequeno: força páginas de 5 (no seu, 1.794 projetos)
+  w.route_to('projetos'); await w.carregarProjetosAPI({q:''}); await sleep(1500);
+  const pgs=Math.ceil(tot/5), linhasP=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')].map(tr=>tr.getAttribute('data-nav'));
+  chk(!d.getElementById('projetos-pag').hidden&&txt('#projetos-pag').includes('de '+tot)&&new RegExp('Página 1 de '+pgs).test(txt('#projetos-pag')),'Projetos deveria mostrar o controle de paginação com o total: "'+txt('#projetos-pag').slice(0,90)+'"');
+  const pag1=linhasP(); chk(pag1.length===5,'a página 1 deveria ter 5 linhas: '+pag1.length);
+  chk(txt('#v-projetos .cnt').includes('1–5 de '+tot+' projetos'),'o contador deveria dizer "1–5 de '+tot+' projetos" (e não "N registros"): "'+txt('#v-projetos .cnt')+'"');
+  w.toggleProjetoSelecionado(pag1[0].replace('projeto/',''),true);
+  d.querySelector('#projetos-pag button[data-pg="prox"]').click(); await sleep(1800);
+  const pag2=linhasP(); chk(pag2.length===5&&!pag2.some(c=>pag1.includes(c)),'a página 2 deveria ter 5 linhas diferentes das da 1: '+pag2.length);
+  chk(txt('#v-projetos .cnt').includes('6–10 de '+tot),'o contador da página 2 deveria dizer 6–10: "'+txt('#v-projetos .cnt')+'"');
+  chk(w.eval('PROJETOS_SELECIONADOS.size')===1,'a seleção deveria sobreviver à troca de página');
+  for(let k=2;k<pgs;k++){ d.querySelector('#projetos-pag button[data-pg="prox"]').click(); await sleep(1500); }
+  chk(d.querySelector('#projetos-pag button[data-pg="prox"]').disabled&&linhasP().length===tot-5*(pgs-1),'na última página Próxima deveria estar desabilitada e restar '+(tot-5*(pgs-1))+' linha(s): '+linhasP().length);
+  // exportar: traz TODOS do filtro, não só a página
+  w.__baixou=[]; w.exportarVisaoAtual('projetos'); await sleep(2800);
+  { const csv=await lerBlob(w.__ultimoBlob); const cods=new Set(csv.match(/F\d{3}-P\d{4}/g)||[]);
+    chk((w.__baixou||[]).length>0&&cods.size>=tot,'a exportação deveria trazer os '+tot+' projetos (não só os '+linhasP().length+' da página): achei '+cods.size); }
+  // mudar o filtro volta à página 1
+  await w.carregarProjetosAPI({q:'Casa'}); await sleep(1500);
+  chk(!/Página [2-9]/.test(txt('#projetos-pag')),'depois de buscar, a lista deveria voltar à página 1: "'+txt('#projetos-pag').slice(0,60)+'"');
+  // o seletor "por página" funciona
+  w.eval('PROJ_PAG.por=5'); await w.carregarProjetosAPI({q:''}); await sleep(1500);
+  { const sel=d.querySelector('#projetos-pag select[data-pg="por"]'); sel.value='25'; sel.dispatchEvent(new w.Event('change',{bubbles:true})); await sleep(1800);
+    chk(linhasP().length===Math.min(25,tot)&&d.getElementById('projetos-pag').hidden===(tot<=25),'trocar para 25 por página deveria mostrar '+Math.min(25,tot)+' linhas: '+linhasP().length); }
+  w.eval('PROJ_PAG.por=100;PROJ_PAG.pagina=1'); await w.carregarProjetosAPI({q:''}); await sleep(1200); w.limparSelecaoProjetos();
+  // auditoria
+  w.route_to('auditoria'); await sleep(2200);
+  const totAu=(await J(adm,'/api/eventos?por_pagina=1')).b.total;
+  chk(totAu>60,'precondição: a auditoria deveria ter mais de 60 eventos: '+totAu);
+  w.eval('AUD_PAG.por=25;AUD_PAG.pagina=1'); await w.carregarAuditoria(); await sleep(1800);
+  chk(!d.getElementById('au-pag').hidden&&!!d.querySelector('#au-pag select[data-pg="por"]')&&txt('#au-pag').includes('de '+totAu),'a Auditoria deveria ter o controle de paginação com o total: "'+txt('#au-pag').slice(0,80)+'"');
+  const idsAu=()=>[...d.querySelectorAll('#au-body tr[data-audit-id]')].map(tr=>tr.getAttribute('data-audit-id'));
+  const a1=idsAu(); chk(a1.length===25,'a Auditoria com 25 por página deveria mostrar 25 linhas: '+a1.length);
+  d.querySelector('#au-pag button[data-pg="prox"]').click(); await sleep(1800);
+  const a2=idsAu(); chk(a2.length>0&&!a2.some(i=>a1.includes(i))&&Math.max(...a2.map(Number))<Math.min(...a1.map(Number)),'a página 2 da auditoria deveria ter eventos MAIS ANTIGOS e sem repetição');
+  w.eval('AUD_PAG.por=100;AUD_PAG.pagina=1'); await w.carregarAuditoria(); await sleep(1500);
+  // paginador genérico (qualquer lista desenhada na tela)
+  { const raiz=d.createElement('section'); raiz.id='v-fake'; raiz.innerHTML='<div class="filterbar"></div><div class="tw"><table><thead><tr><th>N</th></tr></thead><tbody id="fk"></tbody></table></div><div class="thumbs" id="gr"></div>'; d.body.appendChild(raiz);
+    const fk=d.getElementById('fk'); fk.innerHTML=Array.from({length:120},(_,i)=>'<tr><td>'+(i+1)+'</td></tr>').join('');
+    w.ativarPaginacao('#fk',{por:50}); await sleep(150);
+    const vis=()=>[...fk.children].filter(r=>!r.classList.contains('pg-oculta')&&r.style.display!=='none').map(r=>+r.textContent);
+    const ctl=()=>fk.closest('.tw').nextElementSibling;
+    chk(vis().length===50&&vis()[0]===1&&/Mostrando 1–50 de 120/.test(ctl().textContent)&&/Página 1 de 3/.test(ctl().textContent),'paginador genérico: 120 linhas deveriam virar 3 páginas de 50: '+vis().length+' | '+ctl().textContent.slice(0,70));
+    ctl().querySelector('button[data-pg="prox"]').click(); chk(vis()[0]===51&&vis().length===50,'a página 2 deveria começar na linha 51');
+    ctl().querySelector('button[data-pg="prox"]').click(); chk(vis().length===20&&vis()[0]===101,'a página 3 deveria ter as 20 últimas');
+    ctl().querySelector('button[data-pg="ant"]').click(); chk(vis()[0]===51,'Anterior deveria voltar à página 2');
+    // exportar uma lista paginada só na tela: as linhas escondidas pela página ENTRAM
+    w.__baixou=[]; w.exportarVisaoAtual('fake'); chk(/120 linha\(s\) exportadas/.test(txt('#toast')),'exportar deveria trazer as 120 linhas, não só as 50 da página: "'+txt('#toast')+'"');
+    // filtro por style.display recalcula as páginas
+    [...fk.children].slice(0,100).forEach(r=>{r.style.display='none'}); await sleep(150);
+    chk(ctl().hidden&&vis().length===20,'filtrando para 20 linhas o controle deveria sumir e as 20 aparecerem: '+vis().length);
+    [...fk.children].forEach(r=>{r.style.display=''}); await sleep(150);
+    chk(!ctl().hidden&&vis().length===50,'ao remover o filtro a paginação deveria voltar');
+    // redesenho com outro tamanho volta à página 1
+    fk.innerHTML=Array.from({length:75},(_,i)=>'<tr><td>'+(i+1)+'</td></tr>').join(''); await sleep(150);
+    chk(vis().length===50&&vis()[0]===1&&/Página 1 de 2/.test(ctl().textContent),'redesenhar a lista deveria voltar à página 1');
+    // modo "mostrar mais" (grades de folhas)
+    const gr=d.getElementById('gr'); gr.innerHTML=Array.from({length:130},(_,i)=>'<div class="card">'+(i+1)+'</div>').join(''); w.ativarPaginacao('#gr',{por:60,modo:'mais'}); await sleep(150);
+    const gv=()=>[...gr.children].filter(r=>!r.classList.contains('pg-oculta')).length, gc=()=>gr.nextElementSibling;
+    chk(gv()===60&&/Mostrando 60 de 130/.test(gc().textContent),'grade: deveria mostrar 60 de 130: '+gv());
+    gc().querySelector('button[data-pg="mais"]').click(); chk(gv()===120,'"Mostrar mais" deveria mostrar 120');
+    gc().querySelector('button[data-pg="mais"]').click(); chk(gv()===130&&!gc().querySelector('button'),'depois de tudo exibido o botão deveria sumir');
+    raiz.remove(); d.querySelectorAll('.pg-ctl').forEach(c=>{if(!c.id)c.remove()}); }
+  // as grades de folhas dos projetos já saem paginadas (60) quando passam disso
+  w.route_to('projeto/F023-P0011'); await sleep(2000);
+  chk([...d.querySelectorAll('.project-series .thumbs')].every(g=>g.dataset.pg==='mais'),'as grades de folhas do projeto deveriam estar ligadas ao "Mostrar mais"');
+  okl.push('paginação: projetos e auditoria no servidor (páginas sem repetir, seleção mantida, busca volta à 1ª, exporta tudo), paginador genérico e "mostrar mais"'); }
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');
