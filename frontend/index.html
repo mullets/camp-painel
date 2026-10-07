@@ -274,6 +274,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .edit-sec{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
 .edit-aviso{background:var(--amber-soft);color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12.5px}
 .edit-alerta{border-color:var(--amber)}
+.guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
 .edit-lista{margin:6px 0 8px;padding-left:18px;font-size:12.5px}
 .dirty-state{display:none;margin-left:auto;font-size:11.5px;color:var(--amber);background:var(--amber-soft);padding:3px 8px;border-radius:999px;white-space:nowrap}
@@ -1487,13 +1488,21 @@ async function carregarPublicacao(code){
   box.innerHTML=renderPublicacao(code,g);acoes.innerHTML=botoesPublicacao(code,g)}
 function acaoCondicao(tipo,alvo){
   closeDrawer(true);
-  if(tipo==='direitos'){PUB_REFRESH=document.getElementById('pd-pub')?alvoProjetoAtual():null;editarDireitos(alvo)}
+  const rota=(location.hash||'').match(/^#(fundo|projeto)\/([^/]+)/);
+  if(['direitos','editar'].includes(tipo)&&rota)PUB_REFRESH=rota[1]==='fundo'?()=>carregarGuiaFundo(rota[2]):rota[2];
+  if(tipo==='direitos')editarDireitos(alvo);
+  else if(tipo==='editar')editarFundo(alvo);
+  else if(tipo==='vincular'){openModal('m-arq');const sel=document.getElementById('na-fundo');if(sel&&alvo)[...sel.options].forEach(o=>{o.selected=o.value===alvo})}
+  else if(tipo==='projetos')go('projetos');
+  else if(tipo==='fundo')go('fundo/'+alvo);
+  else if(tipo==='editar_agente')editarAgente(+alvo);
+  else if(tipo==='wpadmin')window.open(alvo,'_blank','noopener');
   else if(tipo==='autorizar')autorizarProjeto(alvo);
   else if(tipo==='subir_folhas')subirFolhas(alvo);
   else if(tipo==='erros')go('erros')}
 function alvoProjetoAtual(){const m=(location.hash||'').match(/^#projeto\/([^/]+)/);return m?m[1]:null}
 const _closeDrawerBase=closeDrawer;
-closeDrawer=function(force){const r=_closeDrawerBase(force);if(r!==false&&PUB_REFRESH){const c=PUB_REFRESH;PUB_REFRESH=null;setTimeout(()=>carregarPublicacao(c),500)}return r};
+closeDrawer=function(force){const r=_closeDrawerBase(force);if(r!==false&&PUB_REFRESH){const c=PUB_REFRESH;PUB_REFRESH=null;setTimeout(()=>typeof c==='function'?c():carregarPublicacao(c),500)}return r};
 async function resultadoPublicacao(code,acao,r){
   if(r.ok){toast(r.mensagem||'Publicação atualizada');return}
   const falhas=(r.falhas||[]).slice(0,30);
@@ -1507,6 +1516,40 @@ async function publicarProjeto(code,acao){
   if(!confirm(msg))return;toast('Atualizando publicação…');
   try{await resultadoPublicacao(code,acao,await API(`/api/projetos/${code}/publicar`,{method:'POST',body:JSON.stringify({acao})}))}catch(e){await erroPublicacao(code,acao,e)}
   showProjeto(code);carregarFundosAPI()}
+const GUIA_FUNDO=[
+ ['Reservar o fundo','Fundos → "Novo fundo": o código (F0xx) e a sigla de 3 letras não mudam depois.'],
+ ['Escrever a história e a procedência','Abra o fundo → Editar. Só entra história com a fonte citada.'],
+ ['Vincular o arquiteto ou produtor','No fundo, em "Agentes (proveniência)" → Vincular.'],
+ ['Definir os direitos','No fundo, em "Direitos e licença" → Editar: situação Autorizado, titular e o documento do termo. Sem isso nada é publicado.'],
+ ['Autorizar cada projeto','Em cada projeto, no painel "Publicação" → Autorizar publicação. Autorizar não publica sozinho.'],
+ ['Enviar as folhas ao site','No projeto: "Enviar folhas ao site" (ficam como rascunho) e "Importar folhas só no site" se elas vieram do site.'],
+ ['Publicar','No projeto: painel "Publicação" → Publicar. Ou, no fundo, Publicar para todos os projetos prontos (só admin master).'],
+ ['Conferir','Use "Ver página pública" no projeto. Publicar muda o site na hora: prefira fora do horário de movimento (depois das 21h).']];
+const GUIA_ARQUITETO=[
+ ['Cadastrar o arquiteto','Arquitetos → Novo agente: nome na forma autorizada (como aparece no site), datas de existência e as grafias de carimbo.'],
+ ['Escrever a biografia, com fonte','Abra o arquiteto → Editar. Só entra texto com a fonte citada.'],
+ ['Vincular ao fundo','Em "Agentes (proveniência)" do fundo → Vincular. O arquiteto precisa de pelo menos um fundo.'],
+ ['Publicar projetos do fundo','O arquiteto só aparece no site quando um fundo dele tem projeto publicado (veja o passo a passo do fundo).'],
+ ['Completar no WordPress','No wp-admin: CAMP Acervo → Arquitetos → enviar a foto, escrever a biografia e ativar. O painel não faz esta parte.'],
+ ['Conferir','A página fica em /acervo/arquitetos/NOME/. O painel mostra se encontrou a página no espelho do site.']];
+const GUIA_NOTA_ARQ='O campo "Status" do arquiteto no painel é só um marcador interno: ele não publica nada no site.';
+const passosGuia=l=>`<details class="guia-passos"><summary>Passo a passo completo</summary><ol>${l.map(([t,d])=>`<li><b>${escHtml(t)}.</b> ${escHtml(d)}</li>`).join('')}</ol></details>`;
+function renderGuia(g,passos,nota){return `<div class="edit-aviso${g.pode_publicar?' guia-ok':''}"><b>Próximo passo:</b> ${escHtml(g.proximo_passo)}</div><ul class="checklist">${g.condicoes.map(c=>itemChecklist(c,g.pode_agir)).join('')}</ul>${nota?`<small class="help">${escHtml(nota)}</small>`:''}${passosGuia(passos)}`}
+async function carregarGuiaFundo(code){
+  const host=document.getElementById('fd');if(!host)return;let g;try{g=await API(`/api/fundos/${encodeURIComponent(code)}/publicacao`)}catch(e){return}
+  if(!host.isConnected)return;let box=document.getElementById('fd-guia');
+  if(!box){box=document.createElement('div');box.className='panel pub-panel';box.id='fd-guia';const h=host.querySelector('.dethdr');if(h)h.after(box);else host.prepend(box)}
+  box.innerHTML=`<div class="ph"><h2>Como publicar este fundo</h2></div><div class="pb">${renderGuia(g,GUIA_FUNDO,'')}</div>`}
+async function carregarGuiaAgente(id){
+  const host=document.getElementById('d-body');if(!host)return;let g;try{g=await API(`/api/agentes/${encodeURIComponent(id)}/publicacao`)}catch(e){return}
+  if(!host.isConnected)return;const velho=document.getElementById('ag-guia');if(velho)velho.remove();
+  const box=document.createElement('div');box.className='panel';box.id='ag-guia';box.innerHTML=`<div class="ph"><h2>Como publicar este arquiteto</h2></div><div class="pb">${renderGuia(g,GUIA_ARQUITETO,GUIA_NOTA_ARQ)}</div>`;host.prepend(box)}
+const _showFundoGuia=showFundo;
+showFundo=async function(code,tab){const r=await _showFundoGuia(code,tab);carregarGuiaFundo(code);return r};
+const _editarAgenteGuia=editarAgente;
+editarAgente=async function(id){const r=await _editarAgenteGuia(id);carregarGuiaAgente(id);return r};
+AJUDA_TELAS.fundo={titulo:'Publicar um fundo',intro:'Um fundo só vai ao site depois de os direitos estarem autorizados e de haver pelo menos um projeto autorizado e pronto. O quadro "Como publicar este fundo", na página do fundo, mostra o que já está feito e o que falta.',passos:GUIA_FUNDO};
+AJUDA_TELAS.arquitetos={titulo:'Publicar um arquiteto',intro:GUIA_NOTA_ARQ+' Clique num arquiteto para ver o checklist dele.',passos:GUIA_ARQUITETO};
 const _showProjetoPub=showProjeto;
 showProjeto=async function(code,tab){const r=await _showProjetoPub(code,tab);carregarPublicacao(code);return r};
 function erroPublicacaoFundo(code,acao,e){const dir=/Direitos do fundo/.test(e.message);

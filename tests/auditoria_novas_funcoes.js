@@ -156,7 +156,7 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 // leitura não vê o botão
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
-  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
+  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('fundo/F003'); await sleep(2200); chk(!!dl.window.document.getElementById('fd-guia')&&!dl.window.document.querySelector('#fd-guia .chk button'),'leitura deveria ver o guia do fundo SEM botões de ação'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
 
 // ---------- IMAGENS: nunca desenhar planta falsa ----------
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
@@ -317,6 +317,25 @@ okl.push('publicação: checklist antes de clicar, erro com todas as razões e b
   chk(!d.querySelector('.who .av img'),'depois de remover, o topo deveria voltar às iniciais');
   chk((await adm.f('/api/usuarios/'+meuId+'/foto')).status===404,'depois de remover a foto deveria dar 404');
   okl.push('foto de perfil: envia, aparece no topo e na tabela de usuários, recusa arquivo inválido com mensagem, remove'); }
+
+// ---------- GUIA: como publicar fundo e arquiteto ----------
+w.location.hash='#fundo/F003'; await sleep(2800);
+chk(!!d.getElementById('fd-guia')&&txt('#fd-guia').includes('Como publicar este fundo')&&txt('#fd-guia').includes('Próximo passo:'),'a página do fundo deveria ter o quadro "Como publicar este fundo" com o próximo passo: '+txt('#fd-guia').slice(0,80));
+chk(d.querySelectorAll('#fd-guia .chk').length>=4&&txt('#fd-guia').includes('Direitos do fundo F003 autorizados'),'o checklist do fundo deveria listar os requisitos');
+chk(d.querySelectorAll('#fd-guia .guia-passos li').length===8,'o passo a passo completo do fundo deveria ter 8 passos: '+d.querySelectorAll('#fd-guia .guia-passos li').length);
+{ const bt=[...d.querySelectorAll('#fd-guia .chk.falta button')].find(b=>b.textContent.includes('Definir direitos')); chk(!!bt,'o checklist deveria oferecer "Definir direitos do fundo"'); if(bt){ bt.click(); await sleep(1500); chk(txt('#d-title').includes('Direitos e licença'),'o botão deveria abrir a edição de direitos: '+txt('#d-title')); w.closeDrawer(true); } }
+await w.abrirAjuda(); await sleep(500);
+chk(txt('#d-title').includes('Publicar um fundo')&&txt('#d-body').includes('Definir os direitos')&&txt('#d-body').includes('Autorizar cada projeto'),'a ajuda (?) do fundo deveria trazer o passo a passo: '+txt('#d-title')); w.closeDrawer(true);
+w.location.hash='#arquitetos'; await sleep(2200);
+{ const ags=await J(adm,'/api/agentes'); const a0=(ags.b||[])[0]; chk(!!a0,'o ambiente deveria ter arquitetos');
+  await w.editarAgente(a0.id); await sleep(1800);
+  chk(!!d.getElementById('ag-guia')&&txt('#ag-guia').includes('Como publicar este arquiteto'),'o formulário do arquiteto deveria ter o quadro "Como publicar este arquiteto"');
+  chk(txt('#ag-guia').includes('marcador interno')&&txt('#ag-guia').includes('wp-admin'),'o guia do arquiteto deveria dizer que o status é só marcador e que foto/bio/ativar são no wp-admin');
+  chk(d.querySelectorAll('#ag-guia .guia-passos li').length===6,'o passo a passo do arquiteto deveria ter 6 passos');
+  w.closeDrawer(true); }
+await w.abrirAjuda(); await sleep(500);
+chk(txt('#d-title').includes('Publicar um arquiteto')&&txt('#d-body').includes('Completar no WordPress'),'a ajuda (?) de Arquitetos deveria trazer o passo a passo: '+txt('#d-title')); w.closeDrawer(true);
+okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão que resolve e ajuda (?) contextual');
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

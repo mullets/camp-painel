@@ -736,6 +736,61 @@ def filho(modo):
         k = connect(); ev = {r[0]: r[1] for r in k.execute("SELECT tipo, count(*) FROM evento WHERE entidade='usuario' AND tipo LIKE 'foto_%' GROUP BY tipo")}; k.close()
         ver("trocas e remoções ficam na auditoria", ev.get("foto_atualizada", 0) >= 5 and ev.get("foto_removida") == 1, str(ev))
         for l in res: print(l)
+    elif modo == "guia":
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)")
+        for n, aut, wid in ((1, 1, 100), (2, 0, 101), (3, 0, None)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id) VALUES (?,?,?,?,1970,?,?)", (f"F099-P000{n}", "F099", n, f"Casa {n}", aut, wid))
+        c.execute("INSERT INTO agente (forma_autorizada,tipo,historia,fonte_historia) VALUES ('Paulo Mendes da Rocha','pessoa',NULL,NULL)")
+        aid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        c.execute("INSERT INTO agente (forma_autorizada,tipo) VALUES ('Sem Vinculo','pessoa')"); aid2 = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "A", "admin"), ("le@camp.arq.br", "L", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, le, anon = cli("adm@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ids = lambda g, f: {x["id"] for x in g["condicoes"] if f(x)}
+        # ---------- FUNDO ----------
+        r = le.get("/api/fundos/F099/publicacao"); g = r.json()
+        ver("leitura vê o checklist do fundo (200) e não pode agir", r.status_code == 200 and g["pode_agir"] is False, f"HTTP {r.status_code}")
+        ver("fundo sem direitos: falta direitos e projeto pronto (bloqueiam)", ids(g, lambda x: x["bloqueia"] and not x["ok"]) == {"direitos", "projetos"}, str(ids(g, lambda x: x["bloqueia"] and not x["ok"])))
+        ver("recomendações que não bloqueiam: agente, história e sigla", ids(g, lambda x: not x["bloqueia"] and not x["ok"]) == {"agente", "historia", "sigla"})
+        ver("contagem: 3 projetos, 1 autorizado, 0 prontos, 0 publicados", g["contagem"] == {"projetos": 3, "autorizados": 1, "prontos": 0, "publicados": 0}, str(g["contagem"]))
+        ver("próximo passo diz o que fazer primeiro (direitos)", g["proximo_passo"].startswith("Definir direitos do fundo"), g["proximo_passo"][:80])
+        ver("cada pendência traz o botão que a resolve", all(x["acao"] for x in g["condicoes"] if not x["ok"]))
+        adm.put("/api/fundos/F099/direitos", json={"situacao": "autorizado", "titular": "Família X", "documento_autorizacao": "Termo 001"})
+        g = adm.get("/api/fundos/F099/publicacao").json()
+        ver("com direitos autorizados e 1 projeto autorizado com dossiê: o fundo fica pronto", g["pode_publicar"] is True and g["contagem"]["prontos"] == 1 and g["pode_agir"] is True, str(g["contagem"]))
+        ver("próximo passo agora orienta a publicar", "Tudo pronto" in g["proximo_passo"], g["proximo_passo"][:80])
+        ver("fundo inexistente: 404 e sem login: 401", adm.get("/api/fundos/F000/publicacao").status_code == 404 and anon.get("/api/fundos/F099/publicacao").status_code == 401)
+        # ---------- ARQUITETO ----------
+        g = le.get(f"/api/agentes/{aid2}/publicacao").json()
+        ver("arquiteto sem vínculo: falta vínculo e fundo publicado", ids(g, lambda x: x["bloqueia"] and not x["ok"]) == {"vinculo", "publicado"} and g["pode_publicar"] is False)
+        c = connect(); c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F099',?, 'produtor')", (aid,)); c.commit(); c.close()
+        g = le.get(f"/api/agentes/{aid}/publicacao").json()
+        ver("vinculado ao fundo: vínculo ok, mas AINDA não aparece (nenhum projeto publicado)", ids(g, lambda x: x["id"] == "vinculo" and x["ok"]) == {"vinculo"} and ids(g, lambda x: x["id"] == "publicado" and not x["ok"]) == {"publicado"})
+        ver("o checklist diz que foto/bio/ativar são FEITOS NO WORDPRESS (o painel não publica arquiteto)", any(x["id"] == "wpadmin" and not x["ok"] and "wp-admin" in (x["detalhe"] or "") and not x["bloqueia"] for x in g["condicoes"]))
+        ver("biografia ausente é apontada como recomendação (e que exige fonte)", any(x["id"] == "historia" and not x["ok"] and "fonte" in x["detalhe"] and not x["bloqueia"] for x in g["condicoes"]))
+        c = connect(); c.execute("UPDATE agente SET historia='Biografia com fonte', fonte_historia='Dissertação X' WHERE id=?", (aid2,)); c.commit(); c.close()
+        ver("com biografia e fonte a recomendação some", any(x["id"] == "historia" and x["ok"] for x in le.get(f"/api/agentes/{aid2}/publicacao").json()["condicoes"]))
+        c = connect(); c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F099-P0001'")
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status) VALUES (1,'Paulo','paulo-mendes-da-rocha','https://camp.arq.br/acervo/arquitetos/paulo-mendes-da-rocha/','publish')")
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status) VALUES (2,'Outra','paulo-mendes-da-rocha','https://camp.arq.br/outra-area/paulo-mendes-da-rocha/','publish')")
+        c.commit(); c.close()
+        g = adm.get(f"/api/agentes/{aid}/publicacao").json()
+        ver("com projeto publicado: o arquiteto passa a poder aparecer", g["pode_publicar"] is True and ids(g, lambda x: x["id"] == "publicado" and x["ok"]) == {"publicado"}, str(g["proximo_passo"])[:90])
+        ver("acha a página REAL do arquiteto no espelho (só em /acervo/arquitetos/)", g["pagina_url"] == "https://camp.arq.br/acervo/arquitetos/paulo-mendes-da-rocha/" and g["pagina_status"] == "publish" and ids(g, lambda x: x["id"] == "pagina" and x["ok"]) == {"pagina"}, str(g["pagina_url"]))
+        ver("próximo passo do arquiteto aponta o wp-admin", "wp-admin" in g["proximo_passo"], g["proximo_passo"][:100])
+        ver("arquiteto inexistente: 404", adm.get("/api/agentes/99999/publicacao").status_code == 404)
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -878,6 +933,14 @@ else:
 print("14) Foto de perfil: permissões, validação pelo conteúdo, limite e auditoria")
 rc, out = rodar("foto", f"{tmp}/foto.db")
 if rc != 0: ok(False, f"teste de foto não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("15) Guia de publicação: checklist vivo do fundo e do arquiteto")
+rc, out = rodar("guia", f"{tmp}/guia.db")
+if rc != 0: ok(False, f"teste do guia não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

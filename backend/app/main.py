@@ -21,6 +21,7 @@ from .rotas_operacao import router as rotas_operacao
 from .rotas_projetos import router as rotas_projetos
 from .rotas_itens import router as rotas_itens
 from .rotas_importacao import router as rotas_importacao
+from .guia_publicacao import router as guia_publicacao
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -33,6 +34,7 @@ app.include_router(rotas_fundos)
 app.include_router(rotas_projetos)
 app.include_router(rotas_itens)
 app.include_router(rotas_importacao)
+app.include_router(guia_publicacao)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 
