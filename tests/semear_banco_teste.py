@@ -81,6 +81,14 @@ for _fmt, _ext in (("JPG", "jpg"), ("TIF", "tif")):
         (_raiz / "01 - Desenhos e pranchas" / _fmt / f"F026-P0001-1970-S01-D9000{_n}.{_ext}").write_bytes(b"\xff\xd8\xff\xd9")
 c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa) VALUES (?,?,?,?,?,?)",
           ("Lote de teste (QNAP)", "F026-P0001", str(_raiz), 3, 3, "revisao"))
+# decisões pendentes: o CAMP Vision pediu número de projeto e já existe parecido no fundo (a pessoa precisa dizer se é o mesmo)
+_cand = [r for r in c.execute("SELECT codigo, titulo, ano, cidade FROM projeto WHERE fundo_codigo='F026' ORDER BY codigo LIMIT 2").fetchall()]
+for _i, _ch in enumerate(("seed-decisao-1", "seed-decisao-2")):
+    _c0 = _cand[_i % len(_cand)]
+    c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem) VALUES ('projeto_parecido',?,?,?,?,'estacao')",
+              (_ch, "F026", f"{_c0[1]} (reenvio {_i + 1})", _json.dumps({"pedido": {"titulo": f"{_c0[1]} (reenvio {_i + 1})", "ano": _c0[2] or 0, "cidade": _c0[3], "identificacao_original": f"PASTA SCANNER {_i + 1}", "operador": "Beatriz"},
+                "candidatos": [{"codigo": _c0[0], "titulo": _c0[1], "ano": _c0[2], "cidade": _c0[3], "folhas": 3, "score": 0.93 - _i * 0.1, "nivel": "forte" if _i == 0 else "provavel",
+                                "motivos": ["mesmo nome (igual sem acento, maiúscula e palavras genéricas)", "mesma cidade"]}]}, ensure_ascii=False)))
 # o coletor automático dispara 20 s depois de o servidor subir e gravaria uma coleta VAZIA (o QNAP de teste não existe) por cima da semente:
 # os testes não podem depender de relógio. 0 desliga a coleta automática; "Atualizar agora" (manual) continua funcionando.
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")

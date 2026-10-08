@@ -309,6 +309,32 @@ w.route_to('painel'); await sleep(2800);
   chk((w.__baixou||[]).some(x=>x.startsWith('mailto:'+detalheEmail.email)&&x.includes('subject=Assunto%20com%20acento%3A%20%C3%A7%C3%A3o')&&x.includes('body=Linha%201%0ALinha%202%20%26%20mais%3F')),'"Abrir no meu e-mail" deveria montar um mailto: com assunto e texto codificados: '+JSON.stringify(w.__baixou));
   d.querySelector('#d-body [data-uso-acao="detalhe"]').click(); await sleep(1300); chk(txt('#d-title').includes('Pedido de download'),'"Voltar" deveria reabrir o detalhe do pedido');
   w.closeDrawer(true); }
+// ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
+{ w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
+  const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
+  chk(dl.total>=2,'a semente deveria ter 2 decisões pendentes: '+dl.total);
+  const li=[...d.querySelectorAll('#v-painel .action-list li')].filter(x=>/Projeto parecido/.test(x.textContent));
+  chk(li.length>=1&&!!li[0].querySelector('button.pri')&&/Decidir/.test(li[0].textContent),'o "Precisa de atenção" deveria listar a decisão com o botão Decidir ('+li.length+')');
+  chk(/CAMP Vision está esperando/.test(txt('#v-painel .action-card')),'deveria avisar que o CAMP Vision está esperando');
+  chk(/Decisões esperando/.test(txt('#v-painel .hoje-acoes')),'"Por onde começar" deveria incluir as decisões nas pendências: "'+txt('#v-painel .hoje-acoes').slice(0,120)+'"');
+  const id1=dl.itens[0].id, id2=dl.itens[1].id; li[0].querySelector('button.pri').click(); await sleep(1600);
+  chk(txt('#d-title').includes('Projeto parecido: é o mesmo?')&&/O que chegou/.test(txt('#d-body'))&&/Já existe no fundo/.test(txt('#d-body'))&&/está esperando a sua resposta/.test(txt('#d-body')),'a janela deveria mostrar o que chegou, o que já existe e que o CAMP Vision espera: "'+txt('#d-body').slice(0,110)+'"');
+  chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folha\(s\) no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
+  const nProj0=(await J(adm,'/api/painel')).b.projetos.total;
+  d.querySelector('#d-body [data-dec-acao="mesmo"]').click(); await sleep(2600);
+  const r1=(await J(adm,'/api/decisoes/'+id1)).b;
+  chk(r1.situacao==='resolvida'&&r1.resolucao==='mesmo'&&(await J(adm,'/api/painel')).b.projetos.total===nProj0&&!drawerAberto(),'"É o mesmo" deveria resolver SEM criar projeto e fechar a janela: '+JSON.stringify({s:r1.situacao,r:r1.resolucao}));
+  w.abrirDecisao(id2); await sleep(1600); d.querySelector('#d-body [data-dec-acao="novo"]').click(); await sleep(2600);
+  const r2=(await J(adm,'/api/decisoes/'+id2)).b;
+  chk(r2.situacao==='resolvida'&&r2.resolucao==='novo'&&/^F026-P\d{4}$/.test(r2.projeto_codigo)&&(await J(adm,'/api/painel')).b.projetos.total===nProj0+1,'"É outro projeto" deveria criar o novo: '+JSON.stringify(r2).slice(0,140));
+  w.abrirDecisao(id1); await sleep(1500); chk(/Decidido/.test(txt('#d-body'))&&/Era o mesmo projeto/.test(txt('#d-body'))&&!d.querySelector('#d-body [data-dec-acao]'),'uma decisão já resolvida deveria aparecer só para leitura, sem botões'); w.closeDrawer(true);
+  w.route_to('painel'); await sleep(2800); chk(!/Projeto parecido/.test(txt('#v-painel .action-card')),'depois de decidir, o "Precisa de atenção" não deveria mais listar as decisões');
+  // novo projeto à mão: o painel avisa dos parecidos antes de criar
+  const tit=(await J(adm,'/api/projetos/F026-P0001/detalhe')).b.projeto.titulo, nP=(await J(adm,'/api/painel')).b.projetos.total;
+  w.openModal('m-proj'); await sleep(600); d.getElementById('np-fundo').value='F026'; d.getElementById('np-titulo').value=tit; await w.criarProjeto(); await sleep(1500);
+  chk(/Já existe projeto parecido neste fundo/.test(txt('#np-parecidos'))&&/F026-P0001/.test(txt('#np-parecidos'))&&/É um projeto novo: criar mesmo assim/.test(txt('#np-parecidos')),'o modal de novo projeto deveria avisar do parecido (F026-P0001): "'+txt('#np-parecidos').slice(0,120)+'"');
+  chk((await J(adm,'/api/painel')).b.projetos.total===nP,'avisar NÃO pode criar o projeto');
+  d.querySelector('#np-parecidos [data-np-abrir]').click(); await sleep(1500); chk(/projeto\/F026-P0001/.test(w.location.hash),'"Abrir este" deveria levar ao projeto parecido: '+w.location.hash); w.closeModal(); }
 // ---------- FOLHAS NO QNAP NA PÁGINA DO PROJETO ----------
 { w.closeDrawer(true); w.route_to('projeto/F026-P0001'); await sleep(3500);
   const fq=(await J(adm,'/api/projetos/F026-P0001/folhas-qnap')).b, lt=fq.lotes.find(l=>l.existe), qf=()=>d.querySelectorAll('#pj-qnap .qf');

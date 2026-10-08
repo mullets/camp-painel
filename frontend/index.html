@@ -303,6 +303,9 @@ tbody tr.sel td{background:var(--blue-soft)}
 .qf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px}.qf{margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
 .qf-img{height:110px;display:grid;place-items:center;background:var(--surface2)}.qf-img img{max-width:100%;max-height:110px;object-fit:contain}.qf-sem{font-size:11.5px;color:var(--ink3)}
 .qf figcaption{padding:6px 8px;font-size:12px;word-break:break-all}.qf small{display:block;color:var(--ink3)}
+.dec-cand{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--surface)}.dec-cand header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dec-motivos{margin:6px 0 8px;padding-left:18px;color:var(--ink2);font-size:12.5px}.dec-motivos small{display:block}
+.np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
 .qnap-spark{width:100%;height:34px;color:var(--ink2);margin:6px 0 2px;display:block}.qnap-card .site-line span{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qnap-rodape{margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
@@ -1074,7 +1077,9 @@ function addLista(){const nome=document.getElementById('nl-nome').value.trim();i
 function addFundo(){const n=document.getElementById('nf-nome').value.trim(),s=document.getElementById('nf-sigla').value.trim().toUpperCase();if(!n||s.length!==3){toast('Informe nome e sigla de 3 letras');return}if(FUNDOS.some(f=>f[1]===s)){toast(`Sigla ${s} já existe`);return}
   const c='F'+String(FUNDOS.length+1).padStart(3,'0');FUNDOS.push([c,s,n,'',0,0,0]);renderFundos();closeModal();toast(`${c} ${s} reservado para ${n}`);document.getElementById('nf-code').textContent='F'+String(FUNDOS.length+1).padStart(3,'0')}
 async function nextP(){const f=document.getElementById('np-fundo').value;if(EU){try{const d=await API(`/api/fundos/${f}/detalhe`);const n=Math.max(0,...d.projetos.map(p=>+p.codigo.split('-P')[1]))+1;document.getElementById('np-code').textContent=`${f}-P${String(n).padStart(4,'0')} (aprox.; o servidor decide)`}catch(e){document.getElementById('np-code').textContent='não foi possível calcular agora';document.getElementById('np-err').textContent=e.message}return}const r=FUNDOS.find(x=>x[0]===f);document.getElementById('np-code').textContent=`${f}-P${String((r?r[4]:0)+1).padStart(4,'0')}`}
-async function criarProjeto(){const root=document.getElementById('m-proj');if(!validarCampos(root))return;if(!EU){closeModal();toast('Projeto criado (protótipo)');return}const err=document.getElementById('np-err');err.textContent='';try{const r=await API('/api/projetos',{method:'POST',body:JSON.stringify({fundo_codigo:document.getElementById('np-fundo').value,titulo:document.getElementById('np-titulo').value,ano:+document.getElementById('np-ano').value||0,cidade:document.getElementById('np-cidade').value||null,endereco_obra:document.getElementById('np-end').value||null})});closeModal();toast(r.site&&r.site.erro?`${r.codigo} criado no painel; dossiê no site pendente: ${r.site.erro}`:`${r.codigo} criado — dossiê para revisão no site (${(r.site.metadados||[]).length} metadados)`);carregarProjetosAPI();nav('projeto/'+r.codigo)}catch(e){err.textContent=e.message}}
+async function criarProjeto(confirmarNovo){const root=document.getElementById('m-proj');if(!validarCampos(root))return;if(!EU){closeModal();toast('Projeto criado (protótipo)');return}const err=document.getElementById('np-err');err.textContent='';const box=document.getElementById('np-parecidos');if(box)box.innerHTML='';try{const corpo={fundo_codigo:document.getElementById('np-fundo').value,titulo:document.getElementById('np-titulo').value,ano:+document.getElementById('np-ano').value||0,cidade:document.getElementById('np-cidade').value||null,endereco_obra:document.getElementById('np-end').value||null};
+  if(confirmarNovo!==true){const v=await API('/api/projetos/verificar',{method:'POST',body:JSON.stringify(corpo)});if(v.parecidos&&v.parecidos.length){mostrarParecidosNovoProjeto(v.parecidos);return}}   // o painel não cria duplicado em silêncio: mostra os parecidos e espera a confirmação
+  const r=await API('/api/projetos',{method:'POST',body:JSON.stringify({...corpo,confirmar_novo:confirmarNovo===true})});closeModal();toast(r.site&&r.site.erro?`${r.codigo} criado no painel; dossiê no site pendente: ${r.site.erro}`:`${r.codigo} criado — dossiê para revisão no site (${(r.site.metadados||[]).length} metadados)`);carregarProjetosAPI();nav('projeto/'+r.codigo)}catch(e){err.textContent=e.message}}
 
 // ---------- busca global / recentes pessoais ----------
 const q=document.getElementById('q'),qres=document.getElementById('qres');
@@ -1521,6 +1526,20 @@ function cardItemProjeto(it){
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
   return `<div class="thumb" ${navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}<span class="code">${escHtml(codigo)}</span></div></div>`
 }
+async function abrirDecisao(id){
+  try{const d=await API('/api/decisoes/'+encodeURIComponent(id)),p=d.pedido||{},pode=EU&&['admin','master'].includes(EU.papel),res=d.situacao==='resolvida';
+    const kv=(k,v)=>`<div class="us-kv"><span>${escHtml(k)}</span><b>${escHtml(v||'—')}</b></div>`;
+    const cands=(d.candidatos||[]).map(c=>`<div class="dec-cand"><header><span class="code">${escHtml(c.codigo)}</span><b>${escHtml(c.titulo)}</b><span class="tag ${c.nivel==='forte'?'r':'a'}">${c.nivel==='forte'?'muito parecido':'parecido'} · ${escHtml(Math.round(c.score*100))}%</span></header><small class="help">${escHtml([c.ano,c.cidade].filter(Boolean).join(' · ')||'sem ano nem cidade')} · ${escHtml(c.folhas)} folha(s) no painel</small><ul class="dec-motivos">${(c.motivos||[]).map(m=>`<li>${escHtml(m)}</li>`).join('')}</ul>${res?'':`<div class="act"><button class="btn sm pri" data-dec-acao="mesmo" data-dec-id="${escHtml(d.id)}" data-dec-valor="${escHtml(c.codigo)}"${pode?'':' disabled'}>É o mesmo: adicionar a este</button><button class="btn sm" data-dec-acao="ver" data-dec-valor="${escHtml(c.codigo)}">Ver o projeto</button></div>`}</div>`).join('');
+    openDrawer('Projeto parecido: é o mesmo?',`${d.fundo_codigo} · decisão ${d.id}`,`<p class="help">${d.origem==='estacao'?'O <b>CAMP Vision</b> pediu um número de projeto novo e <b>está esperando a sua resposta</b> (ele tenta de novo sozinho). ':''}Antes de criar, o painel achou projeto parecido neste fundo. Escolha: se é o mesmo, o material novo entra no projeto que já existe (e o CAMP Vision recebe o código dele); se não, cria-se um projeto novo.</p><h3 class="hoje-h">O que chegou</h3>${kv('Nome',d.titulo)}${kv('Ano',p.ano?String(p.ano):'')}${kv('Cidade',p.cidade)}${kv('Identificação original (pasta no scanner)',p.identificacao_original)}${kv('Operador',p.operador)}${kv('Chegou em',fmtDataHora(d.criada_em))}<h3 class="hoje-h">${res?'Decidido':'Já existe no fundo'}</h3>${res?`<p class="help">${d.resolucao==='mesmo'?'Era o mesmo projeto: o material foi adicionado a':'Era outro projeto: foi criado'} <b>${escHtml(d.projeto_codigo)}</b>${d.resolvida_por?` por ${escHtml(d.resolvida_por)}`:''}.</p>`:''}${cands||'<p class="help">Nenhum candidato registrado.</p>'}${res?'':`<div class="act"><button class="btn" data-dec-acao="novo" data-dec-id="${escHtml(d.id)}"${pode?'':' disabled'}>É outro projeto: criar novo</button></div>${pode?'':'<p class="help">Só admin e master decidem.</p>'}`}`)}catch(e){toast(e.message)}}
+async function resolverDecisao(id,acao,codigo){
+  if(!confirm(acao==='mesmo'?`Adicionar ao projeto ${codigo}? Nenhum projeto novo será criado e o CAMP Vision receberá o código ${codigo}.`:'Criar um projeto NOVO? Será usado o próximo número do fundo.'))return;
+  try{const r=await API('/api/decisoes/'+encodeURIComponent(id)+'/resolver',{method:'POST',body:JSON.stringify({acao,projeto_codigo:codigo||null})});toast(acao==='mesmo'?`Adicionado a ${r.projeto_codigo}`:`Projeto ${r.projeto_codigo} criado`);closeDrawer(true);if(typeof carregarPainel==='function')carregarPainel()}catch(e){toast(e.message)}}
+function mostrarParecidosNovoProjeto(lista){
+  const err=document.getElementById('np-err');let box=document.getElementById('np-parecidos');if(!box){box=document.createElement('div');box.id='np-parecidos';err.parentNode.insertBefore(box,err)}
+  box.innerHTML=`<div class="np-par"><b>Já existe projeto parecido neste fundo:</b><ul class="dec-motivos">${lista.map(c=>`<li><span class="code">${escHtml(c.codigo)}</span> ${escHtml(c.titulo)} · ${escHtml([c.ano,c.cidade].filter(Boolean).join(' · ')||'sem ano nem cidade')} · ${escHtml(c.folhas)} folha(s)<small class="help">${escHtml((c.motivos||[]).join('; '))}</small> <button type="button" class="btn sm" data-np-abrir="${escHtml(c.codigo)}">Abrir este</button></li>`).join('')}</ul><div class="act"><button type="button" class="btn" onclick="criarProjeto(true)">É um projeto novo: criar mesmo assim</button></div></div>`}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-dec-acao],[data-np-abrir]');if(!b||b.disabled)return;   // códigos e nomes só em data-*, nunca dentro de onclick
+  if(b.dataset.npAbrir){closeModal();nav('projeto/'+b.dataset.npAbrir);return}
+  const a=b.dataset.decAcao;if(a==='mesmo')resolverDecisao(b.dataset.decId,'mesmo',b.dataset.decValor);else if(a==='novo')resolverDecisao(b.dataset.decId,'novo',null);else if(a==='ver'){closeDrawer(true);nav('projeto/'+b.dataset.decValor)}});
 async function carregarFolhasQnap(code){
   const box=document.getElementById('pj-qnap');if(!box)return;
   try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/folhas-qnap');
@@ -1737,7 +1756,7 @@ async function salvarItem(code){
 
 
 // ---------- operação (painel, filas, solicitações, erros) via API ----------
-const TIPO_TAG={erro:'r',pedido:'a',fila:'b',fundo:''};
+const TIPO_TAG={erro:'r',pedido:'a',fila:'b',fundo:'',decisao:'a'};
 function rankHTML(items,tipo,lim=5){
   const xs=(items||[]).slice(0,lim);
   if(!xs.length)return '<li class="empty">Sem dados ainda.</li>';
@@ -1785,8 +1804,8 @@ function estadoGeral({q,qi,site,pend}){   // o selo do painel: crítico (vermelh
   const geral=ruins.length?'bad':avisos.length?'warn':'ok';
   return {geral,texto:geral==='bad'?ruins.join(' · '):geral==='warn'?avisos.join(' · '):'Operação saudável'}}
 let HOJE_ACOES=[];
-function acoesDoDia(hj,d){const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0);
-  return [...(pend?[{id:'pendencias',prioridade:95,titulo:`${pend} pendência(s) de decisão`,detalhe:'Erros que bloqueiam, pedidos aguardando e lotes para revisar (veja "Precisa de atenção")',rota:null}]:[]),...((hj&&hj.acoes)||[])].sort((a,b)=>b.prioridade-a.prioridade)}
+function acoesDoDia(hj,d){const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0)+((d.decisoes&&d.decisoes.pendentes)||0);
+  return [...(pend?[{id:'pendencias',prioridade:95,titulo:`${pend} pendência(s) de decisão`,detalhe:'Decisões esperando (o CAMP Vision pode estar parado), erros que bloqueiam, pedidos aguardando e lotes para revisar (veja "Precisa de atenção")',rota:null}]:[]),...((hj&&hj.acoes)||[])].sort((a,b)=>b.prioridade-a.prioridade)}
 function hojeFraseHTML(hj,d){
   if(!hj)return 'Visão rápida da operação do acervo.';
   const ac=acoesDoDia(hj,d),urg=ac.filter(a=>a.prioridade>=60).length,partes=[];
@@ -1799,7 +1818,7 @@ function kpisHojeHTML(hj){const h=(hj&&hj.hoje)||{},t=(k,l)=>`<div class="kpi"><
   return `${t('folhas','folhas trabalhadas hoje')}${t('projetos_novos','projetos novos hoje')}${t('publicacoes','publicações hoje')}${t('pedidos_e_erros','pedidos e erros novos hoje')}`}   // o contêiner .kpi-grid já existe no painel
 function heroHojeHTML(hj,d){
   if(!hj)return '';
-  const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0),k=hj.kpis;
+  const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0)+((d.decisoes&&d.decisoes.pendentes)||0),k=hj.kpis;
   const kp=(v,l,det)=>`<div class="hoje-kpi"><div class="v">${fmtN(v)}</div><div class="l">${l}</div><div class="d">${escHtml(det)}</div></div>`;
   HOJE_ACOES=acoesDoDia(hj,d);const top=HOJE_ACOES.slice(0,3);
   const prontosDet=k.prontos.valor?'podem ser publicados agora':(k.prontos.autorizados===0?'nenhum projeto foi autorizado ainda':'nenhum passa em todos os requisitos');
@@ -1861,7 +1880,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   const ult=site.ultima_sincronizacao&&(site.ultima_sincronizacao.terminada_em||site.ultima_sincronizacao.iniciada_em);
   const prox=ult?proximaSincronizacao(ult,+(site.intervalo_sync_min||15)):null;
   const nDiv=site.divergencias??d.site?.divergencias??0;
-  const pend=d.erros.bloqueantes+d.solicitacoes.aguardam+d.filas.revisao;
+  const pend=d.erros.bloqueantes+d.solicitacoes.aguardam+d.filas.revisao+((d.decisoes&&d.decisoes.pendentes)||0);
   const {geral,texto:geralTxt}=estadoGeral({q,qi,site,pend});   // máquinas desligadas são normais e aparecem na barra do topo
   const p=a?.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
 
@@ -1882,7 +1901,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
     </div>
 
     <div class="dash-mid">
-      <div class="panel action-card"><div class="ph"><h2>Precisa de atenção</h2><span class="tag">${escHtml(d.precisa_de_voce.length)}</span></div><div class="pb"><ul class="action-list">${d.precisa_de_voce.length?d.precisa_de_voce.slice(0,6).map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${escHtml(x.tipo)}</span><div class="t"><b>${escHtml(x.titulo)}</b>${x.codigo?`<small>${escHtml(x.codigo)}</small>`:''}</div><button class="btn sm" onclick="nav('${escHtml(x.rota)}')">Abrir</button></li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
+      <div class="panel action-card"><div class="ph"><h2>Precisa de atenção</h2><span class="tag">${escHtml(d.precisa_de_voce.length)}</span></div><div class="pb"><ul class="action-list">${d.precisa_de_voce.length?d.precisa_de_voce.slice(0,6).map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${escHtml(x.tipo)}</span><div class="t"><b>${escHtml(x.titulo)}</b>${x.codigo?`<small>${escHtml(x.codigo)}</small>`:''}</div>${x.tipo==='decisao'?`<button class="btn sm pri" onclick="abrirDecisao(${escHtml(x.id)})">Decidir</button>`:`<button class="btn sm" onclick="nav('${escHtml(x.rota)}')">Abrir</button>`}</li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
       <div class="panel"><div class="ph"><h2>Hoje no acervo</h2></div><div class="pb"><div class="kpi-grid">
         ${kpisHojeHTML(hj)}</div></div>
     </div>

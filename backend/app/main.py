@@ -41,6 +41,8 @@ app.include_router(guia_publicacao)
 app.include_router(rotas_qnap)
 app.include_router(rotas_hoje)
 app.include_router(rotas_uso)
+from .rotas_decisoes import router as rotas_decisoes
+app.include_router(rotas_decisoes)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 
@@ -221,6 +223,7 @@ class ReservaProjetoEstacao(BaseModel):
     identificacao_original: str | None = None
     operador: str | None = None        # nome informado na estação (sem login)
     chave_reserva: str | None = None   # uuid gerado pela estação: repetir a chamada não cria outro projeto
+    confirmar_novo: bool = False       # a estação já mostrou os projetos parecidos à pessoa e ela escolheu criar um NOVO: pula a verificação
 
 
 class HeartbeatEstacao(BaseModel):
@@ -279,26 +282,33 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         f = con.execute("SELECT codigo FROM fundo WHERE codigo=? AND ativo=1", (d.fundo_codigo,)).fetchone()
         if not f:
             raise HTTPException(404, "Fundo não existe ou está inativo")
-        prox = con.execute("SELECT proximo FROM v_proximo_p WHERE fundo_codigo=?", (d.fundo_codigo,)).fetchone()[0]
-        numero = int(prox[1:])
-        codigo = f"{d.fundo_codigo}-{prox}"
-        con.execute("INSERT INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,NULL)",
-                    (d.fundo_codigo, numero))
-        con.execute("""
-            INSERT INTO projeto
-                (codigo, fundo_codigo, numero, titulo, ano, cidade, identificacao_original)
-            VALUES (?,?,?,?,?,?,?)
-        """, (codigo, d.fundo_codigo, numero, titulo, d.ano or 0, d.cidade, identificacao))
-        con.execute("""
-            INSERT INTO evento (entidade, codigo, tipo, ator, detalhe)
-            VALUES ('projeto',?,'criado',?,?)
-        """, (codigo, ator, json.dumps({
-            "titulo": titulo,
-            "origem": "estacao",
-            "identificacao_original": identificacao,
-            "operador": operador or None,
-            "chave_reserva": chave or None,
-        }, ensure_ascii=False)))
+        # --- VERIFICAÇÃO: já existe projeto parecido neste fundo? O painel não cria duplicado: pergunta a uma pessoa (fila de Decisões).
+        from . import decisoes
+        from .projetos_novos import resposta_de_projeto
+        from .similaridade import buscar_parecidos
+        chave_dec = decisoes.chave_efetiva(chave, d.fundo_codigo, titulo)
+        dec = decisoes.da_chave(con, chave_dec)
+        if dec and dec["situacao"] == "resolvida":      # a pessoa já decidiu: devolve o projeto escolhido (o existente ou o novo)
+            con.rollback()
+            return resposta_de_projeto(con, dec["projeto_codigo"], decisao_id=dec["id"], existente=(dec["resolucao"] == "mesmo"))
+        if dec:                                         # ainda esperando: a estação tenta de novo sozinha
+            con.rollback()
+            return JSONResponse(status_code=202, content={"pendente": True, "decisao_id": dec["id"],
+                                "mensagem": "Aguardando decisão no painel: já existe projeto parecido neste fundo. Tente de novo em instantes."})
+        if not d.confirmar_novo:
+            parecidos = buscar_parecidos(con, d.fundo_codigo, titulo, d.ano, d.cidade, identificacao)
+            if parecidos:
+                did = decisoes.abrir_projeto_parecido(
+                    con, chave_dec, d.fundo_codigo, titulo,
+                    {"titulo": titulo, "ano": d.ano or 0, "cidade": d.cidade, "identificacao_original": identificacao, "operador": operador or None, "estacao_ip": ip},
+                    parecidos, "estacao")
+                con.commit()
+                return JSONResponse(status_code=202, content={"pendente": True, "decisao_id": did,
+                                    "mensagem": f"Aguardando decisão no painel: já existe projeto parecido neste fundo ({parecidos[0]['codigo']}). Tente de novo em instantes."})
+        from .projetos_novos import criar_projeto
+        novo = criar_projeto(con, d.fundo_codigo, titulo, d.ano, d.cidade, identificacao, ator,
+                             {"titulo": titulo, "origem": "estacao", "identificacao_original": identificacao, "operador": operador or None, "chave_reserva": chave or None})
+        codigo, prox = novo["codigo"], novo["numero_projeto"]
         con.commit()
     except HTTPException:
         con.rollback()

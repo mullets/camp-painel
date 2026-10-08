@@ -28,6 +28,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const J=async u=>{ try{ return await (await f(u)).json() }catch(_){ return null } };
  const erros=await J('/api/erros'), sols=await J('/api/solicitacoes'), ags=await J('/api/agentes'), evs=await J('/api/eventos?limite=60');
  const lista=x=>Array.isArray(x)?x:(x&&(x.itens||x.items||x.eventos||x.dados))||[];
+ // Decisões: o pedido vem da estação/CAMP Vision (de fora): a janela de decisão com título, cidade, identificação, operador, candidato e motivo hostis
+ try{ for(const x of lista(await J('/api/decisoes'))){ await w.abrirDecisao(x.id); await sleep(700); checa('decisão › '+x.id); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['decisões (exceção)']=[e.message.slice(0,80)] }
  // Uso do acervo: nome, e-mail, instituição, uso e respostas vêm de um formulário PÚBLICO (qualquer pessoa digita): abas e detalhe
  try{ w.route_to('uso'); await sleep(1500); for(const aba of ['pessoas','materiais','downloads']){ w.usoAba(aba); await sleep(1300); checa('uso › aba '+aba); }
    for(const it of lista(await J('/api/uso?por_pagina=4'))){ await w.abrirUsoDetalhe(it.id); await sleep(700); checa('uso › detalhe '+it.id); await w.usoEmail(it.id); await sleep(600); checa('uso › e-mail '+it.id); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['uso (exceção)']=[e.message.slice(0,80)] }

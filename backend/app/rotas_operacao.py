@@ -61,10 +61,13 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
         "itens": {"total": q("SELECT COUNT(*) FROM item"), "no_ar": q("SELECT COUNT(*) FROM item WHERE status_site='no_ar'"),
                   "rascunho": q("SELECT COUNT(*) FROM item WHERE status_site='rascunho'"), "autoria_divergente": q("SELECT COUNT(*) FROM item WHERE autoria_divergente=1")},
         "site": {"divergencias": q("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0")},
+        "decisoes": {"pendentes": q("SELECT COUNT(*) FROM decisao WHERE situacao='pendente'")},
     }
     s = con.execute("SELECT iniciada_em, terminada_em, ok, itens FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     d["site"]["ultima_sincronizacao"] = dict(s) if s else None
     d["precisa_de_voce"] = []
+    for r in con.execute("SELECT id, titulo, fundo_codigo, origem FROM decisao WHERE situacao='pendente' ORDER BY criada_em, id LIMIT 4"):
+        d["precisa_de_voce"].append({"tipo": "decisao", "id": r[0], "titulo": f"Projeto parecido: \"{r[1]}\" ({r[2]}). É o mesmo?", "codigo": f"decisão {r[0]}" + (" · o CAMP Vision está esperando" if r[3] == "estacao" else ""), "rota": None})
     for r in con.execute("SELECT codigo, descricao FROM erro WHERE situacao='aberto' AND gravidade='bloqueia' ORDER BY criado_em DESC LIMIT 3"):
         d["precisa_de_voce"].append({"tipo": "erro", "titulo": r[1], "codigo": r[0], "rota": "erros"})
     for r in con.execute("SELECT id, solicitante, situacao FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento') ORDER BY recebida_em LIMIT 3"):

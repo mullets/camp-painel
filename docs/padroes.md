@@ -46,3 +46,11 @@ Papéis: master > admin > operador > leitura. Conta nova entra com senha tempor�
 2. Toda mudança tem teste. Pacote: `tests/teste_backend.py` + `bash tests/rodar_auditoria.sh` (telas, funções, atalhos, XSS; passa de 5 min: rode por etapas, ex. `bash tests/rodar_auditoria.sh novas`, `... xss`) + `python3 scripts/check_ui.py`. Teste isolado: `bash tests/rodar_um.sh tests/ARQUIVO.js`.
 3. Só envia ao `main` com tudo verde; o commit explica o problema, a causa e o que foi provado. Depois atualiza o Trello e marca como feito o que está concluído.
 4. Não afirmar o que não foi testado; dizer o que ficou sem teste.
+
+## 9. O painel verifica antes de agir e, na dúvida, PERGUNTA (Decisões)
+Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente. Antes de criar ou mudar algo que pode duplicar ou contradizer o que já existe, ele **confere** e, havendo dúvida, **abre uma decisão** para uma pessoa em vez de escolher sozinho.
+- **Fila única:** tabela `decisao` (tipo, chave, fundo, pedido e candidatos em JSON, situação, resolução, projeto resultante). Aparece no "Precisa de atenção" (topo) e conta nas pendências do "Por onde começar". Ler: operador; decidir: admin.
+- **Nunca decide sozinho** que dois projetos são o mesmo. Mostra a **nota e os motivos** (nome, identificação original, ano, cidade) e os dois caminhos: "é o mesmo: adicionar a este" ou "é outro: criar novo". Decisão resolvida fica só para leitura.
+- **Idempotente:** a mesma `chave_reserva` volta sempre à mesma decisão; depois de decidida, devolve sempre o mesmo projeto.
+- **Hoje:** `projeto_parecido` (reserva da estação e "Novo projeto" à mão). Motor em `similaridade.py` (puro e testado: palavras genéricas, nome contido, erro de OCR; número ou letra de designação distingue projetos). Novas verificações entram na mesma fila (ver o cartão "Mais inteligência").
+- **Teste:** toda verificação nova precisa de caso que DEVE pedir decisão e caso parecido que NÃO deve (falso alarme também é defeito).

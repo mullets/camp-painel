@@ -30,6 +30,13 @@ for t, cols in CAMPOS.items():
             c.execute(f"UPDATE {t} SET {col} = ? || coalesce({col}, '') WHERE {col} IS NOT NULL OR 1=1", (P(t, col),)); c.commit()
         except sqlite3.Error as e:
             falhas.append(f"{t}.{col}: {e}")
+# decisões (o pedido vem da ESTAÇÃO/CAMP Vision, ou seja, de fora): título, cidade, identificação, operador, candidato e motivo hostis
+import json as _jd
+for (_did,) in c.execute("SELECT id FROM decisao").fetchall():
+    c.execute("UPDATE decisao SET titulo=?, contexto=? WHERE id=?", (P("decisao", "titulo"), _jd.dumps({"pedido": {"titulo": P("decisao", "pedido.titulo"), "cidade": P("decisao", "pedido.cidade"), "ano": 1970,
+               "identificacao_original": P("decisao", "pedido.identificacao"), "operador": P("decisao", "pedido.operador")},
+               "candidatos": [{"codigo": "F026-P0001", "titulo": P("decisao", "cand.titulo"), "ano": 1970, "cidade": P("decisao", "cand.cidade"), "folhas": 3, "score": 0.93, "nivel": "forte", "motivos": [P("decisao", "cand.motivo")]}]}, ensure_ascii=False), _did))
+c.commit()
 # nome de ARQUIVO hostil no lote de teste (vem do CAMP Vision / do scanner, ou seja, de fora)
 import tempfile as _tf
 from pathlib import Path as _P

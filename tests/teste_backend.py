@@ -1077,8 +1077,10 @@ def filho(modo):
         a = lan.post("/api/estacoes/projetos/reservar", json=corpo, headers=T); b = lan.post("/api/estacoes/projetos/reservar", json=corpo, headers=T)
         ver("/reservar devolve codigo, numero_projeto, fundo_codigo, titulo, ano, cidade, identificacao_original", a.status_code == 200 and {"codigo", "numero_projeto", "fundo_codigo", "titulo", "ano", "cidade", "identificacao_original"} <= set(a.json()) and a.json()["codigo"] == "F099-P0008", a.text[:160])
         ver("repetir a reserva com a MESMA chave devolve o MESMO projeto (não duplica)", b.json()["codigo"] == a.json()["codigo"])
-        c3 = lan.post("/api/estacoes/projetos/reservar", json={**corpo, "chave_reserva": "b" * 32}, headers=T)
-        ver("outra chave = próximo número (P0009)", c3.json()["codigo"] == "F099-P0009", c3.text[:100])
+        c3 = lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": "Edifício Zênite", "ano": 1982, "cidade": "Santos/SP", "chave_reserva": "b" * 32}, headers=T)
+        ver("outra chave e NOME DIFERENTE = próximo número (P0009)", c3.json()["codigo"] == "F099-P0009", c3.text[:100])
+        c4 = lan.post("/api/estacoes/projetos/reservar", json={**corpo, "chave_reserva": "e" * 32}, headers=T)
+        ver("outra chave mas o MESMO nome de um projeto do fundo: não cria duplicado, pergunta (202 aguardando decisão)", c4.status_code == 202 and c4.json()["pendente"] is True and "codigo" not in c4.json(), c4.text[:140])
         ver("/reservar sem título: 400; fundo inexistente: 404", lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": " ", "chave_reserva": "c" * 32}, headers=T).status_code == 400 and lan.post("/api/estacoes/projetos/reservar", json={**corpo, "fundo_codigo": "F998", "chave_reserva": "d" * 32}, headers=T).status_code in (400, 404))
         # ---------------- aviso do CAMP Vision (POST /api/campvision/aviso) ----------------
         rel = lambda p_: p_.relative_to(base).as_posix()
@@ -1411,6 +1413,102 @@ def filho(modo):
         ssrv.shutdown(); dv.close()
         k.close(); srv.shutdown()
         for l in res: print(l)
+    elif modo == "decisoes":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        from app.similaridade import buscar_parecidos, normalizar, nivel, pontuar
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        P = lambda a, b: pontuar({"titulo": a[0], "ano": a[1], "cidade": a[2], "identificacao_original": a[3] if len(a) > 3 else None},
+                                 {"titulo": b[0], "ano": b[1], "cidade": b[2], "identificacao_original": b[3] if len(b) > 3 else None})
+        # ---------- motor de similaridade ----------
+        ver("normalizar: sem acento, caixa nem pontuação", normalizar("  Residência  Banco-Cidade! ") == "residencia banco cidade" and normalizar(None) == "")
+        sc, mt = P(("Banco Cidade", 0, None), ("Residência Banco Cidade", 0, None))
+        ver("palavras genéricas não contam: 'Banco Cidade' = 'Residência Banco Cidade' (forte)", sc >= 0.92 and nivel(sc) == "forte" and any("mesmo nome" in m for m in mt), str((sc, mt)))
+        sc, mt = P(("Banco Cidade - Agência Matriz", 0, None), ("Banco Cidade", 0, None))
+        ver("um nome contido no outro (2+ palavras): provável, com o motivo dito", nivel(sc) == "provavel" and any("contido" in m for m in mt), str((sc, mt)))
+        sc, _ = P(("Residência Hoswaldo Correa", 0, None), ("Residência Oswaldo Correa", 0, None))
+        ver("erro de digitação/OCR ('Hoswaldo' x 'Oswaldo'): provável", nivel(sc) is not None, str(sc))
+        ver("nomes realmente diferentes NÃO são parecidos ('Casa Rosa' x 'Casa Azul'; 'Copan' x 'Copan Bloco B')", nivel(P(("Casa Rosa", 0, None), ("Casa Azul", 0, None))[0]) is None and nivel(P(("Copan", 0, None), ("Edifício Copan Bloco B", 0, None))[0]) is None)
+        sc, mt = P(("Qualquer coisa", 0, None, "PASTA SCANNER 17"), ("Outro nome", 0, None, "pasta scanner 17"))
+        ver("mesma identificação original (nome da pasta no scanner) = forte, mesmo com nomes diferentes", sc == 1.0 and "identificação original" in mt[0])
+        base = P(("Banco Cidade", 0, None), ("Banco Cidade Agência", 0, None))[0]
+        ver("mesmo ano e mesma cidade sobem a nota; anos distantes e cidades diferentes descem", P(("Banco Cidade", 1975, "Santos"), ("Banco Cidade Agência", 1975, "Santos"))[0] > base > P(("Banco Cidade", 1975, "Santos"), ("Banco Cidade Agência", 1990, "Recife"))[0])
+        ver("número ou letra de designação distingue projetos: 'Casa 1' x 'Casa 2', 'Torre A' x 'Torre B', 'Banco Safra D27' x 'D28', 'Concorrente 0' x 'Concorrente 1' NÃO são parecidos", all(nivel(P((a, 0, None), (b, 0, None))[0]) is None for a, b in (("Casa 1", "Casa 2"), ("Torre A", "Torre B"), ("Banco Safra D27", "Banco Safra D28"), ("Concorrente 0", "Concorrente 1"), ("Residência Alfa 12", "Residência Alfa 13"))))
+        ver("mas a mesma designação continua igual ('Torre A' = 'Torre A') e uma conjunção no meio é ignorada ('Banco e Cidade' = 'Banco Cidade')", nivel(P(("Torre A", 0, None), ("Torre A", 0, None))[0]) == "forte" and nivel(P(("Banco e Cidade", 0, None), ("Banco Cidade", 0, None))[0]) == "forte")
+        ver("ano e cidade SOZINHOS nunca criam candidato", nivel(P(("Casa Rosa", 1975, "Santos"), ("Edifício Copan", 1975, "Santos"))[0]) is None)
+        ver("campos vazios não quebram", P(("", 0, None), ("", 0, None)) == (0.0, []) and P((None, None, None), ("x", 0, None))[0] == 0.0)
+        # ---------- cenário ----------
+        c = connect()
+        for f, sg in (("F097", "DEC"), ("F096", "OUT")): c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES (?,?,?,1)", (f, f"Fundo {f}", sg))
+        def proj(f, n, t, ano, cid, ident=None):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,identificacao_original) VALUES (?,?,?,?,?,?,?)", (f"{f}-P{n:04d}", f, n, t, ano, cid, ident))
+        proj("F097", 1, "Residência Banco Cidade", 1975, "Santos/SP", "BANCO CIDADE - SANTOS"); proj("F097", 2, "Edifício Copan", 1966, "São Paulo/SP"); proj("F097", 3, "Casa Rosa", 1980, "Campinas/SP"); proj("F097", 4, "Aeroporto de Congonhas", 1955, "São Paulo/SP")
+        proj("F096", 1, "Banco Cidade", 1975, "Santos/SP")      # OUTRO fundo: nunca é candidato de um projeto do F097
+        c.commit()
+        ps = buscar_parecidos(c, "F097", "Banco Cidade - Agência Matriz", 1975, "Santos/SP", None)
+        ver("buscar_parecidos: só do MESMO fundo, o mais parecido primeiro, com nota, nível e motivos", [x["codigo"] for x in ps] == ["F097-P0001"] and ps[0]["nivel"] in ("forte", "provavel") and ps[0]["motivos"] and "folhas" in ps[0], str(ps))
+        c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        adm, op, anon, lan = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False), com_ip("192.168.15.40")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        n_proj = lambda: sql("SELECT COUNT(*) FROM projeto"); n_dec = lambda: sql("SELECT COUNT(*) FROM decisao")
+        reservar = lambda **kw: lan.post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F097", "ano": 1975, "cidade": "Santos/SP", "operador": "Beatriz", **kw})
+        K1, K2, K3, K4 = "1" * 32, "2" * 32, "3" * 32, "4" * 32
+        # ---------- a estação pede um número: o painel pergunta em vez de criar duplicado ----------
+        n0 = n_proj(); r = reservar(titulo="Banco Cidade - Agência Matriz", chave_reserva=K1); j = r.json()
+        ver("reservar um nome parecido: 202 'aguardando decisão', SEM criar projeto e SEM código (o CAMP Vision espera e tenta de novo)", r.status_code == 202 and j["pendente"] is True and "codigo" not in j and "mensagem" in j and n_proj() == n0 and n_dec() == 1, str(j))
+        r2 = reservar(titulo="Banco Cidade - Agência Matriz", chave_reserva=K1)
+        ver("repetir a mesma chave volta à MESMA decisão (não abre outra)", r2.status_code == 202 and r2.json()["decisao_id"] == j["decisao_id"] and n_dec() == 1)
+        dl = adm.get("/api/decisoes").json(); d0 = dl["itens"][0]
+        ver("a lista de decisões traz o pedido original e o candidato (nota, nível, motivos)", dl["total"] == 1 and d0["tipo"] == "projeto_parecido" and d0["pedido"]["titulo"] == "Banco Cidade - Agência Matriz" and d0["pedido"]["operador"] == "Beatriz" and [x["codigo"] for x in d0["candidatos"]] == ["F097-P0001"] and d0["candidatos"][0]["motivos"], str(d0["candidatos"])[:200])
+        ver("operador lê as decisões; sem login 401; só admin decide (403)", op.get("/api/decisoes").status_code == 200 and anon.get("/api/decisoes").status_code == 401 and op.post(f"/api/decisoes/{d0['id']}/resolver", json={"acao": "novo"}).status_code == 403)
+        pn = adm.get("/api/painel").json()
+        ver("o painel inicial mostra a decisão no 'Precisa de atenção' (no topo) e conta as pendentes", pn["decisoes"]["pendentes"] == 1 and pn["precisa_de_voce"][0]["tipo"] == "decisao" and pn["precisa_de_voce"][0]["id"] == d0["id"] and "CAMP Vision está esperando" in pn["precisa_de_voce"][0]["codigo"], str(pn["precisa_de_voce"][0]))
+        ver("resolver: ação inválida 400; 'mesmo' sem projeto 400; projeto de OUTRO fundo 400; decisão inexistente 404", adm.post(f"/api/decisoes/{d0['id']}/resolver", json={"acao": "talvez"}).status_code == 400 and adm.post(f"/api/decisoes/{d0['id']}/resolver", json={"acao": "mesmo"}).status_code == 400 and adm.post(f"/api/decisoes/{d0['id']}/resolver", json={"acao": "mesmo", "projeto_codigo": "F096-P0001"}).status_code == 400 and adm.post("/api/decisoes/9999/resolver", json={"acao": "novo"}).status_code == 404 and n_proj() == n0)
+        r = adm.post(f"/api/decisoes/{d0['id']}/resolver", json={"acao": "mesmo", "projeto_codigo": "F097-P0001"})
+        ver("'é o mesmo': não cria projeto; registra na história do projeto existente", r.status_code == 200 and r.json()["projeto_codigo"] == "F097-P0001" and n_proj() == n0 and sql("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo='F097-P0001' AND tipo='material_adicionado_ao_existente'") == 1)
+        r = reservar(titulo="Banco Cidade - Agência Matriz", chave_reserva=K1); j = r.json()
+        ver("o CAMP Vision tenta de novo e recebe o código do projeto EXISTENTE (existente=true), no formato de sempre", r.status_code == 200 and j["codigo"] == "F097-P0001" and j["existente"] is True and j["numero_projeto"] == "P0001" and j["decisao_id"] == d0["id"] and n_proj() == n0, str(j))
+        ver("uma decisão já resolvida não resolve de novo (409) e sai da lista de pendentes", adm.post(f"/api/decisoes/{d0['id']}/resolver", json={"acao": "novo"}).status_code == 409 and adm.get("/api/decisoes").json()["total"] == 0 and adm.get("/api/decisoes?situacao=resolvida").json()["total"] == 1 and adm.get("/api/painel").json()["decisoes"]["pendentes"] == 0)
+        # ---------- 'é outro projeto': cria o novo e a estação recebe esse ----------
+        j = reservar(titulo="Edifício Copam", ano=1966, cidade="São Paulo/SP", chave_reserva=K2).json()
+        ver("outro nome parecido (Copam x Copan): pergunta", j.get("pendente") is True and "codigo" not in j, str(j))
+        r = adm.post(f"/api/decisoes/{j['decisao_id']}/resolver", json={"acao": "novo"}); novo = r.json()["projeto_codigo"]
+        ver("'é outro projeto': cria com o PRÓXIMO número do fundo (P0005), com a chave de reserva no evento", r.status_code == 200 and novo == "F097-P0005" and n_proj() == n0 + 1 and sql("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo='F097-P0005' AND tipo='criado' AND detalhe LIKE ?", f'%"chave_reserva": "{K2}"%') == 1)
+        a, b = reservar(titulo="Edifício Copam", ano=1966, cidade="São Paulo/SP", chave_reserva=K2).json(), reservar(titulo="Edifício Copam", ano=1966, cidade="São Paulo/SP", chave_reserva=K2).json()
+        ver("a estação recebe o projeto NOVO (sem a marca existente=true) e repetir devolve o mesmo, sem criar outro", a["codigo"] == "F097-P0005" and a.get("existente") is not True and b["codigo"] == a["codigo"] and n_proj() == n0 + 1, str(a))
+        # ---------- pular a pergunta / sem pergunta ----------
+        r = reservar(titulo="Casa Rosa", ano=1980, cidade="Campinas/SP", chave_reserva=K3, confirmar_novo=True)
+        ver("confirmar_novo=true (a pessoa já viu a lista na estação): cria mesmo parecido, sem decisão", r.status_code == 200 and r.json()["codigo"] == "F097-P0006" and n_dec() == 2)
+        r = reservar(titulo="Biblioteca Mário de Andrade", ano=1958, cidade="São Paulo/SP", chave_reserva=K4)
+        ver("nome sem parecido: cria na hora, como sempre (200), sem decisão", r.status_code == 200 and r.json()["codigo"] == "F097-P0007" and n_dec() == 2, r.text[:80])
+        a, b = reservar(titulo="Aeroporto Congonhas", ano=1955, cidade="São Paulo/SP"), reservar(titulo="Aeroporto Congonhas", ano=1955, cidade="São Paulo/SP")
+        ver("sem chave de reserva: o mesmo pedido repetido cai na MESMA decisão (chave derivada do fundo + nome)", a.status_code == b.status_code == 202 and a.json()["decisao_id"] == b.json()["decisao_id"] and n_dec() == 3)
+        # ---------- criação manual no painel ----------
+        import app.publicador as pb
+        pb.criar_dossie_no_site = lambda *a_, **k_: {"ok": True}
+        corpo = {"fundo_codigo": "F097", "titulo": "Banco Cidade Agência Matriz", "ano": 1975, "cidade": "Santos/SP"}
+        v = adm.post("/api/projetos/verificar", json=corpo).json()
+        ver("verificar (antes de criar): devolve os parecidos com a nota e os motivos; operador 403", [x["codigo"] for x in v["parecidos"]] == ["F097-P0001"] and v["parecidos"][0]["motivos"] and op.post("/api/projetos/verificar", json=corpo).status_code == 403)
+        n0 = n_proj(); r = adm.post("/api/projetos", json=corpo)
+        ver("criar à mão com parecido no fundo: 409 com a lista e NADA é criado", r.status_code == 409 and "parecidos" in r.json() and r.json()["parecidos"][0]["codigo"] == "F097-P0001" and "projeto parecido" in r.json()["detail"] and n_proj() == n0, r.text[:120])
+        r = adm.post("/api/projetos", json={**corpo, "confirmar_novo": True})
+        ver("criar à mão confirmando 'é novo': cria", r.status_code == 200 and r.json()["codigo"] == "F097-P0008" and n_proj() == n0 + 1, r.text[:100])
+        r = adm.post("/api/projetos", json={"fundo_codigo": "F097", "titulo": "Teatro Municipal", "ano": 1911})
+        ver("criar à mão um nome sem parecido: cria direto, como sempre", r.status_code == 200 and r.json()["codigo"] == "F097-P0009", r.text[:100])
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -1609,6 +1707,14 @@ else:
 print("21) Uso do acervo: coleta do formulário do site, rotas só para admin, CSV e apagar pessoa (LGPD)")
 rc, out = rodar("uso", f"{tmp}/uso.db")
 if rc != 0: ok(False, f"teste do Uso do acervo não rodou -> {out[-1200:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("22) Decisões: o painel verifica antes de criar projeto e, na dúvida, pergunta (similaridade, fila, estação e criação manual)")
+rc, out = rodar("decisoes", f"{tmp}/decisoes.db")
+if rc != 0: ok(False, f"teste das decisões não rodou -> {out[-1200:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -437,15 +437,36 @@ class NovoProjeto(BaseModel):
     cidade: str | None = None
     endereco_obra: str | None = None
     identificacao_original: str | None = None
+    confirmar_novo: bool = False     # a pessoa viu os projetos parecidos e quer criar um NOVO mesmo assim
+
+
+@router.post("/projetos/verificar")
+def verificar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Antes de criar: projetos PARECIDOS no mesmo fundo (nome, identificação, ano, cidade), com a nota e os motivos."""
+    from .similaridade import buscar_parecidos
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (d.fundo_codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+        return {"parecidos": buscar_parecidos(con, d.fundo_codigo, d.titulo.strip(), d.ano, d.cidade, d.identificacao_original) if d.titulo.strip() else []}
+    finally:
+        con.close()
 
 
 @router.post("/projetos")
-def criar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
+def criar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))):
     con = connect()
     if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (d.fundo_codigo,)).fetchone():
         con.close(); raise HTTPException(404, "Fundo não existe")
     if not d.titulo.strip():
         con.close(); raise HTTPException(400, "Nome do projeto é obrigatório")
+    if not d.confirmar_novo:     # o painel não cria duplicado em silêncio: se há parecido no fundo, devolve a lista e espera a confirmação
+        from fastapi.responses import JSONResponse
+        from .similaridade import buscar_parecidos
+        parecidos = buscar_parecidos(con, d.fundo_codigo, d.titulo.strip(), d.ano, d.cidade, d.identificacao_original)
+        if parecidos:
+            con.close()
+            return JSONResponse(status_code=409, content={"detail": f"Já existe projeto parecido neste fundo ({parecidos[0]['codigo']}): confirme se é um projeto novo.", "parecidos": parecidos})
     prox = con.execute("SELECT proximo FROM v_proximo_p WHERE fundo_codigo=?", (d.fundo_codigo,)).fetchone()[0]
     numero = int(prox[1:]); codigo = f"{d.fundo_codigo}-{prox}"
     con.execute("INSERT INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,?)", (d.fundo_codigo, numero, u["id"]))

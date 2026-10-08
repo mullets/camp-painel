@@ -106,6 +106,11 @@ Resposta: `{ "codigo": "F002-P0003", "numero_projeto": "P0003", "fundo_codigo": 
 - **Idempotente:** repetir a chamada com a **mesma `chave_reserva`** devolve o **mesmo projeto**, sem criar outro. Use sempre uma chave e repita em caso de timeout. Chave diferente = próximo número.
 - Erros: título vazio **400**; ano inválido **400**; fundo inexistente **400/404**.
 - O **número P vem sempre daqui**: o CV2 nunca inventa número.
+- **O painel verifica antes de criar.** Se já existe, no **mesmo fundo**, projeto com nome, identificação original, ano e cidade parecidos, ele **não cria**: abre uma **decisão** para uma pessoa ("é o mesmo? adiciono ao existente ou crio novo?") e responde **202**
+  `{"pendente": true, "decisao_id": N, "mensagem": "..."}`, **sem `codigo`**. O CV2 trata como "sem número ainda": espera e **tenta de novo com a MESMA `chave_reserva`** (obrigatório mandar sempre a mesma chave).
+  Depois da decisão, a mesma chamada devolve **200**: o código do projeto **existente** escolhido (com `"existente": true` e `decisao_id`: **adicione o material a esse projeto, não crie pasta nova**) ou o de um projeto **novo** criado.
+- `confirmar_novo: true` (opcional) pula a verificação: use só se a pessoa na estação já viu a lista de projetos do fundo e escolheu criar um novo.
+- Nome que só difere por número ou letra ("Casa 1" x "Casa 2", "Torre A" x "Torre B") **não** é considerado parecido.
 
 ### 6.3 `POST /api/estacoes/heartbeat` — "estou vivo e fazendo isto"
 **Serve para o CV2** e aceita **o que o CV2 realmente manda** (`docs/contrato-painel.md` do campvision-new). Use:
