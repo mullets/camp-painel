@@ -233,6 +233,13 @@ class HeartbeatEstacao(BaseModel):
     projeto_codigo: str | None = None
     operador: str | None = None
     ultimo_erro: str | None = None
+    # Contrato do CAMP Vision 2 (docs/contrato-painel.md do campvision-new): `projeto` é o nome que ele usa para o projeto em curso;
+    # o resto vira o `detalhe` do heartbeat (progresso, fila, hoje, montagens).
+    projeto: str | None = None
+    progresso: dict | None = None
+    fila: int | None = None
+    hoje: dict | None = None
+    montagens: dict | None = None
 
 
 @app.post("/api/estacoes/projetos/reservar")
@@ -321,14 +328,14 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
         raise HTTPException(400, "estacao_id inválido")
     if tipo not in ("foto", "contex", "universal", "campvision"):
         raise HTTPException(400, "tipo_estacao inválido")
-    if estado not in ("ocioso", "capturando", "finalizando", "backup", "processando", "erro"):
+    if estado not in ("ocioso", "capturando", "finalizando", "backup", "processando", "erro", "vigiando", "pasta indisponível"):
         raise HTTPException(400, "estado inválido")
     con = connect()
     con.execute("""
         INSERT INTO estacao_heartbeat
             (estacao_id, tipo_estacao, app, versao, hostname, ip_local, estado,
-             fundo_codigo, projeto_codigo, operador, ultimo_erro, recebido_de_ip, atualizado_em)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+             fundo_codigo, projeto_codigo, operador, ultimo_erro, recebido_de_ip, detalhe, atualizado_em)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
         ON CONFLICT(estacao_id) DO UPDATE SET
             tipo_estacao=excluded.tipo_estacao,
             app=excluded.app,
@@ -341,13 +348,41 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
             operador=excluded.operador,
             ultimo_erro=excluded.ultimo_erro,
             recebido_de_ip=excluded.recebido_de_ip,
+            detalhe=excluded.detalhe,
             atualizado_em=datetime('now')
     """, (estacao_id, tipo, d.app[:80], (d.versao or "")[:120] or None,
           (d.hostname or "")[:120] or None, (d.ip_local or "")[:64] or None,
-          estado, (d.fundo_codigo or "")[:16] or None, (d.projeto_codigo or "")[:32] or None,
-          (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem))
+          estado, (d.fundo_codigo or "")[:16] or None, ((d.projeto_codigo or d.projeto) or "")[:32] or None,
+          (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem,
+          json.dumps({k: v for k, v in (("progresso", d.progresso), ("fila", d.fila), ("hoje", d.hoje), ("montagens", d.montagens)) if v is not None},
+                     ensure_ascii=False)[:4000] or None))
     con.commit(); con.close()
     return {"ok": True, "estacao_id": estacao_id, "estado": estado}
+
+
+class AvisoCampVision(BaseModel):
+    codigo: str | None = None
+    pasta: str
+    status: str | None = None   # só uma dica: o painel LÊ o status.json no disco (a fonte da verdade)
+    em: str | None = None
+
+
+@app.post("/api/campvision/aviso", status_code=202)
+def aviso_campvision(d: AvisoCampVision, request: Request) -> dict:
+    """"Acabei de mudar este projeto, olhe só ele" (docs/contrato-painel.md do campvision-new).
+
+    Só vale na rede local (e com o token da estação, se houver). O painel relê SÓ essa pasta, em vez de varrer o QNAP inteiro.
+    A pasta é relativa à raiz final (ou absoluta DENTRO dela); a própria raiz e qualquer caminho que escape dela são recusados.
+    """
+    _exigir_rede_local(request)
+    from .rotas_operacao import ler_pasta_do_aviso
+    con = connect()
+    try:
+        r = ler_pasta_do_aviso(con, d.pasta, d.codigo)
+        con.commit()
+        return r
+    finally:
+        con.close()
 
 
 def _uso_incremental() -> None:

@@ -75,15 +75,16 @@ Regras:
 - Um lote pode mudar de etapa entre varreduras (`processando` → `pronto`); isso fica na auditoria.
 - JSON inválido ou vazio: o lote é ignorado ("manifesto inválido").
 
-## 5. Como o painel fica sabendo de um lote (hoje)
-- **Varredura manual**: no painel, *Filas → Varrer QNAP* (`POST /api/filas/varrer-qnap`, exige login de **operador** ou acima). É o único jeito de criar/atualizar lotes.
+## 5. Como o painel fica sabendo de um lote
+- **Aviso do CV2 (o caminho normal):** `POST /api/campvision/aviso`, a cada troca de `status`. O painel relê **só aquela pasta**; a fila enche sozinha (seção 6.4).
+- **Varredura completa**, no painel: *Filas → Varrer QNAP* (`POST /api/filas/varrer-qnap`, exige login de **operador** ou acima). Agora é **reconciliação**: pega o que um aviso perdeu.
 - A cada 10 minutos o painel só **conta** lotes e mede espaço no QNAP (cartão do painel inicial); isso **não cria fila**.
 - A varredura anda por **toda** a pasta final. Por isso a estrutura deve ser rasa e fixa (seção 2).
 
 ## 6. Chamadas HTTP (CV2 → painel)
-Base: `http://192.168.15.60:8000`. **Só funcionam na rede local** (192.168.x.x ou 10.x.x.x), sem login.
-- Fora da rede local, ou passando por proxy/túnel (cabeçalhos `X-Forwarded-For`, `CF-Connecting-IP`...): **403**.
-- **Token:** se o painel tiver `estacao.token` configurado (Configurações; é um valor sensível, que só o administrador vê), o cabeçalho **`X-Camp-Token`** é **obrigatório**, inclusive dentro da rede local. Sem ele ou errado: **401**. Sem token configurado, vale só a rede local.
+Base: `http://192.168.15.60:8000`. Sem login. A regra (`app/rede.py`):
+- **Sem `estacao.token` configurado:** só vale a rede local (192.168.x.x ou 10.x.x.x). De fora, ou passando por proxy/túnel (cabeçalhos `X-Forwarded-For`, `CF-Connecting-IP`...): **403**.
+- **Com `estacao.token` configurado** (Configurações; valor sensível, que só o administrador vê): o cabeçalho **`X-Camp-Token`** é **obrigatório para todos**. Sem ele ou errado: **401**, mesmo de dentro da rede local. Um token válido vale **até de fora** da rede local (é para estações atrás de túnel).
   O CV2 deve ler o token de uma variável de ambiente (ex.: `CAMP_PAINEL_TOKEN`) e **nunca gravá-lo no repositório**.
 
 ### 6.1 `GET /api/estacoes/contexto` — fundos e próximo número de projeto
@@ -103,20 +104,30 @@ Resposta: `{ "codigo": "F002-P0003", "numero_projeto": "P0003", "fundo_codigo": 
 - O **número P vem sempre daqui**: o CV2 nunca inventa número.
 
 ### 6.3 `POST /api/estacoes/heartbeat` — "estou vivo e fazendo isto"
-**Serve para o CV2** (desde esta versão). Use:
+**Serve para o CV2** e aceita **o que o CV2 realmente manda** (`docs/contrato-painel.md` do campvision-new). Use:
 | Campo | Valor para o CV2 |
 |---|---|
 | `estacao_id` | **`campvision2`** para a máquina `.40` (minúsculas, até 64 caracteres). A cópia do Mac, se existir, deve usar outro id (ex.: `campvision2-mac`): ela é aceita, mas só `campvision2` aparece em Estações |
 | `tipo_estacao` | **`campvision`** |
 | `app` | `campvision-new` |
-| `estado` | `ocioso`, `processando` ou `erro` (também aceitos: `capturando`, `finalizando`, `backup`) |
+| `estado` | **`vigiando`**, **`processando`**, **`pasta indisponível`** ou **`erro`** (os do CV2). Também aceitos: `ocioso`, `capturando`, `finalizando`, `backup` (estações de captura) |
 | `versao`, `hostname`, `ip_local` | opcionais (`192.168.15.40`) |
-| `fundo_codigo`, `projeto_codigo` | o que está processando agora (opcional) |
+| `projeto` (ou `projeto_codigo`), `fundo_codigo` | o que está processando agora (opcional) |
+| `progresso` (`{feitos, total}`), `fila`, `hoje` (`{projetos, imagens, erros, custo_usd}`), `montagens` (`{entrada, acervo}`) | opcionais; ficam guardados e aparecem em Estações (`app_detalhe`) |
 | `operador`, `ultimo_erro` | opcionais (`ultimo_erro` até 500 caracteres) |
 
 - Envie **a cada 30 s** (ou no máximo a cada 60 s): **mais de 75 s sem heartbeat = "app offline"** em Estações. É o que mostra "o que está fazendo" no painel.
 - Resposta: `{ "ok": true, "estacao_id": "campvision2", "estado": "processando" }`. `tipo_estacao` ou `estado` inválidos: **400**.
 - O heartbeat nunca deve travar o CV2: use timeout curto (3–5 s) e ignore falhas.
+
+### 6.4 `POST /api/campvision/aviso` — "acabei de mudar este projeto, olhe só ele"
+Corpo: `{"codigo": "F002-P0002", "pasta": "F002 - BSG.../01 - Projetos/F002-P0002 - Residência X", "status": "pronto", "em": "..."}`. Responde **202**.
+- `pasta`: relativa à raiz final do painel (`qnap.prontos_raiz`), ou absoluta **dentro** dela. A própria raiz, vazio e qualquer caminho que escape dela (`../`, `/etc`) são recusados com **400**.
+- O painel lê o **`status.json` do disco**; o `status` do aviso é só uma dica (o aviso não manda no estado).
+- `codigo` (opcional): se não bater com o projeto da pasta, **nada é importado** (`ok: false`).
+- Resposta: `{ok, acao, etapa, codigo, folhas, pasta}` com `acao` = `nova` | `atualizada` | `igual` | `ignorada` (esta com `motivo`). Pasta ainda não visível pelo SMB: `ok: false` ("não encontrada (ainda?)"); o CV2 pode avisar de novo.
+- Pasta da **entrada bruta** é recusada (`ok: false`): o painel só lê o material final.
+- Mesma regra de rede e token da seção 6. Depois de uma queda do painel, o CV2 reenvia o aviso mais recente de cada projeto.
 
 ## 7. O que o CV2 deve fazer, em ordem
 1. Ao iniciar: ler `GET /contexto` (fundos e próximos números) e começar o heartbeat (`ocioso`).
@@ -134,7 +145,7 @@ curl -s -H "X-Camp-Token: $CAMP_PAINEL_TOKEN" http://192.168.15.60:8000/api/esta
 ```
 
 ## 9. Ainda não existe (decisões pendentes)
-- **Aviso automático de lote pronto.** Hoje o painel só descobre lotes na varredura manual. Proposta: `POST /api/estacoes/lote-pronto` (o CV2 avisa o código do projeto e o painel lê só aquela pasta, sem varrer tudo). **Não implementado.**
+- **Do contrato do CV2 (`docs/contrato-painel.md`, §7), o painel ainda NÃO faz:** ler o `status.json` novo (`lote_atual`, contagens, `erros_bloqueantes`); ler `catalogacao/erros.json` em "Erros relatados"; ler `catalogacao.csv` e `contatos.jpg` (**revisão pós-CAMP Vision**: ver o que foi lido, corrigir e aprovar); ler `_campvision/registro/` no "Histórico"; reconciliação noturna; e um canal para **pedir releitura** de um projeto (hoje o painel só recebe, nunca manda nada ao CV2).
 - **PDF** não entra na contagem de folhas (`folhas_encontradas`), embora o CV2 processe PDF. Lotes só de PDF aparecem com 0 folhas.
 - O painel **não lê** `catalogacao.csv`, `contatos.jpg` nem `pacote_tainacan.json`. A revisão pós-CV2 (folha de contatos, girar, duplicatas) depende do formato real do CSV.
 - Marcar o lote como `teste` só vale pelo `info_projeto.json`; o painel não sabe de testes que estejam só no nome da pasta além de `teste`, `asd` e `sei la`.

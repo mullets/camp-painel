@@ -1080,6 +1080,40 @@ def filho(modo):
         c3 = lan.post("/api/estacoes/projetos/reservar", json={**corpo, "chave_reserva": "b" * 32}, headers=T)
         ver("outra chave = próximo número (P0009)", c3.json()["codigo"] == "F099-P0009", c3.text[:100])
         ver("/reservar sem título: 400; fundo inexistente: 404", lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": " ", "chave_reserva": "c" * 32}, headers=T).status_code == 400 and lan.post("/api/estacoes/projetos/reservar", json={**corpo, "fundo_codigo": "F000", "chave_reserva": "d" * 32}, headers=T).status_code in (400, 404))
+        # ---------------- aviso do CAMP Vision (POST /api/campvision/aviso) ----------------
+        rel = lambda p_: p_.relative_to(base).as_posix()
+        d8 = lote("F099-P0008 - Casa Oito", base_info("F099-P0008"), {"status": "processando", "codigo": "F099-P0008"}, [("Plantas", "a.jpg"), ("Plantas", "b.jpg")])
+        d9 = lote("F099-P0009 - Casa Nove", base_info("F099-P0009"), {"status": "pronto", "codigo": "F099-P0009"}, [("Plantas", "a.jpg")])   # NÃO avisada
+        av = lambda **kw: lan.post("/api/campvision/aviso", json=kw, headers=T)
+        r = av(codigo="F099-P0008", pasta=rel(d8), status="processando"); j = r.json()
+        ver("aviso: responde 202 e cria SÓ o lote avisado, em PROCESSANDO, com as 2 folhas", r.status_code == 202 and j["ok"] and j["acao"] == "nova" and j["etapa"] == "processando" and j["folhas"] == 2 and "F099-P0008" in etapas() and "F099-P0009" not in etapas(), str(j))
+        (d8 / "status.json").write_text(_j.dumps({"status": "pronto", "codigo": "F099-P0008"}))
+        j = av(codigo="F099-P0008", pasta=rel(d8), status="pronto").json()
+        ver("aviso: o status.json do DISCO decide (processando -> pronto = REVISÃO)", j["acao"] == "atualizada" and j["etapa"] == "revisao" and etapas()["F099-P0008"][0] == "revisao", str(j))
+        ver("aviso repetido: 'igual' (idempotente)", av(codigo="F099-P0008", pasta=rel(d8)).json()["acao"] == "igual")
+        ver("o aviso mente sobre o status ('erro'): vale o do disco (revisão)", av(codigo="F099-P0008", pasta=rel(d8), status="erro").json()["etapa"] == "revisao")
+        ver("pasta absoluta DENTRO da raiz também vale", av(pasta=str(d8)).json()["ok"] is True)
+        x = av(codigo="F099-P0001", pasta=rel(d9)).json()
+        ver("aviso com código que não bate com a pasta: nada é importado", x["ok"] is False and "nada foi importado" in x["motivo"] and "F099-P0009" not in etapas(), str(x))
+        x = av(pasta="F099 - Fundo de teste/01 - Projetos/F099-P0050 - Nada").json()
+        ver("pasta que ainda não existe: 202 com ok=false (o CV2 pode avisar antes de o SMB mostrar)", x["ok"] is False and "não encontrada" in x["motivo"], str(x))
+        ver("segurança: '../' que escapa da raiz = 400", av(pasta="../etc").status_code == 400 and av(pasta="Fundos e Escritorios/../../..").status_code == 400)
+        ver("segurança: caminho absoluto fora da raiz, a própria raiz e vazio = 400", av(pasta="/etc").status_code == 400 and av(pasta=str(base)).status_code == 400 and av(pasta=".").status_code == 400 and av(pasta="  ").status_code == 400)
+        (entrada / "F099-P0008 - Casa Oito").mkdir(parents=True, exist_ok=True); (entrada / "F099-P0008 - Casa Oito" / "status.json").write_text(_j.dumps({"status": "pronto", "codigo": "F099-P0008"}))
+        x = av(pasta=rel(entrada / "F099-P0008 - Casa Oito")).json()
+        ver("aviso de pasta da ENTRADA bruta: recusado (o painel só lê o material final)", x["ok"] is False and "entrada bruta" in x["motivo"], str(x))
+        ver("aviso de pasta sem manifesto: ok=false", av(pasta=rel(d8 / "Plantas")).json()["ok"] is False)
+        ver("aviso: com token configurado ele é obrigatório (sem token = 401, de dentro e de fora); token válido vale até de fora (desenho do rede.py)", (lan.post("/api/campvision/aviso", json={"pasta": rel(d8)}).status_code, fora.post("/api/campvision/aviso", json={"pasta": rel(d8)}).status_code, fora.post("/api/campvision/aviso", json={"pasta": rel(d8)}, headers=T).status_code) == (401, 401, 202))
+        ver("a varredura completa segue como reconciliação (acha o P0009 que não foi avisado)", op.post("/api/filas/varrer-qnap").json()["novas"] >= 1 and "F099-P0009" in etapas())
+        # ---------------- heartbeat do CONTRATO do CAMP Vision ----------------
+        hb2 = {"estacao_id": "campvision2", "tipo_estacao": "campvision", "app": "CAMP Vision 2", "versao": "2026-10-07-01", "estado": "vigiando", "projeto": "F099-P0008",
+               "progresso": {"feitos": 31, "total": 48}, "fila": 3, "hoje": {"projetos": 2, "imagens": 140, "erros": 1, "custo_usd": 1.84}, "montagens": {"entrada": True, "acervo": True}}
+        r = lan.post("/api/estacoes/heartbeat", json=hb2, headers=T)
+        ver("heartbeat do CV2 com estado 'vigiando' e campo 'projeto' (o que ELE manda): aceito", r.status_code == 200 and r.json()["estado"] == "vigiando", f"HTTP {r.status_code} {r.text[:100]}")
+        ver("'pasta indisponível' também; estado inventado continua 400", lan.post("/api/estacoes/heartbeat", json={**hb2, "estado": "pasta indisponível"}, headers=T).status_code == 200 and lan.post("/api/estacoes/heartbeat", json={**hb2, "estado": "dormindo"}, headers=T).status_code == 400)
+        lan.post("/api/estacoes/heartbeat", json=hb2, headers=T)
+        cv = next(m for m in adm.get("/api/estacoes").json()["maquinas"] if m["nome"] == "CAMP Vision 2")
+        ver("em Estações: estado, projeto e o progresso/fila/montagens do CAMP Vision", (cv["app_estado"], cv["app_projeto"]) == ("vigiando", "F099-P0008") and cv["app_detalhe"]["progresso"] == {"feitos": 31, "total": 48} and cv["app_detalhe"]["fila"] == 3 and cv["app_detalhe"]["montagens"]["acervo"] is True, str({k_: cv.get(k_) for k_ in ("app_estado", "app_projeto", "app_detalhe")}))
         for l in res: print(l)
     elif modo == "sondagem":
         import json as _j, threading as _th, httpx

@@ -445,6 +445,7 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
             "app_operador": hb.get("operador") if hb else None,
             "app_fundo": hb.get("fundo_codigo") if hb else None,
             "app_projeto": hb.get("projeto_codigo") if hb else None,
+            "app_detalhe": (json.loads(hb["detalhe"]) if hb and hb.get("detalhe") else None),
             "app_ultimo_erro": hb.get("ultimo_erro") if hb else None,
             "app_heartbeat_em": hb.get("atualizado_em") if hb else None,
             "app_heartbeat_idade_segundos": hb.get("idade_segundos") if hb else None,
