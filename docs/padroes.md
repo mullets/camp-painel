@@ -16,15 +16,16 @@ Este é o registro único do que já foi decidido. Antes de mexer em algo daqui,
 Não publicado · Rascunho · Publicado · Despublicado; ações Publicar · Voltar para rascunho · Despublicar. Lint em `scripts/check_ui.py` e auditoria do texto visível.
 
 ## 3. Atalhos de teclado (UMA tabela: `NAV_ATALHOS` no `index.html`)
-Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: dígitos 1–9 = as nove primeiras entradas do menu, NA ORDEM em que aparecem; o grupo Sistema usa letras.**
+Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: dígitos 1–9 = as nove primeiras entradas do menu, NA ORDEM em que aparecem; da décima em diante, letras (hoje: U Uso do acervo, que fica no fim do grupo Acervo, e E, A, C no grupo Sistema).**
 | Tecla | Tela | Tecla | Tela |
 |---|---|---|---|
 | 1 | Painel | 7 | Projetos |
 | 2 | Filas de processamento | 8 | Localização |
 | 3 | Solicitações | 9 | Etiquetas |
 | 4 | Erros relatados | E | Estações e site |
-| 5 | Fundos | U | Uso do acervo (admin) |
-| 6 | Arquitetos | A | Auditoria (admin) |
+| 5 | Fundos | U | Uso do acervo (admin; último do grupo Acervo) |
+| 6 | Arquitetos | E | Estações e site |
+|  |  | A | Auditoria (admin) |
 |  |  | C | Configurações (admin) |
 Fixas: `⌘/Ctrl+K` busca · `⌘/Ctrl+B` barra lateral · `F` foca o filtro da tela · `?` ajuda · `Esc` fecha. Item novo no menu = nova linha na tabela (o `check_ui` reprova se esquecer ou fora de ordem, e `tests/auditoria_atalhos.js` aperta TODAS as teclas da tabela).
 

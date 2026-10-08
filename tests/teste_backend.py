@@ -1286,6 +1286,102 @@ def filho(modo):
         pu = adm.post("/api/uso/puxar", json={"completo": True}).json()
         ver("uma coleta COMPLETA depois NÃO traz de volta a pessoa apagada", pu["novas"] == 0 and sql("SELECT COUNT(*) FROM uso_download WHERE email=?", alvo) == 0, str(pu["novas"]))
         ver("reprocessar refaz as colunas a partir das respostas guardadas, sem ir ao site", adm.post("/api/uso/reprocessar").json()["reprocessadas"] == total - n_alvo)
+        # ================= APAGAR de verdade, exportar por visão e e-mail para UMA pessoa =================
+        import base64 as _b64, email as _em, socketserver as _ss
+        dv = connect()
+        ativas = lambda: sql("SELECT COUNT(*) FROM uso_download WHERE apagada=0")
+        antes = ativas(); alvo_id = sql("SELECT id FROM uso_download WHERE apagada=0 AND anonimizada=0 ORDER BY id LIMIT 1"); alvo_origem = sql("SELECT origem_id FROM uso_download WHERE id=?", alvo_id)
+        r = adm.delete(f"/api/uso/{alvo_id}")
+        ver("apagar UM pedido: 200; some do detalhe (404), da lista e do total", r.status_code == 200 and adm.get(f"/api/uso/{alvo_id}").status_code == 404 and adm.get("/api/uso").json()["total"] == antes - 1, str(r.text[:80]))
+        linha = k.execute("SELECT * FROM uso_download WHERE id=?", (alvo_id,)).fetchone()
+        ver("o que sobra é só a MARCA: sem nome, e-mail, telefone, instituição, uso, material, página, respostas nem data", linha["apagada"] == 1 and all(linha[c] is None for c in ("nome", "email", "telefone", "instituicao", "uso", "material_codigo", "pagina", "resposta_json", "recebida_em")))
+        R3 = adm.get("/api/uso/resumo").json()
+        ver("o resumo: o total cai e conta quantas foram apagadas", R3["total"] == antes - 1 and R3["apagadas"] == 1, str((R3["total"], R3["apagadas"])))
+        P3 = adm.get("/api/uso/pessoas?por_pagina=200").json(); M3 = adm.get("/api/uso/materiais?por_pagina=200").json()
+        sem3 = sql("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND material_codigo IS NULL")
+        ver("pessoas, materiais e exportação também não contam a apagada (somas fecham com o novo total)", sum(x["downloads"] for x in P3["itens"]) == antes - 1 and sum(x["downloads"] for x in M3["itens"]) == antes - 1 - sem3 and len(list(_csv.reader(_io.StringIO(adm.get("/api/uso/exportar.csv").text.lstrip("\ufeff")), delimiter=";"))) - 1 == antes - 1)
+        pu = adm.post("/api/uso/puxar", json={"completo": True}).json()
+        ver("uma coleta COMPLETA depois NÃO traz a entrada apagada de volta", pu["novas"] == 0 and sql("SELECT COUNT(*) FROM uso_download WHERE origem_id=?", alvo_origem) == 1 and ativas() == antes - 1, str(pu["novas"]))
+        ids5 = [x[0] for x in k.execute("SELECT id FROM uso_download WHERE apagada=0 ORDER BY id LIMIT 5")]
+        r = adm.post("/api/uso/apagar", json={"ids": ids5 + [999999]})
+        ver("apagar vários por ids: conta só as que existem (999999 não existe)", r.status_code == 200 and r.json()["apagadas"] == 5 and ativas() == antes - 6, r.text[:80])
+        mail = sql("SELECT email FROM uso_download WHERE apagada=0 AND email IS NOT NULL ORDER BY id LIMIT 1"); n_mail = sql("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND email=?", mail)
+        r = adm.post("/api/uso/apagar", json={"email": mail.upper()})
+        ver("apagar tudo de UMA PESSOA (qualquer caixa de letra)", r.json().get("apagadas") == n_mail and n_mail > 0 and adm.get("/api/uso?q=" + mail).json()["total"] == 0, r.text[:80])
+        ver("por filtro vazio é recusado (não dá para apagar tudo de uma vez)", adm.post("/api/uso/apagar", json={"filtro": {}}).status_code == 400 and adm.post("/api/uso/apagar", json={"filtro": {"q": "  "}}).status_code == 400)
+        n_uso = sql("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND uso='Publicação'")
+        r = adm.post("/api/uso/apagar", json={"filtro": {"uso": "Publicação"}})
+        ver("apagar por filtro: apaga exatamente as do filtro, e só elas", r.json().get("apagadas") == n_uso and n_uso > 0 and adm.get("/api/uso?uso=Publicação").json()["total"] == 0 and adm.get("/api/uso").json()["total"] > 0, r.text[:80])
+        ver("exige exatamente um modo; id desconhecido = 404", adm.post("/api/uso/apagar", json={}).status_code == 400 and adm.post("/api/uso/apagar", json={"ids": [1], "email": "a@b.co"}).status_code == 400 and adm.post("/api/uso/apagar", json={"ids": [999999]}).status_code == 404 and adm.delete("/api/uso/999999").status_code == 404)
+        ver("operador não apaga nem exporta nem manda e-mail (403)", op.delete("/api/uso/1").status_code == 403 and op.post("/api/uso/apagar", json={"ids": [1]}).status_code == 403 and op.get("/api/uso/exportar.csv").status_code == 403 and op.post("/api/uso/1/email", json={"assunto": "a", "corpo": "b"}).status_code == 403)
+        evs = [x[0] for x in k.execute("SELECT detalhe FROM evento WHERE tipo='uso_apagado'")]
+        ver("a auditoria registra cada apagamento SEM dados pessoais (só contagem e impressão curta)", len(evs) >= 4 and not any("@" in e or mail.split("@")[0] in e.lower() for e in evs), str(evs[:2]))
+        # ---------- exportar por visão e só os escolhidos ----------
+        lin = lambda t: list(_csv.reader(_io.StringIO(t.lstrip("\ufeff")), delimiter=";"))
+        ex = adm.get("/api/uso/exportar.csv?visao=pessoas"); lp = lin(ex.text); tp = adm.get("/api/uso/pessoas").json()["total"]
+        ver("exportar a visão PESSOAS: uma linha por pessoa (e-mail, pedidos, materiais...)", ex.status_code == 200 and lp[0][0] == "email" and "pedidos" in lp[0] and len(lp) - 1 == tp and "pessoas" in ex.headers["content-disposition"], str((len(lp) - 1, tp)))
+        lm = lin(adm.get("/api/uso/exportar.csv?visao=materiais").text); tm = adm.get("/api/uso/materiais").json()["total"]
+        ver("exportar a visão MATERIAIS: uma linha por material", lm[0][0] == "material_codigo" and len(lm) - 1 == tm and tm > 0, str((len(lm) - 1, tm)))
+        tres = [x[0] for x in k.execute("SELECT id FROM uso_download WHERE apagada=0 ORDER BY id LIMIT 3")]
+        le = lin(adm.get("/api/uso/exportar.csv?ids=" + ",".join(map(str, tres))).text)
+        ver("exportar SÓ os pedidos escolhidos (ids)", len(le) - 1 == 3, str(len(le) - 1))
+        apag = sql("SELECT id FROM uso_download WHERE apagada=1 LIMIT 1")
+        ver("um id já apagado na seleção é ignorado; entradas inválidas = 400", len(lin(adm.get(f"/api/uso/exportar.csv?ids={tres[0]},{apag}").text)) - 1 == 1 and adm.get("/api/uso/exportar.csv?visao=xyz").status_code == 400 and adm.get("/api/uso/exportar.csv?visao=pessoas&ids=1").status_code == 400 and adm.get("/api/uso/exportar.csv?ids=a,b").status_code == 400)
+        ev = [x[0] for x in k.execute("SELECT detalhe FROM evento WHERE tipo='uso_exportado' ORDER BY id DESC LIMIT 4")]
+        ver("a auditoria da exportação diz a visão e quantos foram escolhidos, sem dados das pessoas", any('"visao": "pessoas"' in e for e in ev) and any('"escolhidos": 3' in e for e in ev) and not any("@" in e.replace("adm@camp.arq.br", "") for e in ev))
+        # ---------- e-mail para UMA pessoa (servidor SMTP de mentira) ----------
+        MSGS = []
+        class Smtp(_ss.StreamRequestHandler):
+            def handle(self):
+                w = lambda t: (self.wfile.write((t + "\r\n").encode()), self.wfile.flush())
+                w("220 teste ESMTP"); msg = {"to": [], "auth": None}
+                while True:
+                    ln = self.rfile.readline().decode(errors="replace").rstrip("\r\n")
+                    if not ln: break
+                    cmd = ln.upper()
+                    if cmd.startswith("EHLO"): w("250-teste"); w("250 AUTH PLAIN")
+                    elif cmd.startswith("AUTH PLAIN"): pt = _b64.b64decode(ln.split()[2]).split(b"\0"); msg["auth"] = (pt[1].decode(), pt[2].decode()); w("235 ok")
+                    elif cmd.startswith("MAIL FROM"): msg["from"] = ln[10:].strip(); w("250 ok")
+                    elif cmd.startswith("RCPT TO"): msg["to"].append(ln[8:].strip()); w("250 ok")
+                    elif cmd == "DATA":
+                        w("354 go"); dados = []
+                        while True:
+                            l = self.rfile.readline().decode(errors="replace")
+                            if l in (".\r\n", ".\n", ""): break
+                            dados.append(l)
+                        msg["dados"] = "".join(dados); MSGS.append(msg); msg = {"to": [], "auth": None}; w("250 ok")
+                    elif cmd == "QUIT": w("221 tchau"); break
+                    else: w("250 ok")
+        ssrv = _ss.ThreadingTCPServer(("127.0.0.1", 0), Smtp); ssrv.daemon_threads = True; _th.Thread(target=ssrv.serve_forever, daemon=True).start()
+        eid = sql("SELECT id FROM uso_download WHERE apagada=0 AND email IS NOT NULL ORDER BY id LIMIT 1"); eml = sql("SELECT email FROM uso_download WHERE id=?", eid)
+        corpo_ok = {"assunto": "CAMP: sobre o seu pedido", "corpo": "Olá, Ana. Acentuação: ção e ã.\n\nSegue o material."}
+        ver("e-mail: sem SMTP configurado = 409 com instrução; a configuração diz 'não configurado' e traz os textos padrão", adm.post(f"/api/uso/{eid}/email", json=corpo_ok).status_code == 409 and adm.get("/api/uso/email/config").json()["configurado"] is False and "{nome}" in adm.get("/api/uso/email/config").json()["corpo"])
+        for ch, vl in (("smtp.host", "127.0.0.1"), ("smtp.porta", str(ssrv.server_address[1])), ("smtp.seguranca", "nenhuma"), ("smtp.usuario", "camp@camp.arq.br"), ("smtp.senha", "segredo-smtp"), ("smtp.remetente", "camp@camp.arq.br")):
+            dv.execute("UPDATE configuracao SET valor=? WHERE chave=?", (vl, ch))
+        dv.commit()
+        cf = adm.get("/api/uso/email/config"); ver("a configuração mostra 'configurado' e o remetente, e NUNCA a senha", cf.json()["configurado"] is True and cf.json()["remetente"] == "camp@camp.arq.br" and "segredo-smtp" not in cf.text)
+        r = adm.post(f"/api/uso/{eid}/email", json={**corpo_ok, "para": "intruso@x.com", "bcc": "outro@x.com"})
+        m = MSGS[-1] if MSGS else {"to": [], "dados": ""}; pm = _em.message_from_string(m.get("dados", ""))
+        ver("e-mail enviado: 200 e UM ÚNICO destinatário, o do banco (o 'para' e o 'bcc' do corpo da requisição são ignorados)", r.status_code == 200 and r.json() == {"enviado": True, "para": eml} and m["to"] == [f"<{eml}>"] and "intruso" not in repr(MSGS) and "outro@x.com" not in repr(MSGS), str((r.status_code, m.get("to"))))
+        ver("cabeçalhos certos: De = remetente, Assunto, Responder para = quem enviou; corpo com acentos preservados; autenticou com o usuário/senha da configuração", pm["From"] == "camp@camp.arq.br" and pm["Subject"] == "CAMP: sobre o seu pedido" and pm["Reply-To"] == "adm@camp.arq.br" and "Acentuação: ção e ã." in pm.get_payload(decode=True).decode("utf-8") and m["auth"] == ("camp@camp.arq.br", "segredo-smtp"), str((pm["From"], pm["Reply-To"], m.get("auth"))))
+        ver("o histórico do pedido mostra o e-mail enviado (quando, por quem, assunto)", [(x["enviado_por"], x["assunto"], x["ok"]) for x in adm.get(f"/api/uso/{eid}").json()["emails"]] == [("adm@camp.arq.br", "CAMP: sobre o seu pedido", 1)])
+        n0 = len(MSGS)
+        ver("injeção de cabeçalho no assunto (quebra de linha + Bcc) = 400 e NADA é enviado", adm.post(f"/api/uso/{eid}/email", json={"assunto": "Oi\nBcc: x@y.com", "corpo": "a"}).status_code == 400 and adm.post(f"/api/uso/{eid}/email", json={"assunto": "Oi\r\nTo: x@y.com", "corpo": "a"}).status_code == 400 and len(MSGS) == n0)
+        ver("assunto vazio ou com mais de 200 caracteres, e mensagem vazia = 400", adm.post(f"/api/uso/{eid}/email", json={"assunto": " ", "corpo": "a"}).status_code == 400 and adm.post(f"/api/uso/{eid}/email", json={"assunto": "x" * 201, "corpo": "a"}).status_code == 400 and adm.post(f"/api/uso/{eid}/email", json={"assunto": "a", "corpo": "  "}).status_code == 400)
+        sem_email = sql("SELECT id FROM uso_download WHERE apagada=0 AND email IS NULL LIMIT 1")
+        ver("pedido sem e-mail (dados pessoais apagados) = 404; apagado = 404", (sem_email is None or adm.post(f"/api/uso/{sem_email}/email", json=corpo_ok).status_code == 404) and adm.post(f"/api/uso/{apag}/email", json=corpo_ok).status_code == 404)
+        dv.execute("UPDATE configuracao SET valor='9' WHERE chave='smtp.porta'"); dv.commit()
+        r = adm.post(f"/api/uso/{eid}/email", json=corpo_ok)
+        ver("SMTP fora do ar: 502 com a causa, SEM a senha; a tentativa fica registrada como falha", r.status_code == 502 and "segredo-smtp" not in r.text and sql("SELECT COUNT(*) FROM uso_email WHERE ok=0") == 1, r.text[:120])
+        dv.execute("UPDATE configuracao SET valor=? WHERE chave='smtp.porta'", (str(ssrv.server_address[1]),))
+        for _ in range(30): dv.execute("INSERT INTO uso_email (uso_id, enviado_por, assunto, ok) VALUES (?, 'x', 'x', 1)", (eid,))
+        dv.commit()
+        r = adm.post(f"/api/uso/{eid}/email", json=corpo_ok)
+        ver("limite de 30 e-mails por hora: o 31º = 429", r.status_code == 429, r.text[:100])
+        dv.execute("DELETE FROM uso_email WHERE enviado_por='x'"); dv.commit()
+        evm = [x[0] for x in k.execute("SELECT detalhe FROM evento WHERE tipo IN ('uso_email_enviado','uso_email_falhou')")]
+        ver("a auditoria do e-mail guarda só a impressão curta do destinatário, nunca o endereço", len(evm) == 2 and not any("@" in e for e in evm), str(evm))
+        ssrv.shutdown(); dv.close()
         k.close(); srv.shutdown()
         for l in res: print(l)
     return 0

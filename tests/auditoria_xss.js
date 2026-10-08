@@ -30,7 +30,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const lista=x=>Array.isArray(x)?x:(x&&(x.itens||x.items||x.eventos||x.dados))||[];
  // Uso do acervo: nome, e-mail, instituição, uso e respostas vêm de um formulário PÚBLICO (qualquer pessoa digita): abas e detalhe
  try{ w.route_to('uso'); await sleep(1500); for(const aba of ['pessoas','materiais','downloads']){ w.usoAba(aba); await sleep(1300); checa('uso › aba '+aba); }
-   for(const it of lista(await J('/api/uso?por_pagina=4'))){ await w.abrirUsoDetalhe(it.id); await sleep(700); checa('uso › detalhe '+it.id); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['uso (exceção)']=[e.message.slice(0,80)] }
+   for(const it of lista(await J('/api/uso?por_pagina=4'))){ await w.abrirUsoDetalhe(it.id); await sleep(700); checa('uso › detalhe '+it.id); await w.usoEmail(it.id); await sleep(600); checa('uso › e-mail '+it.id); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['uso (exceção)']=[e.message.slice(0,80)] }
  const ev2=lista(evs).filter(e=>/xss|data-xss/.test(JSON.stringify(e)));
  const funcoes=[['editarDireitos F026',()=>w.editarDireitos('F026')],['editarDireitos F023',()=>w.editarDireitos('F023')],['abrirPerfil',()=>w.abrirPerfil&&w.abrirPerfil()],
    ...lista(erros).slice(0,2).map(e=>['abrirErro '+e.id,()=>w.abrirErro(e.id)]), ...lista(sols).slice(0,2).map(e=>['abrirSolicitacao '+e.id,()=>w.abrirSolicitacao(e.id)]),

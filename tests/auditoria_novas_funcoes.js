@@ -243,13 +243,14 @@ w.route_to('painel'); await sleep(2800);
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
   chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Uso do acervo" com o atalho U');
+  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Acervo','"Uso do acervo" deveria ficar no grupo ACERVO do menu, está em "'+(el&&el.textContent.trim())+'"'); }
   chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
   chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
   const D0=(await J(adm,'/api/uso/'+L.itens[0].id)).b;
   chk(!txt('#us-body').includes(D0.telefone),'o telefone não deveria aparecer na lista (só no detalhe)');
   chk(/Nenhuma coleta ainda|Última coleta/.test(txt('#us-coleta')),'a linha da última coleta deveria aparecer: "'+txt('#us-coleta')+'"');
   d.querySelector('#us-body tr.us-row').click(); await sleep(1500);
-  chk(txt('#d-title').includes('Pedido de download')&&txt('#d-body').includes(D0.telefone)&&txt('#d-body').includes('Resposta completa do formulário')&&!!d.querySelector('#d-body [data-uso-acao="apagar"]'),'o detalhe deveria mostrar o telefone, a resposta completa e o botão de apagar: "'+txt('#d-body').slice(0,120)+'"');
+  chk(txt('#d-title').includes('Pedido de download')&&txt('#d-body').includes(D0.telefone)&&txt('#d-body').includes('Resposta completa do formulário')&&!!d.querySelector('#d-body [data-uso-acao="apagar-um"]')&&!!d.querySelector('#d-body [data-uso-acao="email"]'),'o detalhe deveria mostrar o telefone, a resposta completa e os botões de apagar e de e-mail: "'+txt('#d-body').slice(0,120)+'"');
   d.querySelector('#d-body [data-uso-acao="filtrar"]').click(); await sleep(1800);
   const T=(await J(adm,'/api/uso?q='+encodeURIComponent(D0.email))).b;
   chk(d.getElementById('us-q').value===D0.email&&T.total>=1&&linhas()===Math.min(50,T.total),'"Ver tudo desta pessoa" deveria filtrar pelo e-mail ('+T.total+' esperado, '+linhas()+' na tela)');
@@ -265,15 +266,49 @@ w.route_to('painel'); await sleep(2800);
   chk(linhas()===Math.min(50,FU.total)&&/resultado/.test(txt('#us-cnt')),'o filtro por uso ('+uso1+') deveria bater com a API: '+FU.total+' esperado, '+linhas()+' na tela');
   d.getElementById('us-uso').value=''; d.getElementById('us-q').value='zzzz-nada-assim'; w.usoFiltrou(); await sleep(1300);
   chk(/Nada com esses filtros/.test(txt('#us-body')),'sem resultado deveria dizer "Nada com esses filtros"'); d.getElementById('us-q').value=''; w.usoFiltrou(); await sleep(900);
-  w.__baixou=[]; w.exportarUsoCSV(); chk((w.__baixou||[]).some(x=>/^camp-uso-\d{4}-\d{2}-\d{2}\.csv$/.test(x)),'"Exportar CSV" deveria gerar o download camp-uso-AAAA-MM-DD.csv: '+JSON.stringify(w.__baixou));
+  w.__baixou=[]; w.exportarUsoCSV(); chk((w.__baixou||[]).some(x=>/^camp-uso-pedidos-\d{4}-\d{2}-\d{2}\.csv$/.test(x)),'"Exportar CSV" deveria gerar o download camp-uso-pedidos-AAAA-MM-DD.csv: '+JSON.stringify(w.__baixou));
   d.getElementById('us-q').value='abc'; chk(/q=abc/.test(w.usoQS()),'a exportação deveria levar os filtros ativos'); d.getElementById('us-q').value='';
   await w.puxarUso(false); await sleep(900);
   chk(!d.getElementById('us-atualizar').disabled,'o botão "Atualizar agora" deveria voltar a ficar ativo'); chk(/Application Password|site|coleta/i.test(txt('#toast')),'sem o site configurado deveria avisar com clareza: "'+txt('#toast')+'"');
   w.usoAba('downloads'); await sleep(1300); await w.abrirUsoDetalhe(D0.id); await sleep(1000);
-  d.querySelector('#d-body [data-uso-acao="apagar"]').click(); await sleep(2200);
+  d.querySelector('#d-body [data-uso-acao="anonimizar"]').click(); await sleep(2200);
   const R2=(await J(adm,'/api/uso/resumo')).b, T2=(await J(adm,'/api/uso?q='+encodeURIComponent(D0.email))).b;
   chk(R2.anonimizadas>0&&T2.total===0&&R2.total===R.total,'apagar a pessoa deveria anonimizar os pedidos dela sem mudar o total: '+JSON.stringify({anon:R2.anonimizadas,depois:T2.total,total:[R.total,R2.total]}));
-  chk(!txt('#v-uso').includes(D0.email)&&/dados apagados a pedido/.test(txt('#us-body')),'a tela não deveria mais mostrar o e-mail apagado e deveria dizer "dados apagados a pedido"'); w.closeDrawer(true); }
+  chk(!txt('#v-uso').includes(D0.email)&&/dados pessoais apagados/.test(txt('#us-body')),'a tela não deveria mais mostrar o e-mail com dados pessoais removidos e deveria dizer "dados pessoais apagados"');
+  // ---------- seleção, apagar de verdade, exportar por aba e e-mail para uma pessoa ----------
+  w.closeDrawer(true); w.usoAba('downloads'); d.getElementById('us-q').value=''; d.getElementById('us-uso').value=''; w.usoFiltrou(); await sleep(1600);
+  const caixas=()=>[...d.querySelectorAll('#us-body input[data-uso-sel]')], drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), total=async()=>(await J(adm,'/api/uso/resumo')).b.total;
+  chk(caixas().length>=6,'cada linha de pedido deveria ter uma caixinha de seleção ('+caixas().length+')');
+  caixas()[0].click(); caixas()[1].click(); await sleep(250);
+  chk(!d.getElementById('us-selbar').hidden&&/2 selecionado/.test(txt('#us-seln'))&&!drawerAberto(),'marcar 2 caixinhas deveria mostrar "2 selecionado(s)" SEM abrir o detalhe: "'+txt('#us-seln')+'"');
+  d.getElementById('us-todos').click(); await sleep(250);
+  chk(new RegExp('^'+caixas().length+' selecionado').test(txt('#us-seln')),'"selecionar todos desta página" deveria marcar todas ('+caixas().length+'): "'+txt('#us-seln')+'"');
+  w.__baixou=[]; w.exportarUsoCSV(true); chk((w.__baixou||[]).some(x=>/^camp-uso-pedidos-selecionados-\d{4}-\d{2}-\d{2}\.csv$/.test(x)),'"Exportar selecionados" deveria gerar camp-uso-pedidos-selecionados-AAAA-MM-DD.csv: '+JSON.stringify(w.__baixou));
+  d.getElementById('us-todos').click(); await sleep(200); chk(d.getElementById('us-selbar').hidden,'desmarcar tudo deveria esconder a barra de seleção');
+  for(const aba of ['pessoas','materiais']){ w.usoAba(aba); await sleep(1300); w.__baixou=[]; w.exportarUsoCSV(); chk((w.__baixou||[]).some(x=>x.startsWith('camp-uso-'+aba+'-')),'a exportação da aba '+aba+' deveria se chamar camp-uso-'+aba+'-...: '+JSON.stringify(w.__baixou)); }
+  w.usoAba('downloads'); await sleep(1500);
+  let t0=await total(); caixas()[0].click(); caixas()[1].click(); await sleep(200); w.confirm=()=>true; d.querySelector('#us-selbar .us-apagar').click(); await sleep(2300);
+  chk((await total())===t0-2&&d.getElementById('us-selbar').hidden,'apagar 2 selecionados deveria baixar o total em 2 ('+t0+' para '+(await total())+') e esconder a barra');
+  t0=await total(); d.querySelector('#us-body tr.us-row').click(); await sleep(1500); d.querySelector('#d-body [data-uso-acao="apagar-um"]').click(); await sleep(2300);
+  chk((await total())===t0-1&&!drawerAberto(),'"Apagar este pedido" deveria baixar o total em 1 e fechar o painel lateral');
+  d.querySelector('#us-body tr.us-row').click(); await sleep(1500); const emailAlvo=(await J(adm,'/api/uso/'+d.querySelector('#d-body [data-uso-acao="apagar-um"]').dataset.usoValor)).b.email; const nPessoa=(await J(adm,'/api/uso?q='+encodeURIComponent(emailAlvo))).b.total;
+  d.querySelector('#d-body [data-uso-acao="apagar-pessoa"]').click(); await sleep(2300);
+  chk(nPessoa>=1&&(await J(adm,'/api/uso?q='+encodeURIComponent(emailAlvo))).b.total===0,'"Apagar todos desta pessoa" deveria remover os '+nPessoa+' pedidos dela');
+  const usoX=(await J(adm,'/api/uso/resumo')).b.usos[0].uso, nX=(await J(adm,'/api/uso?uso='+encodeURIComponent(usoX))).b.total; t0=await total();
+  d.getElementById('us-uso').value=usoX; w.usoFiltrou(); await sleep(1600); const bf=d.getElementById('us-apagar-filtro');
+  chk(!bf.hidden&&bf.textContent.includes(String(nX)),'com um filtro ativo deveria aparecer "Apagar os '+nX+' resultados": "'+bf.textContent+'" (oculto='+bf.hidden+')');
+  bf.click(); await sleep(2300); chk((await total())===t0-nX&&bf.hidden,'apagar os resultados do filtro deveria baixar o total em '+nX+' e esconder o botão ('+t0+' para '+(await total())+')');
+  d.getElementById('us-uso').value=''; w.usoFiltrou(); await sleep(1200);
+  // e-mail para UMA pessoa (neste banco o SMTP NÃO está configurado: o envio fica desativado e sobra o "Abrir no meu e-mail")
+  d.querySelector('#us-body tr.us-row').click(); await sleep(1500); const detalheEmail=(await J(adm,'/api/uso/'+d.querySelector('#d-body [data-uso-acao="email"]').dataset.usoValor)).b;
+  d.querySelector('#d-body [data-uso-acao="email"]').click(); await sleep(1500);
+  chk(txt('#d-title').includes('E-mail para uma pessoa')&&txt('#d-body').includes(detalheEmail.email)&&/SÓ para/.test(txt('#d-body')),'a tela de e-mail deveria dizer que vai SÓ para '+detalheEmail.email);
+  chk(d.getElementById('us-env').disabled&&/envio não configurado/.test(txt('#d-body')),'sem SMTP o botão Enviar deveria ficar desativado, com o aviso "envio não configurado"');
+  chk(!/\{nome\}|\{material\}|\{data\}/.test(d.getElementById('us-ass').value+d.getElementById('us-msg').value)&&d.getElementById('us-msg').value.includes(detalheEmail.nome)&&d.getElementById('us-ass').value.length>3,'o texto padrão deveria vir preenchido com o nome e o material (sem {nome}): "'+d.getElementById('us-msg').value.slice(0,90)+'"');
+  d.getElementById('us-ass').value='Assunto com acento: ção'; d.getElementById('us-msg').value='Linha 1\nLinha 2 & mais?'; w.__baixou=[]; d.querySelector('#d-body [data-uso-acao="mailto"]').click();
+  chk((w.__baixou||[]).some(x=>x.startsWith('mailto:'+detalheEmail.email)&&x.includes('subject=Assunto%20com%20acento%3A%20%C3%A7%C3%A3o')&&x.includes('body=Linha%201%0ALinha%202%20%26%20mais%3F')),'"Abrir no meu e-mail" deveria montar um mailto: com assunto e texto codificados: '+JSON.stringify(w.__baixou));
+  d.querySelector('#d-body [data-uso-acao="detalhe"]').click(); await sleep(1300); chk(txt('#d-title').includes('Pedido de download'),'"Voltar" deveria reabrir o detalhe do pedido');
+  w.closeDrawer(true); }
 // ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3000);   // fecha qualquer painel lateral de testes anteriores (o painel protege edição pendente)
   const hj=(await J(adm,'/api/hoje')).b;

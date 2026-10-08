@@ -170,7 +170,7 @@ def puxar(h, con, completo: bool = False, form_id: int | None = None) -> dict:
 def reprocessar(con) -> int:
     """Refaz as colunas (nome, material...) a partir das respostas guardadas, sem ir ao site."""
     n = 0
-    for u in con.execute("SELECT id, resposta_json, pagina FROM uso_download WHERE anonimizada=0 AND resposta_json IS NOT NULL").fetchall():
+    for u in con.execute("SELECT id, resposta_json, pagina FROM uso_download WHERE anonimizada=0 AND apagada=0 AND resposta_json IS NOT NULL").fetchall():
         dv = derivar(_json_ou_dict(u["resposta_json"]), u["pagina"])
         con.execute("""UPDATE uso_download SET nome=?, email=?, telefone=?, instituicao=?, uso=?, material_codigo=?, material_origem=?,
                           projeto_codigo=?, fundo_codigo=? WHERE id=?""",
@@ -184,6 +184,22 @@ def reprocessar(con) -> int:
 def anonimizar_pessoa(con, email: str) -> int:
     """Apaga os dados pessoais de todas as entradas com este e-mail (a pedido da pessoa). Mantém uso e material para as contagens."""
     cur = con.execute("""UPDATE uso_download SET nome='(removido)', email=NULL, telefone=NULL, instituicao=NULL, resposta_json=NULL, anonimizada=1
-                          WHERE lower(email)=lower(?) AND anonimizada=0""", (email.strip(),))
+                          WHERE lower(email)=lower(?) AND anonimizada=0 AND apagada=0""", (email.strip(),))
     con.commit()
     return cur.rowcount
+
+
+def apagar_ids(con, ids: list[int]) -> int:
+    """Apaga entradas DE VERDADE: remove todos os dados (pessoais e de uso) e deixa só a marca (form_id, origem_id) com apagada=1.
+    A marca impede que uma coleta futura traga a entrada de volta; ela some de listas, contagens e exportações."""
+    n = 0
+    ids = sorted({int(i) for i in ids})
+    for k in range(0, len(ids), 500):
+        parte = ids[k:k + 500]
+        cur = con.execute(f"""UPDATE uso_download SET apagada=1, apagada_em=datetime('now'), anonimizada=1, recebida_em=NULL, nome=NULL, email=NULL, telefone=NULL,
+                                 instituicao=NULL, uso=NULL, material_codigo=NULL, material_origem=NULL, projeto_codigo=NULL, fundo_codigo=NULL,
+                                 pagina=NULL, resposta_json=NULL
+                               WHERE apagada=0 AND id IN ({",".join("?" * len(parte))})""", parte)
+        n += cur.rowcount
+    con.commit()
+    return n

@@ -23,6 +23,15 @@ administrador do site e pediu para puxar o histórico completo (07/10/2026).
   endereço da ficha de onde o modal foi aberto). Não guarda IP. `uso_coleta` registra o que cada coleta fez, inclusive erros.
 - **Tela "Uso do acervo"** (menu Sistema, tecla U, só admin e master): quatro números; abas Pedidos de download, Pessoas e Materiais; filtros (texto, uso, período); detalhe com telefone e
   resposta completa; Exportar CSV (todas as linhas do filtro, fica na auditoria); Atualizar agora e Puxar tudo.
+- **Apagar entradas (de verdade)**: um pedido, vários (caixinhas), todos de uma pessoa, ou todos os de um filtro (exige ao menos um filtro: não dá para apagar tudo de uma vez). A entrada some de listas, contagens
+  e exportações e **todos os dados são removidos**; resta só uma marca invisível (formulário + id da entrada) para uma coleta futura NÃO trazer a entrada de volta. "Apagar só os dados pessoais" continua
+  existindo (mantém o pedido nas contagens). A auditoria guarda a contagem e uma impressão curta do e-mail, nunca o endereço.
+- **Exportar**: a aba atual (pedidos, pessoas ou materiais) com o filtro, ou só os pedidos selecionados. CSV com BOM, todas as linhas do filtro (não só a página). Fica na auditoria.
+- **E-mail para UMA pessoa**: botão no detalhe do pedido. O destinatário vem SEMPRE do banco (nunca do que o navegador mandar), sem Cc nem Bcc; o assunto não pode ter quebra de linha (contra injeção de cabeçalho);
+  corpo em quoted-printable (acentos seguros em qualquer servidor); "Responder para" = quem enviou; máximo de 30 por hora; cada envio fica registrado (histórico no detalhe). Texto padrão editável em
+  Configurações (`uso.email_assunto`, `uso.email_corpo`, com {nome}, {material}, {data}). Sem SMTP configurado o botão Enviar fica desativado e sobra "Abrir no meu e-mail" (mailto).
+  **Para ligar o envio:** Configurações → `smtp.host`, `smtp.porta` (587 = STARTTLS; 465 = ssl), `smtp.seguranca` (starttls | ssl | nenhuma), `smtp.usuario`, `smtp.senha` e `smtp.remetente`.
+- **Menu**: "Uso do acervo" fica no fim do grupo **Acervo** (só admin e master), tecla **U** (a décima entrada do menu; dígitos só até 9).
 - **LGPD**: telefone fora das listas; "Apagar dados desta pessoa" anonimiza todas as entradas do e-mail (a linha fica para as contagens e NUNCA é importada de novo); a auditoria
   guarda só uma impressão curta do e-mail. O backup do painel inclui esses dados.
 - Dados de pessoas nunca vão dentro de `onclick`: só em `data-*` (os campos vêm de um formulário público).

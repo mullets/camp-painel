@@ -298,6 +298,8 @@ tbody tr.sel td{background:var(--blue-soft)}
 .us-pess small,.us-mat small{display:block;color:var(--ink3);font-size:11.5px}
 .us-kv{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.us-kv span{color:var(--ink3)}.us-kv b{font-weight:500;word-break:break-word}
 .us-apagar{color:var(--red);border-color:var(--red)}
+.us-selbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}.us-selbar[hidden]{display:none}
+.us-selcel{width:34px}.us-lbl{display:block;margin:12px 0 4px;font-size:12.5px;color:var(--ink3)}.us-ass,.us-msg{width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}.us-msg{min-height:230px;resize:vertical}
 .qnap-spark{width:100%;height:34px;color:var(--ink2);margin:6px 0 2px;display:block}.qnap-card .site-line span{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qnap-rodape{margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
@@ -539,10 +541,10 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
     <button data-v="projetos"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Projetos<kbd>7</kbd></button>
     <button data-v="localizacao"><svg viewBox="0 0 24 24"><path d="M3 7h18v4H3zM3 13h18v4H3z"/><path d="M7 7v10M17 7v10"/></svg>Localização</button>
     <button data-v="etiquetas"><svg viewBox="0 0 24 24"><path d="M3 12l9-9h9v9l-9 9z"/><circle cx="16" cy="8" r="1.5"/></svg>Etiquetas<kbd>8</kbd></button>
-    <div class="grp">Sistema</div>
-    <button data-v="estacoes"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>Estações e site</button>
     <button data-v="uso"><svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Uso do acervo</button>
-      <button data-v="auditoria"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Auditoria</button>
+      <div class="grp">Sistema</div>
+    <button data-v="estacoes"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>Estações e site</button>
+    <button data-v="auditoria"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Auditoria</button>
     <button data-v="config"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>Configurações<kbd>9</kbd></button>
   </nav>
   <div class="foot" id="foot">Protótipo sem servidor</div>
@@ -762,7 +764,8 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
     <div class="hoje-kpis" id="us-kpis"></div>
     <div class="panel">
       <div class="tabs" id="us-tabs"><button class="on" data-aba="downloads" onclick="usoAba('downloads')">Pedidos de download</button><button data-aba="pessoas" onclick="usoAba('pessoas')">Pessoas</button><button data-aba="materiais" onclick="usoAba('materiais')">Materiais</button></div>
-      <div class="filterbar"><input id="us-q" placeholder="nome, e-mail, instituição, código ou uso" oninput="clearTimeout(window._usq);window._usq=setTimeout(usoFiltrou,300)"><select id="us-uso" class="btn" onchange="usoFiltrou()"><option value="">todos os usos</option></select><input id="us-de" type="date" class="btn" onchange="usoFiltrou()" title="a partir de"><input id="us-ate" type="date" class="btn" onchange="usoFiltrou()" title="até"><button class="btn sm" onclick="exportarUsoCSV()">Exportar CSV</button><span class="cnt" id="us-cnt"></span></div>
+      <div class="filterbar"><input id="us-q" placeholder="nome, e-mail, instituição, código ou uso" oninput="clearTimeout(window._usq);window._usq=setTimeout(usoFiltrou,300)"><select id="us-uso" class="btn" onchange="usoFiltrou()"><option value="">todos os usos</option></select><input id="us-de" type="date" class="btn" onchange="usoFiltrou()" title="a partir de"><input id="us-ate" type="date" class="btn" onchange="usoFiltrou()" title="até"><button class="btn sm" onclick="exportarUsoCSV()" title="Exporta a aba atual, com o filtro">Exportar CSV</button><button class="btn sm us-apagar" id="us-apagar-filtro" onclick="usoApagarFiltro()" hidden>Apagar os resultados</button><span class="cnt" id="us-cnt"></span></div>
+      <div class="us-selbar" id="us-selbar" hidden><span id="us-seln"></span><button class="btn sm" onclick="exportarUsoCSV(true)">Exportar selecionados</button><button class="btn sm us-apagar" onclick="usoApagarSel()">Apagar selecionados</button><button class="btn sm" onclick="usoLimparSel()">Limpar seleção</button></div>
       <div class="us-coleta" id="us-coleta"></div>
       <div class="tw"><table><thead id="us-head"></thead><tbody id="us-body"><tr><td class="empty">Carregando…</td></tr></tbody></table></div>
       <div class="pg-ctl" id="us-pag" hidden></div>
@@ -1037,7 +1040,7 @@ function crumbs(route){const [v,arg]=route.split('/');const H=`<a onclick="go('p
   if(v==='fundo'){out.push(`<a onclick="go('fundos')">Fundos</a>`,`<b>${escHtml(arg)} ${escHtml(fundoNome(arg))}</b>`)}
   else if(v==='projeto'){const p=projOf(arg)||{f:arg.slice(0,4),t:arg};out.push(`<a onclick="go('fundos')">Fundos</a>`,`<a onclick="nav('fundo/${escHtml(p.f)}')">${escHtml(p.f)} ${escHtml(fundoNome(p.f))}</a>`,`<b>${escHtml(arg)} · ${escHtml(p.t)}</b>`)}
   else if(v==='item'){const pc=arg.slice(0,10),p=projOf(pc)||{f:pc.slice(0,4),t:pc};out.push(`<a onclick="go('fundos')">Fundos</a>`,`<a onclick="nav('fundo/${escHtml(p.f)}')">${escHtml(p.f)} ${escHtml(fundoNome(p.f))}</a>`,`<a onclick="nav('projeto/${escHtml(pc)}')">${escHtml(pc)} · ${escHtml(p.t)}</a>`,`<b>folha ${escHtml(arg.slice(-6))}</b>`)}
-  else if(v&&v!=='painel'){const grp={filas:'Operação',solicitacoes:'Operação',erros:'Operação',fundos:'Acervo',arquitetos:'Acervo',projetos:'Acervo',etiquetas:'Acervo',localizacao:'Acervo',estacoes:'Sistema',uso:'Sistema',auditoria:'Sistema',config:'Sistema'}[v];if(grp)out.push(`<span>${grp}</span>`);out.push(`<b>${TITLES[v]}</b>`)}
+  else if(v&&v!=='painel'){const grp={filas:'Operação',solicitacoes:'Operação',erros:'Operação',fundos:'Acervo',arquitetos:'Acervo',projetos:'Acervo',etiquetas:'Acervo',localizacao:'Acervo',estacoes:'Sistema',uso:'Acervo',auditoria:'Sistema',config:'Sistema'}[v];if(grp)out.push(`<span>${grp}</span>`);out.push(`<b>${TITLES[v]}</b>`)}
   else out.push('<b>Painel</b>');
   document.getElementById('gcrumb').innerHTML=out.join(S)}
 function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document.getElementById('v-nao-encontrado');if(!sec){sec=document.createElement('section');sec.className='content';sec.id='v-nao-encontrado';document.getElementById('drawer').before(sec)}sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1><p class="sub">${escHtml(detalhe)}</p></div></div><div class="panel"><div class="pb"><button class="btn pri" onclick="go('${fallback}')">Voltar</button></div></div>`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
@@ -1273,7 +1276,7 @@ document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!a
 try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
 // Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
-const NAV_ATALHOS={painel:'1',filas:'2',solicitacoes:'3',erros:'4',fundos:'5',arquitetos:'6',projetos:'7',localizacao:'8',etiquetas:'9',estacoes:'E',uso:'U',auditoria:'A',config:'C'};
+const NAV_ATALHOS={painel:'1',filas:'2',solicitacoes:'3',erros:'4',fundos:'5',arquitetos:'6',projetos:'7',localizacao:'8',etiquetas:'9',uso:'U',estacoes:'E',auditoria:'A',config:'C'};
 const KEYS=Object.fromEntries(Object.entries(NAV_ATALHOS).map(([v,k])=>[k.toLowerCase(),v]));
 document.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=NAV_ATALHOS[b.dataset.v];let el=b.querySelector('kbd');if(!k){if(el)el.remove();return}if(!el){el=document.createElement('kbd');b.appendChild(el)}el.textContent=k});
 document.addEventListener('keydown',e=>{
@@ -2102,15 +2105,18 @@ async function exportarAuditoriaCSV(){if(!AUDITORIA_EVENTOS.length){toast('Não 
   if(AUDITORIA_TOTAL>eventos.length){toast(`Preparando a exportação de ${fmtN(AUDITORIA_TOTAL)} eventos…`);eventos=[];const f=JSON.parse(AUD_CHAVE||'{}');
     try{for(let pg=1;eventos.length<Math.min(AUDITORIA_TOTAL,50000);pg++){const d=await API('/api/eventos?'+new URLSearchParams({...f,pagina:pg,por_pagina:1000}));if(!d.eventos.length)break;eventos.push(...d.eventos)}}catch(e){toast(e.message);return}}
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const linhas=[['quando','ator','entidade','codigo','evento','detalhe'],...eventos.map(e=>[e.quando,e.ator,e.entidade,e.codigo,e.tipo,fmtDetalhe(e.detalhe)])];const csv='\uFEFF'+linhas.map(r=>r.map(q).join(';')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='camp-auditoria-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-const US={aba:'downloads',pagina:1,por:50,chave:''};let US_RESUMO=null;
+const US={aba:'downloads',pagina:1,por:50,chave:''};let US_RESUMO=null,US_TOTAL=0,US_EMAIL=null;const US_SEL=new Set();
 function usoFiltros(){return{q:document.getElementById('us-q').value.trim(),uso:document.getElementById('us-uso').value,de:document.getElementById('us-de').value,ate:document.getElementById('us-ate').value}}
 function usoQS(extra={}){const f={...usoFiltros(),...extra};Object.keys(f).forEach(k=>{if(f[k]===''||f[k]==null)delete f[k]});return new URLSearchParams(f).toString()}
-function usoAba(a){US.aba=a;US.pagina=1;US.chave='';document.querySelectorAll('#us-tabs button').forEach(b=>b.classList.toggle('on',b.dataset.aba===a));carregarUso(true)}
-function usoFiltrou(){US.pagina=1;carregarUso(true)}
+function usoTemFiltro(){const f=usoFiltros();return !!(f.q||f.uso||f.de||f.ate)}
+function usoSelAtualiza(){const b=document.getElementById('us-selbar');if(!b)return;const n=US_SEL.size;b.hidden=n===0;document.getElementById('us-seln').textContent=`${fmtN(n)} selecionado(s)`;const t=document.getElementById('us-todos');if(t){const cs=[...document.querySelectorAll('#us-body input[data-uso-sel]')];t.checked=cs.length>0&&cs.every(c=>US_SEL.has(c.dataset.usoSel))}}
+function usoLimparSel(){US_SEL.clear();document.querySelectorAll('#us-body input[data-uso-sel],#us-todos').forEach(c=>{c.checked=false});usoSelAtualiza()}
+function usoAba(a){US.aba=a;US.pagina=1;US.chave='';usoLimparSel();document.querySelectorAll('#us-tabs button').forEach(b=>b.classList.toggle('on',b.dataset.aba===a));carregarUso(true)}
+function usoFiltrou(){US.pagina=1;usoLimparSel();carregarUso(true)}
 function usoFiltrarPor(texto){closeDrawer(true);document.getElementById('us-q').value=texto;usoAba('downloads')}
 function usoResumoHTML(r){
   const top=(r.usos||[])[0];
-  document.getElementById('us-kpis').innerHTML=[[r.total,'pedidos de download',`${fmtN(r.ultimos_30_dias)} nos últimos 30 dias`],[r.pessoas,'pessoas (e-mails diferentes)',r.anonimizadas?`${fmtN(r.anonimizadas)} registro(s) com dados apagados`:'quem se cadastrou no site'],[r.materiais,'materiais pedidos',r.sem_material?`${fmtN(r.sem_material)} pedido(s) sem material identificado`:'todos com material identificado'],[top?top.n:0,'uso mais declarado',top?top.uso:'nenhum uso registrado']].map(([v,l,d])=>`<div class="hoje-kpi"><div class="v">${fmtN(v)}</div><div class="l">${escHtml(l)}</div><div class="d">${escHtml(d)}</div></div>`).join('');
+  document.getElementById('us-kpis').innerHTML=[[r.total,'pedidos de download',`${fmtN(r.ultimos_30_dias)} nos últimos 30 dias`],[r.pessoas,'pessoas (e-mails diferentes)',r.anonimizadas?`${fmtN(r.anonimizadas)} registro(s) com dados pessoais apagados`:'quem se cadastrou no site'],[r.materiais,'materiais pedidos',r.sem_material?`${fmtN(r.sem_material)} pedido(s) sem material identificado`:'todos com material identificado'],[top?top.n:0,'uso mais declarado',top?top.uso:'nenhum uso registrado']].map(([v,l,d])=>`<div class="hoje-kpi"><div class="v">${fmtN(v)}</div><div class="l">${escHtml(l)}</div><div class="d">${escHtml(d)}</div></div>`).join('');
   const sel=document.getElementById('us-uso'),atual=sel.value;sel.innerHTML='<option value="">todos os usos</option>'+(r.usos||[]).map(u=>`<option value="${escHtml(u.uso)}">${escHtml(u.uso)} (${fmtN(u.n)})</option>`).join('');sel.value=atual;
   const c=r.ultima_coleta;document.getElementById('us-coleta').innerHTML=!c?'Nenhuma coleta ainda. Clique em "Puxar tudo" para trazer o histórico do formulário do site.':c.erro?`<span class="tag r">a última coleta falhou</span> ${escHtml(c.erro)}`:`Última coleta: ${escHtml(fmtDataHora(c.quando))} · ${fmtN(c.lidas)} lida(s), ${fmtN(c.novas)} nova(s)${c.completo?' (histórico completo)':''}`}
 async function carregarUso(soLista){
@@ -2118,18 +2124,20 @@ async function carregarUso(soLista){
     if(!soLista||!US_RESUMO){US_RESUMO=await API('/api/uso/resumo');usoResumoHTML(US_RESUMO)}
     const chave=US.aba+JSON.stringify(usoFiltros());if(chave!==US.chave){US.chave=chave;US.pagina=1}
     tabelaCarregando('#us-body','Carregando…');
-    const rota=US.aba==='pessoas'?'/api/uso/pessoas':US.aba==='materiais'?'/api/uso/materiais':'/api/uso';
-    const d=await API(rota+'?'+usoQS({pagina:US.pagina,por_pagina:US.por}));
+    const rota=US.aba==='pessoas'?'/api/uso/pessoas':US.aba==='materiais'?'/api/uso/materiais':'/api/uso',dl=US.aba==='downloads';
+    const d=await API(rota+'?'+usoQS({pagina:US.pagina,por_pagina:US.por}));US_TOTAL=d.total;
     const cab={downloads:['Quando','Pessoa','Instituição','Material','Uso declarado'],pessoas:['Pessoa','Instituição','Pedidos','Materiais','Primeiro','Último','Usos declarados'],materiais:['Material','Pedidos','Pessoas','Último pedido']}[US.aba];
-    document.getElementById('us-head').innerHTML='<tr>'+cab.map(h=>`<th>${h}</th>`).join('')+'</tr>';
+    document.getElementById('us-head').innerHTML='<tr>'+(dl?'<th class="us-selcel"><input type="checkbox" id="us-todos" aria-label="selecionar todos desta página"></th>':'')+cab.map(h=>`<th>${h}</th>`).join('')+'</tr>';
     const mat=i=>i.material_codigo||i.codigo?`<span class="code">${escHtml(i.material_codigo||i.codigo)}</span>${(i.material_titulo||i.titulo)?`<small>${escHtml(i.material_titulo||i.titulo)}</small>`:''}`:'<span class="tag a">não identificado</span>';
     const linha={
-      downloads:i=>`<tr class="us-row" data-uso-acao="detalhe" data-uso-valor="${escHtml(i.id)}"><td style="white-space:nowrap">${escHtml(fmtDataHora(i.recebida_em))}</td><td class="us-pess">${escHtml(i.nome||'—')}<small>${escHtml(i.email||'dados apagados a pedido')}</small></td><td>${escHtml(i.instituicao||'')}</td><td class="us-mat">${mat(i)}</td><td>${escHtml(i.uso||'')}</td></tr>`,
-      pessoas:i=>`<tr class="us-row"${i.email?` data-uso-acao="filtrar" data-uso-valor="${escHtml(i.email)}"`:''}><td class="us-pess">${escHtml(i.nome||'—')}<small>${escHtml(i.email||'dados apagados a pedido')}</small></td><td>${escHtml(i.instituicao||'')}</td><td>${fmtN(i.downloads)}</td><td>${fmtN(i.materiais)}</td><td style="white-space:nowrap">${escHtml(fmtDataHora(i.primeira))}</td><td style="white-space:nowrap">${escHtml(fmtDataHora(i.ultima))}</td><td>${escHtml(i.usos||'')}</td></tr>`,
+      downloads:i=>`<tr class="us-row" data-uso-acao="detalhe" data-uso-valor="${escHtml(i.id)}"><td class="us-selcel"><input type="checkbox" data-uso-sel="${escHtml(i.id)}" aria-label="selecionar este pedido"${US_SEL.has(String(i.id))?' checked':''}></td><td style="white-space:nowrap">${escHtml(fmtDataHora(i.recebida_em))}</td><td class="us-pess">${escHtml(i.nome||'—')}<small>${escHtml(i.email||'dados pessoais apagados')}</small></td><td>${escHtml(i.instituicao||'')}</td><td class="us-mat">${mat(i)}</td><td>${escHtml(i.uso||'')}</td></tr>`,
+      pessoas:i=>`<tr class="us-row"${i.email?` data-uso-acao="filtrar" data-uso-valor="${escHtml(i.email)}"`:''}><td class="us-pess">${escHtml(i.nome||'—')}<small>${escHtml(i.email||'dados pessoais apagados')}</small></td><td>${escHtml(i.instituicao||'')}</td><td>${fmtN(i.downloads)}</td><td>${fmtN(i.materiais)}</td><td style="white-space:nowrap">${escHtml(fmtDataHora(i.primeira))}</td><td style="white-space:nowrap">${escHtml(fmtDataHora(i.ultima))}</td><td>${escHtml(i.usos||'')}</td></tr>`,
       materiais:i=>`<tr class="us-row" data-uso-acao="filtrar" data-uso-valor="${escHtml(i.codigo)}"><td class="us-mat">${mat(i)}</td><td>${fmtN(i.downloads)}</td><td>${fmtN(i.pessoas)}</td><td style="white-space:nowrap">${escHtml(fmtDataHora(i.ultima))}</td></tr>`}[US.aba];
     const vazio=(US_RESUMO&&US_RESUMO.total===0)?'Ainda não há pedidos de download no painel. Clique em "Puxar tudo" para trazer o histórico do formulário do site.':'Nada com esses filtros.';
-    document.getElementById('us-body').innerHTML=d.itens.length?d.itens.map(linha).join(''):`<tr><td colspan="${cab.length}" class="empty">${vazio}</td></tr>`;
+    document.getElementById('us-body').innerHTML=d.itens.length?d.itens.map(linha).join(''):`<tr><td colspan="${cab.length+(dl?1:0)}" class="empty">${vazio}</td></tr>`;
     document.getElementById('us-cnt').textContent=`${fmtN(d.total)} resultado(s)`;
+    const bf=document.getElementById('us-apagar-filtro');if(bf){bf.hidden=!(dl&&usoTemFiltro()&&d.total>0);bf.textContent=`Apagar os ${fmtN(d.total)} resultados`}
+    usoSelAtualiza();
     montarPaginadorServidor('#us-pag',{total:d.total,pagina:d.pagina,por:d.por_pagina},p=>{US.pagina=p;carregarUso(true)},n=>{US.por=n;US.pagina=1;carregarUso(true)});
   }catch(e){tabelaErro('#us-body',e.status===403?'Só admin e master veem o uso do acervo.':e.message,'carregarUso()')}}
 async function abrirUsoDetalhe(id){
@@ -2137,16 +2145,45 @@ async function abrirUsoDetalhe(id){
     const kv=(k,v)=>`<div class="us-kv"><span>${escHtml(k)}</span><b>${escHtml(v||'—')}</b></div>`;
     const como={campo:'campo do formulário',valor:'valor digitado',pagina:'endereço da ficha'}[d.material_origem]||'';
     const resp=d.resposta?Object.entries(d.resposta).map(([k,v])=>`<li><span class="mono">${escHtml(k)}</span>: ${escHtml(typeof v==='object'?JSON.stringify(v):String(v))}</li>`).join(''):'';
-    openDrawer('Pedido de download',d.nome||'dados apagados',`${d.anonimizada?'<p class="help">Os dados pessoais foram apagados a pedido da pessoa. O uso e o material continuam nas contagens.</p>':''}${kv('Quando',fmtDataHora(d.recebida_em))}${kv('Nome',d.nome)}${kv('E-mail',d.email)}${kv('Telefone',d.telefone)}${kv('Instituição',d.instituicao)}${kv('Uso declarado',d.uso)}${kv('Material',d.material_codigo?d.material_codigo+(d.material_titulo?' — '+d.material_titulo:''):'não identificado')}${como?kv('Como o material foi identificado',como):''}${kv('Página onde pediu',d.pagina)}${resp?`<details class="us-resp"><summary>Resposta completa do formulário</summary><ul class="list">${resp}</ul></details>`:''}<div class="act">${d.email?`<button class="btn sm" data-uso-acao="filtrar" data-uso-valor="${escHtml(d.email)}">Ver tudo desta pessoa</button>`:''}${rota?`<button class="btn sm" data-uso-acao="ficha" data-uso-valor="${escHtml(rota)}">Abrir a ficha</button>`:''}${d.email?`<button class="btn sm us-apagar" data-uso-acao="apagar" data-uso-valor="${escHtml(d.email)}">Apagar dados desta pessoa</button>`:''}</div>`)}catch(e){toast(e.message)}}
-async function usoApagar(email){
-  if(!confirm('Apagar nome, e-mail, telefone e respostas desta pessoa? O uso e o material continuam nas contagens. Não dá para desfazer.'))return;
-  try{const r=await API('/api/uso/anonimizar',{method:'POST',body:JSON.stringify({email})});toast(`Dados apagados em ${fmtN(r.anonimizadas)} pedido(s)`);closeDrawer(true);US_RESUMO=null;carregarUso()}catch(e){toast(e.message)}}
+    const mails=(d.emails||[]).map(x=>`<li>${escHtml(fmtDataHora(x.enviado_em))} · ${escHtml(x.enviado_por)} · ${escHtml(x.assunto)}${x.ok?'':' <span class="tag r">falhou</span>'}</li>`).join('');
+    openDrawer('Pedido de download',d.nome||'dados pessoais apagados',`${d.anonimizada?'<p class="help">Os dados pessoais foram apagados a pedido da pessoa. O uso e o material continuam nas contagens.</p>':''}${kv('Quando',fmtDataHora(d.recebida_em))}${kv('Nome',d.nome)}${kv('E-mail',d.email)}${kv('Telefone',d.telefone)}${kv('Instituição',d.instituicao)}${kv('Uso declarado',d.uso)}${kv('Material',d.material_codigo?d.material_codigo+(d.material_titulo?' — '+d.material_titulo:''):'não identificado')}${como?kv('Como o material foi identificado',como):''}${kv('Página onde pediu',d.pagina)}${resp?`<details class="us-resp"><summary>Resposta completa do formulário</summary><ul class="list">${resp}</ul></details>`:''}${mails?`<details class="us-resp"><summary>E-mails enviados (${fmtN((d.emails||[]).length)})</summary><ul class="list">${mails}</ul></details>`:''}<div class="act">${d.email?`<button class="btn sm pri" data-uso-acao="email" data-uso-valor="${escHtml(d.id)}">Enviar e-mail</button>`:''}${d.email?`<button class="btn sm" data-uso-acao="filtrar" data-uso-valor="${escHtml(d.email)}">Ver tudo desta pessoa</button>`:''}${rota?`<button class="btn sm" data-uso-acao="ficha" data-uso-valor="${escHtml(rota)}">Abrir a ficha</button>`:''}</div><div class="act"><button class="btn sm us-apagar" data-uso-acao="apagar-um" data-uso-valor="${escHtml(d.id)}">Apagar este pedido</button>${d.email?`<button class="btn sm us-apagar" data-uso-acao="apagar-pessoa" data-uso-valor="${escHtml(d.email)}">Apagar todos desta pessoa</button><button class="btn sm us-apagar" data-uso-acao="anonimizar" data-uso-valor="${escHtml(d.email)}" title="Remove nome, e-mail e telefone, mas o pedido continua nas contagens">Apagar só os dados pessoais</button>`:''}</div>`)}catch(e){toast(e.message)}}
+async function usoEmail(id){
+  try{const [d,cf]=await Promise.all([API('/api/uso/'+encodeURIComponent(id)),API('/api/uso/email/config')]);
+    const data=(d.recebida_em||'').slice(0,10).split('-').reverse().join('/');
+    const sub=t=>(t||'').replaceAll('{nome}',d.nome||'').replaceAll('{material}',d.material_titulo||d.material_codigo||'o material').replaceAll('{data}',data);
+    US_EMAIL={id:d.id,email:d.email};
+    openDrawer('E-mail para uma pessoa',d.nome||'',`<p class="help">O e-mail vai SÓ para <b>${escHtml(d.email)}</b>. As respostas chegam em ${escHtml((EU&&EU.email)||'seu e-mail')}.</p>${cf.configurado?'':'<p class="help"><span class="tag a">envio não configurado</span> Preencha smtp.host, smtp.usuario, smtp.senha e smtp.remetente em Configurações. Enquanto isso, use "Abrir no meu e-mail".</p>'}<label class="us-lbl" for="us-ass">Assunto</label><input id="us-ass" class="us-ass" maxlength="200"><label class="us-lbl" for="us-msg">Mensagem</label><textarea id="us-msg" class="us-msg"></textarea><div class="act"><button class="btn pri" id="us-env" data-uso-acao="enviar-email"${cf.configurado?'':' disabled'}>Enviar</button><button class="btn" data-uso-acao="mailto">Abrir no meu e-mail</button><button class="btn" data-uso-acao="detalhe" data-uso-valor="${escHtml(d.id)}">Voltar</button></div>`);
+    document.getElementById('us-ass').value=sub(cf.assunto);document.getElementById('us-msg').value=sub(cf.corpo)   // preenchido por código (.value), nunca montado em HTML: o nome vem de um formulário público
+  }catch(e){toast(e.message)}}
+async function usoEnviarEmail(){
+  if(!US_EMAIL)return;const assunto=document.getElementById('us-ass').value.trim(),corpo=document.getElementById('us-msg').value.trim();
+  if(!assunto||!corpo){toast('Preencha o assunto e a mensagem');return}
+  if(!confirm(`Enviar este e-mail para ${US_EMAIL.email}?`))return;
+  const b=document.getElementById('us-env');b.disabled=true;
+  try{const r=await API(`/api/uso/${US_EMAIL.id}/email`,{method:'POST',body:JSON.stringify({assunto,corpo})});toast('E-mail enviado para '+r.para);abrirUsoDetalhe(US_EMAIL.id)}catch(e){toast(e.message);b.disabled=false}}
+function usoMailto(){if(!US_EMAIL)return;const a=document.createElement('a');a.href='mailto:'+encodeURIComponent(US_EMAIL.email).replace('%40','@')+'?subject='+encodeURIComponent(document.getElementById('us-ass').value)+'&body='+encodeURIComponent(document.getElementById('us-msg').value);document.body.appendChild(a);a.click();a.remove()}
+async function usoApagarReq(corpo,metodo,url,pergunta){
+  if(!confirm(pergunta))return;
+  try{const r=await API(url,{method:metodo,...(corpo?{body:JSON.stringify(corpo)}:{})});toast(`${fmtN(r.apagadas)} pedido(s) apagado(s)`);closeDrawer(true);usoLimparSel();US_RESUMO=null;carregarUso()}catch(e){toast(e.message)}}
+const US_AVISO='Somem de tudo (listas, contagens e exportações) e os dados pessoais são removidos. Não dá para desfazer.';
+function usoApagarSel(){const ids=[...US_SEL].map(Number);if(ids.length)usoApagarReq({ids},'POST','/api/uso/apagar',`Apagar ${fmtN(ids.length)} pedido(s)? ${US_AVISO}`)}
+function usoApagarUm(id){usoApagarReq(null,'DELETE','/api/uso/'+encodeURIComponent(id),`Apagar este pedido? ${US_AVISO}`)}
+function usoApagarPessoa(email){usoApagarReq({email},'POST','/api/uso/apagar',`Apagar TODOS os pedidos de ${email}? ${US_AVISO}`)}
+function usoApagarFiltro(){if(!usoTemFiltro())return;const f=usoFiltros(),filtro={};['q','uso','de','ate'].forEach(k=>{if(f[k])filtro[k]=f[k]});usoApagarReq({filtro},'POST','/api/uso/apagar',`Apagar TODOS os ${fmtN(US_TOTAL)} pedidos que aparecem neste filtro? ${US_AVISO}`)}
+async function usoAnonimizar(email){
+  if(!confirm('Remover nome, e-mail, telefone e respostas desta pessoa? O uso e o material continuam nas contagens. Não dá para desfazer.'))return;
+  try{const r=await API('/api/uso/anonimizar',{method:'POST',body:JSON.stringify({email})});toast(`Dados pessoais apagados em ${fmtN(r.anonimizadas)} pedido(s)`);closeDrawer(true);US_RESUMO=null;carregarUso()}catch(e){toast(e.message)}}
 async function puxarUso(completo){
   const b=document.getElementById(completo?'us-tudo':'us-atualizar');b.disabled=true;toast(completo?'Lendo todo o histórico do formulário no site…':'Buscando pedidos novos no site…');
   try{const r=await API('/api/uso/puxar',{method:'POST',body:JSON.stringify({completo})});US_RESUMO=null;await carregarUso();toast(r.erro?'A coleta falhou: '+r.erro:`${fmtN(r.novas)} pedido(s) novo(s) (${fmtN(r.lidas)} lido(s) no site)`)}catch(e){toast(e.message)}finally{b.disabled=false}}
-function exportarUsoCSV(){const a=document.createElement('a');a.href='/api/uso/exportar.csv?'+usoQS();a.download='camp-uso-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove()}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-uso-acao]');if(!b)return;const a=b.dataset.usoAcao,v=b.dataset.usoValor;   // dados de pessoas NUNCA vão dentro de onclick: só em data-*, lidos aqui
-  if(a==='detalhe')abrirUsoDetalhe(v);else if(a==='filtrar')usoFiltrarPor(v);else if(a==='ficha'){closeDrawer(true);go(v)}else if(a==='apagar')usoApagar(v)});
+function exportarUsoCSV(soSelecionados){   // a aba atual (pedidos | pessoas | materiais), com o filtro; ou SÓ os pedidos selecionados
+  const visao=US.aba==='downloads'?'pedidos':US.aba,sel=soSelecionados&&US_SEL.size,qs=sel?new URLSearchParams({visao:'pedidos',ids:[...US_SEL].join(',')}).toString():usoQS({visao});
+  const a=document.createElement('a');a.href='/api/uso/exportar.csv?'+qs;a.download=`camp-uso-${sel?'pedidos-selecionados':visao}-${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove()}
+document.addEventListener('change',e=>{const c=e.target;if(!c||!c.matches)return;
+  if(c.matches('input[data-uso-sel]')){c.checked?US_SEL.add(c.dataset.usoSel):US_SEL.delete(c.dataset.usoSel);usoSelAtualiza()}
+  else if(c.id==='us-todos'){document.querySelectorAll('#us-body input[data-uso-sel]').forEach(i=>{i.checked=c.checked;c.checked?US_SEL.add(i.dataset.usoSel):US_SEL.delete(i.dataset.usoSel)});usoSelAtualiza()}})
+document.addEventListener('click',e=>{if(e.target.closest('.us-selcel'))return;const b=e.target.closest('[data-uso-acao]');if(!b)return;const a=b.dataset.usoAcao,v=b.dataset.usoValor;   // dados de pessoas NUNCA vão dentro de onclick: só em data-*, lidos aqui
+  if(a==='detalhe')abrirUsoDetalhe(v);else if(a==='filtrar')usoFiltrarPor(v);else if(a==='ficha'){closeDrawer(true);go(v)}else if(a==='anonimizar')usoAnonimizar(v);else if(a==='apagar-um')usoApagarUm(v);else if(a==='apagar-pessoa')usoApagarPessoa(v);else if(a==='email')usoEmail(v);else if(a==='enviar-email')usoEnviarEmail();else if(a==='mailto')usoMailto()});
 async function carregarAuditoria(){const tinha=AUDITORIA_EVENTOS.length>0;if(!tinha)tabelaCarregando('#au-body','Carregando auditoria…');try{const sec=document.getElementById('v-auditoria');if(!sec.dataset.restaurou){try{const s=JSON.parse(localStorage.getItem(AUDITORIA_STATE_KEY)||'{}');if(s.entidade)document.getElementById('au-ent').dataset.restore=s.entidade;if(s.ator)document.getElementById('au-ator').dataset.restore=s.ator;document.getElementById('au-q').value=s.q||'';document.getElementById('au-desde').value=s.desde||''}catch(_){}sec.dataset.restaurou='1'}
   const filtros={entidade:document.getElementById('au-ent').value,ator:document.getElementById('au-ator').value,q:document.getElementById('au-q').value,desde:document.getElementById('au-desde').value};try{localStorage.setItem(AUDITORIA_STATE_KEY,JSON.stringify(filtros))}catch(_){}
   const chaveAu=JSON.stringify(filtros);if(chaveAu!==AUD_CHAVE){AUD_CHAVE=chaveAu;AUD_PAG.pagina=1}
