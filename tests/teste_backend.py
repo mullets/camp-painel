@@ -1081,6 +1081,61 @@ def filho(modo):
         ver("outra chave = próximo número (P0009)", c3.json()["codigo"] == "F099-P0009", c3.text[:100])
         ver("/reservar sem título: 400; fundo inexistente: 404", lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": " ", "chave_reserva": "c" * 32}, headers=T).status_code == 400 and lan.post("/api/estacoes/projetos/reservar", json={**corpo, "fundo_codigo": "F000", "chave_reserva": "d" * 32}, headers=T).status_code in (400, 404))
         for l in res: print(l)
+    elif modo == "sondagem":
+        import json as _j, threading as _th, httpx
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from app.sondagem_fluentforms import sondar
+        CAMPOS = {"fields": [
+            {"element": "input_name", "attributes": {"name": "names", "type": "text"}, "settings": {"label": "Nome completo", "validation_rules": {"required": {"value": True}}}},
+            {"element": "input_email", "attributes": {"name": "email", "type": "email"}, "settings": {"label": "E-mail", "validation_rules": {"required": {"value": True}}}},
+            {"element": "container", "columns": [{"fields": [
+                {"element": "input_hidden", "attributes": {"name": "codigo_material", "type": "hidden"}, "settings": {"label": "Código do material"}},
+                {"element": "select", "attributes": {"name": "uso_pretendido"}, "settings": {"label": "Uso pretendido"}}]}]}]}
+        ENTRADAS = [{"id": i, "created_at": f"2026-09-{1 + i:02d} 10:00:00",
+                     "response": _j.dumps({"names": "Ana Souza", "email": "ana.souza@exemplo.com", "telefone": "11999990000",
+                                           "codigo_material": "F002-P0002-1977-S01-D0000%d" % i if i < 8 else "",
+                                           "uso_pretendido": ["Pesquisa", "Publicação", "Exposição"][i % 3]})} for i in range(12)]
+        def servidor(rotas):
+            vistos = []
+            class H(BaseHTTPRequestHandler):
+                def log_message(self, *a): pass
+                def do_GET(self):
+                    vistos.append(("GET", self.path.split("?")[0]))
+                    st, corpo = rotas.get(self.path.split("?")[0], (404, {"code": "rest_no_route"}))
+                    self.send_response(st); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(_j.dumps(corpo).encode())
+                def do_POST(self): vistos.append(("POST", self.path)); self.send_response(405); self.end_headers()
+                do_PUT = do_DELETE = do_PATCH = do_POST
+            srv = ThreadingHTTPServer(("127.0.0.1", 0), H); _th.Thread(target=srv.serve_forever, daemon=True).start()
+            return srv, vistos, httpx.Client(base_url=f"http://127.0.0.1:{srv.server_port}")
+        base = {"/wp-json/": (200, {"namespaces": ["wp/v2", "fluentform/v1"], "routes": {"/fluentform/v1/forms": {}, "/fluentform/v1/submissions": {}}}),
+                "/wp-json/fluentform/v1/forms": (200, {"data": [{"id": 7, "title": "Cadastro para download de material — CAMP", "status": "published"}, {"id": 5, "title": "Contato — CAMP", "status": "published"}]}),
+                "/wp-json/fluentform/v1/forms/7": (200, {"id": 7, "form_fields": _j.dumps(CAMPOS)}),
+                "/wp-json/fluentform/v1/forms/7/settings": (200, {"confirmation": {"redirectTo": "customUrl", "customUrl": "https://camp.arq.br/wp-content/uploads/2026/foto.jpg"}}),
+                "/wp-json/fluentform/v1/submissions": (200, {"submissions": {"data": ENTRADAS, "total": 40}})}
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        srv, vistos, h = servidor(base); txt = "\n".join(sondar(h)); srv.shutdown()
+        ver("acha o formulário de download pelo título e o id", "Cadastro para download de material" in txt and "id 7" in txt, txt[:200])
+        ver("lê os campos, inclusive dentro de colunas, com rótulo, tipo e obrigatório", "names «Nome completo» (input_name, obrigatório)" in txt and "uso_pretendido" in txt, txt[200:500])
+        ver("aponta o campo oculto do material como candidato a identificar o material", "codigo_material «Código do material»" in txt)
+        ver("diz quantas entradas existem e o período", "40 no total; analisadas as 12 mais recentes" in txt and "2026-09-01 a 2026-09-12" in txt, txt[txt.find("entradas:"):][:140])
+        ver("mede o preenchimento do campo do material (8 de 12, todos no formato Fxxx-Pxxxx)", "preenchido em 8 de 12 entradas; 8 com código CAMP" in txt)
+        ver("agrega o 'uso pretendido' em categorias (lista de opções)", "Pesquisa=4" in txt and "Publicação=4" in txt and "Exposição=4" in txt)
+        ver("detecta que a confirmação leva a um arquivo PÚBLICO (não dá para saber quem baixou)", "ENDEREÇO PÚBLICO" in txt.upper() or "endereço PÚBLICO" in txt, txt[-400:])
+        ver("PRIVACIDADE: não imprime nome, e-mail nem telefone das pessoas", all(x not in txt for x in ("Ana", "Souza", "ana.souza", "@exemplo", "11999990000")))
+        ver("só faz GET (nenhuma escrita no site)", vistos and all(m == "GET" for m, _ in vistos), str(set(m for m, _ in vistos)))
+        sem = dict(base); sem["/wp-json/"] = (200, {"namespaces": ["wp/v2"], "routes": {}})
+        srv, _, h = servidor(sem); t2 = "\n".join(sondar(h)); srv.shutdown()
+        ver("plugin sem REST: diz com clareza e propõe alternativas", "NÃO aparece" in t2 and "webhook" in t2)
+        proib = dict(base); proib["/wp-json/fluentform/v1/forms"] = (403, {"code": "rest_forbidden"})
+        srv, _, h = servidor(proib); t3 = "\n".join(sondar(h)); srv.shutdown()
+        ver("sem permissão (403): explica que o usuário precisa ser administrador do Fluent Forms", "403" in t3 and "administrador" in t3)
+        sem_campo = dict(base); sem_campo["/wp-json/fluentform/v1/forms/7"] = (200, {"form_fields": _j.dumps({"fields": [CAMPOS["fields"][0]]})})
+        srv, _, h = servidor(sem_campo); t4 = "\n".join(sondar(h)); srv.shutdown()
+        ver("formulário SEM campo do material: a conclusão manda criar o campo oculto", "NENHUM" in t4 and "NÃO registra qual material" in t4)
+        fora = httpx.Client(base_url="http://127.0.0.1:9", timeout=2); t5 = "\n".join(sondar(fora))
+        ver("site fora do ar: mensagem clara, sem exceção", "não consegui ler a API" in t5, t5[:160])
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -1263,6 +1318,14 @@ else:
 print("19) Contrato com o CAMP Vision 2: lotes, status, heartbeat, token e reserva de projeto")
 rc, out = rodar("campvision", f"{tmp}/campvision.db")
 if rc != 0: ok(False, f"teste do contrato do CAMP Vision não rodou -> {out[-1100:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("20) Sondagem do Fluent Forms (fase 0 do Uso do acervo): só leitura e sem dados pessoais")
+rc, out = rodar("sondagem", f"{tmp}/sondagem.db")
+if rc != 0: ok(False, f"teste da sondagem não rodou -> {out[-900:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
