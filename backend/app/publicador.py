@@ -2,10 +2,27 @@
 registra divergência para tentar de novo."""
 from __future__ import annotations
 
+import functools
 import json
+
+from fastapi import HTTPException
 
 from .db import connect
 from .wp import WP
+
+CONVIDADO = "F000"  # fundo Convidado: material de terceiros, nunca vai ao site
+
+
+def _nunca_convidado(func):
+    """F000 · Convidado guarda material de TERCEIROS digitalizado na CAMP: nada dele
+    (fundo, dossiê, folha, status) pode ser criado ou mudado no site."""
+    @functools.wraps(func)
+    def envolto(*args, **kwargs):
+        codigo = kwargs.get("codigo", args[0] if args else "")
+        if str(codigo or "").strip().upper().startswith(CONVIDADO):
+            raise HTTPException(403, "F000 · Convidado é material de terceiros — não vai ao site")
+        return func(*args, **kwargs)
+    return envolto
 
 COL_PROJETOS = 8007
 
@@ -25,6 +42,7 @@ def _pendencia(con, entidade, codigo, campo, detalhe):
                 (entidade, codigo, campo, detalhe[:300], None))
 
 
+@_nunca_convidado
 def criar_fundo_no_site(codigo: str, ator: str) -> dict:
     """Cria termos 'Fundos' e 'Arquitetos' para o fundo. Idempotente (não recria se já há term_id)."""
     con = connect()
@@ -77,6 +95,7 @@ def renomear_fundo_no_site(codigo: str, novo_titulo: str, ator: str) -> dict:
     return out
 
 
+@_nunca_convidado
 def criar_dossie_no_site(codigo: str, ator: str) -> dict:
     """Cria o item do projeto na coleção 'Projetos CAMP' como rascunho, com os metadados que o site usa."""
     con = connect()
@@ -161,6 +180,7 @@ def renomear_agente_no_site(agente_id: int, novo_nome: str, ator: str) -> dict:
     return out
 
 
+@_nunca_convidado
 def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
     """Propaga status remoto sem manter transação SQLite aberta durante chamadas de rede.
 
@@ -351,6 +371,7 @@ def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     return r[0] if r else None
 
 
+@_nunca_convidado
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
     con = connect()
