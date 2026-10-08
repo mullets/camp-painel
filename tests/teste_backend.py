@@ -782,7 +782,7 @@ def filho(modo):
         g = adm.get("/api/fundos/F099/publicacao").json()
         ver("com direitos autorizados e 1 projeto autorizado com dossiê: o fundo fica pronto", g["pode_publicar"] is True and g["contagem"]["prontos"] == 1 and g["pode_agir"] is True, str(g["contagem"]))
         ver("próximo passo agora orienta a publicar", "Tudo pronto" in g["proximo_passo"], g["proximo_passo"][:80])
-        ver("fundo inexistente: 404 e sem login: 401", adm.get("/api/fundos/F000/publicacao").status_code == 404 and anon.get("/api/fundos/F099/publicacao").status_code == 401)
+        ver("fundo inexistente: 404 e sem login: 401", adm.get("/api/fundos/F998/publicacao").status_code == 404 and anon.get("/api/fundos/F099/publicacao").status_code == 401)
         # ---------- ARQUITETO ----------
         g = le.get(f"/api/agentes/{aid2}/publicacao").json()
         ver("arquiteto sem vínculo: falta vínculo e fundo publicado", ids(g, lambda x: x["bloqueia"] and not x["ok"]) == {"vinculo", "publicado"} and g["pode_publicar"] is False)
@@ -1079,7 +1079,7 @@ def filho(modo):
         ver("repetir a reserva com a MESMA chave devolve o MESMO projeto (não duplica)", b.json()["codigo"] == a.json()["codigo"])
         c3 = lan.post("/api/estacoes/projetos/reservar", json={**corpo, "chave_reserva": "b" * 32}, headers=T)
         ver("outra chave = próximo número (P0009)", c3.json()["codigo"] == "F099-P0009", c3.text[:100])
-        ver("/reservar sem título: 400; fundo inexistente: 404", lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": " ", "chave_reserva": "c" * 32}, headers=T).status_code == 400 and lan.post("/api/estacoes/projetos/reservar", json={**corpo, "fundo_codigo": "F000", "chave_reserva": "d" * 32}, headers=T).status_code in (400, 404))
+        ver("/reservar sem título: 400; fundo inexistente: 404", lan.post("/api/estacoes/projetos/reservar", json={**corpo, "titulo": " ", "chave_reserva": "c" * 32}, headers=T).status_code == 400 and lan.post("/api/estacoes/projetos/reservar", json={**corpo, "fundo_codigo": "F998", "chave_reserva": "d" * 32}, headers=T).status_code in (400, 404))
         # ---------------- aviso do CAMP Vision (POST /api/campvision/aviso) ----------------
         rel = lambda p_: p_.relative_to(base).as_posix()
         d8 = lote("F099-P0008 - Casa Oito", base_info("F099-P0008"), {"status": "processando", "codigo": "F099-P0008"}, [("Plantas", "a.jpg"), ("Plantas", "b.jpg")])
