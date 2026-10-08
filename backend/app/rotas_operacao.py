@@ -577,13 +577,14 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         return {"acao": "ignorada", "pasta": str(pasta), "codigo": cod,
                 "motivo": f"o aviso diz {esperado.strip().upper()}, mas a pasta é do projeto {cod}: nada foi importado"}
 
-    exts = {".jpg", ".jpeg", ".tif", ".tiff", ".dng", ".png"}
-    arquivos = [x for x in pasta.rglob("*") if x.is_file() and x.suffix.lower() in exts]
-    n_arq = len(arquivos)
+    from .qnap_folhas import contar_documentos
+    n_arq, leitura_parcial = contar_documentos(pasta)   # DOCUMENTOS (série + nome), não arquivos: TIF/ e JPG/ do mesmo código são UM documento
 
     st = status.get("status") if isinstance(status, dict) else None
     etapa_alvo, conhecido = _classificar_status(st)
     aviso = None if conhecido else f"status desconhecido '{st}': tratado como pronto"
+    if leitura_parcial:
+        aviso = ((aviso + "; ") if aviso else "") + "a pasta demorou para ser lida: a contagem de folhas pode estar incompleta"
     nome = info.get("nome") or info.get("titulo") or pasta.name
     esperadas = info.get("folhas_esperadas") or info.get("itens_esperados") or info.get("quantidade")
     contexto = {

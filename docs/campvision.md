@@ -26,7 +26,11 @@ estações de captura ─▶ QNAP: Arquivos/100 - Scanners  ─▶  CV2 (Ubuntu 
         <série>/                    ← Plantas, Fotografias, Documentos... (as imagens ficam aqui)
 ```
 - **Um lote é a pasta do projeto** (a que contém `info_projeto.json` e/ou `status.json`). O painel não entra em outra pasta dentro dele.
-- O painel conta as imagens do lote **em todas as subpastas**. Extensões contadas: `.jpg .jpeg .tif .tiff .dng .png`. **PDF não é contado** (ver seção 9).
+- O painel conta **DOCUMENTOS**, não arquivos: a chave é (série, nome sem extensão), com a série sendo a primeira pasta abaixo da do projeto. Cada formato pode ficar numa subpasta própria dentro da série
+  (`<série>/TIF/F026-P0006-1975-S01-D00001.tif` e `<série>/JPG/F026-P0006-1975-S01-D00001.jpg` são **um** documento, com dois formatos). Extensões: `.jpg .jpeg .tif .tiff .dng .png`. **PDF não é contado** (ver seção 9).
+  Lixeira e ocultos do QNAP (`@Recycle`, `@eaDir`, `#recycle`, nomes com ponto) são ignorados.
+- Na **página do projeto**, o painel "Encontradas no QNAP, ainda não catalogadas no painel" lista os documentos da pasta do lote que ainda não são folhas do painel (com prévia quando há JPG). A lista de folhas do projeto vem do
+  banco (itens do site e itens locais); **importar o lote para virar folha é a revisão pós-CAMP Vision, que ainda não existe**.
 - O nome da pasta do projeto **deve começar pelo código** (`F002-P0002 - Igreja...`): é o último recurso do painel para descobrir o projeto (seção 3).
 
 ## 3. `info_projeto.json` (na pasta do projeto)

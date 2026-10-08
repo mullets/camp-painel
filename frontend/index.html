@@ -300,6 +300,9 @@ tbody tr.sel td{background:var(--blue-soft)}
 .us-apagar{color:var(--red);border-color:var(--red)}
 .us-selbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}.us-selbar[hidden]{display:none}
 .us-selcel{width:34px}.us-lbl{display:block;margin:12px 0 4px;font-size:12.5px;color:var(--ink3)}.us-ass,.us-msg{width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}.us-msg{min-height:230px;resize:vertical}
+.qf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px}.qf{margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.qf-img{height:110px;display:grid;place-items:center;background:var(--surface2)}.qf-img img{max-width:100%;max-height:110px;object-fit:contain}.qf-sem{font-size:11.5px;color:var(--ink3)}
+.qf figcaption{padding:6px 8px;font-size:12px;word-break:break-all}.qf small{display:block;color:var(--ink3)}
 .qnap-spark{width:100%;height:34px;color:var(--ink2);margin:6px 0 2px;display:block}.qnap-card .site-line span{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qnap-rodape{margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .guia-passos{margin-top:10px}.guia-passos summary{cursor:pointer;font-weight:600;font-size:12.5px}.guia-passos ol{margin:8px 0 0 18px;padding:0;display:grid;gap:6px;font-size:12.5px}.guia-ok{background:var(--green-soft);color:var(--green)}
 .qnap-ajuda{margin-top:12px;line-height:1.6}.qnap-ajuda code{background:var(--surface-2,rgba(127,127,127,.15));padding:1px 5px;border-radius:4px;font-size:12px}
@@ -1518,7 +1521,14 @@ function cardItemProjeto(it){
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
   return `<div class="thumb" ${navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}<span class="code">${escHtml(codigo)}</span></div></div>`
 }
-function renderItensProjeto(d,p){
+async function carregarFolhasQnap(code){
+  const box=document.getElementById('pj-qnap');if(!box)return;
+  try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/folhas-qnap');
+    const com=(r.lotes||[]).filter(l=>l.existe&&l.fora_do_painel>0),sumiu=(r.lotes||[]).filter(l=>!l.existe);
+    box.innerHTML=com.map(l=>`<div class="panel"><div class="ph"><h2>Encontradas no QNAP, ainda não catalogadas no painel</h2><span class="tag a">${fmtN(l.fora_do_painel)} documento(s)</span></div><div class="pb"><p class="help">Lote <b>${escHtml(l.nome)}</b> (${escHtml(l.etapa)}). Estes arquivos estão na pasta do projeto no QNAP, mas ainda não viraram folhas do painel: falta revisar e importar o lote. Quando entrarem, passam a aparecer na lista de folhas abaixo.${l.parcial?' <b>A leitura da pasta foi interrompida por demorar: a lista está incompleta.</b>':''}</p><div class="qf-grid">${l.documentos.map(d=>`<figure class="qf"><div class="qf-img">${d.previa?`<img loading="lazy" alt="" src="/api/projetos/${encodeURIComponent(code)}/folhas-qnap/arquivo?lote=${encodeURIComponent(l.id)}&caminho=${encodeURIComponent(d.previa)}">`:'<span class="qf-sem">sem prévia</span>'}</div><figcaption><span class="code">${escHtml(d.codigo)}</span><small>${escHtml(d.serie||'—')} · ${d.formatos.map(escHtml).join(' · ')}</small></figcaption></figure>`).join('')}</div>${l.fora_do_painel>l.documentos.length?`<small class="help">… e mais ${fmtN(l.fora_do_painel-l.documentos.length)} (mostrando ${fmtN(l.documentos.length)})</small>`:''}</div></div>`).join('')+sumiu.map(l=>`<div class="panel"><div class="pb"><p class="help"><span class="tag r">pasta não encontrada</span> A pasta do lote <b>${escHtml(l.nome)}</b> não está acessível: <span class="mono">${escHtml(l.pasta)}</span>. Confira se o QNAP está montado.</p></div></div>`).join('')
+  }catch(e){box.innerHTML=''}}
+function renderItensProjeto(d,p){setTimeout(()=>carregarFolhasQnap(p.codigo),0);return '<div id="pj-qnap"></div>'+renderItensProjetoBase(d,p)}
+function renderItensProjetoBase(d,p){
   const its=d.itens||[], fonte=d.fonte_visual||{};
   if(!its.length)return `<div class="panel"><div class="empty">Nenhum documento digitalizado reconhecido para este projeto.</div></div>`;
   const diverge=fonte.documentos_site!==fonte.documentos_locais,soSite=its.filter(i=>i.origem_catalogacao==='site').length;

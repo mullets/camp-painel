@@ -105,7 +105,9 @@ async def cabecalhos_seguranca(request: Request, call_next):
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "same-origin"
     resp.headers["Permissions-Policy"] = "camera=(self), geolocation=()"
-    resp.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else "no-cache"
+    # A API NUNCA fica em cache (dado velho na tela já foi problema), salvo quando a PRÓPRIA rota declara (hoje: a prévia privada de uma folha do QNAP).
+    if "Cache-Control" not in resp.headers:
+        resp.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else "no-cache"
     return resp
 
 

@@ -30,6 +30,12 @@ for t, cols in CAMPOS.items():
             c.execute(f"UPDATE {t} SET {col} = ? || coalesce({col}, '') WHERE {col} IS NOT NULL OR 1=1", (P(t, col),)); c.commit()
         except sqlite3.Error as e:
             falhas.append(f"{t}.{col}: {e}")
+# nome de ARQUIVO hostil no lote de teste (vem do CAMP Vision / do scanner, ou seja, de fora)
+import tempfile as _tf
+from pathlib import Path as _P
+_d = _P(_tf.gettempdir()) / "camp_seed_qnap" / "F026-P0001 - Lote de teste" / "01 - Desenhos e pranchas" / "JPG"
+if _d.is_dir():
+    (_d / "F026-P0001-1970-S01-D90009<img src=x onerror=window.__xss=1>.jpg").write_bytes(b"\xff\xd8\xff\xd9")
 # respostas do formulário público (JSON {campo: valor}): chave e valor envenenados, mantendo o JSON válido
 import json as _j
 c.execute("UPDATE uso_download SET resposta_json=? WHERE id IN (SELECT id FROM uso_download ORDER BY id LIMIT 12)",

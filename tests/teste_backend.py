@@ -1007,7 +1007,7 @@ def filho(modo):
             if info is not None: (d / "info_projeto.json").write_text(_j.dumps(info))
             if bruto_info is not None: (d / "info_projeto.json").write_text(bruto_info)
             if status is not None: (d / "status.json").write_text(_j.dumps(status))
-            for sub, nome in imgs: (d / sub).mkdir(exist_ok=True); (d / sub / nome).write_bytes(b"x")
+            for sub, nome in imgs: (d / sub).mkdir(parents=True, exist_ok=True); (d / sub / nome).write_bytes(b"\xff\xd8\xff\xd9")
             return d
         base_info = lambda cod, **k: {"codigo": cod, "nome": f"Casa {cod}", "folhas_esperadas": 3, "estacao": "contex1", "tipo_estacao": "contex", "operador": "Beatriz", "operador_email": "b@camp.arq.br", "fundo_codigo": "F099", **k}
         lote("F099-P0001 - Casa 1", base_info("F099-P0001"), {"status": "pronto", "codigo": "F099-P0001"}, [("Plantas", "a.jpg"), ("Plantas", "b.jpg"), ("Fotografias", "c.tif")])
@@ -1105,6 +1105,33 @@ def filho(modo):
         ver("aviso de pasta sem manifesto: ok=false", av(pasta=rel(d8 / "Plantas")).json()["ok"] is False)
         ver("aviso: com token configurado ele é obrigatório (sem token = 401, de dentro e de fora); token válido vale até de fora (desenho do rede.py)", (lan.post("/api/campvision/aviso", json={"pasta": rel(d8)}).status_code, fora.post("/api/campvision/aviso", json={"pasta": rel(d8)}).status_code, fora.post("/api/campvision/aviso", json={"pasta": rel(d8)}, headers=T).status_code) == (401, 401, 202))
         ver("a varredura completa segue como reconciliação (acha o P0009 que não foi avisado)", op.post("/api/filas/varrer-qnap").json()["novas"] >= 1 and "F099-P0009" in etapas())
+        # ---------------- folhas no QNAP: contar DOCUMENTOS (TIF/ e JPG/ do mesmo código = um) e mostrar o que ainda não está no painel ----------------
+        c = connect(); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',10)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0010','F099',10,'Casa Dez',1970)"); c.commit(); c.close()
+        S1 = "01 - Desenhos e pranchas"
+        d10 = lote("F099-P0010 - Casa Dez", base_info("F099-P0010"), {"status": "pronto", "codigo": "F099-P0010"},
+                   [(S1 + "/TIF", "F099-P0010-1970-S01-D00001.tif"), (S1 + "/JPG", "F099-P0010-1970-S01-D00001.jpg"),
+                    (S1 + "/TIF", "F099-P0010-1970-S01-D00002.tif"), (S1 + "/JPG", "F099-P0010-1970-S01-D00002.jpg"),
+                    (S1 + "/TIF", "F099-P0010-1970-S01-D00003.tif"), (S1 + "/DNG", "F099-P0010-1970-S01-D00003.dng"), ("02 - Fotografias/JPG", "F099-P0010-1970-S03-D00001.jpg")])
+        (d10 / "@Recycle").mkdir(); (d10 / "@Recycle" / "lixo.jpg").write_bytes(b"x"); (d10 / S1 / ".oculto.jpg").write_bytes(b"x")
+        j = av(codigo="F099-P0010", pasta=rel(d10)).json()
+        ver("cada formato numa subpasta (TIF/, JPG/, DNG/): 7 arquivos são 4 DOCUMENTOS (a lixeira do QNAP e os ocultos não contam)", j["folhas"] == 4 and j["etapa"] == "revisao", str(j))
+        fq = adm.get("/api/projetos/F099-P0010/folhas-qnap").json(); lt = fq["lotes"][0]
+        d1 = next(x for x in lt["documentos"] if x["codigo"].endswith("S01-D00001"))
+        ver("painel das folhas no QNAP: o lote aparece com os 4 documentos, os formatos de cada um e a prévia JPG", len(fq["lotes"]) == 1 and lt["existe"] and lt["total"] == 4 and lt["fora_do_painel"] == 4 and set(d1["formatos"]) == {"TIF", "JPG"} and d1["previa"].endswith(".jpg") and next(x for x in lt["documentos"] if x["codigo"].endswith("S01-D00003"))["formatos"].count("DNG") == 1, str({k_: lt[k_] for k_ in ("total", "fora_do_painel")}))
+        c = connect(); c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (9101,8013,'publish','x','F099-P0010-1970-S01-D00001','F099-P0010','F099')"); c.commit(); c.close()
+        lt2 = adm.get("/api/projetos/F099-P0010/folhas-qnap").json()["lotes"][0]
+        ver("o que JÁ é folha do painel/site sai da lista (sobram 3 de 4)", lt2["total"] == 4 and lt2["fora_do_painel"] == 3 and all(not x["codigo"].endswith("S01-D00001") for x in lt2["documentos"]), str(lt2["fora_do_painel"]))
+        arq = f"/api/projetos/F099-P0010/folhas-qnap/arquivo?lote={lt['id']}&caminho="
+        from urllib.parse import quote as _q
+        anon = TestClient(app, raise_server_exceptions=False)   # sem login
+        ok_ = adm.get(arq + _q(d1["previa"]))
+        ver("a prévia JPG é servida a quem está logado, com cache privado de 1 h (o resto da API continua no-store); sem login 401", ok_.status_code == 200 and ok_.content == b"\xff\xd8\xff\xd9" and ok_.headers.get("cache-control") == "private, max-age=3600" and adm.get("/api/projetos/F099-P0010/folhas-qnap").headers["cache-control"] == "no-store" and anon.get(arq + _q(d1["previa"])).status_code == 401, str((ok_.status_code, ok_.content[:6], ok_.headers.get("cache-control"), anon.get(arq + _q(d1["previa"])).status_code)))
+        ver("só prévia: TIF, DNG e arquivo inexistente = 404", adm.get(arq + _q(S1 + "/TIF/F099-P0010-1970-S01-D00001.tif")).status_code == 404 and adm.get(arq + _q(S1 + "/DNG/F099-P0010-1970-S01-D00003.dng")).status_code == 404 and adm.get(arq + "nao/existe.jpg").status_code == 404)
+        ver("segurança: caminho que escapa da pasta do lote (../, absoluto, outro lote) = 404", adm.get(arq + _q("../../../../etc/passwd")).status_code == 404 and adm.get(arq + _q("/etc/passwd")).status_code == 404 and adm.get(arq + _q("../F099-P0008 - Casa Oito/status.json")).status_code == 404 and adm.get(f"/api/projetos/F099-P0001/folhas-qnap/arquivo?lote={lt['id']}&caminho=" + _q(d1["previa"])).status_code == 404)
+        ver("a lixeira (@Recycle) e os arquivos ocultos nunca são servidos", adm.get(arq + _q("@Recycle/lixo.jpg")).status_code == 404 and adm.get(arq + _q(S1 + "/.oculto.jpg")).status_code == 404)
+        c = connect(); c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote sem pasta','F099-P0010','/nao/existe/mais','revisao')"); c.commit(); c.close()
+        lts = adm.get("/api/projetos/F099-P0010/folhas-qnap").json()["lotes"]
+        ver("lote cuja pasta sumiu (QNAP desmontado): aparece como existe=false, sem erro", any(x["existe"] is False and x["documentos"] == [] for x in lts) and adm.get("/api/projetos/F099-P9999/folhas-qnap").status_code == 404)
         # ---------------- heartbeat do CONTRATO do CAMP Vision ----------------
         hb2 = {"estacao_id": "campvision2", "tipo_estacao": "campvision", "app": "CAMP Vision 2", "versao": "2026-10-07-01", "estado": "vigiando", "projeto": "F099-P0008",
                "progresso": {"feitos": 31, "total": 48}, "fila": 3, "hoje": {"projetos": 2, "imagens": 140, "erros": 1, "custo_usd": 1.84}, "montagens": {"entrada": True, "acervo": True}}

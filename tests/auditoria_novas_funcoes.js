@@ -309,6 +309,17 @@ w.route_to('painel'); await sleep(2800);
   chk((w.__baixou||[]).some(x=>x.startsWith('mailto:'+detalheEmail.email)&&x.includes('subject=Assunto%20com%20acento%3A%20%C3%A7%C3%A3o')&&x.includes('body=Linha%201%0ALinha%202%20%26%20mais%3F')),'"Abrir no meu e-mail" deveria montar um mailto: com assunto e texto codificados: '+JSON.stringify(w.__baixou));
   d.querySelector('#d-body [data-uso-acao="detalhe"]').click(); await sleep(1300); chk(txt('#d-title').includes('Pedido de download'),'"Voltar" deveria reabrir o detalhe do pedido');
   w.closeDrawer(true); }
+// ---------- FOLHAS NO QNAP NA PÁGINA DO PROJETO ----------
+{ w.closeDrawer(true); w.route_to('projeto/F026-P0001'); await sleep(3500);
+  const fq=(await J(adm,'/api/projetos/F026-P0001/folhas-qnap')).b, lt=fq.lotes.find(l=>l.existe), qf=()=>d.querySelectorAll('#pj-qnap .qf');
+  chk(!!lt&&lt.fora_do_painel===3&&lt.documentos.length===3,'a API deveria listar 3 documentos do lote de teste (JPG e TIF do mesmo código = 1): '+JSON.stringify(lt&&{t:lt.total,f:lt.fora_do_painel}));
+  chk(/Encontradas no QNAP, ainda não catalogadas no painel/.test(txt('#pj-qnap'))&&qf().length===3,'a página do projeto deveria mostrar o painel "Encontradas no QNAP" com 3 documentos: '+qf().length+' ('+txt('#pj-qnap').slice(0,100)+')');
+  chk(/3 documento\(s\)/.test(txt('#pj-qnap'))&&/F026-P0001-1970-S01-D90001/.test(txt('#pj-qnap'))&&/JPG · TIF/.test(txt('#pj-qnap')),'cada documento deveria mostrar o código e os formatos (JPG · TIF)');
+  const im=[...d.querySelectorAll('#pj-qnap .qf img')];
+  chk(im.length===3&&im.every(x=>x.getAttribute('src').startsWith('/api/projetos/F026-P0001/folhas-qnap/arquivo?lote=')&&x.getAttribute('src').includes('caminho=')),'as miniaturas deveriam vir do endpoint de prévia do projeto');
+  chk(/falta revisar e importar o lote/.test(txt('#pj-qnap')),'o painel deveria dizer o que falta (revisar e importar o lote), sem prometer o que não existe');
+  w.route_to('projeto/F023-P0011'); await sleep(3000);
+  chk(d.querySelectorAll('#pj-qnap .qf').length===0&&!/Encontradas no QNAP/.test(txt('#pj-qnap')),'um projeto SEM lote no QNAP não deveria mostrar o painel'); }
 // ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3000);   // fecha qualquer painel lateral de testes anteriores (o painel protege edição pendente)
   const hj=(await J(adm,'/api/hoje')).b;

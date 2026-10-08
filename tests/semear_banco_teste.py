@@ -70,6 +70,17 @@ for i in range(30):
               (100 + i, f"2026-10-{(i % 7) + 1:02d} {10 + i % 9:02d}:15:00", nome, email, tel, inst, _usos[i % 4], mat, "campo" if mat else None,
                "-".join(mat.split("-")[:2]) if mat else None, mat.split("-")[0] if mat else None, f"https://camp.arq.br/acervo/ficha-{i}/",
                _json.dumps({"names": nome, "email": email, "phone": tel, "universidade_empresa": inst, "uso_pretendido": _usos[i % 4], "codigo_material": mat or ""}, ensure_ascii=False)))
+# folhas no QNAP: um lote de teste com arquivos de VERDADE (cada formato numa subpasta), para a página do projeto mostrar o painel
+import shutil as _sh, tempfile as _tf
+from pathlib import Path as _P
+_raiz = _P(_tf.gettempdir()) / "camp_seed_qnap" / "F026-P0001 - Lote de teste"
+_sh.rmtree(_raiz.parent, ignore_errors=True)
+for _fmt, _ext in (("JPG", "jpg"), ("TIF", "tif")):
+    (_raiz / "01 - Desenhos e pranchas" / _fmt).mkdir(parents=True, exist_ok=True)
+    for _n in (1, 2, 3):
+        (_raiz / "01 - Desenhos e pranchas" / _fmt / f"F026-P0001-1970-S01-D9000{_n}.{_ext}").write_bytes(b"\xff\xd8\xff\xd9")
+c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa) VALUES (?,?,?,?,?,?)",
+          ("Lote de teste (QNAP)", "F026-P0001", str(_raiz), 3, 3, "revisao"))
 # o coletor automático dispara 20 s depois de o servidor subir e gravaria uma coleta VAZIA (o QNAP de teste não existe) por cima da semente:
 # os testes não podem depender de relógio. 0 desliga a coleta automática; "Atualizar agora" (manual) continua funcionando.
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")

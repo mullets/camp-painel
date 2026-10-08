@@ -5,7 +5,10 @@ import json
 import re
 import unicodedata
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import auth
@@ -165,6 +168,54 @@ def diagnostico_codigos_entre_colecoes(codigo: str | None = None, u: dict = Depe
     con.close()
     return {"projetos_collection_id": projetos_id, "projetos_collection_nome": nomes.get(projetos_id),
             "itens_collection_id": itens_id, "itens_collection_nome": nomes.get(itens_id), "duplicidades": rows}
+
+
+@router.get("/projetos/{codigo}/folhas-qnap")
+def folhas_qnap(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Documentos que ESTÃO na pasta do(s) lote(s) do projeto no QNAP mas ainda não viraram folhas do painel (nem do site).
+
+    A lista de folhas do projeto vem do banco (itens do site e itens locais); o CAMP Vision grava os arquivos no QNAP e o painel só
+    registra o lote na Fila. Este painel mostra o que falta: a importação/revisão do lote é o passo seguinte."""
+    from .qnap_folhas import documentos_da_pasta
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+        conhecidos = {(r[0] or "").lower() for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (codigo,))}
+        conhecidos |= {(r[0] or "").lower() for r in con.execute("SELECT codigo_detectado FROM wp_item WHERE projeto_detectado=?", (codigo,))}
+        lotes = []
+        for l in con.execute("SELECT id, nome, etapa, pasta_qnap FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,)):
+            base = {"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "pasta": l["pasta_qnap"]}
+            pasta = Path(l["pasta_qnap"]) if l["pasta_qnap"] else None
+            if not pasta or not pasta.is_dir():
+                lotes.append({**base, "existe": False, "total": 0, "fora_do_painel": 0, "parcial": False, "documentos": []})
+                continue
+            r = documentos_da_pasta(pasta)
+            novos = [d for d in r["documentos"] if d["codigo"].lower() not in conhecidos]
+            lotes.append({**base, "existe": True, "total": len(r["documentos"]), "fora_do_painel": len(novos), "parcial": r["parcial"], "documentos": novos[:600]})
+        return {"lotes": lotes}
+    finally:
+        con.close()
+
+
+@router.get("/projetos/{codigo}/folhas-qnap/arquivo")
+def folha_qnap_arquivo(codigo: str, lote: int, caminho: str, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+    """Serve UMA prévia (JPG/PNG) de dentro da pasta de um lote DESTE projeto. Qualquer caminho que escape da pasta do lote = 404."""
+    from .qnap_folhas import EXTS_PREVIA
+    con = connect()
+    try:
+        l = con.execute("SELECT pasta_qnap FROM lista_processamento WHERE id=? AND projeto_codigo=?", (lote, codigo)).fetchone()
+    finally:
+        con.close()
+    if not l or not l["pasta_qnap"]:
+        raise HTTPException(404, "Arquivo não encontrado")
+    base = Path(l["pasta_qnap"]).resolve()
+    alvo = (base / caminho).resolve()
+    if base not in alvo.parents or alvo.suffix.lower() not in EXTS_PREVIA or not alvo.is_file():
+        raise HTTPException(404, "Arquivo não encontrado")
+    if any(p.startswith((".", "@", "#")) for p in alvo.relative_to(base).parts):    # lixeira (@Recycle, #recycle) e ocultos do QNAP: nunca
+        raise HTTPException(404, "Arquivo não encontrado")
+    return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.get("/projetos/{codigo}/detalhe")
