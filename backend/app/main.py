@@ -24,6 +24,7 @@ from .rotas_importacao import router as rotas_importacao
 from .guia_publicacao import router as guia_publicacao
 from .rotas_qnap import router as rotas_qnap
 from .rotas_hoje import router as rotas_hoje
+from .rotas_uso import router as rotas_uso
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -39,6 +40,7 @@ app.include_router(rotas_importacao)
 app.include_router(guia_publicacao)
 app.include_router(rotas_qnap)
 app.include_router(rotas_hoje)
+app.include_router(rotas_uso)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 
@@ -52,6 +54,7 @@ async def _startup() -> None:
     import asyncio
     asyncio.create_task(_sincronizacao_periodica())
     asyncio.create_task(_coleta_qnap_periodica())
+    asyncio.create_task(_coleta_uso_periodica())
 
 
 async def _sincronizacao_periodica() -> None:
@@ -345,6 +348,38 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
           (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem))
     con.commit(); con.close()
     return {"ok": True, "estacao_id": estacao_id, "estado": estado}
+
+
+def _uso_incremental() -> None:
+    from .uso_formularios import puxar
+    from .wp import WP
+    try:
+        h = WP().h
+    except RuntimeError:
+        return   # sem Application Password: nada a fazer
+    con = connect()
+    try:
+        puxar(h, con)
+    finally:
+        con.close()
+
+
+async def _coleta_uso_periodica() -> None:
+    """Traz as novas entradas do formulário de download do site a cada N minutos (uso.coleta_min; 0 desliga), em segundo plano."""
+    import asyncio
+    await asyncio.sleep(60)
+    while True:
+        minutos = 60
+        try:
+            con = connect()
+            v = con.execute("SELECT valor FROM configuracao WHERE chave='uso.coleta_min'").fetchone()
+            con.close()
+            minutos = int(v[0]) if v and str(v[0]).strip().isdigit() else 60
+            if minutos > 0:
+                await asyncio.to_thread(_uso_incremental)
+        except Exception:  # noqa: BLE001  (nunca derruba o painel; cada coleta registra o próprio erro em uso_coleta)
+            pass
+        await asyncio.sleep(max(minutos, 5) * 60 if minutos > 0 else 300)
 
 
 async def _coleta_qnap_periodica() -> None:

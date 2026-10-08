@@ -1136,6 +1136,124 @@ def filho(modo):
         fora = httpx.Client(base_url="http://127.0.0.1:9", timeout=2); t5 = "\n".join(sondar(fora))
         ver("site fora do ar: mensagem clara, sem exceção", "não consegui ler a API" in t5, t5[:160])
         for l in res: print(l)
+    elif modo == "uso":
+        init_db(); aplicar_migracoes()
+        import csv as _csv, io as _io, json as _j, threading as _th, httpx
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import urlparse, parse_qs
+        from app import auth, rotas_uso, uso_formularios as uf
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # ---------- derivar ----------
+        d = uf.derivar({"names": {"first_name": "Ana", "last_name": "Souza"}, "email": "Ana@Exemplo.COM", "phone": "11 99999-0000", "universidade_empresa": "USP",
+                        "uso_pretendido": "Pesquisa", "codigo_material": "f002-p0002-1977-s01-d00001"})
+        ver("derivar: nome composto, e-mail em minúsculas, telefone, instituição, uso e material pelo campo", (d["nome"], d["email"], d["telefone"], d["instituicao"], d["uso"]) == ("Ana Souza", "ana@exemplo.com", "11 99999-0000", "USP", "Pesquisa")
+            and (d["material_codigo"], d["material_origem"], d["projeto_codigo"], d["fundo_codigo"]) == ("F002-P0002-1977-S01-D00001", "campo", "F002-P0002", "F002"), str(d))
+        ver("derivar: sem campo do material, acha um código em qualquer valor", uf.derivar({"mensagem": "quero F002-P0002 por favor"})["material_origem"] == "valor")
+        ver("derivar: sem nada, usa o endereço da ficha de onde o modal foi aberto", uf.derivar({}, "https://camp.arq.br/acervo/f003-p0005-1960-s01-d00002/")["material_codigo"] == "F003-P0005-1960-S01-D00002")
+        ver("derivar: sem código em lugar nenhum = sem material (não inventa)", uf.derivar({"x": "y"}, "https://camp.arq.br/")["material_codigo"] is None)
+        ver("derivar: e-mail em campo de outro nome é achado; texto inválido no campo e-mail não vira e-mail", uf.derivar({"contato": "b@x.org"})["email"] == "b@x.org" and uf.derivar({"email": "não sei"})["email"] is None)
+        # ---------- WordPress de mentira ----------
+        ESTADO = {"max": 250, "ignora_pagina": False, "forms": (200, None)}
+        def entrada(i):
+            n = i % 40
+            return {"id": i, "created_at": f"2026-09-{(i % 28) + 1:02d} 10:00:00", "status": "trashed" if i == 7 else "spam" if i == 8 else "unread",
+                    "source_url": f"https://camp.arq.br/acervo/f098-p0001-1977-s01-d0000{1 + i % 3}/" if i % 10 == 0 else None,
+                    "response": _j.dumps({"names": f"Pessoa {n}", "email": f"Pessoa{n}@Exemplo.com", "phone": f"1190000{n:04d}", "universidade_empresa": f"Uni {n % 5}",
+                                          "uso_pretendido": ["Pesquisa", "Publicação", "Exposição", "Família"][i % 4],
+                                          "codigo_material": f"F098-P0001-1977-S01-D{(i % 6) + 1:05d}" if i % 5 else ""})}
+        def ff(path, q):
+            if path == "/wp-json/fluentform/v1/forms":
+                return ESTADO["forms"] if ESTADO["forms"][1] else (200, {"data": [{"id": 3, "title": "Cadastro para download de material — CAMP"}, {"id": 5, "title": "Contato — CAMP"}]})
+            if path == "/wp-json/fluentform/v1/submissions":
+                pg = 1 if ESTADO["ignora_pagina"] else int(q.get("page", 1)); por = int(q.get("per_page", 10))
+                ids = list(range(ESTADO["max"], 0, -1))[(pg - 1) * por: pg * por]
+                return 200, {"submissions": {"data": [entrada(i) for i in ids], "total": ESTADO["max"]}}
+            return 404, {"code": "rest_no_route"}
+        def servidor(fn):
+            vistos = []
+            class H(BaseHTTPRequestHandler):
+                def log_message(self, *a): pass
+                def do_GET(self):
+                    u = urlparse(self.path); q = {k: v[0] for k, v in parse_qs(u.query).items()}; vistos.append(("GET", u.path))
+                    st, corpo = fn(u.path, q); self.send_response(st); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(_j.dumps(corpo).encode())
+                def do_POST(self): vistos.append(("POST", self.path)); self.send_response(405); self.end_headers()
+                do_PUT = do_DELETE = do_PATCH = do_POST
+            srv = ThreadingHTTPServer(("127.0.0.1", 0), H); _th.Thread(target=srv.serve_forever, daemon=True).start()
+            return srv, vistos, httpx.Client(base_url=f"http://127.0.0.1:{srv.server_port}")
+        srv, vistos, h = servidor(ff)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F098','Fundo de teste','TST',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F098',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F098-P0001','F098',1,'Casa de teste',1977)"); c.commit()
+        subm = lambda: sum(1 for m, p_ in vistos if p_.endswith("/submissions"))
+        validas = [i for i in range(1, 251) if i not in (7, 8)]
+        # ---------- coleta ----------
+        r = uf.puxar(h, c, completo=True)
+        ver("coleta COMPLETA: lê as 250 entradas em 3 páginas, grava 248 e pula a lixeira e o spam", (r["lidas"], r["novas"], r["puladas"], r["total_remoto"], subm()) == (250, 248, 2, 250, 3) and not r["erro"], str(r))
+        ver("acha o formulário de download pelo título", r["form_id"] == 3 and "download" in (r["form_titulo"] or ""))
+        n0 = subm(); r2 = uf.puxar(h, c)
+        ver("coleta INCREMENTAL sem novidade: 0 novas e UMA só página lida", (r2["novas"], subm() - n0) == (0, 1), str((r2["novas"], subm() - n0)))
+        ESTADO["max"] = 252; n0 = subm(); r3 = uf.puxar(h, c)
+        ver("duas entradas novas: traz as 2 e para na página seguinte (já conhecida)", (r3["novas"], subm() - n0) == (2, 2), str((r3["novas"], subm() - n0)))
+        c.execute("DELETE FROM uso_download"); c.commit(); ESTADO["ignora_pagina"] = True; n0 = subm(); r4 = uf.puxar(h, c, completo=True)
+        ver("servidor que ignora o número da página: não entra em laço (para sem entradas novas)", subm() - n0 <= 3 and r4["novas"] == 100, str((subm() - n0, r4["novas"])))
+        ESTADO["ignora_pagina"] = False; c.execute("DELETE FROM uso_download"); c.commit(); uf.puxar(h, c, completo=True)
+        ESTADO["forms"] = (403, {"code": "rest_forbidden"}); r5 = uf.puxar(h, c)
+        ver("sem permissão (403): o erro fica claro e registrado", "403" in (r5["erro"] or "") and "administrador" in r5["erro"], str(r5["erro"]))
+        ESTADO["forms"] = (200, None); fora = httpx.Client(base_url="http://127.0.0.1:9", timeout=2); r6 = uf.puxar(fora, c)
+        ver("site fora do ar: erro registrado, sem exceção", bool(r6["erro"]) and r6["novas"] == 0, str(r6["erro"]))
+        ver("cada coleta fica registrada (diagnóstico), inclusive as com erro", c.execute("SELECT COUNT(*) FROM uso_coleta").fetchone()[0] >= 7 and c.execute("SELECT COUNT(*) FROM uso_coleta WHERE erro IS NOT NULL").fetchone()[0] >= 2)
+        ver("só GET no site (nenhuma escrita)", all(m == "GET" for m, _ in vistos))
+        ver("não guarda IP nem agente do navegador (minimização)", not any(k in [x[1] for x in c.execute("PRAGMA table_info(uso_download)")] for k in ("ip", "user_agent", "browser")))
+        total = c.execute("SELECT COUNT(*) FROM uso_download").fetchone()[0]; sem_mat = c.execute("SELECT COUNT(*) FROM uso_download WHERE material_codigo IS NULL").fetchone()[0]
+        c.close()
+        # ---------- rotas (só admin) ----------
+        rotas_uso._wp_http = lambda: h
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        rotas = ["/api/uso", "/api/uso/pessoas", "/api/uso/materiais", "/api/uso/resumo", "/api/uso/exportar.csv", "/api/uso/1"]
+        ver("sem login: 401 em todas; operador: 403 em todas (dados pessoais)", all(anon.get(r_).status_code == 401 for r_ in rotas) and all(op.get(r_).status_code == 403 for r_ in rotas) and op.post("/api/uso/puxar", json={}).status_code == 403 and op.post("/api/uso/anonimizar", json={"email": "a@b.co"}).status_code == 403)
+        L = adm.get("/api/uso").json(); k = connect()
+        sql = lambda q_, *a: k.execute(q_, a).fetchone()[0]
+        ver("lista: total igual ao do banco, 50 por página, ordenada da mais recente; SEM telefone na lista", L["total"] == total and len(L["itens"]) == 50 and "telefone" not in L["itens"][0] and L["itens"][0]["recebida_em"] >= L["itens"][-1]["recebida_em"], str((L["total"], total)))
+        ver("paginação: a página 2 traz outras 50; por_pagina é limitado a 200", adm.get("/api/uso?pagina=2").json()["itens"][0]["id"] != L["itens"][0]["id"] and len(adm.get("/api/uso?por_pagina=1000").json()["itens"]) == 200)
+        ver("filtro por texto (e-mail, sem diferenciar maiúsculas) bate com o banco", adm.get("/api/uso?q=PESSOA3@").json()["total"] == sql("SELECT COUNT(*) FROM uso_download WHERE email LIKE '%pessoa3@%'"))
+        ver("filtro por uso declarado bate com o banco", adm.get("/api/uso?uso=Publicação").json()["total"] == sql("SELECT COUNT(*) FROM uso_download WHERE uso='Publicação'"))
+        ver("filtro por período bate com o banco", adm.get("/api/uso?de=2026-09-10&ate=2026-09-12").json()["total"] == sql("SELECT COUNT(*) FROM uso_download WHERE date(recebida_em) BETWEEN '2026-09-10' AND '2026-09-12'"))
+        mat = sql("SELECT material_codigo FROM uso_download WHERE material_codigo IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1")
+        ver("filtro por material bate com o banco e traz o título do projeto", adm.get(f"/api/uso?material={mat}").json()["total"] == sql("SELECT COUNT(*) FROM uso_download WHERE material_codigo=?", mat) and adm.get(f"/api/uso?material={mat}").json()["itens"][0]["material_titulo"] == "Casa de teste")
+        P = adm.get("/api/uso/pessoas?por_pagina=200").json()
+        ver("por pessoa: 40 pessoas (e-mail em minúsculas), a soma dos downloads fecha com o total", P["total"] == 40 and sum(x["downloads"] for x in P["itens"]) == total and all(x["email"] == x["email"].lower() for x in P["itens"]), str((P["total"], sum(x["downloads"] for x in P["itens"]), total)))
+        M = adm.get("/api/uso/materiais?por_pagina=200").json()
+        ver("por material: soma fecha com as entradas que têm material; o mais baixado vem primeiro, com título", sum(x["downloads"] for x in M["itens"]) == total - sem_mat and M["itens"][0]["downloads"] >= M["itens"][-1]["downloads"] and M["itens"][0]["titulo"] == "Casa de teste", str((sum(x["downloads"] for x in M["itens"]), total - sem_mat)))
+        R = adm.get("/api/uso/resumo").json()
+        ver("resumo: totais, pessoas, materiais, sem material e a última coleta", R["total"] == total and R["pessoas"] == 40 and R["sem_material"] == sem_mat and R["materiais"] == M["total"] and R["anonimizadas"] == 0 and R["ultima_coleta"] is not None and any(u_["uso"] == "Pesquisa" for u_ in R["usos"]), str({x: R[x] for x in ("total", "pessoas", "sem_material")}))
+        D = adm.get(f"/api/uso/{L['itens'][0]['id']}").json()
+        ver("detalhe: traz o telefone e as respostas completas; id inexistente = 404", D["telefone"] and "uso_pretendido" in D["resposta"] and adm.get("/api/uso/999999").status_code == 404)
+        E = adm.get("/api/uso/exportar.csv?uso=Pesquisa"); linhas = list(_csv.reader(_io.StringIO(E.text.lstrip("\ufeff")), delimiter=";"))
+        ver("CSV: abre no Excel (BOM), traz TODAS as linhas do filtro (não só a página) e o telefone", E.text.startswith("\ufeff") and len(linhas) - 1 == sql("SELECT COUNT(*) FROM uso_download WHERE uso='Pesquisa'") and linhas[0][3] == "telefone" and linhas[1][3] != "" and "csv" in E.headers["content-type"], str((len(linhas) - 1, E.headers["content-type"])))
+        ev = k.execute("SELECT detalhe FROM evento WHERE tipo='uso_exportado'").fetchone()
+        ver("a exportação fica na auditoria, com a contagem e SEM dados das pessoas", ev is not None and _j.loads(ev[0])["linhas"] == len(linhas) - 1 and "@" not in ev[0].replace("adm@camp.arq.br", ""))
+        pu = adm.post("/api/uso/puxar", json={"completo": False}).json()
+        ver("botão 'atualizar agora' (POST /puxar) devolve o resumo da coleta", pu["novas"] == 0 and pu["erro"] is None and pu["lidas"] > 0, str(pu))
+        # ---------- apagar pessoa (LGPD) ----------
+        alvo = "pessoa3@exemplo.com"; n_alvo = sql("SELECT COUNT(*) FROM uso_download WHERE email=?", alvo)
+        ver("apagar pessoa: e-mail vazio = 400; e-mail desconhecido = 404", adm.post("/api/uso/anonimizar", json={"email": " "}).status_code == 400 and adm.post("/api/uso/anonimizar", json={"email": "ninguem@x.org"}).status_code == 404)
+        a = adm.post("/api/uso/anonimizar", json={"email": "Pessoa3@EXEMPLO.com"}).json()
+        ver("apagar pessoa: anonimiza TODAS as entradas dela (qualquer caixa de letra)", a["anonimizadas"] == n_alvo and n_alvo > 0, str(a))
+        ver("depois: nome '(removido)', sem e-mail, telefone, instituição nem respostas; o uso e o material ficam", sql("SELECT COUNT(*) FROM uso_download WHERE anonimizada=1") == n_alvo and sql("SELECT COUNT(*) FROM uso_download WHERE anonimizada=1 AND nome='(removido)' AND email IS NULL AND telefone IS NULL AND instituicao IS NULL AND resposta_json IS NULL AND uso IS NOT NULL") == n_alvo)
+        ver("a lista e as pessoas deixam de mostrar a pessoa; o total de downloads não muda", alvo not in adm.get("/api/uso?por_pagina=200").text and not any(x["email"] == alvo for x in adm.get("/api/uso/pessoas?por_pagina=200").json()["itens"]) and adm.get("/api/uso").json()["total"] == total)
+        ev = k.execute("SELECT detalhe FROM evento WHERE tipo='uso_pessoa_anonimizada'").fetchone()
+        ver("a auditoria guarda só uma impressão curta do e-mail, nunca o e-mail", ev is not None and "pessoa3" not in ev[0].lower() and "@" not in ev[0] and _j.loads(ev[0])["registros"] == n_alvo)
+        pu = adm.post("/api/uso/puxar", json={"completo": True}).json()
+        ver("uma coleta COMPLETA depois NÃO traz de volta a pessoa apagada", pu["novas"] == 0 and sql("SELECT COUNT(*) FROM uso_download WHERE email=?", alvo) == 0, str(pu["novas"]))
+        ver("reprocessar refaz as colunas a partir das respostas guardadas, sem ir ao site", adm.post("/api/uso/reprocessar").json()["reprocessadas"] == total - n_alvo)
+        k.close(); srv.shutdown()
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -1326,6 +1444,14 @@ else:
 print("20) Sondagem do Fluent Forms (fase 0 do Uso do acervo): só leitura e sem dados pessoais")
 rc, out = rodar("sondagem", f"{tmp}/sondagem.db")
 if rc != 0: ok(False, f"teste da sondagem não rodou -> {out[-900:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("21) Uso do acervo: coleta do formulário do site, rotas só para admin, CSV e apagar pessoa (LGPD)")
+rc, out = rodar("uso", f"{tmp}/uso.db")
+if rc != 0: ok(False, f"teste do Uso do acervo não rodou -> {out[-1200:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -11,12 +11,29 @@ Pedido do Rafael em 07/10/2026. **Nada além da fase 0 está implementado.** As 
 - **"Pediu para baixar"** (preencheu o formulário) × **"baixou de verdade"**. O segundo só é observável se o arquivo sair por um **link individual com validade**; um endereço público de arquivo não diz quem baixou.
 - O **uso** é sempre **declarado**; o painel nunca afirma o uso real.
 
+## Estado (07/10/2026)
+**Fases 0 e 1 implementadas e testadas com um WordPress de mentira; NÃO rodadas contra o site real.** Os formatos da API do Fluent Forms foram assumidos
+pelo que o plugin documenta; a primeira coleta real mostra o diagnóstico (a tela diz a última coleta e o erro, se houver). Autorização: o Rafael é
+administrador do site e pediu para puxar o histórico completo (07/10/2026).
+
+## O que existe
+- **Coleta** (`uso_formularios.py`, tabela `uso_download`, migração 033): lê as entradas do formulário de download pela API do WordPress. **Completa** (todo o histórico, botão
+  "Puxar tudo") ou **incremental** (só as novas; para na primeira página já conhecida). Automática a cada `uso.coleta_min` minutos (padrão 60; 0 desliga). Pula lixeira e spam.
+  Guarda todas as respostas (`resposta_json`) e extrai nome, e-mail, telefone, instituição, uso e **material** (do campo do formulário, de qualquer valor com código CAMP, ou do
+  endereço da ficha de onde o modal foi aberto). Não guarda IP. `uso_coleta` registra o que cada coleta fez, inclusive erros.
+- **Tela "Uso do acervo"** (menu Sistema, tecla U, só admin e master): quatro números; abas Pedidos de download, Pessoas e Materiais; filtros (texto, uso, período); detalhe com telefone e
+  resposta completa; Exportar CSV (todas as linhas do filtro, fica na auditoria); Atualizar agora e Puxar tudo.
+- **LGPD**: telefone fora das listas; "Apagar dados desta pessoa" anonimiza todas as entradas do e-mail (a linha fica para as contagens e NUNCA é importada de novo); a auditoria
+  guarda só uma impressão curta do e-mail. O backup do painel inclui esses dados.
+- Dados de pessoas nunca vão dentro de `onclick`: só em `data-*` (os campos vêm de um formulário público).
+
 ## Fases
-0. **Sondagem (pronta)**: `scripts/sondar_fluentforms.py` (somente leitura, sem dados pessoais) diz se o formulário registra **qual material**, o que a pessoa recebe ao enviar, quantas entradas existem e como está o "uso pretendido".
-1. **O painel puxa as entradas do formulário** (como já puxa o site; não exige expor o painel) e cria a tela **"Uso do acervo"**: lista (dia, pessoa, e-mail, instituição, material, formato, uso), visão por pessoa (agrupada por e-mail), visão por material (mais baixados e quem baixou), filtros, CSV, e a seção "Quem baixou" na ficha de folha, projeto e fundo.
-2. **Link rastreado com validade**: cada download fica registrado (data, arquivo, pedido). Formulário com **uso em lista de opções** (as mesmas categorias de Solicitações) + detalhe livre, e aceite com versão do texto.
-3. **Ligação com Solicitações e direitos**: gravar, no dia da entrega, o crédito exigido, a licença e a resolução máxima vigentes do fundo; prazo e crédito a conferir; retorno de uso (onde foi publicado); lembretes nas tarefas do dia.
-- Em paralelo: eventos no GA4 (download, abertura do visualizador, clique em ficha) para números agregados, sem identidade.
+0. **Sondagem** (`scripts/sondar_fluentforms.py`): somente leitura, sem dados pessoais. Útil se a primeira coleta real falhar.
+1. **Puxar as entradas e a tela** (pronta, ver acima).
+2. **Link rastreado com validade**: cada download registrado. Formulário com uso em lista de opções (as mesmas categorias de Solicitações) + detalhe livre, e aceite com versão do texto. **Não feito.**
+3. **Ligação com Solicitações e direitos**: crédito, licença e resolução máxima vigentes no dia da entrega; prazo e crédito a conferir; retorno de uso; lembretes nas tarefas do dia. **Não feito.**
+- Em paralelo: eventos no GA4 (download, visualizador, clique em ficha), números agregados sem identidade. **Não feito.**
+- Plano B se a API do Fluent Forms não responder como esperado: importar o CSV que o próprio plugin exporta (Entradas → Exportar). **Não feito; só se a coleta real falhar.**
 
 ## Cuidados (LGPD)
 - Quem vê a lista (proposta: só administradores); texto do aceite; prazo de guarda; como apagar a pedido; telefone fora das listas.
@@ -25,4 +42,4 @@ Pedido do Rafael em 07/10/2026. **Nada além da fase 0 está implementado.** As 
 ## Decisões abertas (do Rafael)
 1. Objetivo: **prestar contas e controlar direitos**, **entender o público**, ou os dois?
 2. Depois do formulário, como a pessoa recebe o arquivo hoje (link direto, e-mail, só vê na tela)? A sondagem ajuda a responder.
-3. Quem pode ver a lista?
+3. Quem pode ver a lista? (implementado: só admin e master; confirmar)

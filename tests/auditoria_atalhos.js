@@ -13,7 +13,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) pr
   const anunciado={}; d.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=b.querySelector('kbd'); anunciado[b.dataset.v]=k?k.textContent.trim():null});
   // 2) o que cada tecla FAZ (dígitos e letras, maiúscula ou minúscula)
   const faz={};
-  for(const k of '0123456789eacz'.split('')){ w.location.hash='#config'; await sleep(250); tecla(k); await sleep(450); const r=rota(); faz[k]=(r==='config'&&!(k==='c'||k==='9'))?null:r; if(k==='c')faz[k]=r; }
+  const TECLAS=['0','z',...Object.values(JSON.parse(w.eval('JSON.stringify(NAV_ATALHOS)'))).map(x=>x.toLowerCase())];   // as teclas vêm da TABELA (um atalho novo nunca escapa da auditoria); '0' e 'z' são controles que não fazem nada
+  for(const k of TECLAS){ w.location.hash='#config'; await sleep(250); tecla(k); await sleep(450); const r=rota(); faz[k]=(r==='config'&&!(k==='c'||k==='9'))?null:r; if(k==='c')faz[k]=r; }
   const ordem=[...d.querySelectorAll('#nav button[data-v]')].map(b=>b.dataset.v);
   for(const [view,k] of Object.entries(anunciado)){
     if(!k){ linhas.push(`ERRO menu "${view}" ficou SEM tecla`); chk(false,`menu: "${view}" não anuncia tecla`); continue }

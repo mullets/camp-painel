@@ -60,9 +60,20 @@ c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F003-P0001'")
 # divergências entre o painel e o site (4 tipos reais + 1 desconhecido) para o topo do painel e a lista explicada
 for campo, ent, cod, vp, vs in (("sem_codigo", "item", "9001", None, "Foto de teste"), ("sem_codigo", "item", "9002", None, "Outra de teste"), ("sem_itens_no_site", "fundo", "F029", "Fundo sem folhas", None), ("publicado_em_fundo_fora_do_ar", "item", "F023-P0011-1959-S01-D00002", "fora_do_ar", "publish"), ("fundo_inexistente", "item", "F999-P0001-1970-S01-D00001", None, "F999")):
     c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES (?,?,?,?,?)", (ent, cod, campo, vp, vs))
+# uso do acervo: 30 pedidos de download vindos do formulário do site (12 pessoas, 4 usos, 3 materiais e alguns sem material)
+import json as _json
+_usos = ["Pesquisa", "Publicação", "Exposição", "Família"]; _mats = ["F023-P0011-1959-S01-D00001", "F023-P0011-1959-S01-D00003", "F026-P0001", None]
+for i in range(30):
+    n = i % 12; mat = _mats[i % 4]; nome = f"Pessoa Teste {n}"; email = f"pessoa{n}@exemplo.org"; tel = f"(11) 9000-{n:04d}"; inst = f"Universidade {n % 4}"
+    c.execute("""INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,telefone,instituicao,uso,material_codigo,material_origem,projeto_codigo,fundo_codigo,pagina,resposta_json)
+                 VALUES (3,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+              (100 + i, f"2026-10-{(i % 7) + 1:02d} {10 + i % 9:02d}:15:00", nome, email, tel, inst, _usos[i % 4], mat, "campo" if mat else None,
+               "-".join(mat.split("-")[:2]) if mat else None, mat.split("-")[0] if mat else None, f"https://camp.arq.br/acervo/ficha-{i}/",
+               _json.dumps({"names": nome, "email": email, "phone": tel, "universidade_empresa": inst, "uso_pretendido": _usos[i % 4], "codigo_material": mat or ""}, ensure_ascii=False)))
 # o coletor automático dispara 20 s depois de o servidor subir e gravaria uma coleta VAZIA (o QNAP de teste não existe) por cima da semente:
 # os testes não podem depender de relógio. 0 desliga a coleta automática; "Atualizar agora" (manual) continua funcionando.
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")
+c.execute("UPDATE configuracao SET valor='0' WHERE chave='uso.coleta_min'")
 # histórico do QNAP (7 dias, ~17 GB/dia) e a última coleta completa, para o cartão do painel inicial
 for i in range(8):
     c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?, '-1 hours'), 1, 20000, ?)", (f"-{7 - i} days", 12000 - 17 * i))

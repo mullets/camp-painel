@@ -11,6 +11,7 @@ CAMPOS = {
   "agente_forma_variante": ["forma", "contexto"],
   "projeto": ["titulo", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo"],
   "item": ["titulo", "folha", "escala", "dimensoes", "suporte", "projeto_carimbo", "escritorio_carimbo", "autor_carimbo", "credito"],
+  "uso_download": ["nome", "email", "telefone", "instituicao", "uso", "material_codigo", "pagina"],
   "solicitacao": ["solicitante", "email", "instituicao", "finalidade", "detalhe", "condicoes_uso"],
   "erro": ["descricao", "resolucao", "relatado_por"],
   "usuario": ["nome"],
@@ -29,6 +30,10 @@ for t, cols in CAMPOS.items():
             c.execute(f"UPDATE {t} SET {col} = ? || coalesce({col}, '') WHERE {col} IS NOT NULL OR 1=1", (P(t, col),)); c.commit()
         except sqlite3.Error as e:
             falhas.append(f"{t}.{col}: {e}")
+# respostas do formulário público (JSON {campo: valor}): chave e valor envenenados, mantendo o JSON válido
+import json as _j
+c.execute("UPDATE uso_download SET resposta_json=? WHERE id IN (SELECT id FROM uso_download ORDER BY id LIMIT 12)",
+          (_j.dumps({P("uso_download", "resposta_json.chave"): P("uso_download", "resposta_json.valor"), "uso_pretendido": P("uso_download", "resposta_json.uso")}),)); c.commit()
 # metadados do site (JSON {nome: valor}) e eventos de auditoria com antes/depois maliciosos
 for rid, md in c.execute("SELECT id, metadados FROM wp_item").fetchall():
     try: d = json.loads(md or "{}")

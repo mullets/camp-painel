@@ -239,6 +239,41 @@ w.route_to('painel'); await sleep(2800);
   // atualizar agora: pede a coleta, espera e recarrega o cartão
   d.getElementById('qnap-atualizar').click(); await sleep(7000);
   chk(/Atualizado (agora há pouco|há 0 min)/.test(txt('#qnap-card'))&&!!d.getElementById('qnap-atualizar')&&!d.getElementById('qnap-atualizar').disabled,'depois de "Atualizar agora" o cartão deveria mostrar a coleta nova: '+txt('#qnap-card').slice(-90)); }
+// ---------- USO DO ACERVO (pedidos de download do formulário do site) ----------
+{ w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
+  const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
+  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Uso do acervo" com o atalho U');
+  chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
+  chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
+  const D0=(await J(adm,'/api/uso/'+L.itens[0].id)).b;
+  chk(!txt('#us-body').includes(D0.telefone),'o telefone não deveria aparecer na lista (só no detalhe)');
+  chk(/Nenhuma coleta ainda|Última coleta/.test(txt('#us-coleta')),'a linha da última coleta deveria aparecer: "'+txt('#us-coleta')+'"');
+  d.querySelector('#us-body tr.us-row').click(); await sleep(1500);
+  chk(txt('#d-title').includes('Pedido de download')&&txt('#d-body').includes(D0.telefone)&&txt('#d-body').includes('Resposta completa do formulário')&&!!d.querySelector('#d-body [data-uso-acao="apagar"]'),'o detalhe deveria mostrar o telefone, a resposta completa e o botão de apagar: "'+txt('#d-body').slice(0,120)+'"');
+  d.querySelector('#d-body [data-uso-acao="filtrar"]').click(); await sleep(1800);
+  const T=(await J(adm,'/api/uso?q='+encodeURIComponent(D0.email))).b;
+  chk(d.getElementById('us-q').value===D0.email&&T.total>=1&&linhas()===Math.min(50,T.total),'"Ver tudo desta pessoa" deveria filtrar pelo e-mail ('+T.total+' esperado, '+linhas()+' na tela)');
+  d.getElementById('us-q').value=''; w.usoFiltrou(); await sleep(1200);
+  w.usoAba('pessoas'); await sleep(1800); const PP=(await J(adm,'/api/uso/pessoas')).b;
+  chk(/Instituição/.test(txt('#us-head'))&&/Pedidos/.test(txt('#us-head'))&&linhas()===Math.min(50,PP.total),'a aba Pessoas deveria ter '+Math.min(50,PP.total)+' linhas, tem '+linhas());
+  w.usoAba('materiais'); await sleep(1800); const MM=(await J(adm,'/api/uso/materiais')).b;
+  chk(/Material/.test(txt('#us-head'))&&MM.total>0&&linhas()===Math.min(50,MM.total),'a aba Materiais deveria ter '+Math.min(50,MM.total)+' linhas, tem '+linhas());
+  const cod=MM.itens[0].codigo; d.querySelector('#us-body tr.us-row').click(); await sleep(1800);
+  chk(d.getElementById('us-q').value===cod&&d.querySelector('#us-tabs button.on').dataset.aba==='downloads'&&linhas()>=1,'clicar num material deveria listar os pedidos dele');
+  d.getElementById('us-q').value=''; const uso1=R.usos[0].uso; d.getElementById('us-uso').value=uso1; w.usoFiltrou(); await sleep(1500);
+  const FU=(await J(adm,'/api/uso?uso='+encodeURIComponent(uso1))).b;
+  chk(linhas()===Math.min(50,FU.total)&&/resultado/.test(txt('#us-cnt')),'o filtro por uso ('+uso1+') deveria bater com a API: '+FU.total+' esperado, '+linhas()+' na tela');
+  d.getElementById('us-uso').value=''; d.getElementById('us-q').value='zzzz-nada-assim'; w.usoFiltrou(); await sleep(1300);
+  chk(/Nada com esses filtros/.test(txt('#us-body')),'sem resultado deveria dizer "Nada com esses filtros"'); d.getElementById('us-q').value=''; w.usoFiltrou(); await sleep(900);
+  w.__baixou=[]; w.exportarUsoCSV(); chk((w.__baixou||[]).some(x=>/^camp-uso-\d{4}-\d{2}-\d{2}\.csv$/.test(x)),'"Exportar CSV" deveria gerar o download camp-uso-AAAA-MM-DD.csv: '+JSON.stringify(w.__baixou));
+  d.getElementById('us-q').value='abc'; chk(/q=abc/.test(w.usoQS()),'a exportação deveria levar os filtros ativos'); d.getElementById('us-q').value='';
+  await w.puxarUso(false); await sleep(900);
+  chk(!d.getElementById('us-atualizar').disabled,'o botão "Atualizar agora" deveria voltar a ficar ativo'); chk(/Application Password|site|coleta/i.test(txt('#toast')),'sem o site configurado deveria avisar com clareza: "'+txt('#toast')+'"');
+  w.usoAba('downloads'); await sleep(1300); await w.abrirUsoDetalhe(D0.id); await sleep(1000);
+  d.querySelector('#d-body [data-uso-acao="apagar"]').click(); await sleep(2200);
+  const R2=(await J(adm,'/api/uso/resumo')).b, T2=(await J(adm,'/api/uso?q='+encodeURIComponent(D0.email))).b;
+  chk(R2.anonimizadas>0&&T2.total===0&&R2.total===R.total,'apagar a pessoa deveria anonimizar os pedidos dela sem mudar o total: '+JSON.stringify({anon:R2.anonimizadas,depois:T2.total,total:[R.total,R2.total]}));
+  chk(!txt('#v-uso').includes(D0.email)&&/dados apagados a pedido/.test(txt('#us-body')),'a tela não deveria mais mostrar o e-mail apagado e deveria dizer "dados apagados a pedido"'); w.closeDrawer(true); }
 // ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3000);   // fecha qualquer painel lateral de testes anteriores (o painel protege edição pendente)
   const hj=(await J(adm,'/api/hoje')).b;

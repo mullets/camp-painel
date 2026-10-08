@@ -18,7 +18,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const sobre={};   // fragmento de HTML mostrado como TEXTO = escapou demais
  const RX_FRAG=/<(span|div|tr|td|b|small|button|li|ul|dl|dt|dd|table|a)\b[^>]*>/i;
  const checa=(onde)=>{ const cl=d.body.cloneNode(true); cl.querySelectorAll('script,style').forEach(e=>e.remove()); const tx=cl.textContent||''; const pv=tx.match(PROIB); if(pv&&!Object.values(vocab).includes(pv[0])) vocab[onde]=pv[0]; const mm=tx.match(RX_FRAG); if(mm&&!Object.values(sobre).includes(mm[0])) sobre[onde]=mm[0]; for(const e of d.querySelectorAll('[data-xss]')){ const par=ondeEstou(e)+' ← '+e.getAttribute('data-xss'); if(visto.has(par)) continue; visto.add(par); (vazou[onde]=vazou[onde]||[]).push(par); } };
- const passos=[['painel'],['fundos'],['fundo/F026'],['fundo/F023'],['arquitetos'],['projetos'],['projeto/F026-P0001'],['projeto/F023-P0011'],['item/F023-P0011-1959-S01-D00001'],['item/F023-P0011-1959-S01-D00003'],['item/F023-P0011-1959-S01-D00004'],['fundo/F029'],['fundo/F003'],['projeto/F002-P0001'],['projeto/F001-P0001'],['filas'],['solicitacoes'],['erros'],['etiquetas'],['config'],['localizacao'],['estacoes'],['auditoria']];
+ const passos=[['painel'],['uso'],['fundos'],['fundo/F026'],['fundo/F023'],['arquitetos'],['projetos'],['projeto/F026-P0001'],['projeto/F023-P0011'],['item/F023-P0011-1959-S01-D00001'],['item/F023-P0011-1959-S01-D00003'],['item/F023-P0011-1959-S01-D00004'],['fundo/F029'],['fundo/F003'],['projeto/F002-P0001'],['projeto/F001-P0001'],['filas'],['solicitacoes'],['erros'],['etiquetas'],['config'],['localizacao'],['estacoes'],['auditoria']];
  for(const [rota] of passos){ try{ w.route_to(rota); await sleep(1500); checa(rota);
      // abre o detalhe de até 5 linhas (drawer)
      const trs=[...d.querySelectorAll('.content.on tbody tr, #v-'+rota.split('/')[0]+' tbody tr')].slice(0,5);
@@ -28,6 +28,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const J=async u=>{ try{ return await (await f(u)).json() }catch(_){ return null } };
  const erros=await J('/api/erros'), sols=await J('/api/solicitacoes'), ags=await J('/api/agentes'), evs=await J('/api/eventos?limite=60');
  const lista=x=>Array.isArray(x)?x:(x&&(x.itens||x.items||x.eventos||x.dados))||[];
+ // Uso do acervo: nome, e-mail, instituição, uso e respostas vêm de um formulário PÚBLICO (qualquer pessoa digita): abas e detalhe
+ try{ w.route_to('uso'); await sleep(1500); for(const aba of ['pessoas','materiais','downloads']){ w.usoAba(aba); await sleep(1300); checa('uso › aba '+aba); }
+   for(const it of lista(await J('/api/uso?por_pagina=4'))){ await w.abrirUsoDetalhe(it.id); await sleep(700); checa('uso › detalhe '+it.id); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['uso (exceção)']=[e.message.slice(0,80)] }
  const ev2=lista(evs).filter(e=>/xss|data-xss/.test(JSON.stringify(e)));
  const funcoes=[['editarDireitos F026',()=>w.editarDireitos('F026')],['editarDireitos F023',()=>w.editarDireitos('F023')],['abrirPerfil',()=>w.abrirPerfil&&w.abrirPerfil()],
    ...lista(erros).slice(0,2).map(e=>['abrirErro '+e.id,()=>w.abrirErro(e.id)]), ...lista(sols).slice(0,2).map(e=>['abrirSolicitacao '+e.id,()=>w.abrirSolicitacao(e.id)]),

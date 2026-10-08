@@ -8,7 +8,7 @@ Este é o registro único do que já foi decidido. Antes de mexer em algo daqui,
   - **ENTRADA** (`qnap.entrada_captura`): `Arquivos/100 - Scanners`. Os scanners gravam aqui e o CAMP Vision 2 lê. O painel não lê lotes daqui.
   - **PRONTO** (`qnap.prontos_raiz`): `Fundos e Escritorios/ACERVOS_CAMP`, no padrão `<Fundo>/01 - Projetos/<Fxxx-Pxxxx - Nome>/<série>`. O CAMP Vision 2 grava aqui e **o painel lê os lotes só daqui**.
 - **CAMP Vision 2** (repositório oficial `github.com/mullets/campvision-new`; o `campvision2` é o app antigo): roda num Ubuntu dedicado (`.40`). O **contrato** com o painel (arquivos, valores de `status`, heartbeat, token, reserva de projeto) está em `campvision.md`; quem mexer em um lado confere o outro.
-- **Uso do acervo (quem baixou o quê)**: em desenho; ver `uso-do-acervo.md`. Só a sondagem (`scripts/sondar_fluentforms.py`, somente leitura, nunca imprime dados pessoais) está pronta. "Pediu para baixar" é diferente de "baixou de verdade"; o uso é sempre o declarado.
+- **Uso do acervo (quem pediu para baixar o quê)**: fases 0 e 1 prontas (coleta do formulário de download do site, tela só para admin/master, CSV, apagar pessoa); ver `uso-do-acervo.md`. "Pediu para baixar" é diferente de "baixou de verdade"; o uso é sempre o declarado. Dados de pessoas nunca dentro de `onclick` (só `data-*`). A coleta automática tem `uso.coleta_min` (a semente de teste a desliga, como a do QNAP: teste não depende de relógio).
 - **Informações do QNAP no painel** (espaço, tendência, último material, entrada bruta, paradas, lotes prontos, resposta) vêm do **coletor em segundo plano** (`qnap_coletor.py`, a cada 10 min, limite de 25 s, histórico de 90 dias). **Nunca varrer o QNAP dentro de uma requisição**: por SMB é lento e, com a montagem presa, trava o painel. A tela só lê o guardado (`GET /api/qnap`; admin pede `POST /api/qnap/coletar`). Configurações: `qnap.coleta_min`, `qnap.dias_parado`.
 - Mudanças que alteram o site `camp.arq.br` (publicar, despublicar, escrever no Tainacan) só depois das 21h.
 
@@ -23,9 +23,10 @@ Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: d�
 | 2 | Filas de processamento | 8 | Localização |
 | 3 | Solicitações | 9 | Etiquetas |
 | 4 | Erros relatados | E | Estações e site |
-| 5 | Fundos | A | Auditoria (admin) |
-| 6 | Arquitetos | C | Configurações (admin) |
-Fixas: `⌘/Ctrl+K` busca · `⌘/Ctrl+B` barra lateral · `F` foca o filtro da tela · `?` ajuda · `Esc` fecha. Item novo no menu = nova linha na tabela (o `check_ui` reprova se esquecer ou fora de ordem).
+| 5 | Fundos | U | Uso do acervo (admin) |
+| 6 | Arquitetos | A | Auditoria (admin) |
+|  |  | C | Configurações (admin) |
+Fixas: `⌘/Ctrl+K` busca · `⌘/Ctrl+B` barra lateral · `F` foca o filtro da tela · `?` ajuda · `Esc` fecha. Item novo no menu = nova linha na tabela (o `check_ui` reprova se esquecer ou fora de ordem, e `tests/auditoria_atalhos.js` aperta TODAS as teclas da tabela).
 
 ## 4. Listas e paginação
 - Listas grandes de verdade (Projetos, Auditoria): paginação **no servidor** (`pagina`/`por_pagina`), "Mostrando X–Y de N", seletor de tamanho.
