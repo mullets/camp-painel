@@ -238,7 +238,7 @@ w.route_to('painel'); await sleep(2800);
   chk(!!d.getElementById('qnap-atualizar'),'o master deveria ver o botão "Atualizar agora"');
   // atualizar agora: pede a coleta, espera e recarrega o cartão
   d.getElementById('qnap-atualizar').click(); await sleep(7000);
-  chk(/Atualizado (agora há pouco|há 0 min)/.test(txt('#qnap-card'))&&!!d.getElementById('qnap-atualizar')&&!d.getElementById('qnap-atualizar').disabled,'depois de "Atualizar agora" o cartão deveria mostrar a coleta nova: '+txt('#qnap-card').slice(-90)); }
+  chk(/Atualizado (agora|há 0 min)/.test(txt('#qnap-card'))&&!!d.getElementById('qnap-atualizar')&&!d.getElementById('qnap-atualizar').disabled,'depois de "Atualizar agora" o cartão deveria mostrar a coleta nova: '+txt('#qnap-card').slice(-90)); }
 // ---------- USO DO ACERVO (pedidos de download do formulário do site) ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;

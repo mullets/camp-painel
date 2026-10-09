@@ -74,3 +74,17 @@ Uma lista existe para responder "o que eu preciso fazer?" e "onde está aquilo q
 - **Situação diz o que falta**, na mesma fase da Fila (`filas_fase.py`): "Conferir 12", "Importar folhas", "Aprovar lote", "Pronto para publicar", "Em leitura", "Erro no CAMP Vision"; sem lista ativa, a situação no site (publicado, rascunho, despublicado, não publicado) e "sem folhas".
 - **A seleção em massa respeita os filtros** ("Selecionar todos os resultados" usa fundo e situação, não só o texto).
 - O servidor é a fonte única: `situacao`, `ordem` e `fundo` são parâmetros de `GET /api/projetos`, `/api/projetos/codigos` e `/resumo`, sempre com a mesma regra (`_filtro_projetos`).
+
+## 12. Direitos do fundo: preencher NÃO é exigido por padrão (09/10/2026)
+O painel não bloqueia a publicação só porque os direitos de um fundo estão em branco. Ninguém decidiu isso: foi uma regra tirada do caso de um fundo retirado do ar (a família reclamou de uma biografia publicada) e aplicada a todos os 33 fundos, e acabou mandando na tela inicial ("travados por direitos", "Definir os direitos de BSG").
+- **Bloqueia** quando alguém **registrou** uma restrição de propósito (`restrito` ou `nao_autorizado`): é uma decisão de pessoa, e continua valendo. Foi o que protegeria um fundo como o do Chu Ming.
+- **Não bloqueia** quando os direitos estão `nao_definida` (nunca preenchidos).
+- Para voltar a exigir o preenchimento de todos os fundos: configuração `publicacao.exige_direitos` = `1` (Configurações). Padrão `0`.
+- É uma única função, `rotas_gestao.direitos_permitem_publicar`, usada pela publicação do projeto, pela do fundo, pela autorização, pelo guia e pela tela inicial; por isso o interruptor vale para todos.
+- Na lista de Fundos, só aparece a etiqueta (e o filtro "Com restrição de direitos") para restrição registrada.
+- Testes: os de backend e de navegador antigos ligam a exigência (continuam provando o bloqueio); o bloco `direitos_opcional` prova o padrão.
+
+## 13. Topo do projeto e janela de revisão (09/10/2026, depois de olhar as telas num navegador)
+- **Topo do projeto = um painel só**: os 4 passos, a frase do que falta e os botões do passo atual (Começar a conferir, Aprovar todas). O painel "Revisão do lote" ficou só com o andamento e o que foi retirado; as ações raras (Só as sem pendência, Importar de novo, Ler de novo no CAMP Vision) ficam em "Mais ações do lote".
+- **Janela de revisão da folha**: a imagem, o que o CAMP Vision apontou e, no fim, os botões **fixos** (Está certo e próxima, Salvar correção); os campos de edição ficam recolhidos em "Corrigir os dados da folha" e abrem sozinhos quando a folha está sem título. A ação mais comum é a mais à mão.
+- Textos: "agora" (não "agora há pouco"), "1 coisa pede / N coisas pedem você hoje", caminho de navegação com os mesmos nomes dos grupos do menu.

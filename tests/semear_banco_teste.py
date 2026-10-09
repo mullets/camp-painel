@@ -8,6 +8,7 @@ from app.db import init_db, aplicar_migracoes, connect
 from app import auth
 
 init_db(); aplicar_migracoes()
+_c0 = connect(); _c0.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_direitos'"); _c0.commit(); _c0.close()   # os testes de navegador provam o bloqueio de direitos não preenchidos; o padrão de produção é 0
 subprocess.run([sys.executable, str(RAIZ / "scripts/importar_fundos.py"), "--db", os.environ["CAMP_DB_PATH"]],
                check=True, capture_output=True)
 auth.criar_usuario("Rafael", "rafael@camp.arq.br", "senha-bem-longa-123", "master", forcar_troca=False)

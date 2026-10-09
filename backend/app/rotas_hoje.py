@@ -113,7 +113,7 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
                           "titulo": f"Definir os direitos de {f['sigla'] or f['codigo']}", "detalhe": f"Segura {f['projetos']} projeto(s) que não podem ser publicados sem isso"})
         for f in autorizar[:3]:
             acoes.append({"id": "autorizar_" + f["codigo"], "prioridade": 70, "impacto": f["nao_autorizados"], "rota": "fundo/" + f["codigo"],
-                          "titulo": f"Autorizar projetos de {f['sigla'] or f['codigo']}", "detalhe": f"{f['nao_autorizados']} projeto(s) com direitos ok, mas ainda sem autorização"})
+                          "titulo": f"Autorizar projetos de {f['sigla'] or f['codigo']}", "detalhe": f"{f['nao_autorizados']} projeto(s) prontos, mas ainda sem autorização"})
         if snap and (snap["parados"] or 0) > 0:
             acoes.append({"id": "parados", "prioridade": 65, "impacto": snap["parados"], "rota": "estacoes",
                           "titulo": f"{snap['parados']} pasta(s) parada(s) na entrada do QNAP", "detalhe": "Sem alteração há dias: material esquecido ou travado no fluxo"})

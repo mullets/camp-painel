@@ -17,7 +17,10 @@ def rodar(modo, db):
     return r.returncode, (r.stdout + r.stderr).strip()
 
 def filho(modo):
-    from app.db import init_db, aplicar_migracoes, connect
+    from app.db import init_db, aplicar_migracoes as _aplicar_migracoes_real, connect
+    def aplicar_migracoes():
+        # nos testes antigos os direitos NÃO preenchidos bloqueiam (publicacao.exige_direitos=1), para continuar provando o bloqueio; o padrão de produção é 0 e tem bloco próprio (modo 'direitos_opcional')
+        _aplicar_migracoes_real(); c_ = connect(); c_.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_direitos'"); c_.commit(); c_.close()
     if modo == "novo":
         init_db(); aplicar_migracoes(); aplicar_migracoes()   # 2x: idempotente
     elif modo == "antigo":
@@ -2051,6 +2054,27 @@ def filho(modo):
         ver("duplicata 'quase' do CV2 vira 'perceptual' no painel (não se perde)", tuple(c.execute("SELECT duplicata_de, tipo_duplicata FROM item WHERE codigo=?", (D(2),)).fetchone()) == (D(1), "perceptual"))
         c.rollback(); c.close()
         for l in res: print(l)
+    elif modo == "direitos_opcional":
+        init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
+        from app.rotas_gestao import direitos_permitem_publicar as dpp
+        from app.publicacao import condicoes_projeto
+        c = connect(); res = []
+        ver = lambda nome, cond, det="": res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        for f_, t_ in (("F081", "Sem direitos preenchidos"), ("F082", "Com restrição registrada"), ("F083", "Autorizado"), ("F084", "Não autorizado")):
+            c.execute("INSERT INTO fundo (codigo, titulo) VALUES (?,?)", (f_, t_))
+        for f_, st in (("F082", "restrito"), ("F083", "autorizado"), ("F084", "nao_autorizado")):
+            c.execute("INSERT INTO direitos_fundo (fundo_codigo, situacao) VALUES (?,?)", (f_, st))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F081',1)")
+        c.execute("INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, status_site) VALUES ('F081-P0001','F081',1,'Projeto de um fundo sem direitos preenchidos',1970,'nao_publicado')")
+        ver("padrão: a exigência vem DESLIGADA (0) na configuração", c.execute("SELECT valor FROM configuracao WHERE chave='publicacao.exige_direitos'").fetchone()[0] == "0")
+        ver("direitos NÃO preenchidos não bloqueiam a publicação", dpp(c, "F081") is None)
+        ver("uma restrição REGISTRADA continua bloqueando (restrito e não autorizado), com a mensagem", "restritos" in (dpp(c, "F082") or "") and dpp(c, "F084") is not None and dpp(c, "F083") is None)
+        cd = {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}
+        ver("a condição do projeto fica OK e não bloqueia quando só falta preencher", cd["direitos"]["ok"] is True)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_direitos'")
+        ver("com a exigência LIGADA (1) o fundo sem direitos volta a bloquear, com o botão que resolve", dpp(c, "F081") is not None and {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}["direitos"]["ok"] is False and {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}["direitos"]["acao"]["tipo"] == "direitos")
+        c.rollback(); c.close()
+        for l in res: print(l)
     elif modo == "filas":
         init_db(); aplicar_migracoes()
         from app import auth, publicacao_guiada as pg, rotas_projetos as rp, publicador
@@ -2399,6 +2423,14 @@ else:
 print("30) Filas: a fase de cada lista (o que falta e quem age) e o fechamento da lista ao publicar")
 rc, out = rodar("filas", f"{tmp}/filas.db")
 if rc != 0: ok(False, f"teste das filas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("31) Direitos: preencher deixa de ser exigido por padrão; restrição registrada continua bloqueando")
+rc, out = rodar("direitos_opcional", f"{tmp}/dir.db")
+if rc != 0: ok(False, f"teste dos direitos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

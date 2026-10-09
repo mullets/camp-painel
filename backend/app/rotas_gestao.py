@@ -206,6 +206,10 @@ def direitos_permitem_publicar(con, fundo_codigo: str) -> str | None:
     s = r[0] if r else "nao_definida"
     if s == "autorizado":
         return None
+    if s == "nao_definida":      # direitos NÃO PREENCHIDOS não é decisão de ninguém: só bloqueia se a configuração exigir o preenchimento de todos os fundos
+        v = con.execute("SELECT valor FROM configuracao WHERE chave='publicacao.exige_direitos'").fetchone()
+        if not (v and v[0] == "1"):
+            return None
     return {"nao_definida": "Direitos do fundo não definidos — registre a autorização em Fundo → Direitos antes de publicar",
             "restrito": "Fundo com direitos restritos — publicação só com liberação registrada",
             "nao_autorizado": "Fundo sem autorização de publicação"}[s]
