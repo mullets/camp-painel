@@ -242,8 +242,8 @@ w.route_to('painel'); await sleep(2800);
 // ---------- USO DO ACERVO (pedidos de download do formulário do site) ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
-  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Uso do acervo" com o atalho U');
-  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Acervo','"Uso do acervo" deveria ficar no grupo ACERVO do menu, está em "'+(el&&el.textContent.trim())+'"'); }
+  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='5','o menu deveria ter "Uso do acervo" com o atalho 5');
+  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Pedidos','"Uso do acervo" deveria ficar no grupo PEDIDOS do menu (junto das Solicitações), está em "'+(el&&el.textContent.trim())+'"'); }
   chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
   chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
   const D0=(await J(adm,'/api/uso/'+L.itens[0].id)).b;
@@ -406,6 +406,20 @@ w.route_to('painel'); await sleep(2800);
   d.querySelector('[data-fila-filtro="todas"]').click(); await sleep(300);
   chk(d.querySelectorAll('#filas-body tr[data-fase]').length===(await J(adm,'/api/filas')).b.length,'o filtro "Todas" deveria mostrar todas as listas do servidor');
   await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }
+// ---------- MENU POR TRABALHO e PRÓXIMO PASSO no topo do projeto ----------
+{ w.confirm=()=>true;
+  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Material novo','Pedidos','Acervo','Sistema']),'o menu deveria ter os grupos por trabalho: Material novo, Pedidos, Acervo, Sistema: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
+  const grupo=nome=>{const g=[...d.querySelectorAll('#nav .grp')].find(x=>x.textContent.trim()===nome),r=[];for(let e=g&&g.nextElementSibling;e&&!e.classList.contains('grp');e=e.nextElementSibling)if(e.dataset.v)r.push(e.dataset.v);return r.join(',')};
+  chk(grupo('Material novo')==='filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
+  chk(txt('#nav [data-v="projetos"] kbd')==='6'&&txt('#nav [data-v="filas"] kbd')==='2'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Filas 2, Projetos 6, Etiquetas T)');
+  w.route_to('projeto/F003-P9001'); await sleep(3600);
+  chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
+  chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
+  chk(!/Fonte visual|reconhecidos no site/.test(txt('.project-source'))&&/folha\(s\) no painel/.test(txt('.project-source')),'a linha de números do projeto deveria falar de folhas no painel e no site, sem jargão: "'+txt('.project-source')+'"');
+  d.querySelector('#pj-proximo [data-pp="conferir"]').click(); await sleep(2000);
+  chk(/Revisar folha/.test(txt('#d-title')),'"Começar a conferir" deveria abrir a primeira folha pendente'); w.closeDrawer(true);
+  w.route_to('projeto/F026-P0001'); await sleep(3600);
+  chk(/Falta trazer as folhas/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="importar"]')&&/Importar/.test(txt('#pj-proximo .steps .cur')),'um projeto com lote ainda não importado deveria pedir "Importar folhas" no passo 1: "'+txt('#pj-proximo')+'"'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

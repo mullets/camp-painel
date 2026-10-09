@@ -308,6 +308,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
 .btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 .rev-ret{margin:8px 0;font-size:12.5px;color:var(--ink2)}.rev-ret summary{cursor:pointer}.thumb[data-rev-abrir]{cursor:pointer}.rev-giro{display:flex;gap:6px;justify-content:center;margin:0 0 10px}
+.pp .pb{display:grid;gap:10px}.pp-acao{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.pp-acao p{margin:0;flex:1 1 320px}
 .fila-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}.btn[aria-pressed="true"]{background:var(--blue-soft);color:var(--blue);border-color:var(--blue)}#fila-resumo{margin:0 0 12px;min-height:1em}
 progress.pg{width:100%;max-width:260px;height:8px;accent-color:var(--blue);vertical-align:middle}.fila-pasta{font-size:12px;color:var(--ink3);margin-top:4px}.fila-pasta summary{cursor:pointer}.fila-acao{white-space:nowrap;text-align:right}.fila-ajuda{margin-top:14px;font-size:13px}
 .rl-estado{margin:0 0 8px}.rl-estado:empty{display:none}.rl-estado .tag{margin-right:4px}
@@ -546,21 +547,22 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
   <nav class="nav" id="nav">
     <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Painel<kbd>1</kbd></button>
-    <div class="grp">Operação</div>
+    <div class="grp">Material novo</div>
     <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Filas de processamento<span class="n" id="n-filas">3</span><kbd>2</kbd></button>
-    <button data-v="solicitacoes"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg>Solicitações<span class="n" id="n-sol">4</span><kbd>3</kbd></button>
-    <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Erros relatados<span class="n" id="n-err">5</span><kbd>4</kbd></button>
+    <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Erros relatados<span class="n" id="n-err">5</span><kbd>3</kbd></button>
+    <div class="grp">Pedidos</div>
+    <button data-v="solicitacoes"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg>Solicitações<span class="n" id="n-sol">4</span><kbd>4</kbd></button>
+    <button data-v="uso"><svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Uso do acervo<kbd>5</kbd></button>
     <div class="grp">Acervo</div>
-    <button data-v="fundos"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M3 10h18"/></svg>Fundos<kbd>5</kbd></button>
-    <button data-v="arquitetos"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Arquitetos<kbd>6</kbd></button>
-    <button data-v="projetos"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Projetos<kbd>7</kbd></button>
-    <button data-v="localizacao"><svg viewBox="0 0 24 24"><path d="M3 7h18v4H3zM3 13h18v4H3z"/><path d="M7 7v10M17 7v10"/></svg>Localização</button>
-    <button data-v="etiquetas"><svg viewBox="0 0 24 24"><path d="M3 12l9-9h9v9l-9 9z"/><circle cx="16" cy="8" r="1.5"/></svg>Etiquetas<kbd>8</kbd></button>
-    <button data-v="uso"><svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Uso do acervo</button>
-      <div class="grp">Sistema</div>
-    <button data-v="estacoes"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>Estações e site</button>
-    <button data-v="auditoria"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Auditoria</button>
-    <button data-v="config"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>Configurações<kbd>9</kbd></button>
+    <button data-v="projetos"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Projetos<kbd>6</kbd></button>
+    <button data-v="fundos"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M3 10h18"/></svg>Fundos<kbd>7</kbd></button>
+    <button data-v="arquitetos"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Arquitetos<kbd>8</kbd></button>
+    <button data-v="localizacao"><svg viewBox="0 0 24 24"><path d="M3 7h18v4H3zM3 13h18v4H3z"/><path d="M7 7v10M17 7v10"/></svg>Localização<kbd>9</kbd></button>
+    <button data-v="etiquetas"><svg viewBox="0 0 24 24"><path d="M3 12l9-9h9v9l-9 9z"/><circle cx="16" cy="8" r="1.5"/></svg>Etiquetas<kbd>T</kbd></button>
+    <div class="grp">Sistema</div>
+    <button data-v="estacoes"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>Estações e site<kbd>E</kbd></button>
+    <button data-v="auditoria"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Auditoria<kbd>A</kbd></button>
+    <button data-v="config"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>Configurações<kbd>C</kbd></button>
   </nav>
   <div class="foot" id="foot">Protótipo sem servidor</div>
 </aside>
@@ -1259,7 +1261,7 @@ const AJUDA_TELAS={
   auditoria:{titulo:'Auditoria',intro:'Histórico institucional de alterações no painel.',passos:[['Filtre por ator ou entidade','Encontre quem alterou um registro.'],['Abra o evento','Veja Antes → Depois quando o evento possui diff.'],['Exporte se necessário','O CSV respeita a visão filtrada atual.']]},
   config:{titulo:'Configurações',intro:'Infraestrutura, usuários e preferências administrativas.',passos:[['Altere somente o necessário','Configurações de integração podem afetar toda a operação.'],['Salve campo a campo','O painel avisa quando existem alterações não salvas.'],['Use usuários e papéis','Dê somente as permissões necessárias para cada função.']]}
 };
-const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–9','Painel até Etiquetas, na ordem do menu'],['E · A · C','Estações e site · Auditoria · Configurações'],['F','Focar filtro da tela'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
+const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–9','Painel até Localização, na ordem do menu'],['T · E · A · C','Etiquetas · Estações e site · Auditoria · Configurações'],['F','Focar filtro da tela'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
 function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||AJUDA_TELAS.painel}
 function abrirAjuda(){const a=ajudaDaRota();openDrawer('Ajuda · '+a.titulo,'guia rápido',`<p style="margin:0;color:var(--ink2)">${escHtml(a.intro)}</p><div class="help-steps">${a.passos.map(([t,d])=>`<div class="help-step"><div><b>${escHtml(t)}</b><small>${escHtml(d)}</small></div></div>`).join('')}</div><div><h3>Atalhos</h3><div class="shortcut-grid">${AJUDA_ATALHOS.map(([k,d])=>`<kbd>${escHtml(k)}</kbd><span>${escHtml(d)}</span>`).join('')}</div></div>`)}
 function onboardingOperador(u){if(!u||u.papel!=='operador')return;const key='camp.onboarding.v1.'+u.email;try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch(_){}setTimeout(()=>openDrawer('Bem-vindo ao CAMP Acervos','primeiro acesso',`<p style="margin:0;color:var(--ink2)">O painel acompanha o material desde a digitalização até a publicação. Você não precisa conhecer a infraestrutura por trás dele.</p><div class="help-steps"><div class="help-step"><div><b>Comece pelas filas</b><small>Veja o que chegou do CAMP Vision 2 e o que precisa de revisão.</small></div></div><div class="help-step"><div><b>Trabalhe pelo código</b><small>Fundos são Fxxx; projetos são Fxxx-Pxxxx. Use a busca do topo quando souber o código.</small></div></div><div class="help-step"><div><b>Não publique com bloqueio</b><small>Problemas e direitos pendentes aparecem antes das ações de publicação.</small></div></div></div><div class="act"><button class="btn pri" onclick="closeDrawer(true);go('filas')">Ir para Filas</button><button class="btn" onclick="abrirAjuda()">Ver ajuda desta tela</button></div>`),500)}
@@ -1301,7 +1303,7 @@ document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!a
 try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
 // Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
-const NAV_ATALHOS={painel:'1',filas:'2',solicitacoes:'3',erros:'4',fundos:'5',arquitetos:'6',projetos:'7',localizacao:'8',etiquetas:'9',uso:'U',estacoes:'E',auditoria:'A',config:'C'};
+const NAV_ATALHOS={painel:'1',filas:'2',erros:'3',solicitacoes:'4',uso:'5',projetos:'6',fundos:'7',arquitetos:'8',localizacao:'9',etiquetas:'T',estacoes:'E',auditoria:'A',config:'C'};
 const KEYS=Object.fromEntries(Object.entries(NAV_ATALHOS).map(([v,k])=>[k.toLowerCase(),v]));
 document.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=NAV_ATALHOS[b.dataset.v];let el=b.querySelector('kbd');if(!k){if(el)el.remove();return}if(!el){el=document.createElement('kbd');b.appendChild(el)}el.textContent=k});
 document.addEventListener('keydown',e=>{
@@ -1600,6 +1602,27 @@ async function pedirReleitura(tipo,codigo){
 async function cancelarReleitura(id){try{await API('/api/releituras/'+encodeURIComponent(id)+'/cancelar',{method:'POST'});toast('Pedido cancelado');document.querySelectorAll('.rl-estado').forEach(b=>{if(b.dataset.rlItem)carregarEstadoReleitura('item',b.dataset.rlItem);if(b.dataset.rlProjeto)carregarEstadoReleitura('projeto',b.dataset.rlProjeto)})}catch(e){toast(e.message)}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-releitura-item],[data-rl-cancelar]');if(!b||b.disabled)return;e.stopPropagation();e.preventDefault();   // código só em data-*
   if(b.dataset.releituraItem)pedirReleitura('item',b.dataset.releituraItem);else cancelarReleitura(b.dataset.rlCancelar)},true);
+function proximoPassoHTML(r,code){
+  const l=r.lote;if(!l)return '';
+  const op=r.pode_operar,ad=r.pode_agir,f=l.fase,passos=['Importar','Conferir','Aprovar','Publicar'],cur={importar:0,conferir:1,aprovar:2,publicar:3,publicado:4}[f];
+  const stepper=cur===undefined?'':`<div class="steps">${passos.map((t,i)=>`<span class="${i<cur?'done':i===cur?'cur':''}">${t}${i===1&&f==='conferir'?` ${escHtml(l.itens_conferidos)}/${escHtml(l.itens_total)}`:''}</span>`).join('')}</div>`;
+  const bt=(txt,acao)=>`<button class="btn pri" data-pp="${acao}" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">${txt}</button>`;
+  const T={importar:['Falta trazer as folhas do CAMP Vision para o painel.',op?bt('Importar folhas','importar'):''],
+    conferir:[`Faltam conferir ${escHtml(l.itens_pendentes)} de ${escHtml(l.itens_total)} folha(s). Clique numa folha para ver, virar e conferir, ou aprove todas de uma vez.`,op?bt('Começar a conferir','conferir'):''],
+    aprovar:['Todas as folhas foram conferidas. Falta aprovar o lote.',ad?bt('Aprovar lote','aprovar'):'<small class="help">Falta um admin aprovar.</small>'],
+    publicar:['Lote aprovado. Falta publicar o projeto no site.',ad?bt('Publicar','publicar'):'<small class="help">Falta um admin publicar.</small>'],
+    publicado:['Tudo certo: este lote já foi publicado.',''],
+    processando:[l.etapa==='enviado'?'O lote está na fila do CAMP Vision.':'O CAMP Vision está lendo as folhas deste projeto.',''],
+    erro:['O CAMP Vision parou com erro neste lote. Veja em "Erros relatados".','']}[f]||['',''];
+  return `<div class="panel pp"><div class="pb">${stepper}<div class="pp-acao"><p class="help">${T[0]}</p>${T[1]}</div></div></div>`}
+async function carregarProximoPasso(code){const b=document.getElementById('pj-proximo');if(!b)return;try{b.innerHTML=proximoPassoHTML(await API('/api/projetos/'+encodeURIComponent(code)+'/proximo-passo'),code)}catch(_){b.innerHTML=''}}
+async function passoProximo(acao,lote,code){
+  if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else toast('Nenhuma folha pendente.');return}
+  if(acao==='publicar'){abrirPublicacaoGuiada(code);return}
+  try{if(acao==='importar'){const r=await API('/api/lotes/'+encodeURIComponent(lote)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`)}
+    else if(acao==='aprovar'){if(!confirm('Aprovar a revisão deste lote? Depois disso as folhas não podem mais ser editadas, a não ser que você reabra a revisão.'))return;await API('/api/lotes/'+encodeURIComponent(lote)+'/aprovar',{method:'POST'});toast('Revisão aprovada')}
+    showProjeto(code)}catch(e){toast(e.message)}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-pp]');if(b&&!b.disabled)passoProximo(b.dataset.pp,b.dataset.lote,b.dataset.projeto)});
 async function carregarRevisaoLote(code){
   const box=document.getElementById('pj-revisao');if(!box)return;
   try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/revisao'),adm=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel);
@@ -1615,7 +1638,7 @@ async function carregarRevisaoLote(code){
         :(adm?bt('aprovar','Aprovar o lote','pri'):'<small class="help">Todas conferidas. Falta o admin aprovar o lote.</small>');
       return `<div class="panel"><div class="ph"><h2>Revisão do lote</h2>${estado}</div><div class="pb"><p class="help"><b>${escHtml(l.nome)}</b> · o CAMP Vision gravou ${escHtml(l.pacote.documentos)} documento(s)${l.pacote.teste?' · <b>lote de teste</b>: nada é publicável':''}.</p>
       ${vazio?'<p class="help">As folhas ainda não foram importadas para o painel. Importe para conferir e aprovar.</p>':`<div class="rev-chips"><span class="tag a">${escHtml(c.pendente)} a conferir</span><span class="tag g">${escHtml(c.conferida)} conferida(s)</span><span class="tag b">${escHtml(c.corrigida)} corrigida(s)</span>${c.bloqueadas?`<span class="tag r">${escHtml(c.bloqueadas)} bloqueada(s) para o site</span>`:''}</div>${c.pendente&&!apr?'<p class="help">Clique numa folha para ver, virar se estiver de lado e conferir. Ou aprove todas de uma vez.</p>':''}`}
-      <div class="act">${acoes}</div>${vazio||apr||!op?'':`<p class="help">${bt('importar','Importar de novo')} ${bt('releitura','Ler o projeto de novo no CAMP Vision')}</p>`}${ret}${prob}</div></div>`}).join('');carregarEstadoReleitura('projeto',code)}catch(e){box.innerHTML=''}}
+      <div class="act">${acoes}</div>${vazio||apr||!op?'':`<p class="help">${bt('importar','Importar de novo')} ${bt('releitura','Ler o projeto de novo no CAMP Vision')}</p>`}${ret}${prob}</div></div>`}).join('');carregarEstadoReleitura('projeto',code);carregarProximoPasso(code)}catch(e){box.innerHTML=''}}
 function proximaPendente(codigo){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo);return [...L.slice(i+1),...L.slice(0,Math.max(i,0))].find(x=>x.revisao==='pendente')}
 function urlPreviaFolha(codigo,giro,t){return `/api/itens/${encodeURIComponent(codigo)}/previa?${t?`t=${t}&`:''}g=${giro||0}`}
 async function abrirRevisaoItem(codigo){
@@ -1664,12 +1687,12 @@ async function carregarFolhasQnap(code){
     const com=(r.lotes||[]).filter(l=>l.existe&&l.fora_do_painel>0),sumiu=(r.lotes||[]).filter(l=>!l.existe);
     box.innerHTML=com.map(l=>`<div class="panel"><div class="ph"><h2>Encontradas no QNAP, ainda não catalogadas no painel</h2><span class="tag a">${fmtN(l.fora_do_painel)} documento(s)</span></div><div class="pb"><p class="help">Lote <b>${escHtml(l.nome)}</b> (${escHtml(l.etapa)}). Estes arquivos estão na pasta do projeto no QNAP, mas ainda não viraram folhas do painel. Quando o lote tiver o pacote do CAMP Vision, a Revisão do lote (acima) importa as folhas e elas passam a aparecer na lista abaixo.${l.parcial?' <b>A leitura da pasta foi interrompida por demorar: a lista está incompleta.</b>':''}</p><div class="qf-grid">${l.documentos.map(d=>`<figure class="qf"><div class="qf-img">${d.previa?`<img loading="lazy" alt="" src="/api/projetos/${encodeURIComponent(code)}/folhas-qnap/arquivo?lote=${encodeURIComponent(l.id)}&caminho=${encodeURIComponent(d.previa)}">`:'<span class="qf-sem">sem prévia</span>'}</div><figcaption><span class="code">${escHtml(d.codigo)}</span><small>${escHtml(d.serie||'—')} · ${d.formatos.map(escHtml).join(' · ')}</small></figcaption></figure>`).join('')}</div>${l.fora_do_painel>l.documentos.length?`<small class="help">… e mais ${fmtN(l.fora_do_painel-l.documentos.length)} (mostrando ${fmtN(l.documentos.length)})</small>`:''}</div></div>`).join('')+sumiu.map(l=>`<div class="panel"><div class="pb"><p class="help"><span class="tag r">pasta não encontrada</span> A pasta do lote <b>${escHtml(l.nome)}</b> não está acessível: <span class="mono">${escHtml(l.pasta)}</span>. Confira se o QNAP está montado.</p></div></div>`).join('')
   }catch(e){box.innerHTML=''}}
-function renderItensProjeto(d,p){window.ITENS_PJ=d.itens||[];window.PROJETO_PJ=p.codigo;setTimeout(()=>{carregarRevisaoLote(p.codigo);carregarFolhasQnap(p.codigo);const a=window.ACAO_APOS_PROJETO;if(a&&a.codigo===p.codigo){window.ACAO_APOS_PROJETO=null;if(a.tipo==='publicar')setTimeout(()=>abrirPublicacaoGuiada(p.codigo),600);else setTimeout(()=>{const e=document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})},1000)}},0);return '<div id="pj-revisao"></div><div id="pj-qnap"></div>'+renderItensProjetoBase(d,p)}
+function renderItensProjeto(d,p){window.ITENS_PJ=d.itens||[];window.PROJETO_PJ=p.codigo;setTimeout(()=>{carregarProximoPasso(p.codigo);carregarRevisaoLote(p.codigo);carregarFolhasQnap(p.codigo);const a=window.ACAO_APOS_PROJETO;if(a&&a.codigo===p.codigo){window.ACAO_APOS_PROJETO=null;if(a.tipo==='publicar')setTimeout(()=>abrirPublicacaoGuiada(p.codigo),600);else setTimeout(()=>{const e=document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})},1000)}},0);return '<div id="pj-proximo"></div><div id="pj-revisao"></div><div id="pj-qnap"></div>'+renderItensProjetoBase(d,p)}
 function renderItensProjetoBase(d,p){
   const its=d.itens||[], fonte=d.fonte_visual||{};
   if(!its.length)return `<div class="panel"><div class="empty">Nenhum documento digitalizado reconhecido para este projeto.</div></div>`;
   const diverge=(fonte.documentos_site||0)>0&&fonte.documentos_site!==fonte.documentos_locais,soSite=its.filter(i=>i.origem_catalogacao==='site').length;
-  const source=`<div class="project-source ${diverge?'warn':''}"><b>Fonte visual:</b><span>${escHtml(fonte.colecao_itens_nome||('coleção '+(fonte.colecao_itens_id||'—')))}</span><span>· ${escHtml(fonte.documentos_site??0)} documento(s) reconhecidos no site</span><span>· ${escHtml(fonte.documentos_locais??0)} no catálogo local</span>${diverge?'<span class="tag a">divergência</span>':''}${soSite>0&&EU&&EU.papel!=='leitura'?`<button class="btn sm" id="pd-importar" onclick="importarFolhasDoSite('${escHtml(p.codigo)}',${soSite})">Importar ${soSite} folha(s) só no site</button>`:''}</div>`;
+  const source=`<div class="project-source ${diverge?'warn':''}"><span>${escHtml(fonte.documentos_locais??0)} folha(s) no painel</span><span>· ${escHtml(fonte.documentos_site??0)} no site</span>${diverge?'<span class="tag a">números diferentes</span>':''}${soSite>0&&EU&&EU.papel!=='leitura'?`<button class="btn sm" id="pd-importar" onclick="importarFolhasDoSite('${escHtml(p.codigo)}',${soSite})">Importar ${soSite} folha(s) só no site</button>`:''}</div>`;
   const ordem=['S01','S02','S03','S04','S05','S06','SEM_SERIE'];
   const grupos={};for(const it of its){const k=it.serie_codigo||'SEM_SERIE';(grupos[k]||(grupos[k]=[])).push(it)}
   const html=[...ordem,...Object.keys(grupos).filter(k=>!ordem.includes(k))].filter(k=>grupos[k]?.length).map(k=>`<section class="project-series"><div class="project-series-head"><h3>${escHtml(nomeSerieProjeto(k))}</h3><span>${grupos[k].length}</span></div><div class="thumbs">${grupos[k].map(cardItemProjeto).join('')}</div></section>`).join('');

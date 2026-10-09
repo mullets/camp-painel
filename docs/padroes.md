@@ -54,3 +54,14 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 - **Idempotente:** a mesma `chave_reserva` volta sempre à mesma decisão; depois de decidida, devolve sempre o mesmo projeto.
 - **Hoje:** `projeto_parecido` (reserva da estação e "Novo projeto" à mão). Motor em `similaridade.py` (puro e testado: palavras genéricas, nome contido, erro de OCR; número ou letra de designação distingue projetos). Novas verificações entram na mesma fila (ver o cartão "Mais inteligência").
 - **Teste:** toda verificação nova precisa de caso que DEVE pedir decisão e caso parecido que NÃO deve (falso alarme também é defeito).
+
+## 10. Menu por TRABALHO (09/10/2026)
+O menu é agrupado pelo que a equipe faz, não pelo nome das tabelas. Os dígitos 1..9 seguem a ordem visual; as letras vêm depois (regra do `scripts/check_ui.py`).
+- **Painel** (1)
+- **Material novo:** Filas de processamento (2), Erros relatados (3)
+- **Pedidos:** Solicitações (4), Uso do acervo (5, só admin)
+- **Acervo:** Projetos (6), Fundos (7), Arquitetos (8), Localização (9), Etiquetas (T)
+- **Sistema:** Estações e site (E), Auditoria (A), Configurações (C)
+
+**Todo projeto mostra o PRÓXIMO PASSO no topo** (`GET /api/projetos/{c}/proximo-passo`, a mesma fase da Fila): Importar, Conferir, Aprovar, Publicar, com UM botão para o passo atual. A Fila e o projeto dizem a mesma coisa porque usam `filas_fase.py`.
+Princípio: cada tela diz **o que falta** e oferece **um** botão principal que faz o passo de verdade; nada de rótulo que só troca de lugar. Texto de interface em português de gente ("37 folhas no painel · 0 no site"), nunca o nome interno.

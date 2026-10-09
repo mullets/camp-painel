@@ -25,6 +25,29 @@ def _lote(con, lote_id: int):
     return l
 
 
+@router.get("/projetos/{codigo}/proximo-passo")
+def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
+    from .filas_fase import fase_da_lista
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+        lotes = []
+        for l in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas,
+                                       (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
+                                       (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
+                                FROM lista_processamento l WHERE l.projeto_codigo=? ORDER BY l.id DESC""", (codigo,)):
+            d = dict(l)
+            d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
+            d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"])
+            lotes.append(d)
+        lote = next((x for x in lotes if x["fase"] != "publicado"), lotes[0] if lotes else None)
+        return {"lote": lote, "lotes": len(lotes), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
+    finally:
+        con.close()
+
+
 @router.post("/lotes/{lote_id}/importar")
 def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
     con = connect()

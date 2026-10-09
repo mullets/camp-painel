@@ -2088,6 +2088,15 @@ def filho(modo):
         ver("GET /api/filas: cada lista chega com a fase certa (9 situações)", {k: f[v]["fase"] for k, v in L.items()} == esperado, str({k: f[v]["fase"] for k, v in L.items()}))
         ver("traz o andamento da conferência: 3 folhas, 2 pendentes, 1 conferida; e a aprovação (quem e quando)", (f[L["conf"]]["itens_total"], f[L["conf"]]["itens_pendentes"], f[L["conf"]]["itens_conferidos"]) == (3, 2, 1) and f[L["pub"]]["aprovado_em"] and f[L["pub"]]["aprovado_por"] == "adm" and f[L["imp"]]["itens_total"] == 0)
         ver("sem login 401", anon.get("/api/filas").status_code == 401)
+        # ---------- o "próximo passo" de um projeto (a mesma fase da Fila) ----------
+        pp = lambda cod, cli_=op: cli_.get(f"/api/projetos/{cod}/proximo-passo")
+        j5 = pp("F091-P0005").json(); j4 = pp("F091-P0004").json(); j9 = pp("F091-P0009").json()
+        ver("próximo passo: o projeto em conferência diz a fase, quantas folhas e quantas faltam", j5["lote"]["fase"] == "conferir" and (j5["lote"]["itens_total"], j5["lote"]["itens_pendentes"], j5["lote"]["itens_conferidos"]) == (3, 2, 1) and j4["lote"]["fase"] == "importar" and j9["lote"]["fase"] == "publicado", str((j5["lote"]["fase"], j4["lote"]["fase"], j9["lote"]["fase"])))
+        ver("próximo passo: quem pode operar/agir (operador opera, só admin age); sem login 401; projeto inexistente 404", (j5["pode_operar"], j5["pode_agir"]) == (True, False) and pp("F091-P0005", adm).json()["pode_agir"] is True and anon.get("/api/projetos/F091-P0005/proximo-passo").status_code == 401 and pp("F091-P9999").status_code == 404)
+        c = connect(); p11 = proj(11); c.commit(); c.close()
+        ver("projeto sem nenhuma lista: lote vazio, sem erro", pp(p11).json()["lote"] is None and pp(p11).json()["lotes"] == 0)
+        c = connect(); lote(p11, "publicado"); lote(p11, "revisao"); c.commit(); c.close()
+        ver("com uma lista publicada e outra ainda em andamento, mostra a que ainda precisa de você", pp(p11).json()["lote"]["fase"] == "importar" and pp(p11).json()["lotes"] == 2)
         # ---------- publicar com um clique fecha as listas JÁ APROVADAS do projeto ----------
         c = connect(); p10 = proj(10); c.execute("UPDATE projeto SET tainacan_item_id=7777, autorizado_site=1 WHERE codigo=?", (p10,))
         a = lote(p10, "revisao", "2026-10-09 10:00:00"); b = lote(p10, "revisao"); d_ = lote(p10, "rascunho", "2026-10-09 11:00:00"); e_ = lote(p10, "enviado", "2026-10-09 11:00:00"); c.commit(); c.close()

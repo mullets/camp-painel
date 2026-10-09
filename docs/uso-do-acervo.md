@@ -21,7 +21,7 @@ administrador do site e pediu para puxar o histórico completo (07/10/2026).
   "Puxar tudo") ou **incremental** (só as novas; para na primeira página já conhecida). Automática a cada `uso.coleta_min` minutos (padrão 60; 0 desliga). Pula lixeira e spam.
   Guarda todas as respostas (`resposta_json`) e extrai nome, e-mail, telefone, instituição, uso e **material** (do campo do formulário, de qualquer valor com código CAMP, ou do
   endereço da ficha de onde o modal foi aberto). Não guarda IP. `uso_coleta` registra o que cada coleta fez, inclusive erros.
-- **Tela "Uso do acervo"** (menu Sistema, tecla U, só admin e master): quatro números; abas Pedidos de download, Pessoas e Materiais; filtros (texto, uso, período); detalhe com telefone e
+- **Tela "Uso do acervo"** (menu Pedidos, tecla 5, só admin e master): quatro números; abas Pedidos de download, Pessoas e Materiais; filtros (texto, uso, período); detalhe com telefone e
   resposta completa; Exportar CSV (todas as linhas do filtro, fica na auditoria); Atualizar agora e Puxar tudo.
 - **Apagar entradas (de verdade)**: um pedido, vários (caixinhas), todos de uma pessoa, ou todos os de um filtro (exige ao menos um filtro: não dá para apagar tudo de uma vez). A entrada some de listas, contagens
   e exportações e **todos os dados são removidos**; resta só uma marca invisível (formulário + id da entrada) para uma coleta futura NÃO trazer a entrada de volta. "Apagar só os dados pessoais" continua
