@@ -469,6 +469,14 @@ w.route_to('painel'); await sleep(2800);
   if(la){ la.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar num Arquiteto deveria abrir o cadastro real: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
   w.route_to('localizacao'); await sleep(2000); const ll=d.querySelector('#v-localizacao tbody tr[data-abrir]');
   if(ll){ ll.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar numa Localização deveria abrir a real: "'+txt('#d-title')+'"'); w.closeDrawer(true) } }
+// ---------- [Auditoria P0-3] a caixa de seleção da lista de Projetos marca; não abre o projeto ----------
+{ w.limparSelecaoProjetos(); w.route_to('projetos'); await sleep(2500); const h0=w.location.hash, cx=[...d.querySelectorAll('#projetos-body .proj-sel')];
+  cx[0].click(); cx[1].click(); await sleep(300);
+  chk(w.location.hash===h0&&w.eval('PROJETOS_SELECIONADOS.size')===2,'clicar na caixa deveria marcar sem navegar: hash '+h0+' -> '+w.location.hash+', selecionados='+w.eval('PROJETOS_SELECIONADOS.size'));
+  const cel=d.querySelectorAll('#projetos-body .sel-cel')[2]; cel.click(); await sleep(300);
+  chk(w.location.hash===h0&&w.eval('PROJETOS_SELECIONADOS.size')===3&&!!cel.querySelector('input').checked,'clicar na CÉLULA da caixa também deveria marcar sem navegar (selecionados='+w.eval('PROJETOS_SELECIONADOS.size')+')');
+  chk(/3 selecionados/.test(txt('#proj-bulk-count')),'a barra deveria dizer "3 selecionados": "'+txt('#proj-bulk-count')+'"'); w.limparSelecaoProjetos();
+  d.querySelector('#projetos-body tr[data-nav] b').click(); await sleep(800); chk(/^#projeto\//.test(w.location.hash),'clicar no nome deveria continuar abrindo o projeto: '+w.location.hash); w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

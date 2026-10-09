@@ -307,6 +307,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .dec-motivos{margin:6px 0 8px;padding-left:18px;color:var(--ink2);font-size:12.5px}.dec-motivos small{display:block}
 .np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
 .btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+.sel-cel{width:44px;min-width:44px;cursor:pointer}.sel-cel input{width:18px;height:18px;cursor:pointer}
 tr[data-abrir],tr[data-nav]{cursor:pointer}tr[data-abrir]:hover td{background:var(--surface2)}
 .rev-mais{margin-top:10px}.rev-mais summary,.rev-campos summary{cursor:pointer;color:var(--ink2);font-size:13px}.rev-campos{margin:10px 0}.rev-campos summary{font-weight:500;color:var(--ink)}.rev-mais[open] summary{margin-bottom:8px}
 .rev-acoes{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 0;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:2}
@@ -1082,7 +1083,7 @@ window.addEventListener('popstate',e=>{if(temAlteracoes()&&!confirm('Existem alt
 navEl.addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
 // qualquer código ou linha marcada leva à sua página
 function routeCode(c){c=c.trim();if(/^F\d{3}$/.test(c))return 'fundo/'+c;if(/^F\d{3}-P\d{4}$/.test(c))return 'projeto/'+c;if(/^F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}$/.test(c))return 'item/'+c;if(/^F\d{3}-P\d{4}/.test(c))return 'projeto/'+c.slice(0,10);return null}
-document.addEventListener('click',e=>{const nv=e.target.closest('[data-nav]');if(nv&&!e.target.closest('button,a,.code')){nav(nv.dataset.nav);return}
+document.addEventListener('click',e=>{const nv=e.target.closest('[data-nav]');if(nv&&!e.target.closest('button,a,input,label,select,textarea,.code,[data-no-nav]')){nav(nv.dataset.nav);return}
   const cd=e.target.closest('.code');if(cd&&!e.target.closest('.res,.crumb')){const r=routeCode(cd.textContent);if(r){e.stopPropagation();nav(r)}}},true);
 
 // ---------- render ----------
@@ -1501,7 +1502,7 @@ function ativarPaginacoes(){PAG_ALVOS.forEach(([sel,por,modo])=>document.querySe
 let _pgT=0;new MutationObserver(()=>{clearTimeout(_pgT);_pgT=setTimeout(ativarPaginacoes,150)}).observe(document.body,{childList:true,subtree:true});
 function situacaoProjetoHTML(p){const T={conferir:`<span class="tag a">Conferir ${escHtml(p.itens_pendentes)}</span>`,importar:'<span class="tag a">Importar folhas</span>',aprovar:'<span class="tag b">Aprovar lote</span>',publicar:'<span class="tag g">Pronto para publicar</span>',erro:'<span class="tag r">Erro no CAMP Vision</span>',processando:'<span class="tag b">Em leitura</span>'};
   if(T[p.fase])return T[p.fase];const base=STATUS[p.status_site]||escHtml(p.status_site);return p.status_site!=='no_ar'&&!p.folhas?base+' <span class="tag">sem folhas</span>':base}
-const linhaProjetoHTML=p=>{const sub=[p.ano?p.ano:'',p.cidade].filter(Boolean).map(escHtml).join(' · ');return `<tr data-nav="projeto/${escHtml(p.codigo)}"><td><input class="proj-sel" type="checkbox" value="${escHtml(p.codigo)}" ${PROJETOS_SELECIONADOS.has(p.codigo)?'checked':''} onclick="event.stopPropagation();toggleProjetoSelecionado(this.value,this.checked)"></td><td><span class="code">${escHtml(p.codigo)}</span> <b>${escHtml(p.titulo)}</b>${sub?`<br><small class="help">${sub}</small>`:''}</td><td>${escHtml(p.fundo)}</td><td class="num">${escHtml(p.folhas)}</td><td>${situacaoProjetoHTML(p)}</td><td>${fmtData(p.atualizado_em)}</td></tr>`};
+const linhaProjetoHTML=p=>{const sub=[p.ano?p.ano:'',p.cidade].filter(Boolean).map(escHtml).join(' · ');return `<tr data-nav="projeto/${escHtml(p.codigo)}"><td data-no-nav class="sel-cel" onclick="const i=this.querySelector('input');if(i&&event.target!==i)i.click()"><input class="proj-sel" type="checkbox" value="${escHtml(p.codigo)}" ${PROJETOS_SELECIONADOS.has(p.codigo)?'checked':''} onclick="event.stopPropagation();toggleProjetoSelecionado(this.value,this.checked)"></td><td><span class="code">${escHtml(p.codigo)}</span> <b>${escHtml(p.titulo)}</b>${sub?`<br><small class="help">${sub}</small>`:''}</td><td>${escHtml(p.fundo)}</td><td class="num">${escHtml(p.folhas)}</td><td>${situacaoProjetoHTML(p)}</td><td>${fmtData(p.atualizado_em)}</td></tr>`};
 let PROJ_ESTADO={q:'',fundo:'',situacao:'todos',ordem:'codigo'},PROJ_PAG={pagina:1,por:100},PROJ_CHAVE=null,PROJ_FILTRO_ULT={q:''},PROJ_TOTAL=0,AUD_PAG={pagina:1,por:100},AUD_CHAVE=null,AUDITORIA_TOTAL=0;
 async function exportarProjetosTodos(){   // o filtro atual inteiro, não só a página que está na tela
   toast(`Preparando a exportação de ${fmtN(PROJ_TOTAL)} projetos…`);const rows=[];
