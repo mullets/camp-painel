@@ -456,6 +456,19 @@ w.route_to('painel'); await sleep(2800);
   let o=await abrirEm('#projeto/F003-P9001'); chk(o.proj.length>200&&o.proj.includes('Projeto de teste da revisão 9001'),'F5 em #projeto/... deveria mostrar o projeto, mas só há: "'+o.proj.slice(0,80)+'"');
   o=await abrirEm('#fundo/F003'); chk(o.fundo.length>200&&o.fundo.includes('Burle Marx'),'F5 em #fundo/... deveria mostrar o fundo, mas só há: "'+o.fundo.slice(0,80)+'"');
   o=await abrirEm('#item/F003-P9001-1972-S01-D00001'); chk(o.item.length>100&&o.item.includes('F003-P9001-1972-S01-D00001'),'F5 em #item/... deveria mostrar a folha, mas só há: "'+o.item.slice(0,80)+'"'); }
+// ---------- [Auditoria P0-2] clicar numa linha abre o detalhe REAL (não o painel inventado do protótipo) ----------
+{ const falso=()=>/Anotação interna|Relatório diário enviado|Responder por e-mail|Abrir contatos\.jpg|Marcar como corrigido|Abrir no Finder/.test(txt('#d-body')+' '+d.body.innerHTML.slice(0,0));
+  chk(!/Relatório diário enviado por e-mail|Visível só para a equipe/.test(d.documentElement.innerHTML),'o painel falso do protótipo (histórico e anotação inventados) não deveria mais existir na página');
+  w.route_to('filas'); await sleep(2000); const lf=d.querySelector('#v-filas tbody tr[data-nav]'); chk(!!lf&&/^projeto\//.test(lf.getAttribute('data-nav')),'a linha da Fila deveria abrir o projeto (data-nav)');
+  w.route_to('solicitacoes'); await sleep(2000); const ls=d.querySelector('#v-solicitacoes tbody tr[data-abrir]');
+  if(ls){ w.closeDrawer&&w.closeDrawer(true); ls.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar numa Solicitação deveria abrir o pedido real, sem botões inventados: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
+  await w.carregarErros('todos'); await sleep(1200); const le=d.querySelector('#v-erros tbody tr[data-abrir]');
+  if(le){ le.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar num Erro deveria abrir o erro real, sem botões inventados: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
+  w.route_to('arquitetos'); await sleep(2000); const la=d.querySelector('#v-arquitetos tbody tr[data-abrir]');
+  chk(!!la,'a linha de Arquitetos deveria abrir o detalhe real para admin (data-abrir)');
+  if(la){ la.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar num Arquiteto deveria abrir o cadastro real: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
+  w.route_to('localizacao'); await sleep(2000); const ll=d.querySelector('#v-localizacao tbody tr[data-abrir]');
+  if(ll){ ll.querySelector('td').click(); await sleep(1500); chk(txt('#d-title').length>0&&!falso(),'clicar numa Localização deveria abrir a real: "'+txt('#d-title')+'"'); w.closeDrawer(true) } }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
