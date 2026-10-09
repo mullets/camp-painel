@@ -2183,6 +2183,57 @@ def filho(modo):
         ver("migração: 'bloqueado' volta ao status do site (publish=no_ar, draft=rascunho, private=fora_do_ar, sem dossiê=nao_publicado)", got == {PN: "no_ar", PR: "rascunho", PX: "fora_do_ar", PZ: "nao_publicado"}, str(got))
         c.close()
         for l in res: print(l)
+    elif modo == "estacoes_rapida":
+        init_db(); _aplicar_migracoes_real()
+        import time as _tm, types as _ty
+        from app import auth, rotas_gestao as rg, rotas_operacao as ro
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for chave in ("estacao.foto1.ip", "estacao.foto2.ip", "estacao.contex1.ip", "estacao.contex2.ip", "estacao.universal1.ip", "estacao.universal2.ip", "campvision2.ip", "qnap.ip"):
+            c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES (?, '192.0.2.7', '', 0)", (chave,))
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        cont = {"ping": 0, "porta": 0, "site": 0}
+        def ping_lento(ip, timeout=1.2): cont["ping"] += 1; _tm.sleep(0.4); return False
+        def porta_lenta(ip, porta, timeout=0.8): cont["porta"] += 1; _tm.sleep(0.4); return False
+        def site_lento(url): cont["site"] += 1; _tm.sleep(0.4); return {"status": 200, "ms": 400, "ok": True, "estado": "online", "alerta": False}
+        _med_real = rg._medir_site
+        rg._ping, rg._porta, rg._medir_site = ping_lento, porta_lenta, site_lento
+        t0 = _tm.monotonic(); r = adm.get("/api/estacoes"); dt = _tm.monotonic() - t0
+        ver("/api/estacoes com 8 máquinas e site lentos (0,4 s cada) leva o tempo da MAIS lenta, não a soma (sequencial seria ~4,5 s)", r.status_code == 200 and dt < 1.8 and cont == {"ping": 8, "porta": 2, "site": 1}, f"{dt:.2f}s {cont}")
+        t0 = _tm.monotonic(); adm.get("/api/estacoes"); dt2 = _tm.monotonic() - t0
+        ver("segunda chamada em 30 s usa o cache: nenhuma sonda nova e resposta rápida", cont == {"ping": 8, "porta": 2, "site": 1} and dt2 < 0.5, f"{dt2:.2f}s {cont}")
+        adm.get("/api/estacoes?fresco=1")
+        ver("?fresco=1 (botão Atualizar) ignora o cache e sonda de novo", cont == {"ping": 16, "porta": 4, "site": 2}, str(cont))
+        # três estados do site
+        import httpx
+        class R:
+            def __init__(self, code): self.status_code = code
+        rg._medir_site = _med_real; rg._SITE_ESTADOS.clear()
+        def med(code, seg, erro=False):
+            seq = iter([100.0, 100.0 + seg])
+            rg.time = _ty.SimpleNamespace(time=lambda: next(seq), monotonic=_tm.monotonic, sleep=_tm.sleep)
+            def g(*a, **k):
+                if erro: raise RuntimeError("timeout")
+                return R(code)
+            httpx.get = g
+            return rg._medir_site("http://x")
+        a = med(200, 0.8); b = med(200, 7.0); cc = med(503, 0.5)
+        ver("site: rápido = online; 7 s = 'lento' (responde, só demora; ok continua verdadeiro); 5xx = sem_resposta", (a["estado"], a["ok"]) == ("online", True) and (b["estado"], b["ok"], b["alerta"]) == ("lento", True, False) and cc["estado"] == "sem_resposta" and cc["alerta"] is False, str((a, b, cc)))
+        rg._SITE_ESTADOS.clear()
+        d1 = med(None, 0, erro=True); d2 = med(None, 0, erro=True); e1 = med(200, 0.5)
+        ver("só 'sem resposta' DUAS vezes seguidas vira alerta; uma resposta boa zera", d1["alerta"] is False and d2["alerta"] is True and e1["alerta"] is False, str((d1["alerta"], d2["alerta"], e1["alerta"])))
+        # analytics em cache
+        chamadas = {"n": 0}
+        def calc(): chamadas["n"] += 1; return {"disponivel": True, "periodos": {}}
+        ro._analytics_calcular = calc; ro._ANALYTICS_CACHE.update(t=0.0, v=None)
+        adm.get("/api/analytics"); adm.get("/api/analytics"); n2 = chamadas["n"]; adm.get("/api/analytics?fresco=1")
+        ver("analytics: a segunda abertura usa o cache (a consulta ao Site Kit roda 1 vez) e ?fresco=1 consulta de novo", n2 == 1 and chamadas["n"] == 2, str(chamadas))
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2584,6 +2635,14 @@ else:
 print("34) Erro bloqueante: o status do projeto espelha só o site; projeto no ar avisa e vira item urgente")
 rc, out = rodar("erro_bloqueante", f"{tmp}/errb.db")
 if rc != 0: ok(False, f"teste do erro bloqueante não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("35) Estações: sondas em paralelo, cache de 30 s, site em três estados e analytics em cache")
+rc, out = rodar("estacoes_rapida", f"{tmp}/estr.db")
+if rc != 0: ok(False, f"teste das estações não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

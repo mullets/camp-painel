@@ -770,7 +770,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   </section>
   <!-- ESTAÇÕES -->
   <section class="content" id="v-estacoes">
-    <div class="hdr"><div><h1>Estações e saúde do site</h1><p class="sub">O que está ligado, o que está pendente e como o site está respondendo. Atualiza ao abrir.</p></div><div class="act"><button class="btn" onclick="carregarEstacoes()">Atualizar</button></div></div>
+    <div class="hdr"><div><h1>Estações e saúde do site</h1><p class="sub">O que está ligado, o que está pendente e como o site está respondendo. Atualiza ao abrir.</p></div><div class="act"><button class="btn" onclick="carregarEstacoes(true)">Atualizar</button></div></div>
     <div id="est-body"><div class="empty">Carregando…</div></div>
     <div class="panel" id="logs-panel" style="margin-top:16px;display:none">
       <div class="ph"><h2>Logs técnicos</h2><span class="tag" style="margin-left:auto">admin / master</span></div>
@@ -1987,10 +1987,14 @@ function haTempo(ts){if(!ts)return '—';const t=new Date(String(ts).replace(' '
 function sparkQnap(serie){if(!serie||serie.length<2)return '';const v=serie.map(p=>p.livre_gb),min=Math.min(...v),max=Math.max(...v),span=(max-min)||1,W=200,H=34;
   const pts=v.map((y,i)=>`${(i/(v.length-1)*W).toFixed(1)},${(H-2-((y-min)/span)*(H-4)).toFixed(1)}`).join(' ');
   return `<svg class="qnap-spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Espaço livre nos últimos 7 dias: de ${fmtN(Math.round(v[0]))} GB para ${fmtN(Math.round(v[v.length-1]))} GB"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`}
+function siteAlerta(h){return !!h&&(h.estado?(h.estado==='sem_resposta'&&h.alerta===true):h.ok===false)}
+function siteRotulo(h){if(!h)return {cls:'r',txt:'sem dados'};if(!h.estado)return h.ok?{cls:'g',txt:'online'}:{cls:'r',txt:'offline'};
+  const seg=h.ms?` · ${(h.ms/1000).toFixed(1).replace('.',',')} s`:'';return h.estado==='online'?{cls:'g',txt:'online'}:h.estado==='lento'?{cls:'a',txt:'lento'+seg}:h.alerta?{cls:'r',txt:'sem resposta'}:{cls:'a',txt:'sem resposta (conferindo)'}}
+function siteTagHTML(h){const r=siteRotulo(h);return `<span class="tag ${r.cls}">${escHtml(r.txt)}</span>`}
 function estadoGeral({q,qi,site,pend}){   // o selo do painel: crítico (vermelho), atenção (âmbar) ou saudável
   const ruins=[],avisos=[];
   if(!q.montado)ruins.push('QNAP não está conectado a este servidor');
-  if(!site.http?.ok)ruins.push('página pública sem resposta');
+  if(siteAlerta(site.http))ruins.push('página pública sem resposta');
   const niv=q.montado&&qi&&qi.nivel_espaco,livre=qi&&qi.coleta&&qi.coleta.livre_gb,txt=livre!=null?`${fmtN(Math.round(livre))} GB livres (${String(qi.livre_pct).replace('.',',')}%)`:'';
   if(niv==='critico')ruins.push(`QNAP quase cheio: ${txt}`);else if(niv==='aviso')avisos.push(`QNAP com pouco espaço: ${txt}`);
   if(pend)avisos.push(`${pend} pendência(s) de decisão`);
@@ -2057,13 +2061,12 @@ async function atualizarQnapAgora(){
     toast('A coleta está demorando: o QNAP pode estar lento')}catch(e){toast(e.message)}
   await recarregarCartaoQnap()}
 async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.dash-v2');if(!tinha)sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando visão da operação…</div></div></div>';try{
-  const [d,e,a,qi,hj]=await Promise.all([
-    API('/api/painel'),
-    API('/api/estacoes').catch(()=>null),
-    API('/api/analytics').catch(err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}})),
-    API('/api/qnap').catch(()=>null),
-    API('/api/hoje').catch(()=>null)
-  ]);
+  const tratarA=err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}});
+  // a tela aparece assim que /api/painel e /api/hoje (rápidos) chegam; estações, QNAP e audiência entram quando chegarem (antes: tudo esperava a mais lenta, 10 a 13 s)
+  const pe=API('/api/estacoes').catch(()=>null),pa=API('/api/analytics').catch(tratarA),pq=API('/api/qnap').catch(()=>null);
+  const [d,hj]=await Promise.all([API('/api/painel'),API('/api/hoje').catch(()=>null)]);
+  let e=null,a=null,qi=null,verificando=true;
+  const desenhar=()=>{
   limparStale('painel');sec.querySelector('.aviso-exemplo')?.remove();
   const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
   const q=e?.qnap||{},site=e?.site||{},pipe=e?.pipeline||{},maquinas=e?.maquinas||[];
@@ -2085,7 +2088,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
       <div class="dash-side-stack">
         <div class="panel qnap-card" id="qnap-card" data-nav="estacoes" style="cursor:pointer">${qnapInnerHTML(q,qi)}</div>
         <div class="panel site-card" data-nav="estacoes" style="cursor:pointer">
-          <div class="ph" style="padding:0 0 6px;border:0"><h2>Site público</h2><span class="tag ${site.http?.ok?'g':'r'}">${site.http?.ok?'online':'offline'}</span></div>
+          <div class="ph" style="padding:0 0 6px;border:0"><h2>Site público</h2>${siteTagHTML(site.http)}</div>
           <div class="site-line"><b>Última sync</b><span>${ult?fmtDataHora(ult):'nunca'}</span></div>
           <div class="site-line"><b>Próxima</b><span>${prox?fmtDataHora(prox):'—'}</span></div>
           <div class="site-line"><b>Divergências</b><span>${fmtN(nDiv)}${nDiv>0?` · <button type="button" class="lnk" onclick="event.stopPropagation();abrirDivergencias()">ver o que são</button>`:''}</span></div>
@@ -2121,6 +2124,9 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
     </div>
   </div>`;
   window._analyticsAtual=a;
+  if(verificando){sec.querySelectorAll('#qnap-card,.site-card').forEach(c=>{c.innerHTML='<div class="pb state-row"><span class="skeleton-line"></span><div>Verificando…</div></div>'});const ds=sec.querySelector('.dash-state');if(ds){ds.className='dash-state';ds.innerHTML='<span class="dot"></span>verificando…';ds.removeAttribute('onclick');ds.removeAttribute('title')}}
+  };
+  desenhar();[e,qi]=await Promise.all([pe,pq]);verificando=false;desenhar();a=await pa;desenhar();
 }catch(e){if(e.status===401||e.status===428)return;if(tinha)marcarStale('painel',e.message,'carregarPainel()');else sec.innerHTML=`<div class="panel"><div class="pb state-row"><b>Não foi possível carregar o painel.</b><div>${escHtml(e.message)}</div><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div></div>`}}
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
@@ -2238,7 +2244,7 @@ function atualizarBannerSistema(d){
   const q=d?.qnap||{};if(q.montado===false)criticos.push('QNAP não está conectado a este servidor');
   else if(q.nivel_espaco==='critico')criticos.push(`QNAP quase cheio (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%)`);
   else if(q.nivel_espaco==='aviso')problemas.push(`QNAP com pouco espaço (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%)`);
-  const s=d?.site||{};if(s.http&&s.http.ok===false)criticos.push('página pública sem resposta');
+  const s=d?.site||{};if(siteAlerta(s.http))criticos.push('página pública sem resposta');
   const bk=d?.backup;if(bk){if(!bk.existe)problemas.push('nenhum backup do banco');else{const h=+bk.idade_horas;if(bk.ok===false)criticos.push('o último backup do banco falhou');else if(h>96)criticos.push('último backup do banco há '+Math.round(h/24)+' dias');else if(h>36)problemas.push('último backup do banco há '+Math.round(h)+' h')}}
   const ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em);
   const du=dataUtc(ult),intervalo=Math.max(1,+(s.intervalo_sync_min||15));
@@ -2285,8 +2291,8 @@ async function atualizarTopoEstacoes(){
     }).join('');
     const s=d.site||{},ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em);
     const prox=proximaSincronizacao(ult,s.intervalo_sync_min);
-    const wpSt=s.http?.ok?'on':'off';
-    const wpTitle=['WordPress / página pública',s.http?.ok?'online':'offline',ult?'última sincronização '+fmtDataHora(ult):'ainda não sincronizado',prox?'próxima '+fmtDataHora(prox):null].filter(Boolean);
+    const wpSt=siteAlerta(s.http)?'off':'on';
+    const wpTitle=['WordPress / página pública',siteRotulo(s.http).txt,ult?'última sincronização '+fmtDataHora(ult):'ainda não sincronizado',prox?'próxima '+fmtDataHora(prox):null].filter(Boolean);
     const wp=`<button type="button" class="ms ${wpSt}" onclick="go('estacoes')" aria-label="${escHtml(wpTitle.join(' · '))}">${iconeWordpress()}<span class="ms-tip"><b>WordPress / página pública</b>${wpTitle.slice(1).map(x=>`<span>${escHtml(x)}</span>`).join('<br>')}<span class="mono">Clique para abrir Estações</span></span></button>`;
     const syncTxt=ult?`<span class="sync-mini" title="${escHtml(wpTitle.join(' · '))}">sync ${fmtDataHora(ult).replace(/^\d{2}\/\d{2}\/\d{4},\s*/,'')}</span>`:'';
     el.innerHTML=maquinas+wp+syncTxt;
@@ -2315,7 +2321,7 @@ function painelBackup(b){b=b||{};const admin=EU&&['admin','master'].includes(EU.
   const tag=!b.existe?'<span class="tag r">sem backup</span>':b.ok===false?'<span class="tag r">último falhou</span>':h>36?'<span class="tag a">atrasado</span>':'<span class="tag g">em dia</span>';
   return `<div class="panel" id="bk-painel"><div class="ph"><h2>Backup do banco</h2>${admin?`<div class="act"><button class="btn sm" id="bk-agora" onclick="backupAgora()">Fazer backup agora</button></div>`:''}</div><div class="pb"><dl class="kv"><dt>Situação</dt><dd>${tag}</dd><dt>Último backup</dt><dd>${quando}</dd><dt>Cópias guardadas</dt><dd>${escHtml(b.quantidade??0)} (${escHtml(b.ocupa_mb??0)} MB)</dd><dt>Espaço livre no disco</dt><dd>${escHtml(b.livre_gb??'—')} GB</dd></dl>${b.erro?`<small class="help">${escHtml(b.erro)}</small>`:''}<small class="help">Agendado todo dia às 03:30 (instalação: scripts/instalar_backup.sh). Mantém 24 h + 14 dias + 8 semanas.</small></div></div>`}
 async function backupAgora(){try{toast('Fazendo backup… leva alguns segundos');const r=await API('/api/backup/agora',{method:'POST'});toast(`Backup feito: ${(r.tamanho_bytes/1048576).toFixed(1)} MB`+(r.extra&&!r.extra.ok?' · a cópia extra FALHOU':''));carregarEstacoes();atualizarTopoEstacoes()}catch(e){toast(e.message)}}
-async function carregarEstacoes(){const el=document.getElementById('est-body'),tinha=!!el.querySelector('.panel');if(!tinha)el.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Verificando estações e integrações…</div></div></div>';try{const d=await API('/api/estacoes');limparStale('estacoes');const s=d.site,p=d.pipeline,q=d.qnap;el.innerHTML=`
+async function carregarEstacoes(fresco){const el=document.getElementById('est-body'),tinha=!!el.querySelector('.panel');if(!tinha)el.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Verificando estações e integrações…</div></div></div>';try{const d=await API('/api/estacoes'+(fresco===true?'?fresco=1':''));limparStale('estacoes');const s=d.site,p=d.pipeline,q=d.qnap;el.innerHTML=`
   <div class="grid g2 wide3">
     <div class="panel"><div class="ph"><h2>Captura</h2></div><div class="pb"><ul class="list">${d.maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo)).map(m=>{const maq=m.online===null?'<span class="tag">máquina —</span>':m.online?'<span class="tag g">máquina online</span>':'<span class="tag r">máquina offline</span>';const app=m.app_online?'<span class="tag g">app '+escHtml(m.app_estado||'online')+'</span>':'<span class="tag '+(m.online?'a':'r')+'">app offline</span>';const ctx=[m.app_operador,m.app_projeto,m.app_versao].filter(Boolean).map(escHtml).join(' · ');return `<li><div class="t"><b>${escHtml(m.nome)}</b><small>${escHtml(m.funcao||'')}</small><small>${m.ip?escHtml(m.ip):'IP não configurado'}${ctx?' · '+ctx:''}</small>${m.app_ultimo_erro?`<small style="color:var(--red)">${escHtml(m.app_ultimo_erro)}</small>`:''}</div><div class="cluster">${maq}${app}</div></li>`}).join('')}</ul></div></div>
     <div class="panel"><div class="ph"><h2>Processamento</h2></div><div class="pb"><ul class="list">${d.maquinas.filter(m=>m.tipo==='processamento').map(m=>`<li><div class="t"><b>${escHtml(m.nome)}</b><small>${escHtml(m.funcao||'')}</small><small>${m.ip?escHtml(m.ip):'IP não configurado'}</small></div>${m.online===null?'<span class="tag">—</span>':m.online?'<span class="tag g">máquina online</span>':'<span class="tag r">sem resposta ao ping</span>'}</li>`).join('')}</ul><dl class="kv" style="margin-top:12px"><dt>Entrada bruta</dt><dd>${escHtml(p.entrada_bruta)} lote(s)</dd><dt>Material final detectado</dt><dd>${escHtml(p.prontos)} lote(s)</dd><dt>Pronto para revisão</dt><dd>${escHtml(p.aguardando_revisao)} lote(s)</dd></dl></div></div>
@@ -2323,9 +2329,9 @@ async function carregarEstacoes(){const el=document.getElementById('est-body'),t
   </div>
   <div class="grid g2">${painelBackup(d.backup)}${painelImportacao()}</div>
   <div class="panel" style="margin-top:16px"><div class="ph"><h2>Fluxo</h2></div><div class="pb"><div class="steps" style="grid-template-columns:repeat(5,1fr)"><span class="done">captura</span><span class="done">QNAP entrada</span><span class="done">CAMP Vision 2</span><span class="done">pasta final</span><span class="cur">revisão / publicação</span></div><p style="margin:10px 0 0;color:var(--ink3);font-size:12.5px">O painel só considera material novo quando o CAMP Vision 2 terminou o processamento e colocou o lote na pasta final organizada.</p></div></div>
-  <div class="panel" style="margin-top:16px"><div class="ph"><h2>Página pública</h2></div><div class="pb"><dl class="kv"><dt>Resposta</dt><dd>${s.http.ok?`<span class="tag g">ok</span> ${escHtml(s.http.ms)} ms`:`<span class="tag r">falhou</span> ${escHtml(s.http.erro||s.http.status||'')}`}</dd><dt>Última sincronização</dt><dd>${s.ultima_sincronizacao?`${fmtDataHora(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em)} · ${s.ultima_sincronizacao.itens??'?'} itens`:'nunca'} (a cada ${escHtml(s.intervalo_sync_min)} min)</dd><dt>Divergências</dt><dd>${escHtml(s.divergencias)}${s.escritas_pendentes?` · <span class="tag r">${escHtml(s.escritas_pendentes)} escritas pendentes</span>`:''}</dd><dt>Rascunhos</dt><dd>${escHtml(s.rascunhos_no_site)}</dd><dt>Publicados sem código</dt><dd>${escHtml(s.publicados_sem_codigo)}</dd></dl><div class="act" style="margin-top:10px"><button class="btn sm" onclick="sincronizarAgora()">Sincronizar agora</button></div></div></div>`;
+  <div class="panel" style="margin-top:16px"><div class="ph"><h2>Página pública</h2></div><div class="pb"><dl class="kv"><dt>Resposta</dt><dd>${siteTagHTML(s.http)} ${s.http.ms!=null?escHtml(s.http.ms)+' ms':escHtml(s.http.erro||s.http.status||'')}</dd><dt>Última sincronização</dt><dd>${s.ultima_sincronizacao?`${fmtDataHora(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em)} · ${s.ultima_sincronizacao.itens??'?'} itens`:'nunca'} (a cada ${escHtml(s.intervalo_sync_min)} min)</dd><dt>Divergências</dt><dd>${escHtml(s.divergencias)}${s.escritas_pendentes?` · <span class="tag r">${escHtml(s.escritas_pendentes)} escritas pendentes</span>`:''}</dd><dt>Rascunhos</dt><dd>${escHtml(s.rascunhos_no_site)}</dd><dt>Publicados sem código</dt><dd>${escHtml(s.publicados_sem_codigo)}</dd></dl><div class="act" style="margin-top:10px"><button class="btn sm" onclick="sincronizarAgora()">Sincronizar agora</button></div></div></div>`;
   if(EU&&['admin','master'].includes(EU.papel)){document.getElementById('logs-panel').style.display='';carregarLogs()}else document.getElementById('logs-panel').style.display='none'
-}catch(e){if(tinha)marcarStale('estacoes',e.message,'carregarEstacoes()');else el.innerHTML=`<div class="panel"><div class="pb state-row"><b>Não foi possível verificar as estações.</b><div>${escHtml(e.message)}</div><div class="retry"><button class="btn sm" onclick="carregarEstacoes()">Tentar novamente</button></div></div></div>`}}
+}catch(e){if(tinha)marcarStale('estacoes',e.message,'carregarEstacoes()');else el.innerHTML=`<div class="panel"><div class="pb state-row"><b>Não foi possível verificar as estações.</b><div>${escHtml(e.message)}</div><div class="retry"><button class="btn sm" onclick="carregarEstacoes(true)">Tentar novamente</button></div></div></div>`}}
 
 async function carregarLogs(){if(!EU||!['admin','master'].includes(EU.papel))return;const tb=document.getElementById('log-body');try{const qs=new URLSearchParams({nivel:document.getElementById('log-nivel').value,q:document.getElementById('log-q').value,limite:'200'}).toString();const d=await API('/api/logs?'+qs);document.getElementById('log-cnt').textContent=`${d.resumo.erros} erros · ${d.resumo.avisos} avisos · ${d.itens.length} registros`;tb.innerHTML=d.itens.length?d.itens.map(x=>{const niv=x.nivel||'INFO',tag=niv==='ERROR'?'r':niv==='WARNING'?'a':'',msg=x.rota?`${escHtml(x.metodo||'')} ${x.rota} · ${x.status??''}`:(x.mensagem||x.evento||'');return`<tr><td style="white-space:nowrap">${escHtml(fmtDataHora(x.ts,true))}</td><td><span class="tag ${tag}">${escHtml(niv)}</span></td><td class="mono" style="font-size:12px">${escHtml(x.evento||'')}</td><td><b>${escHtml(msg)}</b>${x.erro?`<details style="margin-top:5px"><summary style="cursor:pointer;color:var(--red)">traceback</summary><pre class="mono-block" style="white-space:pre-wrap;max-width:780px;overflow:auto">${escHtml(x.erro)}</pre></details>`:''}</td><td>${x.duracao_ms!=null?escHtml(x.duracao_ms)+' ms':'—'}</td><td class="mono" style="font-size:11px">${escHtml(x.request_id||'—')}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty">Nenhum log com esses filtros.</td></tr>'}catch(e){tb.innerHTML=`<tr><td colspan="6" class="empty">Erro ao carregar logs: ${escHtml(e.message)}</td></tr>`}}
 

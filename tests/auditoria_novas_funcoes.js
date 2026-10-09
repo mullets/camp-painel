@@ -514,6 +514,15 @@ w.route_to('painel'); await sleep(2800);
   chamadas.length=0; resposta=false; preencher(); await w.criarErro(); await sleep(800);
   chk(chamadas.length===0,'"Cancelar" deveria manter o projeto publicado (sem chamar tirar_do_ar): '+chamadas.join());
   w.fetch=fetchOrig; w.confirm=confirmOrig; w.closeModal&&w.closeModal(); }
+// ---------- [Auditoria P0-5] o Painel inicial aparece sem esperar as estações (lentas); site em três estados ----------
+{ const fetchOrig=w.fetch; w.fetch=(u,o={})=>/\/api\/estacoes(\?|$)/.test(String(u))?new Promise(r=>setTimeout(()=>r(fetchOrig(u,o)),2500)):fetchOrig(u,o);
+  d.getElementById('v-painel').innerHTML=''; w.carregarPainel(); await sleep(900);
+  chk(!!d.querySelector('#v-painel .dash-v2')&&/verificando/i.test(txt('#v-painel .dash-state'))&&/Verificando/.test(txt('#qnap-card')),'o Painel deveria aparecer em menos de 1 s, com "verificando…" nos cartões lentos (estações ainda carregando): "'+txt('#v-painel .dash-state')+'" / "'+txt('#qnap-card').slice(0,60)+'"');
+  chk(!/QNAP não está conectado/.test(txt('#v-painel .dash-state')),'enquanto verifica, o Painel não deveria alarmar "QNAP não está conectado"');
+  await sleep(3400); chk(!/Verificando/.test(txt('#qnap-card'))&&!/verificando/i.test(txt('#v-painel .dash-state')),'depois que as estações chegam, o cartão do QNAP e o estado geral deveriam sair de "verificando": "'+txt('#qnap-card').slice(0,60)+'"'); w.fetch=fetchOrig;
+  const R=w.siteRotulo, A=w.siteAlerta;
+  chk(R({estado:'online',ms:800,ok:true}).txt==='online'&&R({estado:'lento',ms:7000,ok:true}).txt==='lento · 7,0 s'&&R({estado:'lento',ms:7000,ok:true}).cls==='a','site lento deveria aparecer amarelo "lento · 7,0 s", não offline: '+JSON.stringify(R({estado:'lento',ms:7000,ok:true})));
+  chk(!A({estado:'sem_resposta',alerta:false,ok:false})&&A({estado:'sem_resposta',alerta:true,ok:false})&&A({ok:false})&&!A({ok:true}),'só "sem resposta" confirmada (alerta) vira alerta vermelho; servidor antigo sem estado continua valendo'); w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

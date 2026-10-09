@@ -355,8 +355,48 @@ def _estado_qnap(raiz: Path) -> tuple[bool, str | None]:
         return False, "nao_existe"
 
 
+# ---- sondas de rede (ping, porta, site): em PARALELO e com cache de 30 s; ?fresco=1 (botão "Atualizar agora") ignora o cache ----
+import concurrent.futures as _cf
+import threading as _th
+_SONDAS: dict = {}
+_SONDAS_LOCK = _th.Lock()
+TTL_SONDA_S = 30.0
+_SITE_ESTADOS: list = []
+
+
+def _sonda(chave, fn, fresco: bool = False):
+    if not fresco:
+        with _SONDAS_LOCK:
+            v = _SONDAS.get(chave)
+        if v and time.monotonic() - v[0] < TTL_SONDA_S:
+            return v[1]
+    r = fn()
+    with _SONDAS_LOCK:
+        _SONDAS[chave] = (time.monotonic(), r)
+    return r
+
+
+def _medir_site(url: str) -> dict:
+    """Três estados: online (< 3 s), lento (3 a 15 s: o site responde, só demora) e sem_resposta (15 s sem resposta, erro de rede ou status 5xx).
+    Só 'sem_resposta' DUAS medições seguidas vira alerta (o site lento não pode alternar entre online e offline)."""
+    import httpx
+    t0 = time.time()
+    try:
+        r = httpx.get(url + "/wp-json/", timeout=15, follow_redirects=True)
+        ms = round((time.time() - t0) * 1000)
+        estado = "sem_resposta" if r.status_code >= 500 else ("online" if ms < 3000 else "lento")
+        res = {"status": r.status_code, "ms": ms, "ok": r.status_code == 200, "estado": estado}
+    except Exception as e:  # noqa: BLE001
+        res = {"status": None, "ok": False, "erro": str(e)[:120], "estado": "sem_resposta"}
+    with _SONDAS_LOCK:
+        _SITE_ESTADOS.append(res["estado"]); del _SITE_ESTADOS[:-2]
+        res["alerta"] = len(_SITE_ESTADOS) == 2 and all(x == "sem_resposta" for x in _SITE_ESTADOS)
+    return res
+
+
+
 @router.get("/estacoes")
-def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
+def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     raiz = Path(_cfg(con, "qnap.raiz", settings.CAMP_QNAP_ROOT))
     entrada_txt = _cfg(con, "qnap.entrada_captura", "")
@@ -427,9 +467,19 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
         (None, "QNAP TS-932PX", "qnap.ip", "armazenamento",
          "Entrada bruta e acervo final", 445),
     ]
+    url = _cfg(con, "wp.url", settings.WP_BASE_URL)
+    ex = _cf.ThreadPoolExecutor(max_workers=12)
+    fr = bool(fresco)
+    f_site = ex.submit(_sonda, ("http", url), lambda: _medir_site(url), fr)
+    sondas: dict = {}
+    for _eid, _n, _ch, _t, _f, _porta_s in estacoes_cfg:
+        _ip = _cfg(con, _ch)
+        if _ip:
+            sondas[_ch] = (ex.submit(_sonda, ("ping", _ip), lambda ip=_ip: _ping(ip), fr),
+                           ex.submit(_sonda, ("porta", _ip, _porta_s), lambda ip=_ip, p=_porta_s: _porta(ip, p), fr) if _porta_s else None)
     for estacao_id, nome, chave, tipo, funcao, porta_servico in estacoes_cfg:
         ip = _cfg(con, chave)
-        online = _ping(ip) if ip else None
+        online = sondas[chave][0].result() if ip else None
         hb = heartbeats.get(estacao_id) if estacao_id else None
         app_online = bool(hb and hb["idade_segundos"] is not None and hb["idade_segundos"] <= 75)
         item = {
@@ -457,7 +507,7 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
         if ip and porta_servico:
             item["servico"] = {
                 "porta": porta_servico,
-                "online": _porta(ip, porta_servico),
+                "online": sondas[chave][1].result() if sondas.get(chave) and sondas[chave][1] else _porta(ip, porta_servico),
                 "nome": "SSH" if porta_servico == 22 else "SMB",
             }
         out["maquinas"].append(item)
@@ -472,18 +522,8 @@ def estacoes(u: dict = Depends(auth.exige("leitura"))) -> dict:
         "publicados_sem_codigo": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND codigo_detectado IS NULL").fetchone()[0],
         "intervalo_sync_min": _cfg(con, "sync.intervalo_min", "15"),
     }
-    url = _cfg(con, "wp.url", settings.WP_BASE_URL)
-    try:
-        import httpx
-        t0 = time.time()
-        r = httpx.get(url + "/wp-json/", timeout=8, follow_redirects=True)
-        out["site"]["http"] = {
-            "status": r.status_code,
-            "ms": round((time.time() - t0) * 1000),
-            "ok": r.status_code == 200,
-        }
-    except Exception as e:  # noqa: BLE001
-        out["site"]["http"] = {"status": None, "ok": False, "erro": str(e)[:120]}
+    out["site"]["http"] = f_site.result()
+    ex.shutdown(wait=False)
     con.close()
     try:
         out["backup"] = bk.estado_publico()

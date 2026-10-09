@@ -217,8 +217,22 @@ def _top_rows(report: dict) -> list[dict]:
     return out
 
 
+_ANALYTICS_CACHE: dict = {"t": 0.0, "v": None}
+
+
 @router.get("/analytics")
-def analytics(u: dict = Depends(auth.exige("leitura"))) -> dict:
+def analytics(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Audiência (cache de 10 min quando deu certo, 60 s quando deu erro: a consulta ao Site Kit leva segundos e antes rodava a cada abertura do painel)."""
+    import time as _t
+    c = _ANALYTICS_CACHE
+    if not fresco and c["v"] is not None and _t.monotonic() - c["t"] < (600 if c["v"].get("disponivel") else 60):
+        return c["v"]
+    v = _analytics_calcular()
+    c["t"], c["v"] = _t.monotonic(), v
+    return v
+
+
+def _analytics_calcular() -> dict:
     """Audiência do site via Google Site Kit / GA4.
 
     Realtime não é inventado: se a instalação não expuser um endpoint realtime,
