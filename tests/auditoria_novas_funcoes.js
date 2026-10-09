@@ -451,6 +451,11 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('erros'); await sleep(1800); const nErr=Number(txt('#n-err')||0); chk(!Number.isNaN(nErr),'Erros deveria carregar ao abrir');
   w.route_to('solicitacoes'); await sleep(1800); chk(!!d.querySelector('#v-solicitacoes tbody tr'),'Solicitações deveria carregar ao abrir');
   w.route_to('fundos'); await sleep(1800); chk(!!d.querySelector('#v-fundos tbody tr'),'Fundos deveria carregar ao abrir'); }
+// ---------- [Auditoria P0-1] F5 ou link direto numa página de detalhe mostra a página COMPLETA ----------
+{ const abrirEm=async hash=>{ const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>adm.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}}); await sleep(4000); const t=sel=>(dx.window.document.querySelector(sel)||{textContent:''}).textContent.replace(/\s+/g,' ').trim(); const o={proj:t('#v-projeto'),fundo:t('#v-fundo'),item:t('#v-item')}; dx.window.close(); return o };
+  let o=await abrirEm('#projeto/F003-P9001'); chk(o.proj.length>200&&o.proj.includes('Projeto de teste da revisão 9001'),'F5 em #projeto/... deveria mostrar o projeto, mas só há: "'+o.proj.slice(0,80)+'"');
+  o=await abrirEm('#fundo/F003'); chk(o.fundo.length>200&&o.fundo.includes('Burle Marx'),'F5 em #fundo/... deveria mostrar o fundo, mas só há: "'+o.fundo.slice(0,80)+'"');
+  o=await abrirEm('#item/F003-P9001-1972-S01-D00001'); chk(o.item.length>100&&o.item.includes('F003-P9001-1972-S01-D00001'),'F5 em #item/... deveria mostrar a folha, mas só há: "'+o.item.slice(0,80)+'"'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
