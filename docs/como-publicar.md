@@ -12,7 +12,7 @@ Vocabulário: ver `vocabulario.md` (Não publicado · Rascunho · Publicado · D
 5. **Autorizar cada projeto** — em cada projeto, painel "Publicação" → *Autorizar publicação*. Autorizar não publica sozinho.
 6. **Enviar as folhas ao site** — no projeto, *Enviar folhas ao site* (ficam como rascunho); *Importar folhas só no site* se elas vieram do site.
 7. **Publicar** — no projeto: painel "Publicação" → *Publicar*. Ou, no fundo, *Publicar* para todos os projetos prontos (só admin master).
-8. **Conferir** — *Ver página pública* no projeto. Publicar muda o site na hora: prefira fora do horário de movimento (depois das 21h).
+8. **Conferir** — *Ver página pública* no projeto. Publicar deixa o projeto visível no site na hora.
 
 ## Publicar um ARQUITETO
 **O painel não publica arquiteto no site.** O campo "Status" do arquiteto é só um marcador interno. O arquiteto aparece no site quando

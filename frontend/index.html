@@ -1555,7 +1555,7 @@ async function abrirPublicacaoGuiada(code){
   openDrawer('Publicar',code,`<p class="help">${ok?'Eu faço a sequência inteira; você só confirma.':'Antes, há o que só uma pessoa resolve:'}</p>${bloq.length?`<ul class="checklist">${bloq.map(b=>itemChecklist({ok:false,bloqueia:true,texto:b.texto,detalhe:b.detalhe,acao:b.acao},true)).join('')}</ul>`:''}
     <h3 class="hoje-h">O que vou fazer</h3><ul class="checklist">${(pl.passos||[]).map(passo).join('')}</ul>${foraTxt.length?`<p class="help"><b>Ficam de fora:</b> ${escHtml(foraTxt.join(' · '))}.</p>`:''}
     <div class="act"><button class="btn pri" id="pub-go" data-pub-go="${escHtml(code)}"${ok?'':' disabled'}>Publicar agora</button></div><div id="pub-prog" class="help" aria-live="polite"></div>
-    <p class="help">Publicar muda o site na hora: prefira fora do horário de movimento (depois das 21h).</p>`)}
+    <p class="help">Ao publicar, o projeto fica visível no site na hora.</p>`)}
 async function executarPublicacaoGuiada(code){
   const go=document.getElementById('pub-go'),prog=document.getElementById('pub-prog');if(!go||!prog)return;go.disabled=true;let folhas=0;
   try{for(;;){prog.textContent=folhas?`Enviando folhas ao site… ${folhas} já enviada(s)`:'Preparando e enviando ao site…';
@@ -1725,7 +1725,7 @@ const GUIA_FUNDO=[
  ['Autorizar cada projeto','Em cada projeto, no painel "Publicação" → Autorizar publicação. Autorizar não publica sozinho.'],
  ['Enviar as folhas ao site','No projeto: "Enviar folhas ao site" (ficam como rascunho) e "Importar folhas só no site" se elas vieram do site.'],
  ['Publicar','No projeto: painel "Publicação" → Publicar. Ou, no fundo, Publicar para todos os projetos prontos (só admin master).'],
- ['Conferir','Use "Ver página pública" no projeto. Publicar muda o site na hora: prefira fora do horário de movimento (depois das 21h).']];
+ ['Conferir','Use "Ver página pública" no projeto. Publicar deixa o projeto visível no site na hora.']];
 const GUIA_ARQUITETO=[
  ['Cadastrar o arquiteto','Arquitetos → Novo agente: nome na forma autorizada (como aparece no site), datas de existência e as grafias de carimbo.'],
  ['Escrever a biografia, com fonte','Abra o arquiteto → Editar. Só entra texto com a fonte citada.'],
