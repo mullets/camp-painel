@@ -37,6 +37,14 @@ for (_did,) in c.execute("SELECT id FROM decisao").fetchall():
                "identificacao_original": P("decisao", "pedido.identificacao"), "operador": P("decisao", "pedido.operador")},
                "candidatos": [{"codigo": "F026-P0001", "titulo": P("decisao", "cand.titulo"), "ano": 1970, "cidade": P("decisao", "cand.cidade"), "folhas": 3, "score": 0.93, "nivel": "forte", "motivos": [P("decisao", "cand.motivo")]}]}, ensure_ascii=False), _did))
 c.commit()
+# revisão do lote: tudo o que vem no pacote do CAMP Vision é texto de fora (título lido, bloqueios, ressalvas, sinais, tipo lido, retirados, problemas)
+for (_ic,) in c.execute("SELECT codigo FROM item WHERE lote_id IS NOT NULL").fetchall():
+    c.execute("UPDATE item SET pendencias=?, tipo_lido=? WHERE codigo=?", (_jd.dumps({"titulo_lido": P("item", "pend.titulo_lido"), "bloqueios": [P("item", "pend.bloqueio")], "ressalvas": [P("item", "pend.ressalva")],
+               "sinais": [P("item", "pend.sinal")], "previa": ""}, ensure_ascii=False), P("item", "tipo_lido"), _ic))
+for (_lid2, _res) in c.execute("SELECT id, resultado FROM lista_processamento WHERE nome LIKE 'Lote de revisão%'").fetchall():
+    c.execute("UPDATE lista_processamento SET resultado=? WHERE id=?", (_jd.dumps({"importacao": {"criadas": 1, "atualizadas": 0, "ignoradas_ja_revisadas": 0, "por": "x", "retirados": [{"codigo": P("lista_processamento", "ret.codigo"), "bloqueios": [P("lista_processamento", "ret.bloqueio")]}],
+               "problemas": [P("lista_processamento", "problema")]}}, ensure_ascii=False), _lid2))
+c.commit()
 # nome de ARQUIVO hostil no lote de teste (vem do CAMP Vision / do scanner, ou seja, de fora)
 import tempfile as _tf
 from pathlib import Path as _P

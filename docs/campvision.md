@@ -158,3 +158,22 @@ curl -s -H "X-Camp-Token: $CAMP_PAINEL_TOKEN" http://192.168.15.60:8000/api/esta
 - **PDF** não entra na contagem de folhas (`folhas_encontradas`), embora o CV2 processe PDF. Lotes só de PDF aparecem com 0 folhas.
 - O painel **não lê** `catalogacao.csv`, `contatos.jpg` nem `pacote_tainacan.json`. A revisão pós-CV2 (folha de contatos, girar, duplicatas) depende do formato real do CSV.
 - Marcar o lote como `teste` só vale pelo `info_projeto.json`; o painel não sabe de testes que estejam só no nome da pasta além de `teste`, `asd` e `sei la`.
+
+## 10. Revisão do lote (pós-CAMP Vision)
+O CAMP Vision grava a catalogação e o painel **importa, uma pessoa confere/corrige e o admin aprova**. O painel não decide nada sozinho.
+
+**Fonte:** `<pasta do lote>/catalogacao/pacote_tainacan.json` (versão 2). Entra só o que está em `documentos`; `retirados` (autoria divergente, retirada por decisão) **não entra** e é listado no resultado.
+Os caminhos de `arquivos` e `preview` vêm **relativos à raiz `ACERVOS_CAMP`** (`qnap.prontos_raiz`); a prévia fica em `_campvision/preview/<projeto>/<código>.jpg`.
+
+**Fluxo (botões na página do projeto, painel "Revisão do lote"):**
+1. **Importar as folhas do lote** (operador+): `POST /api/lotes/{id}/importar`. Cria uma folha por documento, `revisao = pendente`, ligada ao lote. Idempotente.
+   **Nunca sobrescreve** o que uma pessoa já revisou nem o que já está no site; reimportar só atualiza as ainda pendentes.
+2. **Conferir / corrigir** cada folha (janela "Revisar": o que o CAMP Vision leu e apontou ao lado dos campos). Corrigir usa o editor que já existe (`PATCH /api/itens/{codigo}`, com histórico antes/depois) e marca `corrigida`; "está certo" marca `conferida`.
+   "Conferir as folhas sem pendência" marca em lote **só** a folha sem nenhum bloqueio, ressalva ou sinal do CAMP Vision e com título. O resto fica para olho humano.
+3. **Aprovar o lote** (admin): só com **todas** as folhas revisadas. É um **registro** (quem e quando) e **não muda a etapa**: `rascunho` já significa "foi para o site", com portões próprios.
+   Esse portão (`PATCH /api/filas/{id}` para `rascunho`) agora **exige a aprovação** quando o lote tem folhas importadas. Lote aprovado fica protegido (revisar/importar dão 409) até **Reabrir** (admin, e só se ainda não foi ao site).
+
+**O que vira o quê:** `bloqueios`/`publicavel=false` -> `status_site = bloqueado`; `duplicata_de` e `tipo_duplicata` são mantidos; `tipo_de_desenho` só vira o tipo do painel se existir no vocabulário (o lido fica em `tipo_lido`);
+título lido, ressalvas, orientação/série incerta e a prévia ficam em `pendencias` para a pessoa ver ao revisar.
+**Página do projeto:** mostra as folhas do site **somadas** às importadas que ainda não estão no site (antes, se o projeto já tinha folha no site, as locais ficavam escondidas).
+**Ainda não faz:** ler `erros.json` e o aceite do lote (`catalogacao/lotes/*.json`), e enviar a folha ao site (continua sendo o fluxo de publicação que já existe).

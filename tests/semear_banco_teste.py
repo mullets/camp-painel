@@ -89,6 +89,20 @@ for _i, _ch in enumerate(("seed-decisao-1", "seed-decisao-2")):
               (_ch, "F026", f"{_c0[1]} (reenvio {_i + 1})", _json.dumps({"pedido": {"titulo": f"{_c0[1]} (reenvio {_i + 1})", "ano": _c0[2] or 0, "cidade": _c0[3], "identificacao_original": f"PASTA SCANNER {_i + 1}", "operador": "Beatriz"},
                 "candidatos": [{"codigo": _c0[0], "titulo": _c0[1], "ano": _c0[2], "cidade": _c0[3], "folhas": 3, "score": 0.93 - _i * 0.1, "nivel": "forte" if _i == 0 else "provavel",
                                 "motivos": ["mesmo nome (igual sem acento, maiúscula e palavras genéricas)", "mesma cidade"]}]}, ensure_ascii=False)))
+# revisão do lote: dois projetos de teste com o pacote REAL do CAMP Vision (amostra gerada por ele): um JÁ importado (para revisar) e um para importar
+_FIX = _P(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json"
+for _n, _importar in ((9001, True), (9002, False)):
+    _cod = f"F003-P{_n}"
+    c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero) VALUES ('F003', ?)", (_n,))
+    c.execute("INSERT OR IGNORE INTO projeto (codigo, fundo_codigo, numero, titulo, ano) VALUES (?, 'F003', ?, ?, 1972)", (_cod, _n, f"Projeto de teste da revisão {_n}"))
+    _pasta = _P(_tf.gettempdir()) / "camp_seed_qnap" / "revisao" / f"{_cod} - Teste"
+    (_pasta / "catalogacao").mkdir(parents=True, exist_ok=True)
+    (_pasta / "catalogacao" / "pacote_tainacan.json").write_text(_FIX.read_text(encoding="utf-8").replace("F026-P0001", _cod).replace("F026", "F003"), encoding="utf-8")
+    _lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa) VALUES (?,?,?,?,?,'revisao')",
+                     (f"Lote de revisão {_n}", _cod, str(_pasta), 3, 3)).lastrowid
+    if _importar:
+        from app.importador_lote import importar_lote
+        importar_lote(c, _lid, "seed")
 # o coletor automático dispara 20 s depois de o servidor subir e gravaria uma coleta VAZIA (o QNAP de teste não existe) por cima da semente:
 # os testes não podem depender de relógio. 0 desliga a coleta automática; "Atualizar agora" (manual) continua funcionando.
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")

@@ -474,6 +474,8 @@ def mudar_etapa(lid: int, d: EtapaFila, u: dict = Depends(auth.exige("operador")
             con.close(); raise HTTPException(400, f"Bloqueado: {bloq[0] or 0} autoria divergente, {bloq[1] or 0} erro(s) bloqueante(s)")
         if u["papel"] not in ("admin", "master"):
             con.close(); raise HTTPException(403, "Mandar para o site exige admin")
+        if con.execute("SELECT 1 FROM item WHERE lote_id=? LIMIT 1", (lid,)).fetchone() and not l["aprovado_em"]:
+            con.close(); raise HTTPException(400, "Revise e aprove o lote antes de mandar para o site")
     con.execute("UPDATE lista_processamento SET etapa=?, atualizado_em=datetime('now') WHERE id=?", (d.etapa, lid))
     if d.etapa == "revisao":
         con.execute("UPDATE projeto SET status_site=CASE WHEN status_site IN ('nao_publicado','bloqueado') THEN 'em_revisao' ELSE status_site END WHERE codigo=?", (l["projeto_codigo"],))

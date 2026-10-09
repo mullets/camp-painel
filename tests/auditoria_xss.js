@@ -18,7 +18,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const sobre={};   // fragmento de HTML mostrado como TEXTO = escapou demais
  const RX_FRAG=/<(span|div|tr|td|b|small|button|li|ul|dl|dt|dd|table|a)\b[^>]*>/i;
  const checa=(onde)=>{ const cl=d.body.cloneNode(true); cl.querySelectorAll('script,style').forEach(e=>e.remove()); const tx=cl.textContent||''; const pv=tx.match(PROIB); if(pv&&!Object.values(vocab).includes(pv[0])) vocab[onde]=pv[0]; const mm=tx.match(RX_FRAG); if(mm&&!Object.values(sobre).includes(mm[0])) sobre[onde]=mm[0]; for(const e of d.querySelectorAll('[data-xss]')){ const par=ondeEstou(e)+' ← '+e.getAttribute('data-xss'); if(visto.has(par)) continue; visto.add(par); (vazou[onde]=vazou[onde]||[]).push(par); } };
- const passos=[['painel'],['uso'],['fundos'],['fundo/F026'],['fundo/F023'],['arquitetos'],['projetos'],['projeto/F026-P0001'],['projeto/F023-P0011'],['item/F023-P0011-1959-S01-D00001'],['item/F023-P0011-1959-S01-D00003'],['item/F023-P0011-1959-S01-D00004'],['fundo/F029'],['fundo/F003'],['projeto/F002-P0001'],['projeto/F001-P0001'],['filas'],['solicitacoes'],['erros'],['etiquetas'],['config'],['localizacao'],['estacoes'],['auditoria']];
+ const passos=[['painel'],['uso'],['fundos'],['fundo/F026'],['fundo/F023'],['arquitetos'],['projetos'],['projeto/F026-P0001'],['projeto/F023-P0011'],['item/F023-P0011-1959-S01-D00001'],['item/F023-P0011-1959-S01-D00003'],['item/F023-P0011-1959-S01-D00004'],['fundo/F029'],['fundo/F003'],['projeto/F003-P9001'],['projeto/F003-P9002'],['projeto/F002-P0001'],['projeto/F001-P0001'],['filas'],['solicitacoes'],['erros'],['etiquetas'],['config'],['localizacao'],['estacoes'],['auditoria']];
  for(const [rota] of passos){ try{ w.route_to(rota); await sleep(1500); checa(rota);
      // abre o detalhe de até 5 linhas (drawer)
      const trs=[...d.querySelectorAll('.content.on tbody tr, #v-'+rota.split('/')[0]+' tbody tr')].slice(0,5);
@@ -28,6 +28,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const J=async u=>{ try{ return await (await f(u)).json() }catch(_){ return null } };
  const erros=await J('/api/erros'), sols=await J('/api/solicitacoes'), ags=await J('/api/agentes'), evs=await J('/api/eventos?limite=60');
  const lista=x=>Array.isArray(x)?x:(x&&(x.itens||x.items||x.eventos||x.dados))||[];
+ // Revisão do lote: o pacote do CAMP Vision é texto de fora; a janela de revisão de cada folha importada
+ try{ w.route_to('projeto/F003-P9001'); await sleep(2600); for(const x of ((await J('/api/projetos/F003-P9001/detalhe')).itens||[])){ await w.abrirRevisaoItem(x.codigo); await sleep(700); checa('revisão › '+x.codigo); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['revisão (exceção)']=[e.message.slice(0,80)] }
  // Decisões: o pedido vem da estação/CAMP Vision (de fora): a janela de decisão com título, cidade, identificação, operador, candidato e motivo hostis
  try{ for(const x of lista(await J('/api/decisoes'))){ await w.abrirDecisao(x.id); await sleep(700); checa('decisão › '+x.id); try{w.closeDrawer(true)}catch(_){ } } }catch(e){ vazou['decisões (exceção)']=[e.message.slice(0,80)] }
  // Uso do acervo: nome, e-mail, instituição, uso e respostas vêm de um formulário PÚBLICO (qualquer pessoa digita): abas e detalhe

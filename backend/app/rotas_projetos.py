@@ -228,6 +228,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     itens_local = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
+               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido,
                i.tainacan_item_id AS tainacan_item_id_salvo
           FROM item i
          WHERE i.projeto_codigo=?
@@ -265,6 +266,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "rotacao_aplicada": local.get("rotacao_aplicada"),
                 "status_site_local": local.get("status_site"),
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
+                "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -288,8 +290,15 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         d["status_site"] = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar", "pending": "rascunho"}.get(d.get("status"), d.get("status") or "nao_publicado")
         itens_site.append(d)
 
-    itens = itens_site if itens_site else itens_local
+    # Folhas do site + as locais que ainda NÃO estão no site (ex.: lote novo importado para um projeto que já tem folhas publicadas).
+    codigos_site = {x["codigo"] for x in itens_site}
+    itens = itens_site + [x for x in itens_local if x["codigo"] not in codigos_site]
     for d in itens:
+        if isinstance(d.get("pendencias"), str):
+            try:
+                d["pendencias"] = json.loads(d["pendencias"])
+            except ValueError:
+                d["pendencias"] = None
         d.setdefault("thumb_url", None)
         d.setdefault("url", None)
         d.setdefault("tainacan_item_id", None)

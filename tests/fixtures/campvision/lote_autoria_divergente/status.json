@@ -1,0 +1,22 @@
+{
+  "codigo": "F026-P0001",
+  "status": "pronto",
+  "status_em": "2026-10-08T23:08:05+00:00",
+  "lote_atual": "20261008-230803-F026 - Sami Bussab_Desenhos_Tarumã 1972",
+  "versao_cv2": "2026-10-08-08",
+  "campvision2_em": "2026-10-08T23:08:05",
+  "campvision2_pranchas": 2,
+  "campvision2_com_carimbo": 2,
+  "campvision2_a_revisar": 0,
+  "fase": "organizado_v2",
+  "fase_em": "2026-10-08T23:08:05",
+  "lotes_prontos": [
+    "20261008-230803-F026 - Sami Bussab_Desenhos_Tarumã 1972"
+  ],
+  "imagens": 2,
+  "folhas": 2,
+  "com_carimbo": 2,
+  "a_revisar": 2,
+  "erros_bloqueantes": 2,
+  "motivo": ""
+}

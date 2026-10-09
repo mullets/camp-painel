@@ -43,6 +43,8 @@ app.include_router(rotas_hoje)
 app.include_router(rotas_uso)
 from .rotas_decisoes import router as rotas_decisoes
 app.include_router(rotas_decisoes)
+from .rotas_revisao import router as rotas_revisao
+app.include_router(rotas_revisao)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 

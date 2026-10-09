@@ -1,0 +1,209 @@
+{
+  "versao": 2,
+  "gerado_em": "2026-10-08T23:08:05+00:00",
+  "teste": false,
+  "projeto_codigo": "F026-P0001",
+  "projeto_nome": "Tarumã",
+  "fundo_codigo": "F026",
+  "fundo": {
+    "codigo": "F026",
+    "sigla": "SBU",
+    "nome": "Sami Bussab",
+    "coautores": [],
+    "periodo_atuacao": null
+  },
+  "projeto": {
+    "codigo": "F026-P0001",
+    "titulo": "Tarumã",
+    "ano": "1972",
+    "cidade": "",
+    "uf": "",
+    "cliente": "",
+    "endereco": "",
+    "fontes": {
+      "ano": {
+        "pasta": "1972"
+      },
+      "cliente": {},
+      "endereco": {},
+      "cidade": {},
+      "uf": {},
+      "projeto": {
+        "pasta": "Tarumã",
+        "carimbo": "CASA DA PRAIA"
+      }
+    },
+    "lacunas": [],
+    "programa_sugerido": [],
+    "natureza_sugerida": [],
+    "sugestao": {
+      "programa": null,
+      "regra_programa": "",
+      "natureza": null,
+      "regra_natureza": "",
+      "motivo": "",
+      "e_sugestao": true
+    },
+    "capa_sugerida": "",
+    "descricao_sugerida": ""
+  },
+  "documentos": [],
+  "itens": [],
+  "retirados": [
+    {
+      "codigo": "F026-P0001-1972-S01-D00001",
+      "projeto_codigo": "F026-P0001",
+      "fundo_codigo": "F026",
+      "serie": "S01",
+      "modo": "prancha",
+      "titulo": "",
+      "titulo_lido": "",
+      "tipo": "",
+      "tipo_de_desenho": "",
+      "folha": "03",
+      "escala": "",
+      "codigo_unidade": "",
+      "revisao": "",
+      "data_lida": "",
+      "data_iso": "",
+      "data_sugerida": "",
+      "data_outlier": false,
+      "ano": "1968",
+      "ano_do_projeto": "",
+      "metadados": {
+        "projeto": "CASA DA PRAIA",
+        "arquiteto": "SALVADOR CANDIA",
+        "folha": "03",
+        "ano": "1968"
+      },
+      "rastreio": {
+        "projeto": "leitura",
+        "arquiteto": "leitura",
+        "folha": "leitura",
+        "ano": "leitura"
+      },
+      "alternativas": {},
+      "onde": {},
+      "transcricao_integral": "",
+      "materiais_citados": [],
+      "foto": {},
+      "textual": {},
+      "pessoas_identificadas": [],
+      "fotografo": "",
+      "credito": "Acervo Sami Bussab/CAMP - Casa da Arquitetura Moderna Paulista",
+      "preview": "_campvision/preview/F026-P0001/F026-P0001-1972-S01-D00001.jpg",
+      "arquivos": [
+        "F026 - SBU Sami Bussab/01 - Projetos/F026-P0001 - Tarumã/01 - Desenhos e pranchas/JPG/F026-P0001-1972-S01-D00001.jpg"
+      ],
+      "arquivo": "_campvision/preview/F026-P0001/F026-P0001-1972-S01-D00001.jpg",
+      "arquivo_origem": [
+        {
+          "arquivo_origem": "100 - Scanners/F026 - Sami Bussab/Desenhos/Tarumã 1972/JPG/scan 001.jpg",
+          "nome_original": "scan 001.jpg",
+          "origem_formato": "jpg"
+        }
+      ],
+      "origem_formato": "jpg",
+      "rotacao_aplicada": 0,
+      "confianca_rotacao": 0.0,
+      "espelhada": false,
+      "orientacao_incerta": true,
+      "serie_incerta": false,
+      "duplicata_de": null,
+      "tipo_duplicata": "",
+      "autoria_divergente": true,
+      "projeto_divergente": false,
+      "fora_do_periodo": false,
+      "prancha_original": "scan 001.jpg",
+      "confianca": 0.9,
+      "decisao": null,
+      "publicavel": false,
+      "bloqueios": [
+        "autoria divergente"
+      ],
+      "ressalvas": []
+    },
+    {
+      "codigo": "F026-P0001-1972-S01-D00002",
+      "projeto_codigo": "F026-P0001",
+      "fundo_codigo": "F026",
+      "serie": "S01",
+      "modo": "prancha",
+      "titulo": "",
+      "titulo_lido": "",
+      "tipo": "",
+      "tipo_de_desenho": "",
+      "folha": "03",
+      "escala": "",
+      "codigo_unidade": "",
+      "revisao": "",
+      "data_lida": "",
+      "data_iso": "",
+      "data_sugerida": "",
+      "data_outlier": false,
+      "ano": "1968",
+      "ano_do_projeto": "",
+      "metadados": {
+        "projeto": "CASA DA PRAIA",
+        "arquiteto": "SALVADOR CANDIA",
+        "folha": "03",
+        "ano": "1968"
+      },
+      "rastreio": {
+        "projeto": "leitura",
+        "arquiteto": "leitura",
+        "folha": "leitura",
+        "ano": "leitura"
+      },
+      "alternativas": {},
+      "onde": {},
+      "transcricao_integral": "",
+      "materiais_citados": [],
+      "foto": {},
+      "textual": {},
+      "pessoas_identificadas": [],
+      "fotografo": "",
+      "credito": "Acervo Sami Bussab/CAMP - Casa da Arquitetura Moderna Paulista",
+      "preview": "_campvision/preview/F026-P0001/F026-P0001-1972-S01-D00002.jpg",
+      "arquivos": [
+        "F026 - SBU Sami Bussab/01 - Projetos/F026-P0001 - Tarumã/01 - Desenhos e pranchas/JPG/F026-P0001-1972-S01-D00002.jpg"
+      ],
+      "arquivo": "_campvision/preview/F026-P0001/F026-P0001-1972-S01-D00002.jpg",
+      "arquivo_origem": [
+        {
+          "arquivo_origem": "100 - Scanners/F026 - Sami Bussab/Desenhos/Tarumã 1972/JPG/scan 002.jpg",
+          "nome_original": "scan 002.jpg",
+          "origem_formato": "jpg"
+        }
+      ],
+      "origem_formato": "jpg",
+      "rotacao_aplicada": 0,
+      "confianca_rotacao": 0.0,
+      "espelhada": false,
+      "orientacao_incerta": true,
+      "serie_incerta": false,
+      "duplicata_de": "F026-P0001-1972-S01-D00001",
+      "tipo_duplicata": "quase",
+      "autoria_divergente": true,
+      "projeto_divergente": false,
+      "fora_do_periodo": false,
+      "prancha_original": "scan 002.jpg",
+      "confianca": 0.9,
+      "decisao": null,
+      "publicavel": false,
+      "bloqueios": [
+        "autoria divergente",
+        "duplicata de F026-P0001-1972-S01-D00001"
+      ],
+      "ressalvas": []
+    }
+  ],
+  "propostas": {
+    "obras_na_pasta": [],
+    "sem_codigo_de_unidade": [],
+    "fotos_sem_obra": []
+  },
+  "avisos": [
+    "F026-P0001-1972-S01-D00002 é quase de F026-P0001-1972-S01-D00001 — publicar F026-P0001-1972-S01-D00001"
+  ]
+}

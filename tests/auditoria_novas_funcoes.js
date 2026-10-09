@@ -309,6 +309,34 @@ w.route_to('painel'); await sleep(2800);
   chk((w.__baixou||[]).some(x=>x.startsWith('mailto:'+detalheEmail.email)&&x.includes('subject=Assunto%20com%20acento%3A%20%C3%A7%C3%A3o')&&x.includes('body=Linha%201%0ALinha%202%20%26%20mais%3F')),'"Abrir no meu e-mail" deveria montar um mailto: com assunto e texto codificados: '+JSON.stringify(w.__baixou));
   d.querySelector('#d-body [data-uso-acao="detalhe"]').click(); await sleep(1300); chk(txt('#d-title').includes('Pedido de download'),'"Voltar" deveria reabrir o detalhe do pedido');
   w.closeDrawer(true); }
+// ---------- REVISÃO DO LOTE: importar o pacote do CAMP Vision, conferir, corrigir e aprovar ----------
+{ w.confirm=()=>true; w.closeDrawer(true); const pc='F003-P9002', D=n=>pc+'-1972-S01-D0000'+n, loteId=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].id;
+  w.route_to('projeto/'+pc); await sleep(3500);
+  chk(/Revisão do lote/.test(txt('#pj-revisao'))&&/aguardando importação/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="importar"]'),'o projeto com pacote e sem folhas importadas deveria oferecer "Importar as folhas do lote": "'+txt('#pj-revisao').slice(0,120)+'"');
+  chk(/o CAMP Vision gravou 3 documento/.test(txt('#pj-revisao')),'deveria dizer quantos documentos o CAMP Vision gravou');
+  d.querySelector('#pj-revisao [data-rev-lote="importar"]').click(); await sleep(3800);
+  const dt=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b;
+  chk(dt.itens.length===3&&dt.itens.every(i=>i.revisao==='pendente'&&i.lote_id===loteId),'importar deveria criar 3 folhas pendentes ligadas ao lote: '+dt.itens.length);
+  chk(/3 a conferir/.test(txt('#pj-revisao'))&&/Faltam conferir 3 folha/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===true,'depois de importar: 3 a conferir e "Aprovar" bloqueado com o motivo: "'+txt('#pj-revisao').slice(0,160)+'"');
+  const cards=[...d.querySelectorAll('.thumb')].filter(x=>x.textContent.includes(pc));
+  chk(cards.length===3&&cards.every(x=>/a conferir/.test(x.textContent)&&!!x.querySelector('[data-rev-abrir]')),'cada cartão de folha deveria ter o selo "a conferir" e o botão Revisar: '+cards.length);
+  d.querySelector('[data-rev-lote="conferir"]').click(); await sleep(3200);
+  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.conferida===0,'conferir em lote não deveria marcar folha com pendência apontada pelo CAMP Vision (todas as 3 têm)');
+  w.abrirRevisaoItem(D(3)); await sleep(1800);
+  chk(/O que o CAMP Vision leu/.test(txt('#d-body'))&&/orientação incerta/.test(txt('#d-body'))&&!!d.querySelector('#rv-titulo')&&!!d.querySelector('#rv-tipo')&&!!d.querySelector('[data-rev-item="conferida"]'),'a janela de revisão deveria mostrar o que o CAMP Vision apontou e os campos: "'+txt('#d-body').slice(0,140)+'"');
+  d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3200);
+  chk((await J(adm,'/api/itens/'+D(3)+'/edicao')).b.codigo===D(3)&&(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.conferida===1,'"Está certo" deveria marcar a folha como conferida');
+  w.abrirRevisaoItem(D(1)); await sleep(1800); d.getElementById('rv-titulo').value='Planta corrigida no teste'; d.getElementById('rv-escala').value='1:75';
+  d.querySelector('[data-rev-item="corrigida"]').click(); await sleep(3400);
+  const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
+  chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar correção" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
+  w.abrirRevisaoItem(D(2)); await sleep(1800); d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3200);
+  chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/pronta para aprovar/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar: "'+txt('#pj-revisao').slice(0,160)+'"');
+  d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').click(); await sleep(3600);
+  const ap=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0];
+  chk(!!ap.aprovado_em&&ap.etapa==='revisao'&&/aprovado por/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="reabrir"]'),'aprovar deveria registrar quem/quando, manter a etapa e oferecer "Reabrir a revisão": '+JSON.stringify({a:ap.aprovado_em,e:ap.etapa}));
+  d.querySelector('#pj-revisao [data-rev-lote="reabrir"]').click(); await sleep(3400);
+  chk(!(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].aprovado_em,'reabrir deveria limpar a aprovação'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
@@ -343,7 +371,7 @@ w.route_to('painel'); await sleep(2800);
   chk(/3 documento\(s\)/.test(txt('#pj-qnap'))&&/F026-P0001-1970-S01-D90001/.test(txt('#pj-qnap'))&&/JPG · TIF/.test(txt('#pj-qnap')),'cada documento deveria mostrar o código e os formatos (JPG · TIF)');
   const im=[...d.querySelectorAll('#pj-qnap .qf img')];
   chk(im.length===3&&im.every(x=>x.getAttribute('src').startsWith('/api/projetos/F026-P0001/folhas-qnap/arquivo?lote=')&&x.getAttribute('src').includes('caminho=')),'as miniaturas deveriam vir do endpoint de prévia do projeto');
-  chk(/falta revisar e importar o lote/.test(txt('#pj-qnap')),'o painel deveria dizer o que falta (revisar e importar o lote), sem prometer o que não existe');
+  chk(/ainda não viraram folhas do painel/.test(txt('#pj-qnap')),'o painel deveria dizer que ainda não viraram folhas e apontar a Revisão do lote');
   w.route_to('projeto/F023-P0011'); await sleep(3000);
   chk(d.querySelectorAll('#pj-qnap .qf').length===0&&!/Encontradas no QNAP/.test(txt('#pj-qnap')),'um projeto SEM lote no QNAP não deveria mostrar o painel'); }
 // ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------

@@ -1509,6 +1509,108 @@ def filho(modo):
         ver("criar à mão um nome sem parecido: cria direto, como sempre", r.status_code == 200 and r.json()["codigo"] == "F097-P0009", r.text[:100])
         for l in res: print(l)
         k.close()
+    elif modo == "revisao":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        prontos = _P(os.environ["CAMP_TMP_PRONTOS"]); proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"
+        shutil.rmtree(prontos, ignore_errors=True)
+        def montar(pasta, fixture):          # um lote como o CAMP Vision o deixa: catalogacao/pacote_tainacan.json (amostra REAL gerada pelo CAMP Vision)
+            shutil.rmtree(pasta, ignore_errors=True); shutil.copytree(FIX / fixture, pasta); return pasta
+        montar(proj, "lote_normal")
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n in (1, 2): c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,)); c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1972)", (f"F026-P000{n}", "F026", n, "Tarumã" if n == 1 else "Outra obra"))
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa) VALUES ('Lote Tarumã','F026-P0001',?,3,3,'revisao')", (str(proj),)).lastrowid
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        D = lambda n: f"F026-P0001-1972-S01-D0000{n}"
+        # ---------- importar o pacote REAL ----------
+        r = op.post(f"/api/lotes/{lote}/importar"); j = r.json()
+        ver("importar o pacote real do CAMP Vision: 3 folhas criadas, nenhuma retirada", r.status_code == 200 and j["criadas"] == 3 and j["atualizadas"] == 0 and j["retirados"] == [] and j["problemas"] == [], str(j))
+        i1, i3 = (k.execute("SELECT * FROM item WHERE codigo=?", (D(n),)).fetchone() for n in (1, 3))
+        ver("cada folha entra EM REVISÃO ('pendente'), ligada ao lote, de origem campvision, com os arquivos da pasta (relativos ao ACERVOS_CAMP)", i1["revisao"] == "pendente" and i1["lote_id"] == lote and i1["origem"] == "campvision" and i1["serie_codigo"] == "S01" and i1["sequencial"] == 1 and (i1["arquivo_jpg"] or "").endswith("D00001.jpg") and i1["arquivo_jpg"].startswith("F026 - SBU"), str(dict(i1))[:200])
+        ver("duplicata e bloqueio do CAMP Vision viram 'bloqueado' + duplicata_de; a única publicável fica 'nao_publicado'", i1["status_site"] == "bloqueado" and i1["duplicata_de"] == D(3) and i3["status_site"] == "nao_publicado" and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, f"{i1['status_site']} {i1['duplicata_de']} {i3['status_site']}")
+        p1 = _j.loads(i1["pendencias"])
+        ver("o que o CAMP Vision apontou vai para as pendências (bloqueio, sinal 'orientação incerta', prévia)", any("duplicata" in b for b in p1["bloqueios"]) and "orientação incerta" in p1["sinais"] and p1["previa"].startswith("_campvision/preview/F026-P0001/"), str(p1)[:200])
+        j2 = op.post(f"/api/lotes/{lote}/importar").json()
+        ver("importar de novo é idempotente (nada duplica; atualiza as ainda pendentes)", j2["criadas"] == 0 and j2["atualizadas"] == 3 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, str(j2))
+        # ---------- o que uma pessoa já revisou NUNCA é sobrescrito ----------
+        ver("corrigir pelo editor que já existe (PATCH) e marcar como corrigida", op.patch(f"/api/itens/{D(3)}", json={"titulo": "Planta do pavimento térreo", "tipo_documento": "Planta", "escala": "1:50"}).status_code == 200 and op.post(f"/api/itens/{D(3)}/revisao", json={"estado": "corrigida"}).status_code == 200)
+        j3 = op.post(f"/api/lotes/{lote}/importar").json()
+        i3 = k.execute("SELECT titulo, tipo_documento, escala, revisao, revisado_por FROM item WHERE codigo=?", (D(3),)).fetchone()
+        ver("reimportar NÃO desfaz a correção de uma pessoa (ignora a revisada; atualiza só as 2 pendentes)", j3["ignoradas_ja_revisadas"] == 1 and j3["atualizadas"] == 2 and i3["titulo"] == "Planta do pavimento térreo" and i3["tipo_documento"] == "Planta" and i3["revisao"] == "corrigida" and i3["revisado_por"] == "op@camp.arq.br", str(dict(i3)))
+        # ---------- erros ----------
+        ver("importar: lote inexistente 404; sem login 401; só operador (nada para leitura)", op.post("/api/lotes/9999/importar").status_code == 404 and anon.post(f"/api/lotes/{lote}/importar").status_code == 401)
+        c = connect(); sem = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Sem pacote','F026-P0002',?)", (str(prontos),)).lastrowid
+        mesmo_pacote_outro_projeto = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Pacote de outro projeto','F026-P0002',?)", (str(proj),)).lastrowid
+        sumiu = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Pasta sumiu','F026-P0002','/nao/existe')").lastrowid; c.commit(); c.close()
+        e1, e2, e3 = (op.post(f"/api/lotes/{x}/importar") for x in (sem, mesmo_pacote_outro_projeto, sumiu))
+        ver("sem pacote: 400 claro; pacote de OUTRO projeto: 400 (não mistura); pasta inacessível: 400", e1.status_code == e2.status_code == e3.status_code == 400 and "ainda não gravou o pacote" in e1.text and "é do projeto F026-P0001" in e2.text and "não está acessível" in e3.text, f"{e1.text[:80]} | {e2.text[:80]}")
+        (proj / "catalogacao" / "pacote_tainacan.json").write_text("{ não é json", encoding="utf-8")
+        ver("pacote corrompido: 400 e NADA muda nas folhas", op.post(f"/api/lotes/{lote}/importar").status_code == 400 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3)
+        # ---------- autoria divergente: vai para 'retirados' e não entra ----------
+        pr2 = montar(prontos / "outro" / "F026-P0001 - Tarumã (autoria)", "lote_autoria_divergente")
+        c = connect(); lot2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Lote autoria divergente','F026-P0001',?)", (str(pr2),)).lastrowid; c.commit(); c.close()
+        j4 = op.post(f"/api/lotes/{lot2}/importar").json()
+        ver("autoria divergente: as folhas NÃO entram; ficam listadas como retiradas, com o motivo", j4["criadas"] == 0 and len(j4["retirados"]) == 2 and any("autoria divergente" in x["bloqueios"] for x in j4["retirados"]) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, str(j4)[:200])
+        # ---------- pacote com folha sem pendência: conferir em lote só o que é seguro ----------
+        montar(proj, "lote_normal"); pj = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(pj.read_text(encoding="utf-8"))
+        d3 = next(x for x in pk["documentos"] if x["codigo"] == D(3)); d3.update({"orientacao_incerta": False, "titulo": "Elevação sul", "tipo_de_desenho": "Elevação", "bloqueios": [], "publicavel": True})
+        pj.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+        k.execute("UPDATE item SET revisao='pendente', revisado_por=NULL, revisado_em=NULL WHERE lote_id=?", (lote,)); k.commit(); op.post(f"/api/lotes/{lote}/importar")
+        ver("tipo lido que existe no vocabulário vira tipo do painel; título vem do pacote", sql("SELECT tipo_documento FROM item WHERE codigo=?", D(3)) == "Elevação" and sql("SELECT titulo FROM item WHERE codigo=?", D(3)) == "Elevação sul")
+        cb = op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").json()
+        ver("conferir em lote marca SÓ a folha sem nenhuma pendência (D3); as 2 com duplicata/sinais ficam para olho humano", cb["conferidas"] == 1 and cb["restam"] == 2 and sql("SELECT revisao FROM item WHERE codigo=?", D(3)) == "conferida" and sql("SELECT revisao FROM item WHERE codigo=?", D(1)) == "pendente", str(cb))
+        rs = adm.get(f"/api/projetos/F026-P0001/revisao").json()["lotes"]; rl = next(x for x in rs if x["id"] == lote)
+        ver("resumo do projeto: contagens, pacote encontrado e o motivo de ainda não poder aprovar", rl["itens"] == {"total": 3, "pendente": 2, "conferida": 1, "corrigida": 0, "bloqueadas": 2} and rl["pacote"]["existe"] and rl["pacote"]["documentos"] == 3 and rl["pode_aprovar"] is False and rl["motivo"] == "Faltam conferir 2 folha(s)", str(rl)[:260])
+        ver("lote sem pacote/pasta sumida aparece no resumo sem erro", any(x["id"] == sumiu for x in adm.get("/api/projetos/F026-P0002/revisao").json()["lotes"]) and adm.get("/api/projetos/F026-P9999/revisao").status_code == 404)
+        # ---------- revisar uma folha ----------
+        ver("revisar: estado inválido 400; folha inexistente 404; sem login 401", op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "ok"}).status_code == 400 and op.post("/api/itens/F026-P0001-1972-S01-D99999/revisao", json={"estado": "conferida"}).status_code == 404 and anon.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"}).status_code == 401)
+        # ---------- aprovar o lote ----------
+        a0 = adm.post(f"/api/lotes/{lote}/aprovar")
+        ver("aprovar com folha pendente: 400 dizendo quantas faltam", a0.status_code == 400 and "Faltam conferir 2" in a0.text, a0.text[:100])
+        for n in (1, 2): op.post(f"/api/itens/{D(n)}/revisao", json={"estado": "conferida"})
+        # ---------- o portão que já existia (mandar ao site) agora exige a aprovação ----------
+        c = connect(); c.execute("UPDATE projeto SET autorizado_site=1 WHERE codigo='F026-P0001'"); c.commit(); c.close()
+        g = adm.patch(f"/api/filas/{lote}", json={"etapa": "rascunho"})
+        ver("mandar o lote ao site SEM a revisão aprovada: 400 'Revise e aprove o lote'", g.status_code == 400 and "aprove o lote" in g.text, g.text[:120])
+        ver("aprovar: operador 403; admin 200 (registra quem e quando); de novo 409", op.post(f"/api/lotes/{lote}/aprovar").status_code == 403 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 200 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 409 and sql("SELECT aprovado_por FROM lista_processamento WHERE id=?", lote) == "adm@camp.arq.br")
+        ver("a aprovação NÃO muda a etapa ('rascunho' é 'foi para o site', com portões próprios)", sql("SELECT etapa FROM lista_processamento WHERE id=?", lote) == "revisao")
+        ver("lote aprovado fica protegido: revisar, importar e conferir em lote dão 409", op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "pendente"}).status_code == 409 and op.post(f"/api/lotes/{lote}/importar").status_code == 409 and op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").status_code == 409)
+        ver("com a revisão aprovada o portão do site libera (200)", adm.patch(f"/api/filas/{lote}", json={"etapa": "rascunho"}).status_code == 200)
+        ver("lote que já foi para o site não reabre (409); reabrir exige admin e lote aprovado", adm.post(f"/api/lotes/{lote}/reabrir").status_code == 409 and op.post(f"/api/lotes/{lot2}/reabrir").status_code == 403 and adm.post(f"/api/lotes/{lot2}/reabrir").status_code == 409)
+        c = connect(); c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (lote,)); c.commit(); c.close()
+        ver("reabrir (lote em revisão): admin 200; volta a permitir revisar", adm.post(f"/api/lotes/{lote}/reabrir").status_code == 200 and op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "pendente"}).status_code == 200)
+        # ---------- página do projeto: SOMA as folhas importadas às que já estão no site ----------
+        c = connect(); c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (9201,8013,'publish','Folha antiga',?,'F026-P0001','F026')", (D(9),)); c.commit(); c.close()
+        dt = adm.get("/api/projetos/F026-P0001/detalhe").json(); cods = [x["codigo"] for x in dt["itens"]]
+        ver("projeto que JÁ tem folha no site e recebe lote novo: a página mostra as do site E as importadas (com o estado de revisão)", set(cods) == {D(1), D(2), D(3), D(9)} and next(x for x in dt["itens"] if x["codigo"] == D(1))["revisao"] == "pendente" and isinstance(next(x for x in dt["itens"] if x["codigo"] == D(1))["pendencias"], dict), str(cods))
+        # ---------- prévia ----------
+        pv = prontos / "_campvision" / "preview" / "F026-P0001"; pv.mkdir(parents=True); (pv / f"{D(1)}.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+        ok_ = adm.get(f"/api/itens/{D(1)}/previa")
+        ver("prévia da folha: servida a quem está logado (cache privado de 1 h); sem login 401; sem arquivo 404", ok_.status_code == 200 and ok_.content == b"\xff\xd8\xff\xd9" and ok_.headers["cache-control"] == "private, max-age=3600" and anon.get(f"/api/itens/{D(1)}/previa").status_code == 401 and adm.get(f"/api/itens/{D(2)}/previa").status_code == 404)
+        (prontos / "segredo.jpg").write_bytes(b"x")
+        (prontos / f"{D(1)}.jpg").write_bytes(b"fora"); (prontos / "F026 - SBU Sami Bussab" / f"{D(1)}.jpg").write_bytes(b"fora2")    # nome CERTO, mas FORA de _campvision/preview: só a trava de pasta barra
+        for rel in ("../../segredo.jpg", "segredo.jpg", "/etc/passwd", f"_campvision/preview/F026-P0001/{D(1)}.tif", f"{D(1)}.jpg", f"F026 - SBU Sami Bussab/{D(1)}.jpg", f"_campvision/preview/../../{D(1)}.jpg"):
+            k.execute("UPDATE item SET pendencias=? WHERE codigo=?", (_j.dumps({"previa": rel}), D(1))); k.commit()
+            if adm.get(f"/api/itens/{D(1)}/previa").status_code != 404: ver(f"segurança: o caminho da prévia vem do pacote (de fora); '{rel}' não pode ser servido", False, rel); break
+        else: ver("segurança: caminho da prévia que escapa de _campvision/preview (../, absoluto, outra pasta, não-JPG) = 404", True)
+        # ---------- história ----------
+        ev = {r[0] for r in k.execute("SELECT DISTINCT tipo FROM evento WHERE codigo IN ('F026-P0001', ?)", (D(1),))}
+        ver("tudo fica registrado na história (importação, revisão, aprovação, reabertura)", {"folhas_importadas_do_lote", "revisao", "revisao_aprovada", "revisao_reaberta", "revisao_em_lote"} <= ev, str(sorted(ev)))
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -1715,6 +1817,15 @@ else:
 print("22) Decisões: o painel verifica antes de criar projeto e, na dúvida, pergunta (similaridade, fila, estação e criação manual)")
 rc, out = rodar("decisoes", f"{tmp}/decisoes.db")
 if rc != 0: ok(False, f"teste das decisões não rodou -> {out[-1200:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("23) Revisão do lote: importar o pacote do CAMP Vision, conferir/corrigir e aprovar (amostras REAIS do CAMP Vision como fixture)")
+os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_revisao"
+rc, out = rodar("revisao", f"{tmp}/revisao.db")
+if rc != 0: ok(False, f"teste da revisão não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
