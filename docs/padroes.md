@@ -65,3 +65,12 @@ O menu é agrupado pelo que a equipe faz, não pelo nome das tabelas. Os dígito
 
 **Todo projeto mostra o PRÓXIMO PASSO no topo** (`GET /api/projetos/{c}/proximo-passo`, a mesma fase da Fila): Importar, Conferir, Aprovar, Publicar, com UM botão para o passo atual. A Fila e o projeto dizem a mesma coisa porque usam `filas_fase.py`.
 Princípio: cada tela diz **o que falta** e oferece **um** botão principal que faz o passo de verdade; nada de rótulo que só troca de lugar. Texto de interface em português de gente ("37 folhas no painel · 0 no site"), nunca o nome interno.
+
+## 11. Padrão das LISTAS (Projetos primeiro; as demais seguem)
+Uma lista existe para responder "o que eu preciso fazer?" e "onde está aquilo que procuro?", não para despejar colunas.
+- **Situação em chips com contagem**, acima da lista, dentro do fundo e da busca escolhidos (`GET /api/projetos/resumo`): Todos, **Precisam de você**, Publicados, Não publicados, Sem folhas. O chip ativo fica marcado.
+- **Filtros combináveis**: busca por texto, **fundo** e **ordem** (código, mais recentes, nome, mais folhas). "Limpar filtros" só aparece quando há filtro, e volta tudo ao padrão.
+- **Poucas colunas, as que decidem**: Projeto (código + nome + ano e cidade embaixo), Fundo, Folhas, **Situação**, Atualizado. Séries, ano e "última atividade" saíram da lista (ficam no projeto).
+- **Situação diz o que falta**, na mesma fase da Fila (`filas_fase.py`): "Conferir 12", "Importar folhas", "Aprovar lote", "Pronto para publicar", "Em leitura", "Erro no CAMP Vision"; sem lista ativa, a situação no site (publicado, rascunho, despublicado, não publicado) e "sem folhas".
+- **A seleção em massa respeita os filtros** ("Selecionar todos os resultados" usa fundo e situação, não só o texto).
+- O servidor é a fonte única: `situacao`, `ordem` e `fundo` são parâmetros de `GET /api/projetos`, `/api/projetos/codigos` e `/resumo`, sempre com a mesma regra (`_filtro_projetos`).

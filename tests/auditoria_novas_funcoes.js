@@ -420,6 +420,37 @@ w.route_to('painel'); await sleep(2800);
   chk(/Revisar folha/.test(txt('#d-title')),'"Começar a conferir" deveria abrir a primeira folha pendente'); w.closeDrawer(true);
   w.route_to('projeto/F026-P0001'); await sleep(3600);
   chk(/Falta trazer as folhas/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="importar"]')&&/Importar/.test(txt('#pj-proximo .steps .cur')),'um projeto com lote ainda não importado deveria pedir "Importar folhas" no passo 1: "'+txt('#pj-proximo')+'"'); }
+// ---------- LISTA DE PROJETOS: situação, filtros, ordem e "limpar" ----------
+{ w.limparSelecaoProjetos&&w.limparSelecaoProjetos(); w.route_to('projetos'); await sleep(3000);
+  const R=(await J(adm,'/api/projetos/resumo')).b, chips=[...d.querySelectorAll('#proj-chips [data-proj-sit]')], linhas=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')];
+  chk(chips.map(c=>c.dataset.projSit).join(',')==='todos,gente,publicado,nao_publicado,sem_folhas','a lista de projetos deveria ter 5 filtros de situação: '+chips.map(c=>c.dataset.projSit));
+  chk(chips.every(c=>Number(c.querySelector('b').textContent.replace(/\D/g,''))===R[c.dataset.projSit]),'as contagens dos filtros deveriam bater com o servidor: '+JSON.stringify(R)+' / '+chips.map(c=>c.textContent.trim()).join(' | '));
+  chk(d.querySelectorAll('#v-projetos thead th').length===6&&/Situação/.test(txt('#v-projetos thead'))&&!/Séries|Última atividade|Publicação/.test(txt('#v-projetos thead')),'a tabela deveria ter 5 colunas de conteúdo (Projeto, Fundo, Folhas, Situação, Atualizado), sem Séries nem Última atividade: "'+txt('#v-projetos thead')+'"');
+  chk(linhas().length>0&&/P\d{4}/.test(linhas()[0].querySelector('td:nth-child(2) .code').textContent)&&!!linhas()[0].querySelector('td:nth-child(2) b'),'a coluna Projeto deveria juntar o código e o nome');
+  d.querySelector('[data-proj-sit="gente"]').click(); await sleep(2000);
+  chk(linhas().length===R.gente&&linhas().every(t=>/Conferir|Importar folhas|Aprovar lote|Pronto para publicar|Erro no CAMP Vision/.test(t.textContent)),'"Precisam de você" deveria mostrar só projetos com algo a fazer, cada um dizendo o quê: '+linhas().length+' de '+R.gente);
+  chk(d.querySelector('[data-proj-sit="gente"]').getAttribute('aria-pressed')==='true'&&!d.getElementById('proj-limpar').hidden,'o filtro ativo deveria ficar marcado e aparecer "Limpar filtros"');
+  const l9001=linhas().find(t=>t.textContent.includes('F003-P9001')); chk(!!l9001&&/Conferir \d+/.test(l9001.textContent),'F003-P9001 deveria aparecer como "Conferir N": "'+(l9001&&l9001.textContent.slice(0,140))+'"');
+  w.limparSelecaoProjetos(); await w.selecionarTodosProjetosDoFiltro(); await sleep(900);
+  chk(w.eval('PROJETOS_SELECIONADOS.size')===R.gente,'"Selecionar todos os resultados" deveria respeitar o filtro: '+w.eval('PROJETOS_SELECIONADOS.size')+' de '+R.gente); w.limparSelecaoProjetos();
+  d.getElementById('proj-fundo').value='F003'; d.getElementById('proj-fundo').dispatchEvent(new w.Event('change',{bubbles:true})); await sleep(2000);
+  chk(linhas().length>0&&linhas().every(t=>t.getAttribute('data-nav').startsWith('projeto/F003-')),'filtrar por fundo deveria mostrar só projetos do F003 (junto com a situação): '+linhas().map(t=>t.getAttribute('data-nav')).join(','));
+  d.querySelector('[data-proj-sit="todos"]').click(); await sleep(1800); d.getElementById('proj-ordem').value='folhas'; d.getElementById('proj-ordem').dispatchEvent(new w.Event('change',{bubbles:true})); await sleep(1800);
+  const nums=linhas().map(t=>Number(t.querySelector('td.num').textContent.replace(/\D/g,'')));
+  chk(nums.length>1&&nums.every((n,i)=>i===0||nums[i-1]>=n),'ordenar por "Mais folhas" deveria listar da maior para a menor quantidade: '+nums.slice(0,8).join(','));
+  d.getElementById('proj-limpar').click(); await sleep(2000);
+  chk(d.getElementById('proj-fundo').value===''&&d.getElementById('proj-ordem').value==='codigo'&&d.getElementById('proj-q').value===''&&d.querySelector('[data-proj-sit="todos"]').getAttribute('aria-pressed')==='true'&&d.getElementById('proj-limpar').hidden===true,'"Limpar filtros" deveria voltar tudo ao padrão'); }
+// ---------- AS LISTAS MOSTRAM O DADO DE AGORA ao voltar para elas (e não o de quando você entrou) ----------
+{ w.route_to('projetos'); await sleep(2200); const antes=(await J(adm,'/api/projetos/resumo')).b;
+  w.route_to('painel'); await sleep(1500);
+  const novo=(await J(adm,'/api/projetos',{method:'POST',body:JSON.stringify({fundo_codigo:'F026',titulo:'Projeto criado só para provar a lista atualizada',ano:1980,confirmar_novo:true})})).b;
+  w.route_to('projetos'); await sleep(2600);
+  const depois=(await J(adm,'/api/projetos/resumo')).b, chipTodos=Number(d.querySelector('[data-proj-sit="todos"] b').textContent.replace(/\D/g,''));
+  chk(depois.todos===antes.todos+1&&chipTodos===depois.todos,'ao voltar para Projetos a lista deveria mostrar o dado de agora (todos '+antes.todos+' -> '+depois.todos+'), mas o chip diz '+chipTodos);
+  chk([...d.querySelectorAll('#projetos-body tr[data-nav]')].length>0,'a lista deveria ter linhas');
+  w.route_to('erros'); await sleep(1800); const nErr=Number(txt('#n-err')||0); chk(!Number.isNaN(nErr),'Erros deveria carregar ao abrir');
+  w.route_to('solicitacoes'); await sleep(1800); chk(!!d.querySelector('#v-solicitacoes tbody tr'),'Solicitações deveria carregar ao abrir');
+  w.route_to('fundos'); await sleep(1800); chk(!!d.querySelector('#v-fundos tbody tr'),'Fundos deveria carregar ao abrir'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

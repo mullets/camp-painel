@@ -27,3 +27,20 @@ def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_e
     if itens_pendentes > 0:
         return "conferir"
     return "publicar" if aprovado_em else "aprovar"
+
+
+def lote_ativo_por_projeto(con) -> dict:
+    """Para cada projeto com lista, a lista que ainda pede algo (a mais recente que não está publicada) ou, se todas estão publicadas, a mais recente.
+    {projeto: {"fase", "itens_pendentes", "itens_total", "lote_id"}}. A MESMA regra do 'próximo passo' do projeto e da Fila."""
+    por_projeto: dict = {}
+    for l in con.execute("""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em,
+                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS it,
+                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS pen
+                            FROM lista_processamento l ORDER BY l.id DESC"""):
+        d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
+        atual = por_projeto.get(l["pc"])
+        if atual is None:
+            por_projeto[l["pc"]] = d                      # a mais recente de todas
+        elif atual["fase"] == "publicado" and d["fase"] != "publicado":
+            por_projeto[l["pc"]] = d                      # se a mais recente já foi publicada e uma anterior ainda pede algo, é essa que importa
+    return por_projeto

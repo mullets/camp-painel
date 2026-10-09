@@ -111,43 +111,85 @@ def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -
     return {"url": _url_publica_projeto(codigo, titulo, cidade), "origem": "presumido", "status": None}
 
 
-@router.get("/projetos")
-def listar(fundo: str | None = None, q: str | None = None, status: str | None = None, com_folhas: bool | None = None,
-           pagina: int = 1, por_pagina: int = 100, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    sql = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo, p.ano, p.cidade, p.status_site, p.autorizado_site,
+_SELECT_PROJETOS = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo, p.ano, p.cidade, p.status_site, p.autorizado_site,
                     p.tainacan_item_id, p.atualizado_em,
                     (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
                     (SELECT GROUP_CONCAT(DISTINCT serie_codigo) FROM item i WHERE i.projeto_codigo=p.codigo) AS series
              FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE 1=1"""
-    par: list = []
-    if fundo: sql += " AND p.fundo_codigo=?"; par.append(fundo)
-    if status: sql += " AND p.status_site=?"; par.append(status)
-    if q: sql += " AND (p.titulo LIKE ? OR p.codigo LIKE ? OR p.cidade LIKE ?)"; par += [f"%{q}%"] * 3
-    if com_folhas is True: sql += " AND folhas > 0"
-    if com_folhas is False: sql += " AND folhas = 0"
+_ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo"}
+
+
+def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao) -> tuple[str, list]:
+    """Condições comuns da lista, das contagens e da seleção em massa. situacao: gente | publicado | nao_publicado | sem_folhas | todos."""
+    from .filas_fase import PRECISAM_DE_GENTE
+    w, par = "", []
+    if fundo: w += " AND p.fundo_codigo=?"; par.append(fundo)
+    if status: w += " AND p.status_site=?"; par.append(status)
+    if q: w += " AND (p.titulo LIKE ? OR p.codigo LIKE ? OR p.cidade LIKE ?)"; par += [f"%{q}%"] * 3
+    if com_folhas is True: w += " AND folhas > 0"
+    if com_folhas is False: w += " AND folhas = 0"
+    if situacao == "publicado": w += " AND p.status_site='no_ar'"
+    elif situacao == "nao_publicado": w += " AND p.status_site<>'no_ar'"
+    elif situacao == "sem_folhas": w += " AND folhas = 0"
+    elif situacao == "gente":
+        cods = [c for c, f in fases.items() if f["fase"] in PRECISAM_DE_GENTE]
+        if cods:
+            w += " AND p.codigo IN (" + ",".join("?" * len(cods)) + ")"; par += cods
+        else:
+            w += " AND 0"
+    return w, par
+
+
+@router.get("/projetos")
+def listar(fundo: str | None = None, q: str | None = None, status: str | None = None, com_folhas: bool | None = None, situacao: str | None = None,
+           ordem: str = "codigo", pagina: int = 1, por_pagina: int = 100, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    from .filas_fase import lote_ativo_por_projeto
     con = connect()
-    total = con.execute(f"SELECT COUNT(*) FROM ({sql})", par).fetchone()[0]
-    por_pagina = max(1, min(por_pagina, 500))
-    rows = con.execute(sql + " ORDER BY p.codigo LIMIT ? OFFSET ?", [*par, por_pagina, (pagina - 1) * por_pagina]).fetchall()
-    con.close()
-    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "itens": [dict(r) for r in rows]}
+    try:
+        fases = lote_ativo_por_projeto(con)
+        w, par = _filtro_projetos(fases, fundo, q, status, com_folhas, situacao)
+        sql = _SELECT_PROJETOS + w
+        total = con.execute(f"SELECT COUNT(*) FROM ({sql})", par).fetchone()[0]
+        por_pagina = max(1, min(por_pagina, 500))
+        rows = con.execute(sql + f" ORDER BY {_ORDENS.get(ordem, _ORDENS['codigo'])} LIMIT ? OFFSET ?", [*par, por_pagina, (max(pagina, 1) - 1) * por_pagina]).fetchall()
+        itens = []
+        for r in rows:
+            d = dict(r)
+            f = fases.get(d["codigo"])
+            d["fase"], d["itens_pendentes"] = (f["fase"], f["itens_pendentes"]) if f else (None, 0)
+            itens.append(d)
+        return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "itens": itens}
+    finally:
+        con.close()
+
+
+@router.get("/projetos/resumo")
+def resumo_projetos(fundo: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Quantos projetos há em cada situação (para os filtros da lista), dentro do fundo e da busca escolhidos."""
+    from .filas_fase import lote_ativo_por_projeto
+    con = connect()
+    try:
+        fases = lote_ativo_por_projeto(con)
+        n = {}
+        for chave in ("todos", "gente", "publicado", "nao_publicado", "sem_folhas"):
+            w, par = _filtro_projetos(fases, fundo, q, None, None, None if chave == "todos" else chave)
+            n[chave] = con.execute(f"SELECT COUNT(*) FROM ({_SELECT_PROJETOS + w})", par).fetchone()[0]
+        return n
+    finally:
+        con.close()
+
 
 @router.get("/projetos/codigos")
-def codigos_projetos(fundo: str | None = None, q: str | None = None, status: str | None = None,
+def codigos_projetos(fundo: str | None = None, q: str | None = None, status: str | None = None, situacao: str | None = None,
                      u: dict = Depends(auth.exige("leitura"))) -> dict:
-    sql = "SELECT p.codigo FROM projeto p WHERE 1=1"
-    par: list = []
-    if fundo:
-        sql += " AND p.fundo_codigo=?"; par.append(fundo)
-    if status:
-        sql += " AND p.status_site=?"; par.append(status)
-    if q:
-        sql += " AND (p.titulo LIKE ? OR p.codigo LIKE ? OR p.cidade LIKE ?)"; par += [f"%{q}%"] * 3
+    from .filas_fase import lote_ativo_por_projeto
     con = connect()
-    rows = [r[0] for r in con.execute(sql + " ORDER BY p.codigo", par).fetchall()]
-    con.close()
-    return {"total": len(rows), "codigos": rows}
-
+    try:
+        w, par = _filtro_projetos(lote_ativo_por_projeto(con), fundo, q, status, None, situacao)
+        rows = [r[0] for r in con.execute(f"SELECT codigo FROM ({_SELECT_PROJETOS + w}) ORDER BY codigo", par).fetchall()]
+        return {"total": len(rows), "codigos": rows}
+    finally:
+        con.close()
 
 
 @router.get("/diagnostico/codigos-entre-colecoes")
