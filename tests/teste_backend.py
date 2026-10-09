@@ -2234,6 +2234,38 @@ def filho(modo):
         adm.get("/api/analytics"); adm.get("/api/analytics"); n2 = chamadas["n"]; adm.get("/api/analytics?fresco=1")
         ver("analytics: a segunda abertura usa o cache (a consulta ao Site Kit roda 1 vez) e ?fresco=1 consulta de novo", n2 == 1 and chamadas["n"] == 2, str(chamadas))
         for l in res: print(l)
+    elif modo == "codigos_existem":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from app.rotas_operacao import CATS
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F097','Fundo Codigos','COD',1)")
+        for n in (1, 2): c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F097',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F097-P000{n}", "F097", n, f"Projeto {n}"))
+        I1, I2 = "F097-P0001-1970-S01-D00001", "F097-P0001-1970-S01-D00002"
+        for i_, q in ((I1, 1), (I2, 2)): c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,'F097-P0001','S01',?,'Folha','campvision')", (i_, q))
+        c.execute("INSERT INTO localizacao_fisica (tipo, identificador) VALUES ('caixa','CX-001')"); lid = c.execute("SELECT MAX(id) FROM localizacao_fisica").fetchone()[0]
+        c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        cat = sorted(CATS)[0]
+        def erro(cod): return op.post("/api/erros", json={"codigo": cod, "gravidade": "corrigir", "categoria": cat, "descricao": "teste"})
+        ruins = {cod: erro(cod) for cod in ("F097-P9999", "F098", "XYZ", "F097-P0001-1970-S01-D99999")}
+        ver("Relatar problema recusa código que não existe (projeto, fundo, texto solto, folha), com a mensagem, e NADA é gravado", all(r.status_code == 400 and "não existe" in r.text for r in ruins.values()) and sql("SELECT COUNT(*) FROM erro") == 0, str({k_: v_.status_code for k_, v_ in ruins.items()}))
+        bons = [erro(x).status_code for x in ("F097", "F097-P0001", I1, "f097-p0001")]
+        ver("aceita fundo, projeto e folha que existem (também em minúsculas)", bons == [200, 200, 200, 200] and sql("SELECT COUNT(*) FROM erro") == 4, str(bons))
+        al = lambda **kw: op.post("/api/localizacoes/alocar", json={"localizacao_id": lid, "codigos": [], **kw})
+        r1, r2, r3 = al(projeto_codigo="F097-P9999"), al(projeto_codigo="F097-P0002"), al()
+        ver("Alocar recusa projeto inexistente, projeto sem folhas e pedido vazio, cada um com a sua mensagem; nada é gravado", (r1.status_code, r2.status_code, r3.status_code) == (400, 400, 400) and "Projeto F097-P9999 não existe" in r1.text and "F097-P0002 não tem folhas" in r2.text and sql("SELECT COUNT(*) FROM item_localizacao") == 0, (r1.text + r2.text + r3.text)[:260])
+        r4 = al(projeto_codigo="F097-P0001")
+        ver("projeto com folhas: aloca todas", r4.status_code == 200 and r4.json()["alocados"] == 2 and sql("SELECT COUNT(*) FROM item_localizacao") == 2, r4.text[:120])
+        r5 = al(codigos=[I1, "F097-P0001-1970-S01-D88888"])
+        ver("folhas soltas: aloca as que existem e lista as que não foram encontradas", r5.status_code == 200 and r5.json()["alocados"] == 1 and r5.json()["nao_encontrados"] == ["F097-P0001-1970-S01-D88888"], r5.text[:160])
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2643,6 +2675,14 @@ else:
 print("35) Estações: sondas em paralelo, cache de 30 s, site em três estados e analytics em cache")
 rc, out = rodar("estacoes_rapida", f"{tmp}/estr.db")
 if rc != 0: ok(False, f"teste das estações não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("36) Códigos inexistentes: Relatar problema e Alocar recusam, com a mensagem")
+rc, out = rodar("codigos_existem", f"{tmp}/cods.db")
+if rc != 0: ok(False, f"teste dos códigos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -876,6 +876,13 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
         raise HTTPException(400, "Código e descrição são obrigatórios")
     con = connect()
     cod = d.codigo.strip().upper()
+    # o código precisa existir como fundo, projeto ou folha (antes qualquer texto era aceito e o erro ficava ligado a nada, contando como bloqueante)
+    existe = (con.execute("SELECT 1 FROM fundo WHERE codigo=?", (cod,)).fetchone() if re.fullmatch(r"F\d{3}", cod) else
+              con.execute("SELECT 1 FROM projeto WHERE codigo=?", (cod,)).fetchone() if re.fullmatch(r"F\d{3}-P\d{4}", cod) else
+              con.execute("SELECT 1 FROM item WHERE codigo=?", (cod,)).fetchone() if cod.count("-") == 4 else None)
+    if not existe:
+        con.close()
+        raise HTTPException(400, f"O código {cod} não existe. Confira ou busque o projeto.")
     eid = con.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por) VALUES (?,?,?,?,?,?)",
                       (d.gravidade, d.categoria, d.origem, cod, d.descricao.strip(), d.relatado_por or u["email"])).lastrowid
     if d.categoria == "autoria_divergente" and cod.count("-") == 4:

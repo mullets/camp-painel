@@ -523,6 +523,23 @@ w.route_to('painel'); await sleep(2800);
   const R=w.siteRotulo, A=w.siteAlerta;
   chk(R({estado:'online',ms:800,ok:true}).txt==='online'&&R({estado:'lento',ms:7000,ok:true}).txt==='lento · 7,0 s'&&R({estado:'lento',ms:7000,ok:true}).cls==='a','site lento deveria aparecer amarelo "lento · 7,0 s", não offline: '+JSON.stringify(R({estado:'lento',ms:7000,ok:true})));
   chk(!A({estado:'sem_resposta',alerta:false,ok:false})&&A({estado:'sem_resposta',alerta:true,ok:false})&&A({ok:false})&&!A({ok:true}),'só "sem resposta" confirmada (alerta) vira alerta vermelho; servidor antigo sem estado continua valendo'); w.route_to('painel'); }
+// ---------- [Auditoria P1-9] depois de gravar, a janela fecha SEM perguntar "alterações não salvas" (e a proteção continua para quem fecha sem salvar) ----------
+{ const cOrig=w.confirm, asked=[]; w.confirm=m=>{asked.push(String(m));return true}; const perguntou=()=>asked.some(m=>/alterações não salvas/i.test(m));
+  for(const f of ['salvarSolicitacao','salvarErro','salvarDireitos']) chk(/closeDrawer\(true\)/.test(String(w[f]))&&!/closeDrawer\(\)/.test(String(w[f])),f+' deveria fechar com closeDrawer(true) depois de gravar');
+  chk(/limparAlteracoes\('drawer'\)/.test(String(w.alocar)),'alocar deveria limpar as alterações antes de reabrir a janela');
+  const cat=d.getElementById('ne-cat').options[0].value;
+  const er=(await (await adm.f('/api/erros',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:'F003-P9001',gravidade:'corrigir',categoria:cat,descricao:'teste do fechar sem perguntar'})})).json());
+  await w.carregarErros('todos'); await w.abrirErro(er.id); await sleep(300); w.marcarAlteracoes('drawer'); asked.length=0; await w.salvarErro(er.id); await sleep(600);
+  chk(!perguntou(),'depois de salvar o Erro não deveria aparecer "Existem alterações não salvas": '+asked.join('|'));
+  w.openDrawer('t','s','<input id="zz">'); w.marcarAlteracoes('drawer'); asked.length=0; w.closeDrawer();
+  chk(perguntou(),'fechar a janela com alteração NÃO salva deveria continuar perguntando'); w.closeDrawer(true); w.confirm=cOrig; }
+// ---------- [Auditoria P1-11] códigos inexistentes são recusados, com a mensagem no campo ----------
+{ chk(d.getElementById('ne-cod').required&&d.getElementById('ne-desc').required,'código e descrição do "Relatar problema" deveriam estar marcados como obrigatórios');
+  d.getElementById('ne-cod').value='F026-P9999'; d.getElementById('ne-grav').value='bloqueia'; d.getElementById('ne-cat').value=d.getElementById('ne-cat').options[0].value; d.getElementById('ne-desc').value='x';
+  await w.criarErro(); await sleep(600); chk(/não existe/.test(txt('#ne-err')),'Relatar problema com código inexistente deveria mostrar "não existe" no próprio formulário: "'+txt('#ne-err')+'"'); w.closeModal&&w.closeModal();
+  w.route_to('localizacao'); await sleep(2000); const tl=d.querySelector('#v-localizacao tbody tr[data-abrir]');
+  if(tl){ const lid=+tl.getAttribute('data-abrir').split(':')[1]; await w.verLocalizacao(lid); await sleep(500); d.getElementById('al-proj').value='F099-P9999'; await w.alocar(lid); await sleep(600);
+    chk(/não existe/.test(txt('#al-msg')),'Alocar com projeto inexistente deveria dizer "não existe" embaixo do campo: "'+txt('#al-msg')+'"'); w.closeDrawer(true) } w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

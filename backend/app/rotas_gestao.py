@@ -270,8 +270,16 @@ def alocar(d: Alocacao, u: dict = Depends(auth.exige("operador"))) -> dict:
     if not con.execute("SELECT 1 FROM localizacao_fisica WHERE id=?", (d.localizacao_id,)).fetchone():
         con.close(); raise HTTPException(404, "Localização não existe")
     cods = [c.strip().upper() for c in d.codigos if c.strip()]
-    if d.projeto_codigo:
-        cods += [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (d.projeto_codigo.strip().upper(),))]
+    if d.projeto_codigo and d.projeto_codigo.strip():
+        pc = d.projeto_codigo.strip().upper()
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (pc,)).fetchone():
+            con.close(); raise HTTPException(400, f"Projeto {pc} não existe")
+        do_projeto = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (pc,))]
+        if not do_projeto and not cods:
+            con.close(); raise HTTPException(400, f"{pc} não tem folhas no painel ainda")
+        cods += do_projeto
+    elif not cods:
+        con.close(); raise HTTPException(400, "Informe o projeto inteiro ou ao menos um código de folha")
     ok, nao = 0, []
     for c in cods:
         if con.execute("SELECT 1 FROM item WHERE codigo=?", (c,)).fetchone():
