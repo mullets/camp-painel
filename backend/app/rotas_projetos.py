@@ -92,7 +92,9 @@ def _url_publica_projeto(codigo: str, titulo: str, cidade: str | None = None) ->
     if cidade:
         base = re.sub(rf"\s*[,\-–(]\s*{re.escape(cidade)}(?:\s*[,/\-–]\s*[A-Za-z]{{2}})?\s*\)?\s*$", "", base, flags=re.I).strip(" ,-–")
     base = _RE_CIDADE_UF.sub("", base).strip(" ,-–")
-    return f"https://camp.arq.br/acervo/projetos/{codigo.lower()}-{_slug_publico(base)}/"
+    # O SITE corta o título na primeira vírgula (o resto é local/endereço) e guarda só as 6 primeiras palavras do slug (conferido contra 29 projetos reais).
+    slug = "-".join(_slug_publico(base.split(",")[0]).split("-")[:6]).strip("-")
+    return f"https://camp.arq.br/acervo/projetos/{codigo.lower()}-{slug}/" if slug else f"https://camp.arq.br/acervo/projetos/{codigo.lower()}/"
 
 
 def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -> dict:
@@ -103,6 +105,9 @@ def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -
                         ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (codigo, codigo.lower() + "-%")).fetchone()
     if r and r["url"]:
         return {"url": r["url"], "origem": "site", "status": r["status"]}
+    c = con.execute("SELECT url_publica_confirmada FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    if c and c[0]:                                                  # o painel já perguntou ao site e esse endereço abriu
+        return {"url": c[0], "origem": "confirmado", "status": None}
     return {"url": _url_publica_projeto(codigo, titulo, cidade), "origem": "presumido", "status": None}
 
 
@@ -168,6 +173,39 @@ def diagnostico_codigos_entre_colecoes(codigo: str | None = None, u: dict = Depe
     con.close()
     return {"projetos_collection_id": projetos_id, "projetos_collection_nome": nomes.get(projetos_id),
             "itens_collection_id": itens_id, "itens_collection_nome": nomes.get(itens_id), "duplicidades": rows}
+
+
+_CONFIRMADO_EM: dict[str, float] = {}      # a última tentativa SEM sucesso por projeto (evita martelar o site)
+
+
+@router.post("/projetos/{codigo}/pagina-publica/confirmar")
+def confirmar_pagina_publica(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Pergunta ao SITE qual é o endereço real da página pública do projeto (o painel só presume, e o slug do site tem regras próprias).
+    Achou: grava e passa a ser o endereço do botão 'Ver página pública'. Não achou: devolve a busca pública por código, que sempre abre."""
+    import time
+    from . import pagina_publica
+    con = connect()
+    try:
+        p = con.execute("SELECT titulo, cidade FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        palpite = _url_publica_projeto(codigo, p["titulo"], p["cidade"])
+    finally:
+        con.close()
+    busca = pagina_publica.url_busca(codigo)
+    if time.monotonic() - _CONFIRMADO_EM.get(codigo, -1e9) < 60:
+        return {"url": None, "origem": "nao_encontrado", "busca": busca}
+    r = pagina_publica.confirmar(codigo, palpite)
+    if not r["url"]:
+        _CONFIRMADO_EM[codigo] = time.monotonic()
+        return {"url": None, "origem": "nao_encontrado", "busca": busca}
+    con = connect()
+    try:
+        con.execute("UPDATE projeto SET url_publica_confirmada=?, url_publica_em=datetime('now') WHERE codigo=?", (r["url"], codigo))
+        con.commit()
+    finally:
+        con.close()
+    return {"url": r["url"], "origem": "confirmado", "como": r["como"], "busca": busca}
 
 
 @router.get("/projetos/{codigo}/folhas-qnap")

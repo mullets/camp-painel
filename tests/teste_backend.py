@@ -1864,6 +1864,78 @@ def filho(modo):
         ver("envio ao site: sobe a PRÉVIA do CAMP Vision já virada pelo giro manual (30x60, canto vermelho em cima à direita)", rr["erro"] is None and len(envios) == 1 and "_campvision/preview" not in envios[0] and Image.open(envios[0]).size == (30, 60) and vermelho(Image.open(envios[0]), (24, 5)), str((rr, envios)))
         for l in res: print(l)
         k.close()
+    elif modo == "pagina_publica":
+        init_db(); aplicar_migracoes()
+        from app import auth, pagina_publica as pp
+        from app import rotas_projetos as rp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # ---------- a regra do slug, contra projetos REAIS do site (título como o site mostra -> endereço real da página, lidos de camp.arq.br em 09/10/2026) ----------
+        REAIS = [
+            ("F023-P0072", "9º ANDAR - REFORMA DE APTOS. A RUA ALBUQUERQUE LINS", "f023-p0072-9o-andar-reforma-de-aptos-a"), ("F014-P0004", "Agência Banespa, Taquarituba/SP", "f014-p0004-agencia-banespa"),
+            ("F010-P0001", "Apartamento José Baia Sobrinho, Guarujá/SP (interiores)", "f010-p0001-apartamento-jose-baia-sobrinho"), ("F023-P0039", "Apartamento Ricardo Vidigal", "f023-p0039-apartamento-ricardo-vidigal"),
+            ("F023-P0018", "Apartamento Rua Abolição", "f023-p0018-apartamento-rua-abolicao"), ("F023-P0032", "Apartamentos Negrete, São Paulo/SP", "f023-p0032-apartamentos-negrete"),
+            ("F023-P0111", "Apartamentos Rua Domingos de Moraes", "f023-p0111-apartamentos-rua-domingos-de-moraes"), ("F023-P0137", "Apartamentos Tipo Popular René Baccarat, Santos/SP", "f023-p0137-apartamentos-tipo-popular-rene-baccarat"),
+            ("F023-P0138", "Apartos Rua São Luiz esq. Ypiranga", "f023-p0138-apartos-rua-sao-luiz-esq-ypiranga"), ("F023-P0127", "Associação Comercial de Santos, Santos/SP", "f023-p0127-associacao-comercial-de-santos"),
+            ("F020-P0014", "Ateliê de arquitetura com mezanino (obra não identificada)", "f020-p0014-atelie-de-arquitetura-com-mezanino-obra"),
+            ("F023-P0139", "Aumento de Prédio - Lote-10 - Quadra-3 - Jardim Cristina - Rua Manguaba 151 - V. Caledonia - Sto. Amaro, São Paulo/SP", "f023-p0139-aumento-de-predio-lote-10-quadra"),
+            ("F016-P0009", "Banco da Bahia, agência de Piracicaba", "f016-p0009-banco-da-bahia"), ("F023-P0115", "Banco do Estado SP Sumaré", "f023-p0115-banco-do-estado-sp-sumare"),
+            ("F023-P0025", "Banco Industrial de São Paulo, São Paulo/SP", "f023-p0025-banco-industrial-de-sao-paulo"), ("F023-P0101", "Banco Noroeste do Estado de São Paulo S/a, São Paulo/SP", "f023-p0101-banco-noroeste-do-estado-de-sao"),
+            ("F023-P0055", "Barrieiro", "f023-p0055-barrieiro"), ("F023-P0056", "Batisterio Bertioga", "f023-p0056-batisterio-bertioga"), ("F023-P0140", "Bororé, São Paulo/SP", "f023-p0140-borore"),
+            ("F023-P0078", "CAPELA Sta ANTONIO - VICENTE DE CARVALHO - GUARUJÁ, Guarujá/SP", "f023-p0078-capela-sta-antonio-vicente-de-carvalho"), ("F023-P0141", "Carapicuiba, Carapicuíba/SP", "f023-p0141-carapicuiba"),
+            ("F023-P0142", "Casas populares", "f023-p0142-casas-populares"), ("F023-P0019", "CASAS Populares, Sociedade Humanitária Empregados no Comércio, São Paulo/SP", "f023-p0019-casas-populares"),
+            ("F023-P0092", "Casa Tipo G", "f023-p0092-casa-tipo-g"), ("F023-P0003", "Centro Cultural de Santos — Biblioteca e Escola de Arte", "f023-p0003-centro-cultural-de-santos-biblioteca-e"),
+            ("F020-P0004", "Centro de Recuperação de Jovens Infratores (FEBEM), projeto-padrão", "f020-p0004-centro-de-recuperacao-de-jovens-infratores"),
+            ("F023-P0112", "Chacara Nicolau Moraes, São Bernardo do Campo/SP", "f023-p0112-chacara-nicolau-moraes"), ("F023-P0079", "Cia. Telefônica - Guarujá, Guarujá/SP", "f023-p0079-cia-telefonica-guaruja"),
+            ("F026-P0005", "Clube Ipê - Social, Rua Estado de Israel", "f026-p0005-clube-ipe-social"), ("F026-P0001", "Edifício Tarumã, São Paulo/SP", "f026-p0001-edificio-taruma"),
+        ]
+        erros = [(c, rp._url_publica_projeto(c, t, None)) for c, t, slug in REAIS if rp._url_publica_projeto(c, t, None) != f"https://camp.arq.br/acervo/projetos/{slug}/"]
+        ver(f"o endereço montado bate com o REAL em todos os {len(REAIS)} projetos conferidos no site (corta na 1ª vírgula; 6 primeiras palavras)", not erros, str(erros[:2]))
+        ver("o caso do relato: 'Clube Ipê - Social, Rua Estado de Israel' NÃO leva '-rua-estado-de-israel' (era o endereço que dava 404)", rp._url_publica_projeto("F026-P0005", "Clube Ipê - Social, Rua Estado de Israel", "São Paulo") == "https://camp.arq.br/acervo/projetos/f026-p0005-clube-ipe-social/")
+        ver("título vazio não gera endereço quebrado ('codigo-/')", rp._url_publica_projeto("F026-P0099", "", None) == "https://camp.arq.br/acervo/projetos/f026-p0099/")
+        # ---------- confirmar no site ----------
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n, t in ((5, "Clube Ipê - Social, Rua Estado de Israel"), (6, "Outra obra")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,cidade) VALUES (?,?,?,?,'São Paulo')", (f"F026-P000{n}", "F026", n, t))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"),): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"}); anon = TestClient(app, raise_server_exceptions=False)
+        chamadas = []
+        def site_falso(rotas):                         # {url: (status, html)}; o que não está na lista é 404
+            def _g(url, timeout=8.0): chamadas.append(url); return rotas.get(url, (404, ""))
+            return _g
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        def zerar(): rp._CONFIRMADO_EM.clear(); chamadas.clear()
+        D = lambda c_: adm.get(f"/api/projetos/{c_}/detalhe").json()
+        d0 = D("F026-P0005")
+        ver("sem confirmação o detalhe diz que o endereço é PRESUMIDO (e já com a regra certa)", d0["site_url_origem"] == "presumido" and d0["site_url"].endswith("/f026-p0005-clube-ipe-social/"), str(d0["site_url"]))
+        pg = "https://camp.arq.br/acervo/projetos/f026-p0005-clube-ipe-social/"
+        pp._http_get = site_falso({pg: (200, "<html>ok</html>")}); zerar()
+        r = adm.post("/api/projetos/F026-P0005/pagina-publica/confirmar").json()
+        ver("o palpite abre no site: confirmado, gravado, e o detalhe passa a dizer 'confirmado'", r["url"] == pg and r["origem"] == "confirmado" and r["como"] == "palpite" and sql("SELECT url_publica_confirmada FROM projeto WHERE codigo='F026-P0005'") == pg and D("F026-P0005")["site_url_origem"] == "confirmado", str(r))
+        # palpite dá 404, a busca pública devolve o endereço real (e links de OUTRO projeto e de OUTRO site que devem ser ignorados)
+        k.execute("UPDATE projeto SET url_publica_confirmada=NULL WHERE codigo='F026-P0005'"); k.commit()
+        html = ('<a href="https://camp.arq.br/acervo/projetos/f026-p0006-outra-obra/">x</a><a href="https://evil.example/acervo/projetos/f026-p0005-clube/">y</a>'
+                '<a href="https://camp.arq.br/acervo/projetos/f026-p0005-nome-real-diferente/">z</a>')
+        pp._http_get = site_falso({pp.url_busca("F026-P0005"): (200, html)}); zerar()
+        r = adm.post("/api/projetos/F026-P0005/pagina-publica/confirmar").json()
+        ver("o palpite dá 404 mas a busca pública acha: usa o endereço REAL do site e ignora links de outro projeto e de outro domínio", r["url"] == "https://camp.arq.br/acervo/projetos/f026-p0005-nome-real-diferente/" and r["como"] == "busca", str(r))
+        # nada acha: devolve a busca pública (que sempre abre) e NÃO grava
+        k.execute("UPDATE projeto SET url_publica_confirmada=NULL WHERE codigo='F026-P0005'"); k.commit()
+        pp._http_get = site_falso({}); zerar()
+        r = adm.post("/api/projetos/F026-P0005/pagina-publica/confirmar").json(); n1 = len(chamadas)
+        ver("o site não tem a página: devolve a BUSCA PÚBLICA por código (nunca um link morto) e não grava nada", r["url"] is None and r["origem"] == "nao_encontrado" and r["busca"] == "https://camp.arq.br/acervo/projetos/?q=F026-P0005" and sql("SELECT url_publica_confirmada FROM projeto WHERE codigo='F026-P0005'") is None, str(r))
+        adm.post("/api/projetos/F026-P0005/pagina-publica/confirmar")
+        ver("não martela o site: a mesma pergunta sem sucesso dentro de 60 s não faz nova chamada", len(chamadas) == n1 and n1 == 2, f"{n1} {len(chamadas)}")
+        pp._http_get = lambda url, timeout=8.0: (0, ""); zerar()
+        ver("sem rede (status 0): responde 'não encontrado' sem erro 500", adm.post("/api/projetos/F026-P0005/pagina-publica/confirmar").json()["origem"] == "nao_encontrado")
+        ver("projeto inexistente 404; sem login 401", adm.post("/api/projetos/F026-P9999/pagina-publica/confirmar").status_code == 404 and anon.post("/api/projetos/F026-P0005/pagina-publica/confirmar").status_code == 401)
+        pp._http_get = site_falso({pp.url_busca("F026-P0006"): (200, '<a href="https://camp.arq.br/acervo/projetos/f026-p0005-clube-ipe-social/">cartão de outro código</a>')}); zerar()
+        ver("a busca por F026-P0006 não pode devolver o endereço de F026-P0005 (o código tem que ser o do projeto)", adm.post("/api/projetos/F026-P0006/pagina-publica/confirmar").json()["url"] is None)
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -2105,6 +2177,14 @@ print("26) Virar a folha e aprovar todas: giro com cache, painel do QNAP sem cat
 os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_giro"
 rc, out = rodar("giro", f"{tmp}/giro.db")
 if rc != 0: ok(False, f"teste do giro não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("27) Endereço da página pública: a regra do slug do site (30 projetos reais) e a confirmação no site")
+rc, out = rodar("pagina_publica", f"{tmp}/pagina_publica.db")
+if rc != 0: ok(False, f"teste da página pública não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

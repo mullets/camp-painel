@@ -207,3 +207,10 @@ Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabe�
 - **Orientação automática é do CAMP Vision** (ticket #25 dele, ainda no backlog): o painel não adivinha o lado certo; corrige em um clique quando a leitura erra.
 - **Painel "Encontradas no QNAP"** não lista mais a pasta `catalogacao/` (folha de contatos e saídas do CAMP Vision) nem as folhas **retiradas** pelo CAMP Vision (autoria divergente): essas aparecem em "retiradas" na Revisão do lote. A contagem da Fila também deixou de contar a folha de contatos como documento.
 - O aviso amarelo "divergência" da fonte visual só aparece quando o site já tem folhas e o número difere; projeto ainda fora do site não é divergência.
+
+## 13. Endereço da página pública do projeto
+O botão "Ver página pública" antes **presumia** o endereço e errava (caso F026-P0005: levava a `.../f026-p0005-clube-ipe-social-rua-estado-de-israel/`, que dá 404; o real é `.../f026-p0005-clube-ipe-social/`).
+- **Regra do slug do site** (conferida contra 30 projetos reais): o título é cortado na **primeira vírgula** (o resto é local/endereço) e o slug guarda só as **6 primeiras palavras**: `f026-p0005-` + `clube-ipe-social`.
+- **Confirmação no site** (`POST /api/projetos/{codigo}/pagina-publica/confirmar`): como a regra é um palpite, o painel pergunta ao site. (1) o palpite abre? (2) senão, a busca pública `https://camp.arq.br/acervo/projetos/?q=<código>` devolve o endereço real
+  (só vale link do próprio site e do próprio código). Achou: grava em `projeto.url_publica_confirmada` e o botão passa a usar esse endereço. Não achou: o botão vira "Procurar no site" e leva à busca pública por código, que sempre abre. Nunca um link morto. Sem rede: não quebra.
+- **Publicado no painel não quer dizer "com folhas no site"**: a página pode existir como **registro de inventário** (0 documentos) quando só o dossiê do projeto foi publicado. As estatísticas do fundo na página do arquiteto também podem ficar em cache no site.

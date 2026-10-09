@@ -965,7 +965,17 @@ const fundoNome=c=>{const f=FUNDOS.find(x=>x[0]===c);return f?f[2]:c};
 // ---------- projetos e itens (protótipo) ----------
 const STATUS_NO_SITE={publish:'publicado',private:'despublicado (privado no site: só quem está logado no WordPress vê)',draft:'rascunho (só quem está logado no WordPress vê)',pending:'pendente de revisão (só quem está logado vê)'};
 const PUB_PUBLICA=(d,p)=>d.pagina_status?d.pagina_status==='publish':p.status_site==='no_ar';
-function linkPaginaSite(url,publicada,cls='btn sm',presumido=false){if(!url)return '';const u=escHtml(url);return publicada?`<a class="${cls}" href="${u}" target="_blank" rel="noopener"${presumido?' title="Endereço montado pelo painel (a página não foi achada no espelho do site). Se não abrir, a página ainda não foi gerada."':''}>Ver página pública</a>`:`<a class="${cls}" href="${u}" target="_blank" rel="noopener" title="Esta página ainda não é pública: visitantes veem erro 404. Só abre se você estiver logado no WordPress.">Abrir no site (não publicado)</a>`}
+function linkPaginaSite(url,publicada,cls='btn sm',presumido=false){if(!url)return '';const u=escHtml(url);
+  const cod=presumido&&publicada?((url.match(/\/acervo\/projetos\/(f\d{3}-p\d{4})/i)||[])[1]||'').toUpperCase():'';
+  if(cod)setTimeout(()=>confirmarPaginaPublica(cod),0);      // o endereço é um palpite: pergunta ao SITE qual é o real
+  return publicada?`<a class="${cls}" href="${u}" target="_blank" rel="noopener"${cod?` data-pg-publica="${escHtml(cod)}"`:''}${presumido?' title="Endereço montado pelo painel; o painel está confirmando no site."':''}>Ver página pública</a>`:`<a class="${cls}" href="${u}" target="_blank" rel="noopener" title="Esta página ainda não é pública: visitantes veem erro 404. Só abre se você estiver logado no WordPress.">Abrir no site (não publicado)</a>`}
+async function confirmarPaginaPublica(codigo,tent=0){
+  const a=document.querySelector('a[data-pg-publica="'+codigo+'"]');
+  if(!a){if(tent<3)setTimeout(()=>confirmarPaginaPublica(codigo,tent+1),400);return}
+  if(a.dataset.pgFeito)return;a.dataset.pgFeito='1';
+  try{const r=await API('/api/projetos/'+encodeURIComponent(codigo)+'/pagina-publica/confirmar',{method:'POST'});
+    if(r.url){a.href=r.url;a.title='Endereço confirmado no site.'}
+    else{a.href=r.busca;a.textContent='Procurar no site';a.title='A página não foi achada no endereço previsto. Isto abre a busca pública do site por código, que mostra a página se ela existir.'}}catch(e){}}
 // VOCABULÁRIO ÚNICO de publicação (ver docs/vocabulario.md). Valores internos (no_ar, fora_do_ar) NÃO mudam; só os rótulos.
 const ROT_STATUS={nao_publicado:'não publicado',rascunho:'rascunho',no_ar:'publicado',fora_do_ar:'despublicado'};
 const rotStatus=(v,cap)=>{const t=ROT_STATUS[v]||String(v||'').replace(/_/g,' ');return cap?t.charAt(0).toUpperCase()+t.slice(1):t};

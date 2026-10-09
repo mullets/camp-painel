@@ -346,6 +346,21 @@ w.route_to('painel'); await sleep(2800);
   chk(!!ap.aprovado_em&&ap.etapa==='revisao'&&/aprovado por/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="reabrir"]'),'aprovar deveria registrar quem/quando, manter a etapa e oferecer "Reabrir a revisão": '+JSON.stringify({a:ap.aprovado_em,e:ap.etapa}));
   d.querySelector('#pj-revisao [data-rev-lote="reabrir"]').click(); await sleep(3400);
   chk(!(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].aprovado_em,'reabrir deveria limpar a aprovação'); }
+// ---------- ENDEREÇO DA PÁGINA PÚBLICA: o painel confirma no site em vez de presumir ----------
+{ const box=d.createElement('div'); d.body.appendChild(box); const fetchOrig=w.fetch; let chamadas=[];
+  const fake=resp=>{w.fetch=async(u,o)=>{chamadas.push((o&&o.method||'GET')+' '+u);return {ok:true,status:200,statusText:'OK',json:async()=>resp}}};
+  fake({url:null,origem:'nao_encontrado',busca:'https://camp.arq.br/acervo/projetos/?q=F026-P0005'});
+  box.innerHTML=w.linkPaginaSite('https://camp.arq.br/acervo/projetos/f026-p0005-clube-ipe-social-rua-estado-de-israel/',true,'btn',true); await sleep(1200);
+  let a=box.querySelector('a');
+  chk(chamadas.length===1&&/POST \/api\/projetos\/F026-P0005\/pagina-publica\/confirmar/.test(chamadas[0]),'um link presumido deveria perguntar ao site: '+JSON.stringify(chamadas));
+  chk(a.textContent==='Procurar no site'&&a.href==='https://camp.arq.br/acervo/projetos/?q=F026-P0005','sem a página no site, o botão deveria levar à BUSCA PÚBLICA por código (nunca a um link morto): "'+a.textContent+'" '+a.href);
+  fake({url:'https://camp.arq.br/acervo/projetos/f026-p0005-clube-ipe-social/',origem:'confirmado',como:'busca'}); chamadas=[];
+  box.innerHTML=w.linkPaginaSite('https://camp.arq.br/acervo/projetos/f026-p0005-x/',true,'btn',true); await sleep(1200); a=box.querySelector('a');
+  chk(a.textContent==='Ver página pública'&&a.href==='https://camp.arq.br/acervo/projetos/f026-p0005-clube-ipe-social/','achando a página real, o botão deveria apontar para ela: '+a.href);
+  chamadas=[]; fake({});
+  box.innerHTML=w.linkPaginaSite('https://camp.arq.br/acervo/projetos/f026-p0001-edificio-taruma/',true,'btn',false)+w.linkPaginaSite('https://camp.arq.br/acervo/projetos/f026-p0002-x/',false,'btn',true); await sleep(900);
+  chk(chamadas.length===0,'link REAL do site (ou de projeto não publicado) não deveria perguntar nada: '+JSON.stringify(chamadas));
+  w.fetch=fetchOrig; box.remove(); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
