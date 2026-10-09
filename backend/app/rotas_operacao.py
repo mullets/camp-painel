@@ -866,13 +866,15 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
                       (d.gravidade, d.categoria, d.origem, cod, d.descricao.strip(), d.relatado_por or u["email"])).lastrowid
     if d.categoria == "autoria_divergente" and cod.count("-") == 4:
         con.execute("UPDATE item SET autoria_divergente=1 WHERE codigo=?", (cod,))
-    if d.gravidade == "bloqueia":
-        pc = cod[:10] if len(cod) >= 10 else None
-        if pc:
-            con.execute("UPDATE projeto SET status_site='bloqueado' WHERE codigo=? AND status_site IN ('nao_publicado','em_revisao','rascunho')", (pc,))
-    _evento(con, "erro", eid, "criado", u["email"], {"codigo": cod, "gravidade": d.gravidade})
+    # status_site espelha SÓ o site: o bloqueio é derivado dos erros abertos (nunca gravado no status). Se o projeto JÁ está publicado, a tela precisa perguntar o que fazer.
+    pc = cod[:10] if len(cod) >= 10 else None
+    no_ar = False
+    if d.gravidade == "bloqueia" and pc:
+        r_ = con.execute("SELECT status_site FROM projeto WHERE codigo=?", (pc,)).fetchone()
+        no_ar = bool(r_ and r_[0] == "no_ar")
+    _evento(con, "erro", eid, "criado", u["email"], {"codigo": cod, "gravidade": d.gravidade, "publicado_com_bloqueio": no_ar})
     con.commit(); con.close()
-    return {"id": eid}
+    return {"id": eid, "publicado_com_bloqueio": no_ar, "projeto": pc if no_ar else None}
 
 
 @router.patch("/erros/{eid}")
@@ -892,10 +894,7 @@ def editar_erro(eid: int, d: EdicaoErro, u: dict = Depends(auth.exige("operador"
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
                 con.execute("UPDATE item SET autoria_divergente=0 WHERE codigo=?", (e["codigo"],))
-            pc = e["codigo"][:10]
-            resto = con.execute("SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ?) AND gravidade='bloqueia' AND situacao IN ('aberto','em_correcao') AND id<>?", (pc, pc + "-%", eid)).fetchone()[0]
-            if not resto:
-                con.execute("UPDATE projeto SET status_site='em_revisao' WHERE codigo=? AND status_site='bloqueado'", (pc,))
+
     if d.resolucao is not None: campos.append("resolucao=?"); vals.append(d.resolucao)
     if d.gravidade:
         if d.gravidade not in GRAV: con.close(); raise HTTPException(400, "Gravidade inválida")

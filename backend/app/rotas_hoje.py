@@ -105,6 +105,10 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
             acoes.append({"id": "qnap_espaco", "prioridade": 100 if nivel == "critico" else 60, "impacto": 0, "rota": "estacoes",
                           "titulo": "QNAP quase cheio" if nivel == "critico" else "QNAP com pouco espaço",
                           "detalhe": f"{round(snap['livre_gb'])} GB livres ({str(livre_pct).replace('.', ',')}%)"})
+        for pb in con.execute("""SELECT p.codigo, p.titulo FROM projeto p WHERE p.status_site='no_ar' AND EXISTS (SELECT 1 FROM erro e WHERE e.gravidade='bloqueia'
+                                 AND e.situacao IN ('aberto','em_correcao') AND (e.codigo=p.codigo OR e.codigo LIKE p.codigo||'-%')) ORDER BY p.codigo LIMIT 5"""):
+            acoes.append({"id": "pub_bloq_" + pb["codigo"], "prioridade": 98, "impacto": 1, "rota": "projeto/" + pb["codigo"],
+                          "titulo": f"{pb['codigo']} está publicado com erro bloqueante", "detalhe": "Resolva o erro ou despublique o projeto"})
         if prontos:
             acoes.append({"id": "publicar", "prioridade": 90, "impacto": prontos, "rota": "projetos",
                           "titulo": f"Publicar {prontos} projeto(s) pronto(s)", "detalhe": "Passam em todos os requisitos; use o painel Publicação do projeto"})

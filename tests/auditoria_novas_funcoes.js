@@ -499,6 +499,21 @@ w.route_to('painel'); await sleep(2800);
   w.openDrawer('Publicar 3 projeto(s)','plano do lote','<p>x</p>'); await w.executarLoteProjetos(['F900-P0001','F900-P0002','F900-P0003'],[{codigo:'F900-P0004',motivo:'Nenhuma folha conferida'}]); await sleep(1500); w.fetch=fetchOrig;
   chk(chamadas===2,'o lote deveria chamar de novo com os pendentes até acabar (2 chamadas), chamou '+chamadas);
   chk(/2 publicado\(s\) · 2 sem publicar/.test(txt('#d-body'))&&/Fundo com direitos restritos/.test(txt('#d-body'))&&/Nenhuma folha conferida/.test(txt('#d-body')),'o resultado deveria dizer 2 publicados · 2 sem publicar, com o motivo de cada um: "'+txt('#d-body').slice(0,260)+'"'); w.closeDrawer(true); w.route_to('painel'); }
+// ---------- [Auditoria P0-8] erro bloqueante em projeto PUBLICADO: pergunta o que fazer e avisa na página; o status do projeto não é mexido ----------
+{ const g={estado:'no_ar',pode_agir:true,pode_despublicar:true,condicoes:[{id:'bloqueios',bloqueia:true,ok:false,texto:'Sem autoria divergente nem erros bloqueantes',detalhe:'1 erro bloqueante'}]};
+  let h=w.renderPublicacao('F003-P9002',g);
+  chk(/Publicado com problema bloqueante em aberto/.test(h)&&/1 erro bloqueante/.test(h)&&/Ver erros/.test(h)&&/Despublicar/.test(h),'projeto PUBLICADO com erro bloqueante deveria mostrar a faixa vermelha com "Ver erros" e "Despublicar"');
+  chk(!/Publicado com problema bloqueante/.test(w.renderPublicacao('F003-P9002',{...g,estado:'rascunho'})),'projeto em rascunho não deveria mostrar a faixa de "publicado com problema"');
+  h=w.renderPublicacao('F003-P9002',{...g,pode_agir:false}); chk(/Publicado com problema/.test(h)&&!/Despublicar/.test(h),'quem não pode agir vê o aviso, mas sem o botão Despublicar');
+  const fetchOrig=w.fetch, confirmOrig=w.confirm, chamadas=[]; let resposta=true, msg='';
+  w.fetch=(u,o={})=>{ const m=String(o.method||'GET').toUpperCase(); if(m==='POST'&&/\/api\/erros$/.test(String(u))) return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({id:77,publicado_com_bloqueio:true,projeto:'F900-P0001'})}); if(m==='POST'&&/\/api\/projetos\/F900-P0001\/publicar$/.test(String(u))){chamadas.push(JSON.parse(o.body).acao);return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({ok:true})})} return fetchOrig(u,o) };
+  w.confirm=m=>{msg=m;return resposta};
+  const preencher=()=>{d.getElementById('ne-cod').value='F900-P0001';d.getElementById('ne-grav').value='bloqueia';const cat=d.getElementById('ne-cat');cat.value=cat.options[0].value;d.getElementById('ne-desc').value='folha de outro projeto'};
+  preencher(); await w.criarErro(); await sleep(800);
+  chk(/F900-P0001 está PUBLICADO/.test(msg)&&chamadas.join()==='tirar_do_ar','ao relatar o erro num projeto publicado, "OK" deveria despublicar (chamadas: '+chamadas.join()+'): "'+msg.slice(0,80)+'"');
+  chamadas.length=0; resposta=false; preencher(); await w.criarErro(); await sleep(800);
+  chk(chamadas.length===0,'"Cancelar" deveria manter o projeto publicado (sem chamar tirar_do_ar): '+chamadas.join());
+  w.fetch=fetchOrig; w.confirm=confirmOrig; w.closeModal&&w.closeModal(); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

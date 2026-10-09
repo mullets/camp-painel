@@ -2140,6 +2140,49 @@ def filho(modo):
         ver("um projeto que precisa de várias fatias de envio termina dentro do mesmo lote", [x["codigo"] for x in r3["ok"]] == [PG] and len(chamadas["folhas"]) - antes == 2 and r3["pendentes"] == [], str(r3)[:250])
         ver("só admin: operador 403, sem login 401; ação inválida e lista vazia 400", op.post("/api/projetos/lote", json={"codigos": [PA], "acao": "publicar"}).status_code == 403 and op.post("/api/projetos/lote/plano", json={"codigos": [PA], "acao": "publicar"}).status_code == 403 and anon.post("/api/projetos/lote/plano", json={"codigos": [PA], "acao": "publicar"}).status_code == 401 and adm.post("/api/projetos/lote", json={"codigos": [PA], "acao": "bobagem"}).status_code == 400 and adm.post("/api/projetos/lote", json={"codigos": [], "acao": "publicar"}).status_code == 400)
         for l in res: print(l)
+    elif modo == "erro_bloqueante":
+        init_db(); _aplicar_migracoes_real()
+        import pathlib as _pl
+        from app import auth
+        from app.rotas_operacao import CATS
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F096','Fundo Erros','ERR',1)")
+        def proj(n, titulo, st):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F096',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site) VALUES (?,?,?,?,1970,?)", (f"F096-P{n:04d}", "F096", n, titulo, st)); return f"F096-P{n:04d}"
+        PN, PR, PX, PZ = proj(1, "No ar", "no_ar"), proj(2, "Rascunho", "rascunho"), proj(3, "Nao publicado", "nao_publicado"), proj(4, "Sem site", "nao_publicado")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        k = connect(); st = lambda cod: k.execute("SELECT status_site FROM projeto WHERE codigo=?", (cod,)).fetchone()[0]
+        cat = sorted(CATS)[0]; ids = {}; resp = {}
+        for p_ in (PN, PR, PX):
+            r = op.post("/api/erros", json={"codigo": p_, "gravidade": "bloqueia", "categoria": cat, "descricao": "folha de outro projeto"}); resp[p_] = r.json(); ids[p_] = r.json().get("id")
+        ver("registrar erro BLOQUEANTE não grava 'bloqueado' no status: no ar, rascunho e não publicado ficam como estavam", (st(PN), st(PR), st(PX)) == ("no_ar", "rascunho", "nao_publicado"), str((st(PN), st(PR), st(PX))))
+        ver("só o projeto que JÁ está no ar volta com publicado_com_bloqueio e o código", resp[PN]["publicado_com_bloqueio"] is True and resp[PN]["projeto"] == PN and resp[PR]["publicado_com_bloqueio"] is False and resp[PX]["publicado_com_bloqueio"] is False and resp[PR]["projeto"] is None, str(resp)[:300])
+        hoje = [a for a in adm.get("/api/hoje").json()["acoes"] if a["id"].startswith("pub_bloq_")]
+        ver("tela inicial: projeto no ar com erro bloqueante vira item URGENTE (prioridade 98) que leva ao projeto", [a["id"] for a in hoje] == ["pub_bloq_" + PN] and hoje[0]["prioridade"] == 98 and hoje[0]["rota"] == "projeto/" + PN, str(hoje)[:200])
+        for p_ in (PN, PR, PX):
+            op.patch(f"/api/erros/{ids[p_]}", json={"situacao": "corrigido", "resolucao": "ok, arrumado"})
+        ver("resolver o erro também não mexe no status (antes 'rascunho' virava 'em_revisao')", (st(PN), st(PR), st(PX)) == ("no_ar", "rascunho", "nao_publicado"), str((st(PN), st(PR), st(PX))))
+        ver("resolvido, o item urgente some da tela inicial", not [a for a in adm.get("/api/hoje").json()["acoes"] if a["id"].startswith("pub_bloq_")])
+        # migração 044: projetos que ficaram 'bloqueado' voltam ao status do site (olhando o dossiê no espelho)
+        k.close(); c = connect()
+        for cod, wid, wst in ((PN, 9101, "publish"), (PR, 9102, "draft"), (PX, 9103, "private")):
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,?,'dossie',?,?,'F096')", (wid, wst, cod, cod))
+            c.execute("UPDATE projeto SET tainacan_item_id=?, status_site='bloqueado' WHERE codigo=?", (wid, cod))
+        c.execute("UPDATE projeto SET status_site='bloqueado' WHERE codigo=?", (PZ,)); c.commit()
+        c.executescript((_pl.Path(__file__).resolve().parents[1] / "db/migrations/044_projeto_status_sem_bloqueado.sql").read_text(encoding="utf-8"))
+        got = {cod: c.execute("SELECT status_site FROM projeto WHERE codigo=?", (cod,)).fetchone()[0] for cod in (PN, PR, PX, PZ)}
+        ver("migração: 'bloqueado' volta ao status do site (publish=no_ar, draft=rascunho, private=fora_do_ar, sem dossiê=nao_publicado)", got == {PN: "no_ar", PR: "rascunho", PX: "fora_do_ar", PZ: "nao_publicado"}, str(got))
+        c.close()
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2533,6 +2576,14 @@ else:
 print("33) Publicar em lote: a mesma sequência do projeto, com plano antes e pendentes quando falta tempo")
 rc, out = rodar("lote_publicar", f"{tmp}/lote.db")
 if rc != 0: ok(False, f"teste do publicar em lote não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("34) Erro bloqueante: o status do projeto espelha só o site; projeto no ar avisa e vira item urgente")
+rc, out = rodar("erro_bloqueante", f"{tmp}/errb.db")
+if rc != 0: ok(False, f"teste do erro bloqueante não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
