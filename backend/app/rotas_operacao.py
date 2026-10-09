@@ -663,7 +663,25 @@ def ler_pasta_do_aviso(con, pasta_txt: str, codigo: str | None) -> dict:
     if r["acao"] == "entrada":
         return {"ok": False, "acao": "ignorada", "pasta": str(alvo), "motivo": "pasta da entrada bruta: o painel só lê o material final"}
     r["ok"] = r["acao"] in ("nova", "atualizada", "igual")
+    if r["ok"] and r.get("etapa") == "revisao":
+        r["importacao"] = _importar_se_tem_pacote(con, alvo)
     return r
+
+
+def _importar_se_tem_pacote(con, pasta: Path) -> dict | None:
+    """O aviso do CAMP Vision também traz as FOLHAS para o painel (antes só criava o lote e as folhas
+    dependiam do botão "Importar"). Usa o mesmo importador: nunca sobrescreve folha revisada nem no site;
+    lote aprovado não é tocado."""
+    from .importador_lote import importar_lote, ler_pacote
+    l = con.execute("SELECT id, aprovado_em FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1", (str(pasta),)).fetchone()
+    if not l or l["aprovado_em"]:
+        return None
+    try:
+        if ler_pacote(pasta) is None:
+            return None
+        return importar_lote(con, l["id"], "campvision (aviso)")
+    except HTTPException as e:
+        return {"erro": e.detail}
 
 
 @router.post("/filas/varrer-qnap")

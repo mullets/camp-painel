@@ -2052,7 +2052,22 @@ def filho(modo):
         r = importar_lote(c, lote, "teste")
         ver("CV-01: arquivo_origem (pasta + nome) chega à folha do painel", c.execute("SELECT arquivo_origem FROM item WHERE codigo=?", (D(1),)).fetchone()[0] == "100 - Scanners/F026/P1/TIF/scan 001.tif", str(r))
         ver("duplicata 'quase' do CV2 vira 'perceptual' no painel (não se perde)", tuple(c.execute("SELECT duplicata_de, tipo_duplicata FROM item WHERE codigo=?", (D(2),)).fetchone()) == (D(1), "perceptual"))
-        c.rollback(); c.close()
+        c.rollback()
+        # Aviso do CAMP Vision também traz as folhas (antes dependia do botão "Importar")
+        from app.rotas_operacao import ler_pasta_do_aviso
+        prontos = _P(os.environ["CAMP_TMP_PRONTOS"]); shutil.rmtree(prontos, ignore_errors=True)
+        projd = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"
+        shutil.copytree(_P(__file__).parent / "fixtures" / "campvision" / "lote_normal", projd)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)"); c.commit()
+        r1 = ler_pasta_do_aviso(c, str(projd.relative_to(prontos)), "F026-P0001"); c.commit()
+        ver("aviso do CV2 cria o lote E importa as folhas do pacote (sem precisar do botão)", r1.get("ok") and (r1.get("importacao") or {}).get("criadas") == 3, str(r1)[:300])
+        c.execute("UPDATE item SET titulo='Revisado', revisao='corrigida' WHERE codigo=(SELECT MIN(codigo) FROM item WHERE projeto_codigo='F026-P0001' AND lote_id IS NOT NULL)"); c.commit()
+        r2 = ler_pasta_do_aviso(c, str(projd.relative_to(prontos)), "F026-P0001"); c.commit()
+        ver("novo aviso reimporta sem desfazer a revisão de gente", (r2.get("importacao") or {}).get("ignoradas_ja_revisadas") == 1 and c.execute("SELECT COUNT(*) FROM item WHERE titulo='Revisado'").fetchone()[0] == 1, str(r2)[:300])
+        c.close()
         for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
