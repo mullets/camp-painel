@@ -7,3 +7,4 @@ passlib[bcrypt]==1.7.4
 pyjwt==2.10.1
 argon2-cffi==23.1.0
 email-validator==2.2.0
+Pillow>=10.4,<13

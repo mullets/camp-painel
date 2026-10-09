@@ -196,3 +196,14 @@ Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabe�
 **Regra única de folha elegível** (`publicacao.ELEGIVEL_LOCAL`, antes repetida em 4 lugares): sem autoria divergente, não é duplicata e, se veio da revisão do CAMP Vision, já foi conferida/corrigida.
 **Imagem que sobe ao site** (`imagem_site.py`): a **prévia do CAMP Vision** (`_campvision/preview/`, ~3000 px, já girada); senão o arquivo da folha, absoluto ou relativo à raiz dos prontos. Antes tratava o caminho como local, e uma folha vinda da revisão subia **sem imagem**.
 **Nunca testado contra o WordPress de verdade**: os testes usam substitutos do dossiê, das folhas e do status do site.
+
+## 12. Revisão mais simples: aprovar todas, virar a folha, próxima
+- **Aprovar todas** (`POST /api/lotes/{id}/conferir-todas`, operador+): marca TODAS as folhas pendentes do lote como conferidas, inclusive as com algo apontado pelo CAMP Vision. A tela pergunta antes e diz quantas têm algo apontado.
+  As bloqueadas (duplicata, autoria) continuam sem ir ao site. **Aprovar o lote** continua sendo do admin e só aparece quando não resta nenhuma pendente.
+- **Clicar no cartão** abre a revisão da folha (sem botão repetido em cada cartão). Depois de "Está certo" ou "Salvar correção" a janela passa **sozinha para a próxima** pendente, sem recarregar a página; o selo do cartão e os contadores se atualizam na hora.
+- **Virar a folha** (`POST /api/itens/{codigo}/girar`, graus 90, -90 ou 180, operador+): guarda `item.giro_manual` (0/90/180/270, somado ao que o CAMP Vision já aplicou). A prévia é entregue já virada (`GET /api/itens/{codigo}/previa`), **e é a imagem virada que sobe ao site**.
+  O arquivo original no QNAP não é tocado. Não vale para folha que já está no site nem para lote aprovado (409). Precisa do **Pillow** (`requirements.txt`; o `./atualizar.sh` instala): sem ele, girar responde 503 dizendo isso.
+- **Miniaturas leves:** `previa?t=480` entrega a prévia reduzida (lado maior de 120 a 1600 px; fora disso é ignorado), com **cache em disco** (`cache_previas/`, por arquivo, data, tamanho, giro e lado). Antes cada cartão baixava a prévia inteira de ~3000 px.
+- **Orientação automática é do CAMP Vision** (ticket #25 dele, ainda no backlog): o painel não adivinha o lado certo; corrige em um clique quando a leitura erra.
+- **Painel "Encontradas no QNAP"** não lista mais a pasta `catalogacao/` (folha de contatos e saídas do CAMP Vision) nem as folhas **retiradas** pelo CAMP Vision (autoria divergente): essas aparecem em "retiradas" na Revisão do lote. A contagem da Fila também deixou de contar a folha de contatos como documento.
+- O aviso amarelo "divergência" da fonte visual só aparece quando o site já tem folhas e o número difere; projeto ainda fora do site não é divergência.

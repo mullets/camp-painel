@@ -417,6 +417,9 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
         from .imagem_site import imagem_para_o_site
         caminho_img = imagem_para_o_site(con, i) if enviar_imagem else None
+        if caminho_img and i["giro_manual"]:                      # o que a pessoa virou na revisão sobe virado
+            from .giro_imagem import jpeg_girado
+            caminho_img = str(jpeg_girado(caminho_img, i["giro_manual"]))
         if caminho_img:
             try:
                 m = wp.upload_media(caminho_img, titulo)

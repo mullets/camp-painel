@@ -14,7 +14,8 @@ import time
 from pathlib import Path
 
 EXTS_IMAGEM = {".jpg", ".jpeg", ".tif", ".tiff", ".dng", ".png"}
-EXTS_PREVIA = {".jpg", ".jpeg", ".png"}          # as que o navegador mostra e que o painel serve
+EXTS_PREVIA = {".jpg", ".jpeg", ".png"}
+IGNORAR_NA_RAIZ = {"catalogacao"}            # saídas do CAMP Vision (contatos.jpg, pacote, erros): não são documentos do projeto          # as que o navegador mostra e que o painel serve
 _NOME_FORMATO = {"JPEG": "JPG", "TIFF": "TIF"}
 
 
@@ -28,7 +29,7 @@ def documentos_da_pasta(pasta: Path | str, prazo_s: float = 20.0, limite: int = 
         if time.monotonic() > fim:
             parcial = True
             break
-        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "@", "#")))
+        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "@", "#")) and not (Path(raiz) == pasta and d.lower() in IGNORAR_NA_RAIZ))
         for nome in sorted(arqs):
             ext = Path(nome).suffix.lower()
             if ext not in EXTS_IMAGEM or nome.startswith("."):

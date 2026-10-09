@@ -191,7 +191,12 @@ def folhas_qnap(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 lotes.append({**base, "existe": False, "total": 0, "fora_do_painel": 0, "parcial": False, "documentos": []})
                 continue
             r = documentos_da_pasta(pasta)
-            novos = [d for d in r["documentos"] if d["codigo"].lower() not in conhecidos]
+            from .importador_lote import ler_pacote
+            try:                                                   # o que o CAMP Vision RETIROU (autoria divergente...) já aparece na Revisão do lote: não é "esperando catalogação"
+                retirados = {str(x.get("codigo") or "").lower() for x in ((ler_pacote(pasta) or {}).get("retirados") or []) if isinstance(x, dict)}
+            except HTTPException:
+                retirados = set()
+            novos = [d for d in r["documentos"] if d["codigo"].lower() not in conhecidos and d["codigo"].lower() not in retirados]
             lotes.append({**base, "existe": True, "total": len(r["documentos"]), "fora_do_painel": len(novos), "parcial": r["parcial"], "documentos": novos[:600]})
         return {"lotes": lotes}
     finally:
@@ -228,7 +233,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     itens_local = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
-               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido,
+               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual,
                i.tainacan_item_id AS tainacan_item_id_salvo
           FROM item i
          WHERE i.projeto_codigo=?
@@ -266,7 +271,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "rotacao_aplicada": local.get("rotacao_aplicada"),
                 "status_site_local": local.get("status_site"),
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
-                "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"),
+                "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"), "giro_manual": local.get("giro_manual"),
                 "origem_catalogacao": "local+site",
             })
         else:

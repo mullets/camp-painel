@@ -1774,6 +1774,96 @@ def filho(modo):
         except ValueError: ok_ = True
         ver("status inválido continua barrado antes de qualquer pedido", ok_)
         for l in res: print(l)
+    elif modo == "giro":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from app import auth, publicador, giro_imagem
+        from PIL import Image
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        prontos = _P(os.environ["CAMP_TMP_PRONTOS"]); shutil.rmtree(prontos, ignore_errors=True)
+        os.environ["CAMP_CACHE_DIR"] = str(prontos / "cache")
+        def jpg(caminho, canto_vermelho=False, tam=(60, 30)):          # 60x30 branca (ou `tam`); opcional: bloco vermelho 12x12 no canto SUPERIOR ESQUERDO (marca o sentido do giro)
+            caminho.parent.mkdir(parents=True, exist_ok=True); im = Image.new("RGB", tam, "white")
+            if canto_vermelho: im.paste((255, 0, 0), (0, 0, 12, 12))
+            im.save(caminho, "JPEG", quality=95)
+        def vermelho(im, xy): r, g, b = im.getpixel(xy); return r > 200 and g < 90 and b < 90
+        proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", proj)
+        D = lambda n: f"F026-P0001-1972-S01-D{n:05d}"
+        for n in (1, 2, 3): jpg(prontos / "_campvision" / "preview" / "F026-P0001" / f"{D(n)}.jpg", canto_vermelho=True, tam=(600, 300) if n == 1 else (60, 30))   # D1 é grande: serve para provar a miniatura
+        for n in (1, 3, 99): jpg(proj / "01 - Desenhos e pranchas" / "JPG" / f"{D(n)}.jpg")
+        jpg(proj / "catalogacao" / "contatos.jpg")
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote normal','F026-P0001',?,'revisao')", (str(proj),)).lastrowid
+        proj2 = prontos / "outro" / "F026-P0001 - Tarumã (autoria)"; shutil.copytree(FIX / "lote_autoria_divergente", proj2)
+        for n in (1, 2, 99): jpg(proj2 / "01 - Desenhos e pranchas" / "JPG" / f"{D(n)}.jpg")
+        jpg(proj2 / "catalogacao" / "contatos.jpg")
+        lote2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote autoria','F026-P0001',?,'revisao')", (str(proj2),)).lastrowid
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        # ---------- painel "Encontradas no QNAP": só o que de fato espera catalogação ----------
+        fq = {x["id"]: x for x in adm.get("/api/projetos/F026-P0001/folhas-qnap").json()["lotes"]}
+        ver("antes de importar: aparecem as folhas da pasta; a pasta catalogacao (contatos.jpg) NUNCA é documento", sorted(d["codigo"] for d in fq[lote]["documentos"]) == sorted([D(1), D(3), D(99)]) and all(d["serie"] != "catalogacao" and d["codigo"] != "contatos" for x in fq.values() for d in x["documentos"]), str([d["codigo"] for d in fq[lote]["documentos"]]))
+        ver("as folhas RETIRADAS pelo CAMP Vision (autoria divergente) não são 'esperando catalogação'; só sobra a que de fato falta (D99)", [d["codigo"] for d in fq[lote2]["documentos"]] == [D(99)], str([d["codigo"] for d in fq[lote2]["documentos"]]))
+        op.post(f"/api/lotes/{lote}/importar")
+        fq2 = {x["id"]: x for x in adm.get("/api/projetos/F026-P0001/folhas-qnap").json()["lotes"]}
+        ver("depois de importar, as já importadas saem da lista (sobra só D99)", [d["codigo"] for d in fq2[lote]["documentos"]] == [D(99)])
+        # ---------- virar a folha ----------
+        previa = lambda cod, q="": adm.get(f"/api/itens/{cod}/previa{q}")
+        img = lambda r: Image.open(__import__("io").BytesIO(r.content))
+        r0 = previa(D(3)); ver("sem giro: a prévia sai como está (60x30, canto vermelho em cima à esquerda)", r0.status_code == 200 and img(r0).size == (60, 30) and vermelho(img(r0), (5, 5)))
+        g = op.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}); r90 = previa(D(3))
+        ver("girar 90° (horário): 60x30 vira 30x60 e o canto vermelho vai para CIMA À DIREITA", g.status_code == 200 and g.json()["giro_manual"] == 90 and img(r90).size == (30, 60) and vermelho(img(r90), (24, 5)) and not vermelho(img(r90), (5, 5)), str(g.json()))
+        g = op.post(f"/api/itens/{D(3)}/girar", json={"graus": 180}); r270 = previa(D(3))
+        ver("somar 180° ao que já está em 90° dá 270°: o canto vermelho vai para BAIXO À ESQUERDA", g.json()["giro_manual"] == 270 and img(r270).size == (30, 60) and vermelho(img(r270), (5, 54)), str(g.json()))
+        g = op.post(f"/api/itens/{D(3)}/girar", json={"graus": -90}); r180 = previa(D(3))
+        ver("-90° (anti-horário) a partir de 270° dá 180°: 60x30 com o canto vermelho EMBAIXO À DIREITA", g.json()["giro_manual"] == 180 and img(r180).size == (60, 30) and vermelho(img(r180), (54, 24)))
+        op.post(f"/api/itens/{D(3)}/girar", json={"graus": 180}); r_volta = previa(D(3))
+        ver("voltando a 0°: serve o ARQUIVO ORIGINAL (bytes iguais), sem reprocessar", sql("SELECT giro_manual FROM item WHERE codigo=?", D(3)) == 0 and r_volta.content == r0.content)
+        op.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}); n_cache = len(list(giro_imagem.pasta_cache().glob("*.jpg"))); a, b = previa(D(3)), previa(D(3))
+        ver("o giro é guardado em cache em disco: a 2ª chamada devolve o mesmo e não cria arquivo novo", a.content == b.content and len(list(giro_imagem.pasta_cache().glob("*.jpg"))) == n_cache)
+        op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}); mini = previa(D(1), "?t=200")
+        ver("miniatura (?t=200) de uma prévia 600x300 virada: 100x200 (lado maior 200); t fora da faixa 120..1600 (50 ou 99999) é ignorado e vem a prévia inteira virada (300x600)", img(mini).size == (100, 200) and img(previa(D(1), "?t=50")).size == (300, 600) and img(previa(D(1), "?t=99999")).size == (300, 600), str(img(mini).size))
+        op.post(f"/api/itens/{D(1)}/girar", json={"graus": -90})
+        ver("girar: graus inválidos 400; folha inexistente 404; sem login 401", op.post(f"/api/itens/{D(3)}/girar", json={"graus": 45}).status_code == 400 and op.post("/api/itens/F026-P0001-1972-S01-D99999/girar", json={"graus": 90}).status_code == 404 and anon.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}).status_code == 401)
+        k.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (D(2),)); k.commit()
+        ver("folha que já está no site não gira por aqui (409)", op.post(f"/api/itens/{D(2)}/girar", json={"graus": 90}).status_code == 409)
+        k.execute("UPDATE item SET status_site='bloqueado' WHERE codigo=?", (D(2),)); k.commit()
+        giro_imagem.disponivel = lambda: False
+        ver("servidor sem o Pillow: girar dá 503 dizendo para rodar ./atualizar.sh; folha já girada não some (503, não imagem errada); miniatura cai para o original", op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).status_code == 503 and "atualizar.sh" in op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).text and previa(D(3)).status_code == 503 and previa(D(1), "?t=200").status_code == 200 and img(previa(D(1), "?t=200")).size == (600, 300))
+        giro_imagem.disponivel = lambda: __import__("importlib").util.find_spec("PIL") is not None
+        # ---------- aprovar todas ----------
+        ver("antes: 3 folhas pendentes, quase todas com algo apontado pelo CAMP Vision", sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='pendente'", lote) == 3)
+        ver("aprovar todas: sem login 401; lote inexistente 404", anon.post(f"/api/lotes/{lote}/conferir-todas").status_code == 401 and op.post("/api/lotes/9999/conferir-todas").status_code == 404)
+        t = op.post(f"/api/lotes/{lote}/conferir-todas").json()
+        ver("aprovar todas (operador): marca as 3 como conferidas, inclusive as com algo apontado, e DIZ quantas tinham (a tela avisa)", t["conferidas"] == 3 and t["com_pendencia"] >= 2 and t["restam"] == 0 and sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='conferida' AND revisado_por='op@camp.arq.br'", lote) == 3, str(t))
+        ver("clicar de novo não faz nada (0 conferidas) e não estraga", op.post(f"/api/lotes/{lote}/conferir-todas").json()["conferidas"] == 0)
+        ver("depois de aprovar todas o lote pode ser aprovado pelo admin (e só por ele)", op.post(f"/api/lotes/{lote}/aprovar").status_code == 403 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 200)
+        ver("lote aprovado: aprovar todas e girar dão 409", op.post(f"/api/lotes/{lote}/conferir-todas").status_code == 409 and op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).status_code == 409)
+        ver("a história registra o giro e a aprovação em lote", {"giro", "revisao_em_lote"} <= {r[0] for r in k.execute("SELECT DISTINCT tipo FROM evento WHERE codigo IN ('F026-P0001', ?)", (D(3),))})
+        # ---------- a imagem que vai ao site sai VIRADA ----------
+        envios = []
+        class WPFalso:
+            def criar_item(self, col, titulo, status, desc): return {"id": 5001, "slug": "s", "url": "u"}
+            def definir_metadado(self, *a): pass
+            def upload_media(self, caminho, titulo): envios.append(caminho); return {"id": 1, "source_url": "u"}
+            def definir_documento(self, *a): pass
+        publicador.WP = WPFalso
+        k.execute("UPDATE projeto SET tainacan_item_id=9100 WHERE codigo='F026-P0001'"); k.execute("UPDATE item SET status_site='nao_publicado', duplicata_de=NULL, giro_manual=90 WHERE codigo=?", (D(3),)); k.commit()
+        rr = publicador.criar_folha_no_site(D(3), "x")
+        ver("envio ao site: sobe a PRÉVIA do CAMP Vision já virada pelo giro manual (30x60, canto vermelho em cima à direita)", rr["erro"] is None and len(envios) == 1 and "_campvision/preview" not in envios[0] and Image.open(envios[0]).size == (30, 60) and vermelho(Image.open(envios[0]), (24, 5)), str((rr, envios)))
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -2006,6 +2096,15 @@ else:
 print("25) Tainacan: o painel fala com o endereço que o site de fato aceita (servidor HTTP imitando o site real)")
 rc, out = rodar("tainacan", f"{tmp}/tainacan.db")
 if rc != 0: ok(False, f"teste do Tainacan não rodou -> {out[-1200:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("26) Virar a folha e aprovar todas: giro com cache, painel do QNAP sem catalogacao nem retiradas, imagem virada no site")
+os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_giro"
+rc, out = rodar("giro", f"{tmp}/giro.db")
+if rc != 0: ok(False, f"teste do giro não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

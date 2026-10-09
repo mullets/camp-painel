@@ -307,6 +307,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .dec-motivos{margin:6px 0 8px;padding-left:18px;color:var(--ink2);font-size:12.5px}.dec-motivos small{display:block}
 .np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
 .btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+.rev-ret{margin:8px 0;font-size:12.5px;color:var(--ink2)}.rev-ret summary{cursor:pointer}.thumb[data-rev-abrir]{cursor:pointer}.rev-giro{display:flex;gap:6px;justify-content:center;margin:0 0 10px}
 .tag.mini{font-size:9.5px}
 .rev-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.rev-prev{max-width:100%;max-height:340px;border-radius:8px;border:1px solid var(--line);display:block;margin:0 auto 10px}
 .rev-campo{display:grid;gap:3px;margin:8px 0;font-size:12.5px}.rev-campo span{color:var(--ink3)}.rev-campo input,.rev-campo select{width:100%}
@@ -1522,16 +1523,17 @@ async function adotarFolhaDoSite(code){
 async function importarFolhasDoSite(code,n){
   if(!confirm(`Importar ${n} folha(s) que existem só no site para o catálogo do painel?\nElas passam a poder ser editadas aqui; o projeto não é alterado.`))return;
   try{const r=await API(`/api/projetos/${code}/importar-folhas`,{method:'POST',body:JSON.stringify({})});toast(`${r.itens_novos} folha(s) importada(s) do site`);showProjeto(code)}catch(e){toast(e.message)}}
+function tagRevisao(r){return r==='conferida'?'<span class="tag g mini rev-tag">conferida</span>':r==='corrigida'?'<span class="tag b mini rev-tag">corrigida</span>':'<span class="tag a mini rev-tag">a conferir</span>'}
 function cardItemProjeto(it){
   const codigo=it.codigo||('TAINACAN-'+it.tainacan_item_id);
   const navegavel=/^F\d{3}-P\d{4}-.+/.test(codigo);
-  const imagem=it.thumb_url?`<img class="img-real" src="${escHtml(it.thumb_url)}" loading="lazy" alt="${escHtml(codigo)}">`:(it.pendencias&&it.pendencias.previa)?`<img class="img-real img-prev" src="/api/itens/${encodeURIComponent(codigo)}/previa" loading="lazy" alt="${escHtml(codigo)}">`:semImagemHTML();
+  const imagem=it.thumb_url?`<img class="img-real" src="${escHtml(it.thumb_url)}" loading="lazy" alt="${escHtml(codigo)}">`:(it.pendencias&&it.pendencias.previa)?`<img class="img-real img-prev" src="/api/itens/${encodeURIComponent(codigo)}/previa?t=480&g=${it.giro_manual||0}" loading="lazy" alt="${escHtml(codigo)}">`:semImagemHTML();
   const revisavel=!!it.lote_id&&EU&&EU.papel!=='leitura';
-  const rev=it.lote_id?(it.revisao==='conferida'?' <span class="tag g mini">conferida</span>':it.revisao==='corrigida'?' <span class="tag b mini">corrigida</span>':' <span class="tag a mini">a conferir</span>'):'';
+  const rev=it.lote_id?` ${tagRevisao(it.revisao)}`:'';
   const flag=it.autoria_divergente?'<span class="tag r flag">autoria divergente</span>':it.duplicata_de?'<span class="tag a flag">duplicata</span>':it.espelhado?'<span class="tag a flag">espelhado</span>':'';
   const status=it.status_site==='rascunho'?' <span class="tag b" style="font-size:9.5px">rascunho</span>':it.status_site==='fora_do_ar'?' <span class="tag" style="font-size:9.5px">despublicado</span>':'';
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
-  return `<div class="thumb" ${navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}${rev}<span class="code">${escHtml(codigo)}</span>${revisavel?`<button class="btn sm" data-rev-abrir="${escHtml(codigo)}">Revisar</button>`:''}</div></div>`
+  return `<div class="thumb" ${revisavel?`data-rev-abrir="${escHtml(codigo)}"`:navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}${rev}<span class="code">${escHtml(codigo)}</span></div></div>`
 }
 async function abrirDecisao(id){
   try{const d=await API('/api/decisoes/'+encodeURIComponent(id)),p=d.pedido||{},pode=EU&&['admin','master'].includes(EU.papel),res=d.situacao==='resolvida';
@@ -1573,36 +1575,55 @@ async function carregarRevisaoLote(code){
     box.innerHTML=(r.lotes||[]).filter(l=>l.pacote.existe||l.itens.total>0).map(l=>{const c=l.itens,imp=l.importacao||{},apr=!!l.aprovado_em,vazio=c.total===0;
       const estado=apr?`<span class="tag g">aprovado por ${escHtml(l.aprovado_por)}</span>`:vazio?'<span class="tag a">aguardando importação</span>':c.pendente?'<span class="tag a">em revisão</span>':'<span class="tag b">pronta para aprovar</span>';
       const bt=(acao,txt,cls,off)=>`<button class="btn sm ${cls||''}" data-rev-lote="${acao}" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}"${off?' disabled':''}${off&&typeof off==='string'?` title="${escHtml(off)}"`:''}>${txt}</button>`;
-      const ret=(imp.retirados||[]).length?`<p class="help"><b>${imp.retirados.length} folha(s) retirada(s) pelo CAMP Vision</b> (não entraram): ${imp.retirados.map(x=>`<span class="code">${escHtml(String(x.codigo||'').slice(-6))}</span> ${escHtml((x.bloqueios||[]).join(', '))}`).join(' · ')}</p>`:'';
+      const ret=(imp.retirados||[]).length?`<details class="rev-ret"><summary>${imp.retirados.length} folha(s) retirada(s) pelo CAMP Vision (não entraram)</summary>${imp.retirados.map(x=>`<div><span class="code">${escHtml(String(x.codigo||'').slice(-6))}</span> ${escHtml((x.bloqueios||[]).join(', '))}</div>`).join('')}</details>`:'';
       const prob=(imp.problemas||[]).length?`<p class="help"><span class="tag r">não importadas</span> ${imp.problemas.map(x=>escHtml(x)).join(' · ')}</p>`:'';
-      return `<div class="panel"><div class="ph"><h2>Revisão do lote</h2>${estado}</div><div class="pb"><p class="help"><b>${escHtml(l.nome)}</b> · o CAMP Vision gravou ${escHtml(l.pacote.documentos)} documento(s)${l.pacote.retirados?` e retirou ${escHtml(l.pacote.retirados)}`:''}${l.pacote.teste?' · <b>lote de teste</b>: nada é publicável':''}.</p>
-      ${vazio?`<p class="help">As folhas ainda não foram importadas para o painel. Importe para conferir, corrigir e aprovar.</p><div class="act">${op?bt('importar','Importar as folhas do lote','pri'):'<small class="help">Só operador e admin importam.</small>'}</div>`
-      :`<div class="rev-chips"><span class="tag a">${escHtml(c.pendente)} a conferir</span><span class="tag g">${escHtml(c.conferida)} conferida(s)</span><span class="tag b">${escHtml(c.corrigida)} corrigida(s)</span>${c.bloqueadas?`<span class="tag r">${escHtml(c.bloqueadas)} bloqueada(s) para o site</span>`:''}</div>
-      ${l.motivo&&!apr?`<p class="help">${escHtml(l.motivo)}.</p>`:''}
-      <div class="act">${op&&!apr?bt('conferir','Conferir as folhas sem pendência'):''}${op&&!apr?bt('importar','Importar de novo'):''}${adm&&!apr?bt('aprovar','Aprovar o lote','pri',l.pode_aprovar?false:(l.motivo||true)):''}${adm&&apr&&l.etapa==='revisao'?bt('reabrir','Reabrir a revisão'):''}</div>`}
-      ${ret}${prob}</div></div>`}).join('')}catch(e){box.innerHTML=''}}
+      const acoes=vazio?(op?bt('importar','Importar as folhas do lote','pri'):'<small class="help">Só operador e admin importam.</small>')
+        :apr?(adm&&l.etapa==='revisao'?bt('reabrir','Reabrir a revisão'):'')
+        :c.pendente?(op?`${bt('todas',`Aprovar todas (${c.pendente})`,'pri')}${bt('conferir','Só as sem pendência')}`:'')
+        :(adm?bt('aprovar','Aprovar o lote','pri'):'<small class="help">Todas conferidas. Falta o admin aprovar o lote.</small>');
+      return `<div class="panel"><div class="ph"><h2>Revisão do lote</h2>${estado}</div><div class="pb"><p class="help"><b>${escHtml(l.nome)}</b> · o CAMP Vision gravou ${escHtml(l.pacote.documentos)} documento(s)${l.pacote.teste?' · <b>lote de teste</b>: nada é publicável':''}.</p>
+      ${vazio?'<p class="help">As folhas ainda não foram importadas para o painel. Importe para conferir e aprovar.</p>':`<div class="rev-chips"><span class="tag a">${escHtml(c.pendente)} a conferir</span><span class="tag g">${escHtml(c.conferida)} conferida(s)</span><span class="tag b">${escHtml(c.corrigida)} corrigida(s)</span>${c.bloqueadas?`<span class="tag r">${escHtml(c.bloqueadas)} bloqueada(s) para o site</span>`:''}</div>${c.pendente&&!apr?'<p class="help">Clique numa folha para ver, virar se estiver de lado e conferir. Ou aprove todas de uma vez.</p>':''}`}
+      <div class="act">${acoes}</div>${vazio||apr||!op?'':`<p class="help">${bt('importar','Importar de novo')}</p>`}${ret}${prob}</div></div>`}).join('')}catch(e){box.innerHTML=''}}
+function proximaPendente(codigo){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo);return [...L.slice(i+1),...L.slice(0,Math.max(i,0))].find(x=>x.revisao==='pendente')}
+function urlPreviaFolha(codigo,giro,t){return `/api/itens/${encodeURIComponent(codigo)}/previa?${t?`t=${t}&`:''}g=${giro||0}`}
 async function abrirRevisaoItem(codigo){
   const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it){toast('Folha não encontrada na lista');return}
   let ed;try{ed=await API('/api/itens/'+encodeURIComponent(codigo)+'/edicao')}catch(e){toast(e.message);return}
   const p=it.pendencias||{},l=ed.local||{},op=EU&&['operador','admin','master'].includes(EU.papel),tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `;
   const aponta=[...(p.bloqueios||[]).map(x=>tag('r',x)),...(p.sinais||[]).map(x=>tag('a',x)),...(p.ressalvas||[]).map(x=>tag('a',x))].join('')||'<small class="help">Nada apontado.</small>';
   const campo=(id,rot,v)=>`<label class="rev-campo"><span>${rot}</span><input id="${id}" type="text" value="${escHtml(v==null?'':v)}"${op?'':' disabled'}></label>`;
-  openDrawer('Revisar folha',codigo,`${p.previa?`<img class="rev-prev" src="/api/itens/${encodeURIComponent(codigo)}/previa" alt="">`:''}<h3 class="hoje-h">O que o CAMP Vision leu</h3>${p.titulo_lido?`<div class="us-kv"><span>Título no carimbo</span><b>${escHtml(p.titulo_lido)}</b></div>`:''}${it.tipo_lido?`<div class="us-kv"><span>Tipo lido</span><b>${escHtml(it.tipo_lido)}${it.tipo_documento?'':' (não existe na lista do painel)'}</b></div>`:''}${it.duplicata_de?`<div class="us-kv"><span>Duplicata de</span><b>${escHtml(it.duplicata_de)}</b></div>`:''}<div class="rev-chips">${aponta}</div>
+  const falta=(window.ITENS_PJ||[]).filter(x=>x.lote_id&&x.revisao==='pendente').length;
+  openDrawer('Revisar folha',codigo,`${p.previa?`<img class="rev-prev" id="rv-img" src="${urlPreviaFolha(codigo,it.giro_manual)}" alt="">${op?`<div class="rev-giro"><button class="btn sm" data-rev-girar="-90" data-codigo="${escHtml(codigo)}">↺ Virar à esquerda</button><button class="btn sm" data-rev-girar="90" data-codigo="${escHtml(codigo)}">Virar à direita ↻</button></div>`:''}`:''}
+    <p class="help">${it.revisao==='pendente'?`Ainda faltam <b>${falta}</b> folha(s) a conferir.`:'Esta folha já foi revisada.'}</p>
+    <h3 class="hoje-h">O que o CAMP Vision leu</h3>${p.titulo_lido?`<div class="us-kv"><span>Título no carimbo</span><b>${escHtml(p.titulo_lido)}</b></div>`:''}${it.tipo_lido?`<div class="us-kv"><span>Tipo lido</span><b>${escHtml(it.tipo_lido)}${it.tipo_documento?'':' (não existe na lista do painel)'}</b></div>`:''}${it.duplicata_de?`<div class="us-kv"><span>Duplicata de</span><b>${escHtml(it.duplicata_de)}</b></div>`:''}<div class="rev-chips">${aponta}</div>
     <h3 class="hoje-h">Dados da folha</h3>${campo('rv-titulo','Título',l.titulo)}<label class="rev-campo"><span>Tipo</span><select id="rv-tipo"${op?'':' disabled'}><option value=""></option>${(ed.tipos_documento||[]).map(t=>`<option value="${escHtml(t)}"${t===l.tipo_documento?' selected':''}>${escHtml(t)}</option>`).join('')}</select></label>${campo('rv-folha','Folha',l.folha)}${campo('rv-escala','Escala',l.escala)}${campo('rv-ano','Ano da folha',l.ano_folha)}
-    ${op?`<div class="act"><button class="btn sm pri" data-rev-item="conferida" data-codigo="${escHtml(codigo)}">Está certo: marcar conferida</button><button class="btn sm" data-rev-item="corrigida" data-codigo="${escHtml(codigo)}">Salvar correção</button>${it.revisao!=='pendente'?`<button class="btn sm" data-rev-item="pendente" data-codigo="${escHtml(codigo)}">Voltar para a conferir</button>`:''}</div>`:'<p class="help">Só operador e admin revisam.</p>'}`)}
+    ${op?`<div class="act"><button class="btn sm pri" data-rev-item="conferida" data-codigo="${escHtml(codigo)}">Está certo${falta>1||it.revisao!=='pendente'?' e próxima ›':''}</button><button class="btn sm" data-rev-item="corrigida" data-codigo="${escHtml(codigo)}">Salvar correção</button>${it.revisao!=='pendente'?`<button class="btn sm" data-rev-item="pendente" data-codigo="${escHtml(codigo)}">Voltar para a conferir</button>`:''}</div>`:'<p class="help">Só operador e admin revisam.</p>'}
+    <p class="help"><button class="btn sm" data-rev-pagina="${escHtml(codigo)}">Abrir a página da folha</button></p>`)}
+function atualizarCartaoRevisao(codigo){const c=document.querySelector(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"]`);if(c){const t=c.querySelector('.rev-tag'),it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(t&&it)t.outerHTML=tagRevisao(it.revisao)}}
+async function girarFolha(codigo,graus){
+  try{const r=await API('/api/itens/'+encodeURIComponent(codigo)+'/girar',{method:'POST',body:JSON.stringify({graus:+graus})});
+    const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it)it.giro_manual=r.giro_manual;
+    const im=document.getElementById('rv-img');if(im)im.src=urlPreviaFolha(codigo,r.giro_manual);
+    document.querySelectorAll(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"] img.img-prev`).forEach(i=>{i.src=urlPreviaFolha(codigo,r.giro_manual,480)})}catch(e){toast(e.message)}}
 async function salvarRevisaoItem(codigo,estado){
   try{if(estado==='corrigida'){const v=id=>document.getElementById(id).value.trim(),ano=v('rv-ano');
       await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify({titulo:v('rv-titulo'),tipo_documento:v('rv-tipo'),folha:v('rv-folha'),escala:v('rv-escala'),ano_folha:ano===''?0:+ano})})}
-    await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});toast(estado==='pendente'?'Voltou para conferir':estado==='corrigida'?'Correção salva':'Folha conferida');closeDrawer(true);if(window.PROJETO_PJ)showProjeto(window.PROJETO_PJ)}catch(e){toast(e.message)}}
+    await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});
+    const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){it.revisao=estado;it.revisado_por=EU&&EU.email}
+    atualizarCartaoRevisao(codigo);if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
+    if(estado==='pendente'){toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
+    const prox=proximaPendente(codigo);if(prox){abrirRevisaoItem(prox.codigo)}else{closeDrawer(true);toast('Todas as folhas foram revisadas')}}catch(e){toast(e.message)}}
 async function acaoRevisaoLote(acao,lote,projeto){
-  const rotas={importar:'importar',conferir:'conferir-sem-pendencia',aprovar:'aprovar',reabrir:'reabrir'};
+  const rotas={importar:'importar',conferir:'conferir-sem-pendencia',todas:'conferir-todas',aprovar:'aprovar',reabrir:'reabrir'};
+  if(acao==='todas'){const L=(window.ITENS_PJ||[]).filter(x=>String(x.lote_id)===String(lote)&&x.revisao==='pendente'),ap=L.filter(i=>i.status_site==='bloqueado'||(i.pendencias&&((i.pendencias.bloqueios||[]).length||(i.pendencias.ressalvas||[]).length||(i.pendencias.sinais||[]).length))).length;
+    if(!confirm(`Aprovar todas as ${L.length} folha(s) pendentes?${ap?`\n\n${ap} delas têm algo apontado pelo CAMP Vision (duplicata, orientação incerta...). Ficam conferidas, mas as bloqueadas continuam sem ir ao site.`:''}`))return}
   if(acao==='aprovar'&&!confirm('Aprovar a revisão deste lote? Depois disso as folhas não podem mais ser editadas aqui, a não ser que você reabra a revisão.'))return;
   try{const r=await API('/api/lotes/'+encodeURIComponent(lote)+'/'+rotas[acao],{method:'POST'});
-    toast(acao==='importar'?`${r.criadas} folha(s) importada(s)${r.atualizadas?`, ${r.atualizadas} atualizada(s)`:''}${r.ignoradas_ja_revisadas?`, ${r.ignoradas_ja_revisadas} já revisada(s) mantida(s)`:''}`:acao==='conferir'?`${r.conferidas} folha(s) conferida(s); ${r.restam} precisam de olho humano`:acao==='aprovar'?'Revisão aprovada':'Revisão reaberta');
+    toast(acao==='importar'?`${r.criadas} folha(s) importada(s)${r.atualizadas?`, ${r.atualizadas} atualizada(s)`:''}${r.ignoradas_ja_revisadas?`, ${r.ignoradas_ja_revisadas} já revisada(s) mantida(s)`:''}`:acao==='conferir'?`${r.conferidas} folha(s) conferida(s); ${r.restam} precisam de olho humano`:acao==='todas'?`${r.conferidas} folha(s) aprovada(s)`:acao==='aprovar'?'Revisão aprovada':'Revisão reaberta');
     showProjeto(projeto)}catch(e){toast(e.message)}}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-rev-abrir],[data-rev-item],[data-rev-lote]');if(!b||b.disabled)return;   // códigos só em data-*, nunca dentro de onclick
+document.addEventListener('click',e=>{const b=e.target.closest('[data-rev-abrir],[data-rev-item],[data-rev-lote],[data-rev-girar],[data-rev-pagina]');if(!b||b.disabled)return;   // códigos só em data-*, nunca dentro de onclick
   e.stopPropagation();e.preventDefault();
-  if(b.dataset.revAbrir)abrirRevisaoItem(b.dataset.revAbrir);else if(b.dataset.revItem)salvarRevisaoItem(b.dataset.codigo,b.dataset.revItem);else acaoRevisaoLote(b.dataset.revLote,b.dataset.lote,b.dataset.projeto)},true);
+  if(b.dataset.revAbrir)abrirRevisaoItem(b.dataset.revAbrir);else if(b.dataset.revItem)salvarRevisaoItem(b.dataset.codigo,b.dataset.revItem);else if(b.dataset.revGirar)girarFolha(b.dataset.codigo,b.dataset.revGirar);else if(b.dataset.revPagina){closeDrawer(true);nav('item/'+b.dataset.revPagina)}else acaoRevisaoLote(b.dataset.revLote,b.dataset.lote,b.dataset.projeto)},true);
 document.addEventListener('error',e=>{const i=e.target;if(i&&i.classList&&i.classList.contains('img-prev'))i.replaceWith(Object.assign(document.createElement('span'),{className:'qf-sem',textContent:'sem prévia'}))},true);
 async function carregarFolhasQnap(code){
   const box=document.getElementById('pj-qnap');if(!box)return;
@@ -1614,7 +1635,7 @@ function renderItensProjeto(d,p){window.ITENS_PJ=d.itens||[];window.PROJETO_PJ=p
 function renderItensProjetoBase(d,p){
   const its=d.itens||[], fonte=d.fonte_visual||{};
   if(!its.length)return `<div class="panel"><div class="empty">Nenhum documento digitalizado reconhecido para este projeto.</div></div>`;
-  const diverge=fonte.documentos_site!==fonte.documentos_locais,soSite=its.filter(i=>i.origem_catalogacao==='site').length;
+  const diverge=(fonte.documentos_site||0)>0&&fonte.documentos_site!==fonte.documentos_locais,soSite=its.filter(i=>i.origem_catalogacao==='site').length;
   const source=`<div class="project-source ${diverge?'warn':''}"><b>Fonte visual:</b><span>${escHtml(fonte.colecao_itens_nome||('coleção '+(fonte.colecao_itens_id||'—')))}</span><span>· ${escHtml(fonte.documentos_site??0)} documento(s) reconhecidos no site</span><span>· ${escHtml(fonte.documentos_locais??0)} no catálogo local</span>${diverge?'<span class="tag a">divergência</span>':''}${soSite>0&&EU&&EU.papel!=='leitura'?`<button class="btn sm" id="pd-importar" onclick="importarFolhasDoSite('${escHtml(p.codigo)}',${soSite})">Importar ${soSite} folha(s) só no site</button>`:''}</div>`;
   const ordem=['S01','S02','S03','S04','S05','S06','SEM_SERIE'];
   const grupos={};for(const it of its){const k=it.serie_codigo||'SEM_SERIE';(grupos[k]||(grupos[k]=[])).push(it)}

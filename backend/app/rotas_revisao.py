@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, giro_imagem as imagens
 from .db import connect
 from .importador_lote import importar_lote, ler_pacote
 from .rotas_operacao import _qnap_prontos_raiz
@@ -147,6 +147,65 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
         con.close()
 
 
+@router.post("/lotes/{lote_id}/conferir-todas")
+def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Marca TODAS as folhas ainda pendentes do lote como conferidas (inclusive as que o CAMP Vision apontou: o botão existe para quando a pessoa já olhou).
+    Devolve quantas tinham algo apontado, para a tela dizer. Não aprova o lote: isso continua sendo do admin."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["aprovado_em"]:
+            raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
+        marcadas = apontadas = 0
+        for i in con.execute("SELECT codigo, status_site, pendencias FROM item WHERE lote_id=? AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar')", (lote_id,)).fetchall():
+            try:
+                p = json.loads(i["pendencias"] or "{}")
+            except ValueError:
+                p = {}
+            if i["status_site"] == "bloqueado" or p.get("bloqueios") or p.get("ressalvas") or p.get("sinais"):
+                apontadas += 1
+            con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (u["email"], i["codigo"]))
+            marcadas += 1
+        _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", u["email"], {"lote_id": lote_id, "todas": True, "conferidas": marcadas, "com_algo_apontado": apontadas})
+        con.commit()
+        return {"conferidas": marcadas, "com_pendencia": apontadas, "restam": 0}
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+class Giro(BaseModel):
+    graus: int      # 90 (horário), -90 (anti-horário) ou 180
+
+
+@router.post("/itens/{codigo}/girar")
+def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Vira a prévia da folha (e a imagem que vai ao site). A tela e o site mostram a folha já virada; o arquivo original no QNAP não é tocado."""
+    if d.graus not in (90, -90, 180):
+        raise HTTPException(400, "graus deve ser 90, -90 ou 180")
+    if not imagens.disponivel():
+        raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh e tente de novo")
+    con = connect()
+    try:
+        i = con.execute("SELECT i.giro_manual, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        if i["aprovado_em"]:
+            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
+        if i["status_site"] in ("rascunho", "no_ar"):
+            raise HTTPException(409, "Esta folha já está no site: a imagem lá não muda por aqui")
+        novo = (i["giro_manual"] + d.graus) % 360
+        con.execute("UPDATE item SET giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, codigo))
+        _evento(con, "item", codigo, "giro", u["email"], {"de": i["giro_manual"], "para": novo})
+        con.commit()
+        return {"giro_manual": novo}
+    finally:
+        con.close()
+
+
 @router.post("/lotes/{lote_id}/aprovar")
 def aprovar(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
@@ -193,11 +252,11 @@ def reabrir(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
 
 
 @router.get("/itens/{codigo}/previa")
-def previa(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+def previa(codigo: str, t: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
     """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta."""
     con = connect()
     try:
-        i = con.execute("SELECT pendencias FROM item WHERE codigo=?", (codigo,)).fetchone()
+        i = con.execute("SELECT pendencias, giro_manual FROM item WHERE codigo=?", (codigo,)).fetchone()
     finally:
         con.close()
     try:
@@ -211,4 +270,12 @@ def previa(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> FileRespons
     alvo = (raiz / rel).resolve()
     if base not in alvo.parents or alvo.suffix.lower() not in (".jpg", ".jpeg") or alvo.stem != codigo or not alvo.is_file():
         raise HTTPException(404, "Sem prévia")
+    giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
+    if giro and not imagens.disponivel():
+        raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh")
+    if (giro or lado) and imagens.disponivel():
+        try:
+            alvo = imagens.jpeg_girado(alvo, giro, lado or None)
+        except Exception as e:  # noqa: BLE001  (arquivo corrompido, disco cheio...)
+            raise HTTPException(500, f"Não consegui preparar a imagem: {str(e)[:120]}")
     return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})
