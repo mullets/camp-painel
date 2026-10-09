@@ -79,7 +79,8 @@ w.route_to('arquitetos'); await sleep(1000); const ar=d.querySelectorAll('#v-arq
 w.route_to('config'); await sleep(1000); okl.push('config: usuários '+d.querySelectorAll('#usr-body tr').length+' | campos config '+d.querySelectorAll('#cfg-body input').length);
 if(d.querySelectorAll('#usr-body tr').length<2) problems.push('config: usuários não carregaram'); if(d.querySelectorAll('#cfg-body input').length<10) problems.push('config: configurações não carregaram'); checkDom('config');
 // ETIQUETAS
-w.route_to('etiquetas'); await sleep(900); if(!d.querySelector('#lab-preview .label')) problems.push('etiquetas: preview vazio'); else okl.push('etiquetas: preview ok');
+w.route_to('etiquetas'); await sleep(900); if(d.getElementById('l-fundo').value!=='') problems.push('etiquetas: pelo menu a tela deveria abrir SEM fundo escolhido (antes: F014 fixo)'); if(d.querySelector('#lab-preview .label')) problems.push('etiquetas: sem fundo escolhido não deveria haver etiqueta na prévia');
+w.route_to('etiquetas/projeto/F003-P9001'); await sleep(2500); if(!d.querySelector('#lab-preview .label')) problems.push('etiquetas: preview vazio'); else okl.push('etiquetas: preview ok');
 if(!d.querySelector('.lab-section')||!d.querySelector('.lab-preview-shell')) problems.push('etiquetas: novo layout em blocos/prévia não carregou');
 if(!d.getElementById('l-local')||!d.getElementById('l-docs-volume')) problems.push('etiquetas: localização/quantidade por volume ausentes'); 
 for(const t of ['documento','caixa','tubo','fundo']){ d.querySelector(`#lab-tabs [data-t="${t}"]`).click(); await sleep(100); if(!d.querySelector('#lab-preview .label')) problems.push('etiqueta '+t+' sem preview'); }
