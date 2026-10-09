@@ -121,14 +121,35 @@ class WP:
         yield from self._paginado(f"/wp-json/tainacan/v2/taxonomy/{tid}/terms", log=None, hideempty=0)
 
     # ---- escrita (Tainacan) ----
+    def editar_item(self, item_id: int, campos: dict, colecao_id: int | None = None) -> dict:
+        """Edita um item do Tainacan. O endereço que o site aceita é /items/{id} (PLURAL, sem a coleção): conferido no site em produção.
+        A forma /collection/{id}/items/{id} responde 404 `rest_no_route` (foi o que travou o Publicar); fica só como reserva, depois do POST.
+        Só tenta outro endereço quando a resposta é 404/405 (rota inexistente); 400/401/403/5xx são erros de verdade e param na hora."""
+        tentativas = [("patch", f"/wp-json/tainacan/v2/items/{item_id}")]
+        if colecao_id:
+            tentativas.append(("patch", f"/wp-json/tainacan/v2/collection/{colecao_id}/items/{item_id}"))
+        tentativas.append(("post", f"/wp-json/tainacan/v2/items/{item_id}"))
+        ultimo, tentados = None, []
+        for metodo, url in tentativas:
+            r = getattr(self.h, metodo)(url, json=campos)
+            tentados.append(f"{metodo.upper()} {url.replace('/wp-json/tainacan/v2', '')}")
+            if r.status_code < 400:
+                return r.json()
+            ultimo = r
+            if r.status_code not in (404, 405):
+                break
+        quais = "" if len(tentados) == 1 else f" (tentei {'; '.join(tentados)})"
+        raise RuntimeError(f"Tainacan recusou ({ultimo.status_code}) item {item_id}{quais}: {ultimo.text[:200]}")
+
     def atualizar_status_item(self, colecao_id: int, item_id: int, status: str) -> dict:
-        """status: publish | draft | private. Única escrita permitida nesta versão."""
+        """status: publish | draft | private. Confere se o site de fato ficou com o status pedido (um 200 que mantém 'draft' não é publicado)."""
         if status not in ("publish", "draft", "private"):
             raise ValueError("status inválido")
-        r = self.h.patch(f"/wp-json/tainacan/v2/collection/{colecao_id}/items/{item_id}", json={"status": status})
-        if r.status_code >= 400:
-            raise RuntimeError(f"Tainacan recusou ({r.status_code}) item {item_id}: {r.text[:200]}")
-        return r.json()
+        j = self.editar_item(item_id, {"status": status}, colecao_id)
+        ficou = j.get("status") if isinstance(j, dict) else None
+        if ficou and ficou != status:
+            raise RuntimeError(f"Tainacan aceitou, mas o item {item_id} continuou como '{ficou}' em vez de '{status}' (campo obrigatório vazio ou regra do site?)")
+        return j
 
     def criar_termo(self, taxonomia_id: int, nome: str, descricao: str = "") -> dict:
         r = self.h.post(f"/wp-json/tainacan/v2/taxonomy/{taxonomia_id}/terms", json={"name": nome, "description": descricao})
@@ -184,10 +205,7 @@ def metadados_texto(item: dict) -> dict:
 
 # ---- extensões de escrita (01/10) ----
 def _wp_patch_item(self, colecao_id: int, item_id: int, **campos) -> dict:
-    r = self.h.patch(f"/wp-json/tainacan/v2/collection/{colecao_id}/items/{item_id}", json=campos)
-    if r.status_code >= 400:
-        raise RuntimeError(f"Tainacan recusou editar item {item_id}: {r.status_code} {r.text[:200]}")
-    return r.json()
+    return self.editar_item(item_id, campos, colecao_id)
 
 
 def _wp_upload_media(self, caminho: str, titulo: str = "") -> dict:

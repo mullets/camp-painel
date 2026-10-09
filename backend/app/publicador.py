@@ -234,7 +234,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             itens = con.execute(
                 "SELECT codigo, tainacan_item_id FROM item "
-                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0 AND duplicata_de IS NULL",
+                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
@@ -386,6 +386,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         con.close(); return out
     if i["autoria_divergente"] or i["duplicata_de"]:
         con.close(); out["erro"] = "folha com autoria divergente ou duplicata não sobe ao site"; return out
+    if i["lote_id"] and i["revisao"] == "pendente":
+        con.close(); out["erro"] = "a folha ainda não foi conferida na revisão do lote: confira antes de enviar ao site"; return out
     if not i["dossie_id"]:
         con.close(); out["erro"] = "o projeto ainda não tem dossiê no site (crie o projeto no site primeiro)"; return out
     try:
@@ -413,9 +415,11 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
             except Exception as e:  # noqa: BLE001
                 _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
-        if enviar_imagem and i["arquivo_jpg"] and not str(i["arquivo_jpg"]).startswith("http"):
+        from .imagem_site import imagem_para_o_site
+        caminho_img = imagem_para_o_site(con, i) if enviar_imagem else None
+        if caminho_img:
             try:
-                m = wp.upload_media(i["arquivo_jpg"], titulo)
+                m = wp.upload_media(caminho_img, titulo)
                 wp.definir_documento(COL_ACERVO, iid, m["id"])
                 con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
                 out["imagem"] = m.get("source_url")

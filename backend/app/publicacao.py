@@ -12,7 +12,9 @@ import time
 
 from .db import connect
 
-ELEGIVEL = "tainacan_item_id IS NOT NULL AND autoria_divergente=0 AND duplicata_de IS NULL"
+# Uma folha só vai ao site se: não tem autoria divergente, não é duplicata e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
+ELEGIVEL_LOCAL = "autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')"
+ELEGIVEL = f"tainacan_item_id IS NOT NULL AND {ELEGIVEL_LOCAL}"
 
 
 def condicoes_projeto(con, p) -> dict:

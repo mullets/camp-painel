@@ -1611,6 +1611,169 @@ def filho(modo):
         ver("tudo fica registrado na história (importação, revisão, aprovação, reabertura)", {"folhas_importadas_do_lote", "revisao", "revisao_aprovada", "revisao_reaberta", "revisao_em_lote"} <= ev, str(sorted(ev)))
         for l in res: print(l)
         k.close()
+    elif modo == "publicar_tudo":
+        init_db(); aplicar_migracoes()
+        import json as _j, threading as _th
+        from pathlib import Path as _P
+        from app import auth, publicador, publicacao_guiada as pg, wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F094','Fundo Pub','PUB',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F094','autorizado','Fam','Termo')")
+        def proj(n, titulo, **kw):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F094',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F094-P{n:04d}", "F094", n, titulo))
+            return f"F094-P{n:04d}"
+        def folha(cod, seq, **kw):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'campvision')", (cod, cod[:10], "S01", seq, f"Folha {seq}"))
+            for k_, v_ in kw.items(): c.execute(f"UPDATE item SET {k_}=? WHERE codigo=?", (v_, cod))
+        P1 = proj(1, "Casa Um")
+        D = lambda p, n: f"{p}-1970-S01-D{n:05d}"
+        for n in (1, 2, 3, 4, 5): folha(D(P1, n), n)
+        c.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (D(P1, 1), D(P1, 5)))               # D5 é duplicata: fica de fora
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Lote', ?, '/x')", (P1,))
+        lid = c.execute("SELECT id FROM lista_processamento").fetchone()[0]
+        c.execute("UPDATE item SET lote_id=?, revisao='conferida' WHERE codigo IN (?,?)", (lid, D(P1, 1), D(P1, 2)))
+        c.execute("UPDATE item SET lote_id=?, revisao='pendente' WHERE codigo=?", (lid, D(P1, 4)))      # D4 veio da revisão e NÃO foi conferida: fica de fora
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        # ---------- substitutos do WordPress: registram o que seria feito ----------
+        chamadas = {"dossie": 0, "folhas": [], "status": [], "falha_folha": set(), "upload": []}
+        def dossie_falso(codigo, ator):
+            chamadas["dossie"] += 1; cc = connect(); wid = 9000 + chamadas["dossie"]
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft','dossie',?,?,'F094')", (wid, codigo, codigo))
+            cc.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "erro": None}
+        def folha_falsa(codigo, ator, enviar_imagem=True):
+            if codigo in chamadas["falha_folha"]: return {"item_id": None, "metadados": [], "imagem": None, "erro": "WordPress recusou"}
+            chamadas["folhas"].append(codigo); cc = connect(); wid = 7000 + len(chamadas["folhas"])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','f',?,?,'F094')", (wid, codigo, codigo[:10]))
+            cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        class WPFalso:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): chamadas["status"].append((cid, wid, alvo))
+        _folha_real = publicador.criar_folha_no_site
+        publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_falsa, WPFalso
+        url = f"/api/projetos/{P1}"
+        # ---------- o plano (só lê) ----------
+        pl = adm.get(url + "/publicar/plano").json()
+        ver("plano: dossiê, 2 folhas a enviar (D2 e D3: D1 conferida... as elegíveis sem registro no site), autorizar e publicar, na ordem", [x["id"] for x in pl["passos"]] == ["dossie", "folhas", "autorizar", "publicar"] and all(x["estado"] == "sera_feito" for x in pl["passos"]) and pl["folhas_a_enviar"] == 3 and pl["folhas_a_publicar"] == 3 and pl["pode_executar"] and pl["bloqueios"] == [], str(pl)[:300])
+        ver("plano: o que fica de fora é dito (1 duplicata, 1 folha não conferida)", pl["fora"] == {"duplicadas": 1, "autoria_divergente": 0, "nao_conferidas": 1}, str(pl["fora"]))
+        ver("plano: não muda nada; qualquer logado vê (operador), sem login 401, projeto inexistente 404", op.get(url + "/publicar/plano").status_code == 200 and anon.get(url + "/publicar/plano").status_code == 401 and adm.get("/api/projetos/F094-P9999/publicar/plano").status_code == 404 and chamadas["dossie"] == 0 and sql("SELECT autorizado_site FROM projeto WHERE codigo=?", P1) == 0)
+        ver("plano: pode_agir só para admin/master", op.get(url + "/publicar/plano").json()["pode_agir"] is False and pl["pode_agir"] is True)
+        # ---------- permissões ----------
+        ver("executar: operador 403; sem login 401; projeto inexistente 404", op.post(url + "/publicar-tudo").status_code == 403 and anon.post(url + "/publicar-tudo").status_code == 401 and adm.post("/api/projetos/F094-P9999/publicar-tudo").status_code == 404, str((op.post(url + "/publicar-tudo").status_code, anon.post(url + "/publicar-tudo").status_code, adm.post("/api/projetos/F094-P9999/publicar-tudo").status_code)))
+        # ---------- bloqueios que SÓ uma pessoa resolve: nada é feito ----------
+        k.execute("DELETE FROM direitos_fundo WHERE fundo_codigo='F094'"); k.commit()
+        b = adm.post(url + "/publicar-tudo")
+        ver("direitos do fundo não autorizados: 400 com o plano (e o botão que resolve), e NENHUM efeito no site", b.status_code == 400 and any(x["id"] == "direitos" and x["acao"]["tipo"] == "direitos" for x in b.json()["plano"]["bloqueios"]) and chamadas["dossie"] == 0 and chamadas["folhas"] == [] and chamadas["status"] == [], b.text[:200])
+        k.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F094','autorizado','Fam','Termo')"); k.execute("UPDATE projeto SET lote_teste=1 WHERE codigo=?", (P1,)); k.commit()
+        b = adm.post(url + "/publicar-tudo")
+        ver("lote de teste: 400 e nada é feito", b.status_code == 400 and any(x["id"] == "teste" for x in b.json()["plano"]["bloqueios"]) and chamadas["dossie"] == 0)
+        k.execute("UPDATE projeto SET lote_teste=0 WHERE codigo=?", (P1,)); k.commit()
+        # ---------- falha numa folha: NADA é publicado e o que subiu não se repete ----------
+        chamadas["falha_folha"].add(D(P1, 3))
+        r = adm.post(url + "/publicar-tudo").json()
+        ver("uma folha falha ao subir: para antes de publicar, diz qual, e não autoriza nem publica", r["ok"] is False and r["etapa"] == "folhas" and r["falhas"][0]["codigo"] == D(P1, 3) and chamadas["status"] == [] and sql("SELECT autorizado_site FROM projeto WHERE codigo=?", P1) == 0 and "nada foi publicado" in r["mensagem"], str(r)[:260])
+        ver("o dossiê e a folha que subiram ficam (não se repetem na próxima)", chamadas["dossie"] == 1 and sql("SELECT tainacan_item_id IS NOT NULL FROM item WHERE codigo=?", D(P1, 2)) == 1)
+        # ---------- corrigido o problema, clicar de novo termina ----------
+        chamadas["falha_folha"].clear()
+        r2 = adm.post(url + "/publicar-tudo").json()
+        ver("corrigido o problema e clicando de novo: autoriza e publica o dossiê e SÓ as folhas elegíveis (D1, D2, D3), nunca a duplicata nem a não conferida", r2["ok"] is True and r2["etapa"] == "publicar" and "autorizar" in r2["feitos"] and r2["publicados"] == 4 and sorted(w for (_, w, a) in chamadas["status"]) == sorted([9001] + [sql("SELECT tainacan_item_id FROM item WHERE codigo=?", D(P1, n)) for n in (1, 2, 3)]) and all(a == "publish" for (_, _, a) in chamadas["status"]), str(r2)[:300])
+        ver("depois: projeto no ar, autorizado, folhas elegíveis no ar; duplicata e não conferida continuam fora do site", sql("SELECT status_site FROM projeto WHERE codigo=?", P1) == "no_ar" and sql("SELECT autorizado_site FROM projeto WHERE codigo=?", P1) == 1 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site='no_ar'", P1) == 3 and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", D(P1, 4)) is None and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", D(P1, 5)) is None)
+        ver("a história registra a publicação guiada e a autorização", sql("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo IN ('publicacao_guiada','autorizado_ao_publicar')", P1) == 2)
+        # ---------- idempotente ----------
+        n_dossie, n_folhas = chamadas["dossie"], len(chamadas["folhas"])
+        r3 = adm.post(url + "/publicar-tudo").json(); pl3 = adm.get(url + "/publicar/plano").json()
+        ver("clicar de novo não recria dossiê nem folhas (idempotente) e o plano mostra tudo 'feito'", chamadas["dossie"] == n_dossie and len(chamadas["folhas"]) == n_folhas and r3["ok"] is True and [x["estado"] for x in pl3["passos"][:3]] == ["feito", "feito", "feito"] and pl3["ja_publicado"] is True)
+        # ---------- folha conferida depois entra no próximo ----------
+        k.execute("UPDATE item SET revisao='conferida' WHERE codigo=?", (D(P1, 4),)); k.commit()
+        pl4 = adm.get(url + "/publicar/plano").json()
+        ver("conferir uma folha que estava de fora: o plano passa a enviá-la, e publicar de novo leva só a nova", pl4["folhas_a_enviar"] == 1 and pl4["fora"]["nao_conferidas"] == 0 and adm.post(url + "/publicar-tudo").json()["ok"] is True and len(chamadas["folhas"]) == n_folhas + 1 and chamadas["folhas"][-1] == D(P1, 4))
+        # ---------- fatias de tempo: um projeto grande devolve 'parcial' e repetir termina ----------
+        c = connect(); P3 = proj(3, "Casa Tres")
+        for n in (1, 2, 3): folha(D(P3, n), n)
+        c.commit(); c.close(); pg.ORCAMENTO_S = 0.0; antes = len(chamadas["status"])
+        p1 = adm.post(f"/api/projetos/{P3}/publicar-tudo").json(); p2 = adm.post(f"/api/projetos/{P3}/publicar-tudo").json()
+        ver("projeto grande: cada chamada envia uma fatia e devolve 'parcial' com quantas faltam (a tela repete), sem publicar ainda", p1["ok"] is False and p1["parcial"] is True and p1["restam"] == 2 and p2["parcial"] is True and p2["restam"] == 1 and len(chamadas["status"]) == antes, f"{p1.get('restam')} {p2.get('restam')}")
+        p3 = adm.post(f"/api/projetos/{P3}/publicar-tudo").json(); pg.ORCAMENTO_S = 40.0
+        ver("na última fatia termina: autoriza e publica (dossiê + 3 folhas)", p3["ok"] is True and p3["parcial"] is False and p3["publicados"] == 4 and len(chamadas["status"]) == antes + 4, str(p3)[:200])
+        # ---------- sem nenhuma folha conferida: bloqueia ----------
+        c = connect(); P2 = proj(2, "Casa Dois"); folha(D(P2, 1), 1); c.execute("UPDATE item SET lote_id=?, revisao='pendente' WHERE codigo=?", (lid, D(P2, 1))); c.commit(); c.close()
+        b = adm.post(f"/api/projetos/{P2}/publicar-tudo")
+        ver("só tem folha NÃO conferida: bloqueia dizendo para conferir, com o botão que leva à revisão", b.status_code == 400 and any(x["id"] == "revisao" and x["acao"]["tipo"] == "revisao" for x in b.json()["plano"]["bloqueios"]), b.text[:200])
+        # ---------- trava contra clique duplo ----------
+        pg._em_andamento.add(P2)
+        ver("já está publicando este projeto: 409", adm.post(f"/api/projetos/{P2}/publicar-tudo").status_code == 409)
+        pg._em_andamento.discard(P2)
+        # ---------- a regra única de elegibilidade vale também no envio avulso e na publicação avulsa ----------
+        r_real = _folha_real(D(P2, 1), "x")        # D(P2,1): veio da revisão, NÃO conferida e ainda sem registro no site
+        ver("a folha NÃO conferida não sobe nem pelo envio avulso (a função real recusa, antes de falar com o site)", r_real["erro"] and "não foi conferida" in r_real["erro"] and r_real["item_id"] is None, str(r_real))
+        # ---------- qual arquivo sobe ao site: a PRÉVIA do CAMP Vision, não um caminho relativo que não abre ----------
+        from app.imagem_site import imagem_para_o_site
+        raiz = _P(os.environ["CAMP_TMP_PRONTOS"]); shutil_ = __import__("shutil"); shutil_.rmtree(raiz, ignore_errors=True)
+        (raiz / "_campvision" / "preview" / "F094-P0001").mkdir(parents=True); (raiz / "F094 - Fundo" / "JPG").mkdir(parents=True)
+        pv = raiz / "_campvision" / "preview" / "F094-P0001" / "f.jpg"; pv.write_bytes(b"p"); arq = raiz / "F094 - Fundo" / "JPG" / "f.jpg"; arq.write_bytes(b"a"); fora = raiz.parent / "fora.jpg"; fora.write_bytes(b"x")
+        k.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),)); k.commit()
+        im = lambda jpg, previa=None: imagem_para_o_site(k, {"arquivo_jpg": jpg, "pendencias": _j.dumps({"previa": previa}) if previa else None})
+        ver("imagem do site: a prévia do CAMP Vision (3000 px, já girada) vem antes do arquivo da folha", im("F094 - Fundo/JPG/f.jpg", "_campvision/preview/F094-P0001/f.jpg") == str(pv.resolve()))
+        ver("sem prévia: o caminho RELATIVO à raiz dos prontos (como o CAMP Vision grava) passa a abrir; o absoluto continua valendo", im("F094 - Fundo/JPG/f.jpg") == str(arq.resolve()) and im(str(arq)) == str(arq))
+        ver("sem imagem (vazio ou link do site): None, sem subir nada", im(None) is None and im("") is None and im("https://camp.arq.br/x.jpg") is None)
+        ver("segurança: o caminho vem do pacote (de fora): prévia fora de _campvision/preview, '../' e caminho fora da raiz NUNCA resolvem para o arquivo de fora", im("F094 - Fundo/JPG/f.jpg", "../fora.jpg") == str(arq.resolve()) and im("F094 - Fundo/JPG/f.jpg", "F094 - Fundo/JPG/f.jpg") == str(arq.resolve()) and im("../fora.jpg") == "../fora.jpg" and im("../fora.jpg", "_campvision/preview/../../../fora.jpg") == "../fora.jpg")
+        for l in res: print(l)
+        k.close()
+    elif modo == "tainacan":
+        import json as _j, threading as _th, httpx
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from app.wp import WP
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def site(comportamento):          # um servidor HTTP DE VERDADE que imita o site; devolve (cliente WP, pedidos vistos)
+            vistos = []
+            class H(BaseHTTPRequestHandler):
+                def log_message(self, *a): pass
+                def _r(self):
+                    n = int(self.headers.get("Content-Length") or 0); corpo = _j.loads(self.rfile.read(n).decode() or "{}") if n else {}
+                    vistos.append((self.command, self.path, corpo)); st, resp = comportamento(self.command, self.path, corpo)
+                    self.send_response(st); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(_j.dumps(resp).encode())
+                do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = _r
+            srv = ThreadingHTTPServer(("127.0.0.1", 0), H); _th.Thread(target=srv.serve_forever, daemon=True).start()
+            w = WP.__new__(WP); w.h = httpx.Client(base_url=f"http://127.0.0.1:{srv.server_port}")
+            return w, vistos, srv
+        NO_ROUTE = {"code": "rest_no_route", "message": "Nenhuma rota foi encontrada que corresponde com o URL e o método de requisição.", "data": {"status": 404}}
+        IT = "/wp-json/tainacan/v2/items/25236"; COL = "/wp-json/tainacan/v2/collection/8013/items/25236"
+        def real(m, p, b):                # COMO O SITE REAL SE COMPORTA (visto no erro do Rafael): a rota com coleção não existe; /items/{id} existe
+            if p == IT and m in ("PATCH", "POST"): return 200, {"id": 25236, "status": b.get("status", "draft"), "title": "Dossiê"}
+            return 404, NO_ROUTE
+        w, vistos, srv = site(real); j = w.atualizar_status_item(8013, 25236, "publish")
+        ver("publicar contra o site REAL: usa /items/{id} (sem coleção) e funciona; a rota que dava 404 rest_no_route nem é tentada", j["status"] == "publish" and vistos == [("PATCH", IT, {"status": "publish"})], str(vistos)); srv.shutdown()
+        w, vistos, srv = site(real); w.patch_item(8013, 25236, title="Novo", description="d")
+        ver("editar texto da folha/dossiê no site também usa /items/{id}", vistos == [("PATCH", IT, {"title": "Novo", "description": "d"})], str(vistos)); srv.shutdown()
+        def so_post(m, p, b): return (200, {"id": 25236, "status": b["status"]}) if (m, p) == ("POST", IT) else (404, NO_ROUTE)
+        w, vistos, srv = site(so_post); j = w.atualizar_status_item(8013, 25236, "publish")
+        ver("se o PATCH não existir (404), cai para POST /items/{id}; a rota antiga com coleção vai só como reserva", j["status"] == "publish" and [(m, p) for m, p, _ in vistos] == [("PATCH", IT), ("PATCH", COL), ("POST", IT)], str(vistos)); srv.shutdown()
+        w, vistos, srv = site(lambda m, p, b: (401, {"code": "rest_forbidden", "message": "Sem permissão"}))
+        try: w.atualizar_status_item(8013, 25236, "publish"); err = ""
+        except RuntimeError as e: err = str(e)
+        ver("401/403/400/5xx são erros de verdade: para na primeira tentativa, sem insistir em outros endereços", "(401)" in err and "rest_forbidden" in err and len(vistos) == 1, f"{err[:90]} | {len(vistos)} pedido(s)"); srv.shutdown()
+        w, vistos, srv = site(lambda m, p, b: (404, NO_ROUTE))
+        try: w.atualizar_status_item(8013, 25236, "publish"); err = ""
+        except RuntimeError as e: err = str(e)
+        ver("se NENHUM endereço existe: a mensagem diz o que foi tentado (para diagnosticar sem adivinhar)", err.startswith("Tainacan recusou (404) item 25236") and "PATCH /items/25236" in err and "POST /items/25236" in err and "rest_no_route" in err, err[:200]); srv.shutdown()
+        w, vistos, srv = site(lambda m, p, b: (200, {"id": 25236, "status": "draft"}))
+        try: w.atualizar_status_item(8013, 25236, "publish"); err = ""
+        except RuntimeError as e: err = str(e)
+        ver("200 que mantém 'draft' NÃO conta como publicado (o painel não marca no ar o que o site não publicou)", "continuou como 'draft'" in err, err[:160]); srv.shutdown()
+        try: w.atualizar_status_item(8013, 25236, "trash"); ok_ = False
+        except ValueError: ok_ = True
+        ver("status inválido continua barrado antes de qualquer pedido", ok_)
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -1826,6 +1989,23 @@ print("23) Revisão do lote: importar o pacote do CAMP Vision, conferir/corrigir
 os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_revisao"
 rc, out = rodar("revisao", f"{tmp}/revisao.db")
 if rc != 0: ok(False, f"teste da revisão não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("24) Publicar com um clique: plano, sequência (dossiê, folhas, autorizar, publicar), bloqueios, fatias de tempo e idempotência")
+os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_publicar"
+rc, out = rodar("publicar_tudo", f"{tmp}/publicar_tudo.db")
+if rc != 0: ok(False, f"teste do publicar com um clique não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("25) Tainacan: o painel fala com o endereço que o site de fato aceita (servidor HTTP imitando o site real)")
+rc, out = rodar("tainacan", f"{tmp}/tainacan.db")
+if rc != 0: ok(False, f"teste do Tainacan não rodou -> {out[-1200:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -551,7 +551,8 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
             alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
         if d.incluir_folhas:
             for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
-                                    WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.autoria_divergente=0 AND i.duplicata_de IS NULL""", (codigo,)):
+                                    WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.autoria_divergente=0 AND i.duplicata_de IS NULL
+                                      AND (i.lote_id IS NULL OR i.revisao<>'pendente')""", (codigo,)):
                 alvos.append(("item", i[0], i[2] or 8013, i[1]))
     finally:
         con.close()
@@ -657,7 +658,7 @@ def subir_folhas(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close(); raise HTTPException(404, "Projeto não existe")
     if not p["tainacan_item_id"]:
         con.close(); raise HTTPException(400, "O projeto ainda não tem dossiê no site. Use 'Criar no site' primeiro.")
-    pend = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND autoria_divergente=0 AND duplicata_de IS NULL ORDER BY serie_codigo, sequencial", (codigo,))]
+    pend = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente') ORDER BY serie_codigo, sequencial", (codigo,))]
     con.close()
     ok, falhas = 0, []
     for c in pend:

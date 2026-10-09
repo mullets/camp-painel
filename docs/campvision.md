@@ -177,3 +177,22 @@ Os caminhos de `arquivos` e `preview` vêm **relativos à raiz `ACERVOS_CAMP`** 
 título lido, ressalvas, orientação/série incerta e a prévia ficam em `pendencias` para a pessoa ver ao revisar.
 **Página do projeto:** mostra as folhas do site **somadas** às importadas que ainda não estão no site (antes, se o projeto já tinha folha no site, as locais ficavam escondidas).
 **Ainda não faz:** ler `erros.json` e o aceite do lote (`catalogacao/lotes/*.json`), e enviar a folha ao site (continua sendo o fluxo de publicação que já existe).
+
+## 11. Publicar com um clique
+Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabeça: dossiê no site, folhas no site, autorizar o projeto, direitos do fundo, publicar. Agora o painel conhece a receita.
+
+**Na página do projeto, o botão Publicar está sempre ativo e abre o plano** (`GET /api/projetos/{codigo}/publicar/plano`, não muda nada):
+- **O que vou fazer:** dossiê, folhas, autorizar, publicar (cada passo mostra se já foi feito).
+- **Ficam de fora:** duplicatas, autoria divergente e folhas **ainda não conferidas** na revisão (nunca vão ao site).
+- **O que só uma pessoa resolve** e bloqueia: direitos do fundo, autoria divergente/erros bloqueantes, lote de teste, "nenhuma folha conferida ainda". Cada um traz o botão que resolve.
+
+**"Publicar agora"** (`POST /api/projetos/{codigo}/publicar-tudo`, admin) faz a sequência: dossiê -> folhas (rascunho) -> autorizar -> publicar. Regras:
+- **Idempotente:** clicar de novo continua de onde parou; o que já subiu não se repete.
+- **Fatias de tempo:** cada chamada envia folhas por até ~40 s e devolve `parcial` com quantas faltam; a tela repete e mostra o progresso.
+- **Falha numa folha:** para antes de autorizar e publicar, diz qual folha e por quê. Nada fica meio publicado.
+- **Trava contra clique duplo:** 409 se o mesmo projeto já está sendo publicado.
+- Todos os portões de `POST /publicar` continuam valendo: ele revalida no fim.
+
+**Regra única de folha elegível** (`publicacao.ELEGIVEL_LOCAL`, antes repetida em 4 lugares): sem autoria divergente, não é duplicata e, se veio da revisão do CAMP Vision, já foi conferida/corrigida.
+**Imagem que sobe ao site** (`imagem_site.py`): a **prévia do CAMP Vision** (`_campvision/preview/`, ~3000 px, já girada); senão o arquivo da folha, absoluto ou relativo à raiz dos prontos. Antes tratava o caminho como local, e uma folha vinda da revisão subia **sem imagem**.
+**Nunca testado contra o WordPress de verdade**: os testes usam substitutos do dossiê, das folhas e do status do site.

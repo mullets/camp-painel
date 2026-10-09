@@ -459,9 +459,11 @@ chk(!!d.getElementById('pd-pub-corpo')&&/Situação:\s*(não publicado|rascunho)
 const faltam=[...d.querySelectorAll('#pd-pub .chk.falta')].map(e=>e.textContent);
 chk(faltam.length===2&&faltam.some(t=>t.includes('Direitos do fundo F026'))&&faltam.some(t=>t.includes('autorizado para publicação')),'checklist deveria mostrar exatamente 2 pendências (direitos e autorização): '+faltam.length);
 chk(!!d.querySelector('#pd-pub .chk.falta button')&&txt('#pd-pub').includes('Definir direitos do fundo')&&txt('#pd-pub').includes('Autorizar publicação'),'cada pendência deveria ter o botão que a resolve');
-const bp=d.getElementById('pd-publicar'); chk(bp&&bp.getAttribute('aria-disabled')==='true'&&!bp.disabled&&/pendências/.test(bp.title),'botão Publicar deveria estar apagado (aria-disabled, mas clicável) dizendo por quê');
-let _conf=0;w.confirm=()=>{_conf++;return true}; bp.click(); await sleep(900);
-chk(_conf===0&&/Por que não dá para publicar/.test(txt('#d-title'))&&/Faltam \d+ requisito/.test(txt('#d-body'))&&d.querySelectorAll('#d-body .chk.falta').length>=1&&d.querySelectorAll('#d-body .chk.ok').length===0,'clicar em Publicar sem os requisitos deveria EXPLICAR (janela só com o que falta), sem pedir confirmação: "'+txt('#d-body').slice(0,140)+'"'); w.closeDrawer(true);
+const bp=d.getElementById('pd-publicar'); chk(bp&&!bp.disabled&&bp.getAttribute('aria-disabled')!=='true','o botão Publicar deveria estar SEMPRE ativo (o plano é que explica o que falta)');
+let _conf=0;w.confirm=()=>{_conf++;return true}; bp.click(); await sleep(1300);
+chk(_conf===0&&txt('#d-title').includes('Publicar')&&/O que vou fazer/.test(txt('#d-body'))&&d.querySelectorAll('#d-body h3 + ul.checklist li').length===4&&/Autorizar o projeto/.test(txt('#d-body'))&&/Publicar o dossiê e \d+ folha/.test(txt('#d-body')),'clicar em Publicar deveria abrir o PLANO com os 4 passos (dossiê, folhas, autorizar, publicar), sem pedir confirmação ('+d.querySelectorAll('#d-body h3 + ul.checklist li').length+' passos, confirm='+_conf+'): \"'+txt('#d-body').slice(0,160)+'\"');
+chk(d.querySelectorAll('#d-body .chk.falta').length===1&&/Direitos do fundo F026/.test(txt('#d-body'))&&d.querySelectorAll('#d-body .chk.falta button').length===1&&/Definir direitos do fundo/.test(txt('#d-body'))&&d.getElementById('pub-go').disabled===true,'só o que SÓ uma pessoa resolve (direitos do fundo) deveria bloquear, com o botão que resolve, e \"Publicar agora\" ficar desligado');
+chk(!/Autorizar publicação/.test(txt('#d-body').replace('Autorizar o projeto para publicação','')),'a autorização NÃO deveria ser pedida: o painel faz sozinho'); w.closeDrawer(true);
 chk(!d.querySelector('.dethdr #pd-publicar'),'o botão Publicar não deveria mais ficar no cabeçalho (escondia o porquê)');
 chk(txt('#pd-pub').includes('Sem autoria divergente nem erros bloqueantes'),'checklist deveria listar também o que JÁ está ok');
 // força o clique (como se o botão estivesse ativo): o erro vira um painel que FICA, com tudo o que falta e os botões
@@ -477,6 +479,11 @@ r=await J(adm,'/api/fundos/F026/direitos',{method:'PUT',body:JSON.stringify({sit
 r=await J(adm,'/api/projetos/F026-P0001',{method:'PATCH',body:JSON.stringify({autorizado_site:true})}); chk(r.s===200,'não consegui autorizar o projeto no teste: '+r.s+' '+JSON.stringify(r.b).slice(0,80));
 await w.carregarPublicacao('F026-P0001'); await sleep(900);
 chk(d.querySelectorAll('#pd-pub .chk.falta').length===0&&d.getElementById('pd-publicar')&&d.getElementById('pd-publicar').getAttribute('aria-disabled')!=='true','com os requisitos cumpridos o botão Publicar deveria ficar ativo');
+// Publicar com um clique: sem o que só uma pessoa resolve, o plano libera e o clique executa (aqui o WordPress não tem credencial: o erro tem que ser dito e dar para tentar de novo)
+w.closeDrawer(true); d.getElementById('pd-publicar').click(); await sleep(1300);
+chk(d.querySelectorAll('#d-body .chk.falta').length===0&&d.getElementById('pub-go').disabled===false&&/Eu faço a sequência inteira/.test(txt('#d-body')),'com os requisitos humanos cumpridos o plano deveria liberar \"Publicar agora\": \"'+txt('#d-body').slice(0,140)+'\"');
+d.getElementById('pub-go').click(); await sleep(4500);
+chk(/não terminou|não deu/.test(txt('#pub-prog'))&&txt('#pub-prog').trim().length>20&&d.getElementById('pub-go').disabled===false&&/Tentar de novo/.test(txt('#pub-go')),'sem credencial do WordPress o clique deveria explicar o que houve e deixar TENTAR DE NOVO: \"'+txt('#pub-prog').slice(0,160)+'\"'); w.closeDrawer(true);
 // WordPress sem credencial neste ambiente: o erro tem que ser EXPLICADO e FICAR na tela
 await w.publicarProjeto('F026-P0001','publicar'); await sleep(1800);
 chk(txt('#d-title').includes('Não foi possível publicar')&&txt('#d-body').includes('WordPress')&&txt('#d-body').includes('Configurações'),'sem credencial do WordPress deveria explicar e apontar Configurações: '+txt('#d-body').slice(0,120));
