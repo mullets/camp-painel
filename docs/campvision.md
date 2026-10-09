@@ -221,7 +221,7 @@ O botão **Ler dados agora** (página da folha, janela de revisão e painel de r
 **Lado do painel (feito):** tabela `pedido_releitura` (um pedido aberto por alvo: o projeto inteiro ou uma folha), rotas para as pessoas (`POST /api/itens/{c}/releitura`, `POST /api/projetos/{c}/releitura`, `GET` do estado, `POST /api/releituras/{id}/cancelar`) e as três rotas do CV2 abaixo.
 A tela diz a verdade: enquanto o CV2 nunca tiver consultado, mostra "o CAMP Vision ainda não consulta pedidos de releitura: o pedido fica guardado".
 
-**Lado do CAMP Vision (a fazer, no repositório dele; nada disto existe lá):** rede local + `X-Camp-Token`, como no heartbeat.
+**Lado do CAMP Vision (feito em campvision-new, versão 2026-10-09-04; ver docs/contrato-painel.md §12 de lá):** rede local + `X-Camp-Token`, como no heartbeat.
 1. `GET /api/estacoes/pedidos-releitura?estacao=campvision2` -> `{"pedidos":[{"id","escopo":"folha"|"projeto","projeto_codigo","item_codigo"|null,"motivo","pedido_em","estado","pasta_relativa"}]}`.
    `pasta_relativa` é relativa a `ACERVOS_CAMP` (o caminho do painel não é o do CV2). Consultar a cada ~1 min junto do heartbeat. A primeira consulta já faz o painel passar a dizer que o CV2 atende pedidos.
 2. `POST /api/estacoes/pedidos-releitura/{id}/iniciado` `{"estacao":"campvision2"}` ao começar. **409 = pedido já encerrado: não ler.**
@@ -231,3 +231,16 @@ A tela diz a verdade: enquanto o CV2 nunca tiver consultado, mostra "o CAMP Visi
 **Garantias do painel ao importar de novo:** só atualiza folha ainda pendente; **nunca** sobrescreve folha que uma pessoa já revisou nem a que já está no site; lote já aprovado não é tocado (o painel avisa que é preciso reabrir a revisão).
 **Ainda não faz (fase 2):** mostrar a "nova leitura" ao lado da leitura revisada, por campo, para a pessoa escolher. Hoje a nova leitura de uma folha revisada é ignorada, de propósito.
 **Custo:** reler gasta chamadas da API do modelo; a confirmação na tela avisa.
+
+
+## 15. Número P nunca reusado (CV-27) e arquivo de origem (CV-01)
+- **CV-27:** o próximo P de um fundo (`projetos_novos.proximo_numero`) é o MAIOR entre:
+  - o contador do painel (`numero_p`);
+  - os códigos que o espelho do site já viu (`wp_item.codigo_detectado`);
+  - o `proximo_p_local` que o CV2 manda no `/reservar` (maior P nas pastas do acervo + 1).
+
+  Um código que já existe em `projeto` é pulado. Vale para a estação, o painel e a resolução de decisão.
+- **CV-01:** `item.arquivo_origem` (migração 042) recebe `documentos[].arquivo_origem` do pacote: pasta + nome original, várias versões separadas por ` | `. Ao subir a folha, vai para o metadado de texto "Arquivo de origem" da coleção Acervo CAMP (8013).
+  - Se o metadado não existir, o painel o cria uma vez, oculto ao público (`display: no`).
+  - Se o site recusar a criação, fica pendência e a folha sobe sem ele.
+- Tipo de duplicata `quase` (nome novo no CV2) é gravado como `perceptual` no painel.

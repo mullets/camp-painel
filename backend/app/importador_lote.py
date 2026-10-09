@@ -83,6 +83,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         arqs = [str(a) for a in (d.get("arquivos") or [])]
         tif = next((a for a in arqs if a.lower().endswith((".tif", ".tiff"))), None)
         jpg = next((a for a in arqs if a.lower().endswith((".jpg", ".jpeg"))), None)
+        origem = d.get("arquivo_origem")
+        if isinstance(origem, list):
+            origem = " | ".join(str(o.get("arquivo_origem") if isinstance(o, dict) else o) for o in origem if o)
         ano = str(d.get("ano") or "").strip()
         ano_folha = int(ano) if ano.isdigit() and 1800 <= int(ano) <= 2100 else None
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
@@ -92,7 +95,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada"))),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))), "credito": d.get("credito") or None,
-                  "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id}
+                  "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id}
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
             atualizados += 1
@@ -104,7 +107,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             duplicatas.append((cod, str(d["duplicata_de"]), d.get("tipo_duplicata")))
     for cod, de, tipo in duplicatas:                               # depois de todas existirem (a referência é de item para item)
         if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone():
-            con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, tipo if tipo in ("exata", "perceptual", "mesma_folha") else None, cod))
+            con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
     resultado = {}
     try:

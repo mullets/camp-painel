@@ -169,6 +169,18 @@ class WP:
             raise RuntimeError(f"Tainacan recusou criar item: {r.status_code} {r.text[:200]}")
         return r.json()
 
+    def criar_metadado(self, colecao_id: int, nome: str, descricao: str = "") -> dict:
+        """Metadado de TEXTO na coleção, oculto na página pública (display=no). Antes, confere se já existe com o mesmo nome."""
+        for m in self.metadados_da_colecao(colecao_id) or []:
+            if isinstance(m, dict) and (m.get("name") or "").strip().lower() == nome.strip().lower():
+                return m
+        r = self.h.post(f"/wp-json/tainacan/v2/collection/{colecao_id}/metadata",
+                        json={"name": nome, "description": descricao, "metadata_type": "Tainacan\\Metadata_Types\\Text",
+                              "status": "publish", "display": "no", "multiple": "no"})
+        if r.status_code >= 400:
+            raise RuntimeError(f"Tainacan recusou criar o metadado '{nome}': {r.status_code} {r.text[:200]}")
+        return r.json()
+
     def definir_metadado(self, item_id: int, metadado_id: int, valor) -> dict:
         r = self.h.patch(f"/wp-json/tainacan/v2/item/{item_id}/metadata/{metadado_id}", json={"values": valor})
         if r.status_code >= 400:

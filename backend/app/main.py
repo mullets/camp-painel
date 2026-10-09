@@ -230,6 +230,7 @@ class ReservaProjetoEstacao(BaseModel):
     operador: str | None = None        # nome informado na estação (sem login)
     chave_reserva: str | None = None   # uuid gerado pela estação: repetir a chamada não cria outro projeto
     confirmar_novo: bool = False       # a estação já mostrou os projetos parecidos à pessoa e ela escolheu criar um NOVO: pula a verificação
+    proximo_p_local: str | None = None  # CV2: maior P que já existe em pastas do acervo + 1 (o número nunca se reusa)
 
 
 class HeartbeatEstacao(BaseModel):
@@ -306,14 +307,16 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
             if parecidos:
                 did = decisoes.abrir_projeto_parecido(
                     con, chave_dec, d.fundo_codigo, titulo,
-                    {"titulo": titulo, "ano": d.ano or 0, "cidade": d.cidade, "identificacao_original": identificacao, "operador": operador or None, "estacao_ip": ip},
+                    {"titulo": titulo, "ano": d.ano or 0, "cidade": d.cidade, "identificacao_original": identificacao, "operador": operador or None, "estacao_ip": ip,
+                     "proximo_p_local": d.proximo_p_local or None},
                     parecidos, "estacao")
                 con.commit()
                 return JSONResponse(status_code=202, content={"pendente": True, "decisao_id": did,
                                     "mensagem": f"Aguardando decisão no painel: já existe projeto parecido neste fundo ({parecidos[0]['codigo']}). Tente de novo em instantes."})
         from .projetos_novos import criar_projeto
         novo = criar_projeto(con, d.fundo_codigo, titulo, d.ano, d.cidade, identificacao, ator,
-                             {"titulo": titulo, "origem": "estacao", "identificacao_original": identificacao, "operador": operador or None, "chave_reserva": chave or None})
+                             {"titulo": titulo, "origem": "estacao", "identificacao_original": identificacao, "operador": operador or None, "chave_reserva": chave or None,
+                              "proximo_p_local": (d.proximo_p_local or None)})
         codigo, prox = novo["codigo"], novo["numero_projeto"]
         con.commit()
     except HTTPException:

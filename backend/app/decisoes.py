@@ -54,7 +54,8 @@ def resolver(con, did: int, acao: str, projeto_codigo: str | None, ator: str) ->
         real = None if d["chave"].startswith("auto-") else d["chave"]
         novo = criar_projeto(con, d["fundo_codigo"], d["titulo"], pedido.get("ano"), pedido.get("cidade"), pedido.get("identificacao_original"), ator,
                              {"titulo": d["titulo"], "origem": d["origem"] if d["origem"] == "estacao" else "painel", "identificacao_original": pedido.get("identificacao_original"),
-                              "operador": pedido.get("operador"), "chave_reserva": real, "decisao_id": did}, reservado_por=None)
+                              "operador": pedido.get("operador"), "chave_reserva": real, "decisao_id": did,
+                              "proximo_p_local": pedido.get("proximo_p_local")}, reservado_por=None)
         codigo = novo["codigo"]
     con.execute("UPDATE decisao SET situacao='resolvida', resolucao=?, projeto_codigo=?, resolvida_em=datetime('now'), resolvida_por=? WHERE id=?",
                 (acao, codigo, ator, did))

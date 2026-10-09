@@ -2018,6 +2018,39 @@ def filho(modo):
         ver("tudo fica na história (pedido, cancelamento, conclusão, falha)", {"releitura_pedida", "releitura_cancelada", "releitura_concluida", "releitura_falhou"} <= {r[0] for r in k.execute("SELECT DISTINCT tipo FROM evento")})
         for l in res: print(l)
         k.close()
+        return 0
+    elif modo == "cv27_origem":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from app.projetos_novos import proximo_numero, criar_projeto
+        from app.importador_lote import importar_lote
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n in (1, 2):
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,))
+            c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1972)", (f"F026-P000{n}", "F026", n, f"P{n}"))
+        ver("CV-27 sem outras fontes: o contador do painel (P0003)", proximo_numero(c, "F026") == 3)
+        c.execute("INSERT INTO wp_item (id, colecao_id, status, titulo, codigo_detectado) VALUES (901, 8013, 'publish', 'x', 'F026-P0010-1980-S01-D00001')")
+        ver("CV-27: número já usado no SITE nunca se reusa (P0011)", proximo_numero(c, "F026") == 11)
+        ver("CV-27: o CV2 manda proximo_p_local maior (pastas do acervo) e ele vence", proximo_numero(c, "F026", "F026-P0020") == 20)
+        ver("CV-27: proximo_p_local de outro fundo ou mal formado é ignorado", proximo_numero(c, "F026", "F023-P0099") == 11 and proximo_numero(c, "F026", "lixo") == 11)
+        novo = criar_projeto(c, "F026", "Novo", 1975, None, None, "teste", {"proximo_p_local": "F026-P0020"})
+        ver("criar_projeto usa a regra (F026-P0020) e o contador avança a partir dele", novo["codigo"] == "F026-P0020" and proximo_numero(c, "F026") == 21, str(novo))
+        # CV-01: arquivo_origem e tipo 'quase' vindos do pacote v2
+        pasta = _P(os.environ.get("CAMP_TMP_PRONTOS", "/tmp")) / "cv01" / "F026-P0001 - P1"
+        shutil.rmtree(pasta.parent, ignore_errors=True); (pasta / "catalogacao").mkdir(parents=True)
+        D = lambda n: f"F026-P0001-1972-S01-D{n:05d}"
+        doc = lambda n, **x: {"codigo": D(n), "titulo": f"Folha {n}", "publicavel": True, "arquivo_origem": [{"arquivo_origem": f"100 - Scanners/F026/P1/TIF/scan {n:03d}.tif", "nome_original": f"scan {n:03d}.tif"}], **x}
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"versao": 2, "projeto_codigo": "F026-P0001", "documentos": [doc(1), doc(2, duplicata_de=D(1), tipo_duplicata="quase")]}), encoding="utf-8")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid
+        r = importar_lote(c, lote, "teste")
+        ver("CV-01: arquivo_origem (pasta + nome) chega à folha do painel", c.execute("SELECT arquivo_origem FROM item WHERE codigo=?", (D(1),)).fetchone()[0] == "100 - Scanners/F026/P1/TIF/scan 001.tif", str(r))
+        ver("duplicata 'quase' do CV2 vira 'perceptual' no painel (não se perde)", tuple(c.execute("SELECT duplicata_de, tipo_duplicata FROM item WHERE codigo=?", (D(2),)).fetchone()) == (D(1), "perceptual"))
+        c.rollback(); c.close()
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -2276,6 +2309,14 @@ print("28) Ler dados agora: pedido de releitura ao CAMP Vision (pedir, o CV2 con
 os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_releitura"
 rc, out = rodar("releitura", f"{tmp}/releitura.db")
 if rc != 0: ok(False, f"teste da releitura não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("29) CV-27 (número P nunca reusado: painel, site e acervo) e CV-01 (arquivo de origem do CAMP Vision)")
+rc, out = rodar("cv27_origem", f"{tmp}/cv27.db")
+if rc != 0: ok(False, f"teste CV-27/CV-01 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

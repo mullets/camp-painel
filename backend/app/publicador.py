@@ -37,6 +37,22 @@ def _meta(con, colecao_id, nome):
     return (r[0], r[1]) if r else (None, None)
 
 
+def _garantir_metadado_origem(con, wp) -> int | None:
+    """CV-01: cria UMA vez, na coleção Acervo CAMP, o metadado de texto "Arquivo de origem" (oculto ao público)
+    e o registra no espelho. Falhou: devolve None e a folha sobe sem ele (fica pendência)."""
+    try:
+        m = wp.criar_metadado(COL_ACERVO, "Arquivo de origem",
+                              "Pasta + nome original do arquivo digitalizado (CAMP Vision). Uso interno: reconciliação e releitura.")
+    except Exception as e:  # noqa: BLE001
+        _pendencia(con, "colecao", str(COL_ACERVO), "pendente_metadado_Arquivo de origem", str(e)[:200])
+        return None
+    mid = m.get("id") if isinstance(m, dict) else None
+    if mid:
+        con.execute("INSERT OR REPLACE INTO wp_metadado (id, colecao_id, nome, tipo, taxonomia_id, json) VALUES (?,?,?,?,?,?)",
+                    (mid, COL_ACERVO, "Arquivo de origem", m.get("metadata_type"), None, json.dumps(m, ensure_ascii=False)))
+    return mid
+
+
 def _pendencia(con, entidade, codigo, campo, detalhe):
     con.execute("INSERT INTO divergencia_site (entidade, codigo, campo, valor_painel, valor_site) VALUES (?,?,?,?,?)",
                 (entidade, codigo, campo, detalhe[:300], None))
@@ -404,11 +420,13 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                    "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
                    "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
                    "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
-                   "Suporte original": i["suporte"]}
+                   "Suporte original": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
         for nome, valor in valores.items():
             if valor in (None, ""):
                 continue
             mid, _ = _meta(con, COL_ACERVO, nome)
+            if not mid and nome == "Arquivo de origem":
+                mid = _garantir_metadado_origem(con, wp)
             if not mid:
                 continue
             try:
