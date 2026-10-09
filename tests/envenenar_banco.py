@@ -18,6 +18,7 @@ CAMPOS = {
   "localizacao_fisica": ["identificador", "descricao"],
   "entrada_acervo": ["entregue_por", "contato", "documento", "conteudo", "estado_conservacao", "observacoes", "registrado_por"],
   "lista_processamento": ["nome"],
+  "pedido_releitura": ["mensagem", "motivo"],
   "direitos_fundo": ["titular", "documento_autorizacao", "resolucao_max", "credito_exigido", "licenca", "restricoes"],
   "wp_item": ["titulo"], "wp_termo": ["nome"], "wp_colecao": ["nome"],
   "divergencia_site": ["valor_painel", "valor_site"],

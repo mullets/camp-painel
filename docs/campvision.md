@@ -214,3 +214,20 @@ O botão "Ver página pública" antes **presumia** o endereço e errava (caso F0
 - **Confirmação no site** (`POST /api/projetos/{codigo}/pagina-publica/confirmar`): como a regra é um palpite, o painel pergunta ao site. (1) o palpite abre? (2) senão, a busca pública `https://camp.arq.br/acervo/projetos/?q=<código>` devolve o endereço real
   (só vale link do próprio site e do próprio código). Achou: grava em `projeto.url_publica_confirmada` e o botão passa a usar esse endereço. Não achou: o botão vira "Procurar no site" e leva à busca pública por código, que sempre abre. Nunca um link morto. Sem rede: não quebra.
 - **Publicado no painel não quer dizer "com folhas no site"**: a página pode existir como **registro de inventário** (0 documentos) quando só o dossiê do projeto foi publicado. As estatísticas do fundo na página do arquiteto também podem ficar em cache no site.
+
+## 14. "Ler dados agora": pedido de releitura ao CAMP Vision
+O botão **Ler dados agora** (página da folha, janela de revisão e painel de revisão do projeto) **não chama o CAMP Vision**: ele não escuta, o fluxo é de mão única. O painel registra um **pedido** e o CV2 **pergunta** (como no heartbeat).
+
+**Lado do painel (feito):** tabela `pedido_releitura` (um pedido aberto por alvo: o projeto inteiro ou uma folha), rotas para as pessoas (`POST /api/itens/{c}/releitura`, `POST /api/projetos/{c}/releitura`, `GET` do estado, `POST /api/releituras/{id}/cancelar`) e as três rotas do CV2 abaixo.
+A tela diz a verdade: enquanto o CV2 nunca tiver consultado, mostra "o CAMP Vision ainda não consulta pedidos de releitura: o pedido fica guardado".
+
+**Lado do CAMP Vision (a fazer, no repositório dele; nada disto existe lá):** rede local + `X-Camp-Token`, como no heartbeat.
+1. `GET /api/estacoes/pedidos-releitura?estacao=campvision2` -> `{"pedidos":[{"id","escopo":"folha"|"projeto","projeto_codigo","item_codigo"|null,"motivo","pedido_em","estado","pasta_relativa"}]}`.
+   `pasta_relativa` é relativa a `ACERVOS_CAMP` (o caminho do painel não é o do CV2). Consultar a cada ~1 min junto do heartbeat. A primeira consulta já faz o painel passar a dizer que o CV2 atende pedidos.
+2. `POST /api/estacoes/pedidos-releitura/{id}/iniciado` `{"estacao":"campvision2"}` ao começar. **409 = pedido já encerrado: não ler.**
+3. Reler **só o escopo** (uma folha, ou o projeto), regravando o `catalogacao/pacote_tainacan.json` (e o resto), e então `POST /api/estacoes/pedidos-releitura/{id}/concluido` `{"ok": true|false, "mensagem": "..."}`.
+   `ok:false` marca o pedido como falhou e **não importa nada**. `ok:true` faz o painel **importar de novo o pacote** do lote mais recente do projeto.
+
+**Garantias do painel ao importar de novo:** só atualiza folha ainda pendente; **nunca** sobrescreve folha que uma pessoa já revisou nem a que já está no site; lote já aprovado não é tocado (o painel avisa que é preciso reabrir a revisão).
+**Ainda não faz (fase 2):** mostrar a "nova leitura" ao lado da leitura revisada, por campo, para a pessoa escolher. Hoje a nova leitura de uma folha revisada é ignorada, de propósito.
+**Custo:** reler gasta chamadas da API do modelo; a confirmação na tela avisa.

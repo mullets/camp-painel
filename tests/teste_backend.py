@@ -1936,6 +1936,88 @@ def filho(modo):
         ver("a busca por F026-P0006 não pode devolver o endereço de F026-P0005 (o código tem que ser o do projeto)", adm.post("/api/projetos/F026-P0006/pagina-publica/confirmar").json()["url"] is None)
         for l in res: print(l)
         k.close()
+    elif modo == "releitura":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        prontos = _P(os.environ["CAMP_TMP_PRONTOS"]); shutil.rmtree(prontos, ignore_errors=True)
+        proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", proj)
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),)); c.execute("UPDATE configuracao SET valor='segredo-cv' WHERE chave='estacao.token'")
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n in (1, 2): c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,)); c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1972)", (f"F026-P000{n}", "F026", n, "Tarumã" if n == 1 else "Outra"))
+        D = lambda n: f"F026-P0001-1972-S01-D{n:05d}"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'campvision')", (D(7), "F026-P0001", "S01", 7, "Folha sete"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES ('F026-P0002-1972-S01-D00001','F026-P0002','S01',1,'Outra folha','campvision')")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote Tarumã','F026-P0001',?,'revisao')", (str(proj),)).lastrowid
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        lan, fora = com_ip("192.168.15.40"), com_ip("8.8.8.8"); T_ = {"X-Camp-Token": "segredo-cv"}
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        # ---------- pedir ----------
+        r = op.post(f"/api/itens/{D(7)}/releitura", json={"motivo": "carimbo ilegível"}); j = r.json()
+        ver("pedir a releitura de UMA folha: registra o pedido (estado 'pedido', escopo folha), de quem e quando", r.status_code == 200 and j["estado"] == "pedido" and j["escopo"] == "folha" and j["item_codigo"] == D(7) and j["pedido_por"] == "op@camp.arq.br" and j["repetido"] is False and j["motivo"] == "carimbo ilegível", str(j)[:200])
+        j2 = op.post(f"/api/itens/{D(7)}/releitura", json={}).json()
+        ver("clicar de novo devolve o MESMO pedido (repetido=true), não cria outro", j2["id"] == j["id"] and j2["repetido"] is True and sql("SELECT COUNT(*) FROM pedido_releitura") == 1)
+        pj = op.post("/api/projetos/F026-P0001/releitura", json={}).json()
+        ver("pedir o projeto inteiro é outro pedido (escopo projeto); e depois, pedir uma folha dele devolve o do PROJETO (já a cobre)", pj["escopo"] == "projeto" and pj["id"] != j["id"] and op.post(f"/api/itens/{D(7)}/releitura", json={}).json()["id"] == j["id"], str(pj)[:120])
+        k.execute("UPDATE pedido_releitura SET estado='cancelado' WHERE id=?", (j["id"],)); k.commit()
+        ver("com o pedido da FOLHA cancelado, pedir a folha devolve o do projeto inteiro (que a cobre)", op.post(f"/api/itens/{D(7)}/releitura", json={}).json()["id"] == pj["id"])
+        ver("validações: folha de outro projeto/inexistente 404; projeto inexistente 404; motivo > 300 caracteres 400; sem login 401", op.post("/api/itens/F026-P0001-1972-S01-D99999/releitura", json={}).status_code == 404 and op.post("/api/projetos/F026-P9999/releitura", json={}).status_code == 404 and op.post(f"/api/itens/{D(7)}/releitura", json={"motivo": "x" * 301}).status_code == 422 and anon.post(f"/api/itens/{D(7)}/releitura", json={}).status_code == 401)
+        e = op.get(f"/api/itens/{D(7)}/releitura").json()
+        ver("estado da folha: o pedido aberto (do projeto), 'aguardando', e a verdade sobre o CAMP Vision: AINDA NÃO consulta pedidos", e["aberto"]["situacao"] == "aguardando" and e["cv2"]["atende"] is False and e["cv2"]["ultima_consulta_s"] is None, str(e)[:260])
+        # ---------- o CAMP Vision ----------
+        U_ = "/api/estacoes/pedidos-releitura"
+        ver("CV2 com token configurado: sem token ou com token errado 401 (de dentro ou de fora da rede)", all(x.status_code == 401 for x in (fora.get(U_), lan.get(U_), lan.get(U_, headers={"X-Camp-Token": "errado"}), fora.get(U_, headers={"X-Camp-Token": "errado"}))))
+        k.execute("UPDATE configuracao SET valor='' WHERE chave='estacao.token'"); k.commit()
+        ver("CV2 sem token configurado: só a rede local entra (de fora 403)", fora.get(U_).status_code == 403 and lan.get(U_).status_code == 200 and fora.post(f"{U_}/1/iniciado", json={}).status_code == 403)
+        k.execute("UPDATE configuracao SET valor='segredo-cv' WHERE chave='estacao.token'"); k.commit()
+        g = lan.get("/api/estacoes/pedidos-releitura?estacao=campvision2", headers=T_); ped = g.json()["pedidos"]
+        ver("CV2 consulta: recebe o pedido com escopo, projeto, motivo e a pasta RELATIVA ao ACERVOS_CAMP (o caminho do painel não é o do CV2)", g.status_code == 200 and len(ped) == 1 and ped[0]["id"] == pj["id"] and ped[0]["escopo"] == "projeto" and ped[0]["projeto_codigo"] == "F026-P0001" and ped[0]["pasta_relativa"] == "F026 - SBU Sami Bussab/01 - Projetos/F026-P0001 - Tarumã", str(ped)[:260])
+        e = op.get(f"/api/itens/{D(7)}/releitura").json()["cv2"]
+        ver("depois da primeira consulta o painel passa a dizer que o CAMP Vision atende pedidos (e há quanto tempo consultou)", e["atende"] is True and e["ultima_consulta_s"] is not None and e["ultima_consulta_s"] < 60, str(e))
+        i1 = lan.post(f"/api/estacoes/pedidos-releitura/{pj['id']}/iniciado", json={"estacao": "campvision2"}, headers=T_)
+        st = op.get(f"/api/projetos/F026-P0001/releitura").json()["aberto"]
+        ver("'iniciado': o pedido vira em_andamento e a tela mostra 'lendo' com a estação", i1.status_code == 200 and st["estado"] == "em_andamento" and st["situacao"] == "lendo" and st["estacao"] == "campvision2", str(st)[:200])
+        ver("pedido em andamento continua aparecendo para a mesma estação; outra estação não o pega", len(lan.get("/api/estacoes/pedidos-releitura?estacao=campvision2", headers=T_).json()["pedidos"]) == 1 and len(lan.get("/api/estacoes/pedidos-releitura?estacao=outra", headers=T_).json()["pedidos"]) == 0)
+        # ---------- concluir: falha não importa nada; ok importa de novo ----------
+        antes = sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lote)
+        cf = lan.post(f"/api/estacoes/pedidos-releitura/{pj['id']}/concluido", json={"ok": False, "mensagem": "modelo fora do ar"}, headers=T_)
+        k.execute("UPDATE pedido_releitura SET estado='em_andamento' WHERE id=?", (pj["id"],)); k.commit()
+        ver("CV2 avisa FALHA: o pedido vira 'falhou' com a mensagem e NADA é importado", cf.status_code == 200 and cf.json()["estado"] == "falhou" and sql("SELECT mensagem FROM pedido_releitura WHERE id=?", pj["id"]) == "modelo fora do ar" and sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lote) == antes == 0)
+        co = lan.post(f"/api/estacoes/pedidos-releitura/{pj['id']}/concluido", json={"ok": True, "mensagem": "3 folhas lidas"}, headers=T_); jj = co.json()
+        ver("CV2 avisa que TERMINOU: o painel importa de novo o pacote (3 folhas criadas) e guarda o que fez", co.status_code == 200 and jj["estado"] == "concluido" and jj["resultado"]["importacao"]["criadas"] == 3 and sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lote) == 3, str(jj)[:260])
+        ver("encerrado é encerrado: 'iniciado' e 'concluido' de novo dão 409; pedido inexistente 404", lan.post(f"/api/estacoes/pedidos-releitura/{pj['id']}/iniciado", json={}, headers=T_).status_code == 409 and lan.post(f"/api/estacoes/pedidos-releitura/{pj['id']}/concluido", json={}, headers=T_).status_code == 409 and lan.post("/api/estacoes/pedidos-releitura/9999/iniciado", json={}, headers=T_).status_code == 404)
+        ul = op.get(f"/api/projetos/F026-P0001/releitura").json()
+        ver("a tela passa a mostrar a última leitura concluída (e não há mais pedido aberto)", ul["aberto"] is None and ul["ultimo"]["situacao"] == "concluido" and ul["ultimo"]["resultado"]["importacao"]["criadas"] == 3)
+        # ---------- não sobrescreve revisão humana; lote aprovado ----------
+        k.execute("UPDATE item SET titulo='Corrigido por gente', revisao='corrigida', revisado_por='op@camp.arq.br' WHERE codigo=?", (D(3),)); k.commit()
+        p3 = op.post("/api/projetos/F026-P0001/releitura", json={}).json(); lan.post(f"/api/estacoes/pedidos-releitura/{p3['id']}/iniciado", json={}, headers=T_)
+        c3 = lan.post(f"/api/estacoes/pedidos-releitura/{p3['id']}/concluido", json={"ok": True}, headers=T_).json()
+        ver("nova releitura NÃO desfaz a correção de uma pessoa (a folha revisada é ignorada, as pendentes são atualizadas)", c3["resultado"]["importacao"]["ignoradas_ja_revisadas"] == 1 and sql("SELECT titulo FROM item WHERE codigo=?", D(3)) == "Corrigido por gente")
+        k.execute("UPDATE lista_processamento SET aprovado_em=datetime('now'), aprovado_por='adm' WHERE id=?", (lote,)); k.commit()
+        p4 = op.post("/api/projetos/F026-P0001/releitura", json={}).json(); c4 = lan.post(f"/api/estacoes/pedidos-releitura/{p4['id']}/concluido", json={"ok": True}, headers=T_).json()
+        ver("lote já APROVADO: a releitura conclui mas avisa que é preciso reabrir a revisão (não mexe em lote aprovado)", c4["estado"] == "concluido" and c4["resultado"]["importacao"] is None and "reabra" in c4["resultado"]["aviso"], str(c4)[:200])
+        # ---------- cancelar ----------
+        p5 = op.post("/api/projetos/F026-P0002/releitura", json={}).json()
+        ver("cancelar: operador cancela o pedido aberto; o CV2 deixa de recebê-lo; cancelar de novo 409; depois pode pedir outro", op.post(f"/api/releituras/{p5['id']}/cancelar").status_code == 200 and all(x["id"] != p5["id"] for x in lan.get("/api/estacoes/pedidos-releitura", headers=T_).json()["pedidos"]) and op.post(f"/api/releituras/{p5['id']}/cancelar").status_code == 409 and op.post("/api/projetos/F026-P0002/releitura", json={}).json()["id"] != p5["id"] and op.post("/api/releituras/9999/cancelar").status_code == 404)
+        ver("pedido antigo sem resposta é dito com franqueza ('sem_resposta' depois de 24 h) e continua aberto", (k.execute("UPDATE pedido_releitura SET pedido_em=datetime('now','-30 hours') WHERE estado='pedido'"), k.commit()) and op.get("/api/projetos/F026-P0002/releitura").json()["aberto"]["situacao"] == "sem_resposta")
+        ver("tudo fica na história (pedido, cancelamento, conclusão, falha)", {"releitura_pedida", "releitura_cancelada", "releitura_concluida", "releitura_falhou"} <= {r[0] for r in k.execute("SELECT DISTINCT tipo FROM evento")})
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -2185,6 +2267,15 @@ else:
 print("27) Endereço da página pública: a regra do slug do site (30 projetos reais) e a confirmação no site")
 rc, out = rodar("pagina_publica", f"{tmp}/pagina_publica.db")
 if rc != 0: ok(False, f"teste da página pública não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("28) Ler dados agora: pedido de releitura ao CAMP Vision (pedir, o CV2 consulta/inicia/conclui, importa de novo sem desfazer revisão)")
+os.environ["CAMP_TMP_PRONTOS"] = f"{tmp}/prontos_releitura"
+rc, out = rodar("releitura", f"{tmp}/releitura.db")
+if rc != 0: ok(False, f"teste da releitura não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

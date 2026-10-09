@@ -103,6 +103,9 @@ for _n, _importar in ((9001, True), (9002, False)):
     if _importar:
         from app.importador_lote import importar_lote
         importar_lote(c, _lid, "seed")
+# pedidos de releitura que o CAMP Vision respondeu com falha: a tela da folha e o painel do projeto mostram a mensagem (que vem de fora)
+c.execute("INSERT INTO pedido_releitura (projeto_codigo, item_codigo, pedido_por, estado, concluido_em, mensagem) VALUES ('F023-P0011','F023-P0011-1959-S01-D00001','seed','falhou',datetime('now'),'modelo indisponível')")
+c.execute("INSERT INTO pedido_releitura (projeto_codigo, item_codigo, pedido_por, estado, concluido_em, mensagem) VALUES ('F003-P9001',NULL,'seed','falhou',datetime('now'),'modelo indisponível')")
 # o coletor automático dispara 20 s depois de o servidor subir e gravaria uma coleta VAZIA (o QNAP de teste não existe) por cima da semente:
 # os testes não podem depender de relógio. 0 desliga a coleta automática; "Atualizar agora" (manual) continua funcionando.
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")

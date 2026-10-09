@@ -361,6 +361,24 @@ w.route_to('painel'); await sleep(2800);
   box.innerHTML=w.linkPaginaSite('https://camp.arq.br/acervo/projetos/f026-p0001-edificio-taruma/',true,'btn',false)+w.linkPaginaSite('https://camp.arq.br/acervo/projetos/f026-p0002-x/',false,'btn',true); await sleep(900);
   chk(chamadas.length===0,'link REAL do site (ou de projeto não publicado) não deveria perguntar nada: '+JSON.stringify(chamadas));
   w.fetch=fetchOrig; box.remove(); }
+// ---------- LER DADOS AGORA: pedido de releitura ao CAMP Vision ----------
+{ w.confirm=()=>true; const IT='F023-P0011-1959-S01-D00003';
+  w.route_to('item/'+IT); await sleep(2600);
+  chk(!!d.getElementById('it-releitura')&&/Ler dados agora/.test(txt('#it-releitura')),'a página da folha deveria ter o botão "Ler dados agora"');
+  d.getElementById('it-releitura').click(); await sleep(2300);
+  chk(/releitura pedida/.test(txt('#it-releitura-estado'))&&/ainda não consulta pedidos/.test(txt('#it-releitura-estado'))&&!!d.querySelector('#it-releitura-estado [data-rl-cancelar]'),'depois de clicar: "releitura pedida", a verdade sobre o CAMP Vision e o botão cancelar: "'+txt('#it-releitura-estado').slice(0,160)+'"');
+  const lst=(await J(adm,'/api/itens/'+IT+'/releitura')).b; chk(!!lst.aberto&&lst.aberto.estado==='pedido'&&lst.aberto.item_codigo===IT,'o pedido deveria existir no servidor: '+JSON.stringify(lst.aberto));
+  d.getElementById('it-releitura').click(); await sleep(1600); chk((await J(adm,'/api/itens/'+IT+'/releitura')).b.aberto.id===lst.aberto.id,'clicar de novo não deveria criar outro pedido');
+  d.querySelector('#it-releitura-estado [data-rl-cancelar]').click(); await sleep(2300);
+  chk(!(await J(adm,'/api/itens/'+IT+'/releitura')).b.aberto&&!/releitura pedida/.test(txt('#it-releitura-estado')),'cancelar deveria encerrar o pedido e limpar o estado');
+  w.route_to('item/F023-P0011-1959-S01-D00001'); await sleep(2600);
+  chk(/releitura falhou/.test(txt('#it-releitura-estado'))&&/modelo indisponível/.test(txt('#it-releitura-estado')),'a falha respondida pelo CAMP Vision deveria aparecer na página da folha: "'+txt('#it-releitura-estado')+'"');
+  w.route_to('projeto/F003-P9001'); await sleep(3800);
+  chk(/Ler o projeto de novo no CAMP Vision/.test(txt('#pj-revisao'))&&/releitura falhou/.test(txt('#pj-revisao .rl-estado')),'o painel de revisão do projeto deveria ter o botão e mostrar a última releitura: "'+txt('#pj-revisao').slice(0,140)+'"');
+  d.querySelector('#pj-revisao [data-rev-lote="releitura"]').click(); await sleep(2400);
+  chk(/releitura pedida/.test(txt('#pj-revisao .rl-estado')),'pedir o projeto inteiro deveria mostrar o estado no painel: "'+txt('#pj-revisao .rl-estado')+'"');
+  d.querySelector('#pj-revisao [data-rl-cancelar]').click(); await sleep(2200);
+  chk(!(await J(adm,'/api/projetos/F003-P9001/releitura')).b.aberto,'cancelar o pedido do projeto'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
