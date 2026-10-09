@@ -2051,6 +2051,56 @@ def filho(modo):
         ver("duplicata 'quase' do CV2 vira 'perceptual' no painel (não se perde)", tuple(c.execute("SELECT duplicata_de, tipo_duplicata FROM item WHERE codigo=?", (D(2),)).fetchone()) == (D(1), "perceptual"))
         c.rollback(); c.close()
         for l in res: print(l)
+    elif modo == "filas":
+        init_db(); aplicar_migracoes()
+        from app import auth, publicacao_guiada as pg, rotas_projetos as rp, publicador
+        from app.filas_fase import fase_da_lista, FASES, PRECISAM_DE_GENTE
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        casos = [("erro", 0, 0, None, "erro"), ("erro", 5, 2, "x", "erro"), ("enviado", 0, 0, None, "processando"), ("processando", 9, 9, None, "processando"), ("publicado", 5, 0, "x", "publicado"),
+                 ("revisao", 0, 0, None, "importar"), ("revisao", 4, 4, None, "conferir"), ("revisao", 4, 1, "x", "conferir"), ("revisao", 4, 0, None, "aprovar"), ("revisao", 4, 0, "x", "publicar"),
+                 ("rascunho", 0, 0, None, "publicar"), ("rascunho", 3, 2, None, "conferir"), ("rascunho", 3, 0, None, "aprovar")]
+        errados = [(c, fase_da_lista(*c[:4])) for c in casos if fase_da_lista(*c[:4]) != c[4]]
+        ver(f"a fase de cada lista, nos {len(casos)} casos (processando, importar, conferir, aprovar, publicar, publicado, erro)", not errados, str(errados[:2]))
+        ver("toda fase possível está na lista de fases, e 'precisam de gente' não inclui processando nem publicado", all(c[4] in FASES for c in casos) and set(PRECISAM_DE_GENTE) == {"erro", "importar", "conferir", "aprovar", "publicar"})
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F091','Fundo Fila','FIL',1)")
+        def proj(n): c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F091',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F091-P{n:04d}", "F091", n, f"Projeto {n}")); return f"F091-P{n:04d}"
+        def lote(p, etapa, aprov=None):
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES (?,?,'/x',?,?,?)", (f"Lote {p[-4:]} {etapa}", p, etapa, aprov, "adm" if aprov else None)).lastrowid
+        def itens(p, lid, n_pend, n_conf):
+            for i in range(n_pend + n_conf):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao) VALUES (?,?,?,?,?,'campvision',?,?)", (f"{p}-1970-S01-D{i + 1:05d}", p, "S01", i + 1, f"F{i}", lid, "pendente" if i < n_pend else "conferida"))
+        L = {}
+        L["proc"] = lote(proj(1), "processando"); L["env"] = lote(proj(2), "enviado"); L["erro"] = lote(proj(3), "erro"); L["imp"] = lote(proj(4), "revisao")
+        p5 = proj(5); L["conf"] = lote(p5, "revisao"); itens(p5, L["conf"], 2, 1)
+        p6 = proj(6); L["apr"] = lote(p6, "revisao"); itens(p6, L["apr"], 0, 3)
+        p7 = proj(7); L["pub"] = lote(p7, "revisao", "2026-10-09 10:00:00"); itens(p7, L["pub"], 0, 2)
+        L["leg"] = lote(proj(8), "rascunho"); L["fim"] = lote(proj(9), "publicado")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        f = {x["id"]: x for x in op.get("/api/filas").json()}
+        esperado = {"proc": "processando", "env": "processando", "erro": "erro", "imp": "importar", "conf": "conferir", "apr": "aprovar", "pub": "publicar", "leg": "publicar", "fim": "publicado"}
+        ver("GET /api/filas: cada lista chega com a fase certa (9 situações)", {k: f[v]["fase"] for k, v in L.items()} == esperado, str({k: f[v]["fase"] for k, v in L.items()}))
+        ver("traz o andamento da conferência: 3 folhas, 2 pendentes, 1 conferida; e a aprovação (quem e quando)", (f[L["conf"]]["itens_total"], f[L["conf"]]["itens_pendentes"], f[L["conf"]]["itens_conferidos"]) == (3, 2, 1) and f[L["pub"]]["aprovado_em"] and f[L["pub"]]["aprovado_por"] == "adm" and f[L["imp"]]["itens_total"] == 0)
+        ver("sem login 401", anon.get("/api/filas").status_code == 401)
+        # ---------- publicar com um clique fecha as listas JÁ APROVADAS do projeto ----------
+        c = connect(); p10 = proj(10); c.execute("UPDATE projeto SET tainacan_item_id=7777, autorizado_site=1 WHERE codigo=?", (p10,))
+        a = lote(p10, "revisao", "2026-10-09 10:00:00"); b = lote(p10, "revisao"); d_ = lote(p10, "rascunho", "2026-10-09 11:00:00"); e_ = lote(p10, "enviado", "2026-10-09 11:00:00"); c.commit(); c.close()
+        pg.plano = lambda con, p: {"passos": [], "bloqueios": [], "pode_executar": True, "ja_publicado": False, "folhas_a_enviar": 0, "folhas_a_publicar": 0, "fora": {}}
+        rp.publicar = lambda codigo, dd, u: {"ok": False, "alterados": 0, "total": 1, "falhas": [{"codigo": codigo, "erro": "x"}], "mensagem": "falhou"}
+        adm.post(f"/api/projetos/{p10}/publicar-tudo"); k = connect(); et = lambda i: k.execute("SELECT etapa FROM lista_processamento WHERE id=?", (i,)).fetchone()[0]
+        ver("se a publicação FALHA, nenhuma lista é fechada", (et(a), et(b), et(d_), et(e_)) == ("revisao", "revisao", "rascunho", "enviado"))
+        rp.publicar = lambda codigo, dd, u: {"ok": True, "alterados": 1, "total": 1, "falhas": [], "mensagem": "1 registro(s) publicados."}
+        adm.post(f"/api/projetos/{p10}/publicar-tudo")
+        ver("publicou: as listas APROVADAS do projeto (em revisão ou rascunho) viram 'publicada'; a NÃO aprovada e a ainda em leitura ficam como estão", (et(a), et(b), et(d_), et(e_)) == ("publicado", "revisao", "publicado", "enviado"), str((et(a), et(b), et(d_), et(e_))))
+        ver("o fechamento fica na história da lista", k.execute("SELECT COUNT(*) FROM evento WHERE entidade='lista' AND tipo='etapa_publicado' AND codigo IN (?,?)", (str(a), str(d_))).fetchone()[0] == 2)
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -2317,6 +2367,14 @@ else:
 print("29) CV-27 (número P nunca reusado: painel, site e acervo) e CV-01 (arquivo de origem do CAMP Vision)")
 rc, out = rodar("cv27_origem", f"{tmp}/cv27.db")
 if rc != 0: ok(False, f"teste CV-27/CV-01 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("30) Filas: a fase de cada lista (o que falta e quem age) e o fechamento da lista ao publicar")
+rc, out = rodar("filas", f"{tmp}/filas.db")
+if rc != 0: ok(False, f"teste das filas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

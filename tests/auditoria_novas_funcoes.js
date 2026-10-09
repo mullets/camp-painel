@@ -379,6 +379,33 @@ w.route_to('painel'); await sleep(2800);
   chk(/releitura pedida/.test(txt('#pj-revisao .rl-estado')),'pedir o projeto inteiro deveria mostrar o estado no painel: "'+txt('#pj-revisao .rl-estado')+'"');
   d.querySelector('#pj-revisao [data-rl-cancelar]').click(); await sleep(2200);
   chk(!(await J(adm,'/api/projetos/F003-P9001/releitura')).b.aberto,'cancelar o pedido do projeto'); }
+// ---------- FILAS: cada lista diz o que falta e tem UM botão para o próximo passo ----------
+{ w.confirm=()=>true; w.route_to('filas'); await sleep(3000);
+  const chips=[...d.querySelectorAll('#fila-chips [data-fila-filtro]')], lin=cod=>[...d.querySelectorAll('#filas-body tr')].find(t=>t.textContent.includes(cod));
+  chk(chips.length===4&&['gente','processando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, CAMP Vision lendo, Publicadas, Todas): '+chips.length);
+  chk(chips.find(c=>c.getAttribute('aria-pressed')==='true').dataset.filaFiltro==='gente','o filtro padrão deveria ser "Precisam de você" quando há o que fazer');
+  chk(/para conferir/.test(txt('#fila-resumo'))&&/para importar/.test(txt('#fila-resumo')),'o resumo deveria dizer quantas listas estão em cada ponto: "'+txt('#fila-resumo')+'"');
+  chk(d.querySelectorAll('#v-filas thead th').length===4&&!/Pasta no QNAP|Aprovação/.test(txt('#v-filas thead')),'a tabela deveria ter 4 colunas (Projeto, Situação, Atualizado, ação), sem "Pasta no QNAP" nem "Aprovação"');
+  chk(!!d.querySelector('#filas-body details.fila-pasta'),'a pasta do QNAP deveria ficar recolhida dentro de cada linha');
+  let l9001=lin('F003-P9001');
+  chk(!!l9001&&/Faltam conferir/.test(l9001.textContent)&&!!l9001.querySelector('progress.pg')&&!!l9001.querySelector('[data-fila-ir="revisao"]')&&!l9001.querySelector('[data-fila-acao="aprovar"]'),'F003-P9001 deveria dizer que faltam conferir folhas, com a barra de andamento e o botão "Conferir folhas": "'+(l9001&&l9001.textContent.slice(0,140))+'"');
+  const lq=lin('F026-P0001'); chk(!!lq&&!!lq.querySelector('[data-fila-acao="importar"]')&&/Importar/.test(lq.textContent),'uma lista em revisão sem folhas importadas (F026-P0001) deveria oferecer "Importar folhas": "'+(lq&&lq.textContent.slice(100,260))+'"');
+  l9001.querySelector('[data-fila-ir="revisao"]').click(); await sleep(3400);
+  chk(/projeto\/F003-P9001/.test(w.location.hash)&&!!d.getElementById('pj-revisao')&&/Revisão do lote/.test(txt('#pj-revisao')),'"Conferir folhas" deveria levar à página do projeto com a Revisão do lote: '+w.location.hash);
+  const lid=(await J(adm,'/api/projetos/F003-P9001/revisao')).b.lotes[0].id; await J(adm,'/api/lotes/'+lid+'/conferir-todas',{method:'POST'});
+  w.route_to('filas'); await sleep(2800); l9001=lin('F003-P9001');
+  chk(/Falta aprovar o lote|Todas as/.test(l9001.textContent),'ao VOLTAR para a Fila a tela deve mostrar o dado de agora (e não o de quando você entrou): "'+l9001.textContent.slice(100,260)+'"');
+  chk(/Falta aprovar o lote/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-acao="aprovar"]'),'com tudo conferido a lista deveria pedir "Aprovar lote": "'+l9001.textContent.slice(0,120)+'"');
+  const bAp=l9001.querySelector('[data-fila-acao="aprovar"]'); if(bAp){bAp.click(); await sleep(3000)} else chk(false,'sem botão Aprovar; fase no servidor: '+JSON.stringify((await J(adm,'/api/filas')).b.filter(x=>x.projeto_codigo==='F003-P9001').map(x=>({fase:x.fase,t:x.itens_total,p:x.itens_pendentes,ap:x.aprovado_em}))));
+  l9001=lin('F003-P9001');
+  chk(/Lote aprovado/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-ir="publicar"]'),'depois de aprovar a lista deveria pedir "Publicar": "'+l9001.textContent.slice(0,120)+'"');
+  const bPu=l9001&&l9001.querySelector('[data-fila-ir="publicar"]'); if(bPu){bPu.click(); await sleep(4500)}
+  chk(/projeto\/F003-P9001/.test(w.location.hash)&&/Publicar/.test(txt('#d-title')),'"Publicar" deveria levar ao projeto e abrir o plano de publicação: '+w.location.hash+' / '+txt('#d-title')); w.closeDrawer(true);
+  w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="processando"]').click(); await sleep(400);
+  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>t.dataset.fase==='processando'),'o filtro "CAMP Vision lendo" deveria mostrar só listas em leitura');
+  d.querySelector('[data-fila-filtro="todas"]').click(); await sleep(300);
+  chk(d.querySelectorAll('#filas-body tr[data-fase]').length===(await J(adm,'/api/filas')).b.length,'o filtro "Todas" deveria mostrar todas as listas do servidor');
+  await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;

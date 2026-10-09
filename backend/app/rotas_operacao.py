@@ -425,11 +425,20 @@ class NovaLista(BaseModel):
 def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
     rows = con.execute("""SELECT l.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, p.autorizado_site, p.lote_teste,
-                                 (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=l.projeto_codigo) AS folhas_painel
+                                 (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=l.projeto_codigo) AS folhas_painel,
+                                 (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
+                                 (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()
     con.close()
-    return [dict(r) for r in rows]
+    from .filas_fase import fase_da_lista
+    saida = []
+    for r in rows:
+        d = dict(r)
+        d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
+        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"))
+        saida.append(d)
+    return saida
 
 
 @router.post("/filas")

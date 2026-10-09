@@ -96,8 +96,8 @@ okl.push('painel operacional e audiência renderizados'); checkDom('painel');
 // filas: criar lista, avançar
 w.route_to('filas'); await sleep(600); if(d.querySelector('#v-filas .aviso-exemplo')) problems.push('filas ainda com aviso de exemplo');
 w.openModal('m-lista'); d.getElementById('nl-nome').value='LOTE AUDIT'; d.getElementById('nl-proj').value='F023-P0011'; d.getElementById('nl-pasta').value='/mnt/qnap/acervos/F023/P0011'; await w.addLista(); await sleep(800);
-const fl=d.querySelectorAll('#filas-body tr').length; okl.push('filas: '+fl+' linha(s) após criar'); if(!d.querySelector('#filas-body').textContent.includes('LOTE AUDIT')) problems.push('filas: lista criada não apareceu');
-const btn=d.querySelector('#filas-body .btn.pri'); if(btn){btn.click(); await sleep(800); okl.push('filas: avançou etapa -> '+(d.querySelector('#filas-body .steps .cur')||{}).textContent);} checkDom('filas');
+const fl=d.querySelectorAll('#filas-body tr').length; okl.push('filas: '+fl+' linha(s) após criar'); const linha=[...d.querySelectorAll('#filas-body tr')].find(x=>x.textContent.includes('LOTE AUDIT')); if(!linha) problems.push('filas: lista criada não apareceu'); else { if(!/Na fila|Lendo/.test(linha.textContent)) problems.push('filas: lista recém-criada deveria aparecer como "Na fila" do CAMP Vision: '+linha.textContent.slice(0,80)); if(linha.querySelector('.btn.pri')) problems.push('filas: lista na fila do CAMP Vision não deveria ter botão principal (não há o que fazer)'); }
+checkDom('filas');
 // solicitacoes
 w.route_to('solicitacoes'); await sleep(600); if(d.querySelector('#v-solicitacoes .aviso-exemplo')) problems.push('solicitações ainda com aviso de exemplo');
 w.openModal('m-sol'); d.getElementById('ns-nome').value='Editora Teste'; d.getElementById('ns-itens').value='F023-P0011 tif\nF026-P0001-1968-S01-D00001 jpg_3000'; await w.criarSolicitacao(); await sleep(800);

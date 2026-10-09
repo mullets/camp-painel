@@ -308,6 +308,8 @@ tbody tr.sel td{background:var(--blue-soft)}
 .np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
 .btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 .rev-ret{margin:8px 0;font-size:12.5px;color:var(--ink2)}.rev-ret summary{cursor:pointer}.thumb[data-rev-abrir]{cursor:pointer}.rev-giro{display:flex;gap:6px;justify-content:center;margin:0 0 10px}
+.fila-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}.btn[aria-pressed="true"]{background:var(--blue-soft);color:var(--blue);border-color:var(--blue)}#fila-resumo{margin:0 0 12px;min-height:1em}
+progress.pg{width:100%;max-width:260px;height:8px;accent-color:var(--blue);vertical-align:middle}.fila-pasta{font-size:12px;color:var(--ink3);margin-top:4px}.fila-pasta summary{cursor:pointer}.fila-acao{white-space:nowrap;text-align:right}.fila-ajuda{margin-top:14px;font-size:13px}
 .rl-estado{margin:0 0 8px}.rl-estado:empty{display:none}.rl-estado .tag{margin-right:4px}
 .tag.mini{font-size:9.5px}
 .rev-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.rev-prev{max-width:100%;max-height:340px;border-radius:8px;border:1px solid var(--line);display:block;margin:0 auto 10px}
@@ -616,13 +618,15 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
 
   <!-- FILAS -->
   <section class="content" id="v-filas">
-    <div class="hdr"><div><h1>Filas de processamento</h1><p class="sub">Listas de pastas para o CAMP Vision catalogar. Cada lista aponta para uma pasta do QNAP e segue os portões de aprovação até virar rascunho no Tainacan.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-lista')">Nova lista</button></div></div>
-    <div class="panel"><div class="filterbar"><input placeholder="Filtrar listas… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
-      <thead><tr><th>Lista</th><th>Fundo / projeto</th><th>Pasta no QNAP</th><th class="num">Folhas</th><th>Etapa</th><th>Aprovação</th><th></th></tr></thead>
-      <tbody id="filas-body"></tbody>
-    </table></div></div>
-    <p class="sub" style="margin-top:14px;font-size:13px">Etapas: <b>enviado</b> (status.json = enviado_windows) → <b>processando</b> (CAMP Vision 2) → <b>revisão</b> (você confere contatos.jpg e outliers) → <b>rascunho</b> (itens no Tainacan) → <b>publicado</b>. Uma lista só avança para rascunho se o projeto tiver a flag <em>autorizado para o site</em>.</p>
-  </section>
+  <div class="hdr"><div><h1>Filas de processamento</h1><p class="sub">O que o CAMP Vision já leu e o que ainda precisa de uma pessoa: importar, conferir, aprovar e publicar.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-lista')">Nova lista</button></div></div>
+  <div class="fila-chips" id="fila-chips" role="group" aria-label="Filtrar por situação"></div>
+  <p class="sub" id="fila-resumo"></p>
+  <div class="panel"><div class="filterbar"><input placeholder="Filtrar por projeto, fundo ou lista… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
+    <thead><tr><th>Projeto</th><th>Situação</th><th>Atualizado</th><th></th></tr></thead>
+    <tbody id="filas-body"></tbody>
+  </table></div></div>
+  <details class="fila-ajuda"><summary>Como funciona</summary><p>O CAMP Vision lê as pastas do QNAP e grava o resultado. Aí o trabalho passa para você, nesta ordem: <b>importar</b> as folhas para o painel, <b>conferir</b> (clique na folha; dá para virar, corrigir e aprovar todas de uma vez), <b>aprovar</b> o lote (admin) e <b>publicar</b> o projeto no site (admin). A lista só aparece em "Publicadas" quando o projeto é publicado.</p></details>
+</section>
 
   <!-- SOLICITAÇÕES -->
   <section class="content" id="v-solicitacoes">
@@ -1067,7 +1071,7 @@ function crumbs(route){const [v,arg]=route.split('/');const H=`<a onclick="go('p
   else out.push('<b>Painel</b>');
   document.getElementById('gcrumb').innerHTML=out.join(S)}
 function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document.getElementById('v-nao-encontrado');if(!sec){sec=document.createElement('section');sec.className='content';sec.id='v-nao-encontrado';document.getElementById('drawer').before(sec)}sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1><p class="sub">${escHtml(detalhe)}</p></div></div><div class="panel"><div class="pb"><button class="btn pri" onclick="go('${fallback}')">Voltar</button></div></div>`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
-function route_to(route){route=route||'painel';setWhere(route);crumbs(route);if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estacoes')carregarEstacoes();if(v==='auditoria')carregarAuditoria();if(v==='uso')carregarUso()}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
+function route_to(route){route=route||'painel';setWhere(route);crumbs(route);if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='filas')carregarFilas();if(v==='estacoes')carregarEstacoes();if(v==='auditoria')carregarAuditoria();if(v==='uso')carregarUso()}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
 window.addEventListener('popstate',e=>{if(temAlteracoes()&&!confirm('Existem alterações não salvas. Navegar e descartar?')){history.go(1);return}if(temAlteracoes()){ALTERACOES_PENDENTES.clear();atualizarDirtyUI()}const st=e.state||{};NAV_INDEX=Number(st.campIndex)||0;const route=st.campRoute||location.hash.slice(1)||'painel';route_to(route);requestAnimationFrame(()=>{mainEl.scrollTop=Number(st.campScroll)||0})});
 navEl.addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
@@ -1083,11 +1087,7 @@ function renderFundos(){
   ['l-fundo','nl-fundo','na-fundo','np-fundo'].forEach(id=>document.getElementById(id).innerHTML=opts);
   document.getElementById('l-fundo').value='F014';
 }
-function renderFilas(){
-  document.getElementById('filas-body').innerHTML=FILAS.map((l,i)=>`<tr><td><b>${escHtml(l.n)}</b></td><td><span class="code">${escHtml(l.f)}</span> ${escHtml(fundoNome(l.f))}<br><small style="color:var(--ink3)">${escHtml(l.p)}</small></td><td><span class="mono" style="font-size:12px">${escHtml(l.pasta)}</span></td><td class="num">${escHtml(l.fl)}</td><td style="min-width:260px"><div class="steps">${ETAPAS.map((e,k)=>`<span class="${k<l.et?'done':k===l.et?(l.err?'err':'cur'):''}">${e}</span>`).join('')}</div></td><td>${l.aut?'<span class="tag g">autorizado</span>':'<span class="tag a">não autorizado</span>'}</td><td><button class="btn sm" onclick="avancar(${i})">${l.err?'Ver erro':l.et>=4?'Concluído':'Avançar'}</button></td></tr>`).join('');
-  document.getElementById('n-filas').textContent=FILAS.filter(l=>l.et<4).length;
-}
-function avancar(i){const l=FILAS[i];if(l.err){go('erros');return}if(l.et===2&&!l.aut){toast('Projeto não autorizado para o site. Autorize antes de gerar rascunhos.');return}if(l.et<4){l.et++;renderFilas();toast(`${l.n}: ${ETAPAS[l.et]}`)}}
+function renderFilas(){FILAS_SRV=FILAS.map((l,i)=>({id:i,nome:l.n,projeto_codigo:l.p,projeto_titulo:'',fundo:fundoNome(l.f),pasta_qnap:l.pasta,etapa:l.err?'erro':ETAPAS[l.et],folhas_esperadas:l.fl,folhas_encontradas:l.fl,itens_total:0,itens_pendentes:0,itens_conferidos:0,aprovado_em:null,atualizado_em:'',lote_teste:0,fase:l.err?'erro':l.et<=1?'processando':l.et===2?'importar':l.et===3?'publicar':'publicado'}));desenharFilas();document.getElementById('n-filas').textContent=FILAS.filter(l=>l.et<4).length}
 function addLista(){const nome=document.getElementById('nl-nome').value.trim();if(!nome){toast('Dê um nome à lista');return}
   FILAS.unshift({n:nome,f:document.getElementById('nl-fundo').value,p:'novo lote',pasta:document.getElementById('nl-pasta').value||'/acervos/…',fl:+document.getElementById('nl-folhas').value||0,et:0,aut:document.getElementById('nl-auto').checked});
   renderFilas();closeModal();toast('Lista adicionada à fila do CAMP Vision')}
@@ -1664,7 +1664,7 @@ async function carregarFolhasQnap(code){
     const com=(r.lotes||[]).filter(l=>l.existe&&l.fora_do_painel>0),sumiu=(r.lotes||[]).filter(l=>!l.existe);
     box.innerHTML=com.map(l=>`<div class="panel"><div class="ph"><h2>Encontradas no QNAP, ainda não catalogadas no painel</h2><span class="tag a">${fmtN(l.fora_do_painel)} documento(s)</span></div><div class="pb"><p class="help">Lote <b>${escHtml(l.nome)}</b> (${escHtml(l.etapa)}). Estes arquivos estão na pasta do projeto no QNAP, mas ainda não viraram folhas do painel. Quando o lote tiver o pacote do CAMP Vision, a Revisão do lote (acima) importa as folhas e elas passam a aparecer na lista abaixo.${l.parcial?' <b>A leitura da pasta foi interrompida por demorar: a lista está incompleta.</b>':''}</p><div class="qf-grid">${l.documentos.map(d=>`<figure class="qf"><div class="qf-img">${d.previa?`<img loading="lazy" alt="" src="/api/projetos/${encodeURIComponent(code)}/folhas-qnap/arquivo?lote=${encodeURIComponent(l.id)}&caminho=${encodeURIComponent(d.previa)}">`:'<span class="qf-sem">sem prévia</span>'}</div><figcaption><span class="code">${escHtml(d.codigo)}</span><small>${escHtml(d.serie||'—')} · ${d.formatos.map(escHtml).join(' · ')}</small></figcaption></figure>`).join('')}</div>${l.fora_do_painel>l.documentos.length?`<small class="help">… e mais ${fmtN(l.fora_do_painel-l.documentos.length)} (mostrando ${fmtN(l.documentos.length)})</small>`:''}</div></div>`).join('')+sumiu.map(l=>`<div class="panel"><div class="pb"><p class="help"><span class="tag r">pasta não encontrada</span> A pasta do lote <b>${escHtml(l.nome)}</b> não está acessível: <span class="mono">${escHtml(l.pasta)}</span>. Confira se o QNAP está montado.</p></div></div>`).join('')
   }catch(e){box.innerHTML=''}}
-function renderItensProjeto(d,p){window.ITENS_PJ=d.itens||[];window.PROJETO_PJ=p.codigo;setTimeout(()=>{carregarRevisaoLote(p.codigo);carregarFolhasQnap(p.codigo)},0);return '<div id="pj-revisao"></div><div id="pj-qnap"></div>'+renderItensProjetoBase(d,p)}
+function renderItensProjeto(d,p){window.ITENS_PJ=d.itens||[];window.PROJETO_PJ=p.codigo;setTimeout(()=>{carregarRevisaoLote(p.codigo);carregarFolhasQnap(p.codigo);const a=window.ACAO_APOS_PROJETO;if(a&&a.codigo===p.codigo){window.ACAO_APOS_PROJETO=null;if(a.tipo==='publicar')setTimeout(()=>abrirPublicacaoGuiada(p.codigo),600);else setTimeout(()=>{const e=document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})},1000)}},0);return '<div id="pj-revisao"></div><div id="pj-qnap"></div>'+renderItensProjetoBase(d,p)}
 function renderItensProjetoBase(d,p){
   const its=d.itens||[], fonte=d.fonte_visual||{};
   if(!its.length)return `<div class="panel"><div class="empty">Nenhum documento digitalizado reconhecido para este projeto.</div></div>`;
@@ -1753,7 +1753,7 @@ function acaoCondicao(tipo,alvo){
   else if(tipo==='autorizar')autorizarProjeto(alvo);
   else if(tipo==='subir_folhas')subirFolhas(alvo);
   else if(tipo==='erros')go('erros')
- else if(tipo==='revisao'){const e=document.getElementById('pj-revisao');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})}}
+ else if(tipo==='revisao'){const e=document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}}
 function alvoProjetoAtual(){const m=(location.hash||'').match(/^#projeto\/([^/]+)/);return m?m[1]:null}
 const _closeDrawerBase=closeDrawer;
 closeDrawer=function(force){const r=_closeDrawerBase(force);if(r!==false&&PUB_REFRESH){const c=PUB_REFRESH;PUB_REFRESH=null;setTimeout(()=>typeof c==='function'?c():carregarPublicacao(c),500)}return r};
@@ -2056,14 +2056,47 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
 }catch(e){if(e.status===401||e.status===428)return;if(tinha)marcarStale('painel',e.message,'carregarPainel()');else sec.innerHTML=`<div class="panel"><div class="pb state-row"><b>Não foi possível carregar o painel.</b><div>${escHtml(e.message)}</div><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div></div>`}}
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
-async function carregarFilas(){try{const fs=await API('/api/filas');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
-  document.getElementById('filas-body').innerHTML=fs.length?fs.map(l=>{const k=ETAPAS.indexOf(l.etapa);return`<tr><td><b>${escHtml(l.nome)}</b><br><small style="color:var(--ink3)">${escHtml((l.atualizado_em||'').slice(0,16))}</small></td><td><span class="code">${escHtml(l.projeto_codigo)}</span> ${escHtml(l.projeto_titulo)}<br><small style="color:var(--ink3)">${escHtml(l.fundo)}</small></td><td><span class="mono" style="font-size:12px">${escHtml(l.pasta_qnap)}</span></td><td class="num">${escHtml(l.folhas_encontradas??'—')}${l.folhas_esperadas?` / ${escHtml(l.folhas_esperadas)}`:''}${l.folhas_esperadas&&l.folhas_encontradas!=null&&l.folhas_encontradas<l.folhas_esperadas?' <span class="tag r">faltam</span>':''}</td><td style="min-width:260px"><div class="steps">${ETAPAS.map((e,i)=>`<span class="${l.etapa==='erro'?(i===0?'err':''):i<k?'done':i===k?'cur':''}">${e}</span>`).join('')}</div></td><td>${l.lote_teste?'<span class="tag a">teste</span> ':''}${l.autorizado_site?'<span class="tag g">autorizado</span>':'<span class="tag">não autorizado</span>'}</td><td style="white-space:nowrap">${l.etapa==='erro'?`<button class="btn sm" onclick="etapaFila(${escHtml(l.id)},'enviado')">Retomar</button>`:l.etapa==='publicado'?'<span class="tag g">concluído</span>':`<button class="btn sm pri" onclick="etapaFila(${escHtml(l.id)},'${ETAPAS[k+1]}')">→ ${ETAPAS[k+1]}</button>`} <button class="btn sm" onclick="nav('projeto/${escHtml(l.projeto_codigo)}')">Projeto</button></td></tr>`}).join(''):'<tr><td colspan="7" class="empty">Nenhuma lista. Clique em "Varrer QNAP" para ler as pastas do acervo, ou crie uma lista à mão.</td></tr>';
-  document.getElementById('n-filas').textContent=fs.filter(l=>l.etapa!=='publicado').length;
+let FILAS_SRV=[],FILA_FILTRO=null;
+const FILA_GENTE=['erro','importar','conferir','aprovar','publicar'];
+async function carregarFilas(){try{FILAS_SRV=await API('/api/filas');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
+  desenharFilas();document.getElementById('n-filas').textContent=FILAS_SRV.filter(l=>l.etapa!=='publicado').length;
   const act=sec.querySelector('.hdr .act');if(act&&!act.querySelector('[data-qnap]')){const b=document.createElement('button');b.className='btn';b.dataset.qnap='1';b.textContent='Varrer QNAP';b.onclick=varrerQnap;act.prepend(b)}}catch(e){if(e.status!==401&&e.status!==428)toast(e.message)}}
+function idadeFila(s){const t=Date.parse(String(s||'').replace(' ','T')+'Z');return isNaN(t)?'—':textoIdade((Date.now()-t)/1000)}
+function desenharFilas(){
+  const L=FILAS_SRV,n=f=>L.filter(f).length,gente=n(l=>FILA_GENTE.includes(l.fase));
+  if(FILA_FILTRO===null)FILA_FILTRO=gente?'gente':'todas';
+  const chip=(k,t,q)=>`<button class="btn sm" data-fila-filtro="${k}" aria-pressed="${FILA_FILTRO===k}">${t} <b>${q}</b></button>`;
+  document.getElementById('fila-chips').innerHTML=chip('gente','Precisam de você',gente)+chip('processando','CAMP Vision lendo',n(l=>l.fase==='processando'))+chip('publicado','Publicadas',n(l=>l.fase==='publicado'))+chip('todas','Todas',L.length);
+  const rot={conferir:'para conferir',importar:'para importar',aprovar:'para aprovar',publicar:'para publicar',erro:'com erro'},partes=Object.keys(rot).map(f=>[n(l=>l.fase===f),rot[f]]).filter(x=>x[0]);
+  document.getElementById('fila-resumo').textContent=partes.length?partes.map(x=>`${x[0]} ${x[1]}`).join(' · '):'';
+  const ordem={erro:0,conferir:1,importar:2,aprovar:3,publicar:4,processando:5,publicado:6};
+  const vis=L.filter(l=>FILA_FILTRO==='gente'?FILA_GENTE.includes(l.fase):FILA_FILTRO==='todas'?true:l.fase===FILA_FILTRO).sort((a,b)=>(ordem[a.fase]-ordem[b.fase])||String(b.atualizado_em).localeCompare(String(a.atualizado_em)));
+  document.getElementById('filas-body').innerHTML=vis.length?vis.map(linhaFila).join(''):`<tr><td colspan="4" class="empty">${!L.length?'Nenhuma lista. Clique em "Varrer QNAP" para ler as pastas do acervo, ou crie uma lista à mão.':FILA_FILTRO==='gente'?'Nada precisa de você agora. As listas em leitura aparecem em "CAMP Vision lendo".':'Nenhuma lista nesta situação.'}</td></tr>`}
+function linhaFila(l){
+  const ad=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel),f=l.fase,id=escHtml(l.id),pj=escHtml(l.projeto_codigo);
+  const T={importar:['a','Importar','O CAMP Vision terminou a leitura. Falta trazer as folhas para o painel.'],conferir:['a','Conferir',`Faltam conferir <b>${escHtml(l.itens_pendentes)}</b> de ${escHtml(l.itens_total)} folha(s).`],
+    aprovar:['b','Aprovar',`Todas as ${escHtml(l.itens_total)} folha(s) conferidas. Falta aprovar o lote.`],publicar:['g','Publicar','Lote aprovado. Falta publicar o projeto no site.'],
+    processando:['b',l.etapa==='enviado'?'Na fila':'Lendo',l.etapa==='enviado'?'Aguardando o CAMP Vision começar.':'O CAMP Vision está lendo as folhas.'],erro:['r','Erro','O CAMP Vision parou com erro. Veja o motivo e tente de novo.'],publicado:['g','Publicada','Concluída.']}[f]||['',escHtml(f),''];
+  const total=f==='processando'?l.folhas_esperadas:l.itens_total,feito=f==='processando'?(l.folhas_encontradas||0):f==='conferir'?l.itens_conferidos:l.itens_total;
+  const barra=total&&['processando','conferir','aprovar','publicar'].includes(f)?`<div><progress class="pg" value="${escHtml(feito)}" max="${escHtml(total)}"></progress> <small class="help">${escHtml(feito)} de ${escHtml(total)}</small></div>`:'';
+  const bt=(cls,txt,at)=>`<button class="btn sm ${cls}" ${at}>${txt}</button>`;
+  let acao=f==='importar'?(op?bt('pri','Importar folhas',`data-fila-acao="importar" data-id="${id}"`):''):f==='conferir'?bt('pri','Conferir folhas',`data-fila-ir="revisao" data-projeto="${pj}"`)
+    :f==='aprovar'?(ad?bt('pri','Aprovar lote',`data-fila-acao="aprovar" data-id="${id}"`):'<small class="help">Falta um admin aprovar</small>'):f==='publicar'?(ad?bt('pri','Publicar',`data-fila-ir="publicar" data-projeto="${pj}"`):'<small class="help">Falta um admin publicar</small>')
+    :f==='erro'?bt('pri','Ver erro','data-fila-ir="erros"')+(op?' '+bt('','Tentar de novo',`data-fila-acao="retomar" data-id="${id}"`):''):'';
+  return `<tr data-fase="${escHtml(f)}"><td><span class="code">${pj}</span> <b>${escHtml(l.projeto_titulo)}</b><br><small class="help">${escHtml(l.fundo)} · ${escHtml(l.nome)}</small><details class="fila-pasta"><summary>pasta</summary><span class="mono">${escHtml(l.pasta_qnap)}</span></details></td>
+    <td><span class="tag ${T[0]}">${T[1]}</span>${l.lote_teste?' <span class="tag a">teste</span>':''} ${T[2]}${barra}</td><td>${escHtml(idadeFila(l.atualizado_em))}</td><td class="fila-acao">${acao} ${bt('','Projeto',`data-fila-ir="projeto" data-projeto="${pj}"`)}</td></tr>`}
+async function acaoFila(acao,id){try{
+  if(acao==='importar'){const r=await API('/api/lotes/'+encodeURIComponent(id)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`+((r.retirados||[]).length?`; ${r.retirados.length} retirada(s) pelo CAMP Vision`:''))}
+  else if(acao==='aprovar'){if(!confirm('Aprovar a revisão deste lote? Depois disso as folhas não podem mais ser editadas, a não ser que você reabra a revisão.'))return;await API('/api/lotes/'+encodeURIComponent(id)+'/aprovar',{method:'POST'});toast('Revisão aprovada')}
+  else if(acao==='retomar'){await API('/api/filas/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({etapa:'enviado'})});toast('Lista de volta para o CAMP Vision')}
+  carregarFilas();if(typeof carregarPainel==='function')carregarPainel()}catch(e){toast(e.message)}}
+function irDaFila(onde,projeto){if(onde==='erros'){go('erros');return}window.ACAO_APOS_PROJETO=(onde==='revisao'||onde==='publicar')?{tipo:onde,codigo:projeto}:null;nav('projeto/'+projeto)}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-filtro],[data-fila-acao],[data-fila-ir]');if(!b||b.disabled)return;   // códigos só em data-*
+  if(b.dataset.filaFiltro){FILA_FILTRO=b.dataset.filaFiltro;desenharFilas()}else if(b.dataset.filaAcao)acaoFila(b.dataset.filaAcao,b.dataset.id);else irDaFila(b.dataset.filaIr,b.dataset.projeto)});
 async function etapaFila(id,etapa){if(!etapa)return;try{await API('/api/filas/'+id,{method:'PATCH',body:JSON.stringify({etapa})});toast('Lista: '+etapa);carregarFilas();carregarPainel()}catch(e){toast(e.message)}}
 async function varrerQnap(){toast('Lendo pastas do QNAP…');try{const r=await API('/api/filas/varrer-qnap',{method:'POST'});toast(`${r.novas} novas, ${r.atualizadas} atualizadas, ${r.ignoradas.length} ignoradas`);if(r.ignoradas.length)openDrawer('Pastas ignoradas na varredura',r.raiz,`<ul class="list">${r.ignoradas.map(x=>`<li><div class="t"><span class="mono" style="font-size:12px">${escHtml(x.pasta)}</span><small>${escHtml(x.motivo)}</small></div></li>`).join('')}</ul>`);carregarFilas()}catch(e){toast(e.message)}}
 const _addListaMock=addLista;
-addLista=async function(){if(!EU)return _addListaMock();try{await API('/api/filas',{method:'POST',body:JSON.stringify({nome:document.getElementById('nl-nome').value,projeto_codigo:document.getElementById('nl-proj').value.trim().toUpperCase(),pasta_qnap:document.getElementById('nl-pasta').value,folhas_esperadas:+document.getElementById('nl-folhas').value||null,autorizar_site:document.getElementById('nl-auto').checked,lote_teste:document.querySelector('#m-lista input[type=checkbox]:not(#nl-auto)').checked})});closeModal();toast('Lista adicionada');carregarFilas()}catch(e){toast(e.message)}}
+addLista=async function(){if(!EU)return _addListaMock();try{await API('/api/filas',{method:'POST',body:JSON.stringify({nome:document.getElementById('nl-nome').value,projeto_codigo:document.getElementById('nl-proj').value.trim().toUpperCase(),pasta_qnap:document.getElementById('nl-pasta').value,folhas_esperadas:+document.getElementById('nl-folhas').value||null,autorizar_site:document.getElementById('nl-auto').checked,lote_teste:document.querySelector('#m-lista input[type=checkbox]:not(#nl-auto)').checked})});closeModal();toast('Lista adicionada');FILA_FILTRO='todas';carregarFilas()}catch(e){toast(e.message)}}
 
 const SIT_TAG={aguarda_resposta:'a',aguarda_orcamento:'a',aguarda_credito:'b',em_preparacao:'b',entregue:'g',recusada:''};
 let solFiltro='abertas';
