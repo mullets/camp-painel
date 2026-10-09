@@ -602,8 +602,9 @@ def filho(modo):
         ver("mudar publicação sem registros no site NÃO responde '0 atualizados' mudo", r.status_code == 200 and not j["ok"] and "ainda não tem registros no site" in j["mensagem"], str(j)[:120])
         # ---- lote ----
         Fake.chamadas.clear()
-        r = adm.post("/api/projetos/lote", json={"codigos": [P1, P2], "acao": "publicar"}); j = r.json()
-        ver("lote: um publica e o outro volta com o MOTIVO", r.status_code == 200 and [x["codigo"] for x in j["ok"]] == [P1] and len(j["falhas"]) == 1 and j["falhas"][0]["codigo"] == P2 and "não foi autorizado" in j["falhas"][0]["erro"], str(j)[:200])
+        # O lote agora usa a sequência GUIADA (bloco 'lote_publicar'); aqui seguem as mesmas transições do banco com o Publicar cru de cada projeto
+        r1_ = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"}); r2_ = adm.post(f"/api/projetos/{P2}/publicar", json={"acao": "publicar"})
+        ver("Publicar cru: um publica e o outro volta com o MOTIVO", r1_.status_code == 200 and r1_.json().get("ok") and r1_.json().get("alterados", 0) > 0 and r2_.status_code in (200, 400) and "não foi autorizado" in r2_.text, (r1_.text[:90] + " | " + r2_.text[:110]))
         # ---- fundo inteiro: mesmas regras ----
         Fake.chamadas.clear()
         r = mst.post("/api/fundos/F099/status-site", json={"acao": "no_ar"}); j = r.json()
@@ -2081,6 +2082,64 @@ def filho(modo):
         ver("projeto que já começa com 'Projeto' usa 'de', sem repetir a palavra", "de Projeto de teste (1972)" in df({**base, "projeto_titulo": "Projeto de teste"}) and "do projeto Projeto" not in df({**base, "projeto_titulo": "Projeto de teste"}))
         ver("sem ano: 's.d.'", "(s.d.)" in df({**base, "projeto_ano": None}))
         for l in res: print(l)
+    elif modo == "lote_publicar":
+        init_db(); aplicar_migracoes()
+        from app import auth, publicador, publicacao_guiada as pg, wp as _wp, rotas_projetos as rp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F094','Fundo Lote','LOT',1)"); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F095','Fundo Restrito','RST',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F094','autorizado','Fam','Termo')")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao) VALUES ('F095','restrito')")
+        def proj(f, n, titulo, revisao):
+            cod = f"{f}-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, f, n, titulo))
+            c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES (?,?,'/x')", (f"Lote {cod}", cod))
+            lid = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+            for s_ in (1, 2):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao) VALUES (?,?,?,?,?,'campvision',?,?)", (f"{cod}-1970-S01-D{s_:05d}", cod, "S01", s_, f"Folha {s_}", lid, revisao))
+            return cod
+        PA, PB, PE, PF, PG = (proj("F094", n, t, "conferida") for n, t in ((1, "Casa A"), (2, "Casa B"), (3, "Casa E"), (4, "Casa F"), (6, "Casa G")))
+        PD = proj("F094", 5, "Casa D", "pendente"); PC = proj("F095", 1, "Casa C", "conferida")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        chamadas = {"dossie": 0, "folhas": [], "status": []}
+        def dossie_falso(codigo, ator):
+            chamadas["dossie"] += 1; cc = connect(); wid = 9000 + chamadas["dossie"]
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft','dossie',?,?,?)", (wid, codigo, codigo, codigo[:4]))
+            cc.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "erro": None}
+        def folha_falsa(codigo, ator, enviar_imagem=True):
+            chamadas["folhas"].append(codigo); cc = connect(); wid = 7000 + len(chamadas["folhas"])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','f',?,?,?)", (wid, codigo, codigo[:10], codigo[:4]))
+            cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        class WPFalso:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): chamadas["status"].append((cid, wid, alvo))
+        publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_falsa, WPFalso
+        todos = [PA, PB, PC, PD]
+        pl = adm.post("/api/projetos/lote/plano", json={"codigos": todos, "acao": "publicar"}).json()
+        ver("plano do lote: quem seria publicado e quem fica de fora, com o motivo de cada um", {x["codigo"] for x in pl["publicaveis"]} == {PA, PB} and {x["codigo"] for x in pl["bloqueados"]} == {PC, PD} and all(x["motivo"] for x in pl["bloqueados"]), str(pl)[:300])
+        ver("o plano só lê: nada foi criado no site", chamadas["dossie"] == 0 and not chamadas["folhas"] and not chamadas["status"])
+        r = adm.post("/api/projetos/lote", json={"codigos": todos, "acao": "publicar"}).json()
+        ver("Publicar em lote segue a MESMA sequência do Publicar do projeto (dossiê, folhas, autorizar, publicar)", [x["codigo"] for x in r["ok"]] == [PA, PB] and chamadas["dossie"] == 2 and len(chamadas["folhas"]) == 4 and sql("SELECT COUNT(*) FROM projeto WHERE codigo IN (?,?) AND autorizado_site=1", PA, PB) == 2 and len(chamadas["status"]) >= 2, str(r)[:300])
+        ver("quem tem bloqueio de pessoa falha ANTES de mexer no site, com o motivo; nada fica pendente", {x["codigo"] for x in r["falhas"]} == {PC, PD} and not any(f_.startswith(("F095", "F094-P0005")) for f_ in chamadas["folhas"]) and r["pendentes"] == [] and "restritos" in " ".join(x["erro"] for x in r["falhas"] if x["codigo"] == PC), str(r["falhas"])[:300])
+        rp.ORCAMENTO_LOTE_S = 0.0
+        r1 = adm.post("/api/projetos/lote", json={"codigos": [PE, PF], "acao": "publicar"}).json()
+        ver("sem tempo, o que não coube volta em 'pendentes' (o primeiro sempre avança)", [x["codigo"] for x in r1["ok"]] == [PE] and r1["pendentes"] == [PF], str(r1)[:250])
+        r2 = adm.post("/api/projetos/lote", json={"codigos": r1["pendentes"], "acao": "publicar"}).json(); rp.ORCAMENTO_LOTE_S = 40.0
+        ver("repetindo com os pendentes, o lote termina", [x["codigo"] for x in r2["ok"]] == [PF] and r2["pendentes"] == [], str(r2)[:250])
+        pg.ORCAMENTO_S = 0.0; antes = len(chamadas["folhas"])
+        r3 = adm.post("/api/projetos/lote", json={"codigos": [PG], "acao": "publicar"}).json(); pg.ORCAMENTO_S = 40.0
+        ver("um projeto que precisa de várias fatias de envio termina dentro do mesmo lote", [x["codigo"] for x in r3["ok"]] == [PG] and len(chamadas["folhas"]) - antes == 2 and r3["pendentes"] == [], str(r3)[:250])
+        ver("só admin: operador 403, sem login 401; ação inválida e lista vazia 400", op.post("/api/projetos/lote", json={"codigos": [PA], "acao": "publicar"}).status_code == 403 and op.post("/api/projetos/lote/plano", json={"codigos": [PA], "acao": "publicar"}).status_code == 403 and anon.post("/api/projetos/lote/plano", json={"codigos": [PA], "acao": "publicar"}).status_code == 401 and adm.post("/api/projetos/lote", json={"codigos": [PA], "acao": "bobagem"}).status_code == 400 and adm.post("/api/projetos/lote", json={"codigos": [], "acao": "publicar"}).status_code == 400)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2466,6 +2525,14 @@ else:
 print("32) Descrição da folha no site: sem '. ' no começo quando a folha não tem título")
 rc, out = rodar("descricao_folha", f"{tmp}/desc.db")
 if rc != 0: ok(False, f"teste da descrição não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("33) Publicar em lote: a mesma sequência do projeto, com plano antes e pendentes quando falta tempo")
+rc, out = rodar("lote_publicar", f"{tmp}/lote.db")
+if rc != 0: ok(False, f"teste do publicar em lote não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

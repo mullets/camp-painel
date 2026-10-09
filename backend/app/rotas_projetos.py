@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 import re
 import unicodedata
 
@@ -677,34 +678,82 @@ class AcaoProjetosLote(BaseModel):
     acao: str
 
 
+ORCAMENTO_LOTE_S = 40.0     # tempo máximo de uma chamada de "Publicar" em lote; o que não coube volta em "pendentes" e a tela repete
+
+
+def _limpar_codigos(codigos) -> list[str]:
+    cods = list(dict.fromkeys(c.strip().upper() for c in codigos if c.strip()))
+    if not cods:
+        raise HTTPException(400, "Selecione ao menos um projeto")
+    if len(cods) > 500:
+        raise HTTPException(400, "Ação em lote limitada a 500 projetos por vez")
+    return cods
+
+
+@router.post("/projetos/lote/plano")
+def projetos_lote_plano(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """O que o 'Publicar' em lote FARIA: quais projetos seguem a mesma sequência do Publicar do projeto e quais ficam de fora (e por quê). Só lê."""
+    from . import publicacao_guiada
+    codigos = _limpar_codigos(d.codigos)
+    publicaveis, bloqueados = [], []
+    con = connect()
+    try:
+        for c in codigos:
+            p = con.execute("SELECT * FROM projeto WHERE codigo=?", (c,)).fetchone()
+            if not p:
+                bloqueados.append({"codigo": c, "titulo": "", "motivo": "Projeto não existe"}); continue
+            pl = publicacao_guiada.plano(con, p)
+            if pl["bloqueios"]:
+                bloqueados.append({"codigo": c, "titulo": p["titulo"], "motivo": " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]),
+                                   "acoes": [b["acao"] for b in pl["bloqueios"] if b.get("acao")]})
+            else:
+                publicaveis.append({"codigo": c, "titulo": p["titulo"]})
+    finally:
+        con.close()
+    return {"selecionados": len(codigos), "publicaveis": publicaveis, "bloqueados": bloqueados}
+
+
 @router.post("/projetos/lote")
 def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -> dict:
     if d.acao not in ("publicar", "rascunho", "tirar_do_ar"):
         raise HTTPException(400, "Ação em lote inválida")
-    codigos = list(dict.fromkeys(c.strip().upper() for c in d.codigos if c.strip()))
-    if not codigos:
-        raise HTTPException(400, "Selecione ao menos um projeto")
-    if len(codigos) > 500:
-        raise HTTPException(400, "Ação em lote limitada a 500 projetos por vez")
-    ok, falhas = [], []
-    for codigo in codigos:
+    codigos = _limpar_codigos(d.codigos)
+    ok, falhas, pendentes = [], [], []
+    t0 = time.monotonic()
+    for idx, codigo in enumerate(codigos):
         try:
-            r = publicar(codigo, Publicacao(acao=d.acao), u)
-            if r.get("ok") and r.get("alterados", 0) > 0:
-                ok.append({"codigo": codigo, "alterados": r.get("alterados", 0)})
-            elif r.get("ok"):
-                falhas.append({"codigo": codigo, "erro": r.get("mensagem") or "Nenhum registro vinculado a este projeto no site."})
+            if d.acao == "publicar":
+                # a MESMA sequência do Publicar do projeto: dossiê, folhas, autorizar, publicar (e para antes se algo só uma pessoa resolve)
+                from . import publicacao_guiada
+                if idx > 0 and time.monotonic() - t0 >= ORCAMENTO_LOTE_S:
+                    pendentes = codigos[idx:]; break
+                while True:
+                    r = publicacao_guiada.executar(codigo, u)
+                    if not r.get("parcial") or time.monotonic() - t0 >= ORCAMENTO_LOTE_S:
+                        break
+                if r.get("parcial"):                    # ainda faltam folhas deste projeto: a tela chama de novo (a guiada não repete o que já subiu)
+                    pendentes = codigos[idx:]; break
+                if r.get("ok") and r.get("publicados", r.get("alterados", 0)) > 0:
+                    ok.append({"codigo": codigo, "alterados": r.get("publicados", r.get("alterados", 0))})
+                else:
+                    falhas.append({"codigo": codigo, "erro": r.get("mensagem") or ((r.get("falhas") or [{}])[0].get("erro")) or "Falha na publicação"})
             else:
-                falhas.append({"codigo": codigo, "erro": ((r.get("falhas") or [{}])[0].get("erro")) or r.get("mensagem") or "Falha na publicação"})
+                r = publicar(codigo, Publicacao(acao=d.acao), u)
+                if r.get("ok") and r.get("alterados", 0) > 0:
+                    ok.append({"codigo": codigo, "alterados": r.get("alterados", 0)})
+                elif r.get("ok"):
+                    falhas.append({"codigo": codigo, "erro": r.get("mensagem") or "Nenhum registro vinculado a este projeto no site."})
+                else:
+                    falhas.append({"codigo": codigo, "erro": ((r.get("falhas") or [{}])[0].get("erro")) or r.get("mensagem") or "Falha na publicação"})
         except HTTPException as e:
             falhas.append({"codigo": codigo, "erro": str(e.detail)})
         except Exception as e:  # noqa: BLE001
             falhas.append({"codigo": codigo, "erro": str(e)[:240]})
     con = connect()
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto','lote',?,?,?)",
-                (f"lote_{d.acao}", u["email"], json.dumps({"selecionados": len(codigos), "ok": [x["codigo"] for x in ok], "falhas": falhas}, ensure_ascii=False)))
+                (f"lote_{d.acao}", u["email"], json.dumps({"selecionados": len(codigos), "ok": [x["codigo"] for x in ok], "falhas": falhas, "pendentes": pendentes}, ensure_ascii=False)))
     con.commit(); con.close()
-    return {"selecionados": len(codigos), "ok": ok, "falhas": falhas}
+    return {"selecionados": len(codigos), "ok": ok, "falhas": falhas, "pendentes": pendentes}
 
 @router.post("/projetos/exportar-selecao")
 def exportar_selecao(d: AcaoProjetosLote, u: dict = Depends(auth.exige("leitura"))) -> dict:
