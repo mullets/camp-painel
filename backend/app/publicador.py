@@ -13,6 +13,17 @@ from .wp import WP
 CONVIDADO = "F000"  # fundo Convidado: material de terceiros, nunca vai ao site
 
 
+
+def descricao_folha(i) -> str:
+    """Frase da descrição da folha no site, montada só com as partes que existem: folha sem título NÃO começa com '. ',
+    e 'Projeto X' não vira 'do projeto Projeto X'."""
+    pt = (i["projeto_titulo"] or "").strip()
+    de = "de" if pt.lower().startswith("projeto") else "do projeto"
+    corpo = f"{i['serie_nome']} {de} {pt} ({i['projeto_ano'] or 's.d.'}), fundo {i['fundo_titulo']}"
+    partes = [i["titulo"].strip()] if (i["titulo"] or "").strip() else []
+    partes.append(corpo)
+    return ". ".join(partes) + "."
+
 def _nunca_convidado(func):
     """F000 · Convidado guarda material de TERCEIROS digitalizado na CAMP: nada dele
     (fundo, dossiê, folha, status) pode ser criado ou mudado no site."""
@@ -410,7 +421,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         wp = WP()
         p_num = codigo.split("-")[1]
         titulo = f"{(i['titulo'] or i['tipo_documento'] or i['serie_nome'])} — {p_num} — {i['projeto_titulo']}"
-        it = wp.criar_item(COL_ACERVO, titulo, "draft", f"{i['titulo'] or ''}. {i['serie_nome']} do projeto {i['projeto_titulo']} ({i['projeto_ano'] or 's.d.'}) — fundo {i['fundo_titulo']}.")
+        it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
         iid = it["id"]
         con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
         con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",

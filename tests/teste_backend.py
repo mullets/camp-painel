@@ -2069,6 +2069,18 @@ def filho(modo):
         ver("novo aviso reimporta sem desfazer a revisão de gente", (r2.get("importacao") or {}).get("ignoradas_ja_revisadas") == 1 and c.execute("SELECT COUNT(*) FROM item WHERE titulo='Revisado'").fetchone()[0] == 1, str(r2)[:300])
         c.close()
         for l in res: print(l)
+    elif modo == "descricao_folha":
+        init_db(); _aplicar_migracoes_real()
+        from app.publicador import descricao_folha as df
+        res = []
+        ver = lambda nome, cond, det="": res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = {"serie_nome": "Desenhos e pranchas", "projeto_titulo": "Casa Tarumã", "projeto_ano": 1972, "fundo_titulo": "Burle Marx", "titulo": ""}
+        ver("folha SEM título: a descrição começa pela série, não por '. '", df(base) == "Desenhos e pranchas do projeto Casa Tarumã (1972), fundo Burle Marx.", df(base))
+        ver("folha COM título: 'Título. Série do projeto...'", df({**base, "titulo": "Planta do térreo"}) == "Planta do térreo. Desenhos e pranchas do projeto Casa Tarumã (1972), fundo Burle Marx.", df({**base, "titulo": "Planta do térreo"}))
+        ver("título só com espaços conta como sem título (nada de ' . ')", not df({**base, "titulo": "   "}).startswith((".", " ")))
+        ver("projeto que já começa com 'Projeto' usa 'de', sem repetir a palavra", "de Projeto de teste (1972)" in df({**base, "projeto_titulo": "Projeto de teste"}) and "do projeto Projeto" not in df({**base, "projeto_titulo": "Projeto de teste"}))
+        ver("sem ano: 's.d.'", "(s.d.)" in df({**base, "projeto_ano": None}))
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2446,6 +2458,14 @@ else:
 print("31) Direitos: preencher deixa de ser exigido por padrão; restrição registrada continua bloqueando")
 rc, out = rodar("direitos_opcional", f"{tmp}/dir.db")
 if rc != 0: ok(False, f"teste dos direitos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("32) Descrição da folha no site: sem '. ' no começo quando a folha não tem título")
+rc, out = rodar("descricao_folha", f"{tmp}/desc.db")
+if rc != 0: ok(False, f"teste da descrição não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
