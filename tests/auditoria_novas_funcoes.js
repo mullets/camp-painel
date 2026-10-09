@@ -477,6 +477,20 @@ w.route_to('painel'); await sleep(2800);
   chk(w.location.hash===h0&&w.eval('PROJETOS_SELECIONADOS.size')===3&&!!cel.querySelector('input').checked,'clicar na CÉLULA da caixa também deveria marcar sem navegar (selecionados='+w.eval('PROJETOS_SELECIONADOS.size')+')');
   chk(/3 selecionados/.test(txt('#proj-bulk-count')),'a barra deveria dizer "3 selecionados": "'+txt('#proj-bulk-count')+'"'); w.limparSelecaoProjetos();
   d.querySelector('#projetos-body tr[data-nav] b').click(); await sleep(800); chk(/^#projeto\//.test(w.location.hash),'clicar no nome deveria continuar abrindo o projeto: '+w.location.hash); w.route_to('painel'); }
+// ---------- [Auditoria P0-4] os botões "Etiquetas" abrem a etiqueta do projeto/fundo/folha de ORIGEM (nunca a de outro fundo) ----------
+{ const lab=()=>({f:d.getElementById('l-fundo').value,p:d.getElementById('l-proj').value,o:txt('#lab-origem'),aba:(d.querySelector('#lab-tabs .on')||{dataset:{}}).dataset.t});
+  w.route_to('etiquetas/projeto/F003-P9001'); await sleep(3500); let L=lab();
+  chk(L.f==='F003'&&L.p==='F003-P9001'&&L.aba==='projeto'&&/Etiqueta de: F003-P9001/.test(L.o),'etiquetas/projeto/F003-P9001 deveria abrir a etiqueta DESSE projeto: '+JSON.stringify(L));
+  w.route_to('etiquetas/fundo/F026'); await sleep(2800); L=lab();
+  chk(L.f==='F026'&&L.aba==='fundo'&&/Etiqueta de: F026/.test(L.o),'etiquetas/fundo/F026 deveria abrir a etiqueta do fundo F026: '+JSON.stringify(L));
+  w.route_to('etiquetas/folha/F003-P9001-1972-S01-D00002'); await sleep(3500); L=lab();
+  chk(L.f==='F003'&&L.p==='F003-P9001'&&L.aba==='documento','etiquetas/folha/<código> deveria abrir a aba de folha no projeto da folha: '+JSON.stringify(L));
+  w.route_to('projeto/F003-P9001'); await sleep(3500); const bp=[...d.querySelectorAll('#v-projeto .act button')].find(x=>x.textContent.trim()==='Etiquetas');
+  chk(!!bp&&/etiquetas\/projeto\/F003-P9001/.test(bp.getAttribute('onclick')),'o botão "Etiquetas" da página do projeto deveria levar o código do projeto: '+(bp&&bp.getAttribute('onclick')));
+  w.route_to('fundo/F026'); await sleep(3000); const bf=[...d.querySelectorAll('#v-fundo .act button')].find(x=>/Etiqueta do fundo/.test(x.textContent));
+  chk(!!bf&&/etiquetas\/fundo\/F026/.test(bf.getAttribute('onclick')),'o botão "Etiqueta do fundo" deveria levar o código do fundo: '+(bf&&bf.getAttribute('onclick')));
+  const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/#etiquetas',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>adm.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}}); await sleep(3500);
+  const dd=dx.window.document; chk(dd.getElementById('l-fundo').value===''&&/Escolha o fundo/.test(dd.getElementById('lab-origem').textContent),'pelo menu lateral a etiqueta deveria abrir SEM fundo pré-escolhido (antes: sempre F014): "'+dd.getElementById('l-fundo').value+'" / "'+dd.getElementById('lab-origem').textContent+'"'); dx.window.close(); w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
