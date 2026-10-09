@@ -306,6 +306,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .dec-cand{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--surface)}.dec-cand header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .dec-motivos{margin:6px 0 8px;padding-left:18px;color:var(--ink2);font-size:12.5px}.dec-motivos small{display:block}
 .np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
+.btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 .tag.mini{font-size:9.5px}
 .rev-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.rev-prev{max-width:100%;max-height:340px;border-radius:8px;border:1px solid var(--line);display:block;margin:0 auto 10px}
 .rev-campo{display:grid;gap:3px;margin:8px 0;font-size:12.5px}.rev-campo span{color:var(--ink3)}.rev-campo input,.rev-campo select{width:100%}
@@ -1648,17 +1649,22 @@ function renderPublicacao(code,g){
   return `<div class="pub-estado">Situação: <span class="tag ${PUB_TAG[g.estado]||''}">${escHtml(rotStatus(g.estado))}</span> ${escHtml(PUB_EXPLICA[g.estado]||'')}</div><ul class="checklist">${g.condicoes.map(c=>itemChecklist(c,g.pode_agir)).join('')}</ul>${nota}`}
 function botoesPublicacao(code,g){
   if(!g.pode_agir)return '';const c=escHtml(code),pub=g.estado==='no_ar',bloq=!g.pode_despublicar&&pub;
-  const dis=(cond,why)=>cond?` disabled title="${why}"`:'';
+  const dis=(cond,why)=>cond?` aria-disabled="true" title="${why}"`:'';   // apagado, mas CLICÁVEL: o clique explica o motivo (um botão disabled engole o clique em silêncio)
   let h='';
-  if(!pub)h+=`<button class="btn pri" id="pd-publicar"${dis(!g.pode_publicar,'Resolva as pendências da lista abaixo')} onclick="publicarProjeto('${c}','publicar')">Publicar</button>`;
-  if(pub||g.estado==='fora_do_ar')h+=`<button class="btn" id="pd-rascunho"${dis(bloq,'Exige admin master')} onclick="publicarProjeto('${c}','rascunho')">Voltar para rascunho</button>`;
-  if(pub||g.estado==='rascunho')h+=`<button class="btn" id="pd-despublicar"${dis(bloq,'Exige admin master')} onclick="publicarProjeto('${c}','tirar_do_ar')">Despublicar</button>`;
+  if(!pub)h+=`<button class="btn pri" id="pd-publicar"${dis(!g.pode_publicar,'Resolva as pendências da lista abaixo')} onclick="publicarProjeto('${c}','publicar',this)">Publicar</button>`;
+  if(pub||g.estado==='fora_do_ar')h+=`<button class="btn" id="pd-rascunho"${dis(bloq,'Exige admin master')} onclick="publicarProjeto('${c}','rascunho',this)">Voltar para rascunho</button>`;
+  if(pub||g.estado==='rascunho')h+=`<button class="btn" id="pd-despublicar"${dis(bloq,'Exige admin master')} onclick="publicarProjeto('${c}','tirar_do_ar',this)">Despublicar</button>`;
   return h}
 async function carregarPublicacao(code){
   const box=document.getElementById('pd-pub-corpo'),acoes=document.getElementById('pd-pub-acoes');if(!box)return;
   let g;try{g=await API(`/api/projetos/${encodeURIComponent(code)}/publicacao`)}catch(e){if(document.getElementById('pd-pub-corpo')===box)box.innerHTML=`<div class="empty">${escHtml(e.message)}</div>`;return}
   if(document.getElementById('pd-pub-corpo')!==box)return;   // a tela mudou enquanto carregava
-  box.innerHTML=renderPublicacao(code,g);acoes.innerHTML=botoesPublicacao(code,g)}
+  window.PUB_G=window.PUB_G||{};window.PUB_G[code]=g;box.innerHTML=renderPublicacao(code,g);acoes.innerHTML=botoesPublicacao(code,g)}
+function explicarBloqueioPublicacao(code,acao){
+  const g=(window.PUB_G||{})[code];
+  if(acao!=='publicar'||!g){toast('Esta ação exige admin master.');return}
+  const falta=(g.condicoes||[]).filter(c=>c.bloqueia&&!c.ok);
+  openDrawer('Por que não dá para publicar',code,`<p class="help">Faltam <b>${falta.length}</b> requisito(s) obrigatório(s). Resolva cada um e o botão <b>Publicar</b> libera.</p><ul class="checklist">${falta.map(c=>itemChecklist(c,g.pode_agir)).join('')}</ul>`)}
 function acaoCondicao(tipo,alvo){
   closeDrawer(true);
   const rota=(location.hash||'').match(/^#(fundo|projeto)\/([^/]+)/);
@@ -1684,7 +1690,8 @@ async function erroPublicacao(code,acao,e){
   let lista='';
   if(acao==='publicar'){try{const g=await API(`/api/projetos/${encodeURIComponent(code)}/publicacao`);const falta=g.condicoes.filter(c=>c.bloqueia&&!c.ok);if(falta.length)lista=`<h3 class="sub-h">O que falta</h3><ul class="checklist">${falta.map(c=>itemChecklist(c,g.pode_agir)).join('')}</ul>`}catch(_){}}
   openDrawer(acao==='publicar'?'Não foi possível publicar':'Não foi possível alterar a publicação',code,`<div class="stale-note"><span class="status-dot bad"></span><span>${escHtml(e.message)}</span></div>${lista}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}
-async function publicarProjeto(code,acao){
+async function publicarProjeto(code,acao,btn){
+ if(btn&&btn.getAttribute('aria-disabled')==='true'){explicarBloqueioPublicacao(code,acao);return}
   const msg={publicar:`Publicar ${code} agora?\nA página do projeto e todas as folhas sem problema ficarão visíveis ao público.`,rascunho:`Voltar ${code} para rascunho?\nA página e as folhas deixam de ser públicas, mas continuam salvas para revisão.`,tirar_do_ar:`Despublicar ${code}?\nA página e as folhas deixam de ser públicas (ficam privadas no site).`}[acao];
   if(!confirm(msg))return;toast('Atualizando publicação…');
   try{await resultadoPublicacao(code,acao,await API(`/api/projetos/${code}/publicar`,{method:'POST',body:JSON.stringify({acao})}))}catch(e){await erroPublicacao(code,acao,e)}
