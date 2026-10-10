@@ -93,7 +93,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 "ano_do_projeto": d.get("ano_do_projeto")}
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipos.get(tipo_lido.lower()), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
-                  "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada"))),
+                  "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))), "credito": d.get("credito") or None,
                   "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id}
         if ex:
