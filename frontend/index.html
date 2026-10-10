@@ -1624,6 +1624,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-dec-acao],
   if(b.dataset.npAbrir){closeModal();nav('projeto/'+b.dataset.npAbrir);return}
   const a=b.dataset.decAcao;if(a==='mesmo')resolverDecisao(b.dataset.decId,'mesmo',b.dataset.decValor);else if(a==='novo')resolverDecisao(b.dataset.decId,'novo',null);else if(a==='ver'){closeDrawer(true);nav('projeto/'+b.dataset.decValor)}});
 async function abrirPublicacaoGuiada(code){
+  try{const at=await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa');if(at.tarefa&&at.tarefa.estado==='rodando'){openDrawer('Publicar',code,tarefaPubHTML(code,at.tarefa));acompanharTarefaPub(code,at.tarefa.id);return}}catch(_){}
   let pl;try{pl=await API('/api/projetos/'+encodeURIComponent(code)+'/publicar/plano')}catch(e){toast(e.message);return}
   const bloq=pl.bloqueios||[],ok=pl.pode_executar,fora=pl.fora||{};
   const passo=x=>`<li class="chk ${x.estado==='feito'?'ok':'aviso'}"><span class="chk-ico" aria-hidden="true">${x.estado==='feito'?'✔':'→'}</span><div class="t"><b>${escHtml(x.texto)}</b></div><span class="sr">${x.estado==='feito'?'já feito':'será feito'}</span></li>`;
@@ -1632,16 +1633,32 @@ async function abrirPublicacaoGuiada(code){
     <h3 class="hoje-h">O que vou fazer</h3><ul class="checklist">${(pl.passos||[]).map(passo).join('')}</ul>${foraTxt.length?`<p class="help"><b>Ficam de fora:</b> ${escHtml(foraTxt.join(' · '))}.</p>`:''}
     <div class="act"><button class="btn pri" id="pub-go" data-pub-go="${escHtml(code)}"${ok?'':' disabled'}>Publicar agora</button></div><div id="pub-prog" class="help" aria-live="polite"></div>
     <p class="help">Ao publicar, o projeto fica visível no site na hora.</p>`)}
+const PUB_ETAPAS=[['dossie','Criar a página do projeto no site'],['folhas','Enviar as folhas'],['autorizar','Liberar o projeto para publicação'],['publicar','Tornar o projeto público']];
+function tarefaPubHTML(code,t){
+  const ordem={dossie:0,folhas:1,autorizar:2,publicar:3,fim:4},atual=ordem[t.etapa]??0,rodando=t.estado==='rodando',ok=t.estado==='ok';
+  const ico=i=>ok||i<atual?'✔':i===atual?(rodando?'⏳':'✖'):'→',cls=i=>ok||i<atual?'ok':i===atual&&!rodando?'falta':'aviso';
+  const texto=(id,rot)=>id==='folhas'?`Enviar as folhas: <b>${escHtml(t.feitas)} de ${escHtml(t.total)}</b>${rodando&&t.folha_atual?` · agora: <span class="code">${escHtml(t.folha_atual)}</span>`:''}${t.s_por_folha?` · cerca de ${escHtml(t.s_por_folha)} s por folha`:''}${rodando&&t.faltam_s?` · faltam cerca de ${escHtml(t.faltam_s)} s`:''}`:escHtml(rot);
+  const passos=PUB_ETAPAS.map(([id,rot],i)=>`<li class="chk ${cls(i)}"><span class="chk-ico" aria-hidden="true">${ico(i)}</span><div class="t"><b>${texto(id,rot)}</b></div></li>`).join('');
+  const falhas=(t.falhas||[]).length?`<h3 class="hoje-h">Folhas que não subiram</h3><ul class="dec-motivos">${t.falhas.map(f=>`<li><span class="code">${escHtml(f.codigo)}</span> ${escHtml(f.erro)}</li>`).join('')}</ul>`:'';
+  const log=(t.log||[]).slice(-8).map(l=>`<li><small>${escHtml(fmtDataHora(l.em))} · ${escHtml(l.texto)}</small></li>`).join('');
+  const fim=ok?`<p class="help"><b>✔ ${escHtml((t.resultado&&t.resultado.mensagem)||'Publicado.')}</b>${t.decorrido_s!=null?` Levou ${escHtml(t.decorrido_s>=60?Math.floor(t.decorrido_s/60)+' min '+(t.decorrido_s%60)+' s':t.decorrido_s+' s')}.`:''}</p><div class="act"><button class="btn pri" onclick="closeDrawer(true)">Fechar</button></div>`
+    :rodando?`<p class="help" aria-live="polite">Você pode fechar esta janela: a publicação continua no servidor. Para voltar, clique em Publicar de novo no projeto.</p>`
+    :`<p class="help"><span class="tag r">não terminou</span> ${escHtml((t.resultado&&t.resultado.mensagem)||'A publicação parou.')}</p><div class="act"><button class="btn pri" id="pub-go" data-pub-go="${escHtml(code)}">Tentar de novo (continua de onde parou)</button></div>`;
+  return `<div data-pub-tarefa="${escHtml(code)}"><ul class="checklist">${passos}</ul>${fim}${falhas}${log?`<h3 class="hoje-h">O que aconteceu</h3><ul class="dec-motivos">${log}</ul>`:''}</div>`}
+function desenharTarefaPub(code,t){const w=document.querySelector(`[data-pub-tarefa="${code}"]`),prog=document.getElementById('pub-prog');
+  if(!w&&!prog)return false;document.getElementById('d-title').textContent=t.estado==='ok'?'Publicado':'Publicar';document.getElementById('d-body').innerHTML=tarefaPubHTML(code,t);return true}
+const PUB_VIGIA={};
+async function acompanharTarefaPub(code,tid){
+  if(PUB_VIGIA[code])return;PUB_VIGIA[code]=true;
+  try{for(;;){let t;try{t=await API('/api/tarefas/'+tid)}catch(e){if(e.status===404)break;await new Promise(r=>setTimeout(r,3000));continue}
+      desenharTarefaPub(code,t);if(window.PROJETO_PJ===code)carregarProximoPasso(code);
+      if(t.estado!=='rodando'){if(t.estado==='ok')toast('Publicado');if(window.PROJETO_PJ===code)showProjeto(code);carregarFundosAPI();break}
+      await new Promise(r=>setTimeout(r,2000))}}
+  finally{delete PUB_VIGIA[code]}}
 async function executarPublicacaoGuiada(code){
-  const go=document.getElementById('pub-go'),prog=document.getElementById('pub-prog');if(!go||!prog)return;go.disabled=true;let folhas=0;
-  try{for(;;){prog.textContent=folhas?`Enviando folhas ao site… ${folhas} já enviada(s)`:'Preparando e enviando ao site…';
-      const r=await API('/api/projetos/'+encodeURIComponent(code)+'/publicar-tudo',{method:'POST'});folhas+=r.folhas_criadas||0;
-      if(r.parcial)continue;
-      if(r.ok){document.getElementById('d-title').textContent='Publicado';document.getElementById('d-body').innerHTML=`<p class="help"><b>✔ ${escHtml(r.mensagem)}</b></p><div class="act"><button class="btn pri" onclick="closeDrawer(true)">Fechar</button></div>`;toast('Publicado')}
-      else{prog.innerHTML=`<span class="tag r">não terminou</span> ${escHtml(r.mensagem)}${(r.falhas||[]).length?`<ul class="dec-motivos">${r.falhas.map(f=>`<li><span class="code">${escHtml(f.codigo)}</span> ${escHtml(f.erro)}</li>`).join('')}</ul>`:''}`;go.disabled=false;go.textContent='Tentar de novo'}
-      break}}
-  catch(e){prog.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;go.disabled=false;go.textContent='Tentar de novo'}
-  if(window.PROJETO_PJ===code)showProjeto(code);carregarFundosAPI()}
+  const go=document.getElementById('pub-go'),prog=document.getElementById('pub-prog');if(!go||!prog)return;go.disabled=true;prog.textContent='Iniciando…';
+  try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/publicar-tudo?tarefa=1',{method:'POST'});await acompanharTarefaPub(code,r.tarefa_id)}
+  catch(e){prog.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;go.disabled=false;go.textContent='Tentar de novo'}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-pub-go]');if(b&&!b.disabled)executarPublicacaoGuiada(b.dataset.pubGo)});
 function textoIdade(s){const m=Math.round(s/60);return m<1?'agora':m<60?`há ${m} min`:m<48*60?`há ${Math.round(m/60)} h`:`há ${Math.round(m/1440)} dias`}
 function estadoReleituraHTML(e,alvo){
@@ -1685,7 +1702,10 @@ function proximoPassoSemLoteHTML(code,g){
   const corpo=hum?[`Falta resolver: ${escHtml(hum.texto)}.`,ad&&hum.acao?`<button class="btn pri" data-pp-cond="${escHtml(hum.acao.tipo)}" data-alvo="${escHtml(hum.acao.alvo||'')}">${escHtml(hum.acao.rotulo)}</button>`:'']:['Pronto para publicar. O painel autoriza e envia ao site na hora.',ad?`<button class="btn pri" data-pp="publicar" data-projeto="${c}">Publicar</button>`:'<small class="help">Um administrador publica.</small>'];
   return `<div class="panel pp"><div class="pb"><div class="pp-acao"><p class="help">${corpo[0]}</p>${corpo[1]}</div></div></div>`}
 function desenharProximoPasso(code){const b=document.getElementById('pj-proximo'),u=window.PP_ULT;if(!b||!u||u.code!==code)return;b.innerHTML=u.r.lote?proximoPassoHTML(u.r,code):proximoPassoSemLoteHTML(code,(window.PUB_G||{})[code])}
-async function carregarProximoPasso(code){const b=document.getElementById('pj-proximo');if(!b)return;try{window.PP_ULT={code,r:await API('/api/projetos/'+encodeURIComponent(code)+'/proximo-passo')};desenharProximoPasso(code)}catch(_){b.innerHTML=''}}
+async function carregarProximoPasso(code){const b=document.getElementById('pj-proximo');if(!b)return;try{window.PP_ULT={code,r:await API('/api/projetos/'+encodeURIComponent(code)+'/proximo-passo')};desenharProximoPasso(code);avisoTarefaPub(code)}catch(_){b.innerHTML=''}}
+async function avisoTarefaPub(code){const b=document.getElementById('pj-proximo');if(!b)return;try{const at=(await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa')).tarefa;
+  if(at&&at.estado==='rodando'){b.insertAdjacentHTML('afterbegin',`<div class="aviso-bloqueio pp-tarefa" role="status">⏳ <b>Publicando… ${escHtml(at.feitas)} de ${escHtml(at.total)}</b>${at.folha_atual?` · agora: <span class="code">${escHtml(at.folha_atual)}</span>`:''} <button class="btn sm" data-pub-abrir="${escHtml(code)}">Acompanhar</button></div>`);acompanharTarefaPub(code,at.id)}}catch(_){}}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-pub-abrir]');if(t)abrirPublicacaoGuiada(t.dataset.pubAbrir)});
 async function passoProximo(acao,lote,code){
   if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else toast('Nenhuma folha pendente.');return}
   if(acao==='publicar'){abrirPublicacaoGuiada(code);return}

@@ -13,6 +13,11 @@ class Login(BaseModel):
     codigo_totp: str | None = None
 
 
+class Preferencia(BaseModel):
+    chave: str
+    valor: str | None = None      # None apaga ("mostrar de novo")
+
+
 class TrocaSenha(BaseModel):
     senha_atual: str
     senha_nova: str
@@ -49,6 +54,38 @@ def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
         con.close()
     return {"id": u["id"], "nome": u["nome"], "email": u["email"], "papel": u["papel"], "tem_foto": tem_foto,
             "precisa_trocar_senha": bool(u["precisa_trocar_senha"]), "totp": bool(u.get("totp"))}
+
+
+@router.get("/eu/preferencias")
+def preferencias(u: dict = Depends(auth.usuario_atual)) -> dict:
+    """Preferências da pessoa logada (hoje: 'ajuda.<página>' = a versão da caixa 'Como funciona esta página' que ela já viu)."""
+    from .db import connect
+    con = connect()
+    try:
+        return {r[0]: r[1] for r in con.execute("SELECT chave, valor FROM usuario_preferencia WHERE usuario_id=?", (u["id"],))}
+    finally:
+        con.close()
+
+
+@router.put("/eu/preferencias")
+def gravar_preferencia(d: Preferencia, u: dict = Depends(auth.usuario_atual)) -> dict:
+    import re
+    from .db import connect
+    if not re.fullmatch(r"ajuda\.[a-z_]{1,40}", d.chave or ""):
+        raise HTTPException(400, "Preferência desconhecida")
+    if d.valor is not None and len(d.valor) > 40:
+        raise HTTPException(400, "Valor longo demais")
+    con = connect()
+    try:
+        if d.valor is None:
+            con.execute("DELETE FROM usuario_preferencia WHERE usuario_id=? AND chave=?", (u["id"], d.chave))
+        else:
+            con.execute("""INSERT INTO usuario_preferencia (usuario_id, chave, valor) VALUES (?,?,?)
+                           ON CONFLICT(usuario_id, chave) DO UPDATE SET valor=excluded.valor, atualizado_em=datetime('now')""", (u["id"], d.chave, d.valor))
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True}
 
 
 @router.post("/trocar-senha")

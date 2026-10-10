@@ -451,7 +451,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             caminho_img = str(jpeg_girado(caminho_img, i["giro_manual"]))
         if caminho_img:
             try:
-                m = wp.upload_media(caminho_img, titulo)
+                m = wp.upload_media(caminho_img, titulo, nome=f"{codigo}.jpg")
                 wp.definir_documento(COL_ACERVO, iid, m["id"])
                 con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
                 out["imagem"] = m.get("source_url")

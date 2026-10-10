@@ -220,19 +220,20 @@ def _wp_patch_item(self, colecao_id: int, item_id: int, **campos) -> dict:
     return self.editar_item(item_id, campos, colecao_id)
 
 
-def _wp_upload_media(self, caminho: str, titulo: str = "") -> dict:
+def _wp_upload_media(self, caminho: str, titulo: str = "", nome: str | None = None) -> dict:
     """Sobe um arquivo para a biblioteca de mídia (wp/v2/media). Devolve o JSON do anexo (id, source_url)."""
     import mimetypes
     from pathlib import Path
     p = Path(caminho)
     if not p.exists():
         raise FileNotFoundError(f"arquivo não encontrado: {caminho}")
-    mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    arquivo = nome or p.name                      # o nome que o site guarda (e que vira o nome da imagem e do SEO) é o da folha, nunca um hash de cache
+    mime = mimetypes.guess_type(arquivo)[0] or "application/octet-stream"
     with p.open("rb") as fh:
         r = self.h.post("/wp-json/wp/v2/media", content=fh.read(),
-                        headers={"Content-Disposition": f'attachment; filename="{p.name}"', "Content-Type": mime}, timeout=300)
+                        headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=300)
     if r.status_code >= 400:
-        raise RuntimeError(f"WordPress recusou o upload de {p.name}: {r.status_code} {r.text[:200]}")
+        raise RuntimeError(f"WordPress recusou o upload de {arquivo}: {r.status_code} {r.text[:200]}")
     j = r.json()
     if titulo:
         self.h.post(f"/wp-json/wp/v2/media/{j['id']}", json={"title": titulo, "alt_text": titulo})

@@ -50,7 +50,7 @@ def plano(con, p) -> dict:
             "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas}}
 
 
-def executar(codigo: str, u: dict) -> dict:
+def executar(codigo: str, u: dict, progresso=None) -> dict:
     """Faz a sequência. Devolve {ok, parcial, etapa, mensagem, ...}. Levanta 400 (com o plano) se algo que só uma pessoa resolve impede."""
     from . import publicador
     from .rotas_projetos import Publicacao, publicar
@@ -73,21 +73,33 @@ def executar(codigo: str, u: dict) -> dict:
             raise HTTPException(400, "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]))
         feitos: list[str] = []
 
+        def _p(**kw):
+            if progresso:
+                try:
+                    progresso(kw)
+                except Exception:  # noqa: BLE001  (o acompanhamento nunca derruba a publicação)
+                    pass
+        _p(evento="inicio", total=len(pend))
+
         if not p["tainacan_item_id"]:                                                       # 1) dossiê
             r = publicador.criar_dossie_no_site(codigo, u["email"])
             if r.get("erro") or not r.get("item_id"):
                 return {"ok": False, "parcial": False, "etapa": "dossie", "feitos": feitos, "mensagem": f"Não consegui criar o dossiê no site: {r.get('erro') or 'sem resposta'}. Nada foi publicado."}
             feitos.append("dossie")
+            _p(evento="dossie")
 
         t0, criadas, falhas = time.monotonic(), 0, []                                      # 2) folhas, em fatias de tempo (sempre avança ao menos uma)
         for c in pend:
             if criadas + len(falhas) > 0 and time.monotonic() - t0 >= ORCAMENTO_S:
                 break
+            _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
             r = publicador.criar_folha_no_site(c, u["email"])
             if r.get("erro"):
                 falhas.append({"codigo": c, "erro": r["erro"]})
+                _p(evento="folha_falhou", codigo=c, erro=r["erro"])
             else:
                 criadas += 1
+                _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
         restam = len(pend) - criadas - len(falhas)
         if falhas:
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
@@ -96,6 +108,7 @@ def executar(codigo: str, u: dict) -> dict:
             return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam,
                     "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}
 
+        _p(evento="autorizar")
         con = connect()                                                                     # 3) autorizar (os requisitos já foram checados no plano)
         try:
             if not con.execute("SELECT autorizado_site FROM projeto WHERE codigo=?", (codigo,)).fetchone()[0]:
@@ -106,6 +119,7 @@ def executar(codigo: str, u: dict) -> dict:
         finally:
             con.close()
 
+        _p(evento="publicar")
         res = publicar(codigo, Publicacao(acao="publicar"), u)                              # 4) publicar (revalida TODOS os portões)
         con = connect()
         try:

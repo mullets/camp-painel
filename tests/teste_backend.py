@@ -1860,7 +1860,7 @@ def filho(modo):
         class WPFalso:
             def criar_item(self, col, titulo, status, desc): return {"id": 5001, "slug": "s", "url": "u"}
             def definir_metadado(self, *a): pass
-            def upload_media(self, caminho, titulo): envios.append(caminho); return {"id": 1, "source_url": "u"}
+            def upload_media(self, caminho, titulo, nome=None): envios.append(caminho); return {"id": 1, "source_url": "u"}
             def definir_documento(self, *a): pass
         publicador.WP = WPFalso
         k.execute("UPDATE projeto SET tainacan_item_id=9100 WHERE codigo='F026-P0001'"); k.execute("UPDATE item SET status_site='nao_publicado', duplicata_de=NULL, giro_manual=90 WHERE codigo=?", (D(3),)); k.commit()
@@ -2391,6 +2391,104 @@ def filho(modo):
         det = {x["codigo"]: x for x in adm.get(f"/api/projetos/{PJ}/detalhe").json()["itens"]}
         ver("a lista do projeto marca previa só nas folhas que têm imagem (a tela decide por isso)", det[f"{PJ}-1970-S01-D00001"]["pendencias"].get("previa") == "@jpg" and not det[f"{PJ}-1970-S01-D00002"]["pendencias"].get("previa") and not det[f"{PJ}-1970-S01-D00003"]["pendencias"].get("previa"), str({k_: v_["pendencias"].get("previa") for k_, v_ in det.items()}))
         for l in res: print(l)
+    elif modo == "tarefa_publicacao":
+        init_db(); _aplicar_migracoes_real()
+        import time as _tm, types as _ty, tempfile, pathlib as _pl
+        from app import auth, publicador, wp as _wp, rotas_publicar_tudo as rpt
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F092','Fundo Tarefa','TAR',1)"); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F091','Fundo Restrito','RES',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F092','autorizado','Fam','Termo')"); c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao) VALUES ('F091','restrito')")
+        def proj(f, n, titulo, folhas):
+            cod = f"{f}-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, f, n, titulo))
+            c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES (?,?,'/x','revisao',datetime('now'))", (f"Lote {cod}", cod)); lid = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+            for q in range(1, folhas + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,pendencias) VALUES (?,?,'S01',?,?,'campvision',?,'conferida','{}')", (f"{cod}-1970-S01-D{q:05d}", cod, q, f"Folha {q}", lid))
+            return cod
+        PA, PF, PB = proj("F092", 1, "Casa A", 5), proj("F092", 2, "Casa Falha", 3), proj("F091", 1, "Casa Restrita", 2)
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        ch = {"folhas": [], "falha": set()}
+        def dossie_falso(codigo, ator):
+            cc = connect(); wid = 9000 + sql("SELECT COUNT(*) FROM wp_item WHERE colecao_id=8007")
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft','d',?,?,?)", (wid, codigo, codigo, codigo[:4])); cc.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "erro": None}
+        def folha_lenta(codigo, ator, enviar_imagem=True):
+            _tm.sleep(0.5)
+            if codigo in ch["falha"]: return {"item_id": None, "metadados": [], "imagem": None, "erro": "WordPress recusou a imagem"}
+            ch["folhas"].append(codigo); cc = connect(); wid = 7000 + len(ch["folhas"]) + sql("SELECT COUNT(*) FROM wp_item WHERE colecao_id=8013")
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','f',?,?,?)", (wid, codigo, codigo[:10], codigo[:4])); cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        class WPFalso:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): pass
+        publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_lenta, WPFalso
+        def esperar(tid, ate=25):
+            t0 = _tm.monotonic()
+            while _tm.monotonic() - t0 < ate:
+                t = adm.get(f"/api/tarefas/{tid}").json()
+                if t["estado"] != "rodando": return t
+                _tm.sleep(0.2)
+            return adm.get(f"/api/tarefas/{tid}").json()
+        t0 = _tm.monotonic(); r = adm.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1"); dt = _tm.monotonic() - t0; tid = r.json().get("tarefa_id")
+        ver("publicar-tudo?tarefa=1 responde NA HORA (202 + tarefa_id), sem esperar as 5 folhas lentas (0,5 s cada)", r.status_code == 202 and tid and dt < 1.0, f"{r.status_code} {dt:.2f}s {r.text[:80]}")
+        _tm.sleep(1.3); meio = adm.get(f"/api/tarefas/{tid}").json()
+        ver("no meio do envio a tarefa mostra o progresso real: rodando, folha atual, quantas já subiram, total", meio["estado"] == "rodando" and meio["total"] == 5 and 1 <= meio["feitas"] <= 4 and bool(meio["folha_atual"]) and meio["etapa"] == "folhas", str({k_: meio[k_] for k_ in ("estado", "etapa", "feitas", "total", "folha_atual")}))
+        dup = adm.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").json()
+        ver("clicar de novo com a tarefa rodando devolve a MESMA tarefa (não duplica nem dá 409)", dup.get("tarefa_id") == tid and dup.get("ja_rodando") is True, str(dup))
+        ver("a tarefa do projeto é encontrada pelo projeto (reabrir a janela volta ao acompanhamento)", adm.get(f"/api/projetos/{PA}/tarefa").json()["tarefa"]["id"] == tid)
+        fim = esperar(tid)
+        ver("termina: estado ok, 5 de 5, resultado, duração, e o projeto está publicado", fim["estado"] == "ok" and fim["feitas"] == 5 and fim["decorrido_s"] is not None and fim["resultado"]["ok"] is True and sql("SELECT status_site FROM projeto WHERE codigo=?", PA) == "no_ar", str({k_: fim[k_] for k_ in ("estado", "feitas", "total")}) + " " + str(fim.get("resultado"))[:120])
+        txt = " | ".join(x["texto"] for x in fim["log"])
+        ver("o histórico da tarefa conta o que aconteceu (dossiê, cada folha, liberação, publicação)", "Dossiê criado" in txt and txt.count("enviada") == 5 and "liberado" in txt and "Publicando" in txt, txt[:200])
+        # bloqueio de pessoa: nem começa
+        b = adm.post(f"/api/projetos/{PB}/publicar-tudo?tarefa=1")
+        ver("com bloqueio de pessoa (direitos restritos) NÃO inicia tarefa: 400 com o motivo e o plano", b.status_code == 400 and "restritos" in b.text and sql("SELECT COUNT(*) FROM tarefa_publicacao WHERE projeto_codigo=?", PB) == 0, b.text[:160])
+        # falha de uma folha e retomada sem repetir
+        ch["falha"].add(f"{PF}-1970-S01-D00002"); t2 = esperar(adm.post(f"/api/projetos/{PF}/publicar-tudo?tarefa=1").json()["tarefa_id"])
+        ver("uma folha que falha: a tarefa termina 'falhou' com a folha e o motivo, e nada foi publicado", t2["estado"] == "falhou" and any(f_["codigo"].endswith("D00002") and "recusou" in f_["erro"] for f_ in t2["falhas"]) and sql("SELECT status_site FROM projeto WHERE codigo=?", PF) != "no_ar", str(t2["falhas"]))
+        antes = len(ch["folhas"]); ch["falha"].clear(); t3 = esperar(adm.post(f"/api/projetos/{PF}/publicar-tudo?tarefa=1").json()["tarefa_id"])
+        ver("tentar de novo continua de onde parou: só envia a que faltava e publica", t3["estado"] == "ok" and len(ch["folhas"]) - antes == 1 and sql("SELECT status_site FROM projeto WHERE codigo=?", PF) == "no_ar", f"enviou {len(ch['folhas']) - antes}")
+        # interrompida (servidor reiniciou)
+        k2 = connect(); k2.execute("INSERT INTO tarefa_publicacao (projeto_codigo, ator, estado, etapa) VALUES (?, 'x', 'rodando', 'folhas')", (PB,)); zid = k2.execute("SELECT MAX(id) FROM tarefa_publicacao").fetchone()[0]; k2.commit(); k2.close()
+        z = adm.get(f"/api/tarefas/{zid}").json()
+        ver("tarefa 'rodando' sem thread viva (servidor reiniciou) vira 'falhou' com a explicação, não fica rodando para sempre", z["estado"] == "falhou" and "interrompida" in (z["resultado"] or {}).get("mensagem", ""), str(z.get("resultado")))
+        ver("só admin inicia (operador 403, sem login 401); leitura consulta", op.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 403 and anon.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 401 and op.get(f"/api/tarefas/{tid}").status_code == 200 and adm.get("/api/tarefas/99999").status_code == 404)
+        # nome do arquivo no WordPress: sempre <código>.jpg, nunca o hash do cache
+        pasta = _pl.Path(tempfile.mkdtemp()); f_ = pasta / "02c3ecf8cd8f0bf43ce24c55792d6b8a82aa2d18.jpg"; f_.write_bytes(b"\xff\xd8\xff\xd9")
+        cap = {}
+        class H:
+            def post(self, caminho, content=None, headers=None, timeout=None, json=None):
+                cap["h"] = headers; return _ty.SimpleNamespace(status_code=201, text="", json=lambda: {"id": 1, "source_url": "u"})
+        _wp_cls = __import__("app.wp", fromlist=["WP"]); _wp_cls._wp_upload_media(_ty.SimpleNamespace(h=H()), str(f_), "", nome="F092-P0001-1970-S01-D00002.jpg")
+        ver("a imagem sobe com o nome <código>.jpg (não o hash do arquivo girado do cache)", "F092-P0001-1970-S01-D00002.jpg" in (cap.get("h") or {}).get("Content-Disposition", "") and "02c3ecf8" not in (cap.get("h") or {}).get("Content-Disposition", ""), str(cap))
+        for l in res: print(l)
+    elif modo == "preferencias_ajuda":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        for em, nome, papel in (("a@camp.arq.br", "A", "operador"), ("b@camp.arq.br", "B", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        a, b, anon = cli("a@camp.arq.br"), cli("b@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", anon.get("/api/auth/eu/preferencias").status_code == 401 and anon.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "1"}).status_code == 401)
+        ver("começa vazio", a.get("/api/auth/eu/preferencias").json() == {})
+        ver("grava a versão da caixa que a pessoa já viu e devolve", a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "1"}).status_code == 200 and a.get("/api/auth/eu/preferencias").json() == {"ajuda.painel": "1"})
+        a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "2"})
+        ver("gravar de novo atualiza (não duplica)", a.get("/api/auth/eu/preferencias").json() == {"ajuda.painel": "2"})
+        ver("é POR PESSOA: o outro usuário não vê a preferência de quem gravou", b.get("/api/auth/eu/preferencias").json() == {})
+        ver("valor nulo apaga ('mostrar de novo')", a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": None}).status_code == 200 and a.get("/api/auth/eu/preferencias").json() == {})
+        ver("só aceita chaves de ajuda (ajuda.<página>): outras e malformadas dão 400", all(a.put("/api/auth/eu/preferencias", json={"chave": k_, "valor": "1"}).status_code == 400 for k_ in ("papel", "ajuda.", "ajuda.Painel", "ajuda.x/../y", "ajuda." + "a" * 50)) and a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "x" * 50}).status_code == 400)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2840,6 +2938,22 @@ else:
 print("39) P0-9: Enviar folhas cria o dossiê; requisito de revisão no checklist; prévia pelo JPG do QNAP")
 rc, out = rodar("p09_dossie_revisao", f"{tmp}/p09.db")
 if rc != 0: ok(False, f"teste do P0-9 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("40) Publicar em segundo plano: tarefa com progresso real, retomada sem repetir, nome de arquivo <código>.jpg")
+rc, out = rodar("tarefa_publicacao", f"{tmp}/tarefa.db")
+if rc != 0: ok(False, f"teste da tarefa de publicação não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("41) Preferências por pessoa: qual versão da caixa de ajuda cada um já viu")
+rc, out = rodar("preferencias_ajuda", f"{tmp}/pref.db")
+if rc != 0: ok(False, f"teste das preferências não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

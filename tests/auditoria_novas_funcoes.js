@@ -570,6 +570,33 @@ w.route_to('painel'); await sleep(2800);
   const pend=(w.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');
   if(pend){ w.acaoCondicao('revisao','F003-P9001'); await sleep(1500); chk(/Revisar folha/.test(txt('#d-title')),'"Conferir as folhas" (condição revisao) deveria abrir a primeira folha pendente: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
   chk(!/no site/.test(w.eval("semImagemHTML()")),'o texto de folha sem imagem não deveria dizer "no site": '+w.eval("semImagemHTML()").replace(/<[^>]+>/g,' ')); w.route_to('painel'); }
+// ---------- [Auditoria P0-10] publicar é uma TAREFA em segundo plano: a tela mostra o progresso real e nunca "desiste" ----------
+{ const H=w.tarefaPubHTML, txtH=h=>h.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+  const rodando={estado:'rodando',etapa:'folhas',feitas:3,total:5,folha_atual:'F900-P0001-1970-S01-D00004',s_por_folha:25,faltam_s:50,falhas:[],log:[{em:'2026-10-10 00:54:51',texto:'Dossiê criado no site'}]};
+  let h=txtH(H('F900-P0001',rodando));
+  chk(/3 de 5/.test(h)&&/agora: F900-P0001-1970-S01-D00004/.test(h)&&/cerca de 25 s por folha/.test(h)&&/faltam cerca de 50 s/.test(h)&&/Dossiê criado no site/.test(h)&&/Você pode fechar esta janela/.test(h),'a tarefa rodando deveria mostrar "3 de 5", a folha atual, ~25 s por folha, o que falta, o histórico e que dá para fechar: '+h.slice(0,260));
+  chk(/✔ Criar a página do projeto no site/.test(h)&&/⏳ Enviar as folhas/.test(h)&&/→ Liberar/.test(h),'os passos deveriam estar com ✔ (feito), ⏳ (agora) e → (adiante): '+h.slice(0,200));
+  h=txtH(H('F900-P0001',{...rodando,estado:'falhou',etapa:'folhas',folha_atual:null,falhas:[{codigo:'F900-P0001-1970-S01-D00002',erro:'WordPress recusou a imagem'}],resultado:{ok:false,mensagem:'1 folha não subiu ao site; nada foi publicado.'}}));
+  chk(/não terminou/.test(h)&&/F900-P0001-1970-S01-D00002 WordPress recusou a imagem/.test(h)&&/Tentar de novo \(continua de onde parou\)/.test(h)&&/✖ Enviar as folhas/.test(h),'a tarefa que falhou deveria dizer qual folha e por quê, com "Tentar de novo (continua de onde parou)": '+h.slice(0,240));
+  h=txtH(H('F900-P0001',{estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Dossiê + 5 folhas publicados.'},decorrido_s:65}));
+  chk(/✔ Dossiê \+ 5 folhas publicados\./.test(h)&&/Levou 1 min 5 s/.test(h)&&!/⏳/.test(h)&&/Fechar/.test(h),'a tarefa pronta deveria dizer o resultado e o tempo total: '+h.slice(0,200));
+  // acompanhamento de verdade (respostas simuladas): rodando -> pronto; fechar a janela no meio não quebra nada
+  const fetchOrig=w.fetch; let gets=0; const R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j});
+  w.fetch=(u,o={})=>{ if(/\/publicar-tudo\?tarefa=1$/.test(String(u)))return R({tarefa_id:9}); if(/\/api\/tarefas\/9$/.test(String(u))){gets++;return R(gets===1?{...rodando,id:9}:{id:9,estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Dossiê + 5 folhas publicados.'},decorrido_s:20})} return fetchOrig(u,o) };
+  w.openDrawer('Publicar','F900-P0001','<div class="act"><button id="pub-go" data-pub-go="F900-P0001">Publicar agora</button></div><div id="pub-prog"></div>');
+  const pronto=w.executarPublicacaoGuiada('F900-P0001'); await sleep(700);
+  chk(/3 de 5/.test(txt('#d-body'))&&!/demorou demais|não deu/.test(txt('#d-body')),'durante o envio a janela deveria mostrar o progresso real (3 de 5), nunca "demorou demais": "'+txt('#d-body').slice(0,120)+'"');
+  w.closeDrawer(true); await pronto; await sleep(300);
+  chk(gets>=2,'fechar a janela no meio NÃO deveria parar o acompanhamento (consultou '+gets+' vez(es))');
+  // reabrir no meio: volta ao acompanhamento, não ao plano
+  w.fetch=(u,o={})=>{ if(/\/api\/projetos\/F900-P0002\/tarefa$/.test(String(u)))return R({tarefa:{...rodando,id:11}}); if(/\/api\/tarefas\/11$/.test(String(u)))return R({id:11,estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Pronto.'},decorrido_s:9}); return fetchOrig(u,o) };
+  await w.abrirPublicacaoGuiada('F900-P0002'); await sleep(300);
+  chk(!!d.querySelector('[data-pub-tarefa="F900-P0002"]')&&!/Publicar agora/.test(txt('#d-body')),'reabrir a janela com a tarefa rodando deveria voltar ao acompanhamento, não ao plano: "'+txt('#d-body').slice(0,100)+'"'); await sleep(2500); w.closeDrawer(true);
+  // faixa "Publicando…" na página do projeto
+  let terminou=false; w.fetch=(u,o={})=>/\/api\/projetos\/F003-P9001\/tarefa$/.test(String(u))?R({tarefa:terminou?null:{...rodando,id:13}}):/\/api\/tarefas\/13$/.test(String(u))?R(terminou?{id:13,estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Pronto.'}}:{...rodando,id:13}):fetchOrig(u,o);
+  w.route_to('projeto/F003-P9001'); await sleep(3800);
+  chk(!!d.querySelector('#pj-proximo .pp-tarefa')&&/Publicando… 3 de 5/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pub-abrir]'),'a página do projeto deveria avisar "Publicando… 3 de 5" com o botão Acompanhar: "'+txt('#pj-proximo').slice(0,120)+'"');
+  terminou=true; await sleep(2600); w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
@@ -580,9 +607,9 @@ w.route_to('painel'); await sleep(2800);
   h=w.proximoPassoSemLoteHTML('F900-P0001',{estado:'rascunho',pode_agir:true,condicoes:[]}); chk(/Pronto para publicar/.test(h)&&/data-pp="publicar"/.test(h),'projeto sem lote e sem pendência deveria mostrar "Pronto para publicar" com o botão');
   const pub=w.proximoPassoSemLoteHTML('F900-P0001',{estado:'no_ar',pode_agir:true,condicoes:[]}); chk(/Publicado/.test(pub)&&!/btn pri/.test(pub),'projeto publicado deveria dizer "Publicado", sem botão azul');
   chk(!/btn pri/.test(w.botoesPublicacao('F900-P0001',{pode_agir:true,estado:'rascunho',pode_despublicar:true})),'o painel Publicação não deveria ter um segundo botão azul "Publicar" (o único é o do Próximo passo)');
-  w.history.replaceState(null,'','#projeto/F003-P9001'); w.openDrawer('Publicar','F003-P9001','<button id="pub-go">x</button>'); w.acaoCondicao('direitos','F003'); await sleep(600);
+  w.history.replaceState(null,'','#projeto/F003-P9001'); w.openDrawer('Publicar','F003-P9001','<button id="pub-go">x</button>'); w.acaoCondicao('direitos','F003'); await sleep(1800);
   chk(w.PUB_VOLTAR==='F003-P9001'&&/PUB_VOLTAR/.test(String(w.salvarDireitos)),'definir direitos a partir da publicação guiada deveria lembrar de voltar a ela depois de salvar (PUB_VOLTAR)'); w.PUB_VOLTAR=null; w.closeDrawer(true);
-  const fetchOrig=w.fetch; w.fetch=(u,o={})=>/\/publicar-tudo$/.test(String(u))?Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({ok:true,parcial:false,mensagem:'2 registro(s) publicados.',folhas_criadas:0})}):fetchOrig(u,o);
+  const fetchOrig=w.fetch; w.fetch=(u,o={})=>{const R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j}); if(/\/publicar-tudo\?tarefa=1$/.test(String(u)))return R({tarefa_id:7}); if(/\/api\/tarefas\/7$/.test(String(u)))return R({id:7,estado:'ok',etapa:'fim',feitas:2,total:2,folha_atual:null,log:[],falhas:[],resultado:{ok:true,mensagem:'2 registros publicados.'},decorrido_s:12,s_por_folha:6}); return fetchOrig(u,o)};
   w.openDrawer('Publicar','F900-P0001','<div class="act"><button id="pub-go" data-pub-go="F900-P0001">Publicar agora</button></div><div id="pub-prog"></div>'); await w.executarPublicacaoGuiada('F900-P0001'); await sleep(800); w.fetch=fetchOrig;
   chk(/Publicado/.test(txt('#d-title'))&&/2 registro/.test(txt('#d-body'))&&!d.getElementById('pub-go')&&!/Publicar agora/.test(txt('#d-body')),'depois de publicar, a janela deveria mostrar o resultado (sem "Publicar agora"): "'+txt('#d-title')+' / '+txt('#d-body').slice(0,80)+'"'); w.closeDrawer(true);
   const absOrig=w.abrirRevisaoItem; let abriu=null; w.abrirRevisaoItem=c=>{abriu=c};
@@ -754,7 +781,7 @@ chk(d.querySelectorAll('#pd-pub .chk.falta').length===0&&d.getElementById('pd-pu
 w.closeDrawer(true); d.getElementById('pd-publicar').click(); await sleep(1300);
 chk(d.querySelectorAll('#d-body .chk.falta').length===0&&d.getElementById('pub-go').disabled===false&&/Eu faço a sequência inteira/.test(txt('#d-body')),'com os requisitos humanos cumpridos o plano deveria liberar \"Publicar agora\": \"'+txt('#d-body').slice(0,140)+'\"');
 d.getElementById('pub-go').click(); await sleep(4500);
-chk(/não terminou|não deu/.test(txt('#pub-prog'))&&txt('#pub-prog').trim().length>20&&d.getElementById('pub-go').disabled===false&&/Tentar de novo/.test(txt('#pub-go')),'sem credencial do WordPress o clique deveria explicar o que houve e deixar TENTAR DE NOVO: \"'+txt('#pub-prog').slice(0,160)+'\"'); w.closeDrawer(true);
+chk(/não terminou|não deu/.test(txt('#d-body'))&&txt('#d-body').trim().length>40&&d.getElementById('pub-go').disabled===false&&/Tentar de novo/.test(txt('#pub-go')),'sem credencial do WordPress o clique deveria explicar o que houve e deixar TENTAR DE NOVO: \"'+txt('#d-body').slice(0,160)+'\"'); w.closeDrawer(true);
 // WordPress sem credencial neste ambiente: o erro tem que ser EXPLICADO e FICAR na tela
 await w.publicarProjeto('F026-P0001','publicar'); await sleep(1800);
 chk(txt('#d-title').includes('Não foi possível publicar')&&txt('#d-body').includes('WordPress')&&txt('#d-body').includes('Configurações'),'sem credencial do WordPress deveria explicar e apontar Configurações: '+txt('#d-body').slice(0,120));
