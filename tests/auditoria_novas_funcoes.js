@@ -668,6 +668,18 @@ w.route_to('painel'); await sleep(2800);
     w.concluirConferencia(); await sleep(300); chk(/Conferência concluída/.test(txt('#d-title'))&&/Era a última\. \d+ de \d+ folhas conferidas/.test(txt('#d-body'))&&!!d.getElementById('rev-fim'),'ao terminar deveria mostrar "Era a última. N de N conferidas" com o botão do próximo passo: "'+txt('#d-body').slice(0,120)+'"');
     L.forEach((x,i)=>{x.revisao=salvas[i]}); w.closeDrawer(true) }
   w.route_to('painel'); }
+// ---------- [H8] aba Folhas: filtros rápidos e contador fixo que acompanha a conferência ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3500); const L=(w.ITENS_PJ||[]).filter(x=>x.lote_id), bar=d.querySelector('.folhas-bar');
+  chk(!!bar&&/Conferidas \d+ de \d+/.test(txt('.folhas-bar .fb-cont')),'a aba Folhas deveria ter a barra com "Conferidas X de N": "'+txt('.folhas-bar')+'"');
+  if(bar&&L.length){ const pend=L.filter(x=>x.revisao==='pendente').length, tot=d.querySelectorAll('.project-series .thumb').length;
+    d.querySelector('[data-fl-f="conferir"]').click(); await sleep(200); const vis=[...d.querySelectorAll('.project-series .thumb')].filter(t=>!t.hidden).length;
+    chk(vis===pend,'o filtro "A conferir" deveria mostrar só as '+pend+' pendentes, mostrou '+vis);
+    d.querySelector('[data-fl-f=""]').click(); await sleep(200); chk([...d.querySelectorAll('.project-series .thumb')].filter(t=>!t.hidden).length===tot,'"Todas" deveria mostrar tudo de novo');
+    const antes=Number((txt('.folhas-bar .fb-cont').match(/(\d+) de/)||[])[1]); const p1=L.find(x=>x.revisao==='pendente');
+    if(p1){ p1.revisao='conferida'; w.atualizarCartaoRevisao(p1.codigo); await sleep(300); const depois=Number((txt('.folhas-bar .fb-cont').match(/(\d+) de/)||[])[1]); chk(depois===antes+1,'conferir uma folha deveria subir o contador de '+antes+' para '+(antes+1)+', foi para '+depois); p1.revisao='pendente' } }
+  w.route_to('painel'); }
+// ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
+{ const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
