@@ -560,6 +560,16 @@ w.route_to('painel'); await sleep(2800);
   dx=await abrir(lei,'#filas'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="qnap.varrer"]'),'leitura não deveria ver "Varrer QNAP"'); dx.window.close();
   dx=await abrir(lei,'#fundos'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="fundos.exportar"],[data-pode="fundo.reservar"],[data-pode="fundo.sigla"]'),'leitura não deveria ver Exportar, Reservar nem "definir sigla"'); dx.window.close();
   chk(w.pode('rota.uso')&&w.pode('fundo.reservar')&&[...d.querySelectorAll('[data-pode="fundo.reservar"]')].every(e=>!e.hidden),'admin deveria continuar vendo e podendo tudo'); }
+// ---------- [Auditoria P0-9] Enviar folhas repete até acabar (cria o dossiê no servidor); "Conferir as folhas" abre a 1ª folha; texto de imagem ----------
+{ const fetchOrig=w.fetch, confOrig=w.confirm, toastOrig=w.toast, msgs=[]; let n=0; w.toast=m=>{msgs.push(String(m))}; w.confirm=()=>true;
+  w.fetch=(u,o={})=>{ if(/\/api\/projetos\/F900-P0009\/subir-folhas$/.test(String(u))&&String(o.method||'GET').toUpperCase()==='POST'){ n++; const corpo=n===1?{pendentes:3,criadas:1,falhas:[],restam:2,parcial:true,dossie_criado:true}:{pendentes:2,criadas:2,falhas:[],restam:0,parcial:false,dossie_criado:false}; return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>corpo}) } return fetchOrig(u,o) };
+  await w.subirFolhas('F900-P0009'); await sleep(500); w.fetch=fetchOrig; w.confirm=confOrig; w.toast=toastOrig;
+  chk(n===2,'"Enviar folhas ao site" deveria chamar de novo enquanto houver parcial (2 chamadas), chamou '+n);
+  chk(msgs.some(m=>/faltam 2/.test(m))&&msgs.some(m=>/3 folhas enviadas|3 folha\(s\) enviada/.test(m)),'deveria avisar o andamento ("faltam 2") e o total final (3): '+msgs.join(' | '));
+  w.route_to('projeto/F003-P9001'); await sleep(3500);
+  const pend=(w.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');
+  if(pend){ w.acaoCondicao('revisao','F003-P9001'); await sleep(1500); chk(/Revisar folha/.test(txt('#d-title')),'"Conferir as folhas" (condição revisao) deveria abrir a primeira folha pendente: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
+  chk(!/no site/.test(w.eval("semImagemHTML()")),'o texto de folha sem imagem não deveria dizer "no site": '+w.eval("semImagemHTML()").replace(/<[^>]+>/g,' ')); w.route_to('painel'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};

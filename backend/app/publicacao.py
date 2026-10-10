@@ -43,6 +43,20 @@ def condicoes_projeto(con, p) -> dict:
     conds.append({"id": "teste", "bloqueia": True, "ok": not teste, "texto": "Não é lote de teste",
                   "detalhe": "Lote de teste não vai ao ar" if teste else None, "acao": None})
 
+    # REVISÃO (a mesma regra do plano da publicação guiada): folha vinda do CAMP Vision precisa estar conferida e o lote aprovado
+    nao_conf = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND autoria_divergente=0 AND duplicata_de IS NULL", (codigo,)).fetchone()[0]
+    prontas = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL_LOCAL}", (codigo,)).fetchone()[0]
+    lote_sem_aprovar = con.execute("""SELECT COUNT(*) FROM lista_processamento l WHERE l.projeto_codigo=? AND l.aprovado_em IS NULL AND l.etapa IN ('revisao','rascunho')
+                                       AND EXISTS (SELECT 1 FROM item i WHERE i.lote_id=l.id)""", (codigo,)).fetchone()[0]
+    if nao_conf and prontas == 0:
+        rev_msg, rev_rot = f"{nao_conf} folha(s) esperam conferência na Revisão do lote", "Conferir as folhas"
+    elif lote_sem_aprovar:
+        rev_msg, rev_rot = "O lote ainda não foi aprovado na Revisão do lote", "Aprovar o lote"
+    else:
+        rev_msg, rev_rot = None, None
+    conds.append({"id": "revisao", "bloqueia": True, "ok": rev_msg is None, "texto": "Folhas conferidas e lote aprovado" if rev_msg is None else ("Nenhuma folha conferida ainda" if nao_conf and prontas == 0 else "Lote não aprovado"),
+                  "detalhe": rev_msg, "acao": None if rev_msg is None else {"tipo": "revisao", "rotulo": rev_rot, "alvo": codigo}})
+
     total = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (codigo,)).fetchone()[0]
     elegiveis = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL}", (codigo,)).fetchone()[0]
     vinculados = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (codigo,)).fetchone()[0]
@@ -51,7 +65,7 @@ def condicoes_projeto(con, p) -> dict:
     conds.append({"id": "site", "bloqueia": True, "ok": ok_site,
                   "texto": f"Existe no site: dossiê {'sim' if dossie else 'não'} · {elegiveis} de {total} folha(s)",
                   "detalhe": None if ok_site else "O projeto ainda não tem nenhum registro no site. Envie as folhas ao site (ficam como rascunho) antes de publicar",
-                  "acao": None if ok_site else {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site", "alvo": codigo}})
+                  "acao": None if ok_site else {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site" if dossie else "Criar no site e enviar folhas", "alvo": codigo}})
 
     # avisos: não bloqueiam
     fora = total - vinculados

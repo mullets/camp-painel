@@ -32,17 +32,16 @@ def plano(con, p) -> dict:
     a_enviar = q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL}")
     nao_conferidas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND autoria_divergente=0 AND duplicata_de IS NULL")
     duplicadas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND duplicata_de IS NOT NULL")
+    total_locais = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=?")
     divergentes = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND autoria_divergente=1")
 
     bloqueios = [{"id": i, "texto": por_id[i]["texto"], "detalhe": por_id[i]["detalhe"], "acao": por_id[i]["acao"]}
-                 for i in ("direitos", "bloqueios", "teste") if not por_id[i]["ok"]]
-    if nao_conferidas and elegiveis == 0:
-        bloqueios.append({"id": "revisao", "texto": "Nenhuma folha conferida ainda", "detalhe": f"{nao_conferidas} folha(s) esperam conferência na Revisão do lote",
-                          "acao": {"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo}})
+                 for i in ("direitos", "bloqueios", "teste", "revisao") if not por_id[i]["ok"]]
     dossie = bool(p["tainacan_item_id"])
     passos = [
         {"id": "dossie", "texto": "Criar o dossiê do projeto no site (rascunho)" if not dossie else "Dossiê do projeto no site", "estado": "feito" if dossie else "sera_feito"},
-        {"id": "folhas", "texto": f"Enviar {a_enviar} folha(s) ao site (rascunho)" if a_enviar else "Folhas no site", "estado": "sera_feito" if a_enviar else "feito"},
+        {"id": "folhas", "texto": (f"Enviar {a_enviar} folha(s) ao site (rascunho)" if a_enviar else "Folhas no site") if elegiveis else f"0 de {total_locais} folhas prontas ({nao_conferidas} a conferir)",
+         "estado": "sera_feito" if a_enviar else ("feito" if elegiveis else "aguarda")},
         {"id": "autorizar", "texto": "Autorizar o projeto para publicação" if not p["autorizado_site"] else "Projeto autorizado para publicação", "estado": "feito" if p["autorizado_site"] else "sera_feito"},
         {"id": "publicar", "texto": f"Publicar o dossiê e {elegiveis} folha(s)", "estado": "sera_feito"},
     ]

@@ -2318,6 +2318,79 @@ def filho(modo):
         ver("uma linha por situação, no singular e no plural", tp(1, 1, 3) == "1 publicado · 1 pronto para publicar · 1 com pendência" and tp(2, 3, 9) == "2 publicados · 3 prontos para publicar · 4 com pendência", tp(1, 1, 3) + " | " + tp(2, 3, 9))
         ver("só o que existe aparece (sem '0 ...'); fundo sem projetos diz isso", tp(0, 0, 4) == "4 com pendência" and tp(3, 0, 3) == "3 publicados" and tp(0, 0, 0) == "Nenhum projeto ainda", tp(0, 0, 4) + " | " + tp(3, 0, 3))
         for l in res: print(l)
+    elif modo == "p09_dossie_revisao":
+        init_db(); _aplicar_migracoes_real()
+        import tempfile, pathlib as _pl
+        from app import auth, publicador, publicacao_guiada as pg, wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(tempfile.mkdtemp())
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F093','Fundo P09','PNO',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F093','autorizado','Fam','Termo')")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),)); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(raiz),))
+        def proj(n, titulo, rev="conferida", lote=True, etapa="revisao", aprov=None, folhas=3):
+            cod = f"F093-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F093',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, "F093", n, titulo))
+            lid = None
+            if lote:
+                c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES (?,?,'/x',?,?)", (f"Lote {cod}", cod, etapa, aprov)); lid = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+            for q in range(1, folhas + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,pendencias) VALUES (?,?,'S01',?,?,'campvision',?,?,'{}')", (f"{cod}-1970-S01-D{q:05d}", cod, q, f"Folha {q}", lid, rev))
+            return cod
+        PS = proj(1, "Sem dossie", lote=False)                                  # projeto antigo: sem lote, sem dossiê
+        PQ = proj(2, "Parcial", lote=False, folhas=3)
+        PF = proj(3, "Dossie falha", lote=False, folhas=2)
+        PR = proj(4, "Revisao", rev="pendente")                                 # lote não conferido
+        PA = proj(5, "Aprovar", rev="conferida", etapa="revisao", aprov=None)   # conferido mas lote NÃO aprovado
+        PJ = proj(6, "Com jpg", rev="pendente")
+        jpg = raiz / "F093 - Fundo" / "JPG"; jpg.mkdir(parents=True); (jpg / "F093-P0006-1970-S01-D00001.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"0" * 64 + b"\xff\xd9")
+        c.execute("UPDATE item SET arquivo_jpg=? WHERE codigo=?", ("F093 - Fundo/JPG/F093-P0006-1970-S01-D00001.jpg", f"{PJ}-1970-S01-D00001"))
+        c.execute("UPDATE item SET arquivo_jpg=? WHERE codigo=?", ("../fora.jpg", f"{PJ}-1970-S01-D00002")); (raiz.parent / "fora.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"),): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        ch = {"dossie": [], "folhas": [], "falha_dossie": set()}
+        def dossie_falso(codigo, ator):
+            if codigo in ch["falha_dossie"]: return {"item_id": None, "erro": "WordPress recusou"}
+            ch["dossie"].append(codigo); cc = connect(); wid = 9000 + len(ch["dossie"])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft','d',?,?,'F093')", (wid, codigo, codigo)); cc.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "erro": None}
+        def folha_falsa(codigo, ator, enviar_imagem=True):
+            ch["folhas"].append(codigo); cc = connect(); wid = 7000 + len(ch["folhas"])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','f',?,?,'F093')", (wid, codigo, codigo[:10])); cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        publicador.criar_dossie_no_site, publicador.criar_folha_no_site = dossie_falso, folha_falsa
+        # 1) projeto SEM dossiê: "Enviar folhas ao site" cria o dossiê e as folhas (antes: 400 mandando usar um botão que não existe)
+        r = adm.post(f"/api/projetos/{PS}/subir-folhas")
+        ver("subir-folhas num projeto SEM dossiê cria o dossiê E as folhas, sem erro", r.status_code == 200 and r.json()["criadas"] == 3 and r.json()["dossie_criado"] is True and ch["dossie"] == [PS] and len(ch["folhas"]) == 3, r.text[:200])
+        ch["falha_dossie"].add(PF); r2 = adm.post(f"/api/projetos/{PF}/subir-folhas")
+        ver("se o dossiê não puder ser criado: 400 com o motivo e NENHUMA folha enviada", r2.status_code == 400 and "Não consegui criar o dossiê no site: WordPress recusou" in r2.text and "Nada foi enviado" in r2.text and not any(x.startswith(PF) for x in ch["folhas"]), r2.text[:200])
+        pg.ORCAMENTO_S = 0.0; a1 = adm.post(f"/api/projetos/{PQ}/subir-folhas").json(); a2 = adm.post(f"/api/projetos/{PQ}/subir-folhas").json(); a3 = adm.post(f"/api/projetos/{PQ}/subir-folhas").json(); pg.ORCAMENTO_S = 40.0
+        ver("em fatias de tempo: devolve parcial/restam e termina chamando de novo (sem repetir o que já subiu)", (a1["parcial"], a1["restam"], a2["restam"], a3["parcial"], a3["restam"]) == (True, 2, 1, False, 0) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", PQ) == 3, str((a1, a2, a3))[:260])
+        # 2) requisito de REVISÃO: o checklist e o plano dizem a mesma coisa
+        cond = lambda cod: {x["id"]: x for x in adm.get(f"/api/projetos/{cod}/publicacao").json()["condicoes"]}
+        plano = lambda cod: adm.get(f"/api/projetos/{cod}/publicar/plano").json()
+        c1, p1 = cond(PR), plano(PR)
+        ver("folhas do lote NÃO conferidas: o checklist tem o requisito 'revisao' com 'Conferir as folhas' (o mesmo bloqueio do plano)", c1["revisao"]["ok"] is False and c1["revisao"]["acao"]["rotulo"] == "Conferir as folhas" and any(b["id"] == "revisao" for b in p1["bloqueios"]), str(c1["revisao"])[:200])
+        folhas_passo = next(x for x in p1["passos"] if x["id"] == "folhas")
+        ver("o plano NUNCA diz 'feito' para folhas com 0 prontas: '0 de 3 folhas prontas (3 a conferir)'", folhas_passo["estado"] == "aguarda" and "0 de 3 folhas prontas (3 a conferir)" in folhas_passo["texto"], str(folhas_passo))
+        c2, p2 = cond(PA), plano(PA)
+        ver("conferido mas lote NÃO aprovado: 'Lote não aprovado' com 'Aprovar o lote', no checklist E no plano", c2["revisao"]["ok"] is False and c2["revisao"]["acao"]["rotulo"] == "Aprovar o lote" and any(b["id"] == "revisao" for b in p2["bloqueios"]) and p2["pode_executar"] is False, str(c2["revisao"])[:200])
+        r3 = adm.post(f"/api/projetos/{PA}/publicar-tudo")
+        ver("Publicar agora recusa (400) enquanto o lote não foi aprovado, e nada é enviado ao site", r3.status_code == 400 and not any(x.startswith(PA) for x in ch["folhas"]), r3.text[:160])
+        k2 = connect(); k2.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE projeto_codigo=?", (PA,)); k2.commit(); k2.close()
+        ver("com o lote aprovado o requisito 'revisao' fica cumprido", cond(PA)["revisao"]["ok"] is True and all(b["id"] != "revisao" for b in plano(PA)["bloqueios"]))
+        ver("projeto antigo (sem lote) não é afetado pelo requisito", cond(PQ)["revisao"]["ok"] is True)
+        # 3) prévia pelo JPG do QNAP quando o CAMP Vision não gravou preview
+        pv = adm.get(f"/api/itens/{PJ}-1970-S01-D00001/previa")
+        ver("sem preview do CAMP Vision a prévia usa o JPG da folha no QNAP (image/jpeg)", pv.status_code == 200 and pv.headers["content-type"].startswith("image/jpeg"), f"{pv.status_code} {pv.headers.get('content-type')}")
+        ver("JPG fora da raiz do QNAP (../fora.jpg) NÃO é servido (404)", adm.get(f"/api/itens/{PJ}-1970-S01-D00002/previa").status_code == 404)
+        ver("folha sem JPG nenhum: 404 'Sem prévia'", adm.get(f"/api/itens/{PJ}-1970-S01-D00003/previa").status_code == 404)
+        det = {x["codigo"]: x for x in adm.get(f"/api/projetos/{PJ}/detalhe").json()["itens"]}
+        ver("a lista do projeto marca previa só nas folhas que têm imagem (a tela decide por isso)", det[f"{PJ}-1970-S01-D00001"]["pendencias"].get("previa") == "@jpg" and not det[f"{PJ}-1970-S01-D00002"]["pendencias"].get("previa") and not det[f"{PJ}-1970-S01-D00003"]["pendencias"].get("previa"), str({k_: v_["pendencias"].get("previa") for k_, v_ in det.items()}))
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2759,6 +2832,14 @@ else:
 print("39) Página do fundo: uma frase por situação dos projetos")
 rc, out = rodar("texto_fundo", f"{tmp}/tf.db")
 if rc != 0: ok(False, f"teste do texto do fundo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("39) P0-9: Enviar folhas cria o dossiê; requisito de revisão no checklist; prévia pelo JPG do QNAP")
+rc, out = rodar("p09_dossie_revisao", f"{tmp}/p09.db")
+if rc != 0: ok(False, f"teste do P0-9 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

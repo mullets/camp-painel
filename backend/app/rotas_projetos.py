@@ -315,7 +315,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual,
-               i.tainacan_item_id AS tainacan_item_id_salvo
+               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -379,12 +379,21 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     # Folhas do site + as locais que ainda NÃO estão no site (ex.: lote novo importado para um projeto que já tem folhas publicadas).
     codigos_site = {x["codigo"] for x in itens_site}
     itens = itens_site + [x for x in itens_local if x["codigo"] not in codigos_site]
+    from .rotas_revisao import _qnap_prontos_raiz, jpg_da_folha_no_qnap
+    try:
+        raiz_prontos = _qnap_prontos_raiz()
+    except Exception:  # noqa: BLE001
+        raiz_prontos = None
     for d in itens:
         if isinstance(d.get("pendencias"), str):
             try:
                 d["pendencias"] = json.loads(d["pendencias"])
             except ValueError:
                 d["pendencias"] = None
+        jpg = d.pop("_arquivo_jpg", None)
+        # lote anterior ao preview do CAMP Vision: se o JPG da folha existe no QNAP, a tela pode mostrar a imagem para conferir ('@jpg' = o servidor usa arquivo_jpg)
+        if jpg and raiz_prontos and isinstance(d.get("pendencias"), dict) and not d["pendencias"].get("previa") and jpg_da_folha_no_qnap(raiz_prontos, jpg):
+            d["pendencias"]["previa"] = "@jpg"
         d.setdefault("thumb_url", None)
         d.setdefault("url", None)
         d.setdefault("tainacan_item_id", None)
@@ -784,19 +793,31 @@ def exportar_selecao(d: AcaoProjetosLote, u: dict = Depends(auth.exige("leitura"
 
 @router.post("/projetos/{codigo}/subir-folhas")
 def subir_folhas(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Cria no Tainacan (rascunho) todas as folhas do projeto que ainda não existem lá."""
-    from .publicador import criar_folha_no_site
+    """Cria no Tainacan (rascunho) as folhas do projeto que ainda não existem lá. Se o projeto ainda não tem dossiê, CRIA o dossiê primeiro (antes mandava usar um botão que não existe na tela).
+    Envia em fatias de tempo (a mesma ORCAMENTO_S da publicação guiada): devolve parcial/restam e a tela chama de novo até acabar."""
+    import time as _t
+    from . import publicacao_guiada as pg
+    from .publicacao import ELEGIVEL_LOCAL
+    from .publicador import criar_dossie_no_site, criar_folha_no_site
     con = connect()
     p = con.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
-    if not p["tainacan_item_id"]:
-        con.close(); raise HTTPException(400, "O projeto ainda não tem dossiê no site. Use 'Criar no site' primeiro.")
-    pend = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente') ORDER BY serie_codigo, sequencial", (codigo,))]
+    sem_dossie = not p["tainacan_item_id"]
     con.close()
-    ok, falhas = 0, []
+    if sem_dossie:
+        r = criar_dossie_no_site(codigo, u["email"])
+        if r.get("erro") or not r.get("item_id"):
+            raise HTTPException(400, f"Não consegui criar o dossiê no site: {r.get('erro') or 'sem resposta'}. Nada foi enviado.")
+    con = connect()
+    pend = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} ORDER BY serie_codigo, sequencial", (codigo,))]
+    con.close()
+    ok, falhas, t0 = 0, [], _t.monotonic()
     for c in pend:
+        if ok + len(falhas) > 0 and _t.monotonic() - t0 >= pg.ORCAMENTO_S:
+            break
         r = criar_folha_no_site(c, u["email"])
         if r["erro"]: falhas.append({"codigo": c, "erro": r["erro"]})
         else: ok += 1
-    return {"pendentes": len(pend), "criadas": ok, "falhas": falhas}
+    restam = len(pend) - ok - len(falhas)
+    return {"pendentes": len(pend), "criadas": ok, "falhas": falhas, "restam": restam, "parcial": restam > 0 and not falhas, "dossie_criado": sem_dossie}

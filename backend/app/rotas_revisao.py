@@ -274,24 +274,42 @@ def reabrir(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
+def jpg_da_folha_no_qnap(raiz, rel):
+    """O JPG da folha (item.arquivo_jpg, relativo à raiz dos prontos) se existir e estiver DENTRO da raiz; senão None. Serve de prévia quando o CAMP Vision não gravou preview."""
+    if not rel or str(rel).startswith("http"):
+        return None
+    try:
+        c = Path(str(rel))
+        alvo = c.resolve() if c.is_absolute() else (raiz / str(rel)).resolve()
+        if raiz.resolve() in alvo.parents and alvo.suffix.lower() in (".jpg", ".jpeg") and alvo.is_file():
+            return alvo
+    except OSError:
+        return None
+    return None
+
+
 @router.get("/itens/{codigo}/previa")
 def previa(codigo: str, t: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
     """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta."""
     con = connect()
     try:
-        i = con.execute("SELECT pendencias, giro_manual FROM item WHERE codigo=?", (codigo,)).fetchone()
+        i = con.execute("SELECT pendencias, giro_manual, arquivo_jpg FROM item WHERE codigo=?", (codigo,)).fetchone()
     finally:
         con.close()
     try:
         rel = (json.loads(i["pendencias"] or "{}") if i else {}).get("previa") or ""
     except ValueError:
         rel = ""
-    if not rel:
-        raise HTTPException(404, "Sem prévia")
     raiz = _qnap_prontos_raiz()
-    base = (raiz / "_campvision" / "preview").resolve()
-    alvo = (raiz / rel).resolve()
-    if base not in alvo.parents or alvo.suffix.lower() not in (".jpg", ".jpeg") or alvo.stem != codigo or not alvo.is_file():
+    alvo = None
+    if rel and rel != "@jpg":
+        base = (raiz / "_campvision" / "preview").resolve()
+        cand = (raiz / rel).resolve()
+        if base in cand.parents and cand.suffix.lower() in (".jpg", ".jpeg") and cand.stem == codigo and cand.is_file():
+            alvo = cand
+    if alvo is None:                                   # lote anterior ao preview do CAMP Vision: o JPG da folha no QNAP (sempre DENTRO da raiz dos prontos)
+        alvo = jpg_da_folha_no_qnap(raiz, i["arquivo_jpg"] if i else None)
+    if alvo is None:
         raise HTTPException(404, "Sem prévia")
     giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
     if giro and not imagens.disponivel():
