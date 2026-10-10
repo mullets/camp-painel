@@ -232,7 +232,7 @@ w.route_to('painel'); await sleep(2800);
   chk(!!d.querySelector('#qnap-card svg.qnap-spark'),'o cartão deveria ter o gráfico de espaço dos últimos 7 dias');
   chk(/Tendência/.test(c)&&/GB\/dia/.test(c)&&/enche em ~\d/.test(c),'o cartão deveria mostrar a tendência e quantos dias até encher: '+c.slice(0,200));
   chk(/Último material/.test(c)&&/há 3 h/.test(c)&&c.includes('F002-P0002-IGREJA/lote-12'),'o cartão deveria mostrar o último material recebido (há 3 h + nome)');
-  chk(/Entrada bruta/.test(c)&&/14 pasta\(s\)/.test(c)&&/2 parada\(s\) há mais de 3 dias/.test(c),'o cartão deveria mostrar a entrada bruta e as pastas paradas');
+  chk(/Entrada bruta/.test(c)&&/14 pastas/.test(c)&&/2 paradas há mais de 3 dias/.test(c),'o cartão deveria mostrar a entrada bruta e as pastas paradas');
   chk(/Lotes prontos/.test(c)&&/230/.test(c)&&/Resposta/.test(c)&&/42 ms/.test(c),'o cartão deveria mostrar os lotes prontos e a resposta em ms');
   chk(/Atualizado há \d+ min/.test(c),'o cartão deveria dizer há quanto tempo foi atualizado: '+c.slice(-80));
   chk(!!d.getElementById('qnap-atualizar'),'o master deveria ver o botão "Atualizar agora"');
@@ -415,7 +415,7 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
   chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
-  chk(!/Fonte visual|reconhecidos no site/.test(txt('.project-source'))&&/folha\(s\) no painel/.test(txt('.project-source')),'a linha de números do projeto deveria falar de folhas no painel e no site, sem jargão: "'+txt('.project-source')+'"');
+  chk(!/Fonte visual|reconhecidos no site/.test(txt('.project-source'))&&/folhas no painel/.test(txt('.project-source')),'a linha de números do projeto deveria falar de folhas no painel e no site, sem jargão: "'+txt('.project-source')+'"');
   d.querySelector('#pj-proximo [data-pp="conferir"]').click(); await sleep(2000);
   chk(/Revisar folha/.test(txt('#d-title')),'"Começar a conferir" deveria abrir a primeira folha pendente'); w.closeDrawer(true);
   w.route_to('projeto/F026-P0001'); await sleep(3600);
@@ -493,12 +493,12 @@ w.route_to('painel'); await sleep(2800);
   const dd=dx.window.document; chk(dd.getElementById('l-fundo').value===''&&/Escolha o fundo/.test(dd.getElementById('lab-origem').textContent),'pelo menu lateral a etiqueta deveria abrir SEM fundo pré-escolhido (antes: sempre F014): "'+dd.getElementById('l-fundo').value+'" / "'+dd.getElementById('lab-origem').textContent+'"'); dx.window.close(); w.route_to('painel'); }
 // ---------- [Auditoria P0-6] "Publicar" em lote: plano antes (quem publica, quem fica de fora e por quê) e execução que repete até acabar ----------
 { w.limparSelecaoProjetos(); w.eval("PROJETOS_SELECIONADOS.add('F003-P9001');PROJETOS_SELECIONADOS.add('F003-P9002')"); await w.acaoLoteProjetos('publicar'); await sleep(1500);
-  chk(/Publicar 2 projeto\(s\)/.test(txt('#d-title'))&&/serão publicados|será publicado/.test(txt('#d-body'))&&/ficam de fora|fica de fora/.test(txt('#d-body')),'o Publicar em lote deveria abrir o PLANO ("N serão publicados · M ficam de fora"): "'+txt('#d-title')+' / '+txt('#d-body').slice(0,160)+'"');
+  chk(/Publicar 2 projetos/.test(txt('#d-title'))&&/serão publicados|será publicado/.test(txt('#d-body'))&&/ficam de fora|fica de fora/.test(txt('#d-body')),'o Publicar em lote deveria abrir o PLANO ("N serão publicados · M ficam de fora"): "'+txt('#d-title')+' / '+txt('#d-body').slice(0,160)+'"');
   chk(!/confirm/.test(String(w.acaoLoteProjetos).slice(0,200).split("'publicar'")[0]),'o lote não deveria mais confirmar com o confirm() nativo antes do plano'); w.closeDrawer(true); w.limparSelecaoProjetos();
   const fetchOrig=w.fetch; let chamadas=0; w.fetch=(u,o={})=>{ if(/\/api\/projetos\/lote$/.test(String(u))&&String(o.method||'GET').toUpperCase()==='POST'){ chamadas++; const corpo=chamadas===1?{ok:[{codigo:'F900-P0001'}],falhas:[],pendentes:['F900-P0002']}:{ok:[{codigo:'F900-P0002'}],falhas:[{codigo:'F900-P0003',erro:'Fundo com direitos restritos'}],pendentes:[]}; return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>corpo}) } return fetchOrig(u,o) };
   w.openDrawer('Publicar 3 projeto(s)','plano do lote','<p>x</p>'); await w.executarLoteProjetos(['F900-P0001','F900-P0002','F900-P0003'],[{codigo:'F900-P0004',motivo:'Nenhuma folha conferida'}]); await sleep(1500); w.fetch=fetchOrig;
   chk(chamadas===2,'o lote deveria chamar de novo com os pendentes até acabar (2 chamadas), chamou '+chamadas);
-  chk(/2 publicado\(s\) · 2 sem publicar/.test(txt('#d-body'))&&/Fundo com direitos restritos/.test(txt('#d-body'))&&/Nenhuma folha conferida/.test(txt('#d-body')),'o resultado deveria dizer 2 publicados · 2 sem publicar, com o motivo de cada um: "'+txt('#d-body').slice(0,260)+'"'); w.closeDrawer(true); w.route_to('painel'); }
+  chk(/2 publicados · 2 sem publicar/.test(txt('#d-body'))&&/Fundo com direitos restritos/.test(txt('#d-body'))&&/Nenhuma folha conferida/.test(txt('#d-body')),'o resultado deveria dizer 2 publicados · 2 sem publicar, com o motivo de cada um: "'+txt('#d-body').slice(0,260)+'"'); w.closeDrawer(true); w.route_to('painel'); }
 // ---------- [Auditoria P0-8] erro bloqueante em projeto PUBLICADO: pergunta o que fazer e avisa na página; o status do projeto não é mexido ----------
 { const g={estado:'no_ar',pode_agir:true,pode_despublicar:true,condicoes:[{id:'bloqueios',bloqueia:true,ok:false,texto:'Sem autoria divergente nem erros bloqueantes',detalhe:'1 erro bloqueante'}]};
   let h=w.renderPublicacao('F003-P9002',g);
@@ -608,7 +608,7 @@ w.route_to('painel'); await sleep(2800);
   chk(/(Decisões esperando|esperam você)/.test(txt('#v-painel .hoje-acoes')),'"Por onde começar" deveria incluir as decisões nas pendências: "'+txt('#v-painel .hoje-acoes').slice(0,120)+'"');
   const id1=dl.itens[0].id, id2=dl.itens[1].id; li[0].querySelector('button.pri').click(); await sleep(1600);
   chk(txt('#d-title').includes('Projeto parecido: é o mesmo?')&&/O que chegou/.test(txt('#d-body'))&&/Já existe no fundo/.test(txt('#d-body'))&&/está esperando a sua resposta/.test(txt('#d-body')),'a janela deveria mostrar o que chegou, o que já existe e que o CAMP Vision espera: "'+txt('#d-body').slice(0,110)+'"');
-  chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folha\(s\) no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
+  chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folhas no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
   const nProj0=(await J(adm,'/api/painel')).b.projetos.total;
   d.querySelector('#d-body [data-dec-acao="mesmo"]').click(); await sleep(2600);
   const r1=(await J(adm,'/api/decisoes/'+id1)).b;
@@ -629,7 +629,7 @@ w.route_to('painel'); await sleep(2800);
   const fq=(await J(adm,'/api/projetos/F026-P0001/folhas-qnap')).b, lt=fq.lotes.find(l=>l.existe), qf=()=>d.querySelectorAll('#pj-qnap .qf');
   chk(!!lt&&lt.fora_do_painel===3&&lt.documentos.length===3,'a API deveria listar 3 documentos do lote de teste (JPG e TIF do mesmo código = 1): '+JSON.stringify(lt&&{t:lt.total,f:lt.fora_do_painel}));
   chk(/Encontradas no QNAP, ainda não catalogadas no painel/.test(txt('#pj-qnap'))&&qf().length===3,'a página do projeto deveria mostrar o painel "Encontradas no QNAP" com 3 documentos: '+qf().length+' ('+txt('#pj-qnap').slice(0,100)+')');
-  chk(/3 documento\(s\)/.test(txt('#pj-qnap'))&&/F026-P0001-1970-S01-D90001/.test(txt('#pj-qnap'))&&/JPG · TIF/.test(txt('#pj-qnap')),'cada documento deveria mostrar o código e os formatos (JPG · TIF)');
+  chk(/3 documentos/.test(txt('#pj-qnap'))&&/F026-P0001-1970-S01-D90001/.test(txt('#pj-qnap'))&&/JPG · TIF/.test(txt('#pj-qnap')),'cada documento deveria mostrar o código e os formatos (JPG · TIF)');
   const im=[...d.querySelectorAll('#pj-qnap .qf img')];
   chk(im.length===3&&im.every(x=>x.getAttribute('src').startsWith('/api/projetos/F026-P0001/folhas-qnap/arquivo?lote=')&&x.getAttribute('src').includes('caminho=')),'as miniaturas deveriam vir do endpoint de prévia do projeto');
   chk(/ainda não viraram folhas do painel/.test(txt('#pj-qnap')),'o painel deveria dizer que ainda não viraram folhas e apontar a Revisão do lote');
@@ -689,7 +689,7 @@ okl.push('backup: painel na tela de Estações, banner global (some depois do ba
   // master/operador: vê a tag e o botão no projeto
   w.route_to('projeto/F002-P0002'); await sleep(2000);
   chk(!!d.querySelector('[data-nav="item/'+SO+'"] .tag.origin'),'a folha só no site deveria ter a tag "só no site"');
-  chk(!!d.getElementById('pd-importar')&&txt('#pd-importar').includes('2 folha(s)'),'o projeto deveria oferecer "Importar 2 folha(s) só no site": '+txt('#pd-source, .project-source').slice(0,120));
+  chk(!!d.getElementById('pd-importar')&&txt('#pd-importar').includes('2 folhas'),'o projeto deveria oferecer "Importar 2 folha(s) só no site": '+txt('#pd-source, .project-source').slice(0,120));
   // clicar no cartão abre a folha (importa na hora)
   d.querySelector('[data-nav="item/'+SO+'"]').click(); await sleep(3000);
   chk(w.location.hash==='#item/'+SO&&!!d.getElementById('it-editar')&&!/não encontrado/i.test(txt('.content.on')),'abrir a folha só no site deveria abrir a página dela com o botão Editar, não "não encontrado": '+txt('.content.on').slice(0,100));
@@ -698,7 +698,7 @@ okl.push('backup: painel na tela de Estações, banner global (some depois do ba
   await w.editarItem(SO); await sleep(600); const ti=d.getElementById('ei-titulo'); ti.value='Foto editada no painel'; ti.dispatchEvent(new w.Event('input',{bubbles:true})); await w.salvarItem(SO); await sleep(1800);
   r=await J(adm,'/api/itens/'+SO); chk(r.s===200&&r.b.item.titulo==='Foto editada no painel','a folha importada deveria salvar a edição: '+JSON.stringify(r.b&&r.b.item&&r.b.item.titulo));
   w.route_to('projeto/F002-P0002'); await sleep(2000);
-  chk(!!d.getElementById('pd-importar')&&txt('#pd-importar').includes('1 folha(s)'),'depois de importar uma, o botão deveria contar 1: '+(d.getElementById('pd-importar')?txt('#pd-importar'):'(sem botão)'));
+  chk(!!d.getElementById('pd-importar')&&txt('#pd-importar').includes('1 folha'),'depois de importar uma, o botão deveria contar 1: '+(d.getElementById('pd-importar')?txt('#pd-importar'):'(sem botão)'));
   okl.push('folha só no site: leitura recebe explicação sem importar; abrir importa e edita como as demais; botão do projeto conta certo'); }
 // ---------- CATÁLOGO LOCAL × SITE (prévia e importação) ----------
 r=await J(ope,'/api/importacao/previa'); chk(r.s===403,'operador vendo a prévia do importador: '+r.s);

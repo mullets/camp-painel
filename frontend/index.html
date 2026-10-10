@@ -1375,8 +1375,9 @@ const ROTULO={aguarda_resposta:'aguarda resposta',aguarda_orcamento:'aguarda or�
   formas_variantes:'grafias no carimbo',forma_autorizada:'nome autorizado',historia_arquivistica:'história',fonte_historia:'fonte da história',credito_padrao:'crédito padrão'};
 function rotulo(v){return Object.prototype.hasOwnProperty.call(ROTULO,v)?ROTULO[v]:String(v==null?'':v).replace(/_/g,' ')}
 // "3 folha(s)" -> "3 folhas", "1 folha(s)" -> "1 folha", "item(ns)" -> "itens": corrige o texto visível (inclusive o que vem do servidor)
+function pluralDe(pal,suf){return suf==='ns'&&/m$/i.test(pal)?pal.slice(0,-1)+'ns':pal+suf}
 function normalizarPlurais(raiz){const w=document.createTreeWalker(raiz,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode())){const v=n.nodeValue;if(v.indexOf('(s)')<0&&v.indexOf('(ns)')<0)continue;const pai=n.parentNode&&n.parentNode.nodeName;if(pai==='TEXTAREA'||pai==='SCRIPT'||pai==='STYLE')continue;
-  const t=v.replace(/(\d[\d.]*)\s+(\p{L}+)\((n?s)\)/gu,(m,num,pal,suf)=>num.replace(/\./g,'')==='1'?`${num} ${pal}`:`${num} ${pal}${suf}`).replace(/(\p{L}+)\((n?s)\)/gu,'$1$2');if(t!==v)n.nodeValue=t}}
+  const t=v.replace(/(\d[\d.]*)\s+(\p{L}+)\((n?s)\)/gu,(m,num,pal,suf)=>num.replace(/\./g,'')==='1'?`${num} ${pal}`:`${num} ${pluralDe(pal,suf)}`).replace(/(\p{L}+)\((n?s)\)/gu,(m,pal,suf)=>pluralDe(pal,suf));if(t!==v)n.nodeValue=t}}
 // datas do banco são UTC; a equipe vê tudo no horário de São Paulo
 const FUSO_CAMP='America/Sao_Paulo';
 function fmtDataHora(v,comSegundos=false){
