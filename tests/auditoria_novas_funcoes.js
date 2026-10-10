@@ -413,7 +413,7 @@ w.route_to('painel'); await sleep(2800);
   chk(grupo('Material novo')==='filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
   chk(txt('#nav [data-v="projetos"] kbd')==='6'&&txt('#nav [data-v="filas"] kbd')==='2'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Filas 2, Projetos 6, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
-  chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
+  chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
   chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
   chk(!/Fonte visual|reconhecidos no site/.test(txt('.project-source'))&&/folhas no painel/.test(txt('.project-source')),'a linha de números do projeto deveria falar de folhas no painel e no site, sem jargão: "'+txt('.project-source')+'"');
   d.querySelector('#pj-proximo [data-pp="conferir"]').click(); await sleep(2000);
@@ -625,6 +625,31 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('painel'); await sleep(500); w.abrirAjuda(); await sleep(400); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'"?" deveria reabrir a caixa'); await sleep(500); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'a caixa reaberta pelo "?" não deveria sumir sozinha');
   d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(700); w.eval("AJUDA_PAGINAS.painel.v=2"); w.garantirCaixaAjuda(); await sleep(300);
   chk(!!d.querySelector('#v-painel > .ajuda-caixa')&&/Novo/.test(txt('#v-painel > .ajuda-caixa h2')),'texto com versão nova deveria voltar a aparecer, com a etiqueta "Novo"'); w.eval("AJUDA_PAGINAS.painel.v=1"); w.route_to('painel'); }
+// ---------- [H3] telas vazias que ensinam e erro que NÃO vira "vazio" ----------
+{ const v=w.vazioHTML('Nada aqui','Quando houver, aparece nesta lista.','<button id="vz-b">Começar</button>');
+  chk(/Nada aqui/.test(v)&&/Quando houver/.test(v)&&/id="vz-b"/.test(v)&&/role="status"/.test(v),'vazioHTML deveria trazer título, explicação e o botão para começar');
+  const fetchOrig=w.fetch,R=(j,ok=true,st=200)=>Promise.resolve({ok,status:st,statusText:'x',json:async()=>j});
+  w.fetch=(u,o={})=>/\/api\/erros\?/.test(String(u))?R([]):/\/api\/localizacoes$/.test(String(u))?R([]):fetchOrig(u,o);
+  w.route_to('erros'); await sleep(900); chk(/Nenhum problema nesta situação/.test(txt('#v-erros tbody'))&&!!d.querySelector('#v-erros tbody [onclick*="m-erro"]'),'Erros vazio deveria explicar e oferecer "Relatar problema": "'+txt('#v-erros tbody').slice(0,140)+'"');
+  w.route_to('localizacao'); await sleep(900); chk(/Ainda não há caixas, gavetas ou tubos/.test(txt('#loc-body'))&&!!d.querySelector('#loc-body [onclick*="m-loc"]'),'Localização vazia deveria oferecer "Nova localização": "'+txt('#loc-body').slice(0,140)+'"');
+  w.fetch=(u,o={})=>/\/api\/erros\?/.test(String(u))?R({detail:'servidor caiu'},false,500):fetchOrig(u,o);
+  w.route_to('erros'); await sleep(900); chk(/Não consegui carregar os problemas/.test(txt('#v-erros tbody'))&&!/Nenhum problema nesta situação/.test(txt('#v-erros tbody')),'com a API em erro a lista NÃO pode dizer "vazio": "'+txt('#v-erros tbody').slice(0,140)+'"');
+  w.fetch=fetchOrig; w.route_to('painel'); }
+// ---------- [H5] O caminho do material: os mesmos 7 nomes, na mesma ordem ----------
+{ const h=w.caminhoMaterialHTML(4,' 3/14'),dd=d.createElement('div'); dd.innerHTML=h; const sp=[...dd.querySelectorAll('.steps.caminho span')];
+  chk(sp.map(x=>x.firstChild.textContent.trim()).join(',')==='Digitalizar,Enviar ao QNAP,Leitura,Importar,Conferir 3/14,Aprovar,Publicar','o caminho deveria ter os 7 passos oficiais na ordem: '+sp.map(x=>x.textContent).join(' | '));
+  chk(dd.querySelectorAll('span.done').length===4&&dd.querySelectorAll('span.cur').length===1&&/Conferir 3\/14/.test(dd.querySelector('span.cur').textContent)&&/você está aqui/.test(dd.querySelector('span.cur').textContent),'4 feitos, 1 atual com "3/14" e "você está aqui"');
+  w.route_to('caminho'); await sleep(500); chk(d.querySelectorAll('#v-caminho-corpo details').length===7&&/Leva alguns minutos por pasta/.test(txt('#v-caminho-corpo'))&&d.querySelectorAll('#v-caminho-corpo .steps.caminho span').length===7,'a página #caminho deveria explicar os 7 passos');
+  w.route_to('projeto/F003-P9001'); await sleep(3500); chk(d.querySelectorAll('#pj-proximo .steps.caminho span').length===7,'a página do projeto deveria mostrar o caminho de 7 passos com "você está aqui"'); w.route_to('painel'); }
+// ---------- [H2] glossário: página com busca e balão no ponto de uso ----------
+{ chk(w.eval('GLOSSARIO.length')>=22,'o glossário deveria ter pelo menos os 22 termos');
+  w.route_to('glossario'); await sleep(500); const n=d.querySelectorAll('#gl-lista .gl-item').length; w.filtrarGlossario('rascunho'); const vis=[...d.querySelectorAll('#gl-lista .gl-item')].filter(e=>!e.hidden).length; w.filtrarGlossario('');
+  chk(n>=22&&vis>=1&&vis<n,'a busca do glossário deveria reduzir a lista ('+vis+' de '+n+')');
+  const c=w.comTermos('O dossiê e o lote, depois outro lote.'); chk((c.match(/<abbr class="termo"/g)||[]).length===2&&!/<abbr[^>]*>outro lote/.test(c)&&(c.match(/>lote</g)||[]).length===1,'só a 1ª ocorrência de cada termo vira balão: '+c);
+  chk(!/<abbr/.test(w.comTermos('&lt;script&gt;')),'texto sem termo não vira balão');
+  w.route_to('filas'); await sleep(900); const ab=d.querySelector('#v-filas .ajuda-caixa abbr.termo'); chk(!!ab,'a caixa da página deveria ter termos do glossário em balão');
+  if(ab){ ab.click(); await sleep(200); chk(!!d.getElementById('termo-pop')&&/Ver no glossário/.test(txt('#termo-pop'))&&txt('#termo-pop').length>40,'clicar no termo deveria abrir o balão com a definição e o link do glossário'); d.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await sleep(150); chk(!d.getElementById('termo-pop'),'Esc deveria fechar o balão') }
+  w.route_to('painel'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
