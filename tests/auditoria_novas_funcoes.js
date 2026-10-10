@@ -650,6 +650,24 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('filas'); await sleep(900); const ab=d.querySelector('#v-filas .ajuda-caixa abbr.termo'); chk(!!ab,'a caixa da página deveria ter termos do glossário em balão');
   if(ab){ ab.click(); await sleep(200); chk(!!d.getElementById('termo-pop')&&/Ver no glossário/.test(txt('#termo-pop'))&&txt('#termo-pop').length>40,'clicar no termo deveria abrir o balão com a definição e o link do glossário'); d.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await sleep(150); chk(!d.getElementById('termo-pop'),'Esc deveria fechar o balão') }
   w.route_to('painel'); }
+// ---------- [H9] janela Revisar folha: progresso, aviso da última, atalhos, campo alterado, tipos na ordem de uso ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3500); const L=(w.ITENS_PJ||[]).filter(x=>x.lote_id);
+  if(L.length>=2){ const a=L[0]; await w.abrirRevisaoItem(a.codigo); await sleep(1200);
+    chk(/Folha 1 de \d+ · \d+ conferidas?/.test(txt('#d-body .rev-prog'))&&!!d.querySelector('#d-body .rev-prog progress'),'a janela deveria mostrar "Folha 1 de N · X conferidas" com barra: "'+txt('#d-body .rev-prog')+'"');
+    const ops=[...d.querySelectorAll('#rv-tipo option')].map(o=>o.value).filter(Boolean); const rk=v=>{const i=['planta','corte','eleva','fachada','perspectiva','detalhe','implanta'].findIndex(p=>v.toLowerCase().startsWith(p));return i<0?99:i};
+    chk(ops.length===0||ops.every((v,i)=>i===0||rk(ops[i-1])<=rk(v)),'os tipos deveriam vir na ordem de uso (Planta, Corte, …): '+ops.slice(0,6).join(', '));
+    const inp=d.getElementById('rv-folha'); inp.value=(inp.value||'')+'X'; inp.dispatchEvent(new w.Event('input',{bubbles:true})); chk(inp.closest('.rev-campo').classList.contains('alterado'),'campo mudado deveria ganhar a marca "alterado"');
+    inp.value=inp.defaultValue; inp.dispatchEvent(new w.Event('input',{bubbles:true})); chk(!inp.closest('.rev-campo').classList.contains('alterado'),'voltando ao valor original a marca deveria sumir');
+    d.activeElement&&d.activeElement.blur(); d.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); await sleep(1200);
+    chk((d.getElementById('d-sub')||{}).textContent===L[1].codigo,'a seta → deveria abrir a próxima folha ('+L[1].codigo+'), abriu "'+txt('#d-sub')+'"');
+    d.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})); await sleep(1200);
+    chk((d.getElementById('d-sub')||{}).textContent===a.codigo,'a seta ← deveria voltar à folha anterior');
+    // a última pendente: aviso e tela de conclusão
+    const salvas=L.map(x=>x.revisao); L.forEach((x,i)=>{if(i<L.length-1)x.revisao='conferida'}); const ult=L[L.length-1]; ult.revisao='pendente';
+    await w.abrirRevisaoItem(ult.codigo); await sleep(1200); chk(/É a última/.test(txt('#d-body .rev-ultima')),'na última folha pendente deveria avisar "É a última"');
+    w.concluirConferencia(); await sleep(300); chk(/Conferência concluída/.test(txt('#d-title'))&&/Era a última\. \d+ de \d+ folhas conferidas/.test(txt('#d-body'))&&!!d.getElementById('rev-fim'),'ao terminar deveria mostrar "Era a última. N de N conferidas" com o botão do próximo passo: "'+txt('#d-body').slice(0,120)+'"');
+    L.forEach((x,i)=>{x.revisao=salvas[i]}); w.closeDrawer(true) }
+  w.route_to('painel'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
