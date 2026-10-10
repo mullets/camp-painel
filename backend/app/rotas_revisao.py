@@ -67,7 +67,8 @@ def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
 
 
 def _contagem(con, lote_id: int) -> dict:
-    c = {"total": 0, "pendente": 0, "conferida": 0, "corrigida": 0, "bloqueadas": 0}
+    c = {"total": 0, "pendente": 0, "conferida": 0, "corrigida": 0, "bloqueadas": 0, "retidas": 0}
+    c["retidas"] = con.execute("SELECT COUNT(*) FROM item WHERE lote_id=? AND retida=1", (lote_id,)).fetchone()[0]
     for r in con.execute("SELECT revisao, status_site, COUNT(*) FROM item WHERE lote_id=? GROUP BY revisao, status_site", (lote_id,)):
         c["total"] += r[2]
         c[r[0]] += r[2]
@@ -136,6 +137,39 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         _evento(con, "item", codigo, "revisao", u["email"], {"de": i["revisao"], "para": d.estado})
         con.commit()
         return {"ok": True, "revisao": d.estado}
+    finally:
+        con.close()
+
+
+class RetencaoItem(BaseModel):
+    retida: bool
+    motivo: str | None = None
+
+
+@router.post("/itens/{codigo}/retencao")
+def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Reter a folha: ela continua no painel (conferida), mas NUNCA vai ao site (nem pela publicação do projeto, nem do fundo, nem pelo lote). Liberar a devolve para conferir."""
+    con = connect()
+    try:
+        i = con.execute("SELECT i.revisao, i.status_site, i.retida, i.lote_id, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        if i["aprovado_em"]:
+            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
+        if i["status_site"] in ("rascunho", "no_ar"):
+            raise HTTPException(409, "Esta folha já está no site. Despublique pela página da folha antes de retê-la.")
+        motivo = (d.motivo or "").strip()[:300] or None
+        if d.retida:
+            con.execute("""UPDATE item SET retida=1, retida_motivo=?, retida_por=?, retida_em=datetime('now'),
+                           revisao=CASE WHEN revisao='pendente' THEN 'conferida' ELSE revisao END,
+                           revisado_por=CASE WHEN revisao='pendente' THEN ? ELSE revisado_por END, revisado_em=CASE WHEN revisao='pendente' THEN datetime('now') ELSE revisado_em END,
+                           atualizado_em=datetime('now') WHERE codigo=?""", (motivo, u["email"], u["email"], codigo))
+        else:
+            con.execute("""UPDATE item SET retida=0, retida_motivo=NULL, retida_por=NULL, retida_em=NULL, revisao='pendente', revisado_por=NULL, revisado_em=NULL,
+                           atualizado_em=datetime('now') WHERE codigo=?""", (codigo,))
+        _evento(con, "item", codigo, "folha_retida" if d.retida else "folha_liberada", u["email"], {"motivo": motivo})
+        con.commit()
+        return {"ok": True, "retida": d.retida}
     finally:
         con.close()
 

@@ -13,7 +13,7 @@ import time
 from .db import connect
 
 # Uma folha só vai ao site se: não tem autoria divergente, não é duplicata e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
-ELEGIVEL_LOCAL = "autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')"
+ELEGIVEL_LOCAL = "autoria_divergente=0 AND duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')"   # retida = a pessoa decidiu que esta folha não vai ao site
 ELEGIVEL = f"tainacan_item_id IS NOT NULL AND {ELEGIVEL_LOCAL}"
 
 
@@ -68,11 +68,15 @@ def condicoes_projeto(con, p) -> dict:
                   "acao": None if ok_site else {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site" if dossie else "Criar no site e enviar folhas", "alvo": codigo}})
 
     # avisos: não bloqueiam
-    fora = total - vinculados
+    retidas = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1", (codigo,)).fetchone()[0]
+    retidas_sem_site = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1 AND tainacan_item_id IS NULL", (codigo,)).fetchone()[0]
+    fora = total - vinculados - retidas_sem_site
+    if retidas:
+        conds.append({"id": "folhas_retidas", "bloqueia": False, "ok": False, "texto": f"{retidas} folha(s) retida(s) por você: ficam só no painel, não vão ao site", "detalhe": None, "acao": None})
     if ok_site and fora > 0:
         conds.append({"id": "folhas_fora", "bloqueia": False, "ok": False, "texto": f"{fora} folha(s) ainda não estão no site e não serão publicadas",
                       "detalhe": None, "acao": {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site", "alvo": codigo}})
-    excluidas = vinculados - elegiveis
+    excluidas = vinculados - elegiveis - con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1 AND tainacan_item_id IS NOT NULL", (codigo,)).fetchone()[0]
     if excluidas > 0:
         conds.append({"id": "folhas_excluidas", "bloqueia": False, "ok": False,
                       "texto": f"{excluidas} folha(s) com autoria divergente ou duplicadas ficam de fora da publicação", "detalhe": None, "acao": None})

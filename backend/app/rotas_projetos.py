@@ -315,7 +315,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual,
-               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg
+               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial

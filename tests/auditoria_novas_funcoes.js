@@ -110,7 +110,7 @@ w.confirm=()=>true; const c2=w.closeDrawer(); chk(c2===true&&!dr.className.inclu
 const ev=new w.Event('beforeunload',{cancelable:true}); w.editarFundo&&await w.editarFundo('F026'); await sleep(300); const t2=d.getElementById('ef-titulo'); t2.value+='y'; t2.dispatchEvent(new w.Event('input',{bubbles:true})); w.dispatchEvent(ev); chk(ev.defaultPrevented||ev.returnValue!==undefined,'beforeunload não protege edição pendente'); w.confirm=()=>true; w.closeDrawer();
 okl.push('proteção de edição não salva (drawer + beforeunload)');
 // ajuda
-for(const rota of ['painel','fundos','projetos','etiquetas','config']){ w.route_to(rota); await sleep(500); try{w.abrirAjuda()}catch(e){problems.push('abrirAjuda em '+rota+': '+e.message)} chk(txt('#d-title').startsWith('Ajuda'),'ajuda não abriu em '+rota); w.closeDrawer(); }
+for(const rota of ['painel','fundos','projetos','etiquetas','config']){ w.route_to(rota); await sleep(500); try{w.abrirAjuda()}catch(e){problems.push('abrirAjuda em '+rota+': '+e.message)} chk(!!d.querySelector('section.content.on > .ajuda-caixa'),'ajuda não abriu em '+rota); }
 d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'?',bubbles:true})); await sleep(300); okl.push('ajuda contextual em 5 telas');
 // analytics diagnóstico (UI)
 w.route_to('painel'); await sleep(1500); try{await w.diagnosticarAnalytics(); await sleep(800)}catch(e){problems.push('diagnosticarAnalytics lançou: '+e.message)}
@@ -597,6 +597,34 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('projeto/F003-P9001'); await sleep(3800);
   chk(!!d.querySelector('#pj-proximo .pp-tarefa')&&/Publicando… 3 de 5/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pub-abrir]'),'a página do projeto deveria avisar "Publicando… 3 de 5" com o botão Acompanhar: "'+txt('#pj-proximo').slice(0,120)+'"');
   terminou=true; await sleep(2600); w.fetch=fetchOrig; w.route_to('painel'); }
+// ---------- [Folha retida] na conferência dá para NÃO publicar uma folha: ela fica no painel, mas nunca vai ao site ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3500); const pend=(w.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');
+  if(pend){ await w.abrirRevisaoItem(pend.codigo); await sleep(1200);
+    chk(!!d.querySelector('#d-body details.rev-reter')&&!!d.querySelector('#d-body [data-rev-item="reter"]')&&/Não publicar esta folha/.test(txt('#d-body')),'a janela de conferência deveria ter a opção "Não publicar esta folha"');
+    d.getElementById('rv-motivo').value='foto de pessoa';
+    const fetchOrig=w.fetch; let corpo=null; w.fetch=(u,o={})=>{ if(/\/api\/itens\/[^/]+\/retencao$/.test(String(u))&&String(o.method||'GET').toUpperCase()==='POST'){corpo=JSON.parse(o.body);return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({ok:true,retida:corpo.retida})})} return fetchOrig(u,o) };
+    d.querySelector('#d-body [data-rev-item="reter"]').click(); await sleep(1500); w.fetch=fetchOrig;
+    chk(!!corpo&&corpo.retida===true&&corpo.motivo==='foto de pessoa','"Reter esta folha" deveria enviar retida=true com o motivo: '+JSON.stringify(corpo));
+    const it=(w.ITENS_PJ||[]).find(x=>x.codigo===pend.codigo); chk(!!it&&it.retida===1&&it.revisao==='conferida','a folha deveria ficar retida e conferida na tela');
+    await w.abrirRevisaoItem(pend.codigo); await sleep(800);
+    chk(/Retida/.test(txt('#d-body'))&&/não vai ao site/.test(txt('#d-body'))&&!!d.querySelector('#d-body [data-rev-item="liberar"]')&&/Motivo: foto de pessoa/.test(txt('#d-body'))&&!d.querySelector('#d-body [data-rev-item="reter"]'),'folha retida deveria mostrar "Retida", o motivo e "Voltar a publicar", sem oferecer reter de novo: "'+txt('#d-body').slice(0,200)+'"');
+    chk(/retida/.test(w.tagRevisao('conferida',1)),'o cartão da folha retida deveria ter a etiqueta "retida"'); w.closeDrawer(true) }
+  w.route_to('painel'); }
+// ---------- [H1] caixa "Como funciona esta página": 1ª visita aberta, "Entendi" fecha e grava POR PESSOA, "?" reabre, versão nova volta com "Novo" ----------
+{ const paginas=['painel','filas','erros','solicitacoes','uso','projetos','fundos','arquitetos','localizacao','etiquetas','estacoes','auditoria','config'];
+  for(const k of [...paginas,'projeto','fundo','item']) await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.'+k,valor:null})});
+  await w.carregarPreferenciasAjuda(); const sem=[];
+  for(const k of paginas){ w.route_to(k); await sleep(500); const b=d.querySelector('#v-'+k+' > .ajuda-caixa'); if(!b||!/Como funciona esta página/.test(b.textContent)||!/Para que serve/.test(b.textContent)||!b.querySelector('ol li')||b.getAttribute('role')!=='note') sem.push(k) }
+  chk(sem.length===0,'a caixa "Como funciona esta página" deveria aparecer na 1ª visita de toda página; faltou em: '+sem.join(', '));
+  for(const [rota,k] of [['projeto/F003-P9001','projeto'],['fundo/F003','fundo'],['item/F003-P9001-1972-S01-D00001','item']]){ w.route_to(rota); await sleep(3500); chk(!!d.querySelector('#v-'+k+' > .ajuda-caixa'),'a caixa deveria aparecer também na página de '+k+' (mesmo depois de a página desenhar o conteúdo)') }
+  w.route_to('painel'); await sleep(700); d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(1000);
+  chk(!d.querySelector('#v-painel > .ajuda-caixa'),'"Entendi" deveria fechar a caixa'); const pf=(await J(adm,'/api/auth/eu/preferencias')).b; chk(pf['ajuda.painel']==='1','"Entendi" deveria gravar no servidor a versão vista: '+JSON.stringify(pf));
+  const abrirJan=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
+  let dx=await abrirJan(adm,'#painel'); chk(!dx.window.document.querySelector('#v-painel > .ajuda-caixa'),'depois do F5 (ou em outro computador) a caixa que a pessoa já fechou deveria continuar fechada'); dx.window.close();
+  dx=await abrirJan(ope,'#painel'); chk(!!dx.window.document.querySelector('#v-painel > .ajuda-caixa'),'outra pessoa (operador) deveria ver a caixa aberta: a preferência é por PESSOA'); dx.window.close();
+  w.route_to('painel'); await sleep(500); w.abrirAjuda(); await sleep(400); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'"?" deveria reabrir a caixa'); await sleep(500); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'a caixa reaberta pelo "?" não deveria sumir sozinha');
+  d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(700); w.eval("AJUDA_PAGINAS.painel.v=2"); w.garantirCaixaAjuda(); await sleep(300);
+  chk(!!d.querySelector('#v-painel > .ajuda-caixa')&&/Novo/.test(txt('#v-painel > .ajuda-caixa h2')),'texto com versão nova deveria voltar a aparecer, com a etiqueta "Novo"'); w.eval("AJUDA_PAGINAS.painel.v=1"); w.route_to('painel'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
@@ -820,7 +848,7 @@ chk(!!d.getElementById('fd-guia')&&txt('#fd-guia').includes('Como publicar este 
 chk(d.querySelectorAll('#fd-guia .chk').length>=4&&txt('#fd-guia').includes('Direitos do fundo F003 autorizados'),'o checklist do fundo deveria listar os requisitos');
 chk(d.querySelectorAll('#fd-guia .guia-passos li').length===8,'o passo a passo completo do fundo deveria ter 8 passos: '+d.querySelectorAll('#fd-guia .guia-passos li').length);
 { const bt=[...d.querySelectorAll('#fd-guia .chk.falta button')].find(b=>b.textContent.includes('Definir direitos')); chk(!!bt,'o checklist deveria oferecer "Definir direitos do fundo"'); if(bt){ bt.click(); await sleep(1500); chk(txt('#d-title').includes('Direitos e licença'),'o botão deveria abrir a edição de direitos: '+txt('#d-title')); w.closeDrawer(true); } }
-await w.abrirAjuda(); await sleep(500);
+await w.abrirAjudaAtalhos(); await sleep(500);
 chk(txt('#d-title').includes('Publicar um fundo')&&txt('#d-body').includes('Definir os direitos')&&txt('#d-body').includes('Autorizar cada projeto'),'a ajuda (?) do fundo deveria trazer o passo a passo: '+txt('#d-title')); w.closeDrawer(true);
 w.location.hash='#arquitetos'; await sleep(2200);
 { const ags=await J(adm,'/api/agentes'); const a0=(ags.b||[])[0]; chk(!!a0,'o ambiente deveria ter arquitetos');
@@ -829,7 +857,7 @@ w.location.hash='#arquitetos'; await sleep(2200);
   chk(txt('#ag-guia').includes('marcador interno')&&txt('#ag-guia').includes('wp-admin'),'o guia do arquiteto deveria dizer que o status é só marcador e que foto/bio/ativar são no wp-admin');
   chk(d.querySelectorAll('#ag-guia .guia-passos li').length===6,'o passo a passo do arquiteto deveria ter 6 passos');
   w.closeDrawer(true); }
-await w.abrirAjuda(); await sleep(500);
+await w.abrirAjudaAtalhos(); await sleep(500);
 chk(txt('#d-title').includes('Publicar um arquiteto')&&txt('#d-body').includes('Completar no WordPress'),'a ajuda (?) de Arquitetos deveria trazer o passo a passo: '+txt('#d-title')); w.closeDrawer(true);
 okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão que resolve e ajuda (?) contextual');
 

@@ -34,6 +34,7 @@ def plano(con, p) -> dict:
     duplicadas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND duplicata_de IS NOT NULL")
     total_locais = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=?")
     divergentes = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND autoria_divergente=1")
+    retidas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1")
 
     bloqueios = [{"id": i, "texto": por_id[i]["texto"], "detalhe": por_id[i]["detalhe"], "acao": por_id[i]["acao"]}
                  for i in ("direitos", "bloqueios", "teste", "revisao") if not por_id[i]["ok"]]
@@ -47,7 +48,7 @@ def plano(con, p) -> dict:
     ]
     return {"passos": passos, "bloqueios": bloqueios, "pode_executar": not bloqueios, "ja_publicado": p["status_site"] == "no_ar",
             "folhas_a_enviar": a_enviar, "folhas_a_publicar": elegiveis,
-            "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas}}
+            "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas, "retidas": retidas}}
 
 
 def executar(codigo: str, u: dict, progresso=None) -> dict:

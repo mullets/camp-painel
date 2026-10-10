@@ -1577,7 +1577,7 @@ def filho(modo):
         cb = op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").json()
         ver("conferir em lote marca SÓ a folha sem nenhuma pendência (D3); as 2 com duplicata/sinais ficam para olho humano", cb["conferidas"] == 1 and cb["restam"] == 2 and sql("SELECT revisao FROM item WHERE codigo=?", D(3)) == "conferida" and sql("SELECT revisao FROM item WHERE codigo=?", D(1)) == "pendente", str(cb))
         rs = adm.get(f"/api/projetos/F026-P0001/revisao").json()["lotes"]; rl = next(x for x in rs if x["id"] == lote)
-        ver("resumo do projeto: contagens, pacote encontrado e o motivo de ainda não poder aprovar", rl["itens"] == {"total": 3, "pendente": 2, "conferida": 1, "corrigida": 0, "bloqueadas": 2} and rl["pacote"]["existe"] and rl["pacote"]["documentos"] == 3 and rl["pode_aprovar"] is False and rl["motivo"] == "Faltam conferir 2 folha(s)", str(rl)[:260])
+        ver("resumo do projeto: contagens, pacote encontrado e o motivo de ainda não poder aprovar", rl["itens"] == {"total": 3, "pendente": 2, "conferida": 1, "corrigida": 0, "bloqueadas": 2, "retidas": 0} and rl["pacote"]["existe"] and rl["pacote"]["documentos"] == 3 and rl["pode_aprovar"] is False and rl["motivo"] == "Faltam conferir 2 folha(s)", str(rl)[:260])
         ver("lote sem pacote/pasta sumida aparece no resumo sem erro", any(x["id"] == sumiu for x in adm.get("/api/projetos/F026-P0002/revisao").json()["lotes"]) and adm.get("/api/projetos/F026-P9999/revisao").status_code == 404)
         # ---------- revisar uma folha ----------
         ver("revisar: estado inválido 400; folha inexistente 404; sem login 401", op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "ok"}).status_code == 400 and op.post("/api/itens/F026-P0001-1972-S01-D99999/revisao", json={"estado": "conferida"}).status_code == 404 and anon.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"}).status_code == 401)
@@ -1668,7 +1668,7 @@ def filho(modo):
         # ---------- o plano (só lê) ----------
         pl = adm.get(url + "/publicar/plano").json()
         ver("plano: dossiê, 2 folhas a enviar (D2 e D3: D1 conferida... as elegíveis sem registro no site), autorizar e publicar, na ordem", [x["id"] for x in pl["passos"]] == ["dossie", "folhas", "autorizar", "publicar"] and all(x["estado"] == "sera_feito" for x in pl["passos"]) and pl["folhas_a_enviar"] == 3 and pl["folhas_a_publicar"] == 3 and pl["pode_executar"] and pl["bloqueios"] == [], str(pl)[:300])
-        ver("plano: o que fica de fora é dito (1 duplicata, 1 folha não conferida)", pl["fora"] == {"duplicadas": 1, "autoria_divergente": 0, "nao_conferidas": 1}, str(pl["fora"]))
+        ver("plano: o que fica de fora é dito (1 duplicata, 1 folha não conferida)", pl["fora"] == {"duplicadas": 1, "autoria_divergente": 0, "nao_conferidas": 1, "retidas": 0}, str(pl["fora"]))
         ver("plano: não muda nada; qualquer logado vê (operador), sem login 401, projeto inexistente 404", op.get(url + "/publicar/plano").status_code == 200 and anon.get(url + "/publicar/plano").status_code == 401 and adm.get("/api/projetos/F094-P9999/publicar/plano").status_code == 404 and chamadas["dossie"] == 0 and sql("SELECT autorizado_site FROM projeto WHERE codigo=?", P1) == 0)
         ver("plano: pode_agir só para admin/master", op.get(url + "/publicar/plano").json()["pode_agir"] is False and pl["pode_agir"] is True)
         # ---------- permissões ----------
@@ -2489,6 +2489,69 @@ def filho(modo):
         ver("valor nulo apaga ('mostrar de novo')", a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": None}).status_code == 200 and a.get("/api/auth/eu/preferencias").json() == {})
         ver("só aceita chaves de ajuda (ajuda.<página>): outras e malformadas dão 400", all(a.put("/api/auth/eu/preferencias", json={"chave": k_, "valor": "1"}).status_code == 400 for k_ in ("papel", "ajuda.", "ajuda.Painel", "ajuda.x/../y", "ajuda." + "a" * 50)) and a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "x" * 50}).status_code == 400)
         for l in res: print(l)
+    elif modo == "folha_retida":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador, wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F089','Fundo Retida','RET',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F089','autorizado','Fam','Termo')")
+        def proj(n, titulo, folhas=4):
+            cod = f"F089-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F089',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, "F089", n, titulo))
+            c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,'/x','revisao')", (f"Lote {cod}", cod)); lid = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+            for q in range(1, folhas + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,pendencias) VALUES (?,?,'S01',?,?,'campvision',?,'pendente','{}')", (f"{cod}-1970-S01-D{q:05d}", cod, q, f"Folha {q}", lid))
+            return cod
+        PR, PL = proj(1, "Com retida"), proj(2, "Libera")
+        c.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (f"{PL}-1970-S01-D00004",))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        D = lambda p_, n: f"{p_}-1970-S01-D{n:05d}"
+        r1 = op.post(f"/api/itens/{D(PR, 2)}/retencao", json={"retida": True, "motivo": "Foto de pessoa: sem autorização de imagem"})
+        ver("reter uma folha: 200, fica retida COM o motivo, e conta como CONFERIDA (não trava a aprovação do lote)", r1.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PR, 2)) == 1 and sql("SELECT revisao FROM item WHERE codigo=?", D(PR, 2)) == "conferida" and "sem autorização" in sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PR, 2)), r1.text[:100])
+        ver("fica no histórico: quem reteve e por quê", "sem autorização" in sql("SELECT detalhe FROM evento WHERE tipo='folha_retida' AND codigo=?", D(PR, 2)) and sql("SELECT retida_por FROM item WHERE codigo=?", D(PR, 2)) == "op@camp.arq.br")
+        rv = op.get(f"/api/projetos/{PR}/revisao").json()["lotes"][0]["itens"]
+        ver("a revisão do lote conta as retidas (1) e as conferidas (1), sem perder as 3 pendentes", (rv["retidas"], rv["conferida"], rv["pendente"]) == (1, 1, 3), str(rv))
+        for n in (1, 3, 4): op.post(f"/api/itens/{D(PR, n)}/revisao", json={"estado": "conferida"})
+        lote = op.get(f"/api/projetos/{PR}/revisao").json()["lotes"][0]
+        ap = adm.post(f"/api/lotes/{lote['id']}/aprovar")
+        ver("com a folha retida o lote PODE ser aprovado (ela já está resolvida)", lote["pode_aprovar"] is True and ap.status_code == 200, ap.text[:100])
+        ch = {"folhas": [], "dossie": 0}
+        def dossie_falso(codigo, ator):
+            ch["dossie"] += 1; cc = connect(); wid = 9500 + ch["dossie"]
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft','d',?,?,'F089')", (wid, codigo, codigo)); cc.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "erro": None}
+        def folha_falsa(codigo, ator, enviar_imagem=True):
+            ch["folhas"].append(codigo); cc = connect(); wid = 7500 + len(ch["folhas"])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','f',?,?,'F089')", (wid, codigo, codigo[:10])); cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        class WPFalso:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): pass
+        publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_falsa, WPFalso
+        pl = adm.get(f"/api/projetos/{PR}/publicar/plano").json()
+        ver("o plano conta a retida em 'ficam de fora' e só planeja enviar as 3 folhas liberadas", pl["fora"]["retidas"] == 1 and pl["folhas_a_enviar"] == 3 and pl["pode_executar"] is True, str(pl["fora"]) + " " + str(pl["folhas_a_enviar"]))
+        cond = {x["id"]: x for x in adm.get(f"/api/projetos/{PR}/publicacao").json()["condicoes"]}
+        ver("o checklist avisa 'N retida(s): ficam só no painel' e NÃO cobra enviar essa folha ao site", "folhas_retidas" in cond and "retida" in cond["folhas_retidas"]["texto"] and "folhas_fora" not in cond, str(list(cond)))
+        pub = adm.post(f"/api/projetos/{PR}/publicar-tudo").json()
+        ver("Publicar agora envia só as 3 liberadas: a retida NUNCA sobe", pub.get("ok") is True and sorted(ch["folhas"]) == [D(PR, 1), D(PR, 3), D(PR, 4)] and D(PR, 2) not in ch["folhas"], str(ch["folhas"]))
+        sf = adm.post(f"/api/projetos/{PR}/subir-folhas").json()
+        ver("'Enviar folhas ao site' também ignora a retida (nada a enviar, sem aviso eterno)", sf["pendentes"] == 0 and D(PR, 2) not in ch["folhas"], str(sf))
+        ver("depois de aprovado o lote, reter ou liberar dá 409 (reabra a revisão)", adm.post(f"/api/itens/{D(PR, 2)}/retencao", json={"retida": False}).status_code == 409)
+        # liberar devolve para conferir; folha já no site não pode ser retida; permissões
+        op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": True}); lb = op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": False})
+        ver("liberar: a folha deixa de ser retida e volta para CONFERIR (olho humano de novo)", lb.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 1)) == 0 and sql("SELECT revisao FROM item WHERE codigo=?", D(PL, 1)) == "pendente" and sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 1)) is None)
+        ver("folha que já está no site não pode ser retida (409 com a explicação)", "já está no site" in op.post(f"/api/itens/{D(PL, 4)}/retencao", json={"retida": True}).text)
+        ver("leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 403 and anon.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 401 and op.post("/api/itens/F089-P0002-1970-S01-D99999/retencao", json={"retida": True}).status_code == 404)
+        op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
+        ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2954,6 +3017,14 @@ else:
 print("41) Preferências por pessoa: qual versão da caixa de ajuda cada um já viu")
 rc, out = rodar("preferencias_ajuda", f"{tmp}/pref.db")
 if rc != 0: ok(False, f"teste das preferências não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("42) Folha retida na conferência: fica no painel, conta como conferida e nunca vai ao site")
+rc, out = rodar("folha_retida", f"{tmp}/ret.db")
+if rc != 0: ok(False, f"teste da folha retida não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
