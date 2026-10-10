@@ -2266,6 +2266,50 @@ def filho(modo):
         r5 = al(codigos=[I1, "F097-P0001-1970-S01-D88888"])
         ver("folhas soltas: aloca as que existem e lista as que não foram encontradas", r5.status_code == 200 and r5.json()["alocados"] == 1 and r5.json()["nao_encontrados"] == ["F097-P0001-1970-S01-D88888"], r5.text[:160])
         for l in res: print(l)
+    elif modo == "busca_acentos":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F098','Burle Marx','BMX',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F098',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES ('F098-P0001','F098',1,'Casa Tarumã',1970,'São Paulo')")
+        c.execute("INSERT INTO agente (forma_autorizada,tipo) VALUES ('Roberto Burle Marx','pessoa')"); aid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F098',?, 'produtor')", (aid,)); c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        cl = TestClient(app, raise_server_exceptions=False); cl.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        b = lambda q: cl.get("/api/busca", params={"q": q}).json()["resultados"]
+        ver("'taruma' (sem acento) acha 'Casa Tarumã'; com acento e em maiúsculas também", all([r["codigo"] for r in b(t) if r["tipo"] == "projeto"] == ["F098-P0001"] for t in ("taruma", "Tarumã", "TARUMA", "tarumã")), str([b(t) for t in ("taruma", "TARUMA")])[:200])
+        ver("cidade sem acento: 'sao paulo' acha o projeto de 'São Paulo'", [r["codigo"] for r in b("sao paulo") if r["tipo"] == "projeto"] == ["F098-P0001"])
+        arq = [r for r in b("burle") if r["tipo"] == "arquiteto"]
+        ver("arquiteto mostra o(s) fundo(s) dele (F098), não o número interno", len(arq) == 1 and arq[0]["codigo"] == "F098" and arq[0]["agente_id"] == aid and arq[0]["titulo"] == "Roberto Burle Marx", str(arq))
+        ver("código exato continua achando (f098-p0001 em minúsculas) e 'xyzxyz' não acha nada", [r["codigo"] for r in b("f098-p0001")][:1] == ["F098-P0001"] and b("xyzxyz") == [])
+        for l in res: print(l)
+    elif modo == "qnap_tendencia":
+        init_db(); _aplicar_migracoes_real()
+        from app import qnap_coletor as qc
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        def semear(total, livres):
+            c.execute("DELETE FROM qnap_snapshot")
+            for i, lv in enumerate(livres):
+                c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?), 1, ?, ?)", (f"-{len(livres) - 1 - i} days", total, lv))
+            c.commit(); return qc._tendencia(c, livres[-1]), qc.nivel_espaco(c, total, livres[-1])
+        (cres, dias), niv = semear(1650, [400, 398, 396, 296, 294, 292, 290, 288])      # UM degrau de 100 GB num dia e +2 GB/dia nos outros
+        ver("um único salto de 100 GB num dia NÃO vira '+106 GB/dia': a tendência fica em ~2 GB/dia e o nível 'ok'", cres is not None and 1.5 <= cres <= 2.5 and dias is not None and dias > 100 and niv[0] == "ok", f"{cres} GB/dia, {dias} dias, {niv}")
+        (cres, dias), niv = semear(1650, [616, 556, 496, 436, 376, 316, 256, 196][:7] if False else [676, 616, 556, 496, 436, 376, 316, 256])   # +60 GB/dia constantes, 256 GB livres (15,5%)
+        ver("+60 GB/dia constantes com 256 GB livres: enche em ~4 dias e o nível é CRÍTICO (mesmo com 15,5% livre)", cres is not None and 55 <= cres <= 65 and dias is not None and dias <= 5 and niv[0] == "critico", f"{cres} GB/dia, {dias} dias, {niv}")
+        (cres, dias), niv = semear(10000, [6400, 6200, 6000, 5800, 5600, 5400, 5200, 5000])   # +200 GB/dia, 5.000 livres: ~25 dias
+        ver("enchendo em ~25 dias é AVISO (mesmo com 50% livre)", dias is not None and 20 <= dias <= 30 and niv[0] == "aviso", f"{cres} GB/dia, {dias} dias, {niv}")
+        (cres, dias), niv = semear(10000, [5000, 4980, 4960, 4940, 4920, 4900, 4880, 4860])   # +20 GB/dia: ~240 dias
+        ver("+20 GB/dia com muito espaço: ~240 dias e nível ok", dias is not None and 215 <= dias <= 265 and niv[0] == "ok", f"{cres} GB/dia, {dias} dias, {niv}")
+        c.execute("DELETE FROM qnap_snapshot"); c.commit()
+        ver("sem histórico não inventa tendência: nível só pelo espaço livre", qc.nivel_espaco(c, 1000, 400)[0] == "ok" and qc.nivel_espaco(c, 1000, 40)[0] == "critico")
+        c.close()
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2683,6 +2727,22 @@ else:
 print("36) Códigos inexistentes: Relatar problema e Alocar recusam, com a mensagem")
 rc, out = rodar("codigos_existem", f"{tmp}/cods.db")
 if rc != 0: ok(False, f"teste dos códigos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("37) Busca global: sem acento, sem caixa, arquiteto com o fundo")
+rc, out = rodar("busca_acentos", f"{tmp}/busca.db")
+if rc != 0: ok(False, f"teste da busca não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("38) QNAP: tendência robusta (mediana por dia) e nível pelo espaço E pelos dias até encher")
+rc, out = rodar("qnap_tendencia", f"{tmp}/qnapt.db")
+if rc != 0: ok(False, f"teste da tendência do QNAP não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

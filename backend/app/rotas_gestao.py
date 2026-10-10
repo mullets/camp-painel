@@ -33,6 +33,12 @@ def _cfg(con, chave, padrao=""):
 
 
 # ---------------- busca global ----------------
+def _norm(v) -> str:
+    """Sem acento e sem caixa: 'Tarumã' casa com 'taruma' (ninguém digita acento numa busca rápida)."""
+    import unicodedata
+    return unicodedata.normalize("NFKD", str(v or "")).encode("ascii", "ignore").decode().lower()
+
+
 @router.get("/busca")
 def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura"))) -> dict:
     termo = (q or "").strip()
@@ -40,33 +46,35 @@ def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura
         return {"q": termo, "resultados": []}
     limite = max(5, min(limite, 40))
     like = f"%{termo}%"
-    prefix = f"{termo}%"
+    nt = _norm(termo)
+    nl = f"%{nt}%"
     con = connect()
+    con.create_function("norm", 1, _norm)
     resultados = []
 
     for r in con.execute("""SELECT codigo, sigla, titulo FROM fundo
-                            WHERE ativo=1 AND (codigo LIKE ? OR sigla LIKE ? OR titulo LIKE ?)
-                            LIMIT 10""", (like, like, like)).fetchall():
+                            WHERE ativo=1 AND (codigo LIKE ? OR sigla LIKE ? OR norm(titulo) LIKE ?)
+                            LIMIT 10""", (like, like, nl)).fetchall():
         exato = termo.upper() in (str(r["codigo"]).upper(), str(r["sigla"] or "").upper())
-        prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or str(r["titulo"]).lower().startswith(termo.lower())
+        prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or _norm(r["titulo"]).startswith(nt)
         resultados.append({"tipo": "fundo", "codigo": r["codigo"], "titulo": r["titulo"],
                            "subtitulo": r["sigla"] or "", "rota": f"fundo/{r['codigo']}",
                            "score": 0 if exato else 1 if prefixo else 2})
 
     for r in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, p.cidade
                               FROM projeto p
-                             WHERE p.codigo LIKE ? OR p.titulo LIKE ? OR p.cidade LIKE ?
-                             LIMIT 12""", (like, like, like)).fetchall():
+                             WHERE p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ?
+                             LIMIT 12""", (like, nl, nl)).fetchall():
         exato = str(r["codigo"]).upper() == termo.upper()
-        prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or str(r["titulo"]).lower().startswith(termo.lower())
+        prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or _norm(r["titulo"]).startswith(nt)
         resultados.append({"tipo": "projeto", "codigo": r["codigo"], "titulo": r["titulo"],
                            "subtitulo": " · ".join(x for x in (r["fundo_codigo"], r["cidade"]) if x),
                            "rota": f"projeto/{r['codigo']}", "score": 0 if exato else 1 if prefixo else 2})
 
     for r in con.execute("""SELECT codigo, titulo, projeto_codigo, tipo_documento
                               FROM item
-                             WHERE codigo LIKE ? OR titulo LIKE ?
-                             LIMIT 10""", (like, like)).fetchall():
+                             WHERE codigo LIKE ? OR norm(titulo) LIKE ?
+                             LIMIT 10""", (like, nl)).fetchall():
         exato = str(r["codigo"]).upper() == termo.upper()
         prefixo = str(r["codigo"]).upper().startswith(termo.upper())
         resultados.append({"tipo": "documento", "codigo": r["codigo"], "titulo": r["titulo"] or r["tipo_documento"] or "Documento",
@@ -76,11 +84,12 @@ def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura
     for r in con.execute("""SELECT DISTINCT a.id, a.forma_autorizada, a.tipo
                               FROM agente a
                               LEFT JOIN agente_forma_variante v ON v.agente_id=a.id
-                             WHERE a.forma_autorizada LIKE ? OR v.forma LIKE ?
-                             LIMIT 10""", (like, like)).fetchall():
-        prefixo = str(r["forma_autorizada"]).lower().startswith(termo.lower())
-        resultados.append({"tipo": "arquiteto", "codigo": str(r["id"]), "titulo": r["forma_autorizada"],
-                           "subtitulo": str(r["tipo"]).replace("_", " "), "rota": "arquitetos",
+                             WHERE norm(a.forma_autorizada) LIKE ? OR norm(v.forma) LIKE ?
+                             LIMIT 10""", (nl, nl)).fetchall():
+        prefixo = _norm(r["forma_autorizada"]).startswith(nt)
+        fundos = [x[0] for x in con.execute("SELECT fundo_codigo FROM fundo_agente WHERE agente_id=? ORDER BY fundo_codigo", (r["id"],))]
+        resultados.append({"tipo": "arquiteto", "codigo": " · ".join(fundos) if fundos else "", "titulo": r["forma_autorizada"],
+                           "subtitulo": str(r["tipo"]).replace("_", " "), "rota": "arquitetos", "agente_id": r["id"],
                            "filtro": r["forma_autorizada"], "score": 1 if prefixo else 2})
 
     con.close()

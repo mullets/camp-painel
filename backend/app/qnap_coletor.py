@@ -183,18 +183,25 @@ def ultima(con) -> dict | None:
 
 
 def _tendencia(con, livre: float | None) -> tuple[float | None, int | None]:
-    """GB usados por dia (regressão linear dos últimos 7 dias) e dias até encher. Sem dados suficientes: (None, None)."""
+    """GB usados por dia na última semana e dias até encher. ROBUSTA: mediana das variações por dia, não regressão; assim UMA cópia grande num dia
+    (um degrau no gráfico) não vira '+106 GB/dia'. Sem dados suficientes: (None, None)."""
+    import statistics
     pts = con.execute("""SELECT julianday(coletado_em), total_gb - livre_gb FROM qnap_snapshot
                           WHERE coletado_em >= datetime('now','-7 days') AND livre_gb IS NOT NULL AND total_gb IS NOT NULL
                           ORDER BY id""").fetchall()
     if len(pts) < 3 or pts[-1][0] - pts[0][0] < 0.25:
         return None, None
-    n = len(pts)
-    mx, my = sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n
-    den = sum((p[0] - mx) ** 2 for p in pts)
-    if den <= 0:
+    por_dia: dict = {}
+    for t, usado in pts:
+        por_dia[int(t)] = usado                          # o último uso de cada dia
+    ds = sorted(por_dia)
+    if len(ds) >= 3:
+        deltas = [(por_dia[b_] - por_dia[a_]) / (b_ - a_) for a_, b_ in zip(ds, ds[1:])]
+    else:                                                # menos de 3 dias: variações entre coletas, em GB/dia
+        deltas = [(pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0]) for i in range(len(pts) - 1) if pts[i + 1][0] - pts[i][0] >= 0.01]
+    if not deltas:
         return None, None
-    slope = sum((p[0] - mx) * (p[1] - my) for p in pts) / den
+    slope = statistics.median(deltas)
     dias = round(livre / slope) if (livre and slope > 0.5) else None
     return round(slope, 1), dias
 
@@ -208,14 +215,15 @@ def _num(con, chave: str, padrao: float) -> float:
 
 
 def nivel_espaco(con, total_gb: float | None, livre_gb: float | None) -> tuple[str | None, float | None]:
-    """('ok' | 'aviso' | 'critico' | None, % livre). Crítico: < qnap.espaco_critico_pct % OU < qnap.espaco_critico_gb GB;
-    aviso: < qnap.espaco_aviso_pct %. Sem medida: (None, None). É a ÚNICA regra: selo, banner, cartão e ações usam esta."""
+    """('ok' | 'aviso' | 'critico' | None, % livre). Crítico: < qnap.espaco_critico_pct % OU < qnap.espaco_critico_gb GB OU enchendo em < qnap.dias_critico (7) dias;
+    aviso: < qnap.espaco_aviso_pct % OU enchendo em < qnap.dias_aviso (30) dias. Sem medida: (None, None). É a ÚNICA regra: selo, banner, cartão e ações usam esta."""
     if not total_gb or livre_gb is None:
         return None, None
     pct = 100 * livre_gb / total_gb
-    if pct < _num(con, "qnap.espaco_critico_pct", 5) or livre_gb < _num(con, "qnap.espaco_critico_gb", 50):
+    _, dias = _tendencia(con, livre_gb)                  # a tendência também conta: enchendo em poucos dias é crítico mesmo com bastante espaço livre hoje
+    if pct < _num(con, "qnap.espaco_critico_pct", 5) or livre_gb < _num(con, "qnap.espaco_critico_gb", 50) or (dias is not None and dias < _num(con, "qnap.dias_critico", 7)):
         return "critico", round(pct, 1)
-    if pct < _num(con, "qnap.espaco_aviso_pct", 15):
+    if pct < _num(con, "qnap.espaco_aviso_pct", 15) or (dias is not None and dias < _num(con, "qnap.dias_aviso", 30)):
         return "aviso", round(pct, 1)
     return "ok", round(pct, 1)
 

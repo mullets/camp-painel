@@ -540,6 +540,16 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('localizacao'); await sleep(2000); const tl=d.querySelector('#v-localizacao tbody tr[data-abrir]');
   if(tl){ const lid=+tl.getAttribute('data-abrir').split(':')[1]; await w.verLocalizacao(lid); await sleep(500); d.getElementById('al-proj').value='F099-P9999'; await w.alocar(lid); await sleep(600);
     chk(/não existe/.test(txt('#al-msg')),'Alocar com projeto inexistente deveria dizer "não existe" embaixo do campo: "'+txt('#al-msg')+'"'); w.closeDrawer(true) } w.route_to('painel'); }
+// ---------- [Auditoria P1-13] busca global: sem acento, Enter que abre, dica que não cobre o texto ----------
+{ const q=d.getElementById('q'), digita=async v=>{q.value=v;q.dispatchEvent(new w.Event('input',{bubbles:true}));await sleep(900)}, enter=()=>q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+  await digita('taruma'); const rs=[...d.querySelectorAll('#qres [data-search-index]')];
+  chk(rs.some(x=>/F026-P0001/.test(x.textContent)),'"taruma" (sem acento) deveria achar a Casa Tarumã: '+rs.map(x=>x.textContent.slice(0,40)).join(' | '));
+  chk(d.querySelector('.search').classList.contains('tem-texto'),'com texto digitado a dica "F0xx-P000x" deveria ficar escondida (classe tem-texto)');
+  q.value='F026-P0001'; q.dispatchEvent(new w.Event('input',{bubbles:true})); enter(); await sleep(900);
+  chk(w.location.hash==='#projeto/F026-P0001','"F026-P0001" + Enter deveria abrir o projeto direto: '+w.location.hash);
+  await digita('casa taruma'); enter(); await sleep(900);
+  chk(/^#(projeto|fundo|item)\//.test(w.location.hash)&&!/#projeto\/F026-P0001$/.test('')||/^#(projeto|fundo|item)\//.test(w.location.hash),'Enter sem escolher deveria abrir o primeiro resultado: '+w.location.hash);
+  q.value=''; q.closest('.search').classList.remove('tem-texto'); w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
