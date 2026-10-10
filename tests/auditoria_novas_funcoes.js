@@ -550,6 +550,16 @@ w.route_to('painel'); await sleep(2800);
   await digita('casa taruma'); enter(); await sleep(900);
   chk(/^#(projeto|fundo|item)\//.test(w.location.hash)&&!/#projeto\/F026-P0001$/.test('')||/^#(projeto|fundo|item)\//.test(w.location.hash),'Enter sem escolher deveria abrir o primeiro resultado: '+w.location.hash);
   q.value=''; q.closest('.search').classList.remove('tem-texto'); w.route_to('painel'); }
+// ---------- [Auditoria P1-10] permissões: cada papel só vê os botões e telas que pode usar (tabela única PODE) ----------
+{ const abrir=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
+  const visivel=(dd,sel)=>[...dd.querySelectorAll(sel)].some(e=>!e.hidden);
+  let dx=await abrir(ope,'#fundos'), dd=dx.window.document;
+  chk(!visivel(dd,'[data-pode="fundo.reservar"]')&&visivel(dd,'[data-pode="fundos.exportar"]'),'operador não deveria ver "Reservar próximo código", mas vê "Exportar fundos.json"');
+  chk([...dd.querySelectorAll('[data-pode]')].length>0&&[...dd.querySelectorAll('[data-pode]')].every(e=>e.hidden===!dx.window.pode(e.dataset.pode)),'todo botão com data-pode deveria seguir a tabela PODE'); dx.window.close();
+  for(const r of ['uso','config','auditoria']){ dx=await abrir(ope,'#'+r); dd=dx.window.document; const nf=dd.getElementById('v-nao-encontrado'); chk(!!nf&&nf.classList.contains('on')&&/Sem acesso/.test(nf.textContent),'operador em #'+r+' deveria ver "Sem acesso": "'+(nf?nf.textContent.slice(0,80):'sem seção')+'"'); dx.window.close() }
+  dx=await abrir(lei,'#filas'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="qnap.varrer"]'),'leitura não deveria ver "Varrer QNAP"'); dx.window.close();
+  dx=await abrir(lei,'#fundos'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="fundos.exportar"],[data-pode="fundo.reservar"],[data-pode="fundo.sigla"]'),'leitura não deveria ver Exportar, Reservar nem "definir sigla"'); dx.window.close();
+  chk(w.pode('rota.uso')&&w.pode('fundo.reservar')&&[...d.querySelectorAll('[data-pode="fundo.reservar"]')].every(e=>!e.hidden),'admin deveria continuar vendo e podendo tudo'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
