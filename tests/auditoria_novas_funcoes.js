@@ -560,6 +560,25 @@ w.route_to('painel'); await sleep(2800);
   dx=await abrir(lei,'#filas'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="qnap.varrer"]'),'leitura não deveria ver "Varrer QNAP"'); dx.window.close();
   dx=await abrir(lei,'#fundos'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="fundos.exportar"],[data-pode="fundo.reservar"],[data-pode="fundo.sigla"]'),'leitura não deveria ver Exportar, Reservar nem "definir sigla"'); dx.window.close();
   chk(w.pode('rota.uso')&&w.pode('fundo.reservar')&&[...d.querySelectorAll('[data-pode="fundo.reservar"]')].every(e=>!e.hidden),'admin deveria continuar vendo e podendo tudo'); }
+// ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
+{ w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
+  w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
+  let h=w.proximoPassoHTML(PP,'F900-P0001');
+  chk(/Definir direitos do fundo/.test(h)&&/falta resolver/i.test(h)&&!/data-pp="publicar"/.test(h),'com direitos faltando, o Próximo passo NÃO deveria oferecer "Publicar": deveria dizer o que falta e dar o botão que resolve');
+  w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'autorizado',bloqueia:true,ok:false,texto:'Projeto autorizado para publicação'}]};
+  h=w.proximoPassoHTML(PP,'F900-P0001'); chk(/data-pp="publicar"/.test(h),'sem bloqueio de pessoa, o Próximo passo deveria oferecer "Publicar" (a guiada autoriza sozinha)');
+  h=w.proximoPassoSemLoteHTML('F900-P0001',{estado:'rascunho',pode_agir:true,condicoes:[]}); chk(/Pronto para publicar/.test(h)&&/data-pp="publicar"/.test(h),'projeto sem lote e sem pendência deveria mostrar "Pronto para publicar" com o botão');
+  const pub=w.proximoPassoSemLoteHTML('F900-P0001',{estado:'no_ar',pode_agir:true,condicoes:[]}); chk(/Publicado/.test(pub)&&!/btn pri/.test(pub),'projeto publicado deveria dizer "Publicado", sem botão azul');
+  chk(!/btn pri/.test(w.botoesPublicacao('F900-P0001',{pode_agir:true,estado:'rascunho',pode_despublicar:true})),'o painel Publicação não deveria ter um segundo botão azul "Publicar" (o único é o do Próximo passo)');
+  w.history.replaceState(null,'','#projeto/F003-P9001'); w.openDrawer('Publicar','F003-P9001','<button id="pub-go">x</button>'); w.acaoCondicao('direitos','F003'); await sleep(600);
+  chk(w.PUB_VOLTAR==='F003-P9001'&&/PUB_VOLTAR/.test(String(w.salvarDireitos)),'definir direitos a partir da publicação guiada deveria lembrar de voltar a ela depois de salvar (PUB_VOLTAR)'); w.PUB_VOLTAR=null; w.closeDrawer(true);
+  const fetchOrig=w.fetch; w.fetch=(u,o={})=>/\/publicar-tudo$/.test(String(u))?Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({ok:true,parcial:false,mensagem:'2 registro(s) publicados.',folhas_criadas:0})}):fetchOrig(u,o);
+  w.openDrawer('Publicar','F900-P0001','<div class="act"><button id="pub-go" data-pub-go="F900-P0001">Publicar agora</button></div><div id="pub-prog"></div>'); await w.executarPublicacaoGuiada('F900-P0001'); await sleep(800); w.fetch=fetchOrig;
+  chk(/Publicado/.test(txt('#d-title'))&&/2 registro/.test(txt('#d-body'))&&!d.getElementById('pub-go')&&!/Publicar agora/.test(txt('#d-body')),'depois de publicar, a janela deveria mostrar o resultado (sem "Publicar agora"): "'+txt('#d-title')+' / '+txt('#d-body').slice(0,80)+'"'); w.closeDrawer(true);
+  const absOrig=w.abrirRevisaoItem; let abriu=null; w.abrirRevisaoItem=c=>{abriu=c};
+  w.route_to('projeto/F003-P9001'); await sleep(3500); const antes=(w.ITENS_PJ||[]).filter(x=>x.lote_id&&x.revisao==='pendente');
+  if(antes.length){ w.route_to('painel'); w.irDaFila('revisao','F003-P9001'); await sleep(4800); chk(abriu===antes[0].codigo,'"Conferir folhas" vindo da Fila deveria abrir a primeira folha pendente ('+antes[0].codigo+'), abriu: '+abriu) }
+  w.abrirRevisaoItem=absOrig; w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
