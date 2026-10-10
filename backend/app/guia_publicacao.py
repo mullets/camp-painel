@@ -15,6 +15,17 @@ router = APIRouter(prefix="/api", tags=["guia"])
 LIMITE_PROJETOS = 3000   # acima disso a contagem de "prontos" fica aproximada (nunca aconteceu)
 
 
+
+def texto_projetos(publicados: int, a_publicar: int, total: int) -> str:
+    """Uma frase por situação (e não 'N de M... (X autorizados, Y já publicados)', que não dizia QUAL estava pronto): '1 publicado · 1 pronto para publicar · 1 com pendência'."""
+    if total == 0:
+        return "Nenhum projeto ainda"
+    pend = total - publicados - a_publicar
+    partes = [f"{publicados} publicado{'s' if publicados != 1 else ''}" if publicados else "",
+              f"{a_publicar} pronto{'s' if a_publicar != 1 else ''} para publicar" if a_publicar else "",
+              f"{pend} com pendência" if pend else ""]
+    return " · ".join(x for x in partes if x)
+
 def _c(id_, bloqueia, ok, texto, detalhe=None, acao=None) -> dict:
     return {"id": id_, "bloqueia": bloqueia, "ok": bool(ok), "texto": texto, "detalhe": None if ok else detalhe, "acao": None if ok else acao}
 
@@ -44,7 +55,9 @@ def guia_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? ORDER BY codigo LIMIT ?", (codigo, LIMITE_PROJETOS)).fetchall()
         autor = sum(1 for p in projetos if p["autorizado_site"])
         publicados = sum(1 for p in projetos if p["status_site"] == "no_ar")
-        prontos = sum(1 for p in projetos if condicoes_projeto(con, p)["pode_publicar"])
+        pode = {p["codigo"]: condicoes_projeto(con, p)["pode_publicar"] for p in projetos}
+        prontos = sum(1 for p in projetos if pode[p["codigo"]])
+        a_publicar = sum(1 for p in projetos if pode[p["codigo"]] and p["status_site"] != "no_ar")
         total = len(projetos)
         conds = [
             _c("direitos", True, msg is None, f"Direitos do fundo {codigo} autorizados", msg, _acao("direitos", "Definir direitos do fundo", codigo)),
@@ -52,7 +65,7 @@ def guia_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             _c("historia", False, hist and fonte, "História e procedência com fonte citada",
                "A história ainda não foi escrita (o painel só aceita história com a fonte citada)", _acao("editar", "Editar o fundo", codigo)),
             _c("sigla", False, bool(f["sigla"]), "Sigla de 3 letras definida", "Sem sigla não há etiquetas nem nomes de arquivo", _acao("editar", "Definir a sigla", codigo)),
-            _c("projetos", True, prontos > 0, f"{prontos} de {total} projeto(s) prontos para publicar ({autor} autorizados, {publicados} já publicados)",
+            _c("projetos", True, prontos > 0, texto_projetos(publicados, a_publicar, total),
                "O fundo ainda não tem projetos" if total == 0 else
                "Nenhum projeto está pronto: em cada projeto, autorize a publicação e envie as folhas ao site (o checklist do projeto mostra o que falta)",
                _acao("projetos", "Ver os projetos", codigo)),

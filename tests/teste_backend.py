@@ -2310,6 +2310,14 @@ def filho(modo):
         ver("sem histórico não inventa tendência: nível só pelo espaço livre", qc.nivel_espaco(c, 1000, 400)[0] == "ok" and qc.nivel_espaco(c, 1000, 40)[0] == "critico")
         c.close()
         for l in res: print(l)
+    elif modo == "texto_fundo":
+        init_db(); _aplicar_migracoes_real()
+        from app.guia_publicacao import texto_projetos as tp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("uma linha por situação, no singular e no plural", tp(1, 1, 3) == "1 publicado · 1 pronto para publicar · 1 com pendência" and tp(2, 3, 9) == "2 publicados · 3 prontos para publicar · 4 com pendência", tp(1, 1, 3) + " | " + tp(2, 3, 9))
+        ver("só o que existe aparece (sem '0 ...'); fundo sem projetos diz isso", tp(0, 0, 4) == "4 com pendência" and tp(3, 0, 3) == "3 publicados" and tp(0, 0, 0) == "Nenhum projeto ainda", tp(0, 0, 4) + " | " + tp(3, 0, 3))
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -2743,6 +2751,14 @@ else:
 print("38) QNAP: tendência robusta (mediana por dia) e nível pelo espaço E pelos dias até encher")
 rc, out = rodar("qnap_tendencia", f"{tmp}/qnapt.db")
 if rc != 0: ok(False, f"teste da tendência do QNAP não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("39) Página do fundo: uma frase por situação dos projetos")
+rc, out = rodar("texto_fundo", f"{tmp}/tf.db")
+if rc != 0: ok(False, f"teste do texto do fundo não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

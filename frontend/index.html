@@ -1257,7 +1257,7 @@ document.querySelectorAll('thead th').forEach(th=>{if(!th.textContent.trim())ret
   const rows=[...tb.rows];const val=r=>r.children[idx]?r.children[idx].textContent.trim():'';const num=rows.every(r=>!isNaN(parseFloat(val(r).replace(',','.'))));
   rows.sort((a,b)=>{let x=val(a),y=val(b);if(num){x=parseFloat(x.replace(',','.'));y=parseFloat(y.replace(',','.'))}return (x>y?1:x<y?-1:0)*(dir==='asc'?1:-1)});
   rows.forEach(r=>tb.appendChild(r))})});
-document.querySelectorAll('[data-filter]').forEach(inp=>{const panel=inp.closest('.panel'),cnt=panel.querySelector('.cnt');const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});if(cnt.dataset.servidor!=='1')cnt.textContent=t?`${n} de ${tot}`:`${tot} registros`};inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
+document.querySelectorAll('[data-filter]').forEach(inp=>{const panel=inp.closest('.panel'),cnt=panel.querySelector('.cnt');const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{if(r.querySelector('td.empty,td.state-row'))return;tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});if(cnt.dataset.servidor!=='1')cnt.textContent=t?`${n} de ${tot}`:`${tot} ${tot===1?'registro':'registros'}`};inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
 
 const AJUDA_TELAS={
   painel:{titulo:'Painel',intro:'Resumo da operação. Comece pelos avisos e pelo bloco Precisa de atenção.',passos:[['Veja a saúde','Máquinas, QNAP e publicação mostram se a operação está funcionando.'],['Resolva pendências','Abra os itens em Precisa de atenção antes de publicar material.'],['Use os atalhos','A busca global é o caminho mais rápido para um código conhecido.']]},
@@ -2014,12 +2014,13 @@ function estadoGeral({q,qi,site,pend}){   // o selo do painel: crítico (vermelh
   if(siteAlerta(site.http))ruins.push('página pública sem resposta');
   const niv=q.montado&&qi&&qi.nivel_espaco,livre=qi&&qi.coleta&&qi.coleta.livre_gb,txt=livre!=null?`${fmtN(Math.round(livre))} GB livres (${String(qi.livre_pct).replace('.',',')}%)`:'';
   if(niv==='critico')ruins.push(`QNAP quase cheio: ${txt}`);else if(niv==='aviso')avisos.push(`QNAP com pouco espaço: ${txt}`);
-  if(pend)avisos.push(`${pend} pendência(s) de decisão`);
+  if(pend)avisos.push(`${pend} ${pend===1?'item espera':'itens esperam'} você`);
   const geral=ruins.length?'bad':avisos.length?'warn':'ok';
   return {geral,texto:geral==='bad'?ruins.join(' · '):geral==='warn'?avisos.join(' · '):'Operação saudável'}}
+function pendenciasTexto(d){const dec=(d.decisoes&&d.decisoes.pendentes)||0,lot=d.filas.revisao||0,err=d.erros.bloqueantes||0,ped=d.solicitacoes.aguardam||0;return [dec&&`${dec} ${dec===1?'decisão':'decisões'}`,lot&&`${lot} ${lot===1?'lote para revisar':'lotes para revisar'}`,err&&`${err} ${err===1?'erro que bloqueia':'erros que bloqueiam'}`,ped&&`${ped} ${ped===1?'pedido aguardando':'pedidos aguardando'}`].filter(Boolean).join(' · ')}
 let HOJE_ACOES=[];
 function acoesDoDia(hj,d){const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0)+((d.decisoes&&d.decisoes.pendentes)||0);
-  return [...(pend?[{id:'pendencias',prioridade:95,titulo:`${pend} pendência(s) de decisão`,detalhe:'Decisões esperando (o CAMP Vision pode estar parado), erros que bloqueiam, pedidos aguardando e lotes para revisar (veja "Precisa de atenção")',rota:null}]:[]),...((hj&&hj.acoes)||[])].sort((a,b)=>b.prioridade-a.prioridade)}
+  return [...(pend?[{id:'pendencias',prioridade:95,titulo:`${pend} ${pend===1?'item espera':'itens esperam'} você`,detalhe:'Decisões esperando (o CAMP Vision pode estar parado), erros que bloqueiam, pedidos aguardando e lotes para revisar (veja "Precisa de atenção")',rota:null}]:[]),...((hj&&hj.acoes)||[])].sort((a,b)=>b.prioridade-a.prioridade)}
 function hojeFraseHTML(hj,d){
   if(!hj)return 'Visão rápida da operação do acervo.';
   const ac=acoesDoDia(hj,d),urg=ac.filter(a=>a.prioridade>=60).length,partes=[];
@@ -2036,7 +2037,7 @@ function heroHojeHTML(hj,d){
   const kp=(v,l,det)=>`<div class="hoje-kpi"><div class="v">${fmtN(v)}</div><div class="l">${l}</div><div class="d">${escHtml(det)}</div></div>`;
   HOJE_ACOES=acoesDoDia(hj,d);const top=HOJE_ACOES.slice(0,3);
   const prontosDet=k.prontos.valor?'podem ser publicados agora':(k.prontos.autorizados===0?'nenhum projeto foi autorizado ainda':'nenhum passa em todos os requisitos');
-  return `<div class="hoje-kpis">${kp(pend,'pendências',pend?'aguardam decisão':'nada aguardando')}${kp(k.travados.fundos,'travados por direitos',k.travados.fundos?`seguram ${fmtN(k.travados.projetos)} projeto(s)`:'nenhum fundo travado')}${kp(k.prontos.valor,'prontos para publicar',prontosDet)}${kp((hj.hoje.folhas||{}).hoje||0,'folhas trabalhadas hoje','ontem: '+fmtN((hj.hoje.folhas||{}).ontem||0))}</div>
+  return `<div class="hoje-kpis">${kp(pend,pend===1?'item espera você':'itens esperam você',pend?pendenciasTexto(d):'nada aguardando')}${kp(k.travados.fundos,'travados por direitos',k.travados.fundos?`seguram ${fmtN(k.travados.projetos)} projeto(s)`:'nenhum fundo travado')}${kp(k.prontos.valor,'prontos para publicar',prontosDet)}${kp((hj.hoje.folhas||{}).hoje||0,'folhas trabalhadas hoje','ontem: '+fmtN((hj.hoje.folhas||{}).ontem||0))}</div>
     <h3 class="hoje-h">${top.length?'Por onde começar':'Tudo em dia'}</h3>
     ${top.length?`<div class="hoje-acoes">${top.map((a,i)=>`<button class="hoje-acao${a.prioridade>=100?' critica':''}" onclick="irAcaoHoje(${i})"><span class="n">${i+1}</span><div><b>${escHtml(a.titulo)}</b><small>${escHtml(a.detalhe||'')}</small></div><span class="seta" aria-hidden="true">›</span></button>`).join('')}</div>${HOJE_ACOES.length>3?`<small class="help">e mais ${HOJE_ACOES.length-3} item(ns) menos urgentes</small>`:''}`:'<div class="empty">Nada pendente: o acervo está em dia.</div>'}`}
 function irAcaoHoje(i){const a=HOJE_ACOES[i];if(!a)return;

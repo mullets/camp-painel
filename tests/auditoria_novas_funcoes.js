@@ -579,6 +579,13 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('projeto/F003-P9001'); await sleep(3500); const antes=(w.ITENS_PJ||[]).filter(x=>x.lote_id&&x.revisao==='pendente');
   if(antes.length){ w.route_to('painel'); w.irDaFila('revisao','F003-P9001'); await sleep(4800); chk(abriu===antes[0].codigo,'"Conferir folhas" vindo da Fila deveria abrir a primeira folha pendente ('+antes[0].codigo+'), abriu: '+abriu) }
   w.abrirRevisaoItem=absOrig; w.route_to('painel'); }
+// ---------- [Auditoria P1-15] contagens que batem ----------
+{ const P=w.pendenciasTexto;
+  chk(P({decisoes:{pendentes:3},filas:{revisao:14},erros:{bloqueantes:0},solicitacoes:{aguardam:0}})==='3 decisões · 14 lotes para revisar','as pendências deveriam vir detalhadas ("3 decisões · 14 lotes para revisar"): '+P({decisoes:{pendentes:3},filas:{revisao:14},erros:{bloqueantes:0},solicitacoes:{aguardam:0}}));
+  chk(P({decisoes:{pendentes:1},filas:{revisao:1},erros:{bloqueantes:1},solicitacoes:{aguardam:1}})==='1 decisão · 1 lote para revisar · 1 erro que bloqueia · 1 pedido aguardando','o singular deveria estar certo');
+  w.route_to('solicitacoes'); await sleep(2000); await w.carregarSolicitacoes('recusada'); await sleep(1000);
+  const linhas=[...d.querySelectorAll('#v-solicitacoes tbody tr')].filter(r=>!r.querySelector('td.empty,td.state-row')).length;
+  chk(new RegExp('^'+linhas+' registros?').test(txt('#v-solicitacoes .cnt')),'o contador de Solicitações deveria contar só as linhas de dados da aba ('+linhas+'): "'+txt('#v-solicitacoes .cnt')+'"'); w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
@@ -586,7 +593,7 @@ w.route_to('painel'); await sleep(2800);
   const li=[...d.querySelectorAll('#v-painel .action-list li')].filter(x=>/Projeto parecido/.test(x.textContent));
   chk(li.length>=1&&!!li[0].querySelector('button.pri')&&/Decidir/.test(li[0].textContent),'o "Precisa de atenção" deveria listar a decisão com o botão Decidir ('+li.length+')');
   chk(/CAMP Vision está esperando/.test(txt('#v-painel .action-card')),'deveria avisar que o CAMP Vision está esperando');
-  chk(/Decisões esperando/.test(txt('#v-painel .hoje-acoes')),'"Por onde começar" deveria incluir as decisões nas pendências: "'+txt('#v-painel .hoje-acoes').slice(0,120)+'"');
+  chk(/(Decisões esperando|esperam você)/.test(txt('#v-painel .hoje-acoes')),'"Por onde começar" deveria incluir as decisões nas pendências: "'+txt('#v-painel .hoje-acoes').slice(0,120)+'"');
   const id1=dl.itens[0].id, id2=dl.itens[1].id; li[0].querySelector('button.pri').click(); await sleep(1600);
   chk(txt('#d-title').includes('Projeto parecido: é o mesmo?')&&/O que chegou/.test(txt('#d-body'))&&/Já existe no fundo/.test(txt('#d-body'))&&/está esperando a sua resposta/.test(txt('#d-body')),'a janela deveria mostrar o que chegou, o que já existe e que o CAMP Vision espera: "'+txt('#d-body').slice(0,110)+'"');
   chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folha\(s\) no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
@@ -621,7 +628,7 @@ w.route_to('painel'); await sleep(2800);
   const hj=(await J(adm,'/api/hoje')).b;
   chk(/pedem você hoje|Nada urgente hoje/.test(txt('#v-painel .hoje-frase')),'o topo deveria ter a frase do dia: "'+txt('#v-painel .hoje-frase')+'"');
   chk(!/Visão rápida da operação do acervo/.test(txt('#v-painel .dash-hero-main')),'a frase fixa antiga não deveria mais aparecer quando há dados do dia');
-  chk(d.querySelectorAll('#v-painel .hoje-kpi').length===4&&/pendências/.test(txt('#v-painel .hoje-kpis'))&&/travados por direitos/.test(txt('#v-painel .hoje-kpis'))&&/prontos para publicar/.test(txt('#v-painel .hoje-kpis')),'o topo deveria ter os 4 números do dia');
+  chk(d.querySelectorAll('#v-painel .hoje-kpi').length===4&&/(itens? esperam? você|pendências)/.test(txt('#v-painel .hoje-kpis'))&&/travados por direitos/.test(txt('#v-painel .hoje-kpis'))&&/prontos para publicar/.test(txt('#v-painel .hoje-kpis')),'o topo deveria ter os 4 números do dia');
   chk(new RegExp('prontos para publicar').test(txt('#v-painel .hoje-kpis'))&&txt('#v-painel .hoje-kpis').includes(String(hj.kpis.prontos.valor)),'o número de prontos para publicar deveria bater com a API ('+hj.kpis.prontos.valor+')');
   if(hj.kpis.prontos.valor===0) chk(/nenhum projeto foi autorizado ainda|nenhum passa em todos os requisitos/.test(txt('#v-painel .hoje-kpis')),'zero precisa de EXPLICAÇÃO ("nenhum projeto foi autorizado ainda"): '+txt('#v-painel .hoje-kpis').slice(0,260));
   const n=Math.min(3,hj.acoes.length+(txt('#v-painel .action-card .tag')&&0)); chk(d.querySelectorAll('#v-painel .hoje-acao').length>=Math.min(3,hj.acoes.length),'o topo deveria listar até 3 ações do dia: '+d.querySelectorAll('#v-painel .hoje-acao').length+' (API tem '+hj.acoes.length+')');
@@ -640,7 +647,7 @@ w.route_to('painel'); await sleep(2800);
     let r=E({...base,qi:{nivel_espaco:'critico',livre_pct:2.2,coleta:{livre_gb:28}}}); chk(r.geral==='bad'&&/QNAP quase cheio: 28 GB livres \(2,2%\)/.test(r.texto),'28 GB de 1.255 (2,2%) deveria deixar o selo VERMELHO e dizer o espaço: '+JSON.stringify(r));
     r=E({...base,qi:{nivel_espaco:'aviso',livre_pct:11.9,coleta:{livre_gb:150}}}); chk(r.geral==='warn'&&/QNAP com pouco espaço/.test(r.texto),'espaço em aviso deveria deixar o selo ÂMBAR: '+JSON.stringify(r));
     r=E({...base,qi:{nivel_espaco:'ok',livre_pct:60,coleta:{livre_gb:700}}}); chk(r.geral==='ok'&&r.texto==='Operação saudável','espaço ok = saudável');
-    r=E({...base,pend:3,qi:{nivel_espaco:'ok',coleta:{livre_gb:700}}}); chk(r.geral==='warn'&&/3 pendência/.test(r.texto),'pendências = âmbar');
+    r=E({...base,pend:3,qi:{nivel_espaco:'ok',coleta:{livre_gb:700}}}); chk(r.geral==='warn'&&/3 itens esperam você/.test(r.texto),'pendências = âmbar');
     r=E({q:{montado:false},site:{http:{ok:true}},pend:0,qi:{nivel_espaco:'critico',livre_pct:1,coleta:{livre_gb:5}}}); chk(r.geral==='bad'&&/não está conectado/.test(r.texto)&&!/quase cheio/.test(r.texto),'QNAP desconectado: não usa o espaço velho da última coleta: '+JSON.stringify(r)); }
   // cartão do QNAP: barra vermelha, aviso de cota e explicação dos zeros
   { const cfgv={entrada_caminho:'',prontos_caminho:'/mnt/qnap/acervos/Arquivos/100 - Scanners',dias_parado:3};
