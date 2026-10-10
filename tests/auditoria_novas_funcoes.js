@@ -579,6 +579,18 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('projeto/F003-P9001'); await sleep(3500); const antes=(w.ITENS_PJ||[]).filter(x=>x.lote_id&&x.revisao==='pendente');
   if(antes.length){ w.route_to('painel'); w.irDaFila('revisao','F003-P9001'); await sleep(4800); chk(abriu===antes[0].codigo,'"Conferir folhas" vindo da Fila deveria abrir a primeira folha pendente ('+antes[0].codigo+'), abriu: '+abriu) }
   w.abrirRevisaoItem=absOrig; w.route_to('painel'); }
+// ---------- [Auditoria P2-16] textos em português: rótulos com acento, datas no fuso certo, plurais ----------
+{ chk(w.rotulo('aguarda_orcamento')==='aguarda orçamento'&&w.rotulo('em_correcao')==='em correção'&&w.rotulo('decisao')==='decisão'&&w.rotulo('jpg_3000')==='JPG 3000 px'&&w.rotulo('projeto_errado')==='folha de outro projeto'&&w.rotulo('qualquer_coisa')==='qualquer coisa','rotulo() deveria traduzir os valores do banco e ter um fallback sem "_"');
+  d.body.insertAdjacentHTML('beforeend','<div id="zpl">3 folha(s) · 1 folha(s) · 2 item(ns) · 1 item(ns) · 12 pendência(s) · fundo(s) · 1.250 registro(s)</div>'); await sleep(500);
+  chk(txt('#zpl')==='3 folhas · 1 folha · 2 itens · 1 item · 12 pendências · fundos · 1.250 registros','os "(s)" deveriam virar plural/singular certo no texto visível: "'+txt('#zpl')+'"'); d.getElementById('zpl').remove();
+  const sol=(await J(adm,'/api/solicitacoes?situacao=todos')).b.itens[0];
+  if(sol){ await w.abrirSolicitacao(sol.id); await sleep(500); const opts=[...d.querySelectorAll('#es-sit option')].map(o=>o.textContent);
+    chk(!opts.some(o=>/_/.test(o))&&(!opts.some(o=>/orcamento|credito|preparacao/.test(o))),'as situações do pedido deveriam ter acento e sem "_": '+opts.join('|'));
+    chk(/\d{2}\/\d{2}\/\d{4}/.test(txt('#d-body'))&&!/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(txt('#d-body')),'a data do pedido deveria estar em dd/mm/aaaa no horário de São Paulo: "'+txt('#d-body').slice(0,120)+'"'); w.closeDrawer(true) } }
+// ---------- [Auditoria P2-17] Novo projeto: o fundo não vem escolhido; "Criar projeto" nunca fica mudo ----------
+{ w.openModal('m-proj'); await sleep(500); const nf=d.getElementById('np-fundo');
+  chk(nf.value===''&&/escolha o fundo/.test(nf.options[0].textContent)&&/escolha o fundo/.test(txt('#np-code')),'Novo projeto pela lista deveria abrir com o fundo VAZIO ("— escolha o fundo —"): "'+nf.value+'" / "'+txt('#np-code')+'"'); w.closeModal();
+  w.route_to('fundo/F026'); await sleep(3000); const bn=[...d.querySelectorAll('#v-fundo .act button')].find(x=>x.textContent.trim()==='Novo projeto'); if(bn){ bn.click(); await sleep(600); chk(d.getElementById('np-fundo').value==='F026','Novo projeto pela página do F026 deveria abrir já com F026: "'+d.getElementById('np-fundo').value+'"'); w.closeModal() } w.route_to('painel'); }
 // ---------- [Auditoria P1-15] contagens que batem ----------
 { const P=w.pendenciasTexto;
   chk(P({decisoes:{pendentes:3},filas:{revisao:14},erros:{bloqueantes:0},solicitacoes:{aguardam:0}})==='3 decisões · 14 lotes para revisar','as pendências deveriam vir detalhadas ("3 decisões · 14 lotes para revisar"): '+P({decisoes:{pendentes:3},filas:{revisao:14},erros:{bloqueantes:0},solicitacoes:{aguardam:0}}));
@@ -609,7 +621,7 @@ w.route_to('painel'); await sleep(2800);
   // novo projeto à mão: o painel avisa dos parecidos antes de criar
   const tit=(await J(adm,'/api/projetos/F026-P0001/detalhe')).b.projeto.titulo, nP=(await J(adm,'/api/painel')).b.projetos.total;
   w.openModal('m-proj'); await sleep(600); d.getElementById('np-fundo').value='F026'; d.getElementById('np-titulo').value=tit; await w.criarProjeto(); await sleep(1500);
-  chk(/Já existe projeto parecido neste fundo/.test(txt('#np-parecidos'))&&/F026-P0001/.test(txt('#np-parecidos'))&&/É um projeto novo: criar mesmo assim/.test(txt('#np-parecidos')),'o modal de novo projeto deveria avisar do parecido (F026-P0001): "'+txt('#np-parecidos').slice(0,120)+'"');
+  chk(/Já existe projeto parecido neste fundo/.test(txt('#np-parecidos'))&&/F026-P0001/.test(txt('#np-parecidos'))&&/É um projeto novo: criar F026-P\d{4}/.test(txt('#np-parecidos'))&&/Decida acima/.test(txt('#np-err')),'o modal de novo projeto deveria avisar do parecido (F026-P0001): "'+txt('#np-parecidos').slice(0,120)+'"');
   chk((await J(adm,'/api/painel')).b.projetos.total===nP,'avisar NÃO pode criar o projeto');
   d.querySelector('#np-parecidos [data-np-abrir]').click(); await sleep(1500); chk(/projeto\/F026-P0001/.test(w.location.hash),'"Abrir este" deveria levar ao projeto parecido: '+w.location.hash); w.closeModal(); }
 // ---------- FOLHAS NO QNAP NA PÁGINA DO PROJETO ----------
