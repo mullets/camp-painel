@@ -40,13 +40,24 @@ def plano(con, p) -> dict:
                  for i in ("direitos", "bloqueios", "teste", "revisao") if not por_id[i]["ok"]]
     dossie = bool(p["tainacan_item_id"])
     passos = [
-        {"id": "dossie", "texto": "Criar o dossiê do projeto no site (rascunho)" if not dossie else "Dossiê do projeto no site", "estado": "feito" if dossie else "sera_feito"},
-        {"id": "folhas", "texto": (f"Enviar {a_enviar} folha(s) ao site (rascunho)" if a_enviar else "Folhas no site") if elegiveis else f"0 de {total_locais} folhas prontas ({nao_conferidas} a conferir)",
+        {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
+        {"id": "folhas", "texto": (f"Enviar {a_enviar} folha(s) ao site (ainda escondidas)" if a_enviar else "Folhas no site") if elegiveis else f"0 de {total_locais} folhas prontas ({nao_conferidas} a conferir)",
          "estado": "sera_feito" if a_enviar else ("feito" if elegiveis else "aguarda")},
-        {"id": "autorizar", "texto": "Autorizar o projeto para publicação" if not p["autorizado_site"] else "Projeto autorizado para publicação", "estado": "feito" if p["autorizado_site"] else "sera_feito"},
-        {"id": "publicar", "texto": f"Publicar o dossiê e {elegiveis} folha(s)", "estado": "sera_feito"},
+        {"id": "autorizar", "texto": "Marcar o projeto como liberado" if not p["autorizado_site"] else "Projeto liberado para publicação", "estado": "feito" if p["autorizado_site"] else "sera_feito"},
+        {"id": "publicar", "texto": f"Tornar a página e as {elegiveis} folha(s) visíveis para todos", "estado": "sera_feito"},
     ]
-    return {"passos": passos, "bloqueios": bloqueios, "pode_executar": not bloqueios, "ja_publicado": p["status_site"] == "no_ar",
+    # AVISOS (não bloqueiam): coisas que a pessoa provavelmente quer ver antes de tornar público
+    import re as _re
+    avisos = []
+    tit = (p["titulo"] or "").strip()
+    if _re.match(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+\S", tit):
+        limpo = _re.sub(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+", "", tit).replace("_", " ").strip()
+        avisos.append({"id": "titulo", "texto": f"O título “{tit}” parece ter um prefixo de pasta. Como ficaria: “{limpo}”. Corrija em Editar, no topo do projeto."})
+    cidade = p["cidade"] if "cidade" in p.keys() else None
+    sem = [n for n, v in (("ano", p["ano"]), ("cidade", cidade)) if not v or str(v) == "0"]
+    if sem:
+        avisos.append({"id": "vazios", "texto": "Sem " + " e sem ".join(sem) + ": a página fica sem essa informação. Preencha em Editar, no topo do projeto, ou publique assim mesmo."})
+    return {"passos": passos, "bloqueios": bloqueios, "avisos": avisos, "pode_executar": not bloqueios, "ja_publicado": p["status_site"] == "no_ar",
             "folhas_a_enviar": a_enviar, "folhas_a_publicar": elegiveis,
             "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas, "retidas": retidas}}
 

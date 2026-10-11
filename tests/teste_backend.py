@@ -2468,6 +2468,12 @@ def filho(modo):
         try: corrida = rpt._ler(rid)
         finally: rpt._THREADS = orig_threads
         ver("corrida: se a thread acabou entre a leitura e a checagem, o 'ok' que ela gravou NÃO vira 'falhou — interrompida'", corrida["estado"] == "ok" and corrida["resultado"]["ok"] is True, str(corrida["estado"]) + " " + str(corrida.get("resultado")))
+        # avisos do plano (não bloqueiam): prefixo de pasta no título, sem ano, sem cidade; textos em linguagem simples
+        k4 = connect(); k4.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F092',9)"); k4.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F092-P0009','F092',9,'T102_Edifício Jockey Club São Paulo',0)"); k4.commit(); k4.close()
+        pa = adm.get("/api/projetos/F092-P0009/publicar/plano").json(); av = {a_["id"]: a_["texto"] for a_ in pa["avisos"]}
+        ver("o plano avisa do prefixo de pasta no título (e mostra como ficaria) e dos campos vazios, sem bloquear", "Edifício Jockey Club São Paulo" in av.get("titulo", "") and "T102_" in av.get("titulo", "") and "sem ano e sem cidade" in av.get("vazios", "").lower() and not any(b_["id"] in ("titulo", "vazios") for b_ in pa["bloqueios"]), str(pa["avisos"]))
+        ver("os passos do plano falam a língua de quem publica (página escondida → visível para todos)", [x_["texto"] for x_ in pa["passos"]][0].startswith("Criar a página do projeto no site (ainda escondida)") and any("visíveis para todos" in x_["texto"] for x_ in pa["passos"]) and any("Marcar o projeto como liberado" in x_["texto"] for x_ in pa["passos"]), str([x_["texto"] for x_ in pa["passos"]]))
+        ver("título normal e com ano/cidade não gera aviso", adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"] == [] or all(a_["id"] == "vazios" for a_ in adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"]))
         ver("só admin inicia (operador 403, sem login 401); leitura consulta", op.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 403 and anon.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 401 and op.get(f"/api/tarefas/{tid}").status_code == 200 and adm.get("/api/tarefas/99999").status_code == 404)
         # nome do arquivo no WordPress: sempre <código>.jpg, nunca o hash do cache
         pasta = _pl.Path(tempfile.mkdtemp()); f_ = pasta / "02c3ecf8cd8f0bf43ce24c55792d6b8a82aa2d18.jpg"; f_.write_bytes(b"\xff\xd8\xff\xd9")
