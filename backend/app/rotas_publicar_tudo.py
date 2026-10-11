@@ -89,19 +89,34 @@ def _rodar_tarefa(tid: int, codigo: str, u: dict) -> None:
         _THREADS.pop(tid, None)
 
 
-def _ler(tid: int) -> dict | None:
+MSG_INTERROMPIDA = "A publicação foi interrompida (o servidor reiniciou). O que já subiu não se repete: clique em Publicar de novo."
+
+
+def _linha(tid: int) -> dict | None:
     con = connect()
     try:
         r = con.execute("SELECT * FROM tarefa_publicacao WHERE id=?", (tid,)).fetchone()
-        if not r:
-            return None
-        t = dict(r)
+        return dict(r) if r else None
     finally:
         con.close()
-    if t["estado"] == "rodando" and not (_THREADS.get(tid) and _THREADS[tid].is_alive()):      # o servidor reiniciou no meio: não fica "rodando" para sempre
-        _atualizar(tid, estado="falhou", etapa="fim", terminada_em=_agora(),
-                   resultado=json.dumps({"ok": False, "mensagem": "A publicação foi interrompida (o servidor reiniciou). O que já subiu não se repete: clique em Publicar de novo."}, ensure_ascii=False))
-        t.update(estado="falhou", etapa="fim", terminada_em=_agora(), resultado=json.dumps({"ok": False, "mensagem": "A publicação foi interrompida (o servidor reiniciou). O que já subiu não se repete: clique em Publicar de novo."}, ensure_ascii=False))
+
+
+def _ler(tid: int) -> dict | None:
+    t = _linha(tid)
+    if not t:
+        return None
+    viva = bool(_THREADS.get(tid) and _THREADS[tid].is_alive())
+    if t["estado"] == "rodando" and not viva:
+        # A thread pode ter ACABADO entre a leitura da linha e esta checagem: só marca 'interrompida' se a linha AINDA estiver 'rodando'
+        # (atualização condicional) e devolve sempre o que está no banco depois — nunca sobrescreve um 'ok' que a thread acabou de gravar.
+        con = connect()
+        try:
+            con.execute("UPDATE tarefa_publicacao SET estado='falhou', etapa='fim', terminada_em=?, resultado=? WHERE id=? AND estado='rodando'",
+                        (_agora(), json.dumps({"ok": False, "mensagem": MSG_INTERROMPIDA}, ensure_ascii=False), tid))
+            con.commit()
+        finally:
+            con.close()
+        t = _linha(tid)
     for k in ("falhas", "log", "resultado"):
         try:
             t[k] = json.loads(t[k]) if t[k] else ([] if k != "resultado" else None)

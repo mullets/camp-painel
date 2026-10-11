@@ -2459,6 +2459,15 @@ def filho(modo):
         k2 = connect(); k2.execute("INSERT INTO tarefa_publicacao (projeto_codigo, ator, estado, etapa) VALUES (?, 'x', 'rodando', 'folhas')", (PB,)); zid = k2.execute("SELECT MAX(id) FROM tarefa_publicacao").fetchone()[0]; k2.commit(); k2.close()
         z = adm.get(f"/api/tarefas/{zid}").json()
         ver("tarefa 'rodando' sem thread viva (servidor reiniciou) vira 'falhou' com a explicação, não fica rodando para sempre", z["estado"] == "falhou" and "interrompida" in (z["resultado"] or {}).get("mensagem", ""), str(z.get("resultado")))
+        # corrida: a thread termina ENTRE a leitura da linha e a checagem "está viva?" — o 'ok' gravado por ela não pode virar 'falhou'
+        k3 = connect(); k3.execute("INSERT INTO tarefa_publicacao (projeto_codigo, ator, estado, etapa) VALUES (?, 'x', 'rodando', 'publicar')", (PB,)); rid = k3.execute("SELECT MAX(id) FROM tarefa_publicacao").fetchone()[0]; k3.commit(); k3.close()
+        class VirouOk(dict):
+            def get(self, chave, padrao=None):
+                kk = connect(); kk.execute("UPDATE tarefa_publicacao SET estado='ok', etapa='fim', terminada_em=datetime('now'), resultado='{\"ok\": true, \"mensagem\": \"pronto\"}' WHERE id=?", (rid,)); kk.commit(); kk.close(); return None
+        orig_threads = rpt._THREADS; rpt._THREADS = VirouOk()
+        try: corrida = rpt._ler(rid)
+        finally: rpt._THREADS = orig_threads
+        ver("corrida: se a thread acabou entre a leitura e a checagem, o 'ok' que ela gravou NÃO vira 'falhou — interrompida'", corrida["estado"] == "ok" and corrida["resultado"]["ok"] is True, str(corrida["estado"]) + " " + str(corrida.get("resultado")))
         ver("só admin inicia (operador 403, sem login 401); leitura consulta", op.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 403 and anon.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 401 and op.get(f"/api/tarefas/{tid}").status_code == 200 and adm.get("/api/tarefas/99999").status_code == 404)
         # nome do arquivo no WordPress: sempre <código>.jpg, nunca o hash do cache
         pasta = _pl.Path(tempfile.mkdtemp()); f_ = pasta / "02c3ecf8cd8f0bf43ce24c55792d6b8a82aa2d18.jpg"; f_.write_bytes(b"\xff\xd8\xff\xd9")
