@@ -686,6 +686,16 @@ w.route_to('painel'); await sleep(2800);
   chk(/Antes de publicar, confira/.test(b)&&/prefixo de pasta/.test(b)&&/Sem ano e sem cidade/.test(b)&&/você pode publicar mesmo assim/.test(b),'a janela deveria listar os avisos antes de publicar e dizer que dá para publicar mesmo assim: "'+b.slice(0,200)+'"');
   chk(!d.getElementById('pub-go').disabled,'avisos NÃO deveriam bloquear o botão Publicar agora');
   chk(/ainda escondida/.test(b)&&/visíveis para todos/.test(b)&&!/dossiê/i.test(b.replace(/Criar a página/,'')),'os passos deveriam usar linguagem simples (sem "dossiê"): "'+b.slice(0,200)+'"'); w.closeDrawer(true); }
+// ---------- [H7] Filas: quem espera há mais tempo vem primeiro, "esperando há N" acima de 48 h, grupos por papel ----------
+{ w.route_to('filas'); await sleep(1500); d.querySelector('#fila-chips [data-fila-filtro="gente"]').click(); await sleep(300); const L=w.eval('FILAS_SRV'), rows=[...d.querySelectorAll('#filas-body tr[data-fase]')];
+  const ts=r=>{const c=r.querySelector('.code').textContent,l=L.find(x=>x.projeto_codigo===c&&x.fase===r.dataset.fase);return l?String(l.atualizado_em):''};
+  let ordemOk=true; for(let i=1;i<rows.length;i++){ if(rows[i].dataset.fase===rows[i-1].dataset.fase&&rows[i].dataset.fase!=='publicado'&&ts(rows[i-1])>ts(rows[i])) ordemOk=false }
+  chk(ordemOk,'dentro da mesma etapa, a lista que espera há mais tempo deveria vir primeiro');
+  const OPER=['erro','importar','conferir'], fases=rows.map(r=>r.dataset.fase), temOp=fases.some(f=>OPER.includes(f)), temAd=fases.some(f=>!OPER.includes(f)), gh=d.querySelectorAll('#filas-body .fila-grupo').length;
+  chk(temOp&&temAd?gh===2:gh===0,'com os dois tipos de tarefa deveria haver 2 subtítulos ("Para operador" e "Para admin"), senão nenhum; havia '+gh);
+  const velho=w.espera48({fase:'importar',atualizado_em:'2020-01-01 00:00:00'}), agora=w.espera48({fase:'importar',atualizado_em:new Date().toISOString().slice(0,19).replace('T',' ')}), pub=w.espera48({fase:'publicado',atualizado_em:'2020-01-01 00:00:00'});
+  chk(/tag a/.test(velho)&&/esperando há/.test(velho)&&!/esperando/.test(agora)&&!/esperando/.test(pub),'"esperando há N" só para quem depende de pessoa e passou de 48 h: velho='+velho.replace(/<[^>]+>/g,'')+' | agora='+agora+' | publicada='+pub);
+  w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
