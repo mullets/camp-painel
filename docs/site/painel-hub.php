@@ -4,7 +4,8 @@
  * Description: Deixa o painel (camp-painel) gravar os campos "Sobre o acervo", a biografia e o retrato da página-hub
  *              de um fundo. Cartões B1 e B9 do quadro do painel (13/10/2026).
  *
- * INSTALAR: copiar este arquivo para wp-content/mu-plugins/ do site (ou colar no fim do plugin camp-acervo-auto-pages).
+ * INSTALADO no site em 13/10/2026: camp-wordpress a6300c11, fim do plugin camp-acervo-auto-pages (v1.5.36).
+ * Este arquivo fica como referência do contrato; a cópia que vale é a do plugin.
  * Não muda nada sozinho: só responde quando o painel chama, com a Application Password de um usuário que pode editar páginas.
  *
  * POST /wp-json/camp/v1/painel/hub/{term_id}   corpo: {"meta": {"_camp_acervo_procedencia": "…", …}}
