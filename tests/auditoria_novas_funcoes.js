@@ -1042,7 +1042,7 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const pgs=Math.ceil(tot/5), linhasP=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')].map(tr=>tr.getAttribute('data-nav'));
   chk(!d.getElementById('projetos-pag').hidden&&txt('#projetos-pag').includes('de '+tot)&&new RegExp('Página 1 de '+pgs).test(txt('#projetos-pag')),'Projetos deveria mostrar o controle de paginação com o total: "'+txt('#projetos-pag').slice(0,90)+'"');
   const pag1=linhasP(); chk(pag1.length===5,'a página 1 deveria ter 5 linhas: '+pag1.length);
-  chk(txt('#v-projetos .cnt').includes('1–5 de '+tot+' projetos'),'o contador deveria dizer "1–5 de '+tot+' projetos" (e não "N registros"): "'+txt('#v-projetos .cnt')+'"');
+  chk(txt('#v-projetos .cnt').includes('Mostrando 1–5 de '+tot),'o contador deveria dizer "Mostrando 1–5 de '+tot+'" (e não "N registros"): "'+txt('#v-projetos .cnt')+'"');
   w.toggleProjetoSelecionado(pag1[0].replace('projeto/',''),true);
   d.querySelector('#projetos-pag button[data-pg="prox"]').click(); await sleep(1800);
   const pag2=linhasP(); chk(pag2.length===5&&!pag2.some(c=>pag1.includes(c)),'a página 2 deveria ter 5 linhas diferentes das da 1: '+pag2.length);
@@ -1139,6 +1139,19 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H12] Projetos: busca grande, coluna "Próximo passo", seleção no padrão do Gmail, Novo projeto com ajuda ----------
+{ w.route_to('projetos'); await sleep(2000);
+  const q=d.getElementById('proj-q'); chk(!!q&&!!q.closest('.busca-grande')&&!!(q.compareDocumentPosition(d.getElementById('proj-chips'))&4),'[H12] a busca deveria vir grande, acima das abas');
+  chk(/Próximo passo/.test(txt('#v-projetos thead'))&&!/Atualizado/.test(txt('#v-projetos thead')),'[H12] a coluna "Próximo passo" no lugar de "Atualizado"');
+  const lin=[...d.querySelectorAll('#projetos-body tr[data-nav]')].find(t=>t.textContent.includes('F003-P9001'));
+  chk(!!lin&&/→ Conferir 3 folhas/.test(lin.textContent),'[H12] F003-P9001 deveria dizer "→ Conferir 3 folhas": '+(lin?lin.querySelector('.prox-passo').textContent:'linha não achada'));
+  chk(!/Selecionar todos os resultados/.test(txt('#v-projetos .filterbar')),'[H12] "Selecionar todos os resultados" não deveria ficar sempre à vista');
+  w.eval('PROJ_TOTAL=999'); w.selecionarProjetosVisiveis(true); await sleep(100);
+  chk(/Todos os \d+ desta página estão marcados/.test(txt('#proj-sel-todos-msg'))&&!!d.querySelector('[data-proj-sel-todos]'),'[H12] marcar a página inteira deveria oferecer "Marcar todos os N resultados": "'+txt('#proj-sel-todos-msg')+'"');
+  w.limparSelecaoProjetos(); w.carregarProjetosAPI({}); await sleep(1300);
+  chk(/Mostrando 1–\d+ de \d+/.test(txt('#v-projetos .cnt')),'[H12] contagem "Mostrando 1–N de T": "'+txt('#v-projetos .cnt')+'"');
+  w.abrirNovoProjeto(); await sleep(300); chk(/nunca muda/.test(txt('#m-proj .np-ajuda'))&&!!d.getElementById('np-sem-data'),'[H12] Novo projeto: o texto de ajuda e a opção "sem data"'); w.closeModal();
+  okl.push('H12: Projetos com busca grande, Próximo passo por linha, seleção no padrão do Gmail, "Mostrando 1–N de T", Novo projeto com ajuda e "sem data"'); }
 // ---------- [#97] listas no padrão: Filas, Fundos, Arquitetos, Auditoria, Configurações e o resumo das máquinas no topo ----------
 { w.route_to('filas'); await sleep(1500);
   chk(!d.querySelector('#filas-body [data-fila-ir="projeto"]'),'[#97] a linha da Fila não deveria ter o botão "Projeto" (a linha já abre o projeto)');
