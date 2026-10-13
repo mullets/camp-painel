@@ -18,6 +18,8 @@ DIVERGENCIAS = {
                           "O termo ou item do site usa um código de fundo que o painel não conhece. Cadastre o fundo ou corrija o código no site."),
     "publicado_em_fundo_fora_do_ar": ("Público no site, mas o fundo está despublicado no painel",
                                       "A folha continua visível no site embora o fundo tenha sido despublicado aqui. Despublique a folha ou publique o fundo de novo."),
+    "fundo_trocado": ("No site, o item está no fundo errado",
+                      "O código da folha diz um fundo (no painel) e o campo Fundo do item no site diz outro (no site). Corrija o campo Fundo no WordPress: o código é que vale."),
     "sem_itens_no_site": ("Fundo sem nenhuma folha no site",
                           "Normal para fundos ainda não publicados. Só exige ação se o fundo deveria estar no site."),
 }

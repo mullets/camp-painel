@@ -3227,6 +3227,23 @@ def filho(modo):
         ver("o termo 'Materiais' do site vira S06", _serie_do_item("", {"Série": "Materiais"}) == "S06")
         c.close()
         print("\n".join(res))
+    elif modo == "b8_fundo_trocado":
+        init_db(); _aplicar_migracoes_real()
+        from app.sincronizador import fundos_do_termo
+        from app.rotas_hoje import _rotulo
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        equiv = {r[0]: r[1] for r in c.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
+        titulos = {str(r[1] or "").lower(): r[0] for r in c.execute("SELECT codigo, titulo FROM fundo")}
+        c.close()
+        ver("termo 'Marcos Acayaba' é o F021 (tabela de equivalência)", fundos_do_termo("Marcos Acayaba", equiv, titulos) == {"F021"}, str(fundos_do_termo("Marcos Acayaba", equiv, titulos)))
+        ver("termo com código no início ('F023 · OCG')", fundos_do_termo("F023 · OCG", equiv, titulos) == {"F023"})
+        ver("vários fundos separados por ';'", fundos_do_termo("Marcos Acayaba; F023 · OCG", equiv, titulos) == {"F021", "F023"})
+        ver("termo desconhecido não acusa nada", fundos_do_termo("Fulano de Tal", equiv, titulos) == set())
+        t, e = _rotulo("fundo_trocado")
+        ver("a divergência tem título e explicação em português", "fundo errado" in t and "o código é que vale" in e, t)
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3898,6 +3915,14 @@ else:
 print("58) B5 séries: S06 'Materiais' e S07 'Redesenhos' iguais às do site")
 rc, out = rodar("b5_series", f"{tmp}/b5.db")
 if rc != 0: ok(False, f"teste B5 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("59) B8 divergência nova: o campo Fundo do item no site diferente do fundo do código")
+rc, out = rodar("b8_fundo_trocado", f"{tmp}/b8.db")
+if rc != 0: ok(False, f"teste B8 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

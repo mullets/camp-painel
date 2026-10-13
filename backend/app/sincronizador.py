@@ -10,6 +10,7 @@ Regras checadas (todas com a tabela de autoridade como referência):
 from __future__ import annotations
 
 import json
+import re
 import traceback
 import threading
 
@@ -45,6 +46,21 @@ def _varre_o_que_sumiu(con, inicio: str, colecoes_com_metadados: list) -> None:
     if colecoes_com_metadados:   # metadados de uma coleção cuja busca falhou ficam como estavam
         marcas = ",".join("?" * len(colecoes_com_metadados))
         con.execute(f"DELETE FROM wp_metadado WHERE visto_em < ? AND colecao_id IN ({marcas})", (inicio, *colecoes_com_metadados))
+
+
+def fundos_do_termo(texto, equiv: dict, titulos: dict) -> set[str]:
+    """B8 · Fundo(s) que o campo "Fundo" do item no site indica: código no início do termo ("F023 · OCG"),
+    o nome do termo na tabela de equivalência (fundo_termo_site) ou o título do fundo no painel."""
+    out = set()
+    for parte in str(texto or "").split(";"):
+        p = parte.strip()
+        if not p:
+            continue
+        m = re.match(r"^(F\d{3})\b", p)
+        c = m.group(1) if m else (equiv.get(p) or titulos.get(p.lower()))
+        if c:
+            out.add(c)
+    return out
 
 
 def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
@@ -103,6 +119,8 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
 
         # ---- 2) coleções e itens: rede -> memória -> uma transação por coleção ----
         fundos_vistos = set()
+        equiv_fundo = {r[0]: r[1] for r in con.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
+        titulos_fundo = {str(r["titulo"] or "").lower(): c for c, r in fundos.items()}
         cols = wp.colecoes()
         log(f"{len(cols)} coleções encontradas")
         metas_ok: list[int] = []
@@ -132,6 +150,9 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                     fundos_vistos.add(f)
                     if publicado and fundos[f]["status_site"] == "fora_do_ar":
                         div(con, "item", cod, "publicado_em_fundo_fora_do_ar", "fora_do_ar", "publish")
+                    no_site = fundos_do_termo(md.get("Fundo") or md.get("Fundos"), equiv_fundo, titulos_fundo)
+                    if no_site and f not in no_site:   # B8: ex. F023-P0013 publicado com Fundo = Marcos Acayaba
+                        div(con, "item", cod, "fundo_trocado", f, md.get("Fundo") or md.get("Fundos"))
             total = len(linhas)
             info: dict = {}
             if ids and gravar_espelho:   # anexos: também rede, ANTES do lock
