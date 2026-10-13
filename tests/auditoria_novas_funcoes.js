@@ -1139,6 +1139,18 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H10 pendências] operador sem "Publicar agora", prévia do site, avisos com botão, "Ver no site"/"Copiar link" no fim ----------
+{ /* operador novo: o "Nova senha" do teste P2-18 já tirou a sessão do operador de antes */
+  const op2=jar(), nu=(await J(adm,'/api/usuarios',{method:'POST',body:JSON.stringify({nome:'Operador H10',email:'op-h10@camp.arq.br',papel:'operador'})})).b;
+  await J(op2,'/api/auth/login',{method:'POST',body:JSON.stringify({email:'op-h10@camp.arq.br',senha:nu.senha_temporaria})});
+  await J(op2,'/api/auth/trocar-senha',{method:'POST',body:JSON.stringify({senha_atual:nu.senha_temporaria,senha_nova:'senha-op-h10-bem-longa-1'})});
+  const pl=(await J(op2,'/api/projetos/F003-P9001/publicar/plano')).b; chk(pl&&pl.pode_agir===false,'[H10] o plano deveria dizer que operador não publica: '+JSON.stringify(pl).slice(0,120));
+  chk(/pode_agir/.test(String(w.abrirPublicacaoGuiada))||/pode_agir/.test(w.eval('String(abrirPublicacaoGuiada)')),'[H10] a janela "Publicar" deveria considerar quem pode agir');
+  const pa=(await J(adm,'/api/projetos/F003-P9001/publicar/plano')).b; chk((pa.avisos||[]).every(a=>!a.id||a.campo!==undefined||a.id!=='vazios'),'[H10] os avisos de campo vazio deveriam dizer qual campo preencher');
+  w.route_to('projeto/F003-P9001'); await sleep(3500); await w.abrirPublicacaoGuiada('F003-P9001'); await sleep(1200);
+  chk(/Como vai aparecer no site/.test(txt('#d-body'))&&!!d.querySelector('#d-body .previa-site'),'[H10] a janela "Publicar" deveria mostrar como o projeto vai aparecer no site'); w.closeDrawer(true);
+  chk(/data-pub-link/.test(w.tarefaPubHTML('F003-P9001',{estado:'ok',etapa:'fim',feitas:1,total:1,resultado:{mensagem:'Publicado.'}})),'[H10] o fim da publicação deveria ter o lugar de "Ver no site" e "Copiar link"');
+  okl.push('H10 pendências: operador não publica, prévia, avisos com botão, ver/copiar link'); w.route_to('painel'); }
 // ---------- [H9 pendências] imagem sem limite baixo, valor lido ao lado do campo, Relatar problema, sem imagem pergunta antes, Aprovar o lote no fim ----------
 { chk(!/max-height:340px/.test(d.documentElement.innerHTML.match(/\.rev-prev\{[^}]*\}/g).join('')),'[H9] a imagem da revisão não deveria ficar limitada a 340 px');
   w.route_to('projeto/F003-P9001'); await sleep(3500); const it=(w.ITENS_PJ||[]).find(x=>x.lote_id);

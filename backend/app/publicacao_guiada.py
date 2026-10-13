@@ -52,11 +52,11 @@ def plano(con, p) -> dict:
     tit = (p["titulo"] or "").strip()
     if _re.match(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+\S", tit):
         limpo = _re.sub(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+", "", tit).replace("_", " ").strip()
-        avisos.append({"id": "titulo", "texto": f"O título “{tit}” parece ter um prefixo de pasta. Como ficaria: “{limpo}”. Corrija em Editar, no topo do projeto."})
+        avisos.append({"id": "titulo", "campo": "titulo", "texto": f"O título “{tit}” parece ter um prefixo de pasta. Como ficaria: “{limpo}”."})
     cidade = p["cidade"] if "cidade" in p.keys() else None
     sem = [n for n, v in (("ano", p["ano"]), ("cidade", cidade)) if not v or str(v) == "0"]
     if sem:
-        avisos.append({"id": "vazios", "texto": "Sem " + " e sem ".join(sem) + ": a página fica sem essa informação. Preencha em Editar, no topo do projeto, ou publique assim mesmo."})
+        avisos.append({"id": "vazios", "campo": sem[0], "texto": "Sem " + " e sem ".join(sem) + ": a página fica sem essa informação. Preencha agora ou publique assim mesmo."})
     return {"passos": passos, "bloqueios": bloqueios, "avisos": avisos, "pode_executar": not bloqueios, "ja_publicado": p["status_site"] == "no_ar",
             "folhas_a_enviar": a_enviar, "folhas_a_publicar": elegiveis,
             "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas, "retidas": retidas}}
