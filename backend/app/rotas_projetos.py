@@ -567,6 +567,41 @@ def vocabulario_tipologia(u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close()
 
 
+class EscolhaCapa(BaseModel):
+    item: str | None = None    # código da folha; vazio volta à capa automática do site
+
+
+@router.post("/projetos/{codigo}/capa")
+def escolher_capa(codigo: str, d: EscolhaCapa, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """B12: a folha que é a capa do projeto no site (e a imagem quando o link é compartilhado)."""
+    from .publicador import capa_no_site
+    con = connect()
+    p = con.execute("SELECT codigo, capa_item FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    if not p:
+        con.close(); raise HTTPException(404, "Projeto não existe")
+    item = (d.item or "").strip() or None
+    if item:
+        it = con.execute("SELECT codigo, retida, duplicata_de, autoria_divergente FROM item WHERE codigo=? AND projeto_codigo=?", (item, codigo)).fetchone()
+        if not it:
+            con.close(); raise HTTPException(400, f"A folha {item} não é deste projeto")
+        if it["retida"] or it["duplicata_de"] or it["autoria_divergente"]:
+            con.close(); raise HTTPException(400, "Esta folha não vai ao site (retida, duplicata ou com autoria divergente). Escolha outra.")
+    con.execute("UPDATE projeto SET capa_item=?, atualizado_em=datetime('now') WHERE codigo=?", (item, codigo))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'capa_escolhida',?,?)",
+                (codigo, u["email"], json.dumps({"antes": p["capa_item"], "depois": item})))
+    con.commit(); con.close()
+    site = capa_no_site(codigo, u["email"], limpar=bool(p["capa_item"]) and not item)
+    if not item:
+        msg = "Capa automática: o site escolhe (primeira foto, senão o primeiro desenho)"
+    elif site.get("enviado"):
+        msg = f"Capa de {codigo}: {item}. O site já mostra a nova capa"
+    elif site.get("erro"):
+        msg = f"Capa guardada no painel; o site não recebeu ({site['erro'][:100]})"
+    else:
+        msg = f"Capa guardada: {item}. Vai para o site quando o projeto e a folha estiverem lá"
+    return {"ok": True, "capa_item": item, "site": site, "mensagem": msg}
+
+
 class RegistroAutoria(BaseModel):
     autoria: str
     papel_no_projeto: str

@@ -366,6 +366,56 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
     return out
 
 
+def media_da_folha(con, codigo: str) -> int | None:
+    """B12: id do anexo da imagem da folha no site (gravado no envio; para as antigas, o que o espelho do site diz)."""
+    r = con.execute("SELECT i.site_media_id, w.json FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id WHERE i.codigo=?", (codigo,)).fetchone()
+    if not r:
+        return None
+    if r["site_media_id"]:
+        return int(r["site_media_id"])
+    try:
+        j = json.loads(r["json"] or "{}")
+    except ValueError:
+        return None
+    for chave in ("_thumbnail_id", "thumbnail_id"):
+        if str(j.get(chave) or "").isdigit() and int(j[chave]):
+            return int(j[chave])
+    if j.get("document_type") == "attachment" and str(j.get("document") or "").isdigit():
+        return int(j["document"])
+    return None
+
+
+def capa_no_site(codigo_projeto: str, ator: str, limpar: bool = False) -> dict:
+    """B12: põe a folha escolhida como miniatura do dossiê no site (o plugin usa como capa e como og:image).
+    Folha que ainda não está no site: fica guardada e vai quando a folha subir (criar_folha_no_site)."""
+    con = connect()
+    out = {"enviado": False, "erro": None, "aguardando": False}
+    try:
+        p = con.execute("SELECT tainacan_item_id, capa_item FROM projeto WHERE codigo=?", (codigo_projeto,)).fetchone()
+        if p and limpar and not p["capa_item"] and p["tainacan_item_id"]:   # voltou à capa automática: tira a miniatura que o painel tinha posto
+            WP().patch_item(COL_PROJETOS, p["tainacan_item_id"], _thumbnail_id="")
+            out["enviado"] = True
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_capa',?,?)",
+                        (codigo_projeto, ator, json.dumps({"folha": None, "media": None})))
+            return out
+        if not p or not p["capa_item"]:
+            return out
+        media = media_da_folha(con, p["capa_item"])
+        if not p["tainacan_item_id"] or not media:
+            out["aguardando"] = True
+            return out
+        WP().patch_item(COL_PROJETOS, p["tainacan_item_id"], _thumbnail_id=media)
+        out["enviado"] = True
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_capa',?,?)",
+                    (codigo_projeto, ator, json.dumps({"folha": p["capa_item"], "media": media})))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]
+        _pendencia(con, "projeto", codigo_projeto, "pendente_capa_no_site", out["erro"])
+    finally:
+        con.commit(); con.close()
+    return out
+
+
 def renomear_agente_no_site(agente_id: int, novo_nome: str, ator: str) -> dict:
     con = connect()
     a = con.execute("SELECT tainacan_term_id FROM agente WHERE id=?", (agente_id,)).fetchone()
@@ -633,6 +683,10 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 wp.definir_documento(COL_ACERVO, iid, m["id"])
                 con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
                 out["imagem"] = m.get("source_url")
+                con.execute("UPDATE item SET site_media_id=? WHERE codigo=?", (m["id"], codigo))
+                if i["dossie_id"] and con.execute("SELECT 1 FROM projeto WHERE codigo=? AND capa_item=?", (i["projeto_codigo"], codigo)).fetchone():
+                    wp.patch_item(COL_PROJETOS, i["dossie_id"], _thumbnail_id=m["id"])   # B12: a capa escolhida chegou ao site
+                    out["capa"] = True
             except Exception as e:  # noqa: BLE001
                 _pendencia(con, "item", codigo, "pendente_imagem_no_site", str(e)[:200]); out["imagem"] = f"falhou: {e}"[:120]
         out["item_id"] = iid

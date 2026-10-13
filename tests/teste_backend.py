@@ -3310,6 +3310,47 @@ def filho(modo):
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
         print("\n".join(res))
+    elif modo == "b12_capa":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F082','Fundo Capa','FCA',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F082',1),('F082',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F082-P0001','F082',1,'Casa',1960,9201),('F082-P0002','F082',2,'Outra',1961,NULL)")
+        A, B, C = ("F082-P0001-1960-S01-D00001", "F082-P0001-1960-S01-D00002", "F082-P0001-1960-S01-D00003")
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id) VALUES (?,?,'S01',1,'importado',9301)", (A, "F082-P0001"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,'S01',2,'importado')", (B, "F082-P0001"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,retida) VALUES (?,?,'S01',3,'importado',1)", (C, "F082-P0001"))
+        c.execute("INSERT INTO wp_item (id, colecao_id, status, titulo, json) VALUES (9301, 8013, 'publish', 'A', ?)", (__import__("json").dumps({"_thumbnail_id": "555", "document": "555", "document_type": "attachment"}),))
+        c.commit()
+        ver("a imagem de uma folha antiga vem do espelho do site", publicador.media_da_folha(c, A) == 555 and publicador.media_da_folha(c, B) is None)
+        c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        patches = []
+        class WPFalso:
+            def patch_item(self, col, iid, **campos): patches.append((col, iid, campos)); return {}
+        publicador.WP = WPFalso
+        r = x.post("/api/projetos/F082-P0001/capa", json={"item": A}).json()
+        ver("escolher a capa troca a miniatura do dossiê no site (capa e og:image)", patches == [(8007, 9201, {"_thumbnail_id": 555})] and "já mostra" in r["mensagem"], str((patches, r))[:300])
+        ver("folha retida não pode ser capa", x.post("/api/projetos/F082-P0001/capa", json={"item": C}).status_code == 400)
+        ver("folha de outro projeto não pode ser capa", x.post("/api/projetos/F082-P0002/capa", json={"item": A}).status_code == 400)
+        patches.clear()
+        r = x.post("/api/projetos/F082-P0001/capa", json={"item": B}).json()
+        ver("folha que ainda não subiu: fica guardada e aguarda", not patches and r["site"]["aguardando"] and r["capa_item"] == B, str(r))
+        c = connect(); c.execute("UPDATE item SET site_media_id=777 WHERE codigo=?", (B,)); c.commit(); c.close()
+        ver("quando a folha sobe, a capa vai ao site", publicador.capa_no_site("F082-P0001", "x")["enviado"] and patches == [(8007, 9201, {"_thumbnail_id": 777})], str(patches))
+        patches.clear()
+        r = x.post("/api/projetos/F082-P0001/capa", json={"item": None}).json()
+        c = connect()
+        ver("vazio volta à capa automática do site (e tira a miniatura que o painel tinha posto)", r["capa_item"] is None and c.execute("SELECT capa_item FROM projeto WHERE codigo='F082-P0001'").fetchone()[0] is None
+            and patches == [(8007, 9201, {"_thumbnail_id": ""})], str(patches))
+        ver("fica na auditoria", c.execute("SELECT COUNT(*) FROM evento WHERE codigo='F082-P0001' AND tipo='capa_escolhida'").fetchone()[0] == 3); c.close()
+        print("\n".join(res))
     elif modo == "b3_tipologia":
         init_db(); _aplicar_migracoes_real()
         from app import auth, publicador, importador_site, tipologia as tp
@@ -4288,6 +4329,14 @@ else:
 print("68) B3 classificação do projeto com o vocabulário do site (programa, natureza, modalidade, situação)")
 rc, out = rodar("b3_tipologia", f"{tmp}/b3.db")
 if rc != 0: ok(False, f"teste B3 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("69) B12 capa do projeto escolhida no painel")
+rc, out = rodar("b12_capa", f"{tmp}/b12.db")
+if rc != 0: ok(False, f"teste B12 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
