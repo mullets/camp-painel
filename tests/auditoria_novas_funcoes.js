@@ -1139,6 +1139,16 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H1 pendências] "?" nas janelas laterais, foco depois do "Entendi", "?" nas páginas de detalhe, passos no celular ----------
+{ await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_projeto',valor:null})}); await w.carregarPreferenciasAjuda(); await sleep(200);
+  await w.editarProjeto('F026-P0001'); await sleep(600); const da=d.getElementById('d-ajuda');
+  chk(da&&!da.hidden&&!!d.querySelector('#d-body > .ajuda-caixa[data-ajuda="editar_projeto"]'),'[H1] "Editar projeto" deveria ter o "?" e, na 1ª vez, a caixa "Como funciona"');
+  d.querySelector('#d-body > .ajuda-caixa [data-ajuda-fechar]').click(); await sleep(400);
+  chk(!d.querySelector('#d-body > .ajuda-caixa')&&d.activeElement===d.getElementById('d-title'),'[H1] "Entendi" na janela deveria fechar a caixa e pôr o foco no título da janela');
+  da.click(); await sleep(100); chk(!!d.querySelector('#d-body > .ajuda-caixa'),'[H1] o "?" da janela deveria reabrir a caixa'); w.closeDrawer(true);
+  w.route_to('projeto/F026-P0001'); await sleep(3000); chk(!!d.querySelector('#v-projeto .dethdr .help-h1, .content.on .dethdr .help-h1'),'[H1] a página do projeto deveria ter o "?" ao lado do título');
+  chk(!!d.querySelector('.ajuda-caixa .aj-passos-m')||!d.querySelector('.ajuda-caixa'),'[H1] a caixa deveria ter "Ver os passos" para o celular');
+  okl.push('H1 pendências: ? e caixa nas janelas laterais, foco certo, ? nas páginas de detalhe, passos no celular'); w.route_to('painel'); await sleep(1500); }
 // ---------- [H26] Entrar, Meu perfil e primeiro acesso: texto da tela de entrar, olho na senha, força da senha, sessões em linguagem, boas-vindas por papel ----------
 { chk(/Esqueceu a senha\? Peça ao Rafael uma senha nova/.test(txt('#login')),'[H26] a tela de entrar deveria explicar o que fazer quando esquece a senha');
   const ls=d.getElementById('lg-senha'), ol=ls.parentElement.querySelector('[data-olho]'); chk(!!ol,'[H26] o campo de senha deveria ter o botão de mostrar'); if(ol){ ol.click(); chk(ls.type==='text'&&ol.getAttribute('aria-pressed')==='true','[H26] o olho deveria mostrar a senha'); ol.click(); }
