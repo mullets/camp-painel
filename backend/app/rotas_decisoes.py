@@ -37,7 +37,19 @@ def detalhe(did: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
         r = con.execute("SELECT * FROM decisao WHERE id=?", (did,)).fetchone()
         if not r:
             raise HTTPException(404, "Decisão não existe")
-        return _linha(r)
+        d = _linha(r)
+        # H11: miniatura de cada candidato (o que já está no site ou a 1ª folha com prévia) e o código que "É outro" vai criar
+        for c in d["candidatos"]:
+            w = con.execute("SELECT thumb_url FROM wp_item WHERE projeto_detectado=? AND thumb_url IS NOT NULL ORDER BY codigo_detectado LIMIT 1", (c.get("codigo"),)).fetchone()
+            i = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND pendencias LIKE '%previa%' ORDER BY serie_codigo, sequencial LIMIT 1", (c.get("codigo"),)).fetchone()
+            c["capa"] = {"thumb_url": w[0] if w else None, "item": i[0] if i else None}
+        if d.get("situacao") == "pendente" and d.get("fundo_codigo"):
+            from .projetos_novos import proximo_numero
+            try:
+                d["proximo_codigo"] = f"{d['fundo_codigo']}-P{proximo_numero(con, d['fundo_codigo'], d['pedido'].get('proximo_p_local')):04d}"
+            except Exception:  # noqa: BLE001 - sem contador: o botão fica sem o número
+                d["proximo_codigo"] = None
+        return d
     finally:
         con.close()
 
