@@ -119,6 +119,28 @@ class RevisaoItem(BaseModel):
     estado: str     # conferida (está certo) | corrigida (a pessoa editou) | pendente (volta para conferir)
 
 
+def registrar_campos_revisados(con, codigo: str, estado: str, por: str) -> None:
+    """Cartão 152: compara, campo a campo, o que o CV2 leu (item.lido_json) com o que ficou depois da revisão.
+    igual = aceito sem correção; corrigido = a pessoa mudou; preenchido = o CV2 leu vazio e a pessoa preencheu. Voltar a 'pendente' apaga o registro."""
+    if estado == "pendente":
+        con.execute("DELETE FROM revisao_campo WHERE item_codigo=?", (codigo,)); return
+    it = con.execute("SELECT titulo, tipo_documento, folha, escala, ano_folha, lido_json, versao_cv2 FROM item WHERE codigo=?", (codigo,)).fetchone()
+    if not it or not it["lido_json"]:
+        return
+    try:
+        lido = json.loads(it["lido_json"])
+    except ValueError:
+        return
+    norm = lambda v: "" if v is None else str(v).strip()  # noqa: E731
+    for campo, v_lido in lido.items():
+        a, b = norm(v_lido), norm(it[campo])
+        if not a and not b:
+            continue
+        res = "igual" if a == b else ("preenchido" if not a else "corrigido")
+        con.execute("INSERT OR REPLACE INTO revisao_campo (item_codigo, campo, valor_lido, valor_final, resultado, versao_cv2, por) VALUES (?,?,?,?,?,?,?)",
+                    (codigo, campo, a or None, b or None, res, it["versao_cv2"], por))
+
+
 @router.post("/itens/{codigo}/revisao")
 def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"))) -> dict:
     if d.estado not in ("pendente", "conferida", "corrigida"):
@@ -135,6 +157,7 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         con.execute("UPDATE item SET revisao=?, revisado_por=?, revisado_em=CASE WHEN ?='pendente' THEN NULL ELSE datetime('now') END, atualizado_em=datetime('now') WHERE codigo=?",
                     (d.estado, None if d.estado == "pendente" else u["email"], d.estado, codigo))
         _evento(con, "item", codigo, "revisao", u["email"], {"de": i["revisao"], "para": d.estado})
+        registrar_campos_revisados(con, codigo, d.estado, u["email"])
         con.commit()
         return {"ok": True, "revisao": d.estado}
     finally:

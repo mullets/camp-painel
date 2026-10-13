@@ -2843,6 +2843,49 @@ def filho(modo):
         ver("admin devolve COM motivo: a folha entra na próxima importação, pendente de conferência", r.status_code == 200 and sql("SELECT revisao FROM item WHERE codigo=?", ret["codigo"]) == "pendente" and sql("SELECT COUNT(*) FROM evento WHERE tipo='cv_retirado_devolver'") == 1, r.text[:120])
         ver("leitura não responde (403); resposta inválida (400); lote inexistente (404)", lei.post(U, json={"tipo": "proposta", "chave": "x", "acao": "aceitar"}).status_code == 403 and op.post(U, json={"tipo": "sugestao", "chave": "titulo", "acao": "aceitar"}).status_code == 400 and op.post("/api/lotes/99999/saidas-cv/resposta", json={"tipo": "proposta", "chave": "x", "acao": "aceitar"}).status_code == 404)
         for l in res: print(l)
+    elif modo == "qualidade_cv":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, shutil
+        from app import auth, importador_lote
+        from fastapi.testclient import TestClient
+        from app.main import app
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        raiz = _pl.Path(tempfile.mkdtemp()); pasta = raiz / "Taruma"; (pasta / "catalogacao").mkdir(parents=True); shutil.copy(EX / "pacote_tainacan.json", pasta / "catalogacao" / "pacote_tainacan.json")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Edifício Tarumã',1972)")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Tarumã','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid
+        importador_lote.importar_lote(c, lid, "teste"); c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        d0, d1 = pac["documentos"][0]["codigo"], pac["documentos"][1]["codigo"]
+        lido0 = _j.loads(sql("SELECT lido_json FROM item WHERE codigo=?", d0))
+        ver("a importação guarda por folha a versão do CV2, o modelo e o que ele LEU", sql("SELECT versao_cv2 FROM item WHERE codigo=?", d0) == pac["documentos"][0]["versao_cv2"] and sql("SELECT modelo_cv FROM item WHERE codigo=?", d0) == pac["documentos"][0]["modelo"] and lido0.get("folha") == "03", str(lido0))
+        ver("a importação guarda o custo e o tempo do lote (bloco execucao)", _j.loads(sql("SELECT execucao_json FROM lista_processamento WHERE id=?", lid))["custo_usd"] == pac["execucao"]["custo_usd"])
+        k.execute("UPDATE item SET titulo='Planta do térreo', folha='3' WHERE codigo=?", (d0,)); k.commit()       # a pessoa corrige a folha e preenche o título
+        r0 = op.post(f"/api/itens/{d0}/revisao", json={"estado": "corrigida"}); r1 = op.post(f"/api/itens/{d1}/revisao", json={"estado": "conferida"})
+        rc = {r_["campo"]: r_["resultado"] for r_ in k.execute("SELECT campo, resultado FROM revisao_campo WHERE item_codigo=?", (d0,))}
+        ver("ao salvar a revisão, cada campo fica registrado: corrigido (03 → 3), preenchido (CV2 leu vazio)", r0.status_code == 200 and rc.get("folha") == "corrigido" and rc.get("titulo") == "preenchido", str(rc))
+        ver("folha conferida sem mudança: os campos lidos ficam 'igual'", r1.status_code == 200 and sql("SELECT COUNT(*) FROM revisao_campo WHERE item_codigo=? AND resultado<>'igual'", d1) == 0 and sql("SELECT COUNT(*) FROM revisao_campo WHERE item_codigo=?", d1) >= 1)
+        q = adm.get("/api/qualidade-cv").json()
+        fol = next((x_ for x_ in q["por_campo"] if x_["campo"] == "folha"), {})
+        ver("página: % aceito sem correção por versão e por campo", fol.get("versao") == pac["documentos"][0]["versao_cv2"] and fol.get("total") == 2 and fol.get("corrigidos") == 1 and fol.get("pct_aceito") == 50, str(fol))
+        lt = q["por_lote"][0] if q["por_lote"] else {}
+        ver("página: custo, tempo e folhas por lote; custo por folha por versão", lt.get("custo_usd") == pac["execucao"]["custo_usd"] and lt.get("folhas") == 2 and q["por_versao"][0]["custo_por_folha"] == round(pac["execucao"]["custo_usd"] / 2, 4), str(lt) + " " + str(q["por_versao"][:1]))
+        g1 = adm.get("/api/qualidade-cv/gabarito.csv")
+        ver("gabarito com lote NÃO aprovado: só o cabeçalho, com os nomes exatos que o vigia.py --avaliar exige", g1.status_code == 200 and g1.text.strip().splitlines() == ["arquivo_origem,campo,valor_lido,valor_correto,revisado_por,data"], g1.text[:120])
+        k.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (lid,)); k.commit()
+        linhas = adm.get("/api/qualidade-cv/gabarito.csv").text.strip().splitlines()
+        ver("gabarito com o lote aprovado: o valor lido e o corrigido lado a lado, com o arquivo de origem", any(",folha,03,3," in l_ for l_ in linhas) and all(l_.split(",")[0] for l_ in linhas[1:]), str(linhas[:3]))
+        ver("só admin vê a página e o gabarito (operador 403)", op.get("/api/qualidade-cv").status_code == 403 and op.get("/api/qualidade-cv/gabarito.csv").status_code == 403)
+        k.execute("UPDATE lista_processamento SET aprovado_em=NULL WHERE id=?", (lid,)); k.commit(); op.post(f"/api/itens/{d0}/revisao", json={"estado": "pendente"})
+        ver("voltar a folha para 'pendente' apaga o registro dela (não conta em dobro)", sql("SELECT COUNT(*) FROM revisao_campo WHERE item_codigo=?", d0) == 0)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3356,6 +3399,14 @@ else:
 print("48) #148 respostas ao CAMP Vision: usar/ignorar sugestão, aceitar/recusar proposta, devolver folha retirada")
 rc, out = rodar("respostas_cv", f"{tmp}/respostas.db")
 if rc != 0: ok(False, f"teste das respostas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("49) #152 qualidade e custo do CAMP Vision: o que foi lido × corrigido, por campo e versão; gabarito.csv")
+rc, out = rodar("qualidade_cv", f"{tmp}/qualidade.db")
+if rc != 0: ok(False, f"teste da qualidade não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

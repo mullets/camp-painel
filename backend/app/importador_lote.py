@@ -99,7 +99,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))), "credito": d.get("credito") or None,
-                  "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id}
+                  "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
+                  "versao_cv2": (str(d.get("versao_cv2") or "").strip() or None), "versao_prompt": (str(d.get("versao_prompt") or "").strip() or None), "modelo_cv": (str(d.get("modelo") or "").strip() or None)}
+        campos["lido_json"] = json.dumps({k_: campos[k_] for k_ in ("titulo", "tipo_documento", "folha", "escala", "ano_folha")}, ensure_ascii=False)   # o que o CV2 LEU (cartão 152)
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
             atualizados += 1
@@ -120,6 +122,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas, "teste": bool(pacote.get("teste"))}
     resultado["importacao"] = {**resumo, "por": ator}
+    if isinstance(pacote.get("execucao"), dict):                 # custo, tempo e versão do lote (cartão 152)
+        con.execute("UPDATE lista_processamento SET execucao_json=? WHERE id=?", (json.dumps(pacote["execucao"], ensure_ascii=False), lote_id))
     con.execute("UPDATE lista_processamento SET resultado=?, atualizado_em=datetime('now') WHERE id=?", (json.dumps(resultado, ensure_ascii=False), lote_id))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folhas_importadas_do_lote',?,?)",
                 (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))

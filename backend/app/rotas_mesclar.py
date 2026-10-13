@@ -110,6 +110,7 @@ def _trocar_codigo(con, antigo: str, novo: str) -> None:
     con.execute("UPDATE pedido_releitura SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (novo, antigo))
     con.execute("UPDATE erro SET codigo=? WHERE codigo=?", (novo, antigo))
+    con.execute("UPDATE revisao_campo SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
 
 
 def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None) -> dict:

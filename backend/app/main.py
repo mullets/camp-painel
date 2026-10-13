@@ -49,6 +49,8 @@ from .rotas_publicar_tudo import router as rotas_publicar_tudo
 app.include_router(rotas_publicar_tudo)
 from .rotas_mesclar import router as rotas_mesclar
 app.include_router(rotas_mesclar)
+from .rotas_qualidade import router as rotas_qualidade
+app.include_router(rotas_qualidade)
 from .rotas_releitura import router as rotas_releitura
 app.include_router(rotas_releitura)
 app.include_router(rotas_operacao)

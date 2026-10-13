@@ -410,7 +410,7 @@ w.route_to('painel'); await sleep(2800);
 { w.confirm=()=>true;
   chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Material novo','Pedidos','Acervo','Sistema']),'o menu deveria ter os grupos por trabalho: Material novo, Pedidos, Acervo, Sistema: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
   const grupo=nome=>{const g=[...d.querySelectorAll('#nav .grp')].find(x=>x.textContent.trim()===nome),r=[];for(let e=g&&g.nextElementSibling;e&&!e.classList.contains('grp');e=e.nextElementSibling)if(e.dataset.v)r.push(e.dataset.v);return r.join(',')};
-  chk(grupo('Material novo')==='filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
+  chk(grupo('Material novo')==='filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,qualidade,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
   chk(txt('#nav [data-v="projetos"] kbd')==='6'&&txt('#nav [data-v="filas"] kbd')==='2'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Filas 2, Projetos 6, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
@@ -752,6 +752,16 @@ w.route_to('painel'); await sleep(2800);
     box.querySelector('[data-cv-resp="retirado"]').click(); await sleep(300); chk(reqs.length===n0,'sem motivo, a devolução NÃO deveria ser enviada');
     box.querySelector('input').value='o carimbo é do próprio arquiteto'; box.querySelector('[data-cv-resp="retirado"]').click(); await sleep(400);
     const dv=reqs[reqs.length-1]; chk(reqs.length===n0+1&&dv.tipo==='retirado'&&dv.acao==='devolver'&&dv.chave==='F003-P9001-1972-S01-D00009'&&/carimbo/.test(dv.motivo),'com motivo, a devolução deveria ser enviada com o código e o motivo: '+JSON.stringify(dv)) }
+  w.fetch=fetchOrig; w.route_to('painel'); }
+// ---------- [#152] Qualidade do CAMP Vision: por versão, por campo, por lote, gabarito ----------
+{ const fetchOrig=w.fetch, R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j});
+  chk(w.pode('rota.qualidade')&&!!d.querySelector('[data-v="qualidade"]'),'admin deveria ver "Qualidade do CAMP Vision" no menu');
+  const Q={por_versao:[{versao:'2026-10-10-02+d4f9308',pct_aceito:50,total:4,lotes:1,folhas:2,custo_usd:0.006,custo_por_folha:0.003}],por_campo:[{versao:'2026-10-10-02+d4f9308',campo:'folha',rotulo:'Folha',iguais:1,corrigidos:1,preenchidos:0,pct_aceito:50,total:2}],por_lote:[{id:1,nome:'Tarumã',projeto_codigo:'F026-P0001',versao_cv2:'2026-10-10-02+d4f9308',folhas:2,custo_usd:0.006,tempo_s:3.3,aprovado:true}]};
+  w.fetch=(u,o={})=>/\/api\/qualidade-cv$/.test(String(u))?R(Q):fetchOrig(u,o); w.route_to('qualidade'); await sleep(800); const b=txt('#qc-corpo');
+  chk(/Por versão/.test(b)&&/50%/.test(b)&&/US\$ 0\.003/.test(b)&&/Por campo/.test(b)&&/Folha/.test(b)&&/Por lote/.test(b)&&/Tarumã/.test(b)&&/3 s/.test(b),'a página deveria mostrar o placar por versão, por campo e o custo por lote: "'+b.slice(0,200)+'"');
+  chk((d.getElementById('qc-gabarito')||{}).getAttribute&&d.getElementById('qc-gabarito').getAttribute('href')==='/api/qualidade-cv/gabarito.csv','"Exportar gabarito" deveria baixar /api/qualidade-cv/gabarito.csv');
+  w.fetch=(u,o={})=>/\/api\/qualidade-cv$/.test(String(u))?R({por_versao:[],por_campo:[],por_lote:[]}):fetchOrig(u,o); w.route_to('qualidade'); await sleep(800);
+  chk(/Ainda não há folhas conferidas/.test(txt('#qc-corpo')),'sem dados, a página deveria explicar que os números aparecem depois da conferência');
   w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
