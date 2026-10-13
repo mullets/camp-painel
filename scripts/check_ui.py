@@ -32,8 +32,8 @@ for token in required_dom:
 # Impede voltar a crescer sem controle: o teto é o número atual (13/10/2026). Novo layout
 # usa classes/componentes; quem tirar estilo inline pode baixar este número.
 inline = len(re.findall(r'\bstyle="', text))
-if inline > 179:
-    errors.append(f"orçamento de estilos inline excedido: {inline} > 179")
+if inline > 171:
+    errors.append(f"orçamento de estilos inline excedido: {inline} > 171")
 
 # Detecta HTML/JS de componentes sem seu CSS, causa da regressão real do dashboard.
 pairs = [
@@ -57,6 +57,7 @@ for velho, dica in (('class="backbar"', "detalhe tem um só Voltar (o do topo)")
 # --- vocabulário único de publicação (docs/vocabulario.md): estas frases NÃO podem voltar ---
 PROIBIDAS = [
     (r"\bno ar\b", "use 'publicado' / 'Publicar'"),
+    (r"logado no WordPress", "o operador não precisa saber do WordPress: diga 'só a equipe vê'"),
     (r"fora do ar", "use 'despublicado' / 'Despublicar'"),
     (r"tirar (?:o fundo |todo o fundo )?do ar", "use 'Despublicar'"),
     (r"colocar[^`'\"<\n]{0,30}no ar", "use 'Publicar'"),

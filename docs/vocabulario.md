@@ -25,3 +25,8 @@ Uma só linguagem em **todas** as telas, mensagens da API e documentos. Quem esc
 - "Desativar/Reativar" é só para **contas de usuário** e **2FA**, nunca para conteúdo do acervo.
 - Valores internos (`no_ar`, `fora_do_ar`, `tirar_do_ar` na API) ficam como estão por compatibilidade; só os rótulos mudam.
 - Em português do Brasil, concordância normal: "projeto publicado", "folha publicada".
+
+## Quem vê o quê (modo operador, 13/10/2026)
+- Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
+- A tela "Máquinas e site" e o resumo de máquinas do topo são só para admin.
+- Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê.

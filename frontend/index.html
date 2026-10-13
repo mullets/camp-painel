@@ -459,7 +459,7 @@ tr[data-nav]:hover td:last-child::after,tr[data-abrir]:hover td:last-child::afte
 .login small{color:var(--ink3);font-size:var(--fs-sm)}
 .who{cursor:pointer}
 body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
-body:not(.admin):not(.master) [data-v="config"],body:not(.admin):not(.master) [data-v="auditoria"],body:not(.admin):not(.master) [data-v="uso"]{display:none}
+body:not(.admin):not(.master) #machine-status,body:not(.admin):not(.master) [data-v="estacoes"],body:not(.admin):not(.master) [data-v="config"],body:not(.admin):not(.master) [data-v="auditoria"],body:not(.admin):not(.master) [data-v="uso"]{display:none}
 .cfg{display:grid;grid-template-columns:1fr;gap:10px}.cfg .row2{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}.cfg small{color:var(--ink3);display:block}
 .papel{font-family:var(--mono);font-size:var(--fs-xs)}
 
@@ -800,40 +800,7 @@ body.na-painel #system-banner{display:none!important}
   <div class="gcrumb" id="gcrumb"></div>
   <!-- PAINEL -->
   <section class="content on" id="v-painel">
-    <div class="hdr"><div><h1>Sábado, 26 de setembro</h1><p class="sub">Estado do acervo hoje. Tudo o que precisa de decisão sua aparece primeiro.</p><div class="shortcuts"><span><kbd>⌘K</kbd> buscar</span><span><kbd>1</kbd>–<kbd>9</kbd> seções · <kbd>E</kbd> <kbd>A</kbd> <kbd>C</kbd> sistema</span><span><kbd>F</kbd> filtrar tabela</span><span><kbd>⌘B</kbd> barra lateral</span><span><kbd>Esc</kbd> fechar</span></div></div></div>
-    <div class="grid g4" style="margin-bottom:16px">
-      <div class="panel stat"><div class="v">3</div><div class="l">projetos na fila do CAMP Vision</div><div class="d"><span class="tag b">1 processando</span></div></div>
-      <div class="panel stat"><div class="v">4</div><div class="l">solicitações de material em alta</div><div class="d"><span class="tag a">2 aguardam resposta</span></div></div>
-      <div class="panel stat"><div class="v">5</div><div class="l">erros relatados em aberto</div><div class="d"><span class="tag r">1 autoria divergente</span></div></div>
-      <div class="panel stat"><div class="v">30</div><div class="l">fundos cadastrados</div><div class="d">próximo código livre <span class="code">F031</span></div></div>
-    </div>
-    <div class="grid g2">
-      <div class="panel"><div class="ph"><h2>Precisa de você</h2></div><div class="pb">
-        <ul class="list">
-          <li><span class="tag r">erro</span><div class="t">Prancha de Salvador Candia dentro do Safra Mooca<small><span class="code">F014-P0004</span> autoria divergente · bloqueia publicação</small></div><button class="btn sm" onclick="nav('projeto/F014-P0004')">Abrir</button></li>
-          <li><span class="tag a">pedido</span><div class="t">Editora Romano Guerra pede 6 pranchas em TIFF<small>F024 Paulo Mendes da Rocha · aguarda orçamento</small></div><button class="btn sm" onclick="go('solicitacoes')">Ver</button></li>
-          <li><span class="tag b">fila</span><div class="t">Lote "PLANTAS 9" concluído, aguarda sua revisão<small><span class="code">F023-P0011</span> 274 folhas · contatos.jpg gerado</small></div><button class="btn sm" onclick="nav('projeto/F023-P0011')">Revisar</button></li>
-          <li><span class="tag">fundo</span><div class="t">Carlos Henrique Heck sem código de fundo<small>material já em digitalização, precisa reservar F031</small></div><button class="btn sm" onclick="go('fundos')">Reservar</button></li>
-        </ul>
-      </div></div>
-      <div class="panel"><div class="ph"><h2>Pipeline hoje</h2><span class="tag" style="margin-left:auto">Windows → QNAP → CAMP Vision → Tainacan</span></div><div class="pb">
-        <div class="kv">
-          <dt>Aguardando F12 na estação Contex</dt><dd>2 projetos (~1,4 GB)</dd>
-          <dt>Enviados ao QNAP hoje</dt><dd>3 projetos · 118 TIF</dd>
-          <dt>CAMP Vision 2</dt><dd>1 processando · 1 concluído · 1 na fila</dd>
-          <dt>Rascunhos no Tainacan</dt><dd>41 itens esperando publicação</dd>
-          <dt>Publicados esta semana</dt><dd>58 itens em 11 fundos</dd>
-        </div>
-        <div style="margin-top:14px"><h2>Digitalização por fundo (mês)</h2>
-          <div style="display:grid;gap:8px;font-size:13px">
-            <div>Barillari <span class="code">F020</span><div class="bar"><i style="width:82%"></i></div></div>
-            <div>Francisco Segnini Jr. <span class="code">F010</span><div class="bar"><i style="width:55%"></i></div></div>
-            <div>Oswaldo Corrêa Gonçalves <span class="code">F023</span><div class="bar"><i style="width:40%"></i></div></div>
-            <div>Joaquim Barretto <span class="code">F014</span><div class="bar"><i style="width:22%"></i></div></div>
-          </div>
-        </div>
-      </div></div>
-    </div>
+    <div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando o painel…</div></div></div>
   </section>
 
   <!-- DECISÕES -->
@@ -1200,7 +1167,7 @@ const FUNDO_NOME={};   // #94: nome vindo do detalhe, para a trilha e o topo nã
 const fundoNome=c=>{const f=FUNDOS.find(x=>x[0]===c);return f?f[2]:(FUNDO_NOME[c]||c)};
 
 // ---------- projetos e itens (protótipo) ----------
-const STATUS_NO_SITE={publish:'publicado',private:'despublicado (privado no site: só quem está logado no WordPress vê)',draft:'rascunho (só quem está logado no WordPress vê)',pending:'pendente de revisão (só quem está logado vê)'};
+const STATUS_NO_SITE={publish:'publicado',private:'despublicado (retirado do público de propósito)',draft:'rascunho (só a equipe vê no site)',pending:'pendente de revisão (só quem está logado vê)'};
 // #95: o nome que a pessoa reconhece (sem o prefixo de pasta do scanner "T102_" e sem "_"); o banco não muda. Igual a pendencias.titulo_limpo.
 function tituloExibicao(t){const s=String(t||'').trim(),s2=s.replace(/^(?:lote\s+)?[A-Za-z]{1,3}\d{1,5}[_ -]+/i,'');return (s2||s).replace(/_/g,' ').replace(/\s+/g,' ').trim()}
 const PROJ_INFO={};   // #95: fundo e título vindos do detalhe, para a trilha e o "Voltar" do topo não repetirem o código
@@ -1208,7 +1175,7 @@ const PUB_PUBLICA=(d,p)=>d.pagina_status?d.pagina_status==='publish':p.status_si
 function linkPaginaSite(url,publicada,cls='btn sm',presumido=false){if(!url)return '';const u=escHtml(url);
   const cod=presumido&&publicada?((url.match(/\/acervo\/projetos\/(f\d{3}-p\d{4})/i)||[])[1]||'').toUpperCase():'';
   if(cod)setTimeout(()=>confirmarPaginaPublica(cod),0);      // o endereço é um palpite: pergunta ao SITE qual é o real
-  return publicada?`<a class="${cls}" href="${u}" target="_blank" rel="noopener"${cod?` data-pg-publica="${escHtml(cod)}"`:''}${presumido?' title="Endereço montado pelo painel; o painel está confirmando no site."':''}>Ver página pública</a>`:`<a class="${cls}" href="${u}" target="_blank" rel="noopener" title="Esta página ainda não é pública: visitantes veem erro 404. Só abre se você estiver logado no WordPress.">Abrir no site (não publicado)</a>`}
+  return publicada?`<a class="${cls}" href="${u}" target="_blank" rel="noopener"${cod?` data-pg-publica="${escHtml(cod)}"`:''}${presumido?' title="Endereço montado pelo painel; o painel está confirmando no site."':''}>Ver página pública</a>`:`<a class="${cls}" href="${u}" target="_blank" rel="noopener" title="Esta página ainda não é pública: visitantes veem erro 404. Só a equipe consegue abrir.">Abrir no site (não publicado)</a>`}
 async function confirmarPaginaPublica(codigo,tent=0){
   const as=[...document.querySelectorAll('a[data-pg-publica="'+codigo+'"]')].filter(a=>!a.dataset.pgFeito);   // pode haver dois: o do topo e o do Próximo passo (#95)
   if(!as.length){if(tent<3&&!document.querySelector('a[data-pg-publica="'+codigo+'"]'))setTimeout(()=>confirmarPaginaPublica(codigo,tent+1),400);return}
@@ -1308,7 +1275,7 @@ function crumbs(route){const [v,arg]=route.split('/');const H=`<a onclick="go('p
 function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document.getElementById('v-nao-encontrado');if(!sec){sec=document.createElement('section');sec.className='content';sec.id='v-nao-encontrado';document.getElementById('drawer').before(sec)}sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1><p class="sub">${escHtml(detalhe)}</p></div></div><div class="panel"><div class="pb"><button class="btn pri" onclick="go('${fallback}')">Voltar</button></div></div>`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
 const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 // UMA regra: papel mínimo de cada ação/tela. O servidor continua sendo a garantia (devolve 403); aqui o botão simplesmente não aparece para quem não pode.
-const PODE={'rota.uso':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','analytics.diagnostico':'admin'};
+const PODE={'rota.estacoes':'admin','rota.uso':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','analytics.diagnostico':'admin'};
 function pode(acao){const min=PODE[acao];return !min||(!!EU&&(PAPEL_NIVEL[EU.papel]||0)>=PAPEL_NIVEL[min])}
 function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
 function route_to(route){route=route||'painel';document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();const a1=route.split('/')[1]||'';if(v==='decisoes')carregarDecisoes();if(v==='filas'){FILA_FILTRO=a1||null;carregarFilas()}if(v==='projetos'){carregarProjetosAPI(a1?{situacao:a1}:{});if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='erros')carregarErros();if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){carregarEstacoes();setTimeout(()=>{carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='etiquetas')aplicarRotaEtiquetas(route)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
@@ -1768,7 +1735,7 @@ const GLOSSARIO=[
  ['Conferir','conferir','Olhar cada folha e dizer se o que o CAMP Vision leu está certo, corrigindo se preciso.'],
  ['Aprovar o lote','aprovar o lote','Um admin confirma que a conferência terminou. Depois disso, as folhas não mudam mais sem reabrir.'],
  ['Site / Tainacan','Tainacan','A parte pública do acervo em camp.arq.br/colecoes.'],
- ['Rascunho','rascunho','Já está no site, mas só quem está logado no WordPress vê.'],
+ ['Rascunho','rascunho','Já está no site, mas só a equipe vê.'],
  ['Publicado','publicado','Qualquer pessoa vê no site.'],
  ['Despublicado','despublicado','Estava publicado e foi retirado de propósito. Continua guardado.'],
  ['Retida','retida','Folha que uma pessoa decidiu não publicar. Fica no painel, conferida, mas nunca vai ao site.'],
@@ -2786,7 +2753,7 @@ async function salvarProjeto(code){if(!validarCampos(document.getElementById('dr
   for(const k of ['titulo','ano','ano_fim','cidade','endereco_obra','cliente','tipologia','autoria','papel_no_projeto','ambito_conteudo','contagem_esperada']){const el=document.getElementById('ep-'+k);if(!el)continue;if(k==='tipologia'&&el.dataset.orig!==undefined){if(el.value!==(el.dataset.orig||''))b[k]=el.value;continue}let v=el.value;if(['ano','ano_fim','contagem_esperada'].includes(k))v=v===''?null:+v;else v=v===''?null:v;if(v!==null)b[k]=v}b.lote_teste=document.getElementById('ep-lote_teste').checked;
   estadoEditor('salvando');try{const r=await API('/api/projetos/'+code,{method:'PATCH',body:JSON.stringify(b)});estadoEditor('salvo');const st=r.site;toast(r.campos.length?`Salvo: ${r.campos.map(rotulo).join(', ')}${st&&st.erro?' · a página pública NÃO recebeu (fica na lista do que falta enviar)':st&&(st.enviados||[]).length?' · página pública atualizada':''}`:'Nada mudou');limparAlteracoes('drawer');closeDrawer(true);showProjeto(code)}catch(e){estadoEditor('erro',e.message)}}
 let PUB_REFRESH=null;
-const PUB_EXPLICA={no_ar:'Publicado: qualquer visitante vê as páginas.',rascunho:'Rascunho: está no site, mas só quem está logado no WordPress vê.',fora_do_ar:'Despublicado: retirado do público de propósito (privado no site).',nao_publicado:'Não publicado: existe só no painel.'};
+const PUB_EXPLICA={no_ar:'Publicado: qualquer visitante vê as páginas.',rascunho:'Rascunho: está no site, mas só a equipe vê.',fora_do_ar:'Despublicado: retirado do público de propósito (privado no site).',nao_publicado:'Não publicado: existe só no painel.'};
 const PUB_TAG={no_ar:'g',rascunho:'b',fora_do_ar:'r',nao_publicado:''};
 function itemChecklist(c,podeAgir){
   const cls=c.ok?'ok':c.bloqueia?'falta':'aviso',ico=c.ok?'✔':c.bloqueia?'✖':'!',leitor=c.ok?'cumprido':c.bloqueia?'pendente':'aviso';
@@ -3440,7 +3407,7 @@ async function abrirConfigMaquina(chave){
   },80);
 }
 async function atualizarTopoEstacoes(){
-  const el=document.getElementById('machine-status');if(!el||!EU)return;
+  const el=document.getElementById('machine-status');if(!el||!EU)return;if(!['admin','master'].includes(EU.papel)){el.innerHTML='';return}   /* modo operador: máquinas e site são assunto do admin */
   try{
     const d=await API('/api/estacoes');
     const maquinas=d.maquinas.map(m=>{
