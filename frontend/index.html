@@ -2987,6 +2987,8 @@ function machineChip(m){
 async function diagnosticarAnalytics(){
   try{
     const d=await API('/api/analytics/diagnostico');
+    if(d.via==='ga4_direto'){const ok=d.ok;openDrawer('Diagnóstico do Google Analytics',ok?'GA4 direto funcionando':'GA4 direto (conta de serviço)',
+      `<div class="stale-note"${ok?' style="border-color:var(--green);background:var(--green-soft)"':''}><span class="status-dot ${ok?'ok':'warn'}"></span><span><b>${ok?'Analytics funcionando.':'Falha:'}</b> ${escHtml(ok?d.mensagem:(d.erro||'não identificada'))}</span></div><dl class="kv"><dt>Ligação</dt><dd>direta com o GA4 (sem Site Kit)</dd><dt>Conta de serviço</dt><dd>${escHtml(d.conta||'—')}</dd><dt>Propriedade</dt><dd>${escHtml(d.propriedade||'—')}</dd>${ok?`<dt>Usuários hoje</dt><dd>${escHtml(d.usuarios_hoje)}</dd>`:''}</dl><div class="act"><button class="btn" onclick="abrirConfigMaquina('ga4.conta_servico')">Configurar a conta de serviço</button><button class="btn" onclick="abrirConfigMaquina('ga4.propriedade')">Configurar a propriedade</button></div>`);return}
     const linhas=[
       ['Usuário WordPress',d.wp_usuario||'—'],
       ['ID WordPress',d.wp_usuario_id??'—'],

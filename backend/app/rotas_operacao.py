@@ -288,9 +288,33 @@ def _analytics_calcular() -> dict:
         "top_paginas": [],
         "erro": None,
     }
+    from . import ga4_direto
+    direto = None
     try:
-        wp = WP()
-        out["diagnostico"] = _sitekit_diagnostico(wp)
+        c0 = connect()
+        try:
+            cfg = ga4_direto.configurado(c0)
+        finally:
+            c0.close()
+        if cfg:   # caminho preferido: GA4 direto pela conta de serviço (não depende da conexão do Site Kit)
+            direto = ga4_direto.GA4(cfg)
+            out["origem"] = "Google Analytics 4 (direto, conta de serviço)"
+            relatorio = direto.relatorio
+        else:
+            wp = WP()
+            relatorio = lambda **k: _sitekit_report(wp, **k)  # noqa: E731
+    except Exception as e:  # noqa: BLE001
+        out["erro"], out["erro_codigo"], out["acao"] = str(e)[:500], "ga4_config", "Confira ga4.propriedade e ga4.conta_servico em Configurações."
+        return out
+    try:
+        if direto:
+            out["diagnostico"] = {"via": "ga4_direto", "conta": direto.conta.get("client_email"), "propriedade": direto.prop}
+        else:
+            out["diagnostico"] = _sitekit_diagnostico(wp)
+            out["diagnostico"]["via"] = "site_kit"
+    except Exception as e:  # noqa: BLE001
+        out["diagnostico"] = {"via": "site_kit", "mensagem": str(e)[:300]}
+    try:
         if out["diagnostico"].get("wp_ok") and out["diagnostico"].get("sitekit_autenticado") is False:
             raise RuntimeError(
                 "Site Kit não está autenticado para o usuário WordPress "
@@ -302,8 +326,7 @@ def _analytics_calcular() -> dict:
                 + str(out["diagnostico"].get("wp_usuario") or "usado pelo painel")
             )
         for chave, (ini, fim) in periodos.items():
-            rep = _sitekit_report(
-                wp,
+            rep = relatorio(
                 start_date=ini,
                 end_date=fim,
                 metrics=["activeUsers", "screenPageViews"],
@@ -311,8 +334,7 @@ def _analytics_calcular() -> dict:
             out["periodos"][chave] = _metric_values(rep, ["activeUsers", "screenPageViews"])
 
         ini30, fim30 = periodos["30d"]
-        top = _sitekit_report(
-            wp,
+        top = relatorio(
             start_date=ini30,
             end_date=fim30,
             metrics=["screenPageViews"],
@@ -397,14 +419,23 @@ def _analytics_calcular() -> dict:
         out["top_fundos"] = sorted(soma_fundos.values(), key=lambda x: x["visualizacoes"], reverse=True)[:10]
         out["top_projetos"] = sorted(soma_projetos.values(), key=lambda x: x["visualizacoes"], reverse=True)[:10]
         out["disponivel"] = True
-        out["agora"]["motivo"] = "Realtime requer acesso específico à GA4 Realtime API; o Site Kit desta integração fornece os relatórios consolidados."
+        if direto:   # com a conta de serviço o "agora" (últimos 30 min) vem da Realtime API
+            try:
+                out["agora"].update(disponivel=True, usuarios=direto.agora())
+            except Exception as e:  # noqa: BLE001
+                out["agora"]["motivo"] = f"Realtime indisponível: {str(e)[:160]}"
+        else:
+            out["agora"]["motivo"] = "Realtime requer acesso específico à GA4 Realtime API; o Site Kit desta integração fornece os relatórios consolidados."
     except Exception as e:  # noqa: BLE001
         msg = str(e)[:500]
         out["erro"] = msg
         low = msg.lower()
         diag = out.get("diagnostico") or {}
         usuario = diag.get("wp_usuario")
-        if not diag.get("wp_ok", True):
+        if direto:
+            out["erro_codigo"] = "ga4_direto_permissao" if "não tem acesso" in msg else "ga4_direto"
+            out["acao"] = msg if "não tem acesso" in msg else "Confira ga4.propriedade e ga4.conta_servico em Configurações (Diagnosticar mostra a resposta do Google)."
+        elif not diag.get("wp_ok", True):
             out["erro_codigo"] = "wordpress_auth"
             out["acao"] = "Confira wp.usuario e wp.app_password em Configurações."
         elif diag.get("sitekit_autenticado") is False:
@@ -437,8 +468,27 @@ def _analytics_calcular() -> dict:
 
 @router.get("/analytics/diagnostico")
 def analytics_diagnostico(u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Teste explícito da identidade WordPress e da autorização Site Kit/GA4."""
+    """Teste explícito da identidade WordPress e da autorização Site Kit/GA4 (ou do GA4 direto, se configurado)."""
+    from . import ga4_direto
     from .wp import WP
+    con = connect()
+    try:
+        cfg = ga4_direto.configurado(con)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "via": "ga4_direto", "etapa": "ga4_config", "erro": str(e)[:500]}
+    finally:
+        con.close()
+    if cfg:
+        g = ga4_direto.GA4(cfg)
+        d = {"via": "ga4_direto", "conta": g.conta.get("client_email"), "propriedade": g.prop}
+        hoje = datetime.utcnow().date().isoformat()
+        try:
+            rep = g.relatorio(start_date=hoje, end_date=hoje, metrics=["activeUsers"])
+            d.update(ok=True, analytics_report_status=200, usuarios_hoje=_metric_values(rep, ["activeUsers"])["activeUsers"],
+                     mensagem=f"GA4 respondeu direto (conta de serviço {g.conta.get('client_email')}, propriedade {g.prop}).")
+        except Exception as e:  # noqa: BLE001
+            d.update(ok=False, erro=str(e)[:500])
+        return d
     try:
         wp = WP()
     except Exception as e:

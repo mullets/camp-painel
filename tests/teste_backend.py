@@ -3677,6 +3677,57 @@ def filho(modo):
         pv = x.post("/api/projetos/autorizar/previa", json={"codigos": ["F078-P0001"]}).json()
         ver("seleção de projetos: fundo sem direitos fica de fora com o motivo", not pv["prontos"] and pv["fora"][0]["codigo"] == "F078-P0001" and any("autorização de publicação" in m for m in pv["fora"][0]["motivos"]), str(pv)[:300])
         print("\n".join(res))
+    elif modo == "ga4_direto":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, httpx, jwt as _jwt
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+        from app import ga4_direto, rotas_operacao as ro
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        k_ = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = k_.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+        conta = {"type": "service_account", "client_email": "painel@camp.iam.gserviceaccount.com", "private_key": pem, "private_key_id": "abc", "token_uri": "https://oauth2.googleapis.com/token"}
+        c = connect()
+        ver("sem as chaves: usa o Site Kit (None)", ga4_direto.configurado(c) is None)
+        c.execute("UPDATE configuracao SET valor='G-WDL496H8J1' WHERE chave='ga4.propriedade'"); c.execute("UPDATE configuracao SET valor=? WHERE chave='ga4.conta_servico'", (_j.dumps(conta),)); c.commit()
+        try:
+            ga4_direto.configurado(c); ver("G-XXXX no lugar do número é recusado com explicação", False)
+        except RuntimeError as e:
+            ver("G-XXXX no lugar do número é recusado com explicação", "número da propriedade" in str(e))
+        c.execute("UPDATE configuracao SET valor='properties/467114271' WHERE chave='ga4.propriedade'"); c.commit()
+        cfg = ga4_direto.configurado(c); c.close()
+        ver("aceita 'properties/N' e a chave da conta de serviço", cfg and cfg["propriedade"] == "467114271")
+        chamadas = []; negar = {"v": False}
+        def responder(req):
+            chamadas.append(str(req.url))
+            if req.url.host == "oauth2.googleapis.com":
+                a = dict(x.split("=", 1) for x in req.content.decode().split("&"))["assertion"]
+                cl = _jwt.decode(a, k_.public_key(), algorithms=["RS256"], audience="https://oauth2.googleapis.com/token")
+                assert cl["iss"] == conta["client_email"] and "analytics.readonly" in cl["scope"]
+                return httpx.Response(200, json={"access_token": "tok", "expires_in": 3600})
+            if negar["v"]:
+                return httpx.Response(403, json={"error": {"message": "User does not have sufficient permissions"}})
+            corpo = _j.loads(req.content)
+            assert req.headers["Authorization"] == "Bearer tok"
+            if req.url.path.endswith(":runRealtimeReport"):
+                return httpx.Response(200, json={"rows": [{"metricValues": [{"value": "3"}]}]})
+            if corpo.get("dimensions"):
+                return httpx.Response(200, json={"dimensionHeaders": [{"name": "pagePath"}, {"name": "pageTitle"}], "metricHeaders": [{"name": "screenPageViews"}],
+                                                 "rows": [{"dimensionValues": [{"value": "/acervo/arquitetos/x/"}, {"value": "X"}], "metricValues": [{"value": "12"}]}]})
+            return httpx.Response(200, json={"rows": [{"metricValues": [{"value": "40"}, {"value": "120"}]}]})
+        cli = httpx.Client(transport=httpx.MockTransport(responder))
+        orig = ga4_direto.GA4.__init__
+        ga4_direto.GA4.__init__ = lambda self, cfg, cliente=None: orig(self, cfg, cli)
+        ga4_direto._TOKEN.update(chave=None, token=None, expira=0)
+        a = ro._analytics_calcular()
+        ver("analytics pelo GA4 direto: períodos, páginas e 'agora' (Realtime)", a["disponivel"] and a["origem"].startswith("Google Analytics 4 (direto") and a["periodos"]["7d"] == {"activeUsers": 40, "screenPageViews": 120}
+            and a["top_paginas"][0]["visualizacoes"] == 12 and a["agora"] == {"disponivel": True, "usuarios": 3, "janela_min": 30}, str(a)[:400])
+        ver("o token é pedido uma vez só (cache)", sum("oauth2" in x for x in chamadas) == 1, str(chamadas))
+        negar["v"] = True
+        a = ro._analytics_calcular()
+        ver("sem acesso à propriedade: explica que precisa adicionar a conta como Leitor", not a["disponivel"] and a["erro_codigo"] == "ga4_direto_permissao" and "Leitor" in a["acao"] and conta["client_email"] in a["acao"], str(a.get("acao")))
+        print("\n".join(res))
     elif modo == "b2_resolucao":
         init_db(); _aplicar_migracoes_real()
         import tempfile
@@ -4485,6 +4536,14 @@ else:
 print("72) Autorizar projetos em lote (só os prontos pela regra única; não publica)")
 rc, out = rodar("autorizar_lote", f"{tmp}/autl.db")
 if rc != 0: ok(False, f"teste de autorizar em lote não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("73) Google Analytics 4 direto (conta de serviço), sem depender do Site Kit")
+rc, out = rodar("ga4_direto", f"{tmp}/ga4.db")
+if rc != 0: ok(False, f"teste do GA4 direto não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
