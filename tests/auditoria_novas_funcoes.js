@@ -1139,6 +1139,12 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [Estados] mesmas frases para os mesmos problemas; lista com dados não some quando a leitura falha ----------
+{ chk(/sessão terminou/.test(w.mensagemErroAPI(401,'Faça login'))&&w.mensagemErroAPI(401,'E-mail ou senha não conferem.')==='E-mail ou senha não conferem.'&&/papel admin/.test(w.mensagemErroAPI(403,'Requer papel admin'))&&/não respondeu/.test(w.mensagemErroAPI(502,'Bad Gateway')),'[Estados] 401/403/502 deveriam virar as frases padrão (e o erro de login continua o dele)');
+  w.route_to('projetos'); await sleep(2000); const n0=d.querySelectorAll('#projetos-body tr[data-nav]').length;
+  if(n0){ w.tabelaErro('#projetos-body','servidor caiu','carregarProjetosAPI()'); chk(d.querySelectorAll('#projetos-body tr[data-nav]').length===n0&&/desatualizados/.test(txt('#v-projetos .stale-note')),'[Estados] lista com dados deveria continuar na tela, marcada "desatualizada", quando a leitura falha');
+    w.carregarProjetosAPI(); await sleep(1500); chk(!d.querySelector('#v-projetos .stale-note'),'[Estados] a marca de desatualizado deveria sumir quando a leitura volta'); }
+  okl.push('Estados: frases padrão de erro, lista não some, aviso some quando volta'); w.route_to('painel'); }
 // ---------- [Acessibilidade] modais e drawer como diálogo, foco, "×" com nome, aviso falado, menu atual, linhas por teclado, busca combobox ----------
 { w.route_to('projetos'); await sleep(1800); w.a11yPreparar(); w.a11yLinhas();
   const caixas=[...d.querySelectorAll('.modal .box')]; chk(caixas.length>5&&caixas.every(b=>b.getAttribute('role')==='dialog'&&b.getAttribute('aria-modal')==='true'&&b.getAttribute('aria-labelledby')),'[A11y] todo modal deveria ser role=dialog, aria-modal e com título');
