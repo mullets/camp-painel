@@ -48,6 +48,42 @@ for e,c,t,d in evs: con.execute("INSERT INTO evento (entidade,codigo,tipo,ator,d
   }
 }
 
+async function fundo(page) {
+  const F = 'F026';
+  // um problema em aberto numa FOLHA de um projeto do fundo (o cabeçalho tem que contar o projeto como "com problema")
+  pyArg(`
+r=con.execute("SELECT i.codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE p.fundo_codigo='${F}' AND p.mesclado_em IS NULL ORDER BY i.codigo LIMIT 1").fetchone()
+if r and not con.execute("SELECT 1 FROM erro WHERE codigo=? AND descricao='teste sobras'",(r[0],)).fetchone(): con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','outro','operador',?,'teste sobras')",(r[0],))`);
+  const banco = JSON.parse(pyArg(`
+v="SELECT codigo FROM projeto WHERE fundo_codigo='${F}' AND mesclado_em IS NULL"
+q=lambda s: con.execute(s).fetchone()[0]
+print(json.dumps({'todos':q(f"SELECT COUNT(*) FROM ({v})"),'publicado':q(f"SELECT COUNT(*) FROM projeto WHERE codigo IN ({v}) AND status_site='no_ar'"),'nao_publicado':q(f"SELECT COUNT(*) FROM projeto WHERE codigo IN ({v}) AND status_site<>'no_ar'"),
+ 'com_problema':q(f"SELECT COUNT(*) FROM ({v}) x WHERE EXISTS (SELECT 1 FROM erro e WHERE (e.codigo=x.codigo OR e.codigo LIKE x.codigo||'-%') AND e.situacao IN ('aberto','em_correcao'))"),
+ 'folhas':q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo IN ({v})"),'folhas_publicadas':q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo IN ({v}) AND status_site='no_ar'")}))`));
+  await page.goto(BASE + '/#fundo/' + F); await page.waitForSelector('#fd .fd-contagens [data-fd-cont]', { timeout: 15000 });
+  const tela = Object.fromEntries(await page.$$eval('#fd .fd-contagens [data-fd-cont]', bs => bs.map(b => [b.dataset.fdCont, +b.querySelector('b').textContent.replace(/\D/g, '')])));
+  for (const [k, n] of Object.entries(banco)) chk(tela[k] === n, `cabeçalho do fundo: "${k}" mostra ${tela[k]}, o banco tem ${n}`);
+  chk(banco.com_problema >= 1 && 'gente' in tela, 'o cabeçalho mostra "com problema" (≥1 no teste) e "precisam de você"');
+  chk(!/itens publicados/.test(await page.textContent('#fd .dethdr')), 'o cabeçalho não usa mais "itens publicados" (contagem do site, que não batia com o painel)');
+  // cada número abre a lista de Projetos filtrada, com o mesmo total
+  const situacaoDe = { folhas: 'todos', folhas_publicadas: 'publicado' };
+  for (const k of ['todos', 'publicado', 'nao_publicado', 'com_problema', 'gente', 'folhas']) {
+    await page.goto(BASE + '/#fundo/' + F); await page.waitForSelector(`#fd [data-fd-cont="${k}"]`, { timeout: 15000 });
+    const n = +(await page.textContent(`#fd [data-fd-cont="${k}"] b`)).replace(/\D/g, '');
+    await page.click(`#fd [data-fd-cont="${k}"]`);
+    await page.waitForFunction(() => location.hash === '#projetos', null, { timeout: 5000 });
+    const sit = situacaoDe[k] || k;
+    await page.waitForFunction((s) => !!document.querySelector(`#proj-chips [data-proj-sit="${s}"][aria-pressed="true"]`) && /Mostrando|Nenhum projeto/.test((document.querySelector('#v-projetos .cnt') || {}).textContent || ''), sit, { timeout: 10000 });
+    await page.waitForTimeout(400);
+    const st = await page.evaluate(() => ({ fundo: document.getElementById('proj-fundo').value, ordem: document.getElementById('proj-ordem').value, cnt: document.querySelector('#v-projetos .cnt').textContent, linhas: [...document.querySelectorAll('#projetos-body tr[data-nav]')].map(t => t.dataset.nav) }));
+    const total = /Nenhum/.test(st.cnt) ? 0 : +(st.cnt.match(/de ([\d.]+)/) || [0, '-1'])[1].replace(/\./g, '');
+    const esperado = k === 'folhas' ? banco.todos : n;
+    chk(st.fundo === F && total === esperado && st.linhas.every(c => c.startsWith('projeto/' + F)), `"${k}" abre Projetos do ${F} filtrado (${sit}) com ${esperado}: fundo=${st.fundo} total=${total} (${st.cnt})`);
+    if (k === 'folhas') chk(st.ordem === 'folhas', '"folhas" abre a lista ordenada por folhas: ' + st.ordem);
+  }
+  await page.evaluate(() => { PROJ_ESTADO = { ...PROJ_ESTADO, fundo: '', situacao: 'todos', ordem: 'codigo' } });
+}
+
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
@@ -56,7 +92,7 @@ for e,c,t,d in evs: con.execute("INSERT INTO evento (entidade,codigo,tipo,ator,d
   page.on('pageerror', e => erros.push(String(e)));
   const r = await ctx.request.post(BASE + '/api/auth/login', { data: { email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' } });
   chk(r.ok(), 'login do usuário semeado');
-  const mapa = { auditoria };
+  const mapa = { auditoria, fundo };
   for (const e of ETAPAS) { if (!mapa[e]) continue; linhas.push(`--- ${e}`); try { await mapa[e](page) } catch (x) { chk(false, `${e}: ${x.message.split('\n')[0]}`) } }
   chk(!erros.length, 'sem erro de JavaScript na página: ' + erros.slice(0, 2).join(' | '));
   await browser.close();

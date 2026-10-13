@@ -121,8 +121,25 @@ _SELECT_PROJETOS = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fun
 _ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo"}
 
 
+# um problema (erro) em aberto ligado ao projeto ou a uma folha dele: a mesma regra da página do projeto
+COM_PROBLEMA = ("EXISTS (SELECT 1 FROM erro e WHERE (e.codigo=p.codigo OR e.codigo LIKE p.codigo || '-%') "
+                "AND e.situacao IN ('aberto','em_correcao'))")
+SITUACOES_PROJETO = ("todos", "gente", "publicado", "nao_publicado", "sem_folhas", "com_problema")
+
+
+def contar_situacoes(con, fundo=None, q=None, fases=None) -> dict:
+    """Quantos projetos há em cada situação: o número das abas da lista de Projetos e do cabeçalho do fundo (#101), pela MESMA regra da lista."""
+    from .filas_fase import lote_ativo_por_projeto
+    fases = lote_ativo_por_projeto(con) if fases is None else fases
+    n = {}
+    for chave in SITUACOES_PROJETO:
+        w, par = _filtro_projetos(fases, fundo, q, None, None, None if chave == "todos" else chave)
+        n[chave] = con.execute(f"SELECT COUNT(*) FROM ({_SELECT_PROJETOS + w})", par).fetchone()[0]
+    return n
+
+
 def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao) -> tuple[str, list]:
-    """Condições comuns da lista, das contagens e da seleção em massa. situacao: gente | publicado | nao_publicado | sem_folhas | todos."""
+    """Condições comuns da lista, das contagens e da seleção em massa. situacao: gente | publicado | nao_publicado | sem_folhas | com_problema | todos."""
     from .filas_fase import PRECISAM_DE_GENTE
     w, par = "", []
     if fundo: w += " AND p.fundo_codigo=?"; par.append(fundo)
@@ -133,6 +150,7 @@ def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao) -> tup
     if situacao == "publicado": w += " AND p.status_site='no_ar'"
     elif situacao == "nao_publicado": w += " AND p.status_site<>'no_ar'"
     elif situacao == "sem_folhas": w += " AND folhas = 0"
+    elif situacao == "com_problema": w += " AND " + COM_PROBLEMA          # #101: problema em aberto no projeto ou numa folha dele
     elif situacao == "gente":
         cods = [c for c, f in fases.items() if f["fase"] in PRECISAM_DE_GENTE]
         if cods:
@@ -168,15 +186,9 @@ def listar(fundo: str | None = None, q: str | None = None, status: str | None = 
 @router.get("/projetos/resumo")
 def resumo_projetos(fundo: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Quantos projetos há em cada situação (para os filtros da lista), dentro do fundo e da busca escolhidos."""
-    from .filas_fase import lote_ativo_por_projeto
     con = connect()
     try:
-        fases = lote_ativo_por_projeto(con)
-        n = {}
-        for chave in ("todos", "gente", "publicado", "nao_publicado", "sem_folhas"):
-            w, par = _filtro_projetos(fases, fundo, q, None, None, None if chave == "todos" else chave)
-            n[chave] = con.execute(f"SELECT COUNT(*) FROM ({_SELECT_PROJETOS + w})", par).fetchone()[0]
-        return n
+        return contar_situacoes(con, fundo, q)
     finally:
         con.close()
 

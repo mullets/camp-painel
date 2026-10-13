@@ -3761,6 +3761,52 @@ def filho(modo):
         a = le.get(f"/api/localizacoes/{cx1}/conferencia").json()
         ver("ao abrir de novo, mostra a última conferência", a["ultima"] and a["ultima"]["conferidos"] == 3 and a["ultima"]["ator"] == "op@camp.arq.br", str(a["ultima"]))
         for l in res: print(l)
+    elif modo == "fundo_contagens":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F077','Fundo Contas','FCT',1),('F076','Outro','FOU',1)")
+        # P1 publicado com 3 folhas (2 publicadas); P2 sem folhas; P3 com problema numa FOLHA; P4 com problema fechado; P5 juntado a P1 (não conta); P6 de outro fundo
+        for f, n, st, mescl in (("F077", 1, "no_ar", None), ("F077", 2, "nao_publicado", None), ("F077", 3, "rascunho", None), ("F077", 4, "nao_publicado", None), ("F077", 5, "nao_publicado", "F077-P0001"), ("F076", 1, "no_ar", None)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,mesclado_em) VALUES (?,?,?,?,1960,?,?)", (f"{f}-P000{n}", f, n, f"Casa {n}", st, mescl))
+        folhas = [("F077-P0001", 1, "no_ar"), ("F077-P0001", 2, "no_ar"), ("F077-P0001", 3, "rascunho"), ("F077-P0003", 1, "nao_publicado"), ("F077-P0004", 1, "nao_publicado"), ("F077-P0005", 1, "no_ar"), ("F076-P0001", 1, "no_ar")]
+        for pj, n, st in folhas:
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,status_site) VALUES (?,?,'S01',?,'importado',?)", (f"{pj}-1960-S01-D0000{n}", pj, n, st))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','outro','operador','F077-P0003-1960-S01-D00001','folha rasgada')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,situacao) VALUES ('corrigir','outro','operador','F077-P0004','já resolvido','corrigido')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador','F077','texto do fundo')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador','F076-P0001','de outro fundo')")
+        c.commit(); c.close()
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-longa-12345"})
+        d = x.get("/api/fundos/F077/detalhe").json(); k = d.get("contagens") or {}
+        ver("o detalhe do fundo traz as contagens", bool(k), str(d.keys()))
+        c = connect(); q = lambda sql, *a: c.execute(sql, a).fetchone()[0]
+        vivos = "SELECT codigo FROM projeto WHERE fundo_codigo='F077' AND mesclado_em IS NULL"
+        esperado = {"projetos": q(f"SELECT COUNT(*) FROM ({vivos})"), "publicados": q(f"SELECT COUNT(*) FROM projeto WHERE codigo IN ({vivos}) AND status_site='no_ar'"),
+                    "nao_publicados": q(f"SELECT COUNT(*) FROM projeto WHERE codigo IN ({vivos}) AND status_site<>'no_ar'"),
+                    "sem_folhas": q(f"SELECT COUNT(*) FROM ({vivos}) v WHERE NOT EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=v.codigo)"),
+                    "com_problema": q(f"SELECT COUNT(*) FROM ({vivos}) v WHERE EXISTS (SELECT 1 FROM erro e WHERE (e.codigo=v.codigo OR e.codigo LIKE v.codigo||'-%') AND e.situacao IN ('aberto','em_correcao'))"),
+                    "folhas": q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo IN ({vivos})"), "folhas_publicadas": q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo IN ({vivos}) AND status_site='no_ar'"),
+                    "problemas_abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND (codigo='F077' OR codigo LIKE 'F077-%')")}
+        c.close()
+        ver("as contagens batem com o banco (projeto juntado, outro fundo e problema fechado não contam)", all(k.get(a) == b for a, b in esperado.items()), f"api={k} banco={esperado}")
+        ver("valores conhecidos: 4 projetos, 1 publicado, 3 não publicados, 1 sem folhas, 1 com problema, 5 folhas, 2 publicadas, 2 problemas abertos",
+            (k.get("projetos"), k.get("publicados"), k.get("nao_publicados"), k.get("sem_folhas"), k.get("com_problema"), k.get("folhas"), k.get("folhas_publicadas"), k.get("problemas_abertos")) == (4, 1, 3, 1, 1, 5, 2, 2), str(k))
+        # cada número abre uma lista filtrada que mostra EXATAMENTE aquele número de projetos
+        for chave, sit in (("projetos", None), ("publicados", "publicado"), ("nao_publicados", "nao_publicado"), ("precisam_de_gente", "gente"), ("sem_folhas", "sem_folhas"), ("com_problema", "com_problema")):
+            r = x.get("/api/projetos", params={"fundo": "F077", **({"situacao": sit} if sit else {})}).json()
+            ver(f"a lista filtrada ({sit or 'todos'}) tem o mesmo total do cabeçalho ({chave})", r["total"] == k.get(chave), f"lista={r['total']} cabeçalho={k.get(chave)}")
+        r = x.get("/api/projetos", params={"fundo": "F077", "situacao": "com_problema"}).json()
+        ver("o filtro 'com problema' traz o projeto cujo problema está numa folha", [p_["codigo"] for p_ in r["itens"]] == ["F077-P0003"], str([p_["codigo"] for p_ in r["itens"]]))
+        rs = x.get("/api/projetos/resumo", params={"fundo": "F077"}).json()
+        ver("as abas da lista de Projetos contam 'com problema' pela mesma regra", rs.get("com_problema") == k.get("com_problema") and rs.get("todos") == k.get("projetos"), str(rs))
+        print("\n".join(res))
     elif modo == "ga4_direto":
         init_db(); _aplicar_migracoes_real()
         import json as _j, httpx, jwt as _jwt
@@ -4259,7 +4305,7 @@ def filho(modo):
         ver("ordenar: por folhas (as com mais folhas primeiro), por nome, por mais recentes; ordem inválida cai no código, sem erro", P_("&ordem=folhas")["itens"][0]["codigo"].endswith("P0005") and [x["titulo"] for x in P_("&ordem=nome")["itens"]] == sorted((x["titulo"] for x in P_()["itens"]), key=str.lower) and op.get("/api/projetos?fundo=F091&ordem=recentes").status_code == 200 and cods(P_("&ordem=bobagem")) == cods(P_()))
         ver("busca e fundo continuam valendo junto com a situação; fundo inexistente = lista vazia", cods(P_("&q=Projeto 5")) == ["P0005"] and cods(P_("&situacao=gente&q=Projeto 5")) == ["P0005"] and cods(P_("&situacao=publicado&q=Projeto 5")) == [] and op.get("/api/projetos?fundo=F999").json()["total"] == 0)
         rs = op.get("/api/projetos/resumo?fundo=F091").json()
-        ver("contagens dos filtros (para os chips), dentro do fundo; e respeitando a busca", rs == {"todos": 10, "gente": 7, "publicado": 1, "nao_publicado": 9, "sem_folhas": 7} and op.get("/api/projetos/resumo?fundo=F091&q=Projeto 5").json() == {"todos": 1, "gente": 1, "publicado": 0, "nao_publicado": 1, "sem_folhas": 0}, str(rs))
+        ver("contagens dos filtros (para os chips), dentro do fundo; e respeitando a busca", rs == {"todos": 10, "gente": 7, "publicado": 1, "nao_publicado": 9, "sem_folhas": 7, "com_problema": 0} and op.get("/api/projetos/resumo?fundo=F091&q=Projeto 5").json() == {"todos": 1, "gente": 1, "publicado": 0, "nao_publicado": 1, "sem_folhas": 0, "com_problema": 0}, str(rs))
         cg = op.get("/api/projetos/codigos?fundo=F091&situacao=gente").json()
         ver("'Selecionar todos os resultados' respeita a situação (7 projetos, não os 10)", cg["total"] == 7 and all(c_.startswith("F091-") for c_ in cg["codigos"]))
         ver("lista e contagens exigem login (401)", anon.get("/api/projetos").status_code == 401 and anon.get("/api/projetos/resumo").status_code == 401)
@@ -5028,6 +5074,14 @@ else:
 print("96) Modo estante no celular: ler o código (folha, projeto, fundo, caixa) e conferir uma caixa")
 rc, out = rodar("estante", f"{tmp}/estante.db")
 if rc != 0: ok(False, f"teste do modo estante não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("74) #101 cabeçalho do fundo: contagens iguais ao banco e às listas filtradas")
+rc, out = rodar("fundo_contagens", f"{tmp}/fcont.db")
+if rc != 0: ok(False, f"teste das contagens do fundo não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

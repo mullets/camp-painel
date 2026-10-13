@@ -433,7 +433,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- LISTA DE PROJETOS: situação, filtros, ordem e "limpar" ----------
 { w.limparSelecaoProjetos&&w.limparSelecaoProjetos(); w.route_to('projetos'); await sleep(3000);
   const R=(await J(adm,'/api/projetos/resumo')).b, chips=[...d.querySelectorAll('#proj-chips [data-proj-sit]')], linhas=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')];
-  chk(chips.map(c=>c.dataset.projSit).join(',')==='todos,gente,publicado,nao_publicado,sem_folhas','a lista de projetos deveria ter 5 filtros de situação: '+chips.map(c=>c.dataset.projSit));
+  chk(chips.map(c=>c.dataset.projSit).join(',')==='todos,gente,publicado,nao_publicado,sem_folhas,com_problema','a lista de projetos deveria ter 6 filtros de situação: '+chips.map(c=>c.dataset.projSit));
   chk(chips.every(c=>Number(c.querySelector('b').textContent.replace(/\D/g,''))===R[c.dataset.projSit]),'as contagens dos filtros deveriam bater com o servidor: '+JSON.stringify(R)+' / '+chips.map(c=>c.textContent.trim()).join(' | '));
   chk(d.querySelectorAll('#v-projetos thead th').length===6&&/Situação/.test(txt('#v-projetos thead'))&&!/Séries|Última atividade|Publicação/.test(txt('#v-projetos thead')),'a tabela deveria ter 5 colunas de conteúdo (Projeto, Fundo, Folhas, Situação, Atualizado), sem Séries nem Última atividade: "'+txt('#v-projetos thead')+'"');
   chk(linhas().length>0&&/P\d{4}/.test(linhas()[0].querySelector('td:nth-child(2) .code').textContent)&&!!linhas()[0].querySelector('td:nth-child(2) b'),'a coluna Projeto deveria juntar o código e o nome');

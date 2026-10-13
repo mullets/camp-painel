@@ -109,8 +109,23 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "SELECT status, COUNT(*) AS n FROM wp_item WHERE fundo_detectado=? GROUP BY status", (codigo,))]
     eventos = [dict(r) for r in con.execute(
         "SELECT tipo, ator, quando, detalhe FROM evento WHERE entidade='fundo' AND codigo=? ORDER BY id DESC LIMIT 20", (codigo,))]
+    contagens = contagens_fundo(con, codigo)
     con.close()
-    return {"fundo": dict(f), "agentes": agentes, "projetos": projetos, "site": site, "eventos": eventos}
+    return {"fundo": dict(f), "agentes": agentes, "projetos": projetos, "site": site, "eventos": eventos, "contagens": contagens}
+
+
+def contagens_fundo(con, codigo: str) -> dict:
+    """#101 · Os números do cabeçalho do fundo. Os de projeto saem da MESMA regra das abas da lista de Projetos
+    (contar_situacoes), para o número do cabeçalho bater com a lista filtrada que ele abre."""
+    from .rotas_projetos import contar_situacoes
+    n = contar_situacoes(con, codigo)
+    vivos = "SELECT codigo FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL"
+    folhas, folhas_pub = con.execute(f"SELECT COUNT(*), COALESCE(SUM(status_site='no_ar'),0) FROM item WHERE projeto_codigo IN ({vivos})", (codigo,)).fetchone()
+    erros = con.execute(f"""SELECT COUNT(*) FROM erro e WHERE e.situacao IN ('aberto','em_correcao')
+                            AND (e.codigo=? OR EXISTS (SELECT 1 FROM ({vivos}) p WHERE e.codigo=p.codigo OR e.codigo LIKE p.codigo || '-%'))""",
+                         (codigo, codigo)).fetchone()[0]
+    return {"projetos": n["todos"], "publicados": n["publicado"], "nao_publicados": n["nao_publicado"], "precisam_de_gente": n["gente"],
+            "sem_folhas": n["sem_folhas"], "com_problema": n["com_problema"], "folhas": folhas, "folhas_publicadas": folhas_pub, "problemas_abertos": erros}
 
 
 @router.post("/fundos")
