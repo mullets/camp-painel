@@ -16,7 +16,10 @@ def chave_efetiva(chave_reserva: str, fundo: str, titulo: str) -> str:
 
 
 def da_chave(con, chave: str):
-    return con.execute("SELECT * FROM decisao WHERE chave=?", (chave,)).fetchone()
+    d = con.execute("SELECT * FROM decisao WHERE chave=?", (chave,)).fetchone()
+    if d:
+        return d
+    return con.execute("SELECT d.* FROM decisao_chave dc JOIN decisao d ON d.id=dc.decisao_id WHERE dc.chave=?", (chave,)).fetchone()
 
 
 def abrir_projeto_parecido(con, chave: str, fundo: str, titulo: str, pedido: dict, parecidos: list[dict], origem: str) -> int:
@@ -24,6 +27,20 @@ def abrir_projeto_parecido(con, chave: str, fundo: str, titulo: str, pedido: dic
     ja = da_chave(con, chave)
     if ja:
         return ja["id"]
+    # A MESMA pergunta (mesmo fundo + mesmo nome normalizado + mesma estação) já está pendente: não abre outra, só registra a chave nova
+    estacao = (pedido or {}).get("estacao") or (pedido or {}).get("estacao_id")
+    alvo = normalizar(titulo)
+    for d in con.execute("SELECT id, titulo, contexto FROM decisao WHERE situacao='pendente' AND tipo='projeto_parecido' AND fundo_codigo=?", (fundo,)).fetchall():
+        if normalizar(d["titulo"]) != alvo:
+            continue
+        try:
+            est_d = (json.loads(d["contexto"]).get("pedido") or {}).get("estacao")
+        except ValueError:
+            est_d = None
+        if estacao and est_d and estacao != est_d:
+            continue
+        con.execute("INSERT OR IGNORE INTO decisao_chave (chave, decisao_id) VALUES (?,?)", (chave, d["id"]))
+        return d["id"]
     return con.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem) VALUES ('projeto_parecido',?,?,?,?,?)",
                        (chave, fundo, titulo, json.dumps({"pedido": pedido, "candidatos": parecidos}, ensure_ascii=False), origem)).lastrowid
 

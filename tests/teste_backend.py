@@ -2658,6 +2658,38 @@ def filho(modo):
         ver("despublicar projeto que não está no site: 409 explicando; operador 403", adm.post(f"/api/projetos/{PX}/despublicar").status_code == 409 and op.post(f"/api/projetos/{PP}/despublicar").status_code == 403)
         ver("só admin move e mescla (operador 403)", op.post("/api/itens/mover", json={"itens": [m1], "destino": PX}).status_code == 403 and op.post(f"/api/projetos/{PM}/mesclar-em", json={"destino": PX}).status_code == 403)
         for l in res: print(l)
+    elif modo == "prevencao_lote":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile, pathlib as _pl
+        from app import decisoes, rotas_operacao as ro
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F086','Fundo Prev','PRV',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F086',5)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F086-P0005','F086',5,'Clube Ipê Social',1970)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F086',6)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F086-P0006','F086',6,'Edifício Jockey Club',1970)")
+        c.commit()
+        a = decisoes.abrir_projeto_parecido(c, "ch-1", "F086", "Golombeck 3", {"titulo": "Golombeck 3", "estacao": "contex"}, [], "estacao")
+        b = decisoes.abrir_projeto_parecido(c, "ch-2", "F086", "Golombeck_3", {"titulo": "Golombeck_3", "estacao": "contex"}, [], "estacao")
+        b2 = decisoes.abrir_projeto_parecido(c, "ch-2", "F086", "Golombeck_3", {"titulo": "Golombeck_3", "estacao": "contex"}, [], "estacao")
+        cc = decisoes.abrir_projeto_parecido(c, "ch-3", "F086", "Golombeck 3", {"titulo": "Golombeck 3", "estacao": "foto"}, [], "estacao")
+        c.commit()
+        ver("a MESMA pergunta (fundo + nome normalizado + estação) com outra chave volta à mesma decisão", a == b == b2 and c.execute("SELECT COUNT(*) FROM decisao WHERE fundo_codigo='F086'").fetchone()[0] == 2, f"{a} {b} {b2} {cc}")
+        ver("a estação que pergunta pela chave nova encontra a decisão (idempotência mantida)", decisoes.da_chave(c, "ch-2")["id"] == a and decisoes.da_chave(c, "ch-1")["id"] == a)
+        ver("outra estação, mesmo nome: decisão separada (pode ser outro material)", cc != a)
+        raiz = _pl.Path(tempfile.mkdtemp())
+        def pasta(nome, info):
+            p_ = raiz / nome; p_.mkdir(); (p_ / "info_projeto.json").write_text(_j.dumps(info), encoding="utf-8"); (p_ / "status.json").write_text(_j.dumps({"status": "pronto"}), encoding="utf-8"); return p_
+        sub = pasta("01 - Arquivo Arquivístico (TIFF)", {"codigo": "F086-P0005"})
+        r1 = ro._ler_pasta(c, sub, None)
+        ver("a subpasta '01 - Arquivo Arquivístico (TIFF)' é ignorada (não vira lote)", r1["acao"] == "ignorada" and "Arquivístico" in r1["motivo"] and c.execute("SELECT COUNT(*) FROM lista_processamento WHERE pasta_qnap=?", (str(sub),)).fetchone()[0] == 0, str(r1))
+        errado = pasta("F086-P0005 - Conjunto Residencial com Garagem", {"codigo": "F086-P0005", "nome": "Conjunto Residencial com Garagem"})
+        r2 = ro._ler_pasta(c, errado, None); c.commit()
+        ver("lote cujo nome não parece o do projeto: entra com AVISO dizendo os dois nomes, e fica registrado", r2["acao"] == "nova" and "não parece o do projeto F086-P0005" in (r2.get("aviso") or "") and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='lote_nome_diferente' AND codigo='F086-P0005'").fetchone()[0] == 1, str(r2)[:300])
+        certo = pasta("F086-P0006 - T102_Edifício Jockey Club São Paulo", {"codigo": "F086-P0006", "nome": "T102_Edifício Jockey Club São Paulo"})
+        r3 = ro._ler_pasta(c, certo, None)
+        ver("lote com nome compatível (mesmo com prefixo de pasta) não gera aviso de nome", r3["acao"] == "nova" and "não parece" not in (r3.get("aviso") or ""), str(r3)[:200])
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3139,6 +3171,14 @@ else:
 print("44) #156 mesclar, mover, mover lote, duplicata, descartar e despublicar (tudo ou nada, sem perder rastro)")
 rc, out = rodar("mesclar_mover", f"{tmp}/mesclar.db")
 if rc != 0: ok(False, f"teste do #156 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("45) #156 prevenção: decisões repetidas viram uma, subpasta TIFF ignorada, aviso de nome de lote diferente")
+rc, out = rodar("prevencao_lote", f"{tmp}/prev.db")
+if rc != 0: ok(False, f"teste da prevenção não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

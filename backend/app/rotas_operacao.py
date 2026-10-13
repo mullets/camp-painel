@@ -585,6 +585,9 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
 
     if info.get("teste") or pasta.name.lower() in ("teste", "asd", "sei la"):
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": "lote de teste"}
+    from .similaridade import normalizar as _norm_sim
+    if re.match(r"^\d+ ?arquivo arquivistico", _norm_sim(pasta.name) or ""):   # "01 - Arquivo Arquivístico (TIFF)" é parte do lote da pasta de cima
+        return {"acao": "ignorada", "pasta": str(pasta), "motivo": "subpasta '01 - Arquivo Arquivístico (TIFF)': faz parte do lote da pasta de cima"}
 
     cod = None
     for texto in (
@@ -646,6 +649,19 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
             (n_arq, st or "pronto_campvision2", json.dumps(contexto, ensure_ascii=False), ex["id"]),
         )
         return {**saida, "acao": "igual"}
+    # lote NOVO cujo nome não parece o do projeto do código: avisa (não grava em silêncio como se estivesse tudo certo)
+    # regra CONSERVADORA (falso alarme também é defeito): só avisa quando os dois nomes não têm NENHUMA palavra distintiva em comum
+    from .similaridade import normalizar as _nz
+    _vaz = {"com", "dos", "das", "para", "sem", "por", "uma", "nos", "nas"}
+    _pal = lambda x: {w for w in (_nz(x) or "").split() if len(w) >= 3 and not any(ch.isdigit() for ch in w) and w not in _vaz}  # noqa: E731
+    tit_proj = (con.execute("SELECT titulo FROM projeto WHERE codigo=?", (cod,)).fetchone() or [""])[0] or ""
+    nome_limpo = re.sub(r"\s+", " ", re.sub(r"F\d{3}-P\d{4}", " ", str(nome)).replace("_", " ")).strip(" -")
+    ta, tb = _pal(nome_limpo), _pal(tit_proj)
+    if ta and tb and not (ta & tb):
+        alerta = f"o nome da pasta ('{nome_limpo}') não parece o do projeto {cod} ('{tit_proj}'): confira se o lote caiu no projeto certo antes de importar"
+        saida["aviso"] = ((saida["aviso"] + "; ") if saida["aviso"] else "") + alerta
+        contexto["alerta_nome"] = alerta
+        _evento(con, "projeto", cod, "lote_nome_diferente", "campvision2", {"pasta": str(pasta), "nome_pasta": nome_limpo, "titulo_projeto": tit_proj})
     lid = con.execute(
         """INSERT INTO lista_processamento
            (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json, resultado)
