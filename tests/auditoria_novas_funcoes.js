@@ -1139,6 +1139,17 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H19] Arquitetos: grafias como etiquetas, fundos com busca e caixas, aviso de parecido antes de cadastrar ----------
+{ w.route_to('arquitetos'); await sleep(1800); const ags=(await J(adm,'/api/agentes')).b, a0=ags.find(a=>(a.formas||'').length)||ags[0];
+  w.abrirCadastroArquiteto('F026'); await sleep(300);
+  chk(d.querySelectorAll('#na-fundos-lista input[type="checkbox"]').length>=10&&!!d.querySelector('#na-fundos-lista input[value="F026"]:checked'),'[H19] os fundos deveriam ser caixas de marcar (com o fundo de quem abriu já marcado)');
+  const box=d.querySelector('#m-arq .tags-input'), inp=box.querySelector('input'); inp.value='j. b. arquitetos'; inp.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true})); inp.value='TESTE 2'; inp.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+  chk(d.getElementById('na-formas').value==='J. B. ARQUITETOS; TESTE 2'&&box.querySelectorAll('.tag-x').length===2,'[H19] Enter deveria virar etiqueta (em maiúsculas) e o valor "A; B": '+d.getElementById('na-formas').value);
+  box.querySelector('[data-tag-tirar="1"]').click(); chk(d.getElementById('na-formas').value==='J. B. ARQUITETOS','[H19] o × deveria tirar a etiqueta');
+  d.getElementById('na-nome').value=a0.forma_autorizada; await w.naParecidos(); chk(new RegExp('Já existe').test(txt('#na-parecidos'))&&!!d.querySelector('#na-parecidos [data-na-abrir="'+a0.id+'"]'),'[H19] digitar o nome de quem já existe deveria avisar "Já existe … É o mesmo?": "'+txt('#na-parecidos')+'"');
+  w.closeModal(); await w.editarAgente(a0.id); await sleep(900);
+  chk(d.querySelectorAll('#d-body .tags-input .tag-x').length===String(a0.formas||'').split(' | ').filter(Boolean).length,'[H19] o cadastro aberto deveria mostrar as grafias como etiquetas'); w.closeDrawer(true);
+  okl.push('H19: Arquitetos com grafias em etiquetas, fundos com caixas e aviso de parecido'); }
 // ---------- [H18] Uso do acervo: resumo em frases clicáveis, uso por categoria, filtro por fundo, anonimizar recomendado, e-mail com copiar ----------
 { const R=(await J(adm,'/api/uso/resumo')).b;
   if(R.total>0){ const cats=Object.fromEntries((R.categorias||[]).map(c=>[c.categoria,c.n])), soma=Object.values(cats).reduce((a,b)=>a+b,0);
