@@ -1080,6 +1080,20 @@ def filho(modo):
         ctx = lan.get("/api/estacoes/contexto", headers=T).json()
         f99 = next((f for f in ctx["fundos"] if f["codigo_fundo"] == "F099"), {})
         ver("/contexto: cada fundo traz codigo_fundo, prefixo, nome, ultimo_projeto, proximo_projeto (F099: último P0007, próximo P0008)", {"codigo_fundo", "prefixo", "nome", "ultimo_projeto", "proximo_projeto"} <= set(f99) and f99.get("ultimo_projeto") == "P0007" and f99.get("proximo_projeto") == "P0008", str(f99))
+        k = connect(); k.execute("UPDATE fundo SET data_inicio=1950, data_fim=1990 WHERE codigo='F099'")
+        ag1 = k.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim) VALUES ('pessoa','Titular Teste',1920,1995)").lastrowid
+        ag2 = k.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Sócio Teste')").lastrowid
+        k.execute("INSERT INTO agente_forma_variante (agente_id, forma, contexto) VALUES (?, 'T. TESTE', 'carimbo')", (ag1,))
+        k.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F099',?,'produtor')", (ag1,))
+        k.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel, inicio, fim) VALUES ('F099',?,'colaborador',1960,1970)", (ag2,))
+        k.execute("UPDATE projeto SET autoria='Fulano; Beltrano', papel_no_projeto='consultor' WHERE codigo='F099-P0001'"); k.commit(); k.close()
+        au = next(f for f in lan.get("/api/estacoes/contexto", headers=T).json()["fundos"] if f["codigo_fundo"] == "F099")["autoridade"]
+        ver("CV2 §4.4: /contexto traz titular (com grafias e período), coautores e as autorias registradas nos projetos",
+            au["periodo"] == {"inicio": 1950, "fim": 1990} and au["titulares"][0]["nome"] == "Titular Teste" and au["titulares"][0]["grafias"] == ["T. TESTE"]
+            and au["titulares"][0]["inicio"] == 1920 and au["coautores"][0]["nome"] == "Sócio Teste" and au["coautores"][0]["inicio"] == 1960
+            and au["autorias_de_projeto"] == [{"projeto": "F099-P0001", "autores": ["Fulano", "Beltrano"], "papel_do_titular": "consultor"}], str(au)[:300])
+        fj = next((f for f in lan.get("/api/fundos.json", headers=T).json()["fundos"] if f["codigo"] == "F099"), {})
+        ver("/api/fundos.json traz a mesma tabela de autoridade", (fj.get("autoridade") or {}).get("titulares", [{}])[0].get("nome") == "Titular Teste", str(fj)[:200])
         cf = lan.get("/api/estacoes/contexto?fundo=F099", headers=T).json()
         ver("/contexto?fundo=: traz também os projetos (codigo, numero_projeto, projeto, ano, cidade, identificacao_original)", {"codigo", "numero_projeto", "projeto", "ano", "cidade", "identificacao_original"} <= set(cf["projetos"][0]) and len(cf["projetos"]) == 5, str(cf["projetos"][0]))
         chave = "a" * 32; corpo = {"fundo_codigo": "F099", "titulo": "Casa Nova", "ano": 1975, "cidade": "Campinas/SP", "operador": "Beatriz", "chave_reserva": chave}

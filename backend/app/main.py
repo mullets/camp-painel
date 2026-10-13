@@ -201,9 +201,37 @@ def fundos_json(request: Request) -> dict:
     """Lido pela estação Contex, que não tem login. Só responde para a rede local."""
     exigir_estacao(request)
     con = connect()
-    dados = con.execute("SELECT fundos FROM v_fundos_json").fetchone()[0]
+    dados = json.loads(con.execute("SELECT fundos FROM v_fundos_json").fetchone()[0] or "[]")
+    aut = autoridade_fundos(con, [f["codigo"] for f in dados])
     con.close()
-    return {"fundos": json.loads(dados or "[]")}
+    return {"fundos": [{**f, "autoridade": aut.get(f["codigo"])} for f in dados]}
+
+
+def autoridade_fundos(con, codigos: list[str]) -> dict:
+    """CV2 §4.4: quem pode assinar as folhas de cada fundo. Titular (produtor/titular), coautores (colaborador),
+    com as grafias do carimbo e o período de atuação; mais as autorias registradas nos projetos (B4).
+    Folha com arquiteto lido fora disso = autoria divergente."""
+    out = {c: {"periodo": None, "titulares": [], "coautores": [], "autorias_de_projeto": []} for c in codigos}
+    if not codigos:
+        return out
+    marc = ",".join("?" * len(codigos))
+    for f in con.execute(f"SELECT codigo, data_inicio, data_fim FROM fundo WHERE codigo IN ({marc})", codigos):
+        if f["data_inicio"] or f["data_fim"]:
+            out[f["codigo"]]["periodo"] = {"inicio": f["data_inicio"], "fim": f["data_fim"]}
+    for r in con.execute(f"""SELECT fa.fundo_codigo, fa.papel, fa.inicio, fa.fim, a.id, a.forma_autorizada, a.existencia_inicio, a.existencia_fim,
+                                    (SELECT GROUP_CONCAT(forma, '|') FROM agente_forma_variante v WHERE v.agente_id=a.id) AS formas
+                               FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id
+                              WHERE fa.fundo_codigo IN ({marc}) ORDER BY fa.fundo_codigo, a.forma_autorizada""", codigos):
+        pessoa = {"id": r["id"], "nome": r["forma_autorizada"], "grafias": [x for x in (r["formas"] or "").split("|") if x],
+                  "inicio": r["inicio"] or r["existencia_inicio"], "fim": r["fim"] or r["existencia_fim"], "papel": r["papel"]}
+        if r["papel"] in ("produtor", "titular"):
+            out[r["fundo_codigo"]]["titulares"].append(pessoa)
+        elif r["papel"] == "colaborador":
+            out[r["fundo_codigo"]]["coautores"].append(pessoa)
+    for r in con.execute(f"SELECT fundo_codigo, codigo, autoria, papel_no_projeto FROM projeto WHERE fundo_codigo IN ({marc}) AND TRIM(COALESCE(autoria,''))<>''", codigos):
+        out[r["fundo_codigo"]]["autorias_de_projeto"].append({"projeto": r["codigo"], "autores": [x.strip() for x in r["autoria"].split(";") if x.strip()],
+                                                              "papel_do_titular": r["papel_no_projeto"]})
+    return out
 
 
 def _exigir_rede_local(request: Request) -> str:
@@ -232,6 +260,9 @@ def contexto_estacoes(request: Request, fundo: str | None = None) -> dict:
          GROUP BY f.codigo, f.sigla, f.titulo, v.proximo
          ORDER BY f.codigo
     """).fetchall()]
+    aut = autoridade_fundos(con, [f["codigo_fundo"] for f in fundos])   # CV2 §4.4: titular, coautores e período de cada fundo
+    for f in fundos:
+        f["autoridade"] = aut.get(f["codigo_fundo"])
     resposta = {"fundos": fundos}
     # Operadores: só NOMES (sem e-mail/papel) para a estação mostrar "Quem está
     # operando?". As estações não fazem login; o nome é só identificação.
