@@ -810,8 +810,9 @@ w.route_to('estacoes'); await sleep(2800);
     chk(!opts.some(o=>/_/.test(o))&&(!opts.some(o=>/orcamento|credito|preparacao/.test(o))),'as situações do pedido deveriam ter acento e sem "_": '+opts.join('|'));
     chk(/\d{2}\/\d{2}\/\d{4}/.test(txt('#d-body'))&&!/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(txt('#d-body')),'a data do pedido deveria estar em dd/mm/aaaa no horário de São Paulo: "'+txt('#d-body').slice(0,120)+'"'); w.closeDrawer(true) } }
 // ---------- [Auditoria P2-17] Novo projeto: o fundo não vem escolhido; "Criar projeto" nunca fica mudo ----------
-{ w.openModal('m-proj'); await sleep(500); const nf=d.getElementById('np-fundo');
-  chk(nf.value===''&&/escolha o fundo/.test(nf.options[0].textContent)&&/escolha o fundo/.test(txt('#np-code')),'Novo projeto pela lista deveria abrir com o fundo VAZIO ("— escolha o fundo —"): "'+nf.value+'" / "'+txt('#np-code')+'"'); w.closeModal();
+{ d.getElementById('np-fundo').value='F026'; w.abrirNovoProjeto(); await sleep(500); const nf=d.getElementById('np-fundo');
+  chk(nf.value===''&&/escolha o fundo/.test(nf.options[0].textContent)&&/escolha o fundo/.test(txt('#np-code')),'Novo projeto pela lista deveria abrir com o fundo VAZIO ("— escolha o fundo —"): "'+nf.value+'" / "'+txt('#np-code')+'"'); d.getElementById('np-titulo').value='Teste sem fundo'; await w.criarProjeto(); await sleep(300);
+  chk(/Escolha o fundo/.test(txt('#m-proj'))&&d.getElementById('m-proj').classList.contains('on'),'"Criar projeto" sem fundo deveria dizer "Escolha o fundo." no próprio campo: "'+txt('#m-proj').slice(0,160)+'"'); w.closeModal();
   w.route_to('fundo/F026'); await sleep(3000); const bn=[...d.querySelectorAll('#v-fundo .act button')].find(x=>x.textContent.trim()==='Novo projeto'); if(bn){ bn.click(); await sleep(600); chk(d.getElementById('np-fundo').value==='F026','Novo projeto pela página do F026 deveria abrir já com F026: "'+d.getElementById('np-fundo').value+'"'); w.closeModal() } w.route_to('painel'); }
 // ---------- [Auditoria P1-15] contagens que batem ----------
 { w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
@@ -852,6 +853,8 @@ w.route_to('estacoes'); await sleep(2800);
   // novo projeto à mão: o painel avisa dos parecidos antes de criar
   const tit=(await J(adm,'/api/projetos/F026-P0001/detalhe')).b.projeto.titulo, nP=(await J(adm,'/api/painel')).b.projetos.total;
   w.openModal('m-proj'); await sleep(600); d.getElementById('np-fundo').value='F026'; d.getElementById('np-titulo').value=tit; await w.criarProjeto(); await sleep(1500);
+  chk(txt('#np-criar')==='Decida acima: é o mesmo ou é novo?'&&d.getElementById('np-criar').getAttribute('aria-disabled')==='true','[P2-17] com parecido, o botão "Criar projeto" deveria dizer o que falta: "'+txt('#np-criar')+'"');
+  { const nP2=(await J(adm,'/api/painel')).b.projetos.total; await w.criarProjeto(); await sleep(800); chk((await J(adm,'/api/painel')).b.projetos.total===nP2&&!!d.querySelector('#np-parecidos .np-par'),'[P2-17] clicar de novo em "Criar projeto" sem decidir não pode criar: só leva ao aviso') }
   chk(/Já existe projeto parecido neste fundo/.test(txt('#np-parecidos'))&&/F026-P0001/.test(txt('#np-parecidos'))&&/É um projeto novo: criar F026-P\d{4}/.test(txt('#np-parecidos'))&&/Decida acima/.test(txt('#np-err')),'o modal de novo projeto deveria avisar do parecido (F026-P0001): "'+txt('#np-parecidos').slice(0,120)+'"');
   chk((await J(adm,'/api/painel')).b.projetos.total===nP,'avisar NÃO pode criar o projeto');
   d.querySelector('#np-parecidos [data-np-abrir]').click(); await sleep(1500); chk(/projeto\/F026-P0001/.test(w.location.hash),'"Abrir este" deveria levar ao projeto parecido: '+w.location.hash); w.closeModal(); }
