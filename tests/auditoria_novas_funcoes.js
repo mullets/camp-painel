@@ -1139,6 +1139,22 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H21] Etiquetas: 2 passos, frase de conferência, lote de folhas/pastas, impressão no tamanho exato, observação com limite ----------
+{ w.route_to('etiquetas/projeto/F003-P9001'); await sleep(3500);
+  chk(/^Etiqueta de: F003-P9001 · .+ · volume 1 de \d+$/.test(txt('#lab-origem')),'[H21] a frase de conferência deveria dizer projeto, nome, fundo e volume: "'+txt('#lab-origem')+'"');
+  chk(d.querySelectorAll('#v-etiquetas .lab-passo').length===2&&/O que etiquetar/.test(txt('#v-etiquetas .lab-form'))&&/Como imprimir/.test(txt('#v-etiquetas .lab-form')),'[H21] o formulário deveria ter 2 passos: "O que etiquetar" e "Como imprimir"');
+  chk(d.getElementById('f-cadastro-wrap').tagName==='DETAILS'&&/Corrigir no projeto/.test(txt('#f-cadastro-wrap')),'[H21] os dados do cadastro deveriam ficar só para leitura, com "Corrigir no projeto"');
+  const ob=d.getElementById('l-obs'); ob.value='frágil'; ob.dispatchEvent(new w.Event('input',{bubbles:true})); chk(ob.maxLength===30&&txt('#l-obs-cont')==='6/30','[H21] a observação deveria ter limite visível ("6/30"): '+txt('#l-obs-cont')); ob.value=''; ob.dispatchEvent(new w.Event('input',{bubbles:true}));
+  chk(/@page\{size:100mm 50mm/.test((d.getElementById('lab-page')||{}).textContent||''),'[H21] a impressão deveria usar @page no tamanho exato (100mm 50mm)');
+  const lote=v=>{d.querySelector('input[name="l-lote"][value="'+v+'"]').checked=true; d.getElementById('f-lote').dispatchEvent(new w.Event('change',{bubbles:true}))};
+  lote('pastas'); await sleep(200); const np=w.eval('LABEL_LISTA').length;
+  chk(d.querySelectorAll('#printgrid .label').length===np&&/pasta/.test(txt('#lab-origem'))&&d.getElementById('l-qty').value==='1','[H21] "Todas as pastas do fundo" deveria gerar uma etiqueta por projeto ('+np+'): '+d.querySelectorAll('#printgrid .label').length+' · "'+txt('#lab-origem')+'"');
+  d.querySelector('#lab-tabs [data-t="documento"]').click(); await sleep(200); lote('folhas'); await sleep(200); const fs=w.eval('LABEL_FOLHAS');
+  chk(fs.length>0&&d.querySelectorAll('#printgrid .label').length===fs.length&&txt('#printgrid').includes(fs[0].codigo),'[H21] "Todas as folhas deste projeto" deveria gerar uma etiqueta por folha, com o código real ('+fs.length+')');
+  chk(new RegExp('Imprimir '+fs.length+' etiquetas').test(txt('#lab-imprimir'))||fs.length===1,'[H21] o botão deveria dizer quantas etiquetas: "'+txt('#lab-imprimir')+'"');
+  d.getElementById('l-papel').value='a4'; d.getElementById('l-papel').dispatchEvent(new w.Event('change',{bubbles:true})); chk(/size:A4/.test(d.getElementById('lab-page').textContent),'[H21] papel A4 deveria trocar o @page');
+  d.getElementById('l-papel').value='rolo'; lote('um'); d.querySelector('#lab-tabs [data-t="projeto"]').click(); w.route_to('painel');
+  okl.push('H21: etiquetas em 2 passos, frase de conferência, lote de '+fs.length+' folhas e '+np+' pastas, @page no tamanho exato'); }
 // ---------- [H20] Localização: identificador sugerido, alocar com busca e caixas, resultado no drawer, visão por fundo ----------
 { w.route_to('localizacao'); await sleep(1800); w.abrirNovaLocalizacao(); await sleep(700);
   chk(/^CX-\d{3}$/.test(d.getElementById('nloc-id').value),'[H20] "Nova localização" deveria sugerir o próximo identificador livre da caixa (CX-001…): "'+d.getElementById('nloc-id').value+'"');

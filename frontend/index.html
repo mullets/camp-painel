@@ -219,7 +219,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 @media print{
   body{background:#fff}
   .app,.top,.side,.content{display:block!important;padding:0;border:0}
-  .side,.top,.content:not(#v-etiquetas),#v-etiquetas .hdr,#v-etiquetas .lab-form,#v-etiquetas .lab-preview-shell,#v-etiquetas .tabs,.lab-note{display:none!important}
+  .side,.top,.content:not(#v-etiquetas),#v-etiquetas .hdr,#v-etiquetas .lab-form,#v-etiquetas .lab-preview-shell,#v-etiquetas .tabs,.lab-note,.gcrumb,.toast,.ajuda-caixa,.drawer,.modal{display:none!important}
   #v-etiquetas{display:block!important;max-width:none!important;margin:0!important;padding:0!important}
   .lab-wrap{display:none!important}
   .printgrid{display:grid!important;grid-template-columns:repeat(2,max-content);gap:6mm;padding:8mm;align-items:start;justify-content:start}
@@ -697,6 +697,13 @@ body.na-painel #system-banner{display:none!important}
 .al-f{display:flex;gap:6px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;font-size:12px}.al-f:has(input:checked){border-color:var(--blue);background:var(--blue-soft)}
 .al-f img,.al-semimg{width:44px;height:44px;object-fit:cover;border-radius:4px;background:var(--surface2);flex:none}.al-f small{display:block;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .al-colar summary{cursor:pointer;font-size:13px;color:var(--ink2);margin:4px 0}
+/* H21 · Etiquetas: 2 passos, frase de conferência, lote em grade, aviso de impressão */
+.lab-passo{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;margin-right:6px;letter-spacing:0}
+.lab-origem{font-size:17px;line-height:1.35;font-weight:600;color:var(--ink)}
+.lab-lote{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:4px;margin:0;font-size:13px}.lab-lote legend{font-size:12.5px;color:var(--ink2);padding:0 4px}.lab-lote label{display:flex;gap:6px;align-items:center}
+.lab-cadastro summary{cursor:pointer;font-size:13px;color:var(--ink2)}.lab-cadastro[open]{display:grid;gap:10px}.lab-cadastro .lnk{justify-self:start;font-size:13px}
+.lab-preview.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;align-items:start;justify-content:stretch}.lab-mini{zoom:.5}.lab-mais{align-self:center;color:var(--ink3);font-size:13px}
+.lab-aviso{font-size:12.5px;color:var(--ink2);margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -869,7 +876,7 @@ body.na-painel #system-banner{display:none!important}
 
   <!-- ETIQUETAS -->
   <section class="content" id="v-etiquetas">
-    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn pri" onclick="window.print()">Imprimir</button></div></div>
+    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn pri" id="lab-imprimir" onclick="window.print()">Imprimir</button></div></div>
     <div class="tabs" id="lab-tabs">
       <button class="on" data-t="projeto">Pasta de projeto</button>
       <button data-t="documento">Folha / documento</button>
@@ -880,39 +887,38 @@ body.na-painel #system-banner{display:none!important}
     <div class="lab-wrap">
       <div class="panel lab-form">
         <div class="lab-section">
-          <div class="lab-section-title">Identificação</div>
+          <div class="lab-section-title"><span class="lab-passo">1</span> O que etiquetar</div>
           <label class="field">Fundo<select id="l-fundo"></select></label>
           <label class="field" id="f-proj">Projeto<select id="l-proj"></select></label>
-        </div>
-        <div class="lab-section lab-readonly" id="f-cadastro-wrap">
-          <div class="lab-section-title">Dados do cadastro</div>
-          <div class="grid g2" id="f-cadastro"><label class="field">Ano<input id="l-ano" readonly></label><label class="field">Cliente<input id="l-cliente" readonly></label></div>
-          <label class="field" id="f-endereco">Endereço<input id="l-endereco" readonly></label>
-        </div>
-        <div class="lab-section lab-readonly" id="f-armazenamento">
-          <div class="lab-section-title">Embalagem e localização</div>
-          <div class="grid g2" id="f-volume"><label class="field">Volume / embalagem<select id="l-volume"><option value="1">1 de 1</option></select></label><label class="field">Tipo<input id="l-tipo-emb" value="pasta" readonly></label></div>
-          <div class="grid g2" id="f-local"><label class="field">Localização<input id="l-local" placeholder="ex. TUBO 03 / MAP-02-G3" readonly></label><label class="field">Documentos neste volume<input id="l-docs-volume" type="number" value="0" min="0" readonly></label></div>
-        </div>
-        <div class="lab-section" id="f-doc" style="display:none">
-          <div class="lab-section-title">Documento</div>
-          <div class="grid g2"><label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S05</option></select></label><label class="field">Documento<input id="l-doc" value="D00019"></label></div>
-        </div>
-        <div class="lab-section" id="f-caixa" style="display:none">
-          <div class="lab-section-title">Caixa ou gaveta</div>
-          <div class="grid g2"><label class="field">Identificador<input id="l-caixa" value="07" class="mono"></label><label class="field">Conteúdo<input id="l-cont" value="P0001–P0006"></label></div>
+          <div id="f-doc" style="display:none"><div class="grid g2"><label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S05</option></select></label><label class="field">Documento<input id="l-doc" value="D00019"></label></div></div>
+          <div id="f-caixa" style="display:none"><div class="grid g2"><label class="field">Identificador<input id="l-caixa" value="07" class="mono"></label><label class="field">Conteúdo<input id="l-cont" value="P0001–P0006"></label></div></div>
+          <label class="field" id="f-volume">Volume / embalagem<select id="l-volume"><option value="1">1 de 1</option></select></label>
+          <fieldset class="lab-lote" id="f-lote"><legend>Quantas etiquetas diferentes</legend>
+            <label><input type="radio" name="l-lote" value="um" checked> Só esta</label>
+            <label id="f-lote-folhas"><input type="radio" name="l-lote" value="folhas"> Todas as folhas deste projeto <span id="l-n-folhas" class="help"></span></label>
+            <label id="f-lote-pastas"><input type="radio" name="l-lote" value="pastas"> Todas as pastas do fundo <span id="l-n-pastas" class="help"></span></label>
+          </fieldset>
+          <details class="lab-cadastro lab-readonly" id="f-cadastro-wrap"><summary>Dados que vêm do cadastro do projeto (só leitura)</summary>
+            <div class="grid g2" id="f-cadastro"><label class="field">Ano<input id="l-ano" readonly></label><label class="field">Cliente<input id="l-cliente" readonly></label></div>
+            <label class="field" id="f-endereco">Endereço<input id="l-endereco" readonly></label>
+            <div class="grid g2" id="f-local"><label class="field">Localização<input id="l-local" placeholder="sem localização" readonly></label><label class="field">Documentos neste volume<input id="l-docs-volume" type="number" value="0" min="0" readonly></label></div>
+            <label class="field">Embalagem<input id="l-tipo-emb" value="pasta" readonly></label>
+            <button type="button" class="lnk" onclick="const c=document.getElementById('l-proj').value;if(c)nav('projeto/'+c)">Corrigir no projeto ↗</button>
+          </details>
         </div>
         <div class="lab-section">
-          <div class="lab-section-title">Impressão</div>
+          <div class="lab-section-title"><span class="lab-passo">2</span> Como imprimir</div>
           <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option></select></label>
-          <div class="qty"><label class="field">Quantidade<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field">Observação<input id="l-obs" placeholder="opcional, sai em letra pequena"></label></div>
-          <div class="lab-note" style="font-size:12px;color:var(--ink3)">Para folhas/documentos, a quantidade gera uma sequência a partir do número informado.</div>
+          <label class="field">Papel<select id="l-papel"><option value="rolo">Impressora de etiquetas (uma por página, no tamanho exato)</option><option value="a4">Folha A4 comum (várias por folha, para recortar)</option></select></label>
+          <div class="qty"><label class="field">Cópias<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field"><span>Observação <small class="help" id="l-obs-cont" aria-live="polite">0/30</small></span><input id="l-obs" maxlength="30" placeholder="opcional, sai em letra pequena"></label></div>
+          <div class="lab-note" id="l-qty-nota" style="font-size:12px;color:var(--ink3)">Na folha avulsa, as cópias viram uma sequência a partir do número informado (D00019, D00020…).</div>
         </div>
       </div>
       <div class="lab-preview-shell">
         <div class="lab-origem" id="lab-origem"></div>
         <div class="lab-preview-head"><span>Prévia em tamanho proporcional</span><span id="lab-preview-info">100 × 50 mm</span></div>
         <div class="lab-preview" id="lab-preview"></div>
+        <p class="lab-aviso" id="lab-aviso">Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.</p>
       </div>
     </div>
     <div class="printgrid" id="printgrid"></div>
@@ -1462,12 +1468,21 @@ function barcode(text,h,w){const t=('*'+text.toUpperCase().replace(/[^0-9A-Z\-\.
 let labType='projeto';
 document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
-  document.getElementById('l-fmt').value=labType==='tubo'?'20x140':'100x50';renderLabel()});
+  document.getElementById('l-fmt').value=labType==='tubo'?'20x140':'100x50';labAjustarCampos();renderLabel()});
+/* H21: o que aparece em cada aba (volume só na pasta; lote de folhas na folha; lote de pastas na pasta) */
+function labAjustarCampos(){const vis=(id,v)=>{const el=document.getElementById(id);if(el)el.style.display=v?'':'none'},temProj=['projeto','documento'].includes(labType);
+  vis('f-volume',labType==='projeto'&&labLote()==='um');vis('f-lote',temProj);vis('f-lote-folhas',labType==='documento');vis('f-lote-pastas',labType==='projeto');vis('f-cadastro-wrap',temProj);vis('l-qty-nota',labType==='documento'&&labLote()==='um');
+  const r=document.querySelector('input[name="l-lote"]:checked');if(r&&r.closest('label').style.display==='none'||!temProj){const um=document.querySelector('input[name="l-lote"][value="um"]');if(um)um.checked=true}}
+function labLote(){const r=document.querySelector('input[name="l-lote"]:checked');return r?r.value:'um'}
+document.getElementById('f-lote').addEventListener('change',()=>{if(labLote()!=='um')document.getElementById('l-qty').value=1;labAjustarCampos();renderLabel()});
+document.getElementById('l-papel').addEventListener('change',renderLabel);
+document.getElementById('l-obs').addEventListener('input',e=>{const c=document.getElementById('l-obs-cont');if(c)c.textContent=`${e.target.value.length}/30`});
+labAjustarCampos();
 ['l-fundo','l-proj','l-volume','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderLabel));
 document.getElementById('l-fundo').addEventListener('change',carregarProjetosEtiqueta);
 document.getElementById('l-proj').addEventListener('change',carregarDadosProjetoEtiqueta);
 document.getElementById('l-volume').addEventListener('change',aplicarVolumeEtiqueta);
-let LABEL_PROJETO=null,LABEL_VOLUMES=[];
+let LABEL_PROJETO=null,LABEL_VOLUMES=[],LABEL_LISTA=[],LABEL_FOLHAS=[];
 function codigoProjetoEtiqueta(pc){const n=parseInt(String(pc||'').replace(/\D/g,''),10)||0;return 'P'+String(n).padStart(3,'0')}
 async function aplicarRotaEtiquetas(route){
   const [,tipo,...r]=route.split('/'),id=decodeURIComponent(r.join('/')),aba={projeto:'projeto',fundo:'fundo',folha:'documento'}[tipo];
@@ -1488,7 +1503,8 @@ async function carregarProjetosEtiqueta(){
   if(!EU)return;if(!fc){sel.innerHTML='';LABEL_PROJETO=null;LABEL_VOLUMES=[];renderLabel();return}
   try{
     const r=await API('/api/projetos?fundo='+encodeURIComponent(fc)+'&por_pagina=500');
-    sel.innerHTML=r.itens.map(p=>`<option value="${escHtml(p.codigo)}">${escHtml(p.codigo)} · ${escHtml(p.titulo)}${p.ano?' · '+p.ano:''}</option>`).join('');
+    LABEL_LISTA=r.itens;const np=document.getElementById('l-n-pastas');if(np)np.textContent=`(${r.itens.length})`;
+    sel.innerHTML=r.itens.map(p=>`<option value="${escHtml(p.codigo)}">${escHtml(p.codigo)} · ${escHtml(tituloExibicao(p.titulo))}${p.ano?' · '+escHtml(p.ano):''}</option>`).join('');
     if(r.itens.length)await carregarDadosProjetoEtiqueta();else{LABEL_PROJETO=null;LABEL_VOLUMES=[];renderLabel()}
   }catch(e){toast('Etiquetas: '+e.message)}
 }
@@ -1496,7 +1512,7 @@ async function carregarDadosProjetoEtiqueta(){
   const code=document.getElementById('l-proj').value;if(!EU||!code)return;
   try{
     const [d,vs]=await Promise.all([API('/api/projetos/'+code+'/detalhe'),API('/api/projetos/'+code+'/volumes')]);
-    LABEL_PROJETO=d.projeto;LABEL_VOLUMES=vs;
+    LABEL_PROJETO=d.projeto;LABEL_VOLUMES=vs;LABEL_FOLHAS=(d.itens||[]).filter(x=>/^[A-Z]\d{3}-P\d{4}-/.test(x.codigo||'')).sort((a,b)=>a.codigo<b.codigo?-1:1);const nf=document.getElementById('l-n-folhas');if(nf)nf.textContent=`(${LABEL_FOLHAS.length})`;
     document.getElementById('l-ano').value=LABEL_PROJETO.ano||'';
     document.getElementById('l-endereco').value=LABEL_PROJETO.endereco_obra||'';
     document.getElementById('l-cliente').value=LABEL_PROJETO.cliente||'';
@@ -1512,30 +1528,50 @@ function aplicarVolumeEtiqueta(){
   document.getElementById('l-docs-volume').value=v?.quantidade_documentos||0;
   renderLabel();
 }
-function labelHTML(k){
+function labelHTML(k,alvo){   /* alvo (H21, lote): {codigo,titulo,ano,folha} de uma folha ou de uma pasta do fundo */
   const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc)||[fc||'F000','—','(selecione um fundo)',''],sig=f[1]||'—',nome=f[2];
-  const projeto=LABEL_PROJETO||{},pc=(projeto.codigo||document.getElementById('l-proj').value||'F000-P0000').split('-').pop(),pn=projeto.titulo||'(selecione um projeto)',py=projeto.ano||document.getElementById('l-ano').value||'';
-  const volume=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===volume),totalVolumes=v?.total_volumes||Math.max(1,LABEL_VOLUMES.length),local=document.getElementById('l-local').value||'—',tipoEmb=document.getElementById('l-tipo-emb').value||'—',docs=document.getElementById('l-docs-volume').value||'0',endereco=document.getElementById('l-endereco').value||'—',cliente=document.getElementById('l-cliente').value||'—';
+  const projeto=(alvo&&labType==='projeto'?alvo:LABEL_PROJETO)||{},pc=(projeto.codigo||document.getElementById('l-proj').value||'F000-P0000').split('-').pop(),pn=tituloExibicao(projeto.titulo||'')||'(selecione um projeto)',py=projeto.ano||(alvo?'':document.getElementById('l-ano').value)||'';
+  const volume=alvo?1:(+document.getElementById('l-volume').value||1),v=alvo?null:LABEL_VOLUMES.find(x=>x.volume===volume),totalVolumes=v?.total_volumes||(alvo?1:Math.max(1,LABEL_VOLUMES.length)),local=(alvo?'':document.getElementById('l-local').value)||'—',tipoEmb=(alvo?'':document.getElementById('l-tipo-emb').value)||'—',docs=alvo?(alvo.folhas??'—'):(document.getElementById('l-docs-volume').value||'0'),endereco=(alvo?'':document.getElementById('l-endereco').value)||'—',cliente=(alvo?'':document.getElementById('l-cliente').value)||'—';
   const [mw,mh]=document.getElementById('l-fmt').value.split('x').map(Number);const S=3.6;const obs=document.getElementById('l-obs').value;
   let code,lines,big;
   if(labType==='projeto'){code=`${sig}-${codigoProjetoEtiqueta(pc)}.${volume}`;big=code;lines=[['Fundo',fc],['Sigla',sig],['Nome',nome],['Ano',py||'—'],['Cliente',cliente],['Volume',`${volume} de ${totalVolumes}`],['Embalagem',tipoEmb],['Documentos',docs],['Local',local],['Endereço',endereco]]}
-  else if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';const n='D'+String(+d+k).padStart(5,'0');code=`${fc}-${escHtml(pc)}-${py||'0000'}-${document.getElementById('l-serie').value}-${n}`;big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn]]}
+  else if(labType==='documento'){if(alvo){code=alvo.codigo}else{const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';const n='D'+String(+d+k).padStart(5,'0');code=`${fc}-${pc}-${py||'0000'}-${document.getElementById('l-serie').value}-${n}`}big=code;lines=[['Fundo',`${sig} · ${nome}`],['Projeto',pn]].concat(alvo&&alvo.folha?[['Folha',alvo.folha]]:[])}
   else if(labType==='caixa'){const cx=document.getElementById('l-caixa').value.trim().toUpperCase(),id=/^[A-Z]/.test(cx)?cx:'CX'+cx.padStart(2,'0');code=fc?`${fc}-${id}`:id;big=code;/* H20: o identificador cadastrado (CX-001, MAP-01-G01) vai como está */lines=[['Fundo',`${sig} · ${nome}`],['Conteúdo',document.getElementById('l-cont').value]]}
   else if(labType==='fundo'){code=fc;big=`${fc} ${sig}`;lines=[['Fundo',nome],['Período',f[3]||'—']]}
-  else {code=`${fc}-${escHtml(pc)}`;big=code;lines=[]}
+  else {code=`${fc}-${pc}`;big=code;lines=[]}
   const vert=mh>mw;
-  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px"><span class="logo">CAMP</span><span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${big}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${pn} · ${sig}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
-  return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${sig} · CAMP</span></div><div class="body">
+  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px"><span class="logo">CAMP</span><span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${escHtml(big)}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${escHtml(pn)} · ${escHtml(sig)}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
+  return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${escHtml(sig)} · CAMP</span></div><div class="body">
     <div style="display:flex;align-items:center;gap:6px"><span class="logo">CAMP</span><span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
     <div class="big" style="font-size:${big.length>18?12:16}px;margin:5px 0 2px">${escHtml(big)}</div>
     ${labType==='projeto'? `<div class="label-project">${escHtml(pn)}</div>` : ''}
     <div class="row">${lines.map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
-    ${obs?`<div style="font-size:7.5px;color:#555;margin-top:2px">${obs}</div>`:''}
-    <div style="position:absolute;left:10px;right:10px;bottom:7px">${barcode(code,20,'100%')}<div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-align:center;margin-top:1px">${code}</div></div></div></div>`}
-function renderLabel(){const fcod=document.getElementById('l-fundo').value,pcod=document.getElementById('l-proj').value,orig=document.getElementById('lab-origem'),semFundo=!fcod&&!['caixa','tubo'].includes(labType);
-  if(orig){const fn=(FUNDOS.find(f=>f[0]===fcod)||[])[2]||'';orig.textContent=semFundo?'Escolha o fundo para ver a etiqueta.':labType==='fundo'?`Etiqueta de: ${fcod} · ${fn}`:['caixa','tubo'].includes(labType)?'':pcod?`Etiqueta de: ${pcod} · ${(LABEL_PROJETO&&LABEL_PROJETO.titulo)||''}`:'Escolha o projeto.'}
-  if(semFundo){document.getElementById('lab-preview').innerHTML='<div class="empty">Escolha o fundo (e o projeto) para ver a etiqueta.</div>';const pg=document.getElementById('printgrid');if(pg)pg.innerHTML='';return}
-  document.getElementById('lab-preview').innerHTML=labelHTML(0);const info=document.getElementById('lab-preview-info');if(info){const [w,h]=document.getElementById('l-fmt').value.split('x');info.textContent=w+' × '+h+' mm'}const n=Math.min(60,Math.max(1,+document.getElementById('l-qty').value||1));document.getElementById('printgrid').innerHTML=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0)).join('')}
+    ${obs?`<div style="font-size:7.5px;color:#555;margin-top:2px">${escHtml(obs)}</div>`:''}
+    <div style="position:absolute;left:10px;right:10px;bottom:7px">${barcode(code,20,'100%')}<div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-align:center;margin-top:1px">${escHtml(code)}</div></div></div></div>`}
+/* H21: a frase de conferência, em letra grande, acima da prévia */
+function labFrase(lote,lista){const fcod=document.getElementById('l-fundo').value,pcod=document.getElementById('l-proj').value,fn=(FUNDOS.find(f=>f[0]===fcod)||[])[2]||'',pt=tituloExibicao((LABEL_PROJETO&&LABEL_PROJETO.titulo)||'');
+  if(lote==='folhas')return lista.length===1?`Etiqueta de: a única folha de ${pcod} · ${pt}`:`Etiquetas de: todas as ${lista.length} folhas de ${pcod} · ${pt}`;
+  if(lote==='pastas')return lista.length===1?`Etiqueta de: a única pasta do fundo ${fcod} · ${fn}`:`Etiquetas de: todas as ${lista.length} pastas do fundo ${fcod} · ${fn}`;
+  if(labType==='fundo')return `Etiqueta de: ${fcod} · ${fn}`;
+  if(labType==='caixa'){const cx=document.getElementById('l-caixa').value.trim().toUpperCase();return `Etiqueta de: ${fcod?fcod+'-':''}${/^[A-Z]/.test(cx)?cx:'CX'+cx.padStart(2,'0')}${fn?' · '+fn:' · compartilhada'}`}
+  if(labType==='tubo')return pcod?`Etiqueta de: lombada do tubo de ${pcod} · ${pt}`:'Escolha o projeto.';
+  if(!pcod)return 'Escolha o projeto.';
+  if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';return `Etiqueta de: ${pcod} · ${pt} · folha ${document.getElementById('l-serie').value}-D${String(+d).padStart(5,'0')}`}
+  const vol=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===vol);return `Etiqueta de: ${pcod} · ${pt} · ${fn} · volume ${vol} de ${v?.total_volumes||Math.max(1,LABEL_VOLUMES.length)}`}
+function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=document.getElementById('lab-origem'),semFundo=!fcod&&!['caixa','tubo'].includes(labType),pg=document.getElementById('printgrid'),pv=document.getElementById('lab-preview'),bt=document.getElementById('lab-imprimir');
+  const lote=['projeto','documento'].includes(labType)?labLote():'um',lista=lote==='folhas'?LABEL_FOLHAS:lote==='pastas'?LABEL_LISTA:null;
+  if(orig)orig.textContent=semFundo?'Escolha o fundo para ver a etiqueta.':labFrase(lote,lista||[]);
+  if(semFundo){pv.innerHTML='<div class="empty">Escolha o fundo (e o projeto) para ver a etiqueta.</div>';pv.classList.remove('grade');if(pg)pg.innerHTML='';if(bt)bt.textContent='Imprimir';return}
+  const [w,h]=document.getElementById('l-fmt').value.split('x'),info=document.getElementById('lab-preview-info');if(info)info.textContent=w+' × '+h+' mm';
+  const n=Math.min(60,Math.max(1,+document.getElementById('l-qty').value||1));let etiquetas;
+  if(lista){pv.classList.add('grade');pv.innerHTML=lista.length?lista.slice(0,12).map(a=>`<div class="lab-mini">${labelHTML(0,a)}</div>`).join('')+(lista.length>12?`<div class="lab-mais">e mais ${lista.length-12}</div>`:''):'<div class="empty">Nada para etiquetar aqui.</div>';
+    etiquetas=lista.slice(0,600).flatMap(a=>Array.from({length:n},()=>labelHTML(0,a)))}
+  else{pv.classList.remove('grade');pv.innerHTML=labelHTML(0);etiquetas=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0))}
+  if(pg)pg.innerHTML=etiquetas.join('');if(bt)bt.textContent=etiquetas.length>1?`Imprimir ${etiquetas.length} etiquetas`:'Imprimir';
+  /* H21: impressão no tamanho exato (@page) — uma etiqueta por página na impressora de etiquetas, ou várias numa A4 */
+  let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
+  st.textContent=document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
+    :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`}
 
 
 // ---------- desktop: drawer de detalhes ----------
@@ -1598,7 +1634,7 @@ const AJUDA_PAGINAS={
  fundos:{v:2,serve:'A lista oficial dos arquitetos e escritórios cujo material está na CAMP. Cada um tem um código (F026) e uma sigla (SBU) que vão no nome de todos os arquivos e nas etiquetas. As estações de captura e o CAMP Vision consultam esta lista.',passos:['Procure pelo nome, sigla ou código.','Clique na linha para abrir o fundo: dados, direitos, projetos e o que falta para publicar.','Use as abas para ver os que já estão no site ou os que têm pendência (direitos com restrição, sem sigla).','Chegou material de um arquiteto novo? Use "Reservar próximo código". O painel dá o próximo número livre.'],cores:[['publicado / não publicado / despublicado','situação da página do arquiteto no site'],['direitos ainda não registrados','falta registrar a autorização em Fundo → Direitos (só impede publicar se Configurações exigir)'],['direitos com restrição','alguém registrou uma restrição: a publicação fica bloqueada'],['falta sigla','falta escolher as 3 letras']],cuidados:'O código e a sigla NUNCA mudam depois de criados, porque estão no nome dos arquivos. Confira a sigla antes de reservar. Material de terceiros trazido só para digitalizar vai no F000 Convidado.',quem:'Todos veem · admin reserva código e edita.'},
  arquitetos:{v:2,serve:'Cadastro das pessoas e escritórios que produziram o material. O CAMP Vision usa as "grafias no carimbo" para reconhecer de quem é cada prancha.',passos:['Procure o arquiteto pelo nome.','Clique na linha para ver e editar: nome oficial, tipo, anos de atuação, fundos e grafias.','Em "Grafias no carimbo", escreva cada forma como o nome aparece nas pranchas e aperte Enter (ex.: JOAQUIM BARRETTO, J. BARRETTO ARQ. ASSOC.). Para tirar, clique no ×. Quanto mais completo, menos erro de autoria.','Marque o(s) fundo(s) do arquiteto (dá para buscar). Um arquiteto pode estar em mais de um fundo (parcerias).','Biografia só com fonte citada (livro, entrevista, documento). Sem fonte, deixe em branco.'],cores:[],cuidados:'Não crie o mesmo arquiteto duas vezes com grafias diferentes: acrescente a grafia ao cadastro existente.',quem:'Todos veem · admin cadastra e edita.'},
  localizacao:{v:2,serve:'Saber onde cada folha original está guardada: em que caixa, gaveta, tubo, mapoteca ou estante. É o que permite achar o papel quando alguém pede.',passos:['Cadastre o recipiente em "Nova localização": o tipo (caixa, gaveta, tubo…), o identificador escrito nele (o painel já sugere o próximo livre, ex.: CX-002) e, se for de um fundo só, o fundo.','Clique na linha para abrir o recipiente.','Em "Alocar folhas aqui", procure o projeto pelo código ou pelo nome e marque as folhas (todas vêm marcadas). Quem tem uma lista pode colar os códigos, um por linha; o leitor de código de barras também funciona.','Clique "Alocar". O resultado aparece ali mesmo, com o botão "Imprimir etiqueta da caixa"; cole a etiqueta no recipiente.','Em qualquer folha, "Onde está" passa a mostrar esse lugar. No alto da página, "Por fundo" mostra quantas folhas de cada fundo ainda estão sem lugar.'],cores:[],cuidados:'O identificador precisa ser o mesmo que está escrito fisicamente no recipiente. Se mudar uma folha de lugar, aloque de novo no lugar novo (a anterior é substituída).',quem:'Operador e admin.'},
- etiquetas:{v:1,serve:'Imprimir etiquetas com código de barras para pastas, folhas, caixas, tubos e para o fundo. O código da etiqueta leva direto ao registro no painel.',passos:['Escolha o tipo de etiqueta nas abas: pasta de projeto, folha, caixa ou gaveta, lombada de tubo, ou fundo.','Escolha o fundo e o projeto (ou a folha, ou a caixa). Se você veio do botão "Etiquetas" de um projeto, eles já vêm escolhidos.','Confira na prévia, à direita: "Etiqueta de: …", o código, o nome e o volume.','Escolha o formato (100 × 50 mm é o padrão CAMP) e a quantidade.','Clique "Imprimir". Na janela da impressora, escolha a impressora de etiquetas e tamanho real (100%).'],cores:[],cuidados:'Confira o código na prévia antes de imprimir: etiqueta errada colada na pasta errada é difícil de achar depois. Se o projeto não tiver ano, aparece 0000.',quem:'Todos.'},
+ etiquetas:{v:2,serve:'Imprimir etiquetas com código de barras para pastas, folhas, caixas, tubos e para o fundo. O código da etiqueta leva direto ao registro no painel.',passos:['Escolha o tipo de etiqueta nas abas: pasta de projeto, folha, caixa ou gaveta, lombada de tubo, ou fundo.','Passo 1, "O que etiquetar": escolha o fundo e o projeto (ou a folha, ou a caixa). Se você veio do botão "Etiquetas" de um projeto, eles já vêm escolhidos. Para várias de uma vez, marque "Todas as folhas deste projeto" ou "Todas as pastas do fundo".','Confira a frase em letra grande acima da prévia ("Etiqueta de: F023-P0011 · Residência Riviera · … · volume 1 de 1"), o código e o nome.','Passo 2, "Como imprimir": o formato (100 × 50 mm é o padrão CAMP), o papel (impressora de etiquetas ou folha A4) e as cópias.','Clique "Imprimir". Na janela da impressora, escolha a impressora de etiquetas e tamanho real (100%); se sair cortada, desmarque "ajustar à página".'],cores:[],cuidados:'Confira o código na prévia antes de imprimir: etiqueta errada colada na pasta errada é difícil de achar depois. Ano, cliente e endereço vêm do cadastro do projeto e não se mudam aqui: use "Corrigir no projeto". Se o projeto não tiver ano, aparece 0000.',quem:'Todos.'},
  erros:{v:2,serve:'Lista de problemas encontrados no material: folha de outro projeto, carimbo de outro arquiteto, folha repetida, imagem virada ou escaneada pelo verso. Uns são achados pelo CAMP Vision, outros por você ou por visitantes do site.',passos:['Fique na aba "Abertos": são os que ninguém resolveu. A coluna "Há quanto tempo" fica amarela depois de 7 dias.','Clique na linha para ver o problema e abrir a folha ou o projeto.','Resolva na origem (corrija a folha, gire, mova, peça releitura).','Volte aqui, clique em "Marcar como corrigido" e escreva em uma frase o que foi feito.','Achou um problema novo? "Relatar problema", com o código da folha ou do projeto.'],cores:[['bloqueia','o projeto não pode ir ao site até resolver; se já estiver no site, o painel pergunta se deve tirar'],['corrigir','precisa arrumar, mas não impede publicar'],['aviso','só para registro']],cuidados:'"Ignorado" é para quando não era problema de verdade. Escreva o porquê.',quem:'Operador relata e resolve · admin também · leitura só vê.'},
  solicitacoes:{v:2,serve:'Controlar os pedidos de imagens em alta resolução (TIFF ou JPG grande) feitos por pesquisadores, editoras, famílias e exposições. Registra quem pediu, para quê, o que foi entregue e com que crédito.',passos:['Os pedidos do formulário do site entram sozinhos. Os que chegam por e-mail ou pessoalmente você registra em "Registrar pedido": escolha o código e o formato de cada material.','Abra o pedido clicando na linha. A coluna "Recebido" fica amarela depois de 7 dias sem entrega.','Responda à pessoa ("Responder por e-mail" traz um texto pronto) e clique na etapa da trilha conforme andar: aguarda resposta → orçamento → crédito → preparação → entregue.','Em "Condições de uso / crédito exigido", escreva o crédito que a pessoa precisa usar (ex.: "Acervo Sami Bussab / CAMP").','Ao clicar em "entregue", o painel pergunta o que foi entregue (arquivos e tamanho) e guarda no histórico. O pedido sai da aba "Abertas".'],cores:[],cuidados:'Confira os direitos do fundo antes de prometer entrega. Uso comercial pode exigir orçamento.',quem:'Operador e admin.'},
  uso:{v:2,serve:'Ver quem baixou material do site, quando, qual material e para qual uso declarou. Os dados vêm do formulário que a pessoa preenche antes de baixar.',passos:['A aba "Pedidos de download" lista cada download, do mais recente para o mais antigo.','"Pessoas" junta por pessoa; "Materiais" junta por material (os mais procurados).','Use a busca e os filtros (uso, fundo e datas) para achar algo específico. A frase no topo também é clicável: "downloads nos últimos 30 dias", "pessoas" e o material mais baixado.','"Atualizar agora" busca no site os pedidos novos. "Puxar tudo" relê todo o histórico (demora).','"Exportar CSV" baixa a lista do jeito que está filtrada, para relatório.'],cores:[],cuidados:'Aqui há dados pessoais (nome, e-mail, instituição). Não compartilhe a planilha fora da CAMP. Apagar dados é definitivo: use só quando a própria pessoa pedir (LGPD), e prefira "Anonimizar".',quem:'Só admin.'},
