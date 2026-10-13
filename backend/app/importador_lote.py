@@ -40,6 +40,43 @@ def _rotacao(v) -> int:
     return -90 if r == 270 else r
 
 
+def _categoria_retirado(r: dict, motivos: list[str]) -> str:
+    txt = " ".join(motivos).lower()
+    if r.get("autoria_divergente") or "autoria" in txt:
+        return "autoria_divergente"
+    if r.get("projeto_divergente") or "projeto divergente" in txt:
+        return "projeto_errado"
+    if r.get("duplicata_de") or "duplicata" in txt:
+        return "duplicata"
+    return "outro"
+
+
+def registrar_problemas(con, proj: str, pacote: dict, recusadas: list[str], lote_id: int) -> int:
+    """Cartão 13: cada folha que o CAMP Vision RETIROU do lote (e cada uma que o painel recusou ao importar) vira um problema
+    com origem automática ('campvision'). A `chave` evita duplicar ao reimportar e não reabre o que alguém já resolveu.
+    A gravidade é 'corrigir': a folha retirada não vai ao site, então não há por que travar o projeto inteiro. Devolve quantos entraram."""
+    devolvidas = {r[0] for r in con.execute("SELECT chave FROM cv_resposta WHERE lote_id=? AND tipo='retirado' AND acao='devolver'", (lote_id,))}
+    novos = 0
+    for r in pacote.get("retirados") or []:
+        if not isinstance(r, dict):
+            continue
+        cod = str(r.get("codigo") or "").strip()
+        if not cod or cod in devolvidas:
+            continue
+        motivos = [str(b) for b in (r.get("bloqueios") or []) if b] or ([str(r["motivo"])] if r.get("motivo") else [])
+        quem = f" (decisão de {r['retirado_por']})" if r.get("retirado_por") else ""
+        descricao = "O CAMP Vision retirou esta folha do lote" + quem + (": " + "; ".join(motivos) if motivos else "") + ". Ela não entrou na revisão."
+        novos += con.execute("""INSERT OR IGNORE INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por, chave)
+                                VALUES ('corrigir', ?, 'campvision', ?, ?, 'CAMP Vision', ?)""",
+                             (_categoria_retirado(r, motivos), cod if CODIGO_DOCUMENTO.match(cod) else proj, descricao, f"campvision:retirado:{cod}")).rowcount
+    for texto in recusadas:
+        cod = texto.split(":", 1)[0].strip()
+        novos += con.execute("""INSERT OR IGNORE INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por, chave)
+                                VALUES ('corrigir', 'codigo', 'campvision', ?, ?, 'CAMP Vision', ?)""",
+                             (proj, f"Folha do lote que não entrou no painel: {texto}.", f"campvision:recusada:{proj}:{cod}")).rowcount
+    return novos
+
+
 def importar_lote(con, lote_id: int, ator: str) -> dict:
     """NÃO faz commit (quem chama controla a transação)."""
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -115,12 +152,14 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone():
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
+    registrados = registrar_problemas(con, proj, pacote, problemas, lote_id)
     resultado = {}
     try:
         resultado = json.loads(lote["resultado"] or "{}")
     except ValueError:
         pass
-    resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas, "teste": bool(pacote.get("teste"))}
+    resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
+              "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
     resultado["importacao"] = {**resumo, "por": ator}
     if isinstance(pacote.get("execucao"), dict):                 # custo, tempo e versão do lote (cartão 152)
         con.execute("UPDATE lista_processamento SET execucao_json=? WHERE id=?", (json.dumps(pacote["execucao"], ensure_ascii=False), lote_id))

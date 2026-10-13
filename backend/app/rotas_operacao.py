@@ -1029,6 +1029,7 @@ class EdicaoErro(BaseModel):
 
 
 GRAV = ("bloqueia", "corrigir", "aviso")
+ORIGENS_MANUAIS = ("operador", "revisao", "site")
 CATS = ("autoria_divergente", "projeto_errado", "duplicata", "orientacao", "espelhado", "codigo", "metadado", "credito", "arquivo_corrompido", "outro")
 
 
@@ -1061,6 +1062,12 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
         raise HTTPException(400, "Gravidade ou categoria inválida")
     if not d.codigo.strip() or not d.descricao.strip():
         raise HTTPException(400, "Código e descrição são obrigatórios")
+    # cartão 13: 'campvision' é só do registro automático (importação do lote); 'site' = quem viu foi um visitante do site
+    if d.origem not in ORIGENS_MANUAIS:
+        raise HTTPException(400, "Origem inválida: escolha entre você mesmo, a revisão ou um visitante do site")
+    relatado = (d.relatado_por or "").strip()[:160]
+    if d.origem == "site" and not relatado:
+        raise HTTPException(400, "Diga quem avisou pelo site (nome ou e-mail do visitante)")
     con = connect()
     cod = d.codigo.strip().upper()
     # o código precisa existir como fundo, projeto ou folha (antes qualquer texto era aceito e o erro ficava ligado a nada, contando como bloqueante)
@@ -1071,7 +1078,7 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
         con.close()
         raise HTTPException(400, f"O código {cod} não existe. Confira ou busque o projeto.")
     eid = con.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por) VALUES (?,?,?,?,?,?)",
-                      (d.gravidade, d.categoria, d.origem, cod, d.descricao.strip(), d.relatado_por or u["email"])).lastrowid
+                      (d.gravidade, d.categoria, d.origem, cod, d.descricao.strip(), relatado or u["email"])).lastrowid
     if d.categoria == "autoria_divergente" and cod.count("-") == 4:
         con.execute("UPDATE item SET autoria_divergente=1 WHERE codigo=?", (cod,))
     # status_site espelha SÓ o site: o bloqueio é derivado dos erros abertos (nunca gravado no status). Se o projeto JÁ está publicado, a tela precisa perguntar o que fazer.
@@ -1080,7 +1087,7 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
     if d.gravidade == "bloqueia" and pc:
         r_ = con.execute("SELECT status_site FROM projeto WHERE codigo=?", (pc,)).fetchone()
         no_ar = bool(r_ and r_[0] == "no_ar")
-    _evento(con, "erro", eid, "criado", u["email"], {"codigo": cod, "gravidade": d.gravidade, "publicado_com_bloqueio": no_ar})
+    _evento(con, "erro", eid, "criado", u["email"], {"codigo": cod, "gravidade": d.gravidade, "origem": d.origem, "publicado_com_bloqueio": no_ar})
     con.commit(); con.close()
     return {"id": eid, "publicado_com_bloqueio": no_ar, "projeto": pc if no_ar else None}
 

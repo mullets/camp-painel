@@ -3616,6 +3616,53 @@ def filho(modo):
             and connect().execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F086' AND campo='pendente_descricao_no_site'").fetchone()[0] == 1, str(r))
         ver("enviar à mão com o site fora: 502 com o motivo", x.post("/api/fundos/F086/descricao-site").status_code == 502)
         print("\n".join(res))
+    elif modo == "erros_automaticos":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import auth, importador_lote
+        from fastapi.testclient import TestClient
+        from app.main import app
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        p2 = _cp.deepcopy(pac); ret = p2["documentos"].pop(1); ret["bloqueios"] = ["autoria divergente"]; ret["autoria_divergente"] = True; p2["retirados"] = [ret]
+        ruim = _cp.deepcopy(p2["documentos"][0]); ruim["codigo"] = "F099-P0001-1972-S01-D00077"; p2["documentos"].append(ruim)   # folha de outro projeto: o painel recusa
+        pasta = _pl.Path(tempfile.mkdtemp()) / "Taruma"; (pasta / "catalogacao").mkdir(parents=True)
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p2, ensure_ascii=False), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Tarumã','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit(); c.close()
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        r1 = importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        e = k.execute("SELECT * FROM erro WHERE codigo=?", (ret["codigo"],)).fetchone()
+        ver("folha retirada pelo CV2 vira problema com origem automática (campvision), sem ninguém relatar", e is not None and e["origem"] == "campvision" and e["categoria"] == "autoria_divergente" and e["situacao"] == "aberto" and "retirou" in e["descricao"] and "autoria divergente" in e["descricao"], str(dict(e) if e else None))
+        ver("gravidade 'corrigir': a folha retirada não vai ao site, então não trava o projeto", e is not None and e["gravidade"] == "corrigir" and sql("SELECT erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo='F026-P0001'") == 0)
+        rec = k.execute("SELECT * FROM erro WHERE chave LIKE 'campvision:recusada:%'").fetchone()
+        ver("folha que o painel recusou na importação também vira problema automático (no projeto)", rec is not None and rec["codigo"] == "F026-P0001" and "F099-P0001-1972-S01-D00077" in rec["descricao"] and rec["origem"] == "campvision", str(dict(rec) if rec else None))
+        ver("o resultado da importação diz quantos problemas entraram", r1.get("problemas_registrados") == 2, str(r1.get("problemas_registrados")))
+        n1 = sql("SELECT COUNT(*) FROM erro")
+        r2 = importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        ver("reimportar o mesmo lote NÃO duplica", sql("SELECT COUNT(*) FROM erro") == n1 == 2 and r2.get("problemas_registrados") == 0, f"{n1} -> {sql('SELECT COUNT(*) FROM erro')}")
+        k.execute("UPDATE erro SET situacao='corrigido', resolucao='movida para o fundo certo', resolvido_em=datetime('now') WHERE id=?", (e["id"],)); k.commit()
+        importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        ver("reimportar não reabre o que alguém já resolveu", sql("SELECT situacao FROM erro WHERE id=?", e["id"]) == "corrigido" and sql("SELECT COUNT(*) FROM erro") == 2)
+        for em, nome, papel in (("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        op, lei = cli("op@camp.arq.br"), cli("lei@camp.arq.br")
+        base = {"codigo": "F026-P0001", "gravidade": "aviso", "categoria": "credito", "descricao": "visitante diz que o crédito está errado"}
+        r = op.post("/api/erros", json={**base, "origem": "site", "relatado_por": "Maria (maria@exemplo.com)"})
+        ve = k.execute("SELECT origem, relatado_por FROM erro WHERE id=?", (r.json().get("id"),)).fetchone()
+        ver("relato de visitante do site: origem 'site' e quem avisou", r.status_code == 200 and ve and tuple(ve) == ("site", "Maria (maria@exemplo.com)"), r.text[:150])
+        ver("visitante do site sem nome: 400", op.post("/api/erros", json={**base, "origem": "site"}).status_code == 400)
+        ver("ninguém se passa pelo registro automático (origem 'campvision' à mão: 400); origem desconhecida: 400 (antes era erro 500)", op.post("/api/erros", json={**base, "origem": "campvision"}).status_code == 400 and op.post("/api/erros", json={**base, "origem": "xyz"}).status_code == 400)
+        r = op.post("/api/erros", json=base)
+        ver("relato comum continua com origem 'operador' e o e-mail de quem relatou", r.status_code == 200 and tuple(k.execute("SELECT origem, relatado_por FROM erro WHERE id=?", (r.json()["id"],)).fetchone()) == ("operador", "op@camp.arq.br"))
+        lst = lei.get("/api/erros?situacao=todos").json()
+        ver("a lista de Problemas traz a origem de cada um (leitura vê)", {x_["origem"] for x_ in lst} == {"campvision", "site", "operador"}, str({x_["origem"] for x_ in lst}))
+        k.close()
+        for l in res: print(l)
     elif modo == "cv2_aceite":
         init_db(); _aplicar_migracoes_real()
         import json as _j, tempfile
@@ -5377,6 +5424,14 @@ else:
 print("81) Sobras #9 mudar o código de um projeto: folhas recodificadas, mapa antigo→novo para o 301 e integridade")
 rc, out = rodar("recodificar", f"{tmp}/recod.db")
 if rc != 0: ok(False, f"teste de recodificar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("74) Cartão 13: problemas com origem automática (CAMP Vision) e do site")
+rc, out = rodar("erros_automaticos", f"{tmp}/erros_auto.db")
+if rc != 0: ok(False, f"teste dos problemas automáticos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
