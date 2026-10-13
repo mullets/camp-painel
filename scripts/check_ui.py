@@ -10,7 +10,7 @@ text = HTML.read_text(encoding="utf-8")
 
 required_css = [
     ".dash-v2{", ".dash-hero{", ".machine-status{", ".system-banner{",
-    ".lab-wrap{", ".lab-preview{", ".bulkbar{", ".fundos-filtros{",
+    ".lab-wrap{", ".lab-preview{", ".bulkbar{", ".abas-sit{",
     ".dirty-state{", ".form-summary{", ".modal{", ".drawer{", ".filterbar{",
 ]
 required_dom = [
@@ -37,13 +37,20 @@ if inline > 190:
 pairs = [
     ("dash-v2", ".dash-v2{"),
     ("bulkbar", ".bulkbar{"),
-    ("fundos-filtros", ".fundos-filtros{"),
+    ("abas-sit", ".abas-sit{"),
+    ("mais-menu", ".mais-menu{"),
     ("machine-status", ".machine-status{"),
     ("lab-wrap", ".lab-wrap{"),
 ]
 for html_class, selector in pairs:
     if html_class in text and selector not in text:
         errors.append(f"componente {html_class} aparece no HTML/JS sem CSS {selector}")
+
+# --- #94 padrão único de tela (docs/padrao-de-tela.md): variantes antigas não podem voltar ---
+for velho, dica in (('class="backbar"', "detalhe tem um só Voltar (o do topo)"), ('class="fila-chips"', "use .abas-sit"),
+                    ('class="fundos-filtros"', "use .abas-sit"), ('onchange="carregarErros(', "use as abas de situação")):
+    if velho in text:
+        errors.append(f"padrão de tela: {velho} voltou ({dica})")
 
 # --- vocabulário único de publicação (docs/vocabulario.md): estas frases NÃO podem voltar ---
 PROIBIDAS = [

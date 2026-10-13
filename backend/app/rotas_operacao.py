@@ -924,6 +924,17 @@ GRAV = ("bloqueia", "corrigir", "aviso")
 CATS = ("autoria_divergente", "projeto_errado", "duplicata", "orientacao", "espelhado", "codigo", "metadado", "credito", "arquivo_corrompido", "outro")
 
 
+@router.get("/erros/contagem")
+def contar_erros(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """#94: a contagem das abas de situação (Abertos · Corrigidos · Todos), nas mesmas regras do filtro da lista."""
+    con = connect()
+    try:
+        q = lambda w: con.execute("SELECT COUNT(*) FROM erro" + w).fetchone()[0]
+        return {"abertos": q(" WHERE situacao IN ('aberto','em_correcao')"), "corrigido": q(" WHERE situacao='corrigido'"), "todos": q("")}
+    finally:
+        con.close()
+
+
 @router.get("/erros")
 def listar_erros(situacao: str | None = "abertos", u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()

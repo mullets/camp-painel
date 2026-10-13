@@ -1139,6 +1139,24 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [#94] padrão único de tela: ≤1 botão azul no cabeçalho, abas de situação únicas, um só Voltar, linha clicável com data-abrir ----------
+{ const ruins=[];
+  for (const r of ['filas','decisoes','erros','solicitacoes','projetos','fundos','arquitetos','localizacao','auditoria','fundo/F003','projeto/F003-P9001']){ w.route_to(r); await sleep(1500);
+    const v=d.querySelector('.content.on'); if(!v){ruins.push(r+': tela não abriu');continue}
+    const hdr=v.querySelector('.hdr,.dethdr'), pri=hdr?hdr.querySelectorAll('.btn.pri').length:0; if(pri>1) ruins.push(r+': '+pri+' botões azuis no cabeçalho');
+    if(v.querySelector('.backbar,.fila-chips,.fundos-filtros')) ruins.push(r+': variante antiga (Voltar duplo, pílulas)');
+    if(v.querySelector('select[onchange*="carregarErros"]')) ruins.push(r+': select de situação');
+    const soltas=[...v.querySelectorAll('tbody tr[onclick]')].filter(t=>!t.dataset.abrir&&!t.dataset.nav).length; if(soltas) ruins.push(r+': '+soltas+' linha(s) clicável(is) sem data-abrir'); }
+  chk(!ruins.length,'[#94] padrão de tela: '+ruins.join(' | '));
+  w.route_to('erros'); await sleep(1500);
+  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===3&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Corrigidos · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
+  d.querySelector('#err-abas [data-err-sit="todos"]').click(); await sleep(1200);
+  chk(d.querySelector('#err-abas [data-err-sit="todos"]').getAttribute('aria-pressed')==='true','[#94] clicar em "Todos" deveria ligar a aba'); w.carregarErros('abertos'); await sleep(600);
+  w.route_to('fundo/F003'); await sleep(2500); const mm=d.querySelector('#v-fundo .mais-menu');
+  chk(!!mm&&/Etiqueta do fundo/.test(mm.textContent)&&(!/Despublicar/.test(mm.textContent)||!!mm.querySelector('.perigo-txt'))&&/Burle Marx/.test(txt('#gcrumb')),'[#94] fundo: ações secundárias no "Mais ⋯" (despublicar em vermelho) e a trilha com o nome do fundo: "'+txt('#gcrumb')+'"');
+  w.route_to('auditoria'); await sleep(1800); const ta=d.querySelector('#au-body tr[data-abrir^="auditoria:"]');
+  if(ta){ ta.querySelector('td').click(); await sleep(500); chk(/Quando/.test(txt('#d-body')),'[#94] clicar na linha da auditoria deveria abrir o evento'); w.closeDrawer(true) } else chk(false,'[#94] as linhas da auditoria deveriam ter data-abrir');
+  okl.push('#94: padrão de tela em 11 telas (≤1 azul no cabeçalho, abas de situação únicas, sem Voltar duplo, linhas com data-abrir, "Mais ⋯" no fundo)'); }
 // ---------- [#95] página do projeto: um só próximo passo (logo abaixo do título), requisitos recolhidos, trilha sem repetir, título limpo ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500);
   const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
