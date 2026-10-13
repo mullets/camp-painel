@@ -4068,6 +4068,108 @@ def filho(modo):
         ver("o fechamento fica na história da lista", k.execute("SELECT COUNT(*) FROM evento WHERE entidade='lista' AND tipo='etapa_publicado' AND codigo IN (?,?)", (str(a), str(d_))).fetchone()[0] == 2)
         for l in res: print(l)
         k.close()
+    elif modo == "emprestimos":
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F092','Fundo Empréstimo','EMP',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F092',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F092-P0001','F092',1,'Casa Teste',1970)")
+        F = [f"F092-P0001-1970-S01-D{i:05d}" for i in range(1, 5)]
+        for i, cod in enumerate(F, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'manual')", (cod, "F092-P0001", "S01", i, f"Planta {i}"))
+        CX = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F092','caixa','CX-092')").lastrowid
+        TB = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F092','tubo','TB-092')").lastrowid
+        c.execute("INSERT INTO item_localizacao (item_codigo,localizacao_id) VALUES (?,?)", (F[2], CX))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op Silva", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        base = {"tipo": "emprestimo", "nome": "Ana Pesquisadora", "contato": "ana@exemplo.test", "instituicao": "FAU", "prazo": "2099-12-31"}
+        # ---------- permissões ----------
+        ver("criar exige operador: leitura 403, sem login 401", le.post("/api/emprestimos", json={**base, "itens": [F[0]]}).status_code == 403
+            and anon.post("/api/emprestimos", json={**base, "itens": [F[0]]}).status_code == 401)
+        ver("listar e detalhar: leitura pode ver, sem login 401", le.get("/api/emprestimos").status_code == 200 and anon.get("/api/emprestimos").status_code == 401)
+        # ---------- validações ----------
+        r404 = op.post("/api/emprestimos", json={**base, "itens": ["F092-P0001-1970-S01-D09999"]})
+        ver("folha inexistente: 404 com o código na mensagem, e nada é gravado", r404.status_code == 404 and "D09999" in r404.json().get("erro", "")
+            and connect().execute("SELECT COUNT(*) FROM emprestimo").fetchone()[0] == 0, r404.text[:200])
+        ver("caixa inexistente: 404", op.post("/api/emprestimos", json={**base, "localizacoes": [99999]}).status_code == 404)
+        ver("sem nada escolhido: 400; sem nome: 400", op.post("/api/emprestimos", json=base).status_code == 400 and op.post("/api/emprestimos", json={**base, "nome": " ", "itens": [F[0]]}).status_code == 400)
+        ver("empréstimo sem prazo: 400; prazo antes da saída: 400; data inválida: 400",
+            op.post("/api/emprestimos", json={**base, "prazo": None, "itens": [F[0]]}).status_code == 400
+            and op.post("/api/emprestimos", json={**base, "saida_em": "2026-05-10", "prazo": "2026-05-01", "itens": [F[0]]}).status_code == 400
+            and op.post("/api/emprestimos", json={**base, "prazo": "31/12/2099", "itens": [F[0]]}).status_code == 400)
+        ver("tipo inválido: 400", op.post("/api/emprestimos", json={**base, "tipo": "venda", "itens": [F[0]]}).status_code == 400)
+        rs_ = op.get("/api/emprestimos/responsaveis").json()
+        ver("responsáveis: só quem não é de leitura, com 'eu' marcado; leitura não lista (403); responsável de leitura recusado (400)",
+            sorted(x["nome"] for x in rs_) == ["Adm", "Op Silva"] and [x["nome"] for x in rs_ if x["eu"]] == ["Op Silva"] and le.get("/api/emprestimos/responsaveis").status_code == 403
+            and op.post("/api/emprestimos", json={**base, "responsavel_id": 3, "itens": [F[0]]}).status_code == 400, str(rs_))
+        # ---------- criar ----------
+        r = op.post("/api/emprestimos", json={**base, "itens": [F[0].lower(), F[0]], "localizacoes": [CX], "observacao": "para exposição"})
+        e1 = r.json().get("id")
+        ver("criar (operador): 200, folha repetida conta uma vez, mensagem diz o que saiu e até quando", r.status_code == 200 and "Empréstimo registrado: 1 folha e CX-092 com Ana Pesquisadora" in r.json()["mensagem"] and "31/12/2099" in r.json()["mensagem"], r.text[:300])
+        d1 = le.get(f"/api/emprestimos/{e1}").json()
+        ver("detalhe: quem, contato, instituição, tipo, saída hoje, prazo, responsável (quem registrou), folhas e caixas",
+            d1["nome"] == "Ana Pesquisadora" and d1["contato"] == "ana@exemplo.test" and d1["instituicao"] == "FAU" and d1["tipo"] == "emprestimo"
+            and d1["saida_em"] and d1["prazo"] == "2099-12-31" and d1["responsavel"] == "Op Silva" and [x["codigo"] for x in d1["folhas"]] == [F[0]]
+            and [x["identificador"] for x in d1["localizacoes"]] == ["CX-092"] and d1["situacao"] == "aberto" and d1["devolvido_em"] is None, str(d1)[:400])
+        ver("detalhe: o histórico tem o evento 'criado' (tabela evento, entidade emprestimo) e a caixa ganha um evento", [h["tipo"] for h in d1["historico"]] == ["criado"]
+            and connect().execute("SELECT COUNT(*) FROM evento WHERE entidade='localizacao' AND codigo=? AND tipo='emprestada'", (str(CX),)).fetchone()[0] == 1)
+        ver("detalhe de empréstimo inexistente: 404", le.get("/api/emprestimos/99999").status_code == 404)
+        # ---------- folha fora ----------
+        ef = le.get(f"/api/itens/{F[0]}/emprestimo").json(); ev = le.get(f"/api/itens/{F[2]}/emprestimo").json()
+        ver("a folha emprestada diz com quem e até quando; a folha guardada na caixa emprestada também (via CX-092); a que ficou: null",
+            ef["nome"] == "Ana Pesquisadora" and ef["prazo"] == "2099-12-31" and ef["via"] is None and ev["via"] == "CX-092"
+            and le.get(f"/api/itens/{F[1]}/emprestimo").json() is None, str((ef, ev)))
+        ver("folha inexistente na consulta de empréstimo: 404", le.get("/api/itens/F092-P0001-1970-S01-D09999/emprestimo").status_code == 404)
+        fo = le.get("/api/emprestimos/fora").json()
+        ver("/emprestimos/fora lista a caixa e a folha que estão fora", str(CX) in fo["localizacoes"] and F[0] in fo["itens"] and str(TB) not in fo["localizacoes"])
+        ver("não sai de novo: a mesma folha, a folha que está dentro da caixa emprestada e a mesma caixa dão 409",
+            op.post("/api/emprestimos", json={**base, "itens": [F[0]]}).status_code == 409 and op.post("/api/emprestimos", json={**base, "itens": [F[2]]}).status_code == 409
+            and op.post("/api/emprestimos", json={**base, "localizacoes": [CX]}).status_code == 409)
+        # ---------- consulta presencial sem prazo = o mesmo dia ----------
+        rc_ = op.post("/api/emprestimos", json={"tipo": "consulta", "nome": "Beto", "saida_em": "2026-10-01", "itens": [F[3]]})
+        dc = le.get(f"/api/emprestimos/{rc_.json().get('id')}").json()
+        ver("consulta presencial sem prazo: o prazo é o próprio dia da saída", rc_.status_code == 200 and dc["prazo"] == "2026-10-01" and dc["tipo_rotulo"] == "consulta presencial", rc_.text[:200])
+        # ---------- atrasado ----------
+        ra = op.post("/api/emprestimos", json={**base, "nome": "Caio Atrasado", "saida_em": "2026-01-02", "prazo": "2026-01-10", "localizacoes": [TB]})
+        ea = ra.json().get("id")
+        da = le.get(f"/api/emprestimos/{ea}").json()
+        ver("prazo vencido: situação 'atrasado' com os dias de atraso", da["situacao"] == "atrasado" and da["dias_atraso"] > 200, str((da.get("situacao"), da.get("dias_atraso"))))
+        la = le.get("/api/emprestimos?situacao=atrasado").json(); lab = le.get("/api/emprestimos?situacao=aberto").json()
+        ver("lista 'atrasado' só traz os vencidos (o mais antigo primeiro); 'aberto' traz todos os não devolvidos com os atrasados primeiro",
+            [x["id"] for x in la["itens"]] == [ea, dc["id"]] and lab["itens"][0]["id"] == ea and {x["id"] for x in lab["itens"]} == {e1, ea, dc["id"]}, str([(x["id"], x["situacao"]) for x in lab["itens"]]))
+        ver("resumo das abas: 3 em aberto, 2 atrasados, 0 devolvidos", la["resumo"] == {"aberto": 3, "atrasado": 2, "devolvido": 0}, str(la["resumo"]))
+        ver("situação inválida: 400", le.get("/api/emprestimos?situacao=perdido").status_code == 400)
+        pend = op.get("/api/pendencias").json(); pai = op.get("/api/painel").json()
+        g = [x for x in pai["tarefas"] if x["id"] == "emprestimos"]
+        ver("pendências e painel inicial: contagem de atrasados e o grupo 'Originais com prazo vencido' com o botão Ver",
+            pend["emprestimos_atrasados"] == 2 and g and g[0]["total"] == 2 and g[0]["itens"][0]["acao"]["tipo"] == "emprestimo" and g[0]["itens"][0]["acao"]["alvo"] == ea
+            and "TB-092" in g[0]["itens"][0]["detalhe"], str(g)[:300])
+        gl = [x for x in le.get("/api/painel").json()["tarefas"] if x["id"] == "emprestimos"]
+        ver("quem só lê vê o grupo, sem botão de ação", gl and gl[0]["itens"][0]["acao"] is None)
+        # ---------- devolver ----------
+        ver("devolver exige operador: leitura 403, sem login 401; empréstimo inexistente 404",
+            le.post(f"/api/emprestimos/{ea}/devolver").status_code == 403 and anon.post(f"/api/emprestimos/{ea}/devolver").status_code == 401
+            and op.post("/api/emprestimos/99999/devolver").status_code == 404)
+        rd = adm.post(f"/api/emprestimos/{ea}/devolver", json={"observacao": "voltou sem dano"})
+        dd = le.get(f"/api/emprestimos/{ea}").json()
+        ver("devolver registra quando e quem (o admin), a situação vira 'devolvido' e a observação da devolução fica junto",
+            rd.status_code == 200 and dd["devolvido_em"] and dd["devolvido_por_nome"] == "Adm" and dd["situacao"] == "devolvido" and "voltou sem dano" in (dd["observacao"] or ""), str(dd)[:300])
+        ver("histórico: criado e devolvido, com o e-mail de quem fez", [(h["tipo"], h["ator"]) for h in dd["historico"]] == [("criado", "op@camp.arq.br"), ("devolvido", "adm@camp.arq.br")])
+        ver("devolver de novo: 409", op.post(f"/api/emprestimos/{ea}/devolver").status_code == 409)
+        ver("depois de devolver: some dos atrasados, aparece em 'devolvido', o tubo pode sair de novo",
+            op.get("/api/pendencias").json()["emprestimos_atrasados"] == 1 and [x["id"] for x in le.get("/api/emprestimos?situacao=devolvido").json()["itens"]] == [ea]
+            and str(TB) not in le.get("/api/emprestimos/fora").json()["localizacoes"])
+        op.post(f"/api/emprestimos/{e1}/devolver")
+        ver("devolvida a caixa, a folha de dentro dela volta a estar no lugar", le.get(f"/api/itens/{F[2]}/emprestimo").json() is None and le.get(f"/api/itens/{F[0]}/emprestimo").json() is None)
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -4694,6 +4796,14 @@ else:
 print("94) Exportação EAD 2002 (AtoM), CSV de folhas e pacote BagIt por projeto")
 rc, out = rodar("exportacao_ead", f"{tmp}/exp94.db")
 if rc != 0: ok(False, f"teste da exportação não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("92) Consulta presencial e empréstimo de originais: criar, atrasado, devolver, permissões, folha inexistente 404")
+rc, out = rodar("emprestimos", f"{tmp}/emprestimos.db")
+if rc != 0: ok(False, f"teste de empréstimos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

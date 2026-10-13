@@ -152,6 +152,8 @@ def contar_pendencias(con, *, com_listas: bool = False) -> dict:
         "lotes_erro": len(por.get("erro", [])),
         "publicando": q("SELECT COUNT(*) FROM tarefa_publicacao WHERE estado='rodando' AND tipo='publicar'"),
     }
+    from .rotas_emprestimos import contar_atrasados
+    n["emprestimos_atrasados"] = contar_atrasados(con)                       # originais fora com o prazo vencido (tela Empréstimos)
     n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"]            # contador do menu: o que é de operador
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
     if com_listas:
@@ -254,6 +256,20 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3) -> list[
     if linhas:
         grupos.append({"id": "pedidos", "titulo": "Pedidos esperando resposta", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} pedidos", "rota": "solicitacoes"}})
+
+    # 6) originais emprestados que já deviam ter voltado
+    from .rotas_emprestimos import atrasados
+    linhas = []
+    for e in atrasados(con):
+        dias = e["dias_atraso"] or 0
+        o_que = " · ".join(e.get("resumo") or []) or None
+        linhas.append({"sev": "a" if dias < 7 else "r", "titulo": f"{e['nome']} está com originais da CAMP e o prazo venceu", "codigo": None,
+                       "detalhe": " · ".join(p for p in (f"devia ter devolvido em {e['prazo'][8:10]}/{e['prazo'][5:7]}",
+                                                         f"{dias} {'dia' if dias == 1 else 'dias'} de atraso", o_que) if p),
+                       "acao": _acao("Ver", "emprestimo", e["id"])})
+    if linhas:
+        grupos.append({"id": "emprestimos", "titulo": "Originais com prazo vencido", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
+                       "ver_todos": {"rotulo": f"Ver os {len(linhas)} empréstimos atrasados", "rota": "emprestimos/atrasado"}})
 
     if leitura:                                       # quem só lê vê o que está acontecendo, sem botão de ação: a linha abre a página
         for g in grupos:
