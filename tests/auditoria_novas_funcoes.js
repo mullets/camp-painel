@@ -647,7 +647,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/Nada aqui/.test(v)&&/Quando houver/.test(v)&&/id="vz-b"/.test(v)&&/role="status"/.test(v),'vazioHTML deveria trazer título, explicação e o botão para começar');
   const fetchOrig=w.fetch,R=(j,ok=true,st=200)=>Promise.resolve({ok,status:st,statusText:'x',json:async()=>j});
   w.fetch=(u,o={})=>/\/api\/erros\?/.test(String(u))?R([]):/\/api\/localizacoes$/.test(String(u))?R([]):fetchOrig(u,o);
-  w.route_to('erros'); await sleep(900); chk(/Nenhum problema nesta situação/.test(txt('#v-erros tbody'))&&!!d.querySelector('#v-erros tbody [onclick*="m-erro"]'),'Erros vazio deveria explicar e oferecer "Relatar problema": "'+txt('#v-erros tbody').slice(0,140)+'"');
+  w.route_to('erros'); await sleep(900); chk(/Nenhum problema nesta situação/.test(txt('#v-erros tbody'))&&!!d.querySelector('#v-erros tbody [onclick*="m-erro"],#v-erros tbody [onclick*="relatarProblema"]'),'Erros vazio deveria explicar e oferecer "Relatar problema": "'+txt('#v-erros tbody').slice(0,140)+'"');
   w.route_to('localizacao'); await sleep(900); chk(/Ainda não há caixas, gavetas ou tubos/.test(txt('#loc-body'))&&!!d.querySelector('#loc-body [onclick*="m-loc"]'),'Localização vazia deveria oferecer "Nova localização": "'+txt('#loc-body').slice(0,140)+'"');
   w.fetch=(u,o={})=>/\/api\/erros\?/.test(String(u))?R({detail:'servidor caiu'},false,500):fetchOrig(u,o);
   w.route_to('erros'); await sleep(900); chk(/Não consegui carregar os problemas/.test(txt('#v-erros tbody'))&&!/Nenhum problema nesta situação/.test(txt('#v-erros tbody')),'com a API em erro a lista NÃO pode dizer "vazio": "'+txt('#v-erros tbody').slice(0,140)+'"');
@@ -1139,6 +1139,23 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H16] Erros: relatar com o código e o título já preenchidos, gravidade em 3 opções, categoria com exemplo, "há quanto tempo", resolver com verbo ----------
+{ w.nav('projeto/F026-P0001'); await sleep(2500);
+  d.querySelector('#pd [data-relatar-folha="F026-P0001"]').click(); await sleep(1200);
+  chk(d.getElementById('ne-cod').value==='F026-P0001'&&/F026-P0001 · Casa Tarumã/.test(txt('#ne-cod-titulo')),'[H16] relatar a partir do projeto deveria vir com o código e mostrar o título: "'+txt('#ne-cod-titulo')+'"');
+  chk(d.querySelectorAll('#m-erro [name="ne-grav-op"]').length===3&&/não vai ao site até alguém resolver/.test(txt('#m-erro')),'[H16] a gravidade deveria ser 3 opções com o efeito');
+  d.getElementById('ne-cat').value='espelhado'; d.getElementById('ne-cat').dispatchEvent(new w.Event('change',{bubbles:true})); chk(/texto fica ao contrário/.test(txt('#ne-cat-ex')),'[H16] a categoria deveria mostrar um exemplo');
+  d.querySelector('#m-erro [name="ne-grav-op"][value="aviso"]').click(); d.getElementById('ne-desc').value='Teste H16: imagem espelhada';
+  await w.criarErro(); await sleep(900);
+  const er=(await J(adm,'/api/erros?situacao=todos')).b.find(x=>x.descricao==='Teste H16: imagem espelhada');
+  chk(er&&er.gravidade==='aviso'&&er.codigo==='F026-P0001','[H16] o problema deveria ser criado com a gravidade escolhida: '+JSON.stringify(er&&{g:er.gravidade,c:er.codigo}));
+  w.route_to('erros'); await sleep(1500);
+  chk(/Há quanto tempo/.test(txt('#v-erros thead'))&&/hoje|aberto há/.test(txt('#v-erros tbody'))&&!d.querySelector('#v-erros tbody button'),'[H16] a lista deveria ter "Há quanto tempo" e nenhum botão na linha');
+  if(er){ await w.abrirErro(er.id); await sleep(300); d.querySelector('[data-err-res="corrigido"]').click(); await sleep(200);
+    chk(/Escreva em uma frase/.test(txt('#ee-res-err')),'[H16] "Marcar como corrigido" sem a frase deveria pedir a explicação');
+    d.getElementById('ee-res').value='Imagem girada e reenviada'; d.querySelector('[data-err-res="corrigido"]').click(); await sleep(900);
+    const e2=(await J(adm,'/api/erros?situacao=todos')).b.find(x=>x.id===er.id); chk(e2&&e2.situacao==='corrigido'&&e2.resolucao==='Imagem girada e reenviada','[H16] "Marcar como corrigido" deveria fechar com a frase: '+JSON.stringify(e2&&{s:e2.situacao,r:e2.resolucao})); }
+  okl.push('H16: relatar com código e título preenchidos, gravidade em 3 opções, categoria com exemplo, "há quanto tempo", "Marcar como corrigido" com a frase'); }
 // ---------- [H15] Página da folha: zoom, arquivos em linguagem simples, atalhos ← → E, relatar problema, "folha D00003" no topo ----------
 { const its=(await J(adm,'/api/projetos/F026-P0001/detalhe')).b.itens, a=its[1].codigo, b=its[2].codigo;
   w.nav('item/'+a); await sleep(1800);
