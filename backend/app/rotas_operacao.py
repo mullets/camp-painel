@@ -930,7 +930,8 @@ def contar_erros(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     try:
         q = lambda w: con.execute("SELECT COUNT(*) FROM erro" + w).fetchone()[0]
-        return {"abertos": q(" WHERE situacao IN ('aberto','em_correcao')"), "corrigido": q(" WHERE situacao='corrigido'"), "todos": q("")}
+        return {"abertos": q(" WHERE situacao IN ('aberto','em_correcao')"), "em_correcao": q(" WHERE situacao='em_correcao'"),
+                "corrigido": q(" WHERE situacao='corrigido'"), "todos": q("")}
     finally:
         con.close()
 

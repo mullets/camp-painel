@@ -21,6 +21,7 @@ TITULOS = {
     "backup": "Backup agora",
     "sincronizar": "Sincronizar com o site",
     "puxar_uso": "Buscar pedidos no site",
+    "importar_todas": "Importar os lotes da Fila",
 }
 
 

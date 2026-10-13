@@ -1139,6 +1139,34 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [#97] listas no padrão: Filas, Fundos, Arquitetos, Auditoria, Configurações e o resumo das máquinas no topo ----------
+{ w.route_to('filas'); await sleep(1500);
+  chk(!d.querySelector('#filas-body [data-fila-ir="projeto"]'),'[#97] a linha da Fila não deveria ter o botão "Projeto" (a linha já abre o projeto)');
+  const imp=w.eval('FILAS_SRV').filter(l=>l.fase==='importar').length, bi=d.querySelector('[data-fila-importar-todas]');
+  chk(imp>1?(!!bi&&bi.textContent.includes('Importar todas ('+imp+')')):!bi,'[#97] com '+imp+' lote(s) para importar, "Importar todas ('+imp+')" no topo da aba: "'+(bi?bi.textContent:'')+'"');
+  w.route_to('fundos'); await sleep(1500);
+  const vis=[...d.querySelectorAll('#fundos-filtros > [data-ff]')].map(b=>b.dataset.ff);
+  chk(JSON.stringify(vis)==='["todos","publicado","nao_publicado","pendencia"]'&&d.querySelectorAll('#fundos-filtros .mais-lista [data-ff]').length===6,'[#97] Fundos: 4 abas (Todos, Publicados, Não publicados, Com pendência) e o resto em "Filtros ▾": '+JSON.stringify(vis));
+  d.querySelector('#fundos-filtros .mais-lista [data-ff="sem_sigla"]').click(); await sleep(200);
+  chk(/Filtro: Sem sigla/.test(txt('#ff-mais-rot')),'[#97] o "Filtros ▾" deveria mostrar o filtro ligado: "'+txt('#ff-mais-rot')+'"'); d.querySelector('#fundos-filtros [data-ff="todos"]').click(); await sleep(200);
+  w.route_to('arquitetos'); await sleep(2000);
+  chk(!d.querySelector('#v-arquitetos tbody button')&&!/só fatos do documento/.test(txt('#v-arquitetos tbody')),'[#97] Arquitetos: sem "Editar" em cada linha e sem a etiqueta repetida');
+  w.route_to('auditoria'); await sleep(1800);
+  const dets=[...d.querySelectorAll('#au-body td.au-det')].map(t=>t.textContent);
+  chk(dets.length>0&&dets.every(t=>t.length<=80&&!/https?:\/\//.test(t)),'[#97] Auditoria: a coluna de detalhes deveria ser um resumo de até 80 caracteres, sem endereço: '+JSON.stringify(dets.filter(t=>t.length>80||/https?:/.test(t)).slice(0,2)));
+  w.route_to('config'); await sleep(1800);
+  const secs=[...d.querySelectorAll('#cfg-body .cfg-secao')];
+  chk(secs.length>=5&&secs.every(x=>x.querySelectorAll('[data-cfg-salvar]').length===1)&&!/estacao\.foto1\.ip/.test(txt('#cfg-body'))&&!d.querySelector('#cfg-body [data-cfg-chave="contex.ip"]'),'[#97] Configurações: seções com UM "Salvar alterações", chave só na dica, sem a duplicata contex.ip: '+secs.map(x=>x.dataset.cfgSecao).join(', '));
+  const sec=secs.find(x=>x.querySelector('[data-cfg-chave="site.credito_padrao"]'));
+  if(sec){ const inp=sec.querySelector('[data-cfg-chave="site.credito_padrao"]'), v0=inp.value, b=sec.querySelector('[data-cfg-salvar]');
+    chk(b.disabled,'[#97] "Salvar alterações" começa desligado'); inp.value=v0+' (teste 97)'; inp.dispatchEvent(new w.Event('input',{bubbles:true}));
+    chk(!b.disabled&&/1 campo alterado/.test(sec.querySelector('.cfg-mudou').textContent),'[#97] mudar um campo liga o "Salvar alterações" e diz "1 campo alterado"');
+    b.click(); await sleep(1600); const nv=(await J(adm,'/api/config')).b.find(c=>c.chave==='site.credito_padrao');
+    chk(nv&&nv.valor===v0+' (teste 97)','[#97] o Salvar da seção deveria gravar o campo mudado: '+JSON.stringify(nv));
+    await J(adm,'/api/config/site.credito_padrao',{method:'PUT',body:JSON.stringify({valor:v0})}); w.limparAlteracoes('config'); } else chk(false,'[#97] seção com site.credito_padrao não encontrada');
+  w.route_to('painel'); await sleep(900);
+  chk(/\d+ de \d+/.test(txt('#machine-status .ms-resumo'))&&d.querySelectorAll('#machine-status .ms-lista .ms-linha').length>=2,'[#97] o topo deveria ter o resumo "N de M máquinas ligadas" e a lista no clique: "'+txt('#machine-status .ms-resumo')+'"');
+  okl.push('#97: Filas (Importar todas, sem botão Projeto), Fundos (4 abas + Filtros), Arquitetos, Auditoria (resumo), Configurações (seções com 1 Salvar), topo (resumo das máquinas)'); }
 // ---------- [#94] padrão único de tela: ≤1 botão azul no cabeçalho, abas de situação únicas, um só Voltar, linha clicável com data-abrir ----------
 { const ruins=[];
   for (const r of ['filas','decisoes','erros','solicitacoes','projetos','fundos','arquitetos','localizacao','auditoria','fundo/F003','projeto/F003-P9001']){ w.route_to(r); await sleep(1500);
@@ -1149,7 +1177,7 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
     const soltas=[...v.querySelectorAll('tbody tr[onclick]')].filter(t=>!t.dataset.abrir&&!t.dataset.nav).length; if(soltas) ruins.push(r+': '+soltas+' linha(s) clicável(is) sem data-abrir'); }
   chk(!ruins.length,'[#94] padrão de tela: '+ruins.join(' | '));
   w.route_to('erros'); await sleep(1500);
-  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===3&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Corrigidos · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
+  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===4&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Em correção · Resolvidos · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
   d.querySelector('#err-abas [data-err-sit="todos"]').click(); await sleep(1200);
   chk(d.querySelector('#err-abas [data-err-sit="todos"]').getAttribute('aria-pressed')==='true','[#94] clicar em "Todos" deveria ligar a aba'); w.carregarErros('abertos'); await sleep(600);
   w.route_to('fundo/F003'); await sleep(2500); const mm=d.querySelector('#v-fundo .mais-menu');

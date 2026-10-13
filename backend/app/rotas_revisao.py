@@ -66,6 +66,36 @@ def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
         con.close()
 
 
+@router.post("/filas/importar-todas")
+def importar_todas(u: dict = Depends(auth.exige("operador"))):
+    """#97 + H4: "Importar todas (N)" da Fila vira UMA tarefa: importa, um por um, os lotes que esperam importação
+    (as mesmas regras de /api/filas), com "3 de 14", o lote atual e o que falhou."""
+    from . import pendencias, tarefas
+    con = connect()
+    try:
+        alvo = [(l["id"], l["projeto_codigo"]) for l in pendencias.lotes(con) if l["fase"] == "importar"]
+    finally:
+        con.close()
+    if not alvo:
+        raise HTTPException(400, "Nenhum lote esperando importação")
+
+    def rodar(p) -> dict:
+        p.total(len(alvo))
+        folhas, falhas = 0, []
+        for lid, pj in alvo:
+            p.passo("Importando as folhas", atual=pj)
+            try:
+                r = importar(lid, u)
+                folhas += r.get("criadas") or 0
+                p.feita(1, f"{pj}: {r.get('criadas') or 0} folha(s) importada(s)")
+            except HTTPException as e:
+                falhas.append({"codigo": pj, "erro": str(e.detail)}); p.log(f"{pj} NÃO importou: {e.detail}")
+        ok = len(alvo) - len(falhas)
+        return {"ok": not falhas, "falhas": falhas, "lotes": ok, "folhas": folhas,
+                "mensagem": f"{ok} de {len(alvo)} lote(s) importado(s), {folhas} folha(s) no painel" + (f"; {len(falhas)} não {'importou' if len(falhas) == 1 else 'importaram'}" if falhas else "") + ". Próximo passo: conferir."}
+    return tarefas.iniciar("importar_todas", "filas", u, rodar, titulo=f"Importar {len(alvo)} lote(s) da Fila")
+
+
 def _contagem(con, lote_id: int) -> dict:
     c = {"total": 0, "pendente": 0, "conferida": 0, "corrigida": 0, "bloqueadas": 0, "retidas": 0}
     c["retidas"] = con.execute("SELECT COUNT(*) FROM item WHERE lote_id=? AND retida=1", (lote_id,)).fetchone()[0]

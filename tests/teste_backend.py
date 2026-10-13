@@ -3142,6 +3142,46 @@ def filho(modo):
         ver("singular: '1 folha espera conferência'", rv["detalhe"].startswith("1 folha espera conferência"), rv["detalhe"])
         c.close()
         print("\n".join(res))
+    elif modo == "p97_listas":
+        init_db(); _aplicar_migracoes_real()
+        import json, time
+        from fastapi import HTTPException
+        from app import auth, rotas_revisao
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("migração 055: a chave duplicada contex.ip saiu de Configurações", not c.execute("SELECT 1 FROM configuracao WHERE chave='contex.ip'").fetchone())
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F083','Fundo 97','FNS',1)")
+        lids = []
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F083',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F083-P{n:04d}", "F083", n, f"Casa {n}"))
+            lids.append(c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,'/x','revisao')", (f"Lote {n}", f"F083-P{n:04d}")).lastrowid)
+        c.execute("INSERT INTO erro (codigo,gravidade,categoria,descricao,origem,situacao) VALUES ('F083-P0001','corrigir','metadado','a','operador','aberto'),('F083-P0001','corrigir','metadado','b','operador','em_correcao'),('F083-P0002','corrigir','metadado','c','operador','corrigido')")
+        c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ct = op.get("/api/erros/contagem").json()
+        ver("contagem das abas dos Erros (Abertos inclui em correção)", ct == {"abertos": 2, "em_correcao": 1, "corrigido": 1, "todos": 3}, str(ct))
+        def falso(lote_id, u):
+            if lote_id == lids[1]: raise HTTPException(409, "O lote já foi aprovado")
+            return {"criadas": 2}
+        rotas_revisao.importar = falso
+        r = op.post("/api/filas/importar-todas?tarefa=1")
+        t = {}
+        if r.status_code == 202:
+            fim = time.time() + 10
+            while time.time() < fim:
+                t = op.get(f"/api/tarefas/{r.json()['tarefa_id']}").json()
+                if t["estado"] != "rodando": break
+                time.sleep(0.1)
+        ver("Importar todas vira UMA tarefa: 2 de 3, a que falhou listada e o próximo passo", r.status_code == 202 and t.get("tipo") == "importar_todas" and t["total"] == 3 and t["feitas"] == 2 and len(t["falhas"]) == 1 and "2 de 3 lote(s) importado(s), 4 folha(s)" in t["resultado"]["mensagem"] and "Próximo passo: conferir" in t["resultado"]["mensagem"], str({k: t.get(k) for k in ("total", "feitas", "falhas", "resultado")}))
+        c = connect(); c.execute("UPDATE lista_processamento SET descartado_em=datetime('now')"); c.commit(); c.close()
+        r2 = op.post("/api/filas/importar-todas?tarefa=1")
+        ver("sem lote esperando importação: 400 com o motivo", r2.status_code == 400 and "Nenhum lote" in r2.text, r2.text[:120])
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3789,6 +3829,14 @@ else:
 print("55) #95 página do projeto: o requisito 'Existe no site' só fica verde com folha no site; singular/plural")
 rc, out = rodar("p95_site", f"{tmp}/p95.db")
 if rc != 0: ok(False, f"teste #95 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("56) #97 listas: contagem das abas dos Erros, 'Importar todas' como tarefa, chave duplicada contex.ip removida")
+rc, out = rodar("p97_listas", f"{tmp}/p97.db")
+if rc != 0: ok(False, f"teste #97 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
