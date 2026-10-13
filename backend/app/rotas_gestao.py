@@ -341,15 +341,52 @@ def alocar(d: Alocacao, u: dict = Depends(auth.exige("operador"))) -> dict:
         cods += do_projeto
     elif not cods:
         con.close(); raise HTTPException(400, "Informe o projeto inteiro ou ao menos um código de folha")
-    ok, nao = 0, []
-    for c in cods:
-        if con.execute("SELECT 1 FROM item WHERE codigo=?", (c,)).fetchone():
+    ok, nao, projs = 0, [], {}
+    for c in dict.fromkeys(cods):
+        r = con.execute("SELECT i.projeto_codigo, p.titulo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (c,)).fetchone()
+        if r:
             con.execute("INSERT OR REPLACE INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (c, d.localizacao_id)); ok += 1
+            projs[r[0]] = r[1]
         else:
             nao.append(c)
+    loc = con.execute("SELECT identificador FROM localizacao_fisica WHERE id=?", (d.localizacao_id,)).fetchone()[0]
     _evento(con, "localizacao", d.localizacao_id, "alocacao", u["email"], {"itens": ok})
     con.commit(); con.close()
-    return {"alocados": ok, "nao_encontrados": nao}
+    # H20 · o resultado diz o objeto: "6 folhas de Casa Tarumã alocadas em CX-001"
+    de = f" de {next(iter(projs.values()))}" if len(projs) == 1 else (f" de {len(projs)} projetos" if projs else "")
+    mensagem = (f"{ok} folha{'s' if ok != 1 else ''}{de} alocada{'s' if ok != 1 else ''} em {loc}" if ok else f"Nenhuma folha alocada em {loc}")
+    return {"alocados": ok, "nao_encontrados": nao, "mensagem": mensagem, "localizacao": loc, "projetos": list(projs)}
+
+
+@router.get("/localizacoes/resumo")
+def resumo_localizacoes(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    """H20 · Visão por fundo: "F026: 3 caixas, 2 tubos, 214 de 238 folhas localizadas"."""
+    con = connect()
+    tipos: dict[str, dict] = {}
+    for r in con.execute("SELECT COALESCE(fundo_codigo,'') AS f, tipo, COUNT(*) AS n FROM localizacao_fisica GROUP BY 1, 2"):
+        tipos.setdefault(r["f"], {})[r["tipo"]] = r["n"]
+    rows = con.execute("""SELECT f.codigo, f.titulo, COUNT(i.codigo) AS folhas, COUNT(il.item_codigo) AS localizadas
+                            FROM fundo f JOIN projeto p ON p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL
+                            JOIN item i ON i.projeto_codigo=p.codigo LEFT JOIN item_localizacao il ON il.item_codigo=i.codigo
+                           GROUP BY f.codigo ORDER BY f.codigo""").fetchall()
+    con.close()
+    vistos, out = set(), []
+    for r in rows:
+        vistos.add(r["codigo"])
+        out.append({"fundo_codigo": r["codigo"], "fundo": r["titulo"], "folhas": r["folhas"], "localizadas": r["localizadas"], "tipos": tipos.get(r["codigo"], {})})
+    out += [{"fundo_codigo": f or None, "fundo": None, "folhas": 0, "localizadas": 0, "tipos": t} for f, t in tipos.items() if f not in vistos]
+    return out
+
+
+@router.get("/localizacoes/sem-lugar")
+def sem_lugar(fundo: str, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    """H20 · Projetos do fundo com folhas ainda sem localização (o link do resumo)."""
+    con = connect()
+    rows = con.execute("""SELECT p.codigo, p.titulo, COUNT(*) AS faltam FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
+                           WHERE p.fundo_codigo=? AND p.mesclado_em IS NULL AND NOT EXISTS (SELECT 1 FROM item_localizacao il WHERE il.item_codigo=i.codigo)
+                           GROUP BY p.codigo ORDER BY p.codigo""", (fundo.strip().upper(),)).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
 
 
 @router.get("/itens/{codigo}/localizacao")

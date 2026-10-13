@@ -648,7 +648,7 @@ w.route_to('estacoes'); await sleep(2800);
   const fetchOrig=w.fetch,R=(j,ok=true,st=200)=>Promise.resolve({ok,status:st,statusText:'x',json:async()=>j});
   w.fetch=(u,o={})=>/\/api\/erros\?/.test(String(u))?R([]):/\/api\/localizacoes$/.test(String(u))?R([]):fetchOrig(u,o);
   w.route_to('erros'); await sleep(900); chk(/Nenhum problema nesta situação/.test(txt('#v-erros tbody'))&&!!d.querySelector('#v-erros tbody [onclick*="m-erro"],#v-erros tbody [onclick*="relatarProblema"]'),'Erros vazio deveria explicar e oferecer "Relatar problema": "'+txt('#v-erros tbody').slice(0,140)+'"');
-  w.route_to('localizacao'); await sleep(900); chk(/Ainda não há caixas, gavetas ou tubos/.test(txt('#loc-body'))&&!!d.querySelector('#loc-body [onclick*="m-loc"]'),'Localização vazia deveria oferecer "Nova localização": "'+txt('#loc-body').slice(0,140)+'"');
+  w.route_to('localizacao'); await sleep(900); chk(/Ainda não há caixas, gavetas ou tubos/.test(txt('#loc-body'))&&!!d.querySelector('#loc-body [onclick*="NovaLocalizacao"]'),'Localização vazia deveria oferecer "Nova localização": "'+txt('#loc-body').slice(0,140)+'"');
   w.fetch=(u,o={})=>/\/api\/erros\?/.test(String(u))?R({detail:'servidor caiu'},false,500):fetchOrig(u,o);
   w.route_to('erros'); await sleep(900); chk(/Não consegui carregar os problemas/.test(txt('#v-erros tbody'))&&!/Nenhum problema nesta situação/.test(txt('#v-erros tbody')),'com a API em erro a lista NÃO pode dizer "vazio": "'+txt('#v-erros tbody').slice(0,140)+'"');
   w.fetch=fetchOrig; w.route_to('painel'); }
@@ -1139,6 +1139,25 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H20] Localização: identificador sugerido, alocar com busca e caixas, resultado no drawer, visão por fundo ----------
+{ w.route_to('localizacao'); await sleep(1800); w.abrirNovaLocalizacao(); await sleep(700);
+  chk(/^CX-\d{3}$/.test(d.getElementById('nloc-id').value),'[H20] "Nova localização" deveria sugerir o próximo identificador livre da caixa (CX-001…): "'+d.getElementById('nloc-id').value+'"');
+  d.getElementById('nloc-tipo').value='tubo'; await w.nlocSugerir(true); chk(/^TB-\d{3}$/.test(d.getElementById('nloc-id').value),'[H20] trocar o tipo para tubo deveria trocar a sugestão (TB-…): "'+d.getElementById('nloc-id').value+'"');
+  d.getElementById('nloc-tipo').value='caixa'; await w.nlocSugerir(true); const ident=d.getElementById('nloc-id').value; d.getElementById('nloc-fundo').value='F026'; await w.criarLocalizacao(); await sleep(700);
+  const L=(await J(adm,'/api/localizacoes')).b.find(l=>l.identificador===ident);
+  if(!L) problems.push('[H20] a caixa sugerida ('+ident+') não foi criada'); else {
+    await w.verLocalizacao(L.id); await sleep(400); await w.alCarregarFolhas('F026-P0001'); await sleep(300);
+    const cx=[...d.querySelectorAll('#al-folhas input[type=checkbox]')]; chk(cx.length===6&&cx.every(x=>x.checked),'[H20] escolher o projeto deveria listar as 6 folhas, todas marcadas: '+cx.length);
+    cx[0].checked=false; d.getElementById('al-proj').value='F026-P0001'; await w.alocar(L.id); await sleep(900);
+    chk(/5 folhas de .+ alocadas em /.test(txt('#d-body .al-res'))&&/Imprimir etiqueta/.test(txt('#d-body .al-res')),'[H20] o resultado deveria ficar no drawer ("5 folhas de Casa Tarumã alocadas em CX-…") com "Imprimir etiqueta": "'+txt('#d-body .al-res')+'"');
+    chk((await J(adm,'/api/localizacoes/'+L.id+'/itens')).b.length===5,'[H20] só as folhas marcadas deveriam ir para a caixa');
+    const ip=d.getElementById('al-proj'); ip.value='F026-P0001-1975-S01-D00099'; ip.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true})); await sleep(100);
+    chk(/F026-P0001-1975-S01-D00099/.test(d.getElementById('al-cods').value)&&ip.value==='','[H20] o leitor de código de barras (código + Enter) deveria pôr a folha na lista e limpar o campo');
+    ip.value='F099-P9999'; await w.alEnter(L.id); await sleep(500); chk(/não existe/.test(txt('#al-msg')),'[H20] projeto inexistente deveria dizer "não existe" no campo: "'+txt('#al-msg')+'"'); w.closeDrawer(true);
+    const R=(await J(adm,'/api/localizacoes/resumo')).b.find(r=>r.fundo_codigo==='F026'); chk(R&&R.localizadas>=5&&R.tipos.caixa>=1,'[H20] o resumo por fundo deveria contar a caixa e as folhas localizadas: '+JSON.stringify(R));
+    w.route_to('painel'); await sleep(300); w.route_to('localizacao'); await sleep(1500); chk(/F026/.test(txt('#loc-resumo'))&&/de \d+ folhas localizadas/.test(txt('#loc-resumo')),'[H20] a página deveria mostrar a visão por fundo: "'+txt('#loc-resumo').slice(0,160)+'"');
+    const SL=(await J(adm,'/api/localizacoes/sem-lugar?fundo=F026')).b; chk(Array.isArray(SL)&&SL.every(x=>x.faltam>0),'[H20] "sem lugar" deveria listar os projetos com folhas faltando');
+    okl.push('H20: identificador sugerido ('+ident+'), alocar com caixas de marcar, resultado no drawer, leitor de código de barras, visão por fundo'); } }
 // ---------- [H19] Arquitetos: grafias como etiquetas, fundos com busca e caixas, aviso de parecido antes de cadastrar ----------
 { w.route_to('arquitetos'); await sleep(1800); const ags=(await J(adm,'/api/agentes')).b, a0=ags.find(a=>(a.formas||'').length)||ags[0];
   w.abrirCadastroArquiteto('F026'); await sleep(300);
