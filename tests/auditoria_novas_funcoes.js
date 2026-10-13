@@ -1139,6 +1139,21 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H22] Estações: frases por ordem de importância, "normal fora do expediente" × "avise", diagnóstico guiado ----------
+{ const base={qnap:{montado:true,livre_pct:15,livre_gb:3000,total_gb:20000},pipeline:{entrada_bruta:2,aguardando_revisao:1,prontos:5},site:{http:{ok:true,estado:'online',ms:300},ultima_sincronizacao:{ok:1,terminada_em:'2026-10-13 21:50:00'},divergencias:0},backup:{existe:true,ok:true,idade_horas:5},
+    maquinas:[{estacao_id:'campvision2',nome:'CAMP Vision 2',tipo:'processamento',online:true,app_online:true,app_projeto:'F026-P0240'},{estacao_id:'contex1',nome:'Estação Contex 1',tipo:'contex',online:false,app_online:false,app_heartbeat_em:'2026-10-13 18:02:00'}]};
+  const noite=w.estItens(base,new Date(2026,9,13,22,0)), dia=w.estItens(base,new Date(2026,9,13,10,0)), c1n=noite.find(i=>i.id==='contex1'), c1d=dia.find(i=>i.id==='contex1'), qn=noite.find(i=>i.id==='qnap');
+  chk(noite[0].id==='qnap'&&noite[1].id==='campvision2','[H22] a ordem deveria ser QNAP, CAMP Vision, estações…: '+noite.map(i=>i.id).join(','));
+  chk(c1n.cor==='c'&&/desligada desde (\d\d\/\d\d )?18:02 \(normal fora do horário de trabalho\)/.test(c1n.frase)&&!c1n.fazer,'[H22] a Contex 1 desligada às 22h deveria ser cinza e "normal": '+JSON.stringify(c1n));
+  chk(c1d.cor==='r'&&c1d.fazer&&c1d.fazer.length>=3,'[H22] a mesma Contex 1 às 10h deveria ficar vermelha, com "O que fazer"');
+  chk(qn.cor==='a'&&/15% livre.*avise o Rafael/.test(qn.frase),'[H22] o QNAP com 15% livre deveria pedir para avisar o Rafael: '+qn.frase);
+  chk(/lendo F026-P0240/.test(noite[1].frase),'[H22] o CAMP Vision deveria dizer o que está lendo: '+noite[1].frase);
+  w.route_to('estacoes'); await sleep(3200);
+  chk(!!d.getElementById('est-hoje')&&d.querySelectorAll('#est-hoje .est-lista>li').length>=8,'[H22] Estações deveria abrir com "Como está agora", uma linha por item');
+  const dg=d.querySelector('#est-hoje [data-est-diag]'); chk(!!dg&&/Copiar diagnóstico/.test(dg.textContent),'[H22] o item vermelho deveria ter "Copiar diagnóstico"');
+  chk(w.estDiagnostico(w.EST_ITENS[0]).includes('Diagnóstico do painel CAMP'),'[H22] o diagnóstico copiado deveria ter cabeçalho e estado');
+  chk(!!d.querySelector('#est-body details.est-tecnico'),'[H22] o admin deveria ver os detalhes técnicos (IPs e pastas) recolhidos');
+  okl.push('H22: Estações em frases por importância, "normal fora do expediente", O que fazer e diagnóstico'); w.route_to('painel'); }
 // ---------- [H21] Etiquetas: 2 passos, frase de conferência, lote de folhas/pastas, impressão no tamanho exato, observação com limite ----------
 { w.route_to('etiquetas/projeto/F003-P9001'); await sleep(3500);
   chk(/^Etiqueta de: F003-P9001 · .+ · volume 1 de \d+$/.test(txt('#lab-origem')),'[H21] a frase de conferência deveria dizer projeto, nome, fundo e volume: "'+txt('#lab-origem')+'"');
