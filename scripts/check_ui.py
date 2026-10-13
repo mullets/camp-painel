@@ -17,6 +17,8 @@ required_dom = [
     'id="v-painel"', 'id="v-fundos"', 'id="v-projetos"', 'id="v-etiquetas"',
     'id="v-config"', 'id="machine-status"', 'id="system-banner"',
     'id="fundos-filtros"', 'id="proj-bulk"', 'id="drawer"',
+    # página do projeto (abas na ordem do trabalho) e Configurações
+    'id="pj-proximo"', 'id="pd-pub"', 'data-pj-aba="publicacao"', 'data-pj-aba="dados"', 'id="cfg-busca"',
 ]
 
 errors = []
@@ -27,11 +29,11 @@ for token in required_dom:
     if token not in text:
         errors.append(f"estrutura essencial ausente: {token}")
 
-# Impede voltar a crescer sem controle. O orçamento atual é 183; deixamos pequena folga
-# para correções, mas novo layout estrutural deve usar classes/componentes.
+# Impede voltar a crescer sem controle: o teto é o número atual (13/10/2026). Novo layout
+# usa classes/componentes; quem tirar estilo inline pode baixar este número.
 inline = len(re.findall(r'\bstyle="', text))
-if inline > 190:
-    errors.append(f"orçamento de estilos inline excedido: {inline} > 190")
+if inline > 179:
+    errors.append(f"orçamento de estilos inline excedido: {inline} > 179")
 
 # Detecta HTML/JS de componentes sem seu CSS, causa da regressão real do dashboard.
 pairs = [
