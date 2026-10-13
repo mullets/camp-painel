@@ -82,8 +82,31 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
         SELECT p.fundo_codigo AS fundo, f.titulo, COUNT(*) AS n FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
         WHERE i.criado_em >= date('now','-30 days') GROUP BY 1 ORDER BY 3 DESC LIMIT 6""")]
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
+    from .pendencias import contar_pendencias
+    d["pendencias"] = contar_pendencias(con)                       # H6b: fonte única dos números do topo e do menu
     con.close()
     return d
+
+
+@router.get("/painel/pendencias")
+def painel_pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    from .pendencias import contar_pendencias
+    con = connect()
+    try:
+        return contar_pendencias(con)
+    finally:
+        con.close()
+
+
+@router.get("/painel/ritmo")
+def painel_ritmo(dias: int = 14, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """H6b: folhas conferidas/importadas/enviadas por dia, média e previsão de quando a fila de conferência zera."""
+    from .pendencias import ritmo
+    con = connect()
+    try:
+        return ritmo(con, dias)
+    finally:
+        con.close()
 
 
 

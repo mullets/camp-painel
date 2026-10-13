@@ -2962,6 +2962,48 @@ def filho(modo):
         r = lei.get("/api/replica")
         ver("Estações lê a situação da cópia (leitura pode ver)", r.status_code == 200 and r.json()["nivel"] == "critico")
         for l in res: print(l)
+    elif modo == "pendencias_h6b":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, decisoes
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F085','Fundo Livre','LIV',1)"); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F084','Fundo Restrito','RST',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao) VALUES ('F084','restrito')")
+        def proj(f, n, etapa, folhas=0, pend=0, aprov=None, status="nao_publicado"):
+            cod = f"{f}-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site) VALUES (?,?,?,?,1970,?)", (cod, f, n, f"Projeto {n}", status))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES (?,?,'/x',?,?)", (f"Lote {cod}", cod, etapa, aprov)).lastrowid
+            for q in range(1, folhas + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao) VALUES (?,?,'S01',?,?,'campvision',?,?)", (f"{cod}-1970-S01-D{q:05d}", cod, q, f"F{q}", lid, "pendente" if q <= pend else "conferida"))
+            return cod
+        PI = proj("F085", 1, "revisao"); PC1 = proj("F085", 2, "revisao", 3, 2); PC2 = proj("F085", 3, "revisao", 1, 1); PA = proj("F085", 4, "revisao", 2, 0)
+        PP = proj("F085", 5, "revisao", 2, 0, aprov="2026-10-10 10:00:00"); PR = proj("F084", 1, "revisao", 1, 0, aprov="2026-10-10 10:00:00")
+        PE = proj("F085", 6, "erro"); PL = proj("F085", 7, "processando"); PM = proj("F085", 8, "revisao", 4, 4)
+        c.execute("UPDATE projeto SET mesclado_em=? WHERE codigo=?", (PP, PM))
+        c.execute("UPDATE item SET revisado_em=datetime('now'), revisao='conferida' WHERE codigo IN (?,?)", (f"{PA}-1970-S01-D00001", f"{PA}-1970-S01-D00002"))
+        c.execute("UPDATE item SET revisado_em=datetime('now','-1 day') WHERE codigo IN (?,?,?)", (f"{PP}-1970-S01-D00001", f"{PP}-1970-S01-D00002", f"{PC1}-1970-S01-D00003"))
+        c.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao) VALUES ('bloqueia','autoria_divergente','operador',?,'carimbo de outro')", (PC1,))
+        c.commit()
+        for k_, t_ in (("d1", "Golombeck 3"), ("d2", "Golombeck_3"), ("d3", "Outra casa")):
+            decisoes.abrir_projeto_parecido(c, k_, "F085", t_, {"titulo": t_, "estacao": "e" + k_}, [], "estacao")
+        c.commit()
+        auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        lei = TestClient(app, raise_server_exceptions=False); lei.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
+        p = lei.get("/api/painel/pendencias").json()
+        esperado = {"lotes_importar": 1, "lotes_conferir": 2, "folhas_conferir": 3, "lotes_aprovar": 1, "prontos_publicar": 1, "travados_direitos": 1, "lotes_erro": 1, "lotes_lendo": 1, "erros_bloqueantes": 1, "decisoes": 3, "decisoes_pastas": 2, "material_novo": 3, "esperam_admin": 2}
+        ver("contar_pendencias: um número por assunto, certo (o projeto mesclado não conta)", all(p.get(k_) == v_ for k_, v_ in esperado.items()), str({k_: (p.get(k_), v_) for k_, v_ in esperado.items() if p.get(k_) != v_}))
+        filas = [f_ for f_ in lei.get("/api/filas").json() if f_["projeto_codigo"] != PM]
+        conta = lambda fase: sum(1 for f_ in filas if f_.get("fase") == fase)  # noqa: E731
+        ver("o painel e a Fila dão o MESMO número em cada fase (mesma regra)", (conta("importar"), conta("conferir"), conta("aprovar"), conta("erro")) == (p["lotes_importar"], p["lotes_conferir"], p["lotes_aprovar"], p["lotes_erro"]) and conta("publicar") == p["prontos_publicar"] + p["travados_direitos"], str([(f_["projeto_codigo"], f_.get("fase")) for f_ in filas]))
+        ver("/api/painel traz os mesmos números (fonte única)", lei.get("/api/painel").json()["pendencias"] == p)
+        r = lei.get("/api/painel/ritmo?dias=14").json()
+        hoje, ontem = r["dias"][-1], r["dias"][-2]
+        ver("ritmo: 14 dias, hoje 2 conferidas, ontem 3; média 2,5; 3 folhas a conferir zeram em ~1 dia", len(r["dias"]) == 14 and hoje["conferidas"] == 2 and ontem["conferidas"] == 3 and r["media_conferidas"] == 2.5 and r["folhas_a_conferir"] == 3 and r["dias_para_zerar"] == 1, str({k_: r[k_] for k_ in ("media_conferidas", "folhas_a_conferir", "dias_para_zerar")}) + " " + str(r["dias"][-2:]))
+        ver("ritmo: dias fora do intervalo são limitados (1 a 90)", len(lei.get("/api/painel/ritmo?dias=500").json()["dias"]) == 90 and len(lei.get("/api/painel/ritmo?dias=0").json()["dias"]) == 1)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3499,6 +3541,14 @@ else:
 print("51) #149 cópia do acervo: sentinela da réplica (36 h / 72 h), vermelho sem sentinela e alerta por e-mail")
 rc, out = rodar("replica", f"{tmp}/replica.db")
 if rc != 0: ok(False, f"teste da réplica não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("52) H6b fonte única dos números do Painel (igual à Fila) e ritmo das últimas 2 semanas")
+rc, out = rodar("pendencias_h6b", f"{tmp}/pend.db")
+if rc != 0: ok(False, f"teste das pendências não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
