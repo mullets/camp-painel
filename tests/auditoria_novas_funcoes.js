@@ -1139,6 +1139,19 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [Sobras] abas do projeto na ordem do trabalho, ajuda em Novo projeto/Novo fundo, glossário nos cabeçalhos ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3000);
+  const abas=[...d.querySelectorAll('#pd .pj-tabs button')].map(b=>b.textContent.replace(/\s*\(.*\)/,'').trim());
+  chk(abas.join(',')==='Folhas,Publicação,Dados do projeto,Problemas,Pedidos,Histórico','[H8] as abas do projeto deveriam seguir a ordem do trabalho: '+abas.join(','));
+  chk(d.querySelector('[data-pj-aba="publicacao"]').hidden&&d.querySelector('[data-pj-aba="dados"]').hidden&&!!d.getElementById('pd-pub'),'[H8] na aba Folhas, Publicação e Dados ficam guardados (escondidos), não ocupam a primeira tela');
+  w.showProjeto('F003-P9001','publicacao'); await sleep(2000); chk(!d.querySelector('[data-pj-aba="publicacao"]').hidden&&/Requisitos para publicar|Publicação/.test(txt('#pd-pub h2')),'[H8] a aba Publicação deveria mostrar os requisitos');
+  w.showProjeto('F003-P9001','itens'); await sleep(1500);
+  w.abrirNovoProjeto('F003'); await sleep(300); const cx=d.querySelector('[data-modal-ajuda-caixa="novo_projeto"]');
+  chk(!!d.querySelector('#m-proj [data-modal-ajuda="novo_projeto"]')&&!!cx,'[H1] a janela Novo projeto deveria ter o "?" e o lugar da caixa de ajuda');
+  if(cx&&!cx.querySelector('.ajuda-caixa'))d.querySelector('#m-proj [data-modal-ajuda="novo_projeto"]').click(); await sleep(100);
+  chk(/número P/.test(txt('[data-modal-ajuda-caixa="novo_projeto"]')),'[H1] a caixa de ajuda do Novo projeto deveria explicar o número P'); w.closeModal();
+  w.route_to('projetos'); await sleep(1500); w.marcarTermosTela(); chk(!!d.querySelector('#v-projetos thead th .termo, .content.on thead th .termo')||[...d.querySelectorAll('.content.on thead th')].every(th=>th.dataset.termos==='1'),'[H2] os cabeçalhos das tabelas deveriam passar pelo glossário');
+  okl.push('Sobras: abas do projeto, ajuda em Novo projeto/fundo, glossário nos cabeçalhos'); w.route_to('painel'); }
 // ---------- [B6] importar inventário por planilha ----------
 { w.route_to('fundo/F002'); await sleep(2500); chk(!!d.querySelector('#v-fundo [data-planilha-fundo="F002"], .content.on [data-planilha-fundo="F002"]'),'[B6] o "Mais ⋯" do fundo deveria ter "Importar inventário (planilha)"');
   w.abrirImportarPlanilha('F002'); await sleep(300); chk(!!d.getElementById('pl-arq')&&/próximo número P/.test(txt('#d-body')),'[B6] a janela deveria pedir a planilha e explicar os números P'); w.closeDrawer(true);
