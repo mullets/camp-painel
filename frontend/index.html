@@ -251,7 +251,7 @@ th.sortable.asc::after{border-top-color:transparent;border-bottom-color:var(--in
 th.sortable.desc::after{border-top-color:var(--ink)}
 tbody tr[data-row]{cursor:pointer}
 tbody tr.sel td{background:var(--blue-soft)}
-.tw{max-height:calc(100vh - 230px);overflow:auto}
+.tw{overflow-x:auto;overflow-y:visible}   /* uma só barra de rolagem: a tabela cresce com a página (as listas já são paginadas); antes cada tabela rolava por dentro */
 .main.with-drawer{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,420px);grid-template-rows:auto auto minmax(0,1fr)}
 .main.with-drawer .top{grid-column:1/-1;grid-row:1}
 .main.with-drawer .gcrumb{grid-column:1;grid-row:2}
