@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api", tags=["mesclar"])
 @router.post("/projetos/{codigo}/despublicar")
 def despublicar(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Tira o projeto do ar: itens e página do projeto viram 'private' no Tainacan e o status vira fora_do_ar. É o 'tirar_do_ar' do Publicar, com o nome certo.
-    A regra de quem pode é a mesma do Publicar: tirar do ar o que está PÚBLICO exige o admin master."""
+    A regra de quem pode é a mesma do Publicar: despublicar o que está PÚBLICO exige o admin master."""
     from .rotas_projetos import Publicacao, publicar
     con = connect()
     try:
@@ -19,12 +19,12 @@ def despublicar(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
         if not p:
             raise HTTPException(404, "Projeto não existe")
         if not p["tainacan_item_id"] and not con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (codigo,)).fetchone():
-            raise HTTPException(409, "Este projeto não tem nada no site para tirar do ar.")
+            raise HTTPException(409, "Este projeto não tem nada no site para despublicar.")
     finally:
         con.close()
     r = publicar(codigo, Publicacao(acao="tirar_do_ar"), u)
     if r.get("ok") and not r.get("alterados"):
-        raise HTTPException(409, r.get("mensagem") or "Este projeto não tem nada publicado no site para tirar do ar.")
+        raise HTTPException(409, r.get("mensagem") or "Este projeto não tem nada publicado no site para despublicar.")
     return r
 
 

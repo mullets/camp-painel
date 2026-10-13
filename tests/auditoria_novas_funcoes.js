@@ -703,6 +703,25 @@ w.route_to('painel'); await sleep(2800);
   w.route_to('painel'); await sleep(2500); let vis=txt('#v-painel'); chk(!cruas.some(k=>vis.includes(k)),'a Atividade do painel não deveria mostrar tipos técnicos: '+cruas.filter(k=>vis.includes(k)).join(', '));
   w.route_to('auditoria'); await sleep(2500); { const ths=[...d.querySelectorAll('#v-auditoria thead th')].map(x=>x.textContent.trim()), ix=ths.findIndex(x=>/^Evento/i.test(x)); vis=[...d.querySelectorAll('#au-body tr')].map(r=>(r.children[ix]||{}).textContent||'').join(' | '); chk(ix>=0&&vis.length>20&&!cruas.some(k=>vis.includes(k)),'a coluna Evento da Auditoria não deveria mostrar tipos técnicos: '+cruas.filter(k=>vis.includes(k)).join(', ')+' (coluna '+ix+' de '+ths.join('/')+')') }
   w.route_to('painel'); }
+// ---------- [#156] "Mais ⋯" na ficha do projeto: mesclar, mover folhas, mover lote, descartar lote, despublicar ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3500); const b=d.querySelector('[data-pj-mais]');
+  chk(!!b,'admin deveria ver "Mais ⋯" na ficha do projeto');
+  if(b){ b.click(); await sleep(300); chk(/Mais ações/.test(txt('#d-title'))&&d.querySelectorAll('#d-body .mais-acao').length===5,'"Mais ⋯" deveria listar as 5 ações: '+d.querySelectorAll('#d-body .mais-acao').length);
+    d.querySelector('[data-mais="mesclar"]').click(); await sleep(300);
+    chk(d.getElementById('mx-go').disabled&&/mudam de código/.test(txt('#d-body')),'"Mesclar" deveria explicar a consequência e só habilitar depois de marcar "Entendi"');
+    const fetchOrig=w.fetch; let req=null; const R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j});
+    w.fetch=(u,o={})=>{ if(/\/mesclar-em$|\/api\/itens\/mover$/.test(String(u))&&String(o.method||'').toUpperCase()==='POST'){req={u:String(u),b:JSON.parse(o.body)};return R({movidos:[{de:'a',para:'b'}],duplicatas:[],ignorados:[],lotes:[]})} return fetchOrig(u,o) };
+    const marcar=()=>{const ok=d.getElementById('mx-ok');ok.checked=true;ok.dispatchEvent(new w.Event('change',{bubbles:true}))};
+    d.getElementById('mx-dest').value='xyz'; marcar(); d.getElementById('mx-go').click(); await sleep(300);
+    chk(!req&&/código do projeto de destino/.test(txt('#mx-res')),'código de destino inválido não deveria enviar nada e deveria explicar');
+    d.getElementById('mx-dest').value='F003-P9002'; d.getElementById('mx-motivo').value='duplicado'; d.getElementById('mx-go').click(); await sleep(900);
+    chk(!!req&&/F003-P9001\/mesclar-em$/.test(req.u)&&req.b.destino==='F003-P9002'&&req.b.motivo==='duplicado','Mesclar deveria enviar o destino e o motivo: '+JSON.stringify(req));
+    req=null; w.route_to('projeto/F003-P9001'); await sleep(3500); d.querySelector('[data-pj-mais]').click(); await sleep(300); d.querySelector('[data-mais="mover"]').click(); await sleep(300);
+    const cbs=d.querySelectorAll('.mx-it'); chk(cbs.length>0&&cbs.length===(w.ITENS_PJ||[]).length,'Mover folhas deveria listar todas as folhas com caixa de seleção ('+cbs.length+')');
+    if(cbs.length){ cbs[0].checked=true; d.getElementById('mx-dest').value='f003-p9002'; marcar(); d.getElementById('mx-go').click(); await sleep(900);
+      chk(!!req&&req.b.itens.length===1&&req.b.itens[0]===cbs[0].value&&req.b.destino==='F003-P9002','Mover deveria enviar só as folhas marcadas e o destino em maiúsculas: '+JSON.stringify(req)) }
+    w.fetch=fetchOrig; w.closeDrawer(true) }
+  w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------

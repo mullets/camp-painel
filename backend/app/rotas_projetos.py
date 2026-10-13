@@ -411,7 +411,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     eventos = [dict(r) for r in con.execute("SELECT tipo, ator, quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 20", (codigo,))]
-    filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
+    filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
     colecoes = {r["id"]: r["nome"] for r in con.execute("SELECT id, nome FROM wp_colecao").fetchall()}
     fonte_visual = {
         "colecao_projetos_id": projetos_cid,
