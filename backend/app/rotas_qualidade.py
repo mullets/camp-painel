@@ -87,3 +87,14 @@ def alertas_verificar(u: dict = Depends(auth.exige("admin"))) -> dict:
         return {"envios": al.verificar(con)}
     finally:
         con.close()
+
+
+@router.get("/replica")
+def replica_estado(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Cartão 149: a cópia do acervo (réplica) — data da última cópia e o nível (ok/aviso/critico)."""
+    from . import replica
+    con = connect()
+    try:
+        return replica.estado(con)
+    finally:
+        con.close()

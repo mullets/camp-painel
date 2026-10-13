@@ -12,6 +12,7 @@ ASSUNTOS = {
     "campvision": ("CAMP Vision parado", "estacoes"),
     "backup": ("Cópia de segurança do painel atrasada", "estacoes"),
     "site": ("Site sem resposta", "estacoes"),
+    "replica": ("Cópia do acervo parada", "estacoes"),
 }
 LIMITE_CRITICO = timedelta(hours=6)
 
@@ -48,6 +49,10 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
         atrasado = (b.get("idade_horas") or 0) > 36
         falhou = b.get("ok") is False
         out["backup"] = {"critico": bool(atrasado or falhou), "texto": ("A última cópia de segurança do banco do painel falhou: " + (b.get("erro") or "sem detalhe") + ".") if falhou else f"A última cópia de segurança do banco do painel tem {b.get('idade_horas')} h (o limite é 36 h)."}
+    from . import replica
+    rp = replica.estado(con)
+    if rp["configurada"]:
+        out["replica"] = {"critico": rp["nivel"] == "critico", "texto": rp["texto"]}
     url = _cfg(con, "wp.url")
     if url:
         if medir_site is None:

@@ -771,6 +771,14 @@ w.route_to('painel'); await sleep(2800);
   chk(/Alertas por e-mail/.test(t2)&&/QNAP quase cheio/.test(t2)&&/crítico/.test(t2)&&/CAMP Vision parado/.test(t2)&&/ainda não medido/.test(t2)&&/não enviado \(já avisado há menos de 6 h\)/.test(t2)&&/SMTP não configurado/.test(t2),'Estações deveria mostrar o estado de cada alerta e o log de envio: "'+t2.slice(0,220)+'"');
   const b=d.getElementById('al-verificar'); if(b){ b.click(); await sleep(400) } chk(verif===1,'"Verificar agora" deveria pedir a verificação ao servidor');
   w.fetch=fetchOrig; w.route_to('painel'); }
+// ---------- [#149] cópia do acervo em Estações e quarentena do CAMP Vision ----------
+{ const fetchOrig=w.fetch, R=x=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>x});
+  w.fetch=(u,o={})=>/\/api\/replica$/.test(String(u))?R({configurada:true,nivel:'critico',gravado_em:'2026-10-09T02:00:00-03:00',idade_horas:100,texto:'A réplica do acervo parou: última cópia há 100 h.'}):fetchOrig(u,o);
+  w.route_to('estacoes'); await sleep(3200); const t3=txt('#replica-painel');
+  chk(/Cópia do acervo/.test(t3)&&/parada/.test(t3)&&/há 100 h/.test(t3)&&/Verde: menos de 36 h/.test(t3),'Estações deveria mostrar a cópia do acervo com a cor e a idade: "'+t3.slice(0,160)+'"');
+  const q=w.quarentenaHTML({arquivos:2,gb:0.0,ultima_replica:null,aviso:'quarentena sem réplica: 0.0 GB'}).replace(/<[^>]+>/g,'');
+  chk(/Quarentena de 100 - Scanners: 2 arquivo\(s\) · 0 GB/.test(q)&&/quarentena sem réplica/.test(q),'a quarentena do heartbeat deveria aparecer no cartão do CAMP Vision: '+q);
+  w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------

@@ -2933,6 +2933,35 @@ def filho(modo):
         g = adm.get("/api/alertas")
         ver("a tela lê o estado e o log de envio (só admin)", g.status_code == 200 and len(g.json()["envios"]) >= 8 and op.get("/api/alertas").status_code == 403 and op.post("/api/alertas/verificar").status_code == 403)
         for l in res: print(l)
+    elif modo == "replica":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        from app import replica, alertas, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("sem réplica configurada: nada a medir (não vira alerta)", replica.estado(c)["configurada"] is False and "replica" not in alertas.avaliar(c, estado_backup=lambda: {"existe": False}))
+        raiz = _pl.Path(tempfile.mkdtemp()) / "ACERVOS_CAMP"; (raiz / "_campvision").mkdir(parents=True)
+        sent = raiz / "_campvision" / "sentinela.json"
+        def grava(horas): sent.write_text(_j.dumps({"gravado_em": (_dt.now(_tz.utc) - _td(hours=horas)).astimezone(_tz(_td(hours=-3))).isoformat(timespec="seconds"), "versao": "2026-10-10-02"}), encoding="utf-8")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='replica.raiz'", (str(raiz),)); c.commit()
+        grava(10); e1 = replica.estado(c); grava(50); e2 = replica.estado(c); grava(100); e3 = replica.estado(c)
+        ver("verde abaixo de 36 h, amarelo até 72 h, vermelho acima (lendo a sentinela da RÉPLICA, com fuso)", (e1["nivel"], e2["nivel"], e3["nivel"]) == ("ok", "aviso", "critico") and 9.5 < e1["idade_horas"] < 10.5, str((e1["nivel"], e1["idade_horas"], e2["nivel"], e3["nivel"])))
+        grava(5); c.execute("UPDATE configuracao SET valor='rafael@camp.arq.br' WHERE chave='avisos.email'"); c.execute("UPDATE configuracao SET valor='smtp.teste' WHERE chave='smtp.host'"); c.execute("UPDATE configuracao SET valor='p@camp.arq.br' WHERE chave='smtp.usuario'"); c.commit()
+        env = []
+        alertas.verificar(c, enviar=lambda *a, **k: env.append(a), estado_backup=lambda: {"existe": False})
+        sent.rename(sent.with_name("sentinela.json.teste"))                                      # o aceite: renomear a sentinela na réplica
+        e4 = replica.estado(c); f = alertas.verificar(c, enviar=lambda *a, **k: env.append(a), estado_backup=lambda: {"existe": False})
+        ver("renomear a sentinela deixa a linha VERMELHA ('não encontrei a marca')", e4["nivel"] == "critico" and "Não encontrei a marca" in e4["texto"], str(e4))
+        ver("...e dispara o alerta por e-mail 'Cópia do acervo parada'", any(x_["assunto"] == "replica" and x_["tipo"] == "critico" for x_ in f) and len(env) == 1 and "Cópia do acervo" in env[0][2], str(f))
+        auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        lei = TestClient(app, raise_server_exceptions=False); lei.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
+        r = lei.get("/api/replica")
+        ver("Estações lê a situação da cópia (leitura pode ver)", r.status_code == 200 and r.json()["nivel"] == "critico")
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3462,6 +3491,14 @@ else:
 print("50) #151 alertas críticos por e-mail: entra em crítico, resolvido, limite de 6 h, site pela regra única, log de envio")
 rc, out = rodar("alertas_email", f"{tmp}/alertas.db")
 if rc != 0: ok(False, f"teste dos alertas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("51) #149 cópia do acervo: sentinela da réplica (36 h / 72 h), vermelho sem sentinela e alerta por e-mail")
+rc, out = rodar("replica", f"{tmp}/replica.db")
+if rc != 0: ok(False, f"teste da réplica não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
