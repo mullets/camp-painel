@@ -63,6 +63,8 @@ from .rotas_emprestimos import router as rotas_emprestimos
 app.include_router(rotas_emprestimos)
 from .rotas_relatorios import router as rotas_relatorios
 app.include_router(rotas_relatorios)
+from .rotas_estante import router as rotas_estante
+app.include_router(rotas_estante)
 
 
 @app.on_event("startup")

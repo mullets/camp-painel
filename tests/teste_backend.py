@@ -3680,6 +3680,87 @@ def filho(modo):
         pv = x.post("/api/projetos/autorizar/previa", json={"codigos": ["F078-P0001"]}).json()
         ver("seleção de projetos: fundo sem direitos fica de fora com o motivo", not pv["prontos"] and pv["fora"][0]["codigo"] == "F078-P0001" and any("autorização de publicação" in m for m in pv["fora"][0]["motivos"]), str(pv)[:300])
         print("\n".join(res))
+    elif modo == "estante":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F096','Fundo Estante','EST',1)")
+        for n in (1, 2, 3, 12):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F096',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1960)", (f"F096-P{n:04d}", "F096", n, f"Casa {n}"))
+        c.execute("UPDATE projeto SET mesclado_em='F096-P0001' WHERE codigo='F096-P0012'")
+        for p, k in (("F096-P0001", 3), ("F096-P0002", 2), ("F096-P0003", 1)):
+            for s in range(1, k + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,'S01',?,?,'importado')", (f"{p}-1960-S01-D{s:05d}", p, s, f"Planta {s}"))
+        cx1 = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F096','caixa','CX-001')").lastrowid
+        cx2 = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F096','caixa','CX-002')").lastrowid
+        c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES (NULL,'tubo','TB-001')")
+        c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES (NULL,'gaveta','GV-01'),('F096','gaveta','GV-01')")
+        for s in (1, 2, 3):
+            c.execute("INSERT INTO item_localizacao (item_codigo,localizacao_id) VALUES (?,?)", (f"F096-P0001-1960-S01-D{s:05d}", cx1))
+        c.execute("INSERT INTO item_localizacao (item_codigo,localizacao_id) VALUES ('F096-P0002-1960-S01-D00001',?)", (cx1,))
+        c.execute("INSERT INTO item_localizacao (item_codigo,localizacao_id) VALUES ('F096-P0002-1960-S01-D00002',?)", (cx2,))
+        c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        o = TestClient(app, raise_server_exceptions=False); o.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        le = TestClient(app, raise_server_exceptions=False); le.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
+        anon = TestClient(app, raise_server_exceptions=False)
+        R = lambda cod: le.get("/api/resolver-codigo", params={"c": cod})  # noqa: E731
+        r = R(" f096-p0001-1960-s01-d00002 ").json()
+        ver("folha (minúsculas e espaços): vai para a página da folha e diz onde está", r.get("tipo") == "folha" and r["rota"] == "item/F096-P0001-1960-S01-D00002" and r["localizacao"]["identificador"] == "CX-001", str(r))
+        r = R("*F096-P0003-1960-S01-D00001*").json()
+        ver("folha sem lugar (asteriscos do Code 39 ignorados): localização vazia", r.get("tipo") == "folha" and r["localizacao"] is None, str(r))
+        r = R("F096-P0002").json()
+        ver("projeto pelo código completo", r.get("tipo") == "projeto" and r["rota"] == "projeto/F096-P0002", str(r))
+        r = R("EST-P002.1").json()
+        ver("projeto pela etiqueta da pasta (sigla-P002.volume)", r.get("tipo") == "projeto" and r["codigo"] == "F096-P0002" and r["volume"] == 1, str(r))
+        r = R("F096-P0012").json()
+        ver("projeto juntado a outro: leva ao projeto de destino, com aviso", r.get("codigo") == "F096-P0001" and "juntado" in r.get("aviso", ""), str(r))
+        r = R("F096").json(); r2 = R("EST").json()
+        ver("fundo pelo código e pela sigla", r.get("tipo") == "fundo" and r["rota"] == "fundo/F096" and r2.get("rota") == "fundo/F096", str((r, r2)))
+        r = R("F096-CX-001").json(); r2 = R("cx-002").json(); r3 = R("TB-001").json()
+        ver("caixa pela etiqueta (F096-CX-001) e pelo identificador; vai para a conferência", r.get("tipo") == "caixa" and r["rota"] == f"estante/caixa/{cx1}" and r2.get("rota") == f"estante/caixa/{cx2}" and r3.get("tipo") == "caixa", str((r, r2, r3)))
+        r = R("GV-01").json(); r2 = R("F096-GV-01").json()
+        ver("identificador repetido em dois fundos: pede para escolher; com o fundo na frente, resolve", r.get("tipo") == "varios" and len(r["opcoes"]) == 2 and r2.get("tipo") == "caixa" and r2["localizacao"]["fundo_codigo"] == "F096", str((r, r2)))
+        ver("código desconhecido: diz que não achou (sem rota); vazio: 400; sem login: 401",
+            R("XYZ-999").json()["tipo"] == "desconhecido" and R("XYZ-999").json()["rota"] is None and "Não achei" in R("XYZ-999").json()["mensagem"] and R("  ").status_code == 400 and anon.get("/api/resolver-codigo?c=F096").status_code == 401)
+        a = le.get(f"/api/localizacoes/{cx1}/conferencia").json()
+        ver("conferência: lista esperada da caixa (4 folhas)", a["localizacao"]["identificador"] == "CX-001" and len(a["esperados"]) == 4 and a["ultima"] is None, str(a)[:300])
+        ver("conferência de lugar inexistente: 404", le.get("/api/localizacoes/9999/conferencia").status_code == 404)
+        lidos = ["F096-P0001-1960-S01-D00001", "f096-p0001-1960-s01-d00002", "F096-P0001-1960-S01-D00001", "F096-P0002-1960-S01-D00002", "F096-P0003-1960-S01-D00001", "F096", "NADA-1"]
+        p = le.post(f"/api/localizacoes/{cx1}/conferencia/previa", json={"lidos": lidos}).json()
+        ver("prévia: 2 conferidas, 2 faltando, 2 de outro lugar (uma em CX-002, uma sem lugar), 2 não reconhecidas, leitura repetida conta uma vez",
+            len(p["conferidos"]) == 2 and [x["codigo"] for x in p["faltando"]] == ["F096-P0001-1960-S01-D00003", "F096-P0002-1960-S01-D00001"]
+            and {(x["codigo"], x["local"]) for x in p["de_outro_local"]} == {("F096-P0002-1960-S01-D00002", "CX-002"), ("F096-P0003-1960-S01-D00001", None)}
+            and len(p["nao_reconhecidos"]) == 2 and len(p["leituras"]) == 6, _j.dumps(p)[:600])
+        k = connect(); n0 = k.execute("SELECT COUNT(*) FROM evento WHERE tipo='conferencia_caixa'").fetchone()[0]; k.close()
+        ver("prévia não grava nada no histórico", n0 == 0)
+        p = le.post(f"/api/localizacoes/{cx1}/conferencia/previa", json={"lidos": ["EST-P002.1"]}).json()
+        ver("ler a etiqueta da pasta confere as folhas daquele projeto que estão nesta caixa", [x["codigo"] for x in p["conferidos"]] == ["F096-P0002-1960-S01-D00001"], str(p["conferidos"]))
+        p = le.post(f"/api/localizacoes/{cx2}/conferencia/previa", json={"lidos": ["F096-P0003"]}).json()
+        ver("pasta de um projeto sem folhas nesta caixa aparece como de outro lugar", p["de_outro_local"] and p["de_outro_local"][0]["tipo"] == "projeto", str(p["de_outro_local"]))
+        ver("leitura não registra a conferência (403)", le.post(f"/api/localizacoes/{cx1}/conferencia", json={"lidos": lidos}).status_code == 403)
+        mv = o.post("/api/localizacoes/alocar", json={"localizacao_id": cx1, "codigos": ["F096-P0002-1960-S01-D00002"]})
+        ver("mover para esta caixa usa a rota existente (operador)", mv.status_code == 200 and mv.json()["alocados"] == 1, mv.text[:200])
+        g = o.post(f"/api/localizacoes/{cx1}/conferencia", json={"lidos": lidos})
+        gj = g.json()
+        ver("registrar: depois de mover, a folha passa a ser desta caixa e conta como conferida; totais certos",
+            g.status_code == 200 and gj["totais"] == {"esperados": 5, "conferidos": 3, "faltando": 2, "de_outro_local": 1, "nao_reconhecidos": 2, "leituras": 6}
+            and "3 de 5 folhas conferidas" in gj["mensagem"] and "2 faltando" in gj["mensagem"], _j.dumps(gj.get("totais")) + gj.get("mensagem", str(gj)))
+        k = connect(); ev = k.execute("SELECT entidade, codigo, ator, detalhe FROM evento WHERE tipo='conferencia_caixa'").fetchall(); k.close()
+        d_ = _j.loads(ev[0]["detalhe"]) if ev else {}
+        ver("a conferência fica no histórico (evento da localização, com totais e o que faltou)",
+            len(ev) == 1 and ev[0]["entidade"] == "localizacao" and ev[0]["codigo"] == str(cx1) and ev[0]["ator"] == "op@camp.arq.br"
+            and d_.get("conferidos") == 3 and d_.get("faltando") == 2 and d_.get("identificador") == "CX-001" and "F096-P0001-1960-S01-D00003" in d_.get("faltando_codigos", []), str([dict(x) for x in ev]))
+        a = le.get(f"/api/localizacoes/{cx1}/conferencia").json()
+        ver("ao abrir de novo, mostra a última conferência", a["ultima"] and a["ultima"]["conferidos"] == 3 and a["ultima"]["ator"] == "op@camp.arq.br", str(a["ultima"]))
+        for l in res: print(l)
     elif modo == "ga4_direto":
         init_db(); _aplicar_migracoes_real()
         import json as _j, httpx, jwt as _jwt
@@ -4939,6 +5020,14 @@ else:
 print("90) Relatórios para prestação de contas: contagens por período, planilha e acesso")
 rc, out = rodar("relatorios", f"{tmp}/relat.db")
 if rc != 0: ok(False, f"teste dos relatórios não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("96) Modo estante no celular: ler o código (folha, projeto, fundo, caixa) e conferir uma caixa")
+rc, out = rodar("estante", f"{tmp}/estante.db")
+if rc != 0: ok(False, f"teste do modo estante não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
