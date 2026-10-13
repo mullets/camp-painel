@@ -3270,6 +3270,17 @@ def filho(modo):
             ver("o checklist de publicar traz o aviso junto dos requisitos", False, str(e)[:200])
         c.close()
         print("\n".join(res))
+    elif modo == "b11_nome_arquivo":
+        from app.publicador import nome_arquivo_site
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        n = nome_arquivo_site("Planta de situação", "Edifício Tarumã", "F026-P0001-1968-S01-D00003")
+        ver("nome legível com o código no fim", n == "planta-de-situacao-edificio-taruma-F026-P0001-1968-S01-D00003.jpg", n)
+        n2 = nome_arquivo_site(None, None, "F026-P0001-1968-S01-D00003")
+        ver("sem título, só o código", n2 == "F026-P0001-1968-S01-D00003.jpg", n2)
+        n3 = nome_arquivo_site("x" * 200, "Casa", "F001-P0001-1970-S01-D00001")
+        ver("nome longo é cortado (o código fica inteiro)", n3.endswith("-F001-P0001-1970-S01-D00001.jpg") and len(n3) <= 80 + 32, str(len(n3)))
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3957,6 +3968,14 @@ else:
 print("60) B10 checklist de publicar com avisos de qualidade (ano, cidade, programa, título genérico) que não bloqueiam")
 rc, out = rodar("b10_qualidade", f"{tmp}/b10.db")
 if rc != 0: ok(False, f"teste B10 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("61) B11 nome de arquivo legível ao enviar a imagem ao site")
+rc, out = rodar("b11_nome_arquivo", f"{tmp}/b11.db")
+if rc != 0: ok(False, f"teste B11 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import functools
 import json
+import re
+import unicodedata
 
 from fastapi import HTTPException
 
 from .db import connect
 from .wp import WP
+
+
+def nome_arquivo_site(titulo_folha: str | None, projeto_titulo: str | None, codigo: str) -> str:
+    """B11 · Nome do arquivo que o site guarda (vira o nome da imagem no Google): o que é a folha + o projeto + o código.
+    Ex.: planta-de-situacao-edificio-taruma-F026-P0001-1968-S01-D00003.jpg. Só vale para envios novos (o WordPress não renomeia)."""
+    base = " ".join(x for x in (titulo_folha, projeto_titulo) if x)
+    s = unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode("ascii").lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:80].rstrip("-")
+    return f"{s}-{codigo}.jpg" if s else f"{codigo}.jpg"
 
 CONVIDADO = "F000"  # fundo Convidado: material de terceiros, nunca vai ao site
 
@@ -451,7 +462,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             caminho_img = str(jpeg_girado(caminho_img, i["giro_manual"]))
         if caminho_img:
             try:
-                m = wp.upload_media(caminho_img, titulo, nome=f"{codigo}.jpg")
+                m = wp.upload_media(caminho_img, titulo, nome=nome_arquivo_site(i["titulo"] or i["tipo_documento"] or i["serie_nome"], i["projeto_titulo"], codigo))
                 wp.definir_documento(COL_ACERVO, iid, m["id"])
                 con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
                 out["imagem"] = m.get("source_url")
