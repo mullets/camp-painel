@@ -1139,6 +1139,18 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H18] Uso do acervo: resumo em frases clicáveis, uso por categoria, filtro por fundo, anonimizar recomendado, e-mail com copiar ----------
+{ const R=(await J(adm,'/api/uso/resumo')).b;
+  if(R.total>0){ const cats=Object.fromEntries((R.categorias||[]).map(c=>[c.categoria,c.n])), soma=Object.values(cats).reduce((a,b)=>a+b,0);
+    chk(soma===R.total&&(R.categorias||[]).every(c=>c.rotulo),'[H18] cada pedido deveria cair numa categoria de uso (a soma bate com o total): '+JSON.stringify(R.categorias));
+    const c0=(R.categorias||[])[0]; const F=(await J(adm,'/api/uso?uso=cat:'+c0.categoria)).b; chk(F.total===c0.n,'[H18] filtrar por categoria ('+c0.categoria+') deveria trazer '+c0.n+': '+F.total);
+    w.route_to('uso'); await sleep(2000);
+    chk(/nos últimos 30 dias/.test(txt('#us-frase'))&&!!d.querySelector('#us-frase [data-uso-frase="pessoas"]'),'[H18] o resumo deveria vir em frase clicável: "'+txt('#us-frase')+'"');
+    chk(!!d.querySelector('#us-uso optgroup[label="Por categoria"]')&&!!d.getElementById('us-fundo'),'[H18] o filtro de uso deveria ter as categorias, e deveria haver filtro por fundo');
+    d.querySelector('#us-frase [data-uso-frase="pessoas"]').click(); await sleep(1300); chk(w.eval('US').aba==='pessoas','[H18] clicar em "N pessoas" deveria abrir a aba Pessoas');
+    w.usoAba('downloads'); await sleep(1300); const lin=d.querySelector('#us-body tr.us-row[data-uso-acao="detalhe"]');
+    if(lin){ lin.click(); await sleep(1200); chk(/Anonimizar \(recomendado\)/.test(txt('#d-body'))&&/mantém data, material e uso/.test(txt('#d-body'))&&!!d.querySelector('#d-body [data-copiar]'),'[H18] o pedido deveria recomendar "Anonimizar" com a explicação e ter "copiar" no e-mail'); w.closeDrawer(true) } }
+  okl.push('H18: Uso com resumo em frase clicável, categorias de uso, filtro por fundo, anonimizar recomendado'); }
 // ---------- [H17] Solicitações: material por código + formato, trilha da situação com datas, "entregue" pergunta o que foi, modelo de e-mail, "há N dias" ----------
 { w.route_to('solicitacoes'); await sleep(1500); w.abrirRegistroPedido(); await sleep(200);
   d.getElementById('ns-nome').value='Pesquisadora FAU (teste H17)'; d.getElementById('ns-email').value='pesq@fau.test'; d.getElementById('ns-fin').value='pesquisa';

@@ -46,6 +46,16 @@ def _ids(texto: str | None) -> list[int]:
     return ids
 
 
+# H18: o uso declarado é texto livre; para filtros e contagens, cada um cai numa categoria padrão (o texto fica no detalhe)
+_L = "lower(COALESCE(u.uso,''))"
+CAT_USO = f"""CASE WHEN {_L} LIKE '%pesquis%' OR {_L} LIKE '%acad%' OR {_L} LIKE '%tcc%' OR {_L} LIKE '%disserta%' OR {_L} LIKE '%tese%' OR {_L} LIKE '%estud%' OR {_L} LIKE '%aula%' OR {_L} LIKE '%ensino%' THEN 'pesquisa'
+  WHEN {_L} LIKE '%public%' OR {_L} LIKE '%livro%' OR {_L} LIKE '%revista%' OR {_L} LIKE '%editor%' OR {_L} LIKE '%artigo%' OR {_L} LIKE '%jornal%' THEN 'publicacao'
+  WHEN {_L} LIKE '%expo%' OR {_L} LIKE '%mostra%' OR {_L} LIKE '%museu%' THEN 'exposicao'
+  WHEN {_L} LIKE '%fam%' OR {_L} LIKE '%pessoal%' OR {_L} LIKE '%particular%' OR {_L} LIKE '%curios%' THEN 'pessoal'
+  ELSE 'outro' END"""
+CATS_USO = {"pesquisa": "pesquisa acadêmica", "publicacao": "publicação", "exposicao": "exposição", "pessoal": "uso pessoal ou de família", "outro": "outro"}
+
+
 def _filtro(q, de, ate, uso, fundo, material, ids: list[int] | None = None) -> tuple[str, list]:
     w, p = ["u.apagada=0"], []          # entradas APAGADAS nunca aparecem em nada
     if q:
@@ -56,7 +66,9 @@ def _filtro(q, de, ate, uso, fundo, material, ids: list[int] | None = None) -> t
         w.append("date(u.recebida_em) >= date(?)"); p.append(de)
     if ate:
         w.append("date(u.recebida_em) <= date(?)"); p.append(ate)
-    if uso:
+    if uso and uso.startswith("cat:"):
+        w.append(f"({CAT_USO}) = ?"); p.append(uso[4:])
+    elif uso:
         w.append("u.uso = ?"); p.append(uso)
     if fundo:
         w.append("u.fundo_codigo = ?"); p.append(fundo)
@@ -120,6 +132,14 @@ def materiais(pagina: int = 1, por_pagina: int = 50, q: str | None = Query(None)
     return _lista(_sql_materiais, "ORDER BY downloads DESC, ultima DESC", pagina, por_pagina, q, de, ate, uso, fundo, material)
 
 
+def _top_material(con) -> dict | None:
+    r = con.execute("SELECT material_codigo, COUNT(*) FROM uso_download WHERE apagada=0 AND material_codigo IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
+    if not r:
+        return None
+    t = con.execute("SELECT titulo FROM projeto WHERE codigo=? UNION ALL SELECT titulo FROM item WHERE codigo=? LIMIT 1", (r[0], r[0])).fetchone()
+    return {"codigo": r[0], "titulo": t[0] if t else None, "n": r[1]}
+
+
 @router.get("/uso/resumo")
 def resumo(u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
@@ -135,6 +155,9 @@ def resumo(u: dict = Depends(auth.exige("admin"))) -> dict:
             "anonimizadas": um("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND anonimizada=1"),
             "apagadas": um("SELECT COUNT(*) FROM uso_download WHERE apagada=1"),
             "usos": [dict(r) for r in con.execute("SELECT uso, COUNT(*) AS n FROM uso_download WHERE apagada=0 AND uso IS NOT NULL GROUP BY uso ORDER BY n DESC LIMIT 20")],
+            "categorias": [{"categoria": r[0], "rotulo": CATS_USO.get(r[0], r[0]), "n": r[1]} for r in
+                           con.execute(f"SELECT {CAT_USO} AS c, COUNT(*) FROM uso_download u WHERE u.apagada=0 GROUP BY c ORDER BY COUNT(*) DESC")],
+            "top_material": _top_material(con),
             "ultima_coleta": dict(coleta) if coleta else None,
         }
     finally:
