@@ -1139,6 +1139,18 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H13] Fundos: Pendências em palavras, Exportar no "Mais ⋯", sigla sugerida e conferida enquanto digita, confirmação do efeito ----------
+{ w.route_to('fundos'); await sleep(1800);
+  chk(/Pendências/.test(txt('#v-fundos thead'))&&!!d.querySelector('#fundos-body td.fd-pend'),'[H13] a lista deveria ter a coluna "Pendências" em palavras');
+  chk(!!d.querySelector('#v-fundos .hdr .mais-menu')&&/Exportar fundos\.json/.test(txt('#v-fundos .hdr .mais-menu'))&&d.querySelectorAll('#v-fundos .hdr .act > .btn').length===1,'[H13] "Exportar fundos.json" deveria ficar no "Mais ⋯" (só "Reservar próximo código" à vista)');
+  w.abrirReservaFundo(); await sleep(200); const nn=d.getElementById('nf-nome'), ss=d.getElementById('nf-sigla');
+  nn.value='Ubirajara Yolanda Wanderley'; nn.dispatchEvent(new w.Event('input',{bubbles:true})); chk(ss.value==='UYW'&&/livre/.test(txt('#nf-sigla-msg')),'[H13] a sigla deveria ser sugerida pelas iniciais ("UYW"): "'+ss.value+'" / '+txt('#nf-sigla-msg'));
+  const usada=((await J(adm,'/api/fundos/resumo')).b.find(f=>f.sigla)||{}); ss.value=usada.sigla||'ZZZ'; ss.dispatchEvent(new w.Event('input',{bubbles:true}));
+  chk(new RegExp(usada.sigla+' já é de').test(txt('#nf-sigla-msg')),'[H13] sigla repetida deveria ser avisada enquanto digita: "'+txt('#nf-sigla-msg')+'"');
+  ss.value='QWZ'; ss.dispatchEvent(new w.Event('input',{bubbles:true})); w.__semAutoResposta=true; w.addFundo(); await sleep(150);
+  chk(/vão se chamar F\d{3}-P0001-AAAA-S01-D00001/.test(txt('#conf-ov'))&&/QWZ/.test(txt('#conf-ov')),'[H13] antes de reservar, a confirmação deveria mostrar o efeito (nome dos arquivos e sigla): "'+txt('#conf-ov').slice(0,160)+'"');
+  d.querySelector('#conf-ov [data-conf="nao"]').click(); await sleep(100); w.__semAutoResposta=false; w.closeModal();
+  okl.push('H13: Fundos com Pendências em palavras, Exportar no Mais, sigla sugerida/validada e confirmação do efeito'); }
 // ---------- [H12] Projetos: busca grande, coluna "Próximo passo", seleção no padrão do Gmail, Novo projeto com ajuda ----------
 { w.route_to('projetos'); await sleep(2000);
   const q=d.getElementById('proj-q'); chk(!!q&&!!q.closest('.busca-grande')&&!!(q.compareDocumentPosition(d.getElementById('proj-chips'))&4),'[H12] a busca deveria vir grande, acima das abas');
