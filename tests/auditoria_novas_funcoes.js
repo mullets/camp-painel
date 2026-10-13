@@ -1139,6 +1139,13 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [Editor] campos públicos x só do painel; estado do salvamento no topo; erro do servidor dentro do editor ----------
+{ await w.editarFundo('F002'); await sleep(600); const lg=[...d.querySelectorAll('#d-body .ed-grupo legend')].map(x=>x.textContent);
+  chk(lg.join('|')==='Aparece na página pública|Só no painel'&&!!d.querySelector('.ed-grupo #ef-procedencia')&&!!d.querySelector('.ed-grupo:last-of-type #ef-status_site'),'[Editor] o fundo deveria separar "Aparece na página pública" e "Só no painel": '+lg.join('|'));
+  w.estadoEditor('erro','Sigla já usada'); chk(/Erro ao salvar/.test(txt('#dirty-state'))&&/Sigla já usada/.test(txt('#d-erro'))&&d.getElementById('drawer')&&d.querySelector('#d-body #ef-procedencia'),'[Editor] o erro do servidor deveria ficar dentro do editor, sem fechá-lo');
+  w.estadoEditor(''); w.closeDrawer(true);
+  const cod=(((await J(adm,'/api/projetos')).b.itens||[])[0]||{}).codigo; if(cod){ await w.editarProjeto(cod); await sleep(700); chk(d.querySelectorAll('#d-body .ed-grupo').length===2&&!!d.querySelector('.ed-grupo:last-of-type #ep-contagem_esperada'),'[Editor] o projeto deveria separar o que vai ao site do que é só do painel'); w.closeDrawer(true); }
+  okl.push('Editor: grupos público/painel, estado do salvamento, erro dentro do editor'); }
 // ---------- [Estados] mesmas frases para os mesmos problemas; lista com dados não some quando a leitura falha ----------
 { chk(/sessão terminou/.test(w.mensagemErroAPI(401,'Faça login'))&&w.mensagemErroAPI(401,'E-mail ou senha não conferem.')==='E-mail ou senha não conferem.'&&/papel admin/.test(w.mensagemErroAPI(403,'Requer papel admin'))&&/não respondeu/.test(w.mensagemErroAPI(502,'Bad Gateway')),'[Estados] 401/403/502 deveriam virar as frases padrão (e o erro de login continua o dele)');
   w.route_to('projetos'); await sleep(2000); const n0=d.querySelectorAll('#projetos-body tr[data-nav]').length;
