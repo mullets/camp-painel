@@ -1139,6 +1139,15 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H9 pendências] imagem sem limite baixo, valor lido ao lado do campo, Relatar problema, sem imagem pergunta antes, Aprovar o lote no fim ----------
+{ chk(!/max-height:340px/.test(d.documentElement.innerHTML.match(/\.rev-prev\{[^}]*\}/g).join('')),'[H9] a imagem da revisão não deveria ficar limitada a 340 px');
+  w.route_to('projeto/F003-P9001'); await sleep(3500); const it=(w.ITENS_PJ||[]).find(x=>x.lote_id);
+  if(it){ await w.abrirRevisaoItem(it.codigo); await sleep(1500);
+    chk(!!d.querySelector('#d-body [data-relatar-folha]')&&d.querySelector('#d-body details.rev-campos').open,'[H9] a revisão deveria ter "Relatar problema" e os campos já abertos');
+    chk(!!d.querySelector('#d-body .rev-grade .rev-col-img')&&!!d.querySelector('#d-body .rev-col-dados'),'[H9] a revisão deveria separar imagem e dados (lado a lado em tela larga)');
+    const b=d.querySelector('#d-body [data-rev-item="conferida"]'); if(!(it.pendencias&&it.pendencias.previa)&&!it.thumb_url) chk(b&&b.dataset.semImagem==='1','[H9] sem imagem, "Está certo" deveria pedir confirmação');
+    w.closeDrawer(true); }
+  okl.push('H9 pendências: imagem maior, lado a lado, valor lido, relatar, confirmação sem imagem'); w.route_to('painel'); }
 // ---------- [H8 pendências] filtro de folhas que não volta sozinho, miniaturas P/M/G, "Preencher" no que falta, prévia do cartão do site ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500);
   const bf=d.querySelector('.folhas-bar [data-fl-f="conferir"]'); if(bf){ bf.click(); await sleep(100); w.atualizarContadorFolhas(); await sleep(100); chk(d.querySelector('.folhas-bar [data-fl-f="conferir"]').classList.contains('on'),'[H8] o filtro "A conferir" deveria continuar ligado depois de atualizar a contagem (antes voltava para "Todas")'); d.querySelector('.folhas-bar [data-fl-f=""]').click(); }
