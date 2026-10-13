@@ -3289,6 +3289,27 @@ def filho(modo):
         ver("erro aninhado no resultado", _erro_do_cv({"status_json": "{}", "resultado": '{"error": {"message": "timeout no modelo"}}'}) == "timeout no modelo")
         ver("sem motivo: None", _erro_do_cv({"status_json": "x", "resultado": None}) is None)
         print("\n".join(res))
+    elif modo == "b7_duplicados":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F087','Fundo Dup','FDU',1)")
+        for n, t, ano, cid in ((1, "Residência Tarumã", 1968, "São Paulo"), (2, "Residencia Taruma", 1968, "São Paulo"), (3, "Edifício Itália", 1956, "São Paulo")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F087',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES (?,?,?,?,?,?)", (f"F087-P000{n}", "F087", n, t, ano, cid))
+        c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.get("/api/fundos/F087/duplicados").json()
+        ver("acha o par Tarumã × Taruma (e não o Edifício Itália)", r.get("total") == 1 and {r["pares"][0]["a"]["codigo"], r["pares"][0]["b"]["codigo"]} == {"F087-P0001", "F087-P0002"}, str(r)[:200])
+        ver("operador marca 'não são o mesmo'", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0002", "b": "F087-P0001"}).status_code == 200)
+        ver("o par marcado não volta", x.get("/api/fundos/F087/duplicados").json().get("total") == 0)
+        ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
+        ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3992,6 +4013,14 @@ else:
 print("62) H7 Filas: o motivo do erro que o CAMP Vision deixou aparece na linha")
 rc, out = rodar("h7_erro_cv", f"{tmp}/h7.db")
 if rc != 0: ok(False, f"teste H7 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("63) B7 duplicados já cadastrados: varredura por fundo e 'não são o mesmo' que não volta")
+rc, out = rodar("b7_duplicados", f"{tmp}/b7.db")
+if rc != 0: ok(False, f"teste B7 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

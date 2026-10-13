@@ -1139,6 +1139,10 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [B7] "Procurar projetos duplicados" no fundo ----------
+{ w.route_to('fundo/F002'); await sleep(2500); const m=d.querySelector('#v-fundo [data-dup-fundo="F002"]'); chk(!!m,'[B7] o "Mais ⋯" do fundo deveria ter "Procurar projetos duplicados"');
+  if(m){ await w.procurarDuplicados('F002'); await sleep(1200); chk(/Projetos duplicados\?/.test(txt('#d-title'))&&/comparados/.test(txt('#d-sub')),'[B7] a varredura deveria abrir a lista de pares (ou dizer que não achou): '+txt('#d-body').slice(0,120)); w.closeDrawer(true); }
+  okl.push('B7: varredura de duplicados no fundo'); w.route_to('painel'); }
 // ---------- [H11 pendências] decisão com miniatura, diferença dos nomes, próximo código no botão, pedidos iguais juntos ----------
 { const h=w.diffNomesHTML('Residência Tarumã','Residencia Taruma Fase 2'); chk(/<mark>Fase<\/mark>/.test(h)&&/<mark>2<\/mark>/.test(h)&&!/<mark>Residência<\/mark>/.test(h),'[H11] a diferença dos nomes deveria vir em destaque (sem contar acento): '+h);
   const L=(await J(adm,'/api/decisoes?situacao=pendente')).b.itens||[];

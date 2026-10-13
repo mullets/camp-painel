@@ -254,3 +254,53 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
         return {"ok": True}
     finally:
         con.close()
+
+
+# ---------------- B7 · duplicados já cadastrados: varredura por fundo ----------------
+class ParNao(BaseModel):
+    a: str
+    b: str
+
+
+@router.get("/fundos/{codigo}/duplicados")
+def duplicados_do_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Pares de projetos do mesmo fundo que parecem ser o mesmo (nome, ano, cidade, identificação original), do mais para o menos parecido.
+    Os pares que alguém marcou "não são o mesmo" não voltam."""
+    from .similaridade import nivel, pontuar
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+        ps = [dict(r) for r in con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original, p.status_site,
+                                                     (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
+                                                FROM projeto p WHERE p.fundo_codigo=? AND p.mesclado_em IS NULL ORDER BY p.codigo""", (codigo,))]
+        nao = {(r[0], r[1]) for r in con.execute("SELECT a, b FROM par_nao_duplicado")}
+        pares = []
+        for i, x in enumerate(ps):
+            for y in ps[i + 1:]:
+                if (x["codigo"], y["codigo"]) in nao:
+                    continue
+                score, motivos = pontuar(x, y)
+                n = nivel(score)
+                if n:
+                    pares.append({"a": x, "b": y, "score": score, "nivel": n, "motivos": motivos})
+        pares.sort(key=lambda p: (-p["score"], p["a"]["codigo"]))
+        return {"fundo": codigo, "projetos": len(ps), "total": len(pares), "pares": pares[:200]}
+    finally:
+        con.close()
+
+
+@router.post("/fundos/{codigo}/duplicados/nao-sao")
+def marcar_nao_duplicado(codigo: str, d: ParNao, u: dict = Depends(auth.exige("operador"))) -> dict:
+    a, b = sorted([d.a.strip().upper(), d.b.strip().upper()])
+    if a == b or not (a.startswith(codigo + "-") and b.startswith(codigo + "-")):
+        raise HTTPException(400, "Informe dois projetos diferentes deste fundo")
+    con = connect()
+    try:
+        con.execute("INSERT OR IGNORE INTO par_nao_duplicado (a, b, por) VALUES (?,?,?)", (a, b, u["email"]))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'nao_duplicado',?,?)",
+                    (a, u["email"], _json.dumps({"outro": b}, ensure_ascii=False)))
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True}
