@@ -113,11 +113,12 @@ from .db import connect  # noqa: E402
 
 
 @router.get("/sessoes")
-def sessoes(u: dict = Depends(auth.usuario_atual)) -> list[dict]:
+def sessoes(u: dict = Depends(auth.usuario_atual), camp_sessao: str | None = Cookie(default=None)) -> list[dict]:
     con = connect()
     rows = con.execute("SELECT id, criada_em, expira_em, ip, agente FROM sessao WHERE usuario_id=? AND revogada=0 AND expira_em > datetime('now') ORDER BY criada_em DESC", (u["id"],)).fetchall()
     con.close()
-    return [{**dict(r), "id": r["id"][:8]} for r in rows]
+    atual = auth._hash_token(camp_sessao or "")   # H26: marca "este computador"
+    return [{**dict(r), "id": r["id"][:8], "atual": r["id"] == atual} for r in rows]
 
 
 @router.post("/sessoes/encerrar-outras")

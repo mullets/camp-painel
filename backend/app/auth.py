@@ -119,7 +119,7 @@ def autenticar(request: Request, response: Response, email: str, senha: str, lem
     u = con.execute("SELECT * FROM usuario WHERE email=? AND ativo=1", (email,)).fetchone()
 
     # resposta idêntica para usuário inexistente e senha errada (não revela quem existe)
-    erro = HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha incorretos")
+    erro = HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha não conferem.")
     if not u or not u["senha_hash"]:
         pwd.dummy_verify()
         _evento(con, email, "login_falhou", ip, "usuário desconhecido")
