@@ -82,16 +82,21 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
                            cliente=COALESCE(NULLIF(cliente,''),?), tipologia=COALESCE(NULLIF(tipologia,''),?),
                            ambito_conteudo=COALESCE(NULLIF(ambito_conteudo,''),?), ano=CASE WHEN ano=0 THEN ? ELSE ano END,
                            autoria=COALESCE(NULLIF(autoria,''),?), papel_no_projeto=COALESCE(NULLIF(papel_no_projeto,''),?),
+                           natureza=COALESCE(NULLIF(natureza,''),?), modalidade=COALESCE(NULLIF(modalidade,''),?),
+                           situacao_obra=COALESCE(NULLIF(situacao_obra,''),?),
                            atualizado_em=datetime('now') WHERE codigo=?""",
                         (it["id"], status, int(status == "no_ar"), md.get("Cidade"), md.get("Endereço"), md.get("Cliente (divulgável)"),
-                         md.get("Programa / uso"), md.get("Descrição"), ano, md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")), p))
+                         md.get("Programa / uso"), md.get("Descrição"), ano, md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")),
+                         md.get("Natureza do trabalho") or None, md.get("Modalidade") or None, md.get("Situação da obra") or None, p))
             n["projetos_atualizados"] += 1
         else:
             con.execute("""INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, cidade, endereco_obra, cliente, tipologia,
-                           ambito_conteudo, autorizado_site, status_site, tainacan_item_id, autoria, papel_no_projeto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           ambito_conteudo, autorizado_site, status_site, tainacan_item_id, autoria, papel_no_projeto,
+                           natureza, modalidade, situacao_obra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (p, f, numero, titulo, ano, md.get("Cidade"), md.get("Endereço"), md.get("Cliente (divulgável)"),
                          md.get("Programa / uso"), md.get("Descrição"), int(status == "no_ar"), status, it["id"],
-                         md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto"))))
+                         md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")),
+                         md.get("Natureza do trabalho") or None, md.get("Modalidade") or None, md.get("Situação da obra") or None))
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'importado','site',?)",
                         (p, json.dumps({"tainacan_id": it["id"]})))
             n["projetos_novos"] += 1

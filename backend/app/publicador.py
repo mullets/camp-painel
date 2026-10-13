@@ -277,6 +277,7 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         valores = {"Código de Catalogação": codigo, "Ano": str(p["ano"]) if p["ano"] else None, "Cidade": p["cidade"],
                    "Programa / uso": p["tipologia"], "Cliente (divulgável)": p["cliente"],
                    "Autoria do projeto": p["autoria"], "Papel no projeto": PAPEIS_PROJETO.get(p["papel_no_projeto"] or "", p["papel_no_projeto"]),
+                   "Natureza do trabalho": p["natureza"], "Modalidade": p["modalidade"], "Situação da obra": p["situacao_obra"],
                    "Fundo": p["fundo_termo"] or p["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None}
         for nome, valor in valores.items():
             if valor in (None, ""):
@@ -285,6 +286,9 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
             if not mid:
                 continue
             try:
+                col = {v_: k_ for k_, v_ in CAMPOS_PROJETO_SITE.items()}.get(nome)
+                if col in ("tipologia", "natureza", "modalidade", "situacao_obra"):
+                    valor = _valor_para_site(con, col, valor, tipo)   # B3: taxonomia do site recebe id(s)
                 wp.definir_metadado(iid, mid, valor)
                 out["metadados"].append(nome)
             except Exception as e:  # noqa: BLE001
@@ -300,7 +304,8 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
 
 COL_ACERVO = 8013
 CAMPOS_PROJETO_SITE = {"ano": "Ano", "cidade": "Cidade", "cliente": "Cliente (divulgável)", "tipologia": "Programa / uso",
-                       "autoria": "Autoria do projeto", "papel_no_projeto": "Papel no projeto"}
+                       "autoria": "Autoria do projeto", "papel_no_projeto": "Papel no projeto",
+                       "natureza": "Natureza do trabalho", "modalidade": "Modalidade", "situacao_obra": "Situação da obra"}
 # B4: papel do titular do fundo no projeto. O painel guarda a chave; o site recebe o rótulo.
 PAPEIS_PROJETO = {"autor": "Autor", "coautor": "Coautoria", "consultor": "Consultor", "colaborador": "Colaborador", "terceiros": "Projeto de terceiros"}
 
@@ -315,6 +320,18 @@ def papel_do_site(texto: str | None) -> str | None:
         if t.startswith(pref) or (pref == "terceir" and "terceir" in t):
             return chave
     return t
+
+
+def _valor_para_site(con, campo: str, v, tipo_meta: str | None):
+    """B3: faceta de tipologia num metadado de taxonomia vai como id(s) do termo no site (o Tainacan não aceita termo novo)."""
+    from . import tipologia as tp
+    chave = tp.COLUNAS.get(campo)
+    if chave and "axonomy" in str(tipo_meta or ""):
+        ids = tp.ids_do_site(con, chave, v)
+        if ids is None:
+            raise RuntimeError(f"{tp.FACETAS[chave][1]}: “{v}” não existe na taxonomia do site (sincronize ou escolha da lista)")
+        return ids if tp.FACETAS[chave][4] else (ids[0] if ids else "")
+    return _valor_site(campo, v)
 
 
 def _valor_site(campo: str, v):
@@ -338,9 +355,9 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
             out["enviados"].append("título/descrição")
         for campo, nome in CAMPOS_PROJETO_SITE.items():
             if campo in campos:
-                mid, _ = _meta(con, COL_PROJETOS, nome)
+                mid, tipo_meta = _meta(con, COL_PROJETOS, nome)
                 if mid:
-                    wp.definir_metadado(p["tainacan_item_id"], mid, _valor_site(campo, p[campo]))
+                    wp.definir_metadado(p["tainacan_item_id"], mid, _valor_para_site(con, campo, p[campo], tipo_meta))
                     out["enviados"].append(nome)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_metadados',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001

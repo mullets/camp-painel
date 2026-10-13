@@ -498,6 +498,9 @@ class EdicaoProjeto(BaseModel):
     autorizado_site: bool | None = None
     autoria: str | None = None            # B4: "Autoria do projeto" no site
     papel_no_projeto: str | None = None   # B4: "Papel no projeto" (autor, coautor, consultor, colaborador, terceiros)
+    natureza: str | None = None           # B3: facetas do site, nomes dos termos separados por "; "
+    modalidade: str | None = None
+    situacao_obra: str | None = None
 
 
 @router.patch("/projetos/{codigo}")
@@ -519,9 +522,19 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
     from .publicador import PAPEIS_PROJETO
     if d.papel_no_projeto and d.papel_no_projeto not in PAPEIS_PROJETO and d.papel_no_projeto != p["papel_no_projeto"]:
         con.close(); raise HTTPException(400, f"Papel no projeto inválido. Use: {', '.join(PAPEIS_PROJETO)}")
+    from . import tipologia as tp
+    voc = None
+    for col, chave in tp.COLUNAS.items():   # B3: só termos que existem no site (a taxonomia lá não aceita termo novo)
+        v = getattr(d, col)
+        if v is not None and v != (p[col] or ""):
+            try:
+                voc = voc or tp.vocabulario(con)
+                setattr(d, col, tp.validar(con, chave, v, voc))
+            except ValueError as e:
+                con.close(); raise HTTPException(400, str(e))
     campos, vals, mud = [], [], {}
     for k in ("titulo", "ano", "ano_fim", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo", "contagem_esperada",
-              "autoria", "papel_no_projeto"):
+              "autoria", "papel_no_projeto", "natureza", "modalidade", "situacao_obra"):
         v = getattr(d, k)
         if v is not None and v != p[k]:
             campos.append(f"{k}=?"); vals.append(v); mud[k] = v
@@ -536,10 +549,22 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         con.commit()
     con.close()
     site = None
-    if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo", "autoria", "papel_no_projeto")):
+    if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo", "autoria", "papel_no_projeto",
+                                      "natureza", "modalidade", "situacao_obra")):
         from .publicador import atualizar_dossie_no_site
         site = atualizar_dossie_no_site(codigo, mud, u["email"])
     return {"ok": True, "campos": list(mud), "site": site}
+
+
+@router.get("/vocabulario/tipologia")
+def vocabulario_tipologia(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """B3: as 4 facetas com os termos do site (grupos e filhos), para o projeto escolher da lista."""
+    from . import tipologia as tp
+    con = connect()
+    try:
+        return {"facetas": tp.vocabulario(con), "colunas": {v[0]: k for k, v in tp.FACETAS.items()}}
+    finally:
+        con.close()
 
 
 class RegistroAutoria(BaseModel):

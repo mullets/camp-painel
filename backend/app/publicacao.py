@@ -111,7 +111,7 @@ def avisos_qualidade(p) -> list[dict]:
     chaves = p.keys() if hasattr(p, "keys") else []
     v = lambda k: (p[k] if k in chaves else None)  # noqa: E731
     codigo, out = v("codigo"), []
-    for campo, texto in (("ano", "Ano vazio"), ("cidade", "Cidade vazia"), ("tipologia", "Programa / uso vazio")):
+    for campo, texto in (("ano", "Ano vazio"), ("cidade", "Cidade vazia"), ("tipologia", "Programa / uso vazio"), ("natureza", "Natureza do trabalho vazia")):
         if v(campo) in (None, "", 0):
             out.append({"id": f"q_{campo}", "bloqueia": False, "ok": False, "texto": texto,
                         "detalhe": "Não impede a publicação, mas a ficha no site fica incompleta e é mais difícil de achar.",

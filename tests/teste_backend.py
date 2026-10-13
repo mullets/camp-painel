@@ -3253,7 +3253,7 @@ def filho(modo):
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F086','Fundo Ficha','FFI',1)")
         for n, tit, ano, cid, tip in ((1, "Residência Tarumã", 1968, None, "Residência"), (2, "P0002", 0, "São Paulo", None), (3, "[TESTE] Casa Exemplo", 1970, "Santos", "Casa"), (4, "Edifício Itália", 1956, "São Paulo", "Edifício")):
             c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F086',?)", (n,))
-            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tipologia) VALUES (?,?,?,?,?,?,?)", (f"F086-P000{n}", "F086", n, tit, ano, cid, tip))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tipologia,natureza) VALUES (?,?,?,?,?,?,?,'Edificação (obra nova)')", (f"F086-P000{n}", "F086", n, tit, ano, cid, tip))
         c.commit()
         P = lambda n: c.execute("SELECT p.*, 0 AS lote_teste FROM projeto p WHERE codigo=?", (f"F086-P000{n}",)).fetchone()  # noqa: E731
         a1 = {x["id"]: x for x in avisos_qualidade(P(1))}
@@ -3309,6 +3309,60 @@ def filho(modo):
         ver("o par marcado não volta", x.get("/api/fundos/F087/duplicados").json().get("total") == 0)
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
+        print("\n".join(res))
+    elif modo == "b3_tipologia":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador, importador_site, tipologia as tp
+        from app.publicacao import avisos_qualidade
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        v0 = tp.vocabulario(c)
+        ver("sem espelho: usa a cópia da lista do site (21 grupos de programa, 5 situações)", v0["programa"]["origem"] == "copia" and len(v0["programa"]["grupos"]) == 21 and len(v0["situacao"]["grupos"]) == 5)
+        c.execute("INSERT INTO wp_taxonomia (id, nome) VALUES (900, 'Tipologia — Natureza do trabalho'), (901, 'Tipologia — Programa / uso')")
+        for i, n in enumerate(("Edificação (obra nova)", "Reforma / ampliação", "Interiores", "Paisagismo"), start=1):
+            c.execute("INSERT INTO wp_termo (id, taxonomia_id, nome, pai_id) VALUES (?,900,?,0)", (9000 + i, n))
+        c.execute("INSERT INTO wp_termo (id, taxonomia_id, nome, pai_id) VALUES (9101,901,'Habitação',0),(9102,901,'Residência unifamiliar',9101),(9103,901,'Casa de praia',9101)")
+        c.execute("INSERT INTO wp_metadado (id, colecao_id, nome, tipo) VALUES (63001, 8007, 'Natureza do trabalho', 'Tainacan\\Metadata_Types\\Taxonomy'), (63002, 8007, 'Programa / uso', 'Tainacan\\Metadata_Types\\Taxonomy'), (63003, 8007, 'Modalidade', 'Tainacan\\Metadata_Types\\Taxonomy')")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F083','Fundo Tip','FTI',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F083',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tainacan_item_id) VALUES ('F083-P0001','F083',1,'Casa no Guarujá',1965,'Guarujá',8301)")
+        c.commit()
+        v1 = tp.vocabulario(c)
+        ver("com espelho: os termos e ids vêm do site", v1["natureza"]["origem"] == "site" and [g["id"] for g in v1["natureza"]["grupos"]] == [9001, 9002, 9003, 9004]
+            and v1["programa"]["grupos"][0]["filhos"][0]["id"] in (9102, 9103), str(v1["natureza"]["grupos"])[:200])
+        c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("a lista vai para a tela", set(x.get("/api/vocabulario/tipologia").json()["facetas"]) == {"programa", "natureza", "modalidade", "situacao"})
+        enviados = []
+        class WPFalso:
+            def definir_metadado(self, iid, mid, valor): enviados.append((iid, mid, valor))
+            def patch_item(self, *a, **k): pass
+        publicador.WP = WPFalso
+        r = x.patch("/api/projetos/F083-P0001", json={"natureza": "interiores; paisagismo", "tipologia": "casa de praia"})
+        c = connect(); pj = c.execute("SELECT natureza, tipologia FROM projeto WHERE codigo='F083-P0001'").fetchone(); c.close()
+        ver("o painel grava o nome exato do termo do site", r.status_code == 200 and pj["natureza"] == "Interiores; Paisagismo" and pj["tipologia"] == "Casa de praia", r.text[:200])
+        ver("o site recebe os ids dos termos (taxonomia não aceita texto novo)", (8301, 63001, [9003, 9004]) in enviados and (8301, 63002, [9103]) in enviados, str(enviados))
+        ver("termo fora da lista do site é recusado com o nome", x.patch("/api/projetos/F083-P0001", json={"natureza": "Bunker"}).status_code == 400 and "Bunker" in x.patch("/api/projetos/F083-P0001", json={"natureza": "Bunker"}).json()["erro"])
+        ver("situação da obra aceita só um", x.patch("/api/projetos/F083-P0001", json={"situacao_obra": "Construída; Demolida"}).status_code == 400)
+        enviados.clear()
+        r = x.patch("/api/projetos/F083-P0001", json={"modalidade": "Encomenda pública"}).json()
+        c = connect()
+        ver("termo que o espelho do site não tem: salva no painel e fica pendente para o site", (r.get("site") or {}).get("erro") and "Modalidade" in r["site"]["erro"]
+            and c.execute("SELECT modalidade FROM projeto WHERE codigo='F083-P0001'").fetchone()[0] == "Encomenda pública", str(r)[:300])
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F083',2)")
+        c.execute("INSERT INTO wp_item (id, colecao_id, status, titulo, slug, metadados) VALUES (8302, 8007, 'publish', 'P0002 — Loja', 'p0002', ?)",
+                  (__import__("json").dumps({"Código de Catalogação": "F083-P0002", "Programa / uso": "Loja", "Natureza do trabalho": "Interiores; Reforma / ampliação", "Modalidade": "Encomenda privada", "Situação da obra": "Demolida"}),))
+        c.commit(); c.close()
+        importador_site.executar(log=lambda *a: None, projeto="F083-P0002")
+        c = connect(); pj = c.execute("SELECT tipologia, natureza, modalidade, situacao_obra FROM projeto WHERE codigo='F083-P0002'").fetchone()
+        ver("a importação traz as 4 facetas que já estão no site", pj is not None and tuple(pj) == ("Loja", "Interiores; Reforma / ampliação", "Encomenda privada", "Demolida"), str(tuple(pj) if pj else None))
+        p3 = c.execute("SELECT p.*, 0 AS lote_teste FROM projeto p WHERE codigo='F083-P0001'").fetchone(); c.close()
+        ver("natureza vazia vira aviso de qualidade (sem bloquear)", not any(a["id"] == "q_natureza" for a in avisos_qualidade(p3))
+            and any(a["id"] == "q_natureza" and not a["bloqueia"] for a in avisos_qualidade({"codigo": "X", "titulo": "Casa", "ano": 1960, "cidade": "SP", "tipologia": "Loja", "natureza": None})))
         print("\n".join(res))
     elif modo == "b9_retrato":
         init_db(); _aplicar_migracoes_real()
@@ -4226,6 +4280,14 @@ else:
 print("67) B9 retrato e biografia do arquiteto pelo painel")
 rc, out = rodar("b9_retrato", f"{tmp}/b9.db")
 if rc != 0: ok(False, f"teste B9 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("68) B3 classificação do projeto com o vocabulário do site (programa, natureza, modalidade, situação)")
+rc, out = rodar("b3_tipologia", f"{tmp}/b3.db")
+if rc != 0: ok(False, f"teste B3 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

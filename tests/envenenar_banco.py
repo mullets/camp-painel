@@ -9,7 +9,7 @@ CAMPOS = {
   "fundo": ["titulo", "historia_arquivistica", "procedencia", "condicoes_acesso", "condicoes_reproducao", "fonte_historia", "credito_padrao", "motivo_fora_do_ar"],
   "agente": ["forma_autorizada", "historia", "fonte_historia", "lugares"],
   "agente_forma_variante": ["forma", "contexto"],
-  "projeto": ["titulo", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo"],
+  "projeto": ["titulo", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo", "natureza", "modalidade", "situacao_obra", "autoria"],
   "item": ["titulo", "folha", "escala", "dimensoes", "suporte", "projeto_carimbo", "escritorio_carimbo", "autor_carimbo", "credito"],
   "uso_download": ["nome", "email", "telefone", "instituicao", "uso", "material_codigo", "pagina"],
   "solicitacao": ["solicitante", "email", "instituicao", "finalidade", "detalhe", "condicoes_uso"],
