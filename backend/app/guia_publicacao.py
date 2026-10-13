@@ -107,13 +107,15 @@ def guia_agente(aid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
             _c("pagina", False, bool(pag and pag["status"] == "publish"), "Página pública do arquiteto existe no site",
                ("A página existe no site, mas está como " + str(pag["status"]) + " (não publicado)") if pag else
                "Não achei a página no espelho do site. Ela é gerada pelo plugin quando o arquiteto está ativo e tem algo publicado"),
-            _c("wpadmin", False, False, "Foto e biografia do arquiteto no WordPress (feito FORA do painel)",
-               "No wp-admin: CAMP Acervo > Arquitetos > enviar foto, escrever a biografia e ativar. O painel não faz isso",
+            _c("retrato", False, bool(con.execute("SELECT 1 FROM agente_retrato WHERE agente_id=?", (aid,)).fetchone()), "Retrato do arquiteto",
+               "Envie o retrato em Editar o arquiteto: ele vai direto para a página do arquiteto no site", _acao("editar_agente", "Editar o arquiteto", aid)),
+            _c("wpadmin", False, False, "Arquiteto ativado no WordPress (feito FORA do painel)",
+               "No wp-admin: CAMP Acervo > Arquitetos > ativar. Retrato e biografia já saem do painel",
                _acao("wpadmin", "Abrir o wp-admin", "https://camp.arq.br/wp-admin/")),
         ]
         return {"condicoes": conds, "pode_publicar": all(c["ok"] for c in conds if c["bloqueia"]), "fundos": fundos,
                 "pagina_url": pag["url"] if pag else None, "pagina_status": pag["status"] if pag else None,
                 "pode_agir": u["papel"] in ("admin", "master"),
-                "proximo_passo": _proximo(conds, a["status_site"], "O painel já fez a sua parte. Falta no wp-admin: foto, biografia e ativar o arquiteto (CAMP Acervo > Arquitetos).")}
+                "proximo_passo": _proximo(conds, a["status_site"], "O painel já fez a sua parte. Falta no wp-admin só ativar o arquiteto (CAMP Acervo > Arquitetos).")}
     finally:
         con.close()

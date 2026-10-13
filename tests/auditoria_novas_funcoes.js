@@ -1139,6 +1139,11 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [B9] retrato e biografia do arquiteto pelo painel ----------
+{ const ag=((await J(adm,'/api/agentes')).b||[])[0];
+  if(ag){ await w.editarAgente(ag.id); await sleep(600); chk(!!d.querySelector('#d-body input[type="file"][data-ea-retrato]')&&!!d.querySelector('#d-body [data-ea-reenviar]'),'[B9] editar o arquiteto deveria ter "Enviar retrato" e "Reenviar biografia e retrato ao site"');
+    chk(!ag.historia||!!d.querySelector('#d-body [data-ea-bio-apagar]'),'[B9] com biografia, deveria haver "Apagar a biografia (sai do site)"'); w.closeDrawer(true); }
+  okl.push('B9: retrato e biografia do arquiteto pelo painel'); }
 // ---------- [B4] autoria do projeto diferente do titular do fundo ----------
 { const cod=(((await J(adm,'/api/projetos')).b.itens||[])[0]||{}).codigo;
   if(cod){ await w.editarProjeto(cod); await sleep(600); chk(!!d.getElementById('ep-autoria')&&d.querySelectorAll('#ep-papel_no_projeto option').length===6,'[B4] editar o projeto deveria ter "Autoria do projeto" e o papel do titular (5 opções + vazio)'); w.closeDrawer(true);

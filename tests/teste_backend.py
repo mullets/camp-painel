@@ -3310,6 +3310,53 @@ def filho(modo):
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
         print("\n".join(res))
+    elif modo == "b9_retrato":
+        init_db(); _aplicar_migracoes_real()
+        import io
+        from PIL import Image
+        from app import auth, publicador
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F084','Fundo Ret','FRE',1,8401)")
+        c.execute("UPDATE fundo SET tainacan_term_id=8400 WHERE codigo='F000'")
+        aid = c.execute("INSERT INTO agente (tipo, forma_autorizada, historia, fonte_historia) VALUES ('pessoa','Chu Ming Silveira','Nasceu em Xangai.','Entrevista, 2020')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F084',?,'produtor'),('F000',?,'produtor')", (aid, aid))
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        hub, subidos = [], []
+        class WPFalso:
+            def gravar_hub(self, termo, meta): hub.append((termo, dict(meta))); return {"ok": True, "page_id": 601}
+            def upload_media(self, caminho, titulo="", nome=None): subidos.append((nome, titulo, open(caminho, "rb").read()[:3])); return {"id": 7001, "source_url": "u"}
+        publicador.WP = WPFalso
+        buf = io.BytesIO(); Image.new("RGB", (40, 50), "gray").save(buf, "JPEG")
+        ver("SVG/HTML não entra como retrato", x.put(f"/api/agentes/{aid}/retrato", content=b"<svg onload=alert(1)>", headers={"Content-Type": "image/svg+xml"}).status_code == 400)
+        r = x.put(f"/api/agentes/{aid}/retrato", content=buf.getvalue(), headers={"Content-Type": "image/jpeg"}).json()
+        ver("o retrato sobe para a mídia do site com nome legível", subidos and subidos[0][0] == "retrato-chu-ming-silveira.jpg" and subidos[0][2] == b"\xff\xd8\xff", str(subidos)[:200])
+        ver("e vira _camp_foto_id na página do arquiteto (só do fundo dele, nunca do F000)", hub == [(8401, {"_camp_foto_id": 7001})], str(hub))
+        ver("o painel mostra o retrato e a lista diz que tem", x.get(f"/api/agentes/{aid}/retrato").status_code == 200 and next(a for a in x.get("/api/agentes").json() if a["id"] == aid)["tem_retrato"] == 1)
+        hub.clear()
+        r = x.patch(f"/api/agentes/{aid}", json={"historia": "Nasceu em Xangai em 1941; formou-se no Mackenzie."}).json()
+        ver("editar a biografia muda o texto no site", hub and hub[-1][1].get("_camp_bio", "").startswith("Nasceu em Xangai em 1941") and hub[-1][1].get("_camp_bio_fontes") == "Entrevista, 2020", str(hub))
+        hub.clear()
+        r = x.delete(f"/api/agentes/{aid}/biografia").json()
+        c = connect(); a = c.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone()
+        ver("apagar a biografia tira o texto do painel e do site", a["historia"] is None and hub == [(8401, {"_camp_bio": "", "_camp_bio_fontes": ""})], str(hub))
+        ver("o texto apagado fica na auditoria", "Xangai" in (c.execute("SELECT detalhe FROM evento WHERE tipo='biografia_apagada'").fetchone() or [""])[0]); c.close()
+        hub.clear()
+        r = x.delete(f"/api/agentes/{aid}/retrato").json()
+        ver("tirar o retrato apaga o _camp_foto_id do site", hub == [(8401, {"_camp_foto_id": 0})] and x.get(f"/api/agentes/{aid}/retrato").status_code == 404, str(hub))
+        class WPQuebrado:
+            def __init__(self): raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub")
+        publicador.WP = WPQuebrado
+        r = x.put(f"/api/agentes/{aid}/retrato", content=buf.getvalue(), headers={"Content-Type": "image/jpeg"})
+        ver("site sem a rota: o retrato fica salvo no painel e o aviso diz que falta enviar", r.status_code == 200 and "fica na lista do que falta enviar" in r.json()["mensagem"]
+            and connect().execute("SELECT COUNT(*) FROM divergencia_site WHERE campo='pendente_hub_no_site'").fetchone()[0] == 1, r.text[:200])
+        ver("reenviar com o site fora: 502 com o motivo", x.post(f"/api/agentes/{aid}/enviar-ao-site").status_code == 502)
+        print("\n".join(res))
     elif modo == "b4_autoria":
         init_db(); _aplicar_migracoes_real()
         from app import auth, publicador, importador_site
@@ -4171,6 +4218,14 @@ else:
 print("66) B4 autoria do projeto diferente do titular do fundo (coautoria, consultoria, terceiros)")
 rc, out = rodar("b4_autoria", f"{tmp}/b4.db")
 if rc != 0: ok(False, f"teste B4 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("67) B9 retrato e biografia do arquiteto pelo painel")
+rc, out = rodar("b9_retrato", f"{tmp}/b9.db")
+if rc != 0: ok(False, f"teste B9 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

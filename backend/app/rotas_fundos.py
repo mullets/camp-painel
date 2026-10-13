@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from . import auth
@@ -244,7 +244,8 @@ class NovoAgente(BaseModel):
 def listar_agentes(q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
     sql = """SELECT a.*, (SELECT GROUP_CONCAT(forma,' | ') FROM agente_forma_variante v WHERE v.agente_id=a.id) AS formas,
-             (SELECT GROUP_CONCAT(fundo_codigo,' ') FROM fundo_agente fa WHERE fa.agente_id=a.id) AS fundos FROM agente a"""
+             (SELECT GROUP_CONCAT(fundo_codigo,' ') FROM fundo_agente fa WHERE fa.agente_id=a.id) AS fundos,
+             EXISTS(SELECT 1 FROM agente_retrato r WHERE r.agente_id=a.id) AS tem_retrato FROM agente a"""
     p = []
     if q:
         sql += " WHERE a.forma_autorizada LIKE ? OR a.id IN (SELECT agente_id FROM agente_forma_variante WHERE forma LIKE ?)"; p = [f"%{q}%", f"%{q}%"]
@@ -315,7 +316,109 @@ def editar_agente(aid: int, d: EdicaoAgente, u: dict = Depends(auth.exige("admin
     if "forma_autorizada" in mud:
         from .publicador import renomear_agente_no_site
         site = renomear_agente_no_site(aid, mud["forma_autorizada"], u["email"])
-    return {"ok": True, "campos": list(mud), "site": site}
+    hub = None
+    if "historia" in mud or "fonte_historia" in mud:   # B9: a biografia do painel é a do site (página do arquiteto)
+        from .publicador import enviar_agente_ao_hub
+        c2 = connect(); a2 = c2.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone(); c2.close()
+        hub = enviar_agente_ao_hub(aid, {"_camp_bio": a2["historia"] or "", "_camp_bio_fontes": a2["fonte_historia"] or ""}, u["email"])
+    return {"ok": True, "campos": list(mud), "site": site, "hub": hub}
+
+
+# ---- B9: retrato e biografia do arquiteto pelo painel ----
+LIMITE_RETRATO = 3 * 1024 * 1024
+
+
+def _tipo_retrato(b: bytes) -> str | None:
+    if b[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return None
+
+
+@router.get("/agentes/{aid}/retrato")
+def ver_retrato(aid: int, u: dict = Depends(auth.exige("leitura"))) -> Response:
+    con = connect()
+    r = con.execute("SELECT imagem, tipo FROM agente_retrato WHERE agente_id=?", (aid,)).fetchone(); con.close()
+    if not r:
+        raise HTTPException(404, "Sem retrato")
+    return Response(bytes(r["imagem"]), media_type=r["tipo"], headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=60"})
+
+
+@router.put("/agentes/{aid}/retrato")
+async def definir_retrato(aid: int, request: Request, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Guarda o retrato no painel e o envia à página do arquiteto no site (biblioteca de mídia + _camp_foto_id)."""
+    dados = await request.body()
+    if len(dados) > LIMITE_RETRATO:
+        raise HTTPException(413, "Retrato grande demais (máximo 3 MB).")
+    tipo = _tipo_retrato(dados)
+    if not tipo:
+        raise HTTPException(400, "Envie o retrato em JPEG ou PNG.")
+    con = connect()
+    a = con.execute("SELECT forma_autorizada FROM agente WHERE id=?", (aid,)).fetchone()
+    if not a:
+        con.close(); raise HTTPException(404, "Arquiteto não existe")
+    con.execute("""INSERT INTO agente_retrato (agente_id, imagem, tipo, media_id, atualizado_por) VALUES (?,?,?,NULL,?)
+                   ON CONFLICT(agente_id) DO UPDATE SET imagem=excluded.imagem, tipo=excluded.tipo, media_id=NULL,
+                   atualizado_por=excluded.atualizado_por, atualizado_em=datetime('now')""", (aid, dados, tipo, u["email"]))
+    _evento(con, "agente", str(aid), "retrato_atualizado", u["email"], {"bytes": len(dados), "tipo": tipo})
+    con.commit(); con.close()
+    from .publicador import enviar_agente_ao_hub
+    hub = enviar_agente_ao_hub(aid, {"_camp_foto_id": "subir"}, u["email"])
+    return {"ok": True, "hub": hub, "mensagem": _msg_hub(f"Retrato de {a['forma_autorizada']} salvo", hub)}
+
+
+@router.delete("/agentes/{aid}/retrato")
+def remover_retrato(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    n = con.execute("DELETE FROM agente_retrato WHERE agente_id=?", (aid,)).rowcount
+    if n:
+        _evento(con, "agente", str(aid), "retrato_removido", u["email"], None)
+    con.commit(); con.close()
+    from .publicador import enviar_agente_ao_hub
+    hub = enviar_agente_ao_hub(aid, {"_camp_foto_id": 0}, u["email"])
+    return {"ok": True, "hub": hub, "mensagem": _msg_hub("Retrato removido", hub)}
+
+
+@router.delete("/agentes/{aid}/biografia")
+def apagar_biografia(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Remoção rápida (ex.: "Chu Ming: retirar biografia"): apaga no painel e tira o texto do site."""
+    con = connect()
+    a = con.execute("SELECT forma_autorizada, historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone()
+    if not a:
+        con.close(); raise HTTPException(404, "Arquiteto não existe")
+    con.execute("UPDATE agente SET historia=NULL, fonte_historia=NULL, atualizado_em=datetime('now') WHERE id=?", (aid,))
+    _evento(con, "agente", str(aid), "biografia_apagada", u["email"], {"antes": {"historia": a["historia"], "fonte_historia": a["fonte_historia"]}})
+    con.commit(); con.close()
+    from .publicador import enviar_agente_ao_hub
+    hub = enviar_agente_ao_hub(aid, {"_camp_bio": "", "_camp_bio_fontes": ""}, u["email"])
+    return {"ok": True, "hub": hub, "mensagem": _msg_hub(f"Biografia de {a['forma_autorizada']} apagada", hub)}
+
+
+@router.post("/agentes/{aid}/enviar-ao-site")
+def reenviar_agente(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Reenvia biografia e retrato (ex.: depois que o fundo ganhou página no site, ou depois de uma falha)."""
+    con = connect()
+    a = con.execute("SELECT forma_autorizada, historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone()
+    tem = con.execute("SELECT 1 FROM agente_retrato WHERE agente_id=?", (aid,)).fetchone(); con.close()
+    if not a:
+        raise HTTPException(404, "Arquiteto não existe")
+    from .publicador import enviar_agente_ao_hub
+    meta = {"_camp_bio": a["historia"] or "", "_camp_bio_fontes": a["fonte_historia"] or ""}
+    if tem:
+        meta["_camp_foto_id"] = "subir"
+    hub = enviar_agente_ao_hub(aid, meta, u["email"])
+    if hub.get("erro"):
+        raise HTTPException(502, f"O site não recebeu: {hub['erro']}")
+    return {"ok": True, "hub": hub, "mensagem": _msg_hub(f"{a['forma_autorizada']}: biografia{' e retrato' if tem else ''}", hub)}
+
+
+def _msg_hub(base: str, hub: dict) -> str:
+    if hub.get("erro"):
+        return f"{base} no painel; o site não recebeu ({hub['erro'][:120]}) e fica na lista do que falta enviar"
+    if hub.get("fundos"):
+        return f"{base} e enviado ao site ({', '.join(hub['fundos'])})"
+    return f"{base}. O arquiteto ainda não tem fundo no site; vai junto quando tiver"
 
 
 class StatusFundo(BaseModel):

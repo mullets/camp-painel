@@ -161,6 +161,49 @@ def atualizar_descricao_fundo_no_site(codigo: str, ator: str) -> dict:
     return out
 
 
+def enviar_agente_ao_hub(aid: int, meta: dict, ator: str) -> dict:
+    """B9: grava retrato/biografia do arquiteto na página-hub de cada fundo que ele produziu e que já está no site.
+    O retrato sobe uma vez para a biblioteca de mídia; o id do anexo vai como _camp_foto_id."""
+    con = connect()
+    out = {"ok": False, "erro": None, "fundos": []}
+    try:
+        termos = con.execute("""SELECT f.codigo, f.tainacan_term_id FROM fundo_agente fa JOIN fundo f ON f.codigo=fa.fundo_codigo
+                                WHERE fa.agente_id=? AND fa.papel='produtor' AND f.tainacan_term_id IS NOT NULL
+                                AND UPPER(f.codigo) NOT LIKE ?""", (aid, CONVIDADO + "%")).fetchall()
+        if not termos:
+            out["ok"] = True
+            return out
+        wp = WP()
+        meta = dict(meta)
+        if meta.get("_camp_foto_id") == "subir":
+            r = con.execute("SELECT r.imagem, r.tipo, a.forma_autorizada FROM agente_retrato r JOIN agente a ON a.id=r.agente_id WHERE r.agente_id=?", (aid,)).fetchone()
+            import tempfile, os
+            ext = ".png" if r["tipo"] == "image/png" else ".jpg"
+            fd, tmp = tempfile.mkstemp(suffix=ext)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(bytes(r["imagem"]))
+            try:
+                base = unicodedata.normalize("NFKD", r["forma_autorizada"] or "").encode("ascii", "ignore").decode("ascii").lower()
+                nome = "retrato-" + (re.sub(r"[^a-z0-9]+", "-", base).strip("-") or str(aid)) + ext
+                m = wp.upload_media(tmp, f"Retrato de {r['forma_autorizada']}", nome=nome)
+            finally:
+                os.unlink(tmp)
+            con.execute("UPDATE agente_retrato SET media_id=? WHERE agente_id=?", (m["id"], aid))
+            meta["_camp_foto_id"] = m["id"]
+        for codigo, termo in termos:
+            wp.gravar_hub(termo, meta)
+            out["fundos"].append(codigo)
+        out["ok"] = True
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('agente',?,'site_hub_arquiteto',?,?)",
+                    (str(aid), ator, json.dumps({"campos": sorted(meta), "fundos": out["fundos"]}, ensure_ascii=False)))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]
+        _pendencia(con, "agente", str(aid), "pendente_hub_no_site", out["erro"])
+    finally:
+        con.commit(); con.close()
+    return out
+
+
 @_nunca_convidado
 def criar_fundo_no_site(codigo: str, ator: str) -> dict:
     """Cria termos 'Fundos' e 'Arquitetos' para o fundo. Idempotente (não recria se já há term_id)."""
