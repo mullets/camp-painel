@@ -1139,6 +1139,27 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H24] Configurações e Usuários: busca, seções, estado ao vivo, Testar, segredos com "Trocar", mudança perigosa com antes/depois, papéis em cartões ----------
+{ w.route_to('config'); await sleep(2500);
+  chk(d.querySelectorAll('#cfg-nav [data-cfg-ir]').length>=5,'[H24] deveria haver atalhos para as seções');
+  const bu=d.getElementById('cfg-busca'); bu.value='qnap ip'; bu.dispatchEvent(new w.Event('input',{bubbles:true}));
+  const vis=[...d.querySelectorAll('#cfg-body .cfg-campo')].filter(l=>!l.hidden&&!l.closest('.cfg-secao').hidden).map(l=>l.getAttribute('title'));
+  chk(vis.includes('qnap.ip')&&vis.every(t=>/qnap/.test(t)),'[H24] a busca "qnap ip" deveria mostrar só os campos do QNAP: '+vis.join(',')); bu.value=''; bu.dispatchEvent(new w.Event('input',{bubbles:true}));
+  const sen=d.querySelector('[data-cfg-chave="qnap.senha"]'); chk(sen&&sen.disabled&&sen.value===''&&sen.type==='password','[H24] senha nunca vem preenchida e começa travada');
+  const tr=sen&&sen.closest('label').querySelector('[data-cfg-trocar]'); if(tr){ tr.click(); const mo=sen.closest('label').querySelector('[data-cfg-mostrar]'); chk(!sen.disabled&&mo&&!mo.hidden,'[H24] "Trocar" deveria liberar o campo e mostrar "Mostrar"'); sen.value='abc'; mo.click(); chk(sen.type==='text','[H24] "Mostrar" deveria revelar o que foi digitado'); sen.value=''; }
+  chk(!!d.querySelector('#cfg-body [data-cfg-chave="qnap.ip"]').closest('label').querySelector('.cfg-vivo'),'[H24] o IP do QNAP deveria ter o estado ao vivo ao lado ("responde"/"sem resposta")');
+  const ip=d.querySelector('[data-cfg-chave="qnap.ip"]'), ip0=ip.dataset.orig, cOrig=w.confirmar; let pedido=null; w.confirmar=o=>{pedido=o;return Promise.resolve(false)};
+  ip.value='192.168.15.99'; ip.dispatchEvent(new w.Event('input',{bubbles:true})); ip.closest('.cfg-secao').querySelector('[data-cfg-salvar]').click(); await sleep(600); w.confirmar=cOrig;
+  const ipApi=((await J(adm,'/api/config')).b.find(c=>c.chave==='qnap.ip')||{}).valor;
+  chk(pedido&&/192\.168\.15\.99/.test(pedido.html||'')&&new RegExp(ip0.replace(/\./g,'\\.')).test(pedido.html||'')&&ipApi===ip0,'[H24] trocar o IP do QNAP deveria pedir confirmação com o antes e o depois (e não gravar se cancelar): '+JSON.stringify(pedido&&pedido.titulo)+' · '+ipApi);
+  ip.value=ip0; ip.dispatchEvent(new w.Event('input',{bubbles:true})); w.limparAlteracoes('config');
+  const ts=d.querySelector('[data-cfg-testar="site"]'); if(ts){ ts.click(); await sleep(3500); const tt=(ts.closest('.cfg-secao').querySelector('.cfg-teste')||{}).textContent||''; chk(/site/i.test(tt),'[H24] "Testar" do site deveria responder em frase: "'+tt+'"') } else chk(false,'[H24] a seção do site deveria ter "Testar"');
+  chk(!/Nomenclatura de arquivo/.test(txt('#v-config')),'[H24] a nomenclatura de arquivo saiu das Configurações');
+  w.abrirNovoUsuario(); await sleep(200); const cart=[...d.querySelectorAll('#nu-papel-cartoes input[type=radio]')];
+  chk(cart.length>=3&&cart[0].checked&&d.getElementById('nu-papel').value==='leitura','[H24] o papel deveria ser escolhido em cartões explicados (começando no menor)');
+  const op=cart.find(x=>x.value==='operador'); op.checked=true; op.dispatchEvent(new w.Event('change',{bubbles:true})); chk(d.getElementById('nu-papel').value==='operador','[H24] escolher o cartão "Operador" deveria valer'); w.closeModal();
+  w.route_to('caminho'); await sleep(600); chk(/F0xx-P000x/.test(txt('#caminho-nomes')),'[H24] a explicação dos nomes de arquivo deveria estar em "Como o material anda"');
+  okl.push('H24: configurações com busca, seções, estado ao vivo, Testar, senhas com Trocar, confirmação com antes/depois e papéis em cartões'); w.route_to('painel'); }
 // ---------- [H23] Auditoria: cada linha como frase, passos da mesma ação agrupados, filtros rápidos, antes → depois com destaque ----------
 { chk(w.fraseEvento({tipo:'site_publicar',entidade:'projeto',codigo:'F026-P0005',ator:'rafael@camp.arq.br'})==='Rafael publicou o projeto F026-P0005','[H23] frase de publicação: '+w.fraseEvento({tipo:'site_publicar',entidade:'projeto',codigo:'F026-P0005',ator:'rafael@camp.arq.br'}));
   chk(w.fraseEvento({tipo:'site_dossie_criado',entidade:'projeto',codigo:'F026-P0005',ator:'rafael@camp.arq.br'})==='Rafael criou no site a página do projeto F026-P0005','[H23] contração "do projeto"');
