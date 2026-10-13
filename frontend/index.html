@@ -492,7 +492,24 @@ body:not(.admin):not(.master) #machine-status,body:not(.admin):not(.master) [dat
   .content{padding:4px 14px 30px}
   .g2,.g3,.g4{grid-template-columns:1fr}
   .hdr .act{margin-left:0}
+  /* celular: barra de baixo com 4 destinos do papel + "Mais" (o menu inteiro numa folha) */
+  body:not(.nav-aberto) .nav button:not(.mob-pri):not(#nav-mais){display:none}
+  #nav-mais{display:flex}
+  body.nav-aberto .side{position:fixed;inset:0;z-index:70;flex-direction:column;overflow:auto;padding:16px}
+  body.nav-aberto .nav{flex-direction:column}
+  body.nav-aberto .nav button{display:flex;flex-direction:row;font-size:var(--fs-base);min-height:44px;justify-content:flex-start}
+  body.nav-aberto .nav .grp{display:block}
+  /* áreas de toque de 44px */
+  .nav button,.btn,.tabs button,.abas-sit .btn{min-height:44px}
+  /* painel lateral e janelas ocupam a tela toda */
+  .main.with-drawer .drawer{position:fixed;inset:0;z-index:60;height:100%;width:100%;border-left:0}
+  .modal{padding:0}.modal .box{width:100%;height:100%;max-height:none;border-radius:0;border:0}
+  /* colunas secundárias das listas somem no celular */
+  #v-projetos table th:nth-child(3),#v-projetos table td:nth-child(3),#v-projetos table th:nth-child(4),#v-projetos table td:nth-child(4),
+  #v-erros table th:nth-child(4),#v-erros table td:nth-child(4),
+  #v-solicitacoes table th:nth-child(3),#v-solicitacoes table td:nth-child(3),#v-solicitacoes table th:nth-child(4),#v-solicitacoes table td:nth-child(4){display:none}
 }
+@media (min-width:721px){#nav-mais{display:none}}
 
 /* dashboard operacional v2 */
 .dash-v2{display:grid;gap:18px}
@@ -781,6 +798,7 @@ body.na-painel #system-banner{display:none!important}
     <div class="grp">Ajuda</div>
     <button data-v="caminho"><svg viewBox="0 0 24 24"><path d="M4 18h4l4-12h4l4 12"/><circle cx="4" cy="18" r="1.5"/><circle cx="20" cy="18" r="1.5"/></svg>Como o material anda<kbd>M</kbd></button>
     <button data-v="glossario"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>Glossário<kbd>G</kbd></button>
+  <button type="button" id="nav-mais" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Mais</button>
   </nav>
   <div class="foot" id="foot">Protótipo sem servidor</div>
 </aside>
@@ -1276,12 +1294,17 @@ function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document
 const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 // UMA regra: papel mínimo de cada ação/tela. O servidor continua sendo a garantia (devolve 403); aqui o botão simplesmente não aparece para quem não pode.
 const PODE={'rota.estacoes':'admin','rota.uso':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','analytics.diagnostico':'admin'};
+/* Celular: os 4 destinos da barra de baixo dependem do papel; o resto fica em "Mais" */
+const NAV_CELULAR={admin:['painel','decisoes','filas','projetos'],master:['painel','decisoes','filas','projetos'],operador:['painel','filas','projetos','erros'],leitura:['painel','projetos','fundos','arquitetos']};
+function marcarNavCelular(){const l=NAV_CELULAR[(EU&&EU.papel)||'leitura']||NAV_CELULAR.leitura;document.querySelectorAll('#nav > button[data-v]').forEach(b=>b.classList.toggle('mob-pri',l.includes(b.dataset.v)))}
+document.addEventListener('click',e=>{const m=e.target.closest('#nav-mais');if(m){const ab=!document.body.classList.contains('nav-aberto');document.body.classList.toggle('nav-aberto',ab);m.setAttribute('aria-expanded',String(ab));m.lastChild.textContent=ab?'Fechar':'Mais';return}
+  if(document.body.classList.contains('nav-aberto')&&e.target.closest('#nav button[data-v]')){document.body.classList.remove('nav-aberto');const mm=document.getElementById('nav-mais');if(mm){mm.setAttribute('aria-expanded','false');mm.lastChild.textContent='Mais'}}});
 function pode(acao){const min=PODE[acao];return !min||(!!EU&&(PAPEL_NIVEL[EU.papel]||0)>=PAPEL_NIVEL[min])}
-function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
+function aplicarPermissoes(){marcarNavCelular();document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
 function route_to(route){route=route||'painel';document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();const a1=route.split('/')[1]||'';if(v==='decisoes')carregarDecisoes();if(v==='filas'){FILA_FILTRO=a1||null;carregarFilas()}if(v==='projetos'){carregarProjetosAPI(a1?{situacao:a1}:{});if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='erros')carregarErros();if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){carregarEstacoes();setTimeout(()=>{carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='etiquetas')aplicarRotaEtiquetas(route)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
 let POP_VOLTANDO=false;window.addEventListener('popstate',e=>{if(POP_VOLTANDO){POP_VOLTANDO=false;return}if(temAlteracoes()){POP_VOLTANDO=true;history.go(1);confirmarDescarte().then(ok=>{if(ok){ALTERACOES_PENDENTES.clear();atualizarDirtyUI();history.back()}});return}const st=e.state||{};NAV_INDEX=Number(st.campIndex)||0;const route=st.campRoute||location.hash.slice(1)||'painel';route_to(route);requestAnimationFrame(()=>{mainEl.scrollTop=Number(st.campScroll)||0})});
-navEl.addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
+navEl.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)});
 // qualquer código ou linha marcada leva à sua página
 function routeCode(c){c=c.trim();if(/^F\d{3}$/.test(c))return 'fundo/'+c;if(/^F\d{3}-P\d{4}$/.test(c))return 'projeto/'+c;if(/^F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}$/.test(c))return 'item/'+c;if(/^F\d{3}-P\d{4}/.test(c))return 'projeto/'+c.slice(0,10);return null}
 document.addEventListener('click',e=>{const nv=e.target.closest('[data-nav]');if(nv&&!e.target.closest('button,a,input,label,select,textarea,.code,[data-no-nav]')){nav(nv.dataset.nav);return}
