@@ -2805,6 +2805,44 @@ def filho(modo):
         ver("pacote ilegível e relatório em formato novo: não quebra; marca o pacote e devolve o texto cru do relatório", s3.status_code == 200 and s3.json()["pacote_ilegivel"] is True and s3.json()["relatorio"]["formato_ok"] is False and "Formato novo" in s3.json()["relatorio"]["texto"], s3.text[:200])
         ver("lote inexistente: 404", lei.get("/api/lotes/99999/saidas-cv").status_code == 404)
         for l in res: print(l)
+    elif modo == "respostas_cv":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import auth, importador_lote
+        from fastapi.testclient import TestClient
+        from app.main import app
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(tempfile.mkdtemp()); pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        p2 = _cp.deepcopy(pac); ret = p2["documentos"].pop(1); ret["motivo"] = "autoria divergente"; p2["retirados"] = [ret]   # a 2ª folha veio RETIRADA pelo CV2
+        pasta = raiz / "Taruma"; (pasta / "catalogacao").mkdir(parents=True); (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p2, ensure_ascii=False), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'P0001',1972)")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Tarumã','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        U = f"/api/lotes/{lid}/saidas-cv/resposta"
+        r = op.post(U, json={"tipo": "sugestao", "chave": "titulo", "acao": "usar", "valor": "Edifício Tarumã"})
+        ver("'Usar' a sugestão de título troca o título provisório 'P0001' e some da lista", r.status_code == 200 and sql("SELECT titulo FROM projeto WHERE codigo='F026-P0001'") == "Edifício Tarumã" and all(x_["campo"] != "titulo" for x_ in lei.get(f"/api/lotes/{lid}/saidas-cv").json()["sugestoes"]), r.text[:120])
+        ver("responder de novo a mesma coisa: 409", op.post(U, json={"tipo": "sugestao", "chave": "titulo", "acao": "ignorar"}).status_code == 409)
+        r = op.post(U, json={"tipo": "sugestao", "chave": "ano", "acao": "usar", "valor": "1999"})
+        ver("'Usar' NÃO grava por cima do que uma pessoa já preencheu (ano 1972): 409 e o ano fica", r.status_code == 409 and sql("SELECT ano FROM projeto WHERE codigo='F026-P0001'") == 1972, r.text[:120])
+        r = op.post(U, json={"tipo": "sugestao", "chave": "cliente", "acao": "ignorar", "valor": "Fulano"})
+        ver("'Ignorar' fica registrado com quem e quando", r.status_code == 200 and lei.get(f"/api/lotes/{lid}/saidas-cv").json()["respostas"]["sugestao:cliente"]["por"] == "op@camp.arq.br")
+        r = op.post(U, json={"tipo": "proposta", "chave": "obras_na_pasta:0", "acao": "aceitar"})
+        ver("proposta aceita: só registra (nada é aplicado sozinho)", r.status_code == 200 and lei.get(f"/api/lotes/{lid}/saidas-cv").json()["respostas"]["proposta:obras_na_pasta:0"]["acao"] == "aceitar" and sql("SELECT COUNT(*) FROM projeto") == 1)
+        importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        ver("antes de devolver, a folha retirada pelo CV2 NÃO entra na revisão", sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lid) == 1 and sql("SELECT COUNT(*) FROM item WHERE codigo=?", ret["codigo"]) == 0)
+        D = {"tipo": "retirado", "chave": ret["codigo"], "acao": "devolver", "motivo": "o carimbo é do próprio Sami"}
+        ver("devolver folha retirada: operador 403; admin sem motivo 400", op.post(U, json=D).status_code == 403 and adm.post(U, json={**D, "motivo": ""}).status_code == 400)
+        r = adm.post(U, json=D); importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        ver("admin devolve COM motivo: a folha entra na próxima importação, pendente de conferência", r.status_code == 200 and sql("SELECT revisao FROM item WHERE codigo=?", ret["codigo"]) == "pendente" and sql("SELECT COUNT(*) FROM evento WHERE tipo='cv_retirado_devolver'") == 1, r.text[:120])
+        ver("leitura não responde (403); resposta inválida (400); lote inexistente (404)", lei.post(U, json={"tipo": "proposta", "chave": "x", "acao": "aceitar"}).status_code == 403 and op.post(U, json={"tipo": "sugestao", "chave": "titulo", "acao": "aceitar"}).status_code == 400 and op.post("/api/lotes/99999/saidas-cv/resposta", json={"tipo": "proposta", "chave": "x", "acao": "aceitar"}).status_code == 404)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3310,6 +3348,14 @@ else:
 print("47) #148 leitura das saídas do CAMP Vision em catalogacao/ (exemplos reais + relatório no formato do CV2)")
 rc, out = rodar("saidas_cv", f"{tmp}/saidas.db")
 if rc != 0: ok(False, f"teste das saídas do CV não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("48) #148 respostas ao CAMP Vision: usar/ignorar sugestão, aceitar/recusar proposta, devolver folha retirada")
+rc, out = rodar("respostas_cv", f"{tmp}/respostas.db")
+if rc != 0: ok(False, f"teste das respostas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

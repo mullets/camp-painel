@@ -736,6 +736,23 @@ w.route_to('painel'); await sleep(2800);
   const dd=d.createElement('div'); dd.innerHTML=w.saidasCVHTML({...S,avisos:['<img src=x onerror=alert(1)>'],relatorio:{formato_ok:false,texto:'<b>novo formato</b>',partes:[]}});
   chk(!dd.querySelector('img')&&!dd.querySelector('pre b')&&/formato do relatório mudou/.test(dd.textContent)&&/<b>novo formato<\/b>/.test(dd.textContent),'texto vindo dos arquivos do CV2 deveria aparecer escapado, e o relatório em formato novo como texto cru');
   w.fetch=fetchOrig; w.route_to('painel'); }
+// ---------- [#148 parte B] responder ao CAMP Vision: Usar/Ignorar, Aceitar/Recusar, Devolver à revisão (com motivo) ----------
+{ const fetchOrig=w.fetch, R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j}); const reqs=[];
+  const S={existe:true,lote_id:41,avisos:[],retirados:[{codigo:'F003-P9001-1972-S01-D00009',motivo:'autoria divergente'}],propostas:{obras_na_pasta:['Obra A (unidade 2)'],fotos_sem_obra:[]},sugestoes:[{campo:'titulo',sugerido:'Edifício Tarumã',atual:'P0001'}],respostas:{},relatorio:null,decisoes:[],orientacao:null,releituras:[]};
+  w.fetch=(u,o={})=>{ if(/\/api\/lotes\/\d+\/saidas-cv$/.test(String(u)))return R(S); if(/\/saidas-cv\/resposta$/.test(String(u))){reqs.push(JSON.parse(o.body));return R({ok:true})} return fetchOrig(u,o) };
+  w.route_to('projeto/F003-P9001'); await sleep(3800);
+  const usar=d.querySelector('#pj-cv [data-cv-resp="sugestao"][data-acao="usar"]'), aceitar=d.querySelector('#pj-cv [data-cv-resp="proposta"][data-acao="aceitar"]'), dev=d.querySelector('#pj-cv [data-cv-devolver]');
+  chk(!!usar&&!!aceitar&&!!dev,'deveria haver "Usar" na sugestão, "Aceitar" na proposta e "Devolver à revisão" na retirada (admin)');
+  if(usar&&aceitar&&dev){ usar.click(); await sleep(400); chk(reqs[0]&&reqs[0].tipo==='sugestao'&&reqs[0].chave==='titulo'&&reqs[0].acao==='usar'&&reqs[0].valor==='Edifício Tarumã','"Usar" deveria enviar o campo e o valor sugerido: '+JSON.stringify(reqs[0]));
+    w.route_to('projeto/F003-P9001'); await sleep(3800);
+    d.querySelector('#pj-cv [data-cv-resp="proposta"][data-acao="aceitar"]').click(); await sleep(400); chk(reqs.some(r=>r.tipo==='proposta'&&r.chave==='obras_na_pasta:0'&&r.acao==='aceitar'),'"Aceitar" deveria registrar a proposta pelo grupo e índice');
+    w.route_to('projeto/F003-P9001'); await sleep(3800); const n0=reqs.length;
+    d.querySelector('#pj-cv [data-cv-devolver]').click(); await sleep(150); const box=d.querySelector('#pj-cv [data-cv-dev-box]');
+    chk(box&&!box.hidden,'"Devolver à revisão" deveria abrir o campo de motivo na própria tela (sem prompt)');
+    box.querySelector('[data-cv-resp="retirado"]').click(); await sleep(300); chk(reqs.length===n0,'sem motivo, a devolução NÃO deveria ser enviada');
+    box.querySelector('input').value='o carimbo é do próprio arquiteto'; box.querySelector('[data-cv-resp="retirado"]').click(); await sleep(400);
+    const dv=reqs[reqs.length-1]; chk(reqs.length===n0+1&&dv.tipo==='retirado'&&dv.acao==='devolver'&&dv.chave==='F003-P9001-1972-S01-D00009'&&/carimbo/.test(dv.motivo),'com motivo, a devolução deveria ser enviada com o código e o motivo: '+JSON.stringify(dv)) }
+  w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------

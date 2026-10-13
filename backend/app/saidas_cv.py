@@ -81,7 +81,7 @@ def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     return out
 
 
-def ler_saidas(pasta: str | Path, projeto: dict) -> dict:
+def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) -> dict:
     cat = Path(pasta) / "catalogacao"
     if not cat.is_dir():
         return {"existe": False, "motivo": "esta pasta não tem catalogacao/ (o CAMP Vision ainda não entregou)"}
@@ -103,7 +103,8 @@ def ler_saidas(pasta: str | Path, projeto: dict) -> dict:
         "avisos": (pac or {}).get("avisos") if pac else None,
         "retirados": (pac or {}).get("retirados") if pac else None,
         "propostas": propostas,
-        "sugestoes": sugestoes_projeto(pac, projeto),
+        "sugestoes": [x for x in sugestoes_projeto(pac, projeto) if f"sugestao:{x['campo']}" not in (respostas or {})],
+        "respostas": respostas or {},
         "capa_sugerida": ((pac or {}).get("projeto") or {}).get("capa_sugerida") if pac else None,
         "execucao": (pac or {}).get("execucao") if pac else None,
         "relatorio": ler_relatorio(_texto(cat / "relatorio.txt")),

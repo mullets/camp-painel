@@ -55,6 +55,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     if pacote.get("projeto_codigo") != proj:
         raise HTTPException(400, f"O pacote é do projeto {pacote.get('projeto_codigo')}, e o lote é de {proj}")
     docs = pacote.get("documentos") if isinstance(pacote.get("documentos"), list) else pacote.get("itens")
+    # folha que o CAMP Vision RETIROU e um admin DEVOLVEU à revisão (cartão 148): entra como as outras, pendente de conferência
+    if isinstance(docs, list) and isinstance(pacote.get("retirados"), list):
+        devolvidas = {r[0] for r in con.execute("SELECT chave FROM cv_resposta WHERE lote_id=? AND tipo='retirado' AND acao='devolver'", (lote_id,))}
+        docs = docs + [r for r in pacote["retirados"] if isinstance(r, dict) and r.get("codigo") in devolvidas]
     if not isinstance(docs, list):
         raise HTTPException(400, "O pacote não traz a lista de documentos")
 
