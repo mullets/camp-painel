@@ -233,6 +233,7 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (p["fundo_codigo"],)).fetchone()
         valores = {"Código de Catalogação": codigo, "Ano": str(p["ano"]) if p["ano"] else None, "Cidade": p["cidade"],
                    "Programa / uso": p["tipologia"], "Cliente (divulgável)": p["cliente"],
+                   "Autoria do projeto": p["autoria"], "Papel no projeto": PAPEIS_PROJETO.get(p["papel_no_projeto"] or "", p["papel_no_projeto"]),
                    "Fundo": p["fundo_termo"] or p["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None}
         for nome, valor in valores.items():
             if valor in (None, ""):
@@ -255,7 +256,28 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
 
 
 COL_ACERVO = 8013
-CAMPOS_PROJETO_SITE = {"ano": "Ano", "cidade": "Cidade", "cliente": "Cliente (divulgável)", "tipologia": "Programa / uso"}
+CAMPOS_PROJETO_SITE = {"ano": "Ano", "cidade": "Cidade", "cliente": "Cliente (divulgável)", "tipologia": "Programa / uso",
+                       "autoria": "Autoria do projeto", "papel_no_projeto": "Papel no projeto"}
+# B4: papel do titular do fundo no projeto. O painel guarda a chave; o site recebe o rótulo.
+PAPEIS_PROJETO = {"autor": "Autor", "coautor": "Coautoria", "consultor": "Consultor", "colaborador": "Colaborador", "terceiros": "Projeto de terceiros"}
+
+
+def papel_do_site(texto: str | None) -> str | None:
+    """Rótulo vindo do site -> chave do painel (sem acento, pelo começo da palavra). Desconhecido fica como veio."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(texto or "")).encode("ascii", "ignore").decode().strip().lower()
+    if not t:
+        return None
+    for pref, chave in (("coaut", "coautor"), ("co-aut", "coautor"), ("consult", "consultor"), ("colabor", "colaborador"), ("terceir", "terceiros"), ("autor", "autor")):
+        if t.startswith(pref) or (pref == "terceir" and "terceir" in t):
+            return chave
+    return t
+
+
+def _valor_site(campo: str, v):
+    if campo == "papel_no_projeto":
+        return PAPEIS_PROJETO.get(v or "", v or "")
+    return "" if v in (None, 0) else str(v)
 
 
 def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
@@ -275,8 +297,7 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
             if campo in campos:
                 mid, _ = _meta(con, COL_PROJETOS, nome)
                 if mid:
-                    v = p[campo]
-                    wp.definir_metadado(p["tainacan_item_id"], mid, "" if v in (None, 0) else str(v))
+                    wp.definir_metadado(p["tainacan_item_id"], mid, _valor_site(campo, p[campo]))
                     out["enviados"].append(nome)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_metadados',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001

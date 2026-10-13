@@ -1139,6 +1139,12 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [B4] autoria do projeto diferente do titular do fundo ----------
+{ const cod=(((await J(adm,'/api/projetos')).b.itens||[])[0]||{}).codigo;
+  if(cod){ await w.editarProjeto(cod); await sleep(600); chk(!!d.getElementById('ep-autoria')&&d.querySelectorAll('#ep-papel_no_projeto option').length===6,'[B4] editar o projeto deveria ter "Autoria do projeto" e o papel do titular (5 opções + vazio)'); w.closeDrawer(true);
+    chk(typeof w.registrarAutoria==='function','[B4] "Registrar coautoria/terceiros" deveria existir'); }
+  chk(!!cod,'[B4] a lista de projetos deveria ter ao menos um projeto para o teste');
+  okl.push('B4: autoria e papel no projeto'); }
 // ---------- [B1] texto do fundo no site: procedência, entrada, acesso e reprodução ----------
 { w.route_to('fundo/F002'); await sleep(2500); const det=d.getElementById('fd-site'); chk(!!det,'[B1] a descrição do fundo deveria ter "Como aparece no site"');
   if(det){ await w.carregarDescricaoSite(det); await sleep(300); chk(/Procedência:/.test(txt('#fd-site .fd-site-txt'))&&/Condições de acesso e reprodução:/.test(txt('#fd-site .fd-site-txt')),'[B1] a prévia deveria mostrar procedência e condições de reprodução: '+txt('#fd-site').slice(0,160)); }

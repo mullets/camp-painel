@@ -496,6 +496,8 @@ class EdicaoProjeto(BaseModel):
     contagem_esperada: int | None = None
     lote_teste: bool | None = None
     autorizado_site: bool | None = None
+    autoria: str | None = None            # B4: "Autoria do projeto" no site
+    papel_no_projeto: str | None = None   # B4: "Papel no projeto" (autor, coautor, consultor, colaborador, terceiros)
 
 
 @router.patch("/projetos/{codigo}")
@@ -514,8 +516,12 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
             con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloq[0] or 0} folha(s) com autoria divergente, {bloq[1] or 0} erro(s) bloqueante(s)")
     if d.ano is not None and not (d.ano == 0 or 1800 <= d.ano <= 2100):
         con.close(); raise HTTPException(400, "Ano inválido (0000 para sem data)")
+    from .publicador import PAPEIS_PROJETO
+    if d.papel_no_projeto and d.papel_no_projeto not in PAPEIS_PROJETO and d.papel_no_projeto != p["papel_no_projeto"]:
+        con.close(); raise HTTPException(400, f"Papel no projeto inválido. Use: {', '.join(PAPEIS_PROJETO)}")
     campos, vals, mud = [], [], {}
-    for k in ("titulo", "ano", "ano_fim", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo", "contagem_esperada"):
+    for k in ("titulo", "ano", "ano_fim", "cidade", "endereco_obra", "identificacao_original", "cliente", "tipologia", "ambito_conteudo", "contagem_esperada",
+              "autoria", "papel_no_projeto"):
         v = getattr(d, k)
         if v is not None and v != p[k]:
             campos.append(f"{k}=?"); vals.append(v); mud[k] = v
@@ -530,10 +536,45 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         con.commit()
     con.close()
     site = None
-    if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo")):
+    if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo", "autoria", "papel_no_projeto")):
         from .publicador import atualizar_dossie_no_site
         site = atualizar_dossie_no_site(codigo, mud, u["email"])
     return {"ok": True, "campos": list(mud), "site": site}
+
+
+class RegistroAutoria(BaseModel):
+    autoria: str
+    papel_no_projeto: str
+
+
+@router.post("/projetos/{codigo}/registrar-autoria")
+def registrar_autoria(codigo: str, d: RegistroAutoria, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """B4: folha com autoria divergente que é mesmo de outro autor (coautoria, consultoria, terceiros) deixa de bloquear:
+    o projeto passa a dizer quem projetou e qual o papel do titular do fundo; os erros de autoria do projeto ficam corrigidos."""
+    from .publicador import PAPEIS_PROJETO, atualizar_dossie_no_site
+    autoria = (d.autoria or "").strip()
+    if not autoria:
+        raise HTTPException(400, "Informe quem é o autor do projeto")
+    if d.papel_no_projeto not in PAPEIS_PROJETO or d.papel_no_projeto == "autor":
+        raise HTTPException(400, "Escolha o papel do titular do fundo: coautor, consultor, colaborador ou terceiros")
+    con = connect()
+    p = con.execute("SELECT codigo FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    if not p:
+        con.close(); raise HTTPException(404, "Projeto não existe")
+    folhas = con.execute("UPDATE item SET autoria_divergente=0 WHERE projeto_codigo=? AND autoria_divergente=1", (codigo,)).rowcount
+    rotulo = PAPEIS_PROJETO[d.papel_no_projeto]
+    erros = con.execute("""UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=?
+                           WHERE categoria='autoria_divergente' AND situacao IN ('aberto','em_correcao') AND (codigo=? OR codigo LIKE ? || '-%')""",
+                        (f"Registrado no projeto: {rotulo.lower()} · autoria {autoria}"[:300], codigo, codigo)).rowcount
+    con.execute("UPDATE projeto SET autoria=?, papel_no_projeto=?, atualizado_em=datetime('now') WHERE codigo=?", (autoria, d.papel_no_projeto, codigo))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'autoria_registrada',?,?)",
+                (codigo, u["email"], json.dumps({"autoria": autoria, "papel": d.papel_no_projeto, "folhas_liberadas": folhas, "erros_corrigidos": erros}, ensure_ascii=False)))
+    con.commit(); con.close()
+    site = atualizar_dossie_no_site(codigo, {"autoria": autoria, "papel_no_projeto": d.papel_no_projeto}, u["email"])
+    msg = f"{codigo}: registrado como {rotulo.lower()} (autoria: {autoria})"
+    if folhas:
+        msg += f"; {folhas} folha{'s' if folhas != 1 else ''} deixa{'m' if folhas != 1 else ''} de bloquear"
+    return {"ok": True, "folhas_liberadas": folhas, "erros_corrigidos": erros, "site": site, "mensagem": msg}
 
 
 class NovoProjeto(BaseModel):

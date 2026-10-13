@@ -12,6 +12,7 @@ import re
 
 from .db import connect
 from .wp import detectar_codigo
+from .publicador import papel_do_site
 
 COL_PROJETOS, COL_ACERVO = 8007, 8013
 STATUS = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar", "pending": "rascunho"}
@@ -80,15 +81,17 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
                            cidade=COALESCE(NULLIF(cidade,''),?), endereco_obra=COALESCE(NULLIF(endereco_obra,''),?),
                            cliente=COALESCE(NULLIF(cliente,''),?), tipologia=COALESCE(NULLIF(tipologia,''),?),
                            ambito_conteudo=COALESCE(NULLIF(ambito_conteudo,''),?), ano=CASE WHEN ano=0 THEN ? ELSE ano END,
+                           autoria=COALESCE(NULLIF(autoria,''),?), papel_no_projeto=COALESCE(NULLIF(papel_no_projeto,''),?),
                            atualizado_em=datetime('now') WHERE codigo=?""",
                         (it["id"], status, int(status == "no_ar"), md.get("Cidade"), md.get("Endereço"), md.get("Cliente (divulgável)"),
-                         md.get("Programa / uso"), md.get("Descrição"), ano, p))
+                         md.get("Programa / uso"), md.get("Descrição"), ano, md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")), p))
             n["projetos_atualizados"] += 1
         else:
             con.execute("""INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, cidade, endereco_obra, cliente, tipologia,
-                           ambito_conteudo, autorizado_site, status_site, tainacan_item_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           ambito_conteudo, autorizado_site, status_site, tainacan_item_id, autoria, papel_no_projeto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (p, f, numero, titulo, ano, md.get("Cidade"), md.get("Endereço"), md.get("Cliente (divulgável)"),
-                         md.get("Programa / uso"), md.get("Descrição"), int(status == "no_ar"), status, it["id"]))
+                         md.get("Programa / uso"), md.get("Descrição"), int(status == "no_ar"), status, it["id"],
+                         md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto"))))
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'importado','site',?)",
                         (p, json.dumps({"tainacan_id": it["id"]})))
             n["projetos_novos"] += 1

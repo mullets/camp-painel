@@ -3310,6 +3310,57 @@ def filho(modo):
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
         print("\n".join(res))
+    elif modo == "b4_autoria":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador, importador_site
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F085','Fundo Aut','FAU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F085',180)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tainacan_item_id) VALUES ('F085-P0180','F085',180,'Sede do IAB',1947,'São Paulo',7180)")
+        for n in (1, 2):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,autoria_divergente) VALUES (?,?,?,?,'importado',1)",
+                      (f"F085-P0180-1947-S01-D0000{n}", "F085-P0180", "S01", n))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','autoria_divergente','campvision','F085-P0180-1947-S01-D00001','carimbo de outro escritório')")
+        c.execute("INSERT INTO wp_metadado (id, colecao_id, nome, tipo) VALUES (62564, 8007, 'Autoria do projeto', 'text'), (62566, 8007, 'Papel no projeto', 'text')")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        from app.publicacao import condicoes_projeto
+        c = connect(); p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F085-P0180'").fetchone()
+        b = next(x_ for x_ in condicoes_projeto(c, p1)["condicoes"] if x_["id"] == "bloqueios"); c.close()
+        ver("autoria divergente oferece 'Registrar coautoria/terceiros' (e não só 'Ver erros')", not b["ok"] and (b.get("acao") or {}).get("tipo") == "autoria", str(b))
+        enviados = []
+        class WPFalso:
+            def definir_metadado(self, iid, mid, valor): enviados.append((iid, mid, valor))
+            def patch_item(self, *a, **k): pass
+        publicador.WP = WPFalso
+        ver("papel 'autor' não serve para liberar a autoria divergente", x.post("/api/projetos/F085-P0180/registrar-autoria", json={"autoria": "X", "papel_no_projeto": "autor"}).status_code == 400)
+        r = x.post("/api/projetos/F085-P0180/registrar-autoria", json={"autoria": "Rino Levi; Abelardo de Souza; Hélio Duarte; Zenon Lotufo; Roberto Cerqueira César; Jacob Ruchti; Miguel Forte; Galiano Ciampaglia", "papel_no_projeto": "consultor"}).json()
+        c = connect()
+        ver("registrar: as 2 folhas deixam de bloquear e o erro de autoria fica corrigido", r.get("folhas_liberadas") == 2 and r.get("erros_corrigidos") == 1
+            and c.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='F085-P0180' AND autoria_divergente=1").fetchone()[0] == 0, str(r)[:300])
+        pj = c.execute("SELECT autoria, papel_no_projeto FROM projeto WHERE codigo='F085-P0180'").fetchone()
+        ver("o projeto guarda Papel = consultor e os 8 autores", pj["papel_no_projeto"] == "consultor" and len(pj["autoria"].split(";")) == 8, str(dict(pj)))
+        ver("o site recebe 'Autoria do projeto' e 'Papel no projeto' (rótulo 'Consultor')", (7180, 62566, "Consultor") in enviados and any(e_[1] == 62564 and "Rino Levi" in e_[2] for e_ in enviados), str(enviados)[:300])
+        ver("fica na auditoria", c.execute("SELECT COUNT(*) FROM evento WHERE codigo='F085-P0180' AND tipo='autoria_registrada'").fetchone()[0] == 1)
+        c.close(); enviados.clear()
+        r = x.patch("/api/projetos/F085-P0180", json={"papel_no_projeto": "coautor"})
+        ver("editar o papel no painel muda a ficha do site", r.status_code == 200 and (7180, 62566, "Coautoria") in enviados, str(enviados))
+        ver("papel desconhecido é recusado", x.patch("/api/projetos/F085-P0180", json={"papel_no_projeto": "dono"}).status_code == 400)
+        ver("rótulos do site viram a chave do painel", [publicador.papel_do_site(t) for t in ("Consultoria", "Coautoria", "Projeto de terceiros", "Autor", "", "Ghost-writer")] == ["consultor", "coautor", "terceiros", "autor", None, "ghost-writer"])
+        c = connect()
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F085',181)")
+        c.execute("INSERT INTO wp_item (id, colecao_id, status, titulo, slug, metadados) VALUES (7181, 8007, 'publish', 'P0181 — Clube Sírio', 'p0181', ?)",
+                  (__import__("json").dumps({"Código de Catalogação": "F085-P0181", "Autoria do projeto": "Fulano; Beltrano", "Papel no projeto": "Colaboração"}),))
+        c.commit(); c.close()
+        importador_site.executar(log=lambda *a: None, projeto="F085-P0181")
+        c = connect(); pj = c.execute("SELECT autoria, papel_no_projeto FROM projeto WHERE codigo='F085-P0181'").fetchone(); c.close()
+        ver("a importação do site traz autoria e papel", pj is not None and pj["autoria"] == "Fulano; Beltrano" and pj["papel_no_projeto"] == "colaborador", str(dict(pj) if pj else None))
+        print("\n".join(res))
     elif modo == "b1_descricao":
         init_db(); _aplicar_migracoes_real()
         from app import auth, publicador
@@ -4112,6 +4163,14 @@ else:
 print("65) B1 descrição arquivística do fundo no site (procedência, entrada, acesso, reprodução)")
 rc, out = rodar("b1_descricao", f"{tmp}/b1.db")
 if rc != 0: ok(False, f"teste B1 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("66) B4 autoria do projeto diferente do titular do fundo (coautoria, consultoria, terceiros)")
+rc, out = rodar("b4_autoria", f"{tmp}/b4.db")
+if rc != 0: ok(False, f"teste B4 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

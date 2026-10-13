@@ -15,6 +15,12 @@ from .db import connect
 
 # Uma folha só vai ao site se: não tem autoria divergente, não é duplicata e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
 ELEGIVEL_LOCAL = "autoria_divergente=0 AND duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')"   # retida = a pessoa decidiu que esta folha não vai ao site
+
+
+def _outros_bloqueantes(con, codigo: str) -> int:
+    """B4: erros bloqueantes em aberto do projeto que NÃO são de autoria divergente (esses o "Registrar coautoria" resolve)."""
+    return con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ? || '-%') AND situacao IN ('aberto','em_correcao')
+                          AND gravidade='bloqueia' AND categoria<>'autoria_divergente'""", (codigo, codigo)).fetchone()[0]
 ELEGIVEL = f"tainacan_item_id IS NOT NULL AND {ELEGIVEL_LOCAL}"
 
 
@@ -38,7 +44,8 @@ def condicoes_projeto(con, p) -> dict:
     livre = not (div or err)
     conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Sem autoria divergente nem erros bloqueantes",
                   "detalhe": None if livre else f"{div} folha(s) com autoria divergente e {err} erro(s) bloqueante(s)",
-                  "acao": None if livre else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo}})
+                  "acao": None if livre else ({"tipo": "autoria", "rotulo": "É de outro autor? Registrar coautoria/terceiros", "alvo": codigo} if div and not _outros_bloqueantes(con, codigo)
+                                               else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo})})   # B4: autoria divergente pode ser coautoria, não só bloqueio
 
     teste = bool(p["lote_teste"])
     conds.append({"id": "teste", "bloqueia": True, "ok": not teste, "texto": "Não é lote de teste",
