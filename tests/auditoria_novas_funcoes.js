@@ -722,6 +722,20 @@ w.route_to('painel'); await sleep(2800);
       chk(!!req&&req.b.itens.length===1&&req.b.itens[0]===cbs[0].value&&req.b.destino==='F003-P9002','Mover deveria enviar só as folhas marcadas e o destino em maiúsculas: '+JSON.stringify(req)) }
     w.fetch=fetchOrig; w.closeDrawer(true) }
   w.route_to('painel'); }
+// ---------- [#148] o que o CAMP Vision entregou: alerta da contagem, avisos, sugestões, relatório, decisões e orientação da folha ----------
+{ const fetchOrig=w.fetch, R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j});
+  w.route_to('projeto/F003-P9001'); await sleep(3500); const it0=(w.ITENS_PJ||[]).find(x=>x.lote_id); const cod=it0?it0.codigo:'F003-P9001-1972-S01-D00001', dD='D'+String(+cod.slice(-5));
+  const S={existe:true,pacote_ilegivel:false,avisos:['D2 é quase de D1 — publicar D1'],retirados:[{codigo:'F003-P9001-1972-S01-D00009',motivo:'autoria divergente'}],propostas:{obras_na_pasta:[],sem_codigo_de_unidade:[],fotos_sem_obra:[]},
+    sugestoes:[{campo:'titulo',sugerido:'Edifício Tarumã',atual:'P0001'}],capa_sugerida:cod,relatorio:{formato_ok:true,alerta_origem:'12 arquivo(s) na origem, mas 10 arquivado(s): 2 não chegaram ao acervo.',numeros:{origem:12,arquivados:10,documentos:10},texto:'1. Arquivos...',partes:[{n:1,titulo:'Arquivos na origem × registros na saída',itens:['12 arquivo(s) na origem, 10 arquivado(s)']},{n:4,titulo:'Autoria divergente e projeto divergente (não publicar)',itens:['D9: autoria divergente']},{n:5,titulo:'Orientação e série incertas',itens:[dD]},{n:6,titulo:'Folhas esperadas que faltam',itens:[]}]},
+    decisoes:[{codigo:cod,acao:'nota',motivo:'conferir carimbo',por:'Rafa',em:'2026-10-10T09:07:32-03:00'}],orientacao:{texto:'incerta — conferir: '+dD,linhas:[],incertas:[dD]},releituras:[{quando:'2026-10-10T10-00',comparacao:{[cod]:{escala:{antes:'',agora:'1:100'}}}}]};
+  w.fetch=(u,o={})=>/\/api\/lotes\/\d+\/saidas-cv$/.test(String(u))?R(S):fetchOrig(u,o);
+  w.route_to('projeto/F003-P9001'); await sleep(3800); const b=txt('#pj-cv');
+  chk(/O que o CAMP Vision entregou/.test(b)&&/Conferir a contagem/.test(b)&&/2 não chegaram/.test(b)&&/Avisos do CAMP Vision/.test(b)&&/Sugestões para o projeto \(1\)/.test(b)&&/Edifício Tarumã/.test(b)&&/hoje: P0001/.test(b),'a ficha deveria mostrar o alerta da contagem, os avisos e a sugestão de título: "'+b.slice(0,220)+'"');
+  chk(/Retiradas pelo CAMP Vision \(1\)/.test(b)&&/Decisões registradas \(1\)/.test(b)&&/Relatório completo/.test(b)&&/Releituras: o que mudou \(1\)/.test(b)&&/escala: “” → “1:100”/.test(b),'deveria listar retiradas, decisões, relatório completo e o que mudou na releitura');
+  if(it0){ await w.abrirRevisaoItem(cod); await sleep(1200); chk(/orientação incerta/.test(txt('#d-body .cv-folha'))&&/conferir carimbo/.test(txt('#d-body .cv-folha')),'a janela da folha deveria mostrar a orientação incerta e a decisão registrada dela: "'+txt('#d-body .cv-folha')+'"'); w.closeDrawer(true) }
+  const dd=d.createElement('div'); dd.innerHTML=w.saidasCVHTML({...S,avisos:['<img src=x onerror=alert(1)>'],relatorio:{formato_ok:false,texto:'<b>novo formato</b>',partes:[]}});
+  chk(!dd.querySelector('img')&&!dd.querySelector('pre b')&&/formato do relatório mudou/.test(dd.textContent)&&/<b>novo formato<\/b>/.test(dd.textContent),'texto vindo dos arquivos do CV2 deveria aparecer escapado, e o relatório em formato novo como texto cru');
+  w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------

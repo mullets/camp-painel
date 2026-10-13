@@ -174,6 +174,24 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
         con.close()
 
 
+@router.get("/lotes/{lote_id}/saidas-cv")
+def saidas_cv(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Tudo o que o CAMP Vision gravou em catalogacao/ deste lote (avisos, relatório, retiradas, propostas, decisões, orientação, sugestões, releituras)."""
+    from .saidas_cv import ler_saidas
+    con = connect()
+    try:
+        l = con.execute("SELECT id, projeto_codigo, pasta_qnap FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+        if not l:
+            raise HTTPException(404, "Lote não existe")
+        p = con.execute("SELECT * FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()
+    finally:
+        con.close()
+    pasta = Path(l["pasta_qnap"] or "")
+    if not pasta.is_absolute():
+        pasta = _qnap_prontos_raiz() / pasta
+    return {"lote_id": lote_id, "projeto_codigo": l["projeto_codigo"], **ler_saidas(pasta, dict(p) if p else {})}
+
+
 @router.post("/lotes/{lote_id}/conferir-sem-pendencia")
 def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Marca como conferida só a folha SEM nada que o CAMP Vision tenha apontado (bloqueio, ressalva, sinal) e com título preenchido. O resto fica para um olho humano."""

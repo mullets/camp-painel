@@ -2760,6 +2760,51 @@ def filho(modo):
         r9 = lan.post(ini["caminho"].replace("/7/", "/8/"), json=ini["corpo"])
         ver("releitura cancelada: 'iniciado' recebe 409 (o CV2 desiste)", r9.status_code == 409, f"{r9.status_code} {r9.text[:120]}")
         for l in res: print(l)
+    elif modo == "saidas_cv":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, shutil
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(tempfile.mkdtemp())
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'P0001',1972)")
+        pasta = raiz / "F026 - SBU Sami Bussab/01 - Projetos/F026-P0001 - Edifício Tarumã"; cat = pasta / "catalogacao"; cat.mkdir(parents=True)
+        for f in ("pacote_tainacan.json", "propostas.json", "decisoes.json", "orientacao.txt"): shutil.copy(EX / f, cat / f)
+        # relatório no formato EXATO do CV2 (nucleo/entrada.py relatorio_lote, f8c8a69): 'N. Título' e itens recuados
+        rel = "Relatório do lote 12 — F026-P0001 Edifício Tarumã\norigem: 100 - Scanners/Contex\n\n1. Arquivos na origem × registros na saída\n   12 arquivo(s) na origem, 10 arquivado(s), 10 documento(s), 10 com leitura\n\n2. Distribuição por série\n   S01 Desenhos e pranchas: 10\n\n3. Duplicatas (publica só a única)\n   nenhum\n\n4. Autoria divergente e projeto divergente (não publicar)\n   F026-P0001-1972-S01-D00009: autoria divergente — carimbo 'Outro Arquiteto'\n\n5. Orientação e série incertas\n   D1, D2\n\n6. Folhas esperadas que faltam\n   nenhum\n\n7. Erros\n   nenhum\n\n8. Execução\n   Execução: CV2 2026-10-10-01\n"
+        (cat / "relatorio.txt").write_text(rel, encoding="utf-8")
+        (cat / "releituras" / "2026-10-10T10-00").mkdir(parents=True); (cat / "releituras" / "2026-10-10T10-00" / "comparacao.json").write_text(_j.dumps({"F026-P0001-1972-S01-D00001": {"escala": {"antes": "", "agora": "1:100"}}}), encoding="utf-8")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Tarumã','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid
+        vazio = raiz / "sem_catalogacao"; vazio.mkdir()
+        lid2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Vazio','F026-P0001',?,'revisao')", (str(vazio),)).lastrowid
+        ruim = raiz / "ruim"; (ruim / "catalogacao").mkdir(parents=True); (ruim / "catalogacao" / "pacote_tainacan.json").write_text("{isto não é json", encoding="utf-8"); (ruim / "catalogacao" / "relatorio.txt").write_text("Formato novo do relatório sem partes numeradas", encoding="utf-8")
+        lid3 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Ruim','F026-P0001',?,'revisao')", (str(ruim),)).lastrowid
+        c.commit(); c.close()
+        auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        lei = TestClient(app, raise_server_exceptions=False); lei.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        r = lei.get(f"/api/lotes/{lid}/saidas-cv"); s = r.json()
+        ver("lê o catalogacao/ do lote (leitura pode ver)", r.status_code == 200 and s["existe"] is True, r.text[:160])
+        ver("avisos do pacote chegam iguais ao que o CV2 gravou", s["avisos"] == pac["avisos"], str(s["avisos"]))
+        rl = s["relatorio"]
+        ver("relatório: as 8 partes são reconhecidas, com os itens de cada uma", rl["formato_ok"] and len(rl["partes"]) == 8 and rl["partes"][3]["itens"][0].startswith("F026-P0001-1972-S01-D00009: autoria divergente") and rl["partes"][2]["itens"] == [], str([(p_["n"], len(p_["itens"])) for p_ in rl["partes"]]))
+        ver("relatório: origem diferente de arquivados vira ALERTA com a conta (não trava nada)", "12 arquivo(s) na origem, mas 10 arquivado(s): 2 não chegaram" in (rl["alerta_origem"] or "") and rl["numeros"] == {"origem": 12, "arquivados": 10, "documentos": 10}, str(rl.get("alerta_origem")))
+        ver("decisões registradas (decisoes.json) chegam com quem, quando, ação e motivo", isinstance(s["decisoes"], list) and s["decisoes"][0]["acao"] == "nota" and s["decisoes"][0]["por"] == "Rafa")
+        ver("orientação: as folhas 'incerta — conferir' são identificadas", s["orientacao"]["incertas"] == ["D1", "D2"], str(s["orientacao"]))
+        sug = {x_["campo"]: x_ for x_ in s["sugestoes"]}
+        ver("sugestões: o título provisório 'P0001' recebe o título do pacote; o ano já preenchido NÃO é sugerido", sug.get("titulo", {}).get("sugerido") == "Edifício Tarumã" and "ano" not in sug and s["capa_sugerida"] == pac["projeto"]["capa_sugerida"], str(s["sugestoes"]))
+        ver("propostas e releituras (o que mudou) chegam", isinstance(s["propostas"], dict) and "obras_na_pasta" in s["propostas"] and len(s["releituras"]) == 1 and "F026-P0001-1972-S01-D00001" in s["releituras"][0]["comparacao"])
+        s2 = lei.get(f"/api/lotes/{lid2}/saidas-cv").json()
+        ver("lote sem catalogacao/: diz que o CAMP Vision ainda não entregou (não quebra)", s2["existe"] is False and "ainda não entregou" in s2["motivo"])
+        s3 = lei.get(f"/api/lotes/{lid3}/saidas-cv")
+        ver("pacote ilegível e relatório em formato novo: não quebra; marca o pacote e devolve o texto cru do relatório", s3.status_code == 200 and s3.json()["pacote_ilegivel"] is True and s3.json()["relatorio"]["formato_ok"] is False and "Formato novo" in s3.json()["relatorio"]["texto"], s3.text[:200])
+        ver("lote inexistente: 404", lei.get("/api/lotes/99999/saidas-cv").status_code == 404)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3257,6 +3302,14 @@ else:
 print("46) #150 contrato do CV2: os testes usam os exemplos REAIS copiados do campvision-new (tests/contrato)")
 rc, out = rodar("contrato_cv2", f"{tmp}/contrato.db")
 if rc != 0: ok(False, f"teste do contrato não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("47) #148 leitura das saídas do CAMP Vision em catalogacao/ (exemplos reais + relatório no formato do CV2)")
+rc, out = rodar("saidas_cv", f"{tmp}/saidas.db")
+if rc != 0: ok(False, f"teste das saídas do CV não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
