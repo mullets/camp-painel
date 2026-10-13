@@ -241,7 +241,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         padrao_item = cfg_int(cfg_item, COL_ACERVO)
 
         from .publicacao import condicoes_projeto, motivos_bloqueio
-        projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? ORDER BY codigo", (codigo,)).fetchall()
+        projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL ORDER BY codigo", (codigo,)).fetchall()
         ignorados = []
         alvos = []
         for p in projetos:

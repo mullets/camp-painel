@@ -63,7 +63,7 @@ def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura
 
     for r in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, p.cidade
                               FROM projeto p
-                             WHERE p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ?
+                             WHERE (p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ?) AND p.mesclado_em IS NULL
                              LIMIT 12""", (like, nl, nl)).fetchall():
         exato = str(r["codigo"]).upper() == termo.upper()
         prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or _norm(r["titulo"]).startswith(nt)
@@ -458,7 +458,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         out["qnap"]["coletando"] = True
 
     out["pipeline"]["aguardando_revisao"] = con.execute(
-        "SELECT COUNT(*) FROM lista_processamento WHERE etapa='revisao'"
+        "SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao'"
     ).fetchone()[0]
 
     heartbeats = {r["estacao_id"]: dict(r) for r in con.execute("""

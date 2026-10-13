@@ -2567,6 +2567,97 @@ def filho(modo):
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
         for l in res: print(l)
+    elif modo == "mesclar_mover":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F087','Fundo Merge','MRG',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F087','autorizado','Fam','Termo')")
+        def proj(n, titulo, ano, status="nao_publicado"):
+            cod = f"F087-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F087',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site) VALUES (?,?,?,?,?,?)", (cod, "F087", n, titulo, ano, status))
+            return cod
+        def folha(p, ano, q, titulo, fl=None, lote=None, status="nao_publicado", tid=None):
+            cod = f"{p}-{ano:04d}-S01-D{q:05d}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,origem,lote_id,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,?,'campvision',?,'conferida',?,?)", (cod, p, q, titulo, fl, lote, status, tid))
+            return cod
+        PO, PD, PV, PP, PM, PX, PW, PX2 = proj(2, "Burihan antigo", 1975), proj(113, "Miguel Burihan", 1977), proj(228, "Clube vazio", 0), proj(5, "Publico", 1970, "no_ar"), proj(236, "Misturado", 1980), proj(87, "Praças", 0), proj(6, "Lote errado", 1960), proj(240, "Projeto certo", 1961)
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote origem',?,'/o','revisao')", (PO,)); LO = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+        o1, o2, o3 = folha(PO, 1975, 1, "Planta 1", "1", LO), folha(PO, 1975, 2, "Corte", "2", LO), folha(PO, 1975, 3, "Fachada", "3", LO, "rascunho", 555)
+        d1, d2 = folha(PD, 1977, 1, "Planta 1", "1"), folha(PD, 1977, 2, "Detalhe", "9")
+        folha(PP, 1970, 1, "Pública", "1", status="no_ar", tid=777)
+        m1, m2, m3 = folha(PM, 1980, 1, "Praça A", "1"), folha(PM, 1980, 2, "Praça B", "2"), folha(PM, 1980, 3, "Praça C", "3")
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote errado',?,'/w','revisao')", (PW,)); LW = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+        w1, w2 = folha(PW, 1960, 1, "Apto 1", "1", LW), folha(PW, 1960, 2, "Apto 2", "2", LW)
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Subpasta TIFF',?,'/w/01 - Arquivo','revisao')", (PW,)); LD = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+        c.execute("INSERT INTO localizacao_fisica (tipo, identificador) VALUES ('caixa','CX-9')"); loc = c.execute("SELECT MAX(id) FROM localizacao_fisica").fetchone()[0]
+        c.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (o2, loc))
+        c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Sami Teste Merge')"); ag = c.execute("SELECT MAX(id) FROM agente").fetchone()[0]
+        c.execute("INSERT INTO item_agente (item_codigo, agente_id, papel) VALUES (?,?,'autor')", (o2, ag))
+        c.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao) VALUES ('corrigir','orientacao','operador',?,'virada')", (o2,))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura"), ("mst@camp.arq.br", "Mst", "master")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei, mst = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br"), cli("mst@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        # 1) MESCLAR origem -> destino
+        r = adm.post(f"/api/projetos/{PO}/mesclar-em", json={"destino": PD, "motivo": "mesmo projeto"}); j = r.json()
+        n2, n3 = f"{PD}-1977-S01-D00003", f"{PD}-1977-S01-D00004"
+        ver("mesclar: move as folhas para o destino, continuando a numeração D dele", r.status_code == 200 and [m_["para"] for m_ in j["movidos"]] == [n2, n3] and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PD) == 4, r.text[:240])
+        ver("mesclar: a folha que já existe no destino (mesmo título e folha) vira duplicata, não é copiada", j["duplicatas"] == [{"codigo": o1, "duplicata_de": d1}] and sql("SELECT duplicata_de FROM item WHERE codigo=?", o1) == d1, str(j.get("duplicatas")))
+        ver("mesclar: localização, autoria e problemas acompanham a folha no código novo", sql("SELECT item_codigo FROM item_localizacao WHERE localizacao_id=?", loc) == n2 and sql("SELECT item_codigo FROM item_agente WHERE agente_id=?", ag) == n2 and sql("SELECT codigo FROM erro WHERE descricao='virada'") == n2)
+        ver("mesclar: guarda o código antigo e desfaz o vínculo da folha que tinha registro no site (que fica privado lá)", sql("SELECT codigo_anterior FROM item WHERE codigo=?", n3) == o3 and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", n3) is None and sql("SELECT status_site FROM item WHERE codigo=?", n3) == "nao_publicado" and j["movidos"][1]["tinha_registro_no_site"] is True)
+        ver("mesclar: o lote vai junto e a origem fica marcada 'mesclado em' (não é apagada)", sql("SELECT projeto_codigo FROM lista_processamento WHERE id=?", LO) == PD and sql("SELECT mesclado_em FROM projeto WHERE codigo=?", PO) == PD and sql("SELECT COUNT(*) FROM evento WHERE tipo='projeto_mesclado' AND codigo=?", PO) == 1)
+        ver("integridade: nenhuma chave estrangeira quebrada depois de recodificar", k.execute("PRAGMA foreign_key_check").fetchall() == [])
+        lista = [p_["codigo"] for p_ in adm.get("/api/projetos?fundo=F087&por_pagina=500").json()["itens"]]
+        ver("a origem mesclada some da lista de projetos e da busca, mas a ficha dela continua acessível", PO not in lista and PD in lista and all(x_["codigo"] != PO for x_ in adm.get("/api/busca?q=Burihan antigo").json().get("resultados", [])) and adm.get(f"/api/projetos/{PO}/detalhe").status_code == 200, str(lista[:6]))
+        # 2) recusas
+        ver("recusas: mesclar de novo (409), no mesmo projeto (400), destino já mesclado (409), origem pública (409), inexistente (404)",
+            adm.post(f"/api/projetos/{PO}/mesclar-em", json={"destino": PD}).status_code == 409 and adm.post(f"/api/projetos/{PD}/mesclar-em", json={"destino": PD}).status_code == 400
+            and adm.post(f"/api/projetos/{PV}/mesclar-em", json={"destino": PO}).status_code == 409 and adm.post(f"/api/projetos/{PP}/mesclar-em", json={"destino": PD}).status_code == 409
+            and adm.post("/api/projetos/F087-P9999/mesclar-em", json={"destino": PD}).status_code == 404)
+        rv = adm.post(f"/api/projetos/{PV}/mesclar-em", json={"destino": PD})
+        ver("projeto vazio (registro sem folhas) também pode ser mesclado: só fica marcado", rv.status_code == 200 and rv.json()["movidos"] == [] and sql("SELECT mesclado_em FROM projeto WHERE codigo=?", PV) == PD, rv.text[:120])
+        # 3) MOVER folhas escolhidas (separar um lote misturado)
+        mv = adm.post("/api/itens/mover", json={"itens": [m2, m3], "destino": PX})
+        ver("mover: só as folhas escolhidas vão para o destino (ano 0000), a outra fica", mv.status_code == 200 and [m_["para"] for m_ in mv.json()["movidos"]] == [f"{PX}-0000-S01-D00001", f"{PX}-0000-S01-D00002"] and sql("SELECT projeto_codigo FROM item WHERE codigo=?", m1) == PM, mv.text[:200])
+        at = adm.post("/api/itens/mover", json={"itens": [m1, "F087-P0236-1980-S01-D09999"], "destino": PX})
+        ver("mover é tudo ou nada: com uma folha inexistente, nenhuma é movida (404)", at.status_code == 404 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", m1) == PM)
+        ver("folha pública no site não é movida (409): despublique antes", adm.post("/api/itens/mover", json={"itens": [f"{PP}-1970-S01-D00001"], "destino": PX}).status_code == 409)
+        # 4) MOVER LOTE para o projeto certo
+        ml = adm.post(f"/api/filas/{LW}/mover-para", json={"projeto_codigo": PX2})
+        ver("mover lote: o lote e as folhas dele passam para o projeto certo", ml.status_code == 200 and sql("SELECT projeto_codigo FROM lista_processamento WHERE id=?", LW) == PX2 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id=?", PX2, LW) == 2, ml.text[:200])
+        # 5) DUPLICATA
+        dp = op.post(f"/api/itens/{m1}/duplicata-de", json={"codigo_original": f"{PX}-0000-S01-D00001"})
+        ver("marcar duplicata (operador pode): a folha aponta para a original", dp.status_code == 200 and sql("SELECT duplicata_de FROM item WHERE codigo=?", m1) == f"{PX}-0000-S01-D00001")
+        ver("duplicata: não aponta para outra duplicata (409), nem para si mesma (400); leitura 403",
+            op.post(f"/api/itens/{d2}/duplicata-de", json={"codigo_original": m1}).status_code == 409 and op.post(f"/api/itens/{d2}/duplicata-de", json={"codigo_original": d2}).status_code == 400
+            and lei.post(f"/api/itens/{d2}/duplicata-de", json={"codigo_original": d1}).status_code == 403)
+        # 6) DESCARTAR lote (subpasta TIFF)
+        ds = adm.post(f"/api/filas/{LD}/descartar", json={"motivo": "subpasta 01 - Arquivo Arquivístico (TIFF)", "duplicata_de": LW})
+        filas = adm.get("/api/filas").json()
+        ver("descartar: o lote sai da Fila, fica registrado quem e por quê, nada é apagado", ds.status_code == 200 and all(f_["id"] != LD for f_ in filas) and sql("SELECT descartado_motivo FROM lista_processamento WHERE id=?", LD).startswith("subpasta") and sql("SELECT COUNT(*) FROM lista_processamento WHERE id=?", LD) == 1)
+        ver("descartar: de novo (409), lote com folhas (409), motivo curto (400), operador 403",
+            adm.post(f"/api/filas/{LD}/descartar", json={"motivo": "de novo"}).status_code == 409 and adm.post(f"/api/filas/{LW}/descartar", json={"motivo": "tem folhas"}).status_code == 409
+            and adm.post(f"/api/filas/{LO}/descartar", json={"motivo": "x"}).status_code == 400 and op.post(f"/api/filas/{LO}/descartar", json={"motivo": "não pode"}).status_code == 403)
+        # 7) DESPUBLICAR
+        chamadas = []
+        class WPFalso:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): chamadas.append((wid, alvo))
+        _wp.WP = WPFalso
+        k2 = connect(); k2.execute("UPDATE projeto SET tainacan_item_id=888, autorizado_site=1 WHERE codigo=?", (PP,)); k2.commit(); k2.close()
+        ver("despublicar o que está PÚBLICO segue a regra do Publicar: admin comum recebe 403 (exige master)", adm.post(f"/api/projetos/{PP}/despublicar").status_code == 403 and sql("SELECT status_site FROM projeto WHERE codigo=?", PP) == "no_ar")
+        dsp = mst.post(f"/api/projetos/{PP}/despublicar")
+        ver("despublicar (master): página e folhas vão para 'private' no site e o projeto fica fora do ar", dsp.status_code == 200 and ("private" in [a_ for _, a_ in chamadas]) and sql("SELECT status_site FROM projeto WHERE codigo=?", PP) == "fora_do_ar", dsp.text[:200] + " " + str(chamadas))
+        ver("despublicar projeto que não está no site: 409 explicando; operador 403", adm.post(f"/api/projetos/{PX}/despublicar").status_code == 409 and op.post(f"/api/projetos/{PP}/despublicar").status_code == 403)
+        ver("só admin move e mescla (operador 403)", op.post("/api/itens/mover", json={"itens": [m1], "destino": PX}).status_code == 403 and op.post(f"/api/projetos/{PM}/mesclar-em", json={"destino": PX}).status_code == 403)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3040,6 +3131,14 @@ else:
 print("42) Folha retida na conferência: fica no painel, conta como conferida e nunca vai ao site")
 rc, out = rodar("folha_retida", f"{tmp}/ret.db")
 if rc != 0: ok(False, f"teste da folha retida não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("44) #156 mesclar, mover, mover lote, duplicata, descartar e despublicar (tudo ou nada, sem perder rastro)")
+rc, out = rodar("mesclar_mover", f"{tmp}/mesclar.db")
+if rc != 0: ok(False, f"teste do #156 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

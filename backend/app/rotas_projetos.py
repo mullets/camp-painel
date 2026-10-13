@@ -116,7 +116,7 @@ _SELECT_PROJETOS = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fun
                     p.tainacan_item_id, p.atualizado_em,
                     (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
                     (SELECT GROUP_CONCAT(DISTINCT serie_codigo) FROM item i WHERE i.projeto_codigo=p.codigo) AS series
-             FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE 1=1"""
+             FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.mesclado_em IS NULL"""
 _ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo"}
 
 

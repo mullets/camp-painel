@@ -65,7 +65,7 @@ def resumo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
     rows = con.execute("""
         SELECT f.codigo, f.sigla, f.titulo, f.data_inicio, f.data_fim, f.status_site, f.motivo_fora_do_ar, f.ativo,
-               (SELECT COUNT(*) FROM projeto p WHERE p.fundo_codigo=f.codigo) AS projetos,
+               (SELECT COUNT(*) FROM projeto p WHERE p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL) AS projetos,
                (SELECT COUNT(*) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE p.fundo_codigo=f.codigo) AS itens,
                (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='publish') AS no_site,
                (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='draft') AS rascunhos_site,
@@ -98,7 +98,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                (SELECT GROUP_CONCAT(forma, ' | ') FROM agente_forma_variante v WHERE v.agente_id=a.id) AS formas
         FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? ORDER BY fa.papel, a.forma_autorizada""", (codigo,))]
     projetos = [dict(r) for r in con.execute(
-        "SELECT codigo, titulo, ano, cidade, status_site, autorizado_site FROM projeto WHERE fundo_codigo=? ORDER BY codigo", (codigo,))]
+        "SELECT codigo, titulo, ano, cidade, status_site, autorizado_site FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL ORDER BY codigo", (codigo,))]
     site = [dict(r) for r in con.execute(
         "SELECT status, COUNT(*) AS n FROM wp_item WHERE fundo_detectado=? GROUP BY status", (codigo,))]
     eventos = [dict(r) for r in con.execute(

@@ -46,10 +46,10 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     q = lambda sql, *p: con.execute(sql, p).fetchone()[0]  # noqa: E731
     d = {
-        "filas": {"total": q("SELECT COUNT(*) FROM lista_processamento WHERE etapa NOT IN ('publicado')"),
-                  "processando": q("SELECT COUNT(*) FROM lista_processamento WHERE etapa='processando'"),
-                  "revisao": q("SELECT COUNT(*) FROM lista_processamento WHERE etapa='revisao'"),
-                  "erro": q("SELECT COUNT(*) FROM lista_processamento WHERE etapa='erro'")},
+        "filas": {"total": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa NOT IN ('publicado')"),
+                  "processando": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='processando'"),
+                  "revisao": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao'"),
+                  "erro": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='erro'")},
         "solicitacoes": {"abertas": q("SELECT COUNT(*) FROM solicitacao WHERE situacao NOT IN ('entregue','recusada')"),
                          "aguardam": q("SELECT COUNT(*) FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento')")},
         "erros": {"abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')"),
@@ -72,7 +72,7 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
         d["precisa_de_voce"].append({"tipo": "erro", "titulo": r[1], "codigo": r[0], "rota": "erros"})
     for r in con.execute("SELECT id, solicitante, situacao FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento') ORDER BY recebida_em LIMIT 3"):
         d["precisa_de_voce"].append({"tipo": "pedido", "titulo": f"{r[1]} — {r[2].replace('_', ' ')}", "codigo": str(r[0]), "rota": "solicitacoes"})
-    for r in con.execute("SELECT id, nome, projeto_codigo FROM lista_processamento WHERE etapa='revisao' ORDER BY atualizado_em LIMIT 3"):
+    for r in con.execute("SELECT id, nome, projeto_codigo FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao' ORDER BY atualizado_em LIMIT 3"):
         d["precisa_de_voce"].append({"tipo": "fila", "titulo": f"Lote {r[1]} aguarda sua revisão", "codigo": r[2], "rota": f"projeto/{r[2]}"})
     for r in con.execute("SELECT codigo, titulo FROM fundo WHERE sigla IS NULL AND ativo=1 ORDER BY codigo"):
         d["precisa_de_voce"].append({"tipo": "fundo", "titulo": f"{r[1]} sem sigla", "codigo": r[0], "rota": "fundos"})
@@ -443,6 +443,7 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
+                          WHERE l.descartado_em IS NULL
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()
     con.close()
     from .filas_fase import fase_da_lista

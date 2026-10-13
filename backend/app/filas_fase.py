@@ -36,7 +36,7 @@ def lote_ativo_por_projeto(con) -> dict:
     for l in con.execute("""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS it,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS pen
-                            FROM lista_processamento l ORDER BY l.id DESC"""):
+                            FROM lista_processamento l WHERE l.descartado_em IS NULL ORDER BY l.id DESC"""):
         d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
         atual = por_projeto.get(l["pc"])
         if atual is None:
