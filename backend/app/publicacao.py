@@ -87,6 +87,11 @@ def condicoes_projeto(con, p) -> dict:
         conds.append({"id": "folhas_excluidas", "bloqueia": False, "ok": False,
                       "texto": f"{excluidas} folha(s) com autoria divergente ou duplicadas ficam de fora da publicação", "detalhe": None, "acao": None})
     conds += avisos_qualidade(p)
+    from .imagem_site import lado_maximo_do_fundo   # B2: o limite de resolução do fundo aparece no checklist quando é mais apertado que o padrão
+    lado = lado_maximo_do_fundo(con, fundo)
+    if lado and lado < 3000:
+        conds.append({"id": "resolucao", "bloqueia": False, "ok": True, "texto": f"Imagens no site com no máximo {lado} px no lado maior (regra do fundo {fundo})",
+                      "detalhe": None, "acao": None})
     return {"condicoes": conds, "pode_publicar": all(c["ok"] for c in conds if c["bloqueia"]),
             "folhas_total": total, "folhas_elegiveis": elegiveis, "dossie_no_site": dossie}
 

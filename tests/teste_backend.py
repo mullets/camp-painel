@@ -3310,6 +3310,31 @@ def filho(modo):
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
         print("\n".join(res))
+    elif modo == "b2_resolucao":
+        init_db(); _aplicar_migracoes_real()
+        import tempfile
+        from PIL import Image
+        from app.imagem_site import lado_maximo_do_fundo
+        from app.giro_imagem import jpeg_girado
+        from app.publicacao import condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F088','Fundo Res','FRS',1),('F089','Fundo Livre','FLI',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo, situacao, resolucao_max) VALUES ('F088','autorizado','jpg_1200')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F088',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tipologia) VALUES ('F088-P0001','F088',1,'Casa',1970,'Santos','Casa')")
+        c.commit()
+        ver("jpg_1200 limita a 1200 px", lado_maximo_do_fundo(c, "F088") == 1200)
+        ver("sem direitos: o padrão de 3000 px", lado_maximo_do_fundo(c, "F089") == 3000)
+        d = tempfile.mkdtemp(); f = f"{d}/x.jpg"; Image.new("RGB", (3000, 2000), "white").save(f, "JPEG")
+        with Image.open(jpeg_girado(f, 0, 1200)) as im:
+            ver("a imagem enviada fica com o lado maior de no máximo 1200 px", max(im.size) <= 1200, str(im.size))
+        p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F088-P0001'").fetchone()
+        g = condicoes_projeto(c, p1)
+        ver("o checklist de publicar mostra o limite aplicado", any(x["id"] == "resolucao" and "1200 px" in x["texto"] for x in g["condicoes"]))
+        c.close()
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -4021,6 +4046,14 @@ else:
 print("63) B7 duplicados já cadastrados: varredura por fundo e 'não são o mesmo' que não volta")
 rc, out = rodar("b7_duplicados", f"{tmp}/b7.db")
 if rc != 0: ok(False, f"teste B7 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("64) B2 resolução máxima do fundo respeitada na imagem enviada ao site")
+rc, out = rodar("b2_resolucao", f"{tmp}/b2.db")
+if rc != 0: ok(False, f"teste B2 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

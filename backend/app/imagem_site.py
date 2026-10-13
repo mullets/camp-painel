@@ -19,6 +19,15 @@ def raiz_prontos(con) -> Path | None:
     return None
 
 
+LADO_MAXIMO = {"jpg_1200": 1200, "jpg_3000": 3000}   # "tif" = sem limite (sobe a prévia como está, ~3000 px)
+
+
+def lado_maximo_do_fundo(con, fundo_codigo: str) -> int | None:
+    """B2 · Resolução pública máxima que os direitos do fundo permitem (lado maior, em px), ou None se não há limite."""
+    r = con.execute("SELECT resolucao_max FROM direitos_fundo WHERE fundo_codigo=?", (fundo_codigo,)).fetchone()
+    return LADO_MAXIMO.get(r[0]) if r and r[0] else LADO_MAXIMO["jpg_3000"]
+
+
 def imagem_para_o_site(con, item) -> str | None:
     """`item` é uma linha com arquivo_jpg e pendencias. Devolve o caminho a subir, ou None se não há imagem."""
     raiz = raiz_prontos(con)
