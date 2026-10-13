@@ -763,6 +763,14 @@ w.route_to('painel'); await sleep(2800);
   w.fetch=(u,o={})=>/\/api\/qualidade-cv$/.test(String(u))?R({por_versao:[],por_campo:[],por_lote:[]}):fetchOrig(u,o); w.route_to('qualidade'); await sleep(800);
   chk(/Ainda não há folhas conferidas/.test(txt('#qc-corpo')),'sem dados, a página deveria explicar que os números aparecem depois da conferência');
   w.fetch=fetchOrig; w.route_to('painel'); }
+// ---------- [#151] alertas por e-mail em Estações (admin): estado de cada assunto e log de envio ----------
+{ const fetchOrig=w.fetch, R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j}); let verif=0;
+  const A={estado:[{assunto:'qnap',critico:1,texto:'O QNAP está com 1% livre (10 GB).'},{assunto:'backup',critico:0,texto:'A última cópia tem 2 h.'}],envios:[{assunto:'qnap',tipo:'critico',para:'rafael@camp.arq.br',ok:1,enviado_em:'2026-10-13 10:00:00'},{assunto:'qnap',tipo:'suprimido',ok:1,enviado_em:'2026-10-13 10:10:00'},{assunto:'site',tipo:'critico',para:'rafael@camp.arq.br',ok:0,erro:'SMTP não configurado',enviado_em:'2026-10-13 10:20:00'}]};
+  w.fetch=(u,o={})=>{ if(/\/api\/alertas$/.test(String(u)))return R(A); if(/\/api\/alertas\/verificar$/.test(String(u))){verif++;return R({envios:[]})} return fetchOrig(u,o) };
+  w.route_to('estacoes'); await sleep(3200); const t2=txt('#al-painel');
+  chk(/Alertas por e-mail/.test(t2)&&/QNAP quase cheio/.test(t2)&&/crítico/.test(t2)&&/CAMP Vision parado/.test(t2)&&/ainda não medido/.test(t2)&&/não enviado \(já avisado há menos de 6 h\)/.test(t2)&&/SMTP não configurado/.test(t2),'Estações deveria mostrar o estado de cada alerta e o log de envio: "'+t2.slice(0,220)+'"');
+  const b=d.getElementById('al-verificar'); if(b){ b.click(); await sleep(400) } chk(verif===1,'"Verificar agora" deveria pedir a verificação ao servidor');
+  w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------

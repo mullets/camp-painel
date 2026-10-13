@@ -66,3 +66,24 @@ def gabarito(u: dict = Depends(auth.exige("admin"))) -> Response:
     for r in rows:
         w.writerow([r["arquivo_origem"] or "", r["campo"], r["valor_lido"] or "", r["valor_final"] or "", r["por"], r["em"]])
     return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="gabarito.csv"'})
+
+
+@router.get("/alertas")
+def alertas_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Cartão 151: o estado de cada alerta crítico e os últimos envios por e-mail."""
+    con = connect()
+    try:
+        return {"estado": [dict(r) for r in con.execute("SELECT * FROM alerta_estado ORDER BY assunto")],
+                "envios": [dict(r) for r in con.execute("SELECT * FROM alerta_envio ORDER BY id DESC LIMIT 50")]}
+    finally:
+        con.close()
+
+
+@router.post("/alertas/verificar")
+def alertas_verificar(u: dict = Depends(auth.exige("admin"))) -> dict:
+    from . import alertas as al
+    con = connect()
+    try:
+        return {"envios": al.verificar(con)}
+    finally:
+        con.close()

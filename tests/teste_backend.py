@@ -2886,6 +2886,53 @@ def filho(modo):
         k.execute("UPDATE lista_processamento SET aprovado_em=NULL WHERE id=?", (lid,)); k.commit(); op.post(f"/api/itens/{d0}/revisao", json={"estado": "pendente"})
         ver("voltar a folha para 'pendente' apaga o registro dela (não conta em dobro)", sql("SELECT COUNT(*) FROM revisao_campo WHERE item_codigo=?", d0) == 0)
         for l in res: print(l)
+    elif modo == "alertas_email":
+        init_db(); _aplicar_migracoes_real()
+        from datetime import datetime as _dt, timedelta as _td
+        from app import alertas, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for k_, v_ in (("smtp.host", "smtp.teste"), ("smtp.usuario", "painel@camp.arq.br"), ("smtp.senha", "x"), ("avisos.email", "rafael@camp.arq.br")):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb) VALUES (1000, 10)")                                   # 1% livre: crítico pela regra única
+        c.execute("INSERT INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado, atualizado_em) VALUES ('campvision2','processamento','campvision2','vigiando', datetime('now','-2 hours'))")
+        c.commit()
+        enviados = []
+        def falso(smtp, para, titulo, corpo, **kw): enviados.append({"para": para, "titulo": titulo, "corpo": corpo})
+        bk_ok = lambda: {"existe": True, "idade_horas": 2, "ok": True}  # noqa: E731
+        t0 = _dt.utcnow()
+        f1 = alertas.verificar(c, agora=t0, enviar=falso, estado_backup=bk_ok)
+        ver("QNAP crítico + CAMP Vision sem heartbeat: saem 2 e-mails de crítico", sorted(x_["assunto"] for x_ in f1 if x_["tipo"] == "critico") == ["campvision", "qnap"] and len(enviados) == 2, str(f1))
+        ver("o e-mail é em frase, diz o que fazer e traz o link da tela", any("% livre" in e_["corpo"] and "Libere espaço" in e_["corpo"] and "/#estacoes" in e_["corpo"] for e_ in enviados) and any("não dá sinal há 2 h" in e_["corpo"] for e_ in enviados), str([e_["corpo"][:90] for e_ in enviados]))
+        ver("rodar de novo sem mudança: nenhum e-mail", alertas.verificar(c, agora=t0 + _td(minutes=5), enviar=falso, estado_backup=bk_ok) == [] and len(enviados) == 2)
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb) VALUES (1000, 900)"); c.execute("UPDATE estacao_heartbeat SET atualizado_em=datetime('now')"); c.commit()
+        f2 = alertas.verificar(c, agora=t0 + _td(minutes=8), enviar=falso, estado_backup=bk_ok)
+        ver("voltou ao normal: saem 2 e-mails de 'resolvido'", sorted(x_["assunto"] for x_ in f2 if x_["tipo"] == "resolvido") == ["campvision", "qnap"] and len(enviados) == 4 and all("Resolvido" in e_["titulo"] for e_ in enviados[2:]), str(f2))
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb) VALUES (1000, 10)"); c.execute("UPDATE estacao_heartbeat SET atualizado_em=datetime('now','-3 hours')"); c.commit()
+        f3 = alertas.verificar(c, agora=t0 + _td(minutes=18), enviar=falso, estado_backup=bk_ok)
+        ver("a falha volta em 10 min: NENHUM e-mail novo (no máximo 1 a cada 6 h por assunto), e fica registrado como suprimido", len(enviados) == 4 and all(x_["tipo"] == "suprimido" for x_ in f3) and len(f3) == 2 and c.execute("SELECT COUNT(*) FROM alerta_envio WHERE tipo='suprimido'").fetchone()[0] == 2, str(f3))
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb) VALUES (1000, 900)"); c.commit(); alertas.verificar(c, agora=t0 + _td(hours=7), enviar=falso, estado_backup=bk_ok)
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb) VALUES (1000, 10)"); c.commit(); f4 = alertas.verificar(c, agora=t0 + _td(hours=7, minutes=5), enviar=falso, estado_backup=bk_ok)
+        ver("passadas 6 h, um novo episódio crítico volta a avisar", any(x_["assunto"] == "qnap" and x_["tipo"] == "critico" for x_ in f4), str(f4))
+        n = len(enviados); f5 = alertas.verificar(c, agora=t0 + _td(hours=8), enviar=falso, estado_backup=lambda: {"existe": True, "idade_horas": 40, "ok": True})
+        ver("backup com mais de 36 h: crítico", any(x_["assunto"] == "backup" and x_["tipo"] == "critico" for x_ in f5) and "36 h" in enviados[-1]["corpo"], str(f5))
+        c.execute("UPDATE configuracao SET valor='https://camp.arq.br' WHERE chave='wp.url'"); c.commit()
+        f6 = alertas.verificar(c, agora=t0 + _td(hours=9), enviar=falso, estado_backup=bk_ok, medir_site=lambda u: {"estado": "sem_resposta", "alerta": False})
+        f7 = alertas.verificar(c, agora=t0 + _td(hours=9, minutes=5), enviar=falso, estado_backup=bk_ok, medir_site=lambda u: {"estado": "sem_resposta", "alerta": True})
+        ver("site: uma falha não avisa; a regra única (duas seguidas) avisa", not any(x_["assunto"] == "site" for x_ in f6) and any(x_["assunto"] == "site" and x_["tipo"] == "critico" for x_ in f7))
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='smtp.host'"); c.commit()
+        f8 = alertas.verificar(c, agora=t0 + _td(hours=20), enviar=falso, estado_backup=lambda: {"existe": True, "idade_horas": 2, "ok": False, "erro": "disco cheio"})
+        ver("sem SMTP configurado: não quebra; o log de envio diz por quê", any(x_["assunto"] == "backup" and x_.get("erro", "").startswith("SMTP não configurado") for x_ in f8), str(f8))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False); auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        g = adm.get("/api/alertas")
+        ver("a tela lê o estado e o log de envio (só admin)", g.status_code == 200 and len(g.json()["envios"]) >= 8 and op.get("/api/alertas").status_code == 403 and op.post("/api/alertas/verificar").status_code == 403)
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3407,6 +3454,14 @@ else:
 print("49) #152 qualidade e custo do CAMP Vision: o que foi lido × corrigido, por campo e versão; gabarito.csv")
 rc, out = rodar("qualidade_cv", f"{tmp}/qualidade.db")
 if rc != 0: ok(False, f"teste da qualidade não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("50) #151 alertas críticos por e-mail: entra em crítico, resolvido, limite de 6 h, site pela regra única, log de envio")
+rc, out = rodar("alertas_email", f"{tmp}/alertas.db")
+if rc != 0: ok(False, f"teste dos alertas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

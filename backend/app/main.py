@@ -67,6 +67,34 @@ async def _startup() -> None:
     asyncio.create_task(_sincronizacao_periodica())
     asyncio.create_task(_coleta_qnap_periodica())
     asyncio.create_task(_coleta_uso_periodica())
+    asyncio.create_task(_alertas_periodicos())
+
+
+async def _alertas_periodicos() -> None:
+    """Cartão 151: confere os alertas críticos a cada 'avisos.intervalo_min' minutos (0 desliga) e manda e-mail quando um assunto muda de estado."""
+    import asyncio
+    from .alertas import verificar
+    await asyncio.sleep(90)
+    while True:
+        minutos = 5
+        try:
+            con = connect()
+            try:
+                r = con.execute("SELECT valor FROM configuracao WHERE chave='avisos.intervalo_min'").fetchone()
+                minutos = int((r[0] if r else "5") or 0)
+                if minutos > 0:
+                    def _rodar():
+                        c2 = connect()
+                        try:
+                            verificar(c2)
+                        finally:
+                            c2.close()
+                    await asyncio.to_thread(_rodar)
+            finally:
+                con.close()
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.WARNING, "alertas_falhou", str(e)[:200])
+        await asyncio.sleep(max(1, minutos or 5) * 60)
 
 
 async def _sincronizacao_periodica() -> None:
