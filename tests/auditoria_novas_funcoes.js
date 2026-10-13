@@ -374,7 +374,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- LER DADOS AGORA: pedido de releitura ao CAMP Vision ----------
 { w.confirm=()=>true; const IT='F023-P0011-1959-S01-D00003';
   w.route_to('item/'+IT); await sleep(2600);
-  chk(!!d.getElementById('it-releitura')&&/Ler dados agora/.test(txt('#it-releitura')),'a página da folha deveria ter o botão "Ler dados agora"');
+  chk(!!d.getElementById('it-releitura')&&/Pedir ao CAMP Vision para ler de novo/.test(txt('#it-releitura')),'a página da folha deveria ter o botão "Pedir ao CAMP Vision para ler de novo"');
   d.getElementById('it-releitura').click(); await sleep(2300);
   chk(/releitura pedida/.test(txt('#it-releitura-estado'))&&/ainda não consulta pedidos/.test(txt('#it-releitura-estado'))&&!!d.querySelector('#it-releitura-estado [data-rl-cancelar]'),'depois de clicar: "releitura pedida", a verdade sobre o CAMP Vision e o botão cancelar: "'+txt('#it-releitura-estado').slice(0,160)+'"');
   const lst=(await J(adm,'/api/itens/'+IT+'/releitura')).b; chk(!!lst.aberto&&lst.aberto.estado==='pedido'&&lst.aberto.item_codigo===IT,'o pedido deveria existir no servidor: '+JSON.stringify(lst.aberto));
@@ -1139,6 +1139,20 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H15] Página da folha: zoom, arquivos em linguagem simples, atalhos ← → E, relatar problema, "folha D00003" no topo ----------
+{ const its=(await J(adm,'/api/projetos/F026-P0001/detalhe')).b.itens, a=its[1].codigo, b=its[2].codigo;
+  w.nav('item/'+a); await sleep(1800);
+  chk(/✔ no QNAP|✖ não localizada no QNAP/.test(txt('#idet'))&&!/exemplo\.test\/img/.test(txt('#idet')),'[H15] "Arquivos e publicação" em linguagem simples, sem caminho de arquivo à vista');
+  chk(/Pedir ao CAMP Vision para ler de novo/.test(txt('#it-releitura')),'[H15] o botão de releitura deveria dizer o que faz');
+  chk(!!d.querySelector('#idet [data-relatar-folha="'+a+'"]')&&/Atalhos/.test(txt('#idet .it-atalhos')),'[H15] "Relatar problema nesta folha" no cabeçalho e os atalhos no rodapé');
+  chk(new RegExp('folha\\s*'+a.slice(-6)).test(txt('#where')),'[H15] o topo deveria dizer "folha '+a.slice(-6)+'": "'+txt('#where')+'"');
+  d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); await sleep(1500);
+  chk(w.location.hash==='#item/'+b,'[H15] a seta → deveria ir para a próxima folha ('+b+'): '+w.location.hash);
+  d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'e',bubbles:true})); await sleep(900);
+  chk(/Editar /.test(txt('#d-title'))&&/Mude só o que estiver errado/.test(txt('#d-body')),'[H15] a tecla E deveria abrir "Editar" com o texto de ajuda: "'+txt('#d-title')+'"'); w.closeDrawer(true); await sleep(200);
+  chk(w.rotaAtual().startsWith('item/'),'[H15] a tecla E na folha NÃO deveria ir para Estações');
+  d.querySelector('#idet [data-relatar-folha]').click(); await sleep(200); chk(d.getElementById('ne-cod').value===b,'[H15] "Relatar problema" deveria abrir o formulário com o código da folha'); w.closeModal();
+  okl.push('H15: folha com zoom, arquivos em linguagem simples, ← → e E, relatar problema, topo "folha D00003"'); }
 // ---------- [H14] Página do fundo: direitos em 4 cartões, resolução legível, PDF do termo, exemplos na descrição, busca nos projetos ----------
 { await w.editarDireitos('F003'); await sleep(400);
   chk(d.querySelectorAll('#d-body .dr-sit-opcoes input[type="radio"]').length===4&&/pode publicar; há termo assinado/.test(txt('#d-body'))&&!!d.getElementById('dr-sit'),'[H14] a situação dos direitos deveria ser 4 cartões com o efeito de cada um');
