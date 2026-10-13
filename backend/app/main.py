@@ -55,6 +55,8 @@ from .rotas_releitura import router as rotas_releitura
 app.include_router(rotas_releitura)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
+from .rotas_planilha import router as rotas_planilha
+app.include_router(rotas_planilha)
 
 
 @app.on_event("startup")

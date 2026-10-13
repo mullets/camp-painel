@@ -1139,6 +1139,10 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [B6] importar inventário por planilha ----------
+{ w.route_to('fundo/F002'); await sleep(2500); chk(!!d.querySelector('#v-fundo [data-planilha-fundo="F002"], .content.on [data-planilha-fundo="F002"]'),'[B6] o "Mais ⋯" do fundo deveria ter "Importar inventário (planilha)"');
+  w.abrirImportarPlanilha('F002'); await sleep(300); chk(!!d.getElementById('pl-arq')&&/próximo número P/.test(txt('#d-body')),'[B6] a janela deveria pedir a planilha e explicar os números P'); w.closeDrawer(true);
+  okl.push('B6: importar inventário por planilha'); w.route_to('painel'); }
 // ---------- [B12] capa do projeto escolhida no painel ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3000); const b=d.querySelector('#v-projeto [data-capa-usar], .content.on [data-capa-usar]');
   chk(!!b,'[B12] as folhas do projeto deveriam ter "Usar como capa" para o admin');

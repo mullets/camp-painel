@@ -3310,6 +3310,52 @@ def filho(modo):
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
         print("\n".join(res))
+    elif modo == "b6_planilha":
+        init_db(); _aplicar_migracoes_real()
+        import io
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F081','Fundo Inventário','FIN',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F081',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES ('F081-P0001','F081',1,'Residência Tarumã',1968,'São Paulo')")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        linhas = ["Nome do projeto;Ano;Cidade;Nº;Observações;Programa"] + [f"Casa {i};c. {1950 + i};Santos;A-{i:03d};;{'casa de praia' if i == 1 else 'Mansão' if i == 2 else ''}" for i in range(1, 48)] + [
+            "Residencia Taruma;1968;São Paulo;T-1;parecida com a que já existe", ";1970;Santos;X-9;sem nome", "Casa 3;1953;Santos;A-003;repetida na planilha"]
+        csv_ = ("\n".join(linhas) + "\n").encode("cp1252")
+        r = x.post("/api/planilha/ler", content=csv_, headers={"Content-Type": "text/csv", "X-Arquivo-Nome": "Invent%C3%A1rio%20Segnini.csv"})
+        L = r.json() if r.status_code == 200 else {}
+        ver("CSV com ; e acentos do Excel (cp1252): 50 linhas e o mapa sugerido pelas colunas", L.get("total") == 50 and L["mapa"] == {"titulo": "Nome do projeto", "ano": "Ano", "cidade": "Cidade",
+            "identificacao_original": "Nº", "ambito_conteudo": "Observações", "tipologia": "Programa"}, r.text[:300])
+        a = x.post("/api/planilha/analisar", json={"fundo": "F081", "mapa": L.get("mapa", {}), "linhas": L.get("linhas", [])}).json()
+        por_n = {y["n"]: y for y in a.get("linhas", [])}
+        ver("prévia: 47 prontas, 2 com parecido (no fundo e na própria planilha), 1 com problema", a.get("resumo") == {"total": 50, "prontas": 47, "com_parecido": 2, "com_problema": 1}, str(a.get("resumo")))
+        ver("o parecido aponta o projeto que já existe", [p_["codigo"] for p_ in por_n[48]["parecidos"]] == ["F081-P0001"] and por_n[50]["repetida_de"] == 3, str(por_n.get(48, {}).get("parecidos")))
+        ver("ano escrito 'c. 1951' vira 1951", por_n[1]["dados"]["ano"] == 1951)
+        ver("programa da planilha: o da lista do site vira o termo exato; o de fora fica vazio com aviso", por_n[1]["dados"]["tipologia"] == "Casa de praia"
+            and por_n[2]["dados"]["tipologia"] is None and any("Mansão" in a_ for a_ in por_n[2]["avisos"]), str((por_n[1]["dados"]["tipologia"], por_n[2]["avisos"])))
+        criar = list(range(1, 48)) + [48, 49, 50]
+        r = x.post("/api/planilha/criar", json={"fundo": "F081", "mapa": L.get("mapa", {}), "linhas": L.get("linhas", []), "criar": criar, "nome_arquivo": "Inventário Segnini.csv"}).json()
+        cods = [y["codigo"] for y in r.get("criados", [])]
+        ver("49 linhas escolhidas viram 49 projetos com P em sequência (a sem nome não entra)", len(cods) == 49 and cods[0] == "F081-P0002" and cods[-1] == "F081-P0050"
+            and cods == [f"F081-P{n:04d}" for n in range(2, 51)], str(cods[:3]) + str(r.get("mensagem")))
+        c = connect()
+        ver("os dados vão para o projeto (identificação original, observação)", tuple(c.execute("SELECT titulo, ano, cidade, identificacao_original FROM projeto WHERE codigo='F081-P0002'").fetchone()) == ("Casa 1", 1951, "Santos", "A-001"))
+        ev = c.execute("SELECT detalhe FROM evento WHERE codigo='F081' AND tipo='inventario_importado'").fetchone()
+        ver("evento na auditoria com o arquivo e o intervalo", ev and '"criados": 49' in ev[0] and "Inventário Segnini.csv" in ev[0] and "F081-P0050" in ev[0], ev[0] if ev else None)
+        ver("cada projeto lembra a linha e os parecidos", '"parecidos": ["F081-P0001"]' in c.execute("SELECT detalhe FROM evento WHERE tipo='criado' AND detalhe LIKE '%\"linha\": 48%'").fetchone()[0])
+        c.close()
+        import openpyxl
+        wb = openpyxl.Workbook(); ws = wb.active; ws.append(["Projeto", "Data", "Município"]); ws.append(["Clube de Campo", 1972, "Itu"]); buf = io.BytesIO(); wb.save(buf)
+        r = x.post("/api/planilha/ler", content=buf.getvalue(), headers={"Content-Type": "application/octet-stream", "X-Arquivo-Nome": "inv.xlsx"}).json()
+        ver("XLSX também (número do Excel vira texto sem ,0)", r.get("linhas") == [{"Projeto": "Clube de Campo", "Data": "1972", "Município": "Itu"}] and r["mapa"] == {"titulo": "Projeto", "ano": "Data", "cidade": "Município"}, str(r)[:200])
+        ver("formato que não é planilha é recusado", x.post("/api/planilha/ler", content=b"%PDF-1.4", headers={"X-Arquivo-Nome": "a.pdf"}).status_code == 400)
+        print("\n".join(res))
     elif modo == "b12_capa":
         init_db(); _aplicar_migracoes_real()
         from app import auth, publicador
@@ -4337,6 +4383,14 @@ else:
 print("69) B12 capa do projeto escolhida no painel")
 rc, out = rodar("b12_capa", f"{tmp}/b12.db")
 if rc != 0: ok(False, f"teste B12 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("70) B6 importar inventário de projetos por planilha (CSV/XLSX) com prévia")
+rc, out = rodar("b6_planilha", f"{tmp}/b6.db")
+if rc != 0: ok(False, f"teste B6 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
