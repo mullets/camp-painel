@@ -696,6 +696,13 @@ w.route_to('painel'); await sleep(2800);
   const velho=w.espera48({fase:'importar',atualizado_em:'2020-01-01 00:00:00'}), agora=w.espera48({fase:'importar',atualizado_em:new Date().toISOString().slice(0,19).replace('T',' ')}), pub=w.espera48({fase:'publicado',atualizado_em:'2020-01-01 00:00:00'});
   chk(/tag a/.test(velho)&&/esperando há/.test(velho)&&!/esperando/.test(agora)&&!/esperando/.test(pub),'"esperando há N" só para quem depende de pessoa e passou de 48 h: velho='+velho.replace(/<[^>]+>/g,'')+' | agora='+agora+' | publicada='+pub);
   w.route_to('painel'); }
+// ---------- [P2-16] eventos em português: nenhum tipo técnico (site_item_criado…) visível ----------
+{ chk(w.rotuloEvento('site_item_criado')==='folha criada no site'&&w.rotuloEvento('revisao_aprovada')==='lote aprovado'&&w.rotuloEvento('evento_novo_qualquer')==='evento novo qualquer','rotuloEvento deveria traduzir os tipos conhecidos e, nos demais, trocar _ por espaço');
+  chk(w.rotulo('formas_variantes')==='grafias no carimbo','"formas_variantes" deveria aparecer como "grafias no carimbo"');
+  const cruas=w.eval('Object.keys(ROTULO_EVENTO).filter(k=>k.includes("_"))');
+  w.route_to('painel'); await sleep(2500); let vis=txt('#v-painel'); chk(!cruas.some(k=>vis.includes(k)),'a Atividade do painel não deveria mostrar tipos técnicos: '+cruas.filter(k=>vis.includes(k)).join(', '));
+  w.route_to('auditoria'); await sleep(2500); { const ths=[...d.querySelectorAll('#v-auditoria thead th')].map(x=>x.textContent.trim()), ix=ths.findIndex(x=>/^Evento/i.test(x)); vis=[...d.querySelectorAll('#au-body tr')].map(r=>(r.children[ix]||{}).textContent||'').join(' | '); chk(ix>=0&&vis.length>20&&!cruas.some(k=>vis.includes(k)),'a coluna Evento da Auditoria não deveria mostrar tipos técnicos: '+cruas.filter(k=>vis.includes(k)).join(', ')+' (coluna '+ix+' de '+ths.join('/')+')') }
+  w.route_to('painel'); }
 // ---------- [H11] decisão: os botões dizem a consequência e o aviso final diz o que acontece depois ----------
 { const f=String(w.abrirDecisao)+String(w.resolverDecisao); chk(/as folhas entram em/.test(f)&&/próximo número do fundo/.test(f)&&/CAMP Vision continua a leitura em até 2 min/.test(f),'os botões da decisão deveriam dizer a consequência ("as folhas entram em …") e o aviso final deveria dizer que o CAMP Vision continua'); }
 // ---------- [Auditoria P1-12] fluxo do lote: um caminho só, do "Importar" ao "Publicado" ----------
