@@ -701,9 +701,18 @@ def logs_tecnicos(nivel: str | None = None, q: str | None = None, limite: int = 
     return {"resumo": resumo, "itens": itens}
 
 # ---------------- auditoria ----------------
+# H23 · filtros rápidos em linguagem ("Publicações", "Edições", "Pedidos", "Feito pelo CAMP Vision")
+_GRUPOS_EVENTO = {
+    "publicacoes": "(tipo LIKE '%publica%' OR tipo LIKE 'site\\_%' ESCAPE '\\' OR tipo IN ('fora_do_ar','status_site','autorizado_ao_publicar'))",
+    "edicoes": "(tipo LIKE '%edit%' OR tipo IN ('direitos','termo_direitos','giro','giro_manual','foto_atualizada','foto_removida','folha_retida','folha_liberada','projeto_mesclado','folha_movida','lote_movido','duplicata_marcada'))",
+    "pedidos": "(entidade IN ('solicitacao','uso') OR tipo LIKE 'uso\\_%' ESCAPE '\\')",
+    "campvision": "(ator LIKE '%vision%' OR ator IN ('importacao','campvision','cv') OR tipo IN ('material_novo_pronto','material_adicionado_ao_existente','releitura_concluida','folhas_importadas_do_lote','importacao_folhas'))",
+}
+
+
 @router.get("/eventos")
 def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | None = None, q: str | None = None,
-            desde: str | None = None, limite: int = 200, pagina: int = 1, por_pagina: int | None = None,
+            desde: str | None = None, limite: int = 200, pagina: int = 1, por_pagina: int | None = None, grupo: str | None = None,
             u: dict = Depends(auth.exige("admin"))) -> dict:
     # paginação: pagina/por_pagina (máx. 1000). Sem por_pagina vale o antigo "limite" (compatibilidade).
     por = max(1, min(por_pagina if por_pagina else limite, 1000)); pagina = max(1, pagina)
@@ -714,6 +723,7 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
     if tipo: sql += " AND tipo LIKE ?"; p.append(f"%{tipo}%")
     if q: sql += " AND (codigo LIKE ? OR detalhe LIKE ?)"; p += [f"%{q}%", f"%{q}%"]
     if desde: sql += " AND quando >= ?"; p.append(desde)
+    if grupo in _GRUPOS_EVENTO: sql += " AND " + _GRUPOS_EVENTO[grupo]
     total = con.execute(f"SELECT COUNT(*) FROM ({sql})", p).fetchone()[0]
     rows = con.execute(sql + " ORDER BY id DESC LIMIT ? OFFSET ?", [*p, por, (pagina - 1) * por]).fetchall()
     facetas = {"entidades": [r[0] for r in con.execute("SELECT DISTINCT entidade FROM evento ORDER BY 1")],
