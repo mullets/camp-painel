@@ -4484,6 +4484,123 @@ def filho(modo):
         op.post(f"/api/emprestimos/{e1}/devolver")
         ver("devolvida a caixa, a folha de dentro dela volta a estar no lugar", le.get(f"/api/itens/{F[2]}/emprestimo").json() is None and le.get(f"/api/itens/{F[0]}/emprestimo").json() is None)
         for l in res: print(l)
+    elif modo == "pedidos_site":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth, email_envio, rotas_pedidos
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F092','Fundo Pedidos','PED',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F093','Outro Fundo','OUT',1)")
+        for f, n in (("F092", 1), ("F092", 2), ("F093", 1)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,pasta_qnap) VALUES (?,?,?,?,1968,?)", (f"{f}-P{n:04d}", f, n, f"Projeto {n}", f"/mnt/qnap/{f}/P{n:04d}"))
+        for i in range(1, 4):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,arquivo_tif,arquivo_jpg) VALUES (?,?,?,?,?,?,?)",
+                      (f"F092-P0001-1968-S01-D{i:05d}", "F092-P0001", "S01", i, f"Planta {i}", f"/mnt/qnap/F092/P0001/TIF/F092-P0001-1968-S01-D{i:05d}.tif" if i < 3 else None, f"/mnt/qnap/F092/P0001/JPG/F092-P0001-1968-S01-D{i:05d}.jpg"))
+        c.execute("UPDATE item SET duplicata_de='F092-P0001-1968-S01-D00001' WHERE codigo='F092-P0001-1968-S01-D00003'")
+        c.execute("UPDATE configuracao SET valor='admin@camp.arq.br, outra@camp.arq.br' WHERE chave='avisos.email'")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        bom = {"nome": "Marina Costa", "email": "marina@usp.br", "instituicao": "FAU USP", "finalidade": "pesquisa", "mensagem": "Dissertação.\nObrigada.",
+               "itens": [{"codigo": "F092-P0001", "formato": "jpg_3000"}, {"codigo": "f092-p0001-1968-s01-d00002", "formato": "tif"}, "F093-P0001", {"codigo": "F092-P0001", "formato": "jpg_3000"}]}
+        H = {"X-Camp-Token": "tok-pedidos-123"}
+        # ---- (a) entrada automática ----
+        r = anon.post("/api/pedidos/site", json=bom, headers=H)
+        ver("sem pedidos.token configurado a rota fica fechada (503) e nada é gravado", r.status_code == 503 and connect().execute("SELECT COUNT(*) FROM solicitacao").fetchone()[0] == 0, str(r.status_code))
+        c = connect(); c.execute("UPDATE configuracao SET valor='tok-pedidos-123' WHERE chave='pedidos.token'"); c.commit(); c.close()
+        ver("pedidos.token é configuração sensível (a lista de Configurações não mostra o valor)",
+            next(x for x in adm.get("/api/config").json() if x["chave"] == "pedidos.token")["valor"] == "••••••••")
+        ver("sem token ou token errado: 401", anon.post("/api/pedidos/site", json=bom).status_code == 401 and anon.post("/api/pedidos/site", json=bom, headers={"X-Camp-Token": "errado"}).status_code == 401)
+        enviados = []
+        email_envio.enviar = lambda smtp, para, assunto, corpo, responder_para=None, timeout=20: enviados.append((para, assunto, corpo, responder_para))
+        c = connect(); c.executemany("UPDATE configuracao SET valor=? WHERE chave=?", [("smtp.camp.arq.br", "smtp.host"), ("painel@camp.arq.br", "smtp.remetente")]); c.commit(); c.close()
+        r = anon.post("/api/pedidos/site", json=bom, headers=H)
+        j = r.json()
+        sid = j.get("id")
+        c = connect()
+        s = c.execute("SELECT * FROM solicitacao WHERE id=?", (sid,)).fetchone()
+        its = sorted((x[0], x[1]) for x in c.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=?", (sid,)))
+        ver("pedido válido do site, sem login: 200, origem 'site', aguardando resposta, sem responsável", r.status_code == 200 and s and s["origem"] == "site" and s["situacao"] == "aguarda_resposta" and s["responsavel"] is None and s["detalhe"] == "Dissertação.\nObrigada.", str(j))
+        ver("itens: código em maiúsculas, só o código vira jpg_3000, repetido conta uma vez", its == [("F092-P0001", "jpg_3000"), ("F092-P0001-1968-S01-D00002", "tif"), ("F093-P0001", "jpg_3000")], str(its))
+        ver("o histórico do pedido registra a criação pelo site", c.execute("SELECT ator FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='criada'", (str(sid),)).fetchone()[0] == "site")
+        # ---- (d) aviso por e-mail ----
+        env = [dict(x) for x in c.execute("SELECT * FROM alerta_envio WHERE assunto='pedido'")]
+        ver("(d) chega um pedido novo: um e-mail para cada endereço de avisos.email, com responder-para quem pediu", sorted(e[0] for e in enviados) == ["admin@camp.arq.br", "outra@camp.arq.br"] and all(e[3] == "marina@usp.br" for e in enviados), str(enviados)[:300])
+        ver("(d) o e-mail diz quem pediu, para quê, o material e o link da tela", enviados and "Marina Costa" in enviados[0][2] and "pesquisa" in enviados[0][2] and "F093-P0001 (jpg_3000)" in enviados[0][2] and "#solicitacoes" in enviados[0][2] and "Marina Costa" in enviados[0][1])
+        ver("(d) cada envio fica no log dos alertas (assunto 'pedido', tipo 'novo')", len(env) == 2 and all(e["tipo"] == "novo" and e["ok"] == 1 for e in env), str(env)[:300])
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='avisos.pedido_novo'"); c.commit(); c.close()
+        enviados.clear()
+        r2 = anon.post("/api/pedidos/site", json={"nome": "Ana", "email": "ana@x.com", "finalidade": "familia", "mensagem": "Quero a casa do meu avô"}, headers=H)
+        ver("(d) avisos.pedido_novo = 0 desliga o e-mail (o pedido entra do mesmo jeito, só com a mensagem)", r2.status_code == 200 and not enviados, str(r2.json()))
+        c = connect(); c.execute("UPDATE configuracao SET valor='1' WHERE chave='avisos.pedido_novo'"); c.commit(); c.close()
+        def falha(smtp, para, assunto, corpo, responder_para=None, timeout=20): raise email_envio.EnvioErro("servidor recusou")
+        email_envio.enviar = falha
+        r3 = anon.post("/api/pedidos/site", json={"nome": "Beto", "email": "beto@x.com", "finalidade": "outro", "itens": ["F092-P0002"]}, headers=H)
+        c = connect()
+        ver("(d) e-mail que falha não derruba o pedido; a falha fica no log", r3.status_code == 200 and c.execute("SELECT COUNT(*) FROM alerta_envio WHERE assunto='pedido' AND ok=0 AND erro LIKE '%recusou%'").fetchone()[0] == 2)
+        c.close()
+        # validação e limites
+        def st(corpo, **kw): return anon.post("/api/pedidos/site", headers={**H, **kw.get("h", {})}, **({"content": corpo} if isinstance(corpo, (str, bytes)) else {"json": corpo})).status_code
+        ruins = {
+            "sem nome": {**bom, "nome": ""}, "nome de 1 letra": {**bom, "nome": "A"}, "nome comprido": {**bom, "nome": "x" * 121},
+            "sem e-mail": {k: v for k, v in bom.items() if k != "email"}, "e-mail inválido": {**bom, "email": "marina@"},
+            "finalidade fora da lista": {**bom, "finalidade": "venda"}, "mensagem comprida": {**bom, "mensagem": "x" * 2001},
+            "código inválido": {**bom, "itens": [{"codigo": "F92-P1"}]}, "código com injeção": {**bom, "itens": ["F092-P0001'; DROP TABLE item;--"]},
+            "formato inválido": {**bom, "itens": [{"codigo": "F092-P0001", "formato": "png"}]}, "51 itens": {**bom, "itens": [f"F092-P{n:04d}" for n in range(1, 52)]},
+            "sem itens nem mensagem": {**bom, "itens": [], "mensagem": ""}, "itens não é lista": {**bom, "itens": "F092-P0001"},
+            "nome não é texto": {**bom, "nome": 123}, "corpo não é objeto": [1, 2],
+        }
+        errados = {k: st(v) for k, v in ruins.items() if st(v) != 400}
+        ver(f"validação: {len(ruins)} pedidos ruins dão 400 com o motivo", not errados, str(errados))
+        msg = anon.post("/api/pedidos/site", json={**bom, "email": "x"}, headers=H).json().get("erro", "")
+        ver("o motivo vem em português e diz o campo", "email" in msg and "e-mail" in msg, msg)
+        ver("JSON quebrado: 400", st("{nome:") == 400)
+        ver("corpo maior que 16 KB: 413", st(_j.dumps({**bom, "mensagem": "x" * 17000})) == 413)
+        ver("a rota pública não abre as outras: listar pedidos sem login continua 401", anon.get("/api/solicitacoes").status_code == 401)
+        rotas_pedidos._janela[:] = [__import__("time").time()] * rotas_pedidos.LIMITE_POR_HORA
+        ver("mais de 60 pedidos na última hora: 429", st(bom) == 429)
+        rotas_pedidos._janela.clear()
+        # ---- (b) pacote de entrega ----
+        pk = op.get(f"/api/solicitacoes/{sid}/pacote").json()
+        cods = [(l["codigo"], l["formato"]) for l in pk["linhas"]]
+        ver("(b) pacote: o projeto pedido vira as folhas dele (sem a duplicata), a folha pedida entra com a resolução pedida",
+            cods == [("F092-P0001-1968-S01-D00001", "jpg_3000"), ("F092-P0001-1968-S01-D00002", "jpg_3000"), ("F092-P0001-1968-S01-D00002", "tif")], str(cods))
+        l_tif = next(l for l in pk["linhas"] if l["formato"] == "tif")
+        ver("(b) cada linha traz o caminho no QNAP do formato pedido e a resolução em palavras", l_tif["caminho_qnap"].endswith("D00002.tif") and "TIFF" in l_tif["resolucao"] and pk["linhas"][0]["caminho_qnap"].endswith(".jpg"), str(l_tif))
+        ver("(b) projeto sem folhas cadastradas fica de fora, com o motivo", pk["faltam"] == [{"codigo": "F093-P0001", "formato": "jpg_3000", "motivo": "projeto sem folhas cadastradas"}], str(pk["faltam"]))
+        csv_ = op.get(f"/api/solicitacoes/{sid}/pacote?formato=csv")
+        ver("(b) a lista sai também em CSV (para baixar)", csv_.status_code == 200 and "text/csv" in csv_.headers["content-type"] and "F092-P0001-1968-S01-D00002.tif" in csv_.text and "não entra" in csv_.text)
+        ver("(b) leitura não vê o pacote nem entrega (403); sem login 401", le.get(f"/api/solicitacoes/{sid}/pacote").status_code == 403 and le.post(f"/api/solicitacoes/{sid}/entregar", json={}).status_code == 403 and anon.get(f"/api/solicitacoes/{sid}/pacote").status_code == 401)
+        r = op.post(f"/api/solicitacoes/{sid}/entregar", json={"observacao": "por WeTransfer, 410 MB"})
+        c = connect(); s = c.execute("SELECT * FROM solicitacao WHERE id=?", (sid,)).fetchone()
+        ver("(b) marcar como entregue: situação, data e o resumo do pacote ficam no pedido", r.status_code == 200 and s["situacao"] == "entregue" and s["entregue_em"] and s["entrega"].startswith("3 arquivo(s)") and "WeTransfer" in s["entrega"], str(dict(s))[:300])
+        ver("(b) os itens ficam entregues e o histórico guarda as folhas entregues", c.execute("SELECT MIN(entregue) FROM solicitacao_item WHERE solicitacao_id=?", (sid,)).fetchone()[0] == 1 and
+            "F092-P0001-1968-S01-D00002" in c.execute("SELECT detalhe FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='editada'", (str(sid),)).fetchone()[0])
+        h = op.get(f"/api/solicitacoes/{sid}/historico").json()
+        ver("(b) a trilha da tela mostra a data da entrega", "entregue" in h["etapas"], str(h["etapas"]))
+        ver("(b) entregar de novo: 409", op.post(f"/api/solicitacoes/{sid}/entregar", json={}).status_code == 409)
+        sid2 = r2.json()["id"]
+        ver("(b) pedido sem folhas escolhidas não é entregue pelo pacote (409); pedido inexistente 404", op.post(f"/api/solicitacoes/{sid2}/entregar", json={}).status_code == 409 and op.get("/api/solicitacoes/99999/pacote").status_code == 404)
+        # ---- (c) métricas ----
+        c.execute("UPDATE solicitacao SET recebida_em=datetime(entregue_em, '-4 days') WHERE id=?", (sid,)); c.commit()
+        sid4 = op.post("/api/solicitacoes", json={"solicitante": "Editora", "finalidade": "publicacao", "itens": [{"codigo": "F092-P0001-1968-S01-D00001", "formato": "tif"}]}).json()["id"]
+        c.execute("UPDATE solicitacao SET situacao='entregue', recebida_em=datetime('now','-3 days'), entregue_em=datetime('now','-1 days') WHERE id=?", (sid4,)); c.commit(); c.close()
+        m = le.get("/api/solicitacoes/metricas").json()
+        f92 = next(f for f in m["fundos"] if f["fundo"] == "F092")
+        f93 = next(f for f in m["fundos"] if f["fundo"] == "F093")
+        ver("(c) pedidos por fundo: o pedido que pede dois fundos conta em cada um; o fundo vem com o nome", (f92["pedidos"], f92["entregues"], f92["fundo_titulo"]) == (3, 2, "Fundo Pedidos") and (f93["pedidos"], f93["entregues"]) == (1, 1), str(m["fundos"]))
+        ver("(c) tempo médio entre o pedido e a entrega: geral e por fundo (4 d e 2 d → 3 d)", m["dias_medio"] == 3.0 and f92["dias_medio"] == 3.0 and f93["dias_medio"] == 4.0, str(m))
+        ver("(c) totais: pedidos, entregues e quantos vieram do site", (m["pedidos"], m["entregues"], m["do_site"]) == (4, 2, 3), str(m))
+        ver("(c) métricas exigem login", anon.get("/api/solicitacoes/metricas").status_code == 401)
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -5150,6 +5267,14 @@ else:
 print("75) #104 resultado da publicação: o que ficou público e o endereço da página pública")
 rc, out = rodar("resultado_publicacao", f"{tmp}/respub.db")
 if rc != 0: ok(False, f"teste do resultado da publicação não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("80) Sobras #12 pedidos de material: entrada pelo site (token), pacote de entrega, métricas e aviso por e-mail")
+rc, out = rodar("pedidos_site", f"{tmp}/pedsite.db")
+if rc != 0: ok(False, f"teste dos pedidos do site não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

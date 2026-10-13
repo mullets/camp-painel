@@ -117,3 +117,47 @@ def verificar(con, agora: datetime | None = None, enviar=None, medir_site=None, 
             con.execute("UPDATE alerta_estado SET critico_avisado=0 WHERE assunto=?", (assunto,))
     con.commit()
     return feitos
+
+
+# ---------------- Sobras #12 (d): aviso de pedido de material novo ----------------
+# Assunto OPCIONAL (avisos.pedido_novo = 1 liga, 0 desliga). Não é um "crítico": sai um e-mail por pedido que chega pelo site,
+# para os mesmos destinatários (avisos.email), e cada envio fica em alerta_envio com assunto 'pedido' e tipo 'novo'.
+FINALIDADES = {"publicacao": "publicação", "pesquisa": "pesquisa", "editorial": "editorial", "familia": "família",
+               "exposicao": "exposição", "outro": "outro"}
+
+
+def avisar_pedido_novo(con, sid: int, enviar=None) -> list[dict]:
+    if _cfg(con, "avisos.pedido_novo", "1").strip().lower() in ("0", "nao", "não", "false"):
+        return []
+    s = con.execute("SELECT * FROM solicitacao WHERE id=?", (sid,)).fetchone()
+    if not s:
+        return []
+    enviar = enviar or email_envio.enviar
+    destinos = [e.strip() for e in _cfg(con, "avisos.email", "rafael@camp.arq.br").split(",") if e.strip()]
+    base = _cfg(con, "painel.url", "https://painel.camp.arq.br").rstrip("/")
+    smtp = email_envio.configuracao(con)
+    itens = [f"{r['codigo']} ({r['formato']})" for r in con.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=? ORDER BY codigo", (sid,))]
+    titulo = f"[CAMP Painel] Pedido de material novo: {' '.join(str(s['solicitante']).split())[:60]}"
+    corpo = ("Chegou um pedido de material pelo site.\n\n"
+             f"Quem pediu: {s['solicitante']}" + (f" ({s['instituicao']})" if s["instituicao"] else "") + "\n"
+             f"E-mail: {s['email'] or '—'}\n"
+             f"Para quê: {FINALIDADES.get(s['finalidade'], s['finalidade'])}\n"
+             f"Material: {', '.join(itens) or '—'}\n"
+             + (f"\nMensagem:\n{s['detalhe']}\n" if s["detalhe"] else "")
+             + f"\nVer no painel: {base}/#solicitacoes\n\n— CAMP Painel (aviso automático)")
+    feitos = []
+    for para in destinos:
+        ok, erro = False, None
+        if not email_envio.configurado(smtp):
+            erro = "SMTP não configurado (Configurações → smtp.*)"
+        else:
+            try:
+                res = enviar(smtp, para, titulo, corpo, responder_para=s["email"])
+                ok = not (isinstance(res, dict) and res.get("erro"))
+                erro = res.get("erro") if isinstance(res, dict) else None
+            except Exception as ex:  # noqa: BLE001
+                erro = str(ex)[:200]
+        con.execute("INSERT INTO alerta_envio (assunto, tipo, para, titulo, ok, erro) VALUES ('pedido','novo',?,?,?,?)", (para, titulo, int(ok), erro))
+        feitos.append({"assunto": "pedido", "tipo": "novo", "para": para, "ok": ok, "erro": erro})
+    con.commit()
+    return feitos

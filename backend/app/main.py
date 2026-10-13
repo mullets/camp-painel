@@ -53,6 +53,8 @@ from .rotas_qualidade import router as rotas_qualidade
 app.include_router(rotas_qualidade)
 from .rotas_releitura import router as rotas_releitura
 app.include_router(rotas_releitura)
+from .rotas_pedidos import router as rotas_pedidos   # Sobras #12: antes de rotas_operacao (/solicitacoes/metricas)
+app.include_router(rotas_pedidos)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 from .rotas_planilha import router as rotas_planilha
