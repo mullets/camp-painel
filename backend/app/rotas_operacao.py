@@ -838,6 +838,7 @@ class EdicaoSolicitacao(BaseModel):
     valor: float | None = None
     detalhe: str | None = None
     responsavel: int | None = None
+    entrega: str | None = None          # H17: o que foi entregue (arquivos e tamanho)
 
 
 SITUACOES = ["aguarda_resposta", "aguarda_orcamento", "aguarda_credito", "em_preparacao", "entregue", "recusada"]
@@ -892,7 +893,7 @@ def editar_solicitacao(sid: int, d: EdicaoSolicitacao, u: dict = Depends(auth.ex
             campos.append("entregue_em=datetime('now')"); con.execute("UPDATE solicitacao_item SET entregue=1 WHERE solicitacao_id=?", (sid,))
         elif s["situacao"] == "entregue":           # saiu de "entregue" (ex.: o Desfazer do H4): deixa de contar como entregue
             campos.append("entregue_em=NULL"); con.execute("UPDATE solicitacao_item SET entregue=0 WHERE solicitacao_id=?", (sid,))
-    for k in ("condicoes_uso", "valor", "detalhe", "responsavel"):
+    for k in ("condicoes_uso", "valor", "detalhe", "responsavel", "entrega"):
         v = getattr(d, k)
         if v is not None:
             campos.append(f"{k}=?"); vals.append(v); mud[k] = v
@@ -902,6 +903,29 @@ def editar_solicitacao(sid: int, d: EdicaoSolicitacao, u: dict = Depends(auth.ex
         con.commit()
     con.close()
     return {"ok": True}
+
+
+@router.get("/solicitacoes/{sid}/historico")
+def historico_solicitacao(sid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """H17: quando o pedido passou por cada situação (a trilha mostra a data de cada etapa) e o que foi entregue."""
+    con = connect()
+    try:
+        s = con.execute("SELECT recebida_em, entregue_em, entrega FROM solicitacao WHERE id=?", (sid,)).fetchone()
+        if not s:
+            raise HTTPException(404, "Pedido não existe")
+        etapas = {"aguarda_resposta": s["recebida_em"]}
+        linhas = []
+        for e in con.execute("SELECT quando, ator, detalhe FROM evento WHERE entidade='solicitacao' AND codigo=? ORDER BY id", (str(sid),)):
+            try:
+                det = json.loads(e["detalhe"] or "{}")
+            except ValueError:
+                det = {}
+            if det.get("situacao"):
+                etapas[det["situacao"]] = e["quando"]
+            linhas.append({"quando": e["quando"], "ator": e["ator"], "situacao": det.get("situacao"), "entrega": det.get("entrega")})
+        return {"etapas": etapas, "linhas": linhas, "entrega": s["entrega"]}
+    finally:
+        con.close()
 
 
 # ---------------- erros ----------------

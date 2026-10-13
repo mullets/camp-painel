@@ -1139,6 +1139,26 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H17] Solicitações: material por código + formato, trilha da situação com datas, "entregue" pergunta o que foi, modelo de e-mail, "há N dias" ----------
+{ w.route_to('solicitacoes'); await sleep(1500); w.abrirRegistroPedido(); await sleep(200);
+  d.getElementById('ns-nome').value='Pesquisadora FAU (teste H17)'; d.getElementById('ns-email').value='pesq@fau.test'; d.getElementById('ns-fin').value='pesquisa';
+  const cod=d.getElementById('ns-cod'); cod.value='F026-P0001'; d.querySelector('[name="ns-fmt"][value="tif"]').checked=true; w.nsAdicionar();
+  cod.value='xyz'; w.nsAdicionar(); chk(/Escolha um código/.test(txt('#ns-add-err')),'[H17] código inválido deveria ser recusado com explicação');
+  chk(d.querySelectorAll('#ns-lista li').length===1&&/TIFF \(original\)/.test(txt('#ns-lista'))&&d.getElementById('ns-itens').value==='F026-P0001 tif','[H17] o material deveria virar uma linha (código + formato): "'+txt('#ns-lista')+'" / '+JSON.stringify(d.getElementById('ns-itens').value));
+  await w.criarSolicitacao(); await sleep(900);
+  const P=(await J(adm,'/api/solicitacoes?situacao=todos')).b.itens.find(x=>x.solicitante==='Pesquisadora FAU (teste H17)'); chk(!!P&&/F026-P0001/.test(P.itens||''),'[H17] o pedido deveria ser criado com o material: '+JSON.stringify(P&&P.itens));
+  if(P){ await w.abrirSolicitacao(P.id); await sleep(700);
+    chk(d.querySelectorAll('#sol-trilha [data-sol-etapa]').length===5&&!!d.querySelector('#sol-trilha .atual')&&/\d{2}\/\d{2}\/\d{4}/.test(txt('#sol-trilha')),'[H17] a situação deveria ser uma trilha de 5 etapas com a data: "'+txt('#sol-trilha')+'"');
+    w.__semAutoResposta=true; d.querySelector('#sol-trilha [data-sol-etapa="entregue"]').click(); await sleep(200);
+    chk(/O que foi entregue/.test(txt('#conf-ov')),'[H17] marcar "entregue" deveria perguntar o que foi entregue');
+    d.getElementById('conf-campo').value='3 TIFF, 410 MB'; d.getElementById('conf-campo').dispatchEvent(new w.Event('input',{bubbles:true})); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(1200); w.__semAutoResposta=false;
+    const P2=(await J(adm,'/api/solicitacoes?situacao=todos')).b.itens.find(x=>x.id===P.id), H=(await J(adm,'/api/solicitacoes/'+P.id+'/historico')).b;
+    chk(P2&&P2.situacao==='entregue'&&P2.entrega==='3 TIFF, 410 MB'&&H.etapas&&H.etapas.entregue,'[H17] o pedido deveria ficar entregue, com o que foi entregue e a data da etapa: '+JSON.stringify({s:P2&&P2.situacao,e:P2&&P2.entrega,h:H.etapas}));
+    await w.abrirSolicitacao(P.id); await sleep(500); w.__semAutoResposta=true; d.querySelector('[data-sol-responder]').click(); await sleep(200);
+    chk(/Olá, Pesquisadora FAU/.test(d.getElementById('sol-email-txt')?d.getElementById('sol-email-txt').value:'')&&/F026-P0001/.test(d.getElementById('sol-email-txt').value),'[H17] "Responder por e-mail" deveria abrir um texto pronto com o nome e o material');
+    d.querySelector('#conf-ov [data-conf="nao"]').click(); await sleep(100); w.__semAutoResposta=false; w.closeDrawer(true); }
+  w.route_to('solicitacoes'); await sleep(1200); chk(/Recebido/.test(txt('#v-solicitacoes thead')),'[H17] lista com a coluna Recebido');
+  okl.push('H17: material por código + formato, trilha da situação com datas, "entregue" pergunta o que foi, modelo de e-mail'); }
 // ---------- [H16] Erros: relatar com o código e o título já preenchidos, gravidade em 3 opções, categoria com exemplo, "há quanto tempo", resolver com verbo ----------
 { w.nav('projeto/F026-P0001'); await sleep(2500);
   d.querySelector('#pd [data-relatar-folha="F026-P0001"]').click(); await sleep(1200);
