@@ -785,6 +785,75 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
     return {"ok": bool(sucessos) and not falhas, "alterados": len(sucessos), "total": len(alvos), "falhas": falhas, "mensagem": msg}
 
 
+class AutorizarLote(BaseModel):
+    codigos: list[str] = []
+    fundo: str | None = None      # sem códigos: todos os projetos do fundo
+
+
+# a própria autorização, e o envio ao site, que é o Publicar quem faz (dossiê + folhas como rascunho)
+_NAO_CONTA_PARA_AUTORIZAR = {"autorizado", "site"}
+
+
+def _analisar_autorizacao(con, codigos: list[str]) -> dict:
+    """Mesma regra única de publicacao.py: só fica pronto quem cumpre TODOS os requisitos de publicar, menos a própria autorização
+    (direitos do fundo, bloqueios, lote de teste, revisão das folhas, aceite do CAMP Vision...)."""
+    from .publicacao import condicoes_projeto
+    prontos, fora, ja = [], [], []
+    for cod in codigos:
+        p = con.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=? AND p.mesclado_em IS NULL", (cod,)).fetchone()
+        if not p:
+            fora.append({"codigo": cod, "titulo": None, "motivos": ["projeto não existe"]}); continue
+        if p["autorizado_site"]:
+            ja.append(cod); continue
+        falta = [c.get("detalhe") or c["texto"] for c in condicoes_projeto(con, p)["condicoes"] if c["bloqueia"] and not c["ok"] and c["id"] not in _NAO_CONTA_PARA_AUTORIZAR]
+        (fora if falta else prontos).append({"codigo": cod, "titulo": p["titulo"], **({"motivos": falta} if falta else {})})
+    return {"prontos": prontos, "fora": fora, "ja_autorizados": ja}
+
+
+def _codigos_autorizar(con, d: AutorizarLote) -> list[str]:
+    if d.codigos:
+        return _limpar_codigos(d.codigos)
+    if d.fundo:
+        return [r[0] for r in con.execute("SELECT codigo FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL ORDER BY codigo", (d.fundo,))]
+    raise HTTPException(400, "Informe os projetos ou o fundo")
+
+
+@router.post("/projetos/autorizar/previa")
+def previa_autorizar(d: AutorizarLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Antes de confirmar: quantos ficam autorizados e, para os que ficam de fora, por quê."""
+    con = connect()
+    try:
+        return _analisar_autorizacao(con, _codigos_autorizar(con, d))
+    finally:
+        con.close()
+
+
+@router.post("/projetos/autorizar")
+def autorizar_lote(d: AutorizarLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Autoriza de uma vez os projetos prontos (autorizar NÃO publica). Confere de novo cada um na hora."""
+    con = connect()
+    try:
+        a = _analisar_autorizacao(con, _codigos_autorizar(con, d))
+        cods = [x["codigo"] for x in a["prontos"]]
+        con.execute("BEGIN IMMEDIATE")
+        for c in cods:
+            con.execute("UPDATE projeto SET autorizado_site=1, atualizado_em=datetime('now') WHERE codigo=? AND autorizado_site=0", (c,))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'autorizado_em_lote',?,?)",
+                        (c, u["email"], json.dumps({"fundo": d.fundo, "total_no_lote": len(cods)})))
+        if d.fundo and cods:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,'autorizacao_em_lote',?,?)",
+                        (d.fundo, u["email"], json.dumps({"autorizados": len(cods), "de_fora": len(a["fora"]), "ja_estavam": len(a["ja_autorizados"])})))
+        con.commit()
+    except Exception:
+        con.rollback(); raise
+    finally:
+        con.close()
+    n = len(cods)
+    return {"ok": True, "autorizados": cods, "fora": a["fora"], "ja_autorizados": a["ja_autorizados"],
+            "mensagem": (f"{n} projeto{'s' if n != 1 else ''} autorizado{'s' if n != 1 else ''} (ainda não publicado{'s' if n != 1 else ''})" if n else "Nenhum projeto pronto para autorizar")
+                        + (f"; {len(a['fora'])} ficaram de fora" if a["fora"] else "")}
+
+
 class AcaoProjetosLote(BaseModel):
     codigos: list[str]
     acao: str

@@ -3642,6 +3642,41 @@ def filho(modo):
         ver("aceite aprovado libera", ac and ac["ok"])
         c.close()
         print("\n".join(res))
+    elif modo == "autorizar_lote":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F079','Fundo Aut','FAT',1),('F078','Sem Direitos','FSD',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo, situacao, documento_autorizacao) VALUES ('F079','autorizado','termo assinado'),('F078','nao_autorizado',NULL)")
+        for f, n, extra in (("F079", 1, ""), ("F079", 2, ""), ("F079", 3, "teste"), ("F079", 4, "ja"), ("F078", 1, "")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,lote_teste,autorizado_site) VALUES (?,?,?,?,1960,?,?)",
+                      (f"{f}-P000{n}", f, n, f"Casa {n}", int(extra == "teste"), int(extra == "ja")))
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,'S01',1,'importado')", (f"{f}-P000{n}-1960-S01-D00001", f"{f}-P000{n}"))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','outro','operador','F079-P0002','folha rasgada')")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        o = TestClient(app, raise_server_exceptions=False); o.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        pv = x.post("/api/projetos/autorizar/previa", json={"fundo": "F079"}).json()
+        ver("prévia do fundo: 1 pronto, 2 de fora com o motivo (erro bloqueante, lote de teste), 1 já autorizado",
+            [p_["codigo"] for p_ in pv["prontos"]] == ["F079-P0001"] and {f_["codigo"] for f_ in pv["fora"]} == {"F079-P0002", "F079-P0003"} and pv["ja_autorizados"] == ["F079-P0004"]
+            and any("erro" in m for m in next(f_ for f_ in pv["fora"] if f_["codigo"] == "F079-P0002")["motivos"]), str(pv)[:400])
+        ver("operador não autoriza", o.post("/api/projetos/autorizar", json={"fundo": "F079"}).status_code == 403)
+        r = x.post("/api/projetos/autorizar", json={"fundo": "F079"}).json()
+        c = connect()
+        ver("autoriza só o pronto, não publica, e fica na auditoria", r["autorizados"] == ["F079-P0001"] and c.execute("SELECT autorizado_site, status_site FROM projeto WHERE codigo='F079-P0001'").fetchone()[:] == (1, "nao_publicado")
+            and c.execute("SELECT autorizado_site FROM projeto WHERE codigo='F079-P0002'").fetchone()[0] == 0
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='autorizado_em_lote'").fetchone()[0] == 1 and c.execute("SELECT COUNT(*) FROM evento WHERE codigo='F079' AND tipo='autorizacao_em_lote'").fetchone()[0] == 1, str(r))
+        c.close()
+        pv = x.post("/api/projetos/autorizar/previa", json={"codigos": ["F078-P0001"]}).json()
+        ver("seleção de projetos: fundo sem direitos fica de fora com o motivo", not pv["prontos"] and pv["fora"][0]["codigo"] == "F078-P0001" and any("autorização de publicação" in m for m in pv["fora"][0]["motivos"]), str(pv)[:300])
+        print("\n".join(res))
     elif modo == "b2_resolucao":
         init_db(); _aplicar_migracoes_real()
         import tempfile
@@ -4442,6 +4477,14 @@ else:
 print("71) CV2 §10 aceite do lote como portão de publicação")
 rc, out = rodar("cv2_aceite", f"{tmp}/cv2a.db")
 if rc != 0: ok(False, f"teste do aceite não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("72) Autorizar projetos em lote (só os prontos pela regra única; não publica)")
+rc, out = rodar("autorizar_lote", f"{tmp}/autl.db")
+if rc != 0: ok(False, f"teste de autorizar em lote não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
