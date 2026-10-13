@@ -1518,6 +1518,19 @@ def filho(modo):
         ver("nome sem parecido: cria na hora, como sempre (200), sem decisão", r.status_code == 200 and r.json()["codigo"] == "F097-P0007" and n_dec() == 2, r.text[:80])
         a, b = reservar(titulo="Aeroporto Congonhas", ano=1955, cidade="São Paulo/SP"), reservar(titulo="Aeroporto Congonhas", ano=1955, cidade="São Paulo/SP")
         ver("sem chave de reserva: o mesmo pedido repetido cai na MESMA decisão (chave derivada do fundo + nome)", a.status_code == b.status_code == 202 and a.json()["decisao_id"] == b.json()["decisao_id"] and n_dec() == 3)
+        # ---------- contrato 2.2 (auditoria F026): o CV2 casou o CARIMBO com a base e achou 2+ projetos ----------
+        n0 = n_proj(); K5 = "5" * 32
+        corpo_cv = dict(titulo="Conjunto Residencial com Garagens, R. das Laranjeiras", chave_reserva=K5,
+                        carimbo={"obra": "Conjunto Residencial com Garagens", "local": "R. das Laranjeiras", "cliente": "COMURB", "identificadores": ["contribuinte 0891490001"], "folhas": 1},
+                        candidatos=[{"codigo": "F097-P0006", "titulo": "x", "motivos": ["nome no carimbo"]}, {"codigo": "F097-P0007", "motivos": ["mesmo lugar"]}, {"codigo": "F097-P9999"}])
+        r = reservar(**corpo_cv); j = r.json()
+        dd = adm.get(f"/api/decisoes/{j.get('decisao_id')}").json() if r.status_code == 202 else {}
+        ver("reservar com candidatos do CV2: 202, NÃO cria projeto, decisão com os candidatos que existem no fundo (código inexistente cai fora) e o que o carimbo diz",
+            r.status_code == 202 and n_proj() == n0 and [c["codigo"] for c in dd.get("candidatos", [])] == ["F097-P0006", "F097-P0007"] and (dd.get("pedido") or {}).get("carimbo", {}).get("cliente") == "COMURB"
+            and "F097-P0006 × F097-P0007" in j.get("mensagem", ""), f"{r.status_code} {str(dd)[:200]}")
+        adm.post(f"/api/decisoes/{j['decisao_id']}/resolver", json={"acao": "mesmo", "projeto_codigo": "F097-P0007"})
+        r = reservar(**corpo_cv); j = r.json()
+        ver("depois da pessoa escolher, o CV2 recebe o código escolhido (existente=true), sem projeto novo", r.status_code == 200 and j["codigo"] == "F097-P0007" and j["existente"] is True and n_proj() == n0, r.text[:160])
         # ---------- criação manual no painel ----------
         import app.publicador as pb
         pb.criar_dossie_no_site = lambda *a_, **k_: {"ok": True}
@@ -2753,10 +2766,10 @@ def filho(modo):
                     if x: return x
             return None
         m1 = acha(adm.get("/api/estacoes").json())
-        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == "2.1" and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
+        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == "2.2" and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
         lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "3.0"})
         m2 = acha(adm.get("/api/estacoes").json())
-        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o 2.1" in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
+        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o 2.2" in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
         av = http_["aviso"]; r = lan.post(av["caminho"], json=av["corpo"])
         ver("aviso com o corpo REAL do CV2 é aceito (202), mesmo com a pasta ainda ausente", r.status_code == 202, f"{r.status_code} {r.text[:160]}")
         pasta = raiz / av["corpo"]["pasta"]; (pasta / "catalogacao").mkdir(parents=True)
@@ -2819,7 +2832,7 @@ def filho(modo):
         ver("decisões registradas (decisoes.json) chegam com quem, quando, ação e motivo", isinstance(s["decisoes"], list) and s["decisoes"][0]["acao"] == "nota" and s["decisoes"][0]["por"] == "Rafa")
         ver("orientação: as folhas 'incerta — conferir' são identificadas", s["orientacao"]["incertas"] == ["D1", "D2"], str(s["orientacao"]))
         sug = {x_["campo"]: x_ for x_ in s["sugestoes"]}
-        ver("sugestões: o título provisório 'P0001' recebe o título do pacote; o ano já preenchido NÃO é sugerido", sug.get("titulo", {}).get("sugerido") == "Edifício Tarumã" and "ano" not in sug and s["capa_sugerida"] == pac["projeto"]["capa_sugerida"], str(s["sugestoes"]))
+        ver("sugestões: o título provisório 'P0001' recebe o título do pacote; o ano já preenchido NÃO é sugerido", sug.get("titulo", {}).get("sugerido") == pac["projeto"]["titulo"] and "ano" not in sug and s["capa_sugerida"] == pac["projeto"]["capa_sugerida"], str(s["sugestoes"]))
         ver("propostas e releituras (o que mudou) chegam", isinstance(s["propostas"], dict) and "obras_na_pasta" in s["propostas"] and len(s["releituras"]) == 1 and "F026-P0001-1972-S01-D00001" in s["releituras"][0]["comparacao"])
         s2 = lei.get(f"/api/lotes/{lid2}/saidas-cv").json()
         ver("lote sem catalogacao/: diz que o CAMP Vision ainda não entregou (não quebra)", s2["existe"] is False and "ainda não entregou" in s2["motivo"])
@@ -2859,6 +2872,10 @@ def filho(modo):
         ver("proposta aceita: só registra (nada é aplicado sozinho)", r.status_code == 200 and lei.get(f"/api/lotes/{lid}/saidas-cv").json()["respostas"]["proposta:obras_na_pasta:0"]["acao"] == "aceitar" and sql("SELECT COUNT(*) FROM projeto") == 1)
         importador_lote.importar_lote(k, lid, "teste"); k.commit()
         ver("antes de devolver, a folha retirada pelo CV2 NÃO entra na revisão", sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lid) == 1 and sql("SELECT COUNT(*) FROM item WHERE codigo=?", ret["codigo"]) == 0)
+        d0_ = p2["documentos"][0]; it_ = k.execute("SELECT projeto_carimbo, autor_carimbo, lido_json, versao_cv2 FROM item WHERE codigo=?", (d0_["codigo"],)).fetchone()
+        ver("contrato 2.2 (auditoria F026 T1): o que o CARIMBO diz chega ao painel — projeto/autor do carimbo, leitura inteira com transcrição e versão",
+            it_ is not None and it_["projeto_carimbo"] == d0_["carimbo"]["obra"] and it_["autor_carimbo"] == d0_["carimbo"]["arquiteto"]
+            and _j.loads(it_["lido_json"])["carimbo"]["obra"] == d0_["carimbo"]["obra"] and "transcricao_integral" in _j.loads(it_["lido_json"]) and it_["versao_cv2"] == d0_["versao_cv2"], str(dict(it_) if it_ else None)[:200])
         D = {"tipo": "retirado", "chave": ret["codigo"], "acao": "devolver", "motivo": "o carimbo é do próprio Sami"}
         ver("devolver folha retirada: operador 403; admin sem motivo 400", op.post(U, json=D).status_code == 403 and adm.post(U, json={**D, "motivo": ""}).status_code == 400)
         r = adm.post(U, json=D); importador_lote.importar_lote(k, lid, "teste"); k.commit()

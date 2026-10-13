@@ -1,6 +1,6 @@
 """Versão do contrato CAMP Vision 2 ↔ painel que ESTE painel implementa.
 Fonte única do contrato: campvision-new/docs/contrato-painel.md (cópia e exemplos reais em tests/contrato/, com o commit de origem)."""
-CONTRATO_PAINEL = "2.1"
+CONTRATO_PAINEL = "2.2"
 
 
 def aviso_contrato(versao_cv2: str | None) -> str | None:

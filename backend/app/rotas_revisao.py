@@ -162,7 +162,7 @@ def registrar_campos_revisados(con, codigo: str, estado: str, por: str) -> None:
     except ValueError:
         return
     norm = lambda v: "" if v is None else str(v).strip()  # noqa: E731
-    for campo, v_lido in lido.items():
+    for campo, v_lido in ((c, lido.get(c)) for c in ("titulo", "tipo_documento", "folha", "escala", "ano_folha") if c in lido):   # o resto (carimbo, leitura) é rastreio
         a, b = norm(v_lido), norm(it[campo])
         if not a and not b:
             continue

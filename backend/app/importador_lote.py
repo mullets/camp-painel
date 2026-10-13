@@ -16,7 +16,7 @@ from fastapi import HTTPException
 
 CODIGO_DOCUMENTO = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-6])-D(\d{4,6})$")
 SINAIS = (("orientacao_incerta", "orientação incerta"), ("serie_incerta", "série incerta"), ("fora_do_periodo", "fora do período de atuação do fundo"),
-          ("projeto_divergente", "projeto divergente"))
+          ("projeto_divergente", "projeto divergente"), ("sem_identificacao", "sem identificação (pasta com várias obras)"))
 
 
 def ler_pacote(pasta: Path) -> dict | None:
@@ -179,7 +179,17 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                   "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
                   "endereco_folha": endereco_lido, "cliente_folha": cliente_lido,
                   "versao_cv2": (str(d.get("versao_cv2") or "").strip() or None), "versao_prompt": (str(d.get("versao_prompt") or "").strip() or None), "modelo_cv": (str(d.get("modelo") or "").strip() or None)}
-        campos["lido_json"] = json.dumps({k_: campos[k_] for k_ in ("titulo", "tipo_documento", "folha", "escala", "ano_folha")}, ensure_ascii=False)   # o que o CV2 LEU (cartão 152)
+        # O que o CARIMBO diz (contrato 2.2, auditoria F026 T1): sem isso não dá para auditar pelo painel.
+        carimbo = d.get("carimbo") if isinstance(d.get("carimbo"), dict) else {}
+        meta = d.get("metadados") if isinstance(d.get("metadados"), dict) else {}
+        campos["projeto_carimbo"] = (str(carimbo.get("obra") or meta.get("projeto") or "").strip() or None)
+        campos["escritorio_carimbo"] = (str(carimbo.get("escritorio") or meta.get("escritorio") or "").strip() or None)
+        campos["autor_carimbo"] = (str(carimbo.get("arquiteto") or meta.get("arquiteto") or "").strip() or None)
+        lido = {k_: campos[k_] for k_ in ("titulo", "tipo_documento", "folha", "escala", "ano_folha")}   # o que o CV2 LEU (cartão 152)
+        lido.update({"carimbo": carimbo or None, "leitura": d.get("lido") if isinstance(d.get("lido"), dict) else meta or None,
+                     "transcricao_integral": (d.get("lido") or {}).get("transcricao_integral") if isinstance(d.get("lido"), dict) else d.get("transcricao_integral"),
+                     "versao_cv2": campos["versao_cv2"], "versao_prompt": campos["versao_prompt"], "modelo_cv": campos["modelo_cv"]})
+        campos["lido_json"] = json.dumps(lido, ensure_ascii=False)
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
             atualizados += 1

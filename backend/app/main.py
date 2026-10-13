@@ -352,6 +352,10 @@ class ReservaProjetoEstacao(BaseModel):
     chave_reserva: str | None = None   # uuid gerado pela estação: repetir a chamada não cria outro projeto
     confirmar_novo: bool = False       # a estação já mostrou os projetos parecidos à pessoa e ela escolheu criar um NOVO: pula a verificação
     proximo_p_local: str | None = None  # CV2: maior P que já existe em pastas do acervo + 1 (o número nunca se reusa)
+    # Contrato 2.2 (auditoria F026): o CV2 casou o CARIMBO com a base do fundo e achou 2+ projetos possíveis
+    # (ou obras diferentes no mesmo endereço). Com `candidatos`, o painel NÃO cria projeto: pergunta a uma pessoa.
+    candidatos: list[dict] | None = None
+    carimbo: dict | None = None         # o que o carimbo diz: obra, local, cliente, identificadores, folhas
 
 
 class HeartbeatEstacao(BaseModel):
@@ -375,6 +379,23 @@ class HeartbeatEstacao(BaseModel):
     montagens: dict | None = None
     contrato: str | None = None          # versão do contrato que o CV2 fala (2.1+)
     quarentena: dict | None = None       # {arquivos, gb, ultima_replica, aviso} (cartão 149)
+
+
+def candidatos_do_cv(con, fundo: str, candidatos: list[dict]) -> list[dict]:
+    """Os candidatos que o CV2 achou pelo carimbo, no formato da janela 'Projeto parecido' (só códigos que existem no fundo)."""
+    saida = []
+    for c in candidatos[:8]:
+        cod = str((c or {}).get("codigo") or "").strip().upper()
+        p = con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original,
+                                  (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
+                             FROM projeto p WHERE p.codigo=? AND p.fundo_codigo=?""", (cod, fundo)).fetchone()
+        if not p or any(x["codigo"] == p["codigo"] for x in saida):
+            continue
+        motivos = [str(m) for m in (c.get("motivos") or []) if m][:5] or ["o carimbo casa com este projeto"]
+        saida.append({"codigo": p["codigo"], "titulo": p["titulo"], "ano": p["ano"] or None, "cidade": p["cidade"],
+                      "identificacao_original": p["identificacao_original"], "folhas": p["folhas"],
+                      "score": 0.9, "nivel": "provavel", "motivos": ["CAMP Vision: " + m for m in motivos]})
+    return saida
 
 
 @app.post("/api/estacoes/projetos/reservar")
@@ -425,14 +446,20 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
             con.rollback()
             return JSONResponse(status_code=202, content={"pendente": True, "decisao_id": dec["id"],
                                 "mensagem": "Aguardando decisão no painel: já existe projeto parecido neste fundo. Tente de novo em instantes."})
+        pedido_cv = {"titulo": titulo, "ano": d.ano or 0, "cidade": d.cidade, "identificacao_original": identificacao, "operador": operador or None,
+                     "estacao_ip": ip, "proximo_p_local": d.proximo_p_local or None, "carimbo": d.carimbo or None}
+        if d.candidatos:
+            cands = candidatos_do_cv(con, d.fundo_codigo, d.candidatos)
+            if cands:
+                did = decisoes.abrir_projeto_parecido(con, chave_dec, d.fundo_codigo, titulo, pedido_cv, cands, "estacao")
+                con.commit()
+                return JSONResponse(status_code=202, content={"pendente": True, "decisao_id": did, "mensagem":
+                                    "Aguardando decisão no painel: o carimbo casa com mais de um projeto do fundo ("
+                                    + " × ".join(c["codigo"] for c in cands) + "). Tente de novo em instantes."})
         if not d.confirmar_novo:
             parecidos = buscar_parecidos(con, d.fundo_codigo, titulo, d.ano, d.cidade, identificacao)
             if parecidos:
-                did = decisoes.abrir_projeto_parecido(
-                    con, chave_dec, d.fundo_codigo, titulo,
-                    {"titulo": titulo, "ano": d.ano or 0, "cidade": d.cidade, "identificacao_original": identificacao, "operador": operador or None, "estacao_ip": ip,
-                     "proximo_p_local": d.proximo_p_local or None},
-                    parecidos, "estacao")
+                did = decisoes.abrir_projeto_parecido(con, chave_dec, d.fundo_codigo, titulo, pedido_cv, parecidos, "estacao")
                 con.commit()
                 return JSONResponse(status_code=202, content={"pendente": True, "decisao_id": did,
                                     "mensagem": f"Aguardando decisão no painel: já existe projeto parecido neste fundo ({parecidos[0]['codigo']}). Tente de novo em instantes."})

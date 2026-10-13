@@ -1,0 +1,30 @@
+Relatório do lote 20261013-173510-F026 - SBU Sami Bussab_P0001 - Edificio Taruma 1972 — F026-P0001 CASA DA PRAIA
+origem: 100 - Scanners/F026 - SBU Sami Bussab/P0001 - Edificio Taruma 1972
+
+1. Arquivos na origem × registros na saída
+   2 arquivo(s) na origem, 2 arquivado(s), 2 documento(s), 2 com leitura
+
+2. Distribuição por série
+   S01 01 - Desenhos e pranchas: 2
+
+3. Duplicatas (publica só a única)
+   F026-P0001-1972-S01-D00002 é quase de F026-P0001-1972-S01-D00001 — publicar F026-P0001-1972-S01-D00001
+
+4. Autoria divergente, projeto divergente, sem identificação e capas (não publicar)
+   nenhum
+
+5. Precisa de olho humano (orientação e série incertas)
+   F026-P0001-1972-S01-D00001: orientação incerta
+   F026-P0001-1972-S01-D00002: orientação incerta
+
+6. Folhas esperadas que faltam (pelo total do carimbo)
+   nenhum
+
+7. Campos vazios por decisão e ressalvas
+   nenhum
+
+8. Retirado / não arquivado
+   nenhum
+
+Erros: 4 (0 bloqueiam). Detalhe em erros.json.
+Execução: CV2 2026-10-13-01+f8c8a69 · contrato 2.2 · modelo claude-sonnet-5 · 2 chamada(s) · 2000 tokens entrada / 200 saída · US$ 0.0060 · 3.6 s · prompts prancha:48f8c530, fotografia:554fca8b, textual:b3df79d7
