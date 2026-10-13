@@ -532,8 +532,9 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
             con.execute("BEGIN IMMEDIATE")
             for tipo, cod, wid in sucessos:
                 con.execute(
-                    f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?",
-                    (st_painel, cod),
+                    f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now'), "
+                    "publicado_em=CASE WHEN ?='no_ar' THEN COALESCE(publicado_em, datetime('now')) ELSE publicado_em END WHERE codigo=?",
+                    (st_painel, st_painel, cod),
                 )
                 con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
 

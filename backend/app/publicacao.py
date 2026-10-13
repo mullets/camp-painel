@@ -151,7 +151,9 @@ def persistir_resultado(sucessos, status_painel, status_wp, entidade, codigo, ti
         try:
             con.execute("BEGIN IMMEDIATE")
             for tipo, cod, wid in sucessos:
-                con.execute(f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now') WHERE codigo=?", (status_painel, cod))
+                con.execute(f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now'), "
+                            "publicado_em=CASE WHEN ?='no_ar' THEN COALESCE(publicado_em, datetime('now')) ELSE publicado_em END WHERE codigo=?",
+                            (status_painel, status_painel, cod))   # publicado_em: 1ª publicação (relatórios)
                 con.execute("UPDATE wp_item SET status=? WHERE id=?", (status_wp, wid))
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES (?,?,?,?,?)",
                         (entidade, codigo, tipo_evento, ator, json.dumps(detalhe, ensure_ascii=False)))

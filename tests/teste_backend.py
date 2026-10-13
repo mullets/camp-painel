@@ -3869,6 +3869,133 @@ def filho(modo):
         j = r.json() if r.status_code == 200 else {}
         padrao = pathlib.Path(os.environ["CAMP_DB_PATH"]).resolve().parent / "exportacoes"
         ver("sem faltas: ok e sem lista; sem configuração, grava em <dados>/exportacoes", r.status_code == 200 and j.get("ok") is True and j.get("faltando") == [] and pathlib.Path(j.get("pasta", "/")).parent == padrao, (r.status_code, j))
+    elif modo == "relatorios":
+        init_db(); _aplicar_migracoes_real()
+        import io as _io, openpyxl
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, ga4_direto
+        from app.publicacao import persistir_resultado
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F091','Fundo Um','FUM',1),('F092','Fundo Dois','FDO',1)")
+        for pc, f_, n, teste in (("F091-P0001", "F091", 1, 0), ("F091-P0002", "F091", 2, 0), ("F092-P0001", "F092", 1, 0), ("F092-P0002", "F092", 2, 1)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f_, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,lote_teste) VALUES (?,?,?,?,1970,?)", (pc, f_, n, f"Projeto {pc}", teste))
+        seq = {}
+        def folha(pc, quando, origem, publicado=None):
+            seq[pc] = seq.get(pc, 0) + 1
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,criado_em,status_site,publicado_em) VALUES (?,?,?,?,?,?,?,?)",
+                      (f"{pc}-1970-S01-D{seq[pc]:05d}", pc, "S01", seq[pc], origem, quando, "no_ar" if publicado else "nao_publicado", publicado))
+        for _ in range(3): folha("F091-P0001", "2025-01-10 12:00:00", "campvision")
+        folha("F091-P0001", "2025-02-05 09:00:00", "importado", "2025-02-10 10:00:00"); folha("F091-P0001", "2025-02-05 09:00:00", "importado", "2025-02-10 10:00:00")
+        folha("F091-P0001", "2024-12-31 23:59:59", "campvision")                     # antes do período
+        for _ in range(4): folha("F092-P0001", "2025-03-31 23:00:00", "manual")      # último dia do período: entra
+        folha("F092-P0001", "2025-04-01 00:00:01", "manual")                          # depois: não entra
+        for _ in range(5): folha("F092-P0002", "2025-02-01 10:00:00", "campvision", "2025-02-02 10:00:00")   # lote de teste: nunca entra
+        c.execute("UPDATE projeto SET status_site='no_ar', publicado_em='2025-02-10 10:00:00' WHERE codigo='F091-P0001'")
+        c.execute("UPDATE projeto SET status_site='no_ar', publicado_em='2025-05-01 10:00:00' WHERE codigo='F092-P0001'")
+        c.execute("UPDATE projeto SET status_site='no_ar', publicado_em='2025-02-02 10:00:00' WHERE codigo='F092-P0002'")
+        for sol, fin, sit, rec, ent in (("A", "pesquisa", "entregue", "2025-01-05 10:00:00", "2025-01-15 10:00:00"), ("B", "publicacao", "entregue", "2024-12-20 10:00:00", "2025-01-04 10:00:00"),
+                                        ("C", "exposicao", "recusada", "2025-02-01 10:00:00", None), ("D", "pesquisa", "aguarda_resposta", "2025-03-10 10:00:00", None),
+                                        ("E", "familia", "entregue", "2025-03-20 10:00:00", "2025-04-02 10:00:00")):
+            c.execute("INSERT INTO solicitacao (solicitante,finalidade,situacao,recebida_em,entregue_em) VALUES (?,?,?,?,?)", (sol, fin, sit, rec, ent))
+        for cat, sit, cri, resol in (("metadado", "corrigido", "2025-01-02 10:00:00", "2025-01-06 10:00:00"), ("orientacao", "aberto", "2025-02-02 10:00:00", None),
+                                     ("codigo", "fechado", "2024-11-01 10:00:00", "2025-03-01 10:00:00"), ("outro", "ignorado", "2025-03-03 10:00:00", "2025-03-04 10:00:00"),
+                                     ("metadado", "aberto", "2025-06-01 10:00:00", None)):
+            c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,situacao,criado_em,resolvido_em) VALUES ('corrigir',?,'operador','F091-P0001','x',?,?,?)", (cat, sit, cri, resol))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        Q = "/api/relatorios?de=2025-01-01&ate=2025-03-31"
+        QX = Q.replace("relatorios?", "relatorios.xlsx?")
+        r = lei.get(Q); j = r.json() if r.status_code == 200 else {}
+        ver("leitura vê o relatório (200); admin e operador também; sem login 401", r.status_code == 200 and adm.get(Q).status_code == 200 and op.get(Q).status_code == 200 and anon.get(Q).status_code == 401 and anon.get(QX).status_code == 401)
+        ver("datas inválidas ou invertidas: 400 com explicação", lei.get("/api/relatorios?de=2025-13-01").status_code == 400 and "antes da inicial" in lei.get("/api/relatorios?de=2025-03-01&ate=2025-01-01").json().get("erro", ""))
+        ver("período sem datas: o ano corrente", lei.get("/api/relatorios").json()["periodo"]["de"].endswith("-01-01"))
+        f = j.get("folhas", {})
+        ver("folhas: 9 no período (sem lote de teste, bordas certas), por origem", f.get("total") == 9 and f.get("por_origem") == {"campvision": 3, "importado": 2, "manual": 4}, f.get("por_origem"))
+        ver("folhas por mês (jan 3, fev 2, mar 4) com rótulo em português", [(m["rotulo"], m["total"]) for m in f.get("por_mes", [])] == [("jan/2025", 3), ("fev/2025", 2), ("mar/2025", 4)], f.get("por_mes"))
+        ver("folhas por fundo (F091 5, F092 4) e por mês e fundo; acervo ao fim do período 10", [(x["fundo"], x["total"]) for x in f.get("por_fundo", [])] == [("F091", 5), ("F092", 4)]
+            and {(x["mes"], x["fundo"]): x["total"] for x in f.get("por_mes_fundo", [])} == {("2025-01", "F091"): 3, ("2025-02", "F091"): 2, ("2025-03", "F092"): 4} and f.get("acervo_ao_fim") == 10, f.get("por_fundo"))
+        p = j.get("publicacoes", {})
+        ver("publicados no período: 2 folhas e 1 projeto (fev); a lista traz o projeto; situação de hoje 2 folhas e 2 projetos", p.get("folhas") == 2 and p.get("projetos") == 1
+            and [(m["mes"], m["folhas"], m["projetos"]) for m in p.get("por_mes", []) if m["folhas"] or m["projetos"]] == [("2025-02", 2, 1)]
+            and [(x["codigo"], x["publicado_em"], x["folhas"]) for x in p.get("projetos_lista", [])] == [("F091-P0001", "2025-02-10", 2)] and p.get("publicados_hoje") == {"folhas": 2, "projetos": 2}, p)
+        d = j.get("pedidos", {})
+        ver("pedidos: 4 recebidos, 2 atendidos, tempo médio de entrega 12,5 dias, 1 recusado e 1 aguardando", (d.get("recebidos"), d.get("atendidos"), d.get("tempo_medio_dias"), d.get("recusados"), d.get("aguardando")) == (4, 2, 12.5, 1, 1), d)
+        ver("pedidos por mês e por finalidade", [(m["recebidos"], m["atendidos"]) for m in d.get("por_mes", [])] == [(1, 2), (1, 0), (2, 0)]
+            and {x["rotulo"]: (x["recebidos"], x["atendidos"]) for x in d.get("por_finalidade", [])} == {"Pesquisa": (2, 1), "Publicação": (0, 1), "Exposição": (1, 0), "Família": (1, 0)}, d.get("por_finalidade"))
+        e = j.get("problemas", {})
+        ver("problemas: 3 abertos, 2 resolvidos (média 62 dias), 1 descartado, 1 ainda sem solução, 2 em aberto hoje", (e.get("abertos"), e.get("resolvidos"), e.get("tempo_medio_dias"), e.get("descartados"), e.get("ainda_abertos"), e.get("em_aberto_hoje")) == (3, 2, 62.0, 1, 1, 2), e)
+        ver("problemas por mês e por tipo, com nome em português", [(m["abertos"], m["resolvidos"]) for m in e.get("por_mes", [])] == [(1, 1), (1, 0), (1, 1)]
+            and {x["rotulo"]: (x["abertos"], x["resolvidos"]) for x in e.get("por_tipo", [])} == {"Dado errado na ficha": (1, 1), "Orientação / rotação": (1, 0), "Código errado": (0, 1), "Outro": (1, 0)}, e.get("por_tipo"))
+        a = j.get("acessos", {})
+        ver("acessos sem o GA4 configurado: 'sem dados', sem quebrar o resto", a.get("disponivel") is False and "Sem dados" in (a.get("motivo") or "") and f.get("total") == 9, a)
+        # GA4 configurado (falso, sem rede): totais, por mês e páginas
+        class GA4Falso:
+            def __init__(self, cfg, cliente=None): pass
+            def relatorio(self, *, start_date, end_date, metrics, dimensions=None, limit=None):
+                if not dimensions: return {"rows": [{"metricValues": [{"value": "50"}, {"value": "70"}, {"value": "300"}]}]}
+                if dimensions == ["yearMonth"]:
+                    return {"dimensionHeaders": [{"name": "yearMonth"}], "metricHeaders": [{"name": m} for m in metrics],
+                            "rows": [{"dimensionValues": [{"value": "202501"}], "metricValues": [{"value": "20"}, {"value": "30"}, {"value": "100"}]},
+                                     {"dimensionValues": [{"value": "202503"}], "metricValues": [{"value": "35"}, {"value": "40"}, {"value": "200"}]}]}
+                return {"dimensionHeaders": [{"name": "pagePath"}, {"name": "pageTitle"}], "metricHeaders": [{"name": "screenPageViews"}],
+                        "rows": [{"dimensionValues": [{"value": "/acervo/"}, {"value": "Acervo"}], "metricValues": [{"value": "120"}]}]}
+        orig_cfg, orig_ga = ga4_direto.configurado, ga4_direto.GA4
+        ga4_direto.configurado = lambda con: {"propriedade": "1", "conta": {"client_email": "x@y"}}; ga4_direto.GA4 = GA4Falso
+        a = lei.get(Q).json()["acessos"]
+        ver("acessos com o GA4: total do período, por mês (mês sem acesso = 0) e páginas mais vistas", a["disponivel"] and a["total"] == {"pessoas": 50, "visitas": 70, "paginas": 300}
+            and [(m["mes"], m["pessoas"], m["paginas"]) for m in a["por_mes"]] == [("2025-01", 20, 100), ("2025-02", 0, 0), ("2025-03", 35, 200)] and a["paginas"][0]["visualizacoes"] == 120, a)
+        xa = lei.get(QX)
+        class GA4Quebrado(GA4Falso):
+            def relatorio(self, **k): raise RuntimeError("GA4 recusou (500): erro do Google")
+        ga4_direto.GA4 = GA4Quebrado
+        j2 = lei.get(Q).json()
+        ver("GA4 com erro: 'sem dados' com o motivo, e o resto do relatório continua", not j2["acessos"]["disponivel"] and "não respondeu" in j2["acessos"]["motivo"] and j2["folhas"]["total"] == 9)
+        ga4_direto.configurado, ga4_direto.GA4 = orig_cfg, orig_ga
+        # planilha
+        ver("planilha: 200, tipo xlsx e nome com o período", xa.status_code == 200 and "spreadsheetml" in xa.headers.get("content-type", "") and "relatorio_camp_2025-01-01_a_2025-03-31.xlsx" in xa.headers.get("content-disposition", ""), xa.headers)
+        try:
+            wb = openpyxl.load_workbook(_io.BytesIO(xa.content)); abriu = True
+        except Exception as ex:  # noqa: BLE001
+            wb, abriu = None, False; res.append(f"FALHA|xlsx não abre|{ex}")
+        if abriu:
+            ver("planilha abre no openpyxl, uma aba por seção", wb.sheetnames == ["Resumo", "Folhas", "Publicações", "Pedidos", "Problemas", "Acessos ao site"], wb.sheetnames)
+            vals = {r_[0]: r_[1] for r_ in wb["Resumo"].iter_rows(values_only=True) if r_ and r_[0]}
+            ver("Resumo da planilha bate com a tela", vals.get("Folhas digitalizadas ou importadas") == 9 and vals.get("Projetos publicados") == 1 and vals.get("Pedidos de material atendidos") == 2
+                and vals.get("Tempo médio de entrega (dias)") == 12.5 and vals.get("Problemas resolvidos") == 2 and vals.get("Pessoas que visitaram o site") == 50, vals)
+            fol = [tuple(x for x in r_ if x is not None) for r_ in wb["Folhas"].iter_rows(values_only=True)]
+            ver("aba Folhas: total por mês e o cruzamento mês x fundo", ("Total", 3, 2, 4, 9) in fol and ("mar/2025", 0, 4, 4) in fol, fol[:14])
+            ac = [tuple(x for x in r_ if x is not None) for r_ in wb["Acessos ao site"].iter_rows(values_only=True)]
+            ver("aba Acessos: o total do período e as páginas", ("Período inteiro", 50, 70, 300) in ac and any(r_ and r_[0] == "Acervo" for r_ in ac), ac[:10])
+        sx = lei.get("/api/relatorios.xlsx?de=2030-01-01&ate=2030-01-31")
+        try:
+            wb2 = openpyxl.load_workbook(_io.BytesIO(sx.content)); ok2 = "Sem dados" in str(list(wb2["Acessos ao site"].iter_rows(values_only=True)))
+        except Exception:  # noqa: BLE001
+            ok2 = False
+        ver("planilha de um período vazio e sem GA4 abre e diz 'sem dados'", sx.status_code == 200 and ok2)
+        # a data da 1ª publicação é gravada ao publicar e não muda ao despublicar/republicar
+        cod = "F091-P0002"
+        persistir_resultado([("projeto", cod, 1)], "no_ar", "publish", "projeto", cod, "site_no_ar", "t", {})
+        k = connect(); pe = lambda: k.execute("SELECT publicado_em FROM projeto WHERE codigo=?", (cod,)).fetchone()[0]
+        p1 = pe(); k.execute("UPDATE projeto SET publicado_em='2025-01-01 00:00:00' WHERE codigo=?", (cod,)); k.commit()
+        persistir_resultado([("projeto", cod, 1)], "rascunho", "draft", "projeto", cod, "site_rascunho", "t", {})
+        persistir_resultado([("projeto", cod, 1)], "no_ar", "publish", "projeto", cod, "site_no_ar", "t", {})
+        ver("publicar grava a data da 1ª publicação; despublicar e publicar de novo não muda", bool(p1) and pe() == "2025-01-01 00:00:00", (p1, pe()))
+        # migração 090: o que já estava publicado ganha a data da 1ª publicação do histórico
+        k.execute("UPDATE item SET status_site='no_ar', publicado_em=NULL WHERE codigo='F091-P0001-1970-S01-D00001'")
+        k.execute("INSERT INTO evento (entidade,codigo,tipo,ator,quando) VALUES ('projeto','F091-P0001','site_no_ar','t','2024-07-07 07:07:07'),('projeto','F091-P0001','site_no_ar','t','2025-07-07 07:07:07')")
+        k.execute("DELETE FROM migracao WHERE nome='090_publicado_em.sql'"); k.commit(); k.close()
+        _aplicar_migracoes_real()
+        k = connect()
+        ver("migração 090 preenche a data das folhas já publicadas pelo histórico (a primeira)", k.execute("SELECT publicado_em FROM item WHERE codigo='F091-P0001-1970-S01-D00001'").fetchone()[0] == "2024-07-07 07:07:07")
+        k.close()
         print("\n".join(res))
     elif modo == "b2_resolucao":
         init_db(); _aplicar_migracoes_real()
@@ -4804,6 +4931,14 @@ else:
 print("92) Consulta presencial e empréstimo de originais: criar, atrasado, devolver, permissões, folha inexistente 404")
 rc, out = rodar("emprestimos", f"{tmp}/emprestimos.db")
 if rc != 0: ok(False, f"teste de empréstimos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("90) Relatórios para prestação de contas: contagens por período, planilha e acesso")
+rc, out = rodar("relatorios", f"{tmp}/relat.db")
+if rc != 0: ok(False, f"teste dos relatórios não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

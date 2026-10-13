@@ -61,6 +61,8 @@ from .exportacao import router as rotas_exportacao
 app.include_router(rotas_exportacao)
 from .rotas_emprestimos import router as rotas_emprestimos
 app.include_router(rotas_emprestimos)
+from .rotas_relatorios import router as rotas_relatorios
+app.include_router(rotas_relatorios)
 
 
 @app.on_event("startup")
