@@ -7,6 +7,7 @@ Vocabulário: docs/vocabulario.md.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 
@@ -85,8 +86,30 @@ def condicoes_projeto(con, p) -> dict:
     if excluidas > 0:
         conds.append({"id": "folhas_excluidas", "bloqueia": False, "ok": False,
                       "texto": f"{excluidas} folha(s) com autoria divergente ou duplicadas ficam de fora da publicação", "detalhe": None, "acao": None})
+    conds += avisos_qualidade(p)
     return {"condicoes": conds, "pode_publicar": all(c["ok"] for c in conds if c["bloqueia"]),
             "folhas_total": total, "folhas_elegiveis": elegiveis, "dossie_no_site": dossie}
+
+
+# B10 · avisos de qualidade da ficha: não bloqueiam a publicação, mas mostram o que falta e levam ao campo
+TITULO_GENERICO = re.compile(r"^\s*(F\d{3}-)?P\d{3,4}\s*$|\[TESTE\]|DADO FICT[IÍ]CIO|completar com|sem t[ií]tulo|^\s*projeto\s*\d*\s*$", re.I)
+
+
+def avisos_qualidade(p) -> list[dict]:
+    chaves = p.keys() if hasattr(p, "keys") else []
+    v = lambda k: (p[k] if k in chaves else None)  # noqa: E731
+    codigo, out = v("codigo"), []
+    for campo, texto in (("ano", "Ano vazio"), ("cidade", "Cidade vazia"), ("tipologia", "Programa / uso vazio")):
+        if v(campo) in (None, "", 0):
+            out.append({"id": f"q_{campo}", "bloqueia": False, "ok": False, "texto": texto,
+                        "detalhe": "Não impede a publicação, mas a ficha no site fica incompleta e é mais difícil de achar.",
+                        "acao": {"tipo": "editar_projeto", "rotulo": "Preencher", "alvo": f"{codigo}:{campo}"}})
+    t = str(v("titulo") or "")
+    if not t.strip() or TITULO_GENERICO.search(t) or t.strip().upper() == str(codigo or "").upper():
+        out.append({"id": "q_titulo", "bloqueia": False, "ok": False, "texto": f"Título genérico: “{t.strip() or 'vazio'}”",
+                    "detalhe": "Um título que diga o que é o projeto (ex.: Residência Tarumã) ajuda quem busca no site e no Google.",
+                    "acao": {"tipo": "editar_projeto", "rotulo": "Corrigir o título", "alvo": f"{codigo}:titulo"}})
+    return out
 
 
 def motivos_bloqueio(c: dict) -> list[str]:

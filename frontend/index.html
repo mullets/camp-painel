@@ -730,6 +730,7 @@ body.na-painel #system-banner{display:none!important}
 .forca{font-size:12px;color:var(--ink2);display:flex;gap:6px;align-items:center;min-height:16px}.forca-barra{width:80px;height:6px;border-radius:3px;background:var(--line);overflow:hidden;display:inline-block}.forca-barra i{display:block;height:100%}.forca-barra.f0 i{width:15%;background:var(--red)}.forca-barra.f1 i{width:45%;background:var(--amber,#c98a00)}.forca-barra.f2 i{width:75%;background:var(--green)}.forca-barra.f3 i{width:100%;background:var(--green)}
 .perfil-ajuda{font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:12px}.perfil-ajuda summary{cursor:pointer;font-weight:500}.perfil-ajuda ol{margin:6px 0;padding-left:18px}
 .foto-perfil.soltando{outline:2px dashed var(--blue);outline-offset:4px;border-radius:8px}
+.realce{outline:2px solid var(--amber,#c98a00);outline-offset:2px}   /* B10: o campo que o aviso pediu para preencher */
 </style>
 </head>
 <body>
@@ -2626,6 +2627,7 @@ function acaoCondicao(tipo,alvo){
   else if(tipo==='wpadmin')window.open(alvo,'_blank','noopener');
   else if(tipo==='autorizar')autorizarProjeto(alvo);
   else if(tipo==='subir_folhas')subirFolhas(alvo);
+  else if(tipo==='editar_projeto'){const [c,campo]=String(alvo).split(':');Promise.resolve(editarProjeto(c)).then(()=>{const el=document.getElementById('ep-'+campo);if(el){el.focus();el.classList.add('realce')}})}   /* B10: avisos de qualidade levam ao campo */
   else if(tipo==='erros')go('erros')
  else if(tipo==='revisao'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else{const e=document.getElementById('pj-proximo')||document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}}}
 function alvoProjetoAtual(){const m=(location.hash||'').match(/^#projeto\/([^/]+)/);return m?m[1]:null}

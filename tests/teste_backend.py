@@ -554,7 +554,7 @@ def filho(modo):
         ver("operador VÊ o checklist (leitura)", r.status_code == 200 and g["pode_agir"] is False, f"HTTP {r.status_code}")
         ver("checklist mostra o que falta: direitos e autorização (nada mais)", ids_falta == {"direitos", "autorizado"}, str(ids_falta))
         ver("cada pendência traz o botão que resolve", {x["acao"]["tipo"] for x in g["condicoes"] if x["bloqueia"] and not x["ok"]} == {"direitos", "autorizar"})
-        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"]} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
+        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"] and not x["id"].startswith("q_")} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
         # ---- publicar bloqueado: TODAS as razões de uma vez ----
         r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"})
         ver("publicar bloqueado devolve TODAS as pendências (400)", r.status_code == 400 and "Direitos do fundo" in err(r) and "não foi autorizado" in err(r), err(r)[:140])
@@ -3244,6 +3244,32 @@ def filho(modo):
         t, e = _rotulo("fundo_trocado")
         ver("a divergência tem título e explicação em português", "fundo errado" in t and "o código é que vale" in e, t)
         print("\n".join(res))
+    elif modo == "b10_qualidade":
+        init_db(); _aplicar_migracoes_real()
+        from app.publicacao import avisos_qualidade, condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F086','Fundo Ficha','FFI',1)")
+        for n, tit, ano, cid, tip in ((1, "Residência Tarumã", 1968, None, "Residência"), (2, "P0002", 0, "São Paulo", None), (3, "[TESTE] Casa Exemplo", 1970, "Santos", "Casa"), (4, "Edifício Itália", 1956, "São Paulo", "Edifício")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F086',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tipologia) VALUES (?,?,?,?,?,?,?)", (f"F086-P000{n}", "F086", n, tit, ano, cid, tip))
+        c.commit()
+        P = lambda n: c.execute("SELECT p.*, 0 AS lote_teste FROM projeto p WHERE codigo=?", (f"F086-P000{n}",)).fetchone()  # noqa: E731
+        a1 = {x["id"]: x for x in avisos_qualidade(P(1))}
+        ver("sem cidade: aviso 'Cidade vazia' com 'Preencher' que leva ao campo", list(a1) == ["q_cidade"] and a1["q_cidade"]["texto"] == "Cidade vazia" and a1["q_cidade"]["acao"]["alvo"] == "F086-P0001:cidade", str(list(a1)))
+        ver("título 'P0002', sem ano e sem programa: três avisos", {x["id"] for x in avisos_qualidade(P(2))} == {"q_ano", "q_tipologia", "q_titulo"}, str([x["id"] for x in avisos_qualidade(P(2))]))
+        ver("'[TESTE]' no título é genérico", any(x["id"] == "q_titulo" for x in avisos_qualidade(P(3))))
+        ver("ficha completa: nenhum aviso", avisos_qualidade(P(4)) == [])
+        ver("os avisos nunca bloqueiam", all(not x["bloqueia"] for x in avisos_qualidade(P(2))))
+        try:
+            p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F086-P0001'").fetchone()
+            g = condicoes_projeto(c, p1)
+            ver("o checklist de publicar traz o aviso junto dos requisitos", any(x["id"] == "q_cidade" and not x["bloqueia"] for x in g["condicoes"]))
+        except Exception as e:  # noqa: BLE001
+            ver("o checklist de publicar traz o aviso junto dos requisitos", False, str(e)[:200])
+        c.close()
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3923,6 +3949,14 @@ else:
 print("59) B8 divergência nova: o campo Fundo do item no site diferente do fundo do código")
 rc, out = rodar("b8_fundo_trocado", f"{tmp}/b8.db")
 if rc != 0: ok(False, f"teste B8 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("60) B10 checklist de publicar com avisos de qualidade (ano, cidade, programa, título genérico) que não bloqueiam")
+rc, out = rodar("b10_qualidade", f"{tmp}/b10.db")
+if rc != 0: ok(False, f"teste B10 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
