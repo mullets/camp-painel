@@ -3731,6 +3731,145 @@ def filho(modo):
         a = ro._analytics_calcular()
         ver("sem acesso à propriedade: explica que precisa adicionar a conta como Leitor", not a["disponivel"] and a["erro_codigo"] == "ga4_direto_permissao" and "Leitor" in a["acao"] and conta["client_email"] in a["acao"], str(a.get("acao")))
         print("\n".join(res))
+    elif modo == "exportacao_ead":
+        init_db(); _aplicar_migracoes_real()
+        import csv as _csv, hashlib, io, json, tempfile, time
+        import xml.etree.ElementTree as ET
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        c.execute("""INSERT INTO fundo (codigo,titulo,sigla,ativo,data_inicio,data_fim,dimensao_suporte,historia_arquivistica,fonte_historia,procedencia,condicoes_acesso,condicoes_reproducao)
+                     VALUES ('F094','Fundo Exporta & <Cia>','FEX',1,1950,1990,'2 caixas','Guardado pela família.','Entrevista 2024','Doação de 2025','Aberto a pesquisadores','Com crédito')""")
+        c.execute("INSERT OR REPLACE INTO direitos_fundo (fundo_codigo, situacao, licenca, titular) VALUES ('F094','autorizado','CC BY-NC-ND','Família Exporta')")
+        a1 = c.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim, historia, fonte_historia) VALUES ('pessoa','Ana Exporta',1920,2000,'Arquiteta paulista.','Livro X')").lastrowid
+        a2 = c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('entidade_coletiva','Escritório Coautor')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F094',?,'produtor'),('F094',?,'colaborador')", (a1, a2))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F094',1),('F094',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,identificacao_original,autoria,ambito_conteudo) VALUES ('F094-P0001','F094',1,'Casa \"Aspas\" & Cia',1970,'Santos','CX07','Ana Exporta; Bruno B','Plantas e cortes')")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F094-P0002','F094',2,'Escola',0)")
+        P1 = "F094-P0001-1970-S01-D0000"
+        itens = [(f"{P1}1", "F094-P0001", "S01", 1, "Planta <térreo> & cobertura\x01", "Planta", "01/03", "1:50", 1971, f"F094/P0001/{P1}1.tif"),
+                 (f"{P1}2", "F094-P0001", "S01", 2, "=SOMA(A1)", "Corte", "02/03", None, None, f"F094/P0001/{P1}2.tif"),
+                 (f"{P1}3", "F094-P0001", "S01", 3, "Fachada", "Elevação", "03/03", None, None, f"F094/P0001/{P1}3.tif"),
+                 ("F094-P0001-1970-S03-D00004", "F094-P0001", "S03", 4, "Foto da obra", "Fotografia", None, None, None, "../../fora.tif"),
+                 ("F094-P0002-0000-S01-D00001", "F094-P0002", "S01", 1, "Planta escola", "Planta", None, None, None, None)]
+        for it in itens:
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,folha,escala,ano_folha,arquivo_tif,origem,status_site) VALUES (?,?,?,?,?,?,?,?,?,?,'campvision','no_ar')", it)
+        lid = c.execute("INSERT INTO localizacao_fisica (fundo_codigo, tipo, identificador) VALUES ('F094','mapoteca','MAP-02-G3')").lastrowid
+        c.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (f"{P1}1", lid))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False)
+            if em: x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"})
+            return x
+        adm, op, le, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br"), cli(None)
+        # ---------- EAD do fundo ----------
+        r = le.get("/api/fundos/F094/ead.xml")
+        ver("EAD do fundo: 200, XML e baixa como arquivo", r.status_code == 200 and "xml" in r.headers.get("content-type", "") and "F094-ead.xml" in r.headers.get("content-disposition", ""), r.status_code)
+        try:
+            raiz = ET.fromstring(r.content); parse_ok = True
+        except ET.ParseError as e:
+            raiz, parse_ok = None, False; ver("EAD parseável", False, e)
+        ver("EAD do fundo é XML bem-formado (xml.etree) com DOCTYPE EAD 2002", parse_ok and raiz.tag == "ead" and b"ead.dtd" in r.content and b"Version 2002" in r.content)
+        if parse_ok:
+            obrig = ["eadheader/eadid", "eadheader/filedesc/titlestmt/titleproper", "archdesc/did/unitid", "archdesc/did/unittitle", "archdesc/dsc"]
+            ver("elementos obrigatórios: eadid, titleproper, archdesc/did/unitid e unittitle", all(raiz.find(x) is not None and (x.endswith("dsc") or (raiz.find(x).text or "").strip()) for x in obrig), [x for x in obrig if raiz.find(x) is None])
+            ad = raiz.find("archdesc")
+            ver("fundo vira archdesc level='fonds' com unitid F094", ad.get("level") == "fonds" and ad.findtext("did/unitid") == "F094")
+            ver("escape correto: '&' e '<' do título voltam iguais", ad.findtext("did/unittitle") == "Fundo Exporta & <Cia>" and b"&amp; &lt;Cia&gt;" in r.content)
+            ver("datas extremas com normal='1950/1990'", ad.find("did/unitdate").get("normal") == "1950/1990")
+            ver("autoridade: titular na origination (persname) e coautor entidade em controlaccess/corpname", ad.findtext("did/origination/persname") == "Ana Exporta" and ad.find("controlaccess/corpname[@role='coautor']") is not None and ad.find("controlaccess/corpname").text == "Escritório Coautor")
+            ver("campos ISAD: dimensão, história arquivística, procedência, acesso, reprodução e biografia com fonte",
+                ad.findtext("did/physdesc/extent") == "2 caixas" and "Guardado" in (ad.findtext("custodhist/p") or "") and ad.findtext("acqinfo/p") == "Doação de 2025"
+                and ad.findtext("accessrestrict/p") == "Aberto a pesquisadores" and "CC BY-NC-ND" in "".join(x.text or "" for x in ad.findall("userestrict/p")) and any("Livro X" in (x.text or "") for x in ad.findall("bioghist/p")))
+            files = ad.findall("dsc/c")
+            ver("projetos viram c level='file' (2) e folhas c level='item' (4 + 1)", [x.get("level") for x in files] == ["file", "file"] and len(files[0].findall("c[@level='item']")) == 4 and len(files[1].findall("c[@level='item']")) == 1)
+            it1 = files[0].find("c")
+            ver("folha: unitid, título sem caractere de controle, data, tipo, escala e localização", it1.findtext("did/unitid") == f"{P1}1" and it1.findtext("did/unittitle") == "Planta <térreo> & cobertura" and it1.find("did/unitdate").get("normal") == "1971" and it1.findtext("did/physdesc/genreform") == "Planta" and it1.findtext("did/materialspec") == "Escala 1:50" and it1.findtext("did/physloc") == "mapoteca MAP-02-G3", ET.tostring(it1)[:300])
+            ver("projeto: autoria na origination, caixa original em physloc, aspas preservadas", [x.text for x in files[0].findall("did/origination/persname")] == ["Ana Exporta", "Bruno B"] and files[0].findtext("did/physloc") == "CX07" and files[0].findtext("did/unittitle") == 'Casa "Aspas" & Cia')
+            ver("projeto sem ano: unitdate 'sem data' (sem normal inválido)", files[1].findtext("did/unitdate") == "sem data" and files[1].find("did/unitdate").get("normal") is None)
+        # ---------- EAD do projeto ----------
+        r = le.get("/api/projetos/F094-P0001/ead.xml")
+        try:
+            rp = ET.fromstring(r.content)
+            ver("EAD do projeto: fundo como contexto e só este projeto dentro", rp.find("archdesc").get("level") == "fonds" and [x.findtext("did/unitid") for x in rp.findall("archdesc/dsc/c")] == ["F094-P0001"] and rp.findtext("eadheader/eadid") == "CAMP-F094-P0001" and bool(rp.findtext("eadheader/filedesc/titlestmt/titleproper")))
+        except ET.ParseError as e:
+            ver("EAD do projeto parseável", False, e)
+        ver("EAD: 404 para fundo/projeto que não existe; 401 sem login", le.get("/api/fundos/F999/ead.xml").status_code == 404 and le.get("/api/projetos/F094-P0099/ead.xml").status_code == 404 and anon.get("/api/fundos/F094/ead.xml").status_code == 401)
+        # ---------- CSV ----------
+        r = le.get("/api/fundos/F094/folhas.csv")
+        ver("CSV do fundo: UTF-8 com BOM (Excel)", r.status_code == 200 and r.content.startswith(b"\xef\xbb\xbf") and "csv" in r.headers.get("content-type", ""))
+        linhas = list(_csv.reader(io.StringIO(r.content.decode("utf-8-sig"))))
+        ver("CSV: cabeçalho com código, título, ano, série, folha, status, direitos e localização", linhas[0] == ["codigo", "projeto", "titulo", "ano", "serie", "folha", "status", "direitos", "localizacao"], linhas[0])
+        ver("CSV do fundo: uma linha por folha (5)", len(linhas) == 6, len(linhas))
+        l1 = dict(zip(linhas[0], linhas[1]))
+        ver("CSV: valores da folha (ano da folha, série com nome, status legível, direitos com licença, localização física)", l1["codigo"] == f"{P1}1" and l1["ano"] == "1971" and l1["serie"] == "S01 Desenhos e pranchas" and l1["folha"] == "01/03" and l1["status"] == "publicado" and l1["direitos"] == "autorizado · CC BY-NC-ND" and l1["localizacao"] == "mapoteca MAP-02-G3", l1)
+        l2 = dict(zip(linhas[0], linhas[2]))
+        ver("CSV: folha sem ano usa o do projeto; sem localização própria usa a caixa do projeto; fórmula vira texto", l2["ano"] == "1970" and l2["localizacao"] == "CX07" and l2["titulo"] == "'=SOMA(A1)", l2)
+        r = le.get("/api/projetos/F094-P0002/folhas.csv")
+        lp = list(_csv.reader(io.StringIO(r.content.decode("utf-8-sig"))))
+        ver("CSV do projeto: só as folhas dele; projeto sem ano deixa o ano vazio", len(lp) == 2 and lp[1][0] == "F094-P0002-0000-S01-D00001" and lp[1][3] == "", lp)
+        ver("CSV: 404 e 401", le.get("/api/projetos/F094-P0099/folhas.csv").status_code == 404 and anon.get("/api/fundos/F094/folhas.csv").status_code == 401)
+        # ---------- BagIt ----------
+        base = pathlib.Path(tempfile.mkdtemp())
+        qnap, saida = base / "qnap_falso", base / "saida"
+        k = connect()
+        k.execute("INSERT OR IGNORE INTO configuracao (chave, valor) VALUES ('qnap.prontos_raiz', '')")
+        k.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(qnap),))
+        ver("migração 067: configuração exportacao.pasta existe (editável nas Configurações)", k.execute("SELECT COUNT(*) FROM configuracao WHERE chave='exportacao.pasta'").fetchone()[0] == 1)
+        k.execute("UPDATE configuracao SET valor=? WHERE chave='exportacao.pasta'", (str(saida),)); k.commit(); k.close()
+        r = adm.post("/api/projetos/F094-P0001/bagit?tarefa=1")
+        ver("QNAP não montado: 503 'QNAP não conectado' na hora, sem criar tarefa", r.status_code == 503 and "QNAP não conectado" in str(r.json().get("detail") or r.json().get("erro")) and connect().execute("SELECT COUNT(*) FROM tarefa_publicacao WHERE tipo='bagit'").fetchone()[0] == 0, r.text)
+        (qnap / "F094" / "P0001").mkdir(parents=True)
+        conteudos = {}
+        for n in (1, 2):
+            b = os.urandom(3000) + f"tif {n}".encode(); conteudos[n] = b
+            (qnap / "F094" / "P0001" / f"{P1}{n}.tif").write_bytes(b)
+        (base / "fora.tif").write_bytes(b"segredo")                     # fora da raiz: não pode entrar no pacote
+        ver("BagIt: operador e leitura não podem (403); projeto inexistente 404", op.post("/api/projetos/F094-P0001/bagit").status_code == 403 and le.post("/api/projetos/F094-P0001/bagit").status_code == 403 and adm.post("/api/projetos/F094-P0099/bagit").status_code == 404)
+        r = adm.post("/api/projetos/F094-P0001/bagit?tarefa=1")
+        t = {}
+        if r.status_code == 202:
+            fim = time.time() + 15
+            while time.time() < fim:
+                t = adm.get(f"/api/tarefas/{r.json()['tarefa_id']}").json()
+                if t["estado"] != "rodando": break
+                time.sleep(0.1)
+        ver("BagIt roda como tarefa em segundo plano (202) e termina", r.status_code == 202 and t.get("estado") in ("ok", "falhou") and t.get("tipo") == "bagit" and t.get("titulo") == "Pacote BagIt de F094-P0001", f"{r.status_code} {t}")
+        res_t = t.get("resultado") or {}
+        falt = sorted(x["codigo"] for x in t.get("falhas") or [])
+        ver("arquivos que faltam são listados (TIFF ausente e caminho fora da raiz do QNAP)", falt == [f"{P1}3", "F094-P0001-1970-S03-D00004"] and res_t.get("faltando") and "faltam 2" in res_t.get("mensagem", "") and t.get("estado") == "falhou", (falt, res_t.get("mensagem")))
+        bag = pathlib.Path(res_t.get("pasta") or "/nao/existe")
+        ver("o pacote fica na pasta configurada, sem sobra '.parcial'", bag.is_dir() and bag.parent == saida and not list(saida.glob("*.parcial")), bag)
+        ver("bagit.txt: BagIt 1.0 em UTF-8", (bag / "bagit.txt").is_file() and (bag / "bagit.txt").read_text() == "BagIt-Version: 1.0\nTag-File-Character-Encoding: UTF-8\n")
+        man = [l.split("  ", 1) for l in (bag / "manifest-sha256.txt").read_text().splitlines()] if (bag / "manifest-sha256.txt").is_file() else []
+        caminhos = sorted(p_ for _, p_ in man)
+        no_disco = sorted(x.relative_to(bag).as_posix() for x in (bag / "data").rglob("*") if x.is_file()) if (bag / "data").is_dir() else []
+        ver("manifest-sha256 lista exatamente os arquivos de data/ (2 TIFF + EAD + CSV)", caminhos == no_disco and len(caminhos) == 4 and f"data/tiff/S01/{P1}1.tif" in caminhos and "data/metadados/F094-P0001-ead.xml" in caminhos and "data/metadados/F094-P0001-folhas.csv" in caminhos, caminhos)
+        ver("manifest conferido: o sha256 de cada arquivo bate", bool(man) and all(hashlib.sha256((bag / p_).read_bytes()).hexdigest() == h for h, p_ in man))
+        ver("o TIFF copiado é idêntico ao do QNAP", (bag / f"data/tiff/S01/{P1}2.tif").is_file() and (bag / f"data/tiff/S01/{P1}2.tif").read_bytes() == conteudos[2])
+        tag = [l.split("  ", 1) for l in (bag / "tagmanifest-sha256.txt").read_text().splitlines()] if (bag / "tagmanifest-sha256.txt").is_file() else []
+        ver("tagmanifest-sha256 confere bagit.txt, bag-info.txt e manifest-sha256.txt", sorted(p_ for _, p_ in tag) == ["bag-info.txt", "bagit.txt", "manifest-sha256.txt"] and all(hashlib.sha256((bag / p_).read_bytes()).hexdigest() == h for h, p_ in tag))
+        info = dict(l.split(": ", 1) for l in (bag / "bag-info.txt").read_text().splitlines()) if (bag / "bag-info.txt").is_file() else {}
+        oxb = sum((bag / p_).stat().st_size for _, p_ in man)
+        ver("bag-info: Payload-Oxum certo, identificador e data", info.get("Payload-Oxum") == f"{oxb}.4" and info.get("External-Identifier") == "F094-P0001" and bool(info.get("Bagging-Date")) and "incompleto" in info.get("Internal-Sender-Description", ""), info)
+        try:
+            ET.fromstring((bag / "data/metadados/F094-P0001-ead.xml").read_bytes()); ok_x = True
+        except Exception: ok_x = False
+        ver("o EAD dentro do pacote também é XML válido", ok_x)
+        ver("a exportação fica no histórico do projeto", connect().execute("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo='F094-P0001' AND tipo='exportado_bagit'").fetchone()[0] == 1)
+        # completo: tira as folhas sem arquivo -> ok; sem a pasta configurada, usa a pasta de dados
+        k = connect(); k.execute("DELETE FROM item_localizacao"); k.execute("DELETE FROM item WHERE codigo IN (?, 'F094-P0001-1970-S03-D00004')", (f"{P1}3",)); k.execute("UPDATE configuracao SET valor='' WHERE chave='exportacao.pasta'"); k.commit(); k.close()
+        r = adm.post("/api/projetos/F094-P0001/bagit")
+        j = r.json() if r.status_code == 200 else {}
+        padrao = pathlib.Path(os.environ["CAMP_DB_PATH"]).resolve().parent / "exportacoes"
+        ver("sem faltas: ok e sem lista; sem configuração, grava em <dados>/exportacoes", r.status_code == 200 and j.get("ok") is True and j.get("faltando") == [] and pathlib.Path(j.get("pasta", "/")).parent == padrao, (r.status_code, j))
+        print("\n".join(res))
     elif modo == "b2_resolucao":
         init_db(); _aplicar_migracoes_real()
         import tempfile
@@ -4547,6 +4686,14 @@ else:
 print("73) Google Analytics 4 direto (conta de serviço), sem depender do Site Kit")
 rc, out = rodar("ga4_direto", f"{tmp}/ga4.db")
 if rc != 0: ok(False, f"teste do GA4 direto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("94) Exportação EAD 2002 (AtoM), CSV de folhas e pacote BagIt por projeto")
+rc, out = rodar("exportacao_ead", f"{tmp}/exp94.db")
+if rc != 0: ok(False, f"teste da exportação não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
