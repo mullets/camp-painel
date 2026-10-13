@@ -150,7 +150,7 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         if it["status_site"] == "no_ar":
             if it["tainacan_item_id"]:
                 raise HTTPException(409, f"A folha {c} está pública no site. Despublique o projeto antes de mover.")
-            _status_velho(con, c, ator)                                # "no ar" sem registro no site: status velho, não trava
+            _status_velho(con, c, ator)                                # marcada como publicada mas sem registro no site: status velho, não trava
         igual = None
         if it["titulo"] and it["folha"]:
             igual = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND titulo=? AND folha=? AND duplicata_de IS NULL LIMIT 1",
