@@ -2999,7 +2999,7 @@ async function diagnosticarAnalytics(){
       ['GA4 report',d.analytics_report_status==null?'—':'HTTP '+d.analytics_report_status],
     ];
     const escopos=(d.sitekit_escopos_faltantes||[]).length?'<div class="stale-note"><span class="status-dot warn"></span><span><b>Escopos Google faltando:</b> '+escHtml((d.sitekit_escopos_faltantes||[]).join(', '))+'</span></div>':'';
-    const msg=d.ok?'<div class="stale-note" style="border-color:var(--green);background:var(--green-soft)"><span class="status-dot ok"></span><span><b>Analytics funcionando.</b> '+escHtml(d.mensagem||'')+'</span></div>':'<div class="stale-note"><span class="status-dot warn"></span><span><b>Falha:</b> '+escHtml(d.erro||d.mensagem||'não identificada')+'</span></div>';
+    const msg=d.ok?'<div class="stale-note" style="border-color:var(--green);background:var(--green-soft)"><span class="status-dot ok"></span><span><b>Analytics funcionando.</b> '+escHtml(d.mensagem||'')+'</span></div>':'<div class="stale-note"><span class="status-dot warn"></span><span><b>Falha:</b> '+escHtml(d.erro||d.mensagem||'não identificada')+(d.acao?'<br><b>Como resolver:</b> '+escHtml(d.acao):'')+'</span></div>';
     openDrawer('Diagnóstico do Google Analytics',d.ok?'integração funcionando':'verificação da identidade usada pelo painel',msg+escopos+'<dl class="kv">'+linhas.map(([k,v])=>'<dt>'+escHtml(k)+'</dt><dd>'+escHtml(v)+'</dd>').join('')+'</dl><div class="act"><button class="btn" onclick="abrirConfigMaquina(\'wp.usuario\')">Configurar usuário WordPress</button><a class="btn pri" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div>');
   }catch(e){toast(e.message)}
 }

@@ -264,6 +264,14 @@ def analytics(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict
     return v
 
 
+# O Google devolve 403 "não concedeu todas as permissões durante a configuração" quando, ao conectar o Site Kit,
+# a caixa de ler os dados do Analytics ficou desmarcada na tela de consentimento.
+ACAO_PERMISSOES_SITEKIT = ('Entre no wp-admin como "{u}" → Site Kit → Configurações → Serviços conectados → Analytics → Editar '
+                           '(ou "Conceder permissão") e, na tela do Google, marque TODAS as caixas, principalmente '
+                           '"Ver e baixar seus dados do Google Analytics". Depois clique em Diagnosticar de novo. '
+                           'Alternativa sem Site Kit: preencher ga4.propriedade e ga4.conta_servico em Configurações.')
+
+
 def _analytics_calcular() -> dict:
     """Audiência do site via Google Site Kit / GA4.
 
@@ -450,6 +458,9 @@ def _analytics_calcular() -> dict:
                 f'Reautentique o Google no Site Kit logado como "{usuario}" e conceda os escopos solicitados.'
                 if usuario else "Reautentique o Google no Site Kit e conceda os escopos solicitados."
             )
+        elif "concedeu todas as permiss" in low or "granted all" in low or "insufficient scopes" in low:
+            out["erro_codigo"] = "sitekit_permissoes_google"
+            out["acao"] = ACAO_PERMISSOES_SITEKIT.format(u=usuario or "o usuário do painel")
         elif "403" in msg and ("permission" in low or "permiss" in low or "caller" in low or "site kit" in low):
             out["erro_codigo"] = "analytics_permissao_propriedade"
             out["acao"] = (
@@ -503,6 +514,9 @@ def analytics_diagnostico(u: dict = Depends(auth.exige("admin"))) -> dict:
     except Exception as e:
         d["ok"] = False
         d["erro"] = str(e)[:500]
+        lo = d["erro"].lower()
+        if "concedeu todas as permiss" in lo or "granted all" in lo or "insufficient scopes" in lo:
+            d["acao"] = ACAO_PERMISSOES_SITEKIT.format(u=d.get("wp_usuario") or "o usuário do painel")
         m = re.search(r"\((\d{3})\)", d["erro"])
         d["analytics_report_status"] = int(m.group(1)) if m else None
     return d
