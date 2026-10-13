@@ -788,6 +788,7 @@ body.na-painel #system-banner{display:none!important}
 /* H23 · Auditoria: frases, grupos de passos, filtros rápidos, antes → depois com destaque */
 .au-rapidos{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px 0;align-items:center}.au-rapidos [aria-pressed="true"]{background:var(--blue-soft);border-color:var(--blue);color:var(--blue)}.au-sep{width:1px;height:20px;background:var(--line);margin:0 4px}
 .au-frase{line-height:1.4}.au-passos{margin-left:6px;font-size:var(--fs-sm2)}.au-filho td{background:var(--surface2);font-size:var(--fs-md)}.au-ramo{color:var(--ink3)}
+.au-frase-det{margin:0 0 8px;line-height:1.5}.au-dados{margin-top:8px}.au-dados summary{cursor:pointer;color:var(--ink3);font-size:var(--fs-sm2)}.au-json{white-space:pre-wrap;margin-top:6px}
 .au-diff .au-mudou td{background:rgba(234,179,8,.10)}.au-diff del{color:var(--red);text-decoration:line-through}.au-diff ins{color:var(--green);text-decoration:none;font-weight:600}.au-diff .au-igual td{color:var(--ink3)}
 /* H24 · Configurações: busca, seções, estado ao vivo, testar, segredos, papéis em cartões */
 #cfg-busca{width:100%;margin-bottom:8px}.cfg-nav{display:flex;flex-wrap:wrap;gap:4px 12px;margin:0 0 12px;font-size:var(--fs-md)}
@@ -2092,7 +2093,7 @@ function fraseEvento(e,html){const t=e.tipo||'',art=ENT_ART[e.entidade]||'',cod=
   if(!mod){const r=html?escHtml(rotuloEvento(t)):rotuloEvento(t);return `${q}: ${r}${o?' · '+o:''}`}
   return mod.replace('{q}',q).replace('{c}',c).replace('{o}',o).replace('{de}',con(['do ','da '])).replace('{em}',con(['no ','na '])).replace('{ao}',con(['ao ','à ']))}
 function fraseEventoHTML(e){return fraseEvento(e,true)}
-function histEventosHTML(evs,ent,cod){return `<ul class="hist">${(evs||[]).map(e=>{const ev=Object.assign({entidade:ent,codigo:cod},e);return `<li><time>${fmtDataHora(e.quando)}</time><span>${fraseEventoHTML(ev)}${e.detalhe?` <small style="color:var(--ink3)">${escHtml(resumoDetalhe(e.detalhe))}</small>`:''}</span></li>`}).join('')||'<li class="empty">Sem eventos</li>'}</ul>`}
+function histEventosHTML(evs,ent,cod){return `<ul class="hist">${(evs||[]).map(e=>{const ev=Object.assign({entidade:ent,codigo:cod},e);return `<li><time>${fmtDataHora(e.quando)}</time><span>${fraseEventoHTML(ev)}${e.detalhe?` <small style="color:var(--ink3)">${escHtml(resumoDetalhe(e.detalhe,e.tipo))}</small>`:''}</span></li>`}).join('')||'<li class="empty">Sem eventos</li>'}</ul>`}
 /* H23: eventos em sequência da mesma ação (mesma pessoa, mesmo projeto, até 3 min) viram um grupo "N passos" */
 function agruparEventos(evs){const out=[];for(const e of evs){const raiz=String(e.codigo||'').slice(0,10),t=Date.parse(String(e.quando||'').replace(' ','T')+'Z')||0,g=out[out.length-1];
     if(g&&raiz&&g.ator===e.ator&&g.raiz===raiz&&Math.abs(g.t-t)<=180000){g.evs.push(e);g.t=t}else out.push({ator:e.ator,raiz,t,evs:[e]})}
@@ -2129,9 +2130,72 @@ function fmtData(v){
   return new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,day:'2-digit',month:'2-digit',year:'numeric'}).format(d);
 }
 
-// detalhe de evento legível (JSON -> 'chave: valor', sem nulos)
-function resumoDetalhe(d){let o=null;try{o=JSON.parse(d)}catch(_){}if(o&&o.antes&&o.depois&&typeof o.antes==='object'&&typeof o.depois==='object')d=Object.keys(o.depois).map(k=>`${k}: ${valorAuditoria(o.antes[k])} → ${valorAuditoria(o.depois[k])}`).join(' · ')||d;   /* H23: edição em uma linha, antes → depois */
-  const t=fmtDetalhe(d).replace(/https?:\/\/\S+/g,'(link)').replace(/\s+/g,' ').trim();return t.length>80?t.slice(0,79).trimEnd()+'…':t}   // #97: a coluna da auditoria mostra um resumo; o completo (JSON, links) fica no clique
+// #100: o detalhe de cada evento vira uma FRASE (por tipo); tipo desconhecido cai no "Campo: valor" legível; o JSON cru fica em "ver dados" (janela do evento)
+const CAMPO_AU={titulo:'título',descricao:'descrição',situacao:'situação',resolucao_max:'resolução máxima',codigo:'código',papel:'papel',ano:'ano',cidade:'cidade',valor:'valor',nome:'nome',email:'e-mail',motivo:'motivo',lote_id:'lote',item_id:'registro no site',metadados:'campos',tamanho_bytes:'tamanho',bytes:'tamanho',sigla:'sigla',tipologia:'programa / uso',natureza:'natureza do trabalho',autorizado_site:'liberado para publicação',status_site:'publicação',ativo:'ativo'};
+function campoAu(k){k=String(k);const site=k.startsWith('site:'),s=site?k.slice(5):k;const r=Object.prototype.hasOwnProperty.call(CAMPO_AU,s)?CAMPO_AU[s]:rotulo(s);return site?r+' (no site)':r}
+function valorAu(v){if(v===null||v===undefined||v==='')return '—';if(v===true)return 'sim';if(v===false)return 'não';if(Array.isArray(v))return v.length?v.map(valorAu).join(', '):'—';
+  if(typeof v==='object'){const p=Object.entries(v).filter(([,x])=>x!==null&&x!==''&&x!==undefined).map(([k,x])=>`${campoAu(k)}: ${valorAu(x)}`);return p.length?p.join('; '):'—'}
+  return typeof v==='string'&&Object.prototype.hasOwnProperty.call(ROTULO,v)?ROTULO[v]:String(v)}
+function maiusc(s){s=String(s||'');return s.charAt(0).toUpperCase()+s.slice(1)}
+function tamanhoAu(b){b=+b||0;return b>=1048576?(b/1048576).toFixed(1).replace('.',',')+' MB':Math.max(1,Math.round(b/1024))+' KB'}
+function nAu(v){return Array.isArray(v)?v.length:(+v||0)}
+const motivoAu=o=>o.motivo?` (motivo: ${o.motivo})`:'';
+const falhasAu=o=>+o.falhas?`; ${qtd(+o.falhas,'falhou','falharam')}`:'';
+function criadoAu(o){if(o.gravidade)return `Em ${o.codigo||'—'}: ${valorAu(o.gravidade)}${o.publicado_com_bloqueio?' (já estava publicado)':''}`;if(o.solicitante)return `Pedido de ${o.solicitante}`;
+  if(o.identificador)return `Lugar ${o.identificador}${o.fundo?` do fundo ${o.fundo}`:''}`;if(o.nome&&o.projeto)return `Lote “${o.nome}” em ${o.projeto}`;
+  if(o.titulo)return `“${o.titulo}”${o.sigla?` (${o.sigla})`:''}${o.origem==='planilha'?` · da planilha${o.arquivo?' '+o.arquivo:''}${o.linha?`, linha ${o.linha}`:''}`:''}`;return null}
+const sitePubAu=verbo=>o=>`${verbo} ${qtd(+o.ok||0,'registro','registros')} no site${falhasAu(o)}`;
+const FRASE_DETALHE={
+  folha_movida:o=>o.de&&o.para?`Moveu a folha ${o.de} para ${o.para}${motivoAu(o)}`:null,
+  lote_movido:o=>`Moveu o lote de ${o.de||'—'} para ${o.para||'—'}${o.folhas!=null?`, com ${qtd(+o.folhas,'folha','folhas')}`:''}${motivoAu(o)}`,
+  projeto_mesclado:o=>`Juntou ao projeto ${o.destino}: ${qtd(nAu(o.folhas),'folha movida','folhas movidas')}${nAu(o.duplicatas)?`, ${qtd(nAu(o.duplicatas),'duplicata','duplicatas')}`:''}${nAu(o.lotes)?`, ${qtd(nAu(o.lotes),'lote','lotes')}`:''}${motivoAu(o)}`,
+  publicacao_guiada:o=>{if(o.ok===false)return `A publicação não terminou${+o.folhas_criadas?` (${qtd(+o.folhas_criadas,'folha enviada','folhas enviadas')} ao site, ainda escondidas)`:''}`;
+    const p=+o.publicados||0,f=o.folhas_publicadas!=null?+o.folhas_publicadas:Math.max(0,p-1);return p?`Publicou a página do projeto e ${qtd(f,'folha','folhas')}${+o.folhas_criadas?` (${qtd(+o.folhas_criadas,'nova enviada','novas enviadas')} ao site)`:''}`:'Nada novo para publicar'},
+  site_publicar:sitePubAu('Publicou'),site_rascunho:sitePubAu('Voltou para rascunho'),site_tirar_do_ar:sitePubAu('Despublicou'),site_despublicar:sitePubAu('Despublicou'),
+  site_item_criado:o=>`Criou a folha no site${o.item_id?` (registro ${o.item_id})`:''}${nAu(o.metadados)?`, ${qtd(nAu(o.metadados),'campo','campos')}`:''}${typeof o.imagem==='string'?(/^falhou/.test(o.imagem)?'; a imagem não subiu':', com a imagem'):''}${o.capa?'; é a capa do projeto':''}`,
+  site_dossie_criado:o=>`Criou a página do projeto no site${o.item_id?` (registro ${o.item_id})`:''}${nAu(o.metadados)?`, ${qtd(nAu(o.metadados),'campo','campos')}`:''}`,
+  site_metadados:o=>nAu(o.enviados)?`Atualizou no site: ${(o.enviados||[]).map(campoAu).join(', ')}`:null,
+  site_texto_editado:o=>`${nAu(o.enviados)?`Atualizou no site: ${(o.enviados||[]).map(campoAu).join(', ')}`:'Nada foi enviado ao site'}${nAu(o.falhas)?`; ${qtd(nAu(o.falhas),'campo falhou','campos falharam')}`:''}`,
+  site_descricao_atualizada:o=>nAu(o.campos)?`Atualizou no site: ${o.campos.map(campoAu).join(', ')}`:null,
+  site_hub_arquiteto:o=>nAu(o.campos)?`Atualizou no site: ${o.campos.map(campoAu).join(', ')}`:null,
+  site_capa:o=>o.folha?`Capa no site: folha ${o.folha}`:'Tirou a capa do site',
+  capa_escolhida:o=>o.folha||o.item?`Capa: folha ${o.folha||o.item}`:null,
+  autorizado_em_lote:o=>`Autorizado junto com ${qtd(Math.max(0,(+o.total_no_lote||1)-1),'outro projeto','outros projetos')}${o.fundo?` do fundo ${o.fundo}`:''}`,
+  autorizacao_em_lote:o=>`Autorizou ${qtd(+o.autorizados||0,'projeto','projetos')}${+o.de_fora?`; ${qtd(+o.de_fora,'ficou de fora','ficaram de fora')}`:''}${+o.ja_estavam?`; ${qtd(+o.ja_estavam,'já estava autorizado','já estavam autorizados')}`:''}`,
+  revisao:o=>`Conferência: ${valorAu(o.de)} → ${valorAu(o.para)}`,
+  giro:o=>`Girou de ${+o.de||0}° para ${+o.para||0}°`,giro_manual:o=>`Girou de ${+o.de||0}° para ${+o.para||0}°`,
+  folha_retida:o=>o.motivo?`Motivo: ${o.motivo}`:'Fica só no painel',folha_liberada:o=>o.motivo?`Motivo: ${o.motivo}`:'Volta a poder ir ao site',
+  revisao_em_lote:o=>o.todas?`Conferiu todas as folhas do lote ${o.lote_id} (${qtd(+o.conferidas||0,'folha','folhas')})${+o.com_algo_apontado?`; ${fmtN(+o.com_algo_apontado)} com algo apontado`:''}`
+    :`Conferiu ${qtd(+o.conferidas||0,'folha','folhas')} do lote ${o.lote_id}; ${+o.restam?`faltam ${fmtN(+o.restam)}`:'não falta nenhuma'}`,
+  revisao_aprovada:o=>`Aprovou o lote ${o.lote_id}: ${qtd(+o.folhas||0,'folha','folhas')}${+o.bloqueadas?`, ${qtd(+o.bloqueadas,'bloqueada','bloqueadas')}`:''}`,
+  revisao_reaberta:o=>`Reabriu a conferência do lote ${o.lote_id}`,
+  entrada_registrada:o=>`Entrada de ${qtd(+o.volumes||0,'volume','volumes')}${o.tipo?` (${valorAu(o.tipo)})`:''}`,
+  direitos:o=>`Direitos: ${valorAu(o.situacao)}${o.resolucao_max?`; resolução máxima ${valorAu(o.resolucao_max)}`:''}`,
+  termo_direitos:o=>`Anexou o arquivo ${o.nome||'—'}${o.bytes?` (${tamanhoAu(o.bytes)})`:''}`,
+  alocacao:o=>`Guardou ${qtd(nAu(o.itens),'folha','folhas')} neste lugar`,
+  folhas_importadas_do_lote:o=>`Do lote ${o.lote_id}: ${qtd(+o.criadas||0,'folha nova','folhas novas')}${+o.atualizadas?`, ${qtd(+o.atualizadas,'atualizada','atualizadas')}`:''}${+o.ignoradas?`, ${qtd(+o.ignoradas,'ignorada','ignoradas')}`:''}${+o.problemas?`, ${fmtN(+o.problemas)} com problema`:''}`,
+  importacao_folhas:o=>`${qtd(+o.novas||0,'folha nova','folhas novas')} e ${qtd(+o.atualizadas||0,'atualizada','atualizadas')}${o.escopo?` (${o.escopo})`:''}`,
+  importacao_site:o=>`Do site: ${qtd(+o.projetos_novos||0,'projeto novo','projetos novos')}, ${qtd(+o.projetos_atualizados||0,'atualizado','atualizados')}; ${qtd(+o.itens_novos||0,'folha nova','folhas novas')}, ${qtd(+o.itens_atualizados||0,'atualizada','atualizadas')}`,
+  inventario_importado:o=>`Criou ${qtd(+o.criados||0,'projeto','projetos')}${o.de?` (${o.de}${o.ate&&o.ate!==o.de?` a ${o.ate}`:''})`:''}${o.arquivo?` a partir de ${o.arquivo}`:''}`,
+  backup_manual:o=>`Cópia ${o.arquivo||''}${o.tamanho_bytes?` (${tamanhoAu(o.tamanho_bytes)})`:''}`.trim(),
+  etapa_publicado:o=>o.pela==='publicacao_guiada'?'Fechado pela publicação guiada':(o.obs?`Observação: ${o.obs}`:null),
+  material_adicionado_ao_existente:o=>o.titulo_recebido?`Chegou como “${o.titulo_recebido}”`:null,
+  material_novo_pronto:o=>[o.estacao?`Estação ${o.estacao}`:'',o.operador?`por ${o.operador}`:''].filter(Boolean).join(' ')||null,
+  uso_exportado:o=>`Exportou ${qtd(+o.linhas||0,'linha','linhas')}${o.visao?` (${o.visao})`:''}`,
+  uso_coletado:o=>o.erro?`Erro: ${o.erro}`:`Leu ${qtd(+o.lidas||0,'resposta','respostas')}; ${qtd(+o.novas||0,'nova','novas')}`,
+  uso_apagado:o=>`Apagou ${qtd(+o.apagadas||0,'registro','registros')}`,
+  foto_atualizada:o=>o.bytes?`Nova foto (${tamanhoAu(o.bytes)})`:'Nova foto',foto_removida:()=>'Foto tirada',
+  criado:criadoAu,criada:criadoAu};
+function mudancasAu(o){const ks=[...new Set([...Object.keys(o.antes),...Object.keys(o.depois)])].filter(k=>JSON.stringify(o.antes[k]??null)!==JSON.stringify(o.depois[k]??null));
+  return ks.length?'Mudou '+ks.map(k=>`${campoAu(k)}: ${valorAu(o.antes[k])} → ${valorAu(o.depois[k])}`).join(' · '):'Salvou sem mudar nada'}
+function fraseGenerica(o){return Object.entries(o).filter(([,v])=>v!==null&&v!==''&&v!==undefined&&!(Array.isArray(v)&&!v.length)&&!(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length)).map(([k,v])=>`${maiusc(campoAu(k))}: ${valorAu(v)}`).join(' · ')}
+function fraseDetalhe(d,tipo){if(d==null||d==='')return '';let o=null;try{o=JSON.parse(d)}catch(_){}
+  if(!o||typeof o!=='object'||Array.isArray(o))return String(d);                                  // texto livre (ex.: "falha 3") fica como está
+  if(o.antes&&o.depois&&typeof o.antes==='object'&&typeof o.depois==='object')return mudancasAu(o);
+  const f=Object.prototype.hasOwnProperty.call(FRASE_DETALHE,tipo)?FRASE_DETALHE[tipo]:null;
+  if(f){try{const t=f(o);if(t)return t}catch(_){}}
+  return fraseGenerica(o)}
+function resumoDetalhe(d,tipo){const t=fraseDetalhe(d,tipo).replace(/https?:\/\/\S+/g,'(link)').replace(/\s+/g,' ').trim();return t.length>80?t.slice(0,79).trimEnd()+'…':t}   // #97: a coluna mostra até 80 caracteres; a frase inteira e o JSON ficam no clique
 function fmtDetalhe(d){if(!d)return'';try{const o=JSON.parse(d);if(o&&typeof o==='object')return Object.entries(o).filter(([,v])=>v!==null&&v!==''&&!(Array.isArray(v)&&!v.length)).map(([k,v])=>`${k}: ${Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):v}`).join(' · ')}catch(e){}return String(d)}
 
 // ---------- fundos e agentes via API ----------
@@ -3901,9 +3965,10 @@ let AUDITORIA_EVENTOS=[];
 function rotaDoEvento(e){const r=routeCode(String(e.codigo||''));if(r)return r;return({usuario:'config',config:'config',lista:'filas',solicitacao:'solicitacoes',erro:'erros',agente:'arquitetos',emprestimo:'emprestimos'})[e.entidade]||null}
 function valorAuditoria(v){if(v===null||v===undefined||v==='')return '—';if(typeof v==='object')return JSON.stringify(v);return String(v)}
 function detalheAuditoriaHTML(e){let o=null;try{o=e.detalhe?JSON.parse(e.detalhe):null}catch(_){}
-  if(o&&o.antes&&o.depois&&typeof o.antes==='object'&&typeof o.depois==='object'){const ks=[...new Set([...Object.keys(o.antes),...Object.keys(o.depois)])];const mudou=k=>JSON.stringify(o.antes[k]??null)!==JSON.stringify(o.depois[k]??null);return `<p class="help">Em destaque, o que mudou.</p><div class="tw"><table class="au-diff"><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>${ks.map(k=>mudou(k)?`<tr class="au-mudou"><td><b>${escHtml(k)}</b></td><td><del>${escHtml(valorAuditoria(o.antes[k]))}</del></td><td><ins>${escHtml(valorAuditoria(o.depois[k]))}</ins></td></tr>`:`<tr class="au-igual"><td>${escHtml(k)}</td><td>${escHtml(valorAuditoria(o.antes[k]))}</td><td>${escHtml(valorAuditoria(o.depois[k]))}</td></tr>`).join('')}</tbody></table></div>`}
-  if(o&&typeof o==='object')return `<pre class="mono-block" style="white-space:pre-wrap">${escHtml(JSON.stringify(o,null,2))}</pre>`;
-  return `<div class="mono-block">${escHtml(e.detalhe||'Sem detalhe adicional.')}</div>`
+  const dados=o&&typeof o==='object'?`<details class="au-dados"><summary>ver dados</summary><pre class="mono-block au-json">${escHtml(JSON.stringify(o,null,2))}</pre></details>`:'';   /* #100: o JSON cru, recolhido */
+  if(o&&o.antes&&o.depois&&typeof o.antes==='object'&&typeof o.depois==='object'){const ks=[...new Set([...Object.keys(o.antes),...Object.keys(o.depois)])];const mudou=k=>JSON.stringify(o.antes[k]??null)!==JSON.stringify(o.depois[k]??null);return `<p class="help">Em destaque, o que mudou.</p><div class="tw"><table class="au-diff"><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>${ks.map(k=>mudou(k)?`<tr class="au-mudou"><td><b>${escHtml(campoAu(k))}</b></td><td><del>${escHtml(valorAu(o.antes[k]))}</del></td><td><ins>${escHtml(valorAu(o.depois[k]))}</ins></td></tr>`:`<tr class="au-igual"><td>${escHtml(campoAu(k))}</td><td>${escHtml(valorAu(o.antes[k]))}</td><td>${escHtml(valorAu(o.depois[k]))}</td></tr>`).join('')}</tbody></table></div>${dados}`}
+  if(o&&typeof o==='object')return `<p class="au-frase-det">${escHtml(fraseDetalhe(e.detalhe,e.tipo)||'Sem detalhe adicional.')}</p>${dados}`;
+  return `<p class="au-frase-det">${escHtml(e.detalhe||'Sem detalhe adicional.')}</p>`
 }
 function abrirEventoAuditoria(id){const e=AUDITORIA_EVENTOS.find(x=>x.id===id);if(!e)return;const rota=rotaDoEvento(e);openDrawer(fraseEvento(e),`${fmtDataHora(e.quando)} · ${e.codigo||'—'}`,`<dl class="kv"><dt>Quando</dt><dd>${fmtDataHora(e.quando,true)}</dd><dt>Quem</dt><dd>${escHtml(e.ator||'—')}</dd><dt>Entidade</dt><dd>${escHtml(e.entidade||'—')}</dd><dt>Código</dt><dd><span class="code">${escHtml(e.codigo||'—')}</span></dd></dl><div><h3>Alteração</h3>${detalheAuditoriaHTML(e)}</div>${rota?`<div class="act"><button class="btn pri" onclick="nav('${rota}')">Abrir registro relacionado</button></div>`:''}`)}
 async function exportarAuditoriaCSV(){if(!AUDITORIA_EVENTOS.length){toast('Não há eventos para exportar');return}
@@ -4003,7 +4068,7 @@ async function carregarAuditoria(){const tinha=AUDITORIA_EVENTOS.length>0;if(!ti
   const qs=new URLSearchParams({...filtros,pagina:AUD_PAG.pagina,por_pagina:AUD_PAG.por}).toString();const d=await API('/api/eventos?'+qs);limparStale('auditoria');AUDITORIA_EVENTOS=d.eventos;AUDITORIA_TOTAL=d.total;
   montarPaginadorServidor('#au-pag',{total:d.total,pagina:d.pagina,por:d.por_pagina},p=>{AUD_PAG.pagina=p;carregarAuditoria()},n=>{AUD_PAG.por=n;AUD_PAG.pagina=1;carregarAuditoria()});
   const crit=e=>e.tipo!=='login'&&/site_|fora_do_ar|direit|recod|senha|usuario|config/i.test((e.tipo||'')+' '+(e.entidade||''));
-  document.getElementById('au-body').innerHTML=d.eventos.length?agruparEventos(d.eventos).map((g,gi)=>{const pr=g.principal,outros=g.evs.filter(x=>x!==pr),n=g.evs.length,lin=(e,filho)=>`<tr data-audit-id="${escHtml(e.id)}" data-abrir="auditoria:${escHtml(e.id)}"${filho?` class="au-filho" data-au-filho="${gi}" hidden`:n>1?' class="au-grupo"':''}><td style="white-space:nowrap">${fmtDataHora(e.quando)}</td><td class="au-frase">${filho?'<span class="au-ramo" aria-hidden="true">└</span> ':''}${crit(e)?'<span class="tag a">crítico</span> ':''}${fraseEventoHTML(e)}${!filho&&n>1?` <button type="button" class="lnk au-passos" data-au-grupo="${gi}" aria-expanded="false">${n} passos ▸</button>`:''}</td><td class="au-det">${escHtml(resumoDetalhe(e.detalhe))}</td></tr>`;return lin(pr,false)+outros.map(e=>lin(e,true)).join('')}).join(''):`<tr><td colspan="3" class="empty">${vazioHTML('Nenhum evento com estes filtros.','Tire algum filtro ou amplie as datas.','<button class="btn sm" onclick="auLimparFiltros()">Limpar filtros</button>')}</td></tr>`;
+  document.getElementById('au-body').innerHTML=d.eventos.length?agruparEventos(d.eventos).map((g,gi)=>{const pr=g.principal,outros=g.evs.filter(x=>x!==pr),n=g.evs.length,lin=(e,filho)=>`<tr data-audit-id="${escHtml(e.id)}" data-abrir="auditoria:${escHtml(e.id)}"${filho?` class="au-filho" data-au-filho="${gi}" hidden`:n>1?' class="au-grupo"':''}><td style="white-space:nowrap">${fmtDataHora(e.quando)}</td><td class="au-frase">${filho?'<span class="au-ramo" aria-hidden="true">└</span> ':''}${crit(e)?'<span class="tag a">crítico</span> ':''}${fraseEventoHTML(e)}${!filho&&n>1?` <button type="button" class="lnk au-passos" data-au-grupo="${gi}" aria-expanded="false">${n} passos ▸</button>`:''}</td><td class="au-det">${escHtml(resumoDetalhe(e.detalhe,e.tipo))}</td></tr>`;return lin(pr,false)+outros.map(e=>lin(e,true)).join('')}).join(''):`<tr><td colspan="3" class="empty">${vazioHTML('Nenhum evento com estes filtros.','Tire algum filtro ou amplie as datas.','<button class="btn sm" onclick="auLimparFiltros()">Limpar filtros</button>')}</td></tr>`;
   document.getElementById('au-cnt').textContent=`${d.eventos.length} de ${d.total}`;
   const se=document.getElementById('au-ent');if(se.options.length<=1)d.facetas.entidades.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;se.appendChild(o)});if(se.dataset.restore){se.value=se.dataset.restore;delete se.dataset.restore;if(se.value!==filtros.entidade)return carregarAuditoria()}
   const sa=document.getElementById('au-ator');if(sa.options.length<=1)d.facetas.atores.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sa.appendChild(o)});if(sa.dataset.restore){sa.value=sa.dataset.restore;delete sa.dataset.restore;if(sa.value!==filtros.ator)return carregarAuditoria()}
