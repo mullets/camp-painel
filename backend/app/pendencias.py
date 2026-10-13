@@ -150,7 +150,7 @@ def contar_pendencias(con, *, com_listas: bool = False) -> dict:
         "lotes_lendo": sum(1 for l in por.get("processando", []) if l["etapa"] == "processando"),
         "lotes_na_fila": sum(1 for l in por.get("processando", []) if l["etapa"] == "enviado"),
         "lotes_erro": len(por.get("erro", [])),
-        "publicando": q("SELECT COUNT(*) FROM tarefa_publicacao WHERE estado='rodando'"),
+        "publicando": q("SELECT COUNT(*) FROM tarefa_publicacao WHERE estado='rodando' AND tipo='publicar'"),
     }
     n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"]            # contador do menu: o que é de operador
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]

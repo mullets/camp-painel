@@ -748,7 +748,23 @@ def _importar_se_tem_pacote(con, pasta: Path) -> dict | None:
 
 
 @router.post("/filas/varrer-qnap")
-def varrer_qnap(u: dict = Depends(auth.exige("operador"))) -> dict:
+def varrer_qnap(tarefa: int = 0, u: dict = Depends(auth.exige("operador"))):
+    """?tarefa=1 (H4): roda em segundo plano e devolve {tarefa_id}; a tela acompanha em /api/tarefas/{id}."""
+    if not tarefa:
+        return _varrer_qnap()
+    if not _qnap_prontos_raiz().exists():
+        raise HTTPException(503, f"Pasta final do QNAP não montada em {_qnap_prontos_raiz()}")
+    from . import tarefas
+
+    def rodar(p) -> dict:
+        p.passo("Lendo as pastas do QNAP")
+        r = _varrer_qnap()
+        partes = [f"{r['novas']} pasta(s) nova(s)", f"{r['atualizadas']} atualizada(s)"] + ([f"{len(r['ignoradas'])} ignorada(s)"] if r["ignoradas"] else [])
+        return {**r, "ok": True, "nota": r["mensagem"], "mensagem": ", ".join(partes) + "."}
+    return tarefas.iniciar("varrer_qnap", "qnap", u, rodar)
+
+
+def _varrer_qnap() -> dict:
     """Lê somente material FINAL organizado pelo CAMP Vision 2.
 
     Fluxo:
@@ -874,6 +890,8 @@ def editar_solicitacao(sid: int, d: EdicaoSolicitacao, u: dict = Depends(auth.ex
         campos.append("situacao=?"); vals.append(d.situacao); mud["situacao"] = d.situacao
         if d.situacao == "entregue":
             campos.append("entregue_em=datetime('now')"); con.execute("UPDATE solicitacao_item SET entregue=1 WHERE solicitacao_id=?", (sid,))
+        elif s["situacao"] == "entregue":           # saiu de "entregue" (ex.: o Desfazer do H4): deixa de contar como entregue
+            campos.append("entregue_em=NULL"); con.execute("UPDATE solicitacao_item SET entregue=0 WHERE solicitacao_id=?", (sid,))
     for k in ("condicoes_uso", "valor", "detalhe", "responsavel"):
         v = getattr(d, k)
         if v is not None:

@@ -7,8 +7,18 @@ router = APIRouter(prefix="/api/site", tags=["site"])
 
 
 @router.post("/sincronizar")
-def sincronizar(bg: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
+def sincronizar(bg: BackgroundTasks, tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
     from .sincronizador import executar
+    if tarefa:                                   # H4: vira tarefa, com o chip do topo e o aviso de conclusão
+        from . import tarefas
+
+        def rodar(p) -> dict:
+            p.passo("Lendo coleções, folhas e páginas do site")
+            r = executar()
+            if not r.get("ok"):
+                return {**r, "mensagem": f"A sincronização falhou: {r.get('erro') or 'sem resposta do site'}"}
+            return {**r, "mensagem": f"Sincronizado: {r['itens']} item(ns) do site, {r['divergencias']} divergência(s)."}
+        return tarefas.iniciar("sincronizar", "site", u, rodar)
     bg.add_task(executar)
     return {"ok": True, "aviso": "Sincronização iniciada em segundo plano. Acompanhe em /api/site/status."}
 

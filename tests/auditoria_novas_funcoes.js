@@ -320,6 +320,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/Revisão do lote/.test(txt('#pj-revisao'))&&/aguardando importação/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="importar"]'),'o projeto com pacote e sem folhas importadas deveria oferecer "Importar as folhas do lote": "'+txt('#pj-revisao').slice(0,120)+'"');
   chk(/o CAMP Vision gravou 3 documento/.test(txt('#pj-revisao')),'deveria dizer quantos documentos o CAMP Vision gravou');
   d.querySelector('#pj-revisao [data-rev-lote="importar"]').click(); await sleep(3800);
+  chk(/3 folhas importadas/.test(txt('[data-aviso="lote"]'))&&/Próximo passo: conferir/.test(txt('[data-aviso="lote"]'))&&!!d.querySelector('[data-aviso="lote"] [data-pp="conferir"]'),'[H4] depois de importar, o resultado deveria ficar NA TELA com o próximo passo e o botão "Começar a conferir": "'+txt('[data-aviso="lote"]')+'"');
   const dt=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b;
   chk(dt.itens.length===3&&dt.itens.every(i=>i.revisao==='pendente'&&i.lote_id===loteId),'importar deveria criar 3 folhas pendentes ligadas ao lote: '+dt.itens.length);
   chk(/3 a conferir/.test(txt('#pj-revisao'))&&/Aprovar todas \(3\)/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="todas"]')&&!d.querySelector('#pj-revisao [data-rev-lote="aprovar"]'),'depois de importar: 3 a conferir e UM botão principal "Aprovar todas (3)" (o "Aprovar o lote" só aparece quando não restar nenhuma): "'+txt('#pj-revisao').slice(0,200)+'"');
@@ -333,12 +334,16 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/O que o CAMP Vision leu/.test(txt('#d-body'))&&/orientação incerta/.test(txt('#d-body'))&&!!d.querySelector('#rv-titulo')&&!!d.querySelector('#rv-tipo')&&!!d.querySelector('[data-rev-item="conferida"]'),'a janela de revisão deveria mostrar o que o CAMP Vision apontou e os campos: "'+txt('#d-body').slice(0,140)+'"');
   d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3000);
   chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.conferida===1,'"Está certo" deveria marcar a folha como conferida');
+  chk(new RegExp('Folha '+D(3)+' conferida').test(txt('#toast'))&&/Desfazer/.test(txt('#toast .toast-acao')),'[H4] conferir não pergunta: o aviso diz a folha e traz "Desfazer": "'+txt('#toast')+'"');
   const bx=d.querySelector('#d-body [data-rev-item="conferida"]'); chk(/Revisar folha/.test(txt('#d-title'))&&!!bx&&bx.dataset.codigo===D(1)&&w.eval('mainEl').classList.contains('with-drawer'),'depois de conferir, a janela deveria passar SOZINHA para a próxima folha pendente ('+D(1)+'): '+(bx&&bx.dataset.codigo));
   chk([...d.querySelectorAll('.thumb[data-rev-abrir="'+D(3)+'"] .rev-tag')].every(t=>/conferida/.test(t.textContent)),'o selo do cartão deveria virar "conferida" SEM recarregar a página');
   d.querySelector('[data-rev-girar="90"]').click(); await sleep(1500);
   chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===90&&/g=90/.test(d.getElementById('rv-img').getAttribute('src'))&&[...d.querySelectorAll('.thumb[data-rev-abrir="'+D(1)+'"] img')].every(i=>/g=90/.test(i.getAttribute('src'))),'"Virar à direita" deveria gravar o giro (90) e atualizar a imagem da janela e o cartão');
   d.querySelector('[data-rev-girar="-90"]').click(); await sleep(1500);
   chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===0,'"Virar à esquerda" deveria voltar o giro a 0');
+  { const ta=d.querySelector('#toast .toast-acao'); chk(!!ta&&/girada para a esquerda/.test(txt('#toast')),'[H4] girar deveria dizer o que fez e trazer "Desfazer": "'+txt('#toast')+'"');
+    if(ta){ ta.click(); await sleep(1500); chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===90&&/Giro desfeito/.test(txt('#toast'))&&!d.querySelector('#toast .toast-acao'),'[H4] "Desfazer" do giro deveria voltar a 90 (e não oferecer outro Desfazer): "'+txt('#toast')+'"');
+      d.querySelector('[data-rev-girar="-90"]').click(); await sleep(1500); } }
   d.getElementById('rv-titulo').value='Planta corrigida no teste'; d.getElementById('rv-escala').value='1:75';
   d.querySelector('[data-rev-item="corrigida"]').click(); await sleep(3400);
   const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
@@ -566,11 +571,18 @@ w.route_to('estacoes'); await sleep(2800);
   dx=await abrir(lei,'#fundos'); dd=dx.window.document; chk(!visivel(dd,'[data-pode="fundos.exportar"],[data-pode="fundo.reservar"],[data-pode="fundo.sigla"]'),'leitura não deveria ver Exportar, Reservar nem "definir sigla"'); dx.window.close();
   chk(w.pode('rota.uso')&&w.pode('fundo.reservar')&&[...d.querySelectorAll('[data-pode="fundo.reservar"]')].every(e=>!e.hidden),'admin deveria continuar vendo e podendo tudo'); }
 // ---------- [Auditoria P0-9] Enviar folhas repete até acabar (cria o dossiê no servidor); "Conferir as folhas" abre a 1ª folha; texto de imagem ----------
-{ const fetchOrig=w.fetch, confOrig=w.confirm, toastOrig=w.toast, msgs=[]; let n=0; w.toast=m=>{msgs.push(String(m))}; w.confirm=()=>true;
-  w.fetch=(u,o={})=>{ if(/\/api\/projetos\/F900-P0009\/subir-folhas$/.test(String(u))&&String(o.method||'GET').toUpperCase()==='POST'){ n++; const corpo=n===1?{pendentes:3,criadas:1,falhas:[],restam:2,parcial:true,dossie_criado:true}:{pendentes:2,criadas:2,falhas:[],restam:0,parcial:false,dossie_criado:false}; return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>corpo}) } return fetchOrig(u,o) };
-  await w.subirFolhas('F900-P0009'); await sleep(500); w.fetch=fetchOrig; w.confirm=confOrig; w.toast=toastOrig;
-  chk(n===2,'"Enviar folhas ao site" deveria chamar de novo enquanto houver parcial (2 chamadas), chamou '+n);
-  chk(msgs.some(m=>/faltam 2/.test(m))&&msgs.some(m=>/3 folhas enviadas|3 folha\(s\) enviada/.test(m)),'deveria avisar o andamento ("faltam 2") e o total final (3): '+msgs.join(' | '));
+{ const fetchOrig=w.fetch, confOrig=w.confirm, toastOrig=w.toast, msgs=[]; let n=0,g=0; w.toast=m=>{msgs.push(String(m))}; w.confirm=()=>true;
+  // [H4] enviar folhas virou TAREFA no servidor: uma chamada (?tarefa=1) e a tela acompanha o andamento real ("1 de 3", a folha atual) até o fim
+  const resp=c=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>c});
+  w.fetch=(u,o={})=>{ const U=String(u),M=String(o.method||'GET').toUpperCase();
+    if(/\/api\/projetos\/F900-P0009\/subir-folhas\?tarefa=1$/.test(U)&&M==='POST'){ n++; return resp({tarefa_id:777}) }
+    if(/\/api\/tarefas\/777$/.test(U)){ g++; const base={id:777,tipo:'enviar_folhas',titulo:'Enviar folhas de F900-P0009 ao site',projeto_codigo:'F900-P0009',ator:'rafael@camp.arq.br',total:3,iniciada_em:'2026-10-13 10:00:00',decorrido_s:g*2,falhas:[],log:[]};
+      return resp(g<3?{...base,estado:'rodando',etapa:'Enviando as folhas',folha_atual:'F900-P0009-1970-S01-D00002',feitas:1}:{...base,estado:'ok',etapa:'fim',feitas:3,terminada_em:'2026-10-13 10:00:09',resultado:{mensagem:'F900-P0009: 3 folha(s) enviada(s) ao site como rascunho.'}}) }
+    return fetchOrig(u,o) };
+  const pr=w.subirFolhas('F900-P0009'); await sleep(1500); const andamento=txt('[data-aviso="enviar-F900-P0009"]'); await pr; await sleep(200); w.fetch=fetchOrig; w.confirm=confOrig; w.toast=toastOrig;
+  chk(n===1,'[H4] "Enviar folhas ao site" deveria começar UMA tarefa no servidor (?tarefa=1), chamou '+n);
+  chk(/1 de 3/.test(andamento)&&/D00002/.test(andamento)&&/Pode sair desta tela/.test(andamento),'[H4] enquanto roda, a tela deveria mostrar "1 de 3", a folha atual e que dá para sair: "'+andamento+'"');
+  chk(msgs.some(m=>/3 folha\(s\) enviada/.test(m))&&/✔.*3 folhas enviadas/.test(txt('[data-aviso="enviar-F900-P0009"]')),'[H4] no fim, o resultado deveria ficar na tela e no aviso: '+msgs.join(' | ')+' / '+txt('[data-aviso="enviar-F900-P0009"]'));
   w.route_to('projeto/F003-P9001'); await sleep(3500);
   const pend=(w.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');
   if(pend){ w.acaoCondicao('revisao','F003-P9001'); await sleep(1500); chk(/Revisar folha/.test(txt('#d-title')),'"Conferir as folhas" (condição revisao) deveria abrir a primeira folha pendente: "'+txt('#d-title')+'"'); w.closeDrawer(true) }
@@ -1127,6 +1139,36 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H4] toda ação mostra o que está acontecendo: botão "trabalhando", Desfazer, chip de tarefas no topo, aviso de conclusão ----------
+{ w.route_to('painel'); await sleep(800);
+  let hit=0; w.toast('Teste do desfazer',{acao:{rotulo:'Desfazer',fn:()=>{hit++}}}); const tb=d.querySelector('#toast .toast-acao');
+  chk(!!tb&&d.getElementById('toast').classList.contains('com-acao'),'[H4] o toast com ação deveria ter o botão e aceitar clique'); tb.click(); await sleep(50);
+  chk(hit===1&&!d.getElementById('toast').classList.contains('on'),'[H4] clicar em "Desfazer" deveria rodar a ação uma vez e fechar o aviso');
+  // passado 1 s, o botão diz o que está fazendo (sem mudar de largura) e volta ao normal no fim
+  const fetchOrig=w.fetch; w.fetch=(u,o={})=>/\/api\/teste-lento$/.test(String(u))?new Promise(r=>setTimeout(()=>r({ok:true,status:200,statusText:'OK',json:async()=>({ok:true})}),1500)):fetchOrig(u,o);
+  const bt=d.createElement('button'); bt.className='btn'; bt.textContent='Importar'; bt.dataset.trabalhando='Importando…'; d.querySelector('.content.on').appendChild(bt); bt.focus();
+  const pl=w.eval('API')('/api/teste-lento',{method:'POST'}); await sleep(400); const t04=bt.textContent; await sleep(900); const t13=bt.textContent, dis=bt.disabled; await pl; await sleep(30); w.fetch=fetchOrig;
+  chk(t04==='Importar'&&t13==='Importando…'&&dis&&bt.textContent==='Importar'&&!bt.disabled&&bt.style.minWidth==='','[H4] o botão deveria dizer "Importando…" só depois de 1 s e voltar a "Importar" no fim: '+[t04,t13,dis,bt.textContent].join(' / ')); bt.remove();
+  // chip do topo: tarefa rodando aparece de qualquer página; clicar leva ao andamento
+  w.eval('clearTimeout(TAREFAS_TIMER)'); w.eval(`TAREFAS_EST={rodando:[{id:9001,tipo:'publicar',projeto_codigo:'F022-P0009',ator:'x',estado:'rodando',etapa:'folhas',folha_atual:'F022-P0009-1970-S01-D00004',feitas:3,total:5,decorrido_s:70,faltam_s:46,iniciada_em:'2026-10-13 10:00:00',log:[],falhas:[]}],terminadas:[]}`); w.desenharChipTarefas();
+  const chip=d.getElementById('tarefas-chip'); chk(!chip.hidden&&/Publicando F022-P0009 · 3 de 5/.test(chip.textContent),'[H4] o chip do topo deveria dizer "Publicando F022-P0009 · 3 de 5": "'+chip.textContent+'"');
+  chip.querySelector('[data-tarefas-abrir]').click();   // confere na hora: logo depois a lista se atualiza com o servidor de verdade
+  chk(/Tarefas/.test(txt('#d-title'))&&/3 de 5/.test(txt('#d-body'))&&/D00004/.test(txt('#d-body'))&&/faltam cerca de 46 s/.test(txt('#d-body'))&&!!d.querySelector('#d-body [data-tarefa-projeto="F022-P0009"]'),'[H4] clicar no chip deveria abrir o andamento (3 de 5, folha atual, quanto falta, link do projeto): "'+txt('#d-body').slice(0,200)+'"'); w.closeDrawer(true); await sleep(100);
+  // tarefa de verdade no servidor, terminada sem a pessoa ver: o aviso de conclusão fica até ela fechar (e não volta depois)
+  const tr=await w.eval('API')('/api/backup/agora?tarefa=1',{method:'POST'}); await sleep(1800); await w.vigiarTarefas();
+  chk(!chip.hidden&&chip.classList.contains('ok')&&/✔ Backup feito/.test(chip.textContent)&&!!chip.querySelector('[data-tarefas-visto]'),'[H4] terminada fora da vista, a tarefa deveria deixar o aviso "✔ Backup feito…" com × no topo: "'+chip.textContent+'"');
+  chip.querySelector('[data-tarefas-visto]').click(); await sleep(400);
+  const pf=(await J(adm,'/api/auth/eu/preferencias')).b; await w.vigiarTarefas();
+  chk(chip.hidden&&!!pf['tarefas.vista'],'[H4] fechar o aviso deveria escondê-lo e lembrar (preferência tarefas.vista) para não voltar: '+JSON.stringify(pf));
+  const lista=(await J(adm,'/api/tarefas')).b; chk(lista.terminadas.some(x=>x.id===tr.tarefa_id&&x.estado==='ok'),'[H4] /api/tarefas deveria listar a tarefa terminada');
+  // pedido: mudar a situação não pergunta; o aviso diz quem e traz "Desfazer"
+  const P=(await J(adm,'/api/solicitacoes?situacao=todos')).b.itens[0];
+  if(P){ await w.abrirSolicitacao(P.id); await sleep(300); const nova=P.situacao==='em_preparacao'?'aguarda_resposta':'em_preparacao'; d.getElementById('es-sit').value=nova;
+    await w.salvarSolicitacao(P.id); await sleep(200);
+    chk(txt('#toast').includes('Pedido de '+P.solicitante+' marcado como')&&!!d.querySelector('#toast .toast-acao'),'[H4] o aviso do pedido deveria dizer de quem é e trazer "Desfazer": "'+txt('#toast')+'"');
+    d.querySelector('#toast .toast-acao').click(); await sleep(900);
+    chk(((await J(adm,'/api/solicitacoes?situacao=todos')).b.itens.find(x=>x.id===P.id)||{}).situacao===P.situacao,'[H4] "Desfazer" deveria voltar o pedido para a situação anterior ('+P.situacao+')'); }
+  okl.push('H4: botão "trabalhando" após 1 s, Desfazer (conferir, girar, pedido), andamento de tarefa no lugar, chip no topo, aviso de conclusão que fica até fechar'); }
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');

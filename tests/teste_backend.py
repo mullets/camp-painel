@@ -3030,6 +3030,91 @@ def filho(modo):
         ver("com a exigência LIGADA (1) o fundo sem direitos volta a bloquear, com o botão que resolve", dpp(c, "F081") is not None and {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}["direitos"]["ok"] is False and {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}["direitos"]["acao"]["tipo"] == "direitos")
         c.rollback(); c.close()
         for l in res: print(l)
+    elif modo == "tarefas_h4":
+        init_db(); _aplicar_migracoes_real()
+        import json, threading, time
+        from fastapi import HTTPException
+        from app import auth, publicador, tarefas, pendencias as pd
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        cols = [r[1] for r in c.execute("PRAGMA table_info(tarefa_publicacao)")]
+        ver("migração 054: tarefa tem tipo e título", "tipo" in cols and "titulo" in cols, str(cols))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F081','Fundo Tarefa','FTA',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F081',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F081-P0001','F081',1,'Casa Tarefa',1970,7001)")
+        for i in range(1, 5):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'campvision')", (f"F081-P0001-1970-S01-D{i:05d}", "F081-P0001", "S01", i, f"Folha {i}"))
+        c.execute("INSERT INTO solicitacao (solicitante,finalidade,situacao) VALUES ('Pesquisadora Teste','pesquisa','em_preparacao')")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        def esperar(tid, s=10):
+            fim = time.time() + s
+            while time.time() < fim:
+                t = adm.get(f"/api/tarefas/{tid}").json()
+                if t["estado"] != "rodando": return t
+                time.sleep(0.1)
+            return t
+        # 1) backup vira tarefa: 202 na hora, o resultado chega pela tarefa
+        r = adm.post("/api/backup/agora?tarefa=1")
+        t = esperar(r.json().get("tarefa_id")) if r.status_code == 202 else {}
+        ver("backup ?tarefa=1 responde 202 e termina ok com a mensagem", r.status_code == 202 and t.get("estado") == "ok" and t["tipo"] == "backup" and str((t.get("resultado") or {}).get("mensagem", "")).startswith("Backup feito"), f"{r.status_code} {t}")
+        ver("sem ?tarefa o backup continua respondendo na hora (compatível)", adm.post("/api/backup/agora").json().get("ok") is True)
+        ver("operador continua sem poder fazer backup, nem como tarefa", op.post("/api/backup/agora?tarefa=1").status_code == 403)
+        # 2) andamento, 'já rodando' e o chip do topo
+        solta = threading.Event()
+        def lenta(p):
+            p.total(3); p.passo("Fazendo a parte 1", atual="A1"); p.feita(1, "parte 1 pronta"); solta.wait(10); p.feita(2, "o resto pronto")
+            return {"ok": True, "mensagem": "Tudo feito."}
+        u_adm = {"email": "adm@camp.arq.br"}
+        r1 = tarefas.iniciar("teste", "alvo1", u_adm, lenta, titulo="Tarefa de teste"); id1 = json.loads(r1.body)["tarefa_id"]
+        time.sleep(0.4)
+        r2 = tarefas.iniciar("teste", "alvo1", u_adm, lenta); b2 = json.loads(r2.body)
+        ver("a mesma tarefa (tipo + alvo) não começa duas vezes", r2.status_code == 200 and b2.get("ja_rodando") and b2["tarefa_id"] == id1, str(b2))
+        lst = op.get("/api/tarefas").json()
+        rod = [x for x in lst["rodando"] if x["id"] == id1]
+        ver("GET /api/tarefas mostra a que está rodando para todos (com 1 de 3, a etapa e a folha atual)", rod and rod[0]["feitas"] == 1 and rod[0]["total"] == 3 and rod[0]["etapa"] == "Fazendo a parte 1" and rod[0]["folha_atual"] == "A1" and rod[0]["titulo"] == "Tarefa de teste", str(rod))
+        solta.set(); t = esperar(id1)
+        ver("ao terminar: ok, 3 de 3, a mensagem e o registro do que aconteceu", t["estado"] == "ok" and t["feitas"] == 3 and t["resultado"]["mensagem"] == "Tudo feito." and [l["texto"] for l in t["log"]] == ["parte 1 pronta", "o resto pronto"] and t["decorrido_s"] is not None, str(t))
+        lst_a, lst_o = adm.get("/api/tarefas").json(), op.get("/api/tarefas").json()
+        ver("a terminada aparece para quem começou (aviso de conclusão) e não para os outros", any(x["id"] == id1 for x in lst_a["terminadas"]) and not any(x["id"] == id1 for x in lst_o["terminadas"]) and not any(x["id"] == id1 for x in lst_a["rodando"]))
+        # 3) falha: a mensagem da exceção vira o resultado
+        def quebra(p): raise HTTPException(400, "Faltou a pasta X")
+        t = esperar(json.loads(tarefas.iniciar("teste", "alvo2", u_adm, quebra).body)["tarefa_id"])
+        ver("tarefa que falha guarda o motivo", t["estado"] == "falhou" and t["resultado"]["mensagem"] == "Faltou a pasta X", str(t.get("resultado")))
+        t = esperar(json.loads(tarefas.iniciar("teste", "alvo3", u_adm, lambda p: {"erro": "site fora"}).body)["tarefa_id"])
+        ver("resultado com 'erro' conta como falha (e o erro vira a mensagem)", t["estado"] == "falhou" and t["resultado"]["mensagem"] == "site fora", str(t.get("resultado")))
+        # 4) servidor reiniciou no meio: a tarefa sem thread aparece como interrompida, com a mensagem certa para o tipo
+        k = connect(); tz = k.execute("INSERT INTO tarefa_publicacao (projeto_codigo, ator, estado, tipo, titulo) VALUES ('qnap','adm@camp.arq.br','rodando','varrer_qnap','Ler as pastas do QNAP')").lastrowid; k.commit(); k.close()
+        t = adm.get(f"/api/tarefas/{tz}").json()
+        ver("tarefa órfã (servidor reiniciou) vira 'falhou' com 'Rode de novo'", t["estado"] == "falhou" and "Rode de novo" in t["resultado"]["mensagem"], str(t.get("resultado")))
+        ver("o painel só conta como 'publicando' as tarefas de publicação", pd.contar_pendencias(connect())["publicando"] == 0)
+        # 5) enviar folhas: folha a folha, com o que falhou
+        enviadas = []
+        def folha_falsa(codigo, ator):
+            enviadas.append(codigo); return {"erro": "imagem não encontrada"} if codigo.endswith("D00003") else {"erro": None, "item_id": 1}
+        publicador.criar_folha_no_site = folha_falsa
+        r = adm.post("/api/projetos/F081-P0001/subir-folhas?tarefa=1"); t = esperar(r.json()["tarefa_id"])
+        ver("enviar folhas como tarefa: 3 de 4, a que falhou listada e a mensagem com o projeto", r.status_code == 202 and t["tipo"] == "enviar_folhas" and t["total"] == 4 and t["feitas"] == 3 and len(t["falhas"]) == 1 and t["falhas"][0]["codigo"].endswith("D00003") and t["estado"] == "falhou" and "F081-P0001: 3 folha(s) enviada(s)" in t["resultado"]["mensagem"], str({k_: t.get(k_) for k_ in ("total", "feitas", "falhas", "estado", "resultado")}))
+        ver("enviar folhas de projeto que não existe: 404 na hora", adm.post("/api/projetos/F081-P0099/subir-folhas?tarefa=1").status_code == 404)
+        k = connect(); k.execute("UPDATE configuracao SET valor='/nao/existe/qnap' WHERE chave='qnap.prontos_raiz'"); k.execute("INSERT OR IGNORE INTO configuracao (chave, valor) VALUES ('qnap.prontos_raiz','/nao/existe/qnap')"); k.commit(); k.close()
+        ver("varrer QNAP não montado: 503 na hora, sem criar tarefa", op.post("/api/filas/varrer-qnap?tarefa=1").status_code == 503)
+        # 6) preferência do aviso de conclusão
+        ver("preferência 'tarefas.vista' é aceita", adm.put("/api/auth/eu/preferencias", json={"chave": "tarefas.vista", "valor": "2026-10-13 15:00:00"}).status_code == 200 and adm.get("/api/auth/eu/preferencias").json().get("tarefas.vista") == "2026-10-13 15:00:00")
+        ver("outra chave continua recusada", adm.put("/api/auth/eu/preferencias", json={"chave": "tarefas.outra", "valor": "x"}).status_code == 400)
+        # 7) Desfazer da situação do pedido: sair de 'entregue' deixa de contar como entregue
+        sid = connect().execute("SELECT id FROM solicitacao").fetchone()[0]
+        op.patch(f"/api/solicitacoes/{sid}", json={"situacao": "entregue"})
+        e1 = connect().execute("SELECT entregue_em FROM solicitacao WHERE id=?", (sid,)).fetchone()[0]
+        op.patch(f"/api/solicitacoes/{sid}", json={"situacao": "em_preparacao"})
+        e2 = connect().execute("SELECT situacao, entregue_em FROM solicitacao WHERE id=?", (sid,)).fetchone()
+        ver("desfazer 'entregue' volta a situação e limpa a data de entrega", e1 is not None and e2[0] == "em_preparacao" and e2[1] is None, f"{e1} {tuple(e2)}")
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3661,6 +3746,14 @@ else:
 print("53) H6b painel inicial: contagem por lote (Fila = painel = menu), tarefas por papel, caminho, faixa crítica, travados por direitos")
 rc, out = rodar("painel_h6b", f"{tmp}/painel_h6b.db")
 if rc != 0: ok(False, f"teste do painel inicial não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("54) H4 ações longas viram tarefa: backup, enviar folhas, andamento, 'já rodando', chip do topo, falhas, interrompida, Desfazer do pedido")
+rc, out = rodar("tarefas_h4", f"{tmp}/tarefas_h4.db")
+if rc != 0: ok(False, f"teste das tarefas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -90,6 +90,7 @@ def _rodar_tarefa(tid: int, codigo: str, u: dict) -> None:
 
 
 MSG_INTERROMPIDA = "A publicação foi interrompida (o servidor reiniciou). O que já subiu não se repete: clique em Publicar de novo."
+MSG_INTERROMPIDA_OUTRA = "A tarefa foi interrompida (o servidor reiniciou). Rode de novo."
 
 
 def _linha(tid: int) -> dict | None:
@@ -112,7 +113,8 @@ def _ler(tid: int) -> dict | None:
         con = connect()
         try:
             con.execute("UPDATE tarefa_publicacao SET estado='falhou', etapa='fim', terminada_em=?, resultado=? WHERE id=? AND estado='rodando'",
-                        (_agora(), json.dumps({"ok": False, "mensagem": MSG_INTERROMPIDA}, ensure_ascii=False), tid))
+                        (_agora(), json.dumps({"ok": False, "mensagem": MSG_INTERROMPIDA if t.get("tipo", "publicar") == "publicar" else MSG_INTERROMPIDA_OUTRA},
+                                              ensure_ascii=False), tid))
             con.commit()
         finally:
             con.close()
@@ -136,7 +138,7 @@ def _iniciar_tarefa(codigo: str, u: dict):
         p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
         if not p:
             raise HTTPException(404, "Projeto não existe")
-        ativa = con.execute("SELECT id FROM tarefa_publicacao WHERE projeto_codigo=? AND estado='rodando' ORDER BY id DESC LIMIT 1", (codigo,)).fetchone()
+        ativa = con.execute("SELECT id FROM tarefa_publicacao WHERE projeto_codigo=? AND tipo='publicar' AND estado='rodando' ORDER BY id DESC LIMIT 1", (codigo,)).fetchone()
         if ativa and _THREADS.get(ativa[0]) and _THREADS[ativa[0]].is_alive():
             return JSONResponse(status_code=200, content={"tarefa_id": ativa[0], "ja_rodando": True})
         pl = publicacao_guiada.plano(con, p)
@@ -153,6 +155,24 @@ def _iniciar_tarefa(codigo: str, u: dict):
     return JSONResponse(status_code=202, content={"tarefa_id": tid})
 
 
+@router.get("/tarefas")
+def tarefas(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """H4 · o chip do topo: as tarefas rodando agora (de qualquer pessoa) e as que ESTA pessoa começou e terminaram nas últimas 24 h
+    (o aviso de conclusão fica até ela fechar; a tela guarda na preferência 'tarefas.vista' até quando — terminada_em — ela já viu)."""
+    con = connect()
+    try:
+        rod = [r[0] for r in con.execute("SELECT id FROM tarefa_publicacao WHERE estado='rodando' ORDER BY id DESC LIMIT 20")]
+        ter = [r[0] for r in con.execute("""SELECT id FROM tarefa_publicacao WHERE estado!='rodando' AND ator=? AND terminada_em >= datetime('now','-1 day')
+                                            ORDER BY id DESC LIMIT 10""", (u["email"],))]
+    finally:
+        con.close()
+    def curta(t: dict) -> dict:
+        return {**t, "log": (t.get("log") or [])[-8:]}
+    lidas = [t for t in map(_ler, rod) if t]                       # _ler marca como interrompida a que perdeu a thread
+    return {"rodando": [curta(t) for t in lidas if t["estado"] == "rodando"],
+            "terminadas": [curta(t) for t in map(_ler, ter) if t] + [curta(t) for t in lidas if t["estado"] != "rodando" and t["ator"] == u["email"]]}
+
+
 @router.get("/tarefas/{tid}")
 def tarefa(tid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     t = _ler(tid)
@@ -166,7 +186,7 @@ def tarefa_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> 
     """A tarefa de publicação mais recente deste projeto (rodando, ou terminada há pouco). None quando não há nada para acompanhar."""
     con = connect()
     try:
-        r = con.execute("""SELECT id FROM tarefa_publicacao WHERE projeto_codigo=? AND (estado='rodando' OR terminada_em >= datetime('now','-10 minutes'))
+        r = con.execute("""SELECT id FROM tarefa_publicacao WHERE projeto_codigo=? AND tipo='publicar' AND (estado='rodando' OR terminada_em >= datetime('now','-10 minutes'))
                            ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
     finally:
         con.close()

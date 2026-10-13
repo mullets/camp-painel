@@ -210,8 +210,23 @@ class Puxar(BaseModel):
 
 
 @router.post("/uso/puxar")
-def puxar(d: Puxar, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Traz as entradas do formulário do site agora. completo=true lê todo o histórico."""
+def puxar(d: Puxar, tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
+    """Traz as entradas do formulário do site agora. completo=true lê todo o histórico. ?tarefa=1 (H4): em segundo plano."""
+    if tarefa:
+        from . import tarefas
+        _wp_http()                                   # sem o site configurado, avisa na hora (não vira tarefa que falha)
+
+        def rodar(p) -> dict:
+            p.passo("Lendo todo o histórico do formulário no site" if d.completo else "Buscando pedidos novos no site")
+            r = _puxar(d, u)
+            if r.get("erro"):
+                return {**r, "ok": False, "mensagem": f"A coleta falhou: {r['erro']}"}
+            return {**r, "mensagem": f"{r['novas']} pedido(s) novo(s) ({r['lidas']} lido(s) no site)."}
+        return tarefas.iniciar("puxar_uso", "uso", u, rodar, titulo="Buscar todo o histórico de pedidos" if d.completo else None)
+    return _puxar(d, u)
+
+
+def _puxar(d: "Puxar", u: dict) -> dict:
     h = _wp_http()
     con = connect()
     try:

@@ -564,7 +564,23 @@ def backup_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
 
 
 @router.post("/backup/agora")
-def backup_agora(u: dict = Depends(auth.exige("admin"))) -> dict:
+def backup_agora(tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
+    """?tarefa=1 (H4): roda em segundo plano e devolve {tarefa_id}."""
+    if not tarefa:
+        return _backup_agora(u)
+    from . import tarefas
+
+    def rodar(p) -> dict:
+        p.passo("Copiando o banco de dados")
+        r = _backup_agora(u)
+        extra = r.get("extra")
+        b = r["tamanho_bytes"]
+        tam = f"{b / 1048576:.1f} MB" if b >= 1048576 else f"{max(1, round(b / 1024))} KB"
+        return {**r, "mensagem": f"Backup feito: {tam}" + (" · a cópia extra FALHOU" if extra and not extra.get("ok") else "") + "."}
+    return tarefas.iniciar("backup", "backup", u, rodar)
+
+
+def _backup_agora(u: dict) -> dict:
     try:
         r = bk.fazer_backup(destino_extra=bk.destino_extra_configurado())
     except bk.BackupErro as e:

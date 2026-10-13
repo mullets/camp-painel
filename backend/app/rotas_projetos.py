@@ -792,7 +792,28 @@ def exportar_selecao(d: AcaoProjetosLote, u: dict = Depends(auth.exige("leitura"
 
 
 @router.post("/projetos/{codigo}/subir-folhas")
-def subir_folhas(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+def subir_folhas(codigo: str, tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
+    """?tarefa=1 (H4): envia TODAS em segundo plano, folha a folha, com "3 de 5" e a folha atual; devolve {tarefa_id}."""
+    if not tarefa:
+        return _subir_folhas(codigo, u)
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+    finally:
+        con.close()
+    from . import tarefas
+
+    def rodar(p) -> dict:
+        r = _subir_folhas(codigo, u, p)
+        n, f = r["criadas"], r["falhas"]
+        msg = (f"{codigo}: {n} folha(s) enviada(s) ao site como rascunho" + (f"; {len(f)} não {'subiu' if len(f) == 1 else 'subiram'}" if f else "") + "."
+               if r["pendentes"] else f"{codigo}: nenhuma folha faltava no site.")
+        return {**r, "ok": not f, "mensagem": msg, "projeto": codigo}
+    return tarefas.iniciar("enviar_folhas", codigo, u, rodar, titulo=f"Enviar folhas de {codigo} ao site")
+
+
+def _subir_folhas(codigo: str, u: dict, progresso=None) -> dict:
     """Cria no Tainacan (rascunho) as folhas do projeto que ainda não existem lá. Se o projeto ainda não tem dossiê, CRIA o dossiê primeiro (antes mandava usar um botão que não existe na tela).
     Envia em fatias de tempo (a mesma ORCAMENTO_S da publicação guiada): devolve parcial/restam e a tela chama de novo até acabar."""
     import time as _t
@@ -813,11 +834,21 @@ def subir_folhas(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
     pend = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} ORDER BY serie_codigo, sequencial", (codigo,))]
     con.close()
     ok, falhas, t0 = 0, [], _t.monotonic()
+    if progresso:
+        progresso.total(len(pend))
+        if sem_dossie:
+            progresso.log("Dossiê criado no site")
     for c in pend:
-        if ok + len(falhas) > 0 and _t.monotonic() - t0 >= pg.ORCAMENTO_S:
+        if not progresso and ok + len(falhas) > 0 and _t.monotonic() - t0 >= pg.ORCAMENTO_S:   # em tarefa não há fatia de tempo: vai até o fim
             break
+        if progresso:
+            progresso.passo("Enviando as folhas", atual=c)
         r = criar_folha_no_site(c, u["email"])
-        if r["erro"]: falhas.append({"codigo": c, "erro": r["erro"]})
-        else: ok += 1
+        if r["erro"]:
+            falhas.append({"codigo": c, "erro": r["erro"]})
+            if progresso: progresso.log(f"Folha {c} NÃO subiu: {r['erro']}")
+        else:
+            ok += 1
+            if progresso: progresso.feita(1, f"Folha {c} enviada")
     restam = len(pend) - ok - len(falhas)
     return {"pendentes": len(pend), "criadas": ok, "falhas": falhas, "restam": restam, "parcial": restam > 0 and not falhas, "dossie_criado": sem_dossie}
