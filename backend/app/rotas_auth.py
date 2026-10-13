@@ -67,6 +67,19 @@ def preferencias(u: dict = Depends(auth.usuario_atual)) -> dict:
         con.close()
 
 
+@router.delete("/eu/preferencias/ajuda")
+def rever_explicacoes(u: dict = Depends(auth.usuario_atual)) -> dict:
+    """H25 · "Mostrar de novo as explicações": esquece quais caixas "Como funciona esta página" a pessoa já fechou."""
+    from .db import connect
+    con = connect()
+    try:
+        n = con.execute("DELETE FROM usuario_preferencia WHERE usuario_id=? AND chave LIKE 'ajuda.%'", (u["id"],)).rowcount
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "apagadas": n}
+
+
 @router.put("/eu/preferencias")
 def gravar_preferencia(d: Preferencia, u: dict = Depends(auth.usuario_atual)) -> dict:
     import re

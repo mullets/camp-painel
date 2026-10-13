@@ -209,11 +209,11 @@ r=await J(ope,'/api/backup/agora',{method:'POST'}); chk(r.s===403,'operador faze
 r=await J(adm,'/api/backup'); chk(r.s===200&&r.b.existe===false,'sem backup ainda deveria dar existe=false: '+JSON.stringify(r.b).slice(0,80));
 w.route_to('estacoes'); await sleep(3000);
 chk(!!d.getElementById('bk-painel')&&txt('#bk-painel').includes('sem backup'),'painel de backup deveria dizer "sem backup": '+txt('#est-body').slice(0,60));
-chk(txt('#system-banner').includes('nenhum backup do banco'),'banner global deveria avisar "nenhum backup do banco": "'+txt('#system-banner').slice(0,80)+'"');
+chk(/nenhum backup do banco/i.test(txt('#system-banner')),'banner global deveria avisar "nenhum backup do banco": "'+txt('#system-banner').slice(0,80)+'"');
 chk(!!d.getElementById('bk-agora'),'botão "Fazer backup agora" não aparece para master');
 await w.backupAgora(); await sleep(3500);
 chk(txt('#bk-painel').includes('em dia'),'depois do backup o painel deveria dizer "em dia": '+txt('#bk-painel').slice(0,90));
-chk(!txt('#system-banner').includes('nenhum backup do banco'),'banner continua acusando falta de backup depois do backup');
+chk(!/nenhum backup do banco/i.test(txt('#system-banner')),'banner continua acusando falta de backup depois do backup');
 r=await J(adm,'/api/backup'); chk(r.b.existe&&r.b.ok===true&&r.b.quantidade===1&&r.b.contagens.integridade==='ok','API depois do backup: '+JSON.stringify(r.b).slice(0,120));
 r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!('arquivo' in r.b.backup),'operador deveria receber o estado do backup sem caminhos');
 // máquinas sem resposta são normais: NÃO podem aparecer no banner global nem no resumo do painel inicial
@@ -247,8 +247,8 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- USO DO ACERVO (pedidos de download do formulário do site) ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
-  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='6','o menu deveria ter "Uso do acervo" com o atalho 6');
-  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Pedidos','"Uso do acervo" deveria ficar no grupo PEDIDOS do menu (junto das Solicitações), está em "'+(el&&el.textContent.trim())+'"'); }
+  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Downloads do site" (Uso do acervo) com o atalho U');
+  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Acompanhamento','[H25] "Downloads do site" deveria ficar no grupo Acompanhamento do menu, está em "'+(el&&el.textContent.trim())+'"'); }
   chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
   chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
   const D0=(await J(adm,'/api/uso/'+L.itens[0].id)).b;
@@ -418,10 +418,10 @@ w.route_to('estacoes'); await sleep(2800);
   await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }
 // ---------- MENU POR TRABALHO e PRÓXIMO PASSO no topo do projeto ----------
 { w.confirm=()=>true;
-  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Material novo','Pedidos','Acervo','Sistema']),'o menu deveria ter os grupos por trabalho: Material novo, Pedidos, Acervo, Sistema: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
+  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Início','Trabalho do dia','Acervo','Acompanhamento','Ajuda']),'[H25] o menu deveria ter os grupos por tarefa: Início, Trabalho do dia, Acervo, Acompanhamento, Ajuda: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
   const grupo=nome=>{const g=[...d.querySelectorAll('#nav .grp')].find(x=>x.textContent.trim()===nome),r=[];for(let e=g&&g.nextElementSibling;e&&!e.classList.contains('grp');e=e.nextElementSibling)if(e.dataset.v)r.push(e.dataset.v);return r.join(',')};
-  chk(grupo('Material novo')==='decisoes,filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,qualidade,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
-  chk(txt('#nav [data-v="projetos"] kbd')==='7'&&txt('#nav [data-v="decisoes"] kbd')==='2'&&txt('#nav [data-v="filas"] kbd')==='3'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Decisões 2, Filas 3, Projetos 7, Etiquetas T)');
+  chk(grupo('Início')==='painel'&&grupo('Trabalho do dia')==='decisoes,filas,erros,solicitacoes'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Acompanhamento')==='uso,estacoes,auditoria,qualidade,config'&&grupo('Ajuda')==='caminho,glossario','[H25] cada grupo deveria ter os itens certos: '+['Início','Trabalho do dia','Acervo','Acompanhamento','Ajuda'].map(grupo).join(' | '));
+  chk(txt('#nav [data-v="projetos"] kbd')==='6'&&txt('#nav [data-v="decisoes"] kbd')==='2'&&txt('#nav [data-v="filas"] kbd')==='3'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Decisões 2, Material novo 3, Projetos 6, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
   chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
@@ -1139,6 +1139,23 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H25] Navegação: menu por tarefa, "?" ao lado do título, menu do avatar, "Site conferido há…", faixa com o que fazer e "Fechar por hoje" ----------
+{ chk(txt('#nav [data-v="filas"]').startsWith('Material novo')&&txt('#nav [data-v="erros"]').startsWith('Problemas')&&txt('#nav [data-v="solicitacoes"]').startsWith('Pedidos de material')&&txt('#nav [data-v="estacoes"]').startsWith('Máquinas e site')&&txt('#nav [data-v="auditoria"]').startsWith('Histórico de ações'),'[H25] o menu deveria usar os nomes por tarefa');
+  w.route_to('filas'); await sleep(1200); chk(/^Material novo/.test(txt('#v-filas h1'))&&/Material novo/.test(txt('#gcrumb'))&&/Trabalho do dia/.test(txt('#gcrumb')),'[H25] título e trilha deveriam acompanhar o nome do menu: "'+txt('#v-filas h1')+'" / "'+txt('#gcrumb')+'"');
+  chk(!!d.querySelector('#v-filas .hdr .help-h1')&&!d.querySelector('.top .help-top'),'[H25] o "?" deveria ficar ao lado do título da página, e não perdido no topo');
+  chk(d.getElementById('q').placeholder==='Buscar projeto, fundo, arquiteto ou código','[H25] a busca deveria dizer o que procura: '+d.getElementById('q').placeholder);
+  d.querySelector('.who').click(); await sleep(100); const wm=d.getElementById('who-menu');
+  chk(!wm.hidden&&/Meu perfil/.test(wm.textContent)&&/Atalhos/.test(wm.textContent)&&/Mostrar de novo as explicações/.test(wm.textContent)&&/Sair/.test(wm.textContent),'[H25] o avatar deveria abrir o menu (Meu perfil · Atalhos · Mostrar de novo as explicações · Sair)');
+  d.body.click(); await sleep(50); chk(wm.hidden,'[H25] clicar fora deveria fechar o menu do avatar');
+  await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.filas',valor:'99'})}); const rv=(await J(adm,'/api/auth/eu/preferencias/ajuda',{method:'DELETE'})).b;
+  chk(rv&&rv.ok&&!('ajuda.filas' in (await J(adm,'/api/auth/eu/preferencias')).b),'[H25] "Mostrar de novo as explicações" deveria esquecer as caixas já fechadas');
+  const ms=txt('#machine-status'); chk(!/\bsync \d/.test(ms),'[H25] o topo não deveria mostrar "sync 21:43": "'+ms.slice(-60)+'"');
+  w.atualizarBannerSistema({qnap:{montado:true,nivel_espaco:'aviso',livre_gb:3000,livre_pct:15},site:{http:{ok:true}}}); const bn=d.getElementById('system-banner');
+  chk(bn.classList.contains('on')&&/Avise o Rafael/.test(txt('#system-banner'))&&!!bn.querySelector('[data-faixa-fechar]'),'[H25] a faixa deveria dizer o que fazer e ter "Fechar por hoje": "'+txt('#system-banner').slice(0,140)+'"');
+  bn.querySelector('[data-faixa-fechar]').click(); await sleep(50); chk(!bn.classList.contains('on'),'[H25] "Fechar por hoje" deveria esconder a faixa');
+  w.atualizarBannerSistema({qnap:{montado:true,nivel_espaco:'aviso',livre_gb:3000,livre_pct:15},site:{http:{ok:true}}}); chk(!bn.classList.contains('on'),'[H25] o mesmo aviso não deveria voltar no mesmo dia');
+  w.atualizarBannerSistema({qnap:{montado:false},site:{http:{ok:true}}}); chk(bn.classList.contains('on'),'[H25] um aviso diferente deveria aparecer mesmo depois de fechar o outro');
+  try{w.localStorage.clear()}catch(_){} okl.push('H25: menu por tarefa, ? ao lado do título, menu do avatar, faixa com o que fazer e fechar por hoje'); w.route_to('painel'); await sleep(2500); }
 // ---------- [H24] Configurações e Usuários: busca, seções, estado ao vivo, Testar, segredos com "Trocar", mudança perigosa com antes/depois, papéis em cartões ----------
 { w.route_to('config'); await sleep(2500);
   chk(d.querySelectorAll('#cfg-nav [data-cfg-ir]').length>=5,'[H24] deveria haver atalhos para as seções');
