@@ -1162,7 +1162,7 @@ body.na-painel #system-banner{display:none!important}
   </div>
   <div class="pf"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn pri" onclick="criarUsuario()">Criar conta</button></div>
 </div></div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="login" id="login"><form class="box" onsubmit="fazerLogin(event)">
   <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
@@ -1292,7 +1292,7 @@ function showItem(code){const pc=code.slice(0,10);const p=projOf(pc);if(!p)retur
 
 // ---------- navegação ----------
 const navEl=document.getElementById('nav');
-function show(v,sec){document.querySelectorAll('.content').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));navEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===sec));document.querySelector('.main').scrollTo(0,0);closeDrawer()}
+function show(v,sec){document.querySelectorAll('.content').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));navEl.querySelectorAll('button').forEach(b=>{const on=b.dataset.v===sec;b.classList.toggle('on',on);if(on)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});document.querySelector('.main').scrollTo(0,0);closeDrawer()}
 const TITLES={painel:'Painel',decisoes:'Decisões',filas:'Material novo',solicitacoes:'Pedidos de material',erros:'Problemas',fundos:'Fundos',arquitetos:'Arquitetos',projetos:'Projetos',etiquetas:'Etiquetas',localizacao:'Onde está guardado',estacoes:'Máquinas e site',uso:'Downloads do site',auditoria:'Histórico de ações',config:'Configurações',caminho:'Como o material anda',glossario:'Glossário',qualidade:'Qualidade do CAMP Vision'};
 let NAV_INDEX=Number(history.state&&history.state.campIndex)||0;
 function rotaAtual(){return (history.state&&history.state.campRoute)||location.hash.slice(1)||'painel'}
@@ -1377,14 +1377,29 @@ function validarCampos(root){if(!root)return true;limparErrosFormulario(root);co
 document.addEventListener('input',e=>{const f=e.target.closest?.('.field.invalid');if(f){f.classList.remove('invalid');f.querySelector('.field-error')?.remove()}});
 
 // ---------- modais / toast / tema ----------
-function openModal(id){document.getElementById(id).classList.add('on');if(id==='m-proj')nextP();ajudaNoModal(id)}
+function openModal(id){window._FOCO_MODAL=document.activeElement;a11yPreparar();document.getElementById(id).classList.add('on');if(id==='m-proj')nextP();ajudaNoModal(id);
+  setTimeout(()=>{const b=document.querySelector('#'+id+' .box');if(!b||b.contains(document.activeElement))return;const alvo=b.querySelector('input:not([type=hidden]):not([disabled]),select,textarea')||b.querySelector('button:not(.x)');if(alvo)alvo.focus()},30)}
 /* H1 sobra: as janelas "Novo projeto" e "Novo fundo" também têm a caixa "Como funciona" (abre sozinha até a pessoa dar Entendi; "?" reabre) */
 const MODAL_AJUDA={'m-proj':'novo_projeto','m-fundo':'novo_fundo'};
 function ajudaNoModal(id,forcar){const k=MODAL_AJUDA[id],c=k&&document.querySelector(`[data-modal-ajuda-caixa="${k}"]`);if(!c||!AJUDA_PAGINAS[k])return;
   const visto=AJUDA_VISTAS&&AJUDA_VISTAS['ajuda.'+k]===String(AJUDA_PAGINAS[k].v);c.innerHTML=(forcar||!visto)?caixaAjudaHTML(k,false):''}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-modal-ajuda]');if(!b)return;const k=b.dataset.modalAjuda,c=document.querySelector(`[data-modal-ajuda-caixa="${k}"]`);if(!c)return;
   if(c.querySelector('.ajuda-caixa')){c.innerHTML='';return}c.innerHTML=caixaAjudaHTML(k,false);const h=c.querySelector('h2');if(h)h.focus()});
-function closeModal(){document.querySelectorAll('.modal').forEach(m=>m.classList.remove('on'))}
+function closeModal(){const aberto=document.querySelector('.modal.on');document.querySelectorAll('.modal').forEach(m=>m.classList.remove('on'));const f=window._FOCO_MODAL;window._FOCO_MODAL=null;if(aberto&&f&&f.focus&&document.body.contains(f))try{f.focus()}catch(_){}}
+/* Acessibilidade (cartão de modais, drawers, busca e teclado): semântica de diálogo, foco inicial, foco preso no modal e devolvido ao fechar,
+   "×" com nome, linhas de tabela que abrem com Enter, busca como combobox. Uma camada só, para todas as janelas. */
+function a11yPreparar(){
+  document.querySelectorAll('.modal').forEach(m=>{const b=m.querySelector('.box');if(!b||b.dataset.a11y)return;b.dataset.a11y='1';b.setAttribute('role','dialog');b.setAttribute('aria-modal','true');const h=b.querySelector('h2');if(h){h.id=h.id||m.id+'-t';b.setAttribute('aria-labelledby',h.id)}});
+  document.querySelectorAll('.modal .x, .drawer .x, button.x').forEach(x=>{if(!x.getAttribute('aria-label'))x.setAttribute('aria-label','Fechar')});
+  const dr=document.getElementById('drawer');if(dr&&!dr.getAttribute('role')){dr.setAttribute('role','dialog');dr.setAttribute('aria-labelledby','d-title')}
+  const q=document.getElementById('q'),r=document.getElementById('qres');if(q&&r&&!q.getAttribute('role')){q.setAttribute('role','combobox');q.setAttribute('aria-autocomplete','list');q.setAttribute('aria-controls','qres');q.setAttribute('aria-expanded','false');r.setAttribute('role','listbox');r.setAttribute('aria-label','Resultados da busca')}}
+function a11yLinhas(raiz){(raiz||document).querySelectorAll('tr[data-abrir]:not([tabindex]),tr[data-nav]:not([tabindex])').forEach(tr=>tr.setAttribute('tabindex','0'));
+  const q=document.getElementById('q'),r=document.getElementById('qres');if(q&&r){const ab=r.classList.contains('open');if(q.getAttribute('aria-expanded')!==String(ab))q.setAttribute('aria-expanded',String(ab));r.querySelectorAll(':scope > div:not([role])').forEach(o=>o.setAttribute('role','option'))}}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.matches&&e.target.matches('tr[data-abrir],tr[data-nav]')){e.preventDefault();e.target.click();return}
+  const m=document.querySelector('.modal.on .box');if(!m||e.key!=='Tab')return;   /* foco preso dentro do modal aberto */
+  const f=[...m.querySelectorAll('button,[href],input:not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled&&x.offsetParent!==null);if(!f.length)return;
+  const i=f.indexOf(document.activeElement);if(e.shiftKey&&(i<=0)){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus()}});
 // ---------- P2-18 · confirmação padrão do painel (no lugar de confirm/prompt/alert do navegador) ----------
 // Diz o ALVO e a CONSEQUÊNCIA; ação irreversível pode exigir digitar o código; motivo quando a ação fica na auditoria; Enter confirma, Esc cancela;
 // com `acao`, o botão mostra "trabalhando…", bloqueia o duplo clique e o erro aparece DENTRO da janela (a pessoa tenta de novo sem perder o que escreveu).
@@ -1631,8 +1646,8 @@ function atualizarDirtyUI(){const el=document.getElementById('dirty-state');if(e
 function marcarAlteracoes(scope){ALTERACOES_PENDENTES.add(scope);atualizarDirtyUI()}
 function limparAlteracoes(scope){ALTERACOES_PENDENTES.delete(scope);atualizarDirtyUI()}
 function confirmarDescartar(scope){return !temAlteracoes(scope)}   // com alteração, quem chamou pergunta com confirmarDescarte() (janela do painel)
-function openDrawer(title,sub,body){if(!confirmarDescartar('drawer')){confirmarDescarte().then(ok=>{if(ok){limparAlteracoes('drawer');openDrawer(title,sub,body)}});return false}limparAlteracoes('drawer');mainEl.classList.remove('drawer-largo');document.getElementById('d-title').textContent=title;document.getElementById('d-sub').textContent=sub;document.getElementById('d-body').innerHTML=body;ajudaNoDrawer();const ob=document.getElementById('d-open');const r=routeCode(sub||'');ob.style.display=r?'':'none';ob.onclick=()=>nav(r);mainEl.classList.add('with-drawer');return true}
-function closeDrawer(force=false){if(!force&&!confirmarDescartar('drawer')){confirmarDescarte().then(ok=>{if(ok)closeDrawer(true)});return false}limparAlteracoes('drawer');mainEl.classList.remove('drawer-largo');mainEl.classList.remove('with-drawer');document.querySelectorAll('tr.sel').forEach(t=>t.classList.remove('sel'));return true}
+function openDrawer(title,sub,body){if(!document.getElementById('drawer').contains(document.activeElement))window._FOCO_DRAWER=document.activeElement;a11yPreparar();if(!confirmarDescartar('drawer')){confirmarDescarte().then(ok=>{if(ok){limparAlteracoes('drawer');openDrawer(title,sub,body)}});return false}limparAlteracoes('drawer');mainEl.classList.remove('drawer-largo');document.getElementById('d-title').textContent=title;document.getElementById('d-sub').textContent=sub;document.getElementById('d-body').innerHTML=body;ajudaNoDrawer();const ob=document.getElementById('d-open');const r=routeCode(sub||'');ob.style.display=r?'':'none';ob.onclick=()=>nav(r);mainEl.classList.add('with-drawer');return true}
+function closeDrawer(force=false){if(!force&&!confirmarDescartar('drawer')){confirmarDescarte().then(ok=>{if(ok)closeDrawer(true)});return false}limparAlteracoes('drawer');mainEl.classList.remove('drawer-largo');mainEl.classList.remove('with-drawer');document.querySelectorAll('tr.sel').forEach(t=>t.classList.remove('sel'));{const f=window._FOCO_DRAWER;window._FOCO_DRAWER=null;if(f&&f.focus&&document.body.contains(f)&&!document.getElementById('drawer').contains(f))try{f.focus()}catch(_){}}return true}
 document.getElementById('d-body').addEventListener('input',()=>marcarAlteracoes('drawer'));
 document.getElementById('d-body').addEventListener('change',()=>marcarAlteracoes('drawer'));
 document.getElementById('cfg-body').addEventListener('input',()=>marcarAlteracoes('config'));
@@ -3770,7 +3785,7 @@ renderFundos();renderFilas();renderProjetos();renderLabel();instalarExportacoes(
 // A janela lateral começa logo ABAIXO da barra fixa do topo (que inclui a faixa de saúde do sistema); antes o cabeçalho e o botão de fechar ficavam escondidos atrás dela
 (function(){const t=document.querySelector('.top');if(!t)return;const set=()=>document.documentElement.style.setProperty('--top-h',t.offsetHeight+'px');set();if(window.ResizeObserver)new ResizeObserver(set).observe(t);window.addEventListener('resize',set)})();
 
-(function(){let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{aplicarPermissoes();garantirCaixaAjuda();garantirAjudaNoTitulo();marcarTermosTela();normalizarPlurais(document.body)},80)}).observe(document.body,{childList:true,subtree:true})})();
+(function(){let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{aplicarPermissoes();garantirCaixaAjuda();garantirAjudaNoTitulo();marcarTermosTela();normalizarPlurais(document.body);a11yPreparar();a11yLinhas()},80)}).observe(document.body,{childList:true,subtree:true})})();
 </script>
 </body>
 </html>

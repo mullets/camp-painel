@@ -1139,6 +1139,16 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [Acessibilidade] modais e drawer como diálogo, foco, "×" com nome, aviso falado, menu atual, linhas por teclado, busca combobox ----------
+{ w.route_to('projetos'); await sleep(1800); w.a11yPreparar(); w.a11yLinhas();
+  const caixas=[...d.querySelectorAll('.modal .box')]; chk(caixas.length>5&&caixas.every(b=>b.getAttribute('role')==='dialog'&&b.getAttribute('aria-modal')==='true'&&b.getAttribute('aria-labelledby')),'[A11y] todo modal deveria ser role=dialog, aria-modal e com título');
+  chk([...d.querySelectorAll('.modal .x')].every(x=>x.getAttribute('aria-label')==='Fechar'),'[A11y] os "×" deveriam se chamar "Fechar" para o leitor de tela');
+  chk(d.getElementById('toast').getAttribute('aria-live')==='polite'&&d.getElementById('drawer').getAttribute('role')==='dialog','[A11y] o aviso deveria ser falado (aria-live) e o painel lateral um diálogo');
+  chk(!!d.querySelector('.nav button[aria-current="page"]'),'[A11y] o item do menu da tela atual deveria ter aria-current');
+  chk(d.getElementById('q').getAttribute('role')==='combobox'&&d.getElementById('qres').getAttribute('role')==='listbox','[A11y] a busca deveria ser combobox + listbox');
+  const tr=d.querySelector('#projetos-body tr[data-nav]'); chk(!tr||tr.getAttribute('tabindex')==='0','[A11y] as linhas que abrem deveriam receber Tab');
+  const ant=d.activeElement; w.abrirNovoProjeto('F003'); await sleep(120); chk(d.querySelector('#m-proj .box').contains(d.activeElement),'[A11y] abrir o modal deveria levar o foco para dentro dele'); w.closeModal();
+  okl.push('Acessibilidade: diálogos, foco, nomes, aviso falado, menu atual, linhas por teclado, busca'); w.route_to('painel'); }
 // ---------- [Sobras] abas do projeto na ordem do trabalho, ajuda em Novo projeto/Novo fundo, glossário nos cabeçalhos ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3000);
   const abas=[...d.querySelectorAll('#pd .pj-tabs button')].map(b=>b.textContent.replace(/\s*\(.*\)/,'').trim());
