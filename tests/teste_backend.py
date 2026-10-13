@@ -2610,6 +2610,7 @@ def filho(modo):
         d1, d2 = folha(PD, 1977, 1, "Planta 1", "1"), folha(PD, 1977, 2, "Detalhe", "9")
         folha(PP, 1970, 1, "Pública", "1", status="no_ar", tid=777)
         m1, m2, m3 = folha(PM, 1980, 1, "Praça A", "1"), folha(PM, 1980, 2, "Praça B", "2"), folha(PM, 1980, 3, "Praça C", "3")
+        m4 = folha(PM, 1980, 4, "Praça D", "4", status="no_ar")          # "no ar" sem registro no site (status velho, #157)
         c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote errado',?,'/w','revisao')", (PW,)); LW = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
         w1, w2 = folha(PW, 1960, 1, "Apto 1", "1", LW), folha(PW, 1960, 2, "Apto 2", "2", LW)
         c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Subpasta TIFF',?,'/w/01 - Arquivo','revisao')", (PW,)); LD = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
@@ -2644,16 +2645,18 @@ def filho(modo):
         ver("projeto vazio (registro sem folhas) também pode ser mesclado: só fica marcado", rv.status_code == 200 and rv.json()["movidos"] == [] and sql("SELECT mesclado_em FROM projeto WHERE codigo=?", PV) == PD, rv.text[:120])
         # 3) MOVER folhas escolhidas (separar um lote misturado)
         mv = adm.post("/api/itens/mover", json={"itens": [m2, m3], "destino": PX})
-        ver("mover: só as folhas escolhidas vão para o destino (ano 0000), a outra fica", mv.status_code == 200 and [m_["para"] for m_ in mv.json()["movidos"]] == [f"{PX}-0000-S01-D00001", f"{PX}-0000-S01-D00002"] and sql("SELECT projeto_codigo FROM item WHERE codigo=?", m1) == PM, mv.text[:200])
+        ver("mover: só as folhas escolhidas vão para o destino (destino sem ano: mantém o ano da origem, nunca 0000), a outra fica", mv.status_code == 200 and [m_["para"] for m_ in mv.json()["movidos"]] == [f"{PX}-1980-S01-D00001", f"{PX}-1980-S01-D00002"] and sql("SELECT projeto_codigo FROM item WHERE codigo=?", m1) == PM, mv.text[:200])
         at = adm.post("/api/itens/mover", json={"itens": [m1, "F087-P0236-1980-S01-D09999"], "destino": PX})
         ver("mover é tudo ou nada: com uma folha inexistente, nenhuma é movida (404)", at.status_code == 404 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", m1) == PM)
+        sv = adm.post("/api/itens/mover", json={"itens": [m4], "destino": PX})
+        ver("folha marcada 'no ar' sem registro no site é movida: o status velho vira nao_publicado e fica no histórico", sv.status_code == 200 and sql("SELECT status_site FROM item WHERE codigo=?", f"{PX}-1980-S01-D00003") == "nao_publicado" and sql("SELECT COUNT(*) FROM evento WHERE tipo='status_site_corrigido' AND codigo=?", m4) == 1, sv.text[:200])
         ver("folha pública no site não é movida (409): despublique antes", adm.post("/api/itens/mover", json={"itens": [f"{PP}-1970-S01-D00001"], "destino": PX}).status_code == 409)
         # 4) MOVER LOTE para o projeto certo
         ml = adm.post(f"/api/filas/{LW}/mover-para", json={"projeto_codigo": PX2})
         ver("mover lote: o lote e as folhas dele passam para o projeto certo", ml.status_code == 200 and sql("SELECT projeto_codigo FROM lista_processamento WHERE id=?", LW) == PX2 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id=?", PX2, LW) == 2, ml.text[:200])
         # 5) DUPLICATA
-        dp = op.post(f"/api/itens/{m1}/duplicata-de", json={"codigo_original": f"{PX}-0000-S01-D00001"})
-        ver("marcar duplicata (operador pode): a folha aponta para a original", dp.status_code == 200 and sql("SELECT duplicata_de FROM item WHERE codigo=?", m1) == f"{PX}-0000-S01-D00001")
+        dp = op.post(f"/api/itens/{m1}/duplicata-de", json={"codigo_original": f"{PX}-1980-S01-D00001"})
+        ver("marcar duplicata (operador pode): a folha aponta para a original", dp.status_code == 200 and sql("SELECT duplicata_de FROM item WHERE codigo=?", m1) == f"{PX}-1980-S01-D00001")
         ver("duplicata: não aponta para outra duplicata (409), nem para si mesma (400); leitura 403",
             op.post(f"/api/itens/{d2}/duplicata-de", json={"codigo_original": m1}).status_code == 409 and op.post(f"/api/itens/{d2}/duplicata-de", json={"codigo_original": d2}).status_code == 400
             and lei.post(f"/api/itens/{d2}/duplicata-de", json={"codigo_original": d1}).status_code == 403)

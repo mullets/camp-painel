@@ -72,6 +72,7 @@ def descartar_lote(lid: int, d: Descarte, u: dict = Depends(auth.exige("admin"))
 # é movida e perde o vínculo (o registro antigo fica privado no site; ao publicar o destino, ela sobe com o código novo).
 # ---------------------------------------------------------------------------------------------------------------------
 import json as _json
+import re
 
 
 class MoverItens(BaseModel):
@@ -113,6 +114,22 @@ def _trocar_codigo(con, antigo: str, novo: str) -> None:
     con.execute("UPDATE revisao_campo SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
 
 
+def _status_velho(con, codigo: str, ator: str) -> None:
+    """Folha marcada no_ar mas sem registro no site (o despublicar responde "nada no site"): corrige para nao_publicado."""
+    con.execute("UPDATE item SET status_site='nao_publicado', atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'status_site_corrigido',?,?)",
+                (codigo, ator, _json.dumps({"de": "no_ar", "para": "nao_publicado", "motivo": "sem registro no site"}, ensure_ascii=False)))
+
+
+def _ano_da_folha(con, it) -> int:
+    """Destino sem ano: mantém o ano do projeto de origem, ou o que já estava no código da folha (nunca 0000 se havia ano)."""
+    o = con.execute("SELECT ano FROM projeto WHERE codigo=?", (it["projeto_codigo"],)).fetchone()
+    if o and o["ano"]:
+        return int(o["ano"])
+    m = re.search(r"-(\d{4})-[^-]+-D\d+$", it["codigo"])
+    return int(m.group(1)) if m else 0
+
+
 def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None) -> dict:
     """Move as folhas para o destino (transação já aberta por quem chama). Devolve o que foi movido, as duplicatas e o que foi ignorado."""
     d = _destino_valido(con, destino)
@@ -131,7 +148,9 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         if it["projeto_codigo"] == destino:
             ignorados.append({"codigo": c, "motivo": "já está no destino"}); continue
         if it["status_site"] == "no_ar":
-            raise HTTPException(409, f"A folha {c} está pública no site. Despublique o projeto antes de mover.")
+            if it["tainacan_item_id"]:
+                raise HTTPException(409, f"A folha {c} está pública no site. Despublique o projeto antes de mover.")
+            _status_velho(con, c, ator)                                # "no ar" sem registro no site: status velho, não trava
         igual = None
         if it["titulo"] and it["folha"]:
             igual = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND titulo=? AND folha=? AND duplicata_de IS NULL LIMIT 1",
@@ -140,7 +159,7 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata='mesma_folha', atualizado_em=datetime('now') WHERE codigo=?", (igual[0], c))
             duplicatas.append({"codigo": c, "duplicata_de": igual[0]}); continue
         seq += 1
-        novo = f"{destino}-{ano:04d}-{it['serie_codigo']}-D{seq:05d}"
+        novo = f"{destino}-{(ano or _ano_da_folha(con, it)):04d}-{it['serie_codigo']}-D{seq:05d}"
         if con.execute("SELECT 1 FROM item WHERE codigo=?", (novo,)).fetchone():
             raise HTTPException(409, f"O código {novo} já existe; nada foi movido.")
         tinha_site = it["tainacan_item_id"]
@@ -194,7 +213,10 @@ def mesclar_em(origem: str, d: Destino, u: dict = Depends(auth.exige("admin"))) 
         if o["mesclado_em"]:
             raise HTTPException(409, f"O projeto {origem} já foi mesclado em {o['mesclado_em']}.")
         if o["status_site"] == "no_ar":
-            raise HTTPException(409, f"O projeto {origem} está público no site. Despublique antes de mesclar.")
+            tem_site = con.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (origem,)).fetchone()[0] or \
+                con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (origem,)).fetchone()
+            if tem_site:
+                raise HTTPException(409, f"O projeto {origem} está público no site. Despublique antes de mesclar.")
         _destino_valido(con, d.destino)
         cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (origem,))]
         r = _mover(con, cods, d.destino, u["email"], d.motivo or f"mesclado em {d.destino}") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
@@ -244,7 +266,7 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
             raise HTTPException(404, "Folha não existe.")
         if o["duplicata_de"]:
             raise HTTPException(409, f"{d.codigo_original} já é duplicata de {o['duplicata_de']}: aponte para a original.")
-        if a["status_site"] == "no_ar":
+        if a["status_site"] == "no_ar" and con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (codigo,)).fetchone()[0]:
             raise HTTPException(409, "Esta folha está pública no site. Despublique antes.")
         con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=?, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original, d.tipo, codigo))
         con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (d.codigo_original, codigo))   # quem apontava para esta passa a apontar para a original
