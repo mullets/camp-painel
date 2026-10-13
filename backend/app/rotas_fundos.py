@@ -40,6 +40,7 @@ class EdicaoFundo(BaseModel):
     condicoes_reproducao: str | None = None
     status_site: str | None = None
     motivo_fora_do_ar: str | None = None
+    mostrar_doador: bool | None = None   # B1: o site pode mostrar o nome de quem entregou o acervo
 
 
 def _validar_sigla(con, sigla: str, ignorar: str | None = None):
@@ -165,6 +166,8 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
         v = getattr(d, k)
         if v is not None and v != f[k]:
             campos.append(f"{k}=?"); vals.append(v); mud[k] = v
+    if d.mostrar_doador is not None and int(d.mostrar_doador) != (f["mostrar_doador"] or 0):
+        campos.append("mostrar_doador=?"); vals.append(int(d.mostrar_doador)); mud["mostrar_doador"] = int(d.mostrar_doador)
     if not campos:
         con.close(); return {"ok": True, "mudou": False}
     campos.append("atualizado_em=datetime('now')")
@@ -175,7 +178,47 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
     if "titulo" in mud:
         from .publicador import renomear_fundo_no_site
         site = renomear_fundo_no_site(codigo, mud["titulo"], u["email"])
-    return {"ok": True, "mudou": True, "campos": list(mud), "site": site}
+    desc = None
+    if set(mud) & CAMPOS_DESCRICAO_SITE:   # B1: o texto do fundo no site acompanha a edição
+        desc = _descricao_no_site(codigo, u["email"])
+    return {"ok": True, "mudou": True, "campos": list(mud), "site": site, "descricao_site": desc}
+
+
+CAMPOS_DESCRICAO_SITE = {"data_inicio", "data_fim", "dimensao_suporte", "historia_arquivistica", "procedencia", "condicoes_acesso",
+                         "condicoes_reproducao", "mostrar_doador", "sigla"}
+
+
+def _descricao_no_site(codigo: str, ator: str) -> dict | None:
+    from .publicador import atualizar_descricao_fundo_no_site
+    try:
+        return atualizar_descricao_fundo_no_site(codigo, ator)
+    except HTTPException:   # F000 · Convidado não vai ao site
+        return None
+
+
+@router.get("/fundos/{codigo}/descricao-site")
+def ver_descricao_site(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """B1: o texto que o site mostra sobre o fundo, e o que ainda está "em organização"."""
+    from .publicador import campos_hub_fundo, descricao_publica_fundo
+    con = connect()
+    f = con.execute("SELECT codigo, tainacan_term_id, mostrar_doador FROM fundo WHERE codigo=?", (codigo,)).fetchone()
+    if not f:
+        con.close(); raise HTTPException(404, "Fundo não existe")
+    texto = descricao_publica_fundo(con, codigo)
+    _meta, faltam = campos_hub_fundo(con, codigo)
+    con.close()
+    return {"texto": texto, "faltam": faltam, "no_site": bool(f["tainacan_term_id"]), "mostrar_doador": bool(f["mostrar_doador"])}
+
+
+@router.post("/fundos/{codigo}/descricao-site")
+def enviar_descricao_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    from .publicador import atualizar_descricao_fundo_no_site
+    r = atualizar_descricao_fundo_no_site(codigo, u["email"])
+    if r.get("erro"):
+        raise HTTPException(502, f"O site não aceitou o texto: {r['erro']}")
+    if not r.get("enviado"):
+        raise HTTPException(409, "O fundo ainda não existe no site. Use \"Criar no site\" primeiro.")
+    return {"ok": True, "mensagem": f"Texto do fundo {codigo} atualizado no site"}
 
 
 @router.post("/fundos/{codigo}/criar-no-site")

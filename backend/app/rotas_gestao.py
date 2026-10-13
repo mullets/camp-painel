@@ -17,6 +17,7 @@ from . import backup as bk
 from .config import settings
 from .db import connect
 from .log_tecnico import LOG_FILE, ler_logs
+from .publicador import TIPO_ENTRADA
 
 router = APIRouter(prefix="/api", tags=["gestao"])
 
@@ -132,9 +133,11 @@ def criar_entrada(d: NovaEntrada, u: dict = Depends(auth.exige("operador"))) -> 
                          VALUES (?,?,?,?,?,?,?,?,?,?,?)""", (d.fundo_codigo, d.tipo, d.data, d.entregue_por, d.contato, d.documento, d.conteudo, d.volumes, d.estado_conservacao, d.observacoes, u["email"])).lastrowid
     # procedência do fundo (ISAD 3.2.4) preenchida se estiver vazia
     con.execute("UPDATE fundo SET procedencia=COALESCE(NULLIF(procedencia,''), ?) WHERE codigo=?",
-                (f"{d.tipo.capitalize()}{' de ' + d.entregue_por if d.entregue_por else ''}{' em ' + d.data if d.data else ''}", d.fundo_codigo))
+                (f"{TIPO_ENTRADA.get(d.tipo, d.tipo.capitalize())}{' de ' + d.entregue_por if d.entregue_por else ''}{' em ' + d.data if d.data else ''}", d.fundo_codigo))
     _evento(con, "fundo", d.fundo_codigo, "entrada_registrada", u["email"], {"tipo": d.tipo, "volumes": d.volumes})
     con.commit(); con.close()
+    from .rotas_fundos import _descricao_no_site
+    _descricao_no_site(d.fundo_codigo, u["email"])   # B1: a forma de entrada aparece no texto do fundo no site
     return {"id": eid}
 
 
@@ -258,6 +261,8 @@ def salvar_direitos(codigo: str, d: Direitos, u: dict = Depends(auth.exige("admi
         con.execute("UPDATE fundo SET condicoes_reproducao=COALESCE(NULLIF(condicoes_reproducao,''),?) WHERE codigo=?", (d.credito_exigido, codigo))
     _evento(con, "fundo", codigo, "direitos", u["email"], {"situacao": d.situacao, "resolucao_max": d.resolucao_max})
     con.commit(); con.close()
+    from .rotas_fundos import _descricao_no_site
+    _descricao_no_site(codigo, u["email"])   # B1: licença, restrições e crédito entram nas condições de reprodução do site
     return {"ok": True}
 
 

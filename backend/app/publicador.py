@@ -80,6 +80,87 @@ def _pendencia(con, entidade, codigo, campo, detalhe):
                 (entidade, codigo, campo, detalhe[:300], None))
 
 
+EM_ORGANIZACAO = "Documentação em organização."
+TIPO_ENTRADA = {"doacao": "Doação", "comodato": "Comodato", "deposito": "Depósito", "compra": "Compra", "transferencia": "Transferência", "outro": "Outra forma de entrada"}
+
+
+# B1: campos da seção "Sobre o acervo" da página-hub do arquiteto no site (post meta da página, lidos pelo
+# plugin camp-acervo-auto-pages em class-render.php::acervo_description). Os marcados "sempre" vão com o texto
+# padrão quando vazios; os outros, vazios, apagam o campo no site.
+HUB_CAMPOS = [("_camp_acervo_periodo", "Período abrangido", False), ("_camp_acervo_extensao", "Extensão física", False),
+              ("_camp_acervo_historico", "Histórico do acervo e da custódia", False), ("_camp_acervo_procedencia", "Procedência", True),
+              ("_camp_acervo_ingresso", "Forma e data de ingresso", True), ("_camp_acervo_doador", "Doador / cedente", False),
+              ("_camp_acervo_acesso", "Condições de acesso e reprodução", True)]
+
+
+def _frase(t: str) -> str:
+    t = (t or "").strip()
+    return t if not t or t[-1] in ".!?" else t + "."
+
+
+def campos_hub_fundo(con, codigo: str) -> tuple[dict, list]:
+    """B1: {meta do site: texto} e a lista do que ainda falta preencher no painel.
+
+    O nome de quem entregou o acervo só sai com fundo.mostrar_doador; sem isso, a procedência que cita
+    o nome também não sai (a forma de entrada sai, sem o nome).
+    """
+    f = con.execute("SELECT * FROM fundo WHERE codigo=?", (codigo,)).fetchone()
+    if not f:
+        return {}, []
+    mostrar = bool(f["mostrar_doador"])
+    entradas = con.execute("SELECT tipo, data, entregue_por FROM entrada_acervo WHERE fundo_codigo=? ORDER BY COALESCE(data,''), id", (codigo,)).fetchall()
+    dr = con.execute("SELECT licenca, restricoes, credito_exigido FROM direitos_fundo WHERE fundo_codigo=?", (codigo,)).fetchone()
+    nomes = list(dict.fromkeys(e["entregue_por"].strip() for e in entradas if (e["entregue_por"] or "").strip()))
+    proc = (f["procedencia"] or "").strip()
+    if proc and not mostrar and any(n.lower() in proc.lower() for n in nomes):
+        proc = ""
+    ingresso = "; ".join(TIPO_ENTRADA.get(e["tipo"], e["tipo"]) + (f" em {e['data'][:4]}" if e["data"] else "") for e in entradas)
+    repro = (f["condicoes_reproducao"] or "").strip()
+    if not repro and dr:
+        repro = " ".join(x for x in [_frase(dr["licenca"]), _frase(f"Restrições: {dr['restricoes'].strip()}") if (dr["restricoes"] or "").strip() else "",
+                                     _frase(f"Crédito obrigatório: {dr['credito_exigido'].strip()}") if (dr["credito_exigido"] or "").strip() else ""] if x)
+    acesso = " ".join(x for x in [_frase(f"Acesso: {f['condicoes_acesso'].strip()}") if (f["condicoes_acesso"] or "").strip() else "",
+                                  _frase(f"Reprodução: {repro}") if repro else ""] if x)
+    periodo = f"{f['data_inicio'] or ''}–{f['data_fim'] or ''}".strip("–") if (f["data_inicio"] or f["data_fim"]) else ""
+    valores = {"_camp_acervo_periodo": periodo, "_camp_acervo_extensao": f["dimensao_suporte"], "_camp_acervo_historico": f["historia_arquivistica"],
+               "_camp_acervo_procedencia": proc, "_camp_acervo_ingresso": ingresso, "_camp_acervo_doador": "; ".join(nomes) if mostrar else "",
+               "_camp_acervo_acesso": acesso}
+    meta = {k: ((valores[k] or "").strip() or (EM_ORGANIZACAO if sempre else "")) for k, _r, sempre in HUB_CAMPOS}
+    faltam = [r for r, v in (("Procedência", proc), ("Forma de entrada", ingresso), ("Condições de acesso", f["condicoes_acesso"]),
+                             ("Condições de reprodução", repro)) if not (v or "").strip()]
+    return meta, faltam
+
+
+def descricao_publica_fundo(con, codigo: str) -> str:
+    """B1: a prévia do "Sobre o acervo" no site, uma linha "Rótulo: texto" por campo preenchido."""
+    meta, _ = campos_hub_fundo(con, codigo)
+    return "\n\n".join(f"{rot}: {meta[k]}" for k, rot, _s in HUB_CAMPOS if meta.get(k))
+
+
+@_nunca_convidado
+def atualizar_descricao_fundo_no_site(codigo: str, ator: str) -> dict:
+    """B1: grava "Sobre o acervo" na página-hub do arquiteto (rota camp/v1/painel/hub do site, docs/site/painel-hub.php).
+    Sem termo do fundo no site ainda, não faz nada. Falhou: fica pendência e o salvamento no painel continua valendo."""
+    con = connect()
+    out = {"ok": False, "erro": None, "enviado": False}
+    try:
+        f = con.execute("SELECT tainacan_term_id FROM fundo WHERE codigo=?", (codigo,)).fetchone()
+        if not f or not f[0]:
+            out["ok"] = True
+            return out
+        meta, _ = campos_hub_fundo(con, codigo)
+        r = WP().gravar_hub(f[0], meta)
+        out.update(ok=True, enviado=True, pagina=r.get("page_id"))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,'site_descricao_atualizada',?,?)",
+                    (codigo, ator, json.dumps({"termo": f[0], "pagina": r.get("page_id"), "campos": [k for k, v in meta.items() if v]}, ensure_ascii=False)))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]
+        _pendencia(con, "fundo", codigo, "pendente_descricao_no_site", out["erro"])
+    finally:
+        con.commit(); con.close()
+    return out
+
+
 @_nunca_convidado
 def criar_fundo_no_site(codigo: str, ator: str) -> dict:
     """Cria termos 'Fundos' e 'Arquitetos' para o fundo. Idempotente (não recria se já há term_id)."""

@@ -1139,6 +1139,11 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [B1] texto do fundo no site: procedência, entrada, acesso e reprodução ----------
+{ w.route_to('fundo/F002'); await sleep(2500); const det=d.getElementById('fd-site'); chk(!!det,'[B1] a descrição do fundo deveria ter "Como aparece no site"');
+  if(det){ await w.carregarDescricaoSite(det); await sleep(300); chk(/Procedência:/.test(txt('#fd-site .fd-site-txt'))&&/Condições de acesso e reprodução:/.test(txt('#fd-site .fd-site-txt')),'[B1] a prévia deveria mostrar procedência e condições de reprodução: '+txt('#fd-site').slice(0,160)); }
+  await w.editarFundo('F002'); await sleep(600); chk(!!d.getElementById('ef-mostrar_doador'),'[B1] editar o fundo deveria perguntar se o nome de quem entregou pode aparecer no site'); w.closeDrawer(true);
+  okl.push('B1: texto arquivístico do fundo no site, com prévia'); w.route_to('painel'); }
 // ---------- [B7] "Procurar projetos duplicados" no fundo ----------
 { w.route_to('fundo/F002'); await sleep(2500); const m=d.querySelector('#v-fundo [data-dup-fundo="F002"]'); chk(!!m,'[B7] o "Mais ⋯" do fundo deveria ter "Procurar projetos duplicados"');
   if(m){ await w.procurarDuplicados('F002'); await sleep(1200); chk(/Projetos duplicados\?/.test(txt('#d-title'))&&/comparados/.test(txt('#d-sub')),'[B7] a varredura deveria abrir a lista de pares (ou dizer que não achou): '+txt('#d-body').slice(0,120)); w.closeDrawer(true); }

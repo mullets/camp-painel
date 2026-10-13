@@ -3310,6 +3310,56 @@ def filho(modo):
         ver("par de outro fundo é recusado", x.post("/api/fundos/F087/duplicados/nao-sao", json={"a": "F087-P0001", "b": "F001-P0001"}).status_code == 400)
         ver("fundo inexistente: 404", x.get("/api/fundos/F999/duplicados").status_code == 404)
         print("\n".join(res))
+    elif modo == "b1_descricao":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F086','Fundo Desc','FDE',1)")
+        c.execute("INSERT INTO wp_taxonomia (id, nome) VALUES (77, 'Fundos')")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.get("/api/fundos/F086/descricao-site").json()
+        ver("fundo vazio: procedência, ingresso e acesso/reprodução dizem 'Documentação em organização.'",
+            r["texto"].count("Documentação em organização.") == 3 and r["faltam"] == ["Procedência", "Forma de entrada", "Condições de acesso", "Condições de reprodução"], r["texto"])
+        ver("registrar a entrada", x.post("/api/entradas", json={"fundo_codigo": "F086", "tipo": "doacao", "data": "2024-03-01", "entregue_por": "Maria Silva"}).status_code == 200)
+        c = connect(); proc = c.execute("SELECT procedencia FROM fundo WHERE codigo='F086'").fetchone()[0]; c.close()
+        ver("a procedência preenchida pela entrada tem acento ('Doação de …')", proc.startswith("Doação de Maria Silva"), proc)
+        t = x.get("/api/fundos/F086/descricao-site").json()["texto"]
+        ver("sem autorização o nome de quem entregou não sai no site (nem pela procedência)", "Maria Silva" not in t and "Forma e data de ingresso: Doação em 2024" in t, t)
+        hub, termos = [], []
+        class WPFalso:
+            def gravar_hub(self, termo, meta): hub.append((termo, dict(meta))); return {"ok": True, "page_id": 501}
+            def criar_termo(self, tax, nome, descricao=""): termos.append(descricao); return {"id": 9301, "slug": "fundo-desc"}
+        publicador.WP = WPFalso
+        r = x.patch("/api/fundos/F086", json={"condicoes_acesso": "Consulta com agendamento", "mostrar_doador": True}).json()
+        ver("fundo sem página no site: editar não tenta enviar", r.get("mudou") and not hub and (r.get("descricao_site") or {}).get("enviado") is False, str(r))
+        r = x.post("/api/fundos/F086/criar-no-site").json()
+        ver("o termo do fundo continua com 'código · sigla' (a descrição do termo é a biografia de reserva do site)", r.get("fundo_termo") == 9301 and termos == ["F086 · FDE"], str(termos))
+        x.put("/api/fundos/F086/direitos", json={"situacao": "restrito", "licenca": "CC BY-NC-ND 4.0", "restricoes": "uso comercial"})
+        m = hub[-1][1] if hub else {}
+        ver("salvar direitos grava 'Sobre o acervo' na página-hub (acesso + reprodução num campo só)", hub and hub[-1][0] == 9301
+            and m.get("_camp_acervo_acesso") == "Acesso: Consulta com agendamento. Reprodução: CC BY-NC-ND 4.0. Restrições: uso comercial.", str(m)[:300])
+        ver("com autorização o doador sai no campo 'Doador / cedente'", m.get("_camp_acervo_doador") == "Maria Silva" and m.get("_camp_acervo_ingresso") == "Doação em 2024", str(m)[:300])
+        hub.clear()
+        r = x.patch("/api/fundos/F086", json={"procedencia": "Escritório do arquiteto, por intermédio da família.", "mostrar_doador": False}).json()
+        m = hub[-1][1] if hub else {}
+        ver("editar a procedência muda o site; tirar a autorização apaga o doador (campo vazio)", (r.get("descricao_site") or {}).get("enviado")
+            and m.get("_camp_acervo_procedencia") == "Escritório do arquiteto, por intermédio da família." and m.get("_camp_acervo_doador") == "", str(m)[:300])
+        ver("o envio fica na auditoria", connect().execute("SELECT COUNT(*) FROM evento WHERE codigo='F086' AND tipo='site_descricao_atualizada'").fetchone()[0] >= 2)
+        ver("o botão 'Enviar ao site agora' funciona", x.post("/api/fundos/F086/descricao-site").status_code == 200)
+        class WPQuebrado:
+            def __init__(self): raise RuntimeError("Application Password não configurada")
+        publicador.WP = WPQuebrado
+        r = x.patch("/api/fundos/F086", json={"condicoes_acesso": "Aberta."}).json()
+        ver("site fora: salvar continua dando certo e o envio fica pendente", r.get("mudou") and (r.get("descricao_site") or {}).get("erro")
+            and connect().execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F086' AND campo='pendente_descricao_no_site'").fetchone()[0] == 1, str(r))
+        ver("enviar à mão com o site fora: 502 com o motivo", x.post("/api/fundos/F086/descricao-site").status_code == 502)
+        print("\n".join(res))
     elif modo == "b2_resolucao":
         init_db(); _aplicar_migracoes_real()
         import tempfile
@@ -4054,6 +4104,14 @@ else:
 print("64) B2 resolução máxima do fundo respeitada na imagem enviada ao site")
 rc, out = rodar("b2_resolucao", f"{tmp}/b2.db")
 if rc != 0: ok(False, f"teste B2 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("65) B1 descrição arquivística do fundo no site (procedência, entrada, acesso, reprodução)")
+rc, out = rodar("b1_descricao", f"{tmp}/b1.db")
+if rc != 0: ok(False, f"teste B1 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

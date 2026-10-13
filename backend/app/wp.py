@@ -163,6 +163,15 @@ class WP:
             raise RuntimeError(f"Tainacan recusou editar termo {termo_id}: {r.status_code} {r.text[:200]}")
         return r.json()
 
+    def gravar_hub(self, termo_id: int, meta: dict) -> dict:
+        """B1/B9: grava campos da página-hub de um fundo (rota do plugin da CAMP; ver docs/site/painel-hub.php)."""
+        r = self.h.post(f"/wp-json/camp/v1/painel/hub/{int(termo_id)}", json={"meta": meta})
+        if r.status_code == 404 and "rest_no_route" in r.text:
+            raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub (instale docs/site/painel-hub.php no plugin da CAMP)")
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou gravar a página do arquiteto: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     def criar_item(self, colecao_id: int, titulo: str, status: str = "draft", descricao: str = "") -> dict:
         r = self.h.post(f"/wp-json/tainacan/v2/collection/{colecao_id}/items", json={"title": titulo, "status": status, "description": descricao})
         if r.status_code >= 400:
