@@ -654,7 +654,7 @@ w.route_to('estacoes'); await sleep(2800);
   w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [H5] O caminho do material: os mesmos 7 nomes, na mesma ordem ----------
 { const h=w.caminhoMaterialHTML(4,' 3/14'),dd=d.createElement('div'); dd.innerHTML=h; const sp=[...dd.querySelectorAll('.steps.caminho span')];
-  chk(sp.map(x=>x.firstChild.textContent.trim()).join(',')==='Digitalizar,Enviar ao QNAP,Leitura,Importar,Conferir 3/14,Aprovar,Publicar','o caminho deveria ter os 7 passos oficiais na ordem: '+sp.map(x=>x.textContent).join(' | '));
+  chk(sp.map(x=>x.firstChild.textContent.trim()).join(',')==='Digitalizar,Enviar ao QNAP,Leitura do CAMP Vision,Importar,Conferir 3/14,Aprovar o lote,Publicar','o caminho deveria ter os 7 passos oficiais na ordem: '+sp.map(x=>x.textContent).join(' | '));
   chk(dd.querySelectorAll('span.done').length===4&&dd.querySelectorAll('span.cur').length===1&&/Conferir 3\/14/.test(dd.querySelector('span.cur').textContent)&&/você está aqui/.test(dd.querySelector('span.cur').textContent),'4 feitos, 1 atual com "3/14" e "você está aqui"');
   w.route_to('caminho'); await sleep(500); chk(d.querySelectorAll('#v-caminho-corpo details').length===7&&/Leva alguns minutos por pasta/.test(txt('#v-caminho-corpo'))&&d.querySelectorAll('#v-caminho-corpo .steps.caminho span').length===7,'a página #caminho deveria explicar os 7 passos');
   w.route_to('projeto/F003-P9001'); await sleep(3500); chk(d.querySelectorAll('#pj-proximo .steps.caminho span').length===7,'a página do projeto deveria mostrar o caminho de 7 passos com "você está aqui"'); w.route_to('painel'); }
@@ -1139,6 +1139,13 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H5 pendências] caminho com marcas e "travado", mini-barra nas Filas, barra na página da folha, #caminho com onde/tempo/erros ----------
+{ const h=w.caminhoMaterialHTML(2,'',{compacto:true,travado:'o CAMP Vision parou com erro'});
+  chk(/class="trav"/.test(h)&&/Passo 3 de 7: Leitura do CAMP Vision \(parado: o CAMP Vision parou com erro\)/.test(h),'[H5] a mini-barra deveria dizer o passo e o motivo quando travada: '+h.slice(0,200));
+  w.route_to('filas'); await sleep(1800); chk(!!d.querySelector('#filas-body .steps.caminho.compacto'),'[H5] cada linha das Filas deveria ter a mini-barra dos 7 passos');
+  w.route_to('item/F023-P0011-1959-S01-D00001'); await sleep(2500); chk(!!d.querySelector('#idet .it-caminho .steps.caminho'),'[H5] a página da folha deveria ter a barra do caminho');
+  w.route_to('caminho'); await sleep(500); chk((txt('#v-caminho').match(/Onde no painel/g)||[]).length===7&&/Quanto tempo/.test(txt('#v-caminho'))&&/O que pode dar errado/.test(txt('#v-caminho')),'[H5] cada passo em "Como o material anda" deveria dizer onde no painel, quanto tempo e o que pode dar errado');
+  okl.push('H5 pendências: marcas ✔●○⚠, travado com motivo, mini-barra nas Filas, barra na folha, #caminho completo'); w.route_to('painel'); }
 // ---------- [H3 pendências] carregando que avisa se demorar, erro que explica com detalhe recolhido, vazios com o próximo passo ----------
 { w.route_to('auditoria'); await sleep(1800);
   w.tabelaCarregando('#au-body','Carregando teste…'); chk(/Carregando teste/.test(txt('#au-body')),'[H3] carregando deveria dizer o que está buscando');
