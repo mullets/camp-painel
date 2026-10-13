@@ -74,6 +74,11 @@ def resumo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                COALESCE((SELECT situacao FROM direitos_fundo d WHERE d.fundo_codigo=f.codigo),'nao_definida') AS direitos
         FROM fundo f ORDER BY f.codigo""").fetchall()
     out = [dict(r) for r in rows]
+    from .pendencias import fundos_travados       # a mesma regra do número "travados por direitos" do painel inicial
+    travados = {f["codigo"]: f for f in fundos_travados(con)}
+    for f in out:
+        t = travados.get(f["codigo"])
+        f["travado"], f["travado_projetos"] = bool(t), (t["projetos"] if t else 0)
     # termos que existem no site mas não têm código na tabela
     for r in con.execute("""SELECT x.id, x.nome, e.observacao FROM wp_termo x JOIN wp_taxonomia t ON t.id=x.taxonomia_id
                             LEFT JOIN fundo_termo_site e ON e.nome_site=x.nome WHERE t.nome='Fundos' AND (e.fundo_codigo IS NULL)"""):

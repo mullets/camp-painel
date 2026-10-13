@@ -1,4 +1,4 @@
-"""Decisões que o painel pede a uma pessoa (projeto parecido: é o mesmo?). Ler: operador; decidir: admin."""
+"""Decisões que o painel pede a uma pessoa (projeto parecido: é o mesmo?). Ler: todos (leitura vê, sem decidir); decidir: admin."""
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,7 +18,7 @@ def _linha(r) -> dict:
 
 
 @router.get("/decisoes")
-def listar(situacao: str = "pendente", u: dict = Depends(auth.exige("operador"))) -> dict:
+def listar(situacao: str = "pendente", u: dict = Depends(auth.exige("leitura"))) -> dict:
     if situacao not in ("pendente", "resolvida"):
         raise HTTPException(400, "situacao deve ser pendente ou resolvida")
     con = connect()
@@ -31,7 +31,7 @@ def listar(situacao: str = "pendente", u: dict = Depends(auth.exige("operador"))
 
 
 @router.get("/decisoes/{did}")
-def detalhe(did: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+def detalhe(did: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     try:
         r = con.execute("SELECT * FROM decisao WHERE id=?", (did,)).fetchone()

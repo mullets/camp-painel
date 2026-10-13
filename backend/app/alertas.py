@@ -40,7 +40,8 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
             partes.append(f"O CAMP Vision não dá sinal há {hb['idade'] // 3600} h {hb['idade'] % 3600 // 60} min: confira se o computador dele está ligado.")
         if erros:
             partes.append(f"{erros} lote(s) parado(s) com erro na Fila: abra a Fila para ver o motivo.")
-        out["campvision"] = {"critico": bool(parado or erros), "texto": " ".join(partes) or "O CAMP Vision está funcionando."}
+        out["campvision"] = {"critico": bool(parado or erros), "texto": " ".join(partes) or "O CAMP Vision está funcionando.",
+                             "parado": parado, "parado_h": (hb["idade"] // 3600) if parado else None, "lotes_erro": erros}
     if estado_backup is None:
         from . import backup as bk
         estado_backup = bk.estado

@@ -560,6 +560,63 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
 .stale-note{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:8px 10px;border:1px solid var(--amber);border-radius:8px;background:var(--amber-soft);font-size:12px;color:var(--ink2)}
 .stale-note b{color:var(--ink)}.stale-note .btn{margin-left:auto}
 
+/* H6b · painel inicial: saudação que resume, faixa crítica única, "O que fazer agora", caminho do material, ritmo e a coluna "Está tudo funcionando?" */
+body.na-painel #system-banner{display:none!important}
+.ini-hello{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 14px}
+.ini-hello h1{font-size:24px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.ini-hello .sub{color:var(--ink2);margin:4px 0 0;font-size:13.5px}
+.ini-q{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;cursor:pointer;flex:none}
+.ini-alerta{display:flex;gap:12px;align-items:center;background:var(--red-soft);border:1px solid color-mix(in srgb,var(--red) 35%,transparent);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;flex-wrap:wrap}
+.ini-alerta b{color:var(--red)}.ini-alerta p{margin:0;flex:1 1 300px;min-width:0}
+.ini-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.ini-col{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
+.ini-col>.panel{margin:0}
+.ini-kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:1px;background:var(--line2);border-bottom:1px solid var(--line2);border-radius:var(--r) var(--r) 0 0;overflow:hidden}
+.ini-kpi{background:var(--surface);padding:12px 16px;display:grid;gap:2px;align-content:start;text-align:left;border:0;font:inherit;color:inherit;cursor:pointer}
+.ini-kpi:hover{background:var(--surface2)}.ini-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.ini-kpi .v{font:500 24px var(--mono);font-variant-numeric:tabular-nums;line-height:1.2}
+.ini-kpi .l{font-weight:500;font-size:13px}.ini-kpi .d{color:var(--ink3);font-size:12px}
+.ini-kpi.warn .v{color:var(--amber)}.ini-kpi.go .v{color:var(--blue)}
+.ini-tg{border-bottom:1px solid var(--line2)}.ini-tg:last-child{border-bottom:0}
+.ini-tgh{display:flex;align-items:center;gap:8px;padding:10px 16px 4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
+.ini-quem{text-transform:none;letter-spacing:0;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:0 8px}
+.ini-task{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 16px}
+.ini-task[data-ini-linha]{cursor:pointer}.ini-task[data-ini-linha]:hover{background:var(--surface2)}
+.ini-sev{align-self:stretch;border-radius:2px;background:var(--line)}.ini-sev.r{background:var(--red)}.ini-sev.a{background:var(--amber)}.ini-sev.b{background:var(--blue)}
+.ini-task .t{min-width:0}.ini-task .t b{display:block;font-weight:500;overflow-wrap:anywhere}.ini-task small{color:var(--ink3);font-size:12.5px}
+.ini-mais{display:block;width:100%;padding:6px 16px 12px;color:var(--blue);font:inherit;font-size:13px;background:none;border:0;cursor:pointer;text-align:left}
+.ini-vazio{padding:16px;color:var(--ink2)}.ini-vazio b{color:var(--green)}
+.ini-flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;overflow-x:auto}
+.ini-step{border:1px solid var(--line);border-radius:var(--r);padding:10px;display:grid;gap:4px;align-content:start;min-width:96px;background:var(--surface);text-align:left;font:inherit;color:inherit;cursor:pointer}
+.ini-step:hover{border-color:var(--ink3)}
+.ini-step .i{font:500 11px var(--mono);color:var(--ink3)}.ini-step .nm{font-weight:500;font-size:13px}
+.ini-step .q{font:500 20px var(--mono);font-variant-numeric:tabular-nums}.ini-step .w{font-size:12px;color:var(--ink3)}
+.ini-step.stuck{border-color:var(--amber);background:var(--amber-soft)}.ini-step.stuck .q{color:var(--amber)}
+.ini-step.go{border-color:var(--blue);background:var(--blue-soft)}.ini-step.go .q{color:var(--blue)}
+.ini-legenda{display:flex;gap:14px;flex-wrap:wrap;color:var(--ink3);font-size:12px;margin-top:10px}
+.ini-legenda span{display:inline-flex;gap:6px;align-items:center}.ini-legenda i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.ini-legenda i.a{background:var(--amber)}.ini-legenda i.b{background:var(--blue)}
+.ini-chart svg{width:100%;height:auto;display:block}
+.ini-chart rect{fill:var(--line)}.ini-chart rect.hoje{fill:var(--blue)}.ini-chart line{stroke:var(--line2);stroke-width:1}
+.ini-chart text{fill:var(--ink3);font:11px var(--mono)}
+.ini-nota{font-size:12px;color:var(--ink3)}
+.ini-hrow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid var(--line2)}
+.ini-hrow:last-of-type{border-bottom:0}.ini-hrow b{font-weight:500}.ini-hrow p{margin:0;color:var(--ink2);font-size:12.5px}
+.ini-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);margin-top:6px}.ini-dot.g{background:var(--green)}.ini-dot.a{background:var(--amber)}.ini-dot.r{background:var(--red)}.ini-dot.b{background:var(--blue)}
+.ini-bar{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:6px 0 2px;border:1px solid var(--line2)}
+.ini-bar i{display:block;height:100%;background:var(--blue)}.ini-bar.r i{background:var(--red)}.ini-bar.a i{background:var(--amber)}
+.ini-prog{display:grid;gap:12px}.ini-prog-row{display:grid;gap:2px}
+.ini-prog-row header{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.ini-prog-row header span{font:12.5px var(--mono);color:var(--ink2);font-variant-numeric:tabular-nums}
+.ini-feed ul{margin:0;padding:0}.ini-feed li{list-style:none;display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:7px 16px;border-bottom:1px solid var(--line2);font-size:13px}
+.ini-feed li:last-child{border-bottom:0}.ini-feed time{font:12px var(--mono);color:var(--ink3);padding-top:1px}
+.ini-skel{display:block;border-radius:var(--r);background:linear-gradient(90deg,var(--line2),var(--surface2),var(--line2));background-size:200% 100%;animation:camp-skeleton 1.2s linear infinite}
+.ini-hskel{padding:9px 16px;border-bottom:1px solid var(--line2)}.ini-hskel .ini-skel{height:34px}
+.ini-rodape{display:block;padding:8px 16px 12px;color:var(--blue);font:inherit;font-size:13px;background:none;border:0;cursor:pointer;text-align:left}
+.ph .ini-link{margin-left:auto;color:var(--blue);font-size:12.5px;background:none;border:0;cursor:pointer;font-family:inherit}
+@media (max-width:1100px){.ini-grid{grid-template-columns:minmax(0,1fr)}.ini-flow{grid-template-columns:repeat(7,minmax(110px,1fr))}}
+@media (max-width:760px){.ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ini-hello h1{font-size:20px}}
+@media (prefers-reduced-motion:reduce){.ini-skel{animation:none}}
 </style>
 </head>
 <body>
@@ -569,10 +626,11 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <nav class="nav" id="nav">
     <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Painel<kbd>1</kbd></button>
     <div class="grp">Material novo</div>
-    <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Filas de processamento<span class="n" id="n-filas">3</span><kbd>2</kbd></button>
-    <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Erros relatados<span class="n" id="n-err">5</span><kbd>3</kbd></button>
+    <button data-v="decisoes"><svg viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M5 9h14l-2 6H7z"/></svg>Decisões<span class="n r" id="n-dec" hidden></span></button>
+    <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Filas de processamento<span class="n" id="n-filas" hidden></span><kbd>2</kbd></button>
+    <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Erros relatados<span class="n" id="n-err" hidden></span><kbd>3</kbd></button>
     <div class="grp">Pedidos</div>
-    <button data-v="solicitacoes"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg>Solicitações<span class="n" id="n-sol">4</span><kbd>4</kbd></button>
+    <button data-v="solicitacoes"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg>Solicitações<span class="n" id="n-sol" hidden></span><kbd>4</kbd></button>
     <button data-v="uso"><svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Uso do acervo<kbd>5</kbd></button>
     <div class="grp">Acervo</div>
     <button data-v="projetos"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Projetos<kbd>6</kbd></button>
@@ -640,6 +698,12 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
     </div>
   </section>
 
+  <!-- DECISÕES -->
+  <section class="content" id="v-decisoes">
+  <div class="hdr"><div><h1>Decisões</h1><p class="sub">Projetos parecidos com um que já existe. Enquanto ninguém responde, o CAMP Vision fica parado naquela pasta.</p></div></div>
+  <div class="fila-chips" id="dec-chips" role="group" aria-label="Filtrar decisões"></div>
+  <div class="panel"><div class="tw"><table><thead><tr><th>O que chegou</th><th>Parece com</th><th>Esperando</th><th></th></tr></thead><tbody id="dec-body"></tbody></table></div></div>
+  </section>
   <!-- FILAS -->
   <section class="content" id="v-filas">
   <div class="hdr"><div><h1>Filas de processamento</h1><p class="sub">O que o CAMP Vision já leu e o que ainda precisa de uma pessoa: importar, conferir, aprovar e publicar.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-lista')">Nova lista</button></div></div>
@@ -690,7 +754,7 @@ body.leitura .btn.pri,body.leitura .btn[onclick*="openModal"]{display:none}
   <!-- FUNDOS -->
   <section class="content" id="v-fundos">
     <div class="hdr"><div><h1>Fundos</h1><p class="sub">Tabela de autoridade. O código de um fundo nasce aqui e nunca muda: estação Contex, CAMP Vision e site consultam esta lista, não o nome da pasta.</p></div><div class="act"><button class="btn" data-pode="fundos.exportar" onclick="toast('fundos.json exportado — a estação Contex lê este arquivo')">Exportar fundos.json</button><button class="btn pri" data-pode="fundo.reservar" onclick="openModal('m-fundo')">Reservar próximo código</button></div></div>
-    <div class="panel"><div class="hint-rows">Clique num fundo para abrir sua página, com projetos, agentes e descrição.</div><div class="filterbar" id="fundos-filterbar"><input id="fundos-q" placeholder="Buscar por código, sigla ou nome…" autocomplete="off"><div class="fundos-filtros" id="fundos-filtros"><button class="btn sm on" data-ff="todos">Todos <span class="n" id="ffc-todos"></span></button><button class="btn sm" data-ff="publicado">Publicados <span class="n" id="ffc-publicado"></span></button><button class="btn sm" data-ff="rascunho">Rascunhos <span class="n" id="ffc-rascunho"></span></button><button class="btn sm" data-ff="nao_publicado">Não publicados <span class="n" id="ffc-nao_publicado"></span></button><button class="btn sm" data-ff="fora_do_ar">Despublicados <span class="n" id="ffc-fora_do_ar"></span></button><button class="btn sm" data-ff="direitos">Com restrição de direitos <span class="n" id="ffc-direitos"></span></button><button class="btn sm" data-ff="sem_sigla">Sem sigla <span class="n" id="ffc-sem_sigla"></span></button><button class="btn sm" data-ff="so_site">Só no site <span class="n" id="ffc-so_site"></span></button></div><span class="cnt" id="fundos-cnt"></span></div><div class="tw"><table>
+    <div class="panel"><div class="hint-rows">Clique num fundo para abrir sua página, com projetos, agentes e descrição.</div><div class="filterbar" id="fundos-filterbar"><input id="fundos-q" placeholder="Buscar por código, sigla ou nome…" autocomplete="off"><div class="fundos-filtros" id="fundos-filtros"><button class="btn sm on" data-ff="todos">Todos <span class="n" id="ffc-todos"></span></button><button class="btn sm" data-ff="publicado">Publicados <span class="n" id="ffc-publicado"></span></button><button class="btn sm" data-ff="rascunho">Rascunhos <span class="n" id="ffc-rascunho"></span></button><button class="btn sm" data-ff="nao_publicado">Não publicados <span class="n" id="ffc-nao_publicado"></span></button><button class="btn sm" data-ff="fora_do_ar">Despublicados <span class="n" id="ffc-fora_do_ar"></span></button><button class="btn sm" data-ff="direitos">Com restrição de direitos <span class="n" id="ffc-direitos"></span></button><button class="btn sm" data-ff="travados" title="Fundos que não podem publicar por causa dos direitos e têm folhas esperando">Travados por direitos <span class="n" id="ffc-travados"></span></button><button class="btn sm" data-ff="sem_sigla">Sem sigla <span class="n" id="ffc-sem_sigla"></span></button><button class="btn sm" data-ff="so_site">Só no site <span class="n" id="ffc-so_site"></span></button></div><span class="cnt" id="fundos-cnt"></span></div><div class="tw"><table>
       <thead><tr><th>Código</th><th>Sigla</th><th>Nome do fundo</th><th>Período</th><th class="num">Projetos</th><th class="num">Publicados</th><th>Site</th></tr></thead>
       <tbody id="fundos-body"></tbody>
     </table></div></div>
@@ -1083,7 +1147,7 @@ function showItem(code){const pc=code.slice(0,10);const p=projOf(pc);if(!p)retur
 // ---------- navegação ----------
 const navEl=document.getElementById('nav');
 function show(v,sec){document.querySelectorAll('.content').forEach(s=>s.classList.toggle('on',s.id==='v-'+v));navEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===sec));document.querySelector('.main').scrollTo(0,0);closeDrawer()}
-const TITLES={painel:'Painel',filas:'Filas de processamento',solicitacoes:'Solicitações',erros:'Erros relatados',fundos:'Fundos',arquitetos:'Arquitetos',projetos:'Projetos',etiquetas:'Etiquetas',localizacao:'Localização física',estacoes:'Estações e site',uso:'Uso do acervo',auditoria:'Auditoria',config:'Configurações',caminho:'Como o material anda',glossario:'Glossário',qualidade:'Qualidade do CAMP Vision'};
+const TITLES={painel:'Painel',decisoes:'Decisões',filas:'Filas de processamento',solicitacoes:'Solicitações',erros:'Erros relatados',fundos:'Fundos',arquitetos:'Arquitetos',projetos:'Projetos',etiquetas:'Etiquetas',localizacao:'Localização física',estacoes:'Estações e site',uso:'Uso do acervo',auditoria:'Auditoria',config:'Configurações',caminho:'Como o material anda',glossario:'Glossário',qualidade:'Qualidade do CAMP Vision'};
 let NAV_INDEX=Number(history.state&&history.state.campIndex)||0;
 function rotaAtual(){return (history.state&&history.state.campRoute)||location.hash.slice(1)||'painel'}
 function salvarContextoNavegacao(){const st={...(history.state||{}),camp:true,campIndex:NAV_INDEX,campRoute:rotaAtual(),campScroll:mainEl.scrollTop||0};history.replaceState(st,'',location.href)}
@@ -1104,7 +1168,7 @@ const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 const PODE={'rota.uso':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','analytics.diagnostico':'admin'};
 function pode(acao){const min=PODE[acao];return !min||(!!EU&&(PAPEL_NIVEL[EU.papel]||0)>=PAPEL_NIVEL[min])}
 function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
-function route_to(route){route=route||'painel';{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='filas')carregarFilas();if(v==='projetos')carregarProjetosAPI();if(v==='fundos')carregarFundosAPI();if(v==='solicitacoes')carregarSolicitacoes();if(v==='erros')carregarErros();if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){carregarEstacoes();setTimeout(()=>{carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='etiquetas')aplicarRotaEtiquetas(route)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
+function route_to(route){route=route||'painel';document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();const a1=route.split('/')[1]||'';if(v==='decisoes')carregarDecisoes();if(v==='filas'){FILA_FILTRO=a1||null;carregarFilas()}if(v==='projetos')carregarProjetosAPI(a1?{situacao:a1}:{});if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='erros')carregarErros();if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){carregarEstacoes();setTimeout(()=>{carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='etiquetas')aplicarRotaEtiquetas(route)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
 window.addEventListener('popstate',e=>{if(temAlteracoes()&&!confirm('Existem alterações não salvas. Navegar e descartar?')){history.go(1);return}if(temAlteracoes()){ALTERACOES_PENDENTES.clear();atualizarDirtyUI()}const st=e.state||{};NAV_INDEX=Number(st.campIndex)||0;const route=st.campRoute||location.hash.slice(1)||'painel';route_to(route);requestAnimationFrame(()=>{mainEl.scrollTop=Number(st.campScroll)||0})});
 navEl.addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
@@ -1267,7 +1331,7 @@ window.addEventListener('beforeunload',e=>{if(temAlteracoes()){e.preventDefault(
 const HIST=[];   // o histórico do protótipo era inventado; só sobrou para o código de protótipo que o cita, sem eventos falsos
 // Cada linha clicável abre o detalhe REAL do seu registro (data-nav = página; data-abrir = janela). Não existe mais painel genérico de protótipo.
 document.addEventListener('click',e=>{const t=e.target.closest('[data-abrir]');if(!t||e.target.closest('button,a,input,label,select,textarea,.code,[data-no-nav]'))return;const [tipo,...r]=t.dataset.abrir.split(':'),id=r.join(':');
-  ({solicitacao:()=>abrirSolicitacao(+id),erro:()=>abrirErro(+id),agente:()=>editarAgente(+id),localizacao:()=>verLocalizacao(+id)}[tipo]||(()=>{}))()});
+  ({decisao:()=>abrirDecisao(+id),solicitacao:()=>abrirSolicitacao(+id),erro:()=>abrirErro(+id),agente:()=>editarAgente(+id),localizacao:()=>verLocalizacao(+id)}[tipo]||(()=>{}))()});
 
 // ---------- ordenação e filtro ----------
 document.querySelectorAll('thead th').forEach(th=>{if(!th.textContent.trim())return;th.classList.add('sortable');th.addEventListener('click',()=>{
@@ -1294,12 +1358,13 @@ const AJUDA_TELAS={
   auditoria:{titulo:'Auditoria',intro:'Histórico institucional de alterações no painel.',passos:[['Filtre por ator ou entidade','Encontre quem alterou um registro.'],['Abra o evento','Veja Antes → Depois quando o evento possui diff.'],['Exporte se necessário','O CSV respeita a visão filtrada atual.']]},
   config:{titulo:'Configurações',intro:'Infraestrutura, usuários e preferências administrativas.',passos:[['Altere somente o necessário','Configurações de integração podem afetar toda a operação.'],['Salve campo a campo','O painel avisa quando existem alterações não salvas.'],['Use usuários e papéis','Dê somente as permissões necessárias para cada função.']]}
 };
-const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–9','Painel até Localização, na ordem do menu'],['T · E · A · C','Etiquetas · Estações e site · Auditoria · Configurações'],['F','Focar filtro da tela'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
+const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–9','Painel até Arquitetos, na ordem do menu'],['L · T · E · A · C','Localização · Etiquetas · Estações e site · Auditoria · Configurações'],['F','Focar filtro da tela'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
 function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||AJUDA_TELAS.painel}
 // ---------- Como funciona esta página (H1): uma caixa curta no topo de cada tela; "Entendi" fecha, o "?" traz de volta ----------
 // v = versão do texto: se mudar, a caixa volta a aparecer uma vez para quem já tinha fechado, com a etiqueta "Novo".
 const AJUDA_PAGINAS={
- painel:{v:1,serve:'É o resumo do dia. Mostra o que precisa de você agora e se as máquinas estão funcionando.',passos:['Olhe a faixa vermelha no alto, se houver: é algo que pode parar o trabalho (por exemplo, o QNAP quase cheio).','Em "Por onde começar", resolva de cima para baixo. Cada linha leva direto ao lugar certo.','"Decidir" vem primeiro: o CAMP Vision achou um projeto parecido com outro e está parado esperando você dizer se é o mesmo.','Depois, os lotes para conferir e os projetos prontos para publicar.','Os números do topo mostram o que está esperando por alguém.'],cores:[['vermelho','parou ou vai parar: resolva hoje'],['amarelo','precisa de atenção, mas não para nada'],['azul','em andamento'],['verde','tudo certo'],['cinza','desligado ou sem dado (é normal fora do expediente)']],cuidados:'Máquina de captura desligada à noite é normal e não é erro. "Divergências com o site" não quer dizer que o site está errado: é o painel avisando que os dois não batem; abra para ver.',quem:'Leitura vê tudo e não muda nada · operador resolve decisões e lotes · admin também publica e mexe nas configurações.'},
+ painel:{v:2,serve:'É o resumo do dia. Mostra o que precisa de você agora e se as máquinas estão funcionando.',passos:['Olhe a faixa vermelha no alto, se houver. É algo que pode parar o trabalho (por exemplo, o QNAP quase cheio). Clique nela para ver o que fazer.','Em "O que fazer agora", resolva de cima para baixo. Cada linha tem um botão que leva direto ao lugar certo.','"Decidir" vem primeiro: o CAMP Vision achou um projeto parecido com outro e está PARADO esperando você dizer se é o mesmo.','Depois, os lotes para conferir e os projetos prontos para publicar.','Os números do topo são clicáveis e abrem a lista que eles contam.'],cores:[['vermelho','parou ou vai parar: resolva hoje'],['amarelo','precisa de atenção, mas não para nada'],['azul','em andamento ou pronto para o próximo passo'],['verde','tudo certo'],['cinza','desligado ou sem dado (é normal fora do expediente)']],cuidados:'Máquina de captura desligada à noite é normal e não é erro. "Diferenças com o site" não quer dizer que o site está errado: é o painel avisando que os dois não batem; abra para ver.',quem:'Leitura vê tudo e não muda nada · operador importa e confere lotes · admin também decide, aprova, publica e mexe nas configurações.'},
+ decisoes:{v:1,serve:'Aqui ficam as perguntas que o painel faz antes de agir: chegou material de um projeto com nome parecido com um que já existe. É o mesmo projeto ou é outro?',passos:['Comece pelas que dizem "o CAMP Vision está parado esperando": enquanto ninguém responde, aquela pasta não anda.','Clique em "Decidir" para ver o que chegou (nome, ano, cidade, pasta do scanner) e o projeto parecido que já existe.','Se for a mesma obra, clique em "É o mesmo": o material entra no projeto que já existe.','Se for outra obra, clique em "É outro projeto": o painel cria um projeto novo com o próximo número do fundo.','Em até 2 minutos o CAMP Vision recebe a resposta e continua sozinho.'],cores:[['muito parecido','nome praticamente igual: quase sempre é o mesmo'],['parecido','vale abrir o projeto existente e comparar antes de decidir']],cuidados:'Na dúvida, abra o projeto que já existe ("Ver o projeto") e compare as folhas. Juntar dois projetos diferentes dá mais trabalho para desfazer do que criar um novo.',quem:'Todos veem · só admin decide.'},
  filas:{v:1,serve:'Aqui chega cada pasta que o CAMP Vision terminou de ler. Você leva cada uma até o site em 4 passos: importar, conferir, aprovar e publicar.',passos:['Fique na aba "Precisam de você": ela só mostra o que depende de uma pessoa.','Cada linha é um projeto. O botão azul é sempre o próximo passo: Importar folhas, Conferir folhas, Aprovar lote ou Publicar.','"Importar folhas" traz para o painel o que o CAMP Vision leu. Leva poucos segundos.','"Conferir folhas" abre a primeira folha. Confira se está de pé e se o tipo e o título estão certos; corrija e vá para a próxima.','Quando todas estiverem conferidas, um admin aprova o lote e publica.'],cores:[['Importar','chegou, falta trazer'],['Conferir','folhas esperando você olhar'],['Aprovar','falta um admin confirmar'],['Publicar','pronto para ir ao site'],['CAMP Vision lendo','ainda não terminou, espere'],['Erro','o CAMP Vision parou nessa pasta; abra para ver o motivo']],cuidados:'"Varrer QNAP" só serve se você acha que uma pasta enviada não apareceu: o CAMP Vision avisa sozinho. "Nova lista" é para casos raros (pasta antiga, fora do fluxo).',quem:'Operador importa e confere · admin aprova e publica · leitura só vê.'},
  projetos:{v:1,serve:'Lista de todas as obras de todos os arquitetos. Use para achar um projeto, ver o que falta em cada um e fazer ações em vários de uma vez.',passos:['Digite parte do nome, o código (F026-P0233) ou a cidade na busca.','Use os filtros de situação para ver só os publicados, os não publicados ou os que precisam de você.','Clique na linha para abrir o projeto.','Para publicar vários de uma vez, marque as caixas à esquerda e use a barra que aparece.','"Novo projeto" é só para obra que ainda não existe. Antes, procure pelo nome: o projeto pode já estar aqui.'],cores:[['publicado','visível no site'],['rascunho','no site, escondido'],['não publicado','só no painel'],['despublicado','retirado de propósito'],['sem folhas','ainda não digitalizado'],['Conferir 3','3 folhas esperando conferência']],cuidados:'O CAMP Vision cria projetos sozinho quando chega uma pasta nova. Criar à mão é exceção (inventário, material sem digitalização).',quem:'Todos veem · operador cria projeto · admin publica em lote.'},
  fundos:{v:1,serve:'A lista oficial dos arquitetos e escritórios cujo material está na CAMP. Cada um tem um código (F026) e uma sigla (SBU) que vão no nome de todos os arquivos e nas etiquetas.',passos:['Procure pelo nome, sigla ou código.','Clique na linha para abrir o fundo: dados, direitos, projetos e o que falta para publicar.','Use os filtros para ver os que já estão no site ou os que têm pendência.','Chegou material de um arquiteto novo? Use "Reservar próximo código".'],cores:[['publicado / não publicado / despublicado','situação da página do arquiteto no site'],['com restrição','alguém registrou uma restrição de direitos: a publicação fica bloqueada'],['sem sigla','falta escolher as 3 letras']],cuidados:'O código e a sigla NUNCA mudam depois de criados, porque estão no nome dos arquivos. Confira a sigla antes de reservar. Material de terceiros trazido só para digitalizar vai no F000 Convidado.',quem:'Todos veem · admin reserva código e edita.'},
@@ -1428,7 +1493,7 @@ document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!a
 try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
 // Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
-const NAV_ATALHOS={painel:'1',filas:'2',erros:'3',solicitacoes:'4',uso:'5',projetos:'6',fundos:'7',arquitetos:'8',localizacao:'9',etiquetas:'T',estacoes:'E',auditoria:'A',qualidade:'Q',config:'C'};
+const NAV_ATALHOS={painel:'1',decisoes:'2',filas:'3',erros:'4',solicitacoes:'5',uso:'6',projetos:'7',fundos:'8',arquitetos:'9',localizacao:'L',etiquetas:'T',estacoes:'E',auditoria:'A',qualidade:'Q',config:'C'};
 const KEYS=Object.fromEntries(Object.entries(NAV_ATALHOS).map(([v,k])=>[k.toLowerCase(),v]));
 document.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=NAV_ATALHOS[b.dataset.v];let el=b.querySelector('kbd');if(!k){if(el)el.remove();return}if(!el){el=document.createElement('kbd');b.appendChild(el)}el.textContent=k});
 document.addEventListener('keydown',e=>{
@@ -1524,6 +1589,7 @@ function fundoPassaFiltro(f){
   if(FUNDO_FILTRO==='nao_publicado')return !f.so_no_site&&f.status_site==='nao_publicado'&&!(f.no_site>0)&&!(f.rascunhos_site>0);
   if(FUNDO_FILTRO==='fora_do_ar')return f.status_site==='fora_do_ar';
   if(FUNDO_FILTRO==='direitos')return !f.so_no_site&&!['autorizado','nao_definida'].includes(f.direitos);
+  if(FUNDO_FILTRO==='travados')return !!f.travado;
   if(FUNDO_FILTRO==='sem_sigla')return !f.so_no_site&&!f.sigla;
   if(FUNDO_FILTRO==='so_site')return !!f.so_no_site;
   return true;
@@ -1544,6 +1610,7 @@ function atualizarContadoresFundos(){
     nao_publicado:fs.filter(f=>!f.so_no_site&&f.status_site==='nao_publicado'&&!(f.no_site>0)&&!(f.rascunhos_site>0)).length,
     fora_do_ar:fs.filter(f=>f.status_site==='fora_do_ar').length,
     direitos:fs.filter(f=>!f.so_no_site&&!['autorizado','nao_definida'].includes(f.direitos)).length,
+    travados:fs.filter(f=>f.travado).length,
     sem_sigla:fs.filter(f=>!f.so_no_site&&!f.sigla).length,
     so_site:fs.filter(f=>f.so_no_site).length
   };
@@ -1563,7 +1630,7 @@ async function carregarFundosAPI(){const tinha=!!(FUNDOS_API&&FUNDOS_API.length)
   if(!document.querySelector(`#fundos-filtros [data-ff="${FUNDO_FILTRO}"]`))FUNDO_FILTRO='todos';
   document.querySelectorAll('#fundos-filtros [data-ff]').forEach(b=>b.classList.toggle('on',b.dataset.ff===FUNDO_FILTRO));
   renderTabelaFundos();
-  const prox=await API('/api/fundos/proximo').catch(()=>null);if(prox)document.getElementById('nf-code').textContent=prox.codigo}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.status===428?'Troque a senha para continuar.':e.message;if(tinha)marcarStale('fundos',msg,'carregarFundosAPI()');else tabelaErro('#fundos-body',msg,'carregarFundosAPI()')}}
+  const prox=pode('fundo.reservar')?await API('/api/fundos/proximo').catch(()=>null):null;if(prox)document.getElementById('nf-code').textContent=prox.codigo}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.status===428?'Troque a senha para continuar.':e.message;if(tinha)marcarStale('fundos',msg,'carregarFundosAPI()');else tabelaErro('#fundos-body',msg,'carregarFundosAPI()')}}
 async function definirSigla(codigo,titulo){const s=prompt(`Sigla de 3 letras para ${codigo} ${titulo}.\nAtenção: depois de definida não muda mais (entra no nome dos arquivos).`);if(!s)return;try{await API('/api/fundos/'+codigo,{method:'PATCH',body:JSON.stringify({sigla:s.trim().toUpperCase()})});toast(`${codigo} = ${s.toUpperCase()}`);carregarFundosAPI()}catch(e){toast(e.message)}}
 const _addFundoMock=addFundo;
 addFundo=async function(){const root=document.getElementById('m-fundo');if(!validarCampos(root))return;if(!EU)return _addFundoMock();const err=document.getElementById('nf-err');err.textContent='';try{const r=await API('/api/fundos',{method:'POST',body:JSON.stringify({titulo:document.getElementById('nf-nome').value,sigla:document.getElementById('nf-sigla').value,data_inicio:+document.getElementById('nf-ini').value||null,data_fim:+document.getElementById('nf-fim').value||null,tipo_agente:document.getElementById('nf-tipo').value})});closeModal();toast(r.site&&r.site.erro?`${r.codigo} criado no painel; site pendente: ${r.site.erro}`:`${r.codigo} ${r.sigla} reservado e criado no site`);await carregarFundosAPI();nav('fundo/'+r.codigo)}catch(e){err.textContent=e.message}}
@@ -1811,6 +1878,16 @@ function cardItemProjeto(it){
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
   return `<div class="thumb" data-fl="${flagsFolha(it)}" ${revisavel?`data-rev-abrir="${escHtml(codigo)}"`:navegavel?`data-nav="item/${escHtml(codigo)}"`:''}>${imagem}${origem}${flag}<div class="cap"><b>${escHtml(it.tipo_documento||nomeSerieProjeto(it.serie_codigo))}</b>${it.folha?` · folha ${escHtml(it.folha)}`:''}${status}${rev}<span class="code">${escHtml(codigo)}</span></div></div>`
 }
+let DEC_SIT='pendente';
+async function carregarDecisoes(sit){if(sit)DEC_SIT=sit;const tb=document.getElementById('dec-body');if(!tb)return;if(!tb.querySelector('tr[data-abrir]'))tabelaCarregando('#dec-body','Carregando decisões…');
+  try{const [pend,res]=await Promise.all([API('/api/decisoes?situacao=pendente'),API('/api/decisoes?situacao=resolvida')]),admin=EU&&['admin','master'].includes(EU.papel),aberta=DEC_SIT==='pendente';
+    limparStale('decisoes');{const nd=document.getElementById('n-dec');if(nd){nd.textContent=pend.total?fmtN(pend.total):'';nd.hidden=!pend.total}}
+    document.getElementById('dec-chips').innerHTML=[['pendente','Esperando resposta',pend.total],['resolvida','Decididas (as 30 últimas)',res.total]].map(([k,t,n])=>`<button class="btn sm" data-dec-sit="${k}" aria-pressed="${DEC_SIT===k}">${t} <b>${fmtN(n)}</b></button>`).join('');
+    const L=(aberta?pend:res).itens;
+    tb.innerHTML=L.length?L.map(x=>{const c=(x.candidatos||[])[0]||{},pa=(x.pedido||{}).identificacao_original;return `<tr data-abrir="decisao:${escHtml(x.id)}"><td><b>${escHtml(x.titulo)}</b><br><small class="help">${escHtml(x.fundo_codigo)}${pa?` · pasta ${escHtml(pa)}`:''}${aberta&&x.origem==='estacao'?' · o CAMP Vision está parado esperando':''}</small></td><td>${c.codigo?`<span class="code">${escHtml(c.codigo)}</span> ${escHtml(c.titulo||'')}`:'—'}</td><td>${aberta?escHtml(haTempo(x.criada_em)):`${x.resolucao==='mesmo'?'era o mesmo':'projeto novo'} <span class="code">${escHtml(x.projeto_codigo||'')}</span>`}</td><td><button class="btn sm${aberta&&admin?' pri':''}" data-dec-abrir="${escHtml(x.id)}">${aberta&&admin?'Decidir':'Ver'}</button></td></tr>`}).join('')
+      :`<tr><td colspan="4">${vazioHTML(aberta?'Nenhuma decisão esperando':'Nenhuma decisão tomada ainda',aberta?'Quando o CAMP Vision achar um projeto parecido com um que já existe, a pergunta aparece aqui e no Painel.':'As decisões já respondidas aparecem aqui.')}</td></tr>`}
+  catch(e){if(e.status===401||e.status===428)return;if(tb.querySelector('tr[data-abrir]'))marcarStale('decisoes',e.message,'carregarDecisoes()');else tabelaErro('#dec-body',e.message,'carregarDecisoes()')}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-dec-sit],[data-dec-abrir]');if(!b)return;if(b.dataset.decSit)carregarDecisoes(b.dataset.decSit);else abrirDecisao(+b.dataset.decAbrir)});
 async function abrirDecisao(id){
   try{const d=await API('/api/decisoes/'+encodeURIComponent(id)),p=d.pedido||{},pode=EU&&['admin','master'].includes(EU.papel),res=d.situacao==='resolvida';
     const kv=(k,v)=>`<div class="us-kv"><span>${escHtml(k)}</span><b>${escHtml(v||'—')}</b></div>`;
@@ -1818,7 +1895,7 @@ async function abrirDecisao(id){
     openDrawer('Projeto parecido: é o mesmo?',`${d.fundo_codigo} · decisão ${d.id}`,`<p class="help">${d.origem==='estacao'?'O <b>CAMP Vision</b> pediu um número de projeto novo e <b>está esperando a sua resposta</b> (ele tenta de novo sozinho). ':''}Antes de criar, o painel achou projeto parecido neste fundo. Escolha: se é o mesmo, o material novo entra no projeto que já existe (e o CAMP Vision recebe o código dele); se não, cria-se um projeto novo.</p><h3 class="hoje-h">O que chegou</h3>${kv('Nome',d.titulo)}${kv('Ano',p.ano?String(p.ano):'')}${kv('Cidade',p.cidade)}${kv('Identificação original (pasta no scanner)',p.identificacao_original)}${kv('Operador',p.operador)}${kv('Chegou em',fmtDataHora(d.criada_em))}<h3 class="hoje-h">${res?'Decidido':'Já existe no fundo'}</h3>${res?`<p class="help">${d.resolucao==='mesmo'?'Era o mesmo projeto: o material foi adicionado a':'Era outro projeto: foi criado'} <b>${escHtml(d.projeto_codigo)}</b>${d.resolvida_por?` por ${escHtml(d.resolvida_por)}`:''}.</p>`:''}${cands||'<p class="help">Nenhum candidato registrado.</p>'}${res?'':`<div class="act"><button class="btn" data-dec-acao="novo" data-dec-id="${escHtml(d.id)}"${pode?'':' disabled'}>É outro projeto: criar um novo (próximo número do fundo)</button></div>${pode?'':'<p class="help">Só admin e master decidem.</p>'}`}`)}catch(e){toast(e.message)}}
 async function resolverDecisao(id,acao,codigo){
   if(!confirm(acao==='mesmo'?`Adicionar ao projeto ${codigo}? Nenhum projeto novo será criado e o CAMP Vision receberá o código ${codigo}.`:'Criar um projeto NOVO? Será usado o próximo número do fundo.'))return;
-  try{const r=await API('/api/decisoes/'+encodeURIComponent(id)+'/resolver',{method:'POST',body:JSON.stringify({acao,projeto_codigo:codigo||null})});toast(acao==='mesmo'?`✔ Decidido: adicionado a ${r.projeto_codigo}. O CAMP Vision continua a leitura em até 2 min.`:`✔ Decidido: projeto ${r.projeto_codigo} criado. O CAMP Vision continua a leitura em até 2 min.`);closeDrawer(true);if(typeof carregarPainel==='function')carregarPainel()}catch(e){toast(e.message)}}
+  try{const r=await API('/api/decisoes/'+encodeURIComponent(id)+'/resolver',{method:'POST',body:JSON.stringify({acao,projeto_codigo:codigo||null})});toast(acao==='mesmo'?`✔ Decidido: adicionado a ${r.projeto_codigo}. O CAMP Vision continua a leitura em até 2 min.`:`✔ Decidido: projeto ${r.projeto_codigo} criado. O CAMP Vision continua a leitura em até 2 min.`);closeDrawer(true);if(typeof carregarPainel==='function')carregarPainel();if(rotaAtual().startsWith('decisoes'))carregarDecisoes()}catch(e){toast(e.message)}}
 function mostrarParecidosNovoProjeto(lista){
   const err=document.getElementById('np-err');let box=document.getElementById('np-parecidos');if(!box){box=document.createElement('div');box.id='np-parecidos';err.parentNode.insertBefore(box,err)}
   box.innerHTML=`<div class="np-par"><b>Já existe projeto parecido neste fundo:</b><ul class="dec-motivos">${lista.map(c=>`<li><span class="code">${escHtml(c.codigo)}</span> ${escHtml(c.titulo)} · ${escHtml([c.ano,c.cidade].filter(Boolean).join(' · ')||'sem ano nem cidade')} · ${escHtml(c.folhas)} folha(s)<small class="help">${escHtml((c.motivos||[]).join('; '))}</small> <button type="button" class="btn sm" data-np-abrir="${escHtml(c.codigo)}">Abrir este</button></li>`).join('')}</ul><div class="act"><button type="button" class="btn" onclick="criarProjeto(true)">É um projeto novo: criar ${escHtml((((document.getElementById('np-code')||{}).textContent||'').match(/^F\d{3}-P\d{4}/)||['este'])[0])}</button></div></div>`}
@@ -2225,7 +2302,6 @@ async function salvarItem(code){
 
 
 // ---------- operação (painel, filas, solicitações, erros) via API ----------
-const TIPO_TAG={erro:'r',pedido:'a',fila:'b',fundo:'',decisao:'a'};
 function rankHTML(items,tipo,lim=5){
   const xs=(items||[]).slice(0,lim);
   if(!xs.length)return '<li class="empty">Sem dados ainda.</li>';
@@ -2267,42 +2343,6 @@ function siteAlerta(h){return !!h&&(h.estado?(h.estado==='sem_resposta'&&h.alert
 function siteRotulo(h){if(!h)return {cls:'r',txt:'sem dados'};if(!h.estado)return h.ok?{cls:'g',txt:'online'}:{cls:'r',txt:'offline'};
   const seg=h.ms?` · ${(h.ms/1000).toFixed(1).replace('.',',')} s`:'';return h.estado==='online'?{cls:'g',txt:'online'}:h.estado==='lento'?{cls:'a',txt:'lento'+seg}:h.alerta?{cls:'r',txt:'sem resposta'}:{cls:'a',txt:'sem resposta (conferindo)'}}
 function siteTagHTML(h){const r=siteRotulo(h);return `<span class="tag ${r.cls}">${escHtml(r.txt)}</span>`}
-function estadoGeral({q,qi,site,pend}){   // o selo do painel: crítico (vermelho), atenção (âmbar) ou saudável
-  const ruins=[],avisos=[];
-  if(!q.montado)ruins.push('QNAP não está conectado a este servidor');
-  if(siteAlerta(site.http))ruins.push('página pública sem resposta');
-  const niv=q.montado&&qi&&qi.nivel_espaco,livre=qi&&qi.coleta&&qi.coleta.livre_gb,txt=livre!=null?`${fmtN(Math.round(livre))} GB livres (${String(qi.livre_pct).replace('.',',')}%)`:'';
-  if(niv==='critico')ruins.push(`QNAP quase cheio: ${txt}`);else if(niv==='aviso')avisos.push(`QNAP com pouco espaço: ${txt}`);
-  if(pend)avisos.push(`${pend} ${pend===1?'item espera':'itens esperam'} você`);
-  const geral=ruins.length?'bad':avisos.length?'warn':'ok';
-  return {geral,texto:geral==='bad'?ruins.join(' · '):geral==='warn'?avisos.join(' · '):'Operação saudável'}}
-function pendenciasTexto(d){const dec=(d.decisoes&&d.decisoes.pendentes)||0,lot=d.filas.revisao||0,err=d.erros.bloqueantes||0,ped=d.solicitacoes.aguardam||0;return [dec&&`${dec} ${dec===1?'decisão':'decisões'}`,lot&&`${lot} ${lot===1?'lote para revisar':'lotes para revisar'}`,err&&`${err} ${err===1?'erro que bloqueia':'erros que bloqueiam'}`,ped&&`${ped} ${ped===1?'pedido aguardando':'pedidos aguardando'}`].filter(Boolean).join(' · ')}
-let HOJE_ACOES=[];
-function acoesDoDia(hj,d){const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0)+((d.decisoes&&d.decisoes.pendentes)||0);
-  return [...(pend?[{id:'pendencias',prioridade:95,titulo:`${pend} ${pend===1?'item espera':'itens esperam'} você`,detalhe:'Decisões esperando (o CAMP Vision pode estar parado), erros que bloqueiam, pedidos aguardando e lotes para revisar (veja "Precisa de atenção")',rota:null}]:[]),...((hj&&hj.acoes)||[])].sort((a,b)=>b.prioridade-a.prioridade)}
-function hojeFraseHTML(hj,d){
-  if(!hj)return 'Visão rápida da operação do acervo.';
-  const ac=acoesDoDia(hj,d),urg=ac.filter(a=>a.prioridade>=60).length,partes=[];
-  const esp=ac.find(a=>a.id==='qnap_espaco');if(esp)partes.push(esp.titulo.toLowerCase());
-  if(hj.kpis.travados.fundos)partes.push(`${hj.kpis.travados.fundos} fundo(s) travam a publicação`);
-  if(hj.kpis.prontos.valor)partes.push(`${hj.kpis.prontos.valor} projeto(s) prontos para publicar`);
-  const par=ac.find(a=>a.id==='parados');if(par)partes.push(par.titulo.replace(' na entrada do QNAP',' no QNAP'));
-  return `<b>${urg?`${urg} ${urg===1?'coisa pede':'coisas pedem'} você hoje`:'Nada urgente hoje'}</b>${partes.length?' · '+partes.map(escHtml).join(' · '):''}`}
-function kpisHojeHTML(hj){const h=(hj&&hj.hoje)||{},t=(k,l)=>`<div class="kpi"><div class="v">${hj?fmtN((h[k]||{}).hoje||0):'—'}</div><div class="l">${l}</div><div class="d">${hj?'ontem: '+fmtN((h[k]||{}).ontem||0):''}</div></div>`;
-  return `${t('folhas','folhas trabalhadas hoje')}${t('projetos_novos','projetos novos hoje')}${t('publicacoes','publicações hoje')}${t('pedidos_e_erros','pedidos e erros novos hoje')}`}   // o contêiner .kpi-grid já existe no painel
-function heroHojeHTML(hj,d){
-  if(!hj)return '';
-  const pend=(d.erros.bloqueantes||0)+(d.solicitacoes.aguardam||0)+(d.filas.revisao||0)+((d.decisoes&&d.decisoes.pendentes)||0),k=hj.kpis;
-  const kp=(v,l,det)=>`<div class="hoje-kpi"><div class="v">${fmtN(v)}</div><div class="l">${l}</div><div class="d">${escHtml(det)}</div></div>`;
-  HOJE_ACOES=acoesDoDia(hj,d);const top=HOJE_ACOES.slice(0,3);
-  const prontosDet=k.prontos.valor?'podem ser publicados agora':(k.prontos.autorizados===0?'nenhum projeto foi autorizado ainda':'nenhum passa em todos os requisitos');
-  return `<div class="hoje-kpis">${kp(pend,pend===1?'item espera você':'itens esperam você',pend?pendenciasTexto(d):'nada aguardando')}${kp(k.travados.fundos,'travados por direitos',k.travados.fundos?`seguram ${fmtN(k.travados.projetos)} projeto(s)`:'nenhum fundo travado')}${kp(k.prontos.valor,'prontos para publicar',prontosDet)}${kp((hj.hoje.folhas||{}).hoje||0,'folhas trabalhadas hoje','ontem: '+fmtN((hj.hoje.folhas||{}).ontem||0))}</div>
-    <h3 class="hoje-h">${top.length?'Por onde começar':'Tudo em dia'}</h3>
-    ${top.length?`<div class="hoje-acoes">${top.map((a,i)=>`<button class="hoje-acao${a.prioridade>=100?' critica':''}" onclick="irAcaoHoje(${i})"><span class="n">${i+1}</span><div><b>${escHtml(a.titulo)}</b><small>${escHtml(a.detalhe||'')}</small></div><span class="seta" aria-hidden="true">›</span></button>`).join('')}</div>${HOJE_ACOES.length>3?`<small class="help">e mais ${HOJE_ACOES.length-3} item(ns) menos urgentes</small>`:''}`:'<div class="empty">Nada pendente: o acervo está em dia.</div>'}`}
-function irAcaoHoje(i){const a=HOJE_ACOES[i];if(!a)return;
-  if(a.id==='divergencias')abrirDivergencias();
-  else if(a.id==='pendencias'){const h=[...document.querySelectorAll('#v-painel h2')].find(x=>x.textContent.trim().startsWith('Precisa de atenção'));if(h)h.closest('.panel').scrollIntoView({behavior:'smooth',block:'center'})}
-  else if(a.rota)go(a.rota)}
 async function abrirDivergencias(){
   try{const r=await API('/api/site/divergencias/resumo');
     openDrawer('Divergências entre o painel e o site',`${fmtN(r.total)} aberta(s)`,`<p style="margin:0;color:var(--ink2)">Diferenças que o painel achou ao comparar com o site na última sincronização. Nenhuma altera nada sozinha.</p>${r.grupos.length?r.grupos.map(g=>`<div class="div-grupo"><h3>${escHtml(g.titulo)} <span class="tag">${fmtN(g.n)}</span></h3><p class="help">${escHtml(g.explicacao)}</p><ul class="list">${g.itens.slice(0,20).map(i=>`<li><span class="code">${escHtml(i.codigo)}</span><div class="t"><small>${escHtml(i.valor_site||i.valor_painel||'')}</small></div></li>`).join('')}</ul>${g.n>20?`<small class="help">… e mais ${fmtN(g.n-20)}</small>`:''}</div>`).join(''):'<div class="empty">Nenhuma divergência aberta.</div>'}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}catch(e){toast(e.message)}}
@@ -2337,91 +2377,143 @@ async function atualizarQnapAgora(){
     for(let k=0;k<14;k++){await new Promise(r=>setTimeout(r,2000));const i=await API('/api/qnap');if(!i.coletando&&(i.idade_s==null||i.idade_s<20)){await recarregarCartaoQnap();return}}
     toast('A coleta está demorando: o QNAP pode estar lento')}catch(e){toast(e.message)}
   await recarregarCartaoQnap()}
-async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.dash-v2');if(!tinha)sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando visão da operação…</div></div></div>';try{
-  const tratarA=err=>({disponivel:false,erro:err.message,erro_codigo:'indisponivel',periodos:{},top_fundos:[],top_projetos:[],top_paginas:[],agora:{disponivel:false}});
-  // a tela aparece assim que /api/painel e /api/hoje (rápidos) chegam; estações, QNAP e audiência entram quando chegarem (antes: tudo esperava a mais lenta, 10 a 13 s)
-  const pe=API('/api/estacoes').catch(()=>null),pa=API('/api/analytics').catch(tratarA),pq=API('/api/qnap').catch(()=>null);
+// ---------- H6b · painel inicial. Os números e as tarefas vêm PRONTOS do servidor (pendencias.py): a tela só desenha, nunca recalcula ----------
+let PAINEL_ACOES=[],PAINEL_EST=null,PAINEL_QI=null,PAINEL_D=null,PAINEL_REP=null;
+const INI_EXPLICA={decisoes:'Projeto parecido com um que já existe: alguém precisa dizer se é o mesmo. Enquanto isso, o CAMP Vision fica parado naquela pasta.',conferir:'Lotes com folhas que ninguém olhou ainda: está de pé? o tipo e o título estão certos?',admin:'Lotes conferidos esperando a aprovação e lotes aprovados esperando a publicação. Só um admin faz.',travados:'Fundos que não podem ir ao site porque a autorização de direitos ainda não foi registrada. Clique para ver quais são.'};
+const INI_QUEM={admin:'admin',operador:'operador','qualquer':'qualquer pessoa'};
+function qtd(n,um,varios){return `${fmtN(n)} ${n===1?um:varios}`}
+function juntarE(l){return l.length<2?(l[0]||''):l.slice(0,-1).join(', ')+' e '+l[l.length-1]}
+function fmtHoraCamp(v){const s=String(v||'').trim(),d=new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)?s:s.replace(' ','T')+'Z');return isNaN(d.getTime())?'':new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',minute:'2-digit',hour12:false}).format(d)}
+function saudacaoPainel(d,hj){
+  const h=+new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',hour12:false}).format(new Date()),oi=h<5||h>=18?'Boa noite':h<12?'Bom dia':'Boa tarde';
+  const nome=((EU&&EU.nome)||'').trim().split(/\s+/)[0],vc=nome?`, ${nome}`:'',p=d.pendencias,papel=EU&&EU.papel;
+  const dia=new Date().toLocaleDateString('pt-BR',{timeZone:FUSO_CAMP,weekday:'long',day:'numeric',month:'long'}),Dia=dia[0].toUpperCase()+dia.slice(1);
+  const hoje=hj&&hj.hoje,fo=hoje&&hoje.folhas?hoje.folhas.hoje:0,pu=hoje&&hoje.publicacoes?hoje.publicacoes.hoje:0;
+  const prod=[fo?qtd(fo,'folha trabalhada hoje','folhas trabalhadas hoje'):null,pu?qtd(pu,'publicação','publicações'):null].filter(Boolean).join(', ');
+  if(papel==='leitura')return [`${oi}${vc}. Veja como está o acervo hoje.`,`${Dia} · você pode ver tudo, sem alterar`];
+  if(papel==='operador'){const n=p.material_novo,t=n?`${oi}${vc}. ${qtd(n,'lote espera','lotes esperam')} você.`:`${oi}${vc}. Nenhum lote esperando você agora.`;
+    return [t,`${Dia} · ${p.decisoes_estacao?`${qtd(p.decisoes_estacao,'decisão','decisões')} para um admin: o CAMP Vision está parado nela${p.decisoes_estacao===1?'':'s'}`:prod||'nenhuma folha trabalhada ainda hoje'}`]}
+  const g=(d.tarefas||[]).length;
+  return [g?`${oi}${vc}. ${g} ${g===1?'coisa pede':'coisas pedem'} você.`:`${oi}${vc}. Tudo em dia.`,`${Dia}${prod?' · '+prod:''}`]}
+function iniAlertasHTML(al){return (al||[]).map(a=>`<div class="ini-alerta" role="alert"><span class="ini-dot r" aria-hidden="true" style="margin:0"></span><p><b>${escHtml(a.titulo)}</b> ${escHtml(a.texto)}</p>${a.acao?`<button type="button" class="btn sm" data-ini-rota="${escHtml(a.acao.rota)}">${escHtml(a.acao.rotulo)}</button>`:''}</div>`).join('')}
+function iniKpisHTML(p){const admin=EU&&['admin','master'].includes(EU.papel);
+  const k=(cls,v,l,dd,rota,ex)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" title="${escHtml(ex)}"><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span></button>`;
+  const ks=[k(p.decisoes?'warn':'',p.decisoes,p.decisoes===1?'decisão':'decisões',p.decisoes_estacao?'CAMP Vision parado esperando':p.decisoes?'esperando resposta':'nenhuma esperando','decisoes',INI_EXPLICA.decisoes),
+    k('',p.lotes_conferir,p.lotes_conferir===1?'lote para conferir':'lotes para conferir',`${qtd(p.folhas_conferir,'folha','folhas')} no total`,'filas/conferir',INI_EXPLICA.conferir),
+    ...(admin?[k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'espera um admin':'esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin)]:[]),
+    k(p.travados_direitos?'warn':'',p.travados_direitos,p.travados_direitos===1?'fundo travado por direitos':'fundos travados por direitos',p.travados_direitos?`seguram ${qtd(p.travados_projetos,'projeto','projetos')} com folhas`:'todos os fundos ok','fundos/travados',INI_EXPLICA.travados)];
+  return `<div class="ini-kpis" style="--n:${ks.length}">${ks.join('')}</div>`}
+function iniTarefasHTML(d){const gs=d.tarefas||[];PAINEL_ACOES=[];
+  if(!gs.length)return `<div class="ini-vazio"><b>✔ Tudo em dia.</b> Nenhuma decisão, lote ou pedido esperando.${EU&&EU.papel!=='leitura'?' Quer adiantar trabalho? Veja os projetos que ainda não têm folhas digitalizadas.<div class="act" style="margin-top:8px"><button type="button" class="btn sm" data-ini-rota="projetos/sem_folhas">Ver projetos sem folhas</button></div>':''}</div>`;
+  return gs.map(g=>`<div class="ini-tg"><div class="ini-tgh">${escHtml(g.titulo)} <span class="ini-quem">${escHtml(INI_QUEM[g.quem]||g.quem)}</span></div>${g.itens.map(i=>{const k=PAINEL_ACOES.push(i)-1;
+    return `<div class="ini-task"${i.acao?'':` data-ini-linha="${k}"`}><span class="ini-sev ${escHtml(i.sev)}"></span><div class="t"><b>${escHtml(i.titulo)}</b><small>${i.codigo?`<span class="code">${escHtml(i.codigo)}</span> · `:''}${escHtml(i.detalhe||'')}</small></div>${i.acao?`<button type="button" class="btn sm${i.sev==='r'&&i.acao.rotulo!=='Ver'?' pri':''}" data-ini-acao="${k}">${escHtml(i.acao.rotulo)}</button>`:''}</div>`}).join('')}${g.total>g.itens.length?`<button type="button" class="ini-mais" data-ini-rota="${escHtml(g.ver_todos.rota)}">${escHtml(g.ver_todos.rotulo)} →</button>`:''}</div>`).join('')}
+function iniEstacoesCaptura(e){const m=((e&&e.maquinas)||[]).filter(x=>['foto','contex','universal'].includes(x.tipo));return {total:m.length,ligadas:m.filter(x=>x.online||x.app_online).length,nomes:m.filter(x=>x.online||x.app_online).map(x=>x.nome.replace(/^Estação /,''))}}
+function iniCaminhoHTML(c,e){return `<div class="ini-flow">${c.map((p,i)=>{let q=p.q==null?'—':fmtN(p.q),det=p.detalhe;
+    if(p.id==='digitalizar'){if(!e){q='…';det='verificando…'}else{const s=iniEstacoesCaptura(e);q=fmtN(s.ligadas);det=s.ligadas?`de ${s.total} estações ligadas`:'estações desligadas'}}
+    return `<button type="button" class="ini-step ${p.estado==='acumula'?'stuck':p.estado==='pronto'?'go':''}" data-ini-rota="${escHtml(p.rota)}" id="ini-passo-${escHtml(p.id)}"><span class="i">${i+1}</span><span class="nm">${escHtml(p.nome)}</span><span class="q">${escHtml(q)}</span><span class="w">${escHtml(det)}</span></button>`}).join('')}</div>
+  <div class="ini-legenda"><span><i class="a"></i>acumulando: é aqui que falta gente</span><span><i class="b"></i>pronto para o próximo passo</span></div>`}
+function iniRitmoHTML(R,p){if(!R)return '<span class="ini-skel" style="height:150px"></span>';const r=R.dias||[];if(!r.length)return '<p class="ini-nota">Sem dados de ritmo.</p>';
+  const v=r.map(x=>x.conferidas),topo=Math.max(10,Math.ceil(Math.max(...v)/10)*10),x0=40,w=590/v.length,y0=110,k=90/topo,dm=s=>s.slice(8,10)+'/'+s.slice(5,7);
+  const barras=v.map((n,i)=>{const h=Math.max(n*k,n?2:0);return `<rect class="${i===v.length-1?'hoje':''}" x="${(x0+i*w+3).toFixed(1)}" y="${(y0-h).toFixed(1)}" width="${Math.max(1,w-6).toFixed(1)}" height="${h.toFixed(1)}" rx="2"><title>${dm(r[i].dia)}: ${qtd(n,'folha conferida','folhas conferidas')}</title></rect>`}).join('');
+  const hoje=v[v.length-1],media=+R.media_conferidas||0,falta=R.folhas_a_conferir,zera=R.dias_para_zerar,mf=String(media).replace('.',',');
+  const frase=!media?'Nenhuma folha conferida nas últimas 2 semanas.':`Média de ${mf} ${media===1?'folha conferida':'folhas conferidas'} por dia de trabalho`+(falta?` · no ritmo atual, ${falta===1?'a folha':`as ${fmtN(falta)} folhas`} de ${qtd(p.lotes_conferir,'lote','lotes')} ficam conferidas em cerca de ${qtd(Math.max(1,zera||1),'dia de trabalho','dias de trabalho')}.`:'.');
+  return `<svg viewBox="0 0 640 150" role="img" aria-label="Folhas conferidas por dia nas últimas 2 semanas; hoje ${hoje}"><line x1="34" y1="20" x2="630" y2="20"/><line x1="34" y1="65" x2="630" y2="65"/><line x1="34" y1="110" x2="630" y2="110"/><text x="28" y="24" text-anchor="end">${topo}</text><text x="28" y="69" text-anchor="end">${topo/2}</text><text x="28" y="114" text-anchor="end">0</text>${barras}${hoje?`<text x="${(x0+(v.length-1)*w+w/2).toFixed(1)}" y="${(y0-hoje*k-5).toFixed(1)}" text-anchor="middle">${hoje}</text>`:''}<text x="40" y="140">${dm(r[0].dia)}</text><text x="335" y="140" text-anchor="middle">${dm(r[Math.floor(r.length/2)].dia)}</text><text x="628" y="140" text-anchor="end">hoje</text></svg><p class="ini-nota">${escHtml(frase)}</p>`}
+function iniSaudeHTML(e,qi,p){
+  if(!e)return Array.from({length:5},()=>'<div class="ini-hskel"><span class="ini-skel"></span></div>').join('');
+  const L=[],admin=EU&&['admin','master'].includes(EU.papel),row=(c,t,txt,barra)=>L.push(`<div class="ini-hrow"><span class="ini-dot ${c}"></span><div><b>${escHtml(t)}</b><p>${txt}</p>${barra!=null?`<div class="ini-bar ${c==='r'?'r':c==='a'?'a':''}"><i style="width:${Math.max(0,Math.min(100,+barra))}%"></i></div>`:''}</div></div>`);
+  const q=e.qnap||{},niv=(qi&&qi.nivel_espaco)||q.nivel_espaco;
+  if(q.montado===false)row('r','QNAP desconectado deste servidor','O painel não consegue ler os lotes nem o espaço. Veja em Estações e site como conectar.');
+  else if(q.total_gb){const pct=(qi&&qi.livre_pct!=null)?qi.livre_pct:q.livre_pct,dias=qi&&qi.dias_ate_encher;row(niv==='critico'?'r':niv==='aviso'?'a':'g',`QNAP: ${String(pct??'—').replace('.',',')}% livre`,escHtml(`${fmtN(q.livre_gb)} GB de ${fmtN(q.total_gb)} GB.${dias?` No ritmo da semana, enche em ~${qtd(dias,'dia','dias')}.`:''}`),q.uso_pct)}
+  else row('','QNAP sem medida de espaço','A última coleta não trouxe o espaço livre.');
+  const cv=(e.maquinas||[]).find(m=>m.tipo==='processamento'),idade=cv?cv.app_heartbeat_idade_segundos:null;
+  const cvp=[p.lotes_lendo?`Lendo ${qtd(p.lotes_lendo,'pasta','pastas')}.`:null,p.lotes_na_fila?`${qtd(p.lotes_na_fila,'pasta na fila','pastas na fila')}.`:null,p.decisoes_estacao?`Parado em ${qtd(p.decisoes_estacao,'decisão','decisões')}.`:null,p.lotes_erro?`${qtd(p.lotes_erro,'pasta parou','pastas pararam')} com erro.`:null].filter(Boolean).join(' ');
+  if(idade==null)row('','CAMP Vision ainda não deu sinal',escHtml('Quando ligado, ele avisa o painel a cada minuto. '+cvp));
+  else if(idade>3600)row('r',`CAMP Vision sem sinal ${textoIdade(idade)}`,'Os lotes novos não estão sendo lidos. Confira se o computador dele está ligado.');
+  else if(idade>180)row('a',`CAMP Vision sem sinal ${textoIdade(idade)}`,escHtml(cvp||'Pode ser só uma pausa; se passar de 1 hora, vira alerta.'));
+  else row(p.lotes_erro?'a':'g',p.lotes_erro?`CAMP Vision ligado, com ${qtd(p.lotes_erro,'erro','erros')}`:'CAMP Vision ligado',escHtml(cvp||'Nada para ler agora.'));
+  const s=e.site||{},h=s.http,ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em),seg=h&&h.ms?`${(h.ms/1000).toFixed(1).replace('.',',')} s`:'';
+  const conf=ult?` Conferido com o painel ${haTempo(ult)}.`:'',div=s.divergencias?` <button type="button" class="lnk" data-ini-div>${qtd(s.divergencias,'diferença','diferenças')} com o site · ver o que são</button>`:'';
+  if(!h)row('','Site sem medida','Ainda não houve verificação.'+div);
+  else if(siteAlerta(h))row('r','Site sem resposta','Não respondeu em duas verificações seguidas. Confira se camp.arq.br abre; se não abrir, avise a hospedagem.'+div);
+  else if(h.estado==='sem_resposta')row('a','Site não respondeu uma vez (conferindo de novo)','Uma verificação falhou; só vira alerta se a próxima também falhar.'+div);
+  else if(h.estado==='lento')row('a','Site funcionando, mas lento',escHtml(`Respondeu em ${seg} (normal: menos de 3 s).${conf}`)+div);
+  else row('g','Site funcionando',escHtml(`${seg?`Respondeu em ${seg}.`:''}${conf}`)+div);
+  const est=iniEstacoesCaptura(e),hora=+new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',hour12:false}).format(new Date()),dsem=new Date().getDay(),fora=hora>=18||hora<8||dsem===0||dsem===6;
+  if(!est.total)row('','Nenhuma estação de captura cadastrada','Os endereços ficam em Configurações.');
+  else if(!est.ligadas)row('',`Estações de captura desligadas`,escHtml(`${est.total} de ${est.total}.${fora?' É normal fora do expediente.':''}`));
+  else row('g',`${est.ligadas} de ${est.total} estações ligadas`,escHtml(est.nomes.join(', ')));
+  const rp=PAINEL_REP;if(rp&&rp.configurada)row(rp.nivel==='critico'?'r':rp.nivel==='aviso'?'a':'g',rp.nivel==='critico'?'A cópia do acervo parou':rp.nivel==='aviso'?'Cópia do acervo atrasada':'Cópia do acervo em dia',escHtml(rp.gravado_em?`Última cópia ${fmtDataHora(rp.gravado_em)}.${rp.nivel==='ok'?'':' '+rp.texto}`:rp.texto));
+  if(admin){const b=e.backup;
+    if(!b||!b.existe)row('r','Sem cópia de segurança do painel','Nenhuma cópia do banco foi feita. Veja em Estações e site.');
+    else if(b.ok===false)row('r','A última cópia de segurança falhou',escHtml(b.erro||'Veja o motivo em Estações e site.'));
+    else if(+b.idade_horas>36)row('a','Cópia de segurança atrasada',escHtml(`A última foi ${haTempo(String(b.em).replace('T',' '))}. O limite é 36 h.`));
+    else row('g','Cópia de segurança do painel',escHtml(`Feita ${fmtDataHora(b.em)}${b.quantidade?` · ${qtd(b.quantidade,'cópia guardada','cópias guardadas')}`:''}.`))}
+  return L.join('')+'<button type="button" class="ini-rodape" data-ini-rota="estacoes">Ver estações e site →</button>'}
+function iniNoSiteHTML(s){const r=(t,a,b,nota)=>{const pct=b?Math.round(100*a/b):0;return `<div class="ini-prog-row"><header><b>${t}</b><span>${fmtN(a)} de ${fmtN(b)} · ${pct}%</span></header><div class="ini-bar"><i style="width:${pct}%"></i></div>${nota?`<span class="ini-nota">${escHtml(nota)}</span>`:''}</div>`};
+  return r('Folhas',s.folhas.no_ar,s.folhas.total)+r('Projetos',s.projetos.no_ar,s.projetos.total,s.projetos.sem_folhas?`${qtd(s.projetos.sem_folhas,'projeto ainda não tem','projetos ainda não têm')} folhas digitalizadas (são do inventário).`:'')+r('Fundos com página',s.fundos.no_ar,s.fundos.total)}
+function iniHojeHTML(fr){if(!fr||!fr.length)return '<p class="ini-nota" style="padding:12px 16px;margin:0">Nada aconteceu ainda hoje.</p>';
+  return `<ul>${fr.map(f=>`<li><time>${escHtml(fmtHoraCamp(f.quando))}</time><span>${escHtml(f.texto).replace('{codigo}',`<span class="code">${escHtml(f.codigo||'')}</span>`)}</span></li>`).join('')}</ul>`}
+function iniVisitasHTML(a){if(!a)return '<div class="pb"><span class="ini-skel" style="height:18px"></span></div>';
+  if(!a.disponivel)return `<div class="pb ini-nota">O Google Analytics ainda não está ligado ao painel. <button type="button" class="lnk" data-pode="analytics.diagnostico" onclick="diagnosticarAnalytics()">Ver como ligar</button></div>`;
+  const p=a.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
+  return `<div class="pb"><p style="margin:0">${qtd(Number(p7.activeUsers||0),'pessoa','pessoas')} nos últimos 7 dias · ${qtd(Number(p30.screenPageViews||0),'página vista','páginas vistas')} em 30 dias.</p><div class="act" style="margin-top:8px"><button type="button" class="btn sm" onclick="mostrarTop10Analytics()">Ver o que mais visitam</button></div></div>`}
+function iniExecutar(i){const a=i&&i.acao;if(!a)return;const t=a.tipo,v=a.alvo;
+  if(t==='decisao')abrirDecisao(v);else if(t==='conferir')irDaFila('revisao',v);else if(t==='publicar')irDaFila('publicar',v);else if(t==='projeto')nav('projeto/'+v);
+  else if(t==='importar'||t==='aprovar')acaoFila(t,v);else if(t==='erro')abrirErro(v);else if(t==='fila_erro')nav('filas/erro');else if(t==='pedido')abrirSolicitacao(v)}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-acao],[data-ini-rota],[data-ini-linha],[data-ini-div]');if(!b||b.disabled)return;
+  if(b.dataset.iniAcao!=null)iniExecutar(PAINEL_ACOES[+b.dataset.iniAcao]);else if(b.dataset.iniRota)nav(b.dataset.iniRota);else if(b.hasAttribute('data-ini-div'))abrirDivergencias();
+  else{const i=PAINEL_ACOES[+b.dataset.iniLinha],c=i&&i.codigo;if(c&&/^F\d{3}-P\d{4}$/.test(c))nav('projeto/'+c);else if(c&&/^F\d{3}$/.test(c))nav('fundo/'+c)}});
+function iniSaudeAtualizar(){const el=document.getElementById('ini-saude');if(el&&PAINEL_D)el.innerHTML=iniSaudeHTML(PAINEL_EST,PAINEL_QI,PAINEL_D.pendencias);
+  const c=document.getElementById('ini-caminho');if(c&&PAINEL_D)c.innerHTML=iniCaminhoHTML(PAINEL_D.caminho,PAINEL_EST)}
+async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.ini-grid');if(!tinha){PAINEL_EST=PAINEL_QI=null;sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando o resumo do dia…</div></div></div>'}try{
+  const admin=EU&&['admin','master'].includes(EU.papel);
+  // em etapas (P0-5): saudação, alerta e "O que fazer agora" com /api/painel (rápido); estações, QNAP e visitas entram quando chegarem, no lugar de um esqueleto do mesmo tamanho
+  const pe=API('/api/estacoes').catch(()=>null),pq=API('/api/qnap').catch(()=>null),prp=API('/api/replica').catch(()=>null),pa=admin?API('/api/analytics').catch(err=>({disponivel:false,erro:err.message})):Promise.resolve(null),pr=API('/api/painel/ritmo?dias=14').catch(()=>({dias:[]}));
   const [d,hj]=await Promise.all([API('/api/painel'),API('/api/hoje').catch(()=>null)]);
-  let e=null,a=null,qi=null,verificando=true;
-  const desenhar=()=>{
-  limparStale('painel');sec.querySelector('.aviso-exemplo')?.remove();
-  const hoje=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
-  const q=e?.qnap||{},site=e?.site||{},pipe=e?.pipeline||{},maquinas=e?.maquinas||[];
-  const captura=maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo));
-  const cv=maquinas.find(m=>m.tipo==='processamento');
-  const qnap=maquinas.find(m=>m.tipo==='armazenamento');
-  const ult=site.ultima_sincronizacao&&(site.ultima_sincronizacao.terminada_em||site.ultima_sincronizacao.iniciada_em);
-  const prox=ult?proximaSincronizacao(ult,+(site.intervalo_sync_min||15)):null;
-  const nDiv=site.divergencias??d.site?.divergencias??0;
-  const pend=d.erros.bloqueantes+d.solicitacoes.aguardam+d.filas.revisao+((d.decisoes&&d.decisoes.pendentes)||0);
-  const {geral,texto:geralTxt}=estadoGeral({q,qi,site,pend});   // máquinas desligadas são normais e aparecem na barra do topo
-  const p=a?.periodos||{},p7=p['7d']||{},p30=p['30d']||{};
-
-  sec.innerHTML=`<div class="dash-v2">
-    <div class="dash-hero">
-      <div class="panel dash-hero-main">
-        <div class="dash-hero-head"><div><h1>${hoje[0].toUpperCase()+hoje.slice(1)}</h1><p class="hoje-frase">${hojeFraseHTML(hj,d)}</p></div><div class="dash-state ${geral}"${geral==='bad'?` onclick="go('estacoes')" title="Abrir Estações e ver como resolver"`:''}><span class="dot"></span>${escHtml(geralTxt)}</div></div>${heroHojeHTML(hj,d)}
-      </div>
-      <div class="dash-side-stack">
-        <div class="panel qnap-card" id="qnap-card" data-nav="estacoes" style="cursor:pointer">${qnapInnerHTML(q,qi)}</div>
-        <div class="panel site-card" data-nav="estacoes" style="cursor:pointer">
-          <div class="ph" style="padding:0 0 6px;border:0"><h2>Site público</h2>${siteTagHTML(site.http)}</div>
-          <div class="site-line"><b>Última sync</b><span>${ult?fmtDataHora(ult):'nunca'}</span></div>
-          <div class="site-line"><b>Próxima</b><span>${prox?fmtDataHora(prox):'—'}</span></div>
-          <div class="site-line"><b>Divergências</b><span>${fmtN(nDiv)}${nDiv>0?` · <button type="button" class="lnk" onclick="event.stopPropagation();abrirDivergencias()">ver o que são</button>`:''}</span></div>
-        </div>
-      </div>
+  PAINEL_D=d;atualizarContadoresMenu(d.pendencias);limparStale('painel');
+  const [t1,t2]=saudacaoPainel(d,hj),p=d.pendencias;
+  sec.innerHTML=`<div class="hdr ini-hello"><div><h1 id="ini-saud">${escHtml(t1)}</h1><p class="sub">${escHtml(t2)}</p></div><button type="button" class="ini-q" onclick="reabrirAjuda()" title="Como funciona esta página (tecla ?)" aria-label="Como funciona esta página">?</button></div>
+  <div id="ini-alertas">${iniAlertasHTML(d.alertas)}</div>
+  <div class="ini-grid">
+    <div class="ini-col">
+      <section class="panel" aria-labelledby="ini-t-fazer">${iniKpisHTML(p)}<div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">mais urgente primeiro</span></div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
+      <section class="panel" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2><button type="button" class="ini-link" onclick="nav('caminho')">o que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
+      <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Ritmo das últimas 2 semanas</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">folhas conferidas por dia</span></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
     </div>
-
-    <div class="dash-mid">
-      <div class="panel action-card"><div class="ph"><h2>Precisa de atenção</h2><span class="tag">${escHtml(d.precisa_de_voce.length)}</span></div><div class="pb"><ul class="action-list">${d.precisa_de_voce.length?d.precisa_de_voce.slice(0,6).map(x=>`<li><span class="tag ${TIPO_TAG[x.tipo]}">${escHtml(rotulo(x.tipo))}</span><div class="t"><b>${escHtml(x.titulo)}</b>${x.codigo?`<small>${escHtml(x.codigo)}</small>`:''}</div>${x.tipo==='decisao'?`<button class="btn sm pri" onclick="abrirDecisao(${escHtml(x.id)})">Decidir</button>`:`<button class="btn sm" onclick="nav('${escHtml(x.rota)}')">Abrir</button>`}</li>`).join(''):'<li class="empty">Nada pendente de decisão.</li>'}</ul></div></div>
-      <div class="panel"><div class="ph"><h2>Hoje no acervo</h2></div><div class="pb"><div class="kpi-grid">
-        ${kpisHojeHTML(hj)}</div></div>
-    </div>
-
-    <div class="panel"><div class="ph"><h2>Audiência do acervo</h2>${a?.disponivel?'<span class="tag g">Google Analytics</span>':'<span class="tag a">configuração pendente</span>'}<button class="btn sm" style="margin-left:auto" data-pode="analytics.diagnostico" onclick="diagnosticarAnalytics()">Diagnosticar</button></div><div class="pb">
-      ${a?.disponivel?`<div class="analytics-ok">
-        <div class="analytics-overview">
-          <div class="metric"><div class="v">${Number(p7.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · últimos 7 dias</div></div>
-          <div class="metric"><div class="v">${Number(p30.activeUsers||0).toLocaleString('pt-BR')}</div><div class="l">pessoas · últimos 30 dias</div></div>
-          <div class="metric"><div class="v">${Number(p30.screenPageViews||0).toLocaleString('pt-BR')}</div><div class="l">visualizações · 30 dias</div></div>
-        </div>
-        <div class="grid g2 wide3">
-          <div><h2 style="margin:0 0 8px">Fundos mais vistos</h2><ol class="rank">${rankHTML(a.top_fundos,'fundo',5)}</ol></div>
-          <div><h2 style="margin:0 0 8px">Projetos mais vistos</h2><ol class="rank">${rankHTML(a.top_projetos,'projeto',5)}</ol></div>
-          <div><h2 style="margin:0 0 8px">Páginas mais vistas</h2><ol class="rank">${rankHTML(a.top_paginas,'pagina',5)}</ol></div>
-        </div>
-        <div class="act"><button class="btn sm" onclick="mostrarTop10Analytics()">Ver Top 10</button></div>
-      </div>`:`<div class="analytics-lock"><div class="ico">!</div><div><b>${escHtml(a?.acao||'Analytics ainda não disponível')}</b><p>${a?.diagnostico?.wp_usuario?`O painel entra no WordPress como <b>${escHtml(a.diagnostico.wp_usuario)}</b>. `:''}${escHtml(a?.erro||'A integração ainda não respondeu corretamente.')}</p><div class="act" style="margin-top:10px"><button class="btn sm pri" data-pode="analytics.diagnostico" onclick="diagnosticarAnalytics()">Diagnosticar Analytics</button><button class="btn sm" data-pode="analytics.diagnostico" onclick="abrirConfigMaquina('wp.usuario')">Usuário WordPress</button><a class="btn sm" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div></div></div>`}
-    </div></div>
-
-    <div class="grid g2">
-      <div class="panel"><div class="ph"><h2>Acervo em números</h2></div><div class="pb"><dl class="kv"><dt>Projetos</dt><dd>${escHtml(d.projetos.total)} · ${escHtml(d.projetos.no_ar)} publicados · ${escHtml(d.projetos.rascunho)} rascunho</dd><dt>Documentos</dt><dd>${escHtml(d.itens.total)} · ${escHtml(d.itens.no_ar)} publicados · ${escHtml(d.itens.rascunho)} rascunho</dd><dt>Entrada bruta</dt><dd>${escHtml(pipe.entrada_bruta??0)} lote(s)</dd><dt>Prontos pelo CAMP Vision 2</dt><dd>${escHtml(pipe.aguardando_revisao??0)} lote(s)</dd></dl></div></div>
-      <div class="panel"><div class="ph"><h2>Atividade recente</h2></div><div class="pb"><ul class="hist">${d.eventos.slice(0,8).map(e=>`<li><time>${fmtDataHora(e.quando)}</time><span>${escHtml(e.entidade)} <span class="code">${escHtml(e.codigo||'')}</span> ${escHtml(rotuloEvento(e.tipo))} · ${escHtml(e.ator)}</span></li>`).join('')||'<li class="empty">—</li>'}</ul></div></div>
+    <div class="ini-col">
+      <section class="panel" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2></div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
+      <section class="panel" aria-labelledby="ini-t-site"><div class="ph"><h2 id="ini-t-site">Quanto do acervo já está no site</h2></div><div class="pb ini-prog">${iniNoSiteHTML(d.no_site)}</div></section>
+      <section class="panel ini-feed" aria-labelledby="ini-t-hoje"><div class="ph"><h2 id="ini-t-hoje">Hoje</h2>${admin?'<button type="button" class="ini-link" onclick="nav(\'auditoria\')">histórico completo</button>':''}</div>${iniHojeHTML(d.hoje_frases)}</section>
+      ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div id="ini-visitas">${iniVisitasHTML(null)}</div></section>`:''}
     </div>
   </div>`;
-  window._analyticsAtual=a;
-  if(verificando){sec.querySelectorAll('#qnap-card,.site-card').forEach(c=>{c.innerHTML='<div class="pb state-row"><span class="skeleton-line"></span><div>Verificando…</div></div>'});const ds=sec.querySelector('.dash-state');if(ds){ds.className='dash-state';ds.innerHTML='<span class="dot"></span>verificando…';ds.removeAttribute('onclick');ds.removeAttribute('title')}}
-  };
-  desenhar();[e,qi]=await Promise.all([pe,pq]);verificando=false;desenhar();a=await pa;desenhar();
+  garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();
+  pr.then(r=>{const el=document.getElementById('ini-ritmo');if(el)el.innerHTML=iniRitmoHTML(r,p)});
+  Promise.all([pe,pq,prp]).then(([e,qi,rp])=>{PAINEL_EST=e;PAINEL_QI=qi;PAINEL_REP=rp;if(e)iniSaudeAtualizar();else{const el=document.getElementById('ini-saude');if(el)el.innerHTML='<div class="pb state-row"><b>Não consegui verificar as máquinas agora.</b><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div>'}});
+  pa.then(a=>{window._analyticsAtual=a;const el=document.getElementById('ini-visitas');if(el&&a){el.innerHTML=iniVisitasHTML(a);const t=document.getElementById('ini-vis-tag');if(t)t.innerHTML=a.disponivel?'':'<span class="tag a">desligado</span>';aplicarPermissoes&&aplicarPermissoes()}});
 }catch(e){if(e.status===401||e.status===428)return;if(tinha)marcarStale('painel',e.message,'carregarPainel()');else sec.innerHTML=`<div class="panel"><div class="pb state-row"><b>Não foi possível carregar o painel.</b><div>${escHtml(e.message)}</div><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div></div>`}}
+function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{const el=document.getElementById(id);if(!el)return;el.textContent=n?fmtN(n):'';el.hidden=!n;el.classList.toggle('r',!!vermelho&&!!n)};
+  pr('n-dec',p.decisoes,true);pr('n-filas',p.material_novo);pr('n-err',p.erros_abertos);pr('n-sol',p.pedidos_abertos)}
+async function atualizarPendencias(){try{atualizarContadoresMenu(await API('/api/pendencias'))}catch(_){}}
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
 let FILAS_SRV=[],FILA_FILTRO=null;
 const FILA_GENTE=['erro','importar','conferir','aprovar','publicar'];
 async function carregarFilas(){try{FILAS_SRV=await API('/api/filas');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
-  desenharFilas();document.getElementById('n-filas').textContent=FILAS_SRV.filter(l=>l.etapa!=='publicado').length;
+  desenharFilas();atualizarPendencias();
   const act=sec.querySelector('.hdr .act');if(act&&!act.querySelector('[data-qnap]')){const b=document.createElement('button');b.className='btn';b.dataset.qnap='1';b.dataset.pode='qnap.varrer';b.textContent='Varrer QNAP';b.onclick=varrerQnap;act.prepend(b)}}catch(e){if(e.status!==401&&e.status!==428)toast(e.message)}}
 function idadeFila(s){const t=Date.parse(String(s||'').replace(' ','T')+'Z');return isNaN(t)?'—':textoIdade((Date.now()-t)/1000)}
+const FILA_FILTRO_GRUPO={operador:['importar','conferir'],admin:['aprovar','publicar']},FILA_FILTRO_NOME={importar:'Para importar',conferir:'Para conferir',aprovar:'Para aprovar',publicar:'Para publicar',erro:'Com erro',operador:'Importar e conferir',admin:'Esperam um admin'};
+function filaPassa(l){const f=FILA_FILTRO;return f==='gente'?FILA_GENTE.includes(l.fase):f==='todas'?true:FILA_FILTRO_GRUPO[f]?FILA_FILTRO_GRUPO[f].includes(l.fase):l.fase===f}
 function desenharFilas(){
   const L=FILAS_SRV,n=f=>L.filter(f).length,gente=n(l=>FILA_GENTE.includes(l.fase));
   if(FILA_FILTRO===null)FILA_FILTRO=gente?'gente':'todas';
-  const chip=(k,t,q)=>`<button class="btn sm" data-fila-filtro="${k}" aria-pressed="${FILA_FILTRO===k}">${t} <b>${q}</b></button>`;
-  document.getElementById('fila-chips').innerHTML=chip('gente','Precisam de você',gente)+chip('processando','CAMP Vision lendo',n(l=>l.fase==='processando'))+chip('publicado','Publicadas',n(l=>l.fase==='publicado'))+chip('todas','Todas',L.length);
+  const chip=(k,t,q)=>`<button class="btn sm" data-fila-filtro="${k}" aria-pressed="${FILA_FILTRO===k}">${t} <b>${q}</b></button>`,extra=FILA_FILTRO_NOME[FILA_FILTRO];
+  document.getElementById('fila-chips').innerHTML=chip('gente','Precisam de você',gente)+chip('processando','CAMP Vision lendo',n(l=>l.fase==='processando'))+chip('publicado','Publicadas',n(l=>l.fase==='publicado'))+chip('todas','Todas',L.length)+(extra?chip(FILA_FILTRO,extra,n(filaPassa)):'');
   const rot={conferir:'para conferir',importar:'para importar',aprovar:'para aprovar',publicar:'para publicar',erro:'com erro'},partes=Object.keys(rot).map(f=>[n(l=>l.fase===f),rot[f]]).filter(x=>x[0]);
   document.getElementById('fila-resumo').textContent=partes.length?partes.map(x=>`${x[0]} ${x[1]}`).join(' · '):'';
   const ordem={erro:0,conferir:1,importar:2,aprovar:3,publicar:4,processando:5,publicado:6};
-  const vis=L.filter(l=>FILA_FILTRO==='gente'?FILA_GENTE.includes(l.fase):FILA_FILTRO==='todas'?true:l.fase===FILA_FILTRO).sort((a,b)=>(ordem[a.fase]-ordem[b.fase])||(a.fase==='publicado'?String(b.atualizado_em).localeCompare(String(a.atualizado_em)):String(a.atualizado_em).localeCompare(String(b.atualizado_em))));
+  const vis=L.filter(filaPassa).sort((a,b)=>(ordem[a.fase]-ordem[b.fase])||(a.fase==='publicado'?String(b.atualizado_em).localeCompare(String(a.atualizado_em)):String(a.atualizado_em).localeCompare(String(b.atualizado_em))));
   const OPER=['erro','importar','conferir'],gOp=vis.filter(l=>OPER.includes(l.fase)),gAd=vis.filter(l=>!OPER.includes(l.fase)),grp=(t,sub)=>`<tr class="fila-grupo"><td colspan="4"><b>${t}</b> <small class="help">${sub}</small></td></tr>`;
  document.getElementById('filas-body').innerHTML=vis.length?(FILA_FILTRO==='gente'&&gOp.length&&gAd.length?grp('Para operador','importar e conferir')+gOp.map(linhaFila).join('')+grp('Para admin','aprovar e publicar')+gAd.map(linhaFila).join(''):vis.map(linhaFila).join('')):`<tr><td colspan="4" class="empty">${!L.length?'Nenhuma lista. Clique em "Varrer QNAP" para ler as pastas do acervo, ou crie uma lista à mão.':FILA_FILTRO==='gente'?'Nada precisa de você agora. As listas em leitura aparecem em "CAMP Vision lendo".':'Nenhuma lista nesta situação.'}</td></tr>`}
 function espera48(l){const t=Date.parse(String(l.atualizado_em||'').replace(' ','T')+'Z'),h=isNaN(t)?0:(Date.now()-t)/3600000;return FILA_GENTE.includes(l.fase)&&h>48?`<span class="tag a" title="Esta lista está esperando uma pessoa há mais de 48 horas">esperando há ${escHtml(textoIdade(h*3600).replace(/^há\s*/,''))}</span>`:escHtml(idadeFila(l.atualizado_em))}
@@ -2456,7 +2548,7 @@ let solFiltro='abertas';
 async function carregarSolicitacoes(f){if(f)solFiltro=f;try{const d=await API('/api/solicitacoes?situacao='+solFiltro);const sec=document.getElementById('v-solicitacoes');sec.querySelector('.aviso-exemplo')?.remove();const r=d.resumo;const abertas=Object.entries(r).filter(([k])=>!['entregue','recusada'].includes(k)).reduce((a,[,v])=>a+v,0);
   sec.querySelector('.tabs').innerHTML=[['abertas',`Abertas (${abertas})`],['entregue',`Entregues (${r.entregue||0})`],['recusada',`Recusadas (${r.recusada||0})`]].map(([k,l])=>`<button class="${solFiltro===k?'on':''}" onclick="carregarSolicitacoes('${k}')">${l}</button>`).join('');
   sec.querySelector('tbody').innerHTML=d.itens.length?d.itens.map(x=>`<tr data-abrir="solicitacao:${escHtml(x.id)}"><td>${escHtml(x.solicitante)}${x.instituicao?` · ${escHtml(x.instituicao)}`:''}<br><small class="mono">${escHtml(x.email||x.origem)}</small></td><td>${(x.itens||'').split(' · ').filter(Boolean).map(i=>`<span class="code">${i}</span>`).join(' ')||'—'}</td><td>${escHtml(x.finalidade)}</td><td>${fmtData(x.recebida_em)}</td><td><span class="tag ${SIT_TAG[x.situacao]}">${escHtml(rotulo(x.situacao))}</span></td><td><button class="btn sm" onclick="abrirSolicitacao(${escHtml(x.id)})">Abrir</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty">${vazioHTML('Nenhum pedido nesta situação.','Os pedidos feitos pelo formulário do site entram sozinhos. Os que chegam por e-mail ou pessoalmente você registra aqui.','<button class="btn sm pri" onclick="openModal(\'m-sol\')">Registrar pedido</button>')}</td></tr>`;
-  document.getElementById('n-sol').textContent=abertas;const stats=sec.querySelector('.grid.g3');if(stats)stats.innerHTML=`<div class="panel stat"><div class="v">${Object.values(r).reduce((a,b)=>a+b,0)}</div><div class="l">pedidos registrados</div></div><div class="panel stat"><div class="v">${d.fundo_mais_pedido?d.fundo_mais_pedido.fundo:'—'}</div><div class="l">fundo mais pedido</div></div><div class="panel stat"><div class="v">${escHtml(d.dias_medio_entrega??'—')}${d.dias_medio_entrega!=null?' d':''}</div><div class="l">tempo médio até entrega</div></div>`;
+  atualizarPendencias();const stats=sec.querySelector('.grid.g3');if(stats)stats.innerHTML=`<div class="panel stat"><div class="v">${Object.values(r).reduce((a,b)=>a+b,0)}</div><div class="l">pedidos registrados</div></div><div class="panel stat"><div class="v">${d.fundo_mais_pedido?d.fundo_mais_pedido.fundo:'—'}</div><div class="l">fundo mais pedido</div></div><div class="panel stat"><div class="v">${escHtml(d.dias_medio_entrega??'—')}${d.dias_medio_entrega!=null?' d':''}</div><div class="l">tempo médio até entrega</div></div>`;
   const act=sec.querySelector('.hdr .act');if(act){act.innerHTML='<button class="btn pri" onclick="openModal(\'m-sol\')">Registrar pedido</button>'}}catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#v-solicitacoes tbody','Não consegui carregar os pedidos: '+e.message,'carregarSolicitacoes()')}}}
 async function criarSolicitacao(){const root=document.getElementById('m-sol');if(!validarCampos(root))return;const err=document.getElementById('ns-err');err.textContent='';const itens=document.getElementById('ns-itens').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const [codigo,formato]=l.split(/\s+/);return{codigo,formato:formato||'jpg_3000'}});
   try{await API('/api/solicitacoes',{method:'POST',body:JSON.stringify({solicitante:document.getElementById('ns-nome').value,email:document.getElementById('ns-email').value||null,instituicao:document.getElementById('ns-inst').value||null,finalidade:document.getElementById('ns-fin').value,detalhe:document.getElementById('ns-det').value||null,origem:document.getElementById('ns-orig').value,itens})});closeModal();toast('Pedido registrado');carregarSolicitacoes();carregarPainel()}catch(e){err.textContent=e.message}}
@@ -2469,7 +2561,7 @@ const GRAV_TAG={bloqueia:'r',corrigir:'a',aviso:''};
 let errFiltro='abertos';
 async function carregarErros(f){if(f)errFiltro=f;try{const es=await API('/api/erros?situacao='+errFiltro);const sec=document.getElementById('v-erros');sec.querySelector('.aviso-exemplo')?.remove();
   sec.querySelector('tbody').innerHTML=es.length?es.map(e=>`<tr data-abrir="erro:${escHtml(e.id)}"><td><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span></td><td><span class="code">${escHtml(e.codigo)}</span></td><td><b>${escHtml(rotulo(e.categoria))}</b> — ${escHtml(e.descricao)}${e.resolucao?`<br><small style="color:var(--ink3)">resolução: ${escHtml(e.resolucao)}</small>`:''}</td><td>${escHtml(e.origem)}${e.relatado_por?`<br><small style="color:var(--ink3)">${escHtml(e.relatado_por)}</small>`:''}</td><td><span class="tag ${e.situacao==='aberto'?'a':e.situacao==='em_correcao'?'b':'g'}">${escHtml(rotulo(e.situacao))}</span><br><small style="color:var(--ink3)">${fmtData(e.criado_em)}</small></td><td><button class="btn sm" onclick="abrirErro(${escHtml(e.id)})">${['aberto','em_correcao'].includes(e.situacao)?'Resolver':'Ver'}</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty">${vazioHTML('Nenhum problema nesta situação.','Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), registre aqui.','<button class="btn sm pri" onclick="openModal(\'m-erro\')">Relatar problema</button>')}</td></tr>`;
-  const abertos=errFiltro==='abertos'?es.length:(await API('/api/erros?situacao=abertos')).length;document.getElementById('n-err').textContent=abertos;
+  atualizarPendencias();
   const act=sec.querySelector('.hdr .act');if(act){act.innerHTML=`<select class="btn" onchange="carregarErros(this.value)"><option value="abertos" ${errFiltro==='abertos'?'selected':''}>Abertos</option><option value="corrigido" ${errFiltro==='corrigido'?'selected':''}>Corrigidos</option><option value="todos" ${errFiltro==='todos'?'selected':''}>Todos</option></select><button class="btn pri" onclick="openModal('m-erro')">Relatar problema</button>`}}catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#v-erros tbody','Não consegui carregar os problemas: '+e.message,'carregarErros()')}}}
 async function criarErro(){const err=document.getElementById('ne-err');err.textContent='';try{const r=await API('/api/erros',{method:'POST',body:JSON.stringify({codigo:document.getElementById('ne-cod').value,gravidade:document.getElementById('ne-grav').value,categoria:document.getElementById('ne-cat').value,descricao:document.getElementById('ne-desc').value})});closeModal();toast('Problema registrado');
     if(r&&r.publicado_com_bloqueio){const adm=EU&&['admin','master'].includes(EU.papel);
@@ -2618,12 +2710,13 @@ async function carregarAlertas(){if(!(EU&&['admin','master'].includes(EU.papel))
       <details><summary>Últimos envios (${env.length})</summary><ul class="dec-motivos">${env.map(x=>`<li>${escHtml(fmtDataHora(x.enviado_em))} · ${escHtml(ROT_ALERTA[x.assunto]||x.assunto)} · ${escHtml({critico:'crítico',resolvido:'resolvido',suprimido:'não enviado (já avisado há menos de 6 h)'}[x.tipo]||x.tipo)}${x.para?` · para ${escHtml(x.para)}`:''} ${x.tipo==='suprimido'?'':x.ok?'<span class="tag g">enviado</span>':`<span class="tag r">não saiu</span> <small class="help">${escHtml(x.erro||'')}</small>`}</li>`).join('')||'<li>Nenhum envio ainda.</li>'}</ul></details></div>`;
     const b=document.getElementById('al-verificar');if(b)b.onclick=async()=>{b.disabled=true;try{const v=await API('/api/alertas/verificar',{method:'POST'});toast(v.envios.length?`${v.envios.length} aviso(s) processado(s)`:'Nada mudou desde a última verificação');carregarAlertas()}catch(e){toast(e.message);b.disabled=false}}}
   catch(e){p.innerHTML=`<div class="ph"><h2>Alertas por e-mail</h2></div><div class="pb"><p class="help"><span class="tag r">não consegui carregar</span> ${escHtml(e.message)}</p></div>`}}
-async function carregarEstacoes(fresco){const el=document.getElementById('est-body'),tinha=!!el.querySelector('.panel');if(!tinha)el.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Verificando estações e integrações…</div></div></div>';try{const d=await API('/api/estacoes'+(fresco===true?'?fresco=1':''));limparStale('estacoes');const s=d.site,p=d.pipeline,q=d.qnap;el.innerHTML=`
+async function carregarEstacoes(fresco){const el=document.getElementById('est-body'),tinha=!!el.querySelector('.panel');if(!tinha)el.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Verificando estações e integrações…</div></div></div>';try{const [d,qi]=await Promise.all([API('/api/estacoes'+(fresco===true?'?fresco=1':'')),API('/api/qnap').catch(()=>null)]);limparStale('estacoes');const s=d.site,p=d.pipeline,q=d.qnap;el.innerHTML=`
   <div class="grid g2 wide3">
     <div class="panel"><div class="ph"><h2>Captura</h2></div><div class="pb"><ul class="list">${d.maquinas.filter(m=>['foto','contex','universal'].includes(m.tipo)).map(m=>{const maq=m.online===null?'<span class="tag">máquina —</span>':m.online?'<span class="tag g">máquina online</span>':'<span class="tag r">máquina offline</span>';const app=m.app_online?'<span class="tag g">app '+escHtml(m.app_estado||'online')+'</span>':'<span class="tag '+(m.online?'a':'r')+'">app offline</span>';const ctx=[m.app_operador,m.app_projeto,m.app_versao].filter(Boolean).map(escHtml).join(' · ');return `<li><div class="t"><b>${escHtml(m.nome)}</b><small>${escHtml(m.funcao||'')}</small><small>${m.ip?escHtml(m.ip):'IP não configurado'}${ctx?' · '+ctx:''}</small>${m.app_ultimo_erro?`<small style="color:var(--red)">${escHtml(m.app_ultimo_erro)}</small>`:''}</div><div class="cluster">${maq}${app}</div></li>`}).join('')}</ul></div></div>
     <div class="panel"><div class="ph"><h2>Processamento</h2></div><div class="pb"><ul class="list">${d.maquinas.filter(m=>m.tipo==='processamento').map(m=>`<li><div class="t"><b>${escHtml(m.nome)}</b><small>${escHtml(m.funcao||'')}</small>${m.aviso_contrato?`<small><span class="tag a">contrato</span> ${escHtml(m.aviso_contrato)}</small>`:''}${quarentenaHTML(m.app_detalhe&&m.app_detalhe.quarentena)}<small>${m.ip?escHtml(m.ip):'IP não configurado'}</small></div>${m.online===null?'<span class="tag">—</span>':m.online?'<span class="tag g">máquina online</span>':'<span class="tag r">sem resposta ao ping</span>'}</li>`).join('')}</ul><dl class="kv" style="margin-top:12px"><dt>Entrada bruta</dt><dd>${escHtml(p.entrada_bruta)} lote(s)</dd><dt>Material final detectado</dt><dd>${escHtml(p.prontos)} lote(s)</dd><dt>Pronto para revisão</dt><dd>${escHtml(p.aguardando_revisao)} lote(s)</dd></dl></div></div>
     <div class="panel"><div class="ph"><h2>QNAP</h2></div><div class="pb"><dl class="kv"><dt>Raiz</dt><dd class="mono" style="font-size:12px">${escHtml(q.raiz)}</dd><dt>Acesso</dt><dd>${q.montado?'<span class="tag g">conectado</span>':`<span class="tag r">não conectado a este servidor</span> <small>(${q.motivo==='vazia'?'a pasta existe, mas está vazia':'a pasta não existe'})</small>`}</dd><dt>Entrada das estações</dt><dd class="mono" style="font-size:12px">${escHtml(q.entrada_captura||'não configurada')}</dd><dt>Pasta final CAMP Vision 2</dt><dd class="mono" style="font-size:12px">${escHtml(q.prontos_raiz||'não configurada')}</dd>${q.total_gb?`<dt>Espaço</dt><dd>${escHtml(q.livre_gb)} GB livres de ${escHtml(q.total_gb)} GB<div class="bar"><i style="width:${escHtml(q.uso_pct)}%;background:${q.uso_pct>90?'var(--red)':'var(--blue)'}"></i></div></dd>`:''}</dl>${q.montado?'':`<div class="edit-aviso qnap-ajuda" id="qnap-ajuda"><b>O QNAP está funcionando para os Macs, mas não está conectado a ESTE servidor.</b> O painel precisa da pasta <code>${escHtml(q.raiz)}</code> para ler os lotes, o status do CAMP Vision e o espaço. Como conectar, no servidor (<code>camp@camp</code>):<br>1) <code>bash scripts/diagnostico_qnap.sh</code> mostra o que falta e o nome do compartilhamento.<br>2) <code>sudo bash scripts/montar_qnap.sh --host NOME_OU_IP --compartilhamento NOME --usuario USUARIO --subpasta PASTA</code> conecta, deixa permanente e já aponta o painel para a pasta do material pronto.<br>Passo a passo completo: docs/qnap.md.</div>`}</div></div>
   </div>
+  <div class="panel qnap-card" id="qnap-card" style="margin-top:16px">${qnapInnerHTML(q,qi)}</div>
   <div class="grid g2">${painelBackup(d.backup)}${painelImportacao()}</div>
   <div class="panel" style="margin-top:16px"><div class="ph"><h2>Fluxo</h2></div><div class="pb"><div class="steps" style="grid-template-columns:repeat(5,1fr)"><span class="done">captura</span><span class="done">QNAP entrada</span><span class="done">CAMP Vision 2</span><span class="done">pasta final</span><span class="cur">revisão / publicação</span></div><p style="margin:10px 0 0;color:var(--ink3);font-size:12.5px">O painel só considera material novo quando o CAMP Vision 2 terminou o processamento e colocou o lote na pasta final organizada.</p></div></div>
   <div class="panel" style="margin-top:16px"><div class="ph"><h2>Página pública</h2></div><div class="pb"><dl class="kv"><dt>Resposta</dt><dd>${siteTagHTML(s.http)} ${s.http.ms!=null?escHtml(s.http.ms)+' ms':escHtml(s.http.erro||s.http.status||'')}</dd><dt>Última sincronização</dt><dd>${s.ultima_sincronizacao?`${fmtDataHora(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em)} · ${s.ultima_sincronizacao.itens??'?'} itens`:'nunca'} (a cada ${escHtml(s.intervalo_sync_min)} min)</dd><dt>Divergências</dt><dd>${escHtml(s.divergencias)}${s.escritas_pendentes?` · <span class="tag r">${escHtml(s.escritas_pendentes)} escritas pendentes</span>`:''}</dd><dt>Rascunhos</dt><dd>${escHtml(s.rascunhos_no_site)}</dd><dt>Publicados sem código</dt><dd>${escHtml(s.publicados_sem_codigo)}</dd></dl><div class="act" style="margin-top:10px"><button class="btn sm" onclick="sincronizarAgora()">Sincronizar agora</button></div></div></div>`;

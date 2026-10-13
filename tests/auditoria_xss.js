@@ -7,7 +7,7 @@ async function f(u,o={}){ if(u.startsWith('/')) u=BASE+u; const h={...(o.headers
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
  await f('/api/auth/login',{method:'POST',body:JSON.stringify({email:'rafael@camp.arq.br',senha:'senha-bem-longa-123'})});
- const dom=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
+ const dom=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){if(!w.CSS)w.CSS={};if(!w.CSS.escape)w.CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);
    w.fetch=(u,o={})=>f(u,o); w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=()=>{}; w.prompt=()=>null; w.console.error=()=>{}; w.URL.createObjectURL=()=>'blob:x'; }});
  const w=dom.window,d=w.document; await sleep(1500);
  d.getElementById('lg-email').value='rafael@camp.arq.br'; d.getElementById('lg-senha').value='senha-bem-longa-123'; await w.fazerLogin({preventDefault(){}}); await sleep(900);

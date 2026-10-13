@@ -412,6 +412,13 @@ def _medir_site(url: str) -> dict:
 
 
 
+def site_em_cache(url: str) -> dict:
+    """A última medição do site (a mesma de /api/estacoes), SEM ir à rede: para quem não pode esperar 15 s (faixa do painel inicial)."""
+    with _SONDAS_LOCK:
+        v = _SONDAS.get(("http", url))
+    return dict(v[1]) if v else {}
+
+
 @router.get("/estacoes")
 def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()

@@ -11,7 +11,8 @@ async function nodeFetch(url,opt={}){ if(url.startsWith('/')) url=BASE+url;
 (async()=>{
 const html=await (await fetch(BASE+'/')).text();
 const dom=new JSDOM(html,{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
-  w.fetch=nodeFetch; w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
+  if(!w.CSS)w.CSS={};if(!w.CSS.escape)w.CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);   // o jsdom não tem CSS.escape (todo navegador tem)
+    w.fetch=nodeFetch; w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
   w.console.error=(...a)=>problems.push('console.error: '+a.join(' '));
   w.addEventListener('error',e=>problems.push('window.error: '+(e.error&&e.error.stack||e.message)));
   w.addEventListener('unhandledrejection',e=>problems.push('unhandled: '+(e.reason&&e.reason.stack||e.reason)));
@@ -89,10 +90,11 @@ checkDom('etiquetas');
 await w.abrirPerfil(); await sleep(600); if(!d.querySelector('#pf-nova')) problems.push('perfil: não abriu'); else okl.push('perfil: ok'); w.closeModal();
 // PAINEL / FILAS / SOLICITACOES / ERROS (reais)
 w.route_to('painel'); await sleep(1800); if(d.querySelector('#v-painel .aviso-exemplo')) problems.push('painel ainda com aviso de exemplo');
-if(!/pedem você hoje|Nada urgente hoje|Visão rápida da operação do acervo/.test(txt('#v-painel .hoje-frase'))) problems.push('painel: a frase do dia (ou o texto de reserva) está ausente no topo: "'+txt('#v-painel .dash-hero-main').slice(0,120)+'"');
-if(!txt('#v-painel').includes('Audiência do acervo')) problems.push('painel: bloco Audiência do acervo ausente');
+if(!/(Bom dia|Boa tarde|Boa noite)/.test(txt('#ini-saud'))) problems.push('painel: a saudação com o resumo do dia está ausente: "'+txt('#v-painel').slice(0,120)+'"');
+if(!txt('#v-painel').includes('O que fazer agora')) problems.push('painel: bloco "O que fazer agora" ausente');
+if(!txt('#v-painel').includes('Visitas ao site')) problems.push('painel: bloco Visitas ao site ausente (admin)');
 if(!txt('#v-painel').includes('QNAP')) problems.push('painel: status QNAP ausente');
-if(!txt('#v-painel').includes('Site público')) problems.push('painel: status do site ausente');
+if(!/Site (funcionando|sem resposta|não respondeu|sem medida)/.test(txt('#ini-saude'))) problems.push('painel: status do site ausente');
 okl.push('painel operacional e audiência renderizados'); checkDom('painel');
 // filas: criar lista, avançar
 w.route_to('filas'); await sleep(600); if(d.querySelector('#v-filas .aviso-exemplo')) problems.push('filas ainda com aviso de exemplo');

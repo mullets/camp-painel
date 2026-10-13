@@ -63,7 +63,8 @@ r=await J(adm,'/api/projetos/F001-P0002/detalhe'); chk(r.s===200&&r.b.projeto.ti
 // ---------- NAVEGADOR ----------
 const html=await (await fetch(BASE+'/')).text();
 const dom=new JSDOM(html,{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
-  w.fetch=(u,o={})=>adm.f(u,o); w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
+  if(!w.CSS)w.CSS={};if(!w.CSS.escape)w.CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);   // o jsdom não tem CSS.escape (todo navegador tem)
+    w.fetch=(u,o={})=>adm.f(u,o); w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
   w.URL.createObjectURL=()=>'blob:teste'; w.URL.revokeObjectURL=()=>{}; w.HTMLAnchorElement.prototype.click=function(){w.__baixou=(w.__baixou||[]).concat(this.download||this.href)};
   w.console.error=(...a)=>problems.push('console.error: '+a.join(' '));
   w.addEventListener('error',e=>problems.push('window.error: '+(e.error&&e.error.stack||e.message)));
@@ -156,7 +157,7 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 // leitura não vê o botão
 { const dl=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>lei.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});
   await sleep(1500); dl.window.document.getElementById('lg-email').value='leitor@camp.arq.br'; dl.window.document.getElementById('lg-senha').value='senha-leitor-1234'; await dl.window.fazerLogin({preventDefault(){}}); await sleep(800);
-  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('painel'); await sleep(2500); chk(!!dl.window.document.getElementById('qnap-card')&&!dl.window.document.getElementById('qnap-atualizar'),'leitura deveria ver o cartão do QNAP SEM o botão Atualizar agora'); dl.window.route_to('fundo/F003'); await sleep(2200); chk(!!dl.window.document.getElementById('fd-guia')&&!dl.window.document.querySelector('#fd-guia .chk button'),'leitura deveria ver o guia do fundo SEM botões de ação'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
+  dl.window.route_to('item/'+IT); await sleep(1200); chk(!dl.window.document.getElementById('it-editar'),'usuário de LEITURA vê o botão Editar'); okl.push('usuário de leitura não vê o botão Editar'); dl.window.route_to('estacoes'); await sleep(2800); chk(!!dl.window.document.getElementById('qnap-card')&&!dl.window.document.getElementById('qnap-atualizar'),'leitura deveria ver o cartão do QNAP (em Estações e site) SEM o botão Atualizar agora'); dl.window.route_to('fundo/F003'); await sleep(2200); chk(!!dl.window.document.getElementById('fd-guia')&&!dl.window.document.querySelector('#fd-guia .chk button'),'leitura deveria ver o guia do fundo SEM botões de ação'); dl.window.route_to('projeto/F026-P0001'); await sleep(1800); chk(!!dl.window.document.getElementById('pd-pub')&&!dl.window.document.getElementById('pd-publicar')&&!dl.window.document.querySelector('#pd-pub .chk button'),'leitura deveria ver o checklist mas NÃO os botões de publicar/resolver'); dl.window.route_to('estacoes'); await sleep(3000); chk(!!dl.window.document.getElementById('imp-painel')&&!dl.window.document.getElementById('imp-ver'),'leitura deveria ver o painel de importação mas NÃO o botão "Ver o que está faltando"'); chk(!!dl.window.document.getElementById('bk-painel')&&!dl.window.document.getElementById('bk-agora'),'leitura deveria VER o painel de backup mas NÃO o botão "Fazer backup agora"'); dl.window.close(); }
 
 // ---------- IMAGENS: nunca desenhar planta falsa ----------
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
@@ -217,16 +218,16 @@ r=await J(ope,'/api/estacoes'); chk(r.s===200&&r.b.backup&&r.b.backup.existe&&!(
   chk(!off.some(n=>txt('#system-banner').includes(n))&&!/CAMP Vision 2 sem resposta|QNAP sem resposta/.test(txt('#system-banner')),'o banner global não deveria citar máquina sem resposta: "'+txt('#system-banner').slice(0,140)+'"');
   w.route_to('painel'); await sleep(2500);
   chk(!d.querySelector('#v-painel .machine-strip'),'o painel inicial não deveria repetir a faixa de máquinas (a barra do topo já mostra)');
-  chk(!/offline/i.test(txt('#v-painel .dash-state')),'o resumo do painel não deveria dizer "offline" por causa de máquinas: '+txt('#v-painel .dash-state'));
+  chk(!/offline/i.test(txt('#ini-saude')),'o resumo do painel não deveria dizer "offline" por causa de máquinas: '+txt('#ini-saude'));
   chk(!!d.querySelector('.machine-status button, .machine-status .ms'),'a barra do topo deve continuar mostrando as máquinas'); }
 // QNAP: a mensagem diz O QUE é e o que fazer (antes: "Problema na infraestrutura")
 w.route_to('painel'); await sleep(2500);
-chk(txt('#v-painel .dash-state').includes('QNAP não está conectado a este servidor')&&!/infraestrutura/i.test(txt('#v-painel .dash-state')),'o painel inicial deveria dizer exatamente o que está errado: "'+txt('#v-painel .dash-state')+'"');
+chk(txt('#ini-saude').includes('QNAP desconectado deste servidor')&&!/infraestrutura/i.test(txt('#ini-saude')),'o painel inicial deveria dizer exatamente o que está errado: "'+txt('#ini-saude')+'"');
 chk(txt('#system-banner').includes('QNAP não está conectado a este servidor'),'o banner deveria dizer que o QNAP não está conectado a este servidor: "'+txt('#system-banner').slice(0,100)+'"');
 w.route_to('estacoes'); await sleep(2800);
 chk(!!d.getElementById('qnap-ajuda')&&txt('#qnap-ajuda').includes('diagnostico_qnap.sh')&&txt('#qnap-ajuda').includes('montar_qnap.sh')&&txt('#qnap-ajuda').includes('Macs'),'a tela Estações deveria explicar como conectar o QNAP (com os dois comandos)');
-// cartão do QNAP no painel inicial: informações úteis lidas do que o coletor guardou
-w.route_to('painel'); await sleep(2800);
+// cartão do QNAP (agora em Estações e site; o painel inicial só tem a linha "QNAP" em "Está tudo funcionando?"): informações úteis lidas do que o coletor guardou
+w.route_to('estacoes'); await sleep(2800);
 { const c=txt('#qnap-card');
   chk(/11\.?880 GB/.test(c)&&/de 20\.?000 GB/.test(c),'o cartão deveria mostrar o espaço livre/total: '+c.slice(0,90));
   chk(!!d.querySelector('#qnap-card svg.qnap-spark'),'o cartão deveria ter o gráfico de espaço dos últimos 7 dias');
@@ -242,7 +243,7 @@ w.route_to('painel'); await sleep(2800);
 // ---------- USO DO ACERVO (pedidos de download do formulário do site) ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
-  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='5','o menu deveria ter "Uso do acervo" com o atalho 5');
+  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='6','o menu deveria ter "Uso do acervo" com o atalho 6');
   { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Pedidos','"Uso do acervo" deveria ficar no grupo PEDIDOS do menu (junto das Solicitações), está em "'+(el&&el.textContent.trim())+'"'); }
   chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
   chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
@@ -410,8 +411,8 @@ w.route_to('painel'); await sleep(2800);
 { w.confirm=()=>true;
   chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Material novo','Pedidos','Acervo','Sistema']),'o menu deveria ter os grupos por trabalho: Material novo, Pedidos, Acervo, Sistema: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
   const grupo=nome=>{const g=[...d.querySelectorAll('#nav .grp')].find(x=>x.textContent.trim()===nome),r=[];for(let e=g&&g.nextElementSibling;e&&!e.classList.contains('grp');e=e.nextElementSibling)if(e.dataset.v)r.push(e.dataset.v);return r.join(',')};
-  chk(grupo('Material novo')==='filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,qualidade,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
-  chk(txt('#nav [data-v="projetos"] kbd')==='6'&&txt('#nav [data-v="filas"] kbd')==='2'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Filas 2, Projetos 6, Etiquetas T)');
+  chk(grupo('Material novo')==='decisoes,filas,erros'&&grupo('Pedidos')==='solicitacoes,uso'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,etiquetas'&&grupo('Sistema')==='estacoes,auditoria,qualidade,config','cada grupo deveria ter os itens certos: '+['Material novo','Pedidos','Acervo','Sistema'].map(grupo).join(' | '));
+  chk(txt('#nav [data-v="projetos"] kbd')==='7'&&txt('#nav [data-v="decisoes"] kbd')==='2'&&txt('#nav [data-v="filas"] kbd')==='3'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Decisões 2, Filas 3, Projetos 7, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
   chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
@@ -517,9 +518,9 @@ w.route_to('painel'); await sleep(2800);
 // ---------- [Auditoria P0-5] o Painel inicial aparece sem esperar as estações (lentas); site em três estados ----------
 { const fetchOrig=w.fetch; w.fetch=(u,o={})=>/\/api\/estacoes(\?|$)/.test(String(u))?new Promise(r=>setTimeout(()=>r(fetchOrig(u,o)),2500)):fetchOrig(u,o);
   d.getElementById('v-painel').innerHTML=''; w.carregarPainel(); await sleep(900);
-  chk(!!d.querySelector('#v-painel .dash-v2')&&/verificando/i.test(txt('#v-painel .dash-state'))&&/Verificando/.test(txt('#qnap-card')),'o Painel deveria aparecer em menos de 1 s, com "verificando…" nos cartões lentos (estações ainda carregando): "'+txt('#v-painel .dash-state')+'" / "'+txt('#qnap-card').slice(0,60)+'"');
-  chk(!/QNAP não está conectado/.test(txt('#v-painel .dash-state')),'enquanto verifica, o Painel não deveria alarmar "QNAP não está conectado"');
-  await sleep(3400); chk(!/Verificando/.test(txt('#qnap-card'))&&!/verificando/i.test(txt('#v-painel .dash-state')),'depois que as estações chegam, o cartão do QNAP e o estado geral deveriam sair de "verificando": "'+txt('#qnap-card').slice(0,60)+'"'); w.fetch=fetchOrig;
+  chk(!!d.querySelector('#v-painel .ini-grid')&&!!d.getElementById('ini-tarefas')&&d.querySelectorAll('#ini-saude .ini-hskel').length>0,'o Painel deveria aparecer em menos de 1 s (saudação e "O que fazer agora"), com esqueleto na coluna "Está tudo funcionando?" enquanto as estações carregam');
+  chk(!/QNAP desconectado/.test(txt('#ini-saude')),'enquanto verifica, o Painel não deveria alarmar "QNAP desconectado"');
+  await sleep(3400); chk(!d.querySelector('#ini-saude .ini-hskel')&&/QNAP/.test(txt('#ini-saude')),'depois que as estações chegam, a coluna de saúde deveria ser preenchida: "'+txt('#ini-saude').slice(0,60)+'"'); w.fetch=fetchOrig;
   const R=w.siteRotulo, A=w.siteAlerta;
   chk(R({estado:'online',ms:800,ok:true}).txt==='online'&&R({estado:'lento',ms:7000,ok:true}).txt==='lento · 7,0 s'&&R({estado:'lento',ms:7000,ok:true}).cls==='a','site lento deveria aparecer amarelo "lento · 7,0 s", não offline: '+JSON.stringify(R({estado:'lento',ms:7000,ok:true})));
   chk(!A({estado:'sem_resposta',alerta:false,ok:false})&&A({estado:'sem_resposta',alerta:true,ok:false})&&A({ok:false})&&!A({ok:true}),'só "sem resposta" confirmada (alerta) vira alerta vermelho; servidor antigo sem estado continua valendo'); w.route_to('painel'); }
@@ -611,20 +612,20 @@ w.route_to('painel'); await sleep(2800);
     chk(/retida/.test(w.tagRevisao('conferida',1)),'o cartão da folha retida deveria ter a etiqueta "retida"'); w.closeDrawer(true) }
   w.route_to('painel'); }
 // ---------- [H1] caixa "Como funciona esta página": 1ª visita aberta, "Entendi" fecha e grava POR PESSOA, "?" reabre, versão nova volta com "Novo" ----------
-{ const paginas=['painel','filas','erros','solicitacoes','uso','projetos','fundos','arquitetos','localizacao','etiquetas','estacoes','auditoria','config'];
+{ const paginas=['painel','decisoes','filas','erros','solicitacoes','uso','projetos','fundos','arquitetos','localizacao','etiquetas','estacoes','auditoria','config'];
   for(const k of [...paginas,'projeto','fundo','item']) await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.'+k,valor:null})});
   await w.carregarPreferenciasAjuda(); const sem=[];
   for(const k of paginas){ w.route_to(k); await sleep(500); const b=d.querySelector('#v-'+k+' > .ajuda-caixa'); if(!b||!/Como funciona esta página/.test(b.textContent)||!/Para que serve/.test(b.textContent)||!b.querySelector('ol li')||b.getAttribute('role')!=='note') sem.push(k) }
   chk(sem.length===0,'a caixa "Como funciona esta página" deveria aparecer na 1ª visita de toda página; faltou em: '+sem.join(', '));
   for(const [rota,k] of [['projeto/F003-P9001','projeto'],['fundo/F003','fundo'],['item/F003-P9001-1972-S01-D00001','item']]){ w.route_to(rota); await sleep(3500); chk(!!d.querySelector('#v-'+k+' > .ajuda-caixa'),'a caixa deveria aparecer também na página de '+k+' (mesmo depois de a página desenhar o conteúdo)') }
   w.route_to('painel'); await sleep(700); d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(1000);
-  chk(!d.querySelector('#v-painel > .ajuda-caixa'),'"Entendi" deveria fechar a caixa'); const pf=(await J(adm,'/api/auth/eu/preferencias')).b; chk(pf['ajuda.painel']==='1','"Entendi" deveria gravar no servidor a versão vista: '+JSON.stringify(pf));
+  chk(!d.querySelector('#v-painel > .ajuda-caixa'),'"Entendi" deveria fechar a caixa'); const pf=(await J(adm,'/api/auth/eu/preferencias')).b; chk(pf['ajuda.painel']===String(w.eval('AJUDA_PAGINAS.painel.v')),'"Entendi" deveria gravar no servidor a versão vista: '+JSON.stringify(pf));
   const abrirJan=async(cli,hash)=>{const dx=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/'+hash,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(x){x.fetch=(u,o={})=>cli.f(u,o);x.Element.prototype.scrollTo=()=>{};x.confirm=()=>true;x.alert=()=>{};x.console.error=()=>{}}});await sleep(3800);return dx};
   let dx=await abrirJan(adm,'#painel'); chk(!dx.window.document.querySelector('#v-painel > .ajuda-caixa'),'depois do F5 (ou em outro computador) a caixa que a pessoa já fechou deveria continuar fechada'); dx.window.close();
   dx=await abrirJan(ope,'#painel'); chk(!!dx.window.document.querySelector('#v-painel > .ajuda-caixa'),'outra pessoa (operador) deveria ver a caixa aberta: a preferência é por PESSOA'); dx.window.close();
   w.route_to('painel'); await sleep(500); w.abrirAjuda(); await sleep(400); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'"?" deveria reabrir a caixa'); await sleep(500); chk(!!d.querySelector('#v-painel > .ajuda-caixa'),'a caixa reaberta pelo "?" não deveria sumir sozinha');
-  d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(700); w.eval("AJUDA_PAGINAS.painel.v=2"); w.garantirCaixaAjuda(); await sleep(300);
-  chk(!!d.querySelector('#v-painel > .ajuda-caixa')&&/Novo/.test(txt('#v-painel > .ajuda-caixa h2')),'texto com versão nova deveria voltar a aparecer, com a etiqueta "Novo"'); w.eval("AJUDA_PAGINAS.painel.v=1"); w.route_to('painel'); }
+  d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(700); const vAtual=w.eval('AJUDA_PAGINAS.painel.v'); w.eval("AJUDA_PAGINAS.painel.v="+(vAtual+1)); w.garantirCaixaAjuda(); await sleep(300);
+  chk(!!d.querySelector('#v-painel > .ajuda-caixa')&&/Novo/.test(txt('#v-painel > .ajuda-caixa h2')),'texto com versão nova deveria voltar a aparecer, com a etiqueta "Novo"'); w.eval("AJUDA_PAGINAS.painel.v="+vAtual); w.route_to('painel'); }
 // ---------- [H3] telas vazias que ensinam e erro que NÃO vira "vazio" ----------
 { const v=w.vazioHTML('Nada aqui','Quando houver, aparece nesta lista.','<button id="vz-b">Começar</button>');
   chk(/Nada aqui/.test(v)&&/Quando houver/.test(v)&&/id="vz-b"/.test(v)&&/role="status"/.test(v),'vazioHTML deveria trazer título, explicação e o botão para começar');
@@ -813,9 +814,16 @@ w.route_to('painel'); await sleep(2800);
   chk(nf.value===''&&/escolha o fundo/.test(nf.options[0].textContent)&&/escolha o fundo/.test(txt('#np-code')),'Novo projeto pela lista deveria abrir com o fundo VAZIO ("— escolha o fundo —"): "'+nf.value+'" / "'+txt('#np-code')+'"'); w.closeModal();
   w.route_to('fundo/F026'); await sleep(3000); const bn=[...d.querySelectorAll('#v-fundo .act button')].find(x=>x.textContent.trim()==='Novo projeto'); if(bn){ bn.click(); await sleep(600); chk(d.getElementById('np-fundo').value==='F026','Novo projeto pela página do F026 deveria abrir já com F026: "'+d.getElementById('np-fundo').value+'"'); w.closeModal() } w.route_to('painel'); }
 // ---------- [Auditoria P1-15] contagens que batem ----------
-{ const P=w.pendenciasTexto;
-  chk(P({decisoes:{pendentes:3},filas:{revisao:14},erros:{bloqueantes:0},solicitacoes:{aguardam:0}})==='3 decisões · 14 lotes para revisar','as pendências deveriam vir detalhadas ("3 decisões · 14 lotes para revisar"): '+P({decisoes:{pendentes:3},filas:{revisao:14},erros:{bloqueantes:0},solicitacoes:{aguardam:0}}));
-  chk(P({decisoes:{pendentes:1},filas:{revisao:1},erros:{bloqueantes:1},solicitacoes:{aguardam:1}})==='1 decisão · 1 lote para revisar · 1 erro que bloqueia · 1 pedido aguardando','o singular deveria estar certo');
+{ w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
+  const esp={decisoes:P.decisoes,'filas/conferir':P.lotes_conferir,'filas/admin':P.esperam_admin,'fundos/travados':P.travados_direitos};
+  chk(k.length===4&&k.every(([r,v])=>esp[r]===v),'[H6b] os 4 números do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
+  chk(txt('#n-dec')===(P.decisoes?String(P.decisoes):'')&&txt('#n-filas')===(P.material_novo?String(P.material_novo):''),'[H6b] os contadores do menu deveriam vir da mesma fonte: decisões '+txt('#n-dec')+' / filas '+txt('#n-filas'));
+  for(const [r,v] of k){ w.route_to(r); await sleep(2200); const sel={decisoes:'#dec-body tr[data-abrir]','filas/conferir':'#filas-body tr[data-fase]','filas/admin':'#filas-body tr[data-fase]','fundos/travados':'#fundos-body tr[data-nav]'}[r];
+    chk(d.querySelectorAll(sel).length===v,`[H6b] clicar no número ${v} (${r}) deveria abrir uma lista com ${v} linha(s): ${d.querySelectorAll(sel).length}`) }
+  w.route_to('painel'); await sleep(2000);
+  chk(!/itens esperam você|Por onde começar|Acervo em números|Precisa de atenção|Atividade recente/.test(txt('#v-painel')),'[H6b] o painel não deveria mais repetir os blocos antigos');
+  chk(d.querySelectorAll('#ini-caminho .ini-step').length===7&&/Digitalizar.*No QNAP.*CAMP Vision.*Importar.*Conferir.*Aprovar.*Publicar/.test(txt('#ini-caminho')),'[H6b] o caminho do material deveria ter os 7 passos na ordem oficial');
+  chk(!!d.querySelector('#ini-ritmo svg rect')&&/(Média de|Nenhuma folha conferida)/.test(txt('#ini-ritmo')),'[H6b] o ritmo das 2 semanas deveria ter as barras e a frase');
   w.route_to('solicitacoes'); await sleep(2000); await w.carregarSolicitacoes('recusada'); await sleep(1000);
   const linhas=[...d.querySelectorAll('#v-solicitacoes tbody tr')].filter(r=>!r.querySelector('td.empty,td.state-row')).length;
   chk(new RegExp('^'+linhas+' registros?').test(txt('#v-solicitacoes .cnt')),'o contador de Solicitações deveria contar só as linhas de dados da aba ('+linhas+'): "'+txt('#v-solicitacoes .cnt')+'"'); w.route_to('painel'); }
@@ -823,10 +831,10 @@ w.route_to('painel'); await sleep(2800);
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);
   const drawerAberto=()=>w.eval("mainEl.classList.contains('with-drawer')"), dl=(await J(adm,'/api/decisoes')).b;
   chk(dl.total>=2,'a semente deveria ter 2 decisões pendentes: '+dl.total);
-  const li=[...d.querySelectorAll('#v-painel .action-list li')].filter(x=>/Projeto parecido/.test(x.textContent));
-  chk(li.length>=1&&!!li[0].querySelector('button.pri')&&/Decidir/.test(li[0].textContent),'o "Precisa de atenção" deveria listar a decisão com o botão Decidir ('+li.length+')');
-  chk(/CAMP Vision está esperando/.test(txt('#v-painel .action-card')),'deveria avisar que o CAMP Vision está esperando');
-  chk(/(Decisões esperando|esperam você)/.test(txt('#v-painel .hoje-acoes')),'"Por onde começar" deveria incluir as decisões nas pendências: "'+txt('#v-painel .hoje-acoes').slice(0,120)+'"');
+  const li=[...d.querySelectorAll('#v-painel .ini-task')].filter(x=>/é o mesmo projeto que/.test(x.textContent));
+  chk(li.length>=1&&!!li[0].querySelector('button.pri')&&/Decidir/.test(li[0].textContent),'"O que fazer agora" deveria listar a decisão com o botão Decidir ('+li.length+')');
+  chk(/CAMP Vision está parado/.test(txt('#ini-tarefas')),'deveria avisar que o CAMP Vision está parado esperando');
+  chk(/^Decidir/i.test(txt('#ini-tarefas .ini-tgh')),'"Decidir" deveria ser o primeiro grupo de "O que fazer agora": "'+txt('#ini-tarefas .ini-tgh')+'"');
   const id1=dl.itens[0].id, id2=dl.itens[1].id; li[0].querySelector('button.pri').click(); await sleep(1600);
   chk(txt('#d-title').includes('Projeto parecido: é o mesmo?')&&/O que chegou/.test(txt('#d-body'))&&/Já existe no fundo/.test(txt('#d-body'))&&/está esperando a sua resposta/.test(txt('#d-body')),'a janela deveria mostrar o que chegou, o que já existe e que o CAMP Vision espera: "'+txt('#d-body').slice(0,110)+'"');
   chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folhas no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
@@ -838,7 +846,9 @@ w.route_to('painel'); await sleep(2800);
   const r2=(await J(adm,'/api/decisoes/'+id2)).b;
   chk(r2.situacao==='resolvida'&&r2.resolucao==='novo'&&/^F026-P\d{4}$/.test(r2.projeto_codigo)&&(await J(adm,'/api/painel')).b.projetos.total===nProj0+1,'"É outro projeto" deveria criar o novo: '+JSON.stringify(r2).slice(0,140));
   w.abrirDecisao(id1); await sleep(1500); chk(/Decidido/.test(txt('#d-body'))&&/Era o mesmo projeto/.test(txt('#d-body'))&&!d.querySelector('#d-body [data-dec-acao]'),'uma decisão já resolvida deveria aparecer só para leitura, sem botões'); w.closeDrawer(true);
-  w.route_to('painel'); await sleep(2800); chk(!/Projeto parecido/.test(txt('#v-painel .action-card')),'depois de decidir, o "Precisa de atenção" não deveria mais listar as decisões');
+  w.route_to('painel'); await sleep(2800); chk(!/é o mesmo projeto que/.test(txt('#ini-tarefas'))&&txt('#n-dec')==='','depois de decidir, "O que fazer agora" e o contador do menu não deveriam mais mostrar as decisões');
+  w.route_to('decisoes'); await sleep(2000); chk(d.querySelectorAll('#dec-body tr[data-abrir]').length===0&&/Nenhuma decisão esperando/.test(txt('#dec-body')),'a página Decisões deveria estar vazia e explicar');
+  d.querySelector('[data-dec-sit="resolvida"]').click(); await sleep(1500); chk(d.querySelectorAll('#dec-body tr[data-abrir]').length>=2&&/era o mesmo/.test(txt('#dec-body')),'a aba "Decididas" deveria listar as 2 decisões com o resultado: '+txt('#dec-body').slice(0,120)); w.route_to('painel'); await sleep(800);
   // novo projeto à mão: o painel avisa dos parecidos antes de criar
   const tit=(await J(adm,'/api/projetos/F026-P0001/detalhe')).b.projeto.titulo, nP=(await J(adm,'/api/painel')).b.projetos.total;
   w.openModal('m-proj'); await sleep(600); d.getElementById('np-fundo').value='F026'; d.getElementById('np-titulo').value=tit; await w.criarProjeto(); await sleep(1500);
@@ -858,30 +868,16 @@ w.route_to('painel'); await sleep(2800);
   chk(d.querySelectorAll('#pj-qnap .qf').length===0&&!/Encontradas no QNAP/.test(txt('#pj-qnap')),'um projeto SEM lote no QNAP não deveria mostrar o painel'); }
 // ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3000);   // fecha qualquer painel lateral de testes anteriores (o painel protege edição pendente)
-  const hj=(await J(adm,'/api/hoje')).b;
-  chk(/pedem você hoje|Nada urgente hoje/.test(txt('#v-painel .hoje-frase')),'o topo deveria ter a frase do dia: "'+txt('#v-painel .hoje-frase')+'"');
-  chk(!/Visão rápida da operação do acervo/.test(txt('#v-painel .dash-hero-main')),'a frase fixa antiga não deveria mais aparecer quando há dados do dia');
-  chk(d.querySelectorAll('#v-painel .hoje-kpi').length===4&&/(itens? esperam? você|pendências)/.test(txt('#v-painel .hoje-kpis'))&&/travados por direitos/.test(txt('#v-painel .hoje-kpis'))&&/prontos para publicar/.test(txt('#v-painel .hoje-kpis')),'o topo deveria ter os 4 números do dia');
-  chk(new RegExp('prontos para publicar').test(txt('#v-painel .hoje-kpis'))&&txt('#v-painel .hoje-kpis').includes(String(hj.kpis.prontos.valor)),'o número de prontos para publicar deveria bater com a API ('+hj.kpis.prontos.valor+')');
-  if(hj.kpis.prontos.valor===0) chk(/nenhum projeto foi autorizado ainda|nenhum passa em todos os requisitos/.test(txt('#v-painel .hoje-kpis')),'zero precisa de EXPLICAÇÃO ("nenhum projeto foi autorizado ainda"): '+txt('#v-painel .hoje-kpis').slice(0,260));
-  const n=Math.min(3,hj.acoes.length+(txt('#v-painel .action-card .tag')&&0)); chk(d.querySelectorAll('#v-painel .hoje-acao').length>=Math.min(3,hj.acoes.length),'o topo deveria listar até 3 ações do dia: '+d.querySelectorAll('#v-painel .hoje-acao').length+' (API tem '+hj.acoes.length+')');
-  chk(/Por onde começar|Tudo em dia/.test(txt('#v-painel .dash-hero-main')),'o topo deveria ter o título "Por onde começar"');
-  // "Hoje no acervo": só o que é DE HOJE, com o dia anterior ao lado
-  chk(/folhas trabalhadas hoje/.test(txt('#v-painel'))&&/projetos novos hoje/.test(txt('#v-painel'))&&/publicações hoje/.test(txt('#v-painel'))&&/pedidos e erros novos hoje/.test(txt('#v-painel'))&&/ontem: \d+/.test(txt('#v-painel')),'"Hoje no acervo" deveria mostrar só números de hoje, com "ontem: N"');
-  chk(!/fundos publicados/.test(txt('#v-painel'))&&!/lotes prontos para revisão/.test(txt('#v-painel .kpi-grid')),'os totais gerais ("fundos publicados") não pertencem a "Hoje no acervo"');
-  // divergências: o número leva a uma lista em português
-  chk(/Divergências/.test(txt('#v-painel .site-card'))&&!!d.querySelector('#v-painel .site-card .lnk'),'o cartão do site deveria ter o link "ver o que são" nas divergências');
-  d.querySelector('#v-painel .site-card .lnk').click(); await sleep(2500);
+  const pn=(await J(adm,'/api/painel')).b;
+  chk(/^(Bom dia|Boa tarde|Boa noite), Rafael\. (\d+ coisas? pedem? você|Tudo em dia)\.$/.test(txt('#ini-saud')),'[H6b] a saudação deveria resumir o que pede a pessoa: "'+txt('#ini-saud')+'"');
+  chk(d.querySelectorAll('#ini-tarefas .ini-tg').length===pn.tarefas.length&&pn.tarefas.every(g=>txt('#ini-tarefas').includes(g.titulo)),'[H6b] "O que fazer agora" deveria ter um grupo por tipo de trabalho, vindo do servidor');
+  chk([...d.querySelectorAll('#ini-tarefas .ini-tg')].every(g=>g.querySelectorAll('.ini-task').length<=3),'[H6b] no máximo 3 linhas por grupo (o resto em "Ver os N…")');
+  chk(!/folhas_importadas_do_lote|site_item_criado|campvision \(aviso\)/.test(txt('#v-painel')),'[H6b] "Hoje" deveria falar em frases, não com o nome técnico dos eventos');
+  // diferenças com o site: o número leva a uma lista em português (agora na linha "Site" de "Está tudo funcionando?")
+  chk(!!d.querySelector('#ini-saude [data-ini-div]')&&d.querySelector('#ini-saude [data-ini-div]').tagName==='BUTTON','a linha do site deveria ter o botão "ver o que são" nas diferenças (acessível por teclado)');
+  d.querySelector('#ini-saude [data-ini-div]').click(); await sleep(2500);
   chk(txt('#d-title').includes('Divergências entre o painel e o site')&&txt('#d-body').includes('Item do site sem código CAMP')&&txt('#d-body').includes('Fundo sem nenhuma folha no site'),'a lista de divergências deveria explicar cada tipo em português: título="'+txt('#d-title')+'" corpo="'+txt('#d-body').slice(0,80)+'"');
-  chk(d.querySelector('#v-painel .site-card .lnk').tagName==='BUTTON','"ver o que são" deveria ser um botão (acessível por teclado), não um <a> sem href');
   chk(!/sem_codigo|fundo_inexistente|sem_itens_no_site|_fora_do_ar/.test(txt('#d-body')),'a lista não pode mostrar o código cru das divergências'); w.closeDrawer(true);
-  // selo geral: o espaço do QNAP conta (função pura, testada com os números reais do painel)
-  { const E=w.estadoGeral, base={q:{montado:true},site:{http:{ok:true}},pend:0};
-    let r=E({...base,qi:{nivel_espaco:'critico',livre_pct:2.2,coleta:{livre_gb:28}}}); chk(r.geral==='bad'&&/QNAP quase cheio: 28 GB livres \(2,2%\)/.test(r.texto),'28 GB de 1.255 (2,2%) deveria deixar o selo VERMELHO e dizer o espaço: '+JSON.stringify(r));
-    r=E({...base,qi:{nivel_espaco:'aviso',livre_pct:11.9,coleta:{livre_gb:150}}}); chk(r.geral==='warn'&&/QNAP com pouco espaço/.test(r.texto),'espaço em aviso deveria deixar o selo ÂMBAR: '+JSON.stringify(r));
-    r=E({...base,qi:{nivel_espaco:'ok',livre_pct:60,coleta:{livre_gb:700}}}); chk(r.geral==='ok'&&r.texto==='Operação saudável','espaço ok = saudável');
-    r=E({...base,pend:3,qi:{nivel_espaco:'ok',coleta:{livre_gb:700}}}); chk(r.geral==='warn'&&/3 itens esperam você/.test(r.texto),'pendências = âmbar');
-    r=E({q:{montado:false},site:{http:{ok:true}},pend:0,qi:{nivel_espaco:'critico',livre_pct:1,coleta:{livre_gb:5}}}); chk(r.geral==='bad'&&/não está conectado/.test(r.texto)&&!/quase cheio/.test(r.texto),'QNAP desconectado: não usa o espaço velho da última coleta: '+JSON.stringify(r)); }
   // cartão do QNAP: barra vermelha, aviso de cota e explicação dos zeros
   { const cfgv={entrada_caminho:'',prontos_caminho:'/mnt/qnap/acervos/Arquivos/100 - Scanners',dias_parado:3};
     let h=w.qnapInnerHTML({montado:true,livre_gb:28,total_gb:1255,uso_pct:98},{nivel_espaco:'critico',coleta:{prontos:0,prontos_pastas:5,prontos_existe:1,entrada_bruta:null,latencia_ms:2,coletado_em:'2026-01-01 00:00:00'},config:cfgv});

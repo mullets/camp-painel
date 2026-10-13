@@ -940,6 +940,11 @@ def filho(modo):
         proj("F093", 1, aut=1, teste=1, wid=701)                   # F093: autorizado, mas é lote de teste -> NÃO está pronto
         proj("F093", 2, aut=1, wid=702, st="no_ar")                # já publicado: não conta
         for w in (700, 701, 702): c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo) VALUES (?,8007,'draft','x')", (w,))
+        # H6b (regra única): "travado" = fundo com folhas esperando; "pronto" = lote aprovado que o plano da publicação deixa publicar
+        for n in (1, 2, 3): c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,?,?,'importado')", (f"F091-P000{n}-1970-S01-D00101", f"F091-P000{n}", "S01", 101))
+        for cod in ("F092-P0001", "F093-P0001"):
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES (?,?,'/x','revisao',datetime('now'))", (f"Lote {cod}", cod)).lastrowid
+            for i in (1, 2): c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,revisao) VALUES (?,?,?,?,'campvision',?,'conferida')", (f"{cod}-1970-S01-D002{i:02d}", cod, "S01", 200 + i, lid))
         for f in ("F092", "F093"): c.execute("INSERT OR REPLACE INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES (?, 'autorizado','Fam','Termo')", (f,))
         # eventos: 3 folhas hoje (uma com 2 eventos), 1 ontem; 1 publicação hoje
         for cod, q in (("F092-P0001-1970-S01-D00001", "now"), ("F092-P0001-1970-S01-D00001", "now"), ("F092-P0001-1970-S01-D00002", "now"), ("F092-P0001-1970-S01-D00003", "now"), ("F092-P0001-1970-S01-D00009", "-1 days")):
@@ -2993,7 +2998,7 @@ def filho(modo):
         auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
         lei = TestClient(app, raise_server_exceptions=False); lei.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
         p = lei.get("/api/painel/pendencias").json()
-        esperado = {"lotes_importar": 1, "lotes_conferir": 2, "folhas_conferir": 3, "lotes_aprovar": 1, "prontos_publicar": 1, "travados_direitos": 1, "lotes_erro": 1, "lotes_lendo": 1, "erros_bloqueantes": 1, "decisoes": 3, "decisoes_pastas": 2, "material_novo": 3, "esperam_admin": 2}
+        esperado = {"lotes_importar": 1, "lotes_conferir": 2, "folhas_conferir": 3, "lotes_aprovar": 1, "prontos_publicar": 1, "travados_direitos": 1, "lotes_erro": 1, "lotes_lendo": 1, "erros_bloqueantes": 1, "decisoes": 3, "decisoes_pastas": 3, "material_novo": 3, "esperam_admin": 3, "lotes_publicar": 2}
         ver("contar_pendencias: um número por assunto, certo (o projeto mesclado não conta)", all(p.get(k_) == v_ for k_, v_ in esperado.items()), str({k_: (p.get(k_), v_) for k_, v_ in esperado.items() if p.get(k_) != v_}))
         filas = [f_ for f_ in lei.get("/api/filas").json() if f_["projeto_codigo"] != PM]
         conta = lambda fase: sum(1 for f_ in filas if f_.get("fase") == fase)  # noqa: E731
@@ -3024,6 +3029,105 @@ def filho(modo):
         c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_direitos'")
         ver("com a exigência LIGADA (1) o fundo sem direitos volta a bloquear, com o botão que resolve", dpp(c, "F081") is not None and {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}["direitos"]["ok"] is False and {x["id"]: x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F081-P0001'").fetchone())["condicoes"]}["direitos"]["acao"]["tipo"] == "direitos")
         c.rollback(); c.close()
+        for l in res: print(l)
+    elif modo == "painel_h6b":
+        init_db(); _aplicar_migracoes_real()
+        import json
+        from app import auth, pendencias as pd
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F071','Fundo Pronto','FPR',1),('F072','Fundo Restrito','FRE',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo, situacao) VALUES ('F071','autorizado'),('F072','restrito')")
+        def proj(f, n, t=None, tid=None):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?,?,?,?,1970,?)", (f"{f}-P{n:04d}", f, n, t or f"Projeto {n}", tid)); return f"{f}-P{n:04d}"
+        def lote(p, etapa, aprov=None, descartado=False):
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, descartado_em) VALUES (?,?,'/x',?,?,?)",
+                             (f"Lote {p}", p, etapa, aprov, "2026-10-10 10:00:00" if descartado else None)).lastrowid
+        def itens(p, lid, pend, conf, no_site=0):
+            for i in range(pend + conf):
+                c.execute("""INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,revisado_em,tainacan_item_id)
+                             VALUES (?,?,?,?,?,'campvision',?,?,?,?)""", (f"{p}-1970-S01-D{i + 1:05d}", p, "S01", i + 1, f"Folha {i}", lid,
+                             "pendente" if i < pend else "conferida", None if i < pend else "now", (9000 + i) if i >= pend and i - pend < no_site else None))
+            c.execute("UPDATE item SET revisado_em=datetime('now') WHERE revisado_em='now'")
+        lote(proj("F071", 1), "processando"); lote(proj("F071", 2), "enviado"); lote(proj("F071", 3), "erro"); lote(proj("F071", 4, "T098_Edifício Jockey"), "revisao")
+        p5 = proj("F071", 5); itens(p5, lote(p5, "revisao"), 2, 1)
+        p6 = proj("F071", 6); itens(p6, lote(p6, "revisao"), 0, 3)
+        p7 = proj("F071", 7); itens(p7, lote(p7, "revisao", "2026-10-09 10:00:00"), 0, 2)
+        p8 = proj("F071", 8, tid=5555); itens(p8, lote(p8, "revisao", "2026-10-09 10:00:00"), 0, 3, no_site=2)
+        lote(proj("F071", 9), "revisao", descartado=True)
+        q1 = proj("F072", 1); itens(q1, lote(q1, "revisao", "2026-10-09 10:00:00"), 0, 2)
+        d1 = c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem, criada_em) VALUES ('projeto_parecido','k1','F071','Golombeck 3',?,'estacao',datetime('now','-10 hours'))",
+                       (json.dumps({"pedido": {"identificacao_original": "Golombeck 3"}, "candidatos": [{"codigo": "F071-P0001", "titulo": "Golombek"}]}),)).lastrowid
+        c.execute("INSERT INTO decisao_chave (chave, decisao_id) VALUES ('k2',?),('k3',?)", (d1, d1))
+        c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem, situacao) VALUES ('projeto_parecido','k9','F071','Já resolvida','{}','painel','resolvida')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','outro','operador',?,'Folha de outro projeto')", (p5,))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador',?,'Só um aviso')", (p6,))
+        c.execute("INSERT INTO solicitacao (solicitante,finalidade,situacao) VALUES ('Pesquisadora','pesquisa','aguarda_resposta'),('Editora','publicacao','em_preparacao'),('Família','familia','entregue')")
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb, entrada_bruta) VALUES (1000, 10, 7)")
+        c.execute("INSERT INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado, atualizado_em) VALUES ('campvision2','processamento','campvision2','vigiando', datetime('now','-2 hours'))")
+        c.commit()
+        n = pd.contar_pendencias(c)
+        esperado = {"lotes_importar": 1, "lotes_conferir": 1, "folhas_conferir": 2, "lotes_aprovar": 1, "lotes_publicar": 3, "prontos_publicar": 2, "publicando_parcial": 1,
+                    "lotes_erro": 1, "lotes_lendo": 1, "lotes_na_fila": 1, "lotes_processando": 2, "decisoes": 1, "decisoes_pastas": 3, "decisoes_estacao": 1,
+                    "erros_bloqueantes": 1, "erros_abertos": 2, "pedidos_aguardando": 1, "pedidos_abertos": 2, "material_novo": 2, "esperam_admin": 4,
+                    "travados_direitos": 1, "travados_projetos": 1}
+        dif = {k: (n.get(k), v) for k, v in esperado.items() if n.get(k) != v}
+        ver("contar_pendencias: lote descartado fora; cada fase, prontos (2), parcial (1), decisão que chegou 3 vezes, erros e pedidos", not dif, str(dif))
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        fil = adm.get("/api/filas").json()
+        por = {}
+        for x in fil: por[x["fase"]] = por.get(x["fase"], 0) + 1
+        ver("a Fila e o painel contam igual (mesma função): importar, conferir, aprovar, publicar, erro",
+            (por.get("importar"), por.get("conferir"), por.get("aprovar"), por.get("publicar"), por.get("erro")) == (n["lotes_importar"], n["lotes_conferir"], n["lotes_aprovar"], n["lotes_publicar"], n["lotes_erro"]), str(por))
+        pa = adm.get("/api/painel").json()
+        ver("/api/painel traz pendencias, tarefas, caminho, no_site, frases do dia e alertas", all(k in pa for k in ("pendencias", "tarefas", "caminho", "no_site", "hoje_frases", "alertas")) and pa["pendencias"]["prontos_publicar"] == 2)
+        g = [x["id"] for x in pa["tarefas"]]
+        ver("admin: grupos na ordem Decidir → Conferir → Aprovar e publicar → Problemas → Pedidos", g == ["decidir", "conferir", "aprovar_publicar", "problemas", "pedidos"], str(g))
+        t = {x["id"]: x for x in pa["tarefas"]}
+        dec = t["decidir"]["itens"][0]
+        ver("decisão em uma linha: “Golombeck 3” é o mesmo que “Golombek”? chegou 3 vezes, esperando há 10 h, CAMP Vision parado, vermelho",
+            "Golombeck 3" in dec["titulo"] and "Golombek" in dec["titulo"] and "chegou 3 vezes" in dec["detalhe"] and "esperando há 10 h" in dec["detalhe"] and dec["sev"] == "r" and dec["acao"]["rotulo"] == "Decidir", str(dec))
+        conf = t["conferir"]["itens"]
+        ver("conferir: importar primeiro; título limpo (sem o prefixo de pasta T098_)", conf[0]["acao"]["tipo"] == "importar" and conf[0]["titulo"] == "Edifício Jockey" and conf[1]["acao"]["rotulo"] == "Conferir", str([x["titulo"] for x in conf]))
+        ap = {x["codigo"]: x for x in t["aprovar_publicar"]["itens"]}
+        rot = [x["acao"]["rotulo"] for x in t["aprovar_publicar"]["itens"]]
+        ver("aprovar e publicar: aprovar, depois o parcial ('2 de 3 folhas já no site · falta 1 e publicar'), depois o pronto; o travado fica para o 'Ver os 4'",
+            rot == ["Aprovar", "Terminar de publicar", "Publicar"] and "2 de 3 folhas já no site · falta 1 e publicar" in ap.get(p8, {}).get("detalhe", "")
+            and t["aprovar_publicar"]["total"] == 4, str([(x["codigo"], x["detalhe"], x["acao"]["rotulo"]) for x in t["aprovar_publicar"]["itens"]]))
+        todos = pd.tarefas(c, "admin", pd.contar_pendencias(c, com_listas=True), por_grupo=10)
+        tr = [x for g_ in todos if g_["id"] == "aprovar_publicar" for x in g_["itens"] if x["codigo"] == q1]
+        ver("o lote travado por direitos diz o que falta e leva ao projeto", bool(tr) and tr[0]["detalhe"].startswith("travado: Fundo com direitos restritos") and tr[0]["acao"]["rotulo"] == "Ver o que falta", str(tr))
+        trav = [x for x in op.get("/api/painel").json()["tarefas"]]
+        ver("operador: sem 'Aprovar e publicar'; decisão com 'Ver' (só admin decide)", "aprovar_publicar" not in [x["id"] for x in trav] and trav[0]["itens"][0]["acao"]["rotulo"] == "Ver")
+        pl = le.get("/api/painel").json()
+        ver("leitura: nenhuma linha com ação e nenhuma faixa de alerta", all(i["acao"] is None for gg in pl["tarefas"] for i in gg["itens"]) and pl["alertas"] == [])
+        ids = [a["id"] for a in pa["alertas"]]
+        ver("faixa crítica: QNAP crítico e CAMP Vision sem sinal há 2 h (sem esperar o site)", ids == ["qnap", "campvision"] and "QNAP quase cheio: 10 GB livres" in pa["alertas"][0]["titulo"], str(pa["alertas"]))
+        cam = {x["id"]: x for x in pa["caminho"]}
+        ver("caminho: QNAP 7 pastas; CAMP Vision = 2 em leitura + 1 decisão + 1 erro; 'acumula' no passo de gente com mais trabalho (publicar: 3)",
+            cam["qnap"]["q"] == 7 and cam["campvision"]["q"] == 4 and cam["publicar"]["estado"] == "acumula" and cam["aprovar"]["estado"] == "pronto" and "2 prontos · 1 travado" in cam["publicar"]["detalhe"], str(pa["caminho"]))
+        fr = {f["codigo"]: f for f in adm.get("/api/fundos/resumo").json() if f.get("codigo")}
+        ver("Fundos: só o F072 (restrito, com folhas esperando) aparece como travado — o mesmo número do painel", fr["F072"]["travado"] and not fr["F071"]["travado"] and sum(1 for f in fr.values() if f["travado"]) == n["travados_direitos"])
+        ver("/api/hoje usa a mesma regra de 'prontos'", adm.get("/api/hoje").json()["kpis"]["prontos"]["valor"] == n["prontos_publicar"])
+        ri = adm.get("/api/painel/ritmo?dias=14").json()
+        ver("ritmo: 14 dias, hoje por último, com as folhas conferidas hoje (1 + 3 + 2 + 3 + 2 = 11)", len(ri["dias"]) == 14 and ri["dias"][-1]["conferidas"] == 11, str(ri["dias"][-1]))
+        import pathlib as _pl, tempfile as _tf
+        rr = _pl.Path(_tf.mkdtemp()); (rr / "_campvision").mkdir(); (rr / "_campvision" / "sentinela.json").write_text('{"gravado_em": "2026-01-01T00:00:00+00:00"}')
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='replica.raiz'", (str(rr),)); c.commit()
+        al = [a["id"] for a in adm.get("/api/painel").json()["alertas"]]
+        ver("#149: réplica parada (sentinela velha) entra na faixa crítica do painel inicial", "replica" in al, str(al))
+        ver("/api/pendencias: leitura lê (200), sem login 401", le.get("/api/pendencias").status_code == 200 and anon.get("/api/pendencias").status_code == 401 and le.get("/api/pendencias").json()["decisoes"] == 1)
+        ver("Decisões: leitura vê a lista e o detalhe, mas não decide (403)", le.get("/api/decisoes").status_code == 200 and le.get(f"/api/decisoes/{d1}").status_code == 200
+            and le.post(f"/api/decisoes/{d1}/resolver", json={"acao": "novo"}).status_code == 403)
+        ver("titulo_limpo: prefixos de pasta e sublinhados", pd.titulo_limpo("Lote T098_Edifício_Jockey") == "Edifício Jockey" and pd.titulo_limpo("P2 Clube Sírio") == "Clube Sírio" and pd.titulo_limpo("Casa Tarumã") == "Casa Tarumã")
+        c.close()
         for l in res: print(l)
     elif modo == "filas":
         init_db(); aplicar_migracoes()
@@ -3549,6 +3653,14 @@ else:
 print("52) H6b fonte única dos números do Painel (igual à Fila) e ritmo das últimas 2 semanas")
 rc, out = rodar("pendencias_h6b", f"{tmp}/pend.db")
 if rc != 0: ok(False, f"teste das pendências não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("53) H6b painel inicial: contagem por lote (Fila = painel = menu), tarefas por papel, caminho, faixa crítica, travados por direitos")
+rc, out = rodar("painel_h6b", f"{tmp}/painel_h6b.db")
+if rc != 0: ok(False, f"teste do painel inicial não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

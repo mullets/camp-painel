@@ -82,14 +82,23 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
         SELECT p.fundo_codigo AS fundo, f.titulo, COUNT(*) AS n FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
         WHERE i.criado_em >= date('now','-30 days') GROUP BY 1 ORDER BY 3 DESC LIMIT 6""")]
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
-    from .pendencias import contar_pendencias
-    d["pendencias"] = contar_pendencias(con)                       # H6b: fonte única dos números do topo e do menu
+    # H6b: o que fazer agora, o caminho do material, o quanto está no site e as frases do dia, TODOS da fonte única (pendencias)
+    from . import pendencias as pd
+    n = pd.contar_pendencias(con, com_listas=True)
+    d["pendencias"] = {k: v for k, v in n.items() if not k.startswith("_")}
+    d["tarefas"] = pd.tarefas(con, u["papel"], n)
+    d["caminho"] = pd.caminho(con, n)
+    d["no_site"] = pd.no_site(con)
+    d["hoje_frases"] = pd.atividade_hoje(con)
+    d["alertas"] = pd.alertas_criticos(con) if u["papel"] != "leitura" else []
     con.close()
     return d
 
 
 @router.get("/painel/pendencias")
-def painel_pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
+@router.get("/pendencias")
+def pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Só os números (contadores do menu, Filas e painel): a MESMA função do painel inicial."""
     from .pendencias import contar_pendencias
     con = connect()
     try:

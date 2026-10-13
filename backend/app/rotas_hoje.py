@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends
 
 from . import auth, qnap_coletor
 from .db import connect
-from .publicacao import condicoes_projeto
 
 router = APIRouter(prefix="/api", tags=["hoje"])
 
@@ -68,8 +67,11 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
                 travados.append(item)
             elif item["nao_autorizados"]:
                 autorizar.append(item)
-        candidatos = con.execute("SELECT * FROM projeto WHERE autorizado_site=1 AND status_site!='no_ar'").fetchall()
-        prontos = sum(1 for p in candidatos if condicoes_projeto(con, p)["pode_publicar"])
+        from .pendencias import contar_pendencias, fundos_travados
+        pend = contar_pendencias(con)
+        prontos = pend["prontos_publicar"]               # a mesma regra do painel inicial e do botão Publicar (plano da publicação guiada)
+        trav = {f["codigo"]: f for f in fundos_travados(con)}       # travado = fundo com FOLHAS esperando (projeto só de inventário não conta)
+        travados = [{**f, "projetos": trav[f["codigo"]]["projetos"]} for f in travados if f["codigo"] in trav]
         autorizados = con.execute("SELECT COUNT(*) FROM projeto WHERE autorizado_site=1").fetchone()[0]
         seguram = sum(f["projetos"] for f in travados)
 

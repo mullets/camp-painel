@@ -5,7 +5,7 @@ const c={}; const f=async(url,opt={})=>{ if(url.startsWith('/')) url=BASE+url; c
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) problems.push(m); };
 (async()=>{
   await f('/api/auth/login',{method:'POST',body:JSON.stringify({email:'rafael@camp.arq.br',senha:'senha-bem-longa-123'})});
-  const dom=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){w.fetch=(u,o={})=>f(u,o);w.Element.prototype.scrollTo=()=>{};w.confirm=()=>true;w.alert=()=>{};w.console.error=()=>{}}});
+  const dom=new JSDOM(await (await fetch(BASE+'/')).text(),{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){if(!w.CSS)w.CSS={};if(!w.CSS.escape)w.CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);w.fetch=(u,o={})=>f(u,o);w.Element.prototype.scrollTo=()=>{};w.confirm=()=>true;w.alert=()=>{};w.console.error=()=>{}}});
   const w=dom.window, d=w.document; await sleep(2800);
   const tecla=(k,extra={})=>d.dispatchEvent(new w.KeyboardEvent('keydown',{key:k,bubbles:true,...extra}));
   const rota=()=>w.eval('rotaAtual()').split('/')[0];
