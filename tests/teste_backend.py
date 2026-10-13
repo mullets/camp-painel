@@ -3616,6 +3616,78 @@ def filho(modo):
             and connect().execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F086' AND campo='pendente_descricao_no_site'").fetchone()[0] == 1, str(r))
         ver("enviar à mão com o site fora: 502 com o motivo", x.post("/api/fundos/F086/descricao-site").status_code == 502)
         print("\n".join(res))
+    elif modo == "resumo_diario":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from datetime import datetime as _dt, timedelta as _td
+        from app import alertas, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        enviados = []
+        def falso(smtp, para, titulo, corpo, **kw): enviados.append({"para": para, "titulo": titulo, "corpo": corpo})   # SMTP falso: nada sai da máquina
+        hoje18 = _dt.now().replace(hour=18, minute=5, second=0, microsecond=0)
+        ver("vem DESLIGADO de fábrica (alertas.resumo_diario=0): às 18h não sai nada", c.execute("SELECT valor FROM configuracao WHERE chave='alertas.resumo_diario'").fetchone()[0] == "0"
+            and alertas.resumo_diario(c, agora=hoje18, enviar=falso)["motivo"] == "desligado" and enviados == [])
+        for k_, v_ in (("smtp.host", "smtp.teste"), ("smtp.usuario", "painel@camp.arq.br"), ("smtp.senha", "x"), ("alertas.resumo_diario", "1"), ("alertas.resumo_email", "equipe@camp.arq.br")):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F081','Fundo Resumo','FRS',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F081',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F081-P0001','F081',1,'Casa',1960)")
+        for i in range(1, 6):
+            c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, revisao, revisado_em, status_site) VALUES (?, 'F081-P0001', 'S01', ?, ?, ?, ?)",
+                      (f"F081-P0001-1960-S01-D{i:05d}", i, "conferida" if i <= 3 else "pendente", "now" if i <= 3 else None, "no_ar" if i <= 2 else "nao_publicado"))
+        c.execute("UPDATE item SET revisado_em=datetime('now') WHERE revisado_em='now'")
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, revisao, revisado_em) VALUES ('F081-P0001-1960-S01-D00009','F081-P0001','S01',9,'corrigida',datetime('now','-3 days'))")   # revisada em outro dia: não conta
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto','F081-P0001','folhas_importadas_do_lote','teste',?)", (_j.dumps({"criadas": 5}),))
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto','F081-P0001','folhas_importadas_do_lote','teste',?)", (_j.dumps({"criadas": 2}),))
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator) VALUES ('projeto','F081-P0001','site_no_ar','teste')")
+        c.execute("INSERT INTO solicitacao (solicitante, finalidade) VALUES ('Ana','pesquisa')")
+        c.execute("INSERT INTO solicitacao (solicitante, finalidade, recebida_em) VALUES ('Beto','pesquisa', datetime('now','-2 days'))")
+        c.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao) VALUES ('bloqueia','autoria_divergente','operador','F081-P0001','x')")
+        c.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao, situacao, resolucao) VALUES ('aviso','outro','operador','F081-P0001','y','corrigido','feito')")
+        c.commit()
+        r = alertas.resumo_diario(c, agora=hoje18.replace(hour=17, minute=59), enviar=falso)
+        ver("ligado, mas antes das 18h: ainda não sai", r.get("motivo") == "antes das 18h" and enviados == [], str(r))
+        r = alertas.resumo_diario(c, agora=hoje18, enviar=falso)
+        n = r.get("numeros") or {}
+        ver("às 18h sai UM e-mail para o destinatário configurado", r.get("enviado") is True and len(enviados) == 1 and enviados[0]["para"] == "equipe@camp.arq.br" and "Resumo do dia" in enviados[0]["titulo"], str(r.get("erro")))
+        ver("os números do dia: importadas 7, revisadas 3 (não a de outro dia), publicadas 2 (1 projeto), 1 pedido novo, 1 problema aberto que impede publicar",
+            (n.get("importadas"), n.get("revisadas"), n.get("publicadas"), n.get("projetos_publicados"), n.get("pedidos_novos"), n.get("problemas_abertos"), n.get("problemas_bloqueiam")) == (7, 3, 2, 1, 1, 1, 1), str(n))
+        corpo = enviados[0]["corpo"] if enviados else ""
+        ver("o e-mail é em frases simples, com o link do painel e como desligar", "Folhas importadas do CAMP Vision: 7" in corpo and "Pedidos novos de material: 1" in corpo and "Problemas abertos: 1, 1 impede publicar" in corpo and "/#painel" in corpo and "alertas.resumo_diario" in corpo, corpo[:300])
+        r = alertas.resumo_diario(c, agora=hoje18 + _td(minutes=5), enviar=falso)
+        ver("uma vez por dia: às 18h10 não manda de novo", r.get("motivo") == "já enviado hoje" and len(enviados) == 1)
+        r = alertas.resumo_diario(c, agora=hoje18 + _td(days=1), enviar=falso)
+        ver("no dia seguinte sai outro, com os números DAQUELE dia", r.get("enviado") is True and len(enviados) == 2 and r["numeros"]["importadas"] == 0 and r["numeros"]["problemas_abertos"] == 1, str(r.get("numeros")))
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='smtp.host'"); c.commit()
+        r = alertas.resumo_diario(c, agora=hoje18 + _td(days=2), enviar=falso)
+        ver("sem SMTP: não quebra, não manda e registra o motivo", r.get("enviado") is False and "SMTP não configurado" in (r.get("erro") or "") and len(enviados) == 2
+            and c.execute("SELECT ok, erro FROM resumo_diario_envio WHERE dia=?", ((hoje18 + _td(days=2)).strftime("%Y-%m-%d"),)).fetchone()[0] == 0)
+        c.execute("UPDATE configuracao SET valor='smtp.teste' WHERE chave='smtp.host'"); c.execute("UPDATE configuracao SET valor='' WHERE chave='alertas.resumo_email'"); c.execute("UPDATE configuracao SET valor='rafa@camp.arq.br, outro@camp.arq.br' WHERE chave='avisos.email'"); c.commit()
+        r = alertas.resumo_diario(c, agora=hoje18 + _td(days=3), enviar=falso)
+        ver("sem alertas.resumo_email: vai para o PRIMEIRO endereço de avisos.email (um só destinatário)", r.get("enviado") is True and enviados[-1]["para"] == "rafa@camp.arq.br" and len(enviados) == 3)
+        def quebra(*a, **k): raise RuntimeError("servidor recusou")
+        r = alertas.resumo_diario(c, agora=hoje18 + _td(days=4), enviar=quebra)
+        ver("SMTP que falha: o erro fica registrado, nada derruba", r.get("enviado") is False and "recusou" in (r.get("erro") or ""))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False); auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        g = adm.get("/api/alertas").json().get("resumo") or {}
+        ver("a tela de alertas mostra se o resumo está ligado, para quem e o último envio", g.get("ligado") is True and g.get("para") == "rafa@camp.arq.br" and g.get("hora") == 18 and (g.get("ultimo") or {}).get("ok") == 0, str(g))
+        import app.email_envio as _ee
+        _orig = _ee.enviar; _ee.enviar = falso
+        try:
+            antes = c.execute("SELECT COUNT(*) FROM resumo_diario_envio").fetchone()[0]
+            rr = adm.post("/api/alertas/resumo")
+            ver("'Enviar o resumo de hoje agora' (admin): sai na hora e NÃO conta como o resumo do dia", rr.status_code == 200 and rr.json()["enviado"] is True and len(enviados) == 4 and c.execute("SELECT COUNT(*) FROM resumo_diario_envio").fetchone()[0] == antes, rr.text[:200])
+        finally:
+            _ee.enviar = _orig
+        ver("operador não manda resumo (403)", op.post("/api/alertas/resumo").status_code == 403)
+        c.close()
+        for l in res: print(l)
     elif modo == "erros_automaticos":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -5432,6 +5504,14 @@ else:
 print("74) Cartão 13: problemas com origem automática (CAMP Vision) e do site")
 rc, out = rodar("erros_automaticos", f"{tmp}/erros_auto.db")
 if rc != 0: ok(False, f"teste dos problemas automáticos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("75) Cartão 151: resumo do dia por e-mail às 18h (desligado por padrão), com SMTP falso")
+rc, out = rodar("resumo_diario", f"{tmp}/resumo.db")
+if rc != 0: ok(False, f"teste do resumo do dia não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

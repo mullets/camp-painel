@@ -161,3 +161,99 @@ def avisar_pedido_novo(con, sid: int, enviar=None) -> list[dict]:
         feitos.append({"assunto": "pedido", "tipo": "novo", "para": para, "ok": ok, "erro": erro})
     con.commit()
     return feitos
+
+
+# ---------------- resumo do dia (cartão 151): opcional, desligado por padrão ----------------
+HORA_RESUMO = 18
+
+
+def numeros_do_dia(con, dia: str) -> dict:
+    """Os números de um dia (AAAA-MM-DD, horário do servidor), das mesmas fontes das telas: eventos de importação,
+    revisão das folhas, situação no site, pedidos e problemas. Tabela/coluna ausente conta zero (nunca derruba o envio)."""
+    def q(sql: str, *a) -> int:
+        try:
+            return int(con.execute(sql, a).fetchone()[0] or 0)
+        except Exception:  # noqa: BLE001
+            return 0
+    no_dia = "date({},'localtime')=?"
+    return {
+        "importadas": q("SELECT SUM(COALESCE(json_extract(detalhe,'$.criadas'),0)) FROM evento WHERE tipo='folhas_importadas_do_lote' AND " + no_dia.format("quando"), dia),
+        "revisadas": q("SELECT COUNT(*) FROM item WHERE revisao<>'pendente' AND revisado_em IS NOT NULL AND " + no_dia.format("revisado_em"), dia),
+        "publicadas": q("SELECT COUNT(*) FROM item WHERE status_site='no_ar' AND " + no_dia.format("atualizado_em"), dia),
+        "projetos_publicados": q("SELECT COUNT(DISTINCT codigo) FROM evento WHERE entidade='projeto' AND tipo IN ('site_publicar','site_no_ar') AND " + no_dia.format("quando"), dia),
+        "pedidos_novos": q("SELECT COUNT(*) FROM solicitacao WHERE " + no_dia.format("recebida_em"), dia),
+        "problemas_novos": q("SELECT COUNT(*) FROM erro WHERE " + no_dia.format("criado_em"), dia),
+        "problemas_abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')"),
+        "problemas_bloqueiam": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='bloqueia'"),
+    }
+
+
+def texto_resumo(n: dict, dia: str, base: str) -> tuple[str, str]:
+    """(assunto, corpo) em frases simples."""
+    d = f"{dia[8:10]}/{dia[5:7]}/{dia[:4]}"
+    def f(v, um, varios):
+        return f"{v} {um if v == 1 else varios}"
+    linhas = [
+        f"Resumo do painel em {d}:",
+        "",
+        f"- Folhas importadas do CAMP Vision: {n['importadas']}",
+        f"- Folhas revisadas: {n['revisadas']}",
+        f"- Folhas publicadas no site: {n['publicadas']}" + (f" ({f(n['projetos_publicados'], 'projeto', 'projetos')})" if n["projetos_publicados"] else ""),
+        f"- Pedidos novos de material: {n['pedidos_novos']}",
+        f"- Problemas abertos: {n['problemas_abertos']}" + (f", {n['problemas_bloqueiam']} {'impede' if n['problemas_bloqueiam'] == 1 else 'impedem'} publicar" if n["problemas_bloqueiam"] else "")
+        + (f" ({f(n['problemas_novos'], 'novo hoje', 'novos hoje')})" if n["problemas_novos"] else ""),
+        "",
+        f"Ver no painel: {base}/#painel",
+        "",
+        "— CAMP Painel (resumo automático; para não receber mais, mude alertas.resumo_diario para 0 nas Configurações)",
+    ]
+    return f"[CAMP Painel] Resumo do dia {d}", "\n".join(linhas)
+
+
+def resumo_estado(con) -> dict:
+    ligado = _cfg(con, "alertas.resumo_diario", "0").strip() == "1"
+    para = _cfg(con, "alertas.resumo_email").strip() or next((e.strip() for e in _cfg(con, "avisos.email").split(",") if e.strip()), "")
+    try:
+        ult = con.execute("SELECT dia, para, ok, erro, enviado_em FROM resumo_diario_envio ORDER BY dia DESC LIMIT 1").fetchone()
+    except Exception:  # noqa: BLE001
+        ult = None
+    return {"ligado": ligado, "para": para, "hora": HORA_RESUMO, "ultimo": dict(ult) if ult else None}
+
+
+def resumo_diario(con, agora: datetime | None = None, enviar=None, forcar: bool = False) -> dict:
+    """Manda o resumo do dia UMA vez por dia, a partir das 18h (horário do servidor). Desligado por padrão (alertas.resumo_diario=0).
+    forcar=True (botão do admin) ignora o liga/desliga, o horário e o 'já enviado hoje', mas não o destinatário nem o SMTP,
+    e não fica registrado como o resumo do dia."""
+    import json
+    agora = agora or datetime.now()
+    est = resumo_estado(con)
+    if not est["ligado"] and not forcar:
+        return {"enviado": False, "motivo": "desligado"}
+    if agora.hour < HORA_RESUMO and not forcar:
+        return {"enviado": False, "motivo": "antes das 18h"}
+    dia = agora.strftime("%Y-%m-%d")
+    if not forcar and con.execute("SELECT 1 FROM resumo_diario_envio WHERE dia=?", (dia,)).fetchone():
+        return {"enviado": False, "motivo": "já enviado hoje"}
+    para = est["para"]
+    n = numeros_do_dia(con, dia)
+    titulo, corpo = texto_resumo(n, dia, _cfg(con, "painel.url", "https://painel.camp.arq.br").rstrip("/"))
+    smtp = email_envio.configuracao(con)
+    ok, erro = False, None
+    if not para:
+        erro = "Sem destinatário (Configurações → alertas.resumo_email)"
+    elif not email_envio.configurado(smtp):
+        erro = "SMTP não configurado (Configurações → smtp.*)"
+    else:
+        try:
+            res = (enviar or email_envio.enviar)(smtp, para, titulo, corpo)
+            ok = not (isinstance(res, dict) and res.get("erro"))
+            erro = res.get("erro") if isinstance(res, dict) else None
+        except Exception as ex:  # noqa: BLE001
+            erro = str(ex)[:200]
+    if forcar:   # envio de conferência: não conta como o resumo do dia (o das 18h continua saindo)
+        return {"enviado": ok, "para": para, "erro": erro, "numeros": n, "titulo": titulo, "corpo": corpo}
+    con.execute("""INSERT INTO resumo_diario_envio (dia, para, ok, erro, conteudo) VALUES (?,?,?,?,?)
+                   ON CONFLICT(dia) DO UPDATE SET para=excluded.para, ok=excluded.ok, erro=excluded.erro, conteudo=excluded.conteudo, enviado_em=datetime('now')""",
+                (dia, para or None, int(ok), erro, json.dumps(n, ensure_ascii=False)))
+    con.commit()
+    return {"enviado": ok, "para": para, "erro": erro, "numeros": n, "titulo": titulo, "corpo": corpo}

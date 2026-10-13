@@ -73,8 +73,22 @@ def alertas_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
     """Cartão 151: o estado de cada alerta crítico e os últimos envios por e-mail."""
     con = connect()
     try:
+        from . import alertas as al
         return {"estado": [dict(r) for r in con.execute("SELECT * FROM alerta_estado ORDER BY assunto")],
-                "envios": [dict(r) for r in con.execute("SELECT * FROM alerta_envio ORDER BY id DESC LIMIT 50")]}
+                "envios": [dict(r) for r in con.execute("SELECT * FROM alerta_envio ORDER BY id DESC LIMIT 50")],
+                "resumo": al.resumo_estado(con)}
+    finally:
+        con.close()
+
+
+@router.post("/alertas/resumo")
+def alertas_resumo_agora(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Cartão 151: manda o resumo de hoje AGORA (para conferir o e-mail), mesmo fora das 18h ou desligado."""
+    from . import alertas as al
+    con = connect()
+    try:
+        r = al.resumo_diario(con, forcar=True)
+        return {"enviado": r["enviado"], "para": r.get("para"), "erro": r.get("erro"), "numeros": r.get("numeros")}
     finally:
         con.close()
 

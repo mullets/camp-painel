@@ -80,6 +80,30 @@ async def _startup() -> None:
     asyncio.create_task(_coleta_qnap_periodica())
     asyncio.create_task(_coleta_uso_periodica())
     asyncio.create_task(_alertas_periodicos())
+    asyncio.create_task(_resumo_diario_periodico())
+
+
+async def _resumo_diario_periodico() -> None:
+    """Cartão 151: confere a cada 5 min se já são 18h e o resumo do dia ainda não saiu. Desligado por padrão
+    (alertas.resumo_diario=0): nesse caso a conferência não faz nada. A regra (horário, uma vez por dia) fica em alertas.resumo_diario."""
+    import asyncio
+    from .alertas import resumo_diario
+    await asyncio.sleep(120)
+    while True:
+        try:
+            def _rodar():
+                c2 = connect()
+                try:
+                    r = resumo_diario(c2)
+                    if "motivo" not in r:
+                        log_registrar(logging.INFO if r.get("enviado") else logging.WARNING, "resumo_diario",
+                                      "Resumo do dia enviado" if r.get("enviado") else "Resumo do dia não saiu", para=r.get("para"), erro=r.get("erro"))
+                finally:
+                    c2.close()
+            await asyncio.to_thread(_rodar)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.WARNING, "resumo_diario_falhou", str(e)[:200])
+        await asyncio.sleep(300)
 
 
 async def _alertas_periodicos() -> None:
