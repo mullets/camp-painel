@@ -788,6 +788,8 @@ body.na-painel #system-banner{display:none!important}
 /* H23 · Auditoria: frases, grupos de passos, filtros rápidos, antes → depois com destaque */
 .au-rapidos{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px 0;align-items:center}.au-rapidos [aria-pressed="true"]{background:var(--blue-soft);border-color:var(--blue);color:var(--blue)}.au-sep{width:1px;height:20px;background:var(--line);margin:0 4px}
 .au-frase{line-height:1.4}.au-passos{margin-left:6px;font-size:var(--fs-sm2)}.au-filho td{background:var(--surface2);font-size:var(--fs-md)}.au-ramo{color:var(--ink3)}
+.pub-passos{margin-top:10px}.pub-passos summary{cursor:pointer;color:var(--ink3);font-size:var(--fs-sm2)}
+.pub-res-tit{margin:0 0 6px;line-height:1.5}.pub-res-lista{margin:0 0 12px;padding-left:20px;line-height:1.7}.pub-resultado .act{display:flex;flex-wrap:wrap;gap:8px}
 .fd-contagens{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.fd-cont{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;font:inherit;font-size:var(--fs-sm2);color:var(--ink2);cursor:pointer}.fd-cont:hover,.fd-cont:focus-visible{border-color:var(--blue);color:var(--blue)}.fd-cont b{color:var(--ink)}.fd-cont.alerta{border-color:var(--amber);background:var(--amber-soft)}
 .au-frase-det{margin:0 0 8px;line-height:1.5}.au-dados{margin-top:8px}.au-dados summary{cursor:pointer;color:var(--ink3);font-size:var(--fs-sm2)}.au-json{white-space:pre-wrap;margin-top:6px}
 .au-diff .au-mudou td{background:rgba(234,179,8,.10)}.au-diff del{color:var(--red);text-decoration:line-through}.au-diff ins{color:var(--green);text-decoration:none;font-weight:600}.au-diff .au-igual td{color:var(--ink3)}
@@ -2774,13 +2776,22 @@ function tarefaPubHTML(code,t){
   const passos=PUB_ETAPAS.map(([id,rot],i)=>`<li class="chk ${cls(i)}"><span class="chk-ico" aria-hidden="true">${ico(i)}</span><div class="t"><b>${texto(id,rot)}</b></div></li>`).join('');
   const falhas=(t.falhas||[]).length?`<h3 class="hoje-h">Folhas que não subiram</h3><ul class="dec-motivos">${t.falhas.map(f=>`<li><span class="code">${escHtml(f.codigo)}</span> ${escHtml(f.erro)}</li>`).join('')}</ul>`:'';
   const log=(t.log||[]).slice(-8).map(l=>`<li><small>${escHtml(fmtDataHora(l.em))} · ${escHtml(l.texto)}</small></li>`).join('');
-  const fim=ok?`<p class="help"><b>✔ ${escHtml((t.resultado&&t.resultado.mensagem)||'Publicado.')}</b>${t.decorrido_s!=null?` Levou ${escHtml(t.decorrido_s>=60?Math.floor(t.decorrido_s/60)+' min '+(t.decorrido_s%60)+' s':t.decorrido_s+' s')}.`:''}</p><div class="act"><span data-pub-link="${escHtml(code)}"></span><button class="btn pri" onclick="closeDrawer(true)">Fechar</button></div>`
+  const fim=ok?resultadoPubHTML(code,t)
     :rodando?`<p class="help" aria-live="polite">Você pode fechar esta janela: a publicação continua no servidor. Para voltar, clique em Publicar de novo no projeto.</p>`
     :`<p class="help"><span class="tag r">não terminou</span> ${escHtml((t.resultado&&t.resultado.mensagem)||'A publicação parou.')}</p><div class="act"><button class="btn pri" id="pub-go" data-pub-go="${escHtml(code)}">Tentar de novo (continua de onde parou)</button></div>`;
+  if(ok)return `<div data-pub-tarefa="${escHtml(code)}">${fim}<details class="pub-passos"><summary>Passos feitos</summary><ul class="checklist">${passos}</ul></details>${log?`<details class="pub-passos"><summary>O que aconteceu</summary><ul class="dec-motivos">${log}</ul></details>`:''}</div>`;   /* #104: pronto, o resultado vem primeiro */
   return `<div data-pub-tarefa="${escHtml(code)}"><ul class="checklist">${passos}</ul>${fim}${falhas}${log?`<h3 class="hoje-h">O que aconteceu</h3><ul class="dec-motivos">${log}</ul>`:''}</div>`}
-/* H10: no fim, "Ver no site" e "Copiar link" (o endereço vem do projeto depois de publicado) */
+/* #104: a tela de resultado da publicação: o que ficou público e o botão "Ver página pública" (o endereço vem do servidor no resultado da tarefa) */
+function resultadoPubHTML(code,t){const r=t.resultado||{},s=t.decorrido_s,pj=r.projeto||{};
+  const levou=s!=null?` Levou ${escHtml(s>=60?Math.floor(s/60)+' min '+(s%60)+' s':s+' s')}.`:'';
+  const itens=[`<li>A página do projeto <span class="code">${escHtml(code)}</span>${pj.titulo?` · ${escHtml(tituloExibicao(pj.titulo))}`:''}</li>`,
+    r.folhas_publicadas!=null?`<li>${escHtml(qtd(+r.folhas_publicadas,'folha publicada','folhas publicadas'))}${+r.folhas_criadas?` <small class="help">(${escHtml(qtd(+r.folhas_criadas,'enviada agora','enviadas agora'))})</small>`:''}</li>`:'',
+    +r.folhas_fora?`<li class="help">${escHtml(qtd(+r.folhas_fora,'folha ficou','folhas ficaram'))} só no painel (não conferidas, duplicadas, retidas ou com autoria divergente)</li>`:''].filter(Boolean).join('');
+  const link=r.url_publica?`${linkPaginaSite(r.url_publica,true,'btn pri',r.url_origem==='presumido')}<button type="button" class="btn" data-copiar-link="${escHtml(r.url_publica)}">Copiar link</button>`:`<span data-pub-link="${escHtml(code)}"></span>`;
+  return `<div class="pub-resultado" role="status"><p class="pub-res-tit"><b>✔ ${escHtml(r.mensagem||'Publicado.')}</b>${levou}</p>${r.folhas_publicadas!=null||pj.titulo?`<h3 class="hoje-h">O que ficou público</h3><ul class="pub-res-lista">${itens}</ul>`:''}<div class="act">${link}<button class="btn" onclick="closeDrawer(true)">Fechar</button></div></div>`}
+/* H10: sem endereço no resultado (tarefa antiga), "Ver página pública" e "Copiar link" vêm do projeto depois de publicado */
 async function preencherLinkPub(code){const el=document.querySelector(`[data-pub-link="${CSS.escape?CSS.escape(code):code}"]`);if(!el||el.dataset.ok)return;el.dataset.ok='1';try{const d=await API('/api/projetos/'+encodeURIComponent(code)+'/detalhe');if(!d.site_url)return;
-  el.innerHTML=`<a class="btn" href="${escHtml(d.site_url)}" target="_blank" rel="noopener">Ver no site</a> <button type="button" class="btn" data-copiar-link="${escHtml(d.site_url)}">Copiar link</button> `}catch(_){}}
+  el.innerHTML=`${linkPaginaSite(d.site_url,true,'btn pri',d.site_url_origem==='presumido')} <button type="button" class="btn" data-copiar-link="${escHtml(d.site_url)}">Copiar link</button> `}catch(_){}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-copiar-link]');if(!b)return;(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(b.dataset.copiarLink):Promise.reject()).then(()=>toast('Link copiado')).catch(()=>toast(b.dataset.copiarLink))});
 function desenharTarefaPub(code,t){const w=document.querySelector(`[data-pub-tarefa="${code}"]`),prog=document.getElementById('pub-prog');
   if(!w&&!prog)return false;document.getElementById('d-title').textContent=t.estado==='ok'?'Publicado':'Publicar';document.getElementById('d-body').innerHTML=tarefaPubHTML(code,t);if(t.estado==='ok')preencherLinkPub(code);return true}

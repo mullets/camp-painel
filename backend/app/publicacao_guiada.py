@@ -135,8 +135,10 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         res = publicar(codigo, Publicacao(acao="publicar"), u)                              # 4) publicar (revalida TODOS os portões)
         con = connect()
         try:
+            resultado = resultado_publicacao(con, codigo) if res.get("ok") else {}
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'publicacao_guiada',?,?)",
-                        (codigo, u["email"], json.dumps({"feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados"), "ok": res.get("ok")}, ensure_ascii=False)))
+                        (codigo, u["email"], json.dumps({"feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados"), "ok": res.get("ok"),
+                                                         **({"folhas_publicadas": resultado["folhas_publicadas"]} if resultado else {})}, ensure_ascii=False)))
             if res.get("ok"):          # a Fila deixa de pedir ação: as listas JÁ APROVADAS deste projeto passam a "publicadas"
                 for (lid,) in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=? AND aprovado_em IS NOT NULL AND etapa IN ('revisao','rascunho')", (codigo,)).fetchall():
                     con.execute("UPDATE lista_processamento SET etapa='publicado', atualizado_em=datetime('now') WHERE id=?", (lid,))
@@ -144,7 +146,20 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             con.commit()
         finally:
             con.close()
-        return {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0)}
+        return {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado}
     finally:
         with _trava:
             _em_andamento.discard(codigo)
+
+
+def resultado_publicacao(con, codigo: str) -> dict:
+    """#104 · O que ficou público depois de publicar, para a tela de resultado: o projeto, quantas folhas, o que ficou de fora
+    e o endereço da página pública (o REAL do espelho do site quando existe; senão o confirmado; senão o presumido)."""
+    from .rotas_projetos import _pagina_publica_projeto
+    p = con.execute("SELECT titulo, cidade FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+    q = lambda sql: con.execute(sql, (codigo,)).fetchone()[0]  # noqa: E731
+    pub = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])
+    return {"projeto": {"codigo": codigo, "titulo": p["titulo"]},
+            "folhas_publicadas": q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site='no_ar'"),
+            "folhas_fora": q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND (status_site IS NULL OR status_site<>'no_ar')"),
+            "url_publica": pub["url"], "url_origem": pub["origem"]}

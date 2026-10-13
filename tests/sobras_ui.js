@@ -1,14 +1,16 @@
 // Checagens de tela (Playwright, Chromium de verdade) dos itens do cartão "Sobras".
 // Uso (servidor PRÓPRIO, nunca a porta 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/x.db python3 tests/semear_banco_teste.py
-//   (cd backend && CAMP_DB_PATH=/tmp/x.db CAMP_COOKIE_SECURE=false python3 -m uvicorn app.main:app --port 8781)
+//   (cd backend && CAMP_DB_PATH=/tmp/x.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 ../tests/servidor_wp_falso.py 8781)
 //   CAMP_DB_PATH=/tmp/x.db CAMP_BASE=http://127.0.0.1:8781 node tests/sobras_ui.js [auditoria] [fundo] [publicar]
-const path = require('path'), { execFileSync } = require('child_process');
+// "publicar" exige o servidor com WordPress falso (tests/servidor_wp_falso.py); "auditoria" e "fundo" rodam também no uvicorn comum.
+// O navegador só fala com o servidor de teste: todo pedido para fora é barrado (e anotado em BLOQUEADAS).
+const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8781', DB = process.env.CAMP_DB_PATH;
 const CHROME = process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const ETAPAS = process.argv.slice(2).length ? process.argv.slice(2) : ['auditoria', 'fundo', 'publicar'];
-const problemas = [], linhas = [];
+const problemas = [], linhas = [], BLOQUEADAS = [];   // pedidos para fora do servidor de teste: barrados e anotados
 const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!ok) problemas.push(msg); };
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
 // mexe no banco do servidor de teste (só o banco semeado, nunca produção)
@@ -84,15 +86,54 @@ print(json.dumps({'todos':q(f"SELECT COUNT(*) FROM ({v})"),'publicado':q(f"SELEC
   await page.evaluate(() => { PROJ_ESTADO = { ...PROJ_ESTADO, fundo: '', situacao: 'todos', ordem: 'codigo' } });
 }
 
+// #104 · precisa do servidor com WordPress FALSO (tests/servidor_wp_falso.py): publica de verdade pelo painel, sem tocar no site
+async function publicar(page) {
+  const P = 'F026-P0990';
+  pyArg(`
+if not con.execute("SELECT 1 FROM projeto WHERE codigo='${P}'").fetchone():
+    con.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',990)")
+    con.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES ('${P}','F026',990,'Residência Sobras, Rua das Flores','1965','São Paulo')")
+    for n in (1,2,3): con.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,status_site) VALUES (?,?,'S01',?,'importado','nao_publicado')",(f"${P}-1965-S01-D0000{n}",'${P}',n))
+    con.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,status_site,retida) VALUES ('${P}-1965-S01-D00004','${P}','S01',4,'importado','nao_publicado',1)")
+    con.execute("INSERT OR REPLACE INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F026','autorizado','Família','Termo assinado')")`);
+  await page.goto(BASE + '/#projeto/' + P); await page.waitForTimeout(2500);
+  await page.evaluate((c) => abrirPublicacaoGuiada(c), P);
+  await page.waitForSelector('#pub-go:not([disabled])', { timeout: 10000 });
+  await page.click('#pub-go');
+  await page.waitForSelector('#d-body .pub-resultado', { timeout: 30000 });
+  const tela = await page.evaluate(() => ({ titulo: document.getElementById('d-title').textContent, corpo: document.getElementById('d-body').innerText,
+    link: [...document.querySelectorAll('#d-body .pub-resultado a')].map(a => ({ txt: a.textContent.trim(), href: a.getAttribute('href'), alvo: a.target, cls: a.className })) }));
+  const api = JSON.parse(pyArg(`
+r=con.execute("SELECT resultado FROM tarefa_publicacao WHERE projeto_codigo='${P}' ORDER BY id DESC LIMIT 1").fetchone()
+print(r[0] if r else '{}')`));
+  const banco = JSON.parse(pyArg(`
+print(json.dumps({'pub':con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='${P}' AND status_site='no_ar'").fetchone()[0],'st':con.execute("SELECT status_site FROM projeto WHERE codigo='${P}'").fetchone()[0],
+ 'url':con.execute("SELECT url FROM wp_pagina WHERE codigo_detectado='${P}'").fetchone()[0]}))`));
+  chk(banco.st === 'no_ar' && banco.pub === 3, 'o projeto foi publicado de verdade pelo painel (3 folhas; a retida fica de fora): ' + JSON.stringify(banco));
+  chk(api.url_publica === banco.url && api.url_origem === 'site' && api.folhas_publicadas === 3 && api.folhas_fora === 1 && (api.projeto || {}).codigo === P, 'o resultado da tarefa traz o endereço da página (do espelho do site) e o que foi publicado: ' + JSON.stringify(api).slice(0, 300));
+  chk(/Publicado/.test(tela.titulo) && /O que ficou público/.test(tela.corpo) && /Residência Sobras/.test(tela.corpo) && /3 folhas publicadas/.test(tela.corpo) && /1 folha ficou só no painel/.test(tela.corpo), 'a tela de resultado diz o que ficou público: "' + tela.corpo.slice(0, 300) + '"');
+  const ver = tela.link.find(a => a.txt === 'Ver página pública');
+  chk(!!ver && ver.href === banco.url && ver.alvo === '_blank' && /pri/.test(ver.cls), 'botão "Ver página pública" (principal) com o endereço do backend, em nova aba: ' + JSON.stringify(tela.link));
+  if (ver) {
+    const antes = BLOQUEADAS.length;
+    const [aba] = await Promise.all([page.context().waitForEvent('page', { timeout: 5000 }), page.click('#d-body .pub-resultado a:text("Ver página pública")')]);
+    await page.waitForTimeout(800);
+    chk(BLOQUEADAS.slice(antes).includes(banco.url), 'o clique abre, numa aba nova, a página pública do projeto (pedido barrado no teste: nada sai para fora): ' + JSON.stringify(BLOQUEADAS.slice(antes)));
+    await aba.close();
+  }
+  chk(!/Publicar agora/.test(tela.corpo), 'depois de publicar a janela não oferece "Publicar agora" de novo');
+  await page.keyboard.press('Escape');
+}
+
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
-  await ctx.route('**/*', rt => rt.request().url().startsWith(BASE) ? rt.continue() : rt.abort());   // só o servidor de teste: nada sai para o site real
+  await ctx.route('**/*', rt => { const u = rt.request().url(); if (u.startsWith(BASE)) return rt.continue(); BLOQUEADAS.push(u); return rt.abort() });   // só o servidor de teste: nada sai para o site real
   const page = await ctx.newPage(); const erros = [];
   page.on('pageerror', e => erros.push(String(e)));
   const r = await ctx.request.post(BASE + '/api/auth/login', { data: { email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' } });
   chk(r.ok(), 'login do usuário semeado');
-  const mapa = { auditoria, fundo };
+  const mapa = { auditoria, fundo, publicar };
   for (const e of ETAPAS) { if (!mapa[e]) continue; linhas.push(`--- ${e}`); try { await mapa[e](page) } catch (x) { chk(false, `${e}: ${x.message.split('\n')[0]}`) } }
   chk(!erros.length, 'sem erro de JavaScript na página: ' + erros.slice(0, 2).join(' | '));
   await browser.close();

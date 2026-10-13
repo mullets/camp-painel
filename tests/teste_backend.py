@@ -3807,6 +3807,66 @@ def filho(modo):
         rs = x.get("/api/projetos/resumo", params={"fundo": "F077"}).json()
         ver("as abas da lista de Projetos contam 'com problema' pela mesma regra", rs.get("com_problema") == k.get("com_problema") and rs.get("todos") == k.get("projetos"), str(rs))
         print("\n".join(res))
+    elif modo == "resultado_publicacao":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth, publicador, wp as _wp
+        from app.rotas_projetos import _url_publica_projeto
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F075','Fundo Res','FRS',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F075','autorizado','Fam','Termo')")
+        for n, tit in ((1, "Casa Um, Rua A"), (2, "Casa Dois")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F075',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES (?,?,?,?,1970,'São Paulo')", (f"F075-P000{n}", "F075", n, tit))
+            for k in (1, 2, 3):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,retida) VALUES (?,?,'S01',?,'importado',?)", (f"F075-P000{n}-1970-S01-D0000{k}", f"F075-P000{n}", k, int(k == 3)))
+        c.commit(); c.close()
+        chamadas = {"status": [], "falha": set()}
+        def dossie_falso(codigo, ator):
+            cc = connect(); wid = 9100 + int(codigo[-1])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft','d',?,?,'F075')", (wid, codigo, codigo))
+            cc.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "erro": None}
+        def folha_falsa(codigo, ator, enviar_imagem=True):
+            if codigo in chamadas["falha"]: return {"item_id": None, "erro": "WordPress recusou"}
+            cc = connect(); wid = 7100 + int(codigo[9]) * 10 + int(codigo[-1])
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','f',?,?,'F075')", (wid, codigo, codigo[:10]))
+            cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close(); return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        class WPFalso:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): chamadas["status"].append((wid, alvo))
+        publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_falsa, WPFalso
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        # 1) uma folha falha: não publica, e o resultado NÃO traz endereço público (nada ficou público)
+        chamadas["falha"].add("F075-P0001-1970-S01-D00002")
+        r = x.post("/api/projetos/F075-P0001/publicar-tudo").json()
+        ver("publicação que não terminou não promete página pública", r.get("ok") is False and "url_publica" not in r, str(r)[:200])
+        chamadas["falha"].clear()
+        # 2) sem a página no espelho do site: o endereço é o presumido (a mesma regra do botão da página do projeto)
+        r = x.post("/api/projetos/F075-P0001/publicar-tudo").json()
+        pres = _url_publica_projeto("F075-P0001", "Casa Um, Rua A", "São Paulo")
+        ver("publicou: o resultado diz o projeto, as folhas publicadas e as que ficaram de fora", r.get("ok") is True and r.get("projeto") == {"codigo": "F075-P0001", "titulo": "Casa Um, Rua A"}
+            and r.get("folhas_publicadas") == 2 and r.get("folhas_fora") == 1, str(r)[:300])
+        ver("sem página no espelho do site: endereço presumido, igual ao do detalhe do projeto", r.get("url_publica") == pres and r.get("url_origem") == "presumido"
+            and x.get("/api/projetos/F075-P0001/detalhe").json().get("site_url") == pres, f"{r.get('url_publica')} / {pres}")
+        c = connect(); ev = _j.loads(c.execute("SELECT detalhe FROM evento WHERE tipo='publicacao_guiada' AND codigo='F075-P0001' ORDER BY id DESC LIMIT 1").fetchone()[0])
+        ver("a auditoria guarda quantas folhas ficaram publicadas", ev.get("folhas_publicadas") == 2 and ev.get("ok") is True, str(ev))
+        # 3) com a página real no espelho do site: o endereço é ESSE (não o palpite)
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (55,'Casa Dois','f075-p0002-casa-dois-real','https://camp.arq.br/acervo/projetos/f075-p0002-casa-dois-real/','publish','F075-P0002')")
+        c.commit(); c.close()
+        t = x.post("/api/projetos/F075-P0002/publicar-tudo?tarefa=1").json()["tarefa_id"]
+        import time as _tm
+        for _ in range(100):
+            tt = x.get(f"/api/tarefas/{t}").json()
+            if tt["estado"] != "rodando": break
+            _tm.sleep(0.1)
+        rr = tt.get("resultado") or {}
+        ver("pela tarefa (o caminho da tela): o resultado guardado traz o endereço REAL do espelho do site", tt["estado"] == "ok" and rr.get("url_publica") == "https://camp.arq.br/acervo/projetos/f075-p0002-casa-dois-real/" and rr.get("url_origem") == "site" and rr.get("folhas_publicadas") == 2, str(rr)[:300])
+        print("\n".join(res))
     elif modo == "ga4_direto":
         init_db(); _aplicar_migracoes_real()
         import json as _j, httpx, jwt as _jwt
@@ -5082,6 +5142,14 @@ else:
 print("74) #101 cabeçalho do fundo: contagens iguais ao banco e às listas filtradas")
 rc, out = rodar("fundo_contagens", f"{tmp}/fcont.db")
 if rc != 0: ok(False, f"teste das contagens do fundo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("75) #104 resultado da publicação: o que ficou público e o endereço da página pública")
+rc, out = rodar("resultado_publicacao", f"{tmp}/respub.db")
+if rc != 0: ok(False, f"teste do resultado da publicação não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
