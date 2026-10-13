@@ -1139,6 +1139,14 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H2 pendências] glossário em ordem alfabética, palavra marcada só 1 vez por caixa, "fundo"/"folha" explicados, balão no mouse ----------
+{ w.route_to('glossario'); await sleep(600); const ts=[...d.querySelectorAll('#gl-lista .gl-item b')].map(x=>x.textContent);
+  chk(ts.length>=22&&ts.join('|')===[...ts].sort((a,b)=>a.localeCompare(b,'pt-BR')).join('|'),'[H2] o glossário deveria estar em ordem alfabética: '+ts.slice(0,4).join(', '));
+  const h=w.caixaAjudaHTML('fundos',false), n=(h.match(/data-termo="fundo"/g)||[]).length; chk(n===1,'[H2] "fundo" deveria ser marcado uma única vez na caixa (achei '+n+')');
+  chk(/data-termo="folha"/.test(w.caixaAjudaHTML('projeto',false))||/data-termo="folha"/.test(w.caixaAjudaHTML('localizacao',false)),'[H2] "folha" deveria virar termo explicado');
+  const ab=d.createElement('abbr'); ab.className='termo'; ab.dataset.termo='fundo'; ab.textContent='fundo'; d.body.appendChild(ab); ab.dispatchEvent(new w.MouseEvent('mouseover',{bubbles:true})); await sleep(50);
+  chk(!!d.getElementById('termo-pop')&&/Fundo/.test(txt('#termo-pop')),'[H2] passar o mouse sobre o termo deveria abrir o balão'); d.getElementById('termo-pop')?.remove(); ab.remove();
+  okl.push('H2 pendências: glossário em ordem, 1 marca por caixa, gatilhos certos, balão no mouse'); w.route_to('painel'); }
 // ---------- [H1 pendências] "?" nas janelas laterais, foco depois do "Entendi", "?" nas páginas de detalhe, passos no celular ----------
 { await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_projeto',valor:null})}); await w.carregarPreferenciasAjuda(); await sleep(200);
   await w.editarProjeto('F026-P0001'); await sleep(600); const da=d.getElementById('d-ajuda');

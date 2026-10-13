@@ -1696,43 +1696,48 @@ S    série: S01 desenhos e pranchas · S02 textuais
 D    sequencial contínuo no projeto</div><p class="help" style="margin-top:10px">Crédito padrão no site: <em>Acervo {Arquiteto}/CAMP - Casa da Arquitetura Moderna Paulista</em> (muda em Configurações → Site e sincronização).</p></div></div><div class="panel"><div class="pb">${CAMINHO.map(([n,q,t],i)=>`<details ${i===0?'open':''}><summary><b>${i+1}. ${escHtml(n)}</b> <span class="tag mini">${escHtml(q)}</span></summary><p>${escHtml(t)}</p></details>`).join('')}</div></div>`}
 // ---------- H2: glossário (as palavras do acervo explicadas onde aparecem) ----------
 const GLOSSARIO=[
- ['Fundo','dossiê da','O conjunto de tudo o que veio de um arquiteto ou escritório. Tem um código que nunca muda (ex.: F026 = Sami Bussab). O F000 "Convidado" é para material de terceiros trazido só para digitalizar; não é acervo da CAMP.'],
- ['Sigla','','As 3 letras do fundo (ex.: SBU). Vai no nome dos arquivos e nas etiquetas.'],
+ ['Fundo','fundo','O conjunto de tudo o que veio de um arquiteto ou escritório. Tem um código que nunca muda (ex.: F026 = Sami Bussab). O F000 "Convidado" é para material de terceiros trazido só para digitalizar; não é acervo da CAMP.'],
+ ['Sigla','sigla','As 3 letras do fundo (ex.: SBU). Vai no nome dos arquivos e nas etiquetas.'],
  ['Projeto (ou dossiê)','dossiê','Uma obra do arquiteto, com todas as folhas dela. Código F026-P0233. O número P nunca é reaproveitado.'],
- ['Folha (ou documento)','','Uma prancha, foto ou texto digitalizado. Código F026-P0233-1972-S01-D00002 (fundo, projeto, ano, série, número).'],
+ ['Folha (ou documento)','folha','Uma prancha, foto ou texto digitalizado. Código F026-P0233-1972-S01-D00002 (fundo, projeto, ano, série, número).'],
  ['Série','série','O tipo de material: S01 Desenhos e pranchas · S02 Documentos textuais · S03 Fotografias · S04 Negativos · S05 Slides · S06 Materiais · S07 Redesenhos.'],
  ['Lote','lote','O grupo de folhas que o CAMP Vision leu de uma vez, de uma pasta do scanner.'],
- ['CAMP Vision','','O programa que lê as imagens digitalizadas, dá o código, gira as folhas e anota o que está escrito no carimbo.'],
+ ['CAMP Vision','CAMP Vision','O programa que lê as imagens digitalizadas, dá o código, gira as folhas e anota o que está escrito no carimbo.'],
  ['QNAP','QNAP','O servidor de arquivos da CAMP, onde ficam as imagens em alta (TIFF) e as cópias de leitura (JPG).'],
- ['Importar','','Trazer para o painel as folhas que o CAMP Vision leu.'],
- ['Conferir','','Olhar cada folha e dizer se o que o CAMP Vision leu está certo, corrigindo se preciso.'],
- ['Aprovar o lote','','Um admin confirma que a conferência terminou. Depois disso, as folhas não mudam mais sem reabrir.'],
- ['Site / Tainacan','','A parte pública do acervo em camp.arq.br/colecoes.'],
+ ['Importar','importar','Trazer para o painel as folhas que o CAMP Vision leu.'],
+ ['Conferir','conferir','Olhar cada folha e dizer se o que o CAMP Vision leu está certo, corrigindo se preciso.'],
+ ['Aprovar o lote','aprovar o lote','Um admin confirma que a conferência terminou. Depois disso, as folhas não mudam mais sem reabrir.'],
+ ['Site / Tainacan','Tainacan','A parte pública do acervo em camp.arq.br/colecoes.'],
  ['Rascunho','rascunho','Já está no site, mas só quem está logado no WordPress vê.'],
- ['Publicado','','Qualquer pessoa vê no site.'],
+ ['Publicado','publicado','Qualquer pessoa vê no site.'],
  ['Despublicado','despublicado','Estava publicado e foi retirado de propósito. Continua guardado.'],
  ['Retida','retida','Folha que uma pessoa decidiu não publicar. Fica no painel, conferida, mas nunca vai ao site.'],
- ['Direitos do fundo','','A autorização (termo de doação ou comodato) que diz se podemos mostrar o material e com que crédito. Uma restrição registrada bloqueia a publicação.'],
- ['Proveniência / agente','','Quem produziu o material (o arquiteto, o escritório).'],
- ['Autoria divergente','','O carimbo da folha diz outro arquiteto. Bloqueia a publicação até alguém resolver.'],
+ ['Direitos do fundo','direitos do fundo','A autorização (termo de doação ou comodato) que diz se podemos mostrar o material e com que crédito. Uma restrição registrada bloqueia a publicação.'],
+ ['Proveniência / agente','proveniência','Quem produziu o material (o arquiteto, o escritório).'],
+ ['Autoria divergente','autoria divergente','O carimbo da folha diz outro arquiteto. Bloqueia a publicação até alguém resolver.'],
  ['Duplicata','duplicata','A mesma imagem digitalizada duas vezes. Só uma vai ao site.'],
- ['Decisão','','Quando o painel acha um projeto parecido e pergunta se é o mesmo antes de criar outro.'],
+ ['Decisão','decisão','Quando o painel acha um projeto parecido e pergunta se é o mesmo antes de criar outro.'],
  ['Releitura','releitura','Pedir ao CAMP Vision que leia de novo uma folha ou um projeto.'],
  ['Sincronização','sincronização','O painel conferindo o que está no site para manter os dois iguais.'],
  ['Divergência','divergência','Algo diferente entre o painel e o site.']];
 function termoDef(t){const k=String(t).toLowerCase();return GLOSSARIO.find(g=>g[1]&&g[1].toLowerCase()===k)||GLOSSARIO.find(g=>g[0].toLowerCase().startsWith(k))}
-function comTermos(html){const vistos=new Set();const lista=GLOSSARIO.filter(g=>g[1]).map(g=>g[1]).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>b.length-a.length);
+function comTermos(html,vistos){vistos=vistos||new Set();   /* H2: só a 1ª ocorrência por tela (o Set é da caixa/tela inteira) */
+  const lista=GLOSSARIO.filter(g=>g[1]).map(g=>g[1]).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>b.length-a.length);
   return html.replace(new RegExp('(?<![\\p{L}>])('+lista.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\p{L}])','giu'),m=>{const k=m.toLowerCase();if(vistos.has(k))return m;vistos.add(k);return `<abbr class="termo" tabindex="0" data-termo="${escHtml(k)}">${m}</abbr>`})}
-function paginaGlossarioHTML(){return `<label class="field"><span>Buscar uma palavra</span><input id="gl-busca" type="search" placeholder="ex.: dossiê, rascunho, lote" oninput="filtrarGlossario(this.value)"></label><div class="panel"><div class="pb" id="gl-lista">${GLOSSARIO.map(([t,,d])=>`<div class="gl-item" data-t="${escHtml((t+' '+d).toLowerCase())}"><b>${escHtml(t)}</b><p>${escHtml(d)}</p></div>`).join('')}</div></div>`}
+function paginaGlossarioHTML(){return `<label class="field"><span>Buscar uma palavra</span><input id="gl-busca" type="search" placeholder="ex.: dossiê, rascunho, lote" oninput="filtrarGlossario(this.value)"></label><div class="panel"><div class="pb" id="gl-lista">${[...GLOSSARIO].sort((a,b)=>a[0].localeCompare(b[0],'pt-BR')).map(([t,,d])=>`<div class="gl-item" data-t="${escHtml((t+' '+d).toLowerCase())}"><b>${escHtml(t)}</b><p>${escHtml(d)}</p></div>`).join('')}</div></div>`}
 function filtrarGlossario(q){q=String(q||'').toLowerCase().trim();document.querySelectorAll('#gl-lista .gl-item').forEach(e=>{e.hidden=!!q&&!e.dataset.t.includes(q)})}
 function mostrarTermo(el){document.getElementById('termo-pop')?.remove();const g=termoDef(el.dataset.termo);if(!g)return;const p=document.createElement('div');p.id='termo-pop';p.setAttribute('role','tooltip');p.innerHTML=`<b>${escHtml(g[0])}</b><p>${escHtml(g[2])}</p><button class="lnk" onclick="document.getElementById('termo-pop')?.remove();nav('glossario')">Ver no glossário</button>`;document.body.appendChild(p);const r=el.getBoundingClientRect();p.style.top=(window.scrollY+r.bottom+6)+'px';p.style.left=Math.max(8,Math.min(window.innerWidth-300,r.left))+'px'}
 document.addEventListener('click',e=>{const t=e.target.closest('.termo');if(t){mostrarTermo(t);return}if(!e.target.closest('#termo-pop'))document.getElementById('termo-pop')?.remove()});
+let _termoT=0;document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('.termo');if(t){clearTimeout(_termoT);if(!document.getElementById('termo-pop')||document.getElementById('termo-pop').dataset.de!==t.dataset.termo){mostrarTermo(t);const p=document.getElementById('termo-pop');if(p)p.dataset.de=t.dataset.termo}return}
+  if(e.target.closest&&e.target.closest('#termo-pop')){clearTimeout(_termoT);return}const p=document.getElementById('termo-pop');if(p&&p.dataset.de){clearTimeout(_termoT);_termoT=setTimeout(()=>{if(p.dataset.de)p.remove()},400)}});   /* H2: o balão abre também ao passar o mouse (nos cabeçalhos de coluna não: o clique ali ordena a tabela) */
+function marcarTermosTela(){const sec=document.querySelector('.content.on');if(!sec)return;const vistos=new Set([...sec.querySelectorAll('.termo')].map(x=>x.dataset.termo));
+  sec.querySelectorAll('.ph h2:not([data-termos])').forEach(el=>{el.dataset.termos='1';if(el.children.length||!el.textContent.trim())return;const h=comTermos(escHtml(el.textContent),vistos);if(h!==escHtml(el.textContent))el.innerHTML=h})}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('termo'))mostrarTermo(e.target);if(e.key==='Escape')document.getElementById('termo-pop')?.remove()});
 function montarPaginasAjuda(){const c=document.getElementById('v-caminho-corpo'),g=document.getElementById('v-glossario-corpo');if(c&&!c.dataset.ok){c.innerHTML=paginaCaminhoHTML();c.dataset.ok='1'}if(g&&!g.dataset.ok){g.innerHTML=paginaGlossarioHTML();g.dataset.ok='1'}}
 function chaveAjudaAtual(){const on=document.querySelector('section.content.on'),v=on&&on.id&&on.id.startsWith('v-')?on.id.slice(2):null;return v&&AJUDA_PAGINAS[v]?v:null}
-function caixaAjudaHTML(k,novo){const a=AJUDA_PAGINAS[k],papel=EU&&EU.papel?{admin:'admin',master:'admin',operador:'operador',leitura:'leitura'}[EU.papel]:'';
+function caixaAjudaHTML(k,novo){const vt=new Set(),a=AJUDA_PAGINAS[k],papel=EU&&EU.papel?{admin:'admin',master:'admin',operador:'operador',leitura:'leitura'}[EU.papel]:'';
   return `<section class="ajuda-caixa" role="note" aria-labelledby="aj-t-${k}" data-ajuda="${k}"><div class="aj-topo"><h2 id="aj-t-${k}" tabindex="-1"><span aria-hidden="true">ⓘ</span> Como funciona esta página${novo?' <span class="tag b">Novo</span>':''}</h2><button class="btn sm" data-ajuda-fechar="${k}">Entendi ✕</button></div>
-  <p class="aj-serve"><b>Para que serve:</b> ${comTermos(escHtml(a.serve))}</p><ol class="aj-passos">${a.passos.map(p=>`<li>${comTermos(escHtml(p))}</li>`).join('')}</ol><details class="aj-passos-m"><summary>Ver os passos</summary><ol>${a.passos.map(p=>`<li>${escHtml(p)}</li>`).join('')}</ol></details>
+  <p class="aj-serve"><b>Para que serve:</b> ${comTermos(escHtml(a.serve),vt)}</p><ol class="aj-passos">${a.passos.map(p=>`<li>${comTermos(escHtml(p),vt)}</li>`).join('')}</ol><details class="aj-passos-m"><summary>Ver os passos</summary><ol>${a.passos.map(p=>`<li>${escHtml(p)}</li>`).join('')}</ol></details>
   ${a.cores.length?`<details><summary>O que significam as cores e etiquetas</summary><ul>${a.cores.map(([e,m])=>`<li><b>${escHtml(e)}</b>: ${escHtml(m)}</li>`).join('')}</ul></details>`:''}
   ${a.cuidados?`<details><summary>Cuidados</summary><p>${escHtml(a.cuidados)}</p></details>`:''}<details><summary>Quem pode</summary><p>${escHtml(a.quem)}${papel?` Você é <b>${escHtml(papel)}</b>.`:''}</p></details>
   <p class="aj-rodape"><button class="lnk" data-ajuda-atalhos>Passo a passo e atalhos de teclado</button> · <button class="lnk" onclick="nav('caminho')">Como o material anda</button> · <button class="lnk" onclick="nav('glossario')">Glossário</button></p></section>`}
@@ -3505,7 +3510,7 @@ async function abrirPerfil(){const eu=await API('/api/auth/eu');let sessoesErro=
   <div><h3 style="font-size:13px;margin:0 0 6px">Senha</h3><div class="grid g2"><label class="field">Atual<span class="senha-linha"><input id="pf-atual" type="password" autocomplete="current-password"><button type="button" class="olho" data-olho aria-label="Mostrar a senha" aria-pressed="false" title="Mostrar a senha">👁</button></span></label><label class="field">Nova (12+)<span class="senha-linha"><input id="pf-nova" type="password" autocomplete="new-password" data-forca="pf-forca"><button type="button" class="olho" data-olho aria-label="Mostrar a senha" aria-pressed="false" title="Mostrar a senha">👁</button></span><span class="forca" id="pf-forca" aria-live="polite"></span></label></div><button class="btn sm" style="margin-top:6px" onclick="perfilTrocarSenha()">Trocar senha</button></div>
   <div><h3 style="font-size:13px;margin:0 0 6px">Verificação em duas etapas (2FA)</h3>${eu.totp?`<span class="tag g">ativada</span> <label class="field" style="display:inline-flex;gap:6px;align-items:center;margin-left:8px"><input id="pf-2fa-senha" type="password" placeholder="senha para desativar" style="width:180px"><button class="btn sm" onclick="desativar2fa()">Desativar</button></label>`:`<p style="margin:0 0 8px;font-size:13px;color:var(--ink2)">Exige um código do celular (Google Authenticator, Authy, 1Password) a cada login. Recomendado para admin e master.</p><button class="btn sm pri" onclick="iniciar2fa()">Ativar 2FA</button><div id="pf-2fa"></div>`}</div>
   <div><h3 style="font-size:13px;margin:0 0 6px">Sessões abertas (${sessoesErro?'?':ss.length})</h3>${sessoesErro?`<div class="stale-note"><span class="status-dot warn"></span><span>Não foi possível consultar as sessões: ${escHtml(sessoesErro.message)}</span></div>`:''}<ul class="list">${ss.map(x=>`<li><div class="t"><b>${escHtml(descreverAgente(x.agente))}</b>${x.atual?' <span class="tag g">este computador</span>':''}<small>desde ${escHtml(quandoAmigavel(x.criada_em))} · ${escHtml(x.ip||'?')}</small></div></li>`).join('')}</ul>${ss.length>1?'<button class="btn sm" style="margin-top:6px" onclick="encerrarOutras()">Encerrar as outras sessões</button>':''}</div>
-  <div style="border-top:1px solid var(--line2);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="reverExplicacoes()">Mostrar de novo as explicações</button><button class="btn" onclick="sair()">Sair do painel</button></div>`;openModal('m-perfil')}
+  <div style="border-top:1px solid var(--line2);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="reverExplicacoes()">Mostrar de novo as explicações</button><button class="btn" onclick="closeModal();nav('glossario')">Glossário</button><button class="btn" onclick="sair()">Sair do painel</button></div>`;openModal('m-perfil')}
 /* H26: sessão em linguagem ("Chrome no Mac"), e não o User-Agent cru */
 function descreverAgente(ua){ua=String(ua||'');if(!ua)return 'Navegador desconhecido';const nav=/Edg\//.test(ua)?'Edge':/OPR\//.test(ua)?'Opera':/Firefox\//.test(ua)?'Firefox':/Chrome\//.test(ua)?'Chrome':/Safari\//.test(ua)?'Safari':/curl|python|node/i.test(ua)?'Programa':'Navegador';
   const so=/iPhone/.test(ua)?'iPhone':/iPad/.test(ua)?'iPad':/Android/.test(ua)?'Android':/Mac OS X|Macintosh/.test(ua)?'Mac':/Windows/.test(ua)?'Windows':/Linux/.test(ua)?'Linux':'';return so?`${nav} no ${so}`:nav}
@@ -3586,7 +3591,7 @@ renderFundos();renderFilas();renderProjetos();renderLabel();instalarExportacoes(
 // A janela lateral começa logo ABAIXO da barra fixa do topo (que inclui a faixa de saúde do sistema); antes o cabeçalho e o botão de fechar ficavam escondidos atrás dela
 (function(){const t=document.querySelector('.top');if(!t)return;const set=()=>document.documentElement.style.setProperty('--top-h',t.offsetHeight+'px');set();if(window.ResizeObserver)new ResizeObserver(set).observe(t);window.addEventListener('resize',set)})();
 
-(function(){let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{aplicarPermissoes();garantirCaixaAjuda();garantirAjudaNoTitulo();normalizarPlurais(document.body)},80)}).observe(document.body,{childList:true,subtree:true})})();
+(function(){let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(()=>{aplicarPermissoes();garantirCaixaAjuda();garantirAjudaNoTitulo();marcarTermosTela();normalizarPlurais(document.body)},80)}).observe(document.body,{childList:true,subtree:true})})();
 </script>
 </body>
 </html>
