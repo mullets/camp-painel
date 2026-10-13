@@ -54,7 +54,8 @@ INSERT INTO serie VALUES
  ('S03','Fotografias','03 - Fotografias'),
  ('S04','Negativos','04 - Negativos'),
  ('S05','Slides','05 - Slides'),
- ('S06','Materiais e especificações','08 - Materiais e especificações');
+ ('S06','Materiais','08 - Materiais e especificações'),
+ ('S07','Redesenhos','09 - Redesenhos');
 
 -- ISAAR(CPF): registro de autoridade. Pessoa, escritório (entidade coletiva) ou família.
 CREATE TABLE agente (

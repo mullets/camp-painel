@@ -3206,6 +3206,27 @@ def filho(modo):
         ver("o PDF abre (application/pdf) só para admin", g.status_code == 200 and g.headers["content-type"] == "application/pdf" and g.content.startswith(b"%PDF") and op.get("/api/fundos/F084/direitos/termo").status_code == 403)
         ver("com o PDF anexado, autorizado é aceito sem o texto do documento", adm.put("/api/fundos/F084/direitos", json={**base, "situacao": "autorizado"}).status_code == 200)
         print("\n".join(res))
+    elif modo == "b5_series":
+        init_db(); _aplicar_migracoes_real()
+        from app.rotas_projetos import _serie_do_item
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ss = dict(c.execute("SELECT codigo, nome FROM serie").fetchall())
+        ver("S06 se chama Materiais (como no site)", ss.get("S06") == "Materiais", str(ss.get("S06")))
+        ver("S07 Redesenhos existe", ss.get("S07") == "Redesenhos", str(ss.get("S07")))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F085','Fundo Séries','FSE',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F085',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F085-P0001','F085',1,'Casa Tapera',1969)")
+        try:
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES ('F085-P0001-1969-S07-D00001','F085-P0001','S07',1,'Redesenho','importado')"); c.commit(); ok7 = True
+        except Exception as e:  # noqa: BLE001
+            ok7 = str(e)
+        ver("uma folha S07 entra no banco (antes a chave estrangeira recusava)", ok7 is True, str(ok7))
+        ver("o termo 'Redesenhos' do site vira S07 (e não S01, apesar de conter 'desenho')", _serie_do_item("", {"Série": "Redesenhos"}) == "S07")
+        ver("o termo 'Materiais' do site vira S06", _serie_do_item("", {"Série": "Materiais"}) == "S06")
+        c.close()
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3869,6 +3890,14 @@ else:
 print("57) H14 direitos: o PDF do termo assinado anexado (só admin), e autorizado aceito com o PDF")
 rc, out = rodar("h14_termo", f"{tmp}/h14.db")
 if rc != 0: ok(False, f"teste H14 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("58) B5 séries: S06 'Materiais' e S07 'Redesenhos' iguais às do site")
+rc, out = rodar("b5_series", f"{tmp}/b5.db")
+if rc != 0: ok(False, f"teste B5 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
