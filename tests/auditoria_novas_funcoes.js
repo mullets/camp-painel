@@ -1144,8 +1144,9 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   w.abrirImportarPlanilha('F002'); await sleep(300); chk(!!d.getElementById('pl-arq')&&/próximo número P/.test(txt('#d-body')),'[B6] a janela deveria pedir a planilha e explicar os números P'); w.closeDrawer(true);
   okl.push('B6: importar inventário por planilha'); w.route_to('painel'); }
 // ---------- [B12] capa do projeto escolhida no painel ----------
-{ w.route_to('projeto/F003-P9001'); await sleep(3000); const b=d.querySelector('#v-projeto [data-capa-usar], .content.on [data-capa-usar]');
-  chk(!!b,'[B12] as folhas do projeto deveriam ter "Usar como capa" para o admin');
+{ const fl=(((await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens)||[]).find(i=>/^F003-P9001-/.test(i.codigo||'')&&!i.retida&&!i.duplicata_de&&!i.autoria_divergente);
+  if(fl){ w.route_to('item/'+fl.codigo); await sleep(2500); chk(!!d.querySelector('#idet [data-capa-usar="'+fl.codigo+'"]')||/capa do projeto/.test(txt('#idet .it-acoes')),'[B12] a página da folha deveria ter "Usar como capa do projeto" para o admin');
+    w.route_to('projeto/F003-P9001'); await sleep(2500); chk(![...d.querySelectorAll('.thumb')].some(t=>t.querySelector('button')),'[B12] o cartão da folha não deveria ganhar botão (padrão: sem botão repetido)'); }
   okl.push('B12: capa do projeto escolhida no painel'); w.route_to('painel'); }
 // ---------- [B3] classificação do projeto com a lista do site ----------
 { const cod=(((await J(adm,'/api/projetos')).b.itens||[])[0]||{}).codigo;
