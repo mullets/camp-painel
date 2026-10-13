@@ -64,6 +64,48 @@ def ler_orientacao(texto: str | None) -> dict | None:
     return {"texto": texto, "linhas": linhas, "incertas": incertas}
 
 
+ROTULO_ACEITE = {"contagem_origem_igual_saida": "Contagem de origem igual à de saída", "sem_autoria_divergente": "Nenhuma folha com autoria divergente",
+                 "duplicatas_marcadas": "Duplicatas marcadas (só a única vai ao site)", "orientacao_incerta_zerada": "Orientação incerta zerada ou revisada",
+                 "serie_incerta_zerada": "Série incerta zerada", "sem_plausibilidade": "Nenhum campo preenchido por plausibilidade",
+                 "documentacao_nao_e_obra": "Documentação não classificada como obra", "backtest_ok": "Back-test da regra ≥ 85%",
+                 "exif_conferido": "EXIF conferido", "relatorio_gerado": "Relatório de fim de lote gerado"}
+
+
+def ler_aceite(pasta: str | Path) -> dict | None:
+    """CV2 §10 (contrato 9.4): o "aceite" do JSON de lote mais recente em catalogacao/lotes/. None = o CV2 não gravou."""
+    d = Path(pasta) / "catalogacao" / "lotes"
+    if not d.is_dir():
+        return None
+    for f in sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        j = _json(f)
+        if isinstance(j, dict) and isinstance(j.get("aceite"), dict):
+            return {**j["aceite"], "_arquivo": f.name}
+    return None
+
+
+def itens_aceite(aceite: dict | None) -> list[dict]:
+    """Os itens do checklist como lista {chave, rotulo, ok, detalhe} (ok None = não informado)."""
+    if not aceite:
+        return []
+    out = []
+    for k, v in aceite.items():
+        if k in ("publicavel", "pendencias") or k.startswith("_"):
+            continue
+        ok = v.get("ok") if isinstance(v, dict) else v if isinstance(v, bool) else None
+        det = (v.get("contagem") if isinstance(v, dict) else None)
+        out.append({"chave": k, "rotulo": ROTULO_ACEITE.get(k, k.replace("_", " ").capitalize()), "ok": ok, "detalhe": det})
+    return out
+
+
+def motivos_aceite(aceite: dict | None) -> list[str]:
+    if not aceite:
+        return []
+    pend = aceite.get("pendencias")
+    if isinstance(pend, list) and pend:
+        return [str(x.get("mensagem") or x.get("item") or x) if isinstance(x, dict) else str(x) for x in pend]
+    return [i["rotulo"] for i in itens_aceite(aceite) if i["ok"] is False]
+
+
 def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     """Campos do bloco 'projeto' do pacote como SUGESTÃO. Só sugere onde o painel está vazio (ou com o título provisório 'P0001'):
     nunca propõe trocar o que uma pessoa já escreveu."""
@@ -106,6 +148,7 @@ def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) 
         "sugestoes": [x for x in sugestoes_projeto(pac, projeto) if f"sugestao:{x['campo']}" not in (respostas or {})],
         "respostas": respostas or {},
         "capa_sugerida": ((pac or {}).get("projeto") or {}).get("capa_sugerida") if pac else None,
+        "aceite": (lambda a: {"publicavel": a.get("publicavel"), "itens": itens_aceite(a), "motivos": motivos_aceite(a), "arquivo": a.get("_arquivo")} if a else None)(ler_aceite(pasta)),
         "execucao": (pac or {}).get("execucao") if pac else None,
         "relatorio": ler_relatorio(_texto(cat / "relatorio.txt")),
         "decisoes": _json(cat / "decisoes.json"),

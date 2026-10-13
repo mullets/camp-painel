@@ -3613,6 +3613,35 @@ def filho(modo):
             and connect().execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F086' AND campo='pendente_descricao_no_site'").fetchone()[0] == 1, str(r))
         ver("enviar à mão com o site fora: 502 com o motivo", x.post("/api/fundos/F086/descricao-site").status_code == 502)
         print("\n".join(res))
+    elif modo == "cv2_aceite":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from app.saidas_cv import ler_aceite, itens_aceite, motivos_aceite
+        from app.publicacao import condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pasta = _P(tempfile.mkdtemp()) / "F080-P0001 - Casa"; (pasta / "catalogacao" / "lotes").mkdir(parents=True)
+        ver("sem catalogacao/lotes/*.json: sem aceite (não trava nada)", ler_aceite(pasta) is None)
+        (pasta / "catalogacao" / "lotes" / "lote-1.json").write_text(_j.dumps({"aceite": {"contagem_origem_igual_saida": {"ok": True, "contagem": 14},
+            "sem_autoria_divergente": {"ok": False, "contagem": 2}, "exif_conferido": True, "publicavel": False,
+            "pendencias": ["2 folhas com autoria divergente"]}}))
+        a = ler_aceite(pasta)
+        ver("lê o aceite do JSON do lote e lista os itens com ✔/✖", a and a["publicavel"] is False and [(i["chave"], i["ok"]) for i in itens_aceite(a)] == [("contagem_origem_igual_saida", True), ("sem_autoria_divergente", False), ("exif_conferido", True)], str(itens_aceite(a)))
+        ver("o motivo vem das pendências do CV2", motivos_aceite(a) == ["2 folhas com autoria divergente"])
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F080','Fundo Aceite','FAC',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F080',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F080-P0001','F080',1,'Casa',1960)")
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aceite_json) VALUES ('Lote','F080-P0001',?,'revisao',?)", (str(pasta), _j.dumps(a)))
+        c.commit()
+        P = lambda: c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F080-P0001'").fetchone()  # noqa: E731
+        g = condicoes_projeto(c, P()); ac = next((x for x in g["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("aceite reprovado TRAVA a publicação (mesma regra única), com o motivo", ac and ac["bloqueia"] and not ac["ok"] and "autoria divergente" in ac["detalhe"], str(ac))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
+        ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("aceite aprovado libera", ac and ac["ok"])
+        c.close()
+        print("\n".join(res))
     elif modo == "b2_resolucao":
         init_db(); _aplicar_migracoes_real()
         import tempfile
@@ -4405,6 +4434,14 @@ else:
 print("70) B6 importar inventário de projetos por planilha (CSV/XLSX) com prévia")
 rc, out = rodar("b6_planilha", f"{tmp}/b6.db")
 if rc != 0: ok(False, f"teste B6 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("71) CV2 §10 aceite do lote como portão de publicação")
+rc, out = rodar("cv2_aceite", f"{tmp}/cv2a.db")
+if rc != 0: ok(False, f"teste do aceite não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

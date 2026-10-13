@@ -47,6 +47,20 @@ def condicoes_projeto(con, p) -> dict:
                   "acao": None if livre else ({"tipo": "autoria", "rotulo": "É de outro autor? Registrar coautoria/terceiros", "alvo": codigo} if div and not _outros_bloqueantes(con, codigo)
                                                else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo})})   # B4: autoria divergente pode ser coautoria, não só bloqueio
 
+    # CV2 §10 (contrato 9.4): o lote mais recente do projeto com aceite reprovado trava a publicação
+    la = con.execute("""SELECT id, aceite_json FROM lista_processamento WHERE projeto_codigo=? AND aceite_json IS NOT NULL
+                        ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
+    if la:
+        from .saidas_cv import motivos_aceite
+        try:
+            ac = json.loads(la["aceite_json"])
+        except ValueError:
+            ac = {}
+        aceito = ac.get("publicavel") is not False
+        conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
+                      "detalhe": None if aceito else "O CAMP Vision reprovou o lote: " + "; ".join(motivos_aceite(ac) or ["sem motivo informado"]),
+                      "acao": None if aceito else {"tipo": "revisao", "rotulo": "Ver o lote", "alvo": codigo}})
+
     teste = bool(p["lote_teste"])
     conds.append({"id": "teste", "bloqueia": True, "ok": not teste, "texto": "Não é lote de teste",
                   "detalhe": "Lote de teste não vai ao ar" if teste else None, "acao": None})

@@ -124,7 +124,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     resultado["importacao"] = {**resumo, "por": ator}
     if isinstance(pacote.get("execucao"), dict):                 # custo, tempo e versão do lote (cartão 152)
         con.execute("UPDATE lista_processamento SET execucao_json=? WHERE id=?", (json.dumps(pacote["execucao"], ensure_ascii=False), lote_id))
-    con.execute("UPDATE lista_processamento SET resultado=?, atualizado_em=datetime('now') WHERE id=?", (json.dumps(resultado, ensure_ascii=False), lote_id))
+    from .saidas_cv import ler_aceite
+    aceite = ler_aceite(pasta)   # CV2 §10: o aceite do lote fica no painel e vira condição de publicar
+    con.execute("UPDATE lista_processamento SET resultado=?, aceite_json=?, atualizado_em=datetime('now') WHERE id=?",
+                (json.dumps(resultado, ensure_ascii=False), json.dumps(aceite, ensure_ascii=False) if aceite else None, lote_id))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folhas_importadas_do_lote',?,?)",
                 (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))
     return resumo
