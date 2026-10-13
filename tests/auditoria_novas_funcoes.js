@@ -84,7 +84,7 @@ Q.value='Taru'; Q.dispatchEvent(new w.Event('input')); await sleep(900);
 chk(QR.classList.contains('open')&&QR.querySelectorAll('[data-search-index]').length>=1,'busca UI: sem resultados para "Taru"'); chk(QR.textContent.includes('Casa Tarumã'),'busca UI: não mostra Casa Tarumã');
 Q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})); Q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true})); await sleep(900);
 chk(w.location.hash==='#projeto/F026-P0001','busca UI: teclado ↓ + Enter não abriu o projeto (hash='+w.location.hash+')');
-Q.value='zzzzqqq'; Q.dispatchEvent(new w.Event('input')); await sleep(900); chk(QR.textContent.includes('Nenhum resultado'),'busca UI: sem mensagem de zero resultados'); Q.value=''; QR.classList.remove('open');
+Q.value='zzzzqqq'; Q.dispatchEvent(new w.Event('input')); await sleep(900); chk(/Nenhum resultado|Nada encontrado/.test(QR.textContent),'busca UI: sem mensagem de zero resultados'); Q.value=''; QR.classList.remove('open');
 okl.push('busca UI: digitar, ↓, Enter, zero resultados');
 // recentes e favoritos
 const rec=JSON.parse(w.localStorage.getItem('camp.recentes')||w.localStorage.getItem('camp.recentes:rafael@camp.arq.br')||'null');
@@ -168,7 +168,7 @@ await w.showProjeto('F001-P0001','itens'); await sleep(1000);
 const cardsSem=[...d.querySelectorAll('#pd .thumb')]; chk(cardsSem.length>=2,'projeto sem imagens: cards não apareceram ('+cardsSem.length+')');
 chk(cardsSem.every(c=>c.querySelector('.sem-imagem')),'folha sem imagem deveria mostrar a caixa "Sem imagem"');
 chk(!d.querySelector('#pd .thumb svg'),'PLANTA FALSA: a grade ainda desenha SVG inventado no lugar da imagem');
-chk(txt('#pd .sem-imagem').includes('Sem imagem'),'texto "Sem imagem" ausente');
+chk(/Sem imagem|Sem prévia/.test(txt('#pd .sem-imagem')),'texto "Sem prévia" ausente');
 await w.showProjeto('F026-P0001','itens'); await sleep(1000);
 chk(d.querySelectorAll('#pd .thumb img.img-real').length>=6,'folhas com miniatura do site deveriam mostrar a imagem real');
 chk(!d.querySelector('#pd .thumb svg'),'projeto com imagens também não pode ter SVG sintético');
@@ -1139,6 +1139,16 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H3 pendências] carregando que avisa se demorar, erro que explica com detalhe recolhido, vazios com o próximo passo ----------
+{ w.route_to('auditoria'); await sleep(1800);
+  w.tabelaCarregando('#au-body','Carregando teste…'); chk(/Carregando teste/.test(txt('#au-body')),'[H3] carregando deveria dizer o que está buscando');
+  await sleep(3200); chk(/ainda buscando/.test(txt('#au-body')),'[H3] depois de 3 s deveria avisar "ainda buscando": '+txt('#au-body'));
+  w.tabelaErro('#au-body','HTTP 500 teste','carregarAuditoria()'); chk(/Não consegui carregar esta lista/.test(txt('#au-body'))&&!!d.querySelector('#au-body .erro-det summary')&&!!d.querySelector('#au-body .retry button'),'[H3] o erro deveria explicar, ter "Tentar de novo" e o detalhe técnico recolhido');
+  await sleep(200); d.getElementById('au-q').value='zzzz-nada-assim'; await w.carregarAuditoria(); await sleep(1200);
+  const lb=[...d.querySelectorAll('#au-body button')].find(b=>/Limpar filtros/.test(b.textContent)); chk(!!lb,'[H3] a auditoria sem resultado deveria oferecer "Limpar filtros"');
+  if(lb){ lb.click(); await sleep(1500); chk(d.getElementById('au-q').value===''&&d.querySelectorAll('#au-body tr[data-audit-id]').length>0,'[H3] "Limpar filtros" deveria voltar a lista'); }
+  chk(/Sem prévia do CAMP Vision/.test(w.semImagemHTML(null,'F026-P0001-1968-S01-D00001'))&&/Pedir releitura/.test(w.semImagemHTML(null,'F026-P0001-1968-S01-D00001')),'[H3] a miniatura sem prévia deveria oferecer "Pedir releitura"');
+  okl.push('H3 pendências: carregando que avisa a demora, erro com detalhe recolhido, vazios com próximo passo'); w.route_to('painel'); }
 // ---------- [H2 pendências] glossário em ordem alfabética, palavra marcada só 1 vez por caixa, "fundo"/"folha" explicados, balão no mouse ----------
 { w.route_to('glossario'); await sleep(600); const ts=[...d.querySelectorAll('#gl-lista .gl-item b')].map(x=>x.textContent);
   chk(ts.length>=22&&ts.join('|')===[...ts].sort((a,b)=>a.localeCompare(b,'pt-BR')).join('|'),'[H2] o glossário deveria estar em ordem alfabética: '+ts.slice(0,4).join(', '));
