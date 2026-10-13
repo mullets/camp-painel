@@ -2690,6 +2690,76 @@ def filho(modo):
         r3 = ro._ler_pasta(c, certo, None)
         ver("lote com nome compatível (mesmo com prefixo de pasta) não gera aviso de nome", r3["acao"] == "nova" and "não parece" not in (r3.get("aviso") or ""), str(r3)[:200])
         for l in res: print(l)
+    elif modo == "contrato_cv2":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import auth, importador_lote, contrato as ctr
+        from fastapi import HTTPException as _HE
+        from fastapi.testclient import TestClient
+        from app.main import app
+        EX = _pl.Path(__file__).resolve().parent / "contrato"           # cópia LITERAL dos exemplos do CV2 (tests/contrato/ORIGEM.txt)
+        http_ = _j.loads((EX / "http.json").read_text(encoding="utf-8")); pacote = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(tempfile.mkdtemp())
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),)); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(raiz),)); c.commit(); c.close()
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        lan = com_ip("192.168.15.40")
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("o painel implementa a MESMA versão dos exemplos copiados do CV2", ctr.CONTRATO_PAINEL == (EX / "VERSAO").read_text(encoding="utf-8").strip(), ctr.CONTRATO_PAINEL)
+        rq = http_["reservar"]; r = lan.post(rq["caminho"], json=rq["corpo"])
+        import re as _re
+        ver("reservar com o corpo REAL do CV2 devolve um código novo daquele fundo, com o título enviado", r.status_code == 200 and bool(_re.fullmatch(r"F026-P\d{4}", r.json().get("codigo", ""))) and r.json().get("titulo") == rq["corpo"]["titulo"], f"{r.status_code} {r.text[:160]}")
+        k0 = connect(); k0.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); k0.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Edifício Tarumã',1972)"); k0.commit(); k0.close()   # o projeto dos exemplos (pacote, aviso, releitura)
+        r = lan.post("/api/estacoes/heartbeat", json=http_["heartbeat"])
+        ver("heartbeat com o corpo REAL do CV2 é aceito (contrato e quarentena incluídos)", r.status_code == 200, f"{r.status_code} {r.text[:160]}")
+        def acha(o):
+            if isinstance(o, dict):
+                if "app_contrato" in o and o.get("app_contrato") is not None: return o
+                for v in o.values():
+                    x = acha(v)
+                    if x: return x
+            if isinstance(o, list):
+                for v in o:
+                    x = acha(v)
+                    if x: return x
+            return None
+        m1 = acha(adm.get("/api/estacoes").json())
+        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == "2.1" and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
+        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "3.0"})
+        m2 = acha(adm.get("/api/estacoes").json())
+        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o 2.1" in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
+        av = http_["aviso"]; r = lan.post(av["caminho"], json=av["corpo"])
+        ver("aviso com o corpo REAL do CV2 é aceito (202), mesmo com a pasta ainda ausente", r.status_code == 202, f"{r.status_code} {r.text[:160]}")
+        pasta = raiz / av["corpo"]["pasta"]; (pasta / "catalogacao").mkdir(parents=True)
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text((EX / "pacote_tainacan.json").read_text(encoding="utf-8"), encoding="utf-8")
+        k = connect(); lid = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Tarumã','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; k.commit()
+        r1 = importador_lote.importar_lote(k, lid, "teste-contrato"); k.commit()
+        n1 = k.execute("SELECT COUNT(*) FROM item WHERE lote_id=?", (lid,)).fetchone()[0]
+        ver("o pacote REAL do CV2 é importado: uma folha por documento, com o código do CV2", n1 == len(pacote["documentos"]) and k.execute("SELECT COUNT(*) FROM item WHERE codigo=?", (pacote["documentos"][0]["codigo"],)).fetchone()[0] == 1, f"{n1} de {len(pacote['documentos'])} · {str(r1)[:160]}")
+        p2 = _cp.deepcopy(pacote)
+        for d_ in p2["documentos"]: d_["cod"] = d_.pop("codigo")
+        pasta2 = raiz / "mutante"; (pasta2 / "catalogacao").mkdir(parents=True); (pasta2 / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p2, ensure_ascii=False), encoding="utf-8")
+        lid2 = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Mutante','F026-P0001',?,'revisao')", (str(pasta2),)).lastrowid; k.commit()
+        try:
+            importador_lote.importar_lote(k, lid2, "teste-contrato"); k.commit(); n2 = k.execute("SELECT COUNT(*) FROM item WHERE lote_id=?", (lid2,)).fetchone()[0]
+        except _HE:
+            k.rollback(); n2 = -1
+        ver("trocar um campo do exemplo (documentos[].codigo → cod) faz a importação falhar: o teste é sensível ao contrato", n2 != len(pacote["documentos"]), f"importou {n2}")
+        k.execute("INSERT INTO pedido_releitura (id, projeto_codigo, pedido_por, estado) VALUES (7,'F026-P0001','adm@camp.arq.br','pedido')")
+        k.execute("INSERT INTO pedido_releitura (id, projeto_codigo, item_codigo, pedido_por, estado) VALUES (8,'F026-P0001',?,'adm@camp.arq.br','cancelado')", (pacote["documentos"][0]["codigo"],)); k.commit()
+        ini, con_ = http_["iniciado"], http_["concluido"]
+        ri = lan.post(ini["caminho"], json=ini["corpo"]); rc_ = lan.post(con_["caminho"], json=con_["corpo"])
+        ver("releitura: 'iniciado' e 'concluido' com os corpos REAIS do CV2 são aceitos", ri.status_code == 200 and rc_.status_code == 200 and k.execute("SELECT estado FROM pedido_releitura WHERE id=7").fetchone()[0] == "concluido", f"{ri.status_code} {ri.text[:80]} | {rc_.status_code} {rc_.text[:120]}")
+        r9 = lan.post(ini["caminho"].replace("/7/", "/8/"), json=ini["corpo"])
+        ver("releitura cancelada: 'iniciado' recebe 409 (o CV2 desiste)", r9.status_code == 409, f"{r9.status_code} {r9.text[:120]}")
+        for l in res: print(l)
     elif modo == "direitos_opcional":
         init_db(); _aplicar_migracoes_real()                      # SEM ligar a exigência: é o padrão de produção
         from app.rotas_gestao import direitos_permitem_publicar as dpp
@@ -3179,6 +3249,14 @@ else:
 print("45) #156 prevenção: decisões repetidas viram uma, subpasta TIFF ignorada, aviso de nome de lote diferente")
 rc, out = rodar("prevencao_lote", f"{tmp}/prev.db")
 if rc != 0: ok(False, f"teste da prevenção não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("46) #150 contrato do CV2: os testes usam os exemplos REAIS copiados do campvision-new (tests/contrato)")
+rc, out = rodar("contrato_cv2", f"{tmp}/contrato.db")
+if rc != 0: ok(False, f"teste do contrato não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

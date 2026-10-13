@@ -254,6 +254,8 @@ class HeartbeatEstacao(BaseModel):
     fila: int | None = None
     hoje: dict | None = None
     montagens: dict | None = None
+    contrato: str | None = None          # versão do contrato que o CV2 fala (2.1+)
+    quarentena: dict | None = None       # {arquivos, gb, ultima_replica, aviso} (cartão 149)
 
 
 @app.post("/api/estacoes/projetos/reservar")
@@ -377,7 +379,7 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
           (d.hostname or "")[:120] or None, (d.ip_local or "")[:64] or None,
           estado, (d.fundo_codigo or "")[:16] or None, ((d.projeto_codigo or d.projeto) or "")[:32] or None,
           (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem,
-          json.dumps({k: v for k, v in (("progresso", d.progresso), ("fila", d.fila), ("hoje", d.hoje), ("montagens", d.montagens)) if v is not None},
+          json.dumps({k: v for k, v in (("progresso", d.progresso), ("fila", d.fila), ("hoje", d.hoje), ("montagens", d.montagens), ("contrato", d.contrato), ("quarentena", d.quarentena)) if v is not None},
                      ensure_ascii=False)[:4000] or None))
     con.commit(); con.close()
     return {"ok": True, "estacao_id": estacao_id, "estado": estado}

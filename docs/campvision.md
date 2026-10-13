@@ -4,6 +4,8 @@ Este documento é o contrato que o **CAMP Vision 2 (CV2)** segue para falar com 
 (`tests/teste_backend.py`, bloco "Contrato com o CAMP Vision 2"). O que ainda **não** existe está na seção 9.
 Repositório oficial do CV2: `github.com/mullets/campvision-new` (o `campvision2` é o app antigo, com YOLO/Tesseract: não usar).
 
+> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.1** (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
+
 ## 1. Visão geral
 ```
 estações de captura ─▶ QNAP: Arquivos/100 - Scanners  ─▶  CV2 (Ubuntu .40)  ─▶  QNAP: Fundos e Escritorios/ACERVOS_CAMP  ─▶  painel (.60)
@@ -16,68 +18,16 @@ estações de captura ─▶ QNAP: Arquivos/100 - Scanners  ─▶  CV2 (Ubuntu 
 - Painel: `http://192.168.15.60:8000`.
 
 ## 2. Estrutura da pasta final (fixa e rasa)
-```
-/mnt/qnap/acervos/Fundos e Escritorios/ACERVOS_CAMP/
-  <Fundo>/
-    01 - Projetos/
-      <Fxxx-Pxxxx - Nome>/          ← UM LOTE = esta pasta (tem info_projeto.json e status.json)
-        info_projeto.json
-        status.json
-        <série>/                    ← Plantas, Fotografias, Documentos... (as imagens ficam aqui)
-```
-- **Um lote é a pasta do projeto** (a que contém `info_projeto.json` e/ou `status.json`). O painel não entra em outra pasta dentro dele.
-- O painel conta **DOCUMENTOS**, não arquivos: a chave é (série, nome sem extensão), com a série sendo a primeira pasta abaixo da do projeto. Cada formato pode ficar numa subpasta própria dentro da série
-  (`<série>/TIF/F026-P0006-1975-S01-D00001.tif` e `<série>/JPG/F026-P0006-1975-S01-D00001.jpg` são **um** documento, com dois formatos). Extensões: `.jpg .jpeg .tif .tiff .dng .png`. **PDF não é contado** (ver seção 9).
-  Lixeira e ocultos do QNAP (`@Recycle`, `@eaDir`, `#recycle`, nomes com ponto) são ignorados.
-- Na **página do projeto**, o painel "Encontradas no QNAP, ainda não catalogadas no painel" lista os documentos da pasta do lote que ainda não são folhas do painel (com prévia quando há JPG). A lista de folhas do projeto vem do
-  banco (itens do site e itens locais); **importar o lote para virar folha é a revisão pós-CAMP Vision, que ainda não existe**.
-- O nome da pasta do projeto **deve começar pelo código** (`F002-P0002 - Igreja...`): é o último recurso do painel para descobrir o projeto (seção 3).
+
+Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvision-new/docs/contrato-painel.md` (Contrato 2.1 — 10/10/2026, commit f8c8a69 do campvision-new). Cópia literal e exemplos reais em `tests/contrato/` (ver `tests/contrato/ORIGEM.txt`); os testes do painel usam esses arquivos.
 
 ## 3. `info_projeto.json` (na pasta do projeto)
-```json
-{
-  "codigo": "F002-P0002",
-  "nome": "Igreja Paróquia Mãe do Salvador",
-  "folhas_esperadas": 19,
-  "estacao": "contex1",
-  "tipo_estacao": "contex",
-  "operador": "Beatriz",
-  "operador_email": "beatriz@camp.arq.br",
-  "fundo_codigo": "F002",
-  "teste": false
-}
-```
-| Chave | Obrigatória | O que o painel faz |
-|---|---|---|
-| `codigo` | **sim** | Código do projeto (`Fxxx-Pxxxx`). Tem que existir no painel. Aceita também `projeto_codigo` |
-| `nome` | não | Nome do lote nas Filas (aceita `titulo`; senão usa o nome da pasta) |
-| `folhas_esperadas` | recomendada | Quantas folhas deveriam existir; o painel compara com as encontradas (aceita `itens_esperados` ou `quantidade`) |
-| `estacao`, `tipo_estacao`, `operador`, `operador_email`, `fundo_codigo` | não | Guardados com o lote, para saber quem digitalizou |
-| `teste` | não | **`true` = o lote é ignorado.** Também são ignoradas pastas chamadas `teste`, `asd` e `sei la` |
 
-**Como o painel descobre o código do projeto** (usa o primeiro que achar): `codigo` / `projeto_codigo` do `info_projeto.json` → `codigo` do `status.json`
-→ nome da pasta → nome da pasta-mãe + nome da pasta. **Se o código não existir no painel, o lote é ignorado** ("sem código de projeto reconhecido").
+Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvision-new/docs/contrato-painel.md` (Contrato 2.1 — 10/10/2026, commit f8c8a69 do campvision-new). Cópia literal e exemplos reais em `tests/contrato/` (ver `tests/contrato/ORIGEM.txt`); os testes do painel usam esses arquivos.
 
 ## 4. `status.json` (na pasta do projeto)
-```json
-{ "status": "pronto", "codigo": "F002-P0002", "fase": "organizado", "atualizado_em": "2026-10-07T18:30:00-03:00" }
-```
-Só `status` (e `codigo`) são lidos. Qualquer outra chave (`fase`, `mensagem`, `erro`, `campvision2_pranchas`...) é **guardada com o lote e mostrada, mas não interpretada**.
 
-### Valores de `status` que o painel entende
-| Valor | Etapa na fila do painel | Observação |
-|---|---|---|
-| **`processando`** | Processando | Aparece nas Filas; **não pede revisão** nem conta como pendência |
-| **`pronto`** | **Revisão** | Pede revisão humana. Nada é publicado sozinho |
-| **`erro`** | Erro | Aparece nas Filas com o erro |
-| *(antigos)* `enviado_windows` | Processando | Aceito por compatibilidade |
-| *(antigos)* `campvision_concluido`, `pronto_campvision2`, ou **sem status** | Revisão | Aceitos por compatibilidade |
-| qualquer outro valor | Revisão **+ aviso** | A varredura devolve `avisos` com o valor desconhecido |
-
-Regras:
-- **Lote já publicado ou em rascunho nunca volta atrás**, mesmo que o CV2 grave `processando` de novo.
-- Um lote pode mudar de etapa entre varreduras (`processando` → `pronto`); isso fica na auditoria.
-- JSON inválido ou vazio: o lote é ignorado ("manifesto inválido").
+Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvision-new/docs/contrato-painel.md` (Contrato 2.1 — 10/10/2026, commit f8c8a69 do campvision-new). Cópia literal e exemplos reais em `tests/contrato/` (ver `tests/contrato/ORIGEM.txt`); os testes do painel usam esses arquivos.
 
 ## 5. Como o painel fica sabendo de um lote
 - **Aviso do CV2 (o caminho normal):** `POST /api/campvision/aviso`, a cada troca de `status`. O painel relê **só aquela pasta**; a fila enche sozinha (seção 6.4).
@@ -86,57 +36,8 @@ Regras:
 - A varredura anda por **toda** a pasta final. Por isso a estrutura deve ser rasa e fixa (seção 2).
 
 ## 6. Chamadas HTTP (CV2 → painel)
-Base: `http://192.168.15.60:8000`. Sem login. A regra (`app/rede.py`):
-- **Sem `estacao.token` configurado:** só vale a rede local (192.168.x.x ou 10.x.x.x). De fora, ou passando por proxy/túnel (cabeçalhos `X-Forwarded-For`, `CF-Connecting-IP`...): **403**.
-- **Com `estacao.token` configurado** (Configurações; valor sensível, que só o administrador vê): o cabeçalho **`X-Camp-Token`** é **obrigatório para todos**. Sem ele ou errado: **401**, mesmo de dentro da rede local. Um token válido vale **até de fora** da rede local (é para estações atrás de túnel).
-  O CV2 deve ler o token de uma variável de ambiente (ex.: `CAMP_PAINEL_TOKEN`) e **nunca gravá-lo no repositório**.
 
-### 6.1 `GET /api/estacoes/contexto` — fundos e próximo número de projeto
-```json
-{ "fundos": [ { "codigo_fundo": "F002", "prefixo": "AMA", "nome": "Arnaldo Martino", "ultimo_projeto": "P0002", "proximo_projeto": "P0003" } ] }
-```
-Com `?fundo=F002` a resposta inclui também `"projetos"`: lista de `{ codigo, numero_projeto, projeto, ano, cidade, identificacao_original }`. Fundo inexistente ou inativo: **404**. Só aparecem fundos ativos que têm sigla (`prefixo`).
-
-### 6.2 `POST /api/estacoes/projetos/reservar` — cria o projeto com o contador oficial
-Corpo: `fundo_codigo` e `titulo` (obrigatórios); `ano` (0 = sem data; 1800–2100), `cidade`, `identificacao_original`, `operador`, **`chave_reserva`** (uuid de 32 caracteres hexadecimais).
-```json
-{ "fundo_codigo": "F002", "titulo": "Igreja Paróquia Mãe do Salvador", "ano": 1977, "cidade": "São Paulo/SP", "operador": "Beatriz", "chave_reserva": "0f8e...32 hex" }
-```
-Resposta: `{ "codigo": "F002-P0003", "numero_projeto": "P0003", "fundo_codigo": "F002", "titulo": "...", "ano": 1977, "cidade": "...", "identificacao_original": null }`.
-- **Idempotente:** repetir a chamada com a **mesma `chave_reserva`** devolve o **mesmo projeto**, sem criar outro. Use sempre uma chave e repita em caso de timeout. Chave diferente = próximo número.
-- Erros: título vazio **400**; ano inválido **400**; fundo inexistente **400/404**.
-- O **número P vem sempre daqui**: o CV2 nunca inventa número.
-- **O painel verifica antes de criar.** Se já existe, no **mesmo fundo**, projeto com nome, identificação original, ano e cidade parecidos, ele **não cria**: abre uma **decisão** para uma pessoa ("é o mesmo? adiciono ao existente ou crio novo?") e responde **202**
-  `{"pendente": true, "decisao_id": N, "mensagem": "..."}`, **sem `codigo`**. O CV2 trata como "sem número ainda": espera e **tenta de novo com a MESMA `chave_reserva`** (obrigatório mandar sempre a mesma chave).
-  Depois da decisão, a mesma chamada devolve **200**: o código do projeto **existente** escolhido (com `"existente": true` e `decisao_id`: **adicione o material a esse projeto, não crie pasta nova**) ou o de um projeto **novo** criado.
-- `confirmar_novo: true` (opcional) pula a verificação: use só se a pessoa na estação já viu a lista de projetos do fundo e escolheu criar um novo.
-- Nome que só difere por número ou letra ("Casa 1" x "Casa 2", "Torre A" x "Torre B") **não** é considerado parecido.
-
-### 6.3 `POST /api/estacoes/heartbeat` — "estou vivo e fazendo isto"
-**Serve para o CV2** e aceita **o que o CV2 realmente manda** (`docs/contrato-painel.md` do campvision-new). Use:
-| Campo | Valor para o CV2 |
-|---|---|
-| `estacao_id` | **`campvision2`** para a máquina `.40` (minúsculas, até 64 caracteres). A cópia do Mac, se existir, deve usar outro id (ex.: `campvision2-mac`): ela é aceita, mas só `campvision2` aparece em Estações |
-| `tipo_estacao` | **`campvision`** |
-| `app` | `campvision-new` |
-| `estado` | **`vigiando`**, **`processando`**, **`pasta indisponível`** ou **`erro`** (os do CV2). Também aceitos: `ocioso`, `capturando`, `finalizando`, `backup` (estações de captura) |
-| `versao`, `hostname`, `ip_local` | opcionais (`192.168.15.40`) |
-| `projeto` (ou `projeto_codigo`), `fundo_codigo` | o que está processando agora (opcional) |
-| `progresso` (`{feitos, total}`), `fila`, `hoje` (`{projetos, imagens, erros, custo_usd}`), `montagens` (`{entrada, acervo}`) | opcionais; ficam guardados e aparecem em Estações (`app_detalhe`) |
-| `operador`, `ultimo_erro` | opcionais (`ultimo_erro` até 500 caracteres) |
-
-- Envie **a cada 30 s** (ou no máximo a cada 60 s): **mais de 75 s sem heartbeat = "app offline"** em Estações. É o que mostra "o que está fazendo" no painel.
-- Resposta: `{ "ok": true, "estacao_id": "campvision2", "estado": "processando" }`. `tipo_estacao` ou `estado` inválidos: **400**.
-- O heartbeat nunca deve travar o CV2: use timeout curto (3–5 s) e ignore falhas.
-
-### 6.4 `POST /api/campvision/aviso` — "acabei de mudar este projeto, olhe só ele"
-Corpo: `{"codigo": "F002-P0002", "pasta": "F002 - BSG.../01 - Projetos/F002-P0002 - Residência X", "status": "pronto", "em": "..."}`. Responde **202**.
-- `pasta`: relativa à raiz final do painel (`qnap.prontos_raiz`), ou absoluta **dentro** dela. A própria raiz, vazio e qualquer caminho que escape dela (`../`, `/etc`) são recusados com **400**.
-- O painel lê o **`status.json` do disco**; o `status` do aviso é só uma dica (o aviso não manda no estado).
-- `codigo` (opcional): se não bater com o projeto da pasta, **nada é importado** (`ok: false`).
-- Resposta: `{ok, acao, etapa, codigo, folhas, pasta}` com `acao` = `nova` | `atualizada` | `igual` | `ignorada` (esta com `motivo`). Pasta ainda não visível pelo SMB: `ok: false` ("não encontrada (ainda?)"); o CV2 pode avisar de novo.
-- Pasta da **entrada bruta** é recusada (`ok: false`): o painel só lê o material final.
-- Mesma regra de rede e token da seção 6. Depois de uma queda do painel, o CV2 reenvia o aviso mais recente de cada projeto.
+Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvision-new/docs/contrato-painel.md` (Contrato 2.1 — 10/10/2026, commit f8c8a69 do campvision-new). Cópia literal e exemplos reais em `tests/contrato/` (ver `tests/contrato/ORIGEM.txt`); os testes do painel usam esses arquivos.
 
 ## 7. O que o CV2 deve fazer, em ordem
 1. Ao iniciar: ler `GET /contexto` (fundos e próximos números) e começar o heartbeat (`ocioso`).
@@ -216,22 +117,8 @@ O botão "Ver página pública" antes **presumia** o endereço e errava (caso F0
 - **Publicado no painel não quer dizer "com folhas no site"**: a página pode existir como **registro de inventário** (0 documentos) quando só o dossiê do projeto foi publicado. As estatísticas do fundo na página do arquiteto também podem ficar em cache no site.
 
 ## 14. "Ler dados agora": pedido de releitura ao CAMP Vision
-O botão **Ler dados agora** (página da folha, janela de revisão e painel de revisão do projeto) **não chama o CAMP Vision**: ele não escuta, o fluxo é de mão única. O painel registra um **pedido** e o CV2 **pergunta** (como no heartbeat).
 
-**Lado do painel (feito):** tabela `pedido_releitura` (um pedido aberto por alvo: o projeto inteiro ou uma folha), rotas para as pessoas (`POST /api/itens/{c}/releitura`, `POST /api/projetos/{c}/releitura`, `GET` do estado, `POST /api/releituras/{id}/cancelar`) e as três rotas do CV2 abaixo.
-A tela diz a verdade: enquanto o CV2 nunca tiver consultado, mostra "o CAMP Vision ainda não consulta pedidos de releitura: o pedido fica guardado".
-
-**Lado do CAMP Vision (feito em campvision-new, versão 2026-10-09-04; ver docs/contrato-painel.md §12 de lá):** rede local + `X-Camp-Token`, como no heartbeat.
-1. `GET /api/estacoes/pedidos-releitura?estacao=campvision2` -> `{"pedidos":[{"id","escopo":"folha"|"projeto","projeto_codigo","item_codigo"|null,"motivo","pedido_em","estado","pasta_relativa"}]}`.
-   `pasta_relativa` é relativa a `ACERVOS_CAMP` (o caminho do painel não é o do CV2). Consultar a cada ~1 min junto do heartbeat. A primeira consulta já faz o painel passar a dizer que o CV2 atende pedidos.
-2. `POST /api/estacoes/pedidos-releitura/{id}/iniciado` `{"estacao":"campvision2"}` ao começar. **409 = pedido já encerrado: não ler.**
-3. Reler **só o escopo** (uma folha, ou o projeto), regravando o `catalogacao/pacote_tainacan.json` (e o resto), e então `POST /api/estacoes/pedidos-releitura/{id}/concluido` `{"ok": true|false, "mensagem": "..."}`.
-   `ok:false` marca o pedido como falhou e **não importa nada**. `ok:true` faz o painel **importar de novo o pacote** do lote mais recente do projeto.
-
-**Garantias do painel ao importar de novo:** só atualiza folha ainda pendente; **nunca** sobrescreve folha que uma pessoa já revisou nem a que já está no site; lote já aprovado não é tocado (o painel avisa que é preciso reabrir a revisão).
-**Ainda não faz (fase 2):** mostrar a "nova leitura" ao lado da leitura revisada, por campo, para a pessoa escolher. Hoje a nova leitura de uma folha revisada é ignorada, de propósito.
-**Custo:** reler gasta chamadas da API do modelo; a confirmação na tela avisa.
-
+Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvision-new/docs/contrato-painel.md` (Contrato 2.1 — 10/10/2026, commit f8c8a69 do campvision-new). Cópia literal e exemplos reais em `tests/contrato/` (ver `tests/contrato/ORIGEM.txt`); os testes do painel usam esses arquivos.
 
 ## 15. Número P nunca reusado (CV-27) e arquivo de origem (CV-01)
 - **CV-27:** o próximo P de um fundo (`projetos_novos.proximo_numero`) é o MAIOR entre:
