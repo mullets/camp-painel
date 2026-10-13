@@ -49,7 +49,7 @@ def condicoes_projeto(con, p) -> dict:
     lote_sem_aprovar = con.execute("""SELECT COUNT(*) FROM lista_processamento l WHERE l.projeto_codigo=? AND l.aprovado_em IS NULL AND l.etapa IN ('revisao','rascunho')
                                        AND EXISTS (SELECT 1 FROM item i WHERE i.lote_id=l.id)""", (codigo,)).fetchone()[0]
     if nao_conf and prontas == 0:
-        rev_msg, rev_rot = f"{nao_conf} folha(s) esperam conferência na Revisão do lote", "Conferir as folhas"
+        rev_msg, rev_rot = (f"1 folha espera" if nao_conf == 1 else f"{nao_conf} folhas esperam") + " conferência na Revisão do lote", "Conferir as folhas"
     elif lote_sem_aprovar:
         rev_msg, rev_rot = "O lote ainda não foi aprovado na Revisão do lote", "Aprovar o lote"
     else:
@@ -61,10 +61,15 @@ def condicoes_projeto(con, p) -> dict:
     elegiveis = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL}", (codigo,)).fetchone()[0]
     vinculados = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (codigo,)).fetchone()[0]
     dossie = bool(p["tainacan_item_id"])
-    ok_site = dossie or elegiveis > 0
+    # #95: ✔ só com pelo menos uma folha no site (o dossiê sozinho dava um verde enganoso com "0 de N folhas");
+    # projeto sem nenhuma folha que possa ir ao site (só o dossiê) continua ok com o dossiê
+    ok_site = elegiveis > 0 or (dossie and prontas == 0)
+    sem_folha = dossie and not ok_site
     conds.append({"id": "site", "bloqueia": True, "ok": ok_site,
-                  "texto": f"Existe no site: dossiê {'sim' if dossie else 'não'} · {elegiveis} de {total} folha(s)",
-                  "detalhe": None if ok_site else "O projeto ainda não tem nenhum registro no site. Envie as folhas ao site (ficam como rascunho) antes de publicar",
+                  "texto": (f"Existe no site: dossiê sim · nenhuma folha no site ({total} no painel)" if sem_folha else
+                            f"Existe no site: dossiê {'sim' if dossie else 'não'} · {elegiveis} de {total} folha(s)"),
+                  "detalhe": None if ok_site else ("Envie as folhas ao site (ficam como rascunho) antes de publicar" if sem_folha else
+                                                   "O projeto ainda não tem nenhum registro no site. Envie as folhas ao site (ficam como rascunho) antes de publicar"),
                   "acao": None if ok_site else {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site" if dossie else "Criar no site e enviar folhas", "alvo": codigo}})
 
     # avisos: não bloqueiam

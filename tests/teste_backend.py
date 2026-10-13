@@ -3115,6 +3115,33 @@ def filho(modo):
         e2 = connect().execute("SELECT situacao, entregue_em FROM solicitacao WHERE id=?", (sid,)).fetchone()
         ver("desfazer 'entregue' volta a situação e limpa a data de entrega", e1 is not None and e2[0] == "em_preparacao" and e2[1] is None, f"{e1} {tuple(e2)}")
         print("\n".join(res))
+    elif modo == "p95_site":
+        init_db(); _aplicar_migracoes_real()
+        from app.publicacao import condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F082','Fundo 95','FNV',1)")
+        for n, tid in ((1, 8001), (2, 8002), (3, None)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F082',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?,?,?,?,1970,?)", (f"F082-P{n:04d}", "F082", n, f"T10{n}_Casa {n}", tid))
+        for i in (1, 2):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'campvision')", (f"F082-P0001-1970-S01-D{i:05d}", "F082-P0001", "S01", i, f"Folha {i}"))
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L', 'F082-P0003', '/x', 'revisao')")
+        lid = c.execute("SELECT id FROM lista_processamento").fetchone()[0]
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao) VALUES ('F082-P0003-1970-S01-D00001','F082-P0003','S01',1,'F',?, ?, 'pendente')", ("campvision", lid))
+        c.commit()
+        site = lambda cod: next(x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo=?", (cod,)).fetchone())["condicoes"] if x["id"] == "site")
+        s1 = site("F082-P0001")
+        ver("dossiê no site mas 0 de 2 folhas: NÃO fica verde e diz 'nenhuma folha no site'", not s1["ok"] and "nenhuma folha no site" in s1["texto"] and s1["acao"]["rotulo"] == "Enviar folhas ao site", str(s1))
+        c.execute("UPDATE item SET tainacan_item_id=9001 WHERE codigo='F082-P0001-1970-S01-D00001'"); c.commit()
+        s1b = site("F082-P0001")
+        ver("com 1 folha no site, fica verde (1 de 2)", s1b["ok"] and "1 de 2" in s1b["texto"], str(s1b))
+        ver("projeto só com o dossiê (nenhuma folha no painel) continua ok", site("F082-P0002")["ok"])
+        rv = next(x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo='F082-P0003'").fetchone())["condicoes"] if x["id"] == "revisao")
+        ver("singular: '1 folha espera conferência'", rv["detalhe"].startswith("1 folha espera conferência"), rv["detalhe"])
+        c.close()
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3754,6 +3781,14 @@ else:
 print("54) H4 ações longas viram tarefa: backup, enviar folhas, andamento, 'já rodando', chip do topo, falhas, interrompida, Desfazer do pedido")
 rc, out = rodar("tarefas_h4", f"{tmp}/tarefas_h4.db")
 if rc != 0: ok(False, f"teste das tarefas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("55) #95 página do projeto: o requisito 'Existe no site' só fica verde com folha no site; singular/plural")
+rc, out = rodar("p95_site", f"{tmp}/p95.db")
+if rc != 0: ok(False, f"teste #95 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

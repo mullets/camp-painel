@@ -200,7 +200,7 @@ chk(txt('#v-projeto').includes('Ver página pública')&&[...d.querySelectorAll('
 w.route_to('projeto/F003-P0001'); await sleep(1500);
 chk([...d.querySelectorAll('#v-projeto a')].some(a=>a.href==='https://camp.arq.br/acervo/projetos/f003-p0001-slug-real-do-plugin/'),'o link deveria usar o endereço REAL da página (do espelho do site), não o montado: '+[...d.querySelectorAll('#v-projeto a')].map(a=>a.href).filter(h=>/acervo\/projetos/.test(h)).join(' | '));
 w.route_to('projeto/F001-P0001'); await sleep(1500);
-chk(!txt('#v-projeto').includes('Ver página pública')&&txt('#v-projeto').includes('Abrir no site (não publicado)'),'página real em RASCUNHO no site não pode oferecer "Ver página pública": '+txt('#v-projeto .act').slice(0,100));
+chk(!txt('#v-projeto').includes('Ver página pública')&&!/Abrir no site/.test(txt('#v-projeto .dethdr'))&&txt('#v-projeto').includes('ainda não é pública'),'[#95] página real em RASCUNHO no site: nem "Ver página pública" nem link para uma página que dá erro (só a explicação): '+txt('#v-projeto .dethdr').slice(0,140));
 okl.push('link da página pública: só em item/projeto publicado; rascunho/privado explica por que não abre');
 
 // ---------- BACKUP DO BANCO ----------
@@ -511,10 +511,10 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/2 publicados · 2 sem publicar/.test(txt('#d-body'))&&/Fundo com direitos restritos/.test(txt('#d-body'))&&/Nenhuma folha conferida/.test(txt('#d-body')),'o resultado deveria dizer 2 publicados · 2 sem publicar, com o motivo de cada um: "'+txt('#d-body').slice(0,260)+'"'); w.closeDrawer(true); w.route_to('painel'); }
 // ---------- [Auditoria P0-8] erro bloqueante em projeto PUBLICADO: pergunta o que fazer e avisa na página; o status do projeto não é mexido ----------
 { const g={estado:'no_ar',pode_agir:true,pode_despublicar:true,condicoes:[{id:'bloqueios',bloqueia:true,ok:false,texto:'Sem autoria divergente nem erros bloqueantes',detalhe:'1 erro bloqueante'}]};
-  let h=w.renderPublicacao('F003-P9002',g);
+  let h=w.avisoPubComBloqueio('F003-P9002',g);   // #95: a faixa fica fora da lista de requisitos (que é recolhida)
   chk(/Publicado com problema bloqueante em aberto/.test(h)&&/1 erro bloqueante/.test(h)&&/Ver erros/.test(h)&&/Despublicar/.test(h),'projeto PUBLICADO com erro bloqueante deveria mostrar a faixa vermelha com "Ver erros" e "Despublicar"');
-  chk(!/Publicado com problema bloqueante/.test(w.renderPublicacao('F003-P9002',{...g,estado:'rascunho'})),'projeto em rascunho não deveria mostrar a faixa de "publicado com problema"');
-  h=w.renderPublicacao('F003-P9002',{...g,pode_agir:false}); chk(/Publicado com problema/.test(h)&&!/Despublicar/.test(h),'quem não pode agir vê o aviso, mas sem o botão Despublicar');
+  chk(!/Publicado com problema bloqueante/.test(w.avisoPubComBloqueio('F003-P9002',{...g,estado:'rascunho'})),'projeto em rascunho não deveria mostrar a faixa de "publicado com problema"');
+  h=w.avisoPubComBloqueio('F003-P9002',{...g,pode_agir:false}); chk(/Publicado com problema/.test(h)&&!/Despublicar/.test(h),'quem não pode agir vê o aviso, mas sem o botão Despublicar');
   const fetchOrig=w.fetch, confirmOrig=w.confirm, chamadas=[]; let resposta=true, msg='';
   w.fetch=(u,o={})=>{ const m=String(o.method||'GET').toUpperCase(); if(m==='POST'&&/\/api\/erros$/.test(String(u))) return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({id:77,publicado_com_bloqueio:true,projeto:'F900-P0001'})}); if(m==='POST'&&/\/api\/projetos\/F900-P0001\/publicar$/.test(String(u))){chamadas.push(JSON.parse(o.body).acao);return Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>({ok:true})})} return fetchOrig(u,o) };
   w.confirm=m=>{msg=m;return resposta};
@@ -1139,6 +1139,19 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [#95] página do projeto: um só próximo passo (logo abaixo do título), requisitos recolhidos, trilha sem repetir, título limpo ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3500);
+  const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
+  chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&!d.querySelector('#pd .tabs ~ * #pj-proximo'),'[#95] o Próximo passo deveria vir logo abaixo do título, antes dos requisitos e fora das abas');
+  const azuis=[...d.querySelectorAll('#pd .btn.pri')].map(b=>b.textContent.trim());
+  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&pp.contains(d.querySelector('#pd .btn.pri')),'[#95] deveria haver UM só botão azul na página, o do Próximo passo: '+JSON.stringify(azuis));
+  chk(d.getElementById('pd-pub-det')&&!d.getElementById('pd-pub-det').open&&/\d+ de \d+ ok/.test(txt('#pd-pub-resumo'))&&/falta:/.test(txt('#pd-pub-resumo')),'[#95] os requisitos deveriam ficar recolhidos, com o resumo "N de M ok · falta: …": "'+txt('#pd-pub-resumo')+'"');
+  chk(/F003 Burle Marx/.test(txt('#gcrumb'))&&/F003-P9001 · Projeto de teste/.test(txt('#gcrumb'))&&!/F003-P9001 · F003-P9001/.test(txt('#gcrumb')),'[#95] a trilha não deveria repetir o código: "'+txt('#gcrumb')+'"');
+  chk(/Projeto de teste/.test(txt('#where'))&&d.querySelectorAll('#where button').length===1,'[#95] o topo deveria ter um Voltar e o nome do projeto: "'+txt('#where')+'"');
+  w.showProjeto('F003-P9001','historico'); await sleep(2500);
+  chk(/Faltam conferir/.test(txt('#pj-proximo')),'[#95] o Próximo passo deveria aparecer em qualquer aba (aqui: Histórico): "'+txt('#pj-proximo').slice(0,80)+'"'); w.showProjeto('F003-P9001','itens'); await sleep(1500);
+  chk(w.tituloExibicao('T102_Edifício Jockey Club São Paulo')==='Edifício Jockey Club São Paulo'&&w.tituloExibicao('Casa_do_Lago')==='Casa do Lago'&&w.tituloExibicao('Residência Martino')==='Residência Martino','[#95] o título deveria aparecer sem o prefixo da pasta e sem "_"');
+  okl.push('#95: um só botão azul (Próximo passo, em qualquer aba), requisitos recolhidos com resumo, trilha e Voltar únicos, título limpo'); }
 // ---------- [H4] toda ação mostra o que está acontecendo: botão "trabalhando", Desfazer, chip de tarefas no topo, aviso de conclusão ----------
 { w.route_to('painel'); await sleep(800);
   let hit=0; w.toast('Teste do desfazer',{acao:{rotulo:'Desfazer',fn:()=>{hit++}}}); const tb=d.querySelector('#toast .toast-acao');
