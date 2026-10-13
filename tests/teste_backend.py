@@ -3281,6 +3281,14 @@ def filho(modo):
         n3 = nome_arquivo_site("x" * 200, "Casa", "F001-P0001-1970-S01-D00001")
         ver("nome longo é cortado (o código fica inteiro)", n3.endswith("-F001-P0001-1970-S01-D00001.jpg") and len(n3) <= 80 + 32, str(len(n3)))
         print("\n".join(res))
+    elif modo == "h7_erro_cv":
+        from app.rotas_operacao import _erro_do_cv
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("erro no status.json", _erro_do_cv({"status_json": '{"status": "erro", "erro": "pasta sem catalogacao.csv"}'}) == "pasta sem catalogacao.csv")
+        ver("erro aninhado no resultado", _erro_do_cv({"status_json": "{}", "resultado": '{"error": {"message": "timeout no modelo"}}'}) == "timeout no modelo")
+        ver("sem motivo: None", _erro_do_cv({"status_json": "x", "resultado": None}) is None)
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3976,6 +3984,14 @@ else:
 print("61) B11 nome de arquivo legível ao enviar a imagem ao site")
 rc, out = rodar("b11_nome_arquivo", f"{tmp}/b11.db")
 if rc != 0: ok(False, f"teste B11 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("62) H7 Filas: o motivo do erro que o CAMP Vision deixou aparece na linha")
+rc, out = rodar("h7_erro_cv", f"{tmp}/h7.db")
+if rc != 0: ok(False, f"teste H7 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

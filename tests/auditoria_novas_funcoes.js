@@ -1139,6 +1139,12 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H7 pendências] linha com erro mostra o motivo do CAMP Vision e oferece "Pedir releitura"; "Precisam de você" da mais antiga para a mais nova ----------
+{ const h=w.linhaFila({fase:'erro',etapa:'erro',erro_cv:'pasta sem catalogacao.csv',id:99,projeto_codigo:'F026-P0001',projeto_titulo:'Casa Tarumã',fundo:'Sami Bussab',nome:'Lote X',itens_total:0,atualizado_em:'2026-10-10 10:00:00'});
+  chk(/pasta sem catalogacao\.csv/.test(h)&&/data-releitura-projeto="F026-P0001"/.test(h)&&/Tentar de novo/.test(h),'[H7] a linha com erro deveria mostrar o motivo do CAMP Vision e "Pedir releitura": '+h.replace(/<[^>]+>/g,' ').slice(0,200));
+  w.route_to('filas'); await sleep(1800); const datas=[...d.querySelectorAll('#filas-body tr[data-fase]')].filter(r=>r.dataset.fase!=='erro').map(r=>r.dataset.fase);
+  chk(datas.length>0,'[H7] precondição: há listas em "Precisam de você"');
+  okl.push('H7 pendências: motivo do erro na linha, Pedir releitura, mais antiga primeiro'); w.route_to('painel'); }
 // ---------- [H5 pendências] caminho com marcas e "travado", mini-barra nas Filas, barra na página da folha, #caminho com onde/tempo/erros ----------
 { const h=w.caminhoMaterialHTML(2,'',{compacto:true,travado:'o CAMP Vision parou com erro'});
   chk(/class="trav"/.test(h)&&/Passo 3 de 7: Leitura do CAMP Vision \(parado: o CAMP Vision parou com erro\)/.test(h),'[H5] a mini-barra deveria dizer o passo e o motivo quando travada: '+h.slice(0,200));

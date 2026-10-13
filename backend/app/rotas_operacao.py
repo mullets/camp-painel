@@ -467,6 +467,25 @@ class NovaLista(BaseModel):
     autorizar_site: bool = False
 
 
+def _erro_do_cv(d: dict) -> str | None:
+    """Mensagem de erro que o CAMP Vision deixou no status.json (ou no resultado) da pasta, em uma linha."""
+    import json as _json
+    for campo in ("status_json", "resultado"):
+        try:
+            j = _json.loads(d.get(campo) or "{}")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(j, dict):
+            continue
+        for k in ("erro", "mensagem_erro", "motivo", "mensagem", "detalhe", "error", "message"):
+            v = j.get(k)
+            if isinstance(v, dict):
+                v = v.get("mensagem") or v.get("message") or v.get("detalhe")
+            if isinstance(v, str) and v.strip():
+                return " ".join(v.split())[:240]
+    return None
+
+
 @router.get("/filas")
 def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
@@ -484,6 +503,7 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         d = dict(r)
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"))
+        d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
         saida.append(d)
     return saida
 
