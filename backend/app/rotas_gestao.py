@@ -9,7 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from . import auth
@@ -182,7 +182,58 @@ def direitos(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "credito_sugerido": f"Acervo {nome} / CAMP",
         "validade_padrao": "sem prazo",
     }
+    con = connect()
+    try:
+        t = con.execute("SELECT nome, tamanho, enviado_por, enviado_em FROM termo_direitos WHERE fundo_codigo=?", (codigo,)).fetchone()
+    finally:
+        con.close()
+    d["termo"] = dict(t) if t else None
     return d
+
+
+LIMITE_TERMO = 15 * 1024 * 1024
+
+
+@router.put("/fundos/{codigo}/direitos/termo")
+async def enviar_termo(codigo: str, request: Request, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """H14: o PDF do termo assinado (corpo cru, como a foto de perfil). Substitui o anterior."""
+    from urllib.parse import unquote
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > LIMITE_TERMO:
+        raise HTTPException(413, "Arquivo grande demais (máximo 15 MB).")
+    dados = await request.body()
+    if len(dados) > LIMITE_TERMO:
+        raise HTTPException(413, "Arquivo grande demais (máximo 15 MB).")
+    if not dados.startswith(b"%PDF-"):
+        raise HTTPException(400, "Envie o termo em PDF.")
+    nome = unquote(request.headers.get("x-nome-arquivo") or "")[:120] or f"termo-{codigo}.pdf"
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+        con.execute("""INSERT INTO termo_direitos (fundo_codigo, arquivo, nome, tamanho, enviado_por, enviado_em) VALUES (?,?,?,?,?,datetime('now'))
+                       ON CONFLICT(fundo_codigo) DO UPDATE SET arquivo=excluded.arquivo, nome=excluded.nome, tamanho=excluded.tamanho,
+                       enviado_por=excluded.enviado_por, enviado_em=datetime('now')""", (codigo, dados, nome, len(dados), u["email"]))
+        _evento(con, "fundo", codigo, "termo_direitos", u["email"], {"nome": nome, "bytes": len(dados)})
+        con.commit()
+    finally:
+        con.close()
+    return {"ok": True, "nome": nome, "tamanho": len(dados)}
+
+
+@router.get("/fundos/{codigo}/direitos/termo")
+def ver_termo(codigo: str, u: dict = Depends(auth.exige("admin"))) -> Response:
+    con = connect()
+    try:
+        r = con.execute("SELECT arquivo, nome FROM termo_direitos WHERE fundo_codigo=?", (codigo,)).fetchone()
+    finally:
+        con.close()
+    if not r:
+        raise HTTPException(404, "Nenhum termo anexado")
+    from urllib.parse import quote
+    return Response(bytes(r["arquivo"]), media_type="application/pdf",
+                    headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+                             "Content-Disposition": f"inline; filename*=UTF-8''{quote(r['nome'] or 'termo.pdf')}"})
 
 
 @router.put("/fundos/{codigo}/direitos")
@@ -191,9 +242,10 @@ def salvar_direitos(codigo: str, d: Direitos, u: dict = Depends(auth.exige("admi
         raise HTTPException(400, "Situação inválida")
     if d.resolucao_max not in ("tif", "jpg_3000", "jpg_1200"):
         raise HTTPException(400, "Resolução inválida")
-    if d.situacao == "autorizado" and not (d.documento_autorizacao or "").strip():
-        raise HTTPException(400, "Para marcar como autorizado, informe o documento/e-mail que autoriza (referência ou caminho)")
     con = connect()
+    tem_pdf = bool(con.execute("SELECT 1 FROM termo_direitos WHERE fundo_codigo=?", (codigo,)).fetchone())
+    if d.situacao == "autorizado" and not (d.documento_autorizacao or "").strip() and not tem_pdf:
+        con.close(); raise HTTPException(400, "Para marcar como autorizado, anexe o PDF do termo ou informe o documento/e-mail que autoriza")
     if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
         con.close(); raise HTTPException(404, "Fundo não existe")
     con.execute("""INSERT INTO direitos_fundo (fundo_codigo, situacao, titular, documento_autorizacao, data_autorizacao, validade, resolucao_max, credito_exigido, licenca, restricoes, atualizado_por, atualizado_em)

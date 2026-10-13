@@ -1139,6 +1139,17 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H14] Página do fundo: direitos em 4 cartões, resolução legível, PDF do termo, exemplos na descrição, busca nos projetos ----------
+{ await w.editarDireitos('F003'); await sleep(400);
+  chk(d.querySelectorAll('#d-body .dr-sit-opcoes input[type="radio"]').length===4&&/pode publicar; há termo assinado/.test(txt('#d-body'))&&!!d.getElementById('dr-sit'),'[H14] a situação dos direitos deveria ser 4 cartões com o efeito de cada um');
+  chk(/TIFF \(original\)/.test(txt('#dr-res'))&&/nunca mostra imagem maior/.test(txt('#d-body')),'[H14] a resolução máxima deveria ter nomes legíveis e o efeito');
+  chk(!!d.querySelector('#d-body input[type="file"][data-dr-termo="F003"]'),'[H14] deveria dar para anexar o PDF do termo no próprio formulário');
+  let r=await J(adm,'/api/fundos/F003/direitos/termo',{method:'PUT',headers:{'Content-Type':'application/pdf','X-Nome-Arquivo':'termo%20teste.pdf'},body:'%PDF-1.4\n%teste\n'});
+  const dr=(await J(adm,'/api/fundos/F003/direitos')).b; chk(r.s===200&&dr.termo&&dr.termo.nome==='termo teste.pdf','[H14] o PDF do termo deveria ficar guardado com o nome: '+JSON.stringify(dr.termo));
+  r=await J(adm,'/api/fundos/F003/direitos/termo',{method:'PUT',headers:{'Content-Type':'application/pdf'},body:'não é pdf'}); chk(r.s===400,'[H14] arquivo que não é PDF deveria ser recusado: '+r.s);
+  w.closeDrawer(true); await w.editarFundo('F003'); await sleep(400);
+  chk(/3 caixas e 2 tubos/.test(d.getElementById('ef-dimensao_suporte').getAttribute('placeholder')||'')&&/Quanto material existe/.test(txt('#d-body')),'[H14] os campos da descrição deveriam ter exemplo e explicação'); w.closeDrawer(true);
+  okl.push('H14: direitos em 4 cartões, resolução legível, PDF do termo anexado, exemplos na descrição do fundo'); }
 // ---------- [H13] Fundos: Pendências em palavras, Exportar no "Mais ⋯", sigla sugerida e conferida enquanto digita, confirmação do efeito ----------
 { w.route_to('fundos'); await sleep(1800);
   chk(/Pendências/.test(txt('#v-fundos thead'))&&!!d.querySelector('#fundos-body td.fd-pend'),'[H13] a lista deveria ter a coluna "Pendências" em palavras');

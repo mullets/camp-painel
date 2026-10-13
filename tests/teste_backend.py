@@ -3182,6 +3182,30 @@ def filho(modo):
         r2 = op.post("/api/filas/importar-todas?tarefa=1")
         ver("sem lote esperando importação: 400 com o motivo", r2.status_code == 400 and "Nenhum lote" in r2.text, r2.text[:120])
         print("\n".join(res))
+    elif modo == "h14_termo":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F084','Fundo Termo','FTE',1)"); c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        base = {"resolucao_max": "jpg_3000"}
+        r = adm.put("/api/fundos/F084/direitos", json={**base, "situacao": "autorizado"})
+        ver("autorizado sem documento nem PDF é recusado", r.status_code == 400, r.text[:100])
+        ver("operador não anexa termo", op.put("/api/fundos/F084/direitos/termo", content=b"%PDF-1.4 x", headers={"Content-Type": "application/pdf"}).status_code == 403)
+        ver("o que não é PDF é recusado", adm.put("/api/fundos/F084/direitos/termo", content=b"oi", headers={"Content-Type": "application/pdf"}).status_code == 400)
+        r = adm.put("/api/fundos/F084/direitos/termo", content=b"%PDF-1.4 termo assinado", headers={"Content-Type": "application/pdf", "X-Nome-Arquivo": "termo%20da%20fam%C3%ADlia.pdf"})
+        t = adm.get("/api/fundos/F084/direitos").json().get("termo") or {}
+        ver("o PDF fica guardado com nome, tamanho e quem enviou", r.status_code == 200 and t.get("nome") == "termo da família.pdf" and t.get("tamanho") == 23 and t.get("enviado_por") == "adm@camp.arq.br", str(t))
+        g = adm.get("/api/fundos/F084/direitos/termo")
+        ver("o PDF abre (application/pdf) só para admin", g.status_code == 200 and g.headers["content-type"] == "application/pdf" and g.content.startswith(b"%PDF") and op.get("/api/fundos/F084/direitos/termo").status_code == 403)
+        ver("com o PDF anexado, autorizado é aceito sem o texto do documento", adm.put("/api/fundos/F084/direitos", json={**base, "situacao": "autorizado"}).status_code == 200)
+        print("\n".join(res))
     elif modo == "painel_h6b":
         init_db(); _aplicar_migracoes_real()
         import json
@@ -3837,6 +3861,14 @@ else:
 print("56) #97 listas: contagem das abas dos Erros, 'Importar todas' como tarefa, chave duplicada contex.ip removida")
 rc, out = rodar("p97_listas", f"{tmp}/p97.db")
 if rc != 0: ok(False, f"teste #97 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("57) H14 direitos: o PDF do termo assinado anexado (só admin), e autorizado aceito com o PDF")
+rc, out = rodar("h14_termo", f"{tmp}/h14.db")
+if rc != 0: ok(False, f"teste H14 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
