@@ -1139,6 +1139,13 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
+// ---------- [H8 pendências] filtro de folhas que não volta sozinho, miniaturas P/M/G, "Preencher" no que falta, prévia do cartão do site ----------
+{ w.route_to('projeto/F003-P9001'); await sleep(3500);
+  const bf=d.querySelector('.folhas-bar [data-fl-f="conferir"]'); if(bf){ bf.click(); await sleep(100); w.atualizarContadorFolhas(); await sleep(100); chk(d.querySelector('.folhas-bar [data-fl-f="conferir"]').classList.contains('on'),'[H8] o filtro "A conferir" deveria continuar ligado depois de atualizar a contagem (antes voltava para "Todas")'); d.querySelector('.folhas-bar [data-fl-f=""]').click(); }
+  const g=d.querySelector('.fb-tam [data-tam="g"]'); if(g){ g.click(); chk(d.getElementById('pd').dataset.tam==='g','[H8] "G" deveria aumentar as miniaturas'); d.querySelector('.fb-tam [data-tam="m"]').click(); } else chk(false,'[H8] deveria haver P / M / G para o tamanho das miniaturas');
+  chk(!!d.querySelector('#pd .previa-site')&&/Como aparece no site/.test(txt('#pd')),'[H8] a página do projeto deveria mostrar como o cartão aparece no site');
+  chk(/Preencher|Informar ano/.test(txt('#pd')),'[H8] campos vazios deveriam ter "Preencher"');
+  okl.push('H8 pendências: filtro que fica, P/M/G, Preencher, prévia do site'); w.route_to('painel'); }
 // ---------- [H7 pendências] linha com erro mostra o motivo do CAMP Vision e oferece "Pedir releitura"; "Precisam de você" da mais antiga para a mais nova ----------
 { const h=w.linhaFila({fase:'erro',etapa:'erro',erro_cv:'pasta sem catalogacao.csv',id:99,projeto_codigo:'F026-P0001',projeto_titulo:'Casa Tarumã',fundo:'Sami Bussab',nome:'Lote X',itens_total:0,atualizado_em:'2026-10-10 10:00:00'});
   chk(/pasta sem catalogacao\.csv/.test(h)&&/data-releitura-projeto="F026-P0001"/.test(h)&&/Tentar de novo/.test(h),'[H7] a linha com erro deveria mostrar o motivo do CAMP Vision e "Pedir releitura": '+h.replace(/<[^>]+>/g,' ').slice(0,200));
