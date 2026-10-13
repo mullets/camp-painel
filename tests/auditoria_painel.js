@@ -12,6 +12,10 @@ async function nodeFetch(url,opt={}){ if(url.startsWith('/')) url=BASE+url;
 const html=await (await fetch(BASE+'/')).text();
 const dom=new JSDOM(html,{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
   if(!w.CSS)w.CSS={};if(!w.CSS.escape)w.CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);   // o jsdom não tem CSS.escape (todo navegador tem)
+  // P2-18: as confirmações são uma janela do painel (#conf-ov), não o confirm do navegador. Para os testes, a resposta continua vindo de w.confirm(texto).
+  w.addEventListener('DOMContentLoaded',()=>{new w.MutationObserver(()=>{const ov=w.document.getElementById('conf-ov');if(!ov||ov.dataset.respondido)return;ov.dataset.respondido='1';const resp=w.confirm(ov.textContent);setTimeout(()=>{if(!w.document.body.contains(ov))return;
+    if(resp){const dg=ov.querySelector('#conf-dig');if(dg){dg.value=ov.dataset.digitar||'';dg.dispatchEvent(new w.Event('input',{bubbles:true}))}const mt=ov.querySelector('#conf-motivo');if(mt&&!mt.value){mt.value='teste';mt.dispatchEvent(new w.Event('input',{bubbles:true}))}}
+    const b=ov.querySelector(resp?'[data-conf="sim"]':'[data-conf="nao"]')||ov.querySelector('[data-conf="sim"]');b&&b.click()},0)}).observe(w.document.body,{childList:true})});
     w.fetch=nodeFetch; w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
   w.console.error=(...a)=>problems.push('console.error: '+a.join(' '));
   w.addEventListener('error',e=>problems.push('window.error: '+(e.error&&e.error.stack||e.message)));

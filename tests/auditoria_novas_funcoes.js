@@ -64,6 +64,10 @@ r=await J(adm,'/api/projetos/F001-P0002/detalhe'); chk(r.s===200&&r.b.projeto.ti
 const html=await (await fetch(BASE+'/')).text();
 const dom=new JSDOM(html,{url:BASE+'/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
   if(!w.CSS)w.CSS={};if(!w.CSS.escape)w.CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);   // o jsdom não tem CSS.escape (todo navegador tem)
+  // P2-18: as confirmações são uma janela do painel (#conf-ov), não o confirm do navegador. Para os testes, a resposta continua vindo de w.confirm(texto).
+  w.addEventListener('DOMContentLoaded',()=>{new w.MutationObserver(()=>{const ov=w.document.getElementById('conf-ov');if(!ov||ov.dataset.respondido||w.__semAutoResposta)return;ov.dataset.respondido='1';const resp=w.confirm(ov.textContent);setTimeout(()=>{if(!w.document.body.contains(ov))return;
+    if(resp){const dg=ov.querySelector('#conf-dig');if(dg){dg.value=ov.dataset.digitar||'';dg.dispatchEvent(new w.Event('input',{bubbles:true}))}const mt=ov.querySelector('#conf-motivo');if(mt&&!mt.value){mt.value='teste';mt.dispatchEvent(new w.Event('input',{bubbles:true}))}}
+    const b=ov.querySelector(resp?'[data-conf="sim"]':'[data-conf="nao"]')||ov.querySelector('[data-conf="sim"]');b&&b.click()},0)}).observe(w.document.body,{childList:true})});
     w.fetch=(u,o={})=>adm.f(u,o); w.Element.prototype.scrollTo=()=>{}; w.confirm=()=>true; w.alert=m=>okl.push('alert:'+m); w.prompt=()=>null;
   w.URL.createObjectURL=()=>'blob:teste'; w.URL.revokeObjectURL=()=>{}; w.HTMLAnchorElement.prototype.click=function(){w.__baixou=(w.__baixou||[]).concat(this.download||this.href)};
   w.console.error=(...a)=>problems.push('console.error: '+a.join(' '));
@@ -106,8 +110,8 @@ okl.push('validação por campo: '+0+' fundos inválidos criados');
 w.route_to('fundo/F026'); await sleep(900); await w.editarFundo('F026'); await sleep(400);
 const dr=w.eval('mainEl'); const cls0=dr.className; chk(cls0.includes('with-drawer'),'drawer não abriu'); const t=d.getElementById('ef-titulo'); t.value=t.value+' x'; t.dispatchEvent(new w.Event('input',{bubbles:true})); await sleep(100);
 chk(d.getElementById('dirty-state').classList.contains('on'),'dirty-state não apareceu após editar');
-w.confirm=()=>false; const c1=w.closeDrawer(); chk(c1===false&&dr.className===cls0,'fechar com alteração e "cancelar" deveria manter o drawer aberto');
-w.confirm=()=>true; const c2=w.closeDrawer(); chk(c2===true&&!dr.className.includes('with-drawer'),'fechar com "ok" deveria fechar o drawer');
+w.confirm=()=>false; const c1=w.closeDrawer(); chk(c1===false&&!!d.getElementById('conf-ov')&&/alterações não salvas/.test(txt('#conf-ov'))&&!/confirm\(/.test(String(w.confirmarDescartar)),'[P2-18] fechar com alteração deveria abrir a janela do painel "Sair sem salvar?" (não o confirm do navegador)'); await sleep(150); chk(dr.className===cls0&&!d.getElementById('conf-ov'),'fechar com alteração e "Continuar editando" deveria manter o drawer aberto');
+w.confirm=()=>true; const c2=w.closeDrawer(); await sleep(150); chk(c2===false&&!dr.className.includes('with-drawer'),'fechar com "Sair sem salvar" deveria fechar o drawer');
 const ev=new w.Event('beforeunload',{cancelable:true}); w.editarFundo&&await w.editarFundo('F026'); await sleep(300); const t2=d.getElementById('ef-titulo'); t2.value+='y'; t2.dispatchEvent(new w.Event('input',{bubbles:true})); w.dispatchEvent(ev); chk(ev.defaultPrevented||ev.returnValue!==undefined,'beforeunload não protege edição pendente'); w.confirm=()=>true; w.closeDrawer();
 okl.push('proteção de edição não salva (drawer + beforeunload)');
 // ajuda
@@ -511,7 +515,7 @@ w.route_to('estacoes'); await sleep(2800);
   w.confirm=m=>{msg=m;return resposta};
   const preencher=()=>{d.getElementById('ne-cod').value='F900-P0001';d.getElementById('ne-grav').value='bloqueia';const cat=d.getElementById('ne-cat');cat.value=cat.options[0].value;d.getElementById('ne-desc').value='folha de outro projeto'};
   preencher(); await w.criarErro(); await sleep(800);
-  chk(/F900-P0001 está PUBLICADO/.test(msg)&&chamadas.join()==='tirar_do_ar','ao relatar o erro num projeto publicado, "OK" deveria despublicar (chamadas: '+chamadas.join()+'): "'+msg.slice(0,80)+'"');
+  chk(/F900-P0001 está publicado/i.test(msg)&&chamadas.join()==='tirar_do_ar','ao relatar o erro num projeto publicado, "OK" deveria despublicar (chamadas: '+chamadas.join()+'): "'+msg.slice(0,80)+'"');
   chamadas.length=0; resposta=false; preencher(); await w.criarErro(); await sleep(800);
   chk(chamadas.length===0,'"Cancelar" deveria manter o projeto publicado (sem chamar tirar_do_ar): '+chamadas.join());
   w.fetch=fetchOrig; w.confirm=confirmOrig; w.closeModal&&w.closeModal(); }
@@ -532,7 +536,7 @@ w.route_to('estacoes'); await sleep(2800);
   const er=(await (await adm.f('/api/erros',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:'F003-P9001',gravidade:'corrigir',categoria:cat,descricao:'teste do fechar sem perguntar'})})).json());
   await w.carregarErros('todos'); await w.abrirErro(er.id); await sleep(300); w.marcarAlteracoes('drawer'); asked.length=0; await w.salvarErro(er.id); await sleep(600);
   chk(!perguntou(),'depois de salvar o Erro não deveria aparecer "Existem alterações não salvas": '+asked.join('|'));
-  w.openDrawer('t','s','<input id="zz">'); w.marcarAlteracoes('drawer'); asked.length=0; w.closeDrawer();
+  w.openDrawer('t','s','<input id="zz">'); w.marcarAlteracoes('drawer'); asked.length=0; w.closeDrawer(); await sleep(150);
   chk(perguntou(),'fechar a janela com alteração NÃO salva deveria continuar perguntando'); w.closeDrawer(true); w.confirm=cOrig; }
 // ---------- [Auditoria P1-11] códigos inexistentes são recusados, com a mensagem no campo ----------
 { chk(d.getElementById('ne-cod').required&&d.getElementById('ne-desc').required,'código e descrição do "Relatar problema" deveriam estar marcados como obrigatórios');
@@ -1088,6 +1092,41 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   w.route_to('projeto/F023-P0011'); await sleep(2000);
   chk([...d.querySelectorAll('.project-series .thumbs')].every(g=>g.dataset.pg==='mais'),'as grades de folhas do projeto deveriam estar ligadas ao "Mostrar mais"');
   okl.push('paginação: projetos e auditoria no servidor (páginas sem repetir, seleção mantida, busca volta à 1ª, exporta tudo), paginador genérico e "mostrar mais"'); }
+// ---------- [P2-18] confirmações: janela do painel com alvo e consequência; nada de confirm/prompt/alert do navegador ----------
+{ const cOrig=w.confirm; w.__semAutoResposta=true; const fonte=require('fs').readFileSync(require('path').join(__dirname,'..','frontend','index.html'),'utf8');
+  const nativos=(fonte.match(/(?<![\w.])(?:confirm|prompt|alert)\(/g)||[]).length; chk(nativos===0,'[P2-18] o index.html não deveria ter confirm()/prompt()/alert() do navegador: '+nativos);
+  // Usuários → Papel: lista com os 4 papéis e o que cada um faz (antes: digitar o nome do papel)
+  w.confirm=()=>false; w.route_to('config'); await sleep(1800); await w.carregarUsuarios(); await sleep(500);
+  const ul=(await J(adm,'/api/usuarios')).b, op=ul.find(x=>x.email==='operador@camp.arq.br'), eu=ul.find(x=>x.email==='rafael@camp.arq.br');
+  const linhaEu=[...d.querySelectorAll('#usr-body tr')].find(tr=>tr.textContent.includes('rafael@camp.arq.br'));
+  chk(!!linhaEu&&!/Desativar|>Papel</.test(linhaEu.innerHTML)&&/você/.test(linhaEu.textContent),'[P2-18] a própria linha não deveria ter "Papel" nem "Desativar"');
+  w.mudarPapel(op.id,'operador'); await sleep(80);
+  const radios=[...d.querySelectorAll('#conf-ov input[name="conf-op"]')].map(r=>r.value);
+  chk(JSON.stringify(radios)==='["leitura","operador","admin","master"]'&&d.querySelector('#conf-ov input[value="operador"]').checked&&/importa e confere/.test(txt('#conf-ov'))&&/operador@camp\.arq\.br/.test(txt('#conf-ov')),'[P2-18] "Papel" deveria abrir a janela com os 4 papéis explicados, o atual marcado e o alvo: '+txt('#conf-ov').slice(0,160));
+  d.querySelector('#conf-ov [data-conf="nao"]').click(); await sleep(150); chk(!d.getElementById('conf-ov')&&(await J(adm,'/api/usuarios')).b.find(x=>x.id===op.id).papel==='operador','"Cancelar" não muda o papel');
+  // Nova senha: janela com a senha e o botão Copiar (antes: alert que sumia)
+  const ap=w.acaoUsr(op.id,'redefinir-senha'); await sleep(80); chk(/sai do painel/.test(txt('#conf-ov')),'[P2-18] "Nova senha" deveria dizer a consequência'); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(900);
+  chk(!!d.getElementById('senha-temp')&&d.getElementById('senha-temp').textContent.length>=8&&!!d.querySelector('#conf-ov [data-copiar-senha]')&&/não aparece de novo/.test(txt('#conf-ov')),'[P2-18] a senha temporária deveria aparecer numa janela do painel, com "Copiar"'); d.querySelector('#conf-ov [data-conf="sim"]').click(); await ap; await sleep(200);
+  // Sigla: 3 letras e sem repetir, com o erro dentro da janela (antes: prompt sem validação)
+  w.confirm=()=>false; w.definirSigla('F030','Teste'); await sleep(80); const cs=d.getElementById('conf-campo'), sim=d.querySelector('#conf-ov [data-conf="sim"]');
+  cs.value='AB'; cs.dispatchEvent(new w.Event('input',{bubbles:true})); const e1=txt('#conf-err'), d1=sim.disabled;
+  const usada=((await J(adm,'/api/fundos/resumo')).b.find(f=>f.sigla)||{}).sigla||'SBU'; cs.value=usada; cs.dispatchEvent(new w.Event('input',{bubbles:true})); const e2=txt('#conf-err');
+  chk(d1&&/3 letras/.test(e1)&&/já é de outro fundo/.test(e2)&&sim.disabled,'[P2-18] a sigla deveria ser validada na janela (3 letras; não repetir): "'+e1+'" / "'+e2+'"');
+  d.querySelector('#conf-ov [data-conf="nao"]').click(); await sleep(150);
+  // Despublicar o fundo inteiro: motivo obrigatório e digitar o código para confirmar
+  w.confirm=()=>false; w.statusFundoSite('F003','fora_do_ar'); await sleep(80); const sim2=d.querySelector('#conf-ov [data-conf="sim"]');
+  chk(!!d.getElementById('conf-dig')&&!!d.getElementById('conf-motivo')&&sim2.disabled&&/digite/i.test(txt('#conf-ov'))&&/F003/.test(txt('#conf-ov')),'[P2-18] despublicar o fundo inteiro deveria pedir o motivo e digitar o código (botão travado até lá)');
+  d.getElementById('conf-motivo').value='teste'; d.getElementById('conf-motivo').dispatchEvent(new w.Event('input',{bubbles:true})); d.getElementById('conf-dig').value='F00'; d.getElementById('conf-dig').dispatchEvent(new w.Event('input',{bubbles:true})); const trav=sim2.disabled;
+  d.getElementById('conf-dig').value='f003'; d.getElementById('conf-dig').dispatchEvent(new w.Event('input',{bubbles:true}));
+  chk(trav&&!sim2.disabled,'[P2-18] o botão só libera com o código certo (maiúscula/minúscula tanto faz)'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await sleep(150);
+  // Esc cancela; duplo clique numa ação com "acao" roda uma vez só
+  let chamadas=0; const pr=w.confirmar({titulo:'Teste',botao:'Fazer',acao:async()=>{chamadas++;await new Promise(r=>setTimeout(r,300));return 'ok'}}); await sleep(30);
+  const bs=d.querySelector('#conf-ov [data-conf="sim"]'); bs.click(); bs.click(); bs.click(); const ocup=bs.disabled&&/Trabalhando/.test(bs.textContent); const rr=await pr;
+  chk(chamadas===1&&ocup&&rr&&rr.resultado==='ok','[P2-18] com ação, o botão vira "Trabalhando…" e o duplo clique não repete: '+chamadas);
+  const pe=w.confirmar({titulo:'Esc'}); await sleep(30); d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true})); chk((await pe)===false,'[P2-18] Esc deveria cancelar');
+  const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
+  chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
+  w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
 // rotas inválidas / deep link
 w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.test(txt('.content.on')),'rota de projeto inexistente mostra lixo: '+txt('.content.on').slice(0,80)); okl.push('deep link inexistente: "'+txt('.content.on').slice(0,60)+'"');
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');
