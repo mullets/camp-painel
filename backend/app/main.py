@@ -333,7 +333,9 @@ def contexto_estacoes(request: Request, fundo: str | None = None) -> dict:
             raise HTTPException(404, f"Fundo {fundo} não existe ou está inativo")
         resposta["projetos"] = [dict(r) for r in con.execute("""
             SELECT codigo, printf('P%04d', numero) AS numero_projeto, titulo AS projeto,
-                   ano, cidade, identificacao_original
+                   ano, cidade, identificacao_original,
+                   -- último D já catalogado: a estação continua a numeração de um projeto existente
+                   (SELECT MAX(i.sequencial) FROM item i WHERE i.projeto_codigo = projeto.codigo) AS maior_d
               FROM projeto
              WHERE fundo_codigo=?
              ORDER BY numero
