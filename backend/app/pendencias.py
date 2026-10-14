@@ -279,7 +279,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         fila = qb.fila_do_dia(tq)
         linhas = [{"sev": "b", "titulo": t["titulo"], "codigo": t["codigo"], "detalhe": t["detalhe"], "adiar": t["id"],
                    "acao": _acao(t["rotulo"], "rota", t["rota"])} for t in fila]
-        grupos.append({"id": "base", "titulo": "Melhorar a base", "quem": "qualquer", "total": len(tq), "itens": linhas[:por_grupo + 2],
+        grupos.append({"id": "base", "titulo": "Melhorar a base", "quem": "qualquer", "total": len(tq), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": "Ver quanto falta em cada fundo", "rota": "painel/qualidade"},
                        "tipos": qb.resumo_tipos(tq)})
 

@@ -3513,8 +3513,8 @@ function iniNoSiteHTML(s){const r=(t,a,b,nota)=>{const pct=b?Math.round(100*a/b)
 const QB_CRIT=[['com_imagem','Com imagem'],['com_codigo','Com código completo'],['com_titulo','Com título'],['com_direitos','Com direitos definidos']];
 function fmtPct(v){return v==null?'—':String(v).replace('.',',')+'%'}
 function qbSetaHTML(t){if(!t||!t.seta)return '<span class="qb-seta">sem retrato da semana passada ainda</span>';const d=Math.abs(t.diferenca||0),pts=`${String(d).replace('.',',')} ${d===1?'ponto':'pontos'}`;
-  return t.seta==='sobe'?`<span class="qb-seta sobe" title="Comparado com ${escHtml(fmtData(t.dia_antes))}">↑ subiu ${pts}</span>`:t.seta==='desce'?`<span class="qb-seta desce" title="Comparado com ${escHtml(fmtData(t.dia_antes))}">↓ caiu ${pts}</span>`:'<span class="qb-seta">→ igual à semana passada</span>'}
-function fmtData(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}`:''}
+  return t.seta==='sobe'?`<span class="qb-seta sobe" title="Comparado com ${escHtml(fmtDiaMes(t.dia_antes))}">↑ subiu ${pts}</span>`:t.seta==='desce'?`<span class="qb-seta desce" title="Comparado com ${escHtml(fmtDiaMes(t.dia_antes))}">↓ caiu ${pts}</span>`:'<span class="qb-seta">→ igual à semana passada</span>'}
+function fmtDiaMes(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}`:''}   /* dia/mês, para as setas de tendência (não confundir com fmtData, que leva o ano) */
 function qbCriteriosHTML(d){return `<div class="qb-crit">${QB_CRIT.map(([k,t])=>`<label>${t}<span>${fmtPct(d.pct[k])}</span><progress max="100" value="${+d.pct[k]||0}" aria-label="${t}: ${fmtPct(d.pct[k])}"></progress></label>`).join('')}</div>`}
 function iniQualidadeHTML(q){if(!q||!q.geral)return '<p class="ini-nota">Não consegui calcular o índice agora.</p>';const g=q.geral;
   if(!g.folhas)return '<p class="ini-nota">Ainda não há folhas no painel para medir.</p>';
