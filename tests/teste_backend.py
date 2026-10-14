@@ -5203,18 +5203,15 @@ def filho(modo):
         ver("(6) escolher 1965 grava no cadastro e fica na história", rr.status_code == 200 and sql("SELECT ano FROM projeto WHERE codigo='F050-P0002'") == 1965 and sql("SELECT COUNT(*) FROM evento WHERE tipo='dado_escolhido_na_divergencia'") == 1, rr.text[:200])
         # ---------- (3) projeto com o mesmo nome em OUTRO fundo ----------
         v = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F051", "titulo": "Residência Alfa"}).json()
-        ver("(3) criar 'Residência Alfa' no F051: nota forte com o 'Casa Alfa' do F050 (o do próprio F051 é parecido, não 'outro fundo')",
-            [o["codigo"] for o in v.get("outros_fundos", [])] == ["F050-P0001"] and v["outros_fundos"][0]["fundo_codigo"] == "F050" and [p_["codigo"] for p_ in v["parecidos"]] == ["F051-P0001"], str(v)[:300])
+        ver("(3) fundos não se misturam (decisão de 14/10): criar 'Residência Alfa' no F051 não fala do F050; o parecido é só o do próprio F051",
+            v.get("outros_fundos", []) == [] and [p_["codigo"] for p_ in v["parecidos"]] == ["F051-P0001"], str(v)[:300])
         ver("(3) nome sem igual em outro fundo: nenhuma nota", adm.post("/api/projetos/verificar", json={"fundo_codigo": "F051", "titulo": "Edifício Zeta"}).json()["outros_fundos"] == [])
         from app.rotas_operacao import _ler_pasta
         pasta = raiz / "F051 - OBR" / "F051-P0001 - Casa Alfa"; pasta.mkdir(parents=True)
         (pasta / "info_projeto.json").write_text(_j.dumps({"codigo": "F051-P0001", "nome": "Casa Alfa"}), encoding="utf-8"); (pasta / "status.json").write_text('{"status": "pronto"}', encoding="utf-8")
         rl = _ler_pasta(c, pasta, None); c.commit()
         do = c.execute("SELECT * FROM decisao WHERE tipo='projeto_outro_fundo'").fetchall()
-        ver("(3) lote recebido do F051-P0001 'Casa Alfa': o aviso do lote diz que já existe no F050 e abre a pergunta em Decisões",
-            rl["acao"] == "nova" and "F050" in (rl.get("aviso") or "") and len(do) == 1 and _j.loads(do[0]["contexto"])["outro"]["codigo"] == "F050-P0001", str(rl)[:300])
-        rr = adm.post(f"/api/decisoes/{do[0]['id']}/resolver", json={"acao": "mesmo"})
-        ver("(3) 'é o mesmo' fica anotado nos dois projetos", rr.status_code == 200 and sql("SELECT COUNT(*) FROM evento WHERE tipo='mesmo_projeto_em_outro_fundo'") == 2)
+        ver("(3) lote recebido do F051-P0001 'Casa Alfa': NÃO pergunta sobre o F050 (outro fundo)", rl["acao"] == "nova" and "F050" not in (rl.get("aviso") or "") and len(do) == 0, str(rl)[:300])
         # ---------- (4) fundo com nome parecido ----------
         vf = adm.post("/api/fundos/verificar", json={"titulo": "Rino Levi Arquitetos Associados"}).json()
         ver("(4) cadastrar 'Rino Levi Arquitetos Associados': aviso com o F050 Rino Levi e a nota de semelhança", [f_["codigo"] for f_ in vf["parecidos"]] == ["F050"] and vf["parecidos"][0]["score"] >= 0.75, str(vf)[:200])
@@ -5252,7 +5249,7 @@ def filho(modo):
         rr = adm.post(f"/api/decisoes/{pid}/resolver", json={"acao": "mesmo", "projeto_codigo": "F050-P0001"})
         ver("projeto_parecido resolve como antes ('mesmo' grava resolucao e escolha)", rr.status_code == 200 and sql("SELECT resolucao || escolha FROM decisao WHERE id=?", pid) == "mesmomesmo", rr.text[:200])
         Rz = lei.get("/api/decisoes?situacao=resolvida").json()["itens"]
-        ver("as decididas mostram os 4 tipos, cada um com o seu rótulo e a escolha", {x["tipo"] for x in Rz} == {"lote_colide", "divergencia", "projeto_outro_fundo", "projeto_parecido"} and all(x["tipo_rotulo"] and x["escolha"] for x in Rz), str([(x["tipo"], x["escolha"]) for x in Rz]))
+        ver("as decididas mostram os tipos, cada um com o seu rótulo e a escolha", {x["tipo"] for x in Rz} == {"lote_colide", "divergencia", "projeto_parecido"} and all(x["tipo_rotulo"] and x["escolha"] for x in Rz), str([(x["tipo"], x["escolha"]) for x in Rz]))
         decisoes.abrir_divergencias(c, "F050-P0001", {"projeto": {"cidade": "Santos"}}); c.commit()
         tf = pendencias.tarefas(c, "admin")
         g = next((g_ for g_ in tf if g_["id"] == "decidir"), None)

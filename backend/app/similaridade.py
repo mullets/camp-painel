@@ -124,8 +124,9 @@ def nome_de_subpasta(titulo: str | None) -> bool:
 def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int | None = 0, cidade: str | None = None, limite: int = 3) -> list[dict]:
     """Projeto com o MESMO nome em OUTRO fundo ("já existe 'Casa X' no fundo F012 — é o mesmo?"). Só o nível forte: nome
     praticamente igual. Não bloqueia nada: vira uma nota forte com link para a pessoa conferir."""
-    if not normalizar(titulo) or nome_de_subpasta(titulo):
-        return []
+    # Decisão de 14/10 (Rafael): fundos não se misturam. Projeto parecido só se procura DENTRO do mesmo fundo (o mesmo arquiteto);
+    # a nota/pergunta "mesmo nome em outro fundo" foi desligada. A função fica (chamadores antigos) e não acha nada.
+    return []
     novo = {"titulo": titulo, "ano": ano or 0, "cidade": cidade}
     achados = []
     for p in con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.fundo_codigo, f.titulo AS fundo_titulo
