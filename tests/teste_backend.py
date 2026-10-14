@@ -5303,6 +5303,40 @@ def filho(modo):
         ver("religado: o QNAP avisa para a lista própria dele", sorted(x_["para"] for x_ in fq) == ["rafael@camp.arq.br", "ti@camp.arq.br"], str(fq))
         for l in res: print(l)
         c.close()
+    elif modo == "p0002_status_velho":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n in (1, 2, 3, 4): c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+        # P0001: no_ar, sem registro e nenhuma folha no site -> corrige; P0002: no_ar sem registro, mas UMA folha está no site -> fica;
+        # P0003: no_ar COM registro -> fica; P0004: rascunho sem registro -> fica (só corrige no_ar)
+        for n, st, tid in ((1, "no_ar", None), (2, "no_ar", None), (3, "no_ar", 7003), (4, "rascunho", None)):
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES (?,?,?,?,1970,?,?)", (f"F099-P000{n}", "F099", n, f"Projeto {n}", st, tid))
+        folhas = (("F099-P0001-1970-S01-D00001", "no_ar", None), ("F099-P0001-1970-S01-D00002", "no_ar", None), ("F099-P0001-1970-S01-D00003", "rascunho", None),
+                  ("F099-P0002-1970-S01-D00001", "no_ar", 8001), ("F099-P0002-1970-S01-D00002", "no_ar", None), ("F099-P0003-1970-S01-D00001", "no_ar", 8002))
+        for cod, st, tid in folhas:
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id) VALUES (?,?,?,?,?,'importado',?,?)",
+                      (cod, cod[:10], "S01", int(cod[-5:]), "Planta", st, tid))
+        ver("antes: a migração 110 já foi registrada no banco novo (vazio, nada a corrigir)", c.execute("SELECT COUNT(*) FROM migracao WHERE nome='110_status_site_sem_registro.sql'").fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='status_site_corrigido'").fetchone()[0] == 0)
+        c.execute("DELETE FROM migracao WHERE nome='110_status_site_sem_registro.sql'"); c.commit(); c.close()
+        _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: a segunda não faz nada
+        c = connect()
+        st = lambda t, cod: c.execute(f"SELECT status_site FROM {t} WHERE codigo=?", (cod,)).fetchone()[0]
+        ver("folha no_ar sem registro no site vira nao_publicado", st("item", "F099-P0001-1970-S01-D00001") == "nao_publicado" and st("item", "F099-P0001-1970-S01-D00002") == "nao_publicado" and st("item", "F099-P0002-1970-S01-D00002") == "nao_publicado")
+        ver("folha no_ar COM registro no site fica como está", st("item", "F099-P0002-1970-S01-D00001") == "no_ar" and st("item", "F099-P0003-1970-S01-D00001") == "no_ar")
+        ver("folha em rascunho sem registro não é mexida", st("item", "F099-P0001-1970-S01-D00003") == "rascunho")
+        ver("projeto no_ar sem registro e sem folha no site vira nao_publicado", st("projeto", "F099-P0001") == "nao_publicado")
+        ver("projeto no_ar com folha no site, ou com registro próprio, fica no_ar; rascunho não é mexido", st("projeto", "F099-P0002") == "no_ar" and st("projeto", "F099-P0003") == "no_ar" and st("projeto", "F099-P0004") == "rascunho")
+        ev = c.execute("SELECT entidade, codigo, ator, detalhe FROM evento WHERE tipo='status_site_corrigido' ORDER BY entidade, codigo").fetchall()
+        ver("um evento 'status_site_corrigido' por folha e por projeto corrigidos, ator 'migração', rodando 2x não duplica",
+            [(e[0], e[1]) for e in ev] == [("item", "F099-P0001-1970-S01-D00001"), ("item", "F099-P0001-1970-S01-D00002"), ("item", "F099-P0002-1970-S01-D00002"), ("projeto", "F099-P0001")]
+            and all(e[2] == "migração" for e in ev) and all(_j.loads(e[3])["para"] == "nao_publicado" for e in ev), str([tuple(e) for e in ev]))
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -6033,6 +6067,14 @@ else:
 print("106) Notificações: lote parado na Fila, problema que impede publicar e pedido registrado no painel; liga/desliga e quem recebe por assunto (SMTP falso)")
 rc, out = rodar("notificacoes", f"{tmp}/notificacoes.db")
 if rc != 0: ok(False, f"teste das notificações não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("110) P0002: folhas e projetos presos como publicados sem registro no site voltam a 'não publicado' (migração 110)")
+rc, out = rodar("p0002_status_velho", f"{tmp}/p0002.db")
+if rc != 0: ok(False, f"teste da correção do status velho não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
