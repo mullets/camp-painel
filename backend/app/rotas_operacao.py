@@ -8,7 +8,7 @@ import unicodedata
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from . import auth
@@ -974,7 +974,7 @@ def listar_solicitacoes(situacao: str | None = None, u: dict = Depends(auth.exig
 
 
 @router.post("/solicitacoes")
-def criar_solicitacao(d: NovaSolicitacao, u: dict = Depends(auth.exige("operador"))) -> dict:
+def criar_solicitacao(d: NovaSolicitacao, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
     if d.finalidade not in ("publicacao", "pesquisa", "editorial", "familia", "exposicao", "outro"):
         raise HTTPException(400, "Finalidade inválida")
     if not d.solicitante.strip():
@@ -989,7 +989,21 @@ def criar_solicitacao(d: NovaSolicitacao, u: dict = Depends(auth.exige("operador
     _evento(con, "solicitacao", sid, "criada", u["email"], {"solicitante": d.solicitante})
     rep = pedido_anterior(con, sid)
     con.commit(); con.close()
+    tarefas.add_task(_avisar_pedido_painel, sid, u["email"])   # cartão "Notificações": avisa por e-mail (assunto pedido_painel), depois de responder
     return {"id": sid, "repetido_de": rep}
+
+
+def _avisar_pedido_painel(sid: int, quem: str) -> None:
+    from . import alertas
+    con = connect()
+    try:
+        alertas.avisar_pedido_novo(con, sid, registrado_por=quem)
+    except Exception as e:  # noqa: BLE001  (o pedido já está salvo; a falha do aviso só vai para o log)
+        import logging
+        from .log_tecnico import registrar
+        registrar(logging.WARNING, "pedido_aviso_falhou", "Não consegui avisar o pedido registrado no painel", pedido=sid, erro_tipo=type(e).__name__)
+    finally:
+        con.close()
 
 
 @router.patch("/solicitacoes/{sid}")

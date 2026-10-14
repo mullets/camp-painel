@@ -5186,6 +5186,123 @@ def filho(modo):
         ver("o Painel (Decidir) usa a pergunta própria de cada tipo", g and any("leu a cidade “Santos”" in x["titulo"] for x in g["itens"]), str(g)[:300])
         for l in res: print(l)
         c.close()
+    elif modo == "notificacoes":
+        init_db(); _aplicar_migracoes_real()
+        from datetime import datetime as _dt, timedelta as _td
+        from app import alertas, auth, email_envio
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for k_, v_ in (("smtp.host", "smtp.teste"), ("smtp.usuario", "painel@camp.arq.br"), ("smtp.senha", "x"), ("avisos.email", "geral@camp.arq.br")):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa de teste',1970)")
+        c.commit()
+        enviados = []
+        def falso(smtp, para, titulo, corpo, **kw): enviados.append({"para": para, "titulo": titulo, "corpo": corpo})
+        email_envio.enviar = falso                       # SMTP falso também para as rotas (aviso do pedido registrado no painel)
+        bk = lambda: {}  # noqa: E731
+        def rodada(t): return alertas.verificar(c, agora=t, enviar=falso, estado_backup=bk)
+        def so(f, a): return [x_ for x_ in f if x_["assunto"] == a]
+        t0 = _dt.utcnow()
+        # ---- migração 106 ----
+        cfg = {r[0]: r[1] for r in c.execute("SELECT chave, valor FROM configuracao WHERE chave LIKE 'avisos.%'")}
+        ver("migração 106: cada assunto tem liga/desliga e lista de e-mails; a Fila parada vem com 24 h", all(f"avisos.{a}.email" in cfg for a in ("qnap", "campvision", "backup", "site", "replica", "pedido", "pedido_painel", "fila_travada", "bloqueio"))
+            and cfg.get("avisos.fila_travada.horas") == "24" and cfg.get("avisos.fila_travada.ligado") == "1" and cfg.get("avisos.bloqueio.ligado") == "1" and cfg.get("avisos.pedido_painel.ligado") == "1", str(sorted(cfg))[:300])
+        # ---- (a) fila travada ----
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote Casa','F099-P0001','/x','processando')").lastrowid
+        c.commit()
+        ver("lote novo ganha 'etapa_desde' sozinho (gatilho da migração)", c.execute("SELECT etapa_desde FROM lista_processamento WHERE id=?", (lid,)).fetchone()[0] is not None)
+        ver("(a) lote há menos de 24 h na mesma etapa: nenhum aviso", so(rodada(t0), "fila_travada") == [] and not enviados)
+        c.execute("UPDATE lista_processamento SET etapa_desde=datetime('now','-30 hours'), atualizado_em=datetime('now') WHERE id=?", (lid,)); c.commit()
+        f1 = so(rodada(t0 + _td(minutes=5)), "fila_travada")
+        ver("(a) lote parado há 30 h (mesmo com a pasta relida agora): sai o aviso, com o nome do lote e o que fazer", len(f1) == 1 and f1[0]["tipo"] == "critico" and f1[0]["para"] == "geral@camp.arq.br"
+            and "Lote Casa" in enviados[-1]["corpo"] and "há 30 h" in enviados[-1]["corpo"] and "/#filas" in enviados[-1]["corpo"] and "Lote parado na Fila" in enviados[-1]["titulo"], str(f1) + str(enviados[-1:])[:300])
+        ver("(a) rodar de novo: não repete", so(rodada(t0 + _td(minutes=10)), "fila_travada") == [] and len(enviados) == 1)
+        c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (lid,)); c.commit()
+        ver("(a) mudar de etapa reinicia a contagem (gatilho)", c.execute("SELECT etapa_desde > datetime('now','-1 minute') FROM lista_processamento WHERE id=?", (lid,)).fetchone()[0] == 1)
+        f2 = so(rodada(t0 + _td(minutes=15)), "fila_travada")
+        ver("(a) o lote andou: sai um 'resolvido'", len(f2) == 1 and f2[0]["tipo"] == "resolvido" and "Resolvido: lote parado na Fila" in enviados[-1]["titulo"], str(f2))
+        c.execute("UPDATE lista_processamento SET etapa_desde=datetime('now','-30 hours') WHERE id=?", (lid,)); c.commit()
+        f3 = so(rodada(t0 + _td(minutes=20)), "fila_travada")
+        ver("(a) parou de novo em menos de 6 h: não repete (fica 'suprimido' no registro)", [x_["tipo"] for x_ in f3] == ["suprimido"] and len(enviados) == 2, str(f3))
+        c.execute("UPDATE configuracao SET valor='48' WHERE chave='avisos.fila_travada.horas'"); c.commit()
+        rodada(t0 + _td(hours=7))
+        ver("(a) o limite de horas é configurável: com 48 h, o lote de 30 h deixa de contar", c.execute("SELECT critico FROM alerta_estado WHERE assunto='fila_travada'").fetchone()[0] == 0)
+        c.execute("UPDATE configuracao SET valor='24' WHERE chave='avisos.fila_travada.horas'"); c.execute("UPDATE configuracao SET valor='0' WHERE chave='avisos.fila_travada.ligado'"); c.commit()
+        n = len(enviados); f4 = so(rodada(t0 + _td(hours=14)), "fila_travada")
+        ver("(a) desligado: não envia (e não mexe no estado)", f4 == [] and len(enviados) == n and c.execute("SELECT critico FROM alerta_estado WHERE assunto='fila_travada'").fetchone()[0] == 0, str(f4))
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='avisos.fila_travada.ligado'"); c.execute("UPDATE configuracao SET valor='fila@camp.arq.br, rafael@camp.arq.br' WHERE chave='avisos.fila_travada.email'"); c.commit()
+        f5 = so(rodada(t0 + _td(hours=15)), "fila_travada")
+        ver("(a) destinatário por assunto: vai para a lista da Fila, não para a geral", sorted(x_["para"] for x_ in f5 if x_["tipo"] == "critico") == ["fila@camp.arq.br", "rafael@camp.arq.br"], str(f5))
+        c.execute("UPDATE lista_processamento SET descartado_em=datetime('now') WHERE id=?", (lid,)); c.commit(); rodada(t0 + _td(hours=16))
+        # ---- (b) problema bloqueante ----
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','orientacao','operador','F099-P0001','A planta está de cabeça para baixo')")
+        e_aviso = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador','F099-P0001','Só um aviso')").lastrowid
+        e2 = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('bloqueia','credito','site','F099-P0001','Crédito do fotógrafo errado','Ana (site)')").lastrowid
+        c.commit()
+        n = len(enviados); f6 = so(rodada(t0 + _td(hours=17)), "bloqueio")
+        ver("(b) dois problemas que impedem publicar: um e-mail para CADA um; o de gravidade 'aviso' não manda", len(f6) == 2 and {x_["chave"] for x_ in f6} == {"bloqueio:1", f"bloqueio:{e2}"} and len(enviados) == n + 2
+            and all("Problema que impede publicar em F099-P0001" in x_["titulo"] and "/#erros" in x_["corpo"] for x_ in enviados[-2:]) and any("Ana (site)" in x_["corpo"] for x_ in enviados[-2:])
+            and f"bloqueio:{e_aviso}" not in {x_.get("chave") for x_ in f6}, str(f6))
+        ver("(b) rodar de novo: não repete", so(rodada(t0 + _td(hours=17, minutes=5)), "bloqueio") == [])
+        e3 = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','codigo','operador','F099-P0001','Código trocado')").lastrowid; c.commit()
+        f7 = so(rodada(t0 + _td(hours=17, minutes=10)), "bloqueio")
+        ver("(b) um problema novo avisa só ele (os antigos não repetem)", [x_["chave"] for x_ in f7] == [f"bloqueio:{e3}"], str(f7))
+        c.execute("UPDATE erro SET situacao='corrigido' WHERE id=?", (e3,)); c.commit(); n = len(enviados)
+        f8 = so(rodada(t0 + _td(hours=17, minutes=15)), "bloqueio")
+        ver("(b) problema corrigido: não manda outro e-mail (quem corrigiu já sabe)", f8 == [] and len(enviados) == n and c.execute("SELECT critico FROM alerta_estado WHERE assunto=?", (f"bloqueio:{e3}",)).fetchone()[0] == 0, str(f8))
+        c.execute("UPDATE erro SET situacao='aberto' WHERE id=?", (e3,)); c.commit()
+        ver("(b) reaberto em menos de 6 h: não repete (suprimido)", [x_["tipo"] for x_ in so(rodada(t0 + _td(hours=17, minutes=20)), "bloqueio")] == ["suprimido"] and len(enviados) == n)
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='avisos.bloqueio.ligado'"); c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','outro','operador','F099-P0001','Outro')"); c.commit()
+        ver("(b) desligado: não envia", so(rodada(t0 + _td(hours=18)), "bloqueio") == [] and len(enviados) == n)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='avisos.bloqueio.ligado'"); c.execute("UPDATE configuracao SET valor='problemas@camp.arq.br' WHERE chave='avisos.bloqueio.email'"); c.commit()
+        f9 = so(rodada(t0 + _td(hours=19)), "bloqueio")
+        ver("(b) destinatário por assunto: o problema novo vai só para a lista de problemas", [x_["para"] for x_ in f9] == ["problemas@camp.arq.br"], str(f9))
+        # ---- (c) pedido registrado à mão no painel ----
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False); auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        n = len(enviados)
+        sid = op.post("/api/solicitacoes", json={"solicitante": "Editora Exemplo", "email": "ed@exemplo.com", "finalidade": "publicacao", "origem": "email", "itens": [{"codigo": "F099-P0001", "formato": "tif"}]}).json()["id"]
+        env_p = [dict(x_) for x_ in c.execute("SELECT * FROM alerta_envio WHERE chave=?", (f"pedido:{sid}",))]
+        ver("(c) pedido registrado no painel: sai um aviso, dizendo quem registrou", len(enviados) == n + 1 and "registrado no painel" in enviados[-1]["titulo"] and "op@camp.arq.br" in enviados[-1]["corpo"]
+            and [(x_["assunto"], x_["tipo"], x_["para"]) for x_ in env_p] == [("pedido_painel", "novo", "geral@camp.arq.br")], str(env_p) + str(enviados[-1:])[:200])
+        ver("(c) chamar de novo para o mesmo pedido: não repete", alertas.avisar_pedido_novo(c, sid, enviar=falso, registrado_por="op@camp.arq.br") == [] and len(enviados) == n + 1)
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='avisos.pedido_painel.ligado'"); c.commit()
+        op.post("/api/solicitacoes", json={"solicitante": "Outra", "finalidade": "pesquisa", "origem": "presencial", "itens": []})
+        ver("(c) desligado: não envia", len(enviados) == n + 1)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='avisos.pedido_painel.ligado'"); c.execute("UPDATE configuracao SET valor='pedidos@camp.arq.br' WHERE chave='avisos.pedido_painel.email'"); c.commit()
+        op.post("/api/solicitacoes", json={"solicitante": "Terceira", "finalidade": "pesquisa", "origem": "presencial", "itens": []})
+        ver("(c) destinatário por assunto: vai para a lista dos pedidos do painel", len(enviados) == n + 2 and enviados[-1]["para"] == "pedidos@camp.arq.br", str(enviados[-1:]))
+        sid_site = c.execute("INSERT INTO solicitacao (solicitante, email, finalidade, origem) VALUES ('Site','s@x.com','pesquisa','site')").lastrowid; c.commit()
+        fs = alertas.avisar_pedido_novo(c, sid_site, enviar=falso)
+        ver("(c) o pedido do site continua no seu assunto ('pedido', lista geral) e também não repete", [(x_["assunto"], x_["para"]) for x_ in fs] == [("pedido", "geral@camp.arq.br")] and alertas.avisar_pedido_novo(c, sid_site, enviar=falso) == [], str(fs))
+        # ---- (2) preferências: tela e rotas, só admin edita ----
+        g = adm.get("/api/alertas/preferencias")
+        pj = g.json() if g.status_code == 200 else {}
+        porA = {a_["assunto"]: a_ for a_ in pj.get("assuntos", [])}
+        ver("preferências: lista os 9 assuntos com liga/desliga e quem recebe (vazio = lista geral)", g.status_code == 200 and len(porA) == 9 and porA["qnap"]["usa_geral"] and porA["qnap"]["recebem"] == ["geral@camp.arq.br"]
+            and porA["fila_travada"]["emails"] == ["fila@camp.arq.br", "rafael@camp.arq.br"] and pj["fila_horas"] == 24, str(pj)[:300])
+        ver("preferências: operador não lê nem edita (403)", op.get("/api/alertas/preferencias").status_code == 403 and op.put("/api/alertas/preferencias", json={"assuntos": [{"assunto": "qnap", "ligado": False}]}).status_code == 403)
+        r = adm.put("/api/alertas/preferencias", json={"fila_horas": 12, "assuntos": [{"assunto": "qnap", "ligado": False, "emails": "ti@camp.arq.br; rafael@camp.arq.br"}, {"assunto": "fila_travada", "emails": []}]})
+        porA = {a_["assunto"]: a_ for a_ in (r.json().get("assuntos", []) if r.status_code == 200 else [])}
+        ver("preferências: admin desliga, troca a lista e o limite de horas; lista vazia volta para a geral", r.status_code == 200 and porA["qnap"]["ligado"] is False and porA["qnap"]["emails"] == ["ti@camp.arq.br", "rafael@camp.arq.br"]
+            and porA["fila_travada"]["usa_geral"] and r.json()["fila_horas"] == 12 and alertas.horas_fila(c) == 12, r.text[:300])
+        ver("preferências: cada mudança fica na Auditoria", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='config' AND tipo='alterada' AND ator='adm@camp.arq.br' AND codigo IN ('avisos.qnap.ligado','avisos.qnap.email','avisos.fila_travada.email','avisos.fila_travada.horas')").fetchone()[0] == 4)
+        ruim = adm.put("/api/alertas/preferencias", json={"assuntos": [{"assunto": "bloqueio", "emails": "isso nao e email"}]})
+        ver("preferências: e-mail inválido é recusado com frase clara (400) e nada muda", ruim.status_code == 400 and "não parece um e-mail" in ruim.json().get("erro", "") and alertas.destinatarios(c, "bloqueio") == ["problemas@camp.arq.br"], ruim.text[:200])
+        ver("preferências: não deixa a lista geral vazia; assunto desconhecido 400", adm.put("/api/alertas/preferencias", json={"geral": ""}).status_code == 400 and adm.put("/api/alertas/preferencias", json={"assuntos": [{"assunto": "xyz", "ligado": True}]}).status_code == 400)
+        c.execute("INSERT INTO qnap_snapshot (total_gb, livre_gb) VALUES (1000, 10)"); c.commit(); n = len(enviados)
+        ver("assunto antigo (QNAP) também obedece o desligar", so(rodada(t0 + _td(hours=30)), "qnap") == [] and len(enviados) == n)
+        adm.put("/api/alertas/preferencias", json={"assuntos": [{"assunto": "qnap", "ligado": True}]})
+        fq = so(rodada(t0 + _td(hours=31)), "qnap")
+        ver("religado: o QNAP avisa para a lista própria dele", sorted(x_["para"] for x_ in fq) == ["rafael@camp.arq.br", "ti@camp.arq.br"], str(fq))
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -5908,6 +6025,14 @@ else:
 print("102) Mais inteligência: lote que colide, mesmo nome em outro fundo, fundo parecido, divergência do CV2 e pedido repetido")
 rc, out = rodar("mais_inteligencia", f"{tmp}/mais_int.db")
 if rc != 0: ok(False, f"teste Mais inteligência não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("106) Notificações: lote parado na Fila, problema que impede publicar e pedido registrado no painel; liga/desliga e quem recebe por assunto (SMTP falso)")
+rc, out = rodar("notificacoes", f"{tmp}/notificacoes.db")
+if rc != 0: ok(False, f"teste das notificações não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

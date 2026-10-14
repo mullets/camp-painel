@@ -4,7 +4,7 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import Response
 
 from . import auth
@@ -77,6 +77,30 @@ def alertas_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
         return {"estado": [dict(r) for r in con.execute("SELECT * FROM alerta_estado ORDER BY assunto")],
                 "envios": [dict(r) for r in con.execute("SELECT * FROM alerta_envio ORDER BY id DESC LIMIT 50")],
                 "resumo": al.resumo_estado(con)}
+    finally:
+        con.close()
+
+
+@router.get("/alertas/preferencias")
+def alertas_preferencias(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Cartão "Notificações": cada assunto de aviso, se está ligado e quem recebe (vazio = a lista geral avisos.email)."""
+    from . import alertas as al
+    con = connect()
+    try:
+        return al.preferencias(con)
+    finally:
+        con.close()
+
+
+@router.put("/alertas/preferencias")
+def alertas_preferencias_salvar(d: dict = Body(...), u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Só admin. Grava liga/desliga e destinatários por assunto (as mesmas chaves avisos.* das Configurações, com registro na Auditoria)."""
+    from . import alertas as al
+    con = connect()
+    try:
+        return al.salvar_preferencias(con, d if isinstance(d, dict) else {}, u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     finally:
         con.close()
 

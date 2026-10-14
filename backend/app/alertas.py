@@ -1,6 +1,9 @@
 """Alertas críticos por e-mail (cartão 151). Usa as MESMAS regras de nível da tela (P1-14): nada é recalculado aqui.
 Um e-mail quando o assunto entra em crítico (no máximo 1 a cada 6 h por assunto) e um quando volta ao normal (só se o crítico foi avisado).
-Envio pelo email_envio (smtp.*) para avisos.email (vários endereços separados por vírgula). Cada envio fica em alerta_envio."""
+Envio pelo email_envio (smtp.*). Cada envio fica em alerta_envio.
+Cartão "Notificações": cada assunto liga/desliga em 'avisos.<assunto>.ligado' e tem a sua lista de quem recebe em
+'avisos.<assunto>.email' (vazia = avisos.email). Assuntos novos: lote parado na Fila (fila_travada, um aviso para a Fila),
+problema que impede publicar (bloqueio, um aviso por problema) e pedido registrado à mão no painel (pedido_painel)."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -13,13 +16,80 @@ ASSUNTOS = {
     "backup": ("Cópia de segurança do painel atrasada", "estacoes"),
     "site": ("Site sem resposta", "estacoes"),
     "replica": ("Cópia do acervo parada", "estacoes"),
+    "fila_travada": ("Lote parado na Fila", "filas"),
+    "bloqueio": ("Problema que impede publicar", "erros"),
 }
 LIMITE_CRITICO = timedelta(hours=6)
+PADRAO_EMAIL = "rafael@camp.arq.br"
+
+# A tela de preferências (Estações → Alertas) mostra estes assuntos, nesta ordem. 'ligado' é a chave de liga/desliga.
+PREFERENCIAS = [
+    {"assunto": "qnap", "nome": "QNAP quase cheio", "explica": "O armazenamento das digitalizações está ficando sem espaço.", "ligado": "avisos.qnap.ligado"},
+    {"assunto": "campvision", "nome": "CAMP Vision parado", "explica": "O computador do CAMP Vision parou de dar sinal ou um lote deu erro.", "ligado": "avisos.campvision.ligado"},
+    {"assunto": "backup", "nome": "Cópia de segurança atrasada", "explica": "A cópia de segurança do painel tem mais de 36 h ou falhou.", "ligado": "avisos.backup.ligado"},
+    {"assunto": "site", "nome": "Site sem resposta", "explica": "O site não respondeu em duas verificações seguidas.", "ligado": "avisos.site.ligado"},
+    {"assunto": "replica", "nome": "Cópia do acervo parada", "explica": "A cópia das digitalizações em outro disco parou.", "ligado": "avisos.replica.ligado"},
+    {"assunto": "fila_travada", "nome": "Lote parado na Fila", "explica": "Um lote ficou na mesma etapa da Fila por mais tempo que o limite.", "ligado": "avisos.fila_travada.ligado"},
+    {"assunto": "bloqueio", "nome": "Problema que impede publicar", "explica": "Foi aberto um problema grave (um e-mail para cada problema).", "ligado": "avisos.bloqueio.ligado"},
+    {"assunto": "pedido", "nome": "Pedido de material pelo site", "explica": "Alguém pediu material pelo formulário do site.", "ligado": "avisos.pedido_novo"},
+    {"assunto": "pedido_painel", "nome": "Pedido de material registrado no painel", "explica": "Alguém da equipe registrou um pedido à mão no painel.", "ligado": "avisos.pedido_painel.ligado"},
+]
+CHAVE_LIGADO = {p["assunto"]: p["ligado"] for p in PREFERENCIAS}
+# O problema que impede publicar é resolvido por alguém no próprio painel: não sai um segundo e-mail de "resolvido".
+SEM_RESOLVIDO = {"bloqueio"}
+ETAPA_TXT = {"enviado": "esperando o CAMP Vision começar", "processando": "sendo lido pelo CAMP Vision", "revisao": "esperando a revisão das folhas"}
 
 
 def _cfg(con, chave: str, padrao: str = "") -> str:
     r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
     return (r[0] if r and r[0] is not None else padrao) or padrao
+
+
+def ligado(con, assunto: str) -> bool:
+    """Desligado só quando a chave diz 0/não. Assunto sem chave fica ligado."""
+    chave = CHAVE_LIGADO.get(assunto)
+    return not chave or _cfg(con, chave, "1").strip().lower() not in ("0", "nao", "não", "false")
+
+
+def lista_emails(texto: str) -> list[str]:
+    return [e.strip() for e in (texto or "").replace(";", ",").split(",") if e.strip()]
+
+
+def destinatarios(con, assunto: str) -> list[str]:
+    """Quem recebe este assunto: a lista do assunto (avisos.<assunto>.email) ou, se vazia, avisos.email."""
+    return lista_emails(_cfg(con, f"avisos.{assunto}.email")) or lista_emails(_cfg(con, "avisos.email", PADRAO_EMAIL))
+
+
+def _minusc(t: str) -> str:
+    """'Lote parado' -> 'lote parado', mas sigla fica: 'QNAP quase cheio', 'CAMP Vision parado'."""
+    return t if not t or (len(t) > 1 and t[1].isupper()) else t[0].lower() + t[1:]
+
+
+def horas_fila(con) -> int:
+    try:
+        h = int(_cfg(con, "avisos.fila_travada.horas", "24"))
+    except ValueError:
+        h = 24
+    return h if h > 0 else 24
+
+
+def _mandar(con, smtp, enviar, destinos, assunto, tipo, titulo, corpo, chave=None, responder_para=None) -> list[dict]:
+    """Um e-mail por destinatário; cada tentativa fica em alerta_envio (com a chave do aviso)."""
+    feitos = []
+    for para in destinos:
+        ok, erro = False, None
+        if not email_envio.configurado(smtp):
+            erro = "SMTP não configurado (Configurações → smtp.*)"
+        else:
+            try:
+                res = enviar(smtp, para, titulo, corpo, responder_para=responder_para) if responder_para else enviar(smtp, para, titulo, corpo)
+                ok = not (isinstance(res, dict) and res.get("erro"))
+                erro = res.get("erro") if isinstance(res, dict) else None
+            except Exception as ex:  # noqa: BLE001
+                erro = str(ex)[:200]
+        con.execute("INSERT INTO alerta_envio (assunto, tipo, para, titulo, ok, erro, chave) VALUES (?,?,?,?,?,?,?)", (assunto, tipo, para, titulo, int(ok), erro, chave))
+        feitos.append({"assunto": assunto, "tipo": tipo, "para": para, "ok": ok, "erro": erro, **({"chave": chave} if chave and chave != assunto else {})})
+    return feitos
 
 
 def avaliar(con, medir_site=None, estado_backup=None) -> dict:
@@ -63,21 +133,70 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
     return out
 
 
+def avaliar_extras(con, agora: datetime | None = None) -> dict:
+    """Os assuntos do cartão "Notificações" que seguem a mesma regra de crítico/normal:
+    - 'fila_travada': algum lote está na mesma etapa (enviado, processando, revisão) há mais que avisos.fila_travada.horas;
+    - 'bloqueio:<id>': cada problema aberto que impede publicar (gravidade 'bloqueia') é um aviso próprio.
+    Assunto desligado fica de fora (e não mexe no estado guardado). Devolve {chave: {'assunto', 'critico', 'texto', ...}}."""
+    agora = agora or datetime.utcnow()
+    out = {}
+    if ligado(con, "fila_travada"):
+        horas = horas_fila(con)
+        limite = (agora - timedelta(hours=horas)).strftime("%Y-%m-%d %H:%M:%S")
+        lotes = con.execute("""SELECT id, nome, projeto_codigo, etapa, COALESCE(etapa_desde, criado_em) AS desde
+                                 FROM lista_processamento
+                                WHERE descartado_em IS NULL AND etapa IN ('enviado','processando','revisao')
+                                  AND COALESCE(etapa_desde, criado_em) < ? ORDER BY desde""", (limite,)).fetchall()
+        partes = []
+        for l in lotes[:10]:
+            try:
+                h = int((agora - datetime.fromisoformat(l["desde"])).total_seconds() // 3600)
+            except (TypeError, ValueError):
+                h = horas
+            partes.append(f"- {l['nome']} ({l['projeto_codigo']}): {ETAPA_TXT.get(l['etapa'], l['etapa'])} há {h} h")
+        if len(lotes) > 10:
+            partes.append(f"- e mais {len(lotes) - 10} lote(s)")
+        texto = (f"{len(lotes)} lote(s) parado(s) na mesma etapa da Fila há mais de {horas} h:\n" + "\n".join(partes)
+                 + "\n\nAbra a Fila e veja o que falta: se o CAMP Vision está ligado, ou se o lote espera alguém revisar.") if lotes else f"Nenhum lote parado há mais de {horas} h na Fila."
+        out["fila_travada"] = {"assunto": "fila_travada", "critico": bool(lotes), "texto": texto, "lotes": [l["id"] for l in lotes]}
+    if ligado(con, "bloqueio"):
+        abertos = con.execute("""SELECT id, codigo, categoria, descricao, origem, relatado_por FROM erro
+                                  WHERE situacao IN ('aberto','em_correcao') AND gravidade='bloqueia' ORDER BY id""").fetchall()
+        for p in abertos:
+            out[f"bloqueio:{p['id']}"] = {
+                "assunto": "bloqueio", "critico": True, "titulo_base": f"Problema que impede publicar em {p['codigo']}",
+                "texto": (f"Foi aberto um problema que impede publicar {p['codigo']}:\n\n{p['descricao']}\n\n"
+                          + (f"Quem avisou: {p['relatado_por']}\n" if p["relatado_por"] else "")
+                          + "Enquanto ele estiver aberto, esse material não pode ser publicado. Abra Problemas para corrigir ou fechar."),
+                "tela": "erros"}
+        # problema que deixou de estar aberto (corrigido, fechado, ignorado ou mudou de gravidade): volta ao normal
+        vistos = set(out)
+        for e in con.execute("SELECT assunto FROM alerta_estado WHERE assunto LIKE 'bloqueio:%' AND critico=1").fetchall():
+            if e["assunto"] not in vistos:
+                out[e["assunto"]] = {"assunto": "bloqueio", "critico": False, "texto": "O problema não está mais aberto."}
+    return out
+
+
 def verificar(con, agora: datetime | None = None, enviar=None, medir_site=None, estado_backup=None) -> list[dict]:
-    """Compara com o estado guardado e envia o que mudou. Devolve os registros de envio desta rodada."""
+    """Compara com o estado guardado e envia o que mudou. Devolve os registros de envio desta rodada.
+    Mesma regra para todos: um e-mail quando entra em crítico (no máximo 1 a cada 6 h por chave), um quando volta ao normal
+    (só se o crítico foi avisado). Assunto desligado não é avaliado nem envia."""
     agora = agora or datetime.utcnow()
     enviar = enviar or email_envio.enviar
-    destinos = [e.strip() for e in _cfg(con, "avisos.email", "rafael@camp.arq.br").split(",") if e.strip()]
     base = _cfg(con, "painel.url", "https://painel.camp.arq.br").rstrip("/")
     smtp = email_envio.configuracao(con)
     feitos = []
-    for assunto, r in avaliar(con, medir_site=medir_site, estado_backup=estado_backup).items():
-        titulo_base, tela = ASSUNTOS[assunto]
-        e = con.execute("SELECT * FROM alerta_estado WHERE assunto=?", (assunto,)).fetchone()
+    rodada = {k: {**v, "assunto": k} for k, v in avaliar(con, medir_site=medir_site, estado_backup=estado_backup).items() if ligado(con, k)}
+    rodada.update(avaliar_extras(con, agora))
+    for chave, r in rodada.items():
+        assunto = r["assunto"]
+        titulo_base = r.get("titulo_base") or ASSUNTOS[assunto][0]
+        tela = r.get("tela") or ASSUNTOS[assunto][1]
+        e = con.execute("SELECT * FROM alerta_estado WHERE assunto=?", (chave,)).fetchone()
         antes = bool(e["critico"]) if e else False
         if r["critico"] == antes:
             if e:
-                con.execute("UPDATE alerta_estado SET texto=?, atualizado_em=datetime('now') WHERE assunto=?", (r["texto"], assunto))
+                con.execute("UPDATE alerta_estado SET texto=?, atualizado_em=datetime('now') WHERE assunto=?", (r["texto"], chave))
             continue
         tipo, titulo = None, None
         if r["critico"]:
@@ -86,81 +205,129 @@ def verificar(con, agora: datetime | None = None, enviar=None, medir_site=None, 
                 tipo = "suprimido"
             else:
                 tipo, titulo = "critico", f"[CAMP Painel] {titulo_base}"
-        elif e and e["critico_avisado"]:
-            tipo, titulo = "resolvido", f"[CAMP Painel] Resolvido: {titulo_base.lower()}"
+        elif e and e["critico_avisado"] and assunto not in SEM_RESOLVIDO:
+            tipo, titulo = "resolvido", f"[CAMP Painel] Resolvido: {_minusc(titulo_base)}"
         con.execute("""INSERT INTO alerta_estado (assunto, critico, desde, texto, critico_avisado, ultimo_critico_em) VALUES (?,?,?,?,0,NULL)
                        ON CONFLICT(assunto) DO UPDATE SET critico=excluded.critico, desde=excluded.desde, texto=excluded.texto, atualizado_em=datetime('now')""",
-                    (assunto, int(r["critico"]), agora.strftime("%Y-%m-%d %H:%M:%S"), r["texto"]))
+                    (chave, int(r["critico"]), agora.strftime("%Y-%m-%d %H:%M:%S"), r["texto"]))
         if tipo == "suprimido":
-            con.execute("INSERT INTO alerta_envio (assunto, tipo, ok, erro) VALUES (?, 'suprimido', 1, 'já avisado há menos de 6 h')", (assunto,))
-            feitos.append({"assunto": assunto, "tipo": "suprimido"})
+            con.execute("INSERT INTO alerta_envio (assunto, tipo, ok, erro, chave) VALUES (?, 'suprimido', 1, 'já avisado há menos de 6 h', ?)", (assunto, chave))
+            feitos.append({"assunto": assunto, "tipo": "suprimido", **({"chave": chave} if chave != assunto else {})})
             continue
         if tipo is None:
+            if not r["critico"]:
+                con.execute("UPDATE alerta_estado SET critico_avisado=0 WHERE assunto=?", (chave,))
             continue
-        corpo = (r["texto"] if tipo == "critico" else f"Voltou ao normal: {titulo_base.lower()}.") + f"\n\nVer no painel: {base}/#{tela}\n\n— CAMP Painel (aviso automático)"
-        for para in destinos:
-            ok, erro = False, None
-            if not email_envio.configurado(smtp):
-                erro = "SMTP não configurado (Configurações → smtp.*)"
-            else:
-                try:
-                    res = enviar(smtp, para, titulo, corpo)
-                    ok = not (isinstance(res, dict) and res.get("erro"))
-                    erro = res.get("erro") if isinstance(res, dict) else None
-                except Exception as ex:  # noqa: BLE001
-                    erro = str(ex)[:200]
-            con.execute("INSERT INTO alerta_envio (assunto, tipo, para, titulo, ok, erro) VALUES (?,?,?,?,?,?)", (assunto, tipo, para, titulo, int(ok), erro))
-            feitos.append({"assunto": assunto, "tipo": tipo, "para": para, "ok": ok, "erro": erro})
+        corpo = (r["texto"] if tipo == "critico" else f"Voltou ao normal: {_minusc(titulo_base)}.") + f"\n\nVer no painel: {base}/#{tela}\n\n— CAMP Painel (aviso automático)"
+        feitos += _mandar(con, smtp, enviar, destinatarios(con, assunto), assunto, tipo, titulo, corpo, chave=chave)
         if tipo == "critico":
-            con.execute("UPDATE alerta_estado SET critico_avisado=1, ultimo_critico_em=? WHERE assunto=?", (agora.isoformat(timespec="seconds"), assunto))
+            con.execute("UPDATE alerta_estado SET critico_avisado=1, ultimo_critico_em=? WHERE assunto=?", (agora.isoformat(timespec="seconds"), chave))
         else:
-            con.execute("UPDATE alerta_estado SET critico_avisado=0 WHERE assunto=?", (assunto,))
+            con.execute("UPDATE alerta_estado SET critico_avisado=0 WHERE assunto=?", (chave,))
     con.commit()
     return feitos
 
 
 # ---------------- Sobras #12 (d): aviso de pedido de material novo ----------------
-# Assunto OPCIONAL (avisos.pedido_novo = 1 liga, 0 desliga). Não é um "crítico": sai um e-mail por pedido que chega pelo site,
-# para os mesmos destinatários (avisos.email), e cada envio fica em alerta_envio com assunto 'pedido' e tipo 'novo'.
+# Não é um "crítico": sai um e-mail por pedido, e cada envio fica em alerta_envio com tipo 'novo' e chave 'pedido:<id>'
+# (a chave impede mandar o mesmo pedido duas vezes). Pedido do site: assunto 'pedido' (liga/desliga em avisos.pedido_novo).
+# Pedido registrado à mão no painel: assunto 'pedido_painel' (avisos.pedido_painel.ligado).
 FINALIDADES = {"publicacao": "publicação", "pesquisa": "pesquisa", "editorial": "editorial", "familia": "família",
                "exposicao": "exposição", "outro": "outro"}
 
 
-def avisar_pedido_novo(con, sid: int, enviar=None) -> list[dict]:
-    if _cfg(con, "avisos.pedido_novo", "1").strip().lower() in ("0", "nao", "não", "false"):
+def avisar_pedido_novo(con, sid: int, enviar=None, registrado_por: str | None = None) -> list[dict]:
+    """registrado_por = e-mail de quem registrou no painel (pedido feito à mão); vazio = pedido que chegou pelo site."""
+    assunto = "pedido_painel" if registrado_por else "pedido"
+    if not ligado(con, assunto):
         return []
     s = con.execute("SELECT * FROM solicitacao WHERE id=?", (sid,)).fetchone()
     if not s:
         return []
+    chave = f"pedido:{sid}"
+    if con.execute("SELECT 1 FROM alerta_envio WHERE chave=? AND tipo='novo' LIMIT 1", (chave,)).fetchone():
+        return []                                     # já avisado: não repete
     enviar = enviar or email_envio.enviar
-    destinos = [e.strip() for e in _cfg(con, "avisos.email", "rafael@camp.arq.br").split(",") if e.strip()]
     base = _cfg(con, "painel.url", "https://painel.camp.arq.br").rstrip("/")
     smtp = email_envio.configuracao(con)
     itens = [f"{r['codigo']} ({r['formato']})" for r in con.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=? ORDER BY codigo", (sid,))]
-    titulo = f"[CAMP Painel] Pedido de material novo: {' '.join(str(s['solicitante']).split())[:60]}"
-    corpo = ("Chegou um pedido de material pelo site.\n\n"
+    quem = " ".join(str(s["solicitante"]).split())[:60]
+    if registrado_por:
+        titulo = f"[CAMP Painel] Pedido de material registrado no painel: {quem}"
+        abertura = f"Um pedido de material foi registrado no painel por {registrado_por}.\n\n"
+    else:
+        titulo = f"[CAMP Painel] Pedido de material novo: {quem}"
+        abertura = "Chegou um pedido de material pelo site.\n\n"
+    corpo = (abertura +
              f"Quem pediu: {s['solicitante']}" + (f" ({s['instituicao']})" if s["instituicao"] else "") + "\n"
              f"E-mail: {s['email'] or '—'}\n"
              f"Para quê: {FINALIDADES.get(s['finalidade'], s['finalidade'])}\n"
              f"Material: {', '.join(itens) or '—'}\n"
              + (f"\nMensagem:\n{s['detalhe']}\n" if s["detalhe"] else "")
              + f"\nVer no painel: {base}/#solicitacoes\n\n— CAMP Painel (aviso automático)")
-    feitos = []
-    for para in destinos:
-        ok, erro = False, None
-        if not email_envio.configurado(smtp):
-            erro = "SMTP não configurado (Configurações → smtp.*)"
-        else:
-            try:
-                res = enviar(smtp, para, titulo, corpo, responder_para=s["email"])
-                ok = not (isinstance(res, dict) and res.get("erro"))
-                erro = res.get("erro") if isinstance(res, dict) else None
-            except Exception as ex:  # noqa: BLE001
-                erro = str(ex)[:200]
-        con.execute("INSERT INTO alerta_envio (assunto, tipo, para, titulo, ok, erro) VALUES ('pedido','novo',?,?,?,?)", (para, titulo, int(ok), erro))
-        feitos.append({"assunto": "pedido", "tipo": "novo", "para": para, "ok": ok, "erro": erro})
+    feitos = _mandar(con, smtp, enviar, destinatarios(con, assunto), assunto, "novo", titulo, corpo, chave=chave,
+                     responder_para=s["email"] if email_envio.ENDERECO.match(s["email"] or "") else None)
     con.commit()
     return feitos
+
+
+# ---------------- preferências: quem recebe o quê (tela Estações → Alertas) ----------------
+def preferencias(con) -> dict:
+    geral = lista_emails(_cfg(con, "avisos.email", PADRAO_EMAIL))
+    out = []
+    for p in PREFERENCIAS:
+        proprio = lista_emails(_cfg(con, f"avisos.{p['assunto']}.email"))
+        out.append({"assunto": p["assunto"], "nome": p["nome"], "explica": p["explica"], "ligado": ligado(con, p["assunto"]),
+                    "emails": proprio, "recebem": proprio or geral, "usa_geral": not proprio})
+    return {"assuntos": out, "geral": geral, "fila_horas": horas_fila(con)}
+
+
+def salvar_preferencias(con, dados: dict, ator: str) -> dict:
+    """dados = {'geral': [..]?, 'fila_horas': int?, 'assuntos': [{'assunto', 'ligado', 'emails': [..]}]}. Valida tudo antes de gravar.
+    Levanta ValueError com a frase para a tela."""
+    import json
+    mud: dict[str, str] = {}
+
+    def emails(v, onde: str) -> str:
+        lst = lista_emails(",".join(v) if isinstance(v, list) else str(v or ""))
+        ruins = [x for x in lst if not email_envio.ENDERECO.match(x)]
+        if ruins:
+            raise ValueError(f"{onde}: o endereço '{ruins[0]}' não parece um e-mail.")
+        return ", ".join(dict.fromkeys(lst))
+    if "geral" in dados:
+        g = emails(dados["geral"], "Quem recebe quando o assunto não tem lista própria")
+        if not g:
+            raise ValueError("Deixe pelo menos um e-mail em 'Quem recebe quando o assunto não tem lista própria'.")
+        mud["avisos.email"] = g
+    if "fila_horas" in dados:
+        try:
+            h = int(dados["fila_horas"])
+        except (TypeError, ValueError):
+            h = 0
+        if not 1 <= h <= 24 * 30:
+            raise ValueError("O limite da Fila parada tem que ser um número de horas entre 1 e 720.")
+        mud["avisos.fila_travada.horas"] = str(h)
+    nomes = {p["assunto"]: p for p in PREFERENCIAS}
+    for a in dados.get("assuntos") or []:
+        p = nomes.get(str(a.get("assunto")))
+        if not p:
+            raise ValueError(f"Assunto desconhecido: {a.get('assunto')}")
+        if "ligado" in a:
+            mud[p["ligado"]] = "1" if a["ligado"] else "0"
+        if "emails" in a:
+            mud[f"avisos.{p['assunto']}.email"] = emails(a["emails"], p["nome"])
+    for chave, valor in mud.items():
+        atual = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+        if atual is None:
+            con.execute("INSERT INTO configuracao (chave, valor, descricao, sensivel) VALUES (?,?,?,0)", (chave, valor, "Aviso por e-mail (tela Estações → Alertas)"))
+        elif (atual[0] or "") == valor:
+            continue
+        else:
+            con.execute("UPDATE configuracao SET valor=?, atualizado_em=datetime('now'), atualizado_por=? WHERE chave=?", (valor, ator, chave))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('config',?,'alterada',?,?)",
+                    (chave, ator, json.dumps({"antes": {"valor": atual[0] if atual else None}, "depois": {"valor": valor}}, ensure_ascii=False)))
+    con.commit()
+    return preferencias(con)
 
 
 # ---------------- resumo do dia (cartão 151): opcional, desligado por padrão ----------------
