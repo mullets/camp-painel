@@ -4814,6 +4814,123 @@ def filho(modo):
         ver("integridade depois das três trocas: foreign_key_check vazio", c.execute("PRAGMA foreign_key_check").fetchall() == [])
         c.close()
         for l in res: print(l)
+    elif modo == "revisao_pos_cv":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil, io as _io, tempfile as _tf
+        from pathlib import Path as _P
+        from app import auth, publicador
+        from PIL import Image
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        prontos = _P(_tf.mkdtemp()) / "prontos"
+        os.environ["CAMP_CACHE_DIR"] = str(prontos / "cache")
+        def jpg(caminho, tam=(60, 30)):        # branca com um bloco vermelho 12x12 no canto SUPERIOR ESQUERDO (marca o sentido)
+            caminho.parent.mkdir(parents=True, exist_ok=True); im = Image.new("RGB", tam, "white"); im.paste((255, 0, 0), (0, 0, 12, 12)); im.save(caminho, "JPEG", quality=95)
+        def vermelho(im, xy): r, g, b = im.getpixel(xy); return r > 200 and g < 90 and b < 90
+        proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", proj)
+        # o CV2 grava, por folha, o que leu no carimbo: endereço e cliente nos metadados (D1 e D3) ou direto no documento
+        pac = proj / "catalogacao" / "pacote_tainacan.json"; pj = _j.loads(pac.read_text(encoding="utf-8"))
+        docs = pj.get("documentos") or pj.get("itens")
+        docs[0].setdefault("metadados", {})["endereco"] = "Rua Tarumã, 100"; docs[0]["metadados"]["cliente"] = "Família Silva"; docs[0]["espelhada"] = True; docs[0]["orientacao_corrigida"] = False
+        pac.write_text(_j.dumps(pj, ensure_ascii=False), encoding="utf-8")
+        D = lambda n: f"F026-P0001-1972-S01-D{n:05d}"
+        for n in (1, 2, 3): jpg(prontos / "_campvision" / "preview" / "F026-P0001" / f"{D(n)}.jpg")
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote normal','F026-P0001',?,'revisao')", (str(proj),)).lastrowid
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        r = op.post(f"/api/lotes/{lote}/importar")
+        ver("importar: o endereço e o cliente lidos no carimbo de cada folha ficam na folha (para o consenso)", r.status_code == 200 and sql("SELECT endereco_folha FROM item WHERE codigo=?", D(1)) == "Rua Tarumã, 100" and sql("SELECT cliente_folha FROM item WHERE codigo=?", D(1)) == "Família Silva", r.text[:200])
+        # ---------- (1) ESPELHAR ----------
+        previa = lambda cod, q="": adm.get(f"/api/itens/{cod}/previa{q}")
+        img = lambda r_: Image.open(_io.BytesIO(r_.content))
+        ver("o CAMP Vision apontou D1 como espelhada e não corrigiu: o painel já mostra a prévia espelhada (canto vermelho em cima à DIREITA)",
+            sql("SELECT espelhado FROM item WHERE codigo=?", D(1)) == 1 and vermelho(img(previa(D(1))), (54, 5)) and not vermelho(img(previa(D(1))), (5, 5)))
+        ver("a lista do projeto diz se a folha sai espelhada (espelhar) e se foi decisão de gente (espelho_manual)",
+            [(x["espelhar"], x["espelho_manual"]) for x in lei.get("/api/projetos/F026-P0001/detalhe").json()["itens"] if x["codigo"] == D(1)] == [(1, None)])
+        e = op.post(f"/api/itens/{D(1)}/espelhar")
+        ver("Espelhar de novo desfaz (a pessoa decide: espelho_manual=0) e a prévia volta como o arquivo (canto à esquerda)",
+            e.status_code == 200 and e.json()["espelhar"] is False and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(1)) == 0 and vermelho(img(previa(D(1))), (5, 5)), e.text)
+        r0 = previa(D(3)); e = op.post(f"/api/itens/{D(3)}/espelhar"); r1 = previa(D(3))
+        ver("espelhar uma folha normal: FLIP esquerda-direita (60x30, canto vermelho vai para a direita), mesmo tamanho",
+            e.json() == {"espelhar": True, "giro_manual": 0} and img(r1).size == (60, 30) and vermelho(img(r1), (54, 5)) and not vermelho(img(r1), (5, 5)))
+        ver("miniatura espelhada (?t=200) também sai espelhada", vermelho(img(previa(D(3), "?t=200")), (54, 5)) and not vermelho(img(previa(D(3), "?t=200")), (5, 5)))
+        op.post(f"/api/itens/{D(3)}/espelhar"); ver("desespelhar volta ao ARQUIVO ORIGINAL (bytes iguais)", previa(D(3)).content == r0.content)
+        op.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}); e = op.post(f"/api/itens/{D(3)}/espelhar"); rg = previa(D(3))
+        ver("folha deitada (giro 90): espelhar troca o giro por 270, para espelhar o que a pessoa VÊ (esquerda-direita na tela): canto vermelho em cima à esquerda",
+            e.json() == {"espelhar": True, "giro_manual": 270} and img(rg).size == (30, 60) and vermelho(img(rg), (5, 5)) and not vermelho(img(rg), (24, 5)), e.text)
+        ver("reimportar o lote NÃO desfaz a decisão de gente (espelho_manual fica)", op.post(f"/api/lotes/{lote}/importar").status_code == 200 and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(1)) == 0 and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(3)) == 1)
+        ver("espelhar: leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(3)}/espelhar").status_code == 403 and anon.post(f"/api/itens/{D(3)}/espelhar").status_code == 401 and op.post("/api/itens/F026-P0001-1972-S01-D99999/espelhar").status_code == 404)
+        k.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (D(2),)); k.commit()
+        ver("folha que já está no site não espelha por aqui (409)", op.post(f"/api/itens/{D(2)}/espelhar").status_code == 409)
+        k.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (D(2),)); k.commit()
+        ver("a história registra o espelho (de/para)", sql("SELECT COUNT(*) FROM evento WHERE tipo='espelho' AND codigo=?", D(3)) == 3)
+        envios = []
+        class WPFalso:
+            def criar_item(self, col, titulo, status, desc): return {"id": 5001, "slug": "s", "url": "u"}
+            def definir_metadado(self, *a): pass
+            def upload_media(self, caminho, titulo, nome=None): envios.append(caminho); return {"id": 1, "source_url": "u"}
+            def definir_documento(self, *a): pass
+            def patch_item(self, *a, **kw): pass
+        publicador.WP = WPFalso
+        k.execute("UPDATE projeto SET tainacan_item_id=9100 WHERE codigo='F026-P0001'"); k.execute("UPDATE item SET status_site='nao_publicado', revisao='conferida', duplicata_de=NULL, giro_manual=0, espelho_manual=1 WHERE codigo=?", (D(3),)); k.commit()
+        rr = publicador.criar_folha_no_site(D(3), "x")
+        ver("envio ao site: a imagem sobe ESPELHADA (FLIP_LEFT_RIGHT no mesmo lugar do giro)", rr["erro"] is None and len(envios) == 1 and vermelho(Image.open(envios[0]), (54, 5)) and not vermelho(Image.open(envios[0]), (5, 5)), str((rr, envios)))
+        k.execute("UPDATE item SET tainacan_item_id=NULL, status_site='nao_publicado', revisao='pendente' WHERE codigo=?", (D(3),)); k.commit()
+        # ---------- (3) DUPLICATA: marcar, qual publica (trocar) e desfazer ----------
+        k.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL WHERE projeto_codigo='F026-P0001'"); k.commit()
+        m = op.post(f"/api/itens/{D(2)}/duplicata-de", json={"codigo_original": D(1), "tipo": "mesma_folha"})
+        ver("marcar D2 como duplicata de D1 (operador)", m.status_code == 200 and sql("SELECT duplicata_de FROM item WHERE codigo=?", D(2)) == D(1), m.text)
+        t = op.post(f"/api/itens/{D(1)}/duplicata-de", json={"codigo_original": D(2), "tipo": "mesma_folha"})
+        ver("'qual publica': marcar a original (D1) como cópia de D2 TROCA o par: D2 passa a publicar, D1 vira a duplicata",
+            t.status_code == 200 and t.json()["trocou"] is True and sql("SELECT duplicata_de FROM item WHERE codigo=?", D(1)) == D(2) and sql("SELECT duplicata_de FROM item WHERE codigo=?", D(2)) is None, t.text)
+        dz = op.delete(f"/api/itens/{D(1)}/duplicata-de")
+        ver("desfazer a marcação: D1 deixa de ser duplicata (volta a poder ir ao site)", dz.status_code == 200 and dz.json()["era_de"] == D(2) and sql("SELECT duplicata_de FROM item WHERE codigo=?", D(1)) is None and sql("SELECT tipo_duplicata FROM item WHERE codigo=?", D(1)) is None, dz.text)
+        ver("desfazer: de novo 409; folha inexistente 404; leitura 403; sem login 401",
+            op.delete(f"/api/itens/{D(1)}/duplicata-de").status_code == 409 and op.delete("/api/itens/F026-P0001-1972-S01-D99999/duplicata-de").status_code == 404
+            and lei.delete(f"/api/itens/{D(1)}/duplicata-de").status_code == 403 and anon.delete(f"/api/itens/{D(1)}/duplicata-de").status_code == 401)
+        ev = k.execute("SELECT detalhe FROM evento WHERE tipo='duplicata_desmarcada' AND codigo=?", (D(1),)).fetchone()
+        ver("desfazer deixa evento com de quem ela era cópia, e aparece no filtro 'Edições' da auditoria", ev and _j.loads(ev[0])["era_de"] == D(2) and any(x["tipo"] == "duplicata_desmarcada" for x in adm.get("/api/eventos?grupo=edicoes").json()["eventos"]))
+        # ---------- (4) CONSENSO de ano, endereço e cliente ----------
+        k.execute("UPDATE item SET duplicata_de=NULL WHERE projeto_codigo='F026-P0001'")
+        k.execute("UPDATE item SET ano_folha=1968, endereco_folha='Rua Tarumã, 100', cliente_folha='Família Silva' WHERE codigo=?", (D(1),))
+        k.execute("UPDATE item SET ano_folha=1968, endereco_folha='rua tarumã,  100', cliente_folha=NULL WHERE codigo=?", (D(2),))
+        k.execute("UPDATE item SET ano_folha=1986, endereco_folha=NULL, cliente_folha='Outro Cliente' WHERE codigo=?", (D(3),))
+        k.commit()
+        cs = lei.get(f"/api/projetos/F026-P0001/consenso?lote_id={lote}"); j = cs.json(); C = {x["campo"]: x for x in j.get("campos", [])}
+        ver("consenso (leitura pode ver): ano 1968 por 2 de 3 folhas; D3 (1986) diverge", cs.status_code == 200 and j["folhas"] == 3 and C["ano"]["consenso"] == 1968 and C["ano"]["votos"] == 2 and [x["codigo"] for x in C["ano"]["divergentes"]] == [D(3)] and C["ano"]["projeto"] == 1972, cs.text[:400])
+        ver("consenso do endereço ignora caixa e espaços (2 votos); a folha SEM endereço aparece como vazia", C["endereco"]["consenso"] == "Rua Tarumã, 100" and C["endereco"]["divergentes"] == [{"codigo": D(3), "valor": None, "vazio": True, "trava": None}], str(C["endereco"]))
+        ver("cliente: um voto para cada lado não é consenso (não sugere nada)", C["cliente"]["consenso"] is None and C["cliente"]["divergentes"] == [] and C["cliente"]["com_valor"] == 2)
+        ver("aplicar: leitura 403, campo inválido 400, campo sem consenso 409",
+            lei.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "ano"}).status_code == 403 and op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "titulo"}).status_code == 400
+            and op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "cliente"}).status_code == 409)
+        a1 = op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "ano", "itens": [D(3), D(1)], "lote_id": lote}).json()
+        ver("'Usar o valor do consenso' numa folha: D3 vira 1968; D1 (que já segue) é ignorada com o motivo", a1["aplicadas"] == [D(3)] and a1["ignoradas"][0]["codigo"] == D(1) and sql("SELECT ano_folha FROM item WHERE codigo=?", D(3)) == 1968, str(a1))
+        ev = _j.loads(sql("SELECT detalhe FROM evento WHERE tipo='consenso_aplicado' AND codigo=?", D(3)))
+        ver("a troca fica na história da folha (de 1986 para 1968)", ev["de"] == 1986 and ev["para"] == 1968 and ev["campo"] == "ano")
+        k.execute("UPDATE item SET endereco_folha=? WHERE codigo=?", ("Av. Paulista", D(1))); k.execute("UPDATE item SET endereco_folha=? WHERE codigo IN (?,?)", ("Rua Tarumã, 100", D(2), D(3))); k.commit()
+        a2 = op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "endereco", "lote_id": lote}).json()
+        ver("'em todas': troca todas as que divergem pelo valor do consenso", a2["aplicadas"] == [D(1)] and a2["ignoradas"] == [] and sql("SELECT endereco_folha FROM item WHERE codigo=?", D(1)) == "Rua Tarumã, 100", str(a2))
+        k.execute("UPDATE item SET status_site='rascunho', endereco_folha='Av. Paulista' WHERE codigo=?", (D(2),)); k.commit()
+        a3 = op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "endereco"}).json()
+        ver("folha já no site (rascunho) não muda: volta em 'ignoradas' com 'já está no site'", a3["aplicadas"] == [] and a3["ignoradas"] == [{"codigo": D(2), "motivo": "já está no site"}] and sql("SELECT endereco_folha FROM item WHERE codigo=?", D(2)) == "Av. Paulista", str(a3))
+        k.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (D(2),)); k.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (lote,)); k.commit()
+        a4 = op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "endereco"}).json()
+        ver("lote aprovado: nada muda (motivo 'o lote já foi aprovado')", a4["aplicadas"] == [] and a4["ignoradas"][0]["motivo"] == "o lote já foi aprovado", str(a4))
+        ver("duplicata não vota: marcar D2 como cópia tira o voto dela", (k.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (D(1), D(2))), k.commit(), lei.get("/api/projetos/F026-P0001/consenso").json()["folhas"] == 2)[-1])
+        ver("projeto inexistente 404; lote de outro projeto 404; sem login 401",
+            lei.get("/api/projetos/F026-P9999/consenso").status_code == 404 and lei.get("/api/projetos/F026-P0001/consenso?lote_id=9999").status_code == 404 and anon.get("/api/projetos/F026-P0001/consenso").status_code == 401)
+        for l in res: print(l)
+        k.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -5512,6 +5629,14 @@ else:
 print("75) Cartão 151: resumo do dia por e-mail às 18h (desligado por padrão), com SMTP falso")
 rc, out = rodar("resumo_diario", f"{tmp}/resumo.db")
 if rc != 0: ok(False, f"teste do resumo do dia não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("100) Revisão pós-CAMP Vision: espelhar a folha, marcar/trocar/desfazer duplicata e consenso de ano, endereço e cliente no lote")
+rc, out = rodar("revisao_pos_cv", f"{tmp}/revpos.db")
+if rc != 0: ok(False, f"teste da revisão pós-CAMP Vision não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

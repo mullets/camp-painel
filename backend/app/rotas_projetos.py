@@ -326,7 +326,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
 
     itens_local = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
-               i.autoria_divergente, i.duplicata_de, i.espelhado, i.rotacao_aplicada,
+               i.autoria_divergente, i.duplicata_de, i.espelhado, i.espelho_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar, i.rotacao_aplicada,
+               i.endereco_folha, i.cliente_folha,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual,
                i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por
           FROM item i
@@ -361,7 +362,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "ano_folha": local.get("ano_folha"),
                 "autoria_divergente": local.get("autoria_divergente"),
                 "duplicata_de": local.get("duplicata_de"),
-                "espelhado": local.get("espelhado"),
+                "espelhado": local.get("espelhado"), "espelho_manual": local.get("espelho_manual"), "espelhar": local.get("espelhar"),
+                "endereco_folha": local.get("endereco_folha"), "cliente_folha": local.get("cliente_folha"),
                 "rotacao_aplicada": local.get("rotacao_aplicada"),
                 "status_site_local": local.get("status_site"),
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),

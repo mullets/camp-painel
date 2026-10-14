@@ -25,14 +25,25 @@ def pasta_cache() -> Path:
     return p
 
 
-def jpeg_girado(origem: Path | str, giro: int = 0, lado_max: int | None = None) -> Path:
-    """O JPEG girado `giro` graus no sentido horário (0, 90, 180, 270) e, se pedido, reduzido ao lado maior `lado_max`. Sem giro nem redução devolve o próprio arquivo."""
+def espelho_efetivo(item) -> bool:
+    """Espelhar a folha? A decisão de uma pessoa (item.espelho_manual 0/1) vale sobre o que o CAMP Vision apontou (item.espelhado)."""
+    k = item.keys() if hasattr(item, "keys") else ()
+    manual = item["espelho_manual"] if "espelho_manual" in k else None
+    if manual is not None:
+        return bool(manual)
+    return bool(item["espelhado"]) if "espelhado" in k else False
+
+
+def jpeg_girado(origem: Path | str, giro: int = 0, lado_max: int | None = None, espelhar: bool = False) -> Path:
+    """O JPEG espelhado (esquerda-direita, se `espelhar`), depois girado `giro` graus no sentido horário (0, 90, 180, 270) e, se pedido,
+    reduzido ao lado maior `lado_max`. Sem espelho, giro nem redução devolve o próprio arquivo."""
     origem = Path(origem)
     giro %= 360
-    if giro == 0 and not lado_max:
+    if giro == 0 and not lado_max and not espelhar:
         return origem
     st = origem.stat()
-    alvo = pasta_cache() / (hashlib.sha1(f"{origem}|{st.st_mtime_ns}|{st.st_size}|{giro}|{lado_max or 0}".encode()).hexdigest() + ".jpg")
+    chave = f"{origem}|{st.st_mtime_ns}|{st.st_size}|{giro}|{lado_max or 0}" + ("|espelho" if espelhar else "")
+    alvo = pasta_cache() / (hashlib.sha1(chave.encode()).hexdigest() + ".jpg")
     if alvo.is_file():
         return alvo
     from PIL import Image
@@ -40,6 +51,8 @@ def jpeg_girado(origem: Path | str, giro: int = 0, lado_max: int | None = None) 
         if lado_max:
             im.draft("RGB", (lado_max, lado_max))          # JPEG: decodifica já reduzido (rápido e leve)
         im = im.convert("RGB")
+        if espelhar:
+            im = im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         if giro:
             im = im.transpose({90: Image.Transpose.ROTATE_270, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_90}[giro])
         if lado_max:

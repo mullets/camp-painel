@@ -264,16 +264,38 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
         o = con.execute("SELECT codigo, duplicata_de FROM item WHERE codigo=?", (d.codigo_original,)).fetchone()
         if not a or not o:
             raise HTTPException(404, "Folha não existe.")
-        if o["duplicata_de"]:
+        troca = o["duplicata_de"] == codigo                      # "qual publica": a original passa a ser a cópia e vice-versa
+        if o["duplicata_de"] and not troca:
             raise HTTPException(409, f"{d.codigo_original} já é duplicata de {o['duplicata_de']}: aponte para a original.")
         if a["status_site"] == "no_ar" and con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (codigo,)).fetchone()[0]:
             raise HTTPException(409, "Esta folha está pública no site. Despublique antes.")
+        if troca:
+            con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original,))
         con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=?, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original, d.tipo, codigo))
         con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (d.codigo_original, codigo))   # quem apontava para esta passa a apontar para a original
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
-                    (codigo, u["email"], _json.dumps({"original": d.codigo_original, "tipo": d.tipo}, ensure_ascii=False)))
+                    (codigo, u["email"], _json.dumps({"original": d.codigo_original, "tipo": d.tipo, "trocou": troca}, ensure_ascii=False)))
         con.commit()
-        return {"ok": True}
+        return {"ok": True, "trocou": troca}
+    finally:
+        con.close()
+
+
+@router.delete("/itens/{codigo}/duplicata-de")
+def desmarcar_duplicata(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Desfaz a marcação: a folha deixa de ser duplicata e volta a poder ir ao site. Fica registrado de quem ela era cópia."""
+    con = connect()
+    try:
+        a = con.execute("SELECT duplicata_de, tipo_duplicata FROM item WHERE codigo=?", (codigo,)).fetchone()
+        if not a:
+            raise HTTPException(404, "Folha não existe.")
+        if not a["duplicata_de"]:
+            raise HTTPException(409, "Esta folha não está marcada como duplicata.")
+        con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_desmarcada',?,?)",
+                    (codigo, u["email"], _json.dumps({"era_de": a["duplicata_de"], "tipo": a["tipo_duplicata"]}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "era_de": a["duplicata_de"]}
     finally:
         con.close()
 

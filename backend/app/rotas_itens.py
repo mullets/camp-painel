@@ -18,7 +18,8 @@ from .rotas_projetos import _colecao_config
 
 router = APIRouter(prefix="/api", tags=["itens"])
 
-LIMITES_LOCAIS = {"titulo": 300, "tipo_documento": 120, "folha": 40, "escala": 60, "dimensoes": 120, "suporte": 160, "credito": 300}
+LIMITES_LOCAIS = {"titulo": 300, "tipo_documento": 120, "folha": 40, "escala": 60, "dimensoes": 120, "suporte": 160, "credito": 300,
+                  "endereco_folha": 300, "cliente_folha": 200}   # endereço e cliente lidos no carimbo da folha (consenso do lote)
 SITE_METADADOS = ("Tipo de desenho", "Técnica", "Suporte original", "Endereço", "Cliente", "Fotógrafo",
                   "Data do registro fotográfico", "Informação atribuída pela catalogação")
 LIM_TEXTO_SITE = 5000
@@ -113,6 +114,8 @@ class EdicaoItem(BaseModel):
     dimensoes: str | None = None
     suporte: str | None = None
     credito: str | None = None
+    endereco_folha: str | None = None
+    cliente_folha: str | None = None
     titulo_site: str | None = None
     descricao_site: str | None = None
     metadados_site: dict[str, str] | None = None

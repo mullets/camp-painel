@@ -395,6 +395,32 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         con.close()
 
 
+@router.post("/itens/{codigo}/espelhar")
+def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Espelha (ou desespelha) a prévia da folha e a imagem que vai ao site: para a folha digitalizada pelo verso, com o texto ao contrário.
+    Espelha o que a pessoa VÊ: com a folha deitada (giro 90/270), o giro é trocado pelo oposto para o espelho continuar sendo esquerda-direita na tela.
+    O arquivo original no QNAP não é tocado."""
+    if not imagens.disponivel():
+        raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh e tente de novo")
+    con = connect()
+    try:
+        i = con.execute("SELECT i.giro_manual, i.espelhado, i.espelho_manual, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        if i["aprovado_em"]:
+            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
+        if i["status_site"] in ("rascunho", "no_ar"):
+            raise HTTPException(409, "Esta folha já está no site: a imagem lá não muda por aqui")
+        antes = imagens.espelho_efetivo(i)
+        novo, giro = (0 if antes else 1), (-(i["giro_manual"] or 0)) % 360
+        con.execute("UPDATE item SET espelho_manual=?, giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, giro, codigo))
+        _evento(con, "item", codigo, "espelho", u["email"], {"de": int(antes), "para": novo, "giro": giro})
+        con.commit()
+        return {"espelhar": bool(novo), "giro_manual": giro}
+    finally:
+        con.close()
+
+
 @router.post("/lotes/{lote_id}/aprovar")
 def aprovar(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
@@ -459,7 +485,7 @@ def previa(codigo: str, t: int = 0, u: dict = Depends(auth.exige("leitura"))) ->
     """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta."""
     con = connect()
     try:
-        i = con.execute("SELECT pendencias, giro_manual, arquivo_jpg FROM item WHERE codigo=?", (codigo,)).fetchone()
+        i = con.execute("SELECT pendencias, giro_manual, arquivo_jpg, espelhado, espelho_manual FROM item WHERE codigo=?", (codigo,)).fetchone()
     finally:
         con.close()
     try:
@@ -478,11 +504,12 @@ def previa(codigo: str, t: int = 0, u: dict = Depends(auth.exige("leitura"))) ->
     if alvo is None:
         raise HTTPException(404, "Sem prévia")
     giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
-    if giro and not imagens.disponivel():
+    esp = bool(i) and imagens.espelho_efetivo(i)
+    if (giro or esp) and not imagens.disponivel():
         raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh")
-    if (giro or lado) and imagens.disponivel():
+    if (giro or lado or esp) and imagens.disponivel():
         try:
-            alvo = imagens.jpeg_girado(alvo, giro, lado or None)
+            alvo = imagens.jpeg_girado(alvo, giro, lado or None, esp)
         except Exception as e:  # noqa: BLE001  (arquivo corrompido, disco cheio...)
             raise HTTPException(500, f"Não consegui preparar a imagem: {str(e)[:120]}")
     return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})

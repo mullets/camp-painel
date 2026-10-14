@@ -671,12 +671,13 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         from .imagem_site import imagem_para_o_site
         caminho_img = imagem_para_o_site(con, i) if enviar_imagem else None
         if caminho_img:                                           # o que a pessoa virou na revisão sobe virado; e nunca maior que o fundo permite (B2)
-            from .giro_imagem import disponivel, jpeg_girado
+            from .giro_imagem import disponivel, espelho_efetivo, jpeg_girado
             from .imagem_site import lado_maximo_do_fundo
             lado = lado_maximo_do_fundo(con, i["fundo_codigo"])
             reduzir = bool(lado and lado < 3000 and disponivel())   # a prévia já tem ~3000 px: só reprocessa se o fundo pede menos
-            if i["giro_manual"] or reduzir:
-                caminho_img = str(jpeg_girado(caminho_img, i["giro_manual"] or 0, lado if reduzir else None))
+            esp = espelho_efetivo(i)                               # folha digitalizada pelo verso: sobe espelhada de volta
+            if i["giro_manual"] or reduzir or esp:
+                caminho_img = str(jpeg_girado(caminho_img, i["giro_manual"] or 0, lado if reduzir else None, esp))
             out["lado_max_px"] = lado
         if caminho_img:
             try:

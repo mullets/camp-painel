@@ -77,6 +77,16 @@ def registrar_problemas(con, proj: str, pacote: dict, recusadas: list[str], lote
     return novos
 
 
+def _primeiro(doc: dict, md: dict, chaves: tuple) -> str | None:
+    """O primeiro valor não vazio entre as chaves, no documento do pacote e depois nos metadados lidos do carimbo."""
+    for fonte in (doc, md):
+        for k in chaves:
+            v = fonte.get(k)
+            if isinstance(v, (str, int)) and str(v).strip():
+                return str(v).strip()[:300]
+    return None
+
+
 def importar_lote(con, lote_id: int, ator: str) -> dict:
     """NÃO faz commit (quem chama controla a transação)."""
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -128,6 +138,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if isinstance(origem, list):
             origem = " | ".join(str(o.get("arquivo_origem") if isinstance(o, dict) else o) for o in origem if o)
         ano = str(d.get("ano") or "").strip()
+        md = d.get("metadados") if isinstance(d.get("metadados"), dict) else {}
+        endereco_lido = _primeiro(d, md, ("endereco", "endereço", "endereco_obra", "local"))     # o que o carimbo DESTA folha diz (consenso do lote)
+        cliente_lido = _primeiro(d, md, ("cliente", "proprietario", "proprietário"))
         ano_folha = int(ano) if ano.isdigit() and 1800 <= int(ano) <= 2100 else None
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
                 "sinais": [txt for chave, txt in SINAIS if d.get(chave)], "confianca": d.get("confianca"), "previa": d.get("preview") or "",
@@ -137,6 +150,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))), "credito": d.get("credito") or None,
                   "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
+                  "endereco_folha": endereco_lido, "cliente_folha": cliente_lido,
                   "versao_cv2": (str(d.get("versao_cv2") or "").strip() or None), "versao_prompt": (str(d.get("versao_prompt") or "").strip() or None), "modelo_cv": (str(d.get("modelo") or "").strip() or None)}
         campos["lido_json"] = json.dumps({k_: campos[k_] for k_ in ("titulo", "tipo_documento", "folha", "escala", "ano_folha")}, ensure_ascii=False)   # o que o CV2 LEU (cartão 152)
         if ex:
