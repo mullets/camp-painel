@@ -665,6 +665,47 @@ def girar_imagem_no_site(codigo: str, giro: int) -> dict:
     return {"media_id": media, "url": m.get("source_url")}
 
 
+STATUS_DO_SITE = {"publish": "no_ar", "draft": "rascunho", "pending": "rascunho", "private": "fora_do_ar"}
+META_CODIGO_DOCUMENTO = 8030      # "Código do documento" na coleção Acervo CAMP (o espelho wp_metadado manda, se tiver)
+
+
+def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, projeto: str | None = None) -> dict | None:
+    """Antes de criar a folha no Tainacan: já existe um item com este código? (um rascunho de envio anterior cuja ligação se perdeu).
+    1) o espelho do site (wp_item.codigo_detectado); 2) o próprio site, pelo metadado "Código do documento" (8030).
+    Item já ligado a OUTRA folha do painel não serve. Devolve {"id", "status", "como"} ou None. Falha na busca do site não impede criar."""
+    ligados = "SELECT tainacan_item_id FROM item WHERE tainacan_item_id IS NOT NULL AND codigo<>?"
+    r = con.execute(f"""SELECT id, status FROM wp_item WHERE colecao_id=? AND upper(codigo_detectado)=upper(?) AND id NOT IN ({ligados})
+                        ORDER BY (status='publish') DESC, id LIMIT 1""", (COL_ACERVO, codigo, codigo)).fetchone()
+    if r:
+        return {"id": int(r["id"]), "status": r["status"], "como": "espelho do site"}
+    buscar = getattr(wp, "buscar_por_codigo", None)
+    if not buscar:
+        return None
+    mid = _meta(con, COL_ACERVO, "Código do documento")[0] or META_CODIGO_DOCUMENTO
+    try:
+        achados = buscar(COL_ACERVO, mid, codigo) or []
+    except Exception as e:  # noqa: BLE001
+        from .log_tecnico import registrar
+        try:
+            registrar(30, "busca_codigo_no_site_falhou", "Não consegui procurar o código no site antes de criar a folha", codigo=codigo, erro=str(e)[:200])
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+    ja = {x[0] for x in con.execute(ligados, (codigo,))}
+    from .wp import detectar_codigo, metadados_texto
+    for it in sorted(achados, key=lambda x: (x.get("status") != "publish", int(x.get("id") or 0))):
+        if not it.get("id") or int(it["id"]) in ja:
+            continue
+        md = metadados_texto(it)
+        if detectar_codigo(it.get("title", ""), it.get("slug", ""), *md.values())[0] != codigo.upper():
+            continue                                              # o site devolveu algo parecido, mas não é este código
+        con.execute("INSERT OR IGNORE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (int(it["id"]), COL_ACERVO, it.get("status"), it.get("title"), it.get("slug"), it.get("url"), codigo, fundo, projeto,
+                     json.dumps(md, ensure_ascii=False), json.dumps(it, ensure_ascii=False)))
+        return {"id": int(it["id"]), "status": it.get("status"), "como": "busca no site pelo código"}
+    return None
+
+
 @_nunca_convidado
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
@@ -688,29 +729,41 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         wp = WP()
         p_num = codigo.split("-")[1]
         titulo = f"{(i['titulo'] or i['tipo_documento'] or i['serie_nome'])} — {p_num} — {i['projeto_titulo']}"
-        it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
-        iid = it["id"]
-        con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
-        con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (iid, COL_ACERVO, "draft", titulo, it.get("slug"), it.get("url"), codigo, i["fundo_codigo"], i["projeto_codigo"], "{}", json.dumps(it, ensure_ascii=False)))
-        arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (i["fundo_codigo"],)).fetchone()
-        valores = {"Código do documento": codigo, "Projeto": str(i["dossie_id"]), "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
-                   "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
-                   "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
-                   "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
-                   "Suporte original": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
-        for nome, valor in valores.items():
-            if valor in (None, ""):
-                continue
-            mid, _ = _meta(con, COL_ACERVO, nome)
-            if not mid and nome == "Arquivo de origem":
-                mid = _garantir_metadado_origem(con, wp)
-            if not mid:
-                continue
-            try:
-                wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
-            except Exception as e:  # noqa: BLE001
-                _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
+        existente = item_existente_no_site(con, wp, codigo, i["fundo_codigo"], i["projeto_codigo"])
+        if existente:                                             # já há um item com este código no site (rascunho de um envio anterior): liga, não cria outro
+            iid = existente["id"]
+            st = STATUS_DO_SITE.get(existente.get("status"), "rascunho")
+            con.execute("UPDATE item SET tainacan_item_id=?, status_site=? WHERE codigo=?", (iid, st, codigo))
+            out["reaproveitado"] = {"item_id": iid, "como": existente["como"], "status": existente.get("status")}
+            if media_da_folha(con, codigo):                       # já tem imagem lá: não sobe outra
+                out["item_id"] = iid; out["imagem"] = "já estava no site"
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_item_reaproveitado',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
+                con.commit(); con.close()
+                return out
+        else:
+            it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
+            iid = it["id"]
+            con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
+            con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (iid, COL_ACERVO, "draft", titulo, it.get("slug"), it.get("url"), codigo, i["fundo_codigo"], i["projeto_codigo"], "{}", json.dumps(it, ensure_ascii=False)))
+            arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (i["fundo_codigo"],)).fetchone()
+            valores = {"Código do documento": codigo, "Projeto": str(i["dossie_id"]), "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
+                       "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
+                       "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
+                       "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
+                       "Suporte original": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
+            for nome, valor in valores.items():
+                if valor in (None, ""):
+                    continue
+                mid, _ = _meta(con, COL_ACERVO, nome)
+                if not mid and nome == "Arquivo de origem":
+                    mid = _garantir_metadado_origem(con, wp)
+                if not mid:
+                    continue
+                try:
+                    wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
+                except Exception as e:  # noqa: BLE001
+                    _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado
@@ -727,7 +780,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             except Exception as e:  # noqa: BLE001
                 _pendencia(con, "item", codigo, "pendente_imagem_no_site", str(e)[:200]); out["imagem"] = f"falhou: {e}"[:120]
         out["item_id"] = iid
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_item_criado',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,?,?,?)",
+                    (codigo, "site_item_reaproveitado" if existente else "site_item_criado", ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:300]; _pendencia(con, "item", codigo, "pendente_criar_no_site", out["erro"])
     con.commit(); con.close()

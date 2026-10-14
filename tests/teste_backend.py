@@ -5446,6 +5446,114 @@ def filho(modo):
         ver("rodar --aplicar de novo não soma o giro outra vez", g(D(2)) == 90 and g(f"{P}-0000-S03-D00007") == 0 and nev(D(2), "giro_marcado") == 1)
         for l in res: print(l)
         c.close()
+    elif modo == "duplicata_rascunhos":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth, publicador, pagina_publica
+        from app.publicacao import ELEGIVEL_LOCAL, _outros_bloqueantes
+        from app.publicacao_guiada import resultado_publicacao
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n in (1, 2, 3): c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F099-P0001','F099',1,'Casa Nova',1970,9100)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F099-P0002','F099',2,'Título Novo Depois',1970,9200)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0003','F099',3,'Sem Site',1970)")
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (8030,8013,'Código do documento','Text')")
+        F = lambda n: f"F099-P0001-1970-S01-D{n:05d}"
+        for n in range(1, 6):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'importado')", (F(n), "F099-P0001", "S01", n, f"Planta {n}"))
+        # (a) folha 4: o CAMP Vision a marcou como duplicata e por isso a bloqueou; folha 5: duplicata E outro bloqueio
+        c.execute("UPDATE item SET duplicata_de=?, tipo_duplicata='exata', status_site='bloqueado', pendencias=? WHERE codigo=?", (F(1), _j.dumps({"bloqueios": ["duplicata exata de D00001"], "sinais": []}), F(4)))
+        c.execute("UPDATE item SET duplicata_de=?, tipo_duplicata='exata', status_site='bloqueado', pendencias=? WHERE codigo=?", (F(1), _j.dumps({"bloqueios": ["Duplicata de D00001", "carimbo ilegível"]}), F(5)))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','duplicata','campvision',?,'Duplicata exata')", (F(4),))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','metadado','operador',?,'Outro problema')", (F(5),))
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        um = lambda q, *a: c.execute(q, a).fetchone()
+        eleg = lambda cod: um(f"SELECT COUNT(*) FROM item WHERE codigo=? AND {ELEGIVEL_LOCAL}", cod)[0] == 1
+        ver("antes: a folha marcada como duplicata não pode ir ao site e o problema de duplicata trava o projeto", not eleg(F(4)) and _outros_bloqueantes(c, "F099-P0001") == 2)
+        r = op.delete(f"/api/itens/{F(4)}/duplicata-de")
+        a = um("SELECT duplicata_de, status_site, pendencias FROM item WHERE codigo=?", F(4))
+        ver("'Não é duplicata' (operador): a folha deixa de ser duplicata e volta a poder ir ao site", r.status_code == 200 and a["duplicata_de"] is None and eleg(F(4)), r.text[:200])
+        ver("e solta o bloqueio da duplicata: situação 'bloqueado' vira 'nao_publicado' e o aviso de duplicata sai dos bloqueios",
+            a["status_site"] == "nao_publicado" and _j.loads(a["pendencias"])["bloqueios"] == [] and r.json()["situacao_liberada"] is True and r.json()["bloqueios_tirados"] == ["duplicata exata de D00001"], str(dict(a)))
+        ver("o problema de duplicata em aberto desta folha é fechado ('ignorado', com o porquê) e deixa de travar o projeto",
+            um("SELECT situacao FROM erro WHERE codigo=? AND categoria='duplicata'", F(4))[0] == "ignorado" and "Não é duplicata" in um("SELECT resolucao FROM erro WHERE codigo=? AND categoria='duplicata'", F(4))[0]
+            and _outros_bloqueantes(c, "F099-P0001") == 1 and r.json()["problemas_fechados"] == 1)
+        ev = _j.loads(um("SELECT detalhe FROM evento WHERE codigo=? AND tipo='duplicata_desmarcada'", F(4))[0])
+        ver("o histórico registra de quem era cópia e o que foi solto", ev["era_de"] == F(1) and ev["situacao_liberada"] is True and ev["problemas_fechados"] == 1, str(ev))
+        r = op.delete(f"/api/itens/{F(5)}/duplicata-de"); a = um("SELECT status_site, pendencias FROM item WHERE codigo=?", F(5))
+        ver("folha com OUTRO bloqueio além da duplicata: tira só o da duplicata e continua 'bloqueado'; o outro problema fica aberto",
+            r.status_code == 200 and a["status_site"] == "bloqueado" and _j.loads(a["pendencias"])["bloqueios"] == ["carimbo ilegível"] and um("SELECT situacao FROM erro WHERE codigo=?", F(5))[0] == "aberto")
+        ver("desfazer de novo: 409; leitura: 403", op.delete(f"/api/itens/{F(4)}/duplicata-de").status_code == 409 and le.delete(f"/api/itens/{F(5)}/duplicata-de").status_code == 403)
+        c.execute("UPDATE item SET status_site='nao_publicado', pendencias=NULL WHERE codigo=?", (F(5),)); c.commit()
+        # (b) envio ao site com WP falso: não cria item repetido
+        class Fake:
+            itens, prox, falhar_busca, buscas = {}, 50000, False, 0
+            def __init__(self, *a, **k): pass
+            def criar_item(self, col, titulo, status, desc):
+                Fake.prox += 1; Fake.itens[Fake.prox] = {"id": Fake.prox, "title": titulo, "status": status, "metadata": {}}; return {"id": Fake.prox, "slug": f"s{Fake.prox}", "url": f"http://site-falso.invalid/{Fake.prox}"}
+            def definir_metadado(self, wid, mid, valor): Fake.itens[wid]["metadata"][str(mid)] = {"name": {8030: "Código do documento"}.get(mid, str(mid)), "value": valor}
+            def buscar_por_codigo(self, col, mid, codigo):
+                Fake.buscas += 1
+                if Fake.falhar_busca: raise RuntimeError("Tainacan fora do ar")
+                return [dict(x) for x in Fake.itens.values() if (x["metadata"].get(str(mid)) or {}).get("value") == codigo]
+            def upload_media(self, *a, **k): raise AssertionError("não deveria subir imagem neste teste")
+        publicador.WP = Fake
+        r1 = adm.post("/api/projetos/F099-P0001/subir-folhas"); n1 = len(Fake.itens)
+        ver("1º envio: cria no site as 5 folhas que podem ir", r1.status_code == 200 and r1.json()["criadas"] == 5 and n1 == 5, r1.text[:300])
+        r2 = adm.post("/api/projetos/F099-P0001/subir-folhas")
+        ver("2º envio: nada pendente e NENHUM item novo no site", r2.status_code == 200 and r2.json()["pendentes"] == 0 and len(Fake.itens) == n1, r2.text[:200])
+        id1 = um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(1))[0]
+        c.execute("UPDATE item SET tainacan_item_id=NULL, status_site='nao_publicado' WHERE codigo=?", (F(1),)); c.commit()   # a ligação se perdeu
+        r3 = adm.post("/api/projetos/F099-P0001/subir-folhas")
+        ver("ligação perdida + envio de novo: acha o item pelo código no espelho do site e RELIGA (sem criar outro)",
+            r3.json()["criadas"] == 1 and len(Fake.itens) == n1 and um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(1))[0] == id1 and um("SELECT status_site FROM item WHERE codigo=?", F(1))[0] == "rascunho", r3.text[:200])
+        ver("o histórico diz que a folha foi ligada a um item que já existia", um("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='site_item_reaproveitado'", F(1))[0] == 1)
+        id2 = um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(2))[0]
+        c.execute("DELETE FROM wp_item WHERE id=?", (id2,)); c.execute("UPDATE item SET tainacan_item_id=NULL WHERE codigo=?", (F(2),)); c.commit()   # nem o espelho tem
+        r4 = adm.post("/api/projetos/F099-P0001/subir-folhas")
+        ver("fora do espelho: procura no site pelo metadado 'Código do documento' (8030) e religa; o espelho volta a ter o item",
+            r4.json()["criadas"] == 1 and len(Fake.itens) == n1 and um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(2))[0] == id2 and um("SELECT codigo_detectado FROM wp_item WHERE id=?", id2)[0] == F(2), r4.text[:200])
+        Fake.falhar_busca = True
+        c.execute("DELETE FROM wp_item WHERE id=?", (id2,)); c.execute("UPDATE item SET tainacan_item_id=NULL WHERE codigo=?", (F(2),)); c.commit()
+        r5 = adm.post("/api/projetos/F099-P0001/subir-folhas")
+        ver("se a busca no site falha, o envio não trava: cria (como antes)", r5.json()["criadas"] == 1 and len(Fake.itens) == n1 + 1, r5.text[:200])
+        Fake.falhar_busca = False
+        # rascunhos órfãos: o rascunho antigo de F(2) (id2) continua no site com o código de uma folha já ligada a outro item
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8013,'draft','Planta 2 (repetida)',?,'F099-P0001','F099')", (id2, F(2)))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (61000,8013,'publish','Publicada repetida',?)", (F(3),))   # publicada: não é rascunho, não entra
+        c.commit(); n_wp = um("SELECT COUNT(*) FROM wp_item")[0]
+        ro = adm.get("/api/site/rascunhos-orfaos"); j = ro.json() if ro.status_code == 200 else {}
+        ver("GET /api/site/rascunhos-orfaos (admin): lista só o rascunho com código de folha já ligada a OUTRO item, com a folha e o item ligado",
+            ro.status_code == 200 and [(x["id"], x["folha"]) for x in j["rascunhos"]] == [(id2, F(2))] and j["rascunhos"][0]["ligado_a"] == um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(2))[0], ro.text[:300])
+        ver("rascunhos órfãos: só lista (nada apagado); operador e leitura 403", um("SELECT COUNT(*) FROM wp_item")[0] == n_wp and op.get("/api/site/rascunhos-orfaos").status_code == 403 and le.get("/api/site/rascunhos-orfaos").status_code == 403)
+        # (c) link do projeto depois de mudar o título
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,codigo_detectado) VALUES (9100,8007,'publish','Casa Velha','f099-p0001-casa-velha','https://camp.arq.br/acervo/projetos/f099-p0001-casa-velha/','F099-P0001')")
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,codigo_detectado) VALUES (9200,8007,'draft','Título Antigo','f099-p0002-titulo-antigo','https://camp.arq.br/?p=9200','F099-P0002')")
+        c.commit()
+        d1 = op.get("/api/projetos/F099-P0001/detalhe").json(); d2 = op.get("/api/projetos/F099-P0002/detalhe").json(); d3 = op.get("/api/projetos/F099-P0003/detalhe").json()
+        ver("título mudou no painel: o link usa o endereço REAL do item do projeto no espelho do site, não o montado pelo título novo",
+            d1["site_url"] == "https://camp.arq.br/acervo/projetos/f099-p0001-casa-velha/" and d1["site_url_origem"] == "site" and d1["pagina_status"] == "publish", d1["site_url"])
+        ver("sem endereço público no espelho: usa o slug do item do site (que não muda com o título), não o título novo",
+            d2["site_url"] == "https://camp.arq.br/acervo/projetos/f099-p0002-titulo-antigo/" and "titulo-novo" not in d2["site_url"], d2["site_url"])
+        ver("projeto sem nada no site: continua o endereço montado pelo título", d3["site_url"].endswith("f099-p0003-sem-site/") and d3["site_url_origem"] == "presumido", d3["site_url"])
+        rp = resultado_publicacao(c, "F099-P0001")
+        ver("a tela de resultado da publicação (#104) usa o MESMO endereço da tela do projeto", rp["url_publica"] == d1["site_url"] and rp["url_origem"] == "site")
+        palpites = []
+        pagina_publica.confirmar = lambda cod, palpite: palpites.append(palpite) or {"url": None, "como": None}
+        op.post("/api/projetos/F099-P0002/pagina-publica/confirmar")
+        ver("conferir o endereço no site parte do melhor endereço conhecido (o do espelho), não do título novo", palpites == ["https://camp.arq.br/acervo/projetos/f099-p0002-titulo-antigo/"], str(palpites))
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -6192,6 +6300,14 @@ else:
 print("111) Girar folha já publicada: admin gira no site mantendo o anexo, operador recebe 409; script que marca o giro feito direto no site")
 rc, out = rodar("giro_publicado", f"{tmp}/giro_pub.db")
 if rc != 0: ok(False, f"teste do giro de folha publicada não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("112) Duplicata falsa e rascunhos repetidos: 'Não é duplicata' solta o bloqueio, envio ao site reaproveita o item do código, rascunhos órfãos e link do projeto pelo espelho do site")
+rc, out = rodar("duplicata_rascunhos", f"{tmp}/dup_rasc.db")
+if rc != 0: ok(False, f"teste da duplicata falsa e rascunhos repetidos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

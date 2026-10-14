@@ -283,21 +283,51 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
 
 @router.delete("/itens/{codigo}/duplicata-de")
 def desmarcar_duplicata(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Desfaz a marcação: a folha deixa de ser duplicata e volta a poder ir ao site. Fica registrado de quem ela era cópia."""
+    """Desfaz a marcação ("Não é duplicata"): a folha deixa de ser duplicata e volta a poder ir ao site. Fica registrado de quem ela era cópia.
+    Também solta o que o CAMP Vision prendeu por causa da duplicata: o aviso de duplicata entre os bloqueios da folha, a situação
+    'bloqueado' (quando a duplicata era o único bloqueio) e os problemas de duplicata em aberto desta folha."""
     con = connect()
     try:
-        a = con.execute("SELECT duplicata_de, tipo_duplicata FROM item WHERE codigo=?", (codigo,)).fetchone()
+        a = con.execute("SELECT duplicata_de, tipo_duplicata, status_site, pendencias, autoria_divergente FROM item WHERE codigo=?", (codigo,)).fetchone()
         if not a:
             raise HTTPException(404, "Folha não existe.")
         if not a["duplicata_de"]:
             raise HTTPException(409, "Esta folha não está marcada como duplicata.")
+        liberou = liberar_bloqueios_de_duplicata(con, codigo, a, u["email"])
         con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_desmarcada',?,?)",
-                    (codigo, u["email"], _json.dumps({"era_de": a["duplicata_de"], "tipo": a["tipo_duplicata"]}, ensure_ascii=False)))
+                    (codigo, u["email"], _json.dumps({"era_de": a["duplicata_de"], "tipo": a["tipo_duplicata"], **liberou}, ensure_ascii=False)))
         con.commit()
-        return {"ok": True, "era_de": a["duplicata_de"]}
+        return {"ok": True, "era_de": a["duplicata_de"], **liberou}
     finally:
         con.close()
+
+
+def _e_de_duplicata(texto) -> bool:
+    return "duplicat" in str(texto or "").lower()
+
+
+def liberar_bloqueios_de_duplicata(con, codigo: str, a, ator: str) -> dict:
+    """Tira o que prendia a folha só por ser duplicata. Não faz commit. Devolve o que foi solto (vai para o evento e para a tela)."""
+    out = {"bloqueios_tirados": [], "situacao_liberada": False, "problemas_fechados": 0}
+    try:
+        pend = _json.loads(a["pendencias"] or "{}") or {}
+    except ValueError:
+        pend = {}
+    bloq = list(pend.get("bloqueios") or []) if isinstance(pend, dict) else []
+    tirar = [b for b in bloq if _e_de_duplicata(b)]
+    if tirar:
+        pend["bloqueios"] = [b for b in bloq if not _e_de_duplicata(b)]
+        con.execute("UPDATE item SET pendencias=? WHERE codigo=?", (_json.dumps(pend, ensure_ascii=False), codigo))
+        out["bloqueios_tirados"] = tirar
+    if a["status_site"] == "bloqueado" and not (pend.get("bloqueios") if isinstance(pend, dict) else None) and not a["autoria_divergente"]:
+        con.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (codigo,))     # o CAMP Vision bloqueou por causa da duplicata
+        out["situacao_liberada"] = True
+    out["problemas_fechados"] = con.execute(
+        """UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'),
+                  resolucao=? WHERE codigo=? AND categoria='duplicata' AND situacao IN ('aberto','em_correcao')""",
+        (f"Não é duplicata: desmarcada por {ator} no painel.", codigo)).rowcount
+    return out
 
 
 # ---------------- B7 · duplicados já cadastrados: varredura por fundo ----------------

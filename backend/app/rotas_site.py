@@ -51,3 +51,27 @@ def itens(fundo: str | None = None, status: str | None = None, q: str | None = N
     sql += " ORDER BY codigo_detectado LIMIT ?"; p.append(min(limite, 1000))
     con = connect(); rows = con.execute(sql, p).fetchall(); con.close()
     return [dict(r) for r in rows]
+
+
+@router.get("/rascunhos-orfaos")
+def rascunhos_orfaos(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Rascunhos do site (coleção das folhas) com o código de uma folha que já está LIGADA a outro item do site:
+    sobras de envios repetidos. Só lista, a partir do espelho do site; nada é apagado aqui (apague no WordPress, depois de conferir)."""
+    from .publicador import COL_ACERVO
+    con = connect()
+    try:
+        rows = con.execute("""
+            SELECT w.id, w.titulo, w.status, w.url, w.codigo_detectado AS codigo, w.modificado_em,
+                   i.codigo AS folha, i.tainacan_item_id AS ligado_a, i.status_site AS folha_status,
+                   l.status AS ligado_status, l.url AS ligado_url
+              FROM wp_item w
+              JOIN item i ON upper(i.codigo) = upper(w.codigo_detectado)
+              LEFT JOIN wp_item l ON l.id = i.tainacan_item_id
+             WHERE w.colecao_id = ? AND w.status IN ('draft', 'pending', 'auto-draft')
+               AND i.tainacan_item_id IS NOT NULL AND i.tainacan_item_id <> w.id
+             ORDER BY w.codigo_detectado, w.id""", (COL_ACERVO,)).fetchall()
+        sinc = con.execute("SELECT terminada_em FROM sincronizacao WHERE ok=1 ORDER BY id DESC LIMIT 1").fetchone()
+    finally:
+        con.close()
+    return {"total": len(rows), "rascunhos": [dict(r) for r in rows], "espelho_de": sinc[0] if sinc else None,
+            "aviso": "Só a lista: nada foi apagado. Confira cada rascunho no site antes de apagar lá."}

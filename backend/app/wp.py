@@ -299,3 +299,19 @@ def _wp_anexos(self, ids) -> dict:
 
 
 WP.anexos = _wp_anexos
+
+
+def _wp_buscar_por_codigo(self, colecao_id: int, metadado_id: int, codigo: str) -> list[dict]:
+    """Itens da coleção (qualquer status) cujo metadado `metadado_id` ("Código do documento", 8030) é exatamente `codigo`."""
+    r = self.h.get(f"/wp-json/tainacan/v2/collection/{int(colecao_id)}/items",
+                   params={"metaquery[0][key]": int(metadado_id), "metaquery[0][value]": codigo, "metaquery[0][compare]": "=",
+                           "status": "publish,draft,private,pending", "perpage": 10})
+    if r.status_code >= 400:
+        raise RuntimeError(f"Tainacan recusou procurar o código {codigo}: {r.status_code} {r.text[:160]}")
+    dados = r.json()
+    if isinstance(dados, dict):
+        dados = dados.get("items") or []
+    return [d for d in dados if isinstance(d, dict)]
+
+
+WP.buscar_por_codigo = _wp_buscar_por_codigo

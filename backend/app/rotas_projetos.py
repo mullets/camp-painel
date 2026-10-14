@@ -107,9 +107,20 @@ def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -
                         ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (codigo, codigo.lower() + "-%")).fetchone()
     if r and r["url"]:
         return {"url": r["url"], "origem": "site", "status": r["status"]}
+    # o item do projeto no espelho do site (projeto.tainacan_item_id): o endereço e o slug dele são os do site e NÃO mudam
+    # quando o título muda no painel (montar pelo título novo daria um link que não abre)
+    w = con.execute("""SELECT w.url, w.slug, w.status FROM wp_item w
+                        WHERE w.colecao_id=? AND (w.id=(SELECT tainacan_item_id FROM projeto WHERE codigo=?) OR upper(w.codigo_detectado)=upper(?))
+                        ORDER BY (w.id=(SELECT tainacan_item_id FROM projeto WHERE codigo=?)) DESC, (w.status='publish') DESC, w.id DESC LIMIT 1""",
+                    (_colecao_config(con, "tainacan.projetos_collection_id", 8007), codigo, codigo, codigo)).fetchone()
+    if w and w["url"] and "/acervo/projetos/" in w["url"]:
+        return {"url": w["url"], "origem": "site", "status": w["status"]}
     c = con.execute("SELECT url_publica_confirmada FROM projeto WHERE codigo=?", (codigo,)).fetchone()
     if c and c[0]:                                                  # o painel já perguntou ao site e esse endereço abriu
         return {"url": c[0], "origem": "confirmado", "status": None}
+    slug = (w["slug"] or "").strip("/").lower() if w else ""
+    if slug.startswith(codigo.lower() + "-") or slug == codigo.lower():   # a página pública usa o slug do item do site
+        return {"url": f"https://camp.arq.br/acervo/projetos/{slug}/", "origem": "presumido", "status": None}
     return {"url": _url_publica_projeto(codigo, titulo, cidade), "origem": "presumido", "status": None}
 
 
@@ -245,7 +256,7 @@ def confirmar_pagina_publica(codigo: str, u: dict = Depends(auth.exige("leitura"
         p = con.execute("SELECT titulo, cidade FROM projeto WHERE codigo=?", (codigo,)).fetchone()
         if not p:
             raise HTTPException(404, "Projeto não existe")
-        palpite = _url_publica_projeto(codigo, p["titulo"], p["cidade"])
+        palpite = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])["url"]   # o melhor endereço conhecido (espelho do site antes do título)
     finally:
         con.close()
     busca = pagina_publica.url_busca(codigo)
