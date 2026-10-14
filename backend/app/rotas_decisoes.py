@@ -1,4 +1,5 @@
-"""Decisões que o painel pede a uma pessoa (projeto parecido: é o mesmo?). Ler: todos (leitura vê, sem decidir); decidir: admin."""
+"""Decisões que o painel pede a uma pessoa (projeto parecido, lote com números repetidos, dado diferente do cadastro, mesmo nome em outro fundo).
+Ler: todos (leitura vê, sem decidir); decidir: admin."""
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,7 +14,13 @@ router = APIRouter(prefix="/api", tags=["decisoes"])
 def _linha(r) -> dict:
     d = dict(r)
     ctx = json.loads(d.pop("contexto") or "{}")
+    d["tipo"] = d.get("tipo") or "projeto_parecido"
     d["pedido"], d["candidatos"] = ctx.get("pedido", {}), ctx.get("candidatos", [])
+    d["contexto"] = ctx
+    d["pergunta"] = decisoes.pergunta(r, ctx)
+    d["tipo_rotulo"] = decisoes.TIPOS.get(d["tipo"], {}).get("rotulo", d["tipo"])
+    d["opcoes"] = list(decisoes.TIPOS.get(d["tipo"], {}).get("opcoes", ()))
+    d["escolha"] = d.get("escolha") or d.get("resolucao")
     return d
 
 
@@ -39,11 +46,11 @@ def detalhe(did: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
             raise HTTPException(404, "Decisão não existe")
         d = _linha(r)
         # H11: miniatura de cada candidato (o que já está no site ou a 1ª folha com prévia) e o código que "É outro" vai criar
-        for c in d["candidatos"]:
+        for c in (d["candidatos"] if d["tipo"] == "projeto_parecido" else []):
             w = con.execute("SELECT thumb_url FROM wp_item WHERE projeto_detectado=? AND thumb_url IS NOT NULL ORDER BY codigo_detectado LIMIT 1", (c.get("codigo"),)).fetchone()
             i = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND pendencias LIKE '%previa%' ORDER BY serie_codigo, sequencial LIMIT 1", (c.get("codigo"),)).fetchone()
             c["capa"] = {"thumb_url": w[0] if w else None, "item": i[0] if i else None}
-        if d.get("situacao") == "pendente" and d.get("fundo_codigo"):
+        if d["tipo"] == "projeto_parecido" and d.get("situacao") == "pendente" and d.get("fundo_codigo"):
             from .projetos_novos import proximo_numero
             try:
                 d["proximo_codigo"] = f"{d['fundo_codigo']}-P{proximo_numero(con, d['fundo_codigo'], d['pedido'].get('proximo_p_local')):04d}"
@@ -57,6 +64,7 @@ def detalhe(did: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
 class Resolver(BaseModel):
     acao: str
     projeto_codigo: str | None = None
+    valor: str | None = None          # divergência: o valor escolhido entre os candidatos
 
 
 @router.post("/decisoes/{did}/resolver")
@@ -64,7 +72,7 @@ def resolver(did: int, d: Resolver, u: dict = Depends(auth.exige("admin"))) -> d
     con = connect()
     try:
         con.execute("BEGIN IMMEDIATE")
-        r = decisoes.resolver(con, did, d.acao, (d.projeto_codigo or "").strip() or None, u["email"])
+        r = decisoes.resolver(con, did, d.acao, (d.projeto_codigo or "").strip() or None, u["email"], (d.valor or "").strip() or None)
         con.commit()
         return r
     except HTTPException:

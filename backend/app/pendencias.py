@@ -106,8 +106,9 @@ def _decisoes(con) -> list[dict]:
             ctx = json.loads(d["contexto"] or "{}")
         except ValueError:
             ctx = {}
-        cand = (ctx.get("candidatos") or [{}])[0] if ctx.get("candidatos") else {}
-        out.append({"id": d["id"], "titulo": d["titulo"], "fundo": d["fundo_codigo"], "origem": d["origem"], "criada_em": d["criada_em"],
+        cand = (ctx.get("candidatos") or [{}])[0] if ctx.get("candidatos") and d["tipo"] == "projeto_parecido" else {}
+        from .decisoes import pergunta
+        out.append({"id": d["id"], "tipo": d["tipo"], "pergunta": pergunta(d, ctx), "titulo": d["titulo"], "fundo": d["fundo_codigo"], "origem": d["origem"], "criada_em": d["criada_em"],
                     "vezes": 1 + (d["chaves_extra"] or 0), "pasta": (ctx.get("pedido") or {}).get("identificacao_original"),
                     "candidato": {"codigo": cand.get("codigo"), "titulo": cand.get("titulo")} if cand else None})
     return out
@@ -181,7 +182,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     linhas = []
     for d in dec:
         c = d.get("candidato") or {}
-        tit = f"“{d['titulo']}” é o mesmo projeto que “{c.get('titulo')}”?" if c.get("titulo") else f"“{d['titulo']}”: projeto novo ou um que já existe?"
+        tit = d["pergunta"]
         partes = [f"chegou {d['vezes']} vezes" if d["vezes"] > 1 else None, texto_espera(_horas_desde(d["criada_em"])),
                   "o CAMP Vision está parado nesta pasta" if d["origem"] == "estacao" else None]
         linhas.append({"sev": "r" if d["origem"] == "estacao" else "a", "titulo": tit, "codigo": c.get("codigo") or d["fundo"],

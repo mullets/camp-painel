@@ -66,8 +66,9 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     s = con.execute("SELECT iniciada_em, terminada_em, ok, itens FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     d["site"]["ultima_sincronizacao"] = dict(s) if s else None
     d["precisa_de_voce"] = []
-    for r in con.execute("SELECT id, titulo, fundo_codigo, origem FROM decisao WHERE situacao='pendente' ORDER BY criada_em, id LIMIT 4"):
-        d["precisa_de_voce"].append({"tipo": "decisao", "id": r[0], "titulo": f"Projeto parecido: \"{r[1]}\" ({r[2]}). É o mesmo?", "codigo": f"decisão {r[0]}" + (" · o CAMP Vision está esperando" if r[3] == "estacao" else ""), "rota": None})
+    from .decisoes import pergunta as _pergunta
+    for r in con.execute("SELECT * FROM decisao WHERE situacao='pendente' ORDER BY criada_em, id LIMIT 4"):
+        d["precisa_de_voce"].append({"tipo": "decisao", "id": r["id"], "titulo": _pergunta(r), "codigo": f"decisão {r['id']}" + (" · o CAMP Vision está esperando" if r["origem"] == "estacao" else ""), "rota": None})
     for r in con.execute("SELECT codigo, descricao FROM erro WHERE situacao='aberto' AND gravidade='bloqueia' ORDER BY criado_em DESC LIMIT 3"):
         d["precisa_de_voce"].append({"tipo": "erro", "titulo": r[1], "codigo": r[0], "rota": "erros"})
     for r in con.execute("SELECT id, solicitante, situacao FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento') ORDER BY recebida_em LIMIT 3"):
@@ -778,6 +779,17 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         saida["aviso"] = ((saida["aviso"] + "; ") if saida["aviso"] else "") + alerta
         contexto["alerta_nome"] = alerta
         _evento(con, "projeto", cod, "lote_nome_diferente", "campvision2", {"pasta": str(pasta), "nome_pasta": nome_limpo, "titulo_projeto": tit_proj})
+    # "Mais inteligência" (3): projeto com o MESMO nome em OUTRO fundo → nota forte no lote + pergunta em Decisões
+    from .similaridade import buscar_em_outros_fundos
+    from . import decisoes as _dec
+    _p = con.execute("SELECT fundo_codigo, titulo, ano, cidade FROM projeto WHERE codigo=?", (cod,)).fetchone()
+    outros = buscar_em_outros_fundos(con, _p["fundo_codigo"], _p["titulo"], _p["ano"], _p["cidade"]) if _p else []
+    if outros:
+        o = outros[0]
+        nota = f"já existe '{o['titulo']}' no fundo {o['fundo_codigo']} ({o['codigo']}): é o mesmo projeto? Confira em Decisões"
+        saida["aviso"] = ((saida["aviso"] + "; ") if saida["aviso"] else "") + nota
+        contexto["outro_fundo"] = [{k: x[k] for k in ("codigo", "titulo", "fundo_codigo")} for x in outros]
+        _dec.abrir_outro_fundo(con, cod, outros, "campvision")
     lid = con.execute(
         """INSERT INTO lista_processamento
            (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json, resultado)
@@ -925,13 +937,30 @@ class EdicaoSolicitacao(BaseModel):
     entrega: str | None = None          # H17: o que foi entregue (arquivos e tamanho)
 
 
+# "Mais inteligência" (7): a MESMA pessoa (mesmo e-mail, ou mesmo nome quando não há e-mail) pediu o MESMO material (mesmo código, ou o projeto
+# e uma folha dele) nos 30 dias ANTES deste pedido → o pedido anterior (o mais recente)
+_PEDIDO_ANTERIOR = """SELECT {col} FROM solicitacao s2
+   WHERE s2.id<>s.id AND (s2.recebida_em < s.recebida_em OR (s2.recebida_em = s.recebida_em AND s2.id < s.id))
+     AND julianday(s.recebida_em) - julianday(s2.recebida_em) <= 30
+     AND ((COALESCE(s.email,'')<>'' AND lower(s2.email)=lower(s.email)) OR (COALESCE(s.email,'')='' AND lower(trim(s2.solicitante))=lower(trim(s.solicitante))))
+     AND EXISTS (SELECT 1 FROM solicitacao_item a JOIN solicitacao_item b ON (a.codigo=b.codigo OR a.codigo LIKE b.codigo || '-%' OR b.codigo LIKE a.codigo || '-%')
+                  WHERE a.solicitacao_id=s.id AND b.solicitacao_id=s2.id)
+   ORDER BY s2.recebida_em DESC, s2.id DESC LIMIT 1"""
+
+
+def pedido_anterior(con, sid: int) -> dict | None:
+    r = con.execute(f"SELECT ({_PEDIDO_ANTERIOR.format(col='s2.id')}), ({_PEDIDO_ANTERIOR.format(col='s2.recebida_em')}) FROM solicitacao s WHERE s.id=?", (sid,)).fetchone()
+    return {"id": r[0], "recebida_em": r[1]} if r and r[0] else None
+
+
 SITUACOES = ["aguarda_resposta", "aguarda_orcamento", "aguarda_credito", "em_preparacao", "entregue", "recusada"]
 
 
 @router.get("/solicitacoes")
 def listar_solicitacoes(situacao: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
-    sql = """SELECT s.*, us.nome AS responsavel_nome, (SELECT GROUP_CONCAT(codigo || ' (' || formato || ')', ' · ') FROM solicitacao_item si WHERE si.solicitacao_id=s.id) AS itens
+    sql = f"""SELECT s.*, us.nome AS responsavel_nome, (SELECT GROUP_CONCAT(codigo || ' (' || formato || ')', ' · ') FROM solicitacao_item si WHERE si.solicitacao_id=s.id) AS itens,
+                    ({_PEDIDO_ANTERIOR.format(col='s2.id')}) AS repetido_de, ({_PEDIDO_ANTERIOR.format(col='s2.recebida_em')}) AS repetido_de_em
              FROM solicitacao s LEFT JOIN usuario us ON us.id=s.responsavel"""
     p: list = []
     if situacao == "abertas": sql += " WHERE s.situacao NOT IN ('entregue','recusada')"
@@ -958,8 +987,9 @@ def criar_solicitacao(d: NovaSolicitacao, u: dict = Depends(auth.exige("operador
         if cod and fmt in ("tif", "jpg_3000", "jpg_original", "pdf"):
             con.execute("INSERT OR IGNORE INTO solicitacao_item (solicitacao_id, codigo, formato) VALUES (?,?,?)", (sid, cod, fmt))
     _evento(con, "solicitacao", sid, "criada", u["email"], {"solicitante": d.solicitante})
+    rep = pedido_anterior(con, sid)
     con.commit(); con.close()
-    return {"id": sid}
+    return {"id": sid, "repetido_de": rep}
 
 
 @router.patch("/solicitacoes/{sid}")

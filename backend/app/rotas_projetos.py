@@ -669,7 +669,11 @@ def verificar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
     try:
         if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (d.fundo_codigo,)).fetchone():
             raise HTTPException(404, "Fundo não existe")
-        return {"parecidos": buscar_parecidos(con, d.fundo_codigo, d.titulo.strip(), d.ano, d.cidade, d.identificacao_original) if d.titulo.strip() else []}
+        from .similaridade import buscar_em_outros_fundos
+        t = d.titulo.strip()
+        return {"parecidos": buscar_parecidos(con, d.fundo_codigo, t, d.ano, d.cidade, d.identificacao_original) if t else [],
+                # "Mais inteligência" (3): o mesmo nome em OUTRO fundo vira nota forte com link ("já existe 'Casa X' no fundo F012: é o mesmo?")
+                "outros_fundos": buscar_em_outros_fundos(con, d.fundo_codigo, t, d.ano, d.cidade) if t else []}
     finally:
         con.close()
 

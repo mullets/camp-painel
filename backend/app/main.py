@@ -441,6 +441,10 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
                              {"titulo": titulo, "origem": "estacao", "identificacao_original": identificacao, "operador": operador or None, "chave_reserva": chave or None,
                               "proximo_p_local": (d.proximo_p_local or None)})
         codigo, prox = novo["codigo"], novo["numero_projeto"]
+        from .similaridade import buscar_em_outros_fundos
+        outros = buscar_em_outros_fundos(con, d.fundo_codigo, titulo, d.ano, d.cidade)
+        if outros:                                      # "Mais inteligência" (3): mesmo nome em OUTRO fundo → pergunta em Decisões (não trava a estação)
+            decisoes.abrir_outro_fundo(con, codigo, outros, "campvision")
         con.commit()
     except HTTPException:
         con.rollback()
@@ -458,6 +462,7 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         "ano": d.ano or 0,
         "cidade": d.cidade,
         "identificacao_original": identificacao,
+        "outros_fundos": [{k: o[k] for k in ("codigo", "titulo", "fundo_codigo")} for o in outros],
     }
 
 

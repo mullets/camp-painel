@@ -5039,6 +5039,153 @@ def filho(modo):
         ver("/api/hoje traz as melhorias e o índice para o painel inicial", hj["melhorias"]["total_semana"] == 4 and "geral" in hj["qualidade"])
         k.close()
         for l in res: print(l)
+    elif modo == "mais_inteligencia":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from app import auth, decisoes, importador_lote, pendencias
+        from app.config import settings as _st
+        _st.WP_BASE_URL = "http://127.0.0.1:9"          # nunca o site real
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='http://127.0.0.1:9' WHERE chave='wp.url'")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F050','Rino Levi','RLV',1),('F051','Oswaldo Bratke','OBR',1)")
+        for f, n, t, ano in (("F050", 1, "Casa Alfa", 1972), ("F050", 2, "Casa Beta", 1960), ("F050", 3, "Casa Gama", 1961), ("F051", 1, "Casa Alfa", 1972)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES (?,?,?,?,?,'São Paulo')", (f"{f}-P000{n}", f, n, t, ano))
+        raiz = _P(tempfile.mkdtemp())
+        def lote(proj, nome, docs, projeto=None):
+            pasta = raiz / nome; (pasta / "catalogacao").mkdir(parents=True)
+            pac = {"versao": 2, "projeto_codigo": proj, "documentos": docs}
+            if projeto: pac["projeto"] = projeto
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(pac), encoding="utf-8")
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,?,'revisao')", (nome, proj, str(pasta))).lastrowid
+        D = lambda p, n, s="S01", ano=1972: {"codigo": f"{p}-{ano}-{s}-D{n:05d}", "titulo": f"Folha {n} {s}", "publicavel": True, "ano": str(ano)}
+        sql = lambda q, *a: c.execute(q, a).fetchone()[0]
+        # ---------- (1) lote que colide com folhas que o projeto já tem ----------
+        P1 = "F050-P0001"
+        la = lote(P1, "lote A", [D(P1, 1), D(P1, 2), D(P1, 3)]); importador_lote.importar_lote(c, la, "t")
+        lb = lote(P1, "lote B", [D(P1, 2), D(P1, 3), D(P1, 4)]); r = importador_lote.importar_lote(c, lb, "t"); c.commit()
+        dec = c.execute("SELECT * FROM decisao WHERE tipo='lote_colide'").fetchall()
+        ver("(1) lote B repete D2 e D3 do lote A: a folha nova (D4) entra, as 2 repetidas esperam e abre UMA decisão 'lote_colide'",
+            sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lb) == 1 and len(dec) == 1 and r.get("esperando_decisao") == 2 and len(_j.loads(dec[0]["contexto"])["colisoes"]) == 2, str(r))
+        r2 = importador_lote.importar_lote(c, lb, "t"); c.commit()
+        ver("(1) importar de novo enquanto ninguém decidiu: não abre outra decisão e nada muda", sql("SELECT COUNT(*) FROM decisao WHERE tipo='lote_colide'") == 1 and r2.get("esperando_decisao") == 2 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", P1) == 4)
+        ver("(1) reimportar o PRÓPRIO lote A não é colisão", importador_lote.importar_lote(c, la, "t").get("esperando_decisao") is None)
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("lei@camp.arq.br", "Lei", "leitura"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, lei, op = cli("adm@camp.arq.br"), cli("lei@camp.arq.br"), cli("op@camp.arq.br")
+        did = dec[0]["id"]
+        dd = lei.get(f"/api/decisoes/{did}").json()
+        ver("(1) a decisão diz o que é, com texto próprio e as 3 opções", dd["tipo"] == "lote_colide" and dd["opcoes"] == ["adicionar_ao_fim", "ignorar", "substituir"] and "número que F050-P0001 já usa" in dd["pergunta"], dd.get("pergunta"))
+        ver("(1) leitura não decide (403); escolha que não existe para o tipo: 400",
+            lei.post(f"/api/decisoes/{did}/resolver", json={"acao": "ignorar"}).status_code == 403 and adm.post(f"/api/decisoes/{did}/resolver", json={"acao": "mesmo"}).status_code == 400)
+        rr = adm.post(f"/api/decisoes/{did}/resolver", json={"acao": "adicionar_ao_fim"})
+        c2 = connect(); s2 = lambda q, *a: c2.execute(q, a).fetchone()[0]
+        ver("(1) 'adicionar ao fim': as repetidas entram renumeradas D5 e D6 (as do lote A ficam intactas)",
+            rr.status_code == 200 and s2("SELECT COUNT(*) FROM item WHERE codigo IN (?,?) AND lote_id=?", f"{P1}-1972-S01-D00005", f"{P1}-1972-S01-D00006", lb) == 2
+            and s2("SELECT lote_id FROM item WHERE codigo=?", f"{P1}-1972-S01-D00002") == la and s2("SELECT escolha FROM decisao WHERE id=?", did) == "adicionar_ao_fim", rr.text[:300])
+        importador_lote.importar_lote(c2, lb, "t"); c2.commit()
+        ver("(1) reimportar depois da decisão usa os números novos (não duplica nem reabre)", s2("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", P1) == 6 and s2("SELECT COUNT(*) FROM decisao WHERE tipo='lote_colide'") == 1)
+        c2.close()
+        P2 = "F050-P0002"
+        lc = lote(P2, "lote C", [D(P2, 1, ano=1960), D(P2, 2, ano=1960)]); importador_lote.importar_lote(c, lc, "t")
+        ld = lote(P2, "lote D", [D(P2, 1, ano=1960), D(P2, 3, ano=1960)]); importador_lote.importar_lote(c, ld, "t"); c.commit()
+        did2 = sql("SELECT id FROM decisao WHERE tipo='lote_colide' AND situacao='pendente'")
+        adm.post(f"/api/decisoes/{did2}/resolver", json={"acao": "ignorar"})
+        ver("(1) 'ignorar': a repetida não entra; a que já estava continua do lote C", sql("SELECT lote_id FROM item WHERE codigo=?", f"{P2}-1960-S01-D00001") == lc and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", P2) == 3)
+        P3 = "F050-P0003"
+        le = lote(P3, "lote E", [D(P3, 1, ano=1961), D(P3, 2, ano=1961), D(P3, 3, ano=1961)]); importador_lote.importar_lote(c, le, "t")
+        c.execute("UPDATE item SET status_site='no_ar' WHERE codigo=?", (f"{P3}-1961-S01-D00003",)); c.execute("UPDATE item SET revisao='conferida' WHERE codigo=?", (f"{P3}-1961-S01-D00001",))
+        lf = lote(P3, "lote F", [{**D(P3, 1, ano=1961), "titulo": "Planta nova"}, D(P3, 2, "S02", 1961), D(P3, 3, ano=1961)]); importador_lote.importar_lote(c, lf, "t"); c.commit()
+        did3 = sql("SELECT id FROM decisao WHERE tipo='lote_colide' AND situacao='pendente'")
+        rr = adm.post(f"/api/decisoes/{did3}/resolver", json={"acao": "substituir"}).json()
+        ver("(1) 'substituir': mesmo código → a folha passa ao lote F com os dados novos e volta a pedir conferência; código diferente → a antiga sai e a nova entra; a que já está no site FICA",
+            sql("SELECT lote_id FROM item WHERE codigo=?", f"{P3}-1961-S01-D00001") == lf and sql("SELECT titulo FROM item WHERE codigo=?", f"{P3}-1961-S01-D00001") == "Planta nova"
+            and sql("SELECT revisao FROM item WHERE codigo=?", f"{P3}-1961-S01-D00001") == "pendente"
+            and sql("SELECT COUNT(*) FROM item WHERE codigo=?", f"{P3}-1961-S01-D00002") == 0 and sql("SELECT lote_id FROM item WHERE codigo=?", f"{P3}-1961-S02-D00002") == lf
+            and sql("SELECT lote_id FROM item WHERE codigo=?", f"{P3}-1961-S01-D00003") == le and rr.get("mantidas") == [f"{P3}-1961-S01-D00003"], str(rr)[:300])
+        # ---------- (6) divergência: o CV2 diz um ano/cidade/cliente diferente do cadastro ----------
+        c.execute("UPDATE projeto SET cliente='Banco Alfa' WHERE codigo='F050-P0002'")
+        lg = lote("F050-P0002", "lote G", [D("F050-P0002", 7, ano=1965), D("F050-P0002", 8, ano=1965)],
+                  projeto={"ano": "1965", "cidade": "são paulo", "cliente": "Banco Alfa", "fontes": {"ano": {"pasta": "1965", "info_projeto": "1960", "carimbo": "1966"}}})
+        importador_lote.importar_lote(c, lg, "t"); c.commit()
+        dv = c.execute("SELECT * FROM decisao WHERE tipo='divergencia'").fetchall()
+        cx = _j.loads(dv[0]["contexto"]) if dv else {}
+        ver("(6) o CV2 leu ano 1965 e o cadastro diz 1960: abre UMA divergência (cidade igual sem acento/maiúscula e cliente igual não abrem)",
+            len(dv) == 1 and cx.get("campo") == "ano", str([(_j.loads(x["contexto"]).get("campo")) for x in dv]))
+        cand = {x["valor"]: x for x in cx.get("candidatos", [])}
+        ver("(6) candidatos com de onde veio cada um (cadastro + ficha, CAMP Vision + pasta, carimbo) e quantas folhas têm cada ano",
+            set(cand) == {"1960", "1965", "1966"} and "cadastro do painel" in cand["1960"]["fontes"] and "ficha do projeto" in cand["1960"]["fontes"] and "nome da pasta" in cand["1965"]["fontes"] and cand["1965"]["folhas"] == 2, str(cand)[:300])
+        importador_lote.importar_lote(c, lg, "t"); c.commit()
+        ver("(6) reimportar não repete a pergunta", sql("SELECT COUNT(*) FROM decisao WHERE tipo='divergencia'") == 1)
+        dvid = dv[0]["id"]
+        ver("(6) valor fora dos candidatos: 400", adm.post(f"/api/decisoes/{dvid}/resolver", json={"acao": "escolher", "valor": "1999"}).status_code == 400)
+        rr = adm.post(f"/api/decisoes/{dvid}/resolver", json={"acao": "escolher", "valor": "1965"})
+        ver("(6) escolher 1965 grava no cadastro e fica na história", rr.status_code == 200 and sql("SELECT ano FROM projeto WHERE codigo='F050-P0002'") == 1965 and sql("SELECT COUNT(*) FROM evento WHERE tipo='dado_escolhido_na_divergencia'") == 1, rr.text[:200])
+        # ---------- (3) projeto com o mesmo nome em OUTRO fundo ----------
+        v = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F051", "titulo": "Residência Alfa"}).json()
+        ver("(3) criar 'Residência Alfa' no F051: nota forte com o 'Casa Alfa' do F050 (o do próprio F051 é parecido, não 'outro fundo')",
+            [o["codigo"] for o in v.get("outros_fundos", [])] == ["F050-P0001"] and v["outros_fundos"][0]["fundo_codigo"] == "F050" and [p_["codigo"] for p_ in v["parecidos"]] == ["F051-P0001"], str(v)[:300])
+        ver("(3) nome sem igual em outro fundo: nenhuma nota", adm.post("/api/projetos/verificar", json={"fundo_codigo": "F051", "titulo": "Edifício Zeta"}).json()["outros_fundos"] == [])
+        from app.rotas_operacao import _ler_pasta
+        pasta = raiz / "F051 - OBR" / "F051-P0001 - Casa Alfa"; pasta.mkdir(parents=True)
+        (pasta / "info_projeto.json").write_text(_j.dumps({"codigo": "F051-P0001", "nome": "Casa Alfa"}), encoding="utf-8"); (pasta / "status.json").write_text('{"status": "pronto"}', encoding="utf-8")
+        rl = _ler_pasta(c, pasta, None); c.commit()
+        do = c.execute("SELECT * FROM decisao WHERE tipo='projeto_outro_fundo'").fetchall()
+        ver("(3) lote recebido do F051-P0001 'Casa Alfa': o aviso do lote diz que já existe no F050 e abre a pergunta em Decisões",
+            rl["acao"] == "nova" and "F050" in (rl.get("aviso") or "") and len(do) == 1 and _j.loads(do[0]["contexto"])["outro"]["codigo"] == "F050-P0001", str(rl)[:300])
+        rr = adm.post(f"/api/decisoes/{do[0]['id']}/resolver", json={"acao": "mesmo"})
+        ver("(3) 'é o mesmo' fica anotado nos dois projetos", rr.status_code == 200 and sql("SELECT COUNT(*) FROM evento WHERE tipo='mesmo_projeto_em_outro_fundo'") == 2)
+        # ---------- (4) fundo com nome parecido ----------
+        vf = adm.post("/api/fundos/verificar", json={"titulo": "Rino Levi Arquitetos Associados"}).json()
+        ver("(4) cadastrar 'Rino Levi Arquitetos Associados': aviso com o F050 Rino Levi e a nota de semelhança", [f_["codigo"] for f_ in vf["parecidos"]] == ["F050"] and vf["parecidos"][0]["score"] >= 0.75, str(vf)[:200])
+        ver("(4) erro de digitação também ('Oswaldo Bratk')", [f_["codigo"] for f_ in adm.post("/api/fundos/verificar", json={"titulo": "Oswaldo Bratk"}).json()["parecidos"]] == ["F051"])
+        nf0 = sql("SELECT COUNT(*) FROM fundo")
+        r409 = adm.post("/api/fundos", json={"titulo": "Rino Levi Arquitetos Associados", "sigla": "RLA"})
+        ver("(4) reservar sem confirmar: 409 com os parecidos, e nada é criado", r409.status_code == 409 and r409.json()["parecidos"][0]["codigo"] == "F050" and sql("SELECT COUNT(*) FROM fundo") == nf0, r409.text[:200])
+        rok = adm.post("/api/fundos", json={"titulo": "Rino Levi Arquitetos Associados", "sigla": "RLA", "confirmar_novo": True})
+        ver("(4) confirmando que é outro fundo, cria", rok.status_code == 200 and sql("SELECT COUNT(*) FROM fundo") == nf0 + 1, rok.text[:200])
+        ver("(4) nome sem parecido cria direto", adm.post("/api/fundos", json={"titulo": "Lina Bo Bardi", "sigla": "LBB"}).status_code == 200 and adm.post("/api/fundos/verificar", json={"titulo": "Joaquim Guedes"}).json()["parecidos"] == [])
+        # ---------- (7) pedido repetido em 30 dias ----------
+        corpo = {"solicitante": "Maria", "email": "Maria@x.com", "finalidade": "pesquisa", "itens": [{"codigo": "F050-P0001", "formato": "jpg_3000"}]}
+        s1 = op.post("/api/solicitacoes", json=corpo).json()
+        s2_ = op.post("/api/solicitacoes", json={**corpo, "email": "maria@x.com", "itens": [{"codigo": "F050-P0001-1972-S01-D00001", "formato": "tif"}]}).json()
+        s3 = op.post("/api/solicitacoes", json={**corpo, "itens": [{"codigo": "F050-P0002", "formato": "tif"}]}).json()
+        ver("(7) a mesma pessoa pede de novo o mesmo material (projeto e uma folha dele) em 30 dias: o pedido novo aponta o anterior; outro material, não",
+            s1["repetido_de"] is None and (s2_["repetido_de"] or {}).get("id") == s1["id"] and s3["repetido_de"] is None, str((s1, s2_, s3)))
+        c.execute("UPDATE solicitacao SET recebida_em=datetime('now','-31 days') WHERE id=?", (s1["id"],)); c.commit()
+        L_ = {x["id"]: x for x in lei.get("/api/solicitacoes?situacao=todos").json()["itens"]}
+        ver("(7) na lista, o aviso some quando o anterior tem mais de 30 dias", L_[s2_["id"]]["repetido_de"] is None)
+        c.execute("UPDATE solicitacao SET recebida_em=datetime('now','-3 days') WHERE id=?", (s1["id"],)); c.commit()
+        L_ = {x["id"]: x for x in lei.get("/api/solicitacoes?situacao=todos").json()["itens"]}
+        ver("(7) ... e aparece (com a data do anterior) quando tem 3 dias", L_[s2_["id"]]["repetido_de"] == s1["id"] and L_[s2_["id"]]["repetido_de_em"] and L_[s1["id"]]["repetido_de"] is None)
+        for i, (em, mat, dias) in enumerate((("ana@x.com", "F050-P0001", 10), ("ana@x.com", "F050-P0001", 2), ("ana@x.com", "F050-P0002", 1), ("bia@x.com", "F050-P0001", 1), ("ana@x.com", "F050-P0001", 0))):
+            c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email, material_codigo, apagada) VALUES (1,?,datetime('now',?),'Ana',?,?,?)", (i + 1, f"-{dias} days", em, mat, 0))
+        c.execute("UPDATE uso_download SET apagada=1 WHERE origem_id=2"); c.commit()
+        U = {x["id"]: x for x in adm.get("/api/uso?por_pagina=50").json()["itens"]}
+        ver("(7) Uso: o mesmo e-mail baixando o mesmo material em 30 dias aponta o anterior (pedido apagado não conta); outro material ou outra pessoa, não",
+            U[5]["repetido_de"] == 1 and U[1]["repetido_de"] is None and U[3]["repetido_de"] is None and U[4]["repetido_de"] is None, str({k: x["repetido_de"] for k, x in U.items()}))
+        ver("(7) o detalhe do pedido de download também diz qual foi o anterior", adm.get("/api/uso/5").json()["repetido_de"] == 1)
+        # ---------- projeto_parecido continua igual, e a lista mostra cada tipo com o seu texto ----------
+        pid = decisoes.abrir_projeto_parecido(c, "auto-x1", "F050", "Casa Alfa ", {"titulo": "Casa Alfa ", "ano": 1972}, [{"codigo": "F050-P0001", "titulo": "Casa Alfa", "score": 1.0, "nivel": "forte", "motivos": []}], "painel"); c.commit()
+        L = lei.get("/api/decisoes?situacao=pendente").json()["itens"]
+        ver("projeto_parecido continua abrindo e aparece com a pergunta de sempre", any(x["id"] == pid and x["tipo"] == "projeto_parecido" and "é o mesmo projeto que “Casa Alfa”" in x["pergunta"] for x in L), str([x["pergunta"] for x in L])[:300])
+        rr = adm.post(f"/api/decisoes/{pid}/resolver", json={"acao": "mesmo", "projeto_codigo": "F050-P0001"})
+        ver("projeto_parecido resolve como antes ('mesmo' grava resolucao e escolha)", rr.status_code == 200 and sql("SELECT resolucao || escolha FROM decisao WHERE id=?", pid) == "mesmomesmo", rr.text[:200])
+        Rz = lei.get("/api/decisoes?situacao=resolvida").json()["itens"]
+        ver("as decididas mostram os 4 tipos, cada um com o seu rótulo e a escolha", {x["tipo"] for x in Rz} == {"lote_colide", "divergencia", "projeto_outro_fundo", "projeto_parecido"} and all(x["tipo_rotulo"] and x["escolha"] for x in Rz), str([(x["tipo"], x["escolha"]) for x in Rz]))
+        decisoes.abrir_divergencias(c, "F050-P0001", {"projeto": {"cidade": "Santos"}}); c.commit()
+        tf = pendencias.tarefas(c, "admin")
+        g = next((g_ for g_ in tf if g_["id"] == "decidir"), None)
+        ver("o Painel (Decidir) usa a pergunta própria de cada tipo", g and any("leu a cidade “Santos”" in x["titulo"] for x in g["itens"]), str(g)[:300])
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -5753,6 +5900,14 @@ else:
 print("104) Dashboard Tarefas de hoje: qualidade da base na fila única, índice por fundo, melhorias por pessoa e 'Agora não'")
 rc, out = rodar("tarefas_hoje", f"{tmp}/tarefas_hoje.db")
 if rc != 0: ok(False, f"teste das Tarefas de hoje não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("102) Mais inteligência: lote que colide, mesmo nome em outro fundo, fundo parecido, divergência do CV2 e pedido repetido")
+rc, out = rodar("mais_inteligencia", f"{tmp}/mais_int.db")
+if rc != 0: ok(False, f"teste Mais inteligência não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

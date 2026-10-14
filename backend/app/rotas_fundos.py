@@ -25,6 +25,11 @@ class NovoFundo(BaseModel):
     data_inicio: int | None = None
     data_fim: int | None = None
     tipo_agente: str = "pessoa"          # pessoa | entidade_coletiva | familia
+    confirmar_novo: bool = False         # a pessoa viu os fundos de nome parecido e quer criar um NOVO mesmo assim
+
+
+class VerificarFundo(BaseModel):
+    titulo: str
 
 
 class EdicaoFundo(BaseModel):
@@ -128,8 +133,19 @@ def contagens_fundo(con, codigo: str) -> dict:
             "sem_folhas": n["sem_folhas"], "com_problema": n["com_problema"], "folhas": folhas, "folhas_publicadas": folhas_pub, "problemas_abertos": erros}
 
 
+@router.post("/fundos/verificar")
+def verificar_fundo(d: VerificarFundo, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Antes de cadastrar: fundos de nome PARECIDO, com a nota (a mesma de projeto parecido) e os motivos."""
+    from .similaridade import buscar_fundos_parecidos
+    con = connect()
+    try:
+        return {"parecidos": buscar_fundos_parecidos(con, d.titulo.strip()) if d.titulo.strip() else []}
+    finally:
+        con.close()
+
+
 @router.post("/fundos")
-def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))) -> dict:
+def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))):
     con = connect()
     sigla = _validar_sigla(con, d.sigla)
     _validar_anos(d.data_inicio, d.data_fim)
@@ -137,6 +153,13 @@ def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close(); raise HTTPException(400, "Nome do fundo é obrigatório")
     if con.execute("SELECT 1 FROM fundo WHERE lower(titulo)=lower(?)", (d.titulo.strip(),)).fetchone():
         con.close(); raise HTTPException(409, "Já existe fundo com esse nome")
+    if not d.confirmar_novo:     # "Mais inteligência" (4): nome parecido com um fundo que já existe → avisa antes de criar
+        from fastapi.responses import JSONResponse
+        from .similaridade import buscar_fundos_parecidos
+        par = buscar_fundos_parecidos(con, d.titulo.strip())
+        if par:
+            con.close()
+            return JSONResponse(status_code=409, content={"detail": f"Já existe fundo com nome parecido ({par[0]['codigo']} {par[0]['titulo']}): confirme se é um fundo novo.", "parecidos": par})
     codigo = con.execute("SELECT codigo FROM v_proximo_fundo").fetchone()[0]
     con.execute("INSERT INTO fundo (codigo, sigla, titulo, data_inicio, data_fim, credito_padrao) VALUES (?,?,?,?,?,?)",
                 (codigo, sigla, d.titulo.strip(), d.data_inicio, d.data_fim,

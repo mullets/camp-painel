@@ -115,6 +115,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     criados = atualizados = ignoradas = 0
     problemas: list[str] = []
     duplicatas: list[tuple] = []
+    cobertas = colisoes_decididas(con, lote_id)            # folhas que já têm uma decisão "lote_colide" (pendente ou resolvida)
+    novas_colisoes: list[dict] = []
+    esperando = puladas_colisao = 0
     for d in docs:
         cod = str(d.get("codigo") or "")
         m = CODIGO_DOCUMENTO.match(cod)
@@ -122,6 +125,30 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             problemas.append(f"{cod or '(sem código)'}: código inválido, de outro projeto ou de série desconhecida")
             continue
         serie, seq = m.group(4), int(m.group(5))
+        cob = cobertas.get(cod)
+        if cob:
+            if cob["situacao"] == "pendente":
+                esperando += 1                                 # a pessoa ainda não escolheu: a folha espera
+                continue
+            novo_cod = (cob.get("renumeradas") or {}).get(cod)
+            if cob["escolha"] == "ignorar" or cod in (cob.get("mantidas") or []) or (cob["escolha"] == "adicionar_ao_fim" and not novo_cod):
+                puladas_colisao += 1
+                continue
+            if novo_cod:                                       # "adicionar ao fim": a folha entra com o número novo
+                cod = novo_cod
+                m = CODIGO_DOCUMENTO.match(cod)
+                serie, seq = m.group(4), int(m.group(5))
+                if cod not in existentes:
+                    ex_ = con.execute("SELECT codigo, revisao, status_site FROM item WHERE codigo=?", (cod,)).fetchone()
+                    if ex_:
+                        existentes[cod] = ex_
+        else:
+            col = colisao(con, proj, seq, lote_id, lote["pasta_qnap"])
+            if col:
+                novas_colisoes.append({"codigo": cod, "serie": serie, "d": seq, "existente": col["codigo"], "existente_serie": col["serie_codigo"],
+                                       "existente_lote": col["lote_id"], "existente_revisao": col["revisao"], "existente_status": col["status_site"],
+                                       "existente_titulo": col["titulo"], "titulo": (d.get("titulo") or "").strip() or None})
+                continue
         ex = existentes.get(cod)
         if ex and (ex["revisao"] != "pendente" or ex["status_site"] in ("rascunho", "no_ar")):
             ignoradas += 1                                         # já revisada por uma pessoa, ou já no site: não se mexe
@@ -174,6 +201,16 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
+    if novas_colisoes:                                         # "Mais inteligência" (1): o lote repete números que o projeto já usa → pergunta
+        resumo["decisao_colisao"] = abrir_colisao(con, lote, proj, novas_colisoes, docs)
+    if novas_colisoes or esperando:
+        resumo["esperando_decisao"] = len(novas_colisoes) + esperando
+    if puladas_colisao:
+        resumo["puladas_por_decisao"] = puladas_colisao
+    from .decisoes import abrir_divergencias
+    div = abrir_divergencias(con, proj, pacote, lote_id)   # (6) o CV2 leu ano/cidade/cliente diferente do cadastro
+    if div:
+        resumo["divergencias"] = div
     resultado["importacao"] = {**resumo, "por": ator}
     if isinstance(pacote.get("execucao"), dict):                 # custo, tempo e versão do lote (cartão 152)
         con.execute("UPDATE lista_processamento SET execucao_json=? WHERE id=?", (json.dumps(pacote["execucao"], ensure_ascii=False), lote_id))
@@ -184,3 +221,104 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folhas_importadas_do_lote',?,?)",
                 (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))
     return resumo
+
+
+
+# ---------------------------------------------------------------- "Mais inteligência" (1): lote que colide com folhas que o projeto já tem
+def colisao(con, proj: str, seq: int, lote_id: int, pasta: str | None):
+    """A folha do projeto que já usa este número D e veio de OUTRO lote (ou do site, ou à mão). A mesma pasta registrada de novo não conta."""
+    return con.execute("""SELECT i.codigo, i.serie_codigo, i.lote_id, i.revisao, i.status_site, i.titulo FROM item i
+                           LEFT JOIN lista_processamento l ON l.id=i.lote_id
+                          WHERE i.projeto_codigo=? AND i.sequencial=? AND (i.lote_id IS NULL OR i.lote_id<>?)
+                            AND (l.pasta_qnap IS NULL OR l.pasta_qnap<>COALESCE(?, ''))""", (proj, seq, lote_id, pasta)).fetchone()
+
+
+def colisoes_decididas(con, lote_id: int) -> dict:
+    """{codigo_do_pacote: {situacao, escolha, renumeradas, mantidas}} de todas as decisões 'lote_colide' deste lote."""
+    out = {}
+    for d in con.execute("SELECT situacao, escolha, contexto FROM decisao WHERE tipo='lote_colide' AND chave LIKE ? ORDER BY id", (f"lote_colide:{lote_id}:%",)):
+        try:
+            ctx = json.loads(d["contexto"] or "{}")
+        except ValueError:
+            continue
+        info = {"situacao": d["situacao"], "escolha": d["escolha"], "renumeradas": ctx.get("renumeradas") or {}, "mantidas": (ctx.get("resultado") or {}).get("mantidas") or []}
+        for c in ctx.get("colisoes") or []:
+            out[c["codigo"]] = info
+    return out
+
+
+def abrir_colisao(con, lote, proj: str, colisoes: list[dict], docs: list) -> int:
+    from .decisoes import abrir
+    n = con.execute("SELECT COUNT(*) FROM decisao WHERE tipo='lote_colide' AND chave LIKE ?", (f"lote_colide:{lote['id']}:%",)).fetchone()[0]
+    p = con.execute("SELECT fundo_codigo, titulo FROM projeto WHERE codigo=?", (proj,)).fetchone()
+    folhas = con.execute("SELECT COUNT(*), COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (proj,)).fetchone()
+    ctx = {"lote_id": lote["id"], "lote_nome": lote["nome"], "pasta": lote["pasta_qnap"], "projeto_codigo": proj, "projeto_titulo": p["titulo"] if p else None,
+           "folhas_no_projeto": folhas[0], "maior_d": folhas[1], "folhas_no_lote": len(docs), "colisoes": colisoes}
+    did, _ = abrir(con, "lote_colide", f"lote_colide:{lote['id']}:{n + 1}", p["fundo_codigo"] if p else proj[:4], lote["nome"] or proj, ctx, "campvision")
+    return did
+
+
+def aplicar_colisao(con, d, ctx: dict, acao: str, ator: str) -> dict:
+    """Aplica a escolha da pessoa às folhas que colidiram. NÃO faz commit.
+    adicionar_ao_fim: cada folha repetida ganha o próximo número livre do projeto (depois do maior D do projeto e do lote);
+    ignorar: as repetidas não entram (as que já estão no projeto ficam como estão);
+    substituir: a folha do lote toma o lugar da que já existe, menos as que já estão no site (essas ficam e são listadas)."""
+    lote_id, proj = ctx["lote_id"], ctx["projeto_codigo"]
+    colisoes = ctx.get("colisoes") or []
+    out: dict = {}
+    if acao == "adicionar_ao_fim":
+        pacote_max = 0
+        lote = con.execute("SELECT pasta_qnap FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+        try:
+            pac = ler_pacote(Path(lote["pasta_qnap"] or "")) if lote and Path(lote["pasta_qnap"] or "").is_dir() else None
+        except HTTPException:
+            pac = None
+        for x in ((pac or {}).get("documentos") or []):
+            mm = CODIGO_DOCUMENTO.match(str(x.get("codigo") or "")) if isinstance(x, dict) else None
+            if mm:
+                pacote_max = max(pacote_max, int(mm.group(5)))
+        prox = max(con.execute("SELECT COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (proj,)).fetchone()[0], pacote_max) + 1
+        ren = {}
+        for c in colisoes:
+            mm = CODIGO_DOCUMENTO.match(c["codigo"])
+            ren[c["codigo"]] = f"{mm.group(1)}-{mm.group(2)}-{mm.group(3)}-{mm.group(4)}-D{prox:0{max(5, len(mm.group(5)))}d}"
+            prox += 1
+        ctx["renumeradas"] = ren
+        out = {"renumeradas": ren, "mensagem": f"{len(ren)} folha(s) entram no fim, com número novo (a partir de {next(iter(ren.values()), '')[-6:]})."}
+    elif acao == "ignorar":
+        out = {"mensagem": f"As {len(colisoes)} folha(s) repetidas do lote não entram; as que já estavam no projeto ficam como estão."}
+    else:
+        mantidas, trocadas = [], []
+        for c in colisoes:
+            ex = con.execute("SELECT codigo, status_site FROM item WHERE codigo=?", (c["existente"],)).fetchone()
+            if not ex:
+                trocadas.append(c["codigo"]); continue
+            if ex["status_site"] in ("rascunho", "no_ar"):
+                mantidas.append(c["codigo"]); continue
+            if ex["codigo"] == c["codigo"]:                       # mesmo código: a folha passa a ser deste lote e volta a pedir conferência
+                con.execute("UPDATE item SET lote_id=?, revisao='pendente', revisado_por=NULL, revisado_em=NULL, atualizado_em=datetime('now') WHERE codigo=?", (lote_id, ex["codigo"]))
+                trocadas.append(c["codigo"]); continue
+            con.execute("SAVEPOINT troca")
+            try:
+                con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL WHERE duplicata_de=?", (ex["codigo"],))
+                con.execute("DELETE FROM item WHERE codigo=?", (ex["codigo"],))
+                con.execute("RELEASE troca")
+                con.execute("INSERT OR IGNORE INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo) VALUES (?,?,'item',?)",
+                            (ex["codigo"], c["codigo"], f"substituída pela folha do lote {lote_id} (decisão {d['id']})"))
+                trocadas.append(c["codigo"])
+            except Exception:  # noqa: BLE001 - a folha antiga está ligada a outra coisa (localização, pedido...): fica
+                con.execute("ROLLBACK TO troca"); con.execute("RELEASE troca")
+                mantidas.append(c["codigo"])
+        out = {"trocadas": trocadas, "mantidas": mantidas,
+               "mensagem": f"{len(trocadas)} folha(s) substituídas" + (f"; {len(mantidas)} ficaram como estavam (já estão no site ou ligadas a outra coisa)" if mantidas else "") + "."}
+    ctx["resultado"] = out
+    con.execute("UPDATE decisao SET situacao='resolvida', escolha=?, contexto=? WHERE id=?", (acao, json.dumps(ctx, ensure_ascii=False), d["id"]))
+    if acao != "ignorar":                                          # traz as folhas agora (se a pasta estiver acessível e o lote não aprovado)
+        lote = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+        if lote and not lote["aprovado_em"]:
+            try:
+                r = importar_lote(con, lote_id, f"decisao-{ator}")
+                out["importacao"] = {k: r.get(k) for k in ("criadas", "atualizadas")}
+            except HTTPException as e:
+                out["importacao"] = {"erro": e.detail, "aviso": "A escolha fica guardada e vale na próxima importação deste lote."}
+    return out

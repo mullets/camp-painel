@@ -110,3 +110,45 @@ def buscar_parecidos(con, fundo_codigo: str, titulo: str, ano: int | None = 0, c
                             "score": score, "nivel": n, "motivos": motivos})
     achados.sort(key=lambda x: (-x["score"], x["codigo"]))
     return achados[:limite]
+
+
+def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int | None = 0, cidade: str | None = None, limite: int = 3) -> list[dict]:
+    """Projeto com o MESMO nome em OUTRO fundo ("já existe 'Casa X' no fundo F012 — é o mesmo?"). Só o nível forte: nome
+    praticamente igual. Não bloqueia nada: vira uma nota forte com link para a pessoa conferir."""
+    if not normalizar(titulo):
+        return []
+    novo = {"titulo": titulo, "ano": ano or 0, "cidade": cidade}
+    achados = []
+    for p in con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.fundo_codigo, f.titulo AS fundo_titulo
+                              FROM projeto p LEFT JOIN fundo f ON f.codigo=p.fundo_codigo
+                             WHERE p.fundo_codigo<>? AND p.mesclado_em IS NULL""", (fundo_codigo or "",)):
+        score, motivos = pontuar(novo, {"titulo": p["titulo"], "ano": p["ano"], "cidade": p["cidade"]})
+        if score >= NIVEL_FORTE:
+            achados.append({"codigo": p["codigo"], "titulo": p["titulo"], "ano": p["ano"] or None, "cidade": p["cidade"], "fundo_codigo": p["fundo_codigo"],
+                            "fundo_titulo": p["fundo_titulo"], "score": score, "motivos": motivos})
+    achados.sort(key=lambda x: (-x["score"], x["codigo"]))
+    return achados[:limite]
+
+
+# palavras que todo nome de fundo pode ter e que não distinguem um do outro
+_GENERICAS_FUNDO = {"acervo", "fundo", "arquiteto", "arquitetos", "arquitetura", "associados", "escritorio", "ltda", "familia", "colecao"}
+
+
+def _nome_fundo(t: str | None) -> str:
+    pal = [w for w in normalizar(t).split() if w not in _GENERICAS_FUNDO]
+    return " ".join(pal) or normalizar(t)
+
+
+def buscar_fundos_parecidos(con, titulo: str, limite: int = 3) -> list[dict]:
+    """Antes de cadastrar um fundo novo: fundos com nome parecido (a MESMA nota de projeto_parecido), do mais para o menos parecido."""
+    if not _nome_fundo(titulo):
+        return []
+    achados = []
+    for f in con.execute("SELECT codigo, sigla, titulo, (SELECT COUNT(*) FROM projeto p WHERE p.fundo_codigo=fundo.codigo) AS projetos FROM fundo"):
+        score, motivos = pontuar({"titulo": _nome_fundo(titulo)}, {"titulo": _nome_fundo(f["titulo"])})
+        n = nivel(score)
+        if n:
+            achados.append({"codigo": f["codigo"], "sigla": f["sigla"], "titulo": f["titulo"], "projetos": f["projetos"],
+                            "score": score, "nivel": n, "motivos": motivos})
+    achados.sort(key=lambda x: (-x["score"], x["codigo"]))
+    return achados[:limite]

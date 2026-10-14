@@ -79,9 +79,19 @@ def _filtro(q, de, ate, uso, fundo, material, ids: list[int] | None = None) -> t
     return " AND ".join(w), p
 
 
+# "Mais inteligência" (7): a mesma pessoa (e-mail) pediu o mesmo material nos 30 dias antes deste pedido → o pedido anterior
+_ANTERIOR = """SELECT {col} FROM uso_download u2 WHERE u2.apagada=0 AND u2.id<>u.id AND u.email IS NOT NULL AND u.email<>'' AND u2.email=u.email
+     AND u.material_codigo IS NOT NULL AND u2.material_codigo=u.material_codigo
+     AND (u2.recebida_em < u.recebida_em OR (u2.recebida_em = u.recebida_em AND u2.id < u.id))
+     AND julianday(u.recebida_em) - julianday(u2.recebida_em) <= 30
+   ORDER BY u2.recebida_em DESC, u2.id DESC LIMIT 1"""
+
+
 def _sql_pedidos(w: str) -> str:
     return f"""SELECT u.id, u.recebida_em, u.nome, u.email, u.instituicao, u.uso, u.material_codigo, u.pagina, u.anonimizada,
-                      COALESCE(i.titulo, p.titulo) AS material_titulo FROM uso_download u {JUNCAO} WHERE {w}"""
+                      COALESCE(i.titulo, p.titulo) AS material_titulo,
+                      ({_ANTERIOR.format(col='u2.id')}) AS repetido_de, ({_ANTERIOR.format(col='u2.recebida_em')}) AS repetido_de_em
+                 FROM uso_download u {JUNCAO} WHERE {w}"""
 
 
 def _sql_pessoas(w: str) -> str:
@@ -223,6 +233,8 @@ def detalhe(uid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         d = dict(r)
         d["resposta"] = json.loads(d.pop("resposta_json")) if d.get("resposta_json") else None
         d["emails"] = [dict(x) for x in con.execute("SELECT enviado_em, enviado_por, assunto, ok FROM uso_email WHERE uso_id=? ORDER BY id DESC LIMIT 20", (uid,))]
+        rep = con.execute(f"SELECT ({_ANTERIOR.format(col='u2.id')}), ({_ANTERIOR.format(col='u2.recebida_em')}) FROM uso_download u WHERE u.id=?", (uid,)).fetchone()
+        d["repetido_de"], d["repetido_de_em"] = (rep[0], rep[1]) if rep else (None, None)
         return d
     finally:
         con.close()
