@@ -1,5 +1,6 @@
 """CAMP Acervos — API do painel."""
 import json
+import re
 import logging
 import time
 import uuid
@@ -358,6 +359,8 @@ class ReservaProjetoEstacao(BaseModel):
     # (ou obras diferentes no mesmo endereço). Com `candidatos`, o painel NÃO cria projeto: pergunta a uma pessoa.
     candidatos: list[dict] | None = None
     carimbo: dict | None = None         # o que o carimbo diz: obra, local, cliente, identificadores, folhas
+    numero_projeto: str | None = None   # o Mac já reservou este projeto (ex.: "P0060")…
+    projeto_ja_existia: bool = False    # …e diz que ele já existe: o painel devolve esse, não cria outro
 
 
 class HeartbeatEstacao(BaseModel):
@@ -400,6 +403,33 @@ def candidatos_do_cv(con, fundo: str, candidatos: list[dict]) -> list[dict]:
     return saida
 
 
+_P_NA_FRENTE = re.compile(r"^\s*P(\d{4})\s*[-–—]")
+
+
+def _projeto_ja_numerado(con, d) -> str | None:
+    """Código do projeto que a reserva já indica: o número que o Mac mandou (projeto_ja_existia) ou o "P0060 - …" na frente do nome da pasta.
+    Só vale se o projeto existe NESTE fundo; se ele foi mesclado, segue para o destino."""
+    numeros = []
+    if d.projeto_ja_existia and d.numero_projeto:
+        m = re.fullmatch(r"\s*(?:" + re.escape(d.fundo_codigo) + r"-)?P(\d{4})\s*", d.numero_projeto.upper())
+        if m:
+            numeros.append(m.group(1))
+    for texto in (d.titulo, d.identificacao_original):
+        m = _P_NA_FRENTE.match(texto or "")
+        if m:
+            numeros.append(m.group(1))
+    for n in numeros:
+        codigo = f"{d.fundo_codigo}-P{n}"
+        for _ in range(5):                               # projeto mesclado: o material vai para onde ele foi juntado
+            p = con.execute("SELECT codigo, mesclado_em FROM projeto WHERE codigo=? AND fundo_codigo=?", (codigo, d.fundo_codigo)).fetchone()
+            if not p:
+                break
+            if not p["mesclado_em"]:
+                return p["codigo"]
+            codigo = p["mesclado_em"]
+    return None
+
+
 @app.post("/api/estacoes/projetos/reservar")
 def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict:
     """Reserva e cria um projeto para a estação usando o contador autoritativo do painel."""
@@ -435,12 +465,25 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         f = con.execute("SELECT codigo FROM fundo WHERE codigo=? AND ativo=1", (d.fundo_codigo,)).fetchone()
         if not f:
             raise HTTPException(404, "Fundo não existe ou está inativo")
+        # --- O projeto JÁ TEM número (aviso do CV2 de 14/10: o lote "P0060 - SESI — Marília" virou F009-P0114): devolve o existente.
+        existente = _projeto_ja_numerado(con, d)
+        if existente:
+            from .projetos_novos import resposta_de_projeto
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'reserva_reaproveitada',?,?)",
+                        (existente, ator, json.dumps({"titulo_recebido": titulo, "numero_projeto": d.numero_projeto, "projeto_ja_existia": d.projeto_ja_existia,
+                                                      "identificacao_original": identificacao, "chave_reserva": chave or None}, ensure_ascii=False)))
+            con.commit()
+            return resposta_de_projeto(con, existente, existente=True, reaproveitado=True)
         # --- VERIFICAÇÃO: já existe projeto parecido neste fundo? O painel não cria duplicado: pergunta a uma pessoa (fila de Decisões).
         from . import decisoes
         from .projetos_novos import resposta_de_projeto
         from .similaridade import buscar_parecidos
         chave_dec = decisoes.chave_efetiva(chave, d.fundo_codigo, titulo)
         dec = decisoes.da_chave(con, chave_dec)
+        if dec and dec["situacao"] == "resolvida" and (dec["escolha"] if "escolha" in dec.keys() else None) == "descartar":
+            con.rollback()                              # a pessoa descartou o pedido (lote de teste, repetido): a estação não segue
+            return JSONResponse(status_code=410, content={"descartado": True, "decisao_id": dec["id"],
+                                "mensagem": "Este pedido foi descartado no painel (lote de teste ou repetido). Não siga com este lote."})
         if dec and dec["situacao"] == "resolvida":      # a pessoa já decidiu: devolve o projeto escolhido (o existente ou o novo)
             con.rollback()
             return resposta_de_projeto(con, dec["projeto_codigo"], decisao_id=dec["id"], existente=(dec["resolucao"] == "mesmo"))

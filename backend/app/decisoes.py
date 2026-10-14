@@ -66,6 +66,10 @@ def resolver(con, did: int, acao: str, projeto_codigo: str | None, ator: str, va
     tipo = d["tipo"] or "projeto_parecido"
     if tipo not in TIPOS:
         raise HTTPException(400, f"Tipo de decisão desconhecido: {tipo}")
+    if acao == "descartar":                           # lote de teste, pedido repetido…: encerra sem criar nem mudar nada
+        con.execute("UPDATE decisao SET situacao='resolvida', escolha='descartar', resolvida_em=datetime('now'), resolvida_por=? WHERE id=?", (ator, did))
+        _evento(con, "decisao", str(did), "decisao_descartada", ator, {"tipo": tipo, "titulo": d["titulo"], "motivo": (valor or "")[:300] or None})
+        return {"ok": True, "acao": "descartar", "projeto_codigo": None}
     if acao not in TIPOS[tipo]["opcoes"]:
         raise HTTPException(400, f"Escolha inválida para esta decisão: use {', '.join(TIPOS[tipo]['opcoes'])}")
     if tipo != "projeto_parecido":

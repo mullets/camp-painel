@@ -5463,6 +5463,67 @@ def filho(modo):
         ver("rodar --aplicar de novo não soma o giro outra vez", g(D(2)) == 90 and g(f"{P}-0000-S03-D00007") == 0 and nev(D(2), "giro_marcado") == 1)
         for l in res: print(l)
         c.close()
+    elif modo == "aviso_cv_14_10":
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F009','Euclides Oliveira','EOL',1),('F001','Arnaldo Martino','ARM',1)")
+        def proj(f, n, t, ano=0, mescl=None):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,mesclado_em) VALUES (?,?,?,?,?,?)", (f"{f}-P{n:04d}", f, n, t, ano, mescl))
+        proj("F009", 60, "SESI — Marília", 1984); proj("F009", 70, "Escola Velha", 1970, "F009-P0060")
+        proj("F001", 2, "Familia - Nada", 0); proj("F001", 4, "Família Martino", 0)
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False); auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        adm, op, lan = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), com_ip("192.168.15.40")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        n_proj = lambda: sql("SELECT COUNT(*) FROM projeto WHERE fundo_codigo='F009'")
+        reservar = lambda **kw: lan.post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F009", "ano": 1984, "operador": "Rafael", **kw})
+        # 1) o Mac já reservou P0060 e diz que ele existe: o painel devolve P0060, mesmo com um título diferente e confirmar_novo
+        n0 = n_proj(); r = reservar(titulo="SESI Marilia fotos", numero_projeto="P0060", projeto_ja_existia=True, confirmar_novo=True, chave_reserva="a" * 32)
+        ver("projeto_ja_existia + numero_projeto: devolve o projeto existente (F009-P0060), sem criar outro", r.status_code == 200 and r.json().get("codigo") == "F009-P0060" and r.json().get("existente") is True and n_proj() == n0, r.text[:200])
+        ver("a reserva reaproveitada fica no histórico do projeto", sql("SELECT COUNT(*) FROM evento WHERE tipo='reserva_reaproveitada' AND codigo='F009-P0060'") == 1)
+        # 2) o vigia manda o NOME DA PASTA ("P0060 - SESI — Marília - 1984"): o painel reconhece o P0060 na frente
+        n0 = n_proj(); r = reservar(titulo="P0060 - SESI — Marília - 1984", chave_reserva="b" * 32)
+        ver("título começando por 'P0060 - …' (nome da pasta): devolve F009-P0060, não cria F009-P0114", r.status_code == 200 and r.json().get("codigo") == "F009-P0060" and n_proj() == n0, r.text[:200])
+        r = reservar(titulo="Outro nome", identificacao_original="P0060 – SESI Marília", chave_reserva="c" * 32)
+        ver("também pela identificação original (pasta no scanner)", r.status_code == 200 and r.json().get("codigo") == "F009-P0060", r.text[:200])
+        # 3) projeto juntado a outro: segue para o destino
+        r = reservar(titulo="P0070 - Escola Velha", chave_reserva="d" * 32)
+        ver("número de projeto que foi mesclado: devolve o destino da mesclagem", r.status_code == 200 and r.json().get("codigo") == "F009-P0060", r.text[:200])
+        # 4) número que não existe no fundo: segue o caminho normal (cria com o próximo número)
+        n0 = n_proj(); r = reservar(titulo="P0999 - Projeto Novo Qualquer", ano=1990, chave_reserva="e" * 32)
+        ver("número que não existe no fundo: não inventa; reserva normal (projeto novo)", r.status_code == 200 and r.json().get("codigo") not in ("F009-P0999", "F009-P0060") and n_proj() == n0 + 1, r.text[:200])
+        r = reservar(titulo="SESI x", numero_projeto="P0060", projeto_ja_existia=False, chave_reserva="f" * 32, confirmar_novo=True)
+        ver("numero_projeto sem projeto_ja_existia não força nada (cria normal)", r.status_code == 200 and r.json().get("codigo") != "F009-P0060", r.text[:200])
+        # 5) descartar uma decisão pendente (lote de teste "Familia - Nada")
+        r = lan.post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F001", "titulo": "Familia - Nada", "chave_reserva": "9" * 32})
+        did = (r.json() or {}).get("decisao_id")
+        ver("o lote de teste abre uma decisão (projeto parecido) e a estação espera", r.status_code == 202 and bool(did), r.text[:200])
+        ver("operador não descarta (403)", op.post(f"/api/decisoes/{did}/resolver", json={"acao": "descartar"}).status_code == 403)
+        nf = sql("SELECT COUNT(*) FROM projeto WHERE fundo_codigo='F001'")
+        d1 = adm.post(f"/api/decisoes/{did}/resolver", json={"acao": "descartar", "valor": "lote de teste do F001"})
+        ver("admin descarta: a decisão sai da fila, sem criar projeto, com o motivo no histórico", d1.status_code == 200 and sql("SELECT situacao FROM decisao WHERE id=?", did) == "resolvida"
+            and sql("SELECT escolha FROM decisao WHERE id=?", did) == "descartar" and sql("SELECT COUNT(*) FROM projeto WHERE fundo_codigo='F001'") == nf
+            and "lote de teste" in sql("SELECT detalhe FROM evento WHERE tipo='decisao_descartada' AND codigo=?", str(did)), d1.text[:200])
+        r = lan.post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F001", "titulo": "Familia - Nada", "chave_reserva": "9" * 32})
+        ver("a estação pergunta de novo e recebe 410 'descartado' (não segue com o lote)", r.status_code == 410 and r.json().get("descartado") is True, r.text[:200])
+        ver("descartar de novo: 409 (já resolvida)", adm.post(f"/api/decisoes/{did}/resolver", json={"acao": "descartar"}).status_code == 409)
+        pend = adm.get("/api/decisoes?situacao=pendente").json()
+        ver("a decisão descartada não aparece entre as pendentes", all(x["id"] != did for x in (pend.get("itens", pend) if isinstance(pend, dict) else pend)), str(pend)[:200])
+        k.close()
+        for l in res: print(l)
     elif modo == "duplicata_rascunhos":
         init_db(); _aplicar_migracoes_real()
         import json as _j
@@ -6325,6 +6386,14 @@ else:
 print("112) Duplicata falsa e rascunhos repetidos: 'Não é duplicata' solta o bloqueio, envio ao site reaproveita o item do código, rascunhos órfãos e link do projeto pelo espelho do site")
 rc, out = rodar("duplicata_rascunhos", f"{tmp}/dup_rasc.db")
 if rc != 0: ok(False, f"teste da duplicata falsa e rascunhos repetidos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("113) Aviso do CAMP Vision (14/10): reserva reaproveita o projeto já numerado (P0060) e decisão pendente pode ser descartada")
+rc, out = rodar("aviso_cv_14_10", f"{tmp}/aviso1410.db")
+if rc != 0: ok(False, f"teste do aviso de 14/10 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
