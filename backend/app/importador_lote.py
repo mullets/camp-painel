@@ -87,6 +87,22 @@ def _primeiro(doc: dict, md: dict, chaves: tuple) -> str | None:
     return None
 
 
+def _recodificar_por_releitura(con, antigo: str, novo: str, serie: str, ator: str) -> None:
+    """Dá à folha `antigo` o código `novo` (outra série, mesmo D). Copia a linha com o código novo, passa as referências e apaga a
+    antiga: nunca deixa chave estrangeira quebrada, mesmo sem transação com checagem adiada."""
+    from .rotas_mesclar import _trocar_codigo
+    cols = [r[1] for r in con.execute("PRAGMA table_info(item)")]
+    outras = [c for c in cols if c not in ("codigo", "serie_codigo", "codigo_anterior", "sequencial")]
+    seq = con.execute("SELECT sequencial FROM item WHERE codigo=?", (antigo,)).fetchone()[0]
+    con.execute("UPDATE item SET sequencial=? WHERE codigo=?", (-1000000 - seq, antigo))      # libera o D (único no projeto) até apagar a antiga
+    con.execute(f"INSERT INTO item (codigo, serie_codigo, codigo_anterior, sequencial, {', '.join(outras)}) SELECT ?, ?, ?, ?, {', '.join(outras)} FROM item WHERE codigo=?",
+                (novo, serie, antigo, seq, antigo))
+    _trocar_codigo(con, antigo, novo)
+    con.execute("DELETE FROM item WHERE codigo=?", (antigo,))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'folha_recodificada_releitura',?,?)",
+                (novo, ator, json.dumps({"de": antigo, "para": novo, "motivo": "a nova leitura do CAMP Vision mudou a série"}, ensure_ascii=False)))
+
+
 def importar_lote(con, lote_id: int, ator: str) -> dict:
     """NÃO faz commit (quem chama controla a transação)."""
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -118,6 +134,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     cobertas = colisoes_decididas(con, lote_id)            # folhas que já têm uma decisão "lote_colide" (pendente ou resolvida)
     novas_colisoes: list[dict] = []
     esperando = puladas_colisao = 0
+    recodificadas: list[dict] = []
     for d in docs:
         cod = str(d.get("codigo") or "")
         m = CODIGO_DOCUMENTO.match(cod)
@@ -149,6 +166,16 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                                        "existente_lote": col["lote_id"], "existente_revisao": col["revisao"], "existente_status": col["status_site"],
                                        "existente_titulo": col["titulo"], "titulo": (d.get("titulo") or "").strip() or None})
                 continue
+        if cod not in existentes:
+            velha = con.execute("SELECT codigo, lote_id, status_site, tainacan_item_id FROM item WHERE projeto_codigo=? AND sequencial=? AND codigo<>?",
+                                (proj, seq, cod)).fetchone()
+            if velha and velha["lote_id"] == lote_id and not velha["tainacan_item_id"] and velha["status_site"] not in ("rascunho", "no_ar"):
+                # A releitura do MESMO lote mudou a série desta folha (aviso de 14/10: F009-P0060, S01 → S03): a folha que o painel
+                # já tinha passa a ter o código novo (com histórico, revisão, localização e problemas) em vez de travar a leitura nova.
+                _recodificar_por_releitura(con, velha["codigo"], cod, serie, ator)
+                existentes.pop(velha["codigo"], None)
+                existentes[cod] = con.execute("SELECT codigo, revisao, status_site FROM item WHERE codigo=?", (cod,)).fetchone()
+                recodificadas.append({"de": velha["codigo"], "para": cod})
         ex = existentes.get(cod)
         if ex and (ex["revisao"] != "pendente" or ex["status_site"] in ("rascunho", "no_ar")):
             ignoradas += 1                                         # já revisada por uma pessoa, ou já no site: não se mexe
@@ -211,6 +238,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
+    if recodificadas:
+        resumo["recodificadas_pela_releitura"] = recodificadas
     if novas_colisoes:                                         # "Mais inteligência" (1): o lote repete números que o projeto já usa → pergunta
         resumo["decisao_colisao"] = abrir_colisao(con, lote, proj, novas_colisoes, docs)
     if novas_colisoes or esperando:

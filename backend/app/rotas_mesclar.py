@@ -112,6 +112,8 @@ def _trocar_codigo(con, antigo: str, novo: str) -> None:
     con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (novo, antigo))
     con.execute("UPDATE erro SET codigo=? WHERE codigo=?", (novo, antigo))
     con.execute("UPDATE revisao_campo SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
+    con.execute("UPDATE emprestimo_item SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
+    con.execute("UPDATE projeto SET capa_item=? WHERE capa_item=?", (novo, antigo))
 
 
 def _status_velho(con, codigo: str, ator: str) -> None:

@@ -3705,6 +3705,48 @@ def filho(modo):
         ver("operador não manda resumo (403)", op.post("/api/alertas/resumo").status_code == 403)
         c.close()
         for l in res: print(l)
+    elif modo == "releitura_muda_serie":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import importador_lote
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        pasta = _pl.Path(tempfile.mkdtemp()) / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        def gravar(p_): (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p_, ensure_ascii=False), encoding="utf-8")
+        gravar(pac)                                       # 1ª leitura (cortada): S01-D00001 e S01-D00002, sem título
+        for d_ in pac["documentos"]: d_["titulo"] = ""
+        gravar(pac)
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('SESI','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid
+        c.execute("INSERT INTO localizacao_fisica (tipo, identificador) VALUES ('caixa','CX-1')"); c.commit(); c.close()
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        A1, A2 = "F026-P0001-1972-S01-D00001", "F026-P0001-1972-S01-D00002"
+        ver("1ª leitura importada na S01", sql("SELECT COUNT(*) FROM item WHERE serie_codigo='S01'") == 2)
+        k.execute("UPDATE item SET revisao='conferida', giro_manual=90, titulo='Título que a pessoa escreveu' WHERE codigo=?", (A1,))     # uma pessoa já conferiu a D1
+        loc = sql("SELECT id FROM localizacao_fisica"); k.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (A2, loc))
+        k.execute("UPDATE projeto SET capa_item=? WHERE codigo='F026-P0001'", (A2,)); k.commit()
+        # 2ª leitura (releitura do MESMO lote): as folhas são fotografias (S03), com título
+        p2 = _cp.deepcopy(pac)
+        for i_, d_ in enumerate(p2["documentos"], 1):
+            d_["codigo"] = d_["codigo"].replace("-S01-", "-S03-"); d_["titulo"] = f"Vista {i_} lida pelo CAMP Vision"
+        gravar(p2)
+        r = importador_lote.importar_lote(k, lid, "campvision (releitura)"); k.commit()
+        B1, B2 = A1.replace("-S01-", "-S03-"), A2.replace("-S01-", "-S03-")
+        ver("a releitura que muda a série NÃO é recusada ('o número D já é de…')", not any("já é de" in x_ for x_ in r.get("problemas", [])), str(r.get("problemas"))[:200])
+        ver("as folhas passam para S03 com o mesmo D; nenhuma fica na S01", sql("SELECT COUNT(*) FROM item WHERE serie_codigo='S03'") == 2 and sql("SELECT COUNT(*) FROM item WHERE serie_codigo='S01'") == 0)
+        ver("a folha ainda não conferida recebe a leitura nova (título)", sql("SELECT titulo FROM item WHERE codigo=?", B2) == "Vista 2 lida pelo CAMP Vision")
+        ver("a folha que uma pessoa já conferiu muda de código mas mantém o que a pessoa fez (título, giro, conferida)",
+            tuple(k.execute("SELECT titulo, giro_manual, revisao FROM item WHERE codigo=?", (B1,)).fetchone()) == ("Título que a pessoa escreveu", 90, "conferida"))
+        ver("localização e capa acompanham o código novo; o código antigo fica guardado", sql("SELECT item_codigo FROM item_localizacao") == B2 and sql("SELECT capa_item FROM projeto WHERE codigo='F026-P0001'") == B2 and sql("SELECT codigo_anterior FROM item WHERE codigo=?", B2) == A2)
+        ver("o resumo e o histórico dizem o que mudou", len(r.get("recodificadas_pela_releitura") or []) == 2 and sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_recodificada_releitura'") == 2, str(r.get("recodificadas_pela_releitura")))
+        ver("integridade: nenhuma chave estrangeira quebrada", k.execute("PRAGMA foreign_key_check").fetchall() == [])
+        # folha de OUTRO lote com o mesmo D não é tocada (continua indo para a decisão de lote que colide)
+        k.close()
+        for l in res: print(l)
     elif modo == "erros_automaticos":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -6394,6 +6436,14 @@ else:
 print("113) Aviso do CAMP Vision (14/10): reserva reaproveita o projeto já numerado (P0060) e decisão pendente pode ser descartada")
 rc, out = rodar("aviso_cv_14_10", f"{tmp}/aviso1410.db")
 if rc != 0: ok(False, f"teste do aviso de 14/10 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114) Releitura que muda a série das folhas (aviso de 14/10, F009-P0060 S01 → S03): o painel aceita a leitura nova em vez de travar")
+rc, out = rodar("releitura_muda_serie", f"{tmp}/relserie.db")
+if rc != 0: ok(False, f"teste da releitura que muda a série não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
