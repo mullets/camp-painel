@@ -106,6 +106,26 @@ async def _resumo_diario_periodico() -> None:
         except Exception as e:  # noqa: BLE001
             log_registrar(logging.WARNING, "resumo_diario_falhou", str(e)[:200])
         await asyncio.sleep(300)
+    asyncio.create_task(_retrato_qualidade_periodico())
+
+
+async def _retrato_qualidade_periodico() -> None:
+    """Dashboard Tarefas de hoje: grava o retrato do índice de qualidade de hoje a cada hora (mesmo que ninguém abra o painel), para a seta da tendência."""
+    import asyncio
+    from .qualidade_base import gravar_retrato
+    await asyncio.sleep(120)
+    while True:
+        def _rodar():
+            c2 = connect()
+            try:
+                gravar_retrato(c2)
+            finally:
+                c2.close()
+        try:
+            await asyncio.to_thread(_rodar)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.WARNING, "retrato_qualidade_falhou", str(e)[:200])
+        await asyncio.sleep(3600)
 
 
 async def _alertas_periodicos() -> None:

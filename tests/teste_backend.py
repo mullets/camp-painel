@@ -980,7 +980,7 @@ def filho(modo):
         ver("folhas trabalhadas: 3 hoje (a mesma folha com 2 eventos conta UMA vez) e 1 ontem", h["hoje"]["folhas"] == {"hoje": 3, "ontem": 1}, str(h["hoje"]["folhas"]))
         ver("publicações hoje: 1; projetos novos hoje: os 7 criados agora", h["hoje"]["publicacoes"]["hoje"] == 1 and h["hoje"]["projetos_novos"]["hoje"] == 7, str(h["hoje"]))
         ver("pedidos e erros novos hoje: conta o erro de hoje (2 parâmetros no SQL)", h["hoje"]["pedidos_e_erros"]["hoje"] == 1, str(h["hoje"]["pedidos_e_erros"]))
-        ids = [a["id"] for a in h["acoes"]]
+        ids = [a["id"] for a in h["acoes"] if not a.get("base")]   # as tarefas de qualidade da base entram na mesma fila; têm teste próprio (seção 104)
         ver("ordem das ações: QNAP crítico, publicar pronto, direitos, autorizar, paradas, sem imagem, divergências", ids == ["qnap_espaco", "publicar", "direitos_F091", "autorizar_F092", "parados", "sem_imagem", "divergencias"], str(ids))
         ver("a ação do QNAP diz o espaço em GB e %", h["acoes"][0]["detalhe"] == "28 GB livres (2,2%)", h["acoes"][0]["detalhe"])
         ver("as ações de fundo levam à página do fundo", next(a for a in h["acoes"] if a["id"] == "direitos_F091")["rota"] == "fundo/F091" and next(a for a in h["acoes"] if a["id"] == "direitos_F091")["impacto"] == 3)
@@ -4387,7 +4387,7 @@ def filho(modo):
         pa = adm.get("/api/painel").json()
         ver("/api/painel traz pendencias, tarefas, caminho, no_site, frases do dia e alertas", all(k in pa for k in ("pendencias", "tarefas", "caminho", "no_site", "hoje_frases", "alertas")) and pa["pendencias"]["prontos_publicar"] == 2)
         g = [x["id"] for x in pa["tarefas"]]
-        ver("admin: grupos na ordem Decidir → Conferir → Aprovar e publicar → Problemas → Pedidos", g == ["decidir", "conferir", "aprovar_publicar", "problemas", "pedidos"], str(g))
+        ver("admin: grupos na ordem Decidir → Conferir → Aprovar e publicar → Problemas → Pedidos (e, por último, Melhorar a base)", [x for x in g if x != "base"] == ["decidir", "conferir", "aprovar_publicar", "problemas", "pedidos"] and g[-1] in ("pedidos", "base"), str(g))
         t = {x["id"]: x for x in pa["tarefas"]}
         dec = t["decidir"]["itens"][0]
         ver("decisão em uma linha: “Golombeck 3” é o mesmo que “Golombek”? chegou 3 vezes, esperando há 10 h, CAMP Vision parado, vermelho",
@@ -4931,6 +4931,114 @@ def filho(modo):
             lei.get("/api/projetos/F026-P9999/consenso").status_code == 404 and lei.get("/api/projetos/F026-P0001/consenso?lote_id=9999").status_code == 404 and anon.get("/api/projetos/F026-P0001/consenso").status_code == 401)
         for l in res: print(l)
         k.close()
+    elif modo == "tarefas_hoje":
+        # Dashboard Tarefas de hoje: tarefas de qualidade da base na fila única, índice por fundo com retrato diário, melhorias por pessoa e "Agora não"
+        init_db(); aplicar_migracoes()
+        from datetime import datetime as _dt, timedelta as _td
+        from app import auth, qualidade_base as qb
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("UPDATE agente SET fonte_historia='semente das migrações' WHERE COALESCE(fonte_historia,'')=''")   # arquitetos que as migrações já trazem não entram na conta
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F081','Fundo Sem Sigla',NULL,1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F082','Fundo Qualidade','QLB',1)")
+        c.execute("INSERT OR REPLACE INTO direitos_fundo (fundo_codigo,situacao) VALUES ('F082','autorizado')")
+        def proj(f, n, ano, cidade, st="nao_publicado"):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,status_site) VALUES (?,?,?,?,?,?,?)", (f"{f}-P{n:04d}", f, n, f"Casa {f[-2:]}{n}", ano, cidade, st)); return f"{f}-P{n:04d}"
+        def item(cod, pj, seq, titulo, jpg=None, tif=None):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,arquivo_jpg,arquivo_tif) VALUES (?,?,?,?,?,?,?)", (cod, pj, "S01", seq, titulo, jpg, tif))
+        pa = proj("F082", 1, 0, None, "no_ar")                 # publicado, sem ano e sem cidade
+        pb = proj("F082", 2, 1970, "São Paulo")                # completo
+        pc = proj("F081", 1, 1980, "Santos")                   # completo, mas com folha sem título
+        item(f"{pb}-1970-S01-D00001", pb, 1, "Planta", jpg="/a.jpg")
+        item(f"{pb}-1970-S01-D00002", pb, 2, "  ")             # sem título e sem imagem
+        item(f"{pb}-1970-S01-D00003", pb, 3, "Corte", jpg="/c.jpg")
+        item(f"{pb}-0000-S01-D00004", pb, 4, "Elevação", tif="/d.tif")   # código com ano 0000 = incompleto
+        item(f"{pc}-1980-S01-D00001", pc, 1, None)
+        ag1 = c.execute("INSERT INTO agente (tipo,forma_autorizada) VALUES ('pessoa','Fulano Sem Fonte')").lastrowid
+        ag2 = c.execute("INSERT INTO agente (tipo,forma_autorizada,historia,fonte_historia) VALUES ('pessoa','Ciclano Com Fonte','Nasceu.','Livro X')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F082',?,'produtor')", (ag1,))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Ana Adm", "admin"), ("op@camp.arq.br", "Otto Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        base = lambda cl=adm: [a for a in cl.get("/api/hoje").json()["acoes"] if a.get("base")]
+        ids = lambda cl=adm: [a["id"] for a in base(cl)]
+        b0 = {a["id"]: a for a in base()}
+        esperado = {"q_sigla_F081", f"q_proj_{pa}", f"q_titulo_{pb}", f"q_titulo_{pc}", f"q_agente_{ag1}"}
+        ver("os 4 tipos de tarefa da base aparecem na fila do dia (fundo sem sigla, projeto sem ano/cidade, folhas sem título, arquiteto sem fonte)", set(b0) == esperado, str(sorted(b0)))
+        ver("o que está completo não vira tarefa (projeto com ano e cidade, arquiteto com fonte)", f"q_proj_{pb}" not in b0 and f"q_agente_{ag2}" not in b0)
+        ver("cada tarefa leva à tela onde se corrige", b0["q_sigla_F081"]["rota"] == "fundo/F081" and b0[f"q_proj_{pa}"]["rota"] == f"projeto/{pa}"
+            and b0[f"q_titulo_{pb}"]["rota"] == f"item/{pb}-1970-S01-D00002" and b0[f"q_agente_{ag1}"]["rota"] == f"arquitetos/{ag1}", str({k_: v["rota"] for k_, v in b0.items()}))
+        ver("texto em português: 'Projeto … sem ano e sem cidade'; '1 folha sem título em …'", b0[f"q_proj_{pa}"]["titulo"].endswith("sem ano e sem cidade") and b0[f"q_titulo_{pb}"]["titulo"].startswith("1 folha sem título em"), b0[f"q_proj_{pa}"]["titulo"])
+        todas = adm.get("/api/hoje").json()["acoes"]
+        ver("prioridade: sigla (55) > projeto publicado sem dados (50) > folhas/arquiteto de material não publicado; a fila inteira continua ordenada", ids()[:2] == ["q_sigla_F081", f"q_proj_{pa}"]
+            and [a["prioridade"] for a in todas] == sorted((a["prioridade"] for a in todas), reverse=True), str(ids()))
+        hj = adm.get("/api/hoje").json()
+        ver("/api/hoje traz o total da base por tipo", hj["base"]["total"] == 5 and {t["tipo"]: t["n"] for t in hj["base"]["tipos"]} == {"fundo_sem_sigla": 1, "projeto_sem_ano_cidade": 1, "folha_sem_titulo": 2, "agente_sem_fonte": 1}, str(hj["base"]))
+        gp = {g["id"]: g for g in adm.get("/api/painel").json()["tarefas"]}
+        ver("painel inicial: grupo 'Melhorar a base' na fila de 'O que fazer agora', com botão que leva à tela e o id para o 'Agora não'", "base" in gp and gp["base"]["total"] == 5
+            and gp["base"]["itens"][0]["acao"] == {"rotulo": "Dar a sigla", "tipo": "rota", "alvo": "fundo/F081"} and gp["base"]["itens"][0]["adiar"] == "q_sigla_F081", str(gp.get("base")))
+        # ---------- índice de qualidade ----------
+        q = adm.get("/api/qualidade-base").json(); fq = {f["codigo"]: f for f in q["fundos"]}
+        ver("F082: 4 folhas; 75% com imagem, 75% com código completo (ano 0000 não conta), 75% com título, 100% com direitos; índice 81,25",
+            fq["F082"]["folhas"] == 4 and fq["F082"]["pct"] == {"com_imagem": 75.0, "com_codigo": 75.0, "com_titulo": 75.0, "com_direitos": 100.0} and abs(fq["F082"]["indice"] - 81.25) <= 0.05, str(fq.get("F082")))
+        ver("F081: 1 folha sem imagem, sem título e sem direitos definidos: índice 25", fq["F081"]["pct"] == {"com_imagem": 0.0, "com_codigo": 100.0, "com_titulo": 0.0, "com_direitos": 0.0} and fq["F081"]["indice"] == 25.0, str(fq.get("F081")))
+        ver("índice geral sobre todas as 5 folhas: 60/80/60/80 = 70; o pior fundo vem primeiro", q["geral"]["folhas"] == 5 and q["geral"]["indice"] == 70.0 and q["fundos"][0]["codigo"] == "F081", str(q["geral"]))
+        ver("sem retrato da semana anterior, não há seta", q["geral"]["tendencia"]["seta"] is None)
+        k = connect(); hoje_ = qb.agora().date(); n_fundos = k.execute("SELECT COUNT(*) FROM fundo WHERE ativo=1").fetchone()[0]
+        adm.get("/api/qualidade-base")
+        ver("o retrato do dia fica gravado (geral e cada fundo), um por dia mesmo abrindo várias vezes", k.execute("SELECT COUNT(*) FROM qualidade_retrato WHERE dia=?", (hoje_.isoformat(),)).fetchone()[0] == 1 + n_fundos
+            and k.execute("SELECT COUNT(*) FROM qualidade_retrato").fetchone()[0] == 1 + n_fundos and k.execute("SELECT indice FROM qualidade_retrato WHERE fundo_codigo='*'").fetchone()[0] == 70.0)
+        sem = (hoje_ - _td(days=7)).isoformat()
+        k.execute("INSERT INTO qualidade_retrato (dia,fundo_codigo,folhas,indice) VALUES (?,?,5,50)", (sem, "*")); k.execute("INSERT INTO qualidade_retrato (dia,fundo_codigo,folhas,indice) VALUES (?,?,4,90)", (sem, "F082"))
+        k.execute("INSERT INTO qualidade_retrato (dia,fundo_codigo,folhas,indice) VALUES (?,?,4,10)", ((hoje_ - _td(days=3)).isoformat(), "F082")); k.commit()
+        q = adm.get("/api/qualidade-base").json(); fq = {f["codigo"]: f for f in q["fundos"]}
+        ver("seta frente à semana anterior: geral subiu (50 → 70), F082 desceu (90 → 81,25; o retrato de 3 dias atrás não conta)", q["geral"]["tendencia"]["seta"] == "sobe" and q["geral"]["tendencia"]["diferenca"] == 20.0
+            and fq["F082"]["tendencia"]["seta"] == "desce" and fq["F082"]["tendencia"]["antes"] == 90, str((q["geral"]["tendencia"], fq["F082"]["tendencia"])))
+        fd = op.get("/api/qualidade-base/fundo/F082").json()
+        ver("página do fundo: índice, percentuais, seta e histórico de 30 dias", fd["indice"] == fq["F082"]["indice"] and fd["tendencia"]["seta"] == "desce" and fd["historico"][-1]["dia"] == hoje_.isoformat() and len(fd["historico"]) == 3, str(fd.get("historico")))
+        ver("fundo inexistente 404; sem login 401", adm.get("/api/qualidade-base/fundo/F999").status_code == 404 and anon.get("/api/qualidade-base").status_code == 401 and anon.get("/api/melhorias").status_code == 401)
+        # ---------- "Agora não": 7 dias, por pessoa (relógio simulado) ----------
+        real = qb.agora; t0 = _dt(2026, 10, 14, 9, 0, 0)
+        qb.agora = lambda: t0
+        r = adm.post(f"/api/hoje/tarefas/q_agente_{ag1}/agora-nao").json()
+        ver("'Agora não' responde quando a tarefa volta (7 dias)", r.get("ok") and r["ate"] == "2026-10-21 09:00:00", str(r))
+        ver("a tarefa some para quem clicou, na fila do dia e no painel inicial", f"q_agente_{ag1}" not in ids() and all(i.get("adiar") != f"q_agente_{ag1}" for g in adm.get("/api/painel").json()["tarefas"] for i in g["itens"]) and adm.get("/api/hoje").json()["base"]["total"] == 4)
+        ver("para outra pessoa ela continua aparecendo", f"q_agente_{ag1}" in ids(op))
+        qb.agora = lambda: t0 + _td(days=6, hours=23)
+        ver("6 dias e 23 horas depois: ainda escondida", f"q_agente_{ag1}" not in ids())
+        qb.agora = lambda: t0 + _td(days=7, minutes=1)
+        ver("passados 7 dias, ela volta", f"q_agente_{ag1}" in ids())
+        op.post("/api/hoje/tarefas/publicar/agora-nao"); op.post("/api/hoje/tarefas/publicar/agora-nao")
+        ver("'Agora não' vale também para as outras ações do dia; repetir o clique só renova o prazo; sem login 401", anon.post("/api/hoje/tarefas/x/agora-nao").status_code == 401
+            and k.execute("SELECT COUNT(*) FROM tarefa_adiada").fetchone()[0] == 2)
+        qb.agora = real
+        # ---------- corrigir faz a tarefa sumir ----------
+        k.execute("UPDATE fundo SET sigla='SSG' WHERE codigo='F081'"); k.execute("UPDATE projeto SET ano=1960, cidade='Campinas' WHERE codigo=?", (pa,))
+        k.execute("UPDATE item SET titulo='Fachada' WHERE codigo=?", (f"{pb}-1970-S01-D00002",)); k.execute("UPDATE agente SET fonte_historia='Entrevista com a família' WHERE id=?", (ag1,)); k.commit()
+        ver("corrigido, cada tarefa some (só sobra a folha sem título do F081)", ids() == [f"q_titulo_{pc}"], str(ids()))
+        q = adm.get("/api/qualidade-base").json(); fq = {f["codigo"]: f for f in q["fundos"]}
+        ver("e o índice sobe na hora (F082: 100% com título → 87,5)", fq["F082"]["pct"]["com_titulo"] == 100.0 and fq["F082"]["indice"] == 87.5, str(fq["F082"]["pct"]))
+        k.execute("UPDATE item SET titulo='Planta' WHERE codigo=?", (f"{pc}-1980-S01-D00001",)); k.commit()
+        ver("sem nada a corrigir, o painel não mostra o grupo 'Melhorar a base'", "base" not in [g["id"] for g in adm.get("/api/painel").json()["tarefas"]] and not ids())
+        # ---------- melhorias de hoje, por pessoa ----------
+        ev = lambda ent, tipo, ator, desloc: k.execute(f"INSERT INTO evento (entidade,codigo,tipo,ator,quando) VALUES (?,?,?,?,datetime('now','{desloc}'))", (ent, "X", tipo, ator))
+        k.execute("DELETE FROM evento")
+        ev("projeto", "editado", "adm@camp.arq.br", "-1 minutes"); ev("item", "revisao", "adm@camp.arq.br", "-2 minutes"); ev("agente", "editado", "ADM@camp.arq.br", "-3 days")
+        ev("fundo", "editado", "op@camp.arq.br", "-5 minutes"); ev("projeto", "editado", "adm@camp.arq.br", "-10 days")
+        ev("projeto", "criado", "adm@camp.arq.br", "-1 minutes"); ev("item", "editado", "campvision", "-1 minutes"); ev("usuario", "login", "op@camp.arq.br", "-1 minutes"); k.commit()
+        m = op.get("/api/melhorias").json(); pm = {p_["nome"]: p_ for p_ in m["pessoas"]}
+        ver("melhorias: Ana fez 2 hoje e 3 na semana; Otto 1 e 1 (criar, robô, login e o que tem mais de 7 dias não contam)", len(pm) == 2 and (pm["Ana Adm"]["hoje"], pm["Ana Adm"]["semana"], pm["Otto Op"]["hoje"], pm["Otto Op"]["semana"]) == (2, 3, 1, 1)
+            and m["pessoas"][0]["nome"] == "Ana Adm" and m["total_hoje"] == 3, str(m))
+        hj = adm.get("/api/hoje").json()
+        ver("/api/hoje traz as melhorias e o índice para o painel inicial", hj["melhorias"]["total_semana"] == 4 and "geral" in hj["qualidade"])
+        k.close()
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -5637,6 +5745,14 @@ else:
 print("100) Revisão pós-CAMP Vision: espelhar a folha, marcar/trocar/desfazer duplicata e consenso de ano, endereço e cliente no lote")
 rc, out = rodar("revisao_pos_cv", f"{tmp}/revpos.db")
 if rc != 0: ok(False, f"teste da revisão pós-CAMP Vision não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("104) Dashboard Tarefas de hoje: qualidade da base na fila única, índice por fundo, melhorias por pessoa e 'Agora não'")
+rc, out = rodar("tarefas_hoje", f"{tmp}/tarefas_hoje.db")
+if rc != 0: ok(False, f"teste das Tarefas de hoje não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

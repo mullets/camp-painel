@@ -86,7 +86,7 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     from . import pendencias as pd
     n = pd.contar_pendencias(con, com_listas=True)
     d["pendencias"] = {k: v for k, v in n.items() if not k.startswith("_")}
-    d["tarefas"] = pd.tarefas(con, u["papel"], n)
+    d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"])
     d["caminho"] = pd.caminho(con, n)
     d["no_site"] = pd.no_site(con)
     d["hoje_frases"] = pd.atividade_hoje(con)

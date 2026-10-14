@@ -3,9 +3,9 @@
 Usa as mesmas regras do resto do painel (publicacao.condicoes_projeto, direitos_permitem_publicar, qnap_coletor.nivel_espaco):
 nenhuma regra nova é inventada aqui, para os números nunca divergirem das telas.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from . import auth, qnap_coletor
+from . import auth, qnap_coletor, qualidade_base as qb
 from .db import connect
 
 router = APIRouter(prefix="/api", tags=["hoje"])
@@ -131,7 +131,13 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
         if div_total:
             acoes.append({"id": "divergencias", "prioridade": 30, "impacto": div_total, "rota": None,
                           "titulo": f"{div_total} divergência(s) entre o painel e o site", "detalhe": "Clique para ver o que são, em português"})
+        # ---------- qualidade da base, na MESMA fila (prioridade por impacto); "Agora não" esconde por 7 dias, por pessoa ----------
+        tq = qb.tarefas_qualidade(con, u["id"])
+        acoes += [{**t, "base": True} for t in qb.fila_do_dia(tq)]
+        esconder = qb.adiadas(con, u["id"])
+        acoes = [a for a in acoes if a["id"] not in esconder]
         acoes.sort(key=lambda a: (-a["prioridade"], -a["impacto"]))
+        qual = qb.visao_geral(con)
         return {
             "kpis": {"travados": {"fundos": len(travados), "projetos": seguram},
                      "prontos": {"valor": prontos, "autorizados": autorizados}},
@@ -139,6 +145,53 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
             "publicacao": {"fundos_travados": travados[:5], "fundos_para_autorizar": autorizar[:5], "prontos": prontos, "autorizados": autorizados},
             "divergencias": {"total": div_total, "tipos": [{"titulo": t, "n": n} for t, n in sorted(agrupado.items(), key=lambda x: -x[1])]},
             "qnap": {"nivel_espaco": nivel, "livre_pct": livre_pct},
+            "base": {"total": len(tq), "tipos": qb.resumo_tipos(tq)},
+            "qualidade": {"geral": qual["geral"], "fundos": qual["fundos"]},
+            "melhorias": qb.melhorias(con),
         }
+    finally:
+        con.close()
+
+
+@router.post("/hoje/tarefas/{tarefa_id}/agora-nao")
+def agora_nao(tarefa_id: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Esconde esta tarefa só para quem clicou, por 7 dias. Depois ela volta sozinha (se ainda existir)."""
+    if not tarefa_id or len(tarefa_id) > 120:
+        raise HTTPException(400, "Tarefa inválida")
+    con = connect()
+    try:
+        ate = qb.adiar(con, u["id"], tarefa_id)
+        con.commit()
+        return {"ok": True, "ate": ate, "mensagem": f"Escondida por {qb.DIAS_ADIAR} dias. Depois ela volta, se ainda precisar."}
+    finally:
+        con.close()
+
+
+@router.get("/qualidade-base")
+def qualidade_base(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    con = connect()
+    try:
+        return qb.visao_geral(con)
+    finally:
+        con.close()
+
+
+@router.get("/qualidade-base/fundo/{codigo}")
+def qualidade_base_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    con = connect()
+    try:
+        f = qb.do_fundo(con, codigo)
+        if not f:
+            raise HTTPException(404, "Fundo não encontrado")
+        return f
+    finally:
+        con.close()
+
+
+@router.get("/melhorias")
+def melhorias(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    con = connect()
+    try:
+        return qb.melhorias(con)
     finally:
         con.close()

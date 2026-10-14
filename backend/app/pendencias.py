@@ -169,7 +169,7 @@ def _acao(rotulo: str, tipo: str, alvo) -> dict:
     return {"rotulo": rotulo, "tipo": tipo, "alvo": alvo}
 
 
-def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3) -> list[dict]:
+def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_id: int | None = None) -> list[dict]:
     """Grupos na ordem Decidir → Conferir → Aprovar e publicar → Problemas que bloqueiam → Pedidos. Cada linha: sev (r|a|b), titulo, codigo, detalhe, acao."""
     n = n or contar_pendencias(con, com_listas=True)
     admin = papel in ("admin", "master")
@@ -270,6 +270,17 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3) -> list[
     if linhas:
         grupos.append({"id": "emprestimos", "titulo": "Originais com prazo vencido", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} empréstimos atrasados", "rota": "emprestimos/atrasado"}})
+
+    # 6) melhorar a base (qualidade_base): fila única com prioridade; "Agora não" esconde por 7 dias só para esta pessoa
+    from . import qualidade_base as qb
+    tq = qb.tarefas_qualidade(con, usuario_id)
+    if tq:
+        fila = qb.fila_do_dia(tq)
+        linhas = [{"sev": "b", "titulo": t["titulo"], "codigo": t["codigo"], "detalhe": t["detalhe"], "adiar": t["id"],
+                   "acao": _acao(t["rotulo"], "rota", t["rota"])} for t in fila]
+        grupos.append({"id": "base", "titulo": "Melhorar a base", "quem": "qualquer", "total": len(tq), "itens": linhas[:por_grupo + 2],
+                       "ver_todos": {"rotulo": "Ver quanto falta em cada fundo", "rota": "painel/qualidade"},
+                       "tipos": qb.resumo_tipos(tq)})
 
     if leitura:                                       # quem só lê vê o que está acontecendo, sem botão de ação: a linha abre a página
         for g in grupos:
