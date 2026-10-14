@@ -84,6 +84,7 @@ async def _startup() -> None:
     asyncio.create_task(_coleta_uso_periodica())
     asyncio.create_task(_alertas_periodicos())
     asyncio.create_task(_resumo_diario_periodico())
+    asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
 
 
 async def _resumo_diario_periodico() -> None:
@@ -107,7 +108,6 @@ async def _resumo_diario_periodico() -> None:
         except Exception as e:  # noqa: BLE001
             log_registrar(logging.WARNING, "resumo_diario_falhou", str(e)[:200])
         await asyncio.sleep(300)
-    asyncio.create_task(_retrato_qualidade_periodico())
 
 
 async def _retrato_qualidade_periodico() -> None:
