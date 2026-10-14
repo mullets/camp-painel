@@ -372,7 +372,9 @@ class Giro(BaseModel):
 
 @router.post("/itens/{codigo}/girar")
 def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Vira a prévia da folha (e a imagem que vai ao site). A tela e o site mostram a folha já virada; o arquivo original no QNAP não é tocado."""
+    """Vira a prévia da folha (e a imagem que vai ao site). A tela e o site mostram a folha já virada; o arquivo original no QNAP não é tocado.
+    Folha JÁ no site (rascunho ou publicada): só admin. O painel troca o arquivo da imagem no WordPress mantendo o ID do anexo e só grava
+    o giro se o site aceitar; se o site falhar, nada muda no painel."""
     if d.graus not in (90, -90, 180):
         raise HTTPException(400, "graus deve ser 90, -90 ou 180")
     if not imagens.disponivel():
@@ -382,15 +384,26 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         i = con.execute("SELECT i.giro_manual, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        if i["aprovado_em"]:
+        no_site = i["status_site"] in ("rascunho", "no_ar")
+        if no_site and u["papel"] not in ("admin", "master"):
+            raise HTTPException(409, "Esta folha já está no site: só um admin pode girar a imagem de lá. Peça a um admin")
+        if i["aprovado_em"] and not no_site:
             raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
-        if i["status_site"] in ("rascunho", "no_ar"):
-            raise HTTPException(409, "Esta folha já está no site: a imagem lá não muda por aqui")
-        novo = (i["giro_manual"] + d.graus) % 360
+        novo = ((i["giro_manual"] or 0) + d.graus) % 360
+        site = None
+        if no_site:                                   # primeiro o site; o painel só grava se o site aceitou
+            from . import publicador
+            try:
+                site = publicador.girar_imagem_no_site(codigo, novo)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(502, f"O site não aceitou a imagem girada, e nada foi mudado no painel: {str(e)[:240]}")
         con.execute("UPDATE item SET giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, codigo))
-        _evento(con, "item", codigo, "giro", u["email"], {"de": i["giro_manual"], "para": novo})
+        if site:
+            _evento(con, "item", codigo, "giro_no_site", u["email"], {"de": i["giro_manual"], "para": novo, "anexo": site["media_id"]})
+        else:
+            _evento(con, "item", codigo, "giro", u["email"], {"de": i["giro_manual"], "para": novo})
         con.commit()
-        return {"giro_manual": novo}
+        return {"giro_manual": novo, "no_site": bool(site)}
     finally:
         con.close()
 

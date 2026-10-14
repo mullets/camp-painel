@@ -5337,6 +5337,115 @@ def filho(modo):
             and all(e[2] == "migração" for e in ev) and all(_j.loads(e[3])["para"] == "nao_publicado" for e in ev), str([tuple(e) for e in ev]))
         for l in res: print(l)
         c.close()
+    elif modo == "giro_publicado":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, shutil, io, contextlib, importlib.util
+        from pathlib import Path as _P
+        from app import auth, publicador, wp as _wp
+        from PIL import Image
+        import httpx
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = _P(os.environ["CAMP_DB_PATH"]).parent
+        prontos = base / "prontos_giro_publicado"; shutil.rmtree(prontos, ignore_errors=True)
+        os.environ["CAMP_CACHE_DIR"] = str(prontos / "cache")
+        def vermelho(im, xy): r, g, b = im.convert("RGB").getpixel(xy); return r > 200 and g < 90 and b < 90
+        P = "F026-P0092"; D = lambda n, ano=1975, s="S01": f"{P}-{ano}-{s}-D{n:05d}"
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n in (92, 84, 30): c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id,status_site) VALUES (?,'F026',92,'Casa Girada',1975,9100,'no_ar')", (P,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0084','F026',84,'Outra',1975)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES ('Lote 1',?,'/nao/existe','publicado',datetime('now'),'adm')", (P,)).lastrowid
+        def folha(cod, st, tid, media=None, previa=True, seq=None):
+            rel = f"_campvision/preview/{P}/{cod}.jpg"
+            if previa:
+                (prontos / rel).parent.mkdir(parents=True, exist_ok=True); im = Image.new("RGB", (60, 30), "white"); im.paste((255, 0, 0), (0, 0, 12, 12)); im.save(prontos / rel, "JPEG", quality=95)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id,site_media_id,lote_id,revisao,pendencias) VALUES (?,?,?,?,?,'campvision',?,?,?,?,'conferida',?)",
+                      (cod, cod[:10], cod.split("-")[3], seq or int(cod[-5:]), "Planta", st, tid, media, lote, _j.dumps({"previa": rel if previa else "", "sinais": ["orientação incerta"]})))
+        folha(D(2), "no_ar", 7002, 5552)            # publicada, com anexo
+        folha(D(3), "rascunho", 7003, 5553)         # no site como rascunho
+        folha(D(5), "no_ar", 7005, None)            # publicada sem anexo conhecido
+        folha(D(6), "nao_publicado", None)          # fora do site
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        g = lambda cod: c.execute("SELECT giro_manual FROM item WHERE codigo=?", (cod,)).fetchone()[0]
+        nev = lambda cod, t: c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo=?", (cod, t)).fetchone()[0]
+        class Fake:
+            chamadas, falhar = [], False
+            def __init__(self, *a, **k): pass
+            def substituir_midia(self, media_id, caminho, nome=None):
+                if Fake.falhar: raise RuntimeError("O site recusou trocar a imagem do anexo 5552: 500 erro interno")
+                im = Image.open(caminho); Fake.chamadas.append((media_id, im.size, vermelho(im, (24, 5)), nome)); return {"id": media_id, "source_url": "http://site-falso.invalid/f.jpg"}
+        publicador.WP = Fake
+        # ---------- (a) operador recebe 409 pedindo o admin ----------
+        r = op.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
+        ver("operador: folha publicada continua 409, e a frase diz para pedir a um admin", r.status_code == 409 and "admin" in r.json().get("erro", r.text) and g(D(2)) == 0 and not Fake.chamadas, r.text[:200])
+        # ---------- (a) admin gira: troca o arquivo do anexo no site mantendo o ID ----------
+        r = adm.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
+        ver("admin: folha publicada (lote já aprovado) gira: 200, giro_manual 90, avisa que foi no site", r.status_code == 200 and r.json() == {"giro_manual": 90, "no_site": True} and g(D(2)) == 90, r.text[:200])
+        ver("o site recebe a imagem GIRADA (30x60, canto vermelho em cima à direita) para o MESMO anexo (5552), com o nome legível da folha",
+            Fake.chamadas[-1][:3] == (5552, (30, 60), True) and Fake.chamadas[-1][3].endswith(f"{D(2)}.jpg"), str(Fake.chamadas))
+        ver("histórico: evento 'giro_no_site' com o antes, o depois e o anexo", nev(D(2), "giro_no_site") == 1 and _j.loads(c.execute("SELECT detalhe FROM evento WHERE codigo=? AND tipo='giro_no_site'", (D(2),)).fetchone()[0]) == {"de": 0, "para": 90, "anexo": 5552})
+        r = adm.post(f"/api/itens/{D(3)}/girar", json={"graus": -90})
+        ver("admin: folha em rascunho no site também gira lá (270)", r.status_code == 200 and g(D(3)) == 270 and Fake.chamadas[-1][0] == 5553)
+        # ---------- (a) site falha: nada muda ----------
+        Fake.falhar = True; n0 = len(Fake.chamadas)
+        r = adm.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
+        ver("site recusa: 502 com frase em português, o giro NÃO é gravado e não há evento novo", r.status_code == 502 and "nada foi mudado" in r.json().get("erro", r.text) and g(D(2)) == 90 and nev(D(2), "giro_no_site") == 1, r.text[:300])
+        Fake.falhar = False
+        r = adm.post(f"/api/itens/{D(5)}/girar", json={"graus": 90})
+        ver("publicada sem anexo conhecido: 502 dizendo que não achou a imagem no site; nada gravado", r.status_code == 502 and "imagem desta folha no site" in r.json().get("erro", r.text) and g(D(5)) == 0, r.text[:300])
+        r = adm.post(f"/api/itens/{D(6)}/girar", json={"graus": 90})
+        ver("folha fora do site: gira só no painel, sem chamar o site (lote aprovado continua 409)", r.status_code == 409 and len(Fake.chamadas) == n0, r.text[:200])
+        # ---------- (a) o cliente do WordPress: rota do plugin da CAMP, sem rota = frase clara ----------
+        pedidos = []
+        def responder(req):
+            pedidos.append(req)
+            if "/painel/midia/404" in str(req.url): return httpx.Response(404, json={"code": "rest_no_route"})
+            if "/painel/midia/500" in str(req.url): return httpx.Response(500, text="erro")
+            return httpx.Response(200, json={"id": 5552, "source_url": "http://site-falso.invalid/f.jpg"})
+        fw = _wp.WP.__new__(_wp.WP); fw.h = httpx.Client(base_url="http://127.0.0.1:9", transport=httpx.MockTransport(responder))
+        arq = prontos / f"_campvision/preview/{P}/{D(2)}.jpg"
+        j = fw.substituir_midia(5552, str(arq), nome="planta-casa-girada.jpg")
+        ver("WP.substituir_midia: POST em /wp-json/camp/v1/painel/midia/<id> com o arquivo e o nome (mesmo formato do envio de mídia)",
+            j["id"] == 5552 and pedidos[-1].method == "POST" and pedidos[-1].url.path == "/wp-json/camp/v1/painel/midia/5552" and 'filename="planta-casa-girada.jpg"' in pedidos[-1].headers["content-disposition"] and pedidos[-1].content == arq.read_bytes())
+        def erro(mid):
+            try: fw.substituir_midia(mid, str(arq)); return ""
+            except RuntimeError as e: return str(e)
+        ver("site sem a rota: frase pedindo para instalar docs/site/painel-midia.php; outro erro: frase com o código", "painel-midia.php" in erro(404) and "500" in erro(500), erro(404))
+        # ---------- (b) script marcar_giro_publicado ----------
+        spec = importlib.util.spec_from_file_location("marcar_giro", str(_P(__file__).resolve().parents[1] / "scripts" / "marcar_giro_publicado.py")); mg = importlib.util.module_from_spec(spec); spec.loader.exec_module(mg)
+        ver("convenção conferida: 90° horário = 90, anti-horário = 270, 180 = 180 (giro_manual é horário, como em giro_imagem)",
+            mg.GIROS["P0092"][2] == 90 and mg.GIROS["P0092"][7] == 270 and mg.GIROS["P0030"][1] == 180 and sum(len(v) for v in mg.GIROS.values()) == 11 + 4 + 2 + 6 + 2 + 9)
+        c.execute("UPDATE item SET giro_manual=0 WHERE codigo IN (?,?)", (D(2), D(3)))
+        folha(f"{P}-1975-S01-D00004", "no_ar", 7004, previa=False); folha(f"{P}-1976-S02-D00004", "no_ar", 7104, previa=False, seq=104)   # D04 em duas séries (código antigo com outro sequencial): ambígua
+        folha(f"{P}-0000-S03-D00007", "no_ar", 7007, previa=False)      # outro ano e outra série: acha pelo D
+        c.execute("UPDATE item SET giro_manual=90 WHERE codigo=?", (f"{P}-0000-S03-D00007",))   # já tinha giro: soma (90 + 270 = 0)
+        c.commit()
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida): mg.main([])
+        t = saida.getvalue()
+        plano = {x.get("codigo") or f"{x['projeto']}-D{x['d']}": x for x in mg.planejar(c)}
+        ver("só listar (padrão): mostra e NÃO grava nada", "Nada foi alterado" in t and g(D(2)) == 0 and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='giro_marcado'").fetchone()[0] == 0, t[-300:])
+        ver("acha pela combinação projeto + D, em qualquer ano ou série", plano[D(2)]["situacao"] == "gravar" and plano[D(2)]["para"] == 90 and plano[f"{P}-0000-S03-D00007"]["para"] == 0, str(plano.get(f"{P}-0000-S03-D00007")))
+        ver("D com duas folhas no projeto: AMBÍGUA, avisa e não grava; folha fora do site e D que não existe: avisa",
+            plano[f"{P}-D4"]["situacao"] == "ambigua" and "AMBÍGUA" in t and plano[D(6)]["situacao"] == "fora_do_site" and plano["F026-P0084-D2"]["situacao"] == "nao_achada" and "ATENÇÃO" in t, t[:400])
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida): mg.main(["--aplicar", "--ator", "adm@camp.arq.br"])
+        ver("--aplicar: grava o giro_manual (D02 = 90, D03 = 90, D05 = 90, D07 = 0) com um evento 'giro_marcado' cada, e nada vai ao site",
+            g(D(2)) == 90 and g(D(3)) == 90 and g(D(5)) == 90 and g(f"{P}-0000-S03-D00007") == 0 and g(D(6)) == 0 and nev(D(2), "giro_marcado") == 1
+            and c.execute("SELECT ator FROM evento WHERE tipo='giro_marcado' LIMIT 1").fetchone()[0] == "adm@camp.arq.br" and len(Fake.chamadas) == n0, saida.getvalue()[-300:])
+        with contextlib.redirect_stdout(io.StringIO()): mg.main(["--aplicar"])
+        ver("rodar --aplicar de novo não soma o giro outra vez", g(D(2)) == 90 and g(f"{P}-0000-S03-D00007") == 0 and nev(D(2), "giro_marcado") == 1)
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -6075,6 +6184,14 @@ else:
 print("110) P0002: folhas e projetos presos como publicados sem registro no site voltam a 'não publicado' (migração 110)")
 rc, out = rodar("p0002_status_velho", f"{tmp}/p0002.db")
 if rc != 0: ok(False, f"teste da correção do status velho não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("111) Girar folha já publicada: admin gira no site mantendo o anexo, operador recebe 409; script que marca o giro feito direto no site")
+rc, out = rodar("giro_publicado", f"{tmp}/giro_pub.db")
+if rc != 0: ok(False, f"teste do giro de folha publicada não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

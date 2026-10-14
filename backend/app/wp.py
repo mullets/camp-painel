@@ -249,6 +249,28 @@ def _wp_upload_media(self, caminho: str, titulo: str = "", nome: str | None = No
     return j
 
 
+def _wp_substituir_midia(self, media_id: int, caminho: str, nome: str | None = None) -> dict:
+    """Troca o ARQUIVO de um anexo que já existe, mantendo o ID (girar folha já publicada). O WordPress não faz isso pela
+    rota wp/v2/media (ela só cria anexo novo), então usa a rota do plugin da CAMP: docs/site/painel-midia.php."""
+    import mimetypes
+    from pathlib import Path
+    p = Path(caminho)
+    if not p.exists():
+        raise RuntimeError(f"arquivo não encontrado: {caminho}")
+    arquivo = nome or p.name
+    mime = mimetypes.guess_type(arquivo)[0] or "image/jpeg"
+    with p.open("rb") as fh:
+        r = self.h.post(f"/wp-json/camp/v1/painel/midia/{int(media_id)}", content=fh.read(),
+                        headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=300)
+    if r.status_code == 404 and "rest_no_route" in r.text:
+        raise RuntimeError("O site ainda não tem a rota para trocar a imagem de um anexo (instale docs/site/painel-midia.php no plugin da CAMP)")
+    if r.status_code == 401:
+        raise RuntimeError("O site recusou as credenciais (401). Confira usuário e Application Password")
+    if r.status_code >= 400:
+        raise RuntimeError(f"O site recusou trocar a imagem do anexo {media_id}: {r.status_code} {r.text[:200]}")
+    return r.json()
+
+
 def _wp_definir_documento(self, colecao_id: int, item_id: int, media_id: int) -> dict:
     return self.patch_item(colecao_id, item_id, document=str(media_id), document_type="attachment", _thumbnail_id=media_id)
 
@@ -256,6 +278,7 @@ def _wp_definir_documento(self, colecao_id: int, item_id: int, media_id: int) ->
 WP.patch_item = _wp_patch_item
 WP.upload_media = _wp_upload_media
 WP.definir_documento = _wp_definir_documento
+WP.substituir_midia = _wp_substituir_midia
 
 
 def _wp_anexos(self, ids) -> dict:

@@ -622,6 +622,49 @@ def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     return r[0] if r else None
 
 
+def imagem_pronta_para_o_site(con, i, giro: int | None = None) -> tuple[str | None, int | None]:
+    """(caminho, lado máximo) da imagem da folha como ela vai ao site: o que a pessoa virou/espelhou na revisão sobe virado,
+    e nunca maior que o fundo permite (B2). `giro` (graus no sentido horário) substitui o giro_manual gravado. Sem imagem: (None, None).
+    `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual."""
+    from .imagem_site import imagem_para_o_site, lado_maximo_do_fundo
+    caminho_img = imagem_para_o_site(con, i)
+    if not caminho_img:
+        return None, None
+    from .giro_imagem import disponivel, espelho_efetivo, jpeg_girado
+    lado = lado_maximo_do_fundo(con, i["fundo_codigo"])
+    reduzir = bool(lado and lado < 3000 and disponivel())   # a prévia já tem ~3000 px: só reprocessa se o fundo pede menos
+    esp = espelho_efetivo(i)                               # folha digitalizada pelo verso: sobe espelhada de volta
+    g = (i["giro_manual"] or 0) if giro is None else giro % 360
+    if g or reduzir or esp:
+        caminho_img = str(jpeg_girado(caminho_img, g, lado if reduzir else None, esp))
+    return caminho_img, lado
+
+
+def girar_imagem_no_site(codigo: str, giro: int) -> dict:
+    """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no WordPress pela imagem girada `giro` graus (sentido horário,
+    o mesmo giro_manual que a folha vai ter), MANTENDO o ID do anexo (o item do Tainacan, a capa do projeto e os links continuam valendo).
+    Não grava nada no painel: quem chama grava o giro só se isto não levantar erro. Levanta RuntimeError com frase em português."""
+    con = connect()
+    try:
+        i = con.execute("""SELECT i.*, p.fundo_codigo, p.titulo AS projeto_titulo, s.nome AS serie_nome FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
+                           LEFT JOIN serie s ON s.codigo=i.serie_codigo WHERE i.codigo=?""", (codigo,)).fetchone()
+        if not i:
+            raise RuntimeError("Folha não existe")
+        media = media_da_folha(con, codigo)
+        if not media:
+            raise RuntimeError("Não achei a imagem desta folha no site (o anexo não está registrado no painel). Sincronize com o site e tente de novo")
+        caminho, _ = imagem_pronta_para_o_site(con, i, giro)
+        if not caminho:
+            raise RuntimeError("A imagem desta folha não está no QNAP: sem ela não dá para mandar a versão girada ao site")
+    finally:
+        con.close()
+    nome = nome_arquivo_site(i["titulo"] or i["tipo_documento"] or i["serie_nome"], i["projeto_titulo"], codigo)
+    m = WP().substituir_midia(media, caminho, nome=nome)
+    if int(m.get("id") or media) != int(media):
+        raise RuntimeError(f"O site devolveu outro anexo ({m.get('id')}) em vez de trocar o arquivo do anexo {media}")
+    return {"media_id": media, "url": m.get("source_url")}
+
+
 @_nunca_convidado
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
@@ -668,16 +711,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
             except Exception as e:  # noqa: BLE001
                 _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
-        from .imagem_site import imagem_para_o_site
-        caminho_img = imagem_para_o_site(con, i) if enviar_imagem else None
-        if caminho_img:                                           # o que a pessoa virou na revisão sobe virado; e nunca maior que o fundo permite (B2)
-            from .giro_imagem import disponivel, espelho_efetivo, jpeg_girado
-            from .imagem_site import lado_maximo_do_fundo
-            lado = lado_maximo_do_fundo(con, i["fundo_codigo"])
-            reduzir = bool(lado and lado < 3000 and disponivel())   # a prévia já tem ~3000 px: só reprocessa se o fundo pede menos
-            esp = espelho_efetivo(i)                               # folha digitalizada pelo verso: sobe espelhada de volta
-            if i["giro_manual"] or reduzir or esp:
-                caminho_img = str(jpeg_girado(caminho_img, i["giro_manual"] or 0, lado if reduzir else None, esp))
+        caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
+        if caminho_img:
             out["lado_max_px"] = lado
         if caminho_img:
             try:
