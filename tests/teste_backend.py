@@ -5576,6 +5576,16 @@ def filho(modo):
         r = lan.post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F001", "titulo": "Familia - Nada", "chave_reserva": "9" * 32})
         ver("a estação pergunta de novo e recebe 410 'descartado' (não segue com o lote)", r.status_code == 410 and r.json().get("descartado") is True, r.text[:200])
         ver("descartar de novo: 409 (já resolvida)", adm.post(f"/api/decisoes/{did}/resolver", json={"acao": "descartar"}).status_code == 409)
+        n0 = n_proj(); r = reservar(titulo="01 - Arquivo Arquivístico (TIFF)", chave_reserva="8" * 32)
+        ver("nome de subpasta ('01 - Arquivo Arquivístico (TIFF)') é recusado com explicação e não cria projeto", r.status_code == 422 and "subpasta" in r.text and n_proj() == n0, r.text[:200])
+        r = lan.post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F001", "titulo": "Familia Nada", "chave_reserva": "7" * 32})
+        lista = adm.get("/api/decisoes?situacao=pendente").json()["itens"]
+        dd = next((x for x in lista if x["id"] == (r.json() or {}).get("decisao_id")), None)
+        pj = (dd or {}).get("projetos", {}).get("F001-P0002", {})
+        ver("a lista de Decisões traz nome, fundo e folhas de cada projeto citado (não só o código)", pj.get("titulo") == "Familia - Nada" and pj.get("fundo_titulo") == "Arnaldo Martino" and "folhas" in pj and "capa" in pj, str(dd)[:300])
+        from app.similaridade import nome_de_subpasta
+        ver("nome_de_subpasta: '03 - Fotografias', 'JPG' sim; 'SESI — Marília', 'Fotografia aérea do Jockey' não",
+            nome_de_subpasta("03 - Fotografias") and nome_de_subpasta("JPG") and not nome_de_subpasta("SESI — Marília") and not nome_de_subpasta("Fotografia aérea do Jockey"))
         pend = adm.get("/api/decisoes?situacao=pendente").json()
         ver("a decisão descartada não aparece entre as pendentes", all(x["id"] != did for x in (pend.get("itens", pend) if isinstance(pend, dict) else pend)), str(pend)[:200])
         k.close()

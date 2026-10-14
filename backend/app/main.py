@@ -442,6 +442,10 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
     titulo = d.titulo.strip()
     if not titulo:
         raise HTTPException(400, "Nome do projeto é obrigatório")
+    from .similaridade import nome_de_subpasta
+    if nome_de_subpasta(titulo) and not _P_NA_FRENTE.match(titulo):
+        raise HTTPException(422, f"“{titulo}” é nome de subpasta de arquivos (TIFF, JPG, fotografias…), não de uma obra: "
+                                 "use a pasta do projeto (ex.: “P0060 - SESI — Marília - 1984”). Nenhum projeto foi criado.")
     if d.ano and not (1800 <= d.ano <= 2100):
         raise HTTPException(400, "Ano inválido (0 para sem data)")
     identificacao = (d.identificacao_original or "").strip() or None

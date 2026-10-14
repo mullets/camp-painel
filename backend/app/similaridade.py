@@ -112,10 +112,19 @@ def buscar_parecidos(con, fundo_codigo: str, titulo: str, ano: int | None = 0, c
     return achados[:limite]
 
 
+_SUBPASTA = re.compile(r"^\s*(\d{1,3}\s*[-–—._]\s*)?(arquivo\s+arquiv[ií]stico.*|arquivo\s+de\s+acesso.*|desenhos?(\s+e\s+pranchas)?|pranchas|fotografias?|fotos|documentos?|textos?"
+                       r"|jpe?g|tiff?|png|pdf|originais|copias|cópias|digitaliza[cç][aã]o.*|scans?|em\s+identifica[cç][aã]o)\s*(\(.*\))?\s*$", re.I)
+
+
+def nome_de_subpasta(titulo: str | None) -> bool:
+    """'01 - Arquivo Arquivístico (TIFF)', '03 - Fotografias', 'JPG'…: nome de pasta de arquivos, não de obra (aviso de 14/10, F009-P0114)."""
+    return bool(_SUBPASTA.match(titulo or ""))
+
+
 def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int | None = 0, cidade: str | None = None, limite: int = 3) -> list[dict]:
     """Projeto com o MESMO nome em OUTRO fundo ("já existe 'Casa X' no fundo F012 — é o mesmo?"). Só o nível forte: nome
     praticamente igual. Não bloqueia nada: vira uma nota forte com link para a pessoa conferir."""
-    if not normalizar(titulo):
+    if not normalizar(titulo) or nome_de_subpasta(titulo):
         return []
     novo = {"titulo": titulo, "ano": ano or 0, "cidade": cidade}
     achados = []
