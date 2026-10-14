@@ -842,7 +842,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(d.querySelectorAll('#ini-caminho .ini-step').length===7&&/Digitalizar.*No QNAP.*CAMP Vision.*Importar.*Conferir.*Aprovar.*Publicar/.test(txt('#ini-caminho')),'[H6b] o caminho do material deveria ter os 7 passos na ordem oficial');
   chk(!!d.querySelector('#ini-ritmo svg rect')&&/(Média de|Nenhuma folha conferida)/.test(txt('#ini-ritmo')),'[H6b] o ritmo das 2 semanas deveria ter as barras e a frase');
   w.route_to('solicitacoes'); await sleep(2000); await w.carregarSolicitacoes('recusada'); await sleep(1000);
-  const linhas=[...d.querySelectorAll('#v-solicitacoes tbody tr')].filter(r=>!r.querySelector('td.empty,td.state-row')).length;
+  const linhas=[...d.querySelectorAll('#v-solicitacoes tbody tr')].filter(r=>!r.closest('#sol-metricas')&&!r.querySelector('td.empty,td.state-row')).length;   // a tabela "Pedidos por fundo" (#12) não é a lista
   chk(new RegExp('^'+linhas+' registros?').test(txt('#v-solicitacoes .cnt')),'o contador de Solicitações deveria contar só as linhas de dados da aba ('+linhas+'): "'+txt('#v-solicitacoes .cnt')+'"'); w.route_to('painel'); }
 // ---------- DECISÕES: o painel pergunta antes de criar projeto parecido ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3500);

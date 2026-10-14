@@ -193,9 +193,18 @@ def tendencia(con, fundo_codigo: str, indice_hoje: float | None) -> dict:
     return {"seta": "sobe" if dif > 0 else "desce" if dif < 0 else "igual", "antes": r["indice"], "dia_antes": r["dia"], "diferenca": dif}
 
 
+def _indices_com_retrato(con) -> dict:
+    """Índices de agora; grava o retrato do dia só se ainda não houver (a tarefa de hora em hora o mantém em dia).
+    Abrir o painel não deve virar uma escrita no banco a cada visita."""
+    ind = indices(con)
+    if not con.execute("SELECT 1 FROM qualidade_retrato WHERE dia=? LIMIT 1", (agora().date().isoformat(),)).fetchone():
+        gravar_retrato(con, ind)
+    return ind
+
+
 def visao_geral(con) -> dict:
-    """Índices de agora (e grava o retrato do dia), com a tendência de cada um. Fundos sem folhas ficam de fora da lista."""
-    ind = gravar_retrato(con)
+    """Índices de agora (e o retrato do dia, se faltar), com a tendência de cada um. Fundos sem folhas ficam de fora da lista."""
+    ind = _indices_com_retrato(con)
     ind["geral"]["tendencia"] = tendencia(con, "*", ind["geral"]["indice"])
     for f in ind["fundos"]:
         f["tendencia"] = tendencia(con, f["codigo"], f["indice"])
@@ -204,7 +213,7 @@ def visao_geral(con) -> dict:
 
 
 def do_fundo(con, codigo: str) -> dict | None:
-    ind = gravar_retrato(con)
+    ind = _indices_com_retrato(con)
     f = next((x for x in ind["fundos"] if x["codigo"] == codigo), None)
     if not f:
         return None
