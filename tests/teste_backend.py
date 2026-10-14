@@ -3733,6 +3733,7 @@ def filho(modo):
         p2 = _cp.deepcopy(pac)
         for i_, d_ in enumerate(p2["documentos"], 1):
             d_["codigo"] = d_["codigo"].replace("-S01-", "-S03-"); d_["titulo"] = f"Vista {i_} lida pelo CAMP Vision"
+            d_["arquivos"] = [str(a_).replace("S01", "S03").replace("01 - ", "03 - ") for a_ in (d_.get("arquivos") or [])]
         gravar(p2)
         r = importador_lote.importar_lote(k, lid, "campvision (releitura)"); k.commit()
         B1, B2 = A1.replace("-S01-", "-S03-"), A2.replace("-S01-", "-S03-")
@@ -3743,6 +3744,8 @@ def filho(modo):
             tuple(k.execute("SELECT titulo, giro_manual, revisao FROM item WHERE codigo=?", (B1,)).fetchone()) == ("Título que a pessoa escreveu", 90, "conferida"))
         ver("localização e capa acompanham o código novo; o código antigo fica guardado", sql("SELECT item_codigo FROM item_localizacao") == B2 and sql("SELECT capa_item FROM projeto WHERE codigo='F026-P0001'") == B2 and sql("SELECT codigo_anterior FROM item WHERE codigo=?", B2) == A2)
         ver("o resumo e o histórico dizem o que mudou", len(r.get("recodificadas_pela_releitura") or []) == 2 and sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_recodificada_releitura'") == 2, str(r.get("recodificadas_pela_releitura")))
+        jpg_novo = next(a_ for a_ in p2["documentos"][0]["arquivos"] if a_.lower().endswith(".jpg"))
+        ver("a folha já conferida também passa a apontar para os ARQUIVOS da leitura nova (senão a publicação não acha o JPG)", sql("SELECT arquivo_jpg FROM item WHERE codigo=?", B1) == jpg_novo, str(sql("SELECT arquivo_jpg FROM item WHERE codigo=?", B1)))
         ver("integridade: nenhuma chave estrangeira quebrada", k.execute("PRAGMA foreign_key_check").fetchall() == [])
         # folha de OUTRO lote com o mesmo D não é tocada (continua indo para a decisão de lote que colide)
         k.close()
@@ -3821,6 +3824,17 @@ def filho(modo):
         c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
         ver("aceite aprovado libera", ac and ac["ok"])
+        # aviso de 14/10 (F009-P0060): reprovado só por "olho humano" (orientação/série incertas) → a conferência do painel resolve
+        b = {"contagem_origem_igual_saida": {"ok": True}, "orientacao_incerta_zerada": {"ok": False}, "serie_incerta_zerada": {"ok": False}, "publicavel": False}
+        c.execute("UPDATE lista_processamento SET aceite_json=?, aprovado_em=NULL WHERE projeto_codigo='F080-P0001'", (_j.dumps(b),)); c.commit()
+        ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("orientação/série incertas com o lote ainda em conferência: trava", ac and not ac["ok"], str(ac))
+        c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE projeto_codigo='F080-P0001'"); c.commit()
+        ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("lote aprovado no painel: orientação/série incertas deixam de travar (resolvido na conferência)", ac and ac["ok"] and "conferência do painel" in (ac["detalhe"] or ""), str(ac))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**b, "contagem_origem_igual_saida": {"ok": False}}),)); c.commit()
+        ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("mas o que a conferência não resolve (contagem de origem) continua travando, mesmo com o lote aprovado", ac and not ac["ok"], str(ac))
         c.close()
         print("\n".join(res))
     elif modo == "autorizar_lote":

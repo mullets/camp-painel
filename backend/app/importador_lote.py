@@ -103,6 +103,24 @@ def _recodificar_por_releitura(con, antigo: str, novo: str, serie: str, ator: st
                 (novo, ator, json.dumps({"de": antigo, "para": novo, "motivo": "a nova leitura do CAMP Vision mudou a série"}, ensure_ascii=False)))
 
 
+def _atualizar_arquivos(con, cod: str, d: dict) -> None:
+    """Só os arquivos (TIF, JPG, origem) e a prévia da leitura nova; título, giro, revisão e o resto que a pessoa fez ficam."""
+    arqs = [str(a) for a in (d.get("arquivos") or [])]
+    tif = next((a for a in arqs if a.lower().endswith((".tif", ".tiff"))), None)
+    jpg = next((a for a in arqs if a.lower().endswith((".jpg", ".jpeg"))), None)
+    if not (tif or jpg):
+        return
+    row = con.execute("SELECT pendencias FROM item WHERE codigo=?", (cod,)).fetchone()
+    try:
+        pend = json.loads(row["pendencias"] or "{}") if row else {}
+    except ValueError:
+        pend = {}
+    if d.get("preview"):
+        pend["previa"] = d.get("preview")
+    con.execute("UPDATE item SET arquivo_tif=COALESCE(?, arquivo_tif), arquivo_jpg=COALESCE(?, arquivo_jpg), pendencias=?, atualizado_em=datetime('now') WHERE codigo=?",
+                (tif, jpg, json.dumps(pend, ensure_ascii=False), cod))
+
+
 def importar_lote(con, lote_id: int, ator: str) -> dict:
     """NÃO faz commit (quem chama controla a transação)."""
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -178,7 +196,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 recodificadas.append({"de": velha["codigo"], "para": cod})
         ex = existentes.get(cod)
         if ex and (ex["revisao"] != "pendente" or ex["status_site"] in ("rascunho", "no_ar")):
-            ignoradas += 1                                         # já revisada por uma pessoa, ou já no site: não se mexe
+            ignoradas += 1                                         # já revisada por uma pessoa, ou já no site: não se mexe no que a pessoa fez…
+            if ex["status_site"] not in ("rascunho", "no_ar"):     # …mas os CAMINHOS dos arquivos são da máquina: a releitura pode ter movido/renomeado
+                _atualizar_arquivos(con, cod, d)                    # (aviso de 14/10: D00001 conferida apontava para o JPG S01 que não existe mais)
             continue
         outro = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND sequencial=? AND codigo<>?", (proj, seq, cod)).fetchone()
         if outro:

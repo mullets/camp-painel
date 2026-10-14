@@ -57,8 +57,19 @@ def condicoes_projeto(con, p) -> dict:
         except ValueError:
             ac = {}
         aceito = ac.get("publicavel") is not False
+        resolvido_aqui = False
+        if not aceito:
+            # O aceite é uma foto do momento da leitura. Os pontos que pedem OLHO HUMANO (orientação/série incertas, duplicatas,
+            # autoria) a conferência do painel resolve: com o lote APROVADO no painel, eles deixam de travar (aviso de 14/10, F009-P0060).
+            from .saidas_cv import itens_aceite
+            RESOLVE_CONFERENCIA = {"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"}
+            falhas = {i["chave"] for i in itens_aceite(ac) if i["ok"] is False}
+            aprovado = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (la["id"],)).fetchone()[0]
+            if aprovado and falhas <= RESOLVE_CONFERENCIA:
+                aceito = resolvido_aqui = True
         conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
-                      "detalhe": None if aceito else "O CAMP Vision reprovou o lote: " + "; ".join(motivos_aceite(ac) or ["sem motivo informado"]),
+                      "detalhe": ("O CAMP Vision pediu olho humano (" + "; ".join(motivos_aceite(ac)) + "): resolvido na conferência do painel") if resolvido_aqui
+                      else None if aceito else "O CAMP Vision reprovou o lote: " + "; ".join(motivos_aceite(ac) or ["sem motivo informado"]),
                       "acao": None if aceito else {"tipo": "revisao", "rotulo": "Ver o lote", "alvo": codigo}})
 
     teste = bool(p["lote_teste"])
