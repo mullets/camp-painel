@@ -4601,6 +4601,100 @@ def filho(modo):
         ver("(c) totais: pedidos, entregues e quantos vieram do site", (m["pedidos"], m["entregues"], m["do_site"]) == (4, 2, 3), str(m))
         ver("(c) métricas exigem login", anon.get("/api/solicitacoes/metricas").status_code == 401)
         for l in res: print(l)
+    elif modo == "recodificar":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth, rotas_mesclar
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F094','Fundo Recod','REC',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F095','Outro','OTR',1)")
+        for f, n in (("F094", 4), ("F094", 5), ("F094", 7), ("F095", 1)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,pasta_qnap) VALUES (?,?,?,?,1960,?)", (f"{f}-P{n:04d}", f, n, f"Projeto {n}", f"/qnap/{f}/P{n:04d}"))
+        A, I = "F094-P0004", lambda k: f"F094-P0004-1960-S01-D{k:05d}"
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote 1',?,'/qnap/x','revisao')", (A,)).lastrowid
+        for k in (1, 2, 3):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,lote_id) VALUES (?,?,?,?,?,?)", (I(k), A, "S01", k, f"Planta {k}", lid))
+        c.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (I(1), I(3)))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,duplicata_de) VALUES ('F094-P0005-1960-S01-D00001','F094-P0005','S01',1,'Outra',?)", (I(2),))
+        ag = c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Autor Recod')").lastrowid
+        c.execute("INSERT INTO item_agente (item_codigo, agente_id, papel) VALUES (?,?,'autor')", (I(1), ag))
+        loc = c.execute("INSERT INTO localizacao_fisica (tipo, identificador) VALUES ('caixa','CX99')").lastrowid
+        c.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (I(2), loc))
+        c.execute("INSERT INTO pedido_releitura (projeto_codigo, item_codigo, pedido_por, estado) VALUES (?,?,'adm','concluido')", (A, I(1)))
+        c.execute("INSERT INTO revisao_campo (item_codigo, campo, valor_lido, valor_final, resultado, por) VALUES (?,'titulo','x','Planta 1','corrigido','adm')", (I(1),))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador',?,'folha')", (I(2),))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','codigo','operador',?,'número P errado')", (A,))
+        c.execute("UPDATE projeto SET capa_item=? WHERE codigo=?", (I(2), A))
+        c.execute("UPDATE projeto SET mesclado_em=? WHERE codigo='F094-P0007'", (A,))
+        c.execute("INSERT INTO par_nao_duplicado (a, b, por) VALUES (?, 'F094-P0005', 'adm')", (A,))
+        sid = c.execute("INSERT INTO solicitacao (solicitante, finalidade) VALUES ('X','pesquisa')").lastrowid
+        c.execute("INSERT INTO solicitacao_item (solicitacao_id, codigo, formato) VALUES (?,?, 'tif'), (?,?, 'jpg_3000')", (sid, A, sid, I(3)))
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator) VALUES ('projeto',?,'criado','adm'), ('item',?,'editado','adm')", (A, I(1)))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, anon = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), TestClient(app, raise_server_exceptions=False)
+        R = lambda cl, de, novo, **kw: cl.post(f"/api/projetos/{de}/recodificar", json={"novo": novo, **kw})
+        ver("só admin: operador 403, sem login 401", R(op, A, "F094-P0009").status_code == 403 and R(anon, A, "F094-P0009").status_code == 401)
+        ver("recusa: código mal escrito, igual ao atual, de outro fundo, já usado, projeto inexistente, projeto já mesclado",
+            [R(adm, A, x).status_code for x in ("F094-9", A, "F095-P0009", "F094-P0005")] + [R(adm, "F094-P0099", "F094-P0098").status_code, R(adm, "F094-P0007", "F094-P0008").status_code] == [400, 400, 400, 409, 404, 409])
+        orig = rotas_mesclar._trocar_codigo
+        def quebra(con, a, b):
+            if a.endswith("D00002"): raise RuntimeError("falha no meio")
+            orig(con, a, b)
+        rotas_mesclar._trocar_codigo = quebra
+        r = R(adm, A, "F094-P0009")
+        rotas_mesclar._trocar_codigo = orig
+        c = connect()
+        ver("falha no meio: nada muda (uma transação só)", r.status_code == 500 and c.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (A,)).fetchone()[0] == 3 and
+            not c.execute("SELECT 1 FROM projeto WHERE codigo='F094-P0009'").fetchone() and c.execute("SELECT COUNT(*) FROM redirecionamento").fetchone()[0] == 0, str(r.status_code))
+        c.close()
+        r = R(adm, A, "f094-p0009", motivo="número P errado na etiqueta")
+        j = r.json()
+        B, J = "F094-P0009", lambda k: f"F094-P0009-1960-S01-D{k:05d}"
+        c = connect()
+        ver("recodificou: 200, o projeto passa a ser F094-P0009 e o antigo some", r.status_code == 200 and j["para"] == B and c.execute("SELECT numero FROM projeto WHERE codigo=?", (B,)).fetchone()[0] == 9 and not c.execute("SELECT 1 FROM projeto WHERE codigo=?", (A,)).fetchone(), str(j)[:300])
+        ver("as folhas ganham o código novo (mesmo ano, série e D) e guardam o antigo", [tuple(x) for x in c.execute("SELECT codigo, codigo_anterior FROM item WHERE projeto_codigo=? ORDER BY sequencial", (B,))] == [(J(k), I(k)) for k in (1, 2, 3)])
+        fk = c.execute("PRAGMA foreign_key_check").fetchall()
+        ver("integridade: PRAGMA foreign_key_check vazio", fk == [], str([tuple(x) for x in fk])[:300])
+        ver("integridade: PRAGMA integrity_check ok", c.execute("PRAGMA integrity_check").fetchone()[0] == "ok")
+        ver("o número antigo continua reservado (nunca é reusado) e o novo fica reservado", c.execute("SELECT COUNT(*) FROM numero_p WHERE fundo_codigo='F094' AND numero IN (4, 9)").fetchone()[0] == 2)
+        q1 = lambda sql, *a: c.execute(sql, a).fetchone()[0]
+        ver("referências das folhas acompanham: autor, localização, releitura, revisão, problema, duplicata (dentro e de outro projeto)",
+            q1("SELECT item_codigo FROM item_agente WHERE agente_id=?", ag) == J(1) and q1("SELECT item_codigo FROM item_localizacao WHERE localizacao_id=?", loc) == J(2)
+            and q1("SELECT item_codigo || '|' || projeto_codigo FROM pedido_releitura") == f"{J(1)}|{B}" and q1("SELECT item_codigo FROM revisao_campo") == J(1)
+            and q1("SELECT COUNT(*) FROM erro WHERE codigo IN (?,?)", J(2), B) == 2 and q1("SELECT duplicata_de FROM item WHERE codigo=?", J(3)) == J(1)
+            and q1("SELECT duplicata_de FROM item WHERE codigo='F094-P0005-1960-S01-D00001'") == J(2))
+        ver("referências do projeto acompanham: lote, capa, mesclado em, 'não são o mesmo', pedido de material, histórico",
+            q1("SELECT projeto_codigo FROM lista_processamento WHERE id=?", lid) == B and q1("SELECT capa_item FROM projeto WHERE codigo=?", B) == J(2)
+            and q1("SELECT mesclado_em FROM projeto WHERE codigo='F094-P0007'") == B and q1("SELECT a || '|' || b FROM par_nao_duplicado") == f"F094-P0005|{B}"
+            and sorted(x[0] for x in c.execute("SELECT codigo FROM solicitacao_item")) == [B, J(3)]
+            and q1("SELECT COUNT(*) FROM evento WHERE codigo IN (?,?)", A, I(1)) == 0 and q1("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='projeto_recodificado'", B) == 1)
+        ver("nenhum código antigo sobrou nas tabelas (fora o histórico de 'de' e o codigo_anterior)", all(
+            q1(f"SELECT COUNT(*) FROM {t} WHERE {col} = ? OR substr({col},1,11) = ?", A, A + "-") == 0 for t, col in (("item", "codigo"), ("item", "projeto_codigo"), ("item", "duplicata_de"), ("item_agente", "item_codigo"), ("lista_processamento", "projeto_codigo"), ("erro", "codigo"), ("projeto", "capa_item"), ("solicitacao_item", "codigo"))))
+        red = anon.get("/api/redirecionamentos").json()
+        mapa = {x["antigo"]: (x["novo"], x["tipo"]) for x in red["itens"]}
+        ver("mapa antigo → novo: o projeto e cada folha, lido SEM login (para o site fazer o 301)", red["total"] == 4 and mapa[A] == (B, "projeto") and all(mapa[I(k)] == (J(k), "item") for k in (1, 2, 3)), str(red)[:300])
+        ver("o mapa guarda o motivo e quem fez", q1("SELECT motivo || '|' || criado_por FROM redirecionamento WHERE codigo_antigo=?", A) == "número P errado na etiqueta|adm@camp.arq.br")
+        ver("filtros do mapa: ?tipo=projeto e ?desde (data futura = vazio)", [x["antigo"] for x in anon.get("/api/redirecionamentos?tipo=projeto").json()["itens"]] == [A] and anon.get("/api/redirecionamentos?desde=2999-01-01").json()["total"] == 0)
+        c.close()
+        r2 = R(adm, B, "F094-P0010")
+        c = connect()
+        m2 = {x[0]: x[1] for x in c.execute("SELECT codigo_antigo, codigo_novo FROM redirecionamento")}
+        ver("mudar de novo: sem cadeia (o antigo aponta direto para o último)", r2.status_code == 200 and m2[A] == "F094-P0010" and m2[B] == "F094-P0010" and m2[I(1)] == "F094-P0010-1960-S01-D00001" and m2[J(1)] == "F094-P0010-1960-S01-D00001", str(m2)[:300])
+        r3 = R(adm, "F094-P0010", A)
+        m3 = {x[0]: x[1] for x in c.execute("SELECT codigo_antigo, codigo_novo FROM redirecionamento")}
+        ver("voltar ao código original: o antigo não redireciona para ele mesmo", r3.status_code == 200 and A not in m3 and m3[B] == A and m3["F094-P0010"] == A and I(1) not in m3, str(m3)[:300])
+        ver("integridade depois das três trocas: foreign_key_check vazio", c.execute("PRAGMA foreign_key_check").fetchall() == [])
+        c.close()
+        for l in res: print(l)
     return 0
 
 if "--filho" in sys.argv:
@@ -5275,6 +5369,14 @@ else:
 print("80) Sobras #12 pedidos de material: entrada pelo site (token), pacote de entrega, métricas e aviso por e-mail")
 rc, out = rodar("pedidos_site", f"{tmp}/pedsite.db")
 if rc != 0: ok(False, f"teste dos pedidos do site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("81) Sobras #9 mudar o código de um projeto: folhas recodificadas, mapa antigo→novo para o 301 e integridade")
+rc, out = rodar("recodificar", f"{tmp}/recod.db")
+if rc != 0: ok(False, f"teste de recodificar não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

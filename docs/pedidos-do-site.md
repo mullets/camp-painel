@@ -1,5 +1,8 @@
 # Pedidos de material vindos do site (contrato)
 
+Dois contratos entre o painel e o site: a entrada automática de pedidos de material (abaixo) e o mapa de
+redirecionamentos de códigos (no fim).
+
 Cartão "Sobras" #12. O formulário de pedido de material do site (camp.arq.br) registra o pedido direto no painel, sem
 ninguém precisar digitar de novo. O pedido aparece em **Pedidos de material**, na aba "Abertas", com origem "site", e o
 admin recebe um e-mail (se `avisos.pedido_novo` = 1 e o SMTP estiver configurado).
@@ -80,3 +83,23 @@ de novo uma vez; se falhar, mostre "tente mais tarde" ou mande o pedido por e-ma
 - Registra no histórico do pedido ("criada", ator `site`).
 - Manda o e-mail de aviso para `avisos.email` (depois de responder ao site; uma falha no e-mail não desfaz o pedido).
   Cada envio aparece em Máquinas e site → "Alertas por e-mail" → "Últimos envios".
+
+## Redirecionamentos de códigos (para o 301)
+
+Quando um admin muda o código de um projeto (cartão "Sobras" #9), o painel guarda o mapa antigo → novo. O site pode ler
+`GET /api/redirecionamentos` (sem login; só códigos, nada além) e responder 301 do endereço antigo para o novo:
+
+```json
+{"total": 2, "itens": [
+  {"antigo": "F014-P0004", "novo": "F014-P0009", "tipo": "projeto", "criado_em": "2026-10-13 12:00:00"},
+  {"antigo": "F014-P0004-1960-S01-D00001", "novo": "F014-P0009-1960-S01-D00001", "tipo": "item", "criado_em": "2026-10-13 12:00:00"}
+]}
+```
+
+Filtros opcionais: `?tipo=projeto` (ou `item`, `fundo`) e `?desde=2026-10-01` (só os criados a partir dessa data). Uma cadeia
+(A → B e depois B → C) já vem resolvida: A aparece apontando para C. Se o código voltar a ser o original, o
+redirecionamento dele some (nunca aponta para ele mesmo).
+
+O mapa fica na tabela `redirecionamento` (`codigo_antigo`, `codigo_novo`, `entidade`, `motivo`, `criado_por`, `criado_em`,
+`aplicado_no_site`). A coluna `aplicado_no_site` está prevista para o site marcar o que já virou 301; por enquanto o
+painel só a zera quando o destino muda.

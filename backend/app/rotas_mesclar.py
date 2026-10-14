@@ -326,3 +326,109 @@ def marcar_nao_duplicado(codigo: str, d: ParNao, u: dict = Depends(auth.exige("o
     finally:
         con.close()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Sobras #9 · RECODIFICAR um projeto (ex.: o número P errado): F014-P0004 → F014-P0009, no MESMO fundo.
+# Mesma regra do mover: uma transação só, com a checagem de chave estrangeira adiada até o fim (ou troca tudo, ou nada).
+# Cada folha ganha o código novo ({novo}-{ano}-{série}-D{seq}, mesmo ano/série/sequencial) e guarda o antigo em codigo_anterior;
+# o projeto e cada folha entram na tabela redirecionamento (codigo_antigo → codigo_novo, já prevista no schema), que o site lê em GET /api/redirecionamentos para o 301.
+# O número antigo continua reservado (numero_p): nunca é reusado. A pasta no QNAP não é renomeada.
+# ---------------------------------------------------------------------------------------------------------------------
+_COD_PROJETO = re.compile(r"^F\d{3}-P\d{4}$")
+
+
+class Recodificar(BaseModel):
+    novo: str
+    motivo: str | None = None
+
+
+def _prefixo(con, tabela: str, coluna: str, antigo: str, novo: str, onde: str = "") -> int:
+    """Troca o prefixo `antigo` por `novo` na coluna (o próprio código do projeto e os das folhas, que começam por 'antigo-')."""
+    n = len(antigo)
+    return con.execute(f"UPDATE {tabela} SET {coluna} = ? || substr({coluna}, ?) WHERE ({coluna} = ? OR substr({coluna}, 1, ?) = ?){onde}",
+                       (novo, n + 1, antigo, n + 1, antigo + "-")).rowcount
+
+
+def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> dict:
+    p = con.execute("SELECT * FROM projeto WHERE codigo=?", (antigo,)).fetchone()
+    if not p:
+        raise HTTPException(404, f"O projeto {antigo} não existe.")
+    if p["mesclado_em"]:
+        raise HTTPException(409, f"O projeto {antigo} já foi mesclado em {p['mesclado_em']}: mude o código de lá, se precisar.")
+    if not novo.startswith(p["fundo_codigo"] + "-"):
+        raise HTTPException(400, f"O código novo tem que ser do mesmo fundo ({p['fundo_codigo']}-P….). Para levar a outro fundo, use Mesclar.")
+    if con.execute("SELECT 1 FROM projeto WHERE codigo=?", (novo,)).fetchone():
+        raise HTTPException(409, f"O código {novo} já é de outro projeto. Escolha um número livre (ou use Mesclar, se for o mesmo projeto).")
+    numero = int(novo[-4:])
+    if numero < 1:
+        raise HTTPException(400, "O número P tem que ser 0001 ou maior.")
+    con.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,NULL)", (p["fundo_codigo"], numero))
+    con.execute("UPDATE projeto SET codigo=?, numero=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, numero, antigo))
+    folhas = []
+    for it in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (antigo,)).fetchall():
+        c = it["codigo"]
+        nc = novo + c[len(antigo):] if c.startswith(antigo + "-") else f"{novo}-{c.split('-', 2)[-1]}"
+        if con.execute("SELECT 1 FROM item WHERE codigo=?", (nc,)).fetchone():
+            raise HTTPException(409, f"O código {nc} já existe; nada foi mudado.")
+        con.execute("UPDATE item SET codigo=?, projeto_codigo=?, codigo_anterior=?, atualizado_em=datetime('now') WHERE codigo=?", (nc, novo, c, c))
+        _trocar_codigo(con, c, nc)                                     # item_agente, localização, releitura, duplicata_de, erro, revisão
+        folhas.append({"de": c, "para": nc})
+    # o que aponta para o PROJETO (e, por prefixo, para as folhas) fora das chaves estrangeiras
+    for tabela, coluna in (("lista_processamento", "projeto_codigo"), ("pedido_releitura", "projeto_codigo"), ("decisao", "projeto_codigo"),
+                           ("cv_resposta", "projeto_codigo"), ("tarefa_publicacao", "projeto_codigo"), ("tarefa_publicacao", "folha_atual"),
+                           ("uso_download", "projeto_codigo"), ("uso_download", "material_codigo"), ("estacao_heartbeat", "projeto_codigo"),
+                           ("solicitacao_item", "codigo"), ("etiqueta_impressao", "codigo"), ("divergencia_site", "codigo"), ("erro", "codigo"),
+                           ("projeto", "capa_item"), ("projeto", "mesclado_em")):
+        _prefixo(con, tabela, coluna, antigo, novo)
+    _prefixo(con, "cv_resposta", "chave", antigo, novo, " AND tipo='retirado'")
+    _prefixo(con, "evento", "codigo", antigo, novo, " AND entidade IN ('projeto','item')")   # o histórico acompanha o projeto
+    for r in con.execute("SELECT a, b, por, em FROM par_nao_duplicado WHERE a=? OR b=?", (antigo, antigo)).fetchall():
+        a, b = sorted([novo if r["a"] == antigo else r["a"], novo if r["b"] == antigo else r["b"]])
+        con.execute("DELETE FROM par_nao_duplicado WHERE a=? AND b=?", (r["a"], r["b"]))
+        con.execute("INSERT OR IGNORE INTO par_nao_duplicado (a, b, por, em) VALUES (?,?,?,?)", (a, b, r["por"], r["em"]))
+    # mapa antigo → novo: quem já apontava para o antigo passa a apontar para o novo (sem cadeia), e entra o que mudou agora
+    _prefixo(con, "redirecionamento", "codigo_novo", antigo, novo)
+    con.execute("UPDATE redirecionamento SET aplicado_no_site=0 WHERE codigo_novo = ? OR substr(codigo_novo, 1, ?) = ?", (novo, len(novo) + 1, novo + "-"))
+    con.execute("DELETE FROM redirecionamento WHERE codigo_antigo = codigo_novo")
+    mot = (motivo or "").strip()[:300] or "código do projeto corrigido"
+    for de, para, tipo in [(antigo, novo, "projeto")] + [(f["de"], f["para"], "item") for f in folhas]:
+        con.execute("""INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, criado_por) VALUES (?,?,?,?,?)
+                       ON CONFLICT(codigo_antigo) DO UPDATE SET codigo_novo=excluded.codigo_novo, entidade=excluded.entidade, motivo=excluded.motivo,
+                                                                criado_por=excluded.criado_por, criado_em=datetime('now'), aplicado_no_site=0""", (de, para, tipo, mot, ator))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_recodificado',?,?)",
+                (novo, ator, _json.dumps({"de": antigo, "para": novo, "folhas": len(folhas), "motivo": mot}, ensure_ascii=False)))
+    no_site = bool(p["tainacan_item_id"] or p["wp_page_id"]) or bool(con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (novo,)).fetchone())
+    avisos = []
+    if no_site:
+        avisos.append("O projeto já tem registro no site: publique de novo para o site mostrar o código novo. Os endereços antigos redirecionam quando o site ler o mapa de redirecionamentos.")
+    if p["pasta_qnap"]:
+        avisos.append("A pasta no QNAP continua com o nome antigo; renomeie lá se quiser.")
+    return {"ok": True, "de": antigo, "para": novo, "folhas": folhas, "no_site": no_site, "avisos": avisos}
+
+
+@router.post("/projetos/{codigo}/recodificar")
+def recodificar(codigo: str, d: Recodificar, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Muda o código do projeto e de todas as folhas dele. Só admin. O antigo fica guardado e vira redirecionamento."""
+    antigo, novo = codigo.strip().upper(), (d.novo or "").strip().upper()
+    if not _COD_PROJETO.match(novo):
+        raise HTTPException(400, "Use o código completo do projeto, ex.: F014-P0009.")
+    if novo == antigo:
+        raise HTTPException(400, "O código novo é igual ao atual.")
+    return _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], d.motivo))
+
+
+@router.get("/redirecionamentos")
+def redirecionamentos(tipo: str | None = None, desde: str | None = None) -> dict:
+    """PÚBLICA (sem login), para o site responder 301: só códigos antigo → novo, nada além. Ver docs/pedidos-do-site.md."""
+    sql, p = "SELECT codigo_antigo AS antigo, codigo_novo AS novo, entidade AS tipo, criado_em FROM redirecionamento WHERE 1=1", []
+    if tipo in ("fundo", "projeto", "item"):
+        sql += " AND entidade=?"; p.append(tipo)
+    if desde and re.match(r"^\d{4}-\d{2}-\d{2}", desde):
+        sql += " AND criado_em >= ?"; p.append(desde[:19].replace("T", " "))
+    con = connect()
+    try:
+        itens = [dict(r) for r in con.execute(sql + " ORDER BY criado_em, rowid", p)]
+    finally:
+        con.close()
+    return {"total": len(itens), "itens": itens}
