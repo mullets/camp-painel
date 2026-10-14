@@ -8,6 +8,15 @@ e integração com o site (WordPress + Tainacan).
 Roda na máquina `campvision` (Ubuntu), que enxerga `/mnt/qnap/acervos`.
 Acesso externo em `painel.camp.arq.br` via Cloudflare Tunnel.
 
+## 📘 Como funciona — guia técnico completo
+
+**[docs/COMO_FUNCIONA.md](docs/COMO_FUNCIONA.md)** explica, passo a passo, como funciona absolutamente tudo:
+
+- **Parte A — Arquitetura, servidor e operação:** visão geral e o caminho estação → QNAP → CAMP Vision → painel → site; estrutura do código; banco SQLite e migrações; configurações; instalação e `atualizar.sh`; login e papéis; tarefas periódicas; backups, logs e alertas; QNAP e réplica; Cloudflare Tunnel.
+- **Parte B — O caminho do material:** códigos (fundo, projeto, folha); estações e reserva de número; o CAMP Vision 2 e o que ele grava; Fila; importação de lotes; revisão (prévia, girar, espelhar, conferir, aprovar); releitura; Decisões; mover, mesclar e recodificar.
+- **Parte C — Publicação, site e público:** WordPress/Tainacan e o espelho do site; condições e passo a passo da publicação; despublicar; páginas públicas e capa; redirecionamentos; pedidos de material; downloads do site; Google Analytics; relatórios; exportação EAD/CSV/BagIt.
+- **Parte D — Telas, acervo e desenvolvimento:** cada tela do menu e quem pode usar; páginas de fundo, projeto e folha; problemas; alertas por e-mail; auditoria; como desenvolver e testar (check_ui, teste_backend, testes no navegador) e como criar tela, rota, migração e teste.
+
 ## Estrutura
 
 ```
