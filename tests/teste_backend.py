@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site"}
 
 
 def rodar(modo, db):
@@ -730,6 +730,76 @@ def filho(modo):
         ver("GET /api/site/redirecionamentos: totais, pendentes e com erro", j["total"] >= 4 and "pendentes" in j and "com_erro" in j, str(j))
         r = x.post("/api/projetos/F014-P0010/mesclar-em", json={"destino": "F014-P0009", "motivo": "duplicado"})
         ver("mesclar projetos registra o redirecionamento do projeto de origem para o destino", r.status_code == 200 and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F014-P0010'").fetchone()[0] == "F014-P0009" and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F014-P0004'").fetchone()[0] == "F014-P0009", r.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp015_fundo_site":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, publicador, fundo_site
+        from app.publicacao import condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id,procedencia,data_inicio,data_fim) VALUES ('F077','Fundo Hub','FHB',1,8077,'Doação da família',1950,1980)")
+        aid = c.execute("INSERT INTO agente (tipo, forma_autorizada, historia, fonte_historia, tainacan_term_id) VALUES ('pessoa','Zé Arquiteto','Nasceu em 1920.','Entrevista, 2020',9077)").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F077',?,'produtor')", (aid,))
+        c.execute("INSERT INTO agente_retrato (agente_id, imagem, tipo, atualizado_por) VALUES (?,?,'image/jpeg','t')", (aid, b"\xff\xd8\xff\xe0fake"))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F077',1)")
+        c.execute("INSERT INTO wp_taxonomia (id, nome, slug) VALUES (11,'Fundos','fundos'),(12,'Arquitetos','arquitetos')")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F077-P0001','F077',1,'Casa',1960)"); c.commit()
+        chamadas = []
+        class WPF:
+            def gravar_hub(s, termo, meta): chamadas.append((termo, dict(meta))); return {"ok": True, "page_id": 5}
+            def upload_media(s, caminho, titulo="", nome=None): return {"id": 7777, "source_url": "http://x/r.jpg"}
+            def criar_termo(s, *a, **k): return {"id": 1}
+        publicador.WP = WPF
+        d0 = fundo_site.divergencia(c, "F077")
+        ver("antes do primeiro envio: nunca enviado e com campos pendentes", d0["nunca_enviado"] and d0["pendente"] and {m["campo"] for m in d0["mudancas"]} >= {"_camp_bio", "_camp_bio_fontes", "_camp_foto_id", "_camp_acervo_procedencia"}, str(d0))
+        r = fundo_site.enviar_fundo("F077", "teste")
+        hub_fundo = next((m for t, m in chamadas if "_camp_acervo_procedencia" in m), {})
+        hub_agente = next((m for t, m in chamadas if "_camp_bio" in m), {})
+        ver("Enviar fundo ao site: manda os campos do hub, a biografia, as fontes e a foto (id do anexo)", r["ok"] and hub_fundo.get("_camp_acervo_procedencia") == "Doação da família" and hub_agente.get("_camp_bio") == "Nasceu em 1920." and hub_agente.get("_camp_bio_fontes") == "Entrevista, 2020" and hub_agente.get("_camp_foto_id") == 7777, str(chamadas))
+        ver("campos VAZIOS não vão (o site ignora vazio e não se quer sobrescrever texto escrito à mão)", all(v not in ("", None) for _t, m in chamadas for v in m.values()), str(chamadas))
+        d1 = fundo_site.divergencia(c, "F077")
+        ver("depois de enviar: em dia (sem divergência)", not d1["pendente"] and d1["mudancas"] == [] and d1["enviado_em"], str(d1))
+        c.execute("UPDATE fundo SET procedencia='Compra em 1990' WHERE codigo='F077'"); c.execute("UPDATE agente SET historia=NULL WHERE id=?", (aid,)); c.commit()
+        d2 = fundo_site.divergencia(c, "F077")
+        tipos = {m["campo"]: m["tipo"] for m in d2["mudancas"]}
+        ver("divergência painel × site: procedência mudou, biografia saiu", d2["pendente"] and tipos.get("_camp_acervo_procedencia") == "mudou" and tipos.get("_camp_bio") == "saiu", str(d2))
+        # LIMPAR
+        chamadas.clear()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        x.delete(f"/api/agentes/{aid}/biografia")
+        ver("apagar a biografia manda '__limpar__' (e não vazio) para bio e fontes", chamadas and chamadas[-1][1] == {"_camp_bio": "__limpar__", "_camp_bio_fontes": "__limpar__"}, str(chamadas))
+        chamadas.clear(); x.delete(f"/api/agentes/{aid}/retrato")
+        ver("remover a foto manda '__limpar__' para _camp_foto_id", chamadas and chamadas[-1][1] == {"_camp_foto_id": "__limpar__"}, str(chamadas))
+        chamadas.clear(); x.patch(f"/api/agentes/{aid}", json={"historia": "Texto novo", "fonte_historia": "Livro X"})
+        chamadas.clear(); x.patch(f"/api/agentes/{aid}", json={"historia": "", "fonte_historia": ""})
+        ver("esvaziar a biografia no editor também apaga no site", chamadas and chamadas[-1][1].get("_camp_bio") == "__limpar__", str(chamadas))
+        # página do arquiteto
+        pg0 = fundo_site.pagina_arquiteto(c, "F077")
+        ver("sem a página no espelho: não existe nem é pública", not pg0["existe"] and not pg0["publica"], str(pg0))
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status) VALUES (3,'Zé','ze-arquiteto','https://camp.arq.br/acervo/arquitetos/ze-arquiteto/','draft')"); c.commit()
+        pg1 = fundo_site.pagina_arquiteto(c, "F077")
+        ver("página em rascunho: existe, mas não é pública", pg1["existe"] and not pg1["publica"] and pg1["status"] == "draft", str(pg1))
+        p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F077-P0001'").fetchone()
+        conds = {k["id"]: k for k in condicoes_projeto(c, p1)["condicoes"]}
+        ver("o plano de publicação AVISA (sem bloquear) que o fundo não tem página pública do arquiteto", "pagina_arquiteto" in conds and conds["pagina_arquiteto"]["bloqueia"] is False and "F077" in conds["pagina_arquiteto"]["texto"], str(conds.get("pagina_arquiteto")))
+        c.execute("UPDATE wp_pagina SET status='publish' WHERE id=3"); c.commit()
+        ver("com a página pública o aviso some", "pagina_arquiteto" not in {k["id"] for k in condicoes_projeto(c, p1)["condicoes"]})
+        # rotas
+        st = x.get("/api/fundos/F077/site-status").json()
+        ver("GET /api/fundos/{c}/site-status traz no_site, página e divergência", st["no_site"] and st["pagina"]["publica"] and "divergencia" in st, str(st)[:200])
+        chamadas.clear(); r = x.post("/api/fundos/F077/enviar-ao-site")
+        ver("POST /api/fundos/{c}/enviar-ao-site (admin) envia e responde com a mensagem", r.status_code == 200 and r.json()["ok"] and chamadas, r.text[:200])
+        class WPQ(WPF):
+            def gravar_hub(s, termo, meta): raise RuntimeError("site fora do ar")
+        publicador.WP = WPQ
+        r = x.post("/api/fundos/F077/enviar-ao-site")
+        ver("site fora do ar: 502 com o motivo, e o painel continua intacto", r.status_code == 502 and "site fora do ar" in r.text and c.execute("SELECT procedencia FROM fundo WHERE codigo='F077'").fetchone()[0] == "Compra em 1990", r.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -4119,11 +4189,11 @@ def filho(modo):
         hub.clear()
         r = x.delete(f"/api/agentes/{aid}/biografia").json()
         c = connect(); a = c.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone()
-        ver("apagar a biografia tira o texto do painel e do site", a["historia"] is None and hub == [(8401, {"_camp_bio": "", "_camp_bio_fontes": ""})], str(hub))
+        ver("apagar a biografia tira o texto do painel e do site", a["historia"] is None and hub == [(8401, {"_camp_bio": "__limpar__", "_camp_bio_fontes": "__limpar__"})], str(hub))
         ver("o texto apagado fica na auditoria", "Xangai" in (c.execute("SELECT detalhe FROM evento WHERE tipo='biografia_apagada'").fetchone() or [""])[0]); c.close()
         hub.clear()
         r = x.delete(f"/api/agentes/{aid}/retrato").json()
-        ver("tirar o retrato apaga o _camp_foto_id do site", hub == [(8401, {"_camp_foto_id": 0})] and x.get(f"/api/agentes/{aid}/retrato").status_code == 404, str(hub))
+        ver("tirar o retrato apaga o _camp_foto_id do site", hub == [(8401, {"_camp_foto_id": "__limpar__"})] and x.get(f"/api/agentes/{aid}/retrato").status_code == 404, str(hub))
         class WPQuebrado:
             def __init__(self): raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub")
         publicador.WP = WPQuebrado
@@ -7181,6 +7251,14 @@ else:
 print("125) Redirecionamentos enviados ao site, com fila, cadeias resolvidas e reenvio (CAMP-014)")
 rc, out = rodar("camp014_redir", f"{tmp}/c014.db")
 if rc != 0: ok(False, f"teste do CAMP-014 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("126) Enviar fundo ao site: hub com bio/fontes/foto, '__limpar__', divergência e página do arquiteto (CAMP-015)")
+rc, out = rodar("camp015_fundo_site", f"{tmp}/c015.db")
+if rc != 0: ok(False, f"teste do CAMP-015 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

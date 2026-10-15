@@ -57,6 +57,8 @@ def plano(con, p) -> dict:
     sem = [n for n, v in (("ano", p["ano"]), ("cidade", cidade)) if not v or str(v) == "0"]
     if sem:
         avisos.append({"id": "vazios", "campo": sem[0], "texto": "Sem " + " e sem ".join(sem) + ": a página fica sem essa informação. Preencha agora ou publique assim mesmo."})
+    if "pagina_arquiteto" in por_id:     # CAMP-015
+        avisos.append({"id": "pagina_arquiteto", "campo": None, "texto": por_id["pagina_arquiteto"]["texto"] + ": o projeto vai ao ar, mas a página do arquiteto não aparece até ela existir."})
     if divergentes:     # CAMP-046 (contrato 2.4): aviso, não bloqueio
         avisos.append({"id": "autoria_nao_confirmada", "campo": None, "texto": (f"{divergentes} folha(s) com autoria não confirmada" if divergentes != 1 else "1 folha com autoria não confirmada")
                        + ": sobem ao site com o crédito “Autoria não confirmada”."})

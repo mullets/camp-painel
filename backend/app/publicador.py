@@ -98,6 +98,7 @@ def _pendencia(con, entidade, codigo, campo, detalhe):
                 (entidade, codigo, campo, detalhe[:300], None))
 
 
+HUB_LIMPAR = "__limpar__"     # CAMP-015: valor especial que o painel manda para APAGAR um campo do hub no site (vazio continua ignorado pelo site)
 EM_ORGANIZACAO = "Documentação em organização."
 TIPO_ENTRADA = {"doacao": "Doação", "comodato": "Comodato", "deposito": "Depósito", "compra": "Compra", "transferencia": "Transferência", "outro": "Outra forma de entrada"}
 
@@ -196,6 +197,8 @@ def enviar_agente_ao_hub(aid: int, meta: dict, ator: str) -> dict:
             return out
         wp = WP()
         meta = dict(meta)
+        if meta.get("_camp_foto_id") == 0:
+            meta["_camp_foto_id"] = HUB_LIMPAR            # CAMP-015: foto removida no painel = apagar o campo no site
         if meta.get("_camp_foto_id") == "subir":
             r = con.execute("SELECT r.imagem, r.tipo, a.forma_autorizada FROM agente_retrato r JOIN agente a ON a.id=r.agente_id WHERE r.agente_id=?", (aid,)).fetchone()
             import tempfile, os
