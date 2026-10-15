@@ -198,11 +198,14 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .label .body{position:absolute;left:22px;top:0;right:0;bottom:0;padding:8px 10px 40px}
 .label .logo{display:inline-block;height:14px;width:auto;flex:none;vertical-align:middle}
 .label .big{font-family:var(--mono);font-weight:600;letter-spacing:.4px}
-.label.lab-faixa{display:flex;flex-direction:column;padding:6px 8px 4px;box-sizing:border-box;gap:1px}
-.lab-faixa .lf-topo{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}.lab-faixa .logo{height:13px}
-.lab-faixa .lf-big{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis}
-.lab-faixa .lf-meio{display:flex;gap:6px;font-size:8.5px;line-height:1.15;white-space:nowrap;overflow:hidden}.lab-faixa .lf-nome{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}.lab-faixa .lf-chave{color:#444;flex:none}
-.lab-faixa .lf-mat{margin-left:auto;flex:none;font-size:8.5px;font-weight:700;text-transform:uppercase;border:1px solid #111;border-radius:2px;padding:0 3px}
+.label.lab-faixa{box-sizing:border-box;padding:1.6mm 3.6mm 1.4mm;display:flex;flex-direction:column;color:#000;font-weight:400;-webkit-font-smoothing:none}
+.lab-faixa .lf-topo{display:flex;align-items:center;gap:1.6mm;white-space:nowrap;height:4.2mm}.lab-faixa .logo{height:3.4mm}
+.lab-faixa .lf-big{font-family:var(--mono);font-weight:700;font-size:3.5mm;letter-spacing:.1mm;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lab-faixa .lf-mat{margin-left:auto;flex:none;font-size:2.4mm;text-transform:uppercase;letter-spacing:.1mm}
+.lab-faixa .lf-linha{display:flex;gap:2mm;font-size:2.5mm;line-height:3mm;white-space:nowrap;overflow:hidden}.lab-faixa .lf-linha span{overflow:hidden;text-overflow:ellipsis;min-width:0}.lab-faixa .lf-linha .lf-chave{flex:none;margin-left:auto}
+.lab-faixa .lf-nome{font-size:2.8mm;line-height:3.3mm;font-weight:600}
+.lab-faixa .lf-barras{margin-top:auto;display:flex;flex-direction:column;align-items:center}.lab-faixa .lf-barras svg{display:block;shape-rendering:crispEdges}
+.lab-faixa .lf-cod{font-family:var(--mono);font-size:2.1mm;line-height:2.4mm;letter-spacing:.15mm;text-align:center}
 .label.lab-std .ls-corpo{position:absolute;left:22px;top:0;right:0;bottom:0;padding:6px 9px 5px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .lab-std .ls-topo{display:flex;align-items:center;gap:6px;font-size:8px;color:#555;white-space:nowrap;overflow:hidden}
 .lab-std .ls-big{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
@@ -227,9 +230,6 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .lab-capa .lc-linhas{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:12px 28px;font-size:16px}.lab-capa .lc-linhas div{display:flex;flex-direction:column}.lab-capa .lc-linhas b{font-size:12px;text-transform:uppercase;color:#555;letter-spacing:.5px}
 .lab-capa .lc-obs{margin-top:20px;font-size:14px;color:#555}
 .lab-capa .lc-barras{margin-top:auto}.lab-capa .lc-codtxt{font-family:var(--mono);font-size:16px;letter-spacing:3px;text-align:center;margin-top:4px}
-.lab-faixa .lf-sub{font-size:8px;color:#333}.lab-faixa .lf-sub .lf-nome{font-weight:400}
-.lab-faixa .lf-obs{font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lab-faixa .lf-barras{margin-top:auto}.lab-faixa .lf-cod{font-family:var(--mono);font-size:6.5px;letter-spacing:1px;text-align:center;line-height:1}
 .label .label-project{font-size:9px;font-weight:600;line-height:1.15;margin:0 0 4px;white-space:normal;overflow-wrap:anywhere}
 .label .row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px 8px;font-size:7px;line-height:1.15}
 .label .row>div{min-width:0}
@@ -1659,7 +1659,14 @@ const C39={'0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'
 function barcode(text,h,w){const t=('*'+text.toUpperCase().replace(/[^0-9A-Z\-\. ]/g,'-')+'*');let x=0,rects='';const N=1,W=2.6;for(const ch of t){const p=C39[ch]||C39['-'];for(let i=0;i<9;i++){const bw=p[i]==='w'?W:N;if(i%2===0)rects+=`<rect x="${x.toFixed(1)}" y="0" width="${bw}" height="${h}"/>`;x+=bw}x+=N}
   return `<svg viewBox="0 0 ${x.toFixed(1)} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" fill="#111">${rects}</svg>`}
 /* logo da CAMP (pedido de 15/10), redesenhado em vetor a partir do PNG para sair nítido na impressão */
-const LOGO_CAMP='<svg class="logo" viewBox="6 6 195 177" role="img" aria-label="CAMP"><path fill="#111" d="M8 181V27L55 8V181ZM55 8L80 28V38L55 19ZM80 181V27L127 8V181ZM127 8L152 28V38L127 19ZM152 181V27L199 8V181Z"/></svg>';
+const LOGO_CAMP='<svg class="logo" viewBox="6 6 195 177" role="img" aria-label="CAMP" shape-rendering="crispEdges"><path fill="#111" d="M8 181V27L55 8V181ZM55 8L80 28V38L55 19ZM80 181V27L127 8V181ZM127 8L152 28V38L127 19ZM152 181V27L199 8V181Z"/></svg>';
+/* Code 128 (conjunto B): mais compacto que o Code 39, para caber o código inteiro da folha na faixa de 90 mm.
+   Largura do módulo em pontos inteiros da térmica de 300 dpi (0,0847 mm), de 2 a 5 pontos. */
+const C128=['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
+function barcode128(text,largMm,altMm){const t=String(text).replace(/[^\x20-\x7e]/g,'-'),v=[104];for(const ch of t)v.push(ch.charCodeAt(0)-32);let soma=104;for(let i=1;i<v.length;i++)soma+=v[i]*i;v.push(soma%103,106);
+  let x=0,rects='';for(const n of v){const p=C128[n];for(let i=0;i<p.length;i++){const w=+p[i];if(i%2===0)rects+=`<rect x="${x}" y="0" width="${w}" height="1"/>`;x+=w}}
+  const ponto=25.4/300,mod=Math.max(2,Math.min(5,Math.floor(largMm/x/ponto)))*ponto;
+  return `<svg viewBox="0 0 ${x} 1" preserveAspectRatio="none" style="width:${(x*mod).toFixed(3)}mm;height:${altMm}mm" fill="#000">${rects}</svg>`}
 let labType='projeto';function labTipoAtual(){return labType}
 document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
@@ -1768,15 +1775,15 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
       ${mat?`<div class="lc-mat">${escHtml(mat.nome)}${mat.n!=null?` <b>${escHtml(mat.n)}</b> ${mat.n===1?'folha':'folhas'}`:''}</div>`:''}
       <div class="lc-linhas">${lines.filter(([a])=>!['Arquiteto','Cidade','Ano','Material','Projeto','Cidade · ano'].includes(a)).map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
       ${obs?`<div class="lc-obs">${escHtml(obs)}</div>`:''}<div class="lc-barras">${barcode(code,60,'100%')}<div class="lc-codtxt">${escHtml(code)}</div></div></div>`}
-  if(!vert&&mh<=32){   /* faixa (Brother QL-700, DK-1201 29 × 90 mm): código grande, nome numa linha, um dado-chave e o código de barras */
-    const chave=labType==='projeto'?`vol. ${volume}/${totalVolumes}${local&&local!=='—'?' · '+local:''}`:labType==='documento'?(alvo&&alvo.folha?'folha '+alvo.folha:sig):labType==='caixa'?String((lines[1]||[])[1]||''):labType==='fundo'?(f[3]||''):'';
-    const nomeLinha=labType==='projeto'?pn:labType==='documento'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
+  if(!vert&&mh<=32){   /* faixa Brother QL-700 (DK-1201, 29 × 90 mm): medidas em mm, margem fora da área que a Brother não imprime (~3 mm nas pontas), texto preto sem cinza e código de barras Code 128 com barras em pontos inteiros da térmica (300 dpi) */
+    const chave=labType==='projeto'?`vol. ${volume}/${totalVolumes}${local&&local!=='—'?' · '+local:''}`:labType==='documento'?(alvo&&alvo.folha?'folha '+alvo.folha:''):labType==='caixa'?String((lines[1]||[])[1]||''):labType==='fundo'?(f[3]||''):'';
+    const nomeLinha=['projeto','documento','tubo'].includes(labType)?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
     const comProjeto=['projeto','documento','tubo'].includes(labType);
-    return `<div class="label lab-faixa" style="width:${mw*S}px;height:${mh*S}px"><div class="lf-topo">${LOGO_CAMP}<span class="lf-big">${escHtml(big)}</span>${mat&&labType!=='documento'?`<span class="lf-mat">${escHtml(mat.texto)}</span>`:''}</div>
-      <div class="lf-meio"><span class="lf-nome">${escHtml(nomeLinha)}</span></div>
-      ${comProjeto?`<div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(arq)}</span><span class="lf-chave">${escHtml(fc)}</span></div>`:''}
-      <div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(comProjeto?cidAno:'')}</span>${chave?`<span class="lf-chave">${escHtml(chave)}</span>`:''}</div>
-      ${obs?`<div class="lf-obs">${escHtml(obs)}</div>`:''}<div class="lf-barras">${barcode(code,16,'100%')}<div class="lf-cod">${escHtml(code)}</div></div></div>`}
+    return `<div class="label lab-faixa" style="width:${mw}mm;height:${mh}mm"><div class="lf-topo">${LOGO_CAMP}<span class="lf-big">${escHtml(big)}</span>${mat&&labType!=='documento'?`<span class="lf-mat">${escHtml(mat.texto)}</span>`:''}</div>
+      <div class="lf-linha lf-nome"><span>${escHtml(nomeLinha)}</span></div>
+      ${comProjeto?`<div class="lf-linha"><span>${escHtml(arq)}</span></div>`:''}
+      <div class="lf-linha"><span>${escHtml(comProjeto?cidAno:'')}</span>${chave?`<span class="lf-chave">${escHtml(chave)}</span>`:''}</div>
+      ${obs?`<div class="lf-linha"><span>${escHtml(obs)}</span></div>`:''}<div class="lf-barras">${barcode128(code,mw-7.6,obs?5:6.5)}<div class="lf-cod">${escHtml(code)}</div></div></div>`}
   const comNome=['projeto','documento','tubo'].includes(labType);
   if(vert){   /* lombada do tubo (20 × 140): logo, textos em pé (cada um numa linha, cortados com …) e o código de barras girado, cada um no seu espaço */
     const alt=mw*S*0.92;
