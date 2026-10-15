@@ -56,3 +56,6 @@ sudo systemctl restart camp-painel
 
 ## Desfazer
 Apague a linha do QNAP em `/etc/fstab` (há cópia ao lado), rode `sudo umount /mnt/qnap/acervos` e `sudo rm /etc/camp-qnap.cred`.
+
+## Reconciliação noturna (CAMP-008)
+O aviso do CAMP Vision (`POST /api/campvision/aviso`) lê uma pasta de cada vez. Se algum se perder (painel parado, rede), uma vez por noite (`qnap.reconciliacao_hora`, padrão 3; -1 desliga) o painel roda a mesma varredura da raiz final do botão "Varrer QNAP", em segundo plano: recoloca na Fila o lote que faltava e lê o `erros.json` de cada lote (Erros relatados, origem CAMP Vision). Se o QNAP não está montado, tenta de novo depois de 1 hora; o resultado fica no histórico (`qnap_reconciliacao`). Nunca roda dentro de uma requisição.

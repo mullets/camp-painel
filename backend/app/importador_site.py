@@ -16,7 +16,7 @@ from .publicador import papel_do_site
 
 COL_PROJETOS, COL_ACERVO = 8007, 8013
 STATUS = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar", "pending": "rascunho"}
-TIPOS = {"planta": "Planta", "corte": "Corte", "elevação": "Elevação", "elevacao": "Elevação", "fachada": "Elevação",
+TIPOS = {"planta": "Planta", "corte": "Corte", "elevação": "Elevação/Fachada", "elevacao": "Elevação/Fachada", "fachada": "Elevação/Fachada", "elevação/fachada": "Elevação/Fachada",
          "detalhe": "Detalhe", "estrutura": "Estrutura", "croqui": "Croqui", "perspectiva": "Perspectiva",
          "levantamento": "Levantamento", "mobiliário": "Mobiliário", "mobiliario": "Mobiliário", "documento": "Documento",
          "fotografia": "Fotografia", "foto": "Fotografia", "negativo": "Negativo", "slide": "Slide"}

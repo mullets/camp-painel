@@ -65,6 +65,7 @@ def ler_orientacao(texto: str | None) -> dict | None:
 
 
 ROTULO_ACEITE = {"contagem_origem_igual_saida": "Contagem de origem igual à de saída", "sem_autoria_divergente": "Nenhuma folha com autoria divergente",
+                 "folhas_autoria_nao_confirmada": "Folhas com autoria não confirmada (só contagem, não bloqueia)",
                  "duplicatas_marcadas": "Duplicatas marcadas (só a única vai ao site)", "orientacao_incerta_zerada": "Orientação incerta zerada ou revisada",
                  "serie_incerta_zerada": "Série incerta zerada", "sem_plausibilidade": "Nenhum campo preenchido por plausibilidade",
                  "documentacao_nao_e_obra": "Documentação não classificada como obra", "backtest_ok": "Back-test da regra ≥ 85%",
@@ -92,7 +93,7 @@ def itens_aceite(aceite: dict | None) -> list[dict]:
         if k in ("publicavel", "pendencias") or k.startswith("_"):
             continue
         ok = v.get("ok") if isinstance(v, dict) else v if isinstance(v, bool) else None
-        det = (v.get("contagem") if isinstance(v, dict) else None)
+        det = (v.get("contagem") if isinstance(v, dict) else v if isinstance(v, int) and not isinstance(v, bool) else None)   # CV2 2.4: chave só com a contagem
         out.append({"chave": k, "rotulo": ROTULO_ACEITE.get(k, k.replace("_", " ").capitalize()), "ok": ok, "detalhe": det})
     return out
 

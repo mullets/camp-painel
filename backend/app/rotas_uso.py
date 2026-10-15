@@ -294,11 +294,14 @@ def anonimizar(d: Pessoa, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         n = uso_formularios.anonimizar_pessoa(con, d.email)
-        if not n:
+        from . import lgpd
+        outros = lgpd.apagar_pessoa_local(con, d.email.strip())     # CAMP-050: pedidos e relatos da mesma pessoa também
+        site = lgpd.chamar_site(con, d.email.strip())               # e o site (falha do site não desfaz o local: fica para repetir)
+        if not n and not any(outros.values()) and not site["ok"]:
             raise HTTPException(404, "Nenhum registro com esse e-mail")
-        _evento(con, "uso_pessoa_anonimizada", u["email"], {"registros": n, "email_hash": _hash(d.email)})
+        _evento(con, "uso_pessoa_anonimizada", u["email"], {"registros": n, "email_hash": _hash(d.email), "pedidos": outros["solicitacao"], "site_ok": site["ok"]})
         con.commit()
-        return {"anonimizadas": n}
+        return {"anonimizadas": n, "pedidos": outros["solicitacao"], "site": site}
     finally:
         con.close()
 
@@ -335,11 +338,16 @@ def apagar(d: Apagar, u: dict = Depends(auth.exige("admin"))) -> dict:
             ids = [r[0] for r in con.execute(f"SELECT u.id FROM uso_download u {JUNCAO} WHERE {w}", p)]
             detalhe = {"modo": "filtro", "filtro": {k: v for k, v in f.items() if v}}
         n = uso_formularios.apagar_ids(con, ids)
-        if not n:
+        site = None
+        if (d.email or "").strip():                                  # CAMP-050: apagar a pessoa também chama o site (falha não desfaz o local)
+            from . import lgpd
+            lgpd.apagar_pessoa_local(con, d.email.strip())
+            site = lgpd.chamar_site(con, d.email.strip())
+        if not n and not (site and site["ok"]):
             raise HTTPException(404, "Nenhuma entrada encontrada para apagar")
-        _evento(con, "uso_apagado", u["email"], {**detalhe, "apagadas": n})
+        _evento(con, "uso_apagado", u["email"], {**detalhe, "apagadas": n, **({"site_ok": site["ok"]} if site else {})})
         con.commit()
-        return {"apagadas": n}
+        return {"apagadas": n, **({"site": site} if site else {})}
     finally:
         con.close()
 

@@ -624,6 +624,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
             "app_projeto": hb.get("projeto_codigo") if hb else None,
             "app_detalhe": det_hb or None,
             "app_situacao": det_hb.get("situacao"),
+            "app_alerta": det_hb.get("alerta") if isinstance(det_hb.get("alerta"), str) else None,
             "app_contrato": det_hb.get("contrato"),
             "aviso_contrato": __import__("app.contrato", fromlist=["aviso_contrato"]).aviso_contrato(det_hb.get("contrato")),
             "app_ultimo_erro": hb.get("ultimo_erro") if hb else None,

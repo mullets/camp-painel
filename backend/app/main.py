@@ -26,6 +26,8 @@ from .guia_publicacao import router as guia_publicacao
 from .rotas_qnap import router as rotas_qnap
 from .rotas_hoje import router as rotas_hoje
 from .rotas_uso import router as rotas_uso
+from .rotas_lgpd import router as rotas_lgpd
+from .estacao_eventos import router as rotas_estacao_eventos
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -68,6 +70,8 @@ from .rotas_emprestimos import router as rotas_emprestimos
 app.include_router(rotas_emprestimos)
 from .rotas_relatorios import router as rotas_relatorios
 app.include_router(rotas_relatorios)
+app.include_router(rotas_lgpd)
+app.include_router(rotas_estacao_eventos)
 from .rotas_estante import router as rotas_estante
 app.include_router(rotas_estante)
 
@@ -83,8 +87,75 @@ async def _startup() -> None:
     asyncio.create_task(_coleta_qnap_periodica())
     asyncio.create_task(_coleta_uso_periodica())
     asyncio.create_task(_alertas_periodicos())
+    asyncio.create_task(_lgpd_periodica())
+    asyncio.create_task(_reconciliacao_noturna())
+    asyncio.create_task(_coleta_pedidos_site_periodica())
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
+
+
+async def _coleta_pedidos_site_periodica() -> None:
+    """CAMP-013: busca no site os pedidos e correções (e, junto, reenvia os redirecionamentos pendentes, CAMP-014) a cada site.coleta_pedidos_min (padrão 10; 0 desliga)."""
+    import asyncio
+    from . import coletor_pedidos_site as cp
+    await asyncio.sleep(45)
+    while True:
+        minutos = 10
+        try:
+            con = connect()
+            minutos = cp._minutos(con)
+            con.close()
+            if minutos > 0:
+                await asyncio.to_thread(cp.coletar)
+                try:
+                    from . import redir_site
+                    await asyncio.to_thread(redir_site.enviar_pendentes)
+                except ImportError:
+                    pass
+        except Exception as e:  # noqa: BLE001  (nunca derruba o painel)
+            log_registrar(logging.ERROR, "coleta_pedidos_site", f"Falha no coletor de pedidos do site: {type(e).__name__}")
+        await asyncio.sleep(max(1, minutos) * 60 if minutos > 0 else 300)
+
+
+async def _reconciliacao_noturna() -> None:
+    """CAMP-008: uma vez por noite (qnap.reconciliacao_hora), a varredura da raiz final recoloca na Fila o que o aviso do CV2 não trouxe."""
+    import asyncio
+    await asyncio.sleep(90)
+    while True:
+        try:
+            def _tentar():
+                from . import reconciliacao
+                con = connect()
+                try:
+                    if reconciliacao.devido(con):
+                        reconciliacao.rodar(con)
+                finally:
+                    con.close()
+            await asyncio.to_thread(_tentar)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.ERROR, "qnap_reconciliacao", f"Falha na reconciliação noturna: {type(e).__name__}")
+        await asyncio.sleep(600)
+
+
+async def _lgpd_periodica() -> None:
+    """CAMP-050: uma vez por dia, a rotina de guarda de 24 meses (lgpd.modo: simular por padrão) e a repetição do que o site não confirmou."""
+    import asyncio
+    await asyncio.sleep(120)
+    while True:
+        try:
+            def _rodar():
+                from . import lgpd
+                con = connect()
+                try:
+                    if lgpd.precisa_rodar_hoje(con):
+                        lgpd.rodar(con)
+                    lgpd.repetir_pendentes(con)
+                finally:
+                    con.close()
+            await asyncio.to_thread(_rodar)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.ERROR, "lgpd", f"Falha na rotina de LGPD: {type(e).__name__}")
+        await asyncio.sleep(3600)
 
 
 async def _resumo_diario_periodico() -> None:
@@ -411,6 +482,12 @@ def _detalhe_do_heartbeat(d, limite: int = 4000) -> str | None:
     for k, v in extra.items():
         if k not in det and k != "situacao" and isinstance(k, str):
             det[k] = v
+    if "alerta" in det:                       # CV2 2.4: lote incompleto (sem código de projeto para o /aviso) vira detalhe.alerta com estado 'erro'
+        al = det["alerta"]
+        al = al.get("mensagem") or al.get("texto") or json.dumps(al, ensure_ascii=False) if isinstance(al, dict) else al
+        det["alerta"] = " ".join(str(al or "").split())[:300] or None
+        if not det["alerta"]:
+            det.pop("alerta")
     sit = " ".join(str(extra.get("situacao") or d.situacao or "").split())[:200]
     if sit:
         det["situacao"] = sit
@@ -419,7 +496,7 @@ def _detalhe_do_heartbeat(d, limite: int = 4000) -> str | None:
             break
         det.pop(k, None)
     while len(json.dumps(det, ensure_ascii=False)) > limite and len(det) > 1:
-        det.pop(next(k for k in det if k not in ("situacao", "contrato")), None)
+        det.pop(next(k for k in det if k not in ("situacao", "contrato", "alerta")), None)
     return json.dumps(det, ensure_ascii=False) if det else None
 
 

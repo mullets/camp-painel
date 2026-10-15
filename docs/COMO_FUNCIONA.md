@@ -128,7 +128,7 @@ O "CAMP Acervos — Painel de administração" é o sistema interno da CAMP (Cas
 - **operação**: pedidos de material (solicitações), problemas relatados (erros), empréstimos, localização física, etiquetas, decisões pendentes, relatórios, uso do acervo (downloads do site);
 - **infraestrutura**: saúde das máquinas (estações, CAMP Vision, QNAP, site), backups, logs técnicos e alertas por e-mail.
 
-Regras que o sistema impõe (README): o código vem da tabela de autoridade, nunca do nome da pasta; história e biografia só existem com fonte citada; autoria divergente ou erro bloqueante impede publicar; o painel é a fonte da verdade e o Tainacan recebe uma cópia.
+Regras que o sistema impõe (README): o código vem da tabela de autoridade, nunca do nome da pasta; história e biografia só existem com fonte citada; erro bloqueante impede publicar (autoria divergente é aviso desde o contrato 2.4); o painel é a fonte da verdade e o Tainacan recebe uma cópia.
 
 ### A.1.2 Quem usa
 
@@ -438,7 +438,7 @@ Base (`db/schema.sql`), organizada em seções:
 | `numero_p` | Contador oficial de números de projeto por fundo (reserva nunca reusada). |
 | `projeto` | Dossiê `F0xx-P000x`: título, ano, cidade, identificação original (CX039, Tubo 07…), pasta no QNAP, `lote_teste`, `autorizado_site`, `status_site`, ids no site. Migrações acrescentam autoria, tipologia, capa, `url_publica_confirmada`, `mesclado_em` etc. |
 | `tipo_documento` | Vocabulário de tipos (Planta, Corte, Elevação, … Slide), o mesmo do CAMP Vision. |
-| `item` | Folha/foto/documento: código completo, série, sequencial `D`, leituras brutas do carimbo, arquivos (`arquivo_tif`, `arquivo_jpg`, `md5`, `phash`), rotação/espelho, duplicata, `autoria_divergente` (bloqueia publicar), crédito, `status_site`, origem. Migrações acrescentam revisão (`revisao`, `revisado_em`), giro manual, espelho manual, retenção, arquivo de origem etc. |
+| `item` | Folha/foto/documento: código completo, série, sequencial `D`, leituras brutas do carimbo, arquivos (`arquivo_tif`, `arquivo_jpg`, `md5`, `phash`), rotação/espelho, duplicata, `autoria_divergente` (só aviso: "autoria não confirmada", contrato 2.4), crédito, `status_site`, origem. Migrações acrescentam revisão (`revisao`, `revisado_em`), giro manual, espelho manual, retenção, arquivo de origem etc. |
 | `item_agente` | Autoria por item (autor, fotógrafo, desenhista, coautor) com fonte. |
 | `redirecionamento` | Código antigo → código novo (recodificação gera 301 no site). |
 
@@ -2627,7 +2627,7 @@ Arquivos envolvidos:
 
 Duas regras SQL em `publicacao.py`:
 
-- `ELEGIVEL_LOCAL` = `autoria_divergente=0 AND duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')`. Ou seja, a folha não tem autoria divergente, não é duplicata, não foi retida ("Não publicar esta folha") e, se veio de um lote do CAMP Vision, já foi conferida ou corrigida.
+- `ELEGIVEL_LOCAL` (desde o CAMP-046 sem o filtro de autoria) = `duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')`. Ou seja, a folha não tem autoria divergente, não é duplicata, não foi retida ("Não publicar esta folha") e, se veio de um lote do CAMP Vision, já foi conferida ou corrigida.
 - `ELEGIVEL` = `tainacan_item_id IS NOT NULL AND` ELEGIVEL_LOCAL (a folha também já existe no site).
 
 ### C.3.2 As condições para publicar (`condicoes_projeto`)

@@ -962,7 +962,7 @@ chk(_conf===0&&txt('#d-title').includes('Publicar')&&/O que vou fazer/.test(txt(
 chk(d.querySelectorAll('#d-body .chk.falta').length===1&&/Direitos do fundo F026/.test(txt('#d-body'))&&d.querySelectorAll('#d-body .chk.falta button').length===1&&/Definir direitos do fundo/.test(txt('#d-body'))&&d.getElementById('pub-go').disabled===true,'só o que SÓ uma pessoa resolve (direitos do fundo) deveria bloquear, com o botão que resolve, e \"Publicar agora\" ficar desligado');
 chk(!/Autorizar publicação/.test(txt('#d-body').replace('Autorizar o projeto para publicação','')),'a autorização NÃO deveria ser pedida: o painel faz sozinho'); w.closeDrawer(true);
 chk(!d.querySelector('.dethdr #pd-publicar'),'o botão Publicar não deveria mais ficar no cabeçalho (escondia o porquê)');
-chk(txt('#pd-pub').includes('Sem autoria divergente nem erros bloqueantes'),'checklist deveria listar também o que JÁ está ok');
+chk(txt('#pd-pub').includes('Sem erros bloqueantes'),'checklist deveria listar também o que JÁ está ok');
 // força o clique (como se o botão estivesse ativo): o erro vira um painel que FICA, com tudo o que falta e os botões
 await w.publicarProjeto('F026-P0001','publicar'); await sleep(1800);
 chk(txt('#d-title').includes('Não foi possível publicar'),'recusa deveria abrir painel fixo "Não foi possível publicar": '+txt('#d-title'));

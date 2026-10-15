@@ -4,7 +4,7 @@ Este documento é o contrato que o **CAMP Vision 2 (CV2)** segue para falar com 
 (`tests/teste_backend.py`, bloco "Contrato com o CAMP Vision 2"). O que ainda **não** existe está na seção 9.
 Repositório oficial do CV2: `github.com/mullets/campvision-new` (o `campvision2` é o app antigo, com YOLO/Tesseract: não usar).
 
-> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.2** de 13/10/2026 (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
+> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.4** (autoria divergente vira aviso; base 2.2 de 13/10/2026) (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
 
 ## 1. Visão geral
 ```
@@ -72,7 +72,7 @@ curl -s -H "X-Camp-Token: $CAMP_PAINEL_TOKEN" http://192.168.15.60:8000/api/esta
 ## 10. Revisão do lote (pós-CAMP Vision)
 O CAMP Vision grava a catalogação e o painel **importa, uma pessoa confere/corrige e o admin aprova**. O painel não decide nada sozinho.
 
-**Fonte:** `<pasta do lote>/catalogacao/pacote_tainacan.json` (versão 2). Entra só o que está em `documentos`; `retirados` (autoria divergente, retirada por decisão) **não entra** e é listado no resultado.
+**Fonte:** `<pasta do lote>/catalogacao/pacote_tainacan.json` (versão 2). Entra só o que está em `documentos` (inclusive folha com autoria divergente, que vem com `publicavel=true`, `autoria_divergente=true` e a ressalva "autoria não confirmada": contrato 2.4); `retirados` (projeto divergente, capa, retirada por decisão) **não entra** e é listado no resultado.
 Os caminhos de `arquivos` e `preview` vêm **relativos à raiz `ACERVOS_CAMP`** (`qnap.prontos_raiz`); a prévia fica em `_campvision/preview/<projeto>/<código>.jpg`.
 
 **Fluxo (botões na página do projeto, painel "Revisão do lote"):**
@@ -93,8 +93,8 @@ Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabe�
 
 **Na página do projeto, o botão Publicar está sempre ativo e abre o plano** (`GET /api/projetos/{codigo}/publicar/plano`, não muda nada):
 - **O que vou fazer:** dossiê, folhas, autorizar, publicar (cada passo mostra se já foi feito).
-- **Ficam de fora:** duplicatas, autoria divergente e folhas **ainda não conferidas** na revisão (nunca vão ao site).
-- **O que só uma pessoa resolve** e bloqueia: direitos do fundo, autoria divergente/erros bloqueantes, lote de teste, "nenhuma folha conferida ainda". Cada um traz o botão que resolve.
+- **Ficam de fora:** duplicatas e folhas **ainda não conferidas** na revisão (nunca vão ao site).
+- **O que só uma pessoa resolve** e bloqueia: direitos do fundo, erros bloqueantes (autoria divergente é só aviso desde o contrato 2.4), lote de teste, "nenhuma folha conferida ainda". Cada um traz o botão que resolve.
 
 **"Publicar agora"** (`POST /api/projetos/{codigo}/publicar-tudo`, admin) faz a sequência: dossiê -> folhas (rascunho) -> autorizar -> publicar. Regras:
 - **Idempotente:** clicar de novo continua de onde parou; o que já subiu não se repete.
@@ -103,7 +103,7 @@ Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabe�
 - **Trava contra clique duplo:** 409 se o mesmo projeto já está sendo publicado.
 - Todos os portões de `POST /publicar` continuam valendo: ele revalida no fim.
 
-**Regra única de folha elegível** (`publicacao.ELEGIVEL_LOCAL`, antes repetida em 4 lugares): sem autoria divergente, não é duplicata e, se veio da revisão do CAMP Vision, já foi conferida/corrigida.
+**Regra única de folha elegível** (`publicacao.ELEGIVEL_LOCAL`, antes repetida em 4 lugares): não é duplicata e, se veio da revisão do CAMP Vision, já foi conferida/corrigida.
 **Imagem que sobe ao site** (`imagem_site.py`): a **prévia do CAMP Vision** (`_campvision/preview/`, ~3000 px, já girada); senão o arquivo da folha, absoluto ou relativo à raiz dos prontos. Antes tratava o caminho como local, e uma folha vinda da revisão subia **sem imagem**.
 **Nunca testado contra o WordPress de verdade**: os testes usam substitutos do dossiê, das folhas e do status do site.
 
@@ -140,3 +140,22 @@ Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvis
   - Se o metadado não existir, o painel o cria uma vez, oculto ao público (`display: no`).
   - Se o site recusar a criação, fica pendência e a folha sobe sem ele.
 - Tipo de duplicata `quase` (nome novo no CV2) é gravado como `perceptual` no painel.
+
+## Séries (CAMP-047, segunda leva)
+S01 Desenhos e pranchas · S02 Documentos textuais · S03 Fotografias · S04 Negativos · S05 Slides · S06 Materiais · **S07 Publicações** · **S08 Redesenhos** (pasta `08 - Redesenhos`, dentro do projeto) · S99 Não identificado. O importador aceita S01–S08 e S99.
+A migração 122 só ajusta a tabela `serie`. Mover as folhas que eram S07 "Redesenhos" para S08 (o código muda, o antigo vira redirecionamento) é o roteiro `scripts/migrar_serie_s08.py`: `--simular` (padrão) só lista; `--aplicar` troca as que não estão no site; `--incluir-no-site` também as que estão (passam pelo fluxo de redirecionamento do site). Nunca roda sozinho.
+
+## Imagem pública no site: até 1920 px (CAMP-048)
+Ao enviar a folha ao site (`publicador.imagem_pronta_para_o_site`, também usada no giro de folha já publicada), o painel gera um **derivado JPEG q85, sRGB, lado maior ≤ 1920 px** a partir da prévia do CAMP Vision (`_campvision/preview`, já girada), com o giro/espelho escolhido na revisão. Fica em cache em disco (arquivo + data + tamanho + giro + espelho + lado). O TIF e a prévia de ~3000 px **nunca** vão ao site; caminho `.tif` nunca é escolhido; sem Pillow o envio falha com mensagem (melhor não subir do que subir a grande). Fundo com limite menor (jpg_1200) continua valendo. `item.site_imagem_lado` guarda o lado enviado (NULL = enviado antes do limite).
+`python scripts/reprocessar_imagens_publicas.py --simular` (ou `--sim`) lista as folhas com imagem acima de 1920 px ou de tamanho desconhecido; `--aplicar [--limite N] [--fundo F] [--projeto P]` troca o arquivo do anexo no site (mesmo ID).
+
+## Eventos das estações: capturado / enviado (CAMP-017)
+`POST /api/estacoes/eventos` (rede local + `X-Camp-Token`) recebe `{chave (uuid5 de projeto|evento|lote, lote = finalizado_em), estacao_id, tipo_estacao, operador, projeto_codigo, evento: "capturado"|"enviado", total_arquivos, pasta_entrada, sha256_manifesto}`. **Idempotente pela `chave`**; `sha256_manifesto` e `total_arquivos` podem ser `null` (no "capturado" ainda não há manifesto). Grava em `estacao_evento` e no histórico do projeto (`evento`).
+- **Fila / painel inicial:** "Enviados pela estação e ainda sem processar": evento `enviado` há mais de 1 h sem lote do projeto criado depois (`GET /api/estacoes/eventos/pendentes`).
+- **Contagem:** ao importar o lote, compara o total enviado com as folhas que chegaram (criadas + atualizadas + ignoradas + retiradas). Só abre **aviso** (gravidade `aviso`, nunca bloqueia) quando chegaram **menos** folhas que arquivos enviados; folhas a mais não é divergência (a estação Windows pode mandar total menor que o manifesto mesclado com lote anterior ainda não consumido), e total `null` nunca diverge.
+- Heartbeat do CV2 2.4: `detalhe.alerta` (lote incompleto, estado `erro`) aparece em Estações e em "Problemas que bloqueiam" do painel inicial.
+
+## Elevação/Fachada e amostra dos lotes inferidos (CAMP-051)
+- **Tipo único "Elevação/Fachada"** no vocabulário `tipo_documento` do painel (migração 129 junta "Elevação" e "Fachada" nos itens e na tabela; `item.tipo_lido`/`lido_json`, o que o CV2 leu, não são mexidos). O importador (`importador_lote.tipo_do_painel`) trata "Elevação", "Fachada" e "Elevação/Fachada" como o mesmo tipo; o CV2 pode juntar tipos numa folha separados por `" / "` (ex.: `Planta / Elevação/Fachada`): se todos viram o mesmo tipo vale esse; tipos diferentes deixam o tipo vazio (uma pessoa escolhe; o lido fica em `tipo_lido`).
+- **Praça × Parque (266/272): NÃO implementado** (bloqueado até o Rafa conferir a tabela de autoridade).
+- **Os 53 lotes inferidos:** `python scripts/amostrar_lotes_inferidos.py` (padrão só simula) sorteia 10% estratificado por fundo (`--sortear`, reprodutível por `--semente`), escreve o CSV de revisão (`--csv`), registra a decisão por lote (`--decidir N --decisao aprovado|reprovado --motivo … --por email`, também em `evento`) e `--resumo`. **Não libera nada**: só diz se a amostra foi validada; quem libera o resto é o Rafa. "Inferido" = lote em que o CV2 sugeriu dados do projeto (`resultado.sugestoes_cv2`); `--ids` troca o critério por uma lista explícita.

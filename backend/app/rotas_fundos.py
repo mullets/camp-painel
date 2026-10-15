@@ -259,6 +259,29 @@ def enviar_descricao_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -
     return {"ok": True, "mensagem": f"Texto do fundo {codigo} atualizado no site"}
 
 
+@router.get("/fundos/{codigo}/site-status")
+def site_status(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-015: o fundo está no site? a página pública do arquiteto existe? o que mudou no painel e o site ainda não recebeu?"""
+    from . import fundo_site
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+        return fundo_site.estado(con, codigo)
+    finally:
+        con.close()
+
+
+@router.post("/fundos/{codigo}/enviar-ao-site")
+def enviar_fundo_ao_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-015 · "Enviar fundo ao site": cria/atualiza o termo e a página-hub do arquiteto com o que está preenchido no painel (inclusive biografia, fontes e foto)."""
+    from . import fundo_site
+    r = fundo_site.enviar_fundo(codigo, u["email"])
+    if not r["ok"]:
+        raise HTTPException(502, "O site não recebeu tudo: " + "; ".join(r["erros"])[:300])
+    return {**r, "mensagem": f"Fundo {codigo} enviado ao site ({', '.join(r['passos'])})"}
+
+
 @router.post("/fundos/{codigo}/criar-no-site")
 def criar_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
     from .publicador import criar_fundo_no_site
@@ -358,7 +381,8 @@ def editar_agente(aid: int, d: EdicaoAgente, u: dict = Depends(auth.exige("admin
     if "historia" in mud or "fonte_historia" in mud:   # B9: a biografia do painel é a do site (página do arquiteto)
         from .publicador import enviar_agente_ao_hub
         c2 = connect(); a2 = c2.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone(); c2.close()
-        hub = enviar_agente_ao_hub(aid, {"_camp_bio": a2["historia"] or "", "_camp_bio_fontes": a2["fonte_historia"] or ""}, u["email"])
+        from .publicador import HUB_LIMPAR
+        hub = enviar_agente_ao_hub(aid, {"_camp_bio": a2["historia"] or HUB_LIMPAR, "_camp_bio_fontes": a2["fonte_historia"] or HUB_LIMPAR}, u["email"])   # CAMP-015: esvaziar no painel apaga no site
     return {"ok": True, "campos": list(mud), "site": site, "hub": hub}
 
 
@@ -414,7 +438,8 @@ def remover_retrato(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         _evento(con, "agente", str(aid), "retrato_removido", u["email"], None)
     con.commit(); con.close()
     from .publicador import enviar_agente_ao_hub
-    hub = enviar_agente_ao_hub(aid, {"_camp_foto_id": 0}, u["email"])
+    from .publicador import HUB_LIMPAR
+    hub = enviar_agente_ao_hub(aid, {"_camp_foto_id": HUB_LIMPAR}, u["email"])
     return {"ok": True, "hub": hub, "mensagem": _msg_hub("Retrato removido", hub)}
 
 
@@ -429,7 +454,8 @@ def apagar_biografia(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     _evento(con, "agente", str(aid), "biografia_apagada", u["email"], {"antes": {"historia": a["historia"], "fonte_historia": a["fonte_historia"]}})
     con.commit(); con.close()
     from .publicador import enviar_agente_ao_hub
-    hub = enviar_agente_ao_hub(aid, {"_camp_bio": "", "_camp_bio_fontes": ""}, u["email"])
+    from .publicador import HUB_LIMPAR
+    hub = enviar_agente_ao_hub(aid, {"_camp_bio": HUB_LIMPAR, "_camp_bio_fontes": HUB_LIMPAR}, u["email"])
     return {"ok": True, "hub": hub, "mensagem": _msg_hub(f"Biografia de {a['forma_autorizada']} apagada", hub)}
 
 
@@ -442,7 +468,7 @@ def reenviar_agente(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     if not a:
         raise HTTPException(404, "Arquiteto não existe")
     from .publicador import enviar_agente_ao_hub
-    meta = {"_camp_bio": a["historia"] or "", "_camp_bio_fontes": a["fonte_historia"] or ""}
+    meta = {k: v for k, v in (("_camp_bio", a["historia"] or ""), ("_camp_bio_fontes", a["fonte_historia"] or "")) if v.strip()}   # reenviar manda só o preenchido (limpar é pedido à parte)
     if tem:
         meta["_camp_foto_id"] = "subir"
     hub = enviar_agente_ao_hub(aid, meta, u["email"])

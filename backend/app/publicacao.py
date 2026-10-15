@@ -13,14 +13,15 @@ import time
 
 from .db import connect
 
-# Uma folha só vai ao site se: não tem autoria divergente, não é duplicata e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
-ELEGIVEL_LOCAL = "autoria_divergente=0 AND duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')"   # retida = a pessoa decidiu que esta folha não vai ao site
+# Uma folha só vai ao site se: não é duplicata, não foi retida e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
+# CAMP-046 (contrato 2.4): autoria divergente NÃO é mais motivo para ficar de fora; vira AVISO ("autoria não confirmada") e a folha sobe com esse texto no crédito.
+ELEGIVEL_LOCAL = "duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')"   # retida = a pessoa decidiu que esta folha não vai ao site
 
 
 def _outros_bloqueantes(con, codigo: str) -> int:
     """B4: erros bloqueantes em aberto do projeto que NÃO são de autoria divergente (esses o "Registrar coautoria" resolve)."""
     return con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ? || '-%') AND situacao IN ('aberto','em_correcao')
-                          AND gravidade='bloqueia' AND categoria<>'autoria_divergente'""", (codigo, codigo)).fetchone()[0]
+                          AND gravidade='bloqueia' AND categoria<>'autoria_divergente'""", (codigo, codigo)).fetchone()[0]   # (CAMP-046: autoria nunca bloqueia; mantida só por compatibilidade)
 ELEGIVEL = f"tainacan_item_id IS NOT NULL AND {ELEGIVEL_LOCAL}"
 
 
@@ -41,11 +42,17 @@ def condicoes_projeto(con, p) -> dict:
 
     b = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
     div, err = ((b[0] or 0), (b[1] or 0)) if b else (0, 0)
-    livre = not (div or err)
-    conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Sem autoria divergente nem erros bloqueantes",
-                  "detalhe": None if livre else f"{div} folha(s) com autoria divergente e {err} erro(s) bloqueante(s)",
-                  "acao": None if livre else ({"tipo": "autoria", "rotulo": "É de outro autor? Registrar coautoria/terceiros", "alvo": codigo} if div and not _outros_bloqueantes(con, codigo)
-                                               else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo})})   # B4: autoria divergente pode ser coautoria, não só bloqueio
+    err -= con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ? || '-%') AND situacao IN ('aberto','em_correcao')
+                          AND gravidade='bloqueia' AND categoria='autoria_divergente'""", (codigo, codigo)).fetchone()[0] if err else 0   # CAMP-046: base antiga com a view velha: autoria não conta
+    livre = not err
+    conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Sem erros bloqueantes",
+                  "detalhe": None if livre else f"{err} erro(s) bloqueante(s)",
+                  "acao": None if livre else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo}})
+    if div:   # CAMP-046: autoria não confirmada é AVISO (não trava): a folha sobe com "Autoria não confirmada" no crédito
+        conds.append({"id": "autoria_nao_confirmada", "bloqueia": False, "ok": False,
+                      "texto": f"{div} folha(s) com autoria não confirmada" if div != 1 else "1 folha com autoria não confirmada",
+                      "detalhe": "Sobem ao site com o crédito “Autoria não confirmada”; o nome lido no carimbo não é tratado como fato.",
+                      "acao": {"tipo": "autoria", "rotulo": "É de outro autor? Registrar coautoria/terceiros", "alvo": codigo}})
 
     # CV2 §10 (contrato 9.4): o lote mais recente do projeto com aceite reprovado trava a publicação
     la = con.execute("""SELECT id, aceite_json FROM lista_processamento WHERE projeto_codigo=? AND aceite_json IS NOT NULL
@@ -65,7 +72,9 @@ def condicoes_projeto(con, p) -> dict:
             RESOLVE_CONFERENCIA = {"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"}
             falhas = {i["chave"] for i in itens_aceite(ac) if i["ok"] is False}
             aprovado = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (la["id"],)).fetchone()[0]
-            if aprovado and falhas <= RESOLVE_CONFERENCIA:
+            if falhas == {"sem_autoria_divergente"}:      # CAMP-046: CV2 antigo ainda reprova por autoria; no contrato 2.4 isso é só aviso
+                aceito = True
+            elif aprovado and falhas <= RESOLVE_CONFERENCIA:
                 aceito = resolvido_aqui = True
         conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
                       "detalhe": ("O CAMP Vision pediu olho humano (" + "; ".join(motivos_aceite(ac)) + "): resolvido na conferência do painel") if resolvido_aqui
@@ -77,7 +86,7 @@ def condicoes_projeto(con, p) -> dict:
                   "detalhe": "Lote de teste não vai ao ar" if teste else None, "acao": None})
 
     # REVISÃO (a mesma regra do plano da publicação guiada): folha vinda do CAMP Vision precisa estar conferida e o lote aprovado
-    nao_conf = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND autoria_divergente=0 AND duplicata_de IS NULL", (codigo,)).fetchone()[0]
+    nao_conf = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND duplicata_de IS NULL", (codigo,)).fetchone()[0]
     prontas = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL_LOCAL}", (codigo,)).fetchone()[0]
     lote_sem_aprovar = con.execute("""SELECT COUNT(*) FROM lista_processamento l WHERE l.projeto_codigo=? AND l.aprovado_em IS NULL AND l.etapa IN ('revisao','rascunho')
                                        AND EXISTS (SELECT 1 FROM item i WHERE i.lote_id=l.id)""", (codigo,)).fetchone()[0]
@@ -117,8 +126,16 @@ def condicoes_projeto(con, p) -> dict:
     excluidas = vinculados - elegiveis - con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1 AND tainacan_item_id IS NOT NULL", (codigo,)).fetchone()[0]
     if excluidas > 0:
         conds.append({"id": "folhas_excluidas", "bloqueia": False, "ok": False,
-                      "texto": f"{excluidas} folha(s) com autoria divergente ou duplicadas ficam de fora da publicação", "detalhe": None, "acao": None})
+                      "texto": f"{excluidas} folha(s) duplicadas ou não conferidas ficam de fora da publicação", "detalhe": None, "acao": None})
     conds += avisos_qualidade(p)
+    from .fundo_site import pagina_arquiteto   # CAMP-015: aviso (não bloqueia) quando o fundo não tem página pública do arquiteto no site
+    pg = pagina_arquiteto(con, fundo)
+    if not pg["publica"]:
+        conds.append({"id": "pagina_arquiteto", "bloqueia": False, "ok": False,
+                      "texto": f"O fundo {fundo} ainda não tem página pública do arquiteto no site",
+                      "detalhe": ("Não há arquiteto titular cadastrado neste fundo." if pg.get("sem_arquiteto") else
+                                  f"A página existe no site, mas está como {pg['status']} (não publicado)." if pg["existe"] else
+                                  "Não achei a página no espelho do site. Use “Enviar fundo ao site” no fundo e ative o arquiteto no WordPress."), "acao": None})
     from .imagem_site import lado_maximo_do_fundo   # B2: o limite de resolução do fundo aparece no checklist quando é mais apertado que o padrão
     lado = lado_maximo_do_fundo(con, fundo)
     if lado and lado < 3000:

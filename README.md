@@ -44,7 +44,7 @@ Abra http://localhost:8000.
   Recodificar cria um redirecionamento 301, nunca sobrescreve.
 - O código vem sempre da tabela de autoridade, nunca do nome da pasta.
 - História / biografia só existe com fonte citada. Nada inferido.
-- Autoria divergente ou erro bloqueante impede publicação do projeto.
+- Erro bloqueante impede publicação do projeto. Autoria divergente (contrato 2.4) é só aviso: a folha sobe com o crédito “Autoria não confirmada”.
 - Painel é a fonte da verdade. A publicação é feita pelo painel: o botão **Publicar**
   do projeto mostra o plano e envia dossiê e folhas ao site (rascunho), autoriza e publica
   (admin; ver `docs/campvision.md` §11 e `docs/como-publicar.md`). O wp-admin só é preciso

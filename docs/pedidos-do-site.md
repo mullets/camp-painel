@@ -103,3 +103,13 @@ redirecionamento dele some (nunca aponta para ele mesmo).
 O mapa fica na tabela `redirecionamento` (`codigo_antigo`, `codigo_novo`, `entidade`, `motivo`, `criado_por`, `criado_em`,
 `aplicado_no_site`). A coluna `aplicado_no_site` está prevista para o site marcar o que já virou 301; por enquanto o
 painel só a zera quando o destino muda.
+
+## O painel busca no site (CAMP-013)
+Além de receber `POST /api/pedidos/site`, o painel **busca** no site a cada `site.coleta_pedidos_min` minutos (padrão 10; 0 desliga): `GET /wp-json/camp/v1/solicitacoes?marcar=1` com a Application Password. O que chega é guardado em `pedido_site` (chave = id do post no site, idempotente) e vira:
+- `alta-resolucao` → pedido (origem `site`) com item pelo código, formato `tif`;
+- `consulta` → pedido sem item (o código vai no texto: é visita aos originais, não arquivo);
+- `correcao` → erro (origem `site`) ligado ao código da folha/projeto; sem código que o painel conheça, vira pedido comum para uma pessoa ver.
+Falha do site fica em `pedido_site_coleta` (e no log) e nunca derruba o painel. `GET /api/pedidos/coleta` mostra a última volta; `POST /api/pedidos/coletar` (admin) busca agora.
+
+## O painel ENVIA os redirecionamentos ao site (CAMP-014)
+Quando o painel recodifica um projeto, mescla projetos, move folha que já tinha registro no site ou migra série (S07→S08), a linha entra em `redirecionamento` (fila: `aplicado_no_site=0`) e o painel manda ao site `POST /wp-json/camp/v1/painel/redirecionamentos` com `{"itens":[{"antigo":"/acervo/projetos/…/","novo":"/acervo/projetos/…/","tipo":301,"codigo_antigo","codigo_novo","entidade"}]}` (caminhos do próprio site; `/acervo/projetos/<slug>` e `/acervo/documentos/<slug>`). Cadeias já resolvidas (A→B + B→C = A→C e B→C). O endereço vem do espelho do site; para projeto sem página no espelho, `projeto.url_publica_confirmada`; sem endereço, vira pendência (`pendente_redirecionamento`) e espera a sincronização. Código que nunca esteve no site fica `sem_site=1` (continua no mapa público `GET /api/redirecionamentos`). Falha do site não desfaz o local: `tentativas`/`ultimo_erro` na linha e o coletor de 10 min repete. `GET /api/site/redirecionamentos` mostra a fila; `POST /api/site/redirecionamentos/enviar` (admin) envia agora.

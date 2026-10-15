@@ -63,7 +63,8 @@ def _serie_do_item(codigo: str | None, md: dict) -> str | None:
         return m.group(1)
     texto = " ".join(str(md.get(k) or "") for k in ("Série", "Serie", "Tipo de acervo", "Categoria"))
     mapa = {
-        "redesenho": "S07",   # antes de "desenho" (que está contido nele)
+        "redesenho": "S08",   # antes de "desenho" (que está contido nele); CAMP-047: Redesenhos é S08
+        "publica": "S07",     # Publicações (S07)
         "desenho": "S01", "prancha": "S01",
         "documento textual": "S02", "textual": "S02",
         "fotografia": "S03", "foto": "S03",
@@ -467,7 +468,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "S04": "Negativos",
         "S05": "Slides",
         "S06": "Materiais",
-        "S07": "Redesenhos",
+        "S07": "Publicações",
+        "S08": "Redesenhos",
         "S99": "Não identificado",
     }
     categorias = {}
@@ -543,8 +545,8 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         if msg:
             con.close(); raise HTTPException(400, msg)
         bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
-        if bloq and (bloq[0] or bloq[1]):
-            con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloq[0] or 0} folha(s) com autoria divergente, {bloq[1] or 0} erro(s) bloqueante(s)")
+        if bloq and bloq[1]:     # CAMP-046: autoria divergente é aviso, só erro bloqueante trava
+            con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloq[1] or 0} erro(s) bloqueante(s)")
     if d.ano is not None and not (d.ano == 0 or 1800 <= d.ano <= 2100):
         con.close(); raise HTTPException(400, "Ano inválido (0000 para sem data)")
     from .publicador import PAPEIS_PROJETO
@@ -612,8 +614,8 @@ def escolher_capa(codigo: str, d: EscolhaCapa, u: dict = Depends(auth.exige("adm
         it = con.execute("SELECT codigo, retida, duplicata_de, autoria_divergente FROM item WHERE codigo=? AND projeto_codigo=?", (item, codigo)).fetchone()
         if not it:
             con.close(); raise HTTPException(400, f"A folha {item} não é deste projeto")
-        if it["retida"] or it["duplicata_de"] or it["autoria_divergente"]:
-            con.close(); raise HTTPException(400, "Esta folha não vai ao site (retida, duplicata ou com autoria divergente). Escolha outra.")
+        if it["retida"] or it["duplicata_de"]:
+            con.close(); raise HTTPException(400, "Esta folha não vai ao site (retida ou duplicata). Escolha outra.")
     con.execute("UPDATE projeto SET capa_item=?, atualizado_em=datetime('now') WHERE codigo=?", (item, codigo))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'capa_escolhida',?,?)",
                 (codigo, u["email"], json.dumps({"antes": p["capa_item"], "depois": item})))
@@ -781,7 +783,7 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
             alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
         if d.incluir_folhas:
             for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
-                                    WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.autoria_divergente=0 AND i.duplicata_de IS NULL
+                                    WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.duplicata_de IS NULL
                                       AND (i.lote_id IS NULL OR i.revisao<>'pendente')""", (codigo,)):
                 alvos.append(("item", i[0], i[2] or 8013, i[1]))
     finally:

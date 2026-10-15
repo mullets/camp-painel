@@ -315,3 +315,39 @@ def _wp_buscar_por_codigo(self, colecao_id: int, metadado_id: int, codigo: str) 
 
 
 WP.buscar_por_codigo = _wp_buscar_por_codigo
+
+
+def _wp_apagar_pessoa(self, email: str) -> dict:
+    """CAMP-050 · pede ao site para apagar/anonimizar uma pessoa nas 3 cópias (pedidos, downloads, Fluent Forms). Devolve as contagens."""
+    r = self.h.post("/wp-json/camp/v1/painel/pessoa/apagar", json={"email": email.strip()})
+    if r.status_code == 404 and "rest_no_route" in r.text:
+        raise RuntimeError("O site ainda não tem a rota camp/v1/painel/pessoa/apagar")
+    if r.status_code == 401:
+        raise RuntimeError("O site recusou as credenciais (401)")
+    if r.status_code >= 400:
+        raise RuntimeError(f"O site recusou apagar a pessoa: {r.status_code}")
+    try:
+        return r.json()
+    except ValueError:
+        return {}
+
+
+WP.apagar_pessoa = _wp_apagar_pessoa
+
+
+def _wp_enviar_redirecionamentos(self, itens: list[dict]) -> dict:
+    """CAMP-014 · manda o mapa antigo→novo (caminhos do site) ao mapa dinâmico de 301. Devolve {criados, atualizados, iguais, erros:[{indice, motivo}]}."""
+    r = self.h.post("/wp-json/camp/v1/painel/redirecionamentos", json={"itens": itens})
+    if r.status_code == 404 and "rest_no_route" in r.text:
+        raise RuntimeError("O site ainda não tem a rota camp/v1/painel/redirecionamentos")
+    if r.status_code == 401:
+        raise RuntimeError("O site recusou as credenciais (401)")
+    if r.status_code >= 400:
+        raise RuntimeError(f"O site recusou os redirecionamentos: {r.status_code} {r.text[:120]}")
+    try:
+        return r.json()
+    except ValueError:
+        return {}
+
+
+WP.enviar_redirecionamentos = _wp_enviar_redirecionamentos

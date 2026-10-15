@@ -21,6 +21,7 @@ def nome_arquivo_site(titulo_folha: str | None, projeto_titulo: str | None, codi
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:80].rstrip("-")
     return f"{s}-{codigo}.jpg" if s else f"{codigo}.jpg"
 
+CREDITO_AUTORIA_NAO_CONFIRMADA = "Autoria não confirmada"   # CAMP-046 (contrato 2.4)
 CONVIDADO = "F000"  # fundo Convidado: material de terceiros, nunca vai ao site
 
 
@@ -97,6 +98,7 @@ def _pendencia(con, entidade, codigo, campo, detalhe):
                 (entidade, codigo, campo, detalhe[:300], None))
 
 
+HUB_LIMPAR = "__limpar__"     # CAMP-015: valor especial que o painel manda para APAGAR um campo do hub no site (vazio continua ignorado pelo site)
 EM_ORGANIZACAO = "Documentação em organização."
 TIPO_ENTRADA = {"doacao": "Doação", "comodato": "Comodato", "deposito": "Depósito", "compra": "Compra", "transferencia": "Transferência", "outro": "Outra forma de entrada"}
 
@@ -195,6 +197,8 @@ def enviar_agente_ao_hub(aid: int, meta: dict, ator: str) -> dict:
             return out
         wp = WP()
         meta = dict(meta)
+        if meta.get("_camp_foto_id") == 0:
+            meta["_camp_foto_id"] = HUB_LIMPAR            # CAMP-015: foto removida no painel = apagar o campo no site
         if meta.get("_camp_foto_id") == "subir":
             r = con.execute("SELECT r.imagem, r.tipo, a.forma_autorizada FROM agente_retrato r JOIN agente a ON a.id=r.agente_id WHERE r.agente_id=?", (aid,)).fetchone()
             import tempfile, os
@@ -507,7 +511,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             itens = con.execute(
                 "SELECT codigo, tainacan_item_id FROM item "
-                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
+                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
@@ -646,21 +650,25 @@ def _termo_por_nome(con, taxonomia_nome: str, nome: str):
 
 
 def imagem_pronta_para_o_site(con, i, giro: int | None = None) -> tuple[str | None, int | None]:
-    """(caminho, lado máximo) da imagem da folha como ela vai ao site: o que a pessoa virou/espelhou na revisão sobe virado,
-    e nunca maior que o fundo permite (B2). `giro` (graus no sentido horário) substitui o giro_manual gravado. Sem imagem: (None, None).
+    """(caminho, lado maior em px) da imagem da folha como ela vai ao site (CAMP-048): derivado JPEG q85 sRGB com lado maior <= 1920 px
+    (menos, se os direitos do fundo pedem), feito da prévia do CAMP Vision (já girada) com o giro/espelho que a pessoa escolheu na revisão.
+    Fica em cache em disco. O TIF e a prévia de ~3000 px NUNCA vão ao site. `giro` (graus, horário) substitui o giro_manual gravado.
+    Sem imagem: (None, None). Sem Pillow: levanta RuntimeError (melhor não subir nada do que subir a imagem grande).
     `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual."""
-    from .imagem_site import imagem_para_o_site, lado_maximo_do_fundo
+    from .imagem_site import imagem_para_o_site, lado_publico
     caminho_img = imagem_para_o_site(con, i)
     if not caminho_img:
         return None, None
-    from .giro_imagem import disponivel, espelho_efetivo, jpeg_girado
-    lado = lado_maximo_do_fundo(con, i["fundo_codigo"])
-    reduzir = bool(lado and lado < 3000 and disponivel())   # a prévia já tem ~3000 px: só reprocessa se o fundo pede menos
-    esp = espelho_efetivo(i)                               # folha digitalizada pelo verso: sobe espelhada de volta
+    from .giro_imagem import derivado_publico, disponivel, espelho_efetivo, lado_real
+    if not disponivel():
+        raise RuntimeError("O painel não tem a biblioteca de imagens (Pillow): sem ela não dá para gerar a versão de até 1920 px. Instale e tente de novo")
+    lado = lado_publico(con, i["fundo_codigo"])
     g = (i["giro_manual"] or 0) if giro is None else giro % 360
-    if g or reduzir or esp:
-        caminho_img = str(jpeg_girado(caminho_img, g, lado if reduzir else None, esp))
-    return caminho_img, lado
+    try:
+        derivado = derivado_publico(caminho_img, g, lado, espelho_efetivo(i))
+    except OSError as e:
+        raise RuntimeError(f"Não consegui preparar a imagem pública: {e}") from e
+    return str(derivado), (lado_real(derivado) or lado)
 
 
 def girar_imagem_no_site(codigo: str, giro: int) -> dict:
@@ -676,7 +684,7 @@ def girar_imagem_no_site(codigo: str, giro: int) -> dict:
         media = media_da_folha(con, codigo)
         if not media:
             raise RuntimeError("Não achei a imagem desta folha no site (o anexo não está registrado no painel). Sincronize com o site e tente de novo")
-        caminho, _ = imagem_pronta_para_o_site(con, i, giro)
+        caminho, lado_pub = imagem_pronta_para_o_site(con, i, giro)
         if not caminho:
             raise RuntimeError("A imagem desta folha não está no QNAP: sem ela não dá para mandar a versão girada ao site")
     finally:
@@ -685,7 +693,11 @@ def girar_imagem_no_site(codigo: str, giro: int) -> dict:
     m = WP().substituir_midia(media, caminho, nome=nome)
     if int(m.get("id") or media) != int(media):
         raise RuntimeError(f"O site devolveu outro anexo ({m.get('id')}) em vez de trocar o arquivo do anexo {media}")
-    return {"media_id": media, "url": m.get("source_url")}
+    try:
+        c2 = connect(); c2.execute("UPDATE item SET site_imagem_lado=? WHERE codigo=?", (lado_pub, codigo)); c2.commit(); c2.close()
+    except Exception:  # noqa: BLE001  (só informativo)
+        pass
+    return {"media_id": media, "url": m.get("source_url"), "lado_px": lado_pub}
 
 
 STATUS_DO_SITE = {"publish": "no_ar", "draft": "rascunho", "pending": "rascunho", "private": "fora_do_ar"}
@@ -742,8 +754,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         con.close(); out["erro"] = "folha não existe"; return out
     if i["tainacan_item_id"]:
         con.close(); return out
-    if i["autoria_divergente"] or i["duplicata_de"]:
-        con.close(); out["erro"] = "folha com autoria divergente ou duplicata não sobe ao site"; return out
+    if i["duplicata_de"]:
+        con.close(); out["erro"] = "folha duplicada não sobe ao site"; return out
     if i["lote_id"] and i["revisao"] == "pendente":
         con.close(); out["erro"] = "a folha ainda não foi conferida na revisão do lote: confira antes de enviar ao site"; return out
     if not i["dossie_id"]:
@@ -774,6 +786,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                        "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
                        "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
                        "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
+                       "Crédito": CREDITO_AUTORIA_NAO_CONFIRMADA if i["autoria_divergente"] else None,   # CAMP-046: nunca o nome lido como fato
                        "Suporte": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
             for nome, valor in valores.items():
                 if valor in (None, ""):
@@ -798,7 +811,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 wp.definir_documento(COL_ACERVO, iid, m["id"])
                 con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
                 out["imagem"] = m.get("source_url")
-                con.execute("UPDATE item SET site_media_id=? WHERE codigo=?", (m["id"], codigo))
+                con.execute("UPDATE item SET site_media_id=?, site_imagem_lado=? WHERE codigo=?", (m["id"], lado, codigo))
                 if i["dossie_id"] and con.execute("SELECT 1 FROM projeto WHERE codigo=? AND capa_item=?", (i["projeto_codigo"], codigo)).fetchone():
                     wp.patch_item(COL_PROJETOS, i["dossie_id"], _thumbnail_id=m["id"])   # B12: a capa escolhida chegou ao site
                     out["capa"] = True

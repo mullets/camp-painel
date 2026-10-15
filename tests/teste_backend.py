@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao"}
 
 
 def rodar(modo, db):
@@ -240,26 +240,27 @@ def filho(modo):
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         c = connect()
-        ver("CAMP-031: a tabela serie tem S99 'Não identificado' e S07 continua 'Redesenhos' (não renomeada)",
-            c.execute("SELECT nome FROM serie WHERE codigo='S99'").fetchone()[0] == "Não identificado" and c.execute("SELECT nome FROM serie WHERE codigo='S07'").fetchone()[0] == "Redesenhos")
+        ver("CAMP-031/047: a tabela serie tem S99 'Não identificado', S07 'Publicações' e S08 'Redesenhos'",
+            c.execute("SELECT nome FROM serie WHERE codigo='S99'").fetchone()[0] == "Não identificado" and c.execute("SELECT nome FROM serie WHERE codigo='S07'").fetchone()[0] == "Publicações"
+            and c.execute("SELECT nome, pasta FROM serie WHERE codigo='S08'").fetchone()[:] == ("Redesenhos", "08 - Redesenhos"))
         from app.importador_lote import CODIGO_DOCUMENTO, importar_lote
-        ver("o código do documento aceita S01–S07 e S99, e recusa S00/S08/S98", all(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S01", "S06", "S07", "S99"))
-            and not any(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S00", "S08", "S98")))
+        ver("o código do documento aceita S01–S08 e S99, e recusa S00/S09/S98", all(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S01", "S06", "S07", "S08", "S99"))
+            and not any(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S00", "S09", "S98")))
         FIX = _P(__file__).parent / "fixtures" / "campvision"
         pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
         arq = pasta / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(arq.read_text(encoding="utf-8"))
         base = pk["documentos"][2]
         def doc(cod, serie, n):
             d_ = _j.loads(_j.dumps(base)); d_.update({"codigo": cod, "serie": serie, "duplicata_de": "", "bloqueios": [], "publicavel": True, "sequencial": n}); return d_
-        pk["documentos"] = [doc("F026-P0001-1972-S07-D00001", "S07", 1), doc("F026-P0001-1972-S99-D00002", "S99", 2), doc("F026-P0001-1972-S08-D00003", "S08", 3)]
+        pk["documentos"] = [doc("F026-P0001-1972-S07-D00001", "S07", 1), doc("F026-P0001-1972-S99-D00002", "S99", 2), doc("F026-P0001-1972-S08-D00003", "S08", 3), doc("F026-P0001-1972-S09-D00004", "S09", 4)]
         pk.pop("retirados", None); arq.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
         lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
         r = importar_lote(c, lote, "teste@camp")
         ses = dict(c.execute("SELECT codigo, serie_codigo FROM item WHERE projeto_codigo='F026-P0001'").fetchall())
-        ver("pacote com S07 e S99: as duas folhas entram, cada uma na sua série; S08 vira problema e não entra",
-            ses.get("F026-P0001-1972-S07-D00001") == "S07" and ses.get("F026-P0001-1972-S99-D00002") == "S99" and len(ses) == 2 and any("S08" in p_ for p_ in r.get("problemas", [])), str((ses, r)))
+        ver("pacote com S07, S08 e S99: as três folhas entram, cada uma na sua série; S09 vira problema e não entra",
+            ses.get("F026-P0001-1972-S07-D00001") == "S07" and ses.get("F026-P0001-1972-S08-D00003") == "S08" and ses.get("F026-P0001-1972-S99-D00002") == "S99" and len(ses) == 3 and any("S09" in p_ for p_ in r.get("problemas", [])), str((ses, r)))
         for l in res: print(l)
     elif modo == "cv22_leitor":
         init_db(); aplicar_migracoes()
@@ -415,6 +416,573 @@ def filho(modo):
         ver("login atrás do túnel guarda o IP real na sessão e no histórico (não 127.0.0.1)", r.status_code == 200 and k.execute("SELECT ip FROM sessao ORDER BY rowid DESC LIMIT 1").fetchone()[0] == "200.1.2.3", r.text[:100])
         svc = (_pl.Path(__file__).resolve().parents[1] / "scripts" / "camp-painel.service").read_text(encoding="utf-8")
         ver("o serviço sobe o uvicorn com --proxy-headers --forwarded-allow-ips=127.0.0.1", "--proxy-headers" in svc and "--forwarded-allow-ips=127.0.0.1" in svc)
+        for l in res: print(l)
+    elif modo == "camp046_autoria":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import contrato as ctr
+        from app.importador_lote import importar_lote, registrar_erros_cv
+        from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
+        from app.publicacao_guiada import plano
+        ver("CAMP-046: o painel implementa o contrato 2.4", ctr.CONTRATO_PAINEL == "2.4", ctr.CONTRATO_PAINEL)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
+        arq = pasta / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(arq.read_text(encoding="utf-8"))
+        d0 = pk["documentos"][0]; d0.update({"autoria_divergente": True, "publicavel": True, "credito": "Fulano de Tal", "duplicata_de": "", "bloqueios": [],
+                                             "ressalvas": ["autoria não confirmada: carimbo diz Fulano de Tal"]})
+        pk.pop("retirados", None); arq.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+        (pasta / "catalogacao" / "erros.json").write_text(_j.dumps([{"arquivo": d0["codigo"], "categoria": "autoria divergente", "gravidade": "bloqueia", "detalhe": "carimbo de outro arquiteto"}]), encoding="utf-8")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        r = importar_lote(c, lote, "teste@camp")
+        it = c.execute("SELECT * FROM item WHERE codigo=?", (d0["codigo"],)).fetchone()
+        ver("folha com autoria divergente ENTRA no painel (não vai para retirados)", it is not None and it["autoria_divergente"] == 1 and not any(x.get("codigo") == d0["codigo"] for x in (r.get("retirados") or [])), str(r)[:300])
+        ver("o crédito da folha é 'Autoria não confirmada', nunca o nome lido", it["credito"] == "Autoria não confirmada", str(it["credito"]))
+        registrar_erros_cv(c, "F026-P0001", pasta); c.commit()
+        g = c.execute("SELECT gravidade FROM erro WHERE categoria='autoria_divergente' AND chave LIKE 'campvision:erros:%'").fetchone()
+        ver("erros.json com categoria 'autoria divergente' e gravidade bloqueia entra como 'corrigir'", g is not None and g[0] == "corrigir", str(g and g[0]))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','autoria_divergente','operador',?,'x')", (d0["codigo"],)); c.commit()
+        p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F026-P0001'").fetchone()
+        conds = {x["id"]: x for x in condicoes_projeto(c, p1)["condicoes"]}
+        ver("a condição 'bloqueios' passa mesmo com autoria divergente (inclusive erro manual 'bloqueia' de autoria)", conds["bloqueios"]["ok"], str(conds["bloqueios"]))
+        a = conds.get("autoria_nao_confirmada")
+        ver("vira AVISO no checklist: '1 folha com autoria não confirmada', que não bloqueia", bool(a) and a["bloqueia"] is False and "1 folha com autoria não confirmada" in a["texto"], str(a))
+        c.execute("UPDATE item SET revisao='conferida' WHERE codigo=?", (d0["codigo"],)); c.commit()
+        ver("conferida, a folha com autoria divergente é elegível", c.execute(f"SELECT COUNT(*) FROM item WHERE codigo=? AND {ELEGIVEL_LOCAL}", (d0["codigo"],)).fetchone()[0] == 1)
+        pl = plano(c, p1)
+        ver("o plano de publicar traz o aviso e não o bloqueio de autoria", any(x["id"] == "autoria_nao_confirmada" for x in pl["avisos"]) and not any(x["id"] == "bloqueios" for x in pl["bloqueios"]), str(pl["avisos"])[:200])
+        b = c.execute("SELECT erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo='F026-P0001'").fetchone()[0]
+        ver("a view de bloqueios não conta erro de autoria", b == 0, str(b))
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp047_s08":
+        init_db(); aplicar_migracoes()
+        import json as _j, subprocess as _sp, sys as _sys
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import serie_s08
+        from app.rotas_projetos import _serie_do_item
+        c = connect()
+        ver("_serie_do_item: 'redesenho' → S08 e 'publicações' → S07", _serie_do_item(None, {"Série": "Redesenhos"}) == "S08" and _serie_do_item(None, {"Série": "Publicações"}) == "S07" and _serie_do_item(None, {"Série": "Desenhos e pranchas"}) == "S01")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F029','Fundo 29','F29',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F029',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F029-P0001','F029',1,'Casa Tapera',1969)")
+        for n, site in ((1, None), (2, None), (3, 9001)):
+            cod = f"F029-P0001-1969-S07-D0000{n}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id,status_site) VALUES (?,?,'S07',?,'importado',?,?)", (cod, "F029-P0001", n, site, "rascunho" if site else "nao_publicado"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES ('F029-P0001-1969-S01-D00004','F029-P0001','S01',4,'importado')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador','F029-P0001-1969-S07-D00001','x')"); c.commit()
+        pl = serie_s08.planejar(c)
+        ver("simular: lista 3 folhas S07 (2 locais, 1 no site) sem gravar nada", pl["total"] == 3 and pl["locais"] == 2 and pl["no_site"] == 1 and c.execute("SELECT COUNT(*) FROM item WHERE serie_codigo='S08'").fetchone()[0] == 0, str(pl)[:200])
+        dbp = __import__("os").environ["CAMP_DB_PATH"]
+        r = _sp.run([_sys.executable, str(RAIZ / "scripts" / "migrar_serie_s08.py"), "--simular"], capture_output=True, text=True, env=dict(__import__("os").environ))
+        ver("o script em --simular lista e não grava", r.returncode == 0 and "SIMULAÇÃO" in r.stdout and c.execute("SELECT COUNT(*) FROM item WHERE serie_codigo='S08'").fetchone()[0] == 0, (r.stdout + r.stderr)[-300:])
+        c.execute("BEGIN"); out = serie_s08.aplicar(c, "teste@camp"); c.commit()
+        ver("aplicar sem --incluir-no-site troca só as 2 locais e deixa a do site", len(out["trocadas"]) == 2 and len(out["ignoradas"]) == 1 and "já está no site" in out["ignoradas"][0]["motivo"], str(out)[:250])
+        ver("as folhas trocadas ganham série S08, código novo e guardam o anterior", [tuple(x) for x in c.execute("SELECT codigo, serie_codigo, codigo_anterior FROM item WHERE serie_codigo='S08' ORDER BY codigo")] == [("F029-P0001-1969-S08-D00001", "S08", "F029-P0001-1969-S07-D00001"), ("F029-P0001-1969-S08-D00002", "S08", "F029-P0001-1969-S07-D00002")])
+        ver("a folha do site continua S07 com o código antigo (não muda em silêncio)", c.execute("SELECT serie_codigo FROM item WHERE codigo='F029-P0001-1969-S07-D00003'").fetchone()[0] == "S07")
+        ver("o erro e o histórico acompanham o código novo", c.execute("SELECT COUNT(*) FROM erro WHERE codigo='F029-P0001-1969-S08-D00001'").fetchone()[0] == 1)
+        ver("o redirecionamento antigo→novo entra (fila do site, aplicado_no_site=0)", [tuple(x) for x in c.execute("SELECT codigo_antigo, codigo_novo, entidade, aplicado_no_site FROM redirecionamento ORDER BY codigo_antigo")] == [("F029-P0001-1969-S07-D00001", "F029-P0001-1969-S08-D00001", "item", 0), ("F029-P0001-1969-S07-D00002", "F029-P0001-1969-S08-D00002", "item", 0)])
+        c.execute("BEGIN"); out2 = serie_s08.aplicar(c, "teste@camp", incluir_no_site=True); c.commit()
+        ver("com --incluir-no-site a do site também troca e entra no mapa", len(out2["trocadas"]) == 1 and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F029-P0001-1969-S07-D00003'").fetchone()[0] == "F029-P0001-1969-S08-D00003")
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp048_imagem_publica":
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile, subprocess as _sp, sys as _sys, os as _os
+        from pathlib import Path as _P
+        from PIL import Image, ImageCms
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import publicador, reprocessar_imagens as rp
+        from app.giro_imagem import derivado_publico, lado_real
+        from app.imagem_site import imagem_para_o_site
+        raiz = _P(tempfile.mkdtemp()); prev = raiz / "_campvision" / "preview" / "F026-P0001"; prev.mkdir(parents=True)
+        COD = "F026-P0001-1972-S01-D00001"
+        im = Image.new("RGB", (3000, 2000), (200, 30, 30)); im.save(prev / f"{COD}.jpg", "JPEG", quality=95, icc_profile=ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB")).tobytes() if False else None)
+        pequena = Image.new("RGB", (800, 600), (10, 10, 10)); pequena.save(prev / "pequena.jpg", "JPEG")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F026-P0001','F026',1,'Tarumã',1972,7001)")
+        pend = _j.dumps({"previa": f"_campvision/preview/F026-P0001/{COD}.jpg"})
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id,site_media_id,pendencias,arquivo_jpg) VALUES (?,?,?,?,'importado',9001,555,?,?)", (COD, "F026-P0001", "S01", 1, pend, "F026/x.tif"))
+        c.commit()
+        d = derivado_publico(prev / f"{COD}.jpg")
+        with Image.open(d) as o: dims, fmt, modo_ = o.size, o.format, o.mode
+        ver("derivado público: JPEG RGB com lado maior <= 1920 (3000x2000 vira 1920x1280)", fmt == "JPEG" and modo_ == "RGB" and dims == (1920, 1280), str((fmt, modo_, dims)))
+        ver("o derivado fica em cache (mesmo arquivo na segunda chamada) e muda com o giro", derivado_publico(prev / f"{COD}.jpg") == d and derivado_publico(prev / f"{COD}.jpg", 90) != d)
+        with Image.open(derivado_publico(prev / f"{COD}.jpg", 90)) as o: ver("giro de 90° troca largura e altura, ainda <= 1920", o.size == (1280, 1920), str(o.size))
+        with Image.open(derivado_publico(prev / "pequena.jpg")) as o: ver("imagem pequena não é ampliada", o.size == (800, 600), str(o.size))
+        lim = c.execute("SELECT * FROM item WHERE codigo=?", (COD,)).fetchone()
+        ver("o caminho .tif nunca é escolhido como imagem do site (só a prévia JPG)", imagem_para_o_site(c, {"arquivo_jpg": "F026/x.tif", "pendencias": None}) is None and imagem_para_o_site(c, {"arquivo_jpg": "x.TIF", "pendencias": None}) is None)
+        ij = c.execute("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (COD,)).fetchone()
+        caminho, lado = publicador.imagem_pronta_para_o_site(c, ij)
+        ver("imagem_pronta_para_o_site entrega o derivado de 1920 px (não a prévia de 3000)", caminho and lado == 1920 and lado_real(caminho) == 1920 and "preview" not in caminho, str((caminho, lado)))
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo, resolucao_max) VALUES ('F026','jpg_1200') ON CONFLICT(fundo_codigo) DO UPDATE SET resolucao_max='jpg_1200'"); c.commit()
+        _, lado2 = publicador.imagem_pronta_para_o_site(c, ij)
+        ver("fundo que limita a 1200 px continua mais apertado que 1920", lado2 == 1200, str(lado2))
+        c.execute("UPDATE direitos_fundo SET resolucao_max='tif' WHERE fundo_codigo='F026'"); c.commit()
+        # giro de folha publicada usa o mesmo derivado
+        enviados = []
+        class WPF:
+            def substituir_midia(self, media, caminho, nome=None):
+                with Image.open(caminho) as o: enviados.append((media, o.size, o.format))
+                return {"id": media, "source_url": "http://x/y.jpg"}
+        publicador.WP = WPF
+        r = publicador.girar_imagem_no_site(COD, 90)
+        ver("girar folha publicada (substituir_midia) envia o derivado <= 1920, girado, e guarda o lado", enviados == [(555, (1280, 1920), "JPEG")] and r["lado_px"] == 1920 and c.execute("SELECT site_imagem_lado FROM item WHERE codigo=?", (COD,)).fetchone()[0] == 1920, str((enviados, r)))
+        # reprocessamento: o que ainda é desconhecido/acima de 1920
+        c.execute("UPDATE item SET site_imagem_lado=NULL WHERE codigo=?", (COD,)); c.commit()
+        cand = rp.candidatos(c)
+        ver("candidatos: a folha de tamanho desconhecido entra; a de 1920 não", [x["codigo"] for x in cand] == [COD] and cand[0]["tem_imagem_local"], str(cand))
+        c.execute("UPDATE item SET site_imagem_lado=3000 WHERE codigo=?", (COD,)); c.commit()
+        ver("candidatos: a de 3000 px entra", [x["codigo"] for x in rp.candidatos(c)] == [COD])
+        dbp = _os.environ["CAMP_DB_PATH"]
+        r = _sp.run([_sys.executable, str(RAIZ / "scripts" / "reprocessar_imagens_publicas.py"), "--sim"], capture_output=True, text=True, env=dict(_os.environ))
+        ver("o script em --sim lista e não envia", r.returncode == 0 and COD in r.stdout and "SIMULAÇÃO" in r.stdout, (r.stdout + r.stderr)[-300:])
+        out = rp.reenviar(COD, "teste")
+        ver("reenviar troca o arquivo do anexo pelo derivado e zera a pendência (lado 1920)", out["ok"] and out["lado_px"] == 1920 and rp.candidatos(c) == [], str(out))
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp050_lgpd":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, lgpd, wp as _wpmod
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("lgpd.modo nasce 'simular' e a guarda é de 24 meses", lgpd.modo(c) == "simular" and lgpd.meses(c) == 24)
+        meses30 = "-30 months"
+        for i, (em, quando) in enumerate((("velho@x.com", meses30), ("novo@x.com", "-2 months"), ("velho@x.com", "-26 months"))):
+            c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email, telefone, instituicao, uso, material_codigo) VALUES (1,?,datetime('now',?),'Ana',?,'1199','USP','pesquisa','F026-P0001')", (i + 1, quando, em))
+        for em, quando, valor in (("velho@x.com", meses30, None), ("velho@x.com", meses30, 150.0), ("novo@x.com", "-1 months", None)):
+            sid = c.execute("INSERT INTO solicitacao (solicitante, email, instituicao, finalidade, detalhe, origem, recebida_em, valor) VALUES ('Ana Souza',?,'USP','pesquisa','quero a planta','site',datetime('now',?),?)", (em, quando, valor)).lastrowid
+            c.execute("INSERT INTO solicitacao_item (solicitacao_id, codigo, formato) VALUES (?,?,'jpg_3000')", (sid, "F026-P0001"))
+            c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,'criada','site',?)", (str(sid), _j.dumps({"solicitante": "Ana Souza", "origem": "site", "itens": 1})))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,criado_em) VALUES ('aviso','outro','site','F026-P0001','x','Maria (velho@x.com)',datetime('now','-30 months'))")
+        c.commit()
+        r = lgpd.rodar(c, "teste")
+        ver("SIMULAR (padrão): conta o que seria anonimizado e NÃO muda nada", r["modo"] == "simular" and r["uso_download"] == 2 and r["solicitacao"] == 1 and r["mantidas_obrigacao_legal"] == 1 and r["erro_relatado_por"] == 1
+            and c.execute("SELECT COUNT(*) FROM uso_download WHERE email IS NOT NULL").fetchone()[0] == 3 and c.execute("SELECT COUNT(*) FROM solicitacao WHERE anonimizada=1").fetchone()[0] == 0, str(r))
+        lg = c.execute("SELECT detalhe FROM evento WHERE tipo='lgpd_retencao' ORDER BY id DESC LIMIT 1").fetchone()[0]
+        ver("o registro da rotina leva só quantidades (nada de nome nem e-mail)", "@" not in lg and "Ana" not in lg, lg[:120])
+        c.execute("UPDATE configuracao SET valor='aplicar' WHERE chave='lgpd.modo'"); c.commit()
+        r = lgpd.rodar(c, "teste")
+        ver("APLICAR: downloads antigos anonimizados (contagem fica), o recente não", c.execute("SELECT COUNT(*) FROM uso_download WHERE anonimizada=1 AND email IS NULL AND telefone IS NULL AND instituicao IS NULL AND uso='pesquisa'").fetchone()[0] == 2
+            and c.execute("SELECT COUNT(*) FROM uso_download WHERE email='novo@x.com'").fetchone()[0] == 1, str(r))
+        ver("APLICAR: pedido antigo sem valor anonimizado (itens ficam); com valor (obrigação fiscal) e o recente ficam", c.execute("SELECT COUNT(*) FROM solicitacao WHERE anonimizada=1 AND email IS NULL AND solicitante='(removido)' AND detalhe IS NULL").fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM solicitacao WHERE email='velho@x.com'").fetchone()[0] == 1 and c.execute("SELECT COUNT(*) FROM solicitacao_item").fetchone()[0] == 3)
+        ver("APLICAR: o histórico do pedido perde o nome; o relato do site perde quem relatou", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='solicitacao' AND detalhe LIKE '%Ana Souza%'").fetchone()[0] == 2
+            and c.execute("SELECT relatado_por FROM erro WHERE origem='site'").fetchone()[0] == "(removido)", "")
+        r2 = lgpd.contar_e_aplicar(c, False)
+        ver("rodar de novo não acha mais nada (idempotente)", r2["uso_download"] == 0 and r2["solicitacao"] == 0 and r2["erro_relatado_por"] == 0, str(r2))
+        # apagar uma pessoa: local + site; falha do site não desfaz o local e fica para repetir
+        chamadas = []
+        class WPQuebra:
+            def apagar_pessoa(self, em): chamadas.append(em); raise RuntimeError("site fora do ar")
+        class WPOk:
+            def apagar_pessoa(self, em): chamadas.append(em); return {"solicitacoes": 1, "downloads": 2, "fluentforms": 3}
+        _wpmod.WP = WPQuebra
+        out = lgpd.apagar_pessoa(c, "Novo@X.com", "teste")
+        ver("apagar pessoa com o site fora do ar: o LOCAL foi feito e o site ficou pendente", out["local"]["uso_download"] == 1 and out["local"]["solicitacao"] == 1 and not out["site"]["ok"]
+            and c.execute("SELECT COUNT(*) FROM lgpd_pendente_site").fetchone()[0] == 1 and c.execute("SELECT COUNT(*) FROM uso_download WHERE email='novo@x.com'").fetchone()[0] == 0, str(out))
+        _wpmod.WP = WPOk
+        rp = lgpd.repetir_pendentes(c)
+        ver("a rotina repete o pedido ao site e limpa a pendência quando ele confirma", rp["repetidas_ok"] == 1 and c.execute("SELECT COUNT(*) FROM lgpd_pendente_site").fetchone()[0] == 0 and chamadas[-1] == "novo@x.com", str((rp, chamadas)))
+        # rotas
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        j = x.get("/api/lgpd").json()
+        ver("GET /api/lgpd (admin) traz o modo, a guarda e as pendências", j["modo"] == "aplicar" and j["meses"] == 24 and "a_anonimizar" in j and j["pendentes_no_site"] == 0, str(j)[:200])
+        c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email) VALUES (1,99,datetime('now'),'Zé','ze@x.com')"); c.commit()
+        r = x.post("/api/uso/apagar", json={"email": "ze@x.com"})
+        ver("a rota 'apagar todos os pedidos da pessoa' também chama o site", r.status_code == 200 and r.json()["apagadas"] == 1 and r.json()["site"]["ok"] and chamadas[-1] == "ze@x.com", r.text[:200])
+        r = x.post("/api/lgpd/executar")
+        ver("POST /api/lgpd/executar roda a rotina", r.status_code == 200 and r.json()["modo"] == "aplicar", r.text[:200])
+        c.execute("UPDATE configuracao SET valor='simular' WHERE chave='lgpd.modo'"); c.commit()
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp013_coletor":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, coletor_pedidos_site as cp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        FOLHA = "F026-P0001-1972-S01-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,'S01',1,'importado')", (FOLHA, "F026-P0001")); c.commit()
+        ver("o coletor nasce ligado: padrão 10 minutos (0 desliga)", cp._minutos(c) == 10)
+        pedidos = [
+            {"id": 501, "tipo": "alta-resolucao", "codigo": FOLHA, "nome": "Ana Souza", "email": "ana@x.com", "instituicao": "USP", "finalidade": "pesquisa", "mensagem": "preciso da prancha", "criado_em": "2026-10-15T10:00:00+00:00"},
+            {"id": 502, "tipo": "consulta", "codigo": "F026-P0001", "nome": "Beto", "email": "beto@x.com", "instituicao": "", "finalidade": "", "mensagem": "quero ver os originais", "criado_em": "2026-10-15T10:01:00+00:00"},
+            {"id": 503, "tipo": "correcao", "codigo": FOLHA, "nome": "Carla", "email": "carla@x.com", "instituicao": "", "finalidade": "", "mensagem": "a data está errada", "criado_em": "2026-10-15T10:02:00+00:00"},
+            {"id": 504, "tipo": "correcao", "codigo": "F999-P0001", "nome": "Davi", "email": "davi@x.com", "instituicao": "", "finalidade": "", "mensagem": "código que o painel não conhece", "criado_em": "2026-10-15T10:03:00+00:00"},
+        ]
+        class Resp:
+            def __init__(s, code, dados): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        chamadas = []
+        class H:
+            def __init__(s, resp): s.resp = resp
+            def get(s, path, params=None):
+                chamadas.append((path, dict(params or {})))
+                if isinstance(s.resp, Exception): raise s.resp
+                return s.resp
+        class WPF:
+            def __init__(s, resp): s.h = H(resp)
+        o = cp.coletar(c, WPF(Resp(200, pedidos)), avisar=False)
+        ver("chama GET /wp-json/camp/v1/solicitacoes com marcar=1", chamadas and chamadas[0][0] == "/wp-json/camp/v1/solicitacoes" and chamadas[0][1].get("marcar") == 1, str(chamadas))
+        ver("lê 4 pedidos e importa os 4", o["lidas"] == 4 and o["novas"] == 4 and o["importadas"] == 4 and not o["erro"], str(o))
+        s1 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Ana Souza'").fetchone()
+        it = c.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=?", (s1["id"],)).fetchall()
+        ver("alta-resolução vira solicitação (origem site) com item pelo código", s1["origem"] == "site" and s1["finalidade"] == "pesquisa" and [tuple(x) for x in it] == [(FOLHA, "tif")], str([dict(x) for x in it]))
+        s2 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Beto'").fetchone()
+        ver("consulta vira solicitação sem item, com o código no texto e finalidade 'outro'", s2["finalidade"] == "outro" and "Consulta aos originais: F026-P0001" in s2["detalhe"] and c.execute("SELECT COUNT(*) FROM solicitacao_item WHERE solicitacao_id=?", (s2["id"],)).fetchone()[0] == 0)
+        e1 = c.execute("SELECT * FROM erro WHERE relatado_por LIKE 'Carla%'").fetchone()
+        ver("correção vira erro (origem site) ligado à folha, com quem relatou", e1 and e1["origem"] == "site" and e1["codigo"] == FOLHA and e1["descricao"] == "a data está errada" and "carla@x.com" in e1["relatado_por"], str(dict(e1) if e1 else None))
+        s4 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Davi'").fetchone()
+        ver("correção com código que o painel não conhece vira pedido para uma pessoa ver (não se perde)", s4 and "F999-P0001" in s4["detalhe"] and c.execute("SELECT COUNT(*) FROM erro WHERE relatado_por LIKE 'Davi%'").fetchone()[0] == 0)
+        o2 = cp.coletar(c, WPF(Resp(200, pedidos)), avisar=False)
+        ver("idempotente pelo id do site: repetir a mesma resposta não duplica nada", o2["novas"] == 0 and o2["importadas"] == 0 and c.execute("SELECT COUNT(*) FROM solicitacao").fetchone()[0] == 3 and c.execute("SELECT COUNT(*) FROM erro").fetchone()[0] == 1, str(o2))
+        o3 = cp.coletar(c, WPF(RuntimeError("site fora do ar")), avisar=False)
+        ult = c.execute("SELECT erro FROM pedido_site_coleta ORDER BY id DESC LIMIT 1").fetchone()[0]
+        ver("site fora do ar: a falha é registrada e a coleta NÃO levanta", o3["erro"] == "site fora do ar" and ult == "site fora do ar", str(o3))
+        o4 = cp.coletar(c, WPF(Resp(404, [])), avisar=False)
+        ver("rota ausente no site: mensagem clara, sem derrubar", "ainda não tem a rota" in (o4["erro"] or ""), str(o4))
+        c.execute("INSERT INTO pedido_site (site_id, tipo, codigo, payload) VALUES (600,'alta-resolucao','x','{ruim')"); c.commit()
+        o5 = cp.coletar(c, WPF(Resp(200, [{"id": 700, "tipo": "alta-resolucao", "codigo": "F026-P0001", "nome": "Eva", "email": "eva@x.com", "finalidade": "familia", "mensagem": ""}])), avisar=False)
+        ver("um pedido com payload quebrado fica 'falhou' e não impede os outros", o5["importadas"] == 1 and c.execute("SELECT situacao FROM pedido_site WHERE site_id=600").fetchone()[0] == "falhou" and c.execute("SELECT COUNT(*) FROM solicitacao WHERE solicitante='Eva'").fetchone()[0] == 1, str(o5))
+        st = cp.status(c)
+        ver("status: minutos, última coleta e pendentes", st["minutos"] == 10 and st["ultima"] is not None and st["pendentes"] == 1 and st["importados"] == 5, str(st))
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='site.coleta_pedidos_min'"); c.commit()
+        ver("site.coleta_pedidos_min = 0 desliga", cp._minutos(c) == 0)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.post("/api/pedidos/coletar")
+        ver("POST /api/pedidos/coletar (admin) responde mesmo sem o site configurado (erro registrado)", r.status_code == 200 and r.json()["erro"], r.text[:160])
+        ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp014_redir":
+        init_db(); aplicar_migracoes()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, redir_site
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F014','Fundo 14','F14',1)")
+        for n in (4, 9): c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F014',?)", (n,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tainacan_item_id) VALUES ('F014-P0009','F014',9,'Casa Safra, Santos',1960,'Santos',7000)")
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (1,'x','f014-p0004-casa-safra','https://camp.arq.br/acervo/projetos/f014-p0004-casa-safra/','publish','F014-P0004')")
+        redir_site.registrar(c, "F014-P0004", "F014-P0006", "projeto", "teste", "t"); redir_site.registrar(c, "F014-P0006", "F014-P0009", "projeto", "teste", "t"); c.commit()
+        pend = redir_site.pendentes(c)
+        ver("cadeias resolvidas: A→B e B→C viram A→C e B→C", sorted((x["antigo"], x["novo"]) for x in pend) == [("F014-P0004", "F014-P0009"), ("F014-P0006", "F014-P0009")], str(pend))
+        enviados = []
+        class WPF:
+            def __init__(s, erros=None, quebra=None): s.erros, s.quebra = erros, quebra
+            def enviar_redirecionamentos(s, itens):
+                if s.quebra: raise RuntimeError(s.quebra)
+                enviados.append(itens); return {"ok": True, "criados": len(itens), "erros": s.erros or []}
+        o = redir_site.enviar_pendentes(c, WPF(quebra="site fora do ar"))
+        ver("site fora do ar: nada se perde, fica na fila com o erro e a tentativa, e NÃO levanta", o["erro"] == "site fora do ar" and c.execute("SELECT COUNT(*) FROM redirecionamento WHERE aplicado_no_site=0 AND tentativas=1 AND ultimo_erro='site fora do ar'").fetchone()[0] == 1 and o["sem_url"] == 1, str(o))
+        o = redir_site.enviar_pendentes(c, WPF())
+        itens = enviados[0] if enviados else []
+        por = {i["codigo_antigo"]: i for i in itens}
+        ver("envia caminhos do site: o antigo vem do espelho, o novo da rota pública presumida (sem cidade/UF no slug)", por.get("F014-P0004", {}).get("antigo") == "/acervo/projetos/f014-p0004-casa-safra/" and por["F014-P0004"]["novo"] == "/acervo/projetos/f014-p0009-casa-safra/" and por["F014-P0004"]["tipo"] == 301, str(itens))
+        ver("a chave do segundo (B sem endereço conhecido, nem confirmado) vira pendência, não é enviada", o["sem_url"] == 1 and "F014-P0006" not in por and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE campo='pendente_redirecionamento' AND resolvida=0").fetchone()[0] == 1, str(o))
+        ver("o enviado fica marcado aplicado_no_site=1 e não é enviado de novo", c.execute("SELECT aplicado_no_site FROM redirecionamento WHERE codigo_antigo='F014-P0004'").fetchone()[0] == 1 and redir_site.enviar_pendentes(c, WPF())["enviados"] == 0)
+        c.execute("UPDATE projeto SET url_publica_confirmada='https://camp.arq.br/acervo/projetos/f014-p0006-casa-safra/' WHERE codigo='F014-P0009'"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("com url_publica_confirmada (que traz o código antigo) o redirecionamento sai", o["enviados"] == 1 and enviados[-1][0]["antigo"] == "/acervo/projetos/f014-p0006-casa-safra/", str(enviados[-1]))
+        # item: precisa do endereço antigo no espelho
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id) VALUES ('F014-P0009-1960-S08-D00001','F014-P0009','S01',1,'importado',55)")
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,codigo_detectado) VALUES (55,8013,'publish','t','planta-f014-p0009-1960-s07-d00001','https://camp.arq.br/acervo/documentos/planta-f014-p0009-1960-s07-d00001/','F014-P0009-1960-S07-D00001')")
+        redir_site.registrar(c, "F014-P0009-1960-S07-D00001", "F014-P0009-1960-S08-D00001", "item", "série", "t"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("folha: sem o endereço NOVO no espelho ainda, não envia e registra pendência (espera a sincronização)", o["enviados"] == 0 and o["sem_url"] == 1, str(o))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,codigo_detectado) VALUES (56,8013,'publish','t','planta-f014-p0009-1960-s08-d00001','https://camp.arq.br/acervo/documentos/planta-f014-p0009-1960-s08-d00001/','F014-P0009-1960-S08-D00001')"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF(erros=[{"indice": 0, "motivo": "recusado"}]))
+        ver("o site recusa um item (erros[indice]): continua na fila com o motivo", o["falhas"] == 1 and c.execute("SELECT ultimo_erro, aplicado_no_site FROM redirecionamento WHERE codigo_antigo='F014-P0009-1960-S07-D00001'").fetchone()[:] == ("recusado", 0), str(o))
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("na volta seguinte (reenvio) a folha entra: caminhos /acervo/documentos/…", o["enviados"] == 1 and enviados[-1][0]["novo"] == "/acervo/documentos/planta-f014-p0009-1960-s08-d00001/", str(enviados[-1]))
+        redir_site.registrar(c, "F014-P0009-1960-S07-D00099", "F014-P0009-1960-S08-D00099", "item", "série", "t"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("o que nunca esteve no site (nenhum registro) não gera pendência: marcado sem_site", o["sem_url"] == 0 and c.execute("SELECT sem_site FROM redirecionamento WHERE codigo_antigo='F014-P0009-1960-S07-D00099'").fetchone()[0] == 1 and redir_site.status(c)["pendentes"] == 0, str(redir_site.status(c)))
+        # rotas: recodificar com o site fora (sem credencial) continua 200 e deixa a fila
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F014-P0004','F014',4,'Outro',1970,7004)"); c.commit()
+        r = x.post("/api/projetos/F014-P0004/recodificar", json={"novo": "F014-P0010", "motivo": "teste"})
+        ver("recodificar responde 200 mesmo com o site indisponível (o envio é em segundo plano e fica na fila)", r.status_code == 200 and c.execute("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo='F014-P0004' AND codigo_novo='F014-P0010' AND aplicado_no_site=0").fetchone()[0] == 1, r.text[:200])
+        j = x.get("/api/site/redirecionamentos").json()
+        ver("GET /api/site/redirecionamentos: totais, pendentes e com erro", j["total"] >= 4 and "pendentes" in j and "com_erro" in j, str(j))
+        r = x.post("/api/projetos/F014-P0010/mesclar-em", json={"destino": "F014-P0009", "motivo": "duplicado"})
+        ver("mesclar projetos registra o redirecionamento do projeto de origem para o destino", r.status_code == 200 and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F014-P0010'").fetchone()[0] == "F014-P0009" and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F014-P0004'").fetchone()[0] == "F014-P0009", r.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp015_fundo_site":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, publicador, fundo_site
+        from app.publicacao import condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id,procedencia,data_inicio,data_fim) VALUES ('F077','Fundo Hub','FHB',1,8077,'Doação da família',1950,1980)")
+        aid = c.execute("INSERT INTO agente (tipo, forma_autorizada, historia, fonte_historia, tainacan_term_id) VALUES ('pessoa','Zé Arquiteto','Nasceu em 1920.','Entrevista, 2020',9077)").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F077',?,'produtor')", (aid,))
+        c.execute("INSERT INTO agente_retrato (agente_id, imagem, tipo, atualizado_por) VALUES (?,?,'image/jpeg','t')", (aid, b"\xff\xd8\xff\xe0fake"))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F077',1)")
+        c.execute("INSERT INTO wp_taxonomia (id, nome, slug) VALUES (11,'Fundos','fundos'),(12,'Arquitetos','arquitetos')")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F077-P0001','F077',1,'Casa',1960)"); c.commit()
+        chamadas = []
+        class WPF:
+            def gravar_hub(s, termo, meta): chamadas.append((termo, dict(meta))); return {"ok": True, "page_id": 5}
+            def upload_media(s, caminho, titulo="", nome=None): return {"id": 7777, "source_url": "http://x/r.jpg"}
+            def criar_termo(s, *a, **k): return {"id": 1}
+        publicador.WP = WPF
+        d0 = fundo_site.divergencia(c, "F077")
+        ver("antes do primeiro envio: nunca enviado e com campos pendentes", d0["nunca_enviado"] and d0["pendente"] and {m["campo"] for m in d0["mudancas"]} >= {"_camp_bio", "_camp_bio_fontes", "_camp_foto_id", "_camp_acervo_procedencia"}, str(d0))
+        r = fundo_site.enviar_fundo("F077", "teste")
+        hub_fundo = next((m for t, m in chamadas if "_camp_acervo_procedencia" in m), {})
+        hub_agente = next((m for t, m in chamadas if "_camp_bio" in m), {})
+        ver("Enviar fundo ao site: manda os campos do hub, a biografia, as fontes e a foto (id do anexo)", r["ok"] and hub_fundo.get("_camp_acervo_procedencia") == "Doação da família" and hub_agente.get("_camp_bio") == "Nasceu em 1920." and hub_agente.get("_camp_bio_fontes") == "Entrevista, 2020" and hub_agente.get("_camp_foto_id") == 7777, str(chamadas))
+        ver("campos VAZIOS não vão (o site ignora vazio e não se quer sobrescrever texto escrito à mão)", all(v not in ("", None) for _t, m in chamadas for v in m.values()), str(chamadas))
+        d1 = fundo_site.divergencia(c, "F077")
+        ver("depois de enviar: em dia (sem divergência)", not d1["pendente"] and d1["mudancas"] == [] and d1["enviado_em"], str(d1))
+        c.execute("UPDATE fundo SET procedencia='Compra em 1990' WHERE codigo='F077'"); c.execute("UPDATE agente SET historia=NULL WHERE id=?", (aid,)); c.commit()
+        d2 = fundo_site.divergencia(c, "F077")
+        tipos = {m["campo"]: m["tipo"] for m in d2["mudancas"]}
+        ver("divergência painel × site: procedência mudou, biografia saiu", d2["pendente"] and tipos.get("_camp_acervo_procedencia") == "mudou" and tipos.get("_camp_bio") == "saiu", str(d2))
+        # LIMPAR
+        chamadas.clear()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        x.delete(f"/api/agentes/{aid}/biografia")
+        ver("apagar a biografia manda '__limpar__' (e não vazio) para bio e fontes", chamadas and chamadas[-1][1] == {"_camp_bio": "__limpar__", "_camp_bio_fontes": "__limpar__"}, str(chamadas))
+        chamadas.clear(); x.delete(f"/api/agentes/{aid}/retrato")
+        ver("remover a foto manda '__limpar__' para _camp_foto_id", chamadas and chamadas[-1][1] == {"_camp_foto_id": "__limpar__"}, str(chamadas))
+        chamadas.clear(); x.patch(f"/api/agentes/{aid}", json={"historia": "Texto novo", "fonte_historia": "Livro X"})
+        chamadas.clear(); x.patch(f"/api/agentes/{aid}", json={"historia": "", "fonte_historia": ""})
+        ver("esvaziar a biografia no editor também apaga no site", chamadas and chamadas[-1][1].get("_camp_bio") == "__limpar__", str(chamadas))
+        # página do arquiteto
+        pg0 = fundo_site.pagina_arquiteto(c, "F077")
+        ver("sem a página no espelho: não existe nem é pública", not pg0["existe"] and not pg0["publica"], str(pg0))
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status) VALUES (3,'Zé','ze-arquiteto','https://camp.arq.br/acervo/arquitetos/ze-arquiteto/','draft')"); c.commit()
+        pg1 = fundo_site.pagina_arquiteto(c, "F077")
+        ver("página em rascunho: existe, mas não é pública", pg1["existe"] and not pg1["publica"] and pg1["status"] == "draft", str(pg1))
+        p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F077-P0001'").fetchone()
+        conds = {k["id"]: k for k in condicoes_projeto(c, p1)["condicoes"]}
+        ver("o plano de publicação AVISA (sem bloquear) que o fundo não tem página pública do arquiteto", "pagina_arquiteto" in conds and conds["pagina_arquiteto"]["bloqueia"] is False and "F077" in conds["pagina_arquiteto"]["texto"], str(conds.get("pagina_arquiteto")))
+        c.execute("UPDATE wp_pagina SET status='publish' WHERE id=3"); c.commit()
+        ver("com a página pública o aviso some", "pagina_arquiteto" not in {k["id"] for k in condicoes_projeto(c, p1)["condicoes"]})
+        # rotas
+        st = x.get("/api/fundos/F077/site-status").json()
+        ver("GET /api/fundos/{c}/site-status traz no_site, página e divergência", st["no_site"] and st["pagina"]["publica"] and "divergencia" in st, str(st)[:200])
+        chamadas.clear(); r = x.post("/api/fundos/F077/enviar-ao-site")
+        ver("POST /api/fundos/{c}/enviar-ao-site (admin) envia e responde com a mensagem", r.status_code == 200 and r.json()["ok"] and chamadas, r.text[:200])
+        class WPQ(WPF):
+            def gravar_hub(s, termo, meta): raise RuntimeError("site fora do ar")
+        publicador.WP = WPQ
+        r = x.post("/api/fundos/F077/enviar-ao-site")
+        ver("site fora do ar: 502 com o motivo, e o painel continua intacto", r.status_code == 502 and "site fora do ar" in r.text and c.execute("SELECT procedencia FROM fundo WHERE codigo='F077'").fetchone()[0] == "Compra em 1990", r.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp017_eventos":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil, uuid as _u
+        from pathlib import Path as _P
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, estacao_eventos as ee
+        from app.importador_lote import importar_lote
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        lan, fora = com_ip("192.168.15.43"), com_ip("8.8.8.8")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)"); c.commit()
+        k1 = str(_u.uuid5(_u.NAMESPACE_URL, "F026-P0001|enviado|2026-10-15T09:00:00"))
+        corpo = {"chave": k1, "estacao_id": "WIN-01", "tipo_estacao": "contex", "operador": "Rafa", "projeto_codigo": "F026-P0001", "evento": "enviado", "total_arquivos": 10, "pasta_entrada": "100 - Scanners/Contex/F026-P0001", "sha256_manifesto": "ab" * 32}
+        r = lan.post("/api/estacoes/eventos", json=corpo)
+        ver("evento 'enviado' da estação é aceito (rede local)", r.status_code == 200 and r.json()["ok"] and not r.json()["duplicado"], r.text[:160])
+        r2 = lan.post("/api/estacoes/eventos", json=corpo)
+        ver("idempotente pela chave: repetir devolve duplicado e não grava de novo", r2.status_code == 200 and r2.json()["duplicado"] and c.execute("SELECT COUNT(*) FROM estacao_evento").fetchone()[0] == 1, r2.text[:160])
+        ver("grava no histórico do projeto (evento) e na tabela estacao_evento", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo='F026-P0001' AND tipo='estacao_enviado'").fetchone()[0] == 1 and c.execute("SELECT estacao_id, operador, total_arquivos FROM estacao_evento").fetchone()[:] == ("win-01", "Rafa", 10))
+        r = lan.post("/api/estacoes/eventos", json={"chave": str(_u.uuid4()), "estacao_id": "mac-01", "tipo_estacao": "foto", "projeto_codigo": "F026-P0001", "evento": "capturado", "total_arquivos": None, "sha256_manifesto": None})
+        ver("'capturado' aceita sha256_manifesto = null e total_arquivos = null (a estação não pode ser descartada)", r.status_code == 200 and c.execute("SELECT sha256_manifesto FROM estacao_evento WHERE evento='capturado'").fetchone()[0] is None, r.text[:160])
+        ver("evento inválido: 400; sem chave: 400", lan.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4()), "evento": "xyz"}).status_code == 400 and lan.post("/api/estacoes/eventos", json={"evento": "enviado"}).status_code == 400)
+        ver("IP público é recusado (403), como nas outras rotas das estações", fora.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4())}).status_code == 403)
+        # token ligado: header X-Camp-Token
+        c.execute("UPDATE configuracao SET valor='segredo' WHERE chave='estacao.token'"); c.commit()
+        ver("com token ligado: sem token 401; com X-Camp-Token 200", lan.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4())}).status_code == 401
+            and lan.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4())}, headers={"X-Camp-Token": "segredo"}).status_code == 200)
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='estacao.token'"); c.commit()
+        # sem processar
+        c.execute("DELETE FROM estacao_evento"); c.commit()
+        def ev(chave, quando, total=10, proj="F026-P0001"):
+            c.execute("INSERT INTO estacao_evento (chave, estacao_id, projeto_codigo, evento, total_arquivos, recebido_em) VALUES (?,?,?,'enviado',?,datetime('now',?))", (chave, "win-01", proj, total, quando))
+        ev("velho-0001", "-2 hours"); ev("recente-1", "-20 minutes"); c.commit()
+        sp = ee.sem_processar(c)
+        ver("lote enviado há mais de 1 h e sem lote no painel aparece; o de 20 minutos não", [x["id"] for x in sp] and len(sp) == 1 and sp[0]["projeto_codigo"] == "F026-P0001" and sp[0]["horas"] >= 1.9, str(sp))
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        ver("depois que o lote existe no painel, deixa de ser 'sem processar'", ee.sem_processar(c) == [])
+        # conferência de contagem
+        c.execute("DELETE FROM lista_processamento WHERE id=?", (lote,)); c.execute("DELETE FROM estacao_evento"); ev("mil-0001", "-3 hours", total=10); c.commit()
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        r = importar_lote(c, lote, "teste@camp"); c.commit()
+        e = c.execute("SELECT divergente, folhas_entregues, lote_id FROM estacao_evento WHERE chave='mil-0001'").fetchone()
+        ver("importar o lote compara enviados (10) × folhas que chegaram: chegaram menos → aviso", r.get("contagem_estacao", {}).get("divergente") is True and e["divergente"] == 1 and e["lote_id"] == lote, str((r.get("contagem_estacao"), dict(e))))
+        av = c.execute("SELECT gravidade, origem FROM erro WHERE chave='estacao_evento:mil-0001'").fetchone()
+        ver("o aviso é gravidade 'aviso' (não bloqueia)", av is not None and av["gravidade"] == "aviso", str(dict(av) if av else None))
+        n = r["criadas"] + r["atualizadas"] + len(r["retirados"])
+        c.execute("DELETE FROM estacao_evento"); ev("mil-0002", "-3 hours", total=1); c.commit()
+        cf = ee.conferir_contagem(c, "F026-P0001", lote, n)
+        ver("total menor que as folhas (Windows com manifesto mesclado de lote anterior) NÃO é divergência", cf and cf["divergente"] is False and c.execute("SELECT COUNT(*) FROM erro WHERE chave='estacao_evento:mil-0002'").fetchone()[0] == 0, str(cf))
+        c.execute("DELETE FROM estacao_evento"); ev("mil-0003", "-3 hours", total=None); c.commit()
+        cf = ee.conferir_contagem(c, "F026-P0001", lote, n)
+        ver("total desconhecido (null) nunca diverge", cf and cf["divergente"] is False, str(cf))
+        # rotas para pessoas
+        c.execute("DELETE FROM estacao_evento"); c.execute("UPDATE lista_processamento SET descartado_em=datetime('now')"); ev("mil-0004", "-5 hours"); c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        j = x.get("/api/estacoes/eventos/pendentes").json()
+        ver("GET /api/estacoes/eventos/pendentes lista o lote parado", len(j["itens"]) == 1 and j["limite_horas"] == 1, str(j))
+        tj = _j.dumps(x.get("/api/painel").json().get("tarefas"), ensure_ascii=False)
+        ver("o painel inicial mostra 'Lote enviado pela estação e sem processar'", "sem processar" in tj and "F026-P0001" in tj, tj[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp051_tipos":
+        init_db(); aplicar_migracoes()
+        import json as _j, subprocess as _sp, sys as _sys, os as _os, csv as _csv, tempfile
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app.importador_lote import tipo_do_painel
+        from app import amostra_lotes as al
+        c = connect()
+        nomes = [r[0] for r in c.execute("SELECT nome FROM tipo_documento")]
+        ver("vocabulário: 'Elevação/Fachada' existe e 'Elevação' e 'Fachada' separados não", "Elevação/Fachada" in nomes and "Elevação" not in nomes and "Fachada" not in nomes, str(nomes))
+        T = {n.lower(): n for n in nomes}
+        casos = [("Elevação", "Elevação/Fachada"), ("Fachada", "Elevação/Fachada"), ("Elevação/Fachada", "Elevação/Fachada"), ("elevacao", "Elevação/Fachada"), ("Planta", "Planta"),
+                 ("Elevação / Fachada", "Elevação/Fachada"), ("Planta / Elevação/Fachada", None), ("Fachada / Elevação/Fachada", "Elevação/Fachada"), ("Planta / Planta", "Planta"), ("", None), (None, None), ("Coisa", None)]
+        ruins = [(a, tipo_do_painel(a, T), b) for a, b in casos if tipo_do_painel(a, T) != b]
+        ver("o tipo lido vira o tipo unificado; composto por ' / ' de tipos diferentes fica sem tipo (uma pessoa escolhe)", not ruins, str(ruins))
+        # migração sobre dados antigos: itens com 'Elevação' e 'Fachada' viram o unificado
+        c.execute("PRAGMA foreign_keys=OFF")
+        c.execute("INSERT OR IGNORE INTO tipo_documento (nome) VALUES ('Elevação'),('Fachada')")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        for n, t in ((1, "Elevação"), (2, "Fachada"), (3, "Planta")):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tipo_documento,tipo_lido) VALUES (?,?,'S01',?,'importado',?,?)", (f"F026-P0001-1972-S01-D0000{n}", "F026-P0001", n, t, t))
+        c.commit()
+        sql_mig = (_os.path.dirname(_os.path.abspath(__file__)) + "/../db/migrations/129_elevacao_fachada.sql")
+        c.executescript(open(sql_mig, encoding="utf-8").read()); c.commit()
+        r = {row[0]: row[1] for row in c.execute("SELECT codigo, tipo_documento FROM item ORDER BY codigo")}
+        ver("a migração junta Elevação e Fachada nos itens (Planta fica) e tira os dois valores antigos da tabela", list(r.values()) == ["Elevação/Fachada", "Elevação/Fachada", "Planta"] and c.execute("SELECT COUNT(*) FROM tipo_documento WHERE nome IN ('Elevação','Fachada')").fetchone()[0] == 0, str(r))
+        ver("a migração NÃO mexe no tipo lido pelo CAMP Vision (registro do que ele leu)", {row[0] for row in c.execute("SELECT tipo_lido FROM item")} == {"Elevação", "Fachada", "Planta"})
+        c.execute("PRAGMA foreign_keys=ON")
+        # amostra dos lotes inferidos
+        for i, fundo in enumerate(("F026", "F026", "F027")):
+            pass
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F027','Outro','OUT',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F027',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F027-P0001','F027',1,'Casa',1980)")
+        ids = []
+        for k in range(30):
+            proj, fundo = ("F026-P0001", "F026") if k < 20 else ("F027-P0001", "F027")
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES (?,?,?,'revisao',?)", (f"Lote {k}", proj, "/x", _j.dumps({"sugestoes_cv2": {"programa_sugerido": "Residência"}}))).lastrowid
+            ids.append(lid)
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Lote normal','F026-P0001','/x','revisao','{}')")
+        c.commit()
+        lotes = al.lotes_inferidos(c)
+        ver("lotes inferidos: só os que o CAMP Vision sugeriu dados do projeto (30 de 31)", len(lotes) == 30, str(len(lotes)))
+        plano = al.planejar(lotes)
+        por = {}
+        for l in plano: por[l["fundo"]] = por.get(l["fundo"], 0) + 1
+        ver("amostra de 10% ESTRATIFICADA por fundo: 20 lotes → 2, 10 lotes → 1", por == {"F026": 2, "F027": 1}, str(por))
+        ver("o sorteio é reprodutível pela semente e muda com outra semente", [l["lote_id"] for l in al.planejar(lotes)] == [l["lote_id"] for l in plano] and [l["lote_id"] for l in al.planejar(lotes, semente="outra")] != [l["lote_id"] for l in plano])
+        out = _sp.run([_sys.executable, str(_os.path.dirname(_os.path.abspath(__file__)) + "/../scripts/amostrar_lotes_inferidos.py")], capture_output=True, text=True, env=dict(_os.environ))
+        ver("o script sem opções só SIMULA: mostra a amostra e não grava", out.returncode == 0 and "SIMULAÇÃO" in out.stdout and c.execute("SELECT COUNT(*) FROM amostra_lote_inferido").fetchone()[0] == 0, (out.stdout + out.stderr)[-300:])
+        r1 = al.sortear(c, lotes); r2 = al.sortear(c, lotes)
+        ver("sortear grava a amostra (3 lotes) e repetir não sorteia de novo (idempotente)", r1["novos"] == 3 and r2["novos"] == 0 and r2["total_amostra"] == 3, str((r1, r2)))
+        ver("sem decisões: 'faltam 3' e nada é liberado", al.resumo(c, 30)["faltam"] == 3 and "Faltam 3" in al.resumo(c, 30)["conclusao"])
+        amostra = [r[0] for r in c.execute("SELECT lote_id FROM amostra_lote_inferido ORDER BY lote_id")]
+        try: al.decidir(c, ids[0] if ids[0] not in amostra else -1, "aprovado", "", "rafa@camp.arq.br"); fora = False
+        except ValueError: fora = True
+        ver("decidir lote fora da amostra é recusado", fora)
+        try: al.decidir(c, amostra[0], "reprovado", "", "rafa@camp.arq.br"); sem_motivo = False
+        except ValueError: sem_motivo = True
+        ver("reprovar sem motivo é recusado", sem_motivo)
+        al.decidir(c, amostra[0], "aprovado", "ok", "rafa@camp.arq.br"); al.decidir(c, amostra[1], "reprovado", "programa errado", "rafa@camp.arq.br")
+        rs = al.resumo(c, 30)
+        ver("com um reprovado: a conclusão manda NÃO liberar o resto", rs["reprovados"] == 1 and "NÃO liberar" in rs["conclusao"], str(rs))
+        al.decidir(c, amostra[1], "aprovado", "revisto", "rafa@camp.arq.br"); al.decidir(c, amostra[2], "aprovado", "ok", "rafa@camp.arq.br")
+        rs = al.resumo(c, 30)
+        ver("toda a amostra aprovada: diz que quem libera é o Rafa (o roteiro não libera nada)", rs["faltam"] == 0 and rs["reprovados"] == 0 and "Rafa" in rs["conclusao"] and "não libera nada" in rs["conclusao"], str(rs))
+        ver("cada decisão fica no histórico (evento)", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='amostra_inferido_decisao'").fetchone()[0] == 4)
+        ver("nenhum lote foi alterado (etapa e aprovação intactas)", c.execute("SELECT COUNT(*) FROM lista_processamento WHERE etapa<>'revisao' OR aprovado_em IS NOT NULL").fetchone()[0] == 0)
+        arq = tempfile.mktemp(suffix=".csv"); n = al.escrever_csv(c, lotes, arq)
+        linhas = list(_csv.reader(open(arq, encoding="utf-8-sig"), delimiter=";"))
+        ver("relatório CSV: cabeçalho + 3 linhas da amostra, com a decisão", n == 3 and len(linhas) == 4 and linhas[0][8] == "decisao" and {l[8] for l in linhas[1:]} == {"aprovado"}, str(linhas[:2]))
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp008_reconciliacao":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil, tempfile
+        from datetime import datetime as _dt
+        from pathlib import Path as _P
+        from fastapi import HTTPException
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import reconciliacao as rc_
+        c = connect()
+        ver("a reconciliação noturna nasce ligada às 3h", rc_.hora_configurada(c) == 3)
+        dia = lambda h, d=15: _dt(2026, 10, d, h, 0, 0)  # noqa: E731
+        ver("antes das 3h não é devida; às 3h é", not rc_.devido(c, dia(2)) and rc_.devido(c, dia(3)) and rc_.devido(c, dia(9)))
+        r = rc_.rodar(c, dia(3), varrer=lambda: {"novas": 2, "atualizadas": 1, "com_erro": 0, "processando": 0})
+        ver("rodar grava o resultado (evento) e a data; no mesmo dia não é devida de novo", r["ok"] and r["novas"] == 2 and not rc_.devido(c, dia(4)) and rc_.devido(c, dia(3, 16))
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='qnap_reconciliacao'").fetchone()[0] == 1, str(r))
+        def quebra(): raise HTTPException(503, "Pasta final do QNAP não montada")
+        c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.reconciliacao_ultima','qnap.reconciliacao_tentativa')"); c.commit()
+        r = rc_.rodar(c, dia(3), varrer=quebra)
+        ver("QNAP fora do ar: não levanta, registra o erro, NÃO marca o dia como feito", not r["ok"] and "não montada" in r["erro"] and rc_.hora_configurada(c) == 3 and not c.execute("SELECT valor FROM configuracao WHERE chave='qnap.reconciliacao_ultima'").fetchone()[0], str(r))
+        ver("depois de uma falha só tenta de novo daqui a 1 hora", not rc_.devido(c, dia(3)) and rc_.devido(c, _dt(2026, 10, 15, 4, 30)))
+        c.execute("UPDATE configuracao SET valor='-1' WHERE chave='qnap.reconciliacao_hora'"); c.commit()
+        ver("-1 desliga", not rc_.devido(c, dia(12)))
+        c.execute("UPDATE configuracao SET valor='3' WHERE chave='qnap.reconciliacao_hora'"); c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.reconciliacao_ultima','qnap.reconciliacao_tentativa')"); c.commit()
+        # com a varredura de verdade: um lote final na raiz que o aviso do CV2 não trouxe volta para a Fila e o erros.json entra
+        raiz = _P(tempfile.mkdtemp()); pasta = raiz / "F026 - Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"
+        shutil.copytree(_P(__file__).parent / "fixtures" / "campvision" / "lote_normal", pasta)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave IN ('qnap.prontos_raiz','qnap.raiz')", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)"); c.commit()
+        r = rc_.rodar(c, dia(3))
+        ver("reconciliação real: o lote que faltava na Fila entra", r["ok"] and r["novas"] == 1 and c.execute("SELECT COUNT(*) FROM lista_processamento WHERE projeto_codigo='F026-P0001'").fetchone()[0] == 1, str(r))
+        ver("e o erros.json do CAMP Vision desse lote entra em Erros relatados", c.execute("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%'").fetchone()[0] >= 1)
+        c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.reconciliacao_ultima','qnap.reconciliacao_tentativa')"); c.commit()
+        r = rc_.rodar(c, dia(3))
+        ver("rodar de novo não duplica a Fila (idempotente)", r["ok"] and r["novas"] == 0 and c.execute("SELECT COUNT(*) FROM lista_processamento WHERE projeto_codigo='F026-P0001'").fetchone()[0] == 1, str(r))
+        c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
         init_db(); aplicar_migracoes()
@@ -686,6 +1254,8 @@ def filho(modo):
         ver("QNAP: pasta que não existe = não conectado (nao_existe)", _estado_qnap(tmp / "nada") == (False, "nao_existe"))
         ver("QNAP: pasta VAZIA criada à mão NÃO conta como conectada (vazia)", _estado_qnap(vazia) == (False, "vazia"))
         ver("QNAP: pasta com conteúdo conta como conectada", _estado_qnap(cheia) == (True, None))
+        # isola do servidor real: a raiz vem de CAMP_QNAP_ROOT, que no servidor aponta para o QNAP montado
+        _c = connect(); _c.execute("INSERT INTO configuracao(chave,valor) VALUES('qnap.raiz',?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor", (str(tmp / "nada"),)); _c.commit(); _c.close()
         est = op.get("/api/estacoes").json()["qnap"]
         ver("/api/estacoes devolve montado e o motivo", est["montado"] is False and est["motivo"] in ("nao_existe", "vazia"), str(est.get("motivo")))
         pub = op.get("/api/estacoes").json().get("backup", {})
@@ -798,7 +1368,7 @@ def filho(modo):
         ver("operador VÊ o checklist (leitura)", r.status_code == 200 and g["pode_agir"] is False, f"HTTP {r.status_code}")
         ver("checklist mostra o que falta: direitos e autorização (nada mais)", ids_falta == {"direitos", "autorizado"}, str(ids_falta))
         ver("cada pendência traz o botão que resolve", {x["acao"]["tipo"] for x in g["condicoes"] if x["bloqueia"] and not x["ok"]} == {"direitos", "autorizar"})
-        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"] and not x["id"].startswith("q_")} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
+        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"] and not x["id"].startswith("q_") and x["id"] != "pagina_arquiteto"} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
         # ---- publicar bloqueado: TODAS as razões de uma vez ----
         r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"})
         ver("publicar bloqueado devolve TODAS as pendências (400)", r.status_code == 400 and "Direitos do fundo" in err(r) and "não foi autorizado" in err(r), err(r)[:140])
@@ -1847,15 +2417,15 @@ def filho(modo):
         c = connect(); lot2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Lote autoria divergente','F026-P0001',?)", (str(pr2),)).lastrowid; c.commit(); c.close()
         j4 = op.post(f"/api/lotes/{lot2}/importar").json()
         ver("autoria divergente: as folhas NÃO entram; ficam listadas como retiradas, com o motivo", j4["criadas"] == 0 and len(j4["retirados"]) == 2 and any("autoria divergente" in x["bloqueios"] for x in j4["retirados"]) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, str(j4)[:200])
-        # CAMP-008: o erros.json desse lote traz 2 erros 'bloqueia' (autoria divergente): entram em Erros relatados e travam o envio ao site até alguém resolver
-        ver("erros.json do lote com autoria divergente: 2 erros bloqueantes entram em Erros relatados (origem CAMP Vision)", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia' AND situacao='aberto'") == 2)
-        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
+        # CAMP-008/046: o erros.json desse lote traz 2 erros 'bloqueia' de autoria divergente: entram em Erros relatados, mas como 'corrigir' (contrato 2.4: autoria é aviso, não trava)
+        ver("erros.json do lote com autoria divergente: 2 erros entram em Erros relatados (origem CAMP Vision) como 'corrigir', sem bloqueante", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND categoria='autoria_divergente' AND gravidade='corrigir' AND situacao='aberto'") == 2 and sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'") == 0, str([tuple(r_) for r_ in k.execute("SELECT gravidade, situacao, categoria FROM erro WHERE chave LIKE 'campvision:erros:%'").fetchall()]))
+        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%' AND categoria='autoria_divergente'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
         # ---------- pacote com folha sem pendência: conferir em lote só o que é seguro ----------
         montar(proj, "lote_normal"); pj = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(pj.read_text(encoding="utf-8"))
         d3 = next(x for x in pk["documentos"] if x["codigo"] == D(3)); d3.update({"orientacao_incerta": False, "titulo": "Elevação sul", "tipo_de_desenho": "Elevação", "bloqueios": [], "publicavel": True})
         pj.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
         k.execute("UPDATE item SET revisao='pendente', revisado_por=NULL, revisado_em=NULL WHERE lote_id=?", (lote,)); k.commit(); op.post(f"/api/lotes/{lote}/importar")
-        ver("tipo lido que existe no vocabulário vira tipo do painel; título vem do pacote", sql("SELECT tipo_documento FROM item WHERE codigo=?", D(3)) == "Elevação" and sql("SELECT titulo FROM item WHERE codigo=?", D(3)) == "Elevação sul")
+        ver("tipo lido que existe no vocabulário vira tipo do painel; título vem do pacote", sql("SELECT tipo_documento FROM item WHERE codigo=?", D(3)) == "Elevação/Fachada" and sql("SELECT titulo FROM item WHERE codigo=?", D(3)) == "Elevação sul")
         cb = op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").json()
         ver("conferir em lote marca SÓ a folha sem nenhuma pendência (D3); as 2 com duplicata/sinais ficam para olho humano", cb["conferidas"] == 1 and cb["restam"] == 2 and sql("SELECT revisao FROM item WHERE codigo=?", D(3)) == "conferida" and sql("SELECT revisao FROM item WHERE codigo=?", D(1)) == "pendente", str(cb))
         rs = adm.get(f"/api/projetos/F026-P0001/revisao").json()["lotes"]; rl = next(x for x in rs if x["id"] == lote)
@@ -2755,7 +3325,7 @@ def filho(modo):
         pa = adm.get("/api/projetos/F092-P0009/publicar/plano").json(); av = {a_["id"]: a_["texto"] for a_ in pa["avisos"]}
         ver("o plano avisa do prefixo de pasta no título (e mostra como ficaria) e dos campos vazios, sem bloquear", "Edifício Jockey Club São Paulo" in av.get("titulo", "") and "T102_" in av.get("titulo", "") and "sem ano e sem cidade" in av.get("vazios", "").lower() and not any(b_["id"] in ("titulo", "vazios") for b_ in pa["bloqueios"]), str(pa["avisos"]))
         ver("os passos do plano falam a língua de quem publica (página escondida → visível para todos)", [x_["texto"] for x_ in pa["passos"]][0].startswith("Criar a página do projeto no site (ainda escondida)") and any("visíveis para todos" in x_["texto"] for x_ in pa["passos"]) and any("Marcar o projeto como liberado" in x_["texto"] for x_ in pa["passos"]), str([x_["texto"] for x_ in pa["passos"]]))
-        ver("título normal e com ano/cidade não gera aviso", adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"] == [] or all(a_["id"] == "vazios" for a_ in adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"]))
+        ver("título normal e com ano/cidade não gera aviso", adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"] == [] or all(a_["id"] in ("vazios", "pagina_arquiteto") for a_ in adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"]))
         ver("só admin inicia (operador 403, sem login 401); leitura consulta", op.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 403 and anon.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 401 and op.get(f"/api/tarefas/{tid}").status_code == 200 and adm.get("/api/tarefas/99999").status_code == 404)
         # nome do arquivo no WordPress: sempre <código>.jpg, nunca o hash do cache
         pasta = _pl.Path(tempfile.mkdtemp()); f_ = pasta / "02c3ecf8cd8f0bf43ce24c55792d6b8a82aa2d18.jpg"; f_.write_bytes(b"\xff\xd8\xff\xd9")
@@ -3016,10 +3586,10 @@ def filho(modo):
                     if x: return x
             return None
         m1 = acha(adm.get("/api/estacoes").json())
-        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == "2.2" and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
+        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == ctr.CONTRATO_PAINEL and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
         lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "3.0"})
         m2 = acha(adm.get("/api/estacoes").json())
-        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o 2.2" in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
+        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o " + ctr.CONTRATO_PAINEL in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
         # CAMP-028 (C3): detalhe.situacao aparece em Estações; detalhe enorme continua JSON válido; detalhe quebrado no banco não derruba a tela
         import json as _jh
         r = lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "processando", "detalhe": {"situacao": "copiando 12 de 40 arquivos"}})
@@ -3032,7 +3602,16 @@ def filho(modo):
         ver("detalhe gigante é reduzido e continua JSON válido (até 4000 caracteres)", r.status_code == 200 and valido, str(len(bruto or "")))
         kk.execute("UPDATE estacao_heartbeat SET detalhe='{nao e json' WHERE estacao_id=?", (http_["heartbeat"]["estacao_id"].lower(),)); kk.commit(); kk.close()
         ver("detalhe quebrado no banco não derruba GET /api/estacoes (200)", adm.get("/api/estacoes").status_code == 200)
-        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "2.2"})
+
+        # CV2 2.4: lote incompleto vai pelo heartbeat (detalhe.alerta, estado erro) e o painel mostra em Estações e na lista de pendências
+        import json as _jh2
+        r = lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "erro", "detalhe": {"situacao": "lote incompleto", "alerta": "Lote F026 sem 3 arquivos do manifesto " + "x" * 600}})
+        m4 = acha(adm.get("/api/estacoes").json())
+        ver("CV2 2.4: detalhe.alerta chega a Estações (app_alerta), truncado, e o estado 'erro' é aceito", r.status_code == 200 and bool(m4) and (m4.get("app_alerta") or "").startswith("Lote F026 sem 3") and len(m4["app_alerta"]) <= 300, str((m4 or {}).get("app_alerta"))[:80])
+        tj = adm.get("/api/painel").json()
+        ver("o alerta do CV2 entra nos problemas que bloqueiam (Precisa de atenção)", "O CAMP Vision avisou: Lote F026" in _jh2.dumps(tj.get("tarefas"), ensure_ascii=False), str(tj.get("tarefas"))[:100])
+        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "ocioso"})
+        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": ctr.CONTRATO_PAINEL})
         # CAMP-027 (lado do painel): chamada recusada por falta de token aparece como aviso na tela Estações (IP só para admin)
         ver("sem recusa por token, a tela Estações não mostra aviso", adm.get("/api/estacoes").json().get("estacoes_negadas") == [])
         kt = connect(); kt.execute("UPDATE configuracao SET valor='segredo-aviso' WHERE chave='estacao.token'"); kt.commit()
@@ -3523,7 +4102,7 @@ def filho(modo):
         c = connect()
         ss = dict(c.execute("SELECT codigo, nome FROM serie").fetchall())
         ver("S06 se chama Materiais (como no site)", ss.get("S06") == "Materiais", str(ss.get("S06")))
-        ver("S07 Redesenhos existe", ss.get("S07") == "Redesenhos", str(ss.get("S07")))
+        ver("S07 Publicações e S08 Redesenhos existem (CAMP-047)", ss.get("S07") == "Publicações" and ss.get("S08") == "Redesenhos", str((ss.get("S07"), ss.get("S08"))))
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F085','Fundo Séries','FSE',1)")
         c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F085',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F085-P0001','F085',1,'Casa Tapera',1969)")
@@ -3532,7 +4111,7 @@ def filho(modo):
         except Exception as e:  # noqa: BLE001
             ok7 = str(e)
         ver("uma folha S07 entra no banco (antes a chave estrangeira recusava)", ok7 is True, str(ok7))
-        ver("o termo 'Redesenhos' do site vira S07 (e não S01, apesar de conter 'desenho')", _serie_do_item("", {"Série": "Redesenhos"}) == "S07")
+        ver("o termo 'Redesenhos' do site vira S08 (e não S01, apesar de conter 'desenho')", _serie_do_item("", {"Série": "Redesenhos"}) == "S08")
         ver("o termo 'Materiais' do site vira S06", _serie_do_item("", {"Série": "Materiais"}) == "S06")
         c.close()
         print("\n".join(res))
@@ -3794,11 +4373,11 @@ def filho(modo):
         hub.clear()
         r = x.delete(f"/api/agentes/{aid}/biografia").json()
         c = connect(); a = c.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone()
-        ver("apagar a biografia tira o texto do painel e do site", a["historia"] is None and hub == [(8401, {"_camp_bio": "", "_camp_bio_fontes": ""})], str(hub))
+        ver("apagar a biografia tira o texto do painel e do site", a["historia"] is None and hub == [(8401, {"_camp_bio": "__limpar__", "_camp_bio_fontes": "__limpar__"})], str(hub))
         ver("o texto apagado fica na auditoria", "Xangai" in (c.execute("SELECT detalhe FROM evento WHERE tipo='biografia_apagada'").fetchone() or [""])[0]); c.close()
         hub.clear()
         r = x.delete(f"/api/agentes/{aid}/retrato").json()
-        ver("tirar o retrato apaga o _camp_foto_id do site", hub == [(8401, {"_camp_foto_id": 0})] and x.get(f"/api/agentes/{aid}/retrato").status_code == 404, str(hub))
+        ver("tirar o retrato apaga o _camp_foto_id do site", hub == [(8401, {"_camp_foto_id": "__limpar__"})] and x.get(f"/api/agentes/{aid}/retrato").status_code == 404, str(hub))
         class WPQuebrado:
             def __init__(self): raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub")
         publicador.WP = WPQuebrado
@@ -3828,8 +4407,8 @@ def filho(modo):
         x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
         from app.publicacao import condicoes_projeto
         c = connect(); p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F085-P0180'").fetchone()
-        b = next(x_ for x_ in condicoes_projeto(c, p1)["condicoes"] if x_["id"] == "bloqueios"); c.close()
-        ver("autoria divergente oferece 'Registrar coautoria/terceiros' (e não só 'Ver erros')", not b["ok"] and (b.get("acao") or {}).get("tipo") == "autoria", str(b))
+        b = next(x_ for x_ in condicoes_projeto(c, p1)["condicoes"] if x_["id"] == "autoria_nao_confirmada"); c.close()
+        ver("autoria divergente (aviso, CAMP-046) oferece 'Registrar coautoria/terceiros'", not b["ok"] and not b["bloqueia"] and (b.get("acao") or {}).get("tipo") == "autoria", str(b))
         enviados = []
         class WPFalso:
             def definir_metadado(self, iid, mid, valor): enviados.append((iid, mid, valor))
@@ -4083,10 +4662,10 @@ def filho(modo):
         pasta = _P(tempfile.mkdtemp()) / "F080-P0001 - Casa"; (pasta / "catalogacao" / "lotes").mkdir(parents=True)
         ver("sem catalogacao/lotes/*.json: sem aceite (não trava nada)", ler_aceite(pasta) is None)
         (pasta / "catalogacao" / "lotes" / "lote-1.json").write_text(_j.dumps({"aceite": {"contagem_origem_igual_saida": {"ok": True, "contagem": 14},
-            "sem_autoria_divergente": {"ok": False, "contagem": 2}, "exif_conferido": True, "publicavel": False,
+            "sem_autoria_divergente": {"ok": False, "contagem": 2}, "serie_incerta_zerada": {"ok": False}, "exif_conferido": True, "publicavel": False,
             "pendencias": ["2 folhas com autoria divergente"]}}))
         a = ler_aceite(pasta)
-        ver("lê o aceite do JSON do lote e lista os itens com ✔/✖", a and a["publicavel"] is False and [(i["chave"], i["ok"]) for i in itens_aceite(a)] == [("contagem_origem_igual_saida", True), ("sem_autoria_divergente", False), ("exif_conferido", True)], str(itens_aceite(a)))
+        ver("lê o aceite do JSON do lote e lista os itens com ✔/✖", a and a["publicavel"] is False and [(i["chave"], i["ok"]) for i in itens_aceite(a)] == [("contagem_origem_igual_saida", True), ("sem_autoria_divergente", False), ("serie_incerta_zerada", False), ("exif_conferido", True)], str(itens_aceite(a)))
         ver("o motivo vem das pendências do CV2", motivos_aceite(a) == ["2 folhas com autoria divergente"])
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F080','Fundo Aceite','FAC',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F080',1)")
@@ -4099,6 +4678,13 @@ def filho(modo):
         c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
         ver("aceite aprovado libera", ac and ac["ok"])
+        # CAMP-046 / CV2 2.4: o painel tolera as DUAS chaves de autoria (a antiga sem_autoria_divergente e a nova só com contagem)
+        ia = itens_aceite({"folhas_autoria_nao_confirmada": 3, "contagem_origem_igual_saida": {"ok": True}, "publicavel": True})
+        ver("2.4: folhas_autoria_nao_confirmada (só contagem) aparece sem ✔/✖ e com a contagem", [(i["chave"], i["ok"], i["detalhe"]) for i in ia] == [("folhas_autoria_nao_confirmada", None, 3), ("contagem_origem_igual_saida", True, None)], str(ia))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({"sem_autoria_divergente": {"ok": False, "contagem": 2}, "publicavel": False, "pendencias": ["2 folhas com autoria divergente"]}),)); c.commit()
+        ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("CV2 antigo reprovando SÓ por autoria divergente já não trava a publicação", ac and ac["ok"], str(ac))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
         # aviso de 14/10 (F009-P0060): reprovado só por "olho humano" (orientação/série incertas) → a conferência do painel resolve
         b = {"contagem_origem_igual_saida": {"ok": True}, "orientacao_incerta_zerada": {"ok": False}, "serie_incerta_zerada": {"ok": False}, "publicavel": False}
         c.execute("UPDATE lista_processamento SET aceite_json=?, aprovado_em=NULL WHERE projeto_codigo='F080-P0001'", (_j.dumps(b),)); c.commit()
@@ -4407,7 +4993,7 @@ def filho(modo):
         P1 = "F094-P0001-1970-S01-D0000"
         itens = [(f"{P1}1", "F094-P0001", "S01", 1, "Planta <térreo> & cobertura\x01", "Planta", "01/03", "1:50", 1971, f"F094/P0001/{P1}1.tif"),
                  (f"{P1}2", "F094-P0001", "S01", 2, "=SOMA(A1)", "Corte", "02/03", None, None, f"F094/P0001/{P1}2.tif"),
-                 (f"{P1}3", "F094-P0001", "S01", 3, "Fachada", "Elevação", "03/03", None, None, f"F094/P0001/{P1}3.tif"),
+                 (f"{P1}3", "F094-P0001", "S01", 3, "Fachada", "Elevação/Fachada", "03/03", None, None, f"F094/P0001/{P1}3.tif"),
                  ("F094-P0001-1970-S03-D00004", "F094-P0001", "S03", 4, "Foto da obra", "Fotografia", None, None, None, "../../fora.tif"),
                  ("F094-P0002-0000-S01-D00001", "F094-P0002", "S01", 1, "Planta escola", "Planta", None, None, None, None)]
         for it in itens:
@@ -5304,7 +5890,7 @@ def filho(modo):
         item(f"{pb}-1970-S01-D00001", pb, 1, "Planta", jpg="/a.jpg")
         item(f"{pb}-1970-S01-D00002", pb, 2, "  ")             # sem título e sem imagem
         item(f"{pb}-1970-S01-D00003", pb, 3, "Corte", jpg="/c.jpg")
-        item(f"{pb}-0000-S01-D00004", pb, 4, "Elevação", tif="/d.tif")   # código com ano 0000 = incompleto
+        item(f"{pb}-0000-S01-D00004", pb, 4, "Elevação/Fachada", tif="/d.tif")   # código com ano 0000 = incompleto
         item(f"{pc}-1980-S01-D00001", pc, 1, None)
         ag1 = c.execute("INSERT INTO agente (tipo,forma_autorizada) VALUES ('pessoa','Fulano Sem Fonte')").lastrowid
         ag2 = c.execute("INSERT INTO agente (tipo,forma_autorizada,historia,fonte_historia) VALUES ('pessoa','Ciclano Com Fonte','Nasceu.','Livro X')").lastrowid
@@ -6801,6 +7387,86 @@ else:
 print("119) Publicador: metadados por ID do plugin, pendência em vez de silêncio, 'Suporte' (CAMP-035/036/037)")
 rc, out = rodar("cp35_metadados", f"{tmp}/cp35.db")
 if rc != 0: ok(False, f"teste dos metadados do publicador não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("120) Autoria divergente vira aviso, contrato 2.4 (CAMP-046)")
+rc, out = rodar("camp046_autoria", f"{tmp}/c046.db")
+if rc != 0: ok(False, f"teste do CAMP-046 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("121) S08 Redesenhos, S07 Publicações e o roteiro de migração (CAMP-047)")
+rc, out = rodar("camp047_s08", f"{tmp}/c047.db")
+if rc != 0: ok(False, f"teste do CAMP-047 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("122) Imagem pública <= 1920 px, derivado em cache e script de reprocessamento (CAMP-048)")
+rc, out = rodar("camp048_imagem_publica", f"{tmp}/c048.db")
+if rc != 0: ok(False, f"teste do CAMP-048 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("123) LGPD no painel: guarda de 24 meses (simular por padrão) e apagar pessoa chamando o site (CAMP-050)")
+rc, out = rodar("camp050_lgpd", f"{tmp}/c050.db")
+if rc != 0: ok(False, f"teste do CAMP-050 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("124) Coletor de pedidos e correções do site a cada 10 minutos (CAMP-013)")
+rc, out = rodar("camp013_coletor", f"{tmp}/c013.db")
+if rc != 0: ok(False, f"teste do CAMP-013 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("125) Redirecionamentos enviados ao site, com fila, cadeias resolvidas e reenvio (CAMP-014)")
+rc, out = rodar("camp014_redir", f"{tmp}/c014.db")
+if rc != 0: ok(False, f"teste do CAMP-014 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("126) Enviar fundo ao site: hub com bio/fontes/foto, '__limpar__', divergência e página do arquiteto (CAMP-015)")
+rc, out = rodar("camp015_fundo_site", f"{tmp}/c015.db")
+if rc != 0: ok(False, f"teste do CAMP-015 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("127) Estações avisam o painel (capturado/enviado) e lotes enviados sem processar (CAMP-017)")
+rc, out = rodar("camp017_eventos", f"{tmp}/c017.db")
+if rc != 0: ok(False, f"teste do CAMP-017 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("128) Elevação/Fachada unificada e amostra dos lotes inferidos (CAMP-051)")
+rc, out = rodar("camp051_tipos", f"{tmp}/c051.db")
+if rc != 0: ok(False, f"teste do CAMP-051 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("129) Reconciliação noturna do QNAP com o painel (CAMP-008)")
+rc, out = rodar("camp008_reconciliacao", f"{tmp}/c008.db")
+if rc != 0: ok(False, f"teste do CAMP-008 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

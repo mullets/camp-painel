@@ -242,6 +242,21 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     for l in [l for l in L if l["fase"] == "erro"]:
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
                        "detalhe": texto_espera(_horas_desde(l["atualizado_em"])), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
+    for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
+                            WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
+        try:
+            alerta = (json.loads(h["detalhe"]) or {}).get("alerta")
+        except (ValueError, TypeError):
+            alerta = None
+        if isinstance(alerta, str) and alerta.strip():     # CAMP-046/CV2 2.4: o CV2 avisa lote incompleto pelo heartbeat (o /aviso exige código de projeto)
+            linhas.append({"sev": "r", "titulo": "O CAMP Vision avisou: " + alerta.strip()[:200], "codigo": None, "detalhe": f"estação {h['estacao_id']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
+    try:     # CAMP-017: lote que a estação enviou há mais de 1 h e o CAMP Vision não processou
+        from .estacao_eventos import sem_processar
+        for e in sem_processar(con):
+            linhas.append({"sev": "a", "titulo": f"Lote enviado pela estação e sem processar: {titulo_limpo(e['projeto_titulo'] or e['projeto_codigo'])}", "codigo": e["projeto_codigo"],
+                           "detalhe": f"enviado há {round(e['horas'])} h" + (f" por {e['operador']}" if e["operador"] else ""), "acao": _acao("Ver a Fila", "fila_erro", None)})
+    except Exception:  # noqa: BLE001
+        pass
     if linhas:
         grupos.append({"id": "problemas", "titulo": "Problemas que bloqueiam", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} problemas", "rota": "erros"}})

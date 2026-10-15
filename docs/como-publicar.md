@@ -25,3 +25,7 @@ algum fundo dele tem projeto publicado **e** ele está ativo no plugin do WordPr
 6. **Conferir** — a página fica em `/acervo/arquitetos/NOME/`; o painel mostra se a encontrou no espelho do site.
 
 > A regra do arquiteto (visibilidade e ativação no plugin) vem da documentação do plugin da CAMP; confira no wp-admin se algo diferente acontecer.
+
+## Enviar fundo ao site (CAMP-015)
+Na página do fundo, em "Como aparece no site", o botão **Enviar fundo ao site** cria/atualiza o termo da taxonomia e a página-hub do arquiteto com o que está **preenchido** no painel: texto do fundo (procedência, entrada, acesso...), biografia, fontes da biografia e foto do arquiteto titular. Campo vazio no painel não vai (o site ignora vazio; texto escrito à mão no WordPress não é sobrescrito). Para **apagar** um campo no site o painel manda o valor especial `"__limpar__"` (apagar a biografia, remover a foto, esvaziar a biografia no editor).
+O fundo mostra se a página do arquiteto está **pública** no site (lido do espelho) e a divergência painel × site (o que mudou no painel desde o último envio; o painel não consegue ler o hub no site). O plano de publicação do projeto avisa, sem bloquear, quando o fundo não tem página pública do arquiteto.
