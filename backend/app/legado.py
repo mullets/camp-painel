@@ -43,17 +43,26 @@ def ligado_agora(peca: str) -> bool:
         return True
 
 
-def registrar_uso(peca: str, detalhe: str = "") -> None:
-    """Conta um uso do legado. Nunca levanta (não pode atrapalhar a rota)."""
+_SQL_USO = """INSERT INTO legado_uso (chave, vezes, ultimo_detalhe) VALUES (?,1,?)
+               ON CONFLICT(chave) DO UPDATE SET vezes=vezes+1, ultima_em=datetime('now'), ultimo_detalhe=excluded.ultimo_detalhe"""
+
+
+def registrar_uso(peca: str, detalhe: str = "", con=None) -> None:
+    """Conta um uso do legado. Nunca levanta (não pode atrapalhar a rota).
+
+    Quem já tem uma conexão com escrita aberta (a leitura de pasta do lote) PASSA `con`: abrir outra conexão e escrever esperava o
+    busy_timeout inteiro (30 s) por chamada e nem contava o uso. Sem `con`, a espera é curta (1 s) e o uso pode se perder, a rota não."""
     try:
-        con = connect()
+        if con is not None:
+            con.execute(_SQL_USO, (peca, (detalhe or "")[:200]))
+            return
+        c = connect()
         try:
-            con.execute("""INSERT INTO legado_uso (chave, vezes, ultimo_detalhe) VALUES (?,1,?)
-                           ON CONFLICT(chave) DO UPDATE SET vezes=vezes+1, ultima_em=datetime('now'), ultimo_detalhe=excluded.ultimo_detalhe""",
-                        (peca, (detalhe or "")[:200]))
-            con.commit()
+            c.execute("PRAGMA busy_timeout = 1000")
+            c.execute(_SQL_USO, (peca, (detalhe or "")[:200]))
+            c.commit()
         finally:
-            con.close()
+            c.close()
     except Exception:  # noqa: BLE001
         pass
 

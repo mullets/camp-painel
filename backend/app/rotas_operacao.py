@@ -667,13 +667,13 @@ STATUS_ERRO = {"erro", "falha"}
 EVENTO_POR_ETAPA = {"revisao": "material_pronto", "processando": "material_processando", "erro": "material_com_erro"}
 
 
-def _classificar_status(st) -> tuple[str, bool]:
+def _classificar_status(st, con=None) -> tuple[str, bool]:
     """(etapa da lista, status_conhecido). Sem status = pronto (comportamento antigo); valor desconhecido = pronto + aviso."""
     s = str(st or "").strip().lower()
     if s in STATUS_ANTIGOS:                                   # CAMP-024: conta o uso e respeita legado.status_antigos
         from . import legado
-        legado.registrar_uso("status_antigos", s)
-        return ("revisao", True) if legado.ligado_agora("status_antigos") else ("revisao", False)
+        legado.registrar_uso("status_antigos", s, con)
+        return ("revisao", True) if (legado.ligado(con, "status_antigos") if con is not None else legado.ligado_agora("status_antigos")) else ("revisao", False)
     if not s or s in STATUS_PRONTO:
         return "revisao", True
     if s in STATUS_PROCESSANDO:
@@ -709,8 +709,8 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     nome_teste = pasta.name.lower() in ("asd", "sei la")
     if nome_teste:
         from . import legado
-        legado.registrar_uso("nomes_de_teste", pasta.name)
-        nome_teste = legado.ligado_agora("nomes_de_teste")          # CAMP-024: desligado = só "teste": true (ou a pasta "teste") vale
+        legado.registrar_uso("nomes_de_teste", pasta.name, con)
+        nome_teste = legado.ligado(con, "nomes_de_teste")          # CAMP-024: desligado = só "teste": true (ou a pasta "teste") vale
     if info.get("teste") or pasta.name.lower() == "teste" or nome_teste:
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": "lote de teste"}
     from .similaridade import normalizar as _norm_sim
@@ -746,7 +746,7 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     n_arq, leitura_parcial = contar_documentos(pasta)   # DOCUMENTOS (série + nome), não arquivos: TIF/ e JPG/ do mesmo código são UM documento
 
     st = status.get("status") if isinstance(status, dict) else None
-    etapa_alvo, conhecido = _classificar_status(st)
+    etapa_alvo, conhecido = _classificar_status(st, con)
     aviso = None if conhecido else f"status desconhecido '{st}': tratado como pronto"
     if leitura_parcial:
         aviso = ((aviso + "; ") if aviso else "") + "a pasta demorou para ser lida: a contagem de folhas pode estar incompleta"

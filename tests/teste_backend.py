@@ -893,6 +893,7 @@ def filho(modo):
         d2 = _P(_t.mkdtemp()) / "asd"; d2.mkdir(); (d2 / "info_projeto.json").write_text(_j.dumps({"teste": True}))
         d3 = _P(_t.mkdtemp()) / "teste"; d3.mkdir(); (d3 / "info_projeto.json").write_text("{}")
         ver("desligado: 'teste': true e a pasta 'teste' continuam valendo", _ler_pasta(c, d2, None)["motivo"] == "lote de teste" and _ler_pasta(c, d3, None)["motivo"] == "lote de teste")
+        c.commit()   # quem lê a pasta grava o uso na mesma transação; o commit é dele
         r = lan.get("/api/fundos.json")
         ver("fundos.json ligado: 200 e o uso é contado", r.status_code == 200 and c.execute("SELECT vezes FROM legado_uso WHERE chave='fundos_json'").fetchone()[0] == 1, r.text[:120])
         cfg("legado.fundos_json", "0")
@@ -910,6 +911,15 @@ def filho(modo):
         r = adm.post("/api/legado/fundos_json", json={"ligado": False, "simular": False}).json()
         ver("aplicar muda a configuração e registra no histórico", r["aplicado"] and c.execute("SELECT valor FROM configuracao WHERE chave='legado.fundos_json'").fetchone()[0] == "0" and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='legado_alterado'").fetchone()[0] == 1, str(r)[:200])
         ver("peça desconhecida: 404", adm.post("/api/legado/xyz", json={"ligado": False}).status_code == 404)
+        # 15/10: contar o uso com uma escrita já aberta (a leitura de pasta do aviso do CAMP Vision) esperava 30 s por chamada e não contava
+        import time as _tm
+        cfg("legado.status_antigos", "1"); antes = c.execute("SELECT vezes FROM legado_uso WHERE chave='status_antigos'").fetchone()[0]
+        c2 = connect(); c2.execute("BEGIN IMMEDIATE"); c2.execute("UPDATE configuracao SET valor=valor WHERE chave='legado.fundos_json'")
+        t0 = _tm.time(); r_con = _classificar_status("campvision_concluido", c2); t_con = _tm.time() - t0
+        t0 = _tm.time(); r_sem = _classificar_status("campvision_concluido"); t_sem = _tm.time() - t0
+        c2.commit(); c2.close(); depois = c.execute("SELECT vezes FROM legado_uso WHERE chave='status_antigos'").fetchone()[0]
+        ver("com escrita aberta: contar o uso na MESMA conexão é imediato e o uso fica contado", r_con == ("revisao", True) and t_con < 1 and depois == antes + 1, f"{t_con:.2f}s {antes}->{depois}")
+        ver("sem a conexão: espera no máximo ~1 s (antes eram 30 s) e a rota segue", r_sem == ("revisao", True) and t_sem < 3, f"{t_sem:.2f}s")
         c.close()
         for l in res: print(l)
     elif modo == "camp017_eventos":
