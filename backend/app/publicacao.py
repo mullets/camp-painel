@@ -72,7 +72,9 @@ def condicoes_projeto(con, p) -> dict:
             RESOLVE_CONFERENCIA = {"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"}
             falhas = {i["chave"] for i in itens_aceite(ac) if i["ok"] is False}
             aprovado = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (la["id"],)).fetchone()[0]
-            if aprovado and falhas <= RESOLVE_CONFERENCIA:
+            if falhas == {"sem_autoria_divergente"}:      # CAMP-046: CV2 antigo ainda reprova por autoria; no contrato 2.4 isso é só aviso
+                aceito = True
+            elif aprovado and falhas <= RESOLVE_CONFERENCIA:
                 aceito = resolvido_aqui = True
         conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
                       "detalhe": ("O CAMP Vision pediu olho humano (" + "; ".join(motivos_aceite(ac)) + "): resolvido na conferência do painel") if resolvido_aqui

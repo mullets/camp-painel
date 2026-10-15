@@ -411,6 +411,12 @@ def _detalhe_do_heartbeat(d, limite: int = 4000) -> str | None:
     for k, v in extra.items():
         if k not in det and k != "situacao" and isinstance(k, str):
             det[k] = v
+    if "alerta" in det:                       # CV2 2.4: lote incompleto (sem código de projeto para o /aviso) vira detalhe.alerta com estado 'erro'
+        al = det["alerta"]
+        al = al.get("mensagem") or al.get("texto") or json.dumps(al, ensure_ascii=False) if isinstance(al, dict) else al
+        det["alerta"] = " ".join(str(al or "").split())[:300] or None
+        if not det["alerta"]:
+            det.pop("alerta")
     sit = " ".join(str(extra.get("situacao") or d.situacao or "").split())[:200]
     if sit:
         det["situacao"] = sit
@@ -419,7 +425,7 @@ def _detalhe_do_heartbeat(d, limite: int = 4000) -> str | None:
             break
         det.pop(k, None)
     while len(json.dumps(det, ensure_ascii=False)) > limite and len(det) > 1:
-        det.pop(next(k for k in det if k not in ("situacao", "contrato")), None)
+        det.pop(next(k for k in det if k not in ("situacao", "contrato", "alerta")), None)
     return json.dumps(det, ensure_ascii=False) if det else None
 
 

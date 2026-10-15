@@ -3107,6 +3107,15 @@ def filho(modo):
         ver("detalhe gigante é reduzido e continua JSON válido (até 4000 caracteres)", r.status_code == 200 and valido, str(len(bruto or "")))
         kk.execute("UPDATE estacao_heartbeat SET detalhe='{nao e json' WHERE estacao_id=?", (http_["heartbeat"]["estacao_id"].lower(),)); kk.commit(); kk.close()
         ver("detalhe quebrado no banco não derruba GET /api/estacoes (200)", adm.get("/api/estacoes").status_code == 200)
+
+        # CV2 2.4: lote incompleto vai pelo heartbeat (detalhe.alerta, estado erro) e o painel mostra em Estações e na lista de pendências
+        import json as _jh2
+        r = lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "erro", "detalhe": {"situacao": "lote incompleto", "alerta": "Lote F026 sem 3 arquivos do manifesto " + "x" * 600}})
+        m4 = acha(adm.get("/api/estacoes").json())
+        ver("CV2 2.4: detalhe.alerta chega a Estações (app_alerta), truncado, e o estado 'erro' é aceito", r.status_code == 200 and bool(m4) and (m4.get("app_alerta") or "").startswith("Lote F026 sem 3") and len(m4["app_alerta"]) <= 300, str((m4 or {}).get("app_alerta"))[:80])
+        tj = adm.get("/api/painel").json()
+        ver("o alerta do CV2 entra nos problemas que bloqueiam (Precisa de atenção)", "O CAMP Vision avisou: Lote F026" in _jh2.dumps(tj.get("tarefas"), ensure_ascii=False), str(tj.get("tarefas"))[:100])
+        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "ocioso"})
         lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": ctr.CONTRATO_PAINEL})
         # CAMP-027 (lado do painel): chamada recusada por falta de token aparece como aviso na tela Estações (IP só para admin)
         ver("sem recusa por token, a tela Estações não mostra aviso", adm.get("/api/estacoes").json().get("estacoes_negadas") == [])
@@ -4158,10 +4167,10 @@ def filho(modo):
         pasta = _P(tempfile.mkdtemp()) / "F080-P0001 - Casa"; (pasta / "catalogacao" / "lotes").mkdir(parents=True)
         ver("sem catalogacao/lotes/*.json: sem aceite (não trava nada)", ler_aceite(pasta) is None)
         (pasta / "catalogacao" / "lotes" / "lote-1.json").write_text(_j.dumps({"aceite": {"contagem_origem_igual_saida": {"ok": True, "contagem": 14},
-            "sem_autoria_divergente": {"ok": False, "contagem": 2}, "exif_conferido": True, "publicavel": False,
+            "sem_autoria_divergente": {"ok": False, "contagem": 2}, "serie_incerta_zerada": {"ok": False}, "exif_conferido": True, "publicavel": False,
             "pendencias": ["2 folhas com autoria divergente"]}}))
         a = ler_aceite(pasta)
-        ver("lê o aceite do JSON do lote e lista os itens com ✔/✖", a and a["publicavel"] is False and [(i["chave"], i["ok"]) for i in itens_aceite(a)] == [("contagem_origem_igual_saida", True), ("sem_autoria_divergente", False), ("exif_conferido", True)], str(itens_aceite(a)))
+        ver("lê o aceite do JSON do lote e lista os itens com ✔/✖", a and a["publicavel"] is False and [(i["chave"], i["ok"]) for i in itens_aceite(a)] == [("contagem_origem_igual_saida", True), ("sem_autoria_divergente", False), ("serie_incerta_zerada", False), ("exif_conferido", True)], str(itens_aceite(a)))
         ver("o motivo vem das pendências do CV2", motivos_aceite(a) == ["2 folhas com autoria divergente"])
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F080','Fundo Aceite','FAC',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F080',1)")
@@ -4174,6 +4183,13 @@ def filho(modo):
         c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
         ver("aceite aprovado libera", ac and ac["ok"])
+        # CAMP-046 / CV2 2.4: o painel tolera as DUAS chaves de autoria (a antiga sem_autoria_divergente e a nova só com contagem)
+        ia = itens_aceite({"folhas_autoria_nao_confirmada": 3, "contagem_origem_igual_saida": {"ok": True}, "publicavel": True})
+        ver("2.4: folhas_autoria_nao_confirmada (só contagem) aparece sem ✔/✖ e com a contagem", [(i["chave"], i["ok"], i["detalhe"]) for i in ia] == [("folhas_autoria_nao_confirmada", None, 3), ("contagem_origem_igual_saida", True, None)], str(ia))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({"sem_autoria_divergente": {"ok": False, "contagem": 2}, "publicavel": False, "pendencias": ["2 folhas com autoria divergente"]}),)); c.commit()
+        ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
+        ver("CV2 antigo reprovando SÓ por autoria divergente já não trava a publicação", ac and ac["ok"], str(ac))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
         # aviso de 14/10 (F009-P0060): reprovado só por "olho humano" (orientação/série incertas) → a conferência do painel resolve
         b = {"contagem_origem_igual_saida": {"ok": True}, "orientacao_incerta_zerada": {"ok": False}, "serie_incerta_zerada": {"ok": False}, "publicavel": False}
         c.execute("UPDATE lista_processamento SET aceite_json=?, aprovado_em=NULL WHERE projeto_codigo='F080-P0001'", (_j.dumps(b),)); c.commit()
