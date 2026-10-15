@@ -41,6 +41,26 @@ def _rotacao(v) -> int:
     return -90 if r == 270 else r
 
 
+UNIFICADO = "Elevação/Fachada"     # CAMP-051
+_ALIAS_TIPO = {"elevação": UNIFICADO, "elevacao": UNIFICADO, "fachada": UNIFICADO, "elevação/fachada": UNIFICADO, "elevacao/fachada": UNIFICADO,
+               "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO}
+
+
+def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
+    """CAMP-051 · Tipo do vocabulário do painel para o que o CAMP Vision leu. `tipos` = {nome em minúsculas: nome}.
+    "Elevação", "Fachada" e "Elevação/Fachada" são o mesmo tipo. O CV2 pode juntar tipos diferentes numa folha separados por " / "
+    ("Planta / Elevação/Fachada"): se todos viram o MESMO tipo, vale esse; se são tipos diferentes, fica sem tipo (uma pessoa escolhe; o lido é guardado em tipo_lido)."""
+    bruto = " ".join(str(tipo_lido or "").split())
+    if not bruto:
+        return None
+    achados = set()
+    for parte in re.split(r"\s+/\s+", bruto):
+        p = parte.strip().lower()
+        nome = tipos.get(_ALIAS_TIPO.get(p, "").lower()) if p in _ALIAS_TIPO else tipos.get(p)
+        achados.add(nome)
+    return next(iter(achados)) if len(achados) == 1 and None not in achados else None
+
+
 def _categoria_retirado(r: dict, motivos: list[str]) -> str:
     txt = " ".join(motivos).lower()
     if r.get("autoria_divergente") or "autoria" in txt:
@@ -282,7 +302,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
                 "sinais": [txt for chave, txt in SINAIS if d.get(chave)], "confianca": d.get("confianca"), "previa": d.get("preview") or "",
                 "ano_do_projeto": d.get("ano_do_projeto")}
-        campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipos.get(tipo_lido.lower()), "tipo_lido": tipo_lido or None,
+        campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipo_do_painel(tipo_lido, tipos), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))),

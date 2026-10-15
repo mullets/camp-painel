@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos"}
 
 
 def rodar(modo, db):
@@ -873,6 +873,79 @@ def filho(modo):
         ver("o painel inicial mostra 'Lote enviado pela estação e sem processar'", "sem processar" in tj and "F026-P0001" in tj, tj[:200])
         c.close()
         for l in res: print(l)
+    elif modo == "camp051_tipos":
+        init_db(); aplicar_migracoes()
+        import json as _j, subprocess as _sp, sys as _sys, os as _os, csv as _csv, tempfile
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app.importador_lote import tipo_do_painel
+        from app import amostra_lotes as al
+        c = connect()
+        nomes = [r[0] for r in c.execute("SELECT nome FROM tipo_documento")]
+        ver("vocabulário: 'Elevação/Fachada' existe e 'Elevação' e 'Fachada' separados não", "Elevação/Fachada" in nomes and "Elevação" not in nomes and "Fachada" not in nomes, str(nomes))
+        T = {n.lower(): n for n in nomes}
+        casos = [("Elevação", "Elevação/Fachada"), ("Fachada", "Elevação/Fachada"), ("Elevação/Fachada", "Elevação/Fachada"), ("elevacao", "Elevação/Fachada"), ("Planta", "Planta"),
+                 ("Elevação / Fachada", "Elevação/Fachada"), ("Planta / Elevação/Fachada", None), ("Fachada / Elevação/Fachada", "Elevação/Fachada"), ("Planta / Planta", "Planta"), ("", None), (None, None), ("Coisa", None)]
+        ruins = [(a, tipo_do_painel(a, T), b) for a, b in casos if tipo_do_painel(a, T) != b]
+        ver("o tipo lido vira o tipo unificado; composto por ' / ' de tipos diferentes fica sem tipo (uma pessoa escolhe)", not ruins, str(ruins))
+        # migração sobre dados antigos: itens com 'Elevação' e 'Fachada' viram o unificado
+        c.execute("PRAGMA foreign_keys=OFF")
+        c.execute("INSERT OR IGNORE INTO tipo_documento (nome) VALUES ('Elevação'),('Fachada')")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        for n, t in ((1, "Elevação"), (2, "Fachada"), (3, "Planta")):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tipo_documento,tipo_lido) VALUES (?,?,'S01',?,'importado',?,?)", (f"F026-P0001-1972-S01-D0000{n}", "F026-P0001", n, t, t))
+        c.commit()
+        sql_mig = (_os.path.dirname(_os.path.abspath(__file__)) + "/../db/migrations/129_elevacao_fachada.sql")
+        c.executescript(open(sql_mig, encoding="utf-8").read()); c.commit()
+        r = {row[0]: row[1] for row in c.execute("SELECT codigo, tipo_documento FROM item ORDER BY codigo")}
+        ver("a migração junta Elevação e Fachada nos itens (Planta fica) e tira os dois valores antigos da tabela", list(r.values()) == ["Elevação/Fachada", "Elevação/Fachada", "Planta"] and c.execute("SELECT COUNT(*) FROM tipo_documento WHERE nome IN ('Elevação','Fachada')").fetchone()[0] == 0, str(r))
+        ver("a migração NÃO mexe no tipo lido pelo CAMP Vision (registro do que ele leu)", {row[0] for row in c.execute("SELECT tipo_lido FROM item")} == {"Elevação", "Fachada", "Planta"})
+        c.execute("PRAGMA foreign_keys=ON")
+        # amostra dos lotes inferidos
+        for i, fundo in enumerate(("F026", "F026", "F027")):
+            pass
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F027','Outro','OUT',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F027',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F027-P0001','F027',1,'Casa',1980)")
+        ids = []
+        for k in range(30):
+            proj, fundo = ("F026-P0001", "F026") if k < 20 else ("F027-P0001", "F027")
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES (?,?,?,'revisao',?)", (f"Lote {k}", proj, "/x", _j.dumps({"sugestoes_cv2": {"programa_sugerido": "Residência"}}))).lastrowid
+            ids.append(lid)
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Lote normal','F026-P0001','/x','revisao','{}')")
+        c.commit()
+        lotes = al.lotes_inferidos(c)
+        ver("lotes inferidos: só os que o CAMP Vision sugeriu dados do projeto (30 de 31)", len(lotes) == 30, str(len(lotes)))
+        plano = al.planejar(lotes)
+        por = {}
+        for l in plano: por[l["fundo"]] = por.get(l["fundo"], 0) + 1
+        ver("amostra de 10% ESTRATIFICADA por fundo: 20 lotes → 2, 10 lotes → 1", por == {"F026": 2, "F027": 1}, str(por))
+        ver("o sorteio é reprodutível pela semente e muda com outra semente", [l["lote_id"] for l in al.planejar(lotes)] == [l["lote_id"] for l in plano] and [l["lote_id"] for l in al.planejar(lotes, semente="outra")] != [l["lote_id"] for l in plano])
+        out = _sp.run([_sys.executable, str(_os.path.dirname(_os.path.abspath(__file__)) + "/../scripts/amostrar_lotes_inferidos.py")], capture_output=True, text=True, env=dict(_os.environ))
+        ver("o script sem opções só SIMULA: mostra a amostra e não grava", out.returncode == 0 and "SIMULAÇÃO" in out.stdout and c.execute("SELECT COUNT(*) FROM amostra_lote_inferido").fetchone()[0] == 0, (out.stdout + out.stderr)[-300:])
+        r1 = al.sortear(c, lotes); r2 = al.sortear(c, lotes)
+        ver("sortear grava a amostra (3 lotes) e repetir não sorteia de novo (idempotente)", r1["novos"] == 3 and r2["novos"] == 0 and r2["total_amostra"] == 3, str((r1, r2)))
+        ver("sem decisões: 'faltam 3' e nada é liberado", al.resumo(c, 30)["faltam"] == 3 and "Faltam 3" in al.resumo(c, 30)["conclusao"])
+        amostra = [r[0] for r in c.execute("SELECT lote_id FROM amostra_lote_inferido ORDER BY lote_id")]
+        try: al.decidir(c, ids[0] if ids[0] not in amostra else -1, "aprovado", "", "rafa@camp.arq.br"); fora = False
+        except ValueError: fora = True
+        ver("decidir lote fora da amostra é recusado", fora)
+        try: al.decidir(c, amostra[0], "reprovado", "", "rafa@camp.arq.br"); sem_motivo = False
+        except ValueError: sem_motivo = True
+        ver("reprovar sem motivo é recusado", sem_motivo)
+        al.decidir(c, amostra[0], "aprovado", "ok", "rafa@camp.arq.br"); al.decidir(c, amostra[1], "reprovado", "programa errado", "rafa@camp.arq.br")
+        rs = al.resumo(c, 30)
+        ver("com um reprovado: a conclusão manda NÃO liberar o resto", rs["reprovados"] == 1 and "NÃO liberar" in rs["conclusao"], str(rs))
+        al.decidir(c, amostra[1], "aprovado", "revisto", "rafa@camp.arq.br"); al.decidir(c, amostra[2], "aprovado", "ok", "rafa@camp.arq.br")
+        rs = al.resumo(c, 30)
+        ver("toda a amostra aprovada: diz que quem libera é o Rafa (o roteiro não libera nada)", rs["faltam"] == 0 and rs["reprovados"] == 0 and "Rafa" in rs["conclusao"] and "não libera nada" in rs["conclusao"], str(rs))
+        ver("cada decisão fica no histórico (evento)", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='amostra_inferido_decisao'").fetchone()[0] == 4)
+        ver("nenhum lote foi alterado (etapa e aprovação intactas)", c.execute("SELECT COUNT(*) FROM lista_processamento WHERE etapa<>'revisao' OR aprovado_em IS NOT NULL").fetchone()[0] == 0)
+        arq = tempfile.mktemp(suffix=".csv"); n = al.escrever_csv(c, lotes, arq)
+        linhas = list(_csv.reader(open(arq, encoding="utf-8-sig"), delimiter=";"))
+        ver("relatório CSV: cabeçalho + 3 linhas da amostra, com a decisão", n == 3 and len(linhas) == 4 and linhas[0][8] == "decisao" and {l[8] for l in linhas[1:]} == {"aprovado"}, str(linhas[:2]))
+        c.close()
+        for l in res: print(l)
     elif modo == "cp35_metadados":
         init_db(); aplicar_migracoes()
         import json as _j
@@ -1255,7 +1328,7 @@ def filho(modo):
         ver("operador VÊ o checklist (leitura)", r.status_code == 200 and g["pode_agir"] is False, f"HTTP {r.status_code}")
         ver("checklist mostra o que falta: direitos e autorização (nada mais)", ids_falta == {"direitos", "autorizado"}, str(ids_falta))
         ver("cada pendência traz o botão que resolve", {x["acao"]["tipo"] for x in g["condicoes"] if x["bloqueia"] and not x["ok"]} == {"direitos", "autorizar"})
-        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"] and not x["id"].startswith("q_")} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
+        ver("avisos: 1 folha fora do site e 1 duplicada excluída", {x["id"] for x in g["condicoes"] if not x["bloqueia"] and not x["id"].startswith("q_") and x["id"] != "pagina_arquiteto"} == {"folhas_fora", "folhas_excluidas"} and g["folhas_elegiveis"] == 3 and g["folhas_total"] == 5, f"elegíveis={g['folhas_elegiveis']} total={g['folhas_total']}")
         # ---- publicar bloqueado: TODAS as razões de uma vez ----
         r = adm.post(f"/api/projetos/{P1}/publicar", json={"acao": "publicar"})
         ver("publicar bloqueado devolve TODAS as pendências (400)", r.status_code == 400 and "Direitos do fundo" in err(r) and "não foi autorizado" in err(r), err(r)[:140])
@@ -2312,7 +2385,7 @@ def filho(modo):
         d3 = next(x for x in pk["documentos"] if x["codigo"] == D(3)); d3.update({"orientacao_incerta": False, "titulo": "Elevação sul", "tipo_de_desenho": "Elevação", "bloqueios": [], "publicavel": True})
         pj.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
         k.execute("UPDATE item SET revisao='pendente', revisado_por=NULL, revisado_em=NULL WHERE lote_id=?", (lote,)); k.commit(); op.post(f"/api/lotes/{lote}/importar")
-        ver("tipo lido que existe no vocabulário vira tipo do painel; título vem do pacote", sql("SELECT tipo_documento FROM item WHERE codigo=?", D(3)) == "Elevação" and sql("SELECT titulo FROM item WHERE codigo=?", D(3)) == "Elevação sul")
+        ver("tipo lido que existe no vocabulário vira tipo do painel; título vem do pacote", sql("SELECT tipo_documento FROM item WHERE codigo=?", D(3)) == "Elevação/Fachada" and sql("SELECT titulo FROM item WHERE codigo=?", D(3)) == "Elevação sul")
         cb = op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").json()
         ver("conferir em lote marca SÓ a folha sem nenhuma pendência (D3); as 2 com duplicata/sinais ficam para olho humano", cb["conferidas"] == 1 and cb["restam"] == 2 and sql("SELECT revisao FROM item WHERE codigo=?", D(3)) == "conferida" and sql("SELECT revisao FROM item WHERE codigo=?", D(1)) == "pendente", str(cb))
         rs = adm.get(f"/api/projetos/F026-P0001/revisao").json()["lotes"]; rl = next(x for x in rs if x["id"] == lote)
@@ -3212,7 +3285,7 @@ def filho(modo):
         pa = adm.get("/api/projetos/F092-P0009/publicar/plano").json(); av = {a_["id"]: a_["texto"] for a_ in pa["avisos"]}
         ver("o plano avisa do prefixo de pasta no título (e mostra como ficaria) e dos campos vazios, sem bloquear", "Edifício Jockey Club São Paulo" in av.get("titulo", "") and "T102_" in av.get("titulo", "") and "sem ano e sem cidade" in av.get("vazios", "").lower() and not any(b_["id"] in ("titulo", "vazios") for b_ in pa["bloqueios"]), str(pa["avisos"]))
         ver("os passos do plano falam a língua de quem publica (página escondida → visível para todos)", [x_["texto"] for x_ in pa["passos"]][0].startswith("Criar a página do projeto no site (ainda escondida)") and any("visíveis para todos" in x_["texto"] for x_ in pa["passos"]) and any("Marcar o projeto como liberado" in x_["texto"] for x_ in pa["passos"]), str([x_["texto"] for x_ in pa["passos"]]))
-        ver("título normal e com ano/cidade não gera aviso", adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"] == [] or all(a_["id"] == "vazios" for a_ in adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"]))
+        ver("título normal e com ano/cidade não gera aviso", adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"] == [] or all(a_["id"] in ("vazios", "pagina_arquiteto") for a_ in adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"]))
         ver("só admin inicia (operador 403, sem login 401); leitura consulta", op.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 403 and anon.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 401 and op.get(f"/api/tarefas/{tid}").status_code == 200 and adm.get("/api/tarefas/99999").status_code == 404)
         # nome do arquivo no WordPress: sempre <código>.jpg, nunca o hash do cache
         pasta = _pl.Path(tempfile.mkdtemp()); f_ = pasta / "02c3ecf8cd8f0bf43ce24c55792d6b8a82aa2d18.jpg"; f_.write_bytes(b"\xff\xd8\xff\xd9")
@@ -4880,7 +4953,7 @@ def filho(modo):
         P1 = "F094-P0001-1970-S01-D0000"
         itens = [(f"{P1}1", "F094-P0001", "S01", 1, "Planta <térreo> & cobertura\x01", "Planta", "01/03", "1:50", 1971, f"F094/P0001/{P1}1.tif"),
                  (f"{P1}2", "F094-P0001", "S01", 2, "=SOMA(A1)", "Corte", "02/03", None, None, f"F094/P0001/{P1}2.tif"),
-                 (f"{P1}3", "F094-P0001", "S01", 3, "Fachada", "Elevação", "03/03", None, None, f"F094/P0001/{P1}3.tif"),
+                 (f"{P1}3", "F094-P0001", "S01", 3, "Fachada", "Elevação/Fachada", "03/03", None, None, f"F094/P0001/{P1}3.tif"),
                  ("F094-P0001-1970-S03-D00004", "F094-P0001", "S03", 4, "Foto da obra", "Fotografia", None, None, None, "../../fora.tif"),
                  ("F094-P0002-0000-S01-D00001", "F094-P0002", "S01", 1, "Planta escola", "Planta", None, None, None, None)]
         for it in itens:
@@ -5777,7 +5850,7 @@ def filho(modo):
         item(f"{pb}-1970-S01-D00001", pb, 1, "Planta", jpg="/a.jpg")
         item(f"{pb}-1970-S01-D00002", pb, 2, "  ")             # sem título e sem imagem
         item(f"{pb}-1970-S01-D00003", pb, 3, "Corte", jpg="/c.jpg")
-        item(f"{pb}-0000-S01-D00004", pb, 4, "Elevação", tif="/d.tif")   # código com ano 0000 = incompleto
+        item(f"{pb}-0000-S01-D00004", pb, 4, "Elevação/Fachada", tif="/d.tif")   # código com ano 0000 = incompleto
         item(f"{pc}-1980-S01-D00001", pc, 1, None)
         ag1 = c.execute("INSERT INTO agente (tipo,forma_autorizada) VALUES ('pessoa','Fulano Sem Fonte')").lastrowid
         ag2 = c.execute("INSERT INTO agente (tipo,forma_autorizada,historia,fonte_historia) VALUES ('pessoa','Ciclano Com Fonte','Nasceu.','Livro X')").lastrowid
@@ -7338,6 +7411,14 @@ else:
 print("127) Estações avisam o painel (capturado/enviado) e lotes enviados sem processar (CAMP-017)")
 rc, out = rodar("camp017_eventos", f"{tmp}/c017.db")
 if rc != 0: ok(False, f"teste do CAMP-017 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("128) Elevação/Fachada unificada e amostra dos lotes inferidos (CAMP-051)")
+rc, out = rodar("camp051_tipos", f"{tmp}/c051.db")
+if rc != 0: ok(False, f"teste do CAMP-051 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
