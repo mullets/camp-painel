@@ -103,3 +103,10 @@ redirecionamento dele some (nunca aponta para ele mesmo).
 O mapa fica na tabela `redirecionamento` (`codigo_antigo`, `codigo_novo`, `entidade`, `motivo`, `criado_por`, `criado_em`,
 `aplicado_no_site`). A coluna `aplicado_no_site` está prevista para o site marcar o que já virou 301; por enquanto o
 painel só a zera quando o destino muda.
+
+## O painel busca no site (CAMP-013)
+Além de receber `POST /api/pedidos/site`, o painel **busca** no site a cada `site.coleta_pedidos_min` minutos (padrão 10; 0 desliga): `GET /wp-json/camp/v1/solicitacoes?marcar=1` com a Application Password. O que chega é guardado em `pedido_site` (chave = id do post no site, idempotente) e vira:
+- `alta-resolucao` → pedido (origem `site`) com item pelo código, formato `tif`;
+- `consulta` → pedido sem item (o código vai no texto: é visita aos originais, não arquivo);
+- `correcao` → erro (origem `site`) ligado ao código da folha/projeto; sem código que o painel conheça, vira pedido comum para uma pessoa ver.
+Falha do site fica em `pedido_site_coleta` (e no log) e nunca derruba o painel. `GET /api/pedidos/coleta` mostra a última volta; `POST /api/pedidos/coletar` (admin) busca agora.

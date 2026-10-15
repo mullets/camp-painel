@@ -156,6 +156,25 @@ async def pedido_do_site(request: Request, tarefas: BackgroundTasks) -> dict:
     return {"ok": True, "id": sid, "mensagem": "Pedido recebido. A equipe da CAMP responde pelo e-mail informado."}
 
 
+# ---------------- (e) coleta no site (CAMP-013) ----------------
+@router.get("/pedidos/coleta")
+def coleta_status(u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Quando o painel buscou pedidos no site pela última vez e o que ficou pendente."""
+    from . import coletor_pedidos_site as cp
+    con = connect()
+    try:
+        return cp.status(con)
+    finally:
+        con.close()
+
+
+@router.post("/pedidos/coletar")
+def coletar_agora(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Busca agora os pedidos e correções do site (o mesmo que o coletor automático faz a cada 10 min)."""
+    from . import coletor_pedidos_site as cp
+    return cp.coletar()
+
+
 # ---------------- (b) pacote de entrega ----------------
 def pacote(con, sid: int) -> dict:
     s = con.execute("SELECT * FROM solicitacao WHERE id=?", (sid,)).fetchone()

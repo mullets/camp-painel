@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor"}
 
 
 def rodar(modo, db):
@@ -607,6 +607,71 @@ def filho(modo):
         r = x.post("/api/lgpd/executar")
         ver("POST /api/lgpd/executar roda a rotina", r.status_code == 200 and r.json()["modo"] == "aplicar", r.text[:200])
         c.execute("UPDATE configuracao SET valor='simular' WHERE chave='lgpd.modo'"); c.commit()
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp013_coletor":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, coletor_pedidos_site as cp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        FOLHA = "F026-P0001-1972-S01-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,'S01',1,'importado')", (FOLHA, "F026-P0001")); c.commit()
+        ver("o coletor nasce ligado: padrão 10 minutos (0 desliga)", cp._minutos(c) == 10)
+        pedidos = [
+            {"id": 501, "tipo": "alta-resolucao", "codigo": FOLHA, "nome": "Ana Souza", "email": "ana@x.com", "instituicao": "USP", "finalidade": "pesquisa", "mensagem": "preciso da prancha", "criado_em": "2026-10-15T10:00:00+00:00"},
+            {"id": 502, "tipo": "consulta", "codigo": "F026-P0001", "nome": "Beto", "email": "beto@x.com", "instituicao": "", "finalidade": "", "mensagem": "quero ver os originais", "criado_em": "2026-10-15T10:01:00+00:00"},
+            {"id": 503, "tipo": "correcao", "codigo": FOLHA, "nome": "Carla", "email": "carla@x.com", "instituicao": "", "finalidade": "", "mensagem": "a data está errada", "criado_em": "2026-10-15T10:02:00+00:00"},
+            {"id": 504, "tipo": "correcao", "codigo": "F999-P0001", "nome": "Davi", "email": "davi@x.com", "instituicao": "", "finalidade": "", "mensagem": "código que o painel não conhece", "criado_em": "2026-10-15T10:03:00+00:00"},
+        ]
+        class Resp:
+            def __init__(s, code, dados): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        chamadas = []
+        class H:
+            def __init__(s, resp): s.resp = resp
+            def get(s, path, params=None):
+                chamadas.append((path, dict(params or {})))
+                if isinstance(s.resp, Exception): raise s.resp
+                return s.resp
+        class WPF:
+            def __init__(s, resp): s.h = H(resp)
+        o = cp.coletar(c, WPF(Resp(200, pedidos)), avisar=False)
+        ver("chama GET /wp-json/camp/v1/solicitacoes com marcar=1", chamadas and chamadas[0][0] == "/wp-json/camp/v1/solicitacoes" and chamadas[0][1].get("marcar") == 1, str(chamadas))
+        ver("lê 4 pedidos e importa os 4", o["lidas"] == 4 and o["novas"] == 4 and o["importadas"] == 4 and not o["erro"], str(o))
+        s1 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Ana Souza'").fetchone()
+        it = c.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=?", (s1["id"],)).fetchall()
+        ver("alta-resolução vira solicitação (origem site) com item pelo código", s1["origem"] == "site" and s1["finalidade"] == "pesquisa" and [tuple(x) for x in it] == [(FOLHA, "tif")], str([dict(x) for x in it]))
+        s2 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Beto'").fetchone()
+        ver("consulta vira solicitação sem item, com o código no texto e finalidade 'outro'", s2["finalidade"] == "outro" and "Consulta aos originais: F026-P0001" in s2["detalhe"] and c.execute("SELECT COUNT(*) FROM solicitacao_item WHERE solicitacao_id=?", (s2["id"],)).fetchone()[0] == 0)
+        e1 = c.execute("SELECT * FROM erro WHERE relatado_por LIKE 'Carla%'").fetchone()
+        ver("correção vira erro (origem site) ligado à folha, com quem relatou", e1 and e1["origem"] == "site" and e1["codigo"] == FOLHA and e1["descricao"] == "a data está errada" and "carla@x.com" in e1["relatado_por"], str(dict(e1) if e1 else None))
+        s4 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Davi'").fetchone()
+        ver("correção com código que o painel não conhece vira pedido para uma pessoa ver (não se perde)", s4 and "F999-P0001" in s4["detalhe"] and c.execute("SELECT COUNT(*) FROM erro WHERE relatado_por LIKE 'Davi%'").fetchone()[0] == 0)
+        o2 = cp.coletar(c, WPF(Resp(200, pedidos)), avisar=False)
+        ver("idempotente pelo id do site: repetir a mesma resposta não duplica nada", o2["novas"] == 0 and o2["importadas"] == 0 and c.execute("SELECT COUNT(*) FROM solicitacao").fetchone()[0] == 3 and c.execute("SELECT COUNT(*) FROM erro").fetchone()[0] == 1, str(o2))
+        o3 = cp.coletar(c, WPF(RuntimeError("site fora do ar")), avisar=False)
+        ult = c.execute("SELECT erro FROM pedido_site_coleta ORDER BY id DESC LIMIT 1").fetchone()[0]
+        ver("site fora do ar: a falha é registrada e a coleta NÃO levanta", o3["erro"] == "site fora do ar" and ult == "site fora do ar", str(o3))
+        o4 = cp.coletar(c, WPF(Resp(404, [])), avisar=False)
+        ver("rota ausente no site: mensagem clara, sem derrubar", "ainda não tem a rota" in (o4["erro"] or ""), str(o4))
+        c.execute("INSERT INTO pedido_site (site_id, tipo, codigo, payload) VALUES (600,'alta-resolucao','x','{ruim')"); c.commit()
+        o5 = cp.coletar(c, WPF(Resp(200, [{"id": 700, "tipo": "alta-resolucao", "codigo": "F026-P0001", "nome": "Eva", "email": "eva@x.com", "finalidade": "familia", "mensagem": ""}])), avisar=False)
+        ver("um pedido com payload quebrado fica 'falhou' e não impede os outros", o5["importadas"] == 1 and c.execute("SELECT situacao FROM pedido_site WHERE site_id=600").fetchone()[0] == "falhou" and c.execute("SELECT COUNT(*) FROM solicitacao WHERE solicitante='Eva'").fetchone()[0] == 1, str(o5))
+        st = cp.status(c)
+        ver("status: minutos, última coleta e pendentes", st["minutos"] == 10 and st["ultima"] is not None and st["pendentes"] == 1 and st["importados"] == 5, str(st))
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='site.coleta_pedidos_min'"); c.commit()
+        ver("site.coleta_pedidos_min = 0 desliga", cp._minutos(c) == 0)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.post("/api/pedidos/coletar")
+        ver("POST /api/pedidos/coletar (admin) responde mesmo sem o site configurado (erro registrado)", r.status_code == 200 and r.json()["erro"], r.text[:160])
+        ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -7042,6 +7107,14 @@ else:
 print("123) LGPD no painel: guarda de 24 meses (simular por padrão) e apagar pessoa chamando o site (CAMP-050)")
 rc, out = rodar("camp050_lgpd", f"{tmp}/c050.db")
 if rc != 0: ok(False, f"teste do CAMP-050 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("124) Coletor de pedidos e correções do site a cada 10 minutos (CAMP-013)")
+rc, out = rodar("camp013_coletor", f"{tmp}/c013.db")
+if rc != 0: ok(False, f"teste do CAMP-013 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

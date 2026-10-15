@@ -86,8 +86,32 @@ async def _startup() -> None:
     asyncio.create_task(_coleta_uso_periodica())
     asyncio.create_task(_alertas_periodicos())
     asyncio.create_task(_lgpd_periodica())
+    asyncio.create_task(_coleta_pedidos_site_periodica())
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
+
+
+async def _coleta_pedidos_site_periodica() -> None:
+    """CAMP-013: busca no site os pedidos e correções (e, junto, reenvia os redirecionamentos pendentes, CAMP-014) a cada site.coleta_pedidos_min (padrão 10; 0 desliga)."""
+    import asyncio
+    from . import coletor_pedidos_site as cp
+    await asyncio.sleep(45)
+    while True:
+        minutos = 10
+        try:
+            con = connect()
+            minutos = cp._minutos(con)
+            con.close()
+            if minutos > 0:
+                await asyncio.to_thread(cp.coletar)
+                try:
+                    from . import redir_site
+                    await asyncio.to_thread(redir_site.enviar_pendentes)
+                except ImportError:
+                    pass
+        except Exception as e:  # noqa: BLE001  (nunca derruba o painel)
+            log_registrar(logging.ERROR, "coleta_pedidos_site", f"Falha no coletor de pedidos do site: {type(e).__name__}")
+        await asyncio.sleep(max(1, minutos) * 60 if minutos > 0 else 300)
 
 
 async def _lgpd_periodica() -> None:
