@@ -41,7 +41,8 @@ def _norm(v) -> str:
 
 
 @router.get("/busca")
-def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura"))) -> dict:
+def busca_global(q: str, limite: int = 20, fundo: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """`fundo` (opcional): só projetos desse fundo (ex.: escolher o destino de "É de outro projeto…", que não pode ser de outro fundo)."""
     termo = (q or "").strip()
     if not termo:
         return {"q": termo, "resultados": []}
@@ -53,9 +54,9 @@ def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura
     con.create_function("norm", 1, _norm)
     resultados = []
 
-    for r in con.execute("""SELECT codigo, sigla, titulo FROM fundo
+    for r in ([] if fundo else con.execute("""SELECT codigo, sigla, titulo FROM fundo
                             WHERE ativo=1 AND (codigo LIKE ? OR sigla LIKE ? OR norm(titulo) LIKE ?)
-                            LIMIT 10""", (like, like, nl)).fetchall():
+                            LIMIT 10""", (like, like, nl)).fetchall()):
         exato = termo.upper() in (str(r["codigo"]).upper(), str(r["sigla"] or "").upper())
         prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or _norm(r["titulo"]).startswith(nt)
         resultados.append({"tipo": "fundo", "codigo": r["codigo"], "titulo": r["titulo"],
@@ -65,28 +66,29 @@ def busca_global(q: str, limite: int = 20, u: dict = Depends(auth.exige("leitura
     for r in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, p.cidade
                               FROM projeto p
                              WHERE (p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ?) AND p.mesclado_em IS NULL
-                             LIMIT 12""", (like, nl, nl)).fetchall():
+                               AND (? IS NULL OR p.fundo_codigo=?)
+                             LIMIT 12""", (like, nl, nl, fundo, fundo)).fetchall():
         exato = str(r["codigo"]).upper() == termo.upper()
         prefixo = str(r["codigo"]).upper().startswith(termo.upper()) or _norm(r["titulo"]).startswith(nt)
         resultados.append({"tipo": "projeto", "codigo": r["codigo"], "titulo": r["titulo"],
                            "subtitulo": " · ".join(x for x in (r["fundo_codigo"], r["cidade"]) if x),
                            "rota": f"projeto/{r['codigo']}", "score": 0 if exato else 1 if prefixo else 2})
 
-    for r in con.execute("""SELECT codigo, titulo, projeto_codigo, tipo_documento
+    for r in ([] if fundo else con.execute("""SELECT codigo, titulo, projeto_codigo, tipo_documento
                               FROM item
                              WHERE codigo LIKE ? OR norm(titulo) LIKE ?
-                             LIMIT 10""", (like, nl)).fetchall():
+                             LIMIT 10""", (like, nl)).fetchall()):
         exato = str(r["codigo"]).upper() == termo.upper()
         prefixo = str(r["codigo"]).upper().startswith(termo.upper())
         resultados.append({"tipo": "documento", "codigo": r["codigo"], "titulo": r["titulo"] or r["tipo_documento"] or "Documento",
                            "subtitulo": r["projeto_codigo"], "rota": f"item/{r['codigo']}",
                            "score": 0 if exato else 1 if prefixo else 2})
 
-    for r in con.execute("""SELECT DISTINCT a.id, a.forma_autorizada, a.tipo
+    for r in ([] if fundo else con.execute("""SELECT DISTINCT a.id, a.forma_autorizada, a.tipo
                               FROM agente a
                               LEFT JOIN agente_forma_variante v ON v.agente_id=a.id
                              WHERE norm(a.forma_autorizada) LIKE ? OR norm(v.forma) LIKE ?
-                             LIMIT 10""", (nl, nl)).fetchall():
+                             LIMIT 10""", (nl, nl)).fetchall()):
         prefixo = _norm(r["forma_autorizada"]).startswith(nt)
         fundos = [x[0] for x in con.execute("SELECT fundo_codigo FROM fundo_agente WHERE agente_id=? ORDER BY fundo_codigo", (r["id"],))]
         resultados.append({"tipo": "arquiteto", "codigo": " · ".join(fundos) if fundos else "", "titulo": r["forma_autorizada"],

@@ -3623,6 +3623,79 @@ def filho(modo):
         ver("despublicar projeto que não está no site: 409 explicando; operador 403", adm.post(f"/api/projetos/{PX}/despublicar").status_code == 409 and op.post(f"/api/projetos/{PP}/despublicar").status_code == 403)
         ver("só admin move e mescla (operador 403)", op.post("/api/itens/mover", json={"itens": [m1], "destino": PX}).status_code == 403 and op.post(f"/api/projetos/{PM}/mesclar-em", json={"destino": PX}).status_code == 403)
         for l in res: print(l)
+    elif modo == "revisao_outro_projeto":
+        # Revisão da folha: "É de outro projeto…" (mover uma folha pela revisão), fundos não se misturam (14/10) e mover com o projeto publicado.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for f_, sg in (("F088", "OPA"), ("F089", "OPB")):
+            c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES (?,?,?,1)", (f_, "Fundo " + sg, sg))
+        def proj(f_, n, titulo, ano, status="nao_publicado", tid=None):
+            cod = f"{f_}-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f_, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES (?,?,?,?,?,?,?)", (cod, f_, n, titulo, ano, status, tid))
+            return cod
+        def folha(p, ano, q, titulo, lote=None, status="nao_publicado", tid=None, rev="pendente"):
+            cod = f"{p}-{ano:04d}-S01-D{q:05d}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,origem,lote_id,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,?,'campvision',?,?,?,?)", (cod, p, q, titulo, str(q), lote, rev, status, tid))
+            return cod
+        PA = proj("F088", 1, "Residência Publicada", 1970, "no_ar", 9001)     # projeto PUBLICADO no site
+        PB = proj("F088", 2, "Clube Certo", 1971)                              # destino do mesmo fundo
+        PV = proj("F088", 3, "Registro vazio", 0)
+        PC = proj("F089", 1, "Clube Certo", 1971)                              # mesmo nome, OUTRO fundo
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote novo',?,'/a','revisao')", (PA,)); LA = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+        a1 = folha(PA, 1970, 1, "Planta publicada", status="no_ar", tid=901, rev="conferida")
+        a2 = folha(PA, 1970, 2, "Planta do clube", LA)
+        a3 = folha(PA, 1970, 3, "Corte do clube", LA)
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        # 1) fundos não se misturam
+        r = adm.post("/api/itens/mover", json={"itens": [a2], "destino": PC})
+        ver("mover folha para projeto de OUTRO fundo: 409 com mensagem clara, nada muda", r.status_code == 409 and "Fundos não se misturam" in r.text and "F088" in r.text and "F089" in r.text
+            and sql("SELECT projeto_codigo FROM item WHERE codigo=?", a2) == PA and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PC) == 0, r.text[:240])
+        r = adm.post("/api/itens/mover", json={"itens": [a2], "destino": PC, "simular": True})
+        ver("a prévia (simular) também recusa o outro fundo", r.status_code == 409 and "Fundos não se misturam" in r.text, r.text[:160])
+        r = adm.post(f"/api/filas/{LA}/mover-para", json={"projeto_codigo": PC})
+        ver("mover LOTE para projeto de outro fundo: 409, o lote fica onde estava", r.status_code == 409 and "Fundos não se misturam" in r.text and sql("SELECT projeto_codigo FROM lista_processamento WHERE id=?", LA) == PA, r.text[:200])
+        r = adm.post(f"/api/projetos/{PV}/mesclar-em", json={"destino": PC})
+        ver("MESCLAR em projeto de outro fundo (mesmo vazio): 409, a origem não fica marcada", r.status_code == 409 and "Fundos não se misturam" in r.text and sql("SELECT mesclado_em FROM projeto WHERE codigo=?", PV) is None, r.text[:200])
+        # 2) busca do destino filtrada pelo fundo
+        b = adm.get("/api/busca", params={"q": "Clube Certo", "fundo": "F088"}).json()["resultados"]
+        b_todos = adm.get("/api/busca", params={"q": "Clube Certo"}).json()["resultados"]
+        ver("busca do destino com fundo=F088 só traz projetos desse fundo (sem o homônimo do F089)", [x["codigo"] for x in b] == [PB] and PC in [x["codigo"] for x in b_todos], str([x["codigo"] for x in b]))
+        # 3) prévia: mostra o código novo sem gravar nada
+        ev0 = sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_movida'")
+        r = adm.post("/api/itens/mover", json={"itens": [a2], "destino": PB, "simular": True}); j = r.json()
+        ver("prévia (simular): devolve o código novo e não grava nada", r.status_code == 200 and j.get("simulado") is True and [m["para"] for m in j["movidos"]] == [f"{PB}-1971-S01-D00001"]
+            and sql("SELECT projeto_codigo FROM item WHERE codigo=?", a2) == PA and sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_movida'") == ev0, r.text[:240])
+        # 4) projeto PUBLICADO: a folha que não está no site é movida; a publicada é recusada
+        r = adm.post("/api/itens/mover", json={"itens": [a2], "destino": PB, "motivo": "é de outro projeto (revisão da folha)"}); j = r.json()
+        novo = f"{PB}-1971-S01-D00001"
+        ver("projeto publicado: a folha que NÃO está no site é movida, com o código novo", r.status_code == 200 and [m["para"] for m in j["movidos"]] == [novo]
+            and sql("SELECT projeto_codigo FROM item WHERE codigo=?", novo) == PB and sql("SELECT codigo_anterior FROM item WHERE codigo=?", novo) == a2, r.text[:240])
+        ver("a folha movida sai do lote de revisão da origem (as outras continuam)", sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND projeto_codigo=?", LA, PA) == 1 and sql("SELECT COUNT(*) FROM item WHERE codigo=?", a2) == 0)
+        r = adm.post("/api/itens/mover", json={"itens": [a1], "destino": PB})
+        ver("projeto publicado: a folha que ESTÁ no site é recusada (409, despublique antes)", r.status_code == 409 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", a1) == PA, r.text[:200])
+        # 5) histórico dos DOIS projetos
+        ha = [e for e in adm.get(f"/api/projetos/{PA}/detalhe").json()["eventos"] if e["tipo"] == "folha_movida"]
+        hb = [e for e in adm.get(f"/api/projetos/{PB}/detalhe").json()["eventos"] if e["tipo"] == "folha_movida"]
+        hc = [e for e in adm.get(f"/api/projetos/{PC}/detalhe").json()["eventos"] if e["tipo"] == "folha_movida"]
+        ver("histórico: a folha movida aparece no projeto de origem e no de destino (e não num terceiro)", len(ha) == 1 and len(hb) == 1 and not hc
+            and _j.loads(ha[0]["detalhe"])["de"] == a2 and hb[0]["codigo"] == novo, f"origem={len(ha)} destino={len(hb)} outro={len(hc)}")
+        # 6) só admin
+        ver("só admin move (operador 403, também na prévia)", op.post("/api/itens/mover", json={"itens": [a3], "destino": PB}).status_code == 403
+            and op.post("/api/itens/mover", json={"itens": [a3], "destino": PB, "simular": True}).status_code == 403 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", a3) == PA)
+        ver("integridade: nenhuma chave estrangeira quebrada", k.execute("PRAGMA foreign_key_check").fetchall() == [])
+        for l in res: print(l)
     elif modo == "prevencao_lote":
         init_db(); _aplicar_migracoes_real()
         import json as _j, tempfile, pathlib as _pl
@@ -7505,6 +7578,14 @@ else:
 print("120) Autoria divergente vira aviso, contrato 2.4 (CAMP-046)")
 rc, out = rodar("camp046_autoria", f"{tmp}/c046.db")
 if rc != 0: ok(False, f"teste do CAMP-046 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("120a) Revisão da folha: 'É de outro projeto…', fundos não se misturam e mover folha não publicada de projeto publicado")
+rc, out = rodar("revisao_outro_projeto", f"{tmp}/outro_pj.db")
+if rc != 0: ok(False, f"teste de 'É de outro projeto' não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

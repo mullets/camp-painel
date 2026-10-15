@@ -79,6 +79,7 @@ class MoverItens(BaseModel):
     itens: list[str]
     destino: str
     motivo: str | None = None
+    simular: bool = False          # só mostra o que aconteceria (códigos novos, duplicatas, recusas); nada é gravado
 
 
 class Destino(BaseModel):
@@ -97,12 +98,21 @@ class DuplicataDe(BaseModel):
 
 
 def _destino_valido(con, destino: str):
-    d = con.execute("SELECT codigo, ano, mesclado_em FROM projeto WHERE codigo=?", (destino,)).fetchone()
+    d = con.execute("SELECT codigo, ano, mesclado_em, fundo_codigo FROM projeto WHERE codigo=?", (destino,)).fetchone()
     if not d:
         raise HTTPException(404, f"O projeto de destino {destino} não existe.")
     if d["mesclado_em"]:
         raise HTTPException(409, f"O projeto {destino} já foi mesclado em {d['mesclado_em']}: use esse como destino.")
     return d
+
+
+def _mesmo_fundo(con, projeto_origem: str, d, oque: str) -> None:
+    """Regra de 14/10: fundos não se misturam. Mover folha, lote ou mesclar projeto só dentro do MESMO fundo (409 se não)."""
+    o = con.execute("SELECT fundo_codigo FROM projeto WHERE codigo=?", (projeto_origem,)).fetchone()
+    fo, fd = (o["fundo_codigo"] if o else None), d["fundo_codigo"]
+    if fo and fd and fo != fd:
+        raise HTTPException(409, f"Fundos não se misturam: {oque} é do fundo {fo} e o projeto {d['codigo']} é do fundo {fd}. "
+                                 f"Escolha um projeto do fundo {fo}; nada foi movido.")
 
 
 def _trocar_codigo(con, antigo: str, novo: str) -> None:
@@ -150,9 +160,10 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         c = it["codigo"]
         if it["projeto_codigo"] == destino:
             ignorados.append({"codigo": c, "motivo": "já está no destino"}); continue
+        _mesmo_fundo(con, it["projeto_codigo"], d, f"a folha {c}")
         if it["status_site"] == "no_ar":
             if it["tainacan_item_id"]:
-                raise HTTPException(409, f"A folha {c} está pública no site. Despublique o projeto antes de mover.")
+                raise HTTPException(409, f"A folha {c} está publicada no site. Despublique esta folha (ou o projeto) antes de mover; as outras folhas podem ser movidas.")
             _status_velho(con, c, ator)                                # marcada como publicada mas sem registro no site: status velho, não trava
         igual = None
         if it["titulo"] and it["folha"]:
@@ -179,14 +190,14 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
     return {"movidos": movidos, "duplicatas": duplicatas, "ignorados": ignorados}
 
 
-def _transacao(fn):
+def _transacao(fn, simular: bool = False):
     con = connect()
     con.isolation_level = None
     try:
         con.execute("BEGIN IMMEDIATE")
         con.execute("PRAGMA defer_foreign_keys = ON")
         r = fn(con)
-        con.execute("COMMIT")
+        con.execute("ROLLBACK" if simular else "COMMIT")
         return r
     except Exception:
         try:
@@ -230,7 +241,9 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
     """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou)."""
     if not d.itens:
         raise HTTPException(400, "Escolha pelo menos uma folha.")
-    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo))
+    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo), simular=d.simular)
+    if d.simular:
+        return {**r, "simulado": True}
     tarefas.add_task(_enviar_redirecionamentos)
     return r
 
@@ -247,7 +260,7 @@ def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> d
             con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (origem,)).fetchone()
         if tem_site:
             raise HTTPException(409, f"O projeto {origem} está público no site. Despublique antes de mesclar.")
-    _destino_valido(con, destino)
+    _mesmo_fundo(con, origem, _destino_valido(con, destino), f"o projeto {origem}")
     cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (origem,))]
     r = _mover(con, cods, destino, ator, motivo or f"mesclado em {destino}") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
     lotes = [x[0] for x in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=?", (origem,))]
@@ -281,7 +294,7 @@ def _mover_lote(con, lid: int, destino: str, ator: str, motivo: str | None) -> d
         raise HTTPException(409, "Este lote foi descartado.")
     if l["projeto_codigo"] == destino:
         raise HTTPException(400, "O lote já está nesse projeto.")
-    _destino_valido(con, destino)
+    _mesmo_fundo(con, l["projeto_codigo"], _destino_valido(con, destino), f"o lote {lid}")
     cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE lote_id=?", (lid,))]
     r = _mover(con, cods, destino, ator, motivo or f"lote {lid} movido") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
     con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE id=?", (destino, lid))
@@ -456,7 +469,7 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
     if p["mesclado_em"]:
         raise HTTPException(409, f"O projeto {antigo} já foi mesclado em {p['mesclado_em']}: mude o código de lá, se precisar.")
     if not novo.startswith(p["fundo_codigo"] + "-"):
-        raise HTTPException(400, f"O código novo tem que ser do mesmo fundo ({p['fundo_codigo']}-P….). Para levar a outro fundo, use Mesclar.")
+        raise HTTPException(400, f"O código novo tem que ser do mesmo fundo ({p['fundo_codigo']}-P….). Fundos não se misturam.")
     if con.execute("SELECT 1 FROM projeto WHERE codigo=?", (novo,)).fetchone():
         raise HTTPException(409, f"O código {novo} já é de outro projeto. Escolha um número livre (ou use Mesclar, se for o mesmo projeto).")
     numero = int(novo[-4:])

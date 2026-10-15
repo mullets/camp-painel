@@ -437,7 +437,12 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
-    eventos = [dict(r) for r in con.execute("SELECT tipo, ator, quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 20", (codigo,))]
+    # Folha movida aparece nos DOIS projetos: no destino (o código novo começa com o projeto) e na origem (o código antigo, em detalhe.de).
+    eventos = [dict(r) for r in con.execute("""SELECT tipo, ator, quando, detalhe, entidade, codigo FROM evento
+                                                WHERE (entidade='projeto' AND codigo=?)
+                                                   OR (entidade='item' AND tipo='folha_movida'
+                                                       AND (codigo LIKE ? OR (json_valid(detalhe) AND json_extract(detalhe, '$.de') LIKE ?)))
+                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%"))]
     from .livro_cv import historico as _livro
     livro_cv = _livro(con, codigo)
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
