@@ -196,16 +196,16 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .label .sidebar{position:absolute;left:0;top:0;bottom:0;width:22px;border-right:1.5px solid #111;display:grid;place-items:center}
 .label .sidebar span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:8px;letter-spacing:1.2px;white-space:nowrap}
 .label .body{position:absolute;left:22px;top:0;right:0;bottom:0;padding:8px 10px 40px}
-.label .logo{font-family:var(--mono);font-weight:600;font-size:9px;letter-spacing:1px;border:1.5px solid #111;padding:1px 4px;display:inline-block}
+.label .logo{display:inline-block;height:14px;width:auto;flex:none;vertical-align:middle}
 .label .big{font-family:var(--mono);font-weight:600;letter-spacing:.4px}
 .label.lab-faixa{display:flex;flex-direction:column;padding:6px 8px 4px;box-sizing:border-box;gap:1px}
-.lab-faixa .lf-topo{display:flex;align-items:baseline;gap:6px;white-space:nowrap;overflow:hidden}.lab-faixa .logo{font-size:8px}
+.lab-faixa .lf-topo{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}.lab-faixa .logo{height:13px}
 .lab-faixa .lf-big{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis}
 .lab-faixa .lf-meio{display:flex;gap:6px;font-size:8.5px;line-height:1.15;white-space:nowrap;overflow:hidden}.lab-faixa .lf-nome{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}.lab-faixa .lf-chave{color:#444;flex:none}
 .lab-faixa .lf-mat{margin-left:auto;flex:none;font-size:8.5px;font-weight:700;text-transform:uppercase;border:1px solid #111;border-radius:2px;padding:0 3px}
 .label.lab-capa{display:flex;flex-direction:column;padding:48px 52px 40px;box-sizing:border-box;font-size:16px;border-style:dashed}
 .lab-preview .lab-capa,.lab-mini .lab-capa{zoom:.42}
-.lab-capa .lc-topo{display:flex;align-items:center;gap:12px;font-size:14px;color:#444;border-bottom:2px solid #111;padding-bottom:12px}.lab-capa .lc-topo .logo{font-size:22px}
+.lab-capa .lc-topo{display:flex;align-items:center;gap:12px;font-size:14px;color:#444;border-bottom:2px solid #111;padding-bottom:12px}.lab-capa .lc-topo .logo{height:44px}
 .lab-capa .lc-cod{font-family:var(--mono);font-weight:700;font-size:44px;letter-spacing:1px;margin-top:70px}
 .lab-capa .lc-tit{font-size:40px;line-height:1.15;margin:18px 0 0;font-weight:700}
 .lab-capa .lc-arq{font-size:26px;margin-top:22px}.lab-capa .lc-cid{font-size:22px;color:#333;margin-top:8px}
@@ -1643,6 +1643,8 @@ try{const t=localStorage.getItem('camp.theme');if(t){th.value=t;document.documen
 const C39={'0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn','A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn','K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn','U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','*':'nwnnwnwnn'};
 function barcode(text,h,w){const t=('*'+text.toUpperCase().replace(/[^0-9A-Z\-\. ]/g,'-')+'*');let x=0,rects='';const N=1,W=2.6;for(const ch of t){const p=C39[ch]||C39['-'];for(let i=0;i<9;i++){const bw=p[i]==='w'?W:N;if(i%2===0)rects+=`<rect x="${x.toFixed(1)}" y="0" width="${bw}" height="${h}"/>`;x+=bw}x+=N}
   return `<svg viewBox="0 0 ${x.toFixed(1)} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" fill="#111">${rects}</svg>`}
+/* logo da CAMP (pedido de 15/10), redesenhado em vetor a partir do PNG para sair nítido na impressão */
+const LOGO_CAMP='<svg class="logo" viewBox="6 6 195 177" role="img" aria-label="CAMP"><path fill="#111" d="M8 181V27L55 8V181ZM55 8L80 28V38L55 19ZM80 181V27L127 8V181ZM127 8L152 28V38L127 19ZM152 181V27L199 8V181Z"/></svg>';
 let labType='projeto';
 document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
@@ -1743,7 +1745,7 @@ function labelHTML(k,alvo){   /* alvo (H21, lote): {codigo,titulo,ano,folha} de 
   const vert=mh>mw;
   if(mw>=150){   /* pedido de 15/10: capa da pasta, um pouco menor que A4 (200 × 287 mm), impressa em A4 e recortada na linha */
     const tit=labType==='projeto'||labType==='documento'||labType==='tubo'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
-    return `<div class="label lab-capa" style="width:${mw*S}px;height:${mh*S}px"><div class="lc-topo"><span class="logo">CAMP</span><span>Casa da Arquitetura Moderna Paulista · Acervo ${escHtml(sig)}</span></div>
+    return `<div class="label lab-capa" style="width:${mw*S}px;height:${mh*S}px"><div class="lc-topo">${LOGO_CAMP}<span>Casa da Arquitetura Moderna Paulista · Acervo ${escHtml(sig)}</span></div>
       <div class="lc-cod">${escHtml(big)}</div><h2 class="lc-tit">${escHtml(tit)}</h2>
       ${['projeto','documento','tubo'].includes(labType)?`<div class="lc-arq">${escHtml(arq)}</div><div class="lc-cid">${escHtml(cidAno)}</div>`:''}
       ${mat?`<div class="lc-mat">${escHtml(mat.nome)}${mat.n!=null?` <b>${escHtml(mat.n)}</b> ${mat.n===1?'folha':'folhas'}`:''}</div>`:''}
@@ -1753,14 +1755,14 @@ function labelHTML(k,alvo){   /* alvo (H21, lote): {codigo,titulo,ano,folha} de 
     const chave=labType==='projeto'?`vol. ${volume}/${totalVolumes}${local&&local!=='—'?' · '+local:''}`:labType==='documento'?(alvo&&alvo.folha?'folha '+alvo.folha:sig):labType==='caixa'?String((lines[1]||[])[1]||''):labType==='fundo'?(f[3]||''):'';
     const nomeLinha=labType==='projeto'?pn:labType==='documento'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
     const comProjeto=['projeto','documento','tubo'].includes(labType);
-    return `<div class="label lab-faixa" style="width:${mw*S}px;height:${mh*S}px"><div class="lf-topo"><span class="logo">CAMP</span><span class="lf-big">${escHtml(big)}</span>${mat?`<span class="lf-mat">${escHtml(mat.texto)}</span>`:''}</div>
+    return `<div class="label lab-faixa" style="width:${mw*S}px;height:${mh*S}px"><div class="lf-topo">${LOGO_CAMP}<span class="lf-big">${escHtml(big)}</span>${mat?`<span class="lf-mat">${escHtml(mat.texto)}</span>`:''}</div>
       <div class="lf-meio"><span class="lf-nome">${escHtml(nomeLinha)}</span></div>
       ${comProjeto?`<div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(arq)}</span><span class="lf-chave">${escHtml(fc)}</span></div>`:''}
       <div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(comProjeto?cidAno:'')}</span>${chave?`<span class="lf-chave">${escHtml(chave)}</span>`:''}</div>
       ${obs?`<div class="lf-obs">${escHtml(obs)}</div>`:''}<div class="lf-barras">${barcode(code,16,'100%')}<div class="lf-cod">${escHtml(code)}</div></div></div>`}
-  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px"><span class="logo">CAMP</span><span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${escHtml(big)}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${escHtml(pn)} · ${escHtml(arq)} · ${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
+  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px">${LOGO_CAMP}<span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${escHtml(big)}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${escHtml(pn)} · ${escHtml(arq)} · ${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
   return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${escHtml(sig)} · CAMP</span></div><div class="body">
-    <div style="display:flex;align-items:center;gap:6px"><span class="logo">CAMP</span><span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
+    <div style="display:flex;align-items:center;gap:6px">${LOGO_CAMP}<span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
     <div class="big" style="font-size:${big.length>18?12:16}px;margin:5px 0 2px">${escHtml(big)}</div>
     ${labType==='projeto'? `<div class="label-project">${escHtml(pn)}</div>` : ''}
     <div class="row">${lines.map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
