@@ -225,6 +225,35 @@ def filho(modo):
         L = {x["codigo_detectado"]: x for x in c.execute("SELECT * FROM wp_item")}
         ver("anexos indisponíveis: não quebra e usa o que o item já trazia", L["C7"]["imagem_origem"] == "documento" and L["C5"]["imagem_origem"] == "documento" and L["C2"]["imagem_origem"] == "", str(r))
         for l in res: print(l)
+    elif modo == "cv_s99":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from fastapi import HTTPException
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("CAMP-031: a tabela serie tem S99 'Não identificado' e S07 continua 'Redesenhos' (não renomeada)",
+            c.execute("SELECT nome FROM serie WHERE codigo='S99'").fetchone()[0] == "Não identificado" and c.execute("SELECT nome FROM serie WHERE codigo='S07'").fetchone()[0] == "Redesenhos")
+        from app.importador_lote import CODIGO_DOCUMENTO, importar_lote
+        ver("o código do documento aceita S01–S07 e S99, e recusa S00/S08/S98", all(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S01", "S06", "S07", "S99"))
+            and not any(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S00", "S08", "S98")))
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
+        arq = pasta / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(arq.read_text(encoding="utf-8"))
+        base = pk["documentos"][2]
+        def doc(cod, serie, n):
+            d_ = _j.loads(_j.dumps(base)); d_.update({"codigo": cod, "serie": serie, "duplicata_de": "", "bloqueios": [], "publicavel": True, "sequencial": n}); return d_
+        pk["documentos"] = [doc("F026-P0001-1972-S07-D00001", "S07", 1), doc("F026-P0001-1972-S99-D00002", "S99", 2), doc("F026-P0001-1972-S08-D00003", "S08", 3)]
+        pk.pop("retirados", None); arq.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        r = importar_lote(c, lote, "teste@camp")
+        ses = dict(c.execute("SELECT codigo, serie_codigo FROM item WHERE projeto_codigo='F026-P0001'").fetchall())
+        ver("pacote com S07 e S99: as duas folhas entram, cada uma na sua série; S08 vira problema e não entra",
+            ses.get("F026-P0001-1972-S07-D00001") == "S07" and ses.get("F026-P0001-1972-S99-D00002") == "S99" and len(ses) == 2 and any("S08" in p_ for p_ in r.get("problemas", [])), str((ses, r)))
+        for l in res: print(l)
     elif modo == "importador":
         init_db(); aplicar_migracoes()
         import json as _j
@@ -6490,6 +6519,14 @@ else:
 print("114) Releitura que muda a série das folhas (aviso de 14/10, F009-P0060 S01 → S03): o painel aceita a leitura nova em vez de travar")
 rc, out = rodar("releitura_muda_serie", f"{tmp}/relserie.db")
 if rc != 0: ok(False, f"teste da releitura que muda a série não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("115) Séries S07 e S99 no importador do lote (CAMP-031)")
+rc, out = rodar("cv_s99", f"{tmp}/cvs99.db")
+if rc != 0: ok(False, f"teste de S99 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

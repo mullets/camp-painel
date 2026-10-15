@@ -466,6 +466,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "S05": "Slides",
         "S06": "Materiais",
         "S07": "Redesenhos",
+        "S99": "Não identificado",
     }
     categorias = {}
     for x in itens:

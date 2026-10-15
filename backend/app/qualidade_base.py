@@ -134,6 +134,7 @@ def resumo_tipos(tarefas: list[dict]) -> list[dict]:
 
 
 # ---------------- índice de qualidade por fundo ----------------
+GLOB_S99 = "F[0-9][0-9][0-9]-P[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]-S99-D[0-9][0-9][0-9][0-9]*"
 GLOB_CODIGO = "F[0-9][0-9][0-9]-P[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]-S0[1-9]-D[0-9][0-9][0-9][0-9]*"
 CRITERIOS = ("com_imagem", "com_codigo", "com_titulo", "com_direitos")
 
@@ -155,7 +156,7 @@ def indices(con) -> dict:
     for r in con.execute(f"""SELECT f.codigo, f.sigla, f.titulo, COUNT(i.codigo) AS folhas,
                COALESCE(SUM(CASE WHEN COALESCE(i.arquivo_jpg,'')!='' OR COALESCE(i.arquivo_tif,'')!='' OR i.site_media_id IS NOT NULL
                          OR EXISTS (SELECT 1 FROM wp_item w WHERE w.id=i.tainacan_item_id AND (COALESCE(w.documento_url,'')!='' OR COALESCE(w.thumb_url,'')!='')) THEN 1 ELSE 0 END),0) AS com_imagem,
-               COALESCE(SUM(CASE WHEN i.codigo GLOB '{GLOB_CODIGO}' AND i.codigo NOT GLOB '*-P[0-9][0-9][0-9][0-9]-0000-*' THEN 1 ELSE 0 END),0) AS com_codigo,
+               COALESCE(SUM(CASE WHEN (i.codigo GLOB '{GLOB_CODIGO}' OR i.codigo GLOB '{GLOB_S99}') AND i.codigo NOT GLOB '*-P[0-9][0-9][0-9][0-9]-0000-*' THEN 1 ELSE 0 END),0) AS com_codigo,
                COALESCE(SUM(CASE WHEN COALESCE(TRIM(i.titulo),'')!='' THEN 1 ELSE 0 END),0) AS com_titulo,
                CASE WHEN COALESCE(d.situacao,'nao_definida')!='nao_definida' THEN COUNT(i.codigo) ELSE 0 END AS com_direitos
           FROM fundo f
