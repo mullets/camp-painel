@@ -21,7 +21,7 @@
    "entrada": true,
    "acervo": true
   },
-  "contrato": "2.2",
+  "contrato": "2.4",
   "quarentena": {
    "arquivos": 2,
    "gb": 0.0,

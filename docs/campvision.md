@@ -4,7 +4,7 @@ Este documento é o contrato que o **CAMP Vision 2 (CV2)** segue para falar com 
 (`tests/teste_backend.py`, bloco "Contrato com o CAMP Vision 2"). O que ainda **não** existe está na seção 9.
 Repositório oficial do CV2: `github.com/mullets/campvision-new` (o `campvision2` é o app antigo, com YOLO/Tesseract: não usar).
 
-> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.2** de 13/10/2026 (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
+> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.4** (autoria divergente vira aviso; base 2.2 de 13/10/2026) (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
 
 ## 1. Visão geral
 ```
@@ -72,7 +72,7 @@ curl -s -H "X-Camp-Token: $CAMP_PAINEL_TOKEN" http://192.168.15.60:8000/api/esta
 ## 10. Revisão do lote (pós-CAMP Vision)
 O CAMP Vision grava a catalogação e o painel **importa, uma pessoa confere/corrige e o admin aprova**. O painel não decide nada sozinho.
 
-**Fonte:** `<pasta do lote>/catalogacao/pacote_tainacan.json` (versão 2). Entra só o que está em `documentos`; `retirados` (autoria divergente, retirada por decisão) **não entra** e é listado no resultado.
+**Fonte:** `<pasta do lote>/catalogacao/pacote_tainacan.json` (versão 2). Entra só o que está em `documentos` (inclusive folha com autoria divergente, que vem com `publicavel=true`, `autoria_divergente=true` e a ressalva "autoria não confirmada": contrato 2.4); `retirados` (projeto divergente, capa, retirada por decisão) **não entra** e é listado no resultado.
 Os caminhos de `arquivos` e `preview` vêm **relativos à raiz `ACERVOS_CAMP`** (`qnap.prontos_raiz`); a prévia fica em `_campvision/preview/<projeto>/<código>.jpg`.
 
 **Fluxo (botões na página do projeto, painel "Revisão do lote"):**
@@ -93,8 +93,8 @@ Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabe�
 
 **Na página do projeto, o botão Publicar está sempre ativo e abre o plano** (`GET /api/projetos/{codigo}/publicar/plano`, não muda nada):
 - **O que vou fazer:** dossiê, folhas, autorizar, publicar (cada passo mostra se já foi feito).
-- **Ficam de fora:** duplicatas, autoria divergente e folhas **ainda não conferidas** na revisão (nunca vão ao site).
-- **O que só uma pessoa resolve** e bloqueia: direitos do fundo, autoria divergente/erros bloqueantes, lote de teste, "nenhuma folha conferida ainda". Cada um traz o botão que resolve.
+- **Ficam de fora:** duplicatas e folhas **ainda não conferidas** na revisão (nunca vão ao site).
+- **O que só uma pessoa resolve** e bloqueia: direitos do fundo, erros bloqueantes (autoria divergente é só aviso desde o contrato 2.4), lote de teste, "nenhuma folha conferida ainda". Cada um traz o botão que resolve.
 
 **"Publicar agora"** (`POST /api/projetos/{codigo}/publicar-tudo`, admin) faz a sequência: dossiê -> folhas (rascunho) -> autorizar -> publicar. Regras:
 - **Idempotente:** clicar de novo continua de onde parou; o que já subiu não se repete.
@@ -103,7 +103,7 @@ Antes, publicar exigia cinco passos soltos, na ordem certa e conhecidos de cabe�
 - **Trava contra clique duplo:** 409 se o mesmo projeto já está sendo publicado.
 - Todos os portões de `POST /publicar` continuam valendo: ele revalida no fim.
 
-**Regra única de folha elegível** (`publicacao.ELEGIVEL_LOCAL`, antes repetida em 4 lugares): sem autoria divergente, não é duplicata e, se veio da revisão do CAMP Vision, já foi conferida/corrigida.
+**Regra única de folha elegível** (`publicacao.ELEGIVEL_LOCAL`, antes repetida em 4 lugares): não é duplicata e, se veio da revisão do CAMP Vision, já foi conferida/corrigida.
 **Imagem que sobe ao site** (`imagem_site.py`): a **prévia do CAMP Vision** (`_campvision/preview/`, ~3000 px, já girada); senão o arquivo da folha, absoluto ou relativo à raiz dos prontos. Antes tratava o caminho como local, e uma folha vinda da revisão subia **sem imagem**.
 **Nunca testado contra o WordPress de verdade**: os testes usam substitutos do dossiê, das folhas e do status do site.
 

@@ -21,6 +21,7 @@ def nome_arquivo_site(titulo_folha: str | None, projeto_titulo: str | None, codi
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:80].rstrip("-")
     return f"{s}-{codigo}.jpg" if s else f"{codigo}.jpg"
 
+CREDITO_AUTORIA_NAO_CONFIRMADA = "Autoria não confirmada"   # CAMP-046 (contrato 2.4)
 CONVIDADO = "F000"  # fundo Convidado: material de terceiros, nunca vai ao site
 
 
@@ -507,7 +508,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             itens = con.execute(
                 "SELECT codigo, tainacan_item_id FROM item "
-                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND autoria_divergente=0 AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
+                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
@@ -742,8 +743,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         con.close(); out["erro"] = "folha não existe"; return out
     if i["tainacan_item_id"]:
         con.close(); return out
-    if i["autoria_divergente"] or i["duplicata_de"]:
-        con.close(); out["erro"] = "folha com autoria divergente ou duplicata não sobe ao site"; return out
+    if i["duplicata_de"]:
+        con.close(); out["erro"] = "folha duplicada não sobe ao site"; return out
     if i["lote_id"] and i["revisao"] == "pendente":
         con.close(); out["erro"] = "a folha ainda não foi conferida na revisão do lote: confira antes de enviar ao site"; return out
     if not i["dossie_id"]:
@@ -774,6 +775,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                        "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
                        "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
                        "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
+                       "Crédito": CREDITO_AUTORIA_NAO_CONFIRMADA if i["autoria_divergente"] else None,   # CAMP-046: nunca o nome lido como fato
                        "Suporte": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
             for nome, valor in valores.items():
                 if valor in (None, ""):

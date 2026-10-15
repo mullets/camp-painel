@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria"}
 
 
 def rodar(modo, db):
@@ -415,6 +415,49 @@ def filho(modo):
         ver("login atrás do túnel guarda o IP real na sessão e no histórico (não 127.0.0.1)", r.status_code == 200 and k.execute("SELECT ip FROM sessao ORDER BY rowid DESC LIMIT 1").fetchone()[0] == "200.1.2.3", r.text[:100])
         svc = (_pl.Path(__file__).resolve().parents[1] / "scripts" / "camp-painel.service").read_text(encoding="utf-8")
         ver("o serviço sobe o uvicorn com --proxy-headers --forwarded-allow-ips=127.0.0.1", "--proxy-headers" in svc and "--forwarded-allow-ips=127.0.0.1" in svc)
+        for l in res: print(l)
+    elif modo == "camp046_autoria":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import contrato as ctr
+        from app.importador_lote import importar_lote, registrar_erros_cv
+        from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
+        from app.publicacao_guiada import plano
+        ver("CAMP-046: o painel implementa o contrato 2.4", ctr.CONTRATO_PAINEL == "2.4", ctr.CONTRATO_PAINEL)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
+        arq = pasta / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(arq.read_text(encoding="utf-8"))
+        d0 = pk["documentos"][0]; d0.update({"autoria_divergente": True, "publicavel": True, "credito": "Fulano de Tal", "duplicata_de": "", "bloqueios": [],
+                                             "ressalvas": ["autoria não confirmada: carimbo diz Fulano de Tal"]})
+        pk.pop("retirados", None); arq.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+        (pasta / "catalogacao" / "erros.json").write_text(_j.dumps([{"arquivo": d0["codigo"], "categoria": "autoria divergente", "gravidade": "bloqueia", "detalhe": "carimbo de outro arquiteto"}]), encoding="utf-8")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        r = importar_lote(c, lote, "teste@camp")
+        it = c.execute("SELECT * FROM item WHERE codigo=?", (d0["codigo"],)).fetchone()
+        ver("folha com autoria divergente ENTRA no painel (não vai para retirados)", it is not None and it["autoria_divergente"] == 1 and not any(x.get("codigo") == d0["codigo"] for x in (r.get("retirados") or [])), str(r)[:300])
+        ver("o crédito da folha é 'Autoria não confirmada', nunca o nome lido", it["credito"] == "Autoria não confirmada", str(it["credito"]))
+        registrar_erros_cv(c, "F026-P0001", pasta); c.commit()
+        g = c.execute("SELECT gravidade FROM erro WHERE categoria='autoria_divergente' AND chave LIKE 'campvision:erros:%'").fetchone()
+        ver("erros.json com categoria 'autoria divergente' e gravidade bloqueia entra como 'corrigir'", g is not None and g[0] == "corrigir", str(g and g[0]))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','autoria_divergente','operador',?,'x')", (d0["codigo"],)); c.commit()
+        p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F026-P0001'").fetchone()
+        conds = {x["id"]: x for x in condicoes_projeto(c, p1)["condicoes"]}
+        ver("a condição 'bloqueios' passa mesmo com autoria divergente (inclusive erro manual 'bloqueia' de autoria)", conds["bloqueios"]["ok"], str(conds["bloqueios"]))
+        a = conds.get("autoria_nao_confirmada")
+        ver("vira AVISO no checklist: '1 folha com autoria não confirmada', que não bloqueia", bool(a) and a["bloqueia"] is False and "1 folha com autoria não confirmada" in a["texto"], str(a))
+        c.execute("UPDATE item SET revisao='conferida' WHERE codigo=?", (d0["codigo"],)); c.commit()
+        ver("conferida, a folha com autoria divergente é elegível", c.execute(f"SELECT COUNT(*) FROM item WHERE codigo=? AND {ELEGIVEL_LOCAL}", (d0["codigo"],)).fetchone()[0] == 1)
+        pl = plano(c, p1)
+        ver("o plano de publicar traz o aviso e não o bloqueio de autoria", any(x["id"] == "autoria_nao_confirmada" for x in pl["avisos"]) and not any(x["id"] == "bloqueios" for x in pl["bloqueios"]), str(pl["avisos"])[:200])
+        b = c.execute("SELECT erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo='F026-P0001'").fetchone()[0]
+        ver("a view de bloqueios não conta erro de autoria", b == 0, str(b))
+        c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
         init_db(); aplicar_migracoes()
@@ -1847,9 +1890,9 @@ def filho(modo):
         c = connect(); lot2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Lote autoria divergente','F026-P0001',?)", (str(pr2),)).lastrowid; c.commit(); c.close()
         j4 = op.post(f"/api/lotes/{lot2}/importar").json()
         ver("autoria divergente: as folhas NÃO entram; ficam listadas como retiradas, com o motivo", j4["criadas"] == 0 and len(j4["retirados"]) == 2 and any("autoria divergente" in x["bloqueios"] for x in j4["retirados"]) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, str(j4)[:200])
-        # CAMP-008: o erros.json desse lote traz 2 erros 'bloqueia' (autoria divergente): entram em Erros relatados e travam o envio ao site até alguém resolver
-        ver("erros.json do lote com autoria divergente: 2 erros bloqueantes entram em Erros relatados (origem CAMP Vision)", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia' AND situacao='aberto'") == 2)
-        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
+        # CAMP-008/046: o erros.json desse lote traz 2 erros 'bloqueia' de autoria divergente: entram em Erros relatados, mas como 'corrigir' (contrato 2.4: autoria é aviso, não trava)
+        ver("erros.json do lote com autoria divergente: 2 erros entram em Erros relatados (origem CAMP Vision) como 'corrigir', sem bloqueante", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='corrigir' AND situacao='aberto'") == 2 and sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'") == 0)
+        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
         # ---------- pacote com folha sem pendência: conferir em lote só o que é seguro ----------
         montar(proj, "lote_normal"); pj = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(pj.read_text(encoding="utf-8"))
         d3 = next(x for x in pk["documentos"] if x["codigo"] == D(3)); d3.update({"orientacao_incerta": False, "titulo": "Elevação sul", "tipo_de_desenho": "Elevação", "bloqueios": [], "publicavel": True})
@@ -3016,10 +3059,10 @@ def filho(modo):
                     if x: return x
             return None
         m1 = acha(adm.get("/api/estacoes").json())
-        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == "2.2" and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
+        ver("Estações lê o contrato do heartbeat e NÃO avisa quando a versão bate", bool(m1) and m1["app_contrato"] == ctr.CONTRATO_PAINEL and m1.get("aviso_contrato") is None, str({k_: (m1 or {}).get(k_) for k_ in ("app_contrato", "aviso_contrato")}))
         lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "3.0"})
         m2 = acha(adm.get("/api/estacoes").json())
-        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o 2.2" in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
+        ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o " + ctr.CONTRATO_PAINEL in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
         # CAMP-028 (C3): detalhe.situacao aparece em Estações; detalhe enorme continua JSON válido; detalhe quebrado no banco não derruba a tela
         import json as _jh
         r = lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "processando", "detalhe": {"situacao": "copiando 12 de 40 arquivos"}})
@@ -3032,7 +3075,7 @@ def filho(modo):
         ver("detalhe gigante é reduzido e continua JSON válido (até 4000 caracteres)", r.status_code == 200 and valido, str(len(bruto or "")))
         kk.execute("UPDATE estacao_heartbeat SET detalhe='{nao e json' WHERE estacao_id=?", (http_["heartbeat"]["estacao_id"].lower(),)); kk.commit(); kk.close()
         ver("detalhe quebrado no banco não derruba GET /api/estacoes (200)", adm.get("/api/estacoes").status_code == 200)
-        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "2.2"})
+        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": ctr.CONTRATO_PAINEL})
         # CAMP-027 (lado do painel): chamada recusada por falta de token aparece como aviso na tela Estações (IP só para admin)
         ver("sem recusa por token, a tela Estações não mostra aviso", adm.get("/api/estacoes").json().get("estacoes_negadas") == [])
         kt = connect(); kt.execute("UPDATE configuracao SET valor='segredo-aviso' WHERE chave='estacao.token'"); kt.commit()
@@ -6801,6 +6844,14 @@ else:
 print("119) Publicador: metadados por ID do plugin, pendência em vez de silêncio, 'Suporte' (CAMP-035/036/037)")
 rc, out = rodar("cp35_metadados", f"{tmp}/cp35.db")
 if rc != 0: ok(False, f"teste dos metadados do publicador não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("120) Autoria divergente vira aviso, contrato 2.4 (CAMP-046)")
+rc, out = rodar("camp046_autoria", f"{tmp}/c046.db")
+if rc != 0: ok(False, f"teste do CAMP-046 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

@@ -1,7 +1,7 @@
 """Importa o pacote do CAMP Vision (catalogacao/pacote_tainacan.json, versão 2) para as folhas (itens) do painel, EM REVISÃO.
 
 Regras:
-- só entra o que está em `documentos`; `retirados` (autoria divergente, retirada por decisão) NÃO entra, e é contado no resultado;
+- só entra o que está em `documentos` (folha com autoria divergente entra, com aviso: contrato 2.4); `retirados` (projeto divergente, capa, retirada por decisão) NÃO entra, e é contado no resultado;
 - nada que uma pessoa já revisou é sobrescrito, nem o que já foi para o site; reimportar só atualiza folhas ainda pendentes;
 - o tipo lido só vira tipo do painel se existir no vocabulário (o lido fica guardado em `tipo_lido`);
 - tudo o que o CAMP Vision disse de problemático (bloqueios, ressalvas, orientação/série incerta) vai para `pendencias`, para a pessoa ver ao revisar.
@@ -107,6 +107,8 @@ def registrar_erros_cv(con, proj: str, pasta: Path | str) -> int:
         cod = arquivo if CODIGO_DOCUMENTO.match(arquivo) and arquivo.startswith(proj + "-") else proj
         grav = _GRAVIDADE_ERRO_CV.get(str(e.get("gravidade") or "").strip().lower(), "aviso")
         cat = _CATEGORIA_ERRO_CV.get(str(e.get("categoria") or "").strip().lower(), "outro")
+        if cat == "autoria_divergente" and grav == "bloqueia":
+            grav = "corrigir"      # CAMP-046 (contrato 2.4): autoria divergente é aviso, nunca bloqueia a publicação
         chave = "campvision:erros:" + hashlib.sha1(f"{proj}|{arquivo}|{cat}|{detalhe}".encode("utf-8")).hexdigest()[:20]
         novos += con.execute("""INSERT OR IGNORE INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por, chave)
                                 VALUES (?, ?, 'campvision', ?, ?, 'CAMP Vision', ?)""", (grav, cat, cod, detalhe, chave)).rowcount
@@ -283,7 +285,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipos.get(tipo_lido.lower()), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
-                  "autoria_divergente": int(bool(d.get("autoria_divergente"))), "credito": d.get("credito") or None,
+                  "autoria_divergente": int(bool(d.get("autoria_divergente"))),
+                  "credito": ("Autoria não confirmada" if d.get("autoria_divergente") else (d.get("credito") or None)),   # CAMP-046: nunca o nome lido como fato
                   "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
                   "endereco_folha": endereco_lido, "cliente_folha": cliente_lido,
                   "versao_cv2": (str(d.get("versao_cv2") or "").strip() or None), "versao_prompt": (str(d.get("versao_prompt") or "").strip() or None), "modelo_cv": (str(d.get("modelo") or "").strip() or None)}
