@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica"}
 
 
 def rodar(modo, db):
@@ -489,6 +489,64 @@ def filho(modo):
         ver("o redirecionamento antigo→novo entra (fila do site, aplicado_no_site=0)", [tuple(x) for x in c.execute("SELECT codigo_antigo, codigo_novo, entidade, aplicado_no_site FROM redirecionamento ORDER BY codigo_antigo")] == [("F029-P0001-1969-S07-D00001", "F029-P0001-1969-S08-D00001", "item", 0), ("F029-P0001-1969-S07-D00002", "F029-P0001-1969-S08-D00002", "item", 0)])
         c.execute("BEGIN"); out2 = serie_s08.aplicar(c, "teste@camp", incluir_no_site=True); c.commit()
         ver("com --incluir-no-site a do site também troca e entra no mapa", len(out2["trocadas"]) == 1 and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F029-P0001-1969-S07-D00003'").fetchone()[0] == "F029-P0001-1969-S08-D00003")
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp048_imagem_publica":
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile, subprocess as _sp, sys as _sys, os as _os
+        from pathlib import Path as _P
+        from PIL import Image, ImageCms
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import publicador, reprocessar_imagens as rp
+        from app.giro_imagem import derivado_publico, lado_real
+        from app.imagem_site import imagem_para_o_site
+        raiz = _P(tempfile.mkdtemp()); prev = raiz / "_campvision" / "preview" / "F026-P0001"; prev.mkdir(parents=True)
+        COD = "F026-P0001-1972-S01-D00001"
+        im = Image.new("RGB", (3000, 2000), (200, 30, 30)); im.save(prev / f"{COD}.jpg", "JPEG", quality=95, icc_profile=ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB")).tobytes() if False else None)
+        pequena = Image.new("RGB", (800, 600), (10, 10, 10)); pequena.save(prev / "pequena.jpg", "JPEG")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F026-P0001','F026',1,'Tarumã',1972,7001)")
+        pend = _j.dumps({"previa": f"_campvision/preview/F026-P0001/{COD}.jpg"})
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id,site_media_id,pendencias,arquivo_jpg) VALUES (?,?,?,?,'importado',9001,555,?,?)", (COD, "F026-P0001", "S01", 1, pend, "F026/x.tif"))
+        c.commit()
+        d = derivado_publico(prev / f"{COD}.jpg")
+        with Image.open(d) as o: dims, fmt, modo_ = o.size, o.format, o.mode
+        ver("derivado público: JPEG RGB com lado maior <= 1920 (3000x2000 vira 1920x1280)", fmt == "JPEG" and modo_ == "RGB" and dims == (1920, 1280), str((fmt, modo_, dims)))
+        ver("o derivado fica em cache (mesmo arquivo na segunda chamada) e muda com o giro", derivado_publico(prev / f"{COD}.jpg") == d and derivado_publico(prev / f"{COD}.jpg", 90) != d)
+        with Image.open(derivado_publico(prev / f"{COD}.jpg", 90)) as o: ver("giro de 90° troca largura e altura, ainda <= 1920", o.size == (1280, 1920), str(o.size))
+        with Image.open(derivado_publico(prev / "pequena.jpg")) as o: ver("imagem pequena não é ampliada", o.size == (800, 600), str(o.size))
+        lim = c.execute("SELECT * FROM item WHERE codigo=?", (COD,)).fetchone()
+        ver("o caminho .tif nunca é escolhido como imagem do site (só a prévia JPG)", imagem_para_o_site(c, {"arquivo_jpg": "F026/x.tif", "pendencias": None}) is None and imagem_para_o_site(c, {"arquivo_jpg": "x.TIF", "pendencias": None}) is None)
+        ij = c.execute("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (COD,)).fetchone()
+        caminho, lado = publicador.imagem_pronta_para_o_site(c, ij)
+        ver("imagem_pronta_para_o_site entrega o derivado de 1920 px (não a prévia de 3000)", caminho and lado == 1920 and lado_real(caminho) == 1920 and "preview" not in caminho, str((caminho, lado)))
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo, resolucao_max) VALUES ('F026','jpg_1200') ON CONFLICT(fundo_codigo) DO UPDATE SET resolucao_max='jpg_1200'"); c.commit()
+        _, lado2 = publicador.imagem_pronta_para_o_site(c, ij)
+        ver("fundo que limita a 1200 px continua mais apertado que 1920", lado2 == 1200, str(lado2))
+        c.execute("UPDATE direitos_fundo SET resolucao_max='tif' WHERE fundo_codigo='F026'"); c.commit()
+        # giro de folha publicada usa o mesmo derivado
+        enviados = []
+        class WPF:
+            def substituir_midia(self, media, caminho, nome=None):
+                with Image.open(caminho) as o: enviados.append((media, o.size, o.format))
+                return {"id": media, "source_url": "http://x/y.jpg"}
+        publicador.WP = WPF
+        r = publicador.girar_imagem_no_site(COD, 90)
+        ver("girar folha publicada (substituir_midia) envia o derivado <= 1920, girado, e guarda o lado", enviados == [(555, (1280, 1920), "JPEG")] and r["lado_px"] == 1920 and c.execute("SELECT site_imagem_lado FROM item WHERE codigo=?", (COD,)).fetchone()[0] == 1920, str((enviados, r)))
+        # reprocessamento: o que ainda é desconhecido/acima de 1920
+        c.execute("UPDATE item SET site_imagem_lado=NULL WHERE codigo=?", (COD,)); c.commit()
+        cand = rp.candidatos(c)
+        ver("candidatos: a folha de tamanho desconhecido entra; a de 1920 não", [x["codigo"] for x in cand] == [COD] and cand[0]["tem_imagem_local"], str(cand))
+        c.execute("UPDATE item SET site_imagem_lado=3000 WHERE codigo=?", (COD,)); c.commit()
+        ver("candidatos: a de 3000 px entra", [x["codigo"] for x in rp.candidatos(c)] == [COD])
+        dbp = _os.environ["CAMP_DB_PATH"]
+        r = _sp.run([_sys.executable, str(RAIZ / "scripts" / "reprocessar_imagens_publicas.py"), "--sim"], capture_output=True, text=True, env=dict(_os.environ))
+        ver("o script em --sim lista e não envia", r.returncode == 0 and COD in r.stdout and "SIMULAÇÃO" in r.stdout, (r.stdout + r.stderr)[-300:])
+        out = rp.reenviar(COD, "teste")
+        ver("reenviar troca o arquivo do anexo pelo derivado e zera a pendência (lado 1920)", out["ok"] and out["lado_px"] == 1920 and rp.candidatos(c) == [], str(out))
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -6908,6 +6966,14 @@ else:
 print("121) S08 Redesenhos, S07 Publicações e o roteiro de migração (CAMP-047)")
 rc, out = rodar("camp047_s08", f"{tmp}/c047.db")
 if rc != 0: ok(False, f"teste do CAMP-047 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("122) Imagem pública <= 1920 px, derivado em cache e script de reprocessamento (CAMP-048)")
+rc, out = rodar("camp048_imagem_publica", f"{tmp}/c048.db")
+if rc != 0: ok(False, f"teste do CAMP-048 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

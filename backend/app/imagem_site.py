@@ -28,6 +28,14 @@ def lado_maximo_do_fundo(con, fundo_codigo: str) -> int | None:
     return LADO_MAXIMO.get(r[0]) if r and r[0] else LADO_MAXIMO["jpg_3000"]
 
 
+LADO_PUBLICO = 1920       # CAMP-048: teto do que vai ao site, qualquer que seja o fundo
+
+
+def lado_publico(con, fundo_codigo: str) -> int:
+    """Lado maior (px) da imagem PÚBLICA: o menor entre o teto do site (1920) e o que os direitos do fundo permitem."""
+    return min(LADO_PUBLICO, lado_maximo_do_fundo(con, fundo_codigo) or LADO_PUBLICO)
+
+
 def imagem_para_o_site(con, item) -> str | None:
     """`item` é uma linha com arquivo_jpg e pendencias. Devolve o caminho a subir, ou None se não há imagem."""
     raiz = raiz_prontos(con)
@@ -42,6 +50,8 @@ def imagem_para_o_site(con, item) -> str | None:
             return str(alvo)
     jpg = item["arquivo_jpg"]
     if not jpg or str(jpg).startswith("http"):
+        return None
+    if Path(str(jpg)).suffix.lower() not in (".jpg", ".jpeg"):      # CAMP-048: o TIF (ou qualquer outra coisa) nunca vai ao site
         return None
     c = Path(jpg)
     if c.is_absolute():
