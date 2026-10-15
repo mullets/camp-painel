@@ -952,6 +952,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
   <div class="hdr"><div><h1>Material novo</h1><p class="sub">O que o CAMP Vision já leu e o que ainda precisa de uma pessoa: importar, conferir, aprovar e publicar.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-lista')">Nova lista</button></div></div>
   <div class="abas-sit" id="fila-chips" role="group" aria-label="Filtrar por situação"></div>
   <p class="sub" id="fila-resumo"></p>
+  <div id="fila-sem-processar"></div>
   <div class="panel"><div class="filterbar"><input placeholder="Filtrar por projeto, fundo ou lista… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
     <thead><tr><th>Projeto</th><th>Situação</th><th>Atualizado</th><th></th></tr></thead>
     <tbody id="filas-body"></tbody>
@@ -3629,8 +3630,11 @@ function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('
 let FILAS_SRV=[],FILA_FILTRO=null;
 const FILA_GENTE=['erro','importar','conferir','aprovar','publicar'];
 async function carregarFilas(){try{FILAS_SRV=await API('/api/filas');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
-  desenharFilas();atualizarPendencias();
+  desenharFilas();atualizarPendencias();carregarSemProcessar();
   const act=sec.querySelector('.hdr .act');if(act&&!act.querySelector('[data-qnap]')){const b=document.createElement('button');b.className='btn';b.dataset.qnap='1';b.dataset.pode='qnap.varrer';b.textContent='Varrer QNAP';b.onclick=varrerQnap;act.prepend(b)}}catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#filas-body',e.message,'carregarFilas()')}}}   /* H3: erro nunca vira a lista de exemplo */
+/* CAMP-017: lotes que a estação enviou há mais de 1 h e o CAMP Vision ainda não processou */
+async function carregarSemProcessar(){const el=document.getElementById('fila-sem-processar');if(!el)return;try{const r=await API('/api/estacoes/eventos/pendentes');
+  el.innerHTML=r.itens.length?`<div class="panel" style="border-color:var(--amber)"><div class="ph"><h2>Enviados pela estação e ainda sem processar</h2></div><div class="pb"><p class="help">Lotes que a estação enviou há mais de ${escHtml(r.limite_horas)} h e o CAMP Vision ainda não leu. Veja se o CAMP Vision está ligado.</p><ul class="list">${r.itens.map(i=>`<li data-nav="projeto/${escHtml(i.projeto_codigo)}"><div class="t"><b>${escHtml(i.projeto_titulo||i.projeto_codigo)}</b><small><span class="code">${escHtml(i.projeto_codigo)}</span> · ${escHtml(i.total_arquivos==null?'?':i.total_arquivos)} arquivo(s) · enviado há ${escHtml(Math.round(i.horas))} h${i.operador?' por '+escHtml(i.operador):''}</small></div></li>`).join('')}</ul></div></div>`:''}catch(e){el.innerHTML=''}}
 function idadeFila(s){const t=Date.parse(String(s||'').replace(' ','T')+'Z');return isNaN(t)?'—':textoIdade((Date.now()-t)/1000)}
 const FILA_FILTRO_GRUPO={operador:['importar','conferir'],admin:['aprovar','publicar']},FILA_FILTRO_NOME={importar:'Para importar',conferir:'Para conferir',aprovar:'Para aprovar',publicar:'Para publicar',erro:'Com erro',operador:'Importar e conferir',admin:'Esperam um admin'};
 function filaPassa(l){const f=FILA_FILTRO;return f==='gente'?FILA_GENTE.includes(l.fase):f==='todas'?true:FILA_FILTRO_GRUPO[f]?FILA_FILTRO_GRUPO[f].includes(l.fase):l.fase===f}

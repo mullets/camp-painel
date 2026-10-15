@@ -250,6 +250,13 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             alerta = None
         if isinstance(alerta, str) and alerta.strip():     # CAMP-046/CV2 2.4: o CV2 avisa lote incompleto pelo heartbeat (o /aviso exige código de projeto)
             linhas.append({"sev": "r", "titulo": "O CAMP Vision avisou: " + alerta.strip()[:200], "codigo": None, "detalhe": f"estação {h['estacao_id']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
+    try:     # CAMP-017: lote que a estação enviou há mais de 1 h e o CAMP Vision não processou
+        from .estacao_eventos import sem_processar
+        for e in sem_processar(con):
+            linhas.append({"sev": "a", "titulo": f"Lote enviado pela estação e sem processar: {titulo_limpo(e['projeto_titulo'] or e['projeto_codigo'])}", "codigo": e["projeto_codigo"],
+                           "detalhe": f"enviado há {round(e['horas'])} h" + (f" por {e['operador']}" if e["operador"] else ""), "acao": _acao("Ver a Fila", "fila_erro", None)})
+    except Exception:  # noqa: BLE001
+        pass
     if linhas:
         grupos.append({"id": "problemas", "titulo": "Problemas que bloqueiam", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} problemas", "rota": "erros"}})

@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos"}
 
 
 def rodar(modo, db):
@@ -800,6 +800,77 @@ def filho(modo):
         publicador.WP = WPQ
         r = x.post("/api/fundos/F077/enviar-ao-site")
         ver("site fora do ar: 502 com o motivo, e o painel continua intacto", r.status_code == 502 and "site fora do ar" in r.text and c.execute("SELECT procedencia FROM fundo WHERE codigo='F077'").fetchone()[0] == "Compra em 1990", r.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp017_eventos":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil, uuid as _u
+        from pathlib import Path as _P
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, estacao_eventos as ee
+        from app.importador_lote import importar_lote
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        lan, fora = com_ip("192.168.15.43"), com_ip("8.8.8.8")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)"); c.commit()
+        k1 = str(_u.uuid5(_u.NAMESPACE_URL, "F026-P0001|enviado|2026-10-15T09:00:00"))
+        corpo = {"chave": k1, "estacao_id": "WIN-01", "tipo_estacao": "contex", "operador": "Rafa", "projeto_codigo": "F026-P0001", "evento": "enviado", "total_arquivos": 10, "pasta_entrada": "100 - Scanners/Contex/F026-P0001", "sha256_manifesto": "ab" * 32}
+        r = lan.post("/api/estacoes/eventos", json=corpo)
+        ver("evento 'enviado' da estação é aceito (rede local)", r.status_code == 200 and r.json()["ok"] and not r.json()["duplicado"], r.text[:160])
+        r2 = lan.post("/api/estacoes/eventos", json=corpo)
+        ver("idempotente pela chave: repetir devolve duplicado e não grava de novo", r2.status_code == 200 and r2.json()["duplicado"] and c.execute("SELECT COUNT(*) FROM estacao_evento").fetchone()[0] == 1, r2.text[:160])
+        ver("grava no histórico do projeto (evento) e na tabela estacao_evento", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo='F026-P0001' AND tipo='estacao_enviado'").fetchone()[0] == 1 and c.execute("SELECT estacao_id, operador, total_arquivos FROM estacao_evento").fetchone()[:] == ("win-01", "Rafa", 10))
+        r = lan.post("/api/estacoes/eventos", json={"chave": str(_u.uuid4()), "estacao_id": "mac-01", "tipo_estacao": "foto", "projeto_codigo": "F026-P0001", "evento": "capturado", "total_arquivos": None, "sha256_manifesto": None})
+        ver("'capturado' aceita sha256_manifesto = null e total_arquivos = null (a estação não pode ser descartada)", r.status_code == 200 and c.execute("SELECT sha256_manifesto FROM estacao_evento WHERE evento='capturado'").fetchone()[0] is None, r.text[:160])
+        ver("evento inválido: 400; sem chave: 400", lan.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4()), "evento": "xyz"}).status_code == 400 and lan.post("/api/estacoes/eventos", json={"evento": "enviado"}).status_code == 400)
+        ver("IP público é recusado (403), como nas outras rotas das estações", fora.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4())}).status_code == 403)
+        # token ligado: header X-Camp-Token
+        c.execute("UPDATE configuracao SET valor='segredo' WHERE chave='estacao.token'"); c.commit()
+        ver("com token ligado: sem token 401; com X-Camp-Token 200", lan.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4())}).status_code == 401
+            and lan.post("/api/estacoes/eventos", json={**corpo, "chave": str(_u.uuid4())}, headers={"X-Camp-Token": "segredo"}).status_code == 200)
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='estacao.token'"); c.commit()
+        # sem processar
+        c.execute("DELETE FROM estacao_evento"); c.commit()
+        def ev(chave, quando, total=10, proj="F026-P0001"):
+            c.execute("INSERT INTO estacao_evento (chave, estacao_id, projeto_codigo, evento, total_arquivos, recebido_em) VALUES (?,?,?,'enviado',?,datetime('now',?))", (chave, "win-01", proj, total, quando))
+        ev("velho-0001", "-2 hours"); ev("recente-1", "-20 minutes"); c.commit()
+        sp = ee.sem_processar(c)
+        ver("lote enviado há mais de 1 h e sem lote no painel aparece; o de 20 minutos não", [x["id"] for x in sp] and len(sp) == 1 and sp[0]["projeto_codigo"] == "F026-P0001" and sp[0]["horas"] >= 1.9, str(sp))
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        ver("depois que o lote existe no painel, deixa de ser 'sem processar'", ee.sem_processar(c) == [])
+        # conferência de contagem
+        c.execute("DELETE FROM lista_processamento WHERE id=?", (lote,)); c.execute("DELETE FROM estacao_evento"); ev("mil-0001", "-3 hours", total=10); c.commit()
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        r = importar_lote(c, lote, "teste@camp"); c.commit()
+        e = c.execute("SELECT divergente, folhas_entregues, lote_id FROM estacao_evento WHERE chave='mil-0001'").fetchone()
+        ver("importar o lote compara enviados (10) × folhas que chegaram: chegaram menos → aviso", r.get("contagem_estacao", {}).get("divergente") is True and e["divergente"] == 1 and e["lote_id"] == lote, str((r.get("contagem_estacao"), dict(e))))
+        av = c.execute("SELECT gravidade, origem FROM erro WHERE chave='estacao_evento:mil-0001'").fetchone()
+        ver("o aviso é gravidade 'aviso' (não bloqueia)", av is not None and av["gravidade"] == "aviso", str(dict(av) if av else None))
+        n = r["criadas"] + r["atualizadas"] + len(r["retirados"])
+        c.execute("DELETE FROM estacao_evento"); ev("mil-0002", "-3 hours", total=1); c.commit()
+        cf = ee.conferir_contagem(c, "F026-P0001", lote, n)
+        ver("total menor que as folhas (Windows com manifesto mesclado de lote anterior) NÃO é divergência", cf and cf["divergente"] is False and c.execute("SELECT COUNT(*) FROM erro WHERE chave='estacao_evento:mil-0002'").fetchone()[0] == 0, str(cf))
+        c.execute("DELETE FROM estacao_evento"); ev("mil-0003", "-3 hours", total=None); c.commit()
+        cf = ee.conferir_contagem(c, "F026-P0001", lote, n)
+        ver("total desconhecido (null) nunca diverge", cf and cf["divergente"] is False, str(cf))
+        # rotas para pessoas
+        c.execute("DELETE FROM estacao_evento"); c.execute("UPDATE lista_processamento SET descartado_em=datetime('now')"); ev("mil-0004", "-5 hours"); c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        j = x.get("/api/estacoes/eventos/pendentes").json()
+        ver("GET /api/estacoes/eventos/pendentes lista o lote parado", len(j["itens"]) == 1 and j["limite_horas"] == 1, str(j))
+        tj = _j.dumps(x.get("/api/painel").json().get("tarefas"), ensure_ascii=False)
+        ver("o painel inicial mostra 'Lote enviado pela estação e sem processar'", "sem processar" in tj and "F026-P0001" in tj, tj[:200])
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -7259,6 +7330,14 @@ else:
 print("126) Enviar fundo ao site: hub com bio/fontes/foto, '__limpar__', divergência e página do arquiteto (CAMP-015)")
 rc, out = rodar("camp015_fundo_site", f"{tmp}/c015.db")
 if rc != 0: ok(False, f"teste do CAMP-015 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("127) Estações avisam o painel (capturado/enviado) e lotes enviados sem processar (CAMP-017)")
+rc, out = rodar("camp017_eventos", f"{tmp}/c017.db")
+if rc != 0: ok(False, f"teste do CAMP-017 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

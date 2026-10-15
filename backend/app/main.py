@@ -27,6 +27,7 @@ from .rotas_qnap import router as rotas_qnap
 from .rotas_hoje import router as rotas_hoje
 from .rotas_uso import router as rotas_uso
 from .rotas_lgpd import router as rotas_lgpd
+from .estacao_eventos import router as rotas_estacao_eventos
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -70,6 +71,7 @@ app.include_router(rotas_emprestimos)
 from .rotas_relatorios import router as rotas_relatorios
 app.include_router(rotas_relatorios)
 app.include_router(rotas_lgpd)
+app.include_router(rotas_estacao_eventos)
 from .rotas_estante import router as rotas_estante
 app.include_router(rotas_estante)
 
