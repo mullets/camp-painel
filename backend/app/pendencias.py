@@ -53,7 +53,7 @@ def lotes(con) -> list[dict]:
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
                               FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo
-                             WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL"""):
+                             WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL"""):
         d = dict(r)
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"))
         saida.append(d)
@@ -89,7 +89,7 @@ def fundos_travados(con) -> list[dict]:
     out = []
     for f in con.execute("""SELECT f.codigo, f.sigla, f.titulo, COUNT(DISTINCT p.codigo) AS projetos
                               FROM fundo f JOIN projeto p ON p.fundo_codigo=f.codigo
-                             WHERE f.ativo=1 AND p.status_site!='no_ar' AND p.mesclado_em IS NULL
+                             WHERE f.ativo=1 AND p.status_site!='no_ar' AND p.mesclado_em IS NULL AND p.descartado_em IS NULL
                                AND EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=p.codigo)
                              GROUP BY f.codigo ORDER BY projetos DESC, f.codigo"""):
         msg = direitos_permitem_publicar(con, f["codigo"])
@@ -336,9 +336,9 @@ def no_site(con) -> dict:
     q = lambda sql: con.execute(sql).fetchone()[0]  # noqa: E731
     return {
         "folhas": {"no_ar": q("SELECT COUNT(*) FROM item WHERE status_site='no_ar'"), "total": q("SELECT COUNT(*) FROM item")},
-        "projetos": {"no_ar": q("SELECT COUNT(*) FROM projeto WHERE status_site='no_ar' AND mesclado_em IS NULL"),
-                     "total": q("SELECT COUNT(*) FROM projeto WHERE mesclado_em IS NULL"),
-                     "sem_folhas": q("SELECT COUNT(*) FROM projeto p WHERE p.mesclado_em IS NULL AND p.status_site!='no_ar' AND NOT EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=p.codigo)")},
+        "projetos": {"no_ar": q("SELECT COUNT(*) FROM projeto WHERE status_site='no_ar' AND mesclado_em IS NULL AND descartado_em IS NULL"),
+                     "total": q("SELECT COUNT(*) FROM projeto WHERE mesclado_em IS NULL AND descartado_em IS NULL"),
+                     "sem_folhas": q("SELECT COUNT(*) FROM projeto p WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL AND p.status_site!='no_ar' AND NOT EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=p.codigo)")},
         "fundos": {"no_ar": q("SELECT COUNT(*) FROM fundo WHERE ativo=1 AND status_site='no_ar'"), "total": q("SELECT COUNT(*) FROM fundo WHERE ativo=1")},
     }
 

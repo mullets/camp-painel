@@ -67,7 +67,7 @@ def tarefas_qualidade(con, usuario_id: int | None = None) -> list[dict]:
     out: list[dict] = []
     # 1) fundo sem sigla: a sigla vai no nome dos arquivos; sem ela, o material do fundo não anda
     for f in con.execute("""SELECT f.codigo, f.titulo, f.status_site,
-                                   (SELECT COUNT(*) FROM projeto p WHERE p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL) AS projetos
+                                   (SELECT COUNT(*) FROM projeto p WHERE p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL AND p.descartado_em IS NULL) AS projetos
                               FROM fundo f WHERE f.ativo=1 AND COALESCE(TRIM(f.sigla),'')=''"""):
         out.append({"id": "q_sigla_" + f["codigo"], "tipo": "fundo_sem_sigla", "prioridade": 55, "impacto": f["projetos"] or 0,
                     "rota": "fundo/" + f["codigo"], "codigo": f["codigo"], "rotulo": "Dar a sigla",
@@ -77,7 +77,7 @@ def tarefas_qualidade(con, usuario_id: int | None = None) -> list[dict]:
     for p in con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.status_site,
                                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
                               FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo
-                             WHERE f.ativo=1 AND p.mesclado_em IS NULL AND p.lote_teste=0
+                             WHERE f.ativo=1 AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND p.lote_teste=0
                                AND (COALESCE(p.ano,0)=0 OR COALESCE(TRIM(p.cidade),'')='')"""):
         falta = [x for x, vazio in (("ano", not p["ano"]), ("cidade", not (p["cidade"] or "").strip())) if vazio]
         pub = p["status_site"] == "no_ar"
@@ -88,7 +88,7 @@ def tarefas_qualidade(con, usuario_id: int | None = None) -> list[dict]:
     # 3) folhas sem título, juntas por projeto (uma tarefa por projeto)
     for r in con.execute("""SELECT p.codigo, p.titulo, p.status_site, COUNT(*) AS n, MIN(i.codigo) AS primeira
                               FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
-                             WHERE f.ativo=1 AND p.mesclado_em IS NULL AND p.lote_teste=0 AND COALESCE(TRIM(i.titulo),'')=''
+                             WHERE f.ativo=1 AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND p.lote_teste=0 AND COALESCE(TRIM(i.titulo),'')=''
                              GROUP BY p.codigo"""):
         pub = r["status_site"] == "no_ar"
         out.append({"id": "q_titulo_" + r["codigo"], "tipo": "folha_sem_titulo", "prioridade": 45 if pub else 22, "impacto": r["n"],
@@ -161,7 +161,7 @@ def indices(con) -> dict:
                CASE WHEN COALESCE(d.situacao,'nao_definida')!='nao_definida' THEN COUNT(i.codigo) ELSE 0 END AS com_direitos
           FROM fundo f
           LEFT JOIN direitos_fundo d ON d.fundo_codigo=f.codigo
-          LEFT JOIN projeto p ON p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL AND p.lote_teste=0
+          LEFT JOIN projeto p ON p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND p.lote_teste=0
           LEFT JOIN item i ON i.projeto_codigo=p.codigo
          WHERE f.ativo=1 GROUP BY f.codigo ORDER BY f.codigo"""):
         fundos.append(_completar(dict(r)))

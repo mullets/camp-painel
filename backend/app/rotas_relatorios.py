@@ -122,17 +122,17 @@ def _publicacoes(con, de: str, ate: str, meses: list[str]) -> dict:
               WHERE p.lote_teste=0 AND substr(i.publicado_em,1,10) BETWEEN ? AND ? GROUP BY 1,2,3""", "folhas")
     somar("""SELECT substr(p.publicado_em,1,7) AS mes, p.fundo_codigo AS fundo, f.titulo AS titulo, COUNT(*) AS n
                FROM projeto p LEFT JOIN fundo f ON f.codigo=p.fundo_codigo
-              WHERE p.lote_teste=0 AND p.mesclado_em IS NULL AND substr(p.publicado_em,1,10) BETWEEN ? AND ? GROUP BY 1,2,3""", "projetos")
+              WHERE p.lote_teste=0 AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND substr(p.publicado_em,1,10) BETWEEN ? AND ? GROUP BY 1,2,3""", "projetos")
     pm = [{"mes": m, "rotulo": rotulo_mes(m), **v} for m, v in sorted(por_mes.items())]
     lista = [dict(r) for r in con.execute("""
         SELECT p.codigo, p.titulo, p.fundo_codigo AS fundo, substr(p.publicado_em,1,10) AS publicado_em,
                (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo AND i.status_site='no_ar') AS folhas
           FROM projeto p
-         WHERE p.lote_teste=0 AND p.mesclado_em IS NULL AND substr(p.publicado_em,1,10) BETWEEN ? AND ?
+         WHERE p.lote_teste=0 AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND substr(p.publicado_em,1,10) BETWEEN ? AND ?
          ORDER BY p.publicado_em, p.codigo""", (de, ate)).fetchall()]
     hoje = con.execute("""SELECT
         (SELECT COUNT(*) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE p.lote_teste=0 AND i.status_site='no_ar'),
-        (SELECT COUNT(*) FROM projeto WHERE lote_teste=0 AND mesclado_em IS NULL AND status_site='no_ar')""").fetchone()
+        (SELECT COUNT(*) FROM projeto WHERE lote_teste=0 AND mesclado_em IS NULL AND descartado_em IS NULL AND status_site='no_ar')""").fetchone()
     return {
         "folhas": sum(x["folhas"] for x in pm),
         "projetos": sum(x["projetos"] for x in pm),

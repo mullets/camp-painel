@@ -98,9 +98,11 @@ class DuplicataDe(BaseModel):
 
 
 def _destino_valido(con, destino: str):
-    d = con.execute("SELECT codigo, ano, mesclado_em, fundo_codigo FROM projeto WHERE codigo=?", (destino,)).fetchone()
+    d = con.execute("SELECT codigo, ano, mesclado_em, descartado_em, fundo_codigo FROM projeto WHERE codigo=?", (destino,)).fetchone()
     if not d:
         raise HTTPException(404, f"O projeto de destino {destino} não existe.")
+    if d["descartado_em"]:
+        raise HTTPException(409, f"O projeto {destino} foi descartado (era uma pasta de arquivos, não uma obra): escolha outro destino.")
     if d["mesclado_em"]:
         raise HTTPException(409, f"O projeto {destino} já foi mesclado em {d['mesclado_em']}: use esse como destino.")
     return d
@@ -250,9 +252,11 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
 
 def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> dict:
     """Mescla o projeto de origem no destino (transação já aberta por quem chama). Usada pela rota e pelo CAMP Vision (CAMP-009)."""
-    o = con.execute("SELECT codigo, status_site, mesclado_em FROM projeto WHERE codigo=?", (origem,)).fetchone()
+    o = con.execute("SELECT codigo, status_site, mesclado_em, descartado_em FROM projeto WHERE codigo=?", (origem,)).fetchone()
     if not o:
         raise HTTPException(404, f"O projeto {origem} não existe.")
+    if o["descartado_em"]:
+        raise HTTPException(409, f"O projeto {origem} já foi descartado.")
     if o["mesclado_em"]:
         raise HTTPException(409, f"O projeto {origem} já foi mesclado em {o['mesclado_em']}.")
     if o["status_site"] == "no_ar":
@@ -546,3 +550,149 @@ def redirecionamentos(tipo: str | None = None, desde: str | None = None) -> dict
     finally:
         con.close()
     return {"total": len(itens), "itens": itens}
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Projetos com NOME DE PASTA DO SISTEMA ("01 - Arquivo Arquivístico (TIFF)", "JPG"…): o CAMP Vision criou o projeto a partir de
+# uma subpasta (F009-P0114, F022-P0009, F026-P0237). A reserva da estação já recusa esses nomes (422); aqui o admin limpa os
+# que já existem: junta ao projeto certo (mesclar-em, SÓ dentro do mesmo fundo) ou, sem folhas, descarta (nada é apagado).
+# ---------------------------------------------------------------------------------------------------------------------
+_P_NA_PASTA = re.compile(r"(?<![A-Za-z0-9])P\s*0*(\d{1,4})(?!\d)", re.I)
+
+
+def _pasta_do_projeto(pasta: str | None) -> str | None:
+    """Sobe a partir da pasta do lote enquanto o nome for de subpasta do sistema: o que sobra é a pasta da obra."""
+    from .similaridade import nome_de_subpasta
+    partes = (pasta or "").replace("\\", "/").rstrip("/").split("/")
+    subiu = False
+    while partes and nome_de_subpasta(partes[-1]):
+        partes.pop()
+        subiu = True
+    return "/".join(partes) if subiu and partes and partes[-1] else None
+
+
+def _sugerir_destino(con, p, pastas: list[str]) -> dict | None:
+    """O projeto real do MESMO fundo cuja pasta contém a subpasta. Fundos não se misturam (decisão de 14/10)."""
+    from .similaridade import NIVEL_FORTE, nome_de_subpasta, normalizar, pontuar
+    fundo, codigo = p["fundo_codigo"], p["codigo"]
+
+    def vivo(cod: str | None, saltos: int = 0):
+        if not cod or cod == codigo or saltos > 5:
+            return None
+        r = con.execute("""SELECT codigo, titulo, ano, cidade, mesclado_em FROM projeto
+                            WHERE codigo=? AND fundo_codigo=? AND descartado_em IS NULL""", (cod, fundo)).fetchone()
+        if r and r["mesclado_em"]:                       # o projeto da pasta já foi juntado a outro: segue para o destino final
+            return vivo(r["mesclado_em"], saltos + 1)
+        return r if r and not nome_de_subpasta(r["titulo"]) else None
+
+    for pasta in pastas:
+        pai = _pasta_do_projeto(pasta)
+        if not pai:
+            continue
+        nome_pai = pai.split("/")[-1]
+        # 1) outro projeto do fundo cuja pasta (do projeto ou de um lote dele) é exatamente a pasta-mãe
+        for (cod,) in con.execute("""SELECT codigo FROM projeto WHERE fundo_codigo=? AND rtrim(pasta_qnap,'/')=?
+                                      UNION SELECT l.projeto_codigo FROM lista_processamento l JOIN projeto x ON x.codigo=l.projeto_codigo
+                                       WHERE x.fundo_codigo=? AND rtrim(l.pasta_qnap,'/')=?""", (fundo, pai, fundo, pai)).fetchall():
+            r = vivo(cod)
+            if r:
+                return {"codigo": r["codigo"], "titulo": r["titulo"], "pasta": pai, "como": "achado pela pasta do projeto, que é a pasta-mãe"}
+        # 2) o número P no nome da pasta-mãe ("P0060 - SESI — Marília - 1984")
+        m = _P_NA_PASTA.search(nome_pai)
+        if m:
+            r = vivo(f"{fundo}-P{int(m.group(1)):04d}")
+            if r:
+                return {"codigo": r["codigo"], "titulo": r["titulo"], "pasta": pai, "como": f"achado pelo número P{int(m.group(1)):04d} no nome da pasta-mãe"}
+        # 3) pelo nome: a pasta-mãe sem o "P0060 - " do começo e sem o " - 1984" do fim
+        nome = re.sub(r"^\s*P\s*\d{1,4}\s*[-–—._]\s*", "", nome_pai, flags=re.I)
+        ano_m = re.search(r"((?:18|19|20)\d{2})\)?\s*$", nome)
+        nome = re.sub(r"\s*[-–—_(]?\s*(?:18|19|20)\d{2}\)?\s*$", "", nome).strip(" -–—_")
+        alvo, melhor = normalizar(nome), None
+        if not alvo:
+            continue
+        for r in con.execute("""SELECT codigo, titulo, ano, cidade FROM projeto
+                                 WHERE fundo_codigo=? AND codigo<>? AND mesclado_em IS NULL AND descartado_em IS NULL""", (fundo, codigo)).fetchall():
+            if nome_de_subpasta(r["titulo"]):
+                continue
+            if normalizar(r["titulo"]) == alvo:
+                melhor = (2.0, r)
+                break
+            nota, _ = pontuar({"titulo": nome, "ano": int(ano_m.group(1)) if ano_m else 0, "cidade": None},
+                              {"titulo": r["titulo"], "ano": r["ano"], "cidade": r["cidade"]})
+            if nota >= NIVEL_FORTE and (not melhor or nota > melhor[0]):
+                melhor = (nota, r)
+        if melhor:
+            r = melhor[1]
+            return {"codigo": r["codigo"], "titulo": r["titulo"], "pasta": pai, "como": "achado pelo nome da pasta-mãe"}
+    return None
+
+
+def _projetos_nome_de_pasta(con) -> list[dict]:
+    from .rotas_decisoes import _resumo_projetos
+    from .similaridade import nome_de_subpasta
+    out = []
+    for p in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo_titulo, p.pasta_qnap, p.status_site, p.tainacan_item_id, p.wp_page_id,
+                                   (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
+                                   (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo AND i.tainacan_item_id IS NOT NULL) AS folhas_no_site
+                              FROM projeto p LEFT JOIN fundo f ON f.codigo=p.fundo_codigo
+                             WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL ORDER BY p.fundo_codigo, p.codigo""").fetchall():
+        if not nome_de_subpasta(p["titulo"]):
+            continue
+        lotes = [dict(l) for l in con.execute("""SELECT id, nome, pasta_qnap, etapa, descartado_em FROM lista_processamento
+                                                  WHERE projeto_codigo=? ORDER BY id""", (p["codigo"],))]
+        pastas = [l["pasta_qnap"] for l in lotes if l["pasta_qnap"]] + ([p["pasta_qnap"]] if p["pasta_qnap"] else [])
+        tem_site = bool(p["tainacan_item_id"] or p["wp_page_id"] or p["folhas_no_site"])
+        capa = (_resumo_projetos(con, {p["codigo"]}).get(p["codigo"]) or {}).get("capa") if p["folhas"] else None
+        out.append({"codigo": p["codigo"], "titulo": p["titulo"], "fundo_codigo": p["fundo_codigo"], "fundo_titulo": p["fundo_titulo"],
+                    "folhas": p["folhas"], "lotes": lotes, "tem_no_site": tem_site, "status_site": p["status_site"],
+                    "pasta_qnap": pastas[0] if pastas else None, "capa": capa,
+                    "sugestao": _sugerir_destino(con, p, pastas),
+                    "pode_descartar": not p["folhas"] and not tem_site})
+    return out
+
+
+@router.get("/projetos/nome-de-pasta")
+def projetos_nome_de_pasta(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Projetos cujo título é nome de subpasta do sistema, com a sugestão do projeto certo (mesmo fundo)."""
+    con = connect()
+    try:
+        itens = _projetos_nome_de_pasta(con)
+        return {"total": len(itens), "itens": itens}
+    finally:
+        con.close()
+
+
+class DescarteProjeto(BaseModel):
+    motivo: str | None = None
+
+
+@router.post("/projetos/{codigo}/descartar")
+def descartar_projeto(codigo: str, d: DescarteProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Projeto com nome de pasta do sistema e SEM folhas: some das listas. Não apaga nada; o número P nunca é reusado."""
+    from .similaridade import nome_de_subpasta
+    motivo = ((d.motivo or "").strip() or "nome de pasta do sistema, não é uma obra")[:300]
+
+    def fazer(con):
+        p = con.execute("SELECT codigo, titulo, mesclado_em, descartado_em, tainacan_item_id, wp_page_id FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        if p["descartado_em"]:
+            raise HTTPException(409, "Este projeto já foi descartado.")
+        if p["mesclado_em"]:
+            raise HTTPException(409, f"Este projeto já foi juntado a {p['mesclado_em']}.")
+        if not nome_de_subpasta(p["titulo"]):
+            raise HTTPException(409, "Só um projeto com nome de pasta do sistema (ex.: \"01 - Arquivo Arquivístico (TIFF)\") pode ser descartado aqui.")
+        if con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (codigo,)).fetchone()[0]:
+            raise HTTPException(409, "Este projeto tem folhas: junte ao projeto certo em vez de descartar.")
+        if p["tainacan_item_id"] or p["wp_page_id"]:
+            raise HTTPException(409, "Este projeto tem registro no site: junte ao projeto certo em vez de descartar.")
+        lotes = [r[0] for r in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL", (codigo,))]
+        con.execute("""UPDATE lista_processamento SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now')
+                        WHERE projeto_codigo=? AND descartado_em IS NULL""", (u["email"], f"projeto {codigo} descartado: {motivo}"[:300], codigo))
+        con.execute("UPDATE projeto SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now') WHERE codigo=?",
+                    (u["email"], motivo, codigo))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_descartado',?,?)",
+                    (codigo, u["email"], _json.dumps({"titulo": p["titulo"], "motivo": motivo, "lotes": lotes}, ensure_ascii=False)))
+        return {"ok": True, "codigo": codigo, "lotes": lotes}
+
+    return _transacao(fazer)

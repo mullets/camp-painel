@@ -131,7 +131,7 @@ def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int
     achados = []
     for p in con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.fundo_codigo, f.titulo AS fundo_titulo
                               FROM projeto p LEFT JOIN fundo f ON f.codigo=p.fundo_codigo
-                             WHERE p.fundo_codigo<>? AND p.mesclado_em IS NULL""", (fundo_codigo or "",)):
+                             WHERE p.fundo_codigo<>? AND p.mesclado_em IS NULL AND p.descartado_em IS NULL""", (fundo_codigo or "",)):
         score, motivos = pontuar(novo, {"titulo": p["titulo"], "ano": p["ano"], "cidade": p["cidade"]})
         if score >= NIVEL_FORTE:
             achados.append({"codigo": p["codigo"], "titulo": p["titulo"], "ano": p["ano"] or None, "cidade": p["cidade"], "fundo_codigo": p["fundo_codigo"],

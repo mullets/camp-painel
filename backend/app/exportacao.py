@@ -68,7 +68,7 @@ def _projetos(con, fundo: str, projeto: str | None = None) -> list[dict]:
     if projeto:
         rows = con.execute("SELECT * FROM projeto WHERE codigo=?", (projeto,)).fetchall()
     else:
-        rows = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL AND lote_teste=0 ORDER BY numero", (fundo,)).fetchall()
+        rows = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL AND lote_teste=0 ORDER BY numero", (fundo,)).fetchall()
     return [dict(r) for r in rows]
 
 

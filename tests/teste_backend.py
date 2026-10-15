@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta"}
 
 
 def rodar(modo, db):
@@ -6652,6 +6652,80 @@ def filho(modo):
         ver("a decisão descartada não aparece entre as pendentes", all(x["id"] != did for x in (pend.get("itens", pend) if isinstance(pend, dict) else pend)), str(pend)[:200])
         k.close()
         for l in res: print(l)
+    elif modo == "nome_de_pasta":
+        # projetos criados a partir de SUBPASTAS do sistema (F009-P0114 "01 - Arquivo Arquivístico (TIFF)", F022-P0009 com 5 folhas, F026-P0237)
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F009','Euclides Oliveira','EOL',1),('F022','Fundo 22','F22',1),('F026','Fundo 26','F26',1),('F001','Fundo 1','F01',1)")
+        def proj(f, n, t, pasta=None, site=None):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,pasta_qnap,tainacan_item_id) VALUES (?,?,?,?,?,?)", (f"{f}-P{n:04d}", f, n, t, pasta, site))
+            return f"{f}-P{n:04d}"
+        def lote(cod, pasta):
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,?,'revisao')", (pasta.split("/")[-1], cod, pasta)).lastrowid
+        A = "/mnt/qnap/acervos"
+        proj("F009", 60, "SESI — Marília"); proj("F001", 60, "SESI — Marília")              # o mesmo P0060 em OUTRO fundo: nunca é sugerido
+        p114 = proj("F009", 114, "01 - Arquivo Arquivístico (TIFF)")
+        l114 = lote(p114, f"{A}/F009 - EOL/P0060 - SESI — Marília - 1984/01 - Arquivo Arquivístico (TIFF)")
+        proj("F022", 3, "Casa Azul"); proj("F026", 3, "Casa Azul")
+        p9 = proj("F022", 9, "JPG")
+        lote(p9, f"{A}/F022 - F22/Casa Azul - 1975/JPG")
+        for n in range(1, 6):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES (?,?,'S03',?,'importado')", (f"{p9}-0000-S03-D{n:05d}", p9, n))
+        proj("F026", 50, "Edifício Zarvos", pasta=f"{A}/F026 - F26/P0100 - Edificio Z")
+        p237 = proj("F026", 237, "03 - Fotografias")
+        lote(p237, f"{A}/F026 - F26/P0100 - Edificio Z/03 - Fotografias")
+        normal = proj("F026", 238, "Fotografia aérea do Jockey")
+        p239 = proj("F026", 239, "JPG", site=777)                                           # tem registro no site: não descarta
+        c.commit(); c.close()
+        for nome, em, papel in (("Adm", "adm@camp.arq.br", "admin"), ("Op", "op@camp.arq.br", "operador"), ("Le", "le@camp.arq.br", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        ver("operador e leitura não veem a lista (403)", op.get("/api/projetos/nome-de-pasta").status_code == 403 and le.get("/api/projetos/nome-de-pasta").status_code == 403)
+        r = adm.get("/api/projetos/nome-de-pasta"); j = r.json() if r.status_code == 200 else {}
+        por = {x["codigo"]: x for x in j.get("itens", [])}
+        ver("a lista acha os 3 tipos de nome (Arquivo Arquivístico, JPG, 03 - Fotografias) e não o 'Fotografia aérea do Jockey'",
+            {p114, p9, p237, p239} == set(por) and normal not in por and j.get("total") == 4, r.text[:300])
+        ver("cada um traz fundo, folhas, lotes, site e a pasta do lote no QNAP",
+            por.get(p9, {}).get("folhas") == 5 and por.get(p114, {}).get("folhas") == 0 and len(por.get(p114, {}).get("lotes", [])) == 1
+            and por.get(p114, {}).get("pasta_qnap", "").endswith("/01 - Arquivo Arquivístico (TIFF)") and por.get(p114, {}).get("fundo_titulo") == "Euclides Oliveira"
+            and por.get(p239, {}).get("tem_no_site") is True and por.get(p114, {}).get("tem_no_site") is False, str(por.get(p114))[:300])
+        sg = lambda cod: (por.get(cod, {}).get("sugestao") or {}).get("codigo")
+        ver("sugestão pelo P0060 do nome da pasta-mãe, no MESMO fundo (F009, nunca o F001-P0060)", sg(p114) == "F009-P0060", str(por.get(p114, {}).get("sugestao")))
+        ver("sugestão pelo nome da pasta-mãe ('Casa Azul - 1975'), no mesmo fundo (F022, não o F026)", sg(p9) == "F022-P0003", str(por.get(p9, {}).get("sugestao")))
+        ver("sugestão pela pasta do projeto igual à pasta-mãe (F026-P0050)", sg(p237) == "F026-P0050", str(por.get(p237, {}).get("sugestao")))
+        ver("pode descartar só sem folhas e sem nada no site", por.get(p114, {}).get("pode_descartar") is True and por.get(p9, {}).get("pode_descartar") is False and por.get(p239, {}).get("pode_descartar") is False)
+        # descartar
+        ver("operador não descarta (403)", op.post(f"/api/projetos/{p114}/descartar", json={}).status_code == 403)
+        r = adm.post(f"/api/projetos/{p114}/descartar", json={"motivo": "pasta de arquivos"})
+        ver("admin descarta o projeto sem folhas", r.status_code == 200 and sql("SELECT descartado_em IS NOT NULL FROM projeto WHERE codigo=?", p114) == 1, r.text[:200])
+        ver("o projeto não é apagado e o número P0114 continua ocupado (nunca é reusado)", sql("SELECT COUNT(*) FROM projeto WHERE codigo=?", p114) == 1 and sql("SELECT COUNT(*) FROM numero_p WHERE fundo_codigo='F009' AND numero=114") == 1)
+        ver("o evento 'projeto_descartado' fica no histórico", sql("SELECT COUNT(*) FROM evento WHERE tipo='projeto_descartado' AND codigo=?", p114) == 1)
+        ver("o lote do projeto descartado sai da Fila", sql("SELECT descartado_em IS NOT NULL FROM lista_processamento WHERE id=?", l114) == 1)
+        lista = adm.get("/api/projetos?fundo=F009").json()
+        ver("o projeto descartado some da lista de Projetos", p114 not in [x["codigo"] for x in lista["itens"]] and lista["total"] == 1, str(lista)[:200])
+        ver("e da lista de nome de pasta", p114 not in [x["codigo"] for x in adm.get("/api/projetos/nome-de-pasta").json()["itens"]])
+        ver("descartar de novo: 409", adm.post(f"/api/projetos/{p114}/descartar", json={}).status_code == 409)
+        ver("projeto com folhas não é descartado (409)", adm.post(f"/api/projetos/{p9}/descartar", json={}).status_code == 409)
+        ver("projeto com registro no site não é descartado (409)", adm.post(f"/api/projetos/{p239}/descartar", json={}).status_code == 409)
+        ver("projeto com nome de obra não é descartado aqui (409)", adm.post(f"/api/projetos/{normal}/descartar", json={}).status_code == 409)
+        ver("projeto descartado não serve de destino para juntar (409)", adm.post(f"/api/projetos/{p237}/mesclar-em", json={"destino": p114}).status_code == 409)
+        # juntar ao projeto certo (a rota de sempre)
+        r = adm.post(f"/api/projetos/{p9}/mesclar-em", json={"destino": "F022-P0003", "motivo": "nome de pasta do sistema"})
+        ver("juntar o JPG (5 folhas) ao projeto certo pela rota mesclar-em", r.status_code == 200 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F022-P0003'") == 5
+            and sql("SELECT mesclado_em FROM projeto WHERE codigo=?", p9) == "F022-P0003", r.text[:200])
+        fim = adm.get("/api/projetos/nome-de-pasta").json()
+        ver("depois de juntar e descartar, a lista fica só com os que faltam", {x["codigo"] for x in fim["itens"]} == {p237, p239}, str(fim)[:200])
+        k.close()
+        for l in res: print(l)
     elif modo == "duplicata_rascunhos":
         init_db(); _aplicar_migracoes_real()
         import json as _j
@@ -7674,6 +7748,14 @@ else:
 print("131) Desligar o legado por configuração, com contador de uso (CAMP-024)")
 rc, out = rodar("camp024_legado", f"{tmp}/c024.db")
 if rc != 0: ok(False, f"teste do CAMP-024 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("132) Projetos com nome de pasta do sistema: lista, sugestão no mesmo fundo, juntar e descartar")
+rc, out = rodar("nome_de_pasta", f"{tmp}/nome_pasta.db")
+if rc != 0: ok(False, f"teste de nome de pasta não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

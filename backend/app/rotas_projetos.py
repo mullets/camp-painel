@@ -129,7 +129,7 @@ _SELECT_PROJETOS = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fun
                     p.tainacan_item_id, p.atualizado_em,
                     (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
                     (SELECT GROUP_CONCAT(DISTINCT serie_codigo) FROM item i WHERE i.projeto_codigo=p.codigo) AS series
-             FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.mesclado_em IS NULL"""
+             FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL"""
 _ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo"}
 
 
@@ -839,7 +839,7 @@ def _analisar_autorizacao(con, codigos: list[str]) -> dict:
     from .publicacao import condicoes_projeto
     prontos, fora, ja = [], [], []
     for cod in codigos:
-        p = con.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=? AND p.mesclado_em IS NULL", (cod,)).fetchone()
+        p = con.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=? AND p.mesclado_em IS NULL AND p.descartado_em IS NULL", (cod,)).fetchone()
         if not p:
             fora.append({"codigo": cod, "titulo": None, "motivos": ["projeto não existe"]}); continue
         if p["autorizado_site"]:
@@ -853,7 +853,7 @@ def _codigos_autorizar(con, d: AutorizarLote) -> list[str]:
     if d.codigos:
         return _limpar_codigos(d.codigos)
     if d.fundo:
-        return [r[0] for r in con.execute("SELECT codigo FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL ORDER BY codigo", (d.fundo,))]
+        return [r[0] for r in con.execute("SELECT codigo FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL ORDER BY codigo", (d.fundo,))]
     raise HTTPException(400, "Informe os projetos ou o fundo")
 
 

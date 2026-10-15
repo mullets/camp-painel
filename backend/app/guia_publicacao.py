@@ -52,7 +52,7 @@ def guia_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         msg = direitos_permitem_publicar(con, codigo)
         n_ag = con.execute("SELECT COUNT(*) FROM fundo_agente WHERE fundo_codigo=?", (codigo,)).fetchone()[0]
         hist, fonte = bool((f["historia_arquivistica"] or "").strip()), bool((f["fonte_historia"] or "").strip())
-        projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL ORDER BY codigo LIMIT ?", (codigo, LIMITE_PROJETOS)).fetchall()
+        projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL ORDER BY codigo LIMIT ?", (codigo, LIMITE_PROJETOS)).fetchall()
         autor = sum(1 for p in projetos if p["autorizado_site"])
         publicados = sum(1 for p in projetos if p["status_site"] == "no_ar")
         pode = {p["codigo"]: condicoes_projeto(con, p)["pode_publicar"] for p in projetos}

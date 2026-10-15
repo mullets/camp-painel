@@ -65,7 +65,7 @@ def busca_global(q: str, limite: int = 20, fundo: str | None = None, u: dict = D
 
     for r in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, p.cidade
                               FROM projeto p
-                             WHERE (p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ?) AND p.mesclado_em IS NULL
+                             WHERE (p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ?) AND p.mesclado_em IS NULL AND p.descartado_em IS NULL
                                AND (? IS NULL OR p.fundo_codigo=?)
                              LIMIT 12""", (like, nl, nl, fundo, fundo)).fetchall():
         exato = str(r["codigo"]).upper() == termo.upper()
@@ -373,7 +373,7 @@ def resumo_localizacoes(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     for r in con.execute("SELECT COALESCE(fundo_codigo,'') AS f, tipo, COUNT(*) AS n FROM localizacao_fisica GROUP BY 1, 2"):
         tipos.setdefault(r["f"], {})[r["tipo"]] = r["n"]
     rows = con.execute("""SELECT f.codigo, f.titulo, COUNT(i.codigo) AS folhas, COUNT(il.item_codigo) AS localizadas
-                            FROM fundo f JOIN projeto p ON p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL
+                            FROM fundo f JOIN projeto p ON p.fundo_codigo=f.codigo AND p.mesclado_em IS NULL AND p.descartado_em IS NULL
                             JOIN item i ON i.projeto_codigo=p.codigo LEFT JOIN item_localizacao il ON il.item_codigo=i.codigo
                            GROUP BY f.codigo ORDER BY f.codigo""").fetchall()
     con.close()
@@ -390,7 +390,7 @@ def sem_lugar(fundo: str, u: dict = Depends(auth.exige("leitura"))) -> list[dict
     """H20 · Projetos do fundo com folhas ainda sem localização (o link do resumo)."""
     con = connect()
     rows = con.execute("""SELECT p.codigo, p.titulo, COUNT(*) AS faltam FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
-                           WHERE p.fundo_codigo=? AND p.mesclado_em IS NULL AND NOT EXISTS (SELECT 1 FROM item_localizacao il WHERE il.item_codigo=i.codigo)
+                           WHERE p.fundo_codigo=? AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND NOT EXISTS (SELECT 1 FROM item_localizacao il WHERE il.item_codigo=i.codigo)
                            GROUP BY p.codigo ORDER BY p.codigo""", (fundo.strip().upper(),)).fetchall()
     con.close()
     return [dict(r) for r in rows]
