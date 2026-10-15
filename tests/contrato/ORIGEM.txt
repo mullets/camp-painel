@@ -1,3 +1,3 @@
 Cópia LITERAL de campvision-new/docs/contrato/exemplos/ (e de docs/contrato-painel.md), gerada pelo próprio CV2 (python -m tests.contrato_exemplos).
-Origem: github.com/mullets/campvision-new, commit ee3156a (13/10/2026), "Contrato 2.2 — 13/10/2026".
+Origem: github.com/mullets/campvision-new, contrato 2.2 de 13/10/2026 (commit ee3156a). origin/main do campvision-new conferido em 15/10/2026: commit 0d596dc (14/10/2026); os exemplos e o contrato-painel.md de lá são iguais a estes (relatorio.txt não está em origin/main).
 NÃO editar à mão. Para atualizar: copiar de novo do campvision-new e trocar o commit acima. Os testes do painel (bloco contrato_cv2) leem ESTES arquivos.

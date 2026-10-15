@@ -36,7 +36,11 @@ Abra http://localhost:8000.
 - O código vem sempre da tabela de autoridade, nunca do nome da pasta.
 - História / biografia só existe com fonte citada. Nada inferido.
 - Autoria divergente ou erro bloqueante impede publicação do projeto.
-- Painel é a fonte da verdade; o Tainacan recebe cópia como rascunho.
-  Publicação final continua no wp-admin.
+- Painel é a fonte da verdade. A publicação é feita pelo painel: o botão **Publicar**
+  do projeto mostra o plano e envia dossiê e folhas ao site (rascunho), autoriza e publica
+  (admin; ver `docs/campvision.md` §11 e `docs/como-publicar.md`). O wp-admin só é preciso
+  para o que o painel não faz (foto e biografia do arquiteto, ativar o arquiteto).
+- A versão nova é testada antes de entrar: `./atualizar.sh` roda `python tests/teste_backend.py --rapido`
+  numa cópia temporária e só atualiza se passar. O pacote completo é `python tests/teste_backend.py`.
 
 Acompanhamento: board Trello "CAMP Acervos — Painel de administração".

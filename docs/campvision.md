@@ -4,7 +4,7 @@ Este documento é o contrato que o **CAMP Vision 2 (CV2)** segue para falar com 
 (`tests/teste_backend.py`, bloco "Contrato com o CAMP Vision 2"). O que ainda **não** existe está na seção 9.
 Repositório oficial do CV2: `github.com/mullets/campvision-new` (o `campvision2` é o app antigo, com YOLO/Tesseract: não usar).
 
-> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.1** (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
+> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.2** de 13/10/2026 (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
 
 ## 1. Visão geral
 ```
@@ -55,10 +55,19 @@ curl -s -H "X-Camp-Token: $CAMP_PAINEL_TOKEN" http://192.168.15.60:8000/api/esta
 ```
 
 ## 9. Ainda não existe (decisões pendentes)
-- **Do contrato do CV2 (`docs/contrato-painel.md`, §7), o painel ainda NÃO faz:** ler o `status.json` novo (`lote_atual`, contagens, `erros_bloqueantes`); ler `catalogacao/erros.json` em "Erros relatados"; ler `catalogacao.csv` e `contatos.jpg` (**revisão pós-CAMP Vision**: ver o que foi lido, corrigir e aprovar); ler `_campvision/registro/` no "Histórico"; reconciliação noturna; e um canal para **pedir releitura** de um projeto (hoje o painel só recebe, nunca manda nada ao CV2).
-- **PDF** não entra na contagem de folhas (`folhas_encontradas`), embora o CV2 processe PDF. Lotes só de PDF aparecem com 0 folhas.
-- O painel **não lê** `catalogacao.csv`, `contatos.jpg` nem `pacote_tainacan.json`. A revisão pós-CV2 (folha de contatos, girar, duplicatas) depende do formato real do CSV.
+**Passou a existir (integração de 15/10/2026):**
+- `catalogacao/erros.json` entra em **Erros relatados** (origem "CAMP Vision"); gravidade `bloqueia` impede publicar; a chave nasce do conteúdo, então ler de novo não duplica nem reabre o que alguém resolveu.
+- O livro `_campvision/registro/AAAA-MM.jsonl` é lido de forma **incremental** (posição em bytes por arquivo, só linhas completas) pelo coletor do QNAP e aparece em "Registro do CAMP Vision" no Histórico do projeto. `_campvision/` é ignorado na varredura de lotes.
+- **PDF conta como folha** (`folhas_encontradas`); o TIF/JPG do mesmo código continua sendo um documento só.
+- O painel lê o contrato 2.2: motivo do erro em `resultado.status.motivo`; endereço da folha em `carimbo.local` / `lido.endereco`; retirados com `decisao.por` e `decisao.motivo`; `fotografo` (em `lido_json`) e `programa_sugerido`, `natureza_sugerida`, `lacunas` do projeto (no resultado da importação); TIF achado em `<série>/TIF/<codigo>.tif` quando `arquivos[]` traz só o JPG e o arquivo existe; `concluido` de releitura guarda `custo_usd`, `relidos` e afins.
+- Reserva de projeto: o "P0060 - " do nome da pasta (ou `p_estacao`) é só **pista**; só `projeto_ja_existia: true` com `numero_projeto` válido reaproveita o projeto. Repetir a `chave_reserva` usa a tabela `reserva`.
+- Heartbeat: texto livre em `detalhe.situacao`; `/api/estacoes/contexto` traz `coautores` e `periodo_atuacao` por fundo; série `S99` "Não identificado" aceita no importador; Estações avisa quando uma máquina é recusada por falta de token.
+
+**Ainda NÃO existe:**
+- **Reconciliação noturna** (comparar o livro com o que o painel tem) e um canal de volta do painel para o CV2 além dos pedidos de releitura.
+- O painel **não lê** `catalogacao.csv` nem `contatos.jpg`; a revisão usa o `pacote_tainacan.json`.
 - Marcar o lote como `teste` só vale pelo `info_projeto.json`; o painel não sabe de testes que estejam só no nome da pasta além de `teste`, `asd` e `sei la`.
+- Os campos `fotografo`, `programa_sugerido`, `natureza_sugerida` e `lacunas` ainda não têm coluna nem tela própria.
 
 ## 10. Revisão do lote (pós-CAMP Vision)
 O CAMP Vision grava a catalogação e o painel **importa, uma pessoa confere/corrige e o admin aprova**. O painel não decide nada sozinho.
