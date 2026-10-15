@@ -3767,7 +3767,7 @@ Uso típico no celular (`backend/app/rotas_estante.py`).
    - a impressão gera `@page{size:90mm 29mm;margin:0}`, uma etiqueta por página;
    - na janela de impressão: impressora Brother, papel 29 mm × 90 mm, paisagem, sem margens, escala 100% (o aviso abaixo da prévia diz isso);
    - o painel lembra o último formato escolhido neste navegador (`localStorage` `camp.lab.fmt`; a lombada de tubo continua com o formato próprio).
-9. **Nome do projeto, cidade e ano sempre** (15/10/2026): em todos os formatos, as etiquetas de pasta, de folha e de tubo trazem o nome do projeto, a cidade e o ano; sem dado, aparecem "sem cidade" e "sem data".
+9. **Projeto, arquiteto, cidade e ano sempre** (15/10/2026): em todos os formatos, as etiquetas de pasta, de folha e de tubo trazem o nome do projeto, o **arquiteto** (a autoria cadastrada no projeto; sem ela, o nome do fundo) com o código do fundo, a cidade e o ano; sem dado, aparecem "sem cidade" e "sem data".
 
 ### D.2.12 Empréstimos (`#emprestimos`, tecla O)
 
