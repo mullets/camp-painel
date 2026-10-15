@@ -66,7 +66,7 @@ curl -s -H "X-Camp-Token: $CAMP_PAINEL_TOKEN" http://192.168.15.60:8000/api/esta
 **Ainda NÃO existe:**
 - **Reconciliação noturna** (comparar o livro com o que o painel tem) e um canal de volta do painel para o CV2 além dos pedidos de releitura.
 - O painel **não lê** `catalogacao.csv` nem `contatos.jpg`; a revisão usa o `pacote_tainacan.json`.
-- Marcar o lote como `teste` só vale pelo `info_projeto.json`; o painel não sabe de testes que estejam só no nome da pasta além de `teste`, `asd` e `sei la`.
+- Marcar o lote como `teste` só vale pelo `info_projeto.json`; o painel não sabe de testes que estejam só no nome da pasta além de `teste` (e, enquanto `legado.nomes_de_teste` = 1, `asd` e `sei la`).
 - Os campos `fotografo`, `programa_sugerido`, `natureza_sugerida` e `lacunas` ainda não têm coluna nem tela própria.
 
 ## 10. Revisão do lote (pós-CAMP Vision)
@@ -159,3 +159,11 @@ Ao enviar a folha ao site (`publicador.imagem_pronta_para_o_site`, também usada
 - **Tipo único "Elevação/Fachada"** no vocabulário `tipo_documento` do painel (migração 129 junta "Elevação" e "Fachada" nos itens e na tabela; `item.tipo_lido`/`lido_json`, o que o CV2 leu, não são mexidos). O importador (`importador_lote.tipo_do_painel`) trata "Elevação", "Fachada" e "Elevação/Fachada" como o mesmo tipo; o CV2 pode juntar tipos numa folha separados por `" / "` (ex.: `Planta / Elevação/Fachada`): se todos viram o mesmo tipo vale esse; tipos diferentes deixam o tipo vazio (uma pessoa escolhe; o lido fica em `tipo_lido`).
 - **Praça × Parque (266/272): NÃO implementado** (bloqueado até o Rafa conferir a tabela de autoridade).
 - **Os 53 lotes inferidos:** `python scripts/amostrar_lotes_inferidos.py` (padrão só simula) sorteia 10% estratificado por fundo (`--sortear`, reprodutível por `--semente`), escreve o CSV de revisão (`--csv`), registra a decisão por lote (`--decidir N --decisao aprovado|reprovado --motivo … --por email`, também em `evento`) e `--resumo`. **Não libera nada**: só diz se a amostra foi validada; quem libera o resto é o Rafa. "Inferido" = lote em que o CV2 sugeriu dados do projeto (`resultado.sugestoes_cv2`); `--ids` troca o critério por uma lista explícita.
+
+## Reidentificar pelo painel (CAMP-009)
+`POST /api/campvision/reidentificar` (rede local ou `X-Camp-Token`) deixa o CV2 usar as regras de mover/mesclar do painel sem login de admin. `simular: true` por padrão
+(plano sem gravar); aplicar exige `campvision.reidentificar_aplicar = 1` (nasce 0); tudo ou nada; idempotente (`ja_movidos`, `ja_mesclado`). Detalhes e exemplo em `docs/CONTRATO_UNICO.md` §5.1.
+
+## Legado (CAMP-024)
+`legado.status_antigos`, `legado.nomes_de_teste` e `legado.fundos_json` (padrão 1) desligam, um a um, os status `campvision_concluido`/`pronto_campvision2`, o nome de pasta `asd`/`sei la` como teste e `GET /api/fundos.json`.
+`GET /api/legado` mostra o uso; `POST /api/legado/{peca}` simula por padrão. Ver `docs/CONTRATO_UNICO.md` §8. `enviado_windows` NÃO é legado.

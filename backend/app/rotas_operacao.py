@@ -661,7 +661,8 @@ def contexto_estacao(u: dict = Depends(auth.exige("operador"))) -> dict:
 
 # Valores de `status` (status.json) que o painel entende. Contrato: docs/campvision.md.
 STATUS_PRONTO = {"pronto", "campvision_concluido", "pronto_campvision2"}   # os dois últimos são valores antigos do CV2
-STATUS_PROCESSANDO = {"processando", "enviado_windows"}
+STATUS_ANTIGOS = {"campvision_concluido", "pronto_campvision2"}   # CAMP-024: legado.status_antigos
+STATUS_PROCESSANDO = {"processando", "enviado_windows"}   # enviado_windows NÃO é legado: é a marca de fim de lote do Windows (contrato C1)
 STATUS_ERRO = {"erro", "falha"}
 EVENTO_POR_ETAPA = {"revisao": "material_pronto", "processando": "material_processando", "erro": "material_com_erro"}
 
@@ -669,6 +670,10 @@ EVENTO_POR_ETAPA = {"revisao": "material_pronto", "processando": "material_proce
 def _classificar_status(st) -> tuple[str, bool]:
     """(etapa da lista, status_conhecido). Sem status = pronto (comportamento antigo); valor desconhecido = pronto + aviso."""
     s = str(st or "").strip().lower()
+    if s in STATUS_ANTIGOS:                                   # CAMP-024: conta o uso e respeita legado.status_antigos
+        from . import legado
+        legado.registrar_uso("status_antigos", s)
+        return ("revisao", True) if legado.ligado_agora("status_antigos") else ("revisao", False)
     if not s or s in STATUS_PRONTO:
         return "revisao", True
     if s in STATUS_PROCESSANDO:
@@ -701,7 +706,12 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     if not info_path.exists() and not status_path.exists():
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": "sem info_projeto.json nem status.json nesta pasta"}
 
-    if info.get("teste") or pasta.name.lower() in ("teste", "asd", "sei la"):
+    nome_teste = pasta.name.lower() in ("asd", "sei la")
+    if nome_teste:
+        from . import legado
+        legado.registrar_uso("nomes_de_teste", pasta.name)
+        nome_teste = legado.ligado_agora("nomes_de_teste")          # CAMP-024: desligado = só "teste": true (ou a pasta "teste") vale
+    if info.get("teste") or pasta.name.lower() == "teste" or nome_teste:
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": "lote de teste"}
     from .similaridade import normalizar as _norm_sim
     if re.match(r"^\d+ ?arquivo arquivistico", _norm_sim(pasta.name) or ""):   # "01 - Arquivo Arquivístico (TIFF)" é parte do lote da pasta de cima

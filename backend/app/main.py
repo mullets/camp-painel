@@ -28,6 +28,8 @@ from .rotas_hoje import router as rotas_hoje
 from .rotas_uso import router as rotas_uso
 from .rotas_lgpd import router as rotas_lgpd
 from .estacao_eventos import router as rotas_estacao_eventos
+from .reidentificar import router as rotas_reidentificar
+from .legado import router as rotas_legado
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -72,6 +74,8 @@ from .rotas_relatorios import router as rotas_relatorios
 app.include_router(rotas_relatorios)
 app.include_router(rotas_lgpd)
 app.include_router(rotas_estacao_eventos)
+app.include_router(rotas_reidentificar)
+app.include_router(rotas_legado)
 from .rotas_estante import router as rotas_estante
 app.include_router(rotas_estante)
 
@@ -328,6 +332,10 @@ def obter_fundo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
 def fundos_json(request: Request) -> dict:
     """Lido pela estação Contex, que não tem login. Só responde para a rede local."""
     exigir_estacao(request)
+    from . import legado
+    legado.registrar_uso("fundos_json", request.headers.get("user-agent", ""))
+    if not legado.ligado_agora("fundos_json"):       # CAMP-024: desligado por configuração (legado.fundos_json = 0)
+        raise HTTPException(410, "fundos.json foi aposentado: atualize a estação (ela lê /api/estacoes/contexto).")
     con = connect()
     dados = json.loads(con.execute("SELECT fundos FROM v_fundos_json").fetchone()[0] or "[]")
     aut = autoridade_fundos(con, [f["codigo"] for f in dados])

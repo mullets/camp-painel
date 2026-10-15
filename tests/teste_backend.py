@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado"}
 
 
 def rodar(modo, db):
@@ -800,6 +800,116 @@ def filho(modo):
         publicador.WP = WPQ
         r = x.post("/api/fundos/F077/enviar-ao-site")
         ver("site fora do ar: 502 com o motivo, e o painel continua intacto", r.status_code == 502 and "site fora do ar" in r.text and c.execute("SELECT procedencia FROM fundo WHERE codigo='F077'").fetchone()[0] == "Compra em 1990", r.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp009_reidentificar":
+        init_db(); aplicar_migracoes()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def com_ip(ip, h=None):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False, headers=h or {})
+        lan, fora = com_ip("192.168.15.43"), com_ip("8.8.8.8")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami','SBU',1)")
+        def proj(n, titulo, ano, status="nao_publicado"):
+            cod = f"F026-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site) VALUES (?,?,?,?,?,?)", (cod, "F026", n, titulo, ano, status))
+            return cod
+        def folha(p, ano, q, titulo, lote=None, status="nao_publicado", tid=None):
+            cod = f"{p}-{ano:04d}-S01-D{q:05d}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,origem,lote_id,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,?,'campvision',?,'conferida',?,?)", (cod, p, q, titulo, str(q), lote, status, tid))
+            return cod
+        PD, PE, PG, PH, PL, PM = proj(2, "Certo", 1972), proj(236, "Errado", 1980), proj(237, "Errado 2", 1981), proj(238, "Publico", 1982, "no_ar"), proj(239, "Lote", 1983), proj(240, "Mescla", 1984)
+        e1, e2, e3 = folha(PE, 1980, 1, "Planta"), folha(PE, 1980, 2, "Corte", tid=555, status="rascunho"), folha(PE, 1980, 3, "Fachada")
+        g1, g2 = folha(PG, 1981, 1, "Gx"), folha(PH, 1982, 1, "Publica", status="no_ar", tid=777)
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L',?,'/l','revisao')", (PL,)); LID = c.execute("SELECT MAX(id) FROM lista_processamento").fetchone()[0]
+        l1 = folha(PL, 1983, 1, "L1", LID)
+        m1 = folha(PM, 1984, 1, "M1")
+        c.commit()
+        sql = lambda q, *a: c.execute(q, a).fetchone()[0]
+        corpo = {"motivo": "reidentificar F026", "movimentos": [{"itens": [e1, e2], "destino": PD}]}
+        r = lan.post("/api/campvision/reidentificar", json=corpo); j = r.json()
+        ver("SIMULAR é o padrão (sem 'simular' no corpo): devolve o plano e não grava nada", r.status_code == 200 and j["simulado"] and not j["aplicado"] and len(j["mapa"]) == 2 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PE) == 3 and sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_movida'") == 0, r.text[:200])
+        ver("a simulação não deixa redirecionamento na fila", sql("SELECT COUNT(*) FROM redirecionamento") == 0)
+        r = lan.post("/api/campvision/reidentificar", json={**corpo, "simular": False})
+        ver("APLICAR com a configuração desligada (padrão): 403 com mensagem, nada muda", r.status_code == 403 and "desligado" in r.json()["mensagem"] and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PE) == 3, r.text[:200])
+        ver("a configuração nasce 0", sql("SELECT valor FROM configuracao WHERE chave='campvision.reidentificar_aplicar'") == "0")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='campvision.reidentificar_aplicar'"); c.commit()
+        r = lan.post("/api/campvision/reidentificar", json={"movimentos": [{"itens": [e1, g2], "destino": PD}, {"itens": [e3], "destino": PD}], "simular": False})
+        ver("folha pública no site no meio do pedido: 409 e NADA é gravado (tudo ou nada), com o erro no plano", r.status_code == 409 and not r.json()["ok"] and any(o["status"] == 409 for o in r.json()["operacoes"]) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PE) == 3 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PD) == 0, r.text[:250])
+        r = lan.post("/api/campvision/reidentificar", json={**corpo, "simular": False}); j = r.json()
+        novos = sorted(j.get("mapa", {}).values())
+        ver("APLICAR liberado: move as folhas, renumera no destino e devolve o mapa antigo→novo", r.status_code == 200 and j["aplicado"] and len(novos) == 2 and all(n.startswith(PD) for n in novos) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PE) == 1, r.text[:250])
+        ver("o histórico guarda quem fez (CAMP Vision) e a folha com registro no site deixa redirecionamento", sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_movida' AND ator LIKE 'CAMP Vision%'") == 2 and sql("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo=?", e2) == 1)
+        r = lan.post("/api/campvision/reidentificar", json={**corpo, "simular": False}); j = r.json()
+        ver("repetir o mesmo pedido é idempotente: ja_movidos, sem erro e sem duplicar", r.status_code == 200 and j["ok"] and len(j["operacoes"][0]["ja_movidos"]) == 2 and not j["operacoes"][0]["movidos"] and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PD) == 2 and j["mapa"] == {e1: j["mapa"][e1], e2: j["mapa"][e2]}, r.text[:250])
+        r = lan.post("/api/campvision/reidentificar", json={"simular": False, "movimentos": [{"lote_id": LID, "destino": PD}]}); j = r.json()
+        ver("lote inteiro: o lote e as folhas dele vão para o destino", r.status_code == 200 and sql("SELECT projeto_codigo FROM lista_processamento WHERE id=?", LID) == PD and sql("SELECT projeto_codigo FROM item WHERE codigo=?", j["mapa"][l1]) == PD, r.text[:250])
+        r = lan.post("/api/campvision/reidentificar", json={"simular": False, "mesclar": [{"origem": PM, "destino": PD}]}); j = r.json()
+        ver("mesclar projeto: a origem fica 'mesclado em' o destino e as folhas passam", r.status_code == 200 and sql("SELECT mesclado_em FROM projeto WHERE codigo=?", PM) == PD and len(j["mapa"]) == 1, r.text[:250])
+        r = lan.post("/api/campvision/reidentificar", json={"simular": False, "mesclar": [{"origem": PM, "destino": PD}]})
+        ver("mesclar de novo no mesmo destino é idempotente (ja_mesclado)", r.status_code == 200 and r.json()["operacoes"][0].get("ja_mesclado") is True, r.text[:250])
+        r = lan.post("/api/campvision/reidentificar", json={"movimentos": [{"itens": ["F026-P0236-1980-S01-D99999"], "destino": PD}]})
+        ver("folha que não existe: simulação aponta 404 por movimento, sem derrubar o pedido", r.status_code == 200 and not r.json()["ok"] and r.json()["operacoes"][0]["status"] == 404, r.text[:250])
+        ver("corpo vazio/ruim: 400; de fora da LAN sem token: 403", lan.post("/api/campvision/reidentificar", json={}).status_code == 400 and fora.post("/api/campvision/reidentificar", json=corpo).status_code == 403)
+        c.execute("UPDATE configuracao SET valor='segredo-cv' WHERE chave='estacao.token'"); c.commit()
+        ver("com token ligado: sem token 401, com X-Camp-Token passa", lan.post("/api/campvision/reidentificar", json=corpo).status_code == 401 and com_ip("192.168.15.43", {"X-Camp-Token": "segredo-cv"}).post("/api/campvision/reidentificar", json=corpo).status_code == 200)
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp024_legado":
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile as _t
+        from pathlib import Path as _P
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, legado
+        from app.rotas_operacao import _classificar_status, _ler_pasta
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        lan = com_ip("192.168.15.43")
+        c = connect()
+        cfg = lambda ch, v: (c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v, ch)), c.commit())
+        ver("as três chaves de legado nascem LIGADAS (1) — nada muda sozinho", all(c.execute("SELECT valor FROM configuracao WHERE chave=?", (f"legado.{p}",)).fetchone()[0] == "1" for p in legado.PECAS))
+        ver("status antigo continua = pronto e o uso é contado", _classificar_status("campvision_concluido") == ("revisao", True) and c.execute("SELECT vezes FROM legado_uso WHERE chave='status_antigos'").fetchone()[0] == 1)
+        ver("enviado_windows NÃO é legado (contrato C1): processando, sem contar uso", _classificar_status("enviado_windows") == ("processando", True) and c.execute("SELECT COUNT(*) FROM legado_uso WHERE chave='enviado_windows'").fetchone()[0] == 0)
+        cfg("legado.status_antigos", "0")
+        ver("desligado: o status antigo vira 'desconhecido' (aviso); pronto/processando/erro seguem iguais", _classificar_status("pronto_campvision2") == ("revisao", False) and _classificar_status("pronto") == ("revisao", True) and _classificar_status("erro") == ("erro", True) and _classificar_status("") == ("revisao", True))
+        d = _P(_t.mkdtemp()) / "asd"; d.mkdir(); (d / "info_projeto.json").write_text("{}")
+        r1 = _ler_pasta(c, d, None)
+        ver("pasta 'asd' ligada: ignorada como lote de teste (uso contado)", r1["acao"] == "ignorada" and r1["motivo"] == "lote de teste" and c.execute("SELECT vezes FROM legado_uso WHERE chave='nomes_de_teste'").fetchone()[0] == 1, str(r1))
+        cfg("legado.nomes_de_teste", "0")
+        r2 = _ler_pasta(c, d, None)
+        ver("desligado: o NOME da pasta não vale mais como teste", r2["motivo"] != "lote de teste", str(r2))
+        d2 = _P(_t.mkdtemp()) / "asd"; d2.mkdir(); (d2 / "info_projeto.json").write_text(_j.dumps({"teste": True}))
+        d3 = _P(_t.mkdtemp()) / "teste"; d3.mkdir(); (d3 / "info_projeto.json").write_text("{}")
+        ver("desligado: 'teste': true e a pasta 'teste' continuam valendo", _ler_pasta(c, d2, None)["motivo"] == "lote de teste" and _ler_pasta(c, d3, None)["motivo"] == "lote de teste")
+        r = lan.get("/api/fundos.json")
+        ver("fundos.json ligado: 200 e o uso é contado", r.status_code == 200 and c.execute("SELECT vezes FROM legado_uso WHERE chave='fundos_json'").fetchone()[0] == 1, r.text[:120])
+        cfg("legado.fundos_json", "0")
+        r = lan.get("/api/fundos.json")
+        ver("fundos.json desligado: 410 com mensagem; /api/estacoes/contexto continua 200", r.status_code == 410 and "aposentado" in r.text and lan.get("/api/estacoes/contexto").status_code == 200, r.text[:160])
+        cfg("legado.fundos_json", "1")
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False); auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        j = adm.get("/api/legado").json()
+        ver("GET /api/legado (admin) lista as peças com uso e se é seguro desligar; operador 403", {p["chave"] for p in j["pecas"]} == set(legado.PECAS) and next(p for p in j["pecas"] if p["chave"] == "fundos_json")["seguro_desligar"] is False and op.get("/api/legado").status_code == 403, str(j)[:200])
+        r = adm.post("/api/legado/fundos_json", json={"ligado": False}).json()
+        ver("simular (padrão) avisa do uso recente e NÃO muda a configuração", r["simulado"] and not r["aplicado"] and "ATENÇÃO" in r["efeito"] and c.execute("SELECT valor FROM configuracao WHERE chave='legado.fundos_json'").fetchone()[0] == "1", str(r)[:200])
+        r = adm.post("/api/legado/fundos_json", json={"ligado": False, "simular": False}).json()
+        ver("aplicar muda a configuração e registra no histórico", r["aplicado"] and c.execute("SELECT valor FROM configuracao WHERE chave='legado.fundos_json'").fetchone()[0] == "0" and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='legado_alterado'").fetchone()[0] == 1, str(r)[:200])
+        ver("peça desconhecida: 404", adm.post("/api/legado/xyz", json={"ligado": False}).status_code == 404)
         c.close()
         for l in res: print(l)
     elif modo == "camp017_eventos":
@@ -7467,6 +7577,22 @@ else:
 print("129) Reconciliação noturna do QNAP com o painel (CAMP-008)")
 rc, out = rodar("camp008_reconciliacao", f"{tmp}/c008.db")
 if rc != 0: ok(False, f"teste do CAMP-008 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("130) Reidentificar do CAMP Vision usando mover/mesclar do painel, simulando por padrão (CAMP-009)")
+rc, out = rodar("camp009_reidentificar", f"{tmp}/c009.db")
+if rc != 0: ok(False, f"teste do CAMP-009 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("131) Desligar o legado por configuração, com contador de uso (CAMP-024)")
+rc, out = rodar("camp024_legado", f"{tmp}/c024.db")
+if rc != 0: ok(False, f"teste do CAMP-024 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
