@@ -3752,7 +3752,7 @@ Uso típico no celular (`backend/app/rotas_estante.py`).
 
 1. Abas: Pasta de projeto, Folha / documento, Caixa ou gaveta, Lombada de tubo, Fundo (`labType`). `labAjustarCampos()` mostra só os campos de cada aba.
 2. Passo 1 "O que etiquetar": fundo → projeto (`GET /api/projetos?fundo=&por_pagina=500`); dados do cadastro em "só leitura" (`GET /api/projetos/{c}/detalhe` e `/volumes`): ano, cliente, endereço, localização, documentos no volume, embalagem — com "Corrigir no projeto ↗". Volume (1 de N, a partir das localizações). Lote: "Só esta", "Todas as folhas deste projeto", "Todas as pastas do fundo". Na aba Caixa, "Local cadastrado" (`GET /api/localizacoes`) preenche identificador e conteúdo.
-3. Passo 2 "Como imprimir": formato (100×50 padrão CAMP, 70×35, 20×140 lombada), papel (impressora de etiquetas, uma por página no tamanho exato; ou A4 com várias), cópias (1–60; na folha avulsa as cópias viram sequência D00019, D00020…), observação (até 30 caracteres).
+3. Passo 2 "Como imprimir": formato (100×50 padrão CAMP, 70×35, 20×140 lombada, **90×29 Brother QL-700 com rolo DK-1201**), papel (impressora de etiquetas, uma por página no tamanho exato; ou A4 com várias), cópias (1–60; na folha avulsa as cópias viram sequência D00019, D00020…), observação (até 30 caracteres).
 4. Código impresso por tipo (`labelHTML`):
    - pasta: `SIGLA-P011.1` (`codigoProjetoEtiqueta` + volume);
    - folha: o código completo `F026-P0001-1968-S01-D00001`;
@@ -3762,6 +3762,12 @@ Uso típico no celular (`backend/app/rotas_estante.py`).
 5. **Code 39** é desenhado em SVG puro (`barcode(text, h, w)` e a tabela `C39` com o padrão estreito/largo de cada caractere; asteriscos de início e fim; caracteres fora de `0-9 A-Z - . espaço` viram `-`). Qualquer leitor comum lê.
 6. A frase grande acima da prévia (`labFrase`) diz o que vai ser impresso ("Etiqueta de: F023-P0011 · Residência Riviera · … · volume 1 de 1"). "Imprimir" usa `window.print()` com uma regra `@page` gerada na hora (`#lab-page`) para o tamanho exato; só a grade `#printgrid` sai na impressão.
 7. Chegada com contexto: `#etiquetas/projeto/<c>`, `#etiquetas/fundo/<c>`, `#etiquetas/folha/<c>`, `#etiquetas/local/<id>` (`aplicarRotaEtiquetas`). Todos podem usar.
+8. **Brother QL-700 / rolo DK-1201 (29 × 90 mm)**, formato `90x29` (desde 15/10/2026):
+   - layout em faixa (`.lab-faixa` em `labelHTML`, usado em todo formato baixo, com altura ≤ 32 mm): CAMP + código grande; o **nome do projeto**; **cidade · ano** e o dado-chave (volume, folha); código de barras e o código por extenso;
+   - a impressão gera `@page{size:90mm 29mm;margin:0}`, uma etiqueta por página;
+   - na janela de impressão: impressora Brother, papel 29 mm × 90 mm, paisagem, sem margens, escala 100% (o aviso abaixo da prévia diz isso);
+   - o painel lembra o último formato escolhido neste navegador (`localStorage` `camp.lab.fmt`; a lombada de tubo continua com o formato próprio).
+9. **Nome do projeto, cidade e ano sempre** (15/10/2026): em todos os formatos, as etiquetas de pasta, de folha e de tubo trazem o nome do projeto, a cidade e o ano; sem dado, aparecem "sem cidade" e "sem data".
 
 ### D.2.12 Empréstimos (`#emprestimos`, tecla O)
 
