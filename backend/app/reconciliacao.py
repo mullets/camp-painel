@@ -1,6 +1,6 @@
 """CAMP-008 · Reconciliação noturna entre o QNAP (material final do CAMP Vision) e o painel.
 
-O aviso do CV2 (POST /api/campvision/aviso) cobre uma pasta de cada vez; se algum se perder (painel fora do ar, rede), a varredura da raiz final recoloca
+O aviso do CV2 (POST /api/campvision/aviso) cobre uma pasta de cada vez; se algum se perder (painel parado, rede), a varredura da raiz final recoloca
 na Fila o que faltar e lê o erros.json de cada lote (`_ler_pasta` faz as duas coisas). Uma vez por noite (`qnap.reconciliacao_hora`, padrão 3; -1 desliga),
 em segundo plano. Se o QNAP não está montado, tenta de novo daqui a 1 hora. Nunca roda dentro de uma requisição."""
 from __future__ import annotations
