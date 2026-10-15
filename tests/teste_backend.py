@@ -1254,6 +1254,8 @@ def filho(modo):
         ver("QNAP: pasta que não existe = não conectado (nao_existe)", _estado_qnap(tmp / "nada") == (False, "nao_existe"))
         ver("QNAP: pasta VAZIA criada à mão NÃO conta como conectada (vazia)", _estado_qnap(vazia) == (False, "vazia"))
         ver("QNAP: pasta com conteúdo conta como conectada", _estado_qnap(cheia) == (True, None))
+        # isola do servidor real: a raiz vem de CAMP_QNAP_ROOT, que no servidor aponta para o QNAP montado
+        _c = connect(); _c.execute("INSERT INTO configuracao(chave,valor) VALUES('qnap.raiz',?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor", (str(tmp / "nada"),)); _c.commit(); _c.close()
         est = op.get("/api/estacoes").json()["qnap"]
         ver("/api/estacoes devolve montado e o motivo", est["montado"] is False and est["motivo"] in ("nao_existe", "vazia"), str(est.get("motivo")))
         pub = op.get("/api/estacoes").json().get("backup", {})
