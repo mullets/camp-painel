@@ -202,6 +202,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .lab-faixa .lf-topo{display:flex;align-items:baseline;gap:6px;white-space:nowrap;overflow:hidden}.lab-faixa .logo{font-size:8px}
 .lab-faixa .lf-big{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis}
 .lab-faixa .lf-meio{display:flex;gap:6px;font-size:8.5px;line-height:1.15;white-space:nowrap;overflow:hidden}.lab-faixa .lf-nome{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}.lab-faixa .lf-chave{color:#444;flex:none}
+.lab-faixa .lf-mat{margin-left:auto;flex:none;font-size:8.5px;font-weight:700;text-transform:uppercase;border:1px solid #111;border-radius:2px;padding:0 3px}
+.label.lab-capa{display:flex;flex-direction:column;padding:48px 52px 40px;box-sizing:border-box;font-size:16px;border-style:dashed}
+.lab-preview .lab-capa,.lab-mini .lab-capa{zoom:.42}
+.lab-capa .lc-topo{display:flex;align-items:center;gap:12px;font-size:14px;color:#444;border-bottom:2px solid #111;padding-bottom:12px}.lab-capa .lc-topo .logo{font-size:22px}
+.lab-capa .lc-cod{font-family:var(--mono);font-weight:700;font-size:44px;letter-spacing:1px;margin-top:70px}
+.lab-capa .lc-tit{font-size:40px;line-height:1.15;margin:18px 0 0;font-weight:700}
+.lab-capa .lc-arq{font-size:26px;margin-top:22px}.lab-capa .lc-cid{font-size:22px;color:#333;margin-top:8px}
+.lab-capa .lc-mat{margin-top:40px;font-size:26px;text-transform:uppercase;letter-spacing:.5px;border:2px solid #111;padding:10px 16px;align-self:flex-start}.lab-capa .lc-mat b{font-size:32px}
+.lab-capa .lc-linhas{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:12px 28px;font-size:16px}.lab-capa .lc-linhas div{display:flex;flex-direction:column}.lab-capa .lc-linhas b{font-size:12px;text-transform:uppercase;color:#555;letter-spacing:.5px}
+.lab-capa .lc-obs{margin-top:20px;font-size:14px;color:#555}
+.lab-capa .lc-barras{margin-top:auto}.lab-capa .lc-codtxt{font-family:var(--mono);font-size:16px;letter-spacing:3px;text-align:center;margin-top:4px}
 .lab-faixa .lf-sub{font-size:8px;color:#333}.lab-faixa .lf-sub .lf-nome{font-weight:400}
 .lab-faixa .lf-obs{font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lab-faixa .lf-barras{margin-top:auto}.lab-faixa .lf-cod{font-family:var(--mono);font-size:6.5px;letter-spacing:1px;text-align:center;line-height:1}
@@ -1057,6 +1068,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
           <label class="field" id="f-proj">Projeto<select id="l-proj"></select></label>
           <div id="f-doc" style="display:none"><div class="grid g2"><label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S04</option><option>S05</option><option>S06</option><option>S07</option><option>S08</option></select></label><label class="field">Documento<input id="l-doc" value="D00019"></label></div></div>
           <div id="f-caixa" style="display:none"><label class="field">Local cadastrado<select id="l-loc"><option value="">— digitar à mão —</option></select><small class="help">Escolha a caixa, gaveta ou tubo da tela "Onde está guardado": o identificador e o conteúdo vêm dela.</small></label><div class="grid g2"><label class="field">Identificador<input id="l-caixa" value="07" class="mono"></label><label class="field">Conteúdo<input id="l-cont" value="P0001–P0006"></label></div></div>
+          <label class="field" id="f-material">Material<select id="l-material"><option value="">Todo o material do projeto</option></select><small class="help" id="l-material-help">O número entre parênteses é quantas folhas desse tipo já estão no painel.</small></label>
           <label class="field" id="f-volume">Volume / embalagem<select id="l-volume"><option value="1">1 de 1</option></select></label>
           <fieldset class="lab-lote" id="f-lote"><legend>Quantas etiquetas diferentes</legend>
             <label><input type="radio" name="l-lote" value="um" checked> Só esta</label>
@@ -1073,7 +1085,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
         </div>
         <div class="lab-section">
           <div class="lab-section-title"><span class="lab-passo">2</span> Como imprimir</div>
-          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option></select></label>
+          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option></select></label>
           <label class="field">Papel<select id="l-papel"><option value="rolo">Impressora de etiquetas (uma por página, no tamanho exato)</option><option value="a4">Folha A4 comum (várias por folha, para recortar)</option></select></label>
           <div class="qty"><label class="field">Cópias<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field"><span>Observação <small class="help" id="l-obs-cont" aria-live="polite">0/30</small></span><input id="l-obs" maxlength="30" placeholder="opcional, sai em letra pequena"></label></div>
           <div class="lab-note" id="l-qty-nota" style="font-size:12px;color:var(--ink3)">Na folha avulsa, as cópias viram uma sequência a partir do número informado (D00019, D00020…).</div>
@@ -1635,18 +1647,25 @@ function labFmtPreferido(){let f='100x50';try{const v=localStorage.getItem('camp
 document.getElementById('l-fmt')?.addEventListener('change',e=>{try{if(e.target.value!=='20x140')localStorage.setItem('camp.lab.fmt',e.target.value)}catch(_){}});
 /* H21: o que aparece em cada aba (volume só na pasta; lote de folhas na folha; lote de pastas na pasta) */
 function labAjustarCampos(){const vis=(id,v)=>{const el=document.getElementById(id);if(el)el.style.display=v?'':'none'},temProj=['projeto','documento'].includes(labType);
-  vis('f-volume',labType==='projeto'&&labLote()==='um');vis('f-lote',temProj);vis('f-lote-folhas',labType==='documento');vis('f-lote-pastas',labType==='projeto');vis('f-cadastro-wrap',temProj);vis('l-qty-nota',labType==='documento'&&labLote()==='um');
+  vis('f-volume',labType==='projeto'&&labLote()==='um');vis('f-material',['projeto','tubo'].includes(labType));labPreencherMaterial();vis('f-lote',temProj);vis('f-lote-folhas',labType==='documento');vis('f-lote-pastas',labType==='projeto');vis('f-cadastro-wrap',temProj);vis('l-qty-nota',labType==='documento'&&labLote()==='um');
   const r=document.querySelector('input[name="l-lote"]:checked');if(r&&r.closest('label').style.display==='none'||!temProj){const um=document.querySelector('input[name="l-lote"][value="um"]');if(um)um.checked=true}}
 function labLote(){const r=document.querySelector('input[name="l-lote"]:checked');return r?r.value:'um'}
 document.getElementById('f-lote').addEventListener('change',()=>{if(labLote()!=='um')document.getElementById('l-qty').value=1;labAjustarCampos();renderLabel()});
 document.getElementById('l-papel').addEventListener('change',renderLabel);
 document.getElementById('l-obs').addEventListener('input',e=>{const c=document.getElementById('l-obs-cont');if(c)c.textContent=`${e.target.value.length}/30`});
 labAjustarCampos();
-['l-fundo','l-proj','l-volume','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderLabel));
+['l-fundo','l-proj','l-volume','l-material','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderLabel));
 document.getElementById('l-fundo').addEventListener('change',carregarProjetosEtiqueta);
 document.getElementById('l-proj').addEventListener('change',carregarDadosProjetoEtiqueta);
 document.getElementById('l-volume').addEventListener('change',aplicarVolumeEtiqueta);
 let LABEL_PROJETO=null,LABEL_VOLUMES=[],LABEL_LISTA=[],LABEL_FOLHAS=[];
+/* pedido de 15/10: escolher o material (série) da etiqueta e ver quantas folhas dele já estão no painel */
+function labPreencherMaterial(){const sel=document.getElementById('l-material');if(!sel)return;const v=sel.value,porSerie={};(window.LABEL_CATEG||[]).forEach(c=>{porSerie[c.codigo]=c.itens||0});
+  const total=(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0),comCont=labLote()!=='pastas';
+  sel.innerHTML=`<option value="">Todo o material do projeto${comCont?` (${total})`:''}</option>`+['S01','S02','S03','S04','S05','S06','S07','S08'].map(c=>`<option value="${c}">${c} · ${escHtml(nomeSerieProjeto(c))}${comCont?` (${porSerie[c]||0})`:''}</option>`).join('');
+  if([...sel.options].some(o=>o.value===v))sel.value=v}
+function labMaterial(alvo){const c=(document.getElementById('l-material')||{}).value||'';if(!c||!['projeto','tubo'].includes(labType))return null;
+  const n=alvo?null:((window.LABEL_CATEG||[]).find(x=>x.codigo===c)||{}).itens||0;return {codigo:c,nome:nomeSerieProjeto(c),n,texto:nomeSerieProjeto(c)+(n==null?'':' · '+n)}}
 function codigoProjetoEtiqueta(pc){const n=parseInt(String(pc||'').replace(/\D/g,''),10)||0;return 'P'+String(n).padStart(3,'0')}
 async function aplicarRotaEtiquetas(route){
   const [,tipo,...r]=route.split('/'),id=decodeURIComponent(r.join('/')),aba={projeto:'projeto',fundo:'fundo',folha:'documento'}[tipo];
@@ -1688,7 +1707,7 @@ async function carregarDadosProjetoEtiqueta(){
   const code=document.getElementById('l-proj').value;if(!EU||!code)return;
   try{
     const [d,vs]=await Promise.all([API('/api/projetos/'+code+'/detalhe'),API('/api/projetos/'+code+'/volumes')]);
-    LABEL_PROJETO=d.projeto;LABEL_VOLUMES=vs;LABEL_FOLHAS=(d.itens||[]).filter(x=>/^[A-Z]\d{3}-P\d{4}-/.test(x.codigo||'')).sort((a,b)=>a.codigo<b.codigo?-1:1);const nf=document.getElementById('l-n-folhas');if(nf)nf.textContent=`(${LABEL_FOLHAS.length})`;
+    LABEL_PROJETO=d.projeto;LABEL_VOLUMES=vs;window.LABEL_CATEG=d.categorias||[];labPreencherMaterial();LABEL_FOLHAS=(d.itens||[]).filter(x=>/^[A-Z]\d{3}-P\d{4}-/.test(x.codigo||'')).sort((a,b)=>a.codigo<b.codigo?-1:1);const nf=document.getElementById('l-n-folhas');if(nf)nf.textContent=`(${LABEL_FOLHAS.length})`;
     document.getElementById('l-ano').value=LABEL_PROJETO.ano||'';
     document.getElementById('l-endereco').value=LABEL_PROJETO.endereco_obra||'';
     document.getElementById('l-cliente').value=LABEL_PROJETO.cliente||'';
@@ -1710,23 +1729,32 @@ function labelHTML(k,alvo){   /* alvo (H21, lote): {codigo,titulo,ano,folha} de 
   const volume=alvo?1:(+document.getElementById('l-volume').value||1),v=alvo?null:LABEL_VOLUMES.find(x=>x.volume===volume),totalVolumes=v?.total_volumes||(alvo?1:Math.max(1,LABEL_VOLUMES.length)),local=(alvo?'':document.getElementById('l-local').value)||'—',tipoEmb=(alvo?'':document.getElementById('l-tipo-emb').value)||'—',docs=alvo?(alvo.folhas??'—'):(document.getElementById('l-docs-volume').value||'0'),endereco=(alvo?'':document.getElementById('l-endereco').value)||'—',cliente=(alvo?'':document.getElementById('l-cliente').value)||'—';
   const [mw,mh]=document.getElementById('l-fmt').value.split('x').map(Number);const S=3.6;const obs=document.getElementById('l-obs').value;
   const arq=(String(projeto.autoria||'').trim()||nome||'').replace(/\s*;\s*/g,', '),cid=(projeto.cidade||'').trim()||'sem cidade',anoTxt=(py&&String(py)!=='0')?String(py):'sem data',cidAno=`${cid} · ${anoTxt}`;   /* pedido de 15/10: nome do projeto, cidade e ano sempre */
+  const mat=labMaterial(alvo);
   let code,lines,big;
-  if(labType==='projeto'){code=`${sig}-${codigoProjetoEtiqueta(pc)}.${volume}`;big=code;lines=[['Arquiteto',arq],['Fundo',`${fc} · ${sig}`],['Cidade',cid],['Ano',anoTxt],['Cliente',cliente],['Volume',`${volume} de ${totalVolumes}`],['Embalagem',tipoEmb],['Documentos',docs],['Local',local],['Endereço',endereco]]}
+  if(labType==='projeto'){code=`${sig}-${codigoProjetoEtiqueta(pc)}.${volume}`;big=code;lines=[['Arquiteto',arq]].concat(mat?[['Material',mat.texto]]:[]).concat([['Fundo',`${fc} · ${sig}`],['Cidade',cid],['Ano',anoTxt],['Cliente',cliente],['Volume',`${volume} de ${totalVolumes}`],['Embalagem',tipoEmb],['Documentos',docs],['Local',local],['Endereço',endereco]])}
   else if(labType==='documento'){if(alvo){code=alvo.codigo}else{const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';const n='D'+String(+d+k).padStart(5,'0');code=`${fc}-${pc}-${py||'0000'}-${document.getElementById('l-serie').value}-${n}`}big=code;lines=[['Arquiteto',arq],['Fundo',`${fc} · ${sig}`],['Projeto',pn],['Cidade · ano',cidAno]].concat(alvo&&alvo.folha?[['Folha',alvo.folha]]:[])}
   else if(labType==='caixa'){const cx=document.getElementById('l-caixa').value.trim().toUpperCase(),id=/^[A-Z]/.test(cx)?cx:'CX'+cx.padStart(2,'0');code=fc?`${fc}-${id}`:id;big=code;/* H20: o identificador cadastrado (CX-001, MAP-01-G01) vai como está */lines=[['Fundo',`${sig} · ${nome}`],['Conteúdo',document.getElementById('l-cont').value]]}
   else if(labType==='fundo'){code=fc;big=`${fc} ${sig}`;lines=[['Fundo',nome],['Período',f[3]||'—']]}
   else {code=`${fc}-${pc}`;big=code;lines=[]}
   const vert=mh>mw;
+  if(mw>=150){   /* pedido de 15/10: capa da pasta, um pouco menor que A4 (200 × 287 mm), impressa em A4 e recortada na linha */
+    const tit=labType==='projeto'||labType==='documento'||labType==='tubo'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
+    return `<div class="label lab-capa" style="width:${mw*S}px;height:${mh*S}px"><div class="lc-topo"><span class="logo">CAMP</span><span>Casa da Arquitetura Moderna Paulista · Acervo ${escHtml(sig)}</span></div>
+      <div class="lc-cod">${escHtml(big)}</div><h2 class="lc-tit">${escHtml(tit)}</h2>
+      ${['projeto','documento','tubo'].includes(labType)?`<div class="lc-arq">${escHtml(arq)}</div><div class="lc-cid">${escHtml(cidAno)}</div>`:''}
+      ${mat?`<div class="lc-mat">${escHtml(mat.nome)}${mat.n!=null?` <b>${escHtml(mat.n)}</b> ${mat.n===1?'folha':'folhas'}`:''}</div>`:''}
+      <div class="lc-linhas">${lines.filter(([a])=>!['Arquiteto','Cidade','Ano','Material','Projeto','Cidade · ano'].includes(a)).map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
+      ${obs?`<div class="lc-obs">${escHtml(obs)}</div>`:''}<div class="lc-barras">${barcode(code,60,'100%')}<div class="lc-codtxt">${escHtml(code)}</div></div></div>`}
   if(!vert&&mh<=32){   /* faixa (Brother QL-700, DK-1201 29 × 90 mm): código grande, nome numa linha, um dado-chave e o código de barras */
     const chave=labType==='projeto'?`vol. ${volume}/${totalVolumes}${local&&local!=='—'?' · '+local:''}`:labType==='documento'?(alvo&&alvo.folha?'folha '+alvo.folha:sig):labType==='caixa'?String((lines[1]||[])[1]||''):labType==='fundo'?(f[3]||''):'';
     const nomeLinha=labType==='projeto'?pn:labType==='documento'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
     const comProjeto=['projeto','documento','tubo'].includes(labType);
-    return `<div class="label lab-faixa" style="width:${mw*S}px;height:${mh*S}px"><div class="lf-topo"><span class="logo">CAMP</span><span class="lf-big">${escHtml(big)}</span></div>
+    return `<div class="label lab-faixa" style="width:${mw*S}px;height:${mh*S}px"><div class="lf-topo"><span class="logo">CAMP</span><span class="lf-big">${escHtml(big)}</span>${mat?`<span class="lf-mat">${escHtml(mat.texto)}</span>`:''}</div>
       <div class="lf-meio"><span class="lf-nome">${escHtml(nomeLinha)}</span></div>
       ${comProjeto?`<div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(arq)}</span><span class="lf-chave">${escHtml(fc)}</span></div>`:''}
       <div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(comProjeto?cidAno:'')}</span>${chave?`<span class="lf-chave">${escHtml(chave)}</span>`:''}</div>
       ${obs?`<div class="lf-obs">${escHtml(obs)}</div>`:''}<div class="lf-barras">${barcode(code,16,'100%')}<div class="lf-cod">${escHtml(code)}</div></div></div>`}
-  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px"><span class="logo">CAMP</span><span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${escHtml(big)}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${escHtml(pn)} · ${escHtml(arq)} · ${escHtml(cidAno)}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
+  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px"><span class="logo">CAMP</span><span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${escHtml(big)}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${escHtml(pn)} · ${escHtml(arq)} · ${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
   return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${escHtml(sig)} · CAMP</span></div><div class="body">
     <div style="display:flex;align-items:center;gap:6px"><span class="logo">CAMP</span><span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
     <div class="big" style="font-size:${big.length>18?12:16}px;margin:5px 0 2px">${escHtml(big)}</div>
@@ -1743,7 +1771,7 @@ function labFrase(lote,lista){const fcod=document.getElementById('l-fundo').valu
   if(labType==='tubo')return pcod?`Etiqueta de: lombada do tubo de ${pcod} · ${pt}`:'Escolha o projeto.';
   if(!pcod)return 'Escolha o projeto.';
   if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';return `Etiqueta de: ${pcod} · ${pt} · folha ${document.getElementById('l-serie').value}-D${String(+d).padStart(5,'0')}`}
-  const vol=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===vol);return `Etiqueta de: ${pcod} · ${pt} · ${fn} · volume ${vol} de ${v?.total_volumes||Math.max(1,LABEL_VOLUMES.length)}`}
+  const vol=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===vol);const m=labMaterial();return `Etiqueta de: ${pcod} · ${pt} · ${fn}${m?' · '+m.texto:''} · volume ${vol} de ${v?.total_volumes||Math.max(1,LABEL_VOLUMES.length)}`}
 function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=document.getElementById('lab-origem'),semFundo=!fcod&&!['caixa','tubo'].includes(labType),pg=document.getElementById('printgrid'),pv=document.getElementById('lab-preview'),bt=document.getElementById('lab-imprimir');
   const lote=['projeto','documento'].includes(labType)?labLote():'um',lista=lote==='folhas'?LABEL_FOLHAS:lote==='pastas'?LABEL_LISTA:null;
   if(orig)orig.textContent=semFundo?'Escolha o fundo para ver a etiqueta.':labFrase(lote,lista||[]);
@@ -1756,8 +1784,10 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
   if(pg)pg.innerHTML=etiquetas.join('');if(bt)bt.textContent=etiquetas.length>1?`Imprimir ${etiquetas.length} etiquetas`:'Imprimir';
   /* H21: impressão no tamanho exato (@page) — uma etiqueta por página na impressora de etiquetas, ou várias numa A4 */
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
-  const av=document.getElementById('lab-aviso');if(av)av.innerHTML=(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
-  st.textContent=document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
+  {const pp=document.getElementById('l-papel');if(pp&&pp.closest('label'))pp.closest('label').style.display=w==='200'?'none':''}   /* a capa sai sempre numa A4 */
+  const av=document.getElementById('lab-aviso');if(av)av.innerHTML=w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
+  st.textContent=w==='200'?`@media print{@page{size:A4;margin:5mm}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`
+    :document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
     :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`}
 
 
