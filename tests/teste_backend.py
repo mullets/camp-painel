@@ -2106,8 +2106,8 @@ def filho(modo):
         j4 = op.post(f"/api/lotes/{lot2}/importar").json()
         ver("autoria divergente: as folhas NÃO entram; ficam listadas como retiradas, com o motivo", j4["criadas"] == 0 and len(j4["retirados"]) == 2 and any("autoria divergente" in x["bloqueios"] for x in j4["retirados"]) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, str(j4)[:200])
         # CAMP-008/046: o erros.json desse lote traz 2 erros 'bloqueia' de autoria divergente: entram em Erros relatados, mas como 'corrigir' (contrato 2.4: autoria é aviso, não trava)
-        ver("erros.json do lote com autoria divergente: 2 erros entram em Erros relatados (origem CAMP Vision) como 'corrigir', sem bloqueante", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='corrigir' AND situacao='aberto'") == 2 and sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'") == 0)
-        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
+        ver("erros.json do lote com autoria divergente: 2 erros entram em Erros relatados (origem CAMP Vision) como 'corrigir', sem bloqueante", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND categoria='autoria_divergente' AND gravidade='corrigir' AND situacao='aberto'") == 2 and sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'") == 0, str([tuple(r_) for r_ in k.execute("SELECT gravidade, situacao, categoria FROM erro WHERE chave LIKE 'campvision:erros:%'").fetchall()]))
+        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%' AND categoria='autoria_divergente'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
         # ---------- pacote com folha sem pendência: conferir em lote só o que é seguro ----------
         montar(proj, "lote_normal"); pj = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(pj.read_text(encoding="utf-8"))
         d3 = next(x for x in pk["documentos"] if x["codigo"] == D(3)); d3.update({"orientacao_incerta": False, "titulo": "Elevação sul", "tipo_de_desenho": "Elevação", "bloqueios": [], "publicavel": True})
@@ -3790,7 +3790,7 @@ def filho(modo):
         c = connect()
         ss = dict(c.execute("SELECT codigo, nome FROM serie").fetchall())
         ver("S06 se chama Materiais (como no site)", ss.get("S06") == "Materiais", str(ss.get("S06")))
-        ver("S07 Redesenhos existe", ss.get("S07") == "Redesenhos", str(ss.get("S07")))
+        ver("S07 Publicações e S08 Redesenhos existem (CAMP-047)", ss.get("S07") == "Publicações" and ss.get("S08") == "Redesenhos", str((ss.get("S07"), ss.get("S08"))))
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F085','Fundo Séries','FSE',1)")
         c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F085',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F085-P0001','F085',1,'Casa Tapera',1969)")
@@ -3799,7 +3799,7 @@ def filho(modo):
         except Exception as e:  # noqa: BLE001
             ok7 = str(e)
         ver("uma folha S07 entra no banco (antes a chave estrangeira recusava)", ok7 is True, str(ok7))
-        ver("o termo 'Redesenhos' do site vira S07 (e não S01, apesar de conter 'desenho')", _serie_do_item("", {"Série": "Redesenhos"}) == "S07")
+        ver("o termo 'Redesenhos' do site vira S08 (e não S01, apesar de conter 'desenho')", _serie_do_item("", {"Série": "Redesenhos"}) == "S08")
         ver("o termo 'Materiais' do site vira S06", _serie_do_item("", {"Série": "Materiais"}) == "S06")
         c.close()
         print("\n".join(res))
