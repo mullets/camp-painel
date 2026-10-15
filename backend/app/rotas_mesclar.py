@@ -114,6 +114,7 @@ def _trocar_codigo(con, antigo: str, novo: str) -> None:
     con.execute("UPDATE revisao_campo SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE emprestimo_item SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE projeto SET capa_item=? WHERE capa_item=?", (novo, antigo))
+    con.execute("UPDATE reserva SET projeto_codigo=? WHERE projeto_codigo=?", (novo, antigo))     # a reserva repetida devolve o código NOVO
 
 
 def _status_velho(con, codigo: str, ator: str) -> None:
@@ -433,7 +434,7 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
                            ("cv_resposta", "projeto_codigo"), ("tarefa_publicacao", "projeto_codigo"), ("tarefa_publicacao", "folha_atual"),
                            ("uso_download", "projeto_codigo"), ("uso_download", "material_codigo"), ("estacao_heartbeat", "projeto_codigo"),
                            ("solicitacao_item", "codigo"), ("etiqueta_impressao", "codigo"), ("divergencia_site", "codigo"), ("erro", "codigo"),
-                           ("projeto", "capa_item"), ("projeto", "mesclado_em")):
+                           ("projeto", "capa_item"), ("projeto", "mesclado_em"), ("reserva", "projeto_codigo")):
         _prefixo(con, tabela, coluna, antigo, novo)
     _prefixo(con, "cv_resposta", "chave", antigo, novo, " AND tipo='retirado'")
     _prefixo(con, "evento", "codigo", antigo, novo, " AND entidade IN ('projeto','item')")   # o histórico acompanha o projeto

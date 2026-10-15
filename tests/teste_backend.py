@@ -5612,6 +5612,18 @@ def filho(modo):
         # 4) número que não existe no fundo: segue o caminho normal (cria com o próximo número)
         n0 = n_proj(); r = reservar(titulo="P0999 - Projeto Novo Qualquer", ano=1990, chave_reserva="e" * 32)
         ver("número que não existe no fundo: não inventa; reserva normal (projeto novo)", r.status_code == 200 and r.json().get("codigo") not in ("F009-P0999", "F009-P0060") and n_proj() == n0 + 1, r.text[:200])
+        # CAMP-034: a reserva repetida usa a tabela `reserva` (não o LIKE no evento) e devolve o código NOVO depois de recodificar
+        cod_e = sql("SELECT projeto_codigo FROM reserva WHERE chave_reserva=?", "e" * 32)
+        ver("a reserva que criou projeto fica na tabela `reserva` (chave única → projeto)", bool(cod_e) and cod_e.startswith("F009-P"), str(cod_e))
+        r = reservar(titulo="P0999 - Projeto Novo Qualquer", ano=1990, chave_reserva="e" * 32)
+        ver("repetir a mesma chave devolve o mesmo projeto, sem criar outro", r.status_code == 200 and r.json().get("codigo") == cod_e and r.json().get("repetida") is True and n_proj() == n0 + 1, r.text[:200])
+        novo_cod = "F009-P0500"
+        rr = adm.post(f"/api/projetos/{cod_e}/recodificar", json={"novo": novo_cod, "motivo": "teste"})
+        ver("admin recodifica o projeto", rr.status_code == 200, rr.text[:150])
+        r = reservar(titulo="P0999 - Projeto Novo Qualquer", ano=1990, chave_reserva="e" * 32)
+        ver("reserva repetida APÓS recodificar devolve o código NOVO (e não o antigo, que já não existe)", r.status_code == 200 and r.json().get("codigo") == novo_cod and r.json().get("repetida") is True and n_proj() == n0 + 1, r.text[:200])
+        ver("chave que nunca existiu NÃO acha reserva (cria normal)", reservar(titulo="Obra Totalmente Inédita", chave_reserva="4" * 32, confirmar_novo=True).json().get("repetida") is None)
+        ver("a migração de índices criou os índices pedidos", all(sql("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?", n_) == 1 for n_ in ("idx_lista_proc_pasta", "idx_item_status_site", "idx_item_projeto_revisao", "idx_erro_codigo", "idx_wp_item_colecao", "idx_divergencia_resolvida", "idx_solicitacao_situacao")))
         r = reservar(titulo="SESI x", numero_projeto="P0060", projeto_ja_existia=False, chave_reserva="f" * 32, confirmar_novo=True)
         ver("numero_projeto sem projeto_ja_existia não força nada (cria normal)", r.status_code == 200 and r.json().get("codigo") != "F009-P0060", r.text[:200])
         # 5) descartar uma decisão pendente (lote de teste "Familia - Nada")

@@ -39,6 +39,9 @@ def criar_projeto(con, fundo_codigo: str, titulo: str, ano: int | None, cidade: 
                 (codigo, fundo_codigo, numero, titulo, ano or 0, cidade, endereco_obra, identificacao))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'criado',?,?)",
                 (codigo, ator, json.dumps(detalhe, ensure_ascii=False)))
+    chave = (detalhe.get("chave_reserva") or "").strip().lower()
+    if chave:                                           # repetir a reserva devolve ESTE projeto (tabela `reserva`, com índice)
+        con.execute("INSERT OR IGNORE INTO reserva (chave_reserva, projeto_codigo) VALUES (?,?)", (chave, codigo))
     return {"codigo": codigo, "numero_projeto": prox, "fundo_codigo": fundo_codigo, "titulo": titulo, "ano": ano or 0, "cidade": cidade,
             "identificacao_original": identificacao}
 

@@ -509,9 +509,15 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         con.execute("BEGIN IMMEDIATE")
         if chave:
             # A estação repete a reserva quando a resposta se perde (timeout): devolve a mesma.
-            ja = con.execute(
-                "SELECT codigo FROM evento WHERE entidade='projeto' AND tipo='criado' AND detalhe LIKE ?",
-                (f'%"chave_reserva": "{chave}"%',)).fetchone()
+            ja = con.execute("SELECT projeto_codigo FROM reserva WHERE chave_reserva=?", (chave,)).fetchone()
+            if ja:                                      # o projeto pode ter sido recodificado ou mesclado depois: segue para onde ele está
+                cod = ja[0]
+                for _ in range(5):
+                    m_ = con.execute("SELECT mesclado_em FROM projeto WHERE codigo=?", (cod,)).fetchone()
+                    if not m_ or not m_[0]:
+                        break
+                    cod = m_[0]
+                ja = (cod,)
             if ja:
                 p = con.execute("SELECT codigo, fundo_codigo, numero, titulo, ano, cidade, identificacao_original "
                                 "FROM projeto WHERE codigo=?", (ja[0],)).fetchone()
