@@ -52,3 +52,11 @@ administrador do site e pediu para puxar o histórico completo (07/10/2026).
 1. Objetivo: **prestar contas e controlar direitos**, **entender o público**, ou os dois?
 2. Depois do formulário, como a pessoa recebe o arquivo hoje (link direto, e-mail, só vê na tela)? A sondagem ajuda a responder.
 3. Quem pode ver a lista? (implementado: só admin e master; confirmar)
+
+## LGPD: guarda de 24 meses e apagar uma pessoa (CAMP-050)
+- Rotina diária do painel (`backend/app/lgpd.py`, chamada por `main._lgpd_periodica`), com a configuração **`lgpd.modo`**: `simular` (PADRÃO: só conta e registra) ou `aplicar` (anonimiza). Prazo em `lgpd.meses` (24).
+- Cobre `uso_download`, `solicitacao` (+ itens), os eventos desses pedidos e `erro.relatado_por` dos relatos do site. Anonimizar = nome, e-mail, telefone, instituição (e o texto livre do pedido) saem; ficam as contagens (uso, material, datas, itens).
+- **Não é apagado por obrigação legal:** pedido com valor/orçamento (fica contado em `mantidas_obrigacao_legal`).
+- Log e evento só com quantidades. `GET /api/lgpd` (admin) mostra modo, o que seria anonimizado e pendências; `POST /api/lgpd/executar` roda agora (respeita o modo).
+- **Apagar dados desta pessoa** (Uso do acervo) apaga/anonimiza nas cópias do painel e chama o site (`POST /wp-json/camp/v1/painel/pessoa/apagar` com `{"email": ...}`). Falha do site não desfaz o local: a pessoa fica em `lgpd_pendente_site` (o e-mail só fica ali até o site confirmar) e a rotina repete.
+- Texto da política de privacidade e a opção `camp_aap_lgpd_modo` do site ficam no repositório do site.

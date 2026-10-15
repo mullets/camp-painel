@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd"}
 
 
 def rodar(modo, db):
@@ -547,6 +547,66 @@ def filho(modo):
         ver("o script em --sim lista e não envia", r.returncode == 0 and COD in r.stdout and "SIMULAÇÃO" in r.stdout, (r.stdout + r.stderr)[-300:])
         out = rp.reenviar(COD, "teste")
         ver("reenviar troca o arquivo do anexo pelo derivado e zera a pendência (lado 1920)", out["ok"] and out["lado_px"] == 1920 and rp.candidatos(c) == [], str(out))
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp050_lgpd":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, lgpd, wp as _wpmod
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("lgpd.modo nasce 'simular' e a guarda é de 24 meses", lgpd.modo(c) == "simular" and lgpd.meses(c) == 24)
+        meses30 = "-30 months"
+        for i, (em, quando) in enumerate((("velho@x.com", meses30), ("novo@x.com", "-2 months"), ("velho@x.com", "-26 months"))):
+            c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email, telefone, instituicao, uso, material_codigo) VALUES (1,?,datetime('now',?),'Ana',?,'1199','USP','pesquisa','F026-P0001')", (i + 1, quando, em))
+        for em, quando, valor in (("velho@x.com", meses30, None), ("velho@x.com", meses30, 150.0), ("novo@x.com", "-1 months", None)):
+            sid = c.execute("INSERT INTO solicitacao (solicitante, email, instituicao, finalidade, detalhe, origem, recebida_em, valor) VALUES ('Ana Souza',?,'USP','pesquisa','quero a planta','site',datetime('now',?),?)", (em, quando, valor)).lastrowid
+            c.execute("INSERT INTO solicitacao_item (solicitacao_id, codigo, formato) VALUES (?,?,'jpg_3000')", (sid, "F026-P0001"))
+            c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,'criada','site',?)", (str(sid), _j.dumps({"solicitante": "Ana Souza", "origem": "site", "itens": 1})))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,criado_em) VALUES ('aviso','outro','site','F026-P0001','x','Maria (velho@x.com)',datetime('now','-30 months'))")
+        c.commit()
+        r = lgpd.rodar(c, "teste")
+        ver("SIMULAR (padrão): conta o que seria anonimizado e NÃO muda nada", r["modo"] == "simular" and r["uso_download"] == 2 and r["solicitacao"] == 1 and r["mantidas_obrigacao_legal"] == 1 and r["erro_relatado_por"] == 1
+            and c.execute("SELECT COUNT(*) FROM uso_download WHERE email IS NOT NULL").fetchone()[0] == 3 and c.execute("SELECT COUNT(*) FROM solicitacao WHERE anonimizada=1").fetchone()[0] == 0, str(r))
+        lg = c.execute("SELECT detalhe FROM evento WHERE tipo='lgpd_retencao' ORDER BY id DESC LIMIT 1").fetchone()[0]
+        ver("o registro da rotina leva só quantidades (nada de nome nem e-mail)", "@" not in lg and "Ana" not in lg, lg[:120])
+        c.execute("UPDATE configuracao SET valor='aplicar' WHERE chave='lgpd.modo'"); c.commit()
+        r = lgpd.rodar(c, "teste")
+        ver("APLICAR: downloads antigos anonimizados (contagem fica), o recente não", c.execute("SELECT COUNT(*) FROM uso_download WHERE anonimizada=1 AND email IS NULL AND telefone IS NULL AND instituicao IS NULL AND uso='pesquisa'").fetchone()[0] == 2
+            and c.execute("SELECT COUNT(*) FROM uso_download WHERE email='novo@x.com'").fetchone()[0] == 1, str(r))
+        ver("APLICAR: pedido antigo sem valor anonimizado (itens ficam); com valor (obrigação fiscal) e o recente ficam", c.execute("SELECT COUNT(*) FROM solicitacao WHERE anonimizada=1 AND email IS NULL AND solicitante='(removido)' AND detalhe IS NULL").fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM solicitacao WHERE email='velho@x.com'").fetchone()[0] == 1 and c.execute("SELECT COUNT(*) FROM solicitacao_item").fetchone()[0] == 3)
+        ver("APLICAR: o histórico do pedido perde o nome; o relato do site perde quem relatou", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='solicitacao' AND detalhe LIKE '%Ana Souza%'").fetchone()[0] == 2
+            and c.execute("SELECT relatado_por FROM erro WHERE origem='site'").fetchone()[0] == "(removido)", "")
+        r2 = lgpd.contar_e_aplicar(c, False)
+        ver("rodar de novo não acha mais nada (idempotente)", r2["uso_download"] == 0 and r2["solicitacao"] == 0 and r2["erro_relatado_por"] == 0, str(r2))
+        # apagar uma pessoa: local + site; falha do site não desfaz o local e fica para repetir
+        chamadas = []
+        class WPQuebra:
+            def apagar_pessoa(self, em): chamadas.append(em); raise RuntimeError("site fora do ar")
+        class WPOk:
+            def apagar_pessoa(self, em): chamadas.append(em); return {"solicitacoes": 1, "downloads": 2, "fluentforms": 3}
+        _wpmod.WP = WPQuebra
+        out = lgpd.apagar_pessoa(c, "Novo@X.com", "teste")
+        ver("apagar pessoa com o site fora do ar: o LOCAL foi feito e o site ficou pendente", out["local"]["uso_download"] == 1 and out["local"]["solicitacao"] == 1 and not out["site"]["ok"]
+            and c.execute("SELECT COUNT(*) FROM lgpd_pendente_site").fetchone()[0] == 1 and c.execute("SELECT COUNT(*) FROM uso_download WHERE email='novo@x.com'").fetchone()[0] == 0, str(out))
+        _wpmod.WP = WPOk
+        rp = lgpd.repetir_pendentes(c)
+        ver("a rotina repete o pedido ao site e limpa a pendência quando ele confirma", rp["repetidas_ok"] == 1 and c.execute("SELECT COUNT(*) FROM lgpd_pendente_site").fetchone()[0] == 0 and chamadas[-1] == "novo@x.com", str((rp, chamadas)))
+        # rotas
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        j = x.get("/api/lgpd").json()
+        ver("GET /api/lgpd (admin) traz o modo, a guarda e as pendências", j["modo"] == "aplicar" and j["meses"] == 24 and "a_anonimizar" in j and j["pendentes_no_site"] == 0, str(j)[:200])
+        c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email) VALUES (1,99,datetime('now'),'Zé','ze@x.com')"); c.commit()
+        r = x.post("/api/uso/apagar", json={"email": "ze@x.com"})
+        ver("a rota 'apagar todos os pedidos da pessoa' também chama o site", r.status_code == 200 and r.json()["apagadas"] == 1 and r.json()["site"]["ok"] and chamadas[-1] == "ze@x.com", r.text[:200])
+        r = x.post("/api/lgpd/executar")
+        ver("POST /api/lgpd/executar roda a rotina", r.status_code == 200 and r.json()["modo"] == "aplicar", r.text[:200])
+        c.execute("UPDATE configuracao SET valor='simular' WHERE chave='lgpd.modo'"); c.commit()
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -6974,6 +7034,14 @@ else:
 print("122) Imagem pública <= 1920 px, derivado em cache e script de reprocessamento (CAMP-048)")
 rc, out = rodar("camp048_imagem_publica", f"{tmp}/c048.db")
 if rc != 0: ok(False, f"teste do CAMP-048 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("123) LGPD no painel: guarda de 24 meses (simular por padrão) e apagar pessoa chamando o site (CAMP-050)")
+rc, out = rodar("camp050_lgpd", f"{tmp}/c050.db")
+if rc != 0: ok(False, f"teste do CAMP-050 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

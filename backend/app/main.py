@@ -26,6 +26,7 @@ from .guia_publicacao import router as guia_publicacao
 from .rotas_qnap import router as rotas_qnap
 from .rotas_hoje import router as rotas_hoje
 from .rotas_uso import router as rotas_uso
+from .rotas_lgpd import router as rotas_lgpd
 from .rotas_site import router as rotas_site
 
 FRONT = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
@@ -68,6 +69,7 @@ from .rotas_emprestimos import router as rotas_emprestimos
 app.include_router(rotas_emprestimos)
 from .rotas_relatorios import router as rotas_relatorios
 app.include_router(rotas_relatorios)
+app.include_router(rotas_lgpd)
 from .rotas_estante import router as rotas_estante
 app.include_router(rotas_estante)
 
@@ -83,8 +85,30 @@ async def _startup() -> None:
     asyncio.create_task(_coleta_qnap_periodica())
     asyncio.create_task(_coleta_uso_periodica())
     asyncio.create_task(_alertas_periodicos())
+    asyncio.create_task(_lgpd_periodica())
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
+
+
+async def _lgpd_periodica() -> None:
+    """CAMP-050: uma vez por dia, a rotina de guarda de 24 meses (lgpd.modo: simular por padrão) e a repetição do que o site não confirmou."""
+    import asyncio
+    await asyncio.sleep(120)
+    while True:
+        try:
+            def _rodar():
+                from . import lgpd
+                con = connect()
+                try:
+                    if lgpd.precisa_rodar_hoje(con):
+                        lgpd.rodar(con)
+                    lgpd.repetir_pendentes(con)
+                finally:
+                    con.close()
+            await asyncio.to_thread(_rodar)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.ERROR, "lgpd", f"Falha na rotina de LGPD: {type(e).__name__}")
+        await asyncio.sleep(3600)
 
 
 async def _resumo_diario_periodico() -> None:
