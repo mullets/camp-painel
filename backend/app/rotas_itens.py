@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["itens"])
 
 LIMITES_LOCAIS = {"titulo": 300, "tipo_documento": 120, "folha": 40, "escala": 60, "dimensoes": 120, "suporte": 160, "credito": 300,
                   "endereco_folha": 300, "cliente_folha": 200}   # endereço e cliente lidos no carimbo da folha (consenso do lote)
-SITE_METADADOS = ("Tipo de desenho", "Técnica", "Suporte original", "Endereço", "Cliente", "Fotógrafo",
+SITE_METADADOS = ("Tipo de desenho", "Técnica", "Suporte", "Endereço", "Cliente", "Fotógrafo",
                   "Data do registro fotográfico", "Informação atribuída pela catalogação")
 LIM_TEXTO_SITE = 5000
 LIM_TITULO_SITE = 300
@@ -73,7 +73,7 @@ def _campos_do_site(con, w) -> tuple[list[dict], list[dict]]:
         if not mid:
             continue
         kind = _tipo_edicao(tipo)
-        atual = valores.get(nome) or ""
+        atual = valores.get(nome) or (valores.get("Suporte original") if nome == "Suporte" else "") or ""   # CAMP-035: o site velho ainda pode chamar de "Suporte original"
         if not kind:
             if atual:
                 leitura.append({"nome": nome, "valor": atual, "motivo": "tipo de campo não editável aqui"})

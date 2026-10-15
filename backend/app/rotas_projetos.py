@@ -505,7 +505,7 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     d["tainacan_item_id"] = d.pop("wp_id_exato", None)
     from .imagens import e_imagem
     d["imagem_grande"] = d.get("documento_url") if e_imagem(d.get("documento_url")) else None
-    d["metadados_site"] = {k2: v for k2, v in md.items() if v and k2 in ("Tipo de desenho", "Técnica", "Suporte original", "Endereço", "Cliente",
+    d["metadados_site"] = {k2: v for k2, v in md.items() if v and k2 in ("Tipo de desenho", "Técnica", "Suporte", "Suporte original", "Endereço", "Cliente",
                            "Fotógrafo", "Data do registro fotográfico", "Informação atribuída pela catalogação", "Descrição", "Arquiteto")}
     return {"item": d, "anterior": vizinhos[k - 1] if k > 0 else None, "proxima": vizinhos[k + 1] if k < len(vizinhos) - 1 else None,
             "posicao": k + 1, "total": len(vizinhos), "agentes": agentes}

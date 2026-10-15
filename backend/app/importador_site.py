@@ -140,7 +140,7 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
                            escala, ano_folha, suporte, arquivo_jpg, status_site, tainacan_item_id, origem, credito)
                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'importado',?)""",
                         (cod, p, serie, seq, titulo, _tipo(md.get("Tipo de desenho")), md.get("Folha") or None,
-                         md.get("Escala") or None, _int(md.get("Ano")), md.get("Suporte original") or None,
+                         md.get("Escala") or None, _int(md.get("Ano")), (md.get("Suporte") or md.get("Suporte original")) or None,
                          _arquivo_preview(it["documento_url"]), status, it["id"],
                          f"Acervo {md.get('Arquiteto') or md.get('Fundo') or ''}/CAMP - Casa da Arquitetura Moderna Paulista"))
             n["itens_novos"] += 1

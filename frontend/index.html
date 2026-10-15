@@ -2355,7 +2355,7 @@ async function salvarFundo(code){if(!validarCampos(document.getElementById('draw
 async function carregarDescricaoSite(det){const c=det&&det.dataset.fundo,corpo=det&&det.querySelector('.fd-site-corpo');if(!c||!corpo)return;
   try{const r=await API(`/api/fundos/${encodeURIComponent(c)}/descricao-site`);const adm=['admin','master'].includes(EU&&EU.papel);
     corpo.innerHTML=`<div class="fd-site-txt">${r.texto.split('\n\n').map(l=>{const i=l.indexOf(': ');return i>0?`<p><b>${escHtml(l.slice(0,i))}:</b> ${escHtml(l.slice(i+2))}</p>`:`<p>${escHtml(l)}</p>`}).join('')}</div>`+
-      (r.faltam.length?`<p class="help">Ainda aparece como "Documentação em organização": ${escHtml(r.faltam.join(', '))}. Preencha em <b>Editar</b>.</p>`:'')+
+      (r.faltam.length?`<p class="help">Ainda não aparece no site (campo vazio): ${escHtml(r.faltam.join(', '))}. Preencha em <b>Editar</b>. O que já foi escrito direto no site não é apagado.</p>`:'')+
       `<p class="help">${r.mostrar_doador?'O nome de quem entregou o acervo aparece (autorizado).':'O nome de quem entregou o acervo não aparece (sem autorização).'}</p>`+
       (r.no_site?(adm?`<div class="act"><button class="btn sm" data-fd-site-enviar="${escHtml(c)}">Enviar este texto ao site agora</button></div>`:''):'<p class="help">O fundo ainda não tem página no site; o texto vai junto quando ela for criada.</p>')}
   catch(e){corpo.innerHTML=`<small class="help">${escHtml(e.message)}</small>`}}

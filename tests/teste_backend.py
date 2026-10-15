@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados"}
 
 
 def rodar(modo, db):
@@ -415,6 +415,44 @@ def filho(modo):
         ver("login atrás do túnel guarda o IP real na sessão e no histórico (não 127.0.0.1)", r.status_code == 200 and k.execute("SELECT ip FROM sessao ORDER BY rowid DESC LIMIT 1").fetchone()[0] == "200.1.2.3", r.text[:100])
         svc = (_pl.Path(__file__).resolve().parents[1] / "scripts" / "camp-painel.service").read_text(encoding="utf-8")
         ver("o serviço sobe o uvicorn com --proxy-headers --forwarded-allow-ips=127.0.0.1", "--proxy-headers" in svc and "--forwarded-allow-ips=127.0.0.1" in svc)
+        for l in res: print(l)
+    elif modo == "cp35_metadados":
+        init_db(); aplicar_migracoes()
+        import json as _j
+        import app.publicador as pub
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F099','Fundo de teste','FTE',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F099-P0001','F099',1,'Casa de teste',1970,7000)")
+        C1 = "F099-P0001-1970-S01-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,folha,escala,suporte,origem) VALUES (?,?,?,?,?,?,?,?,?,'importado')",
+                  (C1, "F099-P0001", "S01", 1, "Planta térrea", "Planta", "01/02", "1:50", "papel vegetal"))
+        # o espelho do site só conhece o metadado de suporte com o nome VELHO; "Código do documento", "Escala", "Folha" etc. NÃO estão no espelho (caem no ID do plugin)
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (700, 8013, 'Suporte original', 'Tainacan\\Metadata_Types\\Text')")
+        c.commit()
+        enviados = []
+        class FakeWP:
+            def criar_item(self, cid, titulo, status="draft", descricao=""): return {"id": 7100, "slug": "planta", "url": "u"}
+            def definir_metadado(self, wid, mid, valor): enviados.append((wid, mid, valor))
+            def patch_item(self, *a, **k): pass
+        pub.WP = FakeWP
+        r = pub.criar_folha_no_site(C1, "teste@camp", enviar_imagem=False)
+        por_id = {m: v for _w, m, v in enviados}
+        ver("CAMP-036: metadado que o espelho não tem mas o plugin conhece é gravado POR ID (Código 8030, Escala 8052, Folha 8054, Ano 8046)",
+            por_id.get(8030) == C1 and por_id.get(8052) == "1:50" and por_id.get(8054) == "01/02" and por_id.get(8046) == "1970", str(por_id))
+        ver("CAMP-035: 'Suporte' (nome novo) cai no metadado que o espelho ainda chama 'Suporte original' (700)", por_id.get(700) == "papel vegetal", str(por_id))
+        pend = [d["campo"] for d in c.execute("SELECT campo FROM divergencia_site WHERE codigo=? AND resolvida=0", (C1,))]
+        ver("metadado sem nome no espelho e sem ID conhecido ('Tipo de desenho') vira divergência pendente_*, e NÃO some em silêncio", "pendente_metadado_Tipo de desenho" in pend, str(pend))
+        ver("só o que não resolveu vira pendência (Escala, Folha, Código, Suporte resolveram)", [x for x in pend if x.startswith("pendente_metadado_")] == ["pendente_metadado_Tipo de desenho"] or "pendente_metadado_Tipo de desenho" in pend and not any(n in " ".join(pend) for n in ("Escala", "Folha", "Código", "Suporte")), str(pend))
+        n0 = c.execute("SELECT COUNT(*) FROM divergencia_site WHERE campo LIKE 'pendente_metadado_%'").fetchone()[0]
+        pub._pendencia(c, "item", C1, "pendente_metadado_Tipo de desenho", "de novo"); c.commit()
+        ver("a mesma pendência não é empilhada duas vezes", c.execute("SELECT COUNT(*) FROM divergencia_site WHERE campo LIKE 'pendente_metadado_%'").fetchone()[0] == n0)
+        enviados.clear()
+        c.execute("UPDATE projeto SET tainacan_item_id=NULL WHERE codigo='F099-P0001'"); c.commit()
+        pub.criar_dossie_no_site("F099-P0001", "teste@camp")
+        pi = {m: v for _w, m, v in enviados}
+        ver("dossiê: 'Código de Catalogação' (811) e 'Ano' (8439) vão por ID do plugin", pi.get(811) == "F099-P0001" and pi.get(8439) == "1970", str(pi))
         for l in res: print(l)
     elif modo == "importador":
         init_db(); aplicar_migracoes()
@@ -3834,8 +3872,8 @@ def filho(modo):
         auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
         x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
         r = x.get("/api/fundos/F086/descricao-site").json()
-        ver("fundo vazio: procedência, ingresso e acesso/reprodução dizem 'Documentação em organização.'",
-            r["texto"].count("Documentação em organização.") == 3 and r["faltam"] == ["Procedência", "Forma de entrada", "Condições de acesso", "Condições de reprodução"], r["texto"])
+        ver("CAMP-037: fundo vazio NÃO manda o texto padrão 'Documentação em organização.' ao site (nem na prévia); a lista do que falta continua",
+            r["texto"].count("Documentação em organização.") == 0 and r["faltam"] == ["Procedência", "Forma de entrada", "Condições de acesso", "Condições de reprodução"], r["texto"])
         ver("registrar a entrada", x.post("/api/entradas", json={"fundo_codigo": "F086", "tipo": "doacao", "data": "2024-03-01", "entregue_por": "Maria Silva"}).status_code == 200)
         c = connect(); proc = c.execute("SELECT procedencia FROM fundo WHERE codigo='F086'").fetchone()[0]; c.close()
         ver("a procedência preenchida pela entrada tem acento ('Doação de …')", proc.startswith("Doação de Maria Silva"), proc)
@@ -6755,6 +6793,14 @@ else:
 print("118) Migrações em transação por arquivo, IP real atrás do túnel e serviço com proxy-headers (CAMP-042)")
 rc, out = rodar("cp42", f"{tmp}/cp42.db")
 if rc != 0: ok(False, f"teste do CAMP-042 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("119) Publicador: metadados por ID do plugin, pendência em vez de silêncio, 'Suporte' (CAMP-035/036/037)")
+rc, out = rodar("cp35_metadados", f"{tmp}/cp35.db")
+if rc != 0: ok(False, f"teste dos metadados do publicador não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

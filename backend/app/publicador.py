@@ -54,9 +54,24 @@ def _tax(con, nome):
     return r[0] if r else None
 
 
+# IDs dos metadados que o plugin do site (camp-acervo-auto-pages, includes/class-config.php) conhece. O espelho (wp_metadado, por NOME) manda;
+# estes entram quando o espelho não tem o nome (sincronização antiga ou nome diferente no site). CAMP-035/036.
+IDS_METADADOS_DO_PLUGIN = {
+    8013: {"Código do documento": 8030, "Fundo": 8032, "Arquiteto": 8035, "Série": 8038, "Tipo de arquivo": 8041, "Projeto": 8044,
+           "Ano": 8046, "Cliente": 8048, "Endereço": 8050, "Escala": 8052, "Folha": 8054, "Título": 808},
+    8007: {"Fundo": 8400, "Arquiteto": 8403, "Ano": 8439, "Código de Catalogação": 811},
+}
+APELIDOS_METADADO = {"Suporte": ("Suporte original",)}      # o painel diz "Suporte" (como o plugin); o espelho antigo pode ter o nome velho
+
+
 def _meta(con, colecao_id, nome):
-    r = con.execute("SELECT id, tipo FROM wp_metadado WHERE colecao_id=? AND nome=?", (colecao_id, nome)).fetchone()
-    return (r[0], r[1]) if r else (None, None)
+    """(id, tipo) do metadado: primeiro pelo nome no espelho do site; depois pelo ID que o plugin do site conhece; senão (None, None)."""
+    for n in (nome, *APELIDOS_METADADO.get(nome, ())):
+        r = con.execute("SELECT id, tipo FROM wp_metadado WHERE colecao_id=? AND nome=?", (colecao_id, n)).fetchone()
+        if r:
+            return (r[0], r[1])
+    fixo = IDS_METADADOS_DO_PLUGIN.get(int(colecao_id), {}).get(nome)
+    return (fixo, None) if fixo else (None, None)
 
 
 def _garantir_metadado_origem(con, wp) -> int | None:
@@ -76,6 +91,8 @@ def _garantir_metadado_origem(con, wp) -> int | None:
 
 
 def _pendencia(con, entidade, codigo, campo, detalhe):
+    if con.execute("SELECT 1 FROM divergencia_site WHERE entidade=? AND codigo=? AND campo=? AND resolvida=0", (entidade, codigo, campo)).fetchone():
+        return                                    # já está na lista: publicar de novo não empilha o mesmo aviso
     con.execute("INSERT INTO divergencia_site (entidade, codigo, campo, valor_painel, valor_site) VALUES (?,?,?,?,?)",
                 (entidade, codigo, campo, detalhe[:300], None))
 
@@ -98,8 +115,11 @@ def _frase(t: str) -> str:
     return t if not t or t[-1] in ".!?" else t + "."
 
 
-def campos_hub_fundo(con, codigo: str) -> tuple[dict, list]:
+def campos_hub_fundo(con, codigo: str, com_padrao: bool = False) -> tuple[dict, list]:
     """B1: {meta do site: texto} e a lista do que ainda falta preencher no painel.
+
+    CAMP-037: campo vazio no painel NÃO leva mais o texto padrão "Documentação em organização." ao site (o painel não consegue ler o que já
+    está lá e sobrescreveria texto escrito à mão no WordPress). O site já esconde o campo vazio. `com_padrao=True` devolve o texto antigo.
 
     O nome de quem entregou o acervo só sai com fundo.mostrar_doador; sem isso, a procedência que cita
     o nome também não sai (a forma de entrada sai, sem o nome).
@@ -125,7 +145,7 @@ def campos_hub_fundo(con, codigo: str) -> tuple[dict, list]:
     valores = {"_camp_acervo_periodo": periodo, "_camp_acervo_extensao": f["dimensao_suporte"], "_camp_acervo_historico": f["historia_arquivistica"],
                "_camp_acervo_procedencia": proc, "_camp_acervo_ingresso": ingresso, "_camp_acervo_doador": "; ".join(nomes) if mostrar else "",
                "_camp_acervo_acesso": acesso}
-    meta = {k: ((valores[k] or "").strip() or (EM_ORGANIZACAO if sempre else "")) for k, _r, sempre in HUB_CAMPOS}
+    meta = {k: ((valores[k] or "").strip() or (EM_ORGANIZACAO if (sempre and com_padrao) else "")) for k, _r, sempre in HUB_CAMPOS}
     faltam = [r for r, v in (("Procedência", proc), ("Forma de entrada", ingresso), ("Condições de acesso", f["condicoes_acesso"]),
                              ("Condições de reprodução", repro)) if not (v or "").strip()]
     return meta, faltam
@@ -284,6 +304,7 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
                 continue
             mid, tipo = _meta(con, COL_PROJETOS, nome)
             if not mid:
+                _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
                 continue
             try:
                 col = {v_: k_ for k_, v_ in CAMPOS_PROJETO_SITE.items()}.get(nome)
@@ -359,6 +380,8 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
                 if mid:
                     wp.definir_metadado(p["tainacan_item_id"], mid, _valor_para_site(con, campo, p[campo], tipo_meta))
                     out["enviados"].append(nome)
+                else:
+                    _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): a mudança não foi gravada.")
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_metadados',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:300]; _pendencia(con, "projeto", codigo, "pendente_metadados_no_site", out["erro"])
@@ -751,7 +774,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                        "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
                        "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
                        "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
-                       "Suporte original": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
+                       "Suporte": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
             for nome, valor in valores.items():
                 if valor in (None, ""):
                     continue
@@ -759,6 +782,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 if not mid and nome == "Arquivo de origem":
                     mid = _garantir_metadado_origem(con, wp)
                 if not mid:
+                    if nome != "Arquivo de origem":     # (a falha do "Arquivo de origem" já deixou a própria pendência)
+                        _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
                     continue
                 try:
                     wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
