@@ -200,6 +200,14 @@ def iniciado(pid: int, d: Iniciado, request: Request) -> dict:
 class Concluido(BaseModel):
     ok: bool = True
     mensagem: str | None = Field(default=None, max_length=500)
+    # contrato 2.2 (todos opcionais): o que a releitura fez e custou
+    relidos: int | None = None
+    com_mudanca: int | None = None
+    campos_preenchidos: int | None = None
+    regravados: int | None = None
+    custo_usd: float | None = None
+    escopo: str | None = Field(default=None, max_length=20)
+    falhas: list | None = None
 
 
 @router.post("/estacoes/pedidos-releitura/{pid}/concluido")
@@ -216,6 +224,10 @@ def concluido(pid: int, d: Concluido, request: Request) -> dict:
         resultado: dict = {}
         if d.ok:
             resultado = _importar_de_novo(con, p["projeto_codigo"])
+        cv = {k: v for k, v in (("relidos", d.relidos), ("com_mudanca", d.com_mudanca), ("campos_preenchidos", d.campos_preenchidos), ("regravados", d.regravados),
+                                ("custo_usd", d.custo_usd), ("escopo", d.escopo), ("falhas", (d.falhas or [])[:20] or None)) if v is not None}
+        if cv:
+            resultado["campvision"] = cv                # custo e quantas folhas foram relidas ficam com o pedido
         con.execute("UPDATE pedido_releitura SET estado=?, concluido_em=datetime('now'), mensagem=?, resultado=? WHERE id=?",
                     ("concluido" if d.ok else "falhou", (d.mensagem or "").strip() or None, json.dumps(resultado, ensure_ascii=False) if resultado else None, pid))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES (?,?,?,?,?)",

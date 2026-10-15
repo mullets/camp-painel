@@ -63,8 +63,10 @@ def registrar_problemas(con, proj: str, pacote: dict, recusadas: list[str], lote
         cod = str(r.get("codigo") or "").strip()
         if not cod or cod in devolvidas:
             continue
-        motivos = [str(b) for b in (r.get("bloqueios") or []) if b] or ([str(r["motivo"])] if r.get("motivo") else [])
-        quem = f" (decisão de {r['retirado_por']})" if r.get("retirado_por") else ""
+        dec = r.get("decisao") if isinstance(r.get("decisao"), dict) else {}      # contrato 2.2: decisão humana {acao, motivo, por, em}
+        motivos = [str(b) for b in (r.get("bloqueios") or []) if b] or ([str(r["motivo"])] if r.get("motivo") else []) or ([str(dec["motivo"])] if dec.get("motivo") else [])
+        por = r.get("retirado_por") or dec.get("por")
+        quem = f" (decisão de {por})" if por else ""
         descricao = "O CAMP Vision retirou esta folha do lote" + quem + (": " + "; ".join(motivos) if motivos else "") + ". Ela não entrou na revisão."
         novos += con.execute("""INSERT OR IGNORE INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por, chave)
                                 VALUES ('corrigir', ?, 'campvision', ?, ?, 'CAMP Vision', ?)""",
@@ -75,6 +77,26 @@ def registrar_problemas(con, proj: str, pacote: dict, recusadas: list[str], lote
                                 VALUES ('corrigir', 'codigo', 'campvision', ?, ?, 'CAMP Vision', ?)""",
                              (proj, f"Folha do lote que não entrou no painel: {texto}.", f"campvision:recusada:{proj}:{cod}")).rowcount
     return novos
+
+
+def _raiz_prontos(con) -> Path | None:
+    v = con.execute("SELECT valor FROM configuracao WHERE chave='qnap.prontos_raiz'").fetchone()
+    return Path(v[0]) if v and v[0] else None
+
+
+def _tif_irmao(con, jpg: str | None, cod: str) -> str | None:
+    """Contrato 2.2: `arquivos[]` pode trazer só o JPG. O TIF fica em <série>/TIF/<codigo>.tif, ao lado da pasta JPG: só vale se existe no acervo."""
+    raiz = _raiz_prontos(con)
+    if not jpg or not raiz or not raiz.is_dir():
+        return None
+    p = Path(jpg)
+    if p.parent.name.upper() != "JPG":
+        return None
+    cand = p.parent.parent / "TIF" / f"{cod}.tif"
+    try:
+        return str(cand) if (raiz / cand).is_file() else None
+    except OSError:
+        return None
 
 
 def _primeiro(doc: dict, md: dict, chaves: tuple) -> str | None:
@@ -108,6 +130,7 @@ def _atualizar_arquivos(con, cod: str, d: dict) -> None:
     arqs = [str(a) for a in (d.get("arquivos") or [])]
     tif = next((a for a in arqs if a.lower().endswith((".tif", ".tiff"))), None)
     jpg = next((a for a in arqs if a.lower().endswith((".jpg", ".jpeg"))), None)
+    tif = tif or _tif_irmao(con, jpg, cod)
     if not (tif or jpg):
         return
     row = con.execute("SELECT pendencias FROM item WHERE codigo=?", (cod,)).fetchone()
@@ -208,12 +231,16 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         arqs = [str(a) for a in (d.get("arquivos") or [])]
         tif = next((a for a in arqs if a.lower().endswith((".tif", ".tiff"))), None)
         jpg = next((a for a in arqs if a.lower().endswith((".jpg", ".jpeg"))), None)
+        tif = tif or _tif_irmao(con, jpg, cod)
         origem = d.get("arquivo_origem")
         if isinstance(origem, list):
             origem = " | ".join(str(o.get("arquivo_origem") if isinstance(o, dict) else o) for o in origem if o)
         ano = str(d.get("ano") or "").strip()
         md = d.get("metadados") if isinstance(d.get("metadados"), dict) else {}
-        endereco_lido = _primeiro(d, md, ("endereco", "endereço", "endereco_obra", "local"))     # o que o carimbo DESTA folha diz (consenso do lote)
+        carimbo_ = d.get("carimbo") if isinstance(d.get("carimbo"), dict) else {}
+        lido_ = d.get("lido") if isinstance(d.get("lido"), dict) else {}
+        # o que o carimbo DESTA folha diz (contrato 2.2: carimbo.local / lido.endereco; antes: endereco/local nos metadados)
+        endereco_lido = _primeiro(d, md, ("endereco", "endereço", "endereco_obra", "local")) or _primeiro(carimbo_, lido_, ("local", "endereco"))
         cliente_lido = _primeiro(d, md, ("cliente", "proprietario", "proprietário"))
         ano_folha = int(ano) if ano.isdigit() and 1800 <= int(ano) <= 2100 else None
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
@@ -236,6 +263,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         lido.update({"carimbo": carimbo or None, "leitura": d.get("lido") if isinstance(d.get("lido"), dict) else meta or None,
                      "transcricao_integral": (d.get("lido") or {}).get("transcricao_integral") if isinstance(d.get("lido"), dict) else d.get("transcricao_integral"),
                      "versao_cv2": campos["versao_cv2"], "versao_prompt": campos["versao_prompt"], "modelo_cv": campos["modelo_cv"]})
+        if str(d.get("fotografo") or "").strip():       # contrato 2.2: sem coluna própria, fica junto do que o CV2 leu
+            lido["fotografo"] = str(d["fotografo"]).strip()[:200]
         campos["lido_json"] = json.dumps(lido, ensure_ascii=False)
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
@@ -270,6 +299,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     div = abrir_divergencias(con, proj, pacote, lote_id)   # (6) o CV2 leu ano/cidade/cliente diferente do cadastro
     if div:
         resumo["divergencias"] = div
+    sug = {k_: pacote["projeto"][k_] for k_ in ("programa_sugerido", "natureza_sugerida", "lacunas", "sugestao")
+           if isinstance(pacote.get("projeto"), dict) and pacote["projeto"].get(k_) not in (None, "", [], {})}
+    if sug:                                                     # sugestões do CV2 para o projeto (quem grava é gente): guardadas junto do resultado da importação
+        resultado["sugestoes_cv2"] = sug
     resultado["importacao"] = {**resumo, "por": ator}
     if isinstance(pacote.get("execucao"), dict):                 # custo, tempo e versão do lote (cartão 152)
         con.execute("UPDATE lista_processamento SET execucao_json=? WHERE id=?", (json.dumps(pacote["execucao"], ensure_ascii=False), lote_id))

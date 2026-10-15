@@ -542,8 +542,9 @@ def _erro_do_cv(d: dict) -> str | None:
             continue
         if not isinstance(j, dict):
             continue
-        for k in ("erro", "mensagem_erro", "motivo", "mensagem", "detalhe", "error", "message"):
-            v = j.get(k)
+        fontes = [j] + ([j["status"]] if isinstance(j.get("status"), dict) else [])     # contrato 2.2: resultado.status.motivo
+        for fonte, k in ((f_, k_) for f_ in fontes for k_ in ("erro", "mensagem_erro", "motivo", "mensagem", "detalhe", "error", "message")):
+            v = fonte.get(k)
             if isinstance(v, dict):
                 v = v.get("mensagem") or v.get("message") or v.get("detalhe")
             if isinstance(v, str) and v.strip():

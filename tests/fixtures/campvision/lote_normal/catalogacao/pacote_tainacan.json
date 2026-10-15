@@ -119,7 +119,49 @@
       "bloqueios": [
         "duplicata de F026-P0001-1972-S01-D00003"
       ],
-      "ressalvas": []
+      "ressalvas": [],
+      "orientacao_corrigida": false,
+      "versao_cv2": "2026-10-13-01+f8c8a69",
+      "versao_prompt": "prancha:48f8c530",
+      "modelo": "claude-sonnet-5",
+      "capa": "",
+      "sem_identificacao": false,
+      "carimbo": {
+        "obra": "CASA DA PRAIA",
+        "local": "",
+        "cidade": "",
+        "cliente": "",
+        "escritorio": "",
+        "arquiteto": "SAMI BUSSAB",
+        "data": "",
+        "codigo_unidade": "",
+        "contribuinte": "",
+        "alvara": ""
+      },
+      "lido": {
+        "projeto": "CASA DA PRAIA",
+        "cliente": "",
+        "arquiteto": "SAMI BUSSAB",
+        "escritorio": "",
+        "endereco": "",
+        "cidade": "",
+        "uf": "",
+        "data": "",
+        "escala": "",
+        "titulo_prancha": "",
+        "folha": "03",
+        "total_folhas": "",
+        "codigo_serie": "",
+        "codigo_unidade": "ABC-1",
+        "revisao": "",
+        "tipo": "",
+        "ano": "1968",
+        "transcricao_integral": "",
+        "carimbo_encontrado": true,
+        "modo": "prancha",
+        "anotacoes_manuscritas": [],
+        "observacoes_leitura": []
+      }
     },
     {
       "codigo": "F026-P0001-1972-S01-D00002",
@@ -192,7 +234,49 @@
       "bloqueios": [
         "duplicata de F026-P0001-1972-S01-D00001"
       ],
-      "ressalvas": []
+      "ressalvas": [],
+      "orientacao_corrigida": false,
+      "versao_cv2": "2026-10-13-01+f8c8a69",
+      "versao_prompt": "prancha:48f8c530",
+      "modelo": "claude-sonnet-5",
+      "capa": "",
+      "sem_identificacao": false,
+      "carimbo": {
+        "obra": "CASA DA PRAIA",
+        "local": "",
+        "cidade": "",
+        "cliente": "",
+        "escritorio": "",
+        "arquiteto": "SAMI BUSSAB",
+        "data": "",
+        "codigo_unidade": "",
+        "contribuinte": "",
+        "alvara": ""
+      },
+      "lido": {
+        "projeto": "CASA DA PRAIA",
+        "cliente": "",
+        "arquiteto": "SAMI BUSSAB",
+        "escritorio": "",
+        "endereco": "",
+        "cidade": "",
+        "uf": "",
+        "data": "",
+        "escala": "",
+        "titulo_prancha": "",
+        "folha": "03",
+        "total_folhas": "",
+        "codigo_serie": "",
+        "codigo_unidade": "ABC-1",
+        "revisao": "",
+        "tipo": "",
+        "ano": "1968",
+        "transcricao_integral": "",
+        "carimbo_encontrado": true,
+        "modo": "prancha",
+        "anotacoes_manuscritas": [],
+        "observacoes_leitura": []
+      }
     },
     {
       "codigo": "F026-P0001-1972-S01-D00003",
@@ -263,7 +347,49 @@
       "decisao": null,
       "publicavel": true,
       "bloqueios": [],
-      "ressalvas": []
+      "ressalvas": [],
+      "orientacao_corrigida": false,
+      "versao_cv2": "2026-10-13-01+f8c8a69",
+      "versao_prompt": "prancha:48f8c530",
+      "modelo": "claude-sonnet-5",
+      "capa": "",
+      "sem_identificacao": false,
+      "carimbo": {
+        "obra": "CASA DA PRAIA",
+        "local": "",
+        "cidade": "",
+        "cliente": "",
+        "escritorio": "",
+        "arquiteto": "SAMI BUSSAB",
+        "data": "",
+        "codigo_unidade": "",
+        "contribuinte": "",
+        "alvara": ""
+      },
+      "lido": {
+        "projeto": "CASA DA PRAIA",
+        "cliente": "",
+        "arquiteto": "SAMI BUSSAB",
+        "escritorio": "",
+        "endereco": "",
+        "cidade": "",
+        "uf": "",
+        "data": "",
+        "escala": "",
+        "titulo_prancha": "",
+        "folha": "03",
+        "total_folhas": "",
+        "codigo_serie": "",
+        "codigo_unidade": "ABC-1",
+        "revisao": "",
+        "tipo": "",
+        "ano": "1968",
+        "transcricao_integral": "",
+        "carimbo_encontrado": true,
+        "modo": "prancha",
+        "anotacoes_manuscritas": [],
+        "observacoes_leitura": []
+      }
     }
   ],
   "itens": [
@@ -338,7 +464,49 @@
       "bloqueios": [
         "duplicata de F026-P0001-1972-S01-D00003"
       ],
-      "ressalvas": []
+      "ressalvas": [],
+      "orientacao_corrigida": false,
+      "versao_cv2": "2026-10-13-01+f8c8a69",
+      "versao_prompt": "prancha:48f8c530",
+      "modelo": "claude-sonnet-5",
+      "capa": "",
+      "sem_identificacao": false,
+      "carimbo": {
+        "obra": "CASA DA PRAIA",
+        "local": "",
+        "cidade": "",
+        "cliente": "",
+        "escritorio": "",
+        "arquiteto": "SAMI BUSSAB",
+        "data": "",
+        "codigo_unidade": "",
+        "contribuinte": "",
+        "alvara": ""
+      },
+      "lido": {
+        "projeto": "CASA DA PRAIA",
+        "cliente": "",
+        "arquiteto": "SAMI BUSSAB",
+        "escritorio": "",
+        "endereco": "",
+        "cidade": "",
+        "uf": "",
+        "data": "",
+        "escala": "",
+        "titulo_prancha": "",
+        "folha": "03",
+        "total_folhas": "",
+        "codigo_serie": "",
+        "codigo_unidade": "ABC-1",
+        "revisao": "",
+        "tipo": "",
+        "ano": "1968",
+        "transcricao_integral": "",
+        "carimbo_encontrado": true,
+        "modo": "prancha",
+        "anotacoes_manuscritas": [],
+        "observacoes_leitura": []
+      }
     },
     {
       "codigo": "F026-P0001-1972-S01-D00002",
@@ -411,7 +579,49 @@
       "bloqueios": [
         "duplicata de F026-P0001-1972-S01-D00001"
       ],
-      "ressalvas": []
+      "ressalvas": [],
+      "orientacao_corrigida": false,
+      "versao_cv2": "2026-10-13-01+f8c8a69",
+      "versao_prompt": "prancha:48f8c530",
+      "modelo": "claude-sonnet-5",
+      "capa": "",
+      "sem_identificacao": false,
+      "carimbo": {
+        "obra": "CASA DA PRAIA",
+        "local": "",
+        "cidade": "",
+        "cliente": "",
+        "escritorio": "",
+        "arquiteto": "SAMI BUSSAB",
+        "data": "",
+        "codigo_unidade": "",
+        "contribuinte": "",
+        "alvara": ""
+      },
+      "lido": {
+        "projeto": "CASA DA PRAIA",
+        "cliente": "",
+        "arquiteto": "SAMI BUSSAB",
+        "escritorio": "",
+        "endereco": "",
+        "cidade": "",
+        "uf": "",
+        "data": "",
+        "escala": "",
+        "titulo_prancha": "",
+        "folha": "03",
+        "total_folhas": "",
+        "codigo_serie": "",
+        "codigo_unidade": "ABC-1",
+        "revisao": "",
+        "tipo": "",
+        "ano": "1968",
+        "transcricao_integral": "",
+        "carimbo_encontrado": true,
+        "modo": "prancha",
+        "anotacoes_manuscritas": [],
+        "observacoes_leitura": []
+      }
     },
     {
       "codigo": "F026-P0001-1972-S01-D00003",
@@ -482,7 +692,49 @@
       "decisao": null,
       "publicavel": true,
       "bloqueios": [],
-      "ressalvas": []
+      "ressalvas": [],
+      "orientacao_corrigida": false,
+      "versao_cv2": "2026-10-13-01+f8c8a69",
+      "versao_prompt": "prancha:48f8c530",
+      "modelo": "claude-sonnet-5",
+      "capa": "",
+      "sem_identificacao": false,
+      "carimbo": {
+        "obra": "CASA DA PRAIA",
+        "local": "",
+        "cidade": "",
+        "cliente": "",
+        "escritorio": "",
+        "arquiteto": "SAMI BUSSAB",
+        "data": "",
+        "codigo_unidade": "",
+        "contribuinte": "",
+        "alvara": ""
+      },
+      "lido": {
+        "projeto": "CASA DA PRAIA",
+        "cliente": "",
+        "arquiteto": "SAMI BUSSAB",
+        "escritorio": "",
+        "endereco": "",
+        "cidade": "",
+        "uf": "",
+        "data": "",
+        "escala": "",
+        "titulo_prancha": "",
+        "folha": "03",
+        "total_folhas": "",
+        "codigo_serie": "",
+        "codigo_unidade": "ABC-1",
+        "revisao": "",
+        "tipo": "",
+        "ano": "1968",
+        "transcricao_integral": "",
+        "carimbo_encontrado": true,
+        "modo": "prancha",
+        "anotacoes_manuscritas": [],
+        "observacoes_leitura": []
+      }
     }
   ],
   "retirados": [],
@@ -494,5 +746,20 @@
   "avisos": [
     "F026-P0001-1972-S01-D00001 é quase de F026-P0001-1972-S01-D00003 — publicar F026-P0001-1972-S01-D00003",
     "F026-P0001-1972-S01-D00002 é quase de F026-P0001-1972-S01-D00001 — publicar F026-P0001-1972-S01-D00001"
-  ]
+  ],
+  "execucao": {
+    "versao_cv2": "2026-10-13-01+f8c8a69",
+    "contrato": "2.2",
+    "modelo": "claude-sonnet-5",
+    "versao_prompt": {
+      "prancha": "48f8c530",
+      "fotografia": "554fca8b",
+      "textual": "b3df79d7"
+    },
+    "chamadas": 2,
+    "tokens_entrada": 2000,
+    "tokens_saida": 200,
+    "custo_usd": 0.006,
+    "tempo_s": 3.6
+  }
 }

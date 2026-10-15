@@ -254,6 +254,57 @@ def filho(modo):
         ver("pacote com S07 e S99: as duas folhas entram, cada uma na sua série; S08 vira problema e não entra",
             ses.get("F026-P0001-1972-S07-D00001") == "S07" and ses.get("F026-P0001-1972-S99-D00002") == "S99" and len(ses) == 2 and any("S08" in p_ for p_ in r.get("problemas", [])), str((ses, r)))
         for l in res: print(l)
+    elif modo == "cv22_leitor":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.importador_lote import importar_lote
+        from app.rotas_operacao import _erro_do_cv
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("CAMP-032: _erro_do_cv lê resultado.status.motivo (contrato 2.2) e continua lendo o formato antigo",
+            _erro_do_cv({"resultado": _j.dumps({"status": {"estado": "erro", "motivo": "QNAP com problema:  sem espaço"}})}) == "QNAP com problema: sem espaço"
+            and _erro_do_cv({"status_json": _j.dumps({"erro": "OCR falhou"})}) == "OCR falhou" and _erro_do_cv({"resultado": _j.dumps({"status": "erro"})}) is None)
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        prontos = _P(os.environ["CAMP_TMP_PRONTOS"]); shutil.rmtree(prontos, ignore_errors=True)
+        proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", proj)
+        serie_rel = "F026 - SBU Sami Bussab/01 - Projetos/F026-P0001 - Tarumã/01 - Desenhos e pranchas"
+        (prontos / serie_rel / "TIF").mkdir(parents=True); (prontos / serie_rel / "TIF" / "F026-P0001-1972-S01-D00001.tif").write_bytes(b"II*\0")   # só a D1 tem TIF no disco
+        arq = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(arq.read_text(encoding="utf-8"))
+        pk["documentos"][0].update({"fotografo": "Fotógrafo Teste", "carimbo": {**pk["documentos"][0]["carimbo"], "local": "Rua Tarumã 120"}})
+        pk["documentos"][1].update({"lido": {**pk["documentos"][1]["lido"], "endereco": "Av. Lido 9"}})
+        pk["projeto"].update({"programa_sugerido": ["Residência"], "natureza_sugerida": ["Projeto executivo"], "lacunas": ["cidade: fontes discordam"]})
+        pk["retirados"] = [{**pk["documentos"][2], "codigo": "F026-P0001-1972-S01-D00009", "decisao": {"acao": "retirar", "motivo": "folha de outra obra", "por": "Rafa", "em": "2026-10-13T17:35:14-03:00"}, "bloqueios": []}]
+        arq.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(proj),)).lastrowid; c.commit()
+        r = importar_lote(c, lote, "teste@camp"); c.commit()
+        it = {x["codigo"]: x for x in c.execute("SELECT * FROM item WHERE projeto_codigo='F026-P0001'")}
+        d1, d2, d3 = (it[f"F026-P0001-1972-S01-D0000{n}"] for n in (1, 2, 3))
+        ver("endereço da folha vem de carimbo.local (D1) e de lido.endereco (D2)", d1["endereco_folha"] == "Rua Tarumã 120" and d2["endereco_folha"] == "Av. Lido 9", str((d1["endereco_folha"], d2["endereco_folha"])))
+        ver("fotografo fica em lido_json (sem coluna própria)", _j.loads(d1["lido_json"]).get("fotografo") == "Fotógrafo Teste" and "fotografo" not in _j.loads(d2["lido_json"]))
+        sug = _j.loads(c.execute("SELECT resultado FROM lista_processamento WHERE id=?", (lote,)).fetchone()[0]).get("sugestoes_cv2") or {}
+        ver("programa_sugerido, natureza_sugerida e lacunas do projeto ficam guardados no resultado da importação", sug.get("programa_sugerido") == ["Residência"] and sug.get("natureza_sugerida") == ["Projeto executivo"] and sug.get("lacunas") == ["cidade: fontes discordam"], str(sug))
+        ver("arquivos[] só com JPG: o TIF é achado em <série>/TIF/<codigo>.tif quando existe no acervo (D1) e NÃO é inventado quando não existe (D2)",
+            d1["arquivo_tif"] == f"{serie_rel}/TIF/F026-P0001-1972-S01-D00001.tif" and d2["arquivo_tif"] is None and d1["arquivo_jpg"].endswith("D00001.jpg"), str((d1["arquivo_tif"], d2["arquivo_tif"])))
+        e = c.execute("SELECT descricao FROM erro WHERE chave='campvision:retirado:F026-P0001-1972-S01-D00009'").fetchone()
+        ver("folha retirada: o problema cita decisao.por e decisao.motivo", bool(e) and "Rafa" in e[0] and "folha de outra obra" in e[0], str(e and e[0]))
+        # releitura concluída guarda custo e quantas foram relidas
+        c.execute("INSERT INTO pedido_releitura (projeto_codigo, estado, pedido_por) VALUES ('F026-P0001','em_andamento','x')"); c.commit()
+        pid = c.execute("SELECT MAX(id) FROM pedido_releitura").fetchone()[0]
+        lan = TestClient(app, raise_server_exceptions=False)
+        async def _asgi(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("192.168.15.40", 50000)}
+            await app(scope, receive, send)
+        lan = TestClient(_asgi, raise_server_exceptions=False)
+        rr = lan.post(f"/api/estacoes/pedidos-releitura/{pid}/concluido", json={"ok": True, "mensagem": "1 folha relida", "projeto_codigo": "F026-P0001", "escopo": "folha", "relidos": 1, "com_mudanca": 1, "campos_preenchidos": 2, "falhas": [], "custo_usd": 0.01, "regravados": 1, "pasta": "x"})
+        got = _j.loads(c.execute("SELECT resultado FROM pedido_releitura WHERE id=?", (pid,)).fetchone()[0] or "{}").get("campvision") or {}
+        ver("concluido da releitura (corpo real do CV2) é aceito e guarda custo_usd e relidos", rr.status_code == 200 and got.get("custo_usd") == 0.01 and got.get("relidos") == 1 and got.get("regravados") == 1, f"{rr.status_code} {rr.text[:150]} {got}")
+        for l in res: print(l)
     elif modo == "importador":
         init_db(); aplicar_migracoes()
         import json as _j
@@ -6539,6 +6590,14 @@ else:
 print("115) Séries S07 e S99 no importador do lote (CAMP-031)")
 rc, out = rodar("cv_s99", f"{tmp}/cvs99.db")
 if rc != 0: ok(False, f"teste de S99 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("116) Leitor do contrato 2.2 do CAMP Vision (CAMP-032): status.motivo, endereço do carimbo, retirados, TIF, sugestões, custo da releitura")
+rc, out = rodar("cv22_leitor", f"{tmp}/cv22.db")
+if rc != 0: ok(False, f"teste do leitor 2.2 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
