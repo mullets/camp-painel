@@ -88,6 +88,7 @@ async def _startup() -> None:
     asyncio.create_task(_coleta_uso_periodica())
     asyncio.create_task(_alertas_periodicos())
     asyncio.create_task(_lgpd_periodica())
+    asyncio.create_task(_reconciliacao_noturna())
     asyncio.create_task(_coleta_pedidos_site_periodica())
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
@@ -114,6 +115,26 @@ async def _coleta_pedidos_site_periodica() -> None:
         except Exception as e:  # noqa: BLE001  (nunca derruba o painel)
             log_registrar(logging.ERROR, "coleta_pedidos_site", f"Falha no coletor de pedidos do site: {type(e).__name__}")
         await asyncio.sleep(max(1, minutos) * 60 if minutos > 0 else 300)
+
+
+async def _reconciliacao_noturna() -> None:
+    """CAMP-008: uma vez por noite (qnap.reconciliacao_hora), a varredura da raiz final recoloca na Fila o que o aviso do CV2 não trouxe."""
+    import asyncio
+    await asyncio.sleep(90)
+    while True:
+        try:
+            def _tentar():
+                from . import reconciliacao
+                con = connect()
+                try:
+                    if reconciliacao.devido(con):
+                        reconciliacao.rodar(con)
+                finally:
+                    con.close()
+            await asyncio.to_thread(_tentar)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.ERROR, "qnap_reconciliacao", f"Falha na reconciliação noturna: {type(e).__name__}")
+        await asyncio.sleep(600)
 
 
 async def _lgpd_periodica() -> None:

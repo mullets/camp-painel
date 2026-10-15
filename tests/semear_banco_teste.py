@@ -112,6 +112,7 @@ c.execute("INSERT INTO pedido_releitura (projeto_codigo, item_codigo, pedido_por
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='uso.coleta_min'")
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='site.coleta_pedidos_min'")
+c.execute("UPDATE configuracao SET valor='-1' WHERE chave='qnap.reconciliacao_hora'")
 # histórico do QNAP (7 dias, ~17 GB/dia) e a última coleta completa, para o cartão do painel inicial
 for i in range(8):
     c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?, '-1 hours'), 1, 20000, ?)", (f"-{7 - i} days", 12000 - 17 * i))

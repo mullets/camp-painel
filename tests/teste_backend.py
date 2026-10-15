@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao"}
 
 
 def rodar(modo, db):
@@ -944,6 +944,44 @@ def filho(modo):
         arq = tempfile.mktemp(suffix=".csv"); n = al.escrever_csv(c, lotes, arq)
         linhas = list(_csv.reader(open(arq, encoding="utf-8-sig"), delimiter=";"))
         ver("relatório CSV: cabeçalho + 3 linhas da amostra, com a decisão", n == 3 and len(linhas) == 4 and linhas[0][8] == "decisao" and {l[8] for l in linhas[1:]} == {"aprovado"}, str(linhas[:2]))
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp008_reconciliacao":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil, tempfile
+        from datetime import datetime as _dt
+        from pathlib import Path as _P
+        from fastapi import HTTPException
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import reconciliacao as rc_
+        c = connect()
+        ver("a reconciliação noturna nasce ligada às 3h", rc_.hora_configurada(c) == 3)
+        dia = lambda h, d=15: _dt(2026, 10, d, h, 0, 0)  # noqa: E731
+        ver("antes das 3h não é devida; às 3h é", not rc_.devido(c, dia(2)) and rc_.devido(c, dia(3)) and rc_.devido(c, dia(9)))
+        r = rc_.rodar(c, dia(3), varrer=lambda: {"novas": 2, "atualizadas": 1, "com_erro": 0, "processando": 0})
+        ver("rodar grava o resultado (evento) e a data; no mesmo dia não é devida de novo", r["ok"] and r["novas"] == 2 and not rc_.devido(c, dia(4)) and rc_.devido(c, dia(3, 16))
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='qnap_reconciliacao'").fetchone()[0] == 1, str(r))
+        def quebra(): raise HTTPException(503, "Pasta final do QNAP não montada")
+        c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.reconciliacao_ultima','qnap.reconciliacao_tentativa')"); c.commit()
+        r = rc_.rodar(c, dia(3), varrer=quebra)
+        ver("QNAP fora do ar: não levanta, registra o erro, NÃO marca o dia como feito", not r["ok"] and "não montada" in r["erro"] and rc_.hora_configurada(c) == 3 and not c.execute("SELECT valor FROM configuracao WHERE chave='qnap.reconciliacao_ultima'").fetchone()[0], str(r))
+        ver("depois de uma falha só tenta de novo daqui a 1 hora", not rc_.devido(c, dia(3)) and rc_.devido(c, _dt(2026, 10, 15, 4, 30)))
+        c.execute("UPDATE configuracao SET valor='-1' WHERE chave='qnap.reconciliacao_hora'"); c.commit()
+        ver("-1 desliga", not rc_.devido(c, dia(12)))
+        c.execute("UPDATE configuracao SET valor='3' WHERE chave='qnap.reconciliacao_hora'"); c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.reconciliacao_ultima','qnap.reconciliacao_tentativa')"); c.commit()
+        # com a varredura de verdade: um lote final na raiz que o aviso do CV2 não trouxe volta para a Fila e o erros.json entra
+        raiz = _P(tempfile.mkdtemp()); pasta = raiz / "F026 - Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"
+        shutil.copytree(_P(__file__).parent / "fixtures" / "campvision" / "lote_normal", pasta)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave IN ('qnap.prontos_raiz','qnap.raiz')", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)"); c.commit()
+        r = rc_.rodar(c, dia(3))
+        ver("reconciliação real: o lote que faltava na Fila entra", r["ok"] and r["novas"] == 1 and c.execute("SELECT COUNT(*) FROM lista_processamento WHERE projeto_codigo='F026-P0001'").fetchone()[0] == 1, str(r))
+        ver("e o erros.json do CAMP Vision desse lote entra em Erros relatados", c.execute("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%'").fetchone()[0] >= 1)
+        c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('qnap.reconciliacao_ultima','qnap.reconciliacao_tentativa')"); c.commit()
+        r = rc_.rodar(c, dia(3))
+        ver("rodar de novo não duplica a Fila (idempotente)", r["ok"] and r["novas"] == 0 and c.execute("SELECT COUNT(*) FROM lista_processamento WHERE projeto_codigo='F026-P0001'").fetchone()[0] == 1, str(r))
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -7419,6 +7457,14 @@ else:
 print("128) Elevação/Fachada unificada e amostra dos lotes inferidos (CAMP-051)")
 rc, out = rodar("camp051_tipos", f"{tmp}/c051.db")
 if rc != 0: ok(False, f"teste do CAMP-051 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("129) Reconciliação noturna do QNAP com o painel (CAMP-008)")
+rc, out = rodar("camp008_reconciliacao", f"{tmp}/c008.db")
+if rc != 0: ok(False, f"teste do CAMP-008 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
