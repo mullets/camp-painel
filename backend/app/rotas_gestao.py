@@ -649,6 +649,9 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "intervalo_sync_min": _cfg(con, "sync.intervalo_min", "15"),
     }
     out["site"]["http"] = f_site.result()
+    from .rede import negadas_por_token
+    admin_ = u.get("papel") in ("admin", "master")
+    out["estacoes_negadas"] = [{**n, "ip": n["ip"] if admin_ else None} for n in negadas_por_token(con)]   # IP só para admin
     ex.shutdown(wait=False)
     con.close()
     try:

@@ -38,7 +38,33 @@ def _nega(request: Request, ip: str, status: int, motivo: str, mensagem: str):
                   cabecalhos_proxy=[h for h in CABECALHOS_PROXY if h in request.headers],
                   enviou_token=bool(request.headers.get("x-camp-token")),
                   user_agent=request.headers.get("user-agent", "")[:80])
+        if motivo in ("token_ausente_ou_invalido", "via_proxy_sem_token"):
+            _lembrar_negada(ip, motivo, request)
     raise HTTPException(status, mensagem)
+
+
+def _lembrar_negada(ip: str, motivo: str, request: Request) -> None:
+    """A tela Estações avisa que uma máquina está sem o token. Nunca atrapalha a resposta 401/403."""
+    try:
+        con = connect()
+        try:
+            con.execute("""INSERT INTO estacao_negada (ip, motivo, enviou_token, rota) VALUES (?,?,?,?)
+                           ON CONFLICT(ip, motivo) DO UPDATE SET vezes=vezes+1, ultima_em=datetime('now'), enviou_token=excluded.enviou_token, rota=excluded.rota""",
+                        (ip, motivo, int(bool(request.headers.get("x-camp-token"))), request.url.path[:120]))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def negadas_por_token(con, dias: int = 2) -> list[dict]:
+    """Máquinas recusadas por falta de token nos últimos dias (mais recente primeiro)."""
+    try:
+        return [dict(r) for r in con.execute("""SELECT ip, motivo, enviou_token, vezes, ultima_em FROM estacao_negada
+                                                 WHERE ultima_em >= datetime('now', ?) ORDER BY ultima_em DESC LIMIT 10""", (f"-{int(dias)} days",))]
+    except Exception:  # noqa: BLE001 - banco sem a tabela ainda
+        return []
 
 
 def _token_configurado() -> str:

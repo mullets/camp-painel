@@ -2930,6 +2930,18 @@ def filho(modo):
         kk.execute("UPDATE estacao_heartbeat SET detalhe='{nao e json' WHERE estacao_id=?", (http_["heartbeat"]["estacao_id"].lower(),)); kk.commit(); kk.close()
         ver("detalhe quebrado no banco não derruba GET /api/estacoes (200)", adm.get("/api/estacoes").status_code == 200)
         lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "2.2"})
+        # CAMP-027 (lado do painel): chamada recusada por falta de token aparece como aviso na tela Estações (IP só para admin)
+        ver("sem recusa por token, a tela Estações não mostra aviso", adm.get("/api/estacoes").json().get("estacoes_negadas") == [])
+        kt = connect(); kt.execute("UPDATE configuracao SET valor='segredo-aviso' WHERE chave='estacao.token'"); kt.commit()
+        r401 = lan.get("/api/estacoes/contexto"); r401b = lan.get("/api/estacoes/contexto", headers={"X-Camp-Token": "errado"})
+        kt.execute("UPDATE configuracao SET valor='' WHERE chave='estacao.token'"); kt.commit(); kt.close()
+        neg = adm.get("/api/estacoes").json().get("estacoes_negadas") or []
+        ver("estação sem token (401) vira aviso na tela Estações, com o IP para o admin", r401.status_code == 401 and len(neg) == 1 and neg[0]["ip"] == "192.168.15.40" and neg[0]["motivo"] == "token_ausente_ou_invalido", str(neg))
+        ver("com token errado o aviso diz que ele mandou token", r401b.status_code == 401 and (adm.get("/api/estacoes").json().get("estacoes_negadas") or [{}])[0].get("enviou_token") in (0, 1))
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        le_ = TestClient(app, raise_server_exceptions=False); le_.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-longa-12345"})
+        nl = le_.get("/api/estacoes").json().get("estacoes_negadas") or []
+        ver("quem só lê vê que há aviso, mas NÃO vê o IP", len(nl) == 1 and nl[0]["ip"] is None, str(nl))
         av = http_["aviso"]; r = lan.post(av["caminho"], json=av["corpo"])
         ver("aviso com o corpo REAL do CV2 é aceito (202), mesmo com a pasta ainda ausente", r.status_code == 202, f"{r.status_code} {r.text[:160]}")
         pasta = raiz / av["corpo"]["pasta"]; (pasta / "catalogacao").mkdir(parents=True)
