@@ -361,6 +361,7 @@ class ReservaProjetoEstacao(BaseModel):
     carimbo: dict | None = None         # o que o carimbo diz: obra, local, cliente, identificadores, folhas
     numero_projeto: str | None = None   # o Mac já reservou este projeto (ex.: "P0060")…
     projeto_ja_existia: bool = False    # …e diz que ele já existe: o painel devolve esse, não cria outro
+    p_estacao: str | None = None        # "P0060" lido do nome da pasta pela estação: só PISTA (contrato C2), nunca reaproveita sozinho
 
 
 class HeartbeatEstacao(BaseModel):
@@ -406,28 +407,46 @@ def candidatos_do_cv(con, fundo: str, candidatos: list[dict]) -> list[dict]:
 _P_NA_FRENTE = re.compile(r"^\s*P(\d{4})\s*[-–—]")
 
 
+def _projeto_do_numero(con, fundo: str, n: str) -> str | None:
+    """Código do projeto F###-P#### deste fundo; se foi mesclado, segue para o destino. None se não existe."""
+    codigo = f"{fundo}-P{n}"
+    for _ in range(5):
+        p = con.execute("SELECT codigo, mesclado_em FROM projeto WHERE codigo=? AND fundo_codigo=?", (codigo, fundo)).fetchone()
+        if not p:
+            return None
+        if not p["mesclado_em"]:
+            return p["codigo"]
+        codigo = p["mesclado_em"]
+    return None
+
+
 def _projeto_ja_numerado(con, d) -> str | None:
-    """Código do projeto que a reserva já indica: o número que o Mac mandou (projeto_ja_existia) ou o "P0060 - …" na frente do nome da pasta.
-    Só vale se o projeto existe NESTE fundo; se ele foi mesclado, segue para o destino."""
-    numeros = []
+    """Código do projeto que a reserva já indica: SÓ o número que a estação mandou COM projeto_ja_existia=true (contrato C2).
+    O "P0060 - …" na frente do nome da pasta (ou `p_estacao`) é só PISTA: ver `_pista_de_p`. Só vale se o projeto existe NESTE fundo."""
     if d.projeto_ja_existia and d.numero_projeto:
         m = re.fullmatch(r"\s*(?:" + re.escape(d.fundo_codigo) + r"-)?P(\d{4})\s*", d.numero_projeto.upper())
         if m:
-            numeros.append(m.group(1))
-    for texto in (d.titulo, d.identificacao_original):
+            return _projeto_do_numero(con, d.fundo_codigo, m.group(1))
+    return None
+
+
+def _pista_de_p(con, d) -> tuple[str | None, str]:
+    """(projeto indicado pela pista "P" da estação, título sem o "P0060 - " da frente). A pista NÃO decide: abre a decisão "projeto parecido"."""
+    numeros = []
+    m = re.fullmatch(r"\s*(?:" + re.escape(d.fundo_codigo) + r"-)?P(\d{4})\s*", (d.p_estacao or "").upper())
+    if m:
+        numeros.append(m.group(1))
+    titulo = d.titulo.strip()
+    for texto in (titulo, d.identificacao_original):
         m = _P_NA_FRENTE.match(texto or "")
         if m:
             numeros.append(m.group(1))
+    sem_p = _P_NA_FRENTE.sub("", titulo, count=1).strip() or titulo
     for n in numeros:
-        codigo = f"{d.fundo_codigo}-P{n}"
-        for _ in range(5):                               # projeto mesclado: o material vai para onde ele foi juntado
-            p = con.execute("SELECT codigo, mesclado_em FROM projeto WHERE codigo=? AND fundo_codigo=?", (codigo, d.fundo_codigo)).fetchone()
-            if not p:
-                break
-            if not p["mesclado_em"]:
-                return p["codigo"]
-            codigo = p["mesclado_em"]
-    return None
+        cod = _projeto_do_numero(con, d.fundo_codigo, n)
+        if cod:
+            return cod, sem_p
+    return None, sem_p
 
 
 @app.post("/api/estacoes/projetos/reservar")
@@ -506,7 +525,15 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
                                     "Aguardando decisão no painel: o carimbo casa com mais de um projeto do fundo ("
                                     + " × ".join(c["codigo"] for c in cands) + "). Tente de novo em instantes."})
         if not d.confirmar_novo:
-            parecidos = buscar_parecidos(con, d.fundo_codigo, titulo, d.ano, d.cidade, identificacao)
+            pista, titulo_busca = _pista_de_p(con, d)
+            parecidos = buscar_parecidos(con, d.fundo_codigo, titulo_busca, d.ano, d.cidade, identificacao)
+            if pista and not any(x["codigo"] == pista for x in parecidos):
+                pp = con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original,
+                                           (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
+                                      FROM projeto p WHERE p.codigo=?""", (pista,)).fetchone()
+                parecidos.insert(0, {"codigo": pp["codigo"], "titulo": pp["titulo"], "ano": pp["ano"] or None, "cidade": pp["cidade"],
+                                     "identificacao_original": pp["identificacao_original"], "folhas": pp["folhas"], "score": 0.8, "nivel": "provavel",
+                                     "motivos": [f"a estação indicou o número {pista.split('-')[-1]}, mas isso é só uma pista"]})
             if parecidos:
                 did = decisoes.abrir_projeto_parecido(con, chave_dec, d.fundo_codigo, titulo, pedido_cv, parecidos, "estacao")
                 con.commit()
