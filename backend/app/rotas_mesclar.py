@@ -1,5 +1,5 @@
 """Cartão #156: despublicar um projeto e descartar um lote duplicado. Nada é apagado: tudo deixa rastro (quem, quando, por quê)."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from . import auth
@@ -166,6 +166,9 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         if con.execute("SELECT 1 FROM item WHERE codigo=?", (novo,)).fetchone():
             raise HTTPException(409, f"O código {novo} já existe; nada foi movido.")
         tinha_site = it["tainacan_item_id"]
+        if tinha_site:      # CAMP-014: a folha tinha registro no site: o endereço antigo precisa redirecionar para o novo
+            from . import redir_site
+            redir_site.registrar(con, c, novo, "item", motivo or "folha movida", ator)
         con.execute("""UPDATE item SET codigo=?, projeto_codigo=?, sequencial=?, codigo_anterior=?,
                        tainacan_item_id=NULL, status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
                        atualizado_em=datetime('now') WHERE codigo=?""", (novo, destino, seq, c, c))
@@ -195,16 +198,45 @@ def _transacao(fn):
         con.close()
 
 
+def _enviar_redirecionamentos() -> None:
+    """Segundo plano: envia ao site o que a fila de redirecionamentos tem. Nunca levanta."""
+    try:
+        from . import redir_site
+        redir_site.enviar_pendentes()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@router.get("/site/redirecionamentos")
+def status_redirecionamentos(u: dict = Depends(auth.exige("operador"))) -> dict:
+    """CAMP-014 · quantos redirecionamentos já estão no site, quantos faltam e quantos falharam."""
+    from . import redir_site
+    con = connect()
+    try:
+        return redir_site.status(con)
+    finally:
+        con.close()
+
+
+@router.post("/site/redirecionamentos/enviar")
+def enviar_redirecionamentos(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Envia agora ao site o que está na fila de redirecionamentos (o coletor de 10 min também repete)."""
+    from . import redir_site
+    return redir_site.enviar_pendentes()
+
+
 @router.post("/itens/mover")
-def mover_itens(d: MoverItens, u: dict = Depends(auth.exige("admin"))) -> dict:
+def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou)."""
     if not d.itens:
         raise HTTPException(400, "Escolha pelo menos uma folha.")
-    return _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo))
+    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo))
+    tarefas.add_task(_enviar_redirecionamentos)
+    return r
 
 
 @router.post("/projetos/{origem}/mesclar-em")
-def mesclar_em(origem: str, d: Destino, u: dict = Depends(auth.exige("admin"))) -> dict:
+def mesclar_em(origem: str, d: Destino, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Move TODAS as folhas e os lotes da origem para o destino. A origem não é apagada: fica marcada 'mesclado em' e some das listas."""
     if origem == d.destino:
         raise HTTPException(400, "Origem e destino são o mesmo projeto.")
@@ -229,12 +261,16 @@ def mesclar_em(origem: str, d: Destino, u: dict = Depends(auth.exige("admin"))) 
         con.execute("UPDATE projeto SET mesclado_em=?, mesclado_por=?, mesclado_quando=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (d.destino, u["email"], origem))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_mesclado',?,?)",
                     (origem, u["email"], _json.dumps({"destino": d.destino, "folhas": len(r["movidos"]), "duplicatas": len(r["duplicatas"]), "lotes": lotes, "motivo": d.motivo}, ensure_ascii=False)))
+        from . import redir_site
+        redir_site.registrar(con, origem, d.destino, "projeto", d.motivo or f"mesclado em {d.destino}", u["email"])     # CAMP-014: o endereço do projeto de origem passa ao destino
         return {**r, "lotes": lotes, "origem": origem, "destino": d.destino}
-    return _transacao(fazer)
+    res = _transacao(fazer)
+    tarefas.add_task(_enviar_redirecionamentos)
+    return res
 
 
 @router.post("/filas/{lid}/mover-para")
-def mover_lote(lid: int, d: MoverLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+def mover_lote(lid: int, d: MoverLote, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """O lote caiu no projeto errado: passa o lote e as folhas dele para o projeto certo."""
     def fazer(con):
         l = con.execute("SELECT id, projeto_codigo, descartado_em FROM lista_processamento WHERE id=?", (lid,)).fetchone()
@@ -251,7 +287,9 @@ def mover_lote(lid: int, d: MoverLote, u: dict = Depends(auth.exige("admin"))) -
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('lista',?,'lote_movido',?,?)",
                     (str(lid), u["email"], _json.dumps({"de": l["projeto_codigo"], "para": d.projeto_codigo, "folhas": len(r["movidos"]), "motivo": d.motivo}, ensure_ascii=False)))
         return {**r, "lote": lid, "de": l["projeto_codigo"], "para": d.projeto_codigo}
-    return _transacao(fazer)
+    res = _transacao(fazer)
+    tarefas.add_task(_enviar_redirecionamentos)
+    return res
 
 
 @router.post("/itens/{codigo}/duplicata-de")
@@ -444,13 +482,13 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
         con.execute("INSERT OR IGNORE INTO par_nao_duplicado (a, b, por, em) VALUES (?,?,?,?)", (a, b, r["por"], r["em"]))
     # mapa antigo → novo: quem já apontava para o antigo passa a apontar para o novo (sem cadeia), e entra o que mudou agora
     _prefixo(con, "redirecionamento", "codigo_novo", antigo, novo)
-    con.execute("UPDATE redirecionamento SET aplicado_no_site=0 WHERE codigo_novo = ? OR substr(codigo_novo, 1, ?) = ?", (novo, len(novo) + 1, novo + "-"))
+    con.execute("UPDATE redirecionamento SET aplicado_no_site=0, sem_site=0 WHERE codigo_novo = ? OR substr(codigo_novo, 1, ?) = ?", (novo, len(novo) + 1, novo + "-"))
     con.execute("DELETE FROM redirecionamento WHERE codigo_antigo = codigo_novo")
     mot = (motivo or "").strip()[:300] or "código do projeto corrigido"
     for de, para, tipo in [(antigo, novo, "projeto")] + [(f["de"], f["para"], "item") for f in folhas]:
         con.execute("""INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, criado_por) VALUES (?,?,?,?,?)
                        ON CONFLICT(codigo_antigo) DO UPDATE SET codigo_novo=excluded.codigo_novo, entidade=excluded.entidade, motivo=excluded.motivo,
-                                                                criado_por=excluded.criado_por, criado_em=datetime('now'), aplicado_no_site=0""", (de, para, tipo, mot, ator))
+                                                                criado_por=excluded.criado_por, criado_em=datetime('now'), aplicado_no_site=0, sem_site=0""", (de, para, tipo, mot, ator))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_recodificado',?,?)",
                 (novo, ator, _json.dumps({"de": antigo, "para": novo, "folhas": len(folhas), "motivo": mot}, ensure_ascii=False)))
     no_site = bool(p["tainacan_item_id"] or p["wp_page_id"]) or bool(con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (novo,)).fetchone())
@@ -463,14 +501,16 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
 
 
 @router.post("/projetos/{codigo}/recodificar")
-def recodificar(codigo: str, d: Recodificar, u: dict = Depends(auth.exige("admin"))) -> dict:
+def recodificar(codigo: str, d: Recodificar, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Muda o código do projeto e de todas as folhas dele. Só admin. O antigo fica guardado e vira redirecionamento."""
     antigo, novo = codigo.strip().upper(), (d.novo or "").strip().upper()
     if not _COD_PROJETO.match(novo):
         raise HTTPException(400, "Use o código completo do projeto, ex.: F014-P0009.")
     if novo == antigo:
         raise HTTPException(400, "O código novo é igual ao atual.")
-    return _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], d.motivo))
+    r = _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], d.motivo))
+    tarefas.add_task(_enviar_redirecionamentos)          # CAMP-014: manda o mapa ao site (falha não desfaz o local; o coletor repete)
+    return r
 
 
 @router.get("/redirecionamentos")

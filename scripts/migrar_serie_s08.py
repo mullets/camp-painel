@@ -46,6 +46,12 @@ def main(argv=None) -> int:
     if a.incluir_no_site and any(f["no_site"] for f in r["trocadas"]):
         s = serie_s08.atualizar_site_das_trocadas(r["trocadas"], a.ator)
         print(f"Site: {s['atualizadas']} atualizada(s), {len(s['falhas'])} falha(s) (viraram pendência)")
+    try:
+        from app import redir_site
+        e = redir_site.enviar_pendentes(con)
+        print(f"Redirecionamentos para o site: {e['enviados']} enviado(s), {e['sem_url']} sem endereço conhecido, {e['falhas']} falha(s)" + (f" ({e['erro']})" if e["erro"] else ""))
+    except Exception as ex:  # noqa: BLE001
+        print("Redirecionamentos: não consegui enviar agora (ficam na fila):", ex)
     con.close()
     return 0
 

@@ -58,10 +58,8 @@ def aplicar(con, ator: str, incluir_no_site: bool = False, motivo: str = "série
             con.execute("UPDATE cv_resposta SET chave=? WHERE chave=? AND tipo='retirado'", (n, a))
         con.execute("UPDATE evento SET codigo=? WHERE codigo=? AND entidade='item'", (n, a))
         # cadeias já resolvidas: quem apontava para o antigo passa a apontar para o novo
-        con.execute("UPDATE redirecionamento SET codigo_novo=?, aplicado_no_site=0 WHERE codigo_novo=?", (n, a))
-        con.execute("""INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, criado_por) VALUES (?,?,'item',?,?)
-                       ON CONFLICT(codigo_antigo) DO UPDATE SET codigo_novo=excluded.codigo_novo, motivo=excluded.motivo, criado_por=excluded.criado_por,
-                                                                criado_em=datetime('now'), aplicado_no_site=0""", (a, n, motivo, ator))
+        from . import redir_site
+        redir_site.registrar(con, a, n, "item", motivo, ator)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'serie_trocada',?,?)",
                     (n, ator, json.dumps({"de": a, "para": n, "serie": f"{ANTIGA}→{NOVA}", "no_site": f["no_site"]}, ensure_ascii=False)))
         trocadas.append(f)

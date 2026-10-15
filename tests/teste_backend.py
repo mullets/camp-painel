@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir"}
 
 
 def rodar(modo, db):
@@ -672,6 +672,64 @@ def filho(modo):
         r = x.post("/api/pedidos/coletar")
         ver("POST /api/pedidos/coletar (admin) responde mesmo sem o site configurado (erro registrado)", r.status_code == 200 and r.json()["erro"], r.text[:160])
         ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp014_redir":
+        init_db(); aplicar_migracoes()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, redir_site
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F014','Fundo 14','F14',1)")
+        for n in (4, 9): c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F014',?)", (n,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tainacan_item_id) VALUES ('F014-P0009','F014',9,'Casa Safra, Santos',1960,'Santos',7000)")
+        c.execute("INSERT INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado) VALUES (1,'x','f014-p0004-casa-safra','https://camp.arq.br/acervo/projetos/f014-p0004-casa-safra/','publish','F014-P0004')")
+        redir_site.registrar(c, "F014-P0004", "F014-P0006", "projeto", "teste", "t"); redir_site.registrar(c, "F014-P0006", "F014-P0009", "projeto", "teste", "t"); c.commit()
+        pend = redir_site.pendentes(c)
+        ver("cadeias resolvidas: A→B e B→C viram A→C e B→C", sorted((x["antigo"], x["novo"]) for x in pend) == [("F014-P0004", "F014-P0009"), ("F014-P0006", "F014-P0009")], str(pend))
+        enviados = []
+        class WPF:
+            def __init__(s, erros=None, quebra=None): s.erros, s.quebra = erros, quebra
+            def enviar_redirecionamentos(s, itens):
+                if s.quebra: raise RuntimeError(s.quebra)
+                enviados.append(itens); return {"ok": True, "criados": len(itens), "erros": s.erros or []}
+        o = redir_site.enviar_pendentes(c, WPF(quebra="site fora do ar"))
+        ver("site fora do ar: nada se perde, fica na fila com o erro e a tentativa, e NÃO levanta", o["erro"] == "site fora do ar" and c.execute("SELECT COUNT(*) FROM redirecionamento WHERE aplicado_no_site=0 AND tentativas=1 AND ultimo_erro='site fora do ar'").fetchone()[0] == 1 and o["sem_url"] == 1, str(o))
+        o = redir_site.enviar_pendentes(c, WPF())
+        itens = enviados[0] if enviados else []
+        por = {i["codigo_antigo"]: i for i in itens}
+        ver("envia caminhos do site: o antigo vem do espelho, o novo da rota pública presumida (sem cidade/UF no slug)", por.get("F014-P0004", {}).get("antigo") == "/acervo/projetos/f014-p0004-casa-safra/" and por["F014-P0004"]["novo"] == "/acervo/projetos/f014-p0009-casa-safra/" and por["F014-P0004"]["tipo"] == 301, str(itens))
+        ver("a chave do segundo (B sem endereço conhecido, nem confirmado) vira pendência, não é enviada", o["sem_url"] == 1 and "F014-P0006" not in por and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE campo='pendente_redirecionamento' AND resolvida=0").fetchone()[0] == 1, str(o))
+        ver("o enviado fica marcado aplicado_no_site=1 e não é enviado de novo", c.execute("SELECT aplicado_no_site FROM redirecionamento WHERE codigo_antigo='F014-P0004'").fetchone()[0] == 1 and redir_site.enviar_pendentes(c, WPF())["enviados"] == 0)
+        c.execute("UPDATE projeto SET url_publica_confirmada='https://camp.arq.br/acervo/projetos/f014-p0006-casa-safra/' WHERE codigo='F014-P0009'"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("com url_publica_confirmada (que traz o código antigo) o redirecionamento sai", o["enviados"] == 1 and enviados[-1][0]["antigo"] == "/acervo/projetos/f014-p0006-casa-safra/", str(enviados[-1]))
+        # item: precisa do endereço antigo no espelho
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id) VALUES ('F014-P0009-1960-S08-D00001','F014-P0009','S01',1,'importado',55)")
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,codigo_detectado) VALUES (55,8013,'publish','t','planta-f014-p0009-1960-s07-d00001','https://camp.arq.br/acervo/documentos/planta-f014-p0009-1960-s07-d00001/','F014-P0009-1960-S07-D00001')")
+        redir_site.registrar(c, "F014-P0009-1960-S07-D00001", "F014-P0009-1960-S08-D00001", "item", "série", "t"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("folha: sem o endereço NOVO no espelho ainda, não envia e registra pendência (espera a sincronização)", o["enviados"] == 0 and o["sem_url"] == 1, str(o))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,slug,url,codigo_detectado) VALUES (56,8013,'publish','t','planta-f014-p0009-1960-s08-d00001','https://camp.arq.br/acervo/documentos/planta-f014-p0009-1960-s08-d00001/','F014-P0009-1960-S08-D00001')"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF(erros=[{"indice": 0, "motivo": "recusado"}]))
+        ver("o site recusa um item (erros[indice]): continua na fila com o motivo", o["falhas"] == 1 and c.execute("SELECT ultimo_erro, aplicado_no_site FROM redirecionamento WHERE codigo_antigo='F014-P0009-1960-S07-D00001'").fetchone()[:] == ("recusado", 0), str(o))
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("na volta seguinte (reenvio) a folha entra: caminhos /acervo/documentos/…", o["enviados"] == 1 and enviados[-1][0]["novo"] == "/acervo/documentos/planta-f014-p0009-1960-s08-d00001/", str(enviados[-1]))
+        redir_site.registrar(c, "F014-P0009-1960-S07-D00099", "F014-P0009-1960-S08-D00099", "item", "série", "t"); c.commit()
+        o = redir_site.enviar_pendentes(c, WPF())
+        ver("o que nunca esteve no site (nenhum registro) não gera pendência: marcado sem_site", o["sem_url"] == 0 and c.execute("SELECT sem_site FROM redirecionamento WHERE codigo_antigo='F014-P0009-1960-S07-D00099'").fetchone()[0] == 1 and redir_site.status(c)["pendentes"] == 0, str(redir_site.status(c)))
+        # rotas: recodificar com o site fora (sem credencial) continua 200 e deixa a fila
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F014-P0004','F014',4,'Outro',1970,7004)"); c.commit()
+        r = x.post("/api/projetos/F014-P0004/recodificar", json={"novo": "F014-P0010", "motivo": "teste"})
+        ver("recodificar responde 200 mesmo com o site indisponível (o envio é em segundo plano e fica na fila)", r.status_code == 200 and c.execute("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo='F014-P0004' AND codigo_novo='F014-P0010' AND aplicado_no_site=0").fetchone()[0] == 1, r.text[:200])
+        j = x.get("/api/site/redirecionamentos").json()
+        ver("GET /api/site/redirecionamentos: totais, pendentes e com erro", j["total"] >= 4 and "pendentes" in j and "com_erro" in j, str(j))
+        r = x.post("/api/projetos/F014-P0010/mesclar-em", json={"destino": "F014-P0009", "motivo": "duplicado"})
+        ver("mesclar projetos registra o redirecionamento do projeto de origem para o destino", r.status_code == 200 and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F014-P0010'").fetchone()[0] == "F014-P0009" and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F014-P0004'").fetchone()[0] == "F014-P0009", r.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -7115,6 +7173,14 @@ else:
 print("124) Coletor de pedidos e correções do site a cada 10 minutos (CAMP-013)")
 rc, out = rodar("camp013_coletor", f"{tmp}/c013.db")
 if rc != 0: ok(False, f"teste do CAMP-013 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("125) Redirecionamentos enviados ao site, com fila, cadeias resolvidas e reenvio (CAMP-014)")
+rc, out = rodar("camp014_redir", f"{tmp}/c014.db")
+if rc != 0: ok(False, f"teste do CAMP-014 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
