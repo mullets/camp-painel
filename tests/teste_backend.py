@@ -2770,6 +2770,19 @@ def filho(modo):
         lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "3.0"})
         m2 = acha(adm.get("/api/estacoes").json())
         ver("versão de contrato diferente aparece em Estações com as duas versões", bool(m2) and "contrato 3.0" in (m2.get("aviso_contrato") or "") and "o 2.2" in (m2.get("aviso_contrato") or ""), str((m2 or {}).get("aviso_contrato")))
+        # CAMP-028 (C3): detalhe.situacao aparece em Estações; detalhe enorme continua JSON válido; detalhe quebrado no banco não derruba a tela
+        import json as _jh
+        r = lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "estado": "processando", "detalhe": {"situacao": "copiando 12 de 40 arquivos"}})
+        m3 = acha(adm.get("/api/estacoes").json())
+        ver("heartbeat com detalhe.situacao: a tela de Estações devolve a situação", r.status_code == 200 and bool(m3) and m3.get("app_situacao") == "copiando 12 de 40 arquivos", str((m3 or {}).get("app_situacao")))
+        r = lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "detalhe": {"situacao": "x" * 9000, "lixo": "y" * 9000}, "montagens": {"a": "z" * 9000}})
+        kk = connect(); bruto = kk.execute("SELECT detalhe FROM estacao_heartbeat WHERE estacao_id=?", (http_["heartbeat"]["estacao_id"].lower(),)).fetchone()[0]
+        try: val = _jh.loads(bruto); valido = isinstance(val, dict) and len(bruto) <= 4000
+        except Exception: valido = False
+        ver("detalhe gigante é reduzido e continua JSON válido (até 4000 caracteres)", r.status_code == 200 and valido, str(len(bruto or "")))
+        kk.execute("UPDATE estacao_heartbeat SET detalhe='{nao e json' WHERE estacao_id=?", (http_["heartbeat"]["estacao_id"].lower(),)); kk.commit(); kk.close()
+        ver("detalhe quebrado no banco não derruba GET /api/estacoes (200)", adm.get("/api/estacoes").status_code == 200)
+        lan.post("/api/estacoes/heartbeat", json={**http_["heartbeat"], "contrato": "2.2"})
         av = http_["aviso"]; r = lan.post(av["caminho"], json=av["corpo"])
         ver("aviso com o corpo REAL do CV2 é aceito (202), mesmo com a pasta ainda ausente", r.status_code == 202, f"{r.status_code} {r.text[:160]}")
         pasta = raiz / av["corpo"]["pasta"]; (pasta / "catalogacao").mkdir(parents=True)

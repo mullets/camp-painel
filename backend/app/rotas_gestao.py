@@ -600,6 +600,11 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         online = sondas[chave][0].result() if ip else None
         hb = heartbeats.get(estacao_id) if estacao_id else None
         app_online = bool(hb and hb["idade_segundos"] is not None and hb["idade_segundos"] <= 75)
+        try:                                              # detalhe antigo ou quebrado nunca derruba a tela
+            det_hb = json.loads(hb["detalhe"]) if hb and hb.get("detalhe") else {}
+            det_hb = det_hb if isinstance(det_hb, dict) else {}
+        except (ValueError, TypeError):
+            det_hb = {}
         item = {
             "estacao_id": estacao_id,
             "config_chave": chave,
@@ -617,9 +622,10 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
             "app_operador": hb.get("operador") if hb else None,
             "app_fundo": hb.get("fundo_codigo") if hb else None,
             "app_projeto": hb.get("projeto_codigo") if hb else None,
-            "app_detalhe": (json.loads(hb["detalhe"]) if hb and hb.get("detalhe") else None),
-                "app_contrato": ((json.loads(hb["detalhe"]) if hb and hb.get("detalhe") else {}) or {}).get("contrato"),
-                "aviso_contrato": __import__("app.contrato", fromlist=["aviso_contrato"]).aviso_contrato(((json.loads(hb["detalhe"]) if hb and hb.get("detalhe") else {}) or {}).get("contrato")),
+            "app_detalhe": det_hb or None,
+            "app_situacao": det_hb.get("situacao"),
+            "app_contrato": det_hb.get("contrato"),
+            "aviso_contrato": __import__("app.contrato", fromlist=["aviso_contrato"]).aviso_contrato(det_hb.get("contrato")),
             "app_ultimo_erro": hb.get("ultimo_erro") if hb else None,
             "app_heartbeat_em": hb.get("atualizado_em") if hb else None,
             "app_heartbeat_idade_segundos": hb.get("idade_segundos") if hb else None,

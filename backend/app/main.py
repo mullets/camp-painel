@@ -385,6 +385,28 @@ class HeartbeatEstacao(BaseModel):
     montagens: dict | None = None
     contrato: str | None = None          # versão do contrato que o CV2 fala (2.1+)
     quarentena: dict | None = None       # {arquivos, gb, ultima_replica, aviso} (cartão 149)
+    detalhe: dict | None = None          # C3: texto livre do que a estação está fazendo vai em detalhe.situacao
+    situacao: str | None = None          # atalho aceito: o mesmo que detalhe.situacao
+
+
+def _detalhe_do_heartbeat(d, limite: int = 4000) -> str | None:
+    """JSON do `detalhe` do heartbeat, sempre VÁLIDO: se passar do limite, tira os blocos maiores (nunca corta o texto no meio)."""
+    det = {k: v for k, v in (("progresso", d.progresso), ("fila", d.fila), ("hoje", d.hoje), ("montagens", d.montagens),
+                             ("contrato", d.contrato), ("quarentena", d.quarentena)) if v is not None}
+    extra = d.detalhe if isinstance(d.detalhe, dict) else {}
+    for k, v in extra.items():
+        if k not in det and k != "situacao" and isinstance(k, str):
+            det[k] = v
+    sit = " ".join(str(extra.get("situacao") or d.situacao or "").split())[:200]
+    if sit:
+        det["situacao"] = sit
+    for k in ("montagens", "hoje", "quarentena", "progresso", "fila"):    # do mais pesado ao mais leve
+        if len(json.dumps(det, ensure_ascii=False)) <= limite:
+            break
+        det.pop(k, None)
+    while len(json.dumps(det, ensure_ascii=False)) > limite and len(det) > 1:
+        det.pop(next(k for k in det if k not in ("situacao", "contrato")), None)
+    return json.dumps(det, ensure_ascii=False) if det else None
 
 
 def candidatos_do_cv(con, fundo: str, candidatos: list[dict]) -> list[dict]:
@@ -606,8 +628,7 @@ def heartbeat_estacao(d: HeartbeatEstacao, request: Request) -> dict:
           (d.hostname or "")[:120] or None, (d.ip_local or "")[:64] or None,
           estado, (d.fundo_codigo or "")[:16] or None, ((d.projeto_codigo or d.projeto) or "")[:32] or None,
           (d.operador or "")[:160] or None, (d.ultimo_erro or "")[:500] or None, ip_origem,
-          json.dumps({k: v for k, v in (("progresso", d.progresso), ("fila", d.fila), ("hoje", d.hoje), ("montagens", d.montagens), ("contrato", d.contrato), ("quarentena", d.quarentena)) if v is not None},
-                     ensure_ascii=False)[:4000] or None))
+          _detalhe_do_heartbeat(d)))
     con.commit(); con.close()
     return {"ok": True, "estacao_id": estacao_id, "estado": estado}
 
