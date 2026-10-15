@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from . import auth
-from .rede import exigir_estacao
+from .rede import exigir_estacao, ip_do_cliente
 from .db import connect, init_db, aplicar_migracoes
 from .log_tecnico import configurar as configurar_logs, registrar as log_registrar
 from .rotas_admin import router as rotas_admin
@@ -185,7 +185,7 @@ async def _sincronizacao_periodica() -> None:
 async def cabecalhos_seguranca(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
     inicio = time.perf_counter()
-    ip = request.client.host if request.client else "?"
+    ip = ip_do_cliente(request)
     try:
         resp = await call_next(request)
     except Exception as e:

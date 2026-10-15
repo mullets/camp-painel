@@ -1,5 +1,5 @@
 -- Nome do termo "Fundos" no site -> código da tabela de autoridade
-CREATE TABLE fundo_termo_site (
+CREATE TABLE IF NOT EXISTS fundo_termo_site (
   nome_site    TEXT PRIMARY KEY,
   fundo_codigo TEXT,                                -- NULL = ainda sem decisão (sem FK: pode existir antes do fundo)
   observacao   TEXT

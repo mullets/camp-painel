@@ -32,6 +32,14 @@ def _colecao_config(con, chave: str, padrao: int) -> int:
         return padrao
 
 
+class ColecaoVaziaSuspeita(Exception):
+    """A coleção devolveu 0 itens e o espelho tinha N: é falha do site/da API, não coleção esvaziada. A rodada para; nada é apagado."""
+
+    def __init__(self, cid: int, nome: str, antes: int):
+        self.cid, self.nome, self.antes = cid, nome, antes
+        super().__init__(f"a coleção {nome} (id {cid}) devolveu 0 itens, mas o espelho tinha {antes}: sincronização interrompida e nada foi apagado")
+
+
 def _inicia_transacao(con) -> None:
     """Escrita curta e atômica: pega o lock de uma vez (espera até o busy_timeout) e o solta no commit."""
     if con.in_transaction:
@@ -154,6 +162,10 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                     if no_site and f not in no_site:   # B8: ex. F023-P0013 publicado com Fundo = Marcos Acayaba
                         div(con, "item", cod, "fundo_trocado", f, md.get("Fundo") or md.get("Fundos"))
             total = len(linhas)
+            if gravar_espelho and total == 0:                 # CAMP-042: 0 itens onde antes havia N → para e avisa, NÃO apaga o espelho
+                antes = con.execute("SELECT COUNT(*) FROM wp_item WHERE colecao_id=?", (cid,)).fetchone()[0]
+                if antes > 0:
+                    raise ColecaoVaziaSuspeita(cid, c.get("name") or str(cid), antes)
             info: dict = {}
             if ids and gravar_espelho:   # anexos: também rede, ANTES do lock
                 try:
@@ -292,6 +304,12 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
         # Qualquer escrita em andamento é desfeita; o espelho da rodada anterior continua intacto.
         if con.in_transaction:
             con.rollback()
+        if isinstance(e, ColecaoVaziaSuspeita):               # alerta visível: Estações mostra a divergência e o histórico guarda o evento
+            con.execute("DELETE FROM divergencia_site WHERE resolvida=0 AND campo='colecao_vazia_suspeita' AND codigo=?", (str(e.cid),))
+            con.execute("INSERT INTO divergencia_site (entidade, codigo, campo, valor_painel, valor_site) VALUES ('colecao',?,'colecao_vazia_suspeita',?,?)",
+                        (str(e.cid), f"{e.antes} itens no espelho", "0 itens no site"))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('sistema','sync','sincronizacao_abortada_colecao_vazia','site',?)",
+                        (json.dumps({"colecao_id": e.cid, "nome": e.nome, "itens_no_espelho": e.antes}, ensure_ascii=False),))
         con.execute("UPDATE sincronizacao SET terminada_em=datetime('now'), ok=0, erro=? WHERE id=?", (f"{e}\n{traceback.format_exc()[-800:]}", sid))
         con.commit()
         log(f"ERRO: {e}")

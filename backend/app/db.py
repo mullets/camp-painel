@@ -77,11 +77,15 @@ def aplicar_migracoes() -> None:
     for arq in sorted(MIGRACOES.glob("*.sql")):
         if arq.name in feitas:
             continue
+        # Cada arquivo roda numa TRANSAÇÃO só (CAMP-042): se uma instrução falhar no meio, nada fica pela metade e o arquivo não
+        # é marcado como aplicado; a próxima subida tenta de novo do começo.
         try:
+            con.execute("BEGIN")
             executar_script_idempotente(con, arq.read_text(encoding="utf-8"))
+            con.execute("INSERT INTO migracao (nome) VALUES (?)", (arq.name,))
+            con.commit()
         except Exception:
             con.rollback()
+            con.close()
             raise
-        con.execute("INSERT INTO migracao (nome) VALUES (?)", (arq.name,))
-        con.commit()
     con.close()

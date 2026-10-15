@@ -1,5 +1,5 @@
 -- Entrada de acervo (proveniência física) e direitos/licença por fundo
-CREATE TABLE entrada_acervo (
+CREATE TABLE IF NOT EXISTS entrada_acervo (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   fundo_codigo  TEXT NOT NULL REFERENCES fundo(codigo),
   tipo          TEXT NOT NULL CHECK (tipo IN ('doacao','comodato','deposito','compra','transferencia','outro')),
@@ -14,7 +14,7 @@ CREATE TABLE entrada_acervo (
   registrado_por TEXT,
   criado_em     TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE direitos_fundo (
+CREATE TABLE IF NOT EXISTS direitos_fundo (
   fundo_codigo  TEXT PRIMARY KEY REFERENCES fundo(codigo),
   situacao      TEXT NOT NULL DEFAULT 'nao_definida' CHECK (situacao IN ('nao_definida','autorizado','restrito','nao_autorizado')),
   titular       TEXT,                                  -- quem detém os direitos (família, espólio, escritório)

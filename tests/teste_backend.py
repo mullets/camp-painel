@@ -366,6 +366,49 @@ def filho(modo):
         (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00002.tif").write_bytes(b"II*\0"); (pasta / "02 - Documentos textuais" / "leiame.txt").write_text("x")
         ver("PDF conta como folha (2 documentos; o TIF do mesmo código não conta de novo; .txt não conta)", contar_documentos(pasta)[0] == 2, str(contar_documentos(pasta)))
         for l in res: print(l)
+    elif modo == "cp42":
+        init_db(); aplicar_migracoes()
+        import tempfile as _tf, pathlib as _pl
+        import app.db as _db
+        from app import auth
+        from fastapi.testclient import TestClient
+        from fastapi import Request
+        from app.main import app
+        from app.rede import ip_do_cliente
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # ---- CAMP-042: migração em transação por arquivo ----
+        orig = _db.MIGRACOES; tmpm = _pl.Path(_tf.mkdtemp())
+        (tmpm / "900_quebrada.sql").write_text("CREATE TABLE IF NOT EXISTS t_atomica (a INTEGER);\nINSERT INTO t_atomica VALUES (1);\nINSERT INTO tabela_que_nao_existe VALUES (1);\n", encoding="utf-8")
+        _db.MIGRACOES = tmpm
+        try:
+            _db.aplicar_migracoes(); falhou = False
+        except Exception:
+            falhou = True
+        k = connect()
+        ver("migração que falha no meio: levanta o erro, NÃO deixa a tabela pela metade e NÃO é marcada como aplicada",
+            falhou and k.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='t_atomica'").fetchone()[0] == 0 and k.execute("SELECT COUNT(*) FROM migracao WHERE nome='900_quebrada.sql'").fetchone()[0] == 0)
+        (tmpm / "900_quebrada.sql").write_text("CREATE TABLE IF NOT EXISTS t_atomica (a INTEGER);\nINSERT INTO t_atomica VALUES (1);\n", encoding="utf-8")
+        _db.aplicar_migracoes(); _db.aplicar_migracoes()
+        ver("corrigida a migração, a próxima subida aplica inteira (e rodar de novo não repete)", k.execute("SELECT COUNT(*) FROM t_atomica").fetchone()[0] == 1 and k.execute("SELECT COUNT(*) FROM migracao WHERE nome='900_quebrada.sql'").fetchone()[0] == 1)
+        _db.MIGRACOES = orig; k.close()
+        # ---- CAMP-042: IP certo atrás do túnel ----
+        def rq(peer, h): return Request({"type": "http", "client": (peer, 1), "method": "GET", "path": "/", "headers": [(a.lower().encode(), b.encode()) for a, b in h.items()]})
+        ver("túnel (peer 127.0.0.1) com CF-Connecting-IP: o IP é o de quem entrou", ip_do_cliente(rq("127.0.0.1", {"CF-Connecting-IP": "200.1.2.3"})) == "200.1.2.3")
+        ver("túnel só com X-Forwarded-For: vale o último da lista (o que o proxy acrescentou, não o que o cliente escreveu)", ip_do_cliente(rq("127.0.0.1", {"X-Forwarded-For": "1.1.1.1, 200.1.2.4"})) == "200.1.2.4")
+        ver("de outra máquina o cabeçalho de proxy é IGNORADO (qualquer um pode escrever um)", ip_do_cliente(rq("192.168.15.43", {"CF-Connecting-IP": "9.9.9.9", "X-Forwarded-For": "9.9.9.9"})) == "192.168.15.43")
+        ver("sem cabeçalho, ou com cabeçalho inválido, vale o IP da conexão", ip_do_cliente(rq("192.168.15.43", {})) == "192.168.15.43" and ip_do_cliente(rq("127.0.0.1", {"CF-Connecting-IP": "lixo"})) == "127.0.0.1")
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        async def via_tunel(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("127.0.0.1", 50000)}
+            await app(scope, receive, send)
+        tc = TestClient(via_tunel, raise_server_exceptions=False)
+        r = tc.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"}, headers={"CF-Connecting-IP": "200.1.2.3"})
+        k = connect()
+        ver("login atrás do túnel guarda o IP real na sessão e no histórico (não 127.0.0.1)", r.status_code == 200 and k.execute("SELECT ip FROM sessao ORDER BY rowid DESC LIMIT 1").fetchone()[0] == "200.1.2.3", r.text[:100])
+        svc = (_pl.Path(__file__).resolve().parents[1] / "scripts" / "camp-painel.service").read_text(encoding="utf-8")
+        ver("o serviço sobe o uvicorn com --proxy-headers --forwarded-allow-ips=127.0.0.1", "--proxy-headers" in svc and "--forwarded-allow-ips=127.0.0.1" in svc)
+        for l in res: print(l)
     elif modo == "importador":
         init_db(); aplicar_migracoes()
         import json as _j
@@ -427,6 +470,7 @@ def filho(modo):
         sonda = {"durante": [], "escrita_ms": []}
         class Fake:
             falha_na_2a = False
+            zerar_8013 = False
             def __init__(self, log=print): self.base = "https://fake"
             def quem_sou(self): return {"name": "teste", "roles": ["administrator"]}
             def taxonomias(self): return [{"id": 77, "name": "Fundos", "slug": "fundos"}]
@@ -434,6 +478,7 @@ def filho(modo):
             def colecoes(self): return [{"id": 8007, "name": "Projetos", "slug": "p", "url": "u"}, {"id": 8013, "name": "Acervo", "slug": "a", "url": "u"}]
             def metadados_da_colecao(self, cid): return [{"id": 501, "name": "Técnica", "metadata_type": "Tainacan\\Metadata_Types\\Text", "metadata_type_options": {}}] if cid == 8013 else []
             def itens(self, cid):
+                if cid == 8013 and Fake.zerar_8013: return   # CAMP-042: a API devolve 0 itens numa coleção que tinha itens
                 if cid == 8007:
                     yield {"id": 100, "title": "P0001 — Casa", "slug": "p0001-casa", "url": "u", "status": "publish", "metadata": {"1": {"name": "Código de Catalogação", "value_as_string": "F099-P0001"}}}
                     return
@@ -485,6 +530,19 @@ def filho(modo):
         ver("metadados da coleção atualizados", k.execute("SELECT count(*) FROM wp_metadado WHERE visto_em > '2021'").fetchone()[0] == 1)
         ver("contagem do projeto reconciliada com o dossiê do site", k.execute("SELECT count(*) FROM wp_item WHERE colecao_id=8007").fetchone()[0] == 1)
         k.close()
+        # ===== CAMP-042: coleção que devolve 0 itens quando o espelho tinha N → aborta com alerta e NÃO apaga =====
+        antes2 = mirror(); n_it = len(antes2["wp_item"])
+        Fake.zerar_8013 = True
+        r = sz.executar(True, lambda *a, **k: None)
+        k = connect()
+        ver("coleção que vem VAZIA onde havia itens: a rodada para (ok=False) e diz qual coleção", r["ok"] is False and "8013" in str(r.get("erro")) and "0 itens" in str(r.get("erro")), str(r)[:160])
+        ver("NADA foi apagado do espelho (nenhum item da coleção sumiu)", contem(mirror(), antes2) and len(mirror()["wp_item"]) >= n_it, str({t: sorted(antes2[t] - mirror()[t]) for t in antes2}))
+        ver("o alerta fica visível: divergência 'colecao_vazia_suspeita' e evento no histórico", k.execute("SELECT COUNT(*) FROM divergencia_site WHERE campo='colecao_vazia_suspeita' AND resolvida=0").fetchone()[0] == 1
+            and k.execute("SELECT COUNT(*) FROM evento WHERE tipo='sincronizacao_abortada_colecao_vazia'").fetchone()[0] == 1)
+        k.execute("DELETE FROM wp_item WHERE colecao_id=8013"); k.commit()   # coleção que JÁ estava vazia no espelho: vazia de verdade, não é suspeita
+        r = sz.executar(True, lambda *a, **k: None)
+        ver("coleção vazia que já estava vazia no espelho NÃO aborta (sem falso alarme)", r["ok"] is True, str(r)[:160]); k.close()
+        Fake.zerar_8013 = False
         for l in res: print(l)
     elif modo == "backup":
         init_db(); aplicar_migracoes()
@@ -6682,6 +6740,14 @@ else:
 print("117) Erros do CAMP Vision (erros.json), livro de registro incremental e PDF como folha (CAMP-008)")
 rc, out = rodar("cv_erros_livro", f"{tmp}/cvlivro.db")
 if rc != 0: ok(False, f"teste de erros/livro não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("118) Migrações em transação por arquivo, IP real atrás do túnel e serviço com proxy-headers (CAMP-042)")
+rc, out = rodar("cp42", f"{tmp}/cp42.db")
+if rc != 0: ok(False, f"teste do CAMP-042 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

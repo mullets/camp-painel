@@ -111,7 +111,8 @@ def criar_usuario(nome: str, email: str, senha: str, papel: str, forcar_troca: b
 
 def autenticar(request: Request, response: Response, email: str, senha: str, lembrar: bool = False,
                codigo_totp: str | None = None) -> dict:
-    ip = request.client.host if request.client else "?"
+    from .rede import ip_do_cliente
+    ip = ip_do_cliente(request)      # atrás do túnel, o IP de quem entrou (não 127.0.0.1: senão todos dividem o limite de tentativas)
     if _ip_estourou(ip):
         raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
     email = email.lower().strip()

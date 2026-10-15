@@ -76,6 +76,25 @@ def _token_configurado() -> str:
     return ((row[0] if row else "") or "").strip()
 
 
+def ip_do_cliente(request: Request) -> str:
+    """IP de quem está do outro lado, também atrás do túnel (cloudflared conecta de 127.0.0.1). Só confia no cabeçalho de proxy quando
+    quem conectou é a própria máquina (o túnel); de qualquer outro IP o cabeçalho é ignorado, porque qualquer um pode escrever um."""
+    peer = request.client.host if request.client else ""
+    try:
+        loop = ipaddress.ip_address(peer).is_loopback
+    except ValueError:
+        loop = False
+    if loop:
+        cf = request.headers.get("cf-connecting-ip", "").strip()
+        xff = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+        for cand in (cf, xff[-1] if xff else ""):
+            try:
+                return str(ipaddress.ip_address(cand))
+            except ValueError:
+                continue
+    return peer or "?"
+
+
 def _ip_lan(ip: str) -> bool:
     try:
         a = ipaddress.ip_address(ip)
