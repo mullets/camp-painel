@@ -38,6 +38,23 @@ orig.close()
 print(dst)
 PY
 
+# CAMP-040: a versão nova é testada ANTES de entrar. Os testes rodam numa cópia temporária de origin/main com bancos de teste (a base
+# real e o serviço não são tocados). Se falhar, aborta aqui: nada é baixado para esta pasta e o serviço continua como está.
+echo "== testes rápidos da versão nova (antes de atualizar)"
+git fetch origin main
+TESTE_DIR="$(mktemp -d)"
+git worktree add --detach "$TESTE_DIR" origin/main >/dev/null
+limpa_teste() { git worktree remove --force "$TESTE_DIR" >/dev/null 2>&1 || rm -rf "$TESTE_DIR"; git worktree prune; }
+trap limpa_teste EXIT
+pip install -q -r "$TESTE_DIR/backend/requirements.txt"
+if ! (cd "$TESTE_DIR" && python tests/teste_backend.py --rapido); then
+  echo "ERRO: os testes da versão nova falharam. NADA foi atualizado: o serviço continua na versão anterior."
+  echo "Avise o Rafael com o resultado acima. O backup desta rodada está em: $BACKUP"
+  exit 20
+fi
+limpa_teste
+trap - EXIT
+
 echo "== git pull main"
 git pull --ff-only origin main
 

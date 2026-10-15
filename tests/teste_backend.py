@@ -11,8 +11,15 @@ def ok(cond, msg):
     print(("  ok    " if cond else "  FALHA ") + msg)
     if not cond: falhas.append(msg)
 
+# Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
+# sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42"}
+
+
 def rodar(modo, db):
-    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"), CAMP_BACKUP_DIR=str(pathlib.Path(db).parent / "backups"))
+    if "--rapido" in sys.argv and modo not in MODOS_RAPIDOS:
+        return 0, ""
+    env = dict(os.environ, CAMP_DB_PATH=db, CAMP_TMP_PRONTOS=os.environ.get("CAMP_TMP_PRONTOS") or str(pathlib.Path(db).parent / "prontos"), CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"), CAMP_BACKUP_DIR=str(pathlib.Path(db).parent / "backups"))
     r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
 
