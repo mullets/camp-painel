@@ -727,6 +727,11 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         return {"acao": "ignorada", "pasta": str(pasta), "codigo": cod,
                 "motivo": f"o aviso diz {esperado.strip().upper()}, mas a pasta é do projeto {cod}: nada foi importado"}
 
+    try:                                                    # CAMP-008: o erros.json do CAMP Vision entra em Erros relatados já na leitura da pasta
+        from .importador_lote import registrar_erros_cv
+        registrar_erros_cv(con, cod, pasta)
+    except Exception:  # noqa: BLE001 - arquivo ruim nunca impede ler o lote
+        pass
     from .qnap_folhas import contar_documentos
     n_arq, leitura_parcial = contar_documentos(pasta)   # DOCUMENTOS (série + nome), não arquivos: TIF/ e JPG/ do mesmo código são UM documento
 
@@ -885,6 +890,8 @@ def _varrer_qnap() -> dict:
 
     manifestos = list(raiz.rglob("info_projeto.json")) + list(raiz.rglob("status.json"))
     for arq in manifestos:
+        if "_campvision" in arq.relative_to(raiz).parts:      # prévias e livro de registro do CAMP Vision: não são lotes
+            continue
         pasta = arq.parent.resolve()
         if pasta in vistos:
             continue

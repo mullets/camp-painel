@@ -8,6 +8,7 @@ Regras:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -76,6 +77,39 @@ def registrar_problemas(con, proj: str, pacote: dict, recusadas: list[str], lote
         novos += con.execute("""INSERT OR IGNORE INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por, chave)
                                 VALUES ('corrigir', 'codigo', 'campvision', ?, ?, 'CAMP Vision', ?)""",
                              (proj, f"Folha do lote que não entrou no painel: {texto}.", f"campvision:recusada:{proj}:{cod}")).rowcount
+    return novos
+
+
+_CATEGORIA_ERRO_CV = {"orientacao": "orientacao", "orientação": "orientacao", "duplicata": "duplicata", "metadado": "metadado", "autoria divergente": "autoria_divergente",
+                      "autoria_divergente": "autoria_divergente", "projeto errado": "projeto_errado", "projeto_errado": "projeto_errado", "espelhado": "espelhado",
+                      "codigo": "codigo", "código": "codigo", "credito": "credito", "crédito": "credito", "arquivo corrompido": "arquivo_corrompido"}
+_GRAVIDADE_ERRO_CV = {"bloqueia": "bloqueia", "bloqueante": "bloqueia", "bloqueio": "bloqueia", "corrigir": "corrigir", "aviso": "aviso"}
+
+
+def registrar_erros_cv(con, proj: str, pasta: Path | str) -> int:
+    """CAMP-008: catalogacao/erros.json do CAMP Vision vira "Erros relatados" (origem CAMP Vision). Gravidade 'bloqueia' impede publicar (regra que já vale
+    para todo erro aberto). Idempotente: a chave nasce do conteúdo, então ler de novo não duplica nem reabre o que uma pessoa já resolveu. Devolve os novos."""
+    arq = Path(pasta) / "catalogacao" / "erros.json"
+    try:
+        dados = json.loads(arq.read_text(encoding="utf-8")) if arq.is_file() and arq.stat().st_size else []
+    except (OSError, ValueError):
+        return 0
+    if isinstance(dados, dict):
+        dados = dados.get("erros") or []
+    novos = 0
+    for e in dados if isinstance(dados, list) else []:
+        if not isinstance(e, dict):
+            continue
+        detalhe = " ".join(str(e.get("detalhe") or e.get("mensagem") or "").split())[:500]
+        if not detalhe:
+            continue
+        arquivo = str(e.get("arquivo") or "").strip()
+        cod = arquivo if CODIGO_DOCUMENTO.match(arquivo) and arquivo.startswith(proj + "-") else proj
+        grav = _GRAVIDADE_ERRO_CV.get(str(e.get("gravidade") or "").strip().lower(), "aviso")
+        cat = _CATEGORIA_ERRO_CV.get(str(e.get("categoria") or "").strip().lower(), "outro")
+        chave = "campvision:erros:" + hashlib.sha1(f"{proj}|{arquivo}|{cat}|{detalhe}".encode("utf-8")).hexdigest()[:20]
+        novos += con.execute("""INSERT OR IGNORE INTO erro (gravidade, categoria, origem, codigo, descricao, relatado_por, chave)
+                                VALUES (?, ?, 'campvision', ?, ?, 'CAMP Vision', ?)""", (grav, cat, cod, detalhe, chave)).rowcount
     return novos
 
 
@@ -279,7 +313,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone():
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
-    registrados = registrar_problemas(con, proj, pacote, problemas, lote_id)
+    registrados = registrar_problemas(con, proj, pacote, problemas, lote_id) + registrar_erros_cv(con, proj, pasta)
     resultado = {}
     try:
         resultado = json.loads(lote["resultado"] or "{}")

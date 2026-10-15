@@ -13,7 +13,7 @@ import os
 import time
 from pathlib import Path
 
-EXTS_IMAGEM = {".jpg", ".jpeg", ".tif", ".tiff", ".dng", ".png"}
+EXTS_IMAGEM = {".jpg", ".jpeg", ".tif", ".tiff", ".dng", ".png", ".pdf"}   # PDF (documento textual) também é uma folha
 EXTS_PREVIA = {".jpg", ".jpeg", ".png"}
 IGNORAR_NA_RAIZ = {"catalogacao"}            # saídas do CAMP Vision (contatos.jpg, pacote, erros): não são documentos do projeto          # as que o navegador mostra e que o painel serve
 _NOME_FORMATO = {"JPEG": "JPG", "TIFF": "TIF"}

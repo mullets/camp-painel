@@ -17,7 +17,7 @@ from .db import connect
 
 ORCAMENTO_S = 25          # tempo máximo de uma coleta inteira
 RETENCAO_DIAS = 90
-IGNORAR = ("@", ".")      # lixeira/miniaturas do QNAP (@Recycle, .@__thumb...) e arquivos ocultos
+IGNORAR = ("@", ".", "_campvision")      # lixeira/miniaturas do QNAP (@Recycle, .@__thumb...), arquivos ocultos e a pasta de prévias/livro do CAMP Vision
 _lock = threading.Lock()
 _atual: threading.Thread | None = None
 
@@ -162,6 +162,15 @@ def coletar() -> dict:
                 saida.update(_medir(raiz, entrada, prontos, dias_parado, t0 + max(1, ORCAMENTO_S - 3)))
             except Exception as e:  # noqa: BLE001
                 saida["erro"] = f"falha ao medir: {str(e)[:160]}"
+            try:                                    # livro de registro do CV2 → Histórico do projeto (incremental, em segundo plano)
+                from .livro_cv import ler_incremental
+                c_ = connect()
+                try:
+                    ler_incremental(c_, prontos)
+                finally:
+                    c_.close()
+            except Exception:  # noqa: BLE001 - o livro nunca derruba a coleta
+                pass
 
         _atual = threading.Thread(target=alvo, daemon=True)
         _atual.start()

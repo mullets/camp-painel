@@ -305,6 +305,67 @@ def filho(modo):
         got = _j.loads(c.execute("SELECT resultado FROM pedido_releitura WHERE id=?", (pid,)).fetchone()[0] or "{}").get("campvision") or {}
         ver("concluido da releitura (corpo real do CV2) é aceito e guarda custo_usd e relidos", rr.status_code == 200 and got.get("custo_usd") == 0.01 and got.get("relidos") == 1 and got.get("regravados") == 1, f"{rr.status_code} {rr.text[:150]} {got}")
         for l in res: print(l)
+    elif modo == "cv_erros_livro":
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.importador_lote import importar_lote, registrar_erros_cv
+        from app.publicacao import _outros_bloqueantes
+        from app.livro_cv import ler_incremental
+        from app.qnap_folhas import contar_documentos
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        FIX = _P(__file__).parent / "fixtures" / "campvision"
+        prontos = _P(os.environ["CAMP_TMP_PRONTOS"]); shutil.rmtree(prontos, ignore_errors=True)
+        proj = prontos / "F026 - SBU Sami Bussab" / "01 - Projetos" / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", proj)
+        (proj / "catalogacao" / "erros.json").write_text(_j.dumps([
+            {"arquivo": "F026-P0001-1972-S01-D00001", "categoria": "orientação", "gravidade": "aviso", "origem": "CAMP Vision", "detalhe": "orientação incerta — conferir na folha de contatos"},
+            {"arquivo": "F026-P0001-1972-S01-D00002", "categoria": "duplicata", "gravidade": "corrigir", "origem": "CAMP Vision", "detalhe": "quase de D00001 — só a única publica"},
+            {"arquivo": "", "categoria": "metadado", "gravidade": "aviso", "origem": "CAMP Vision", "detalhe": "sem pasta de material: série S01 deduzida"},
+            {"arquivo": "F026-P0001-1972-S01-D00003", "categoria": "coisa nova", "gravidade": "bloqueia", "origem": "CAMP Vision", "detalhe": "arquivo ilegível"},
+            {"arquivo": "F099-P0007-1972-S01-D00003", "categoria": "metadado", "gravidade": "aviso", "origem": "CAMP Vision", "detalhe": "de OUTRO projeto: vai para o projeto do lote"}], ensure_ascii=False), encoding="utf-8")
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(proj),)).lastrowid; c.commit()
+        importar_lote(c, lote, "teste@camp"); c.commit()
+        lin = c.execute("SELECT * FROM erro WHERE origem='campvision' AND chave LIKE 'campvision:erros:%' ORDER BY id").fetchall()
+        ver("CAMP-008: erros.json vira Erros relatados (origem CAMP Vision): 5 registros, gravidade e categoria mapeadas", len(lin) == 5 and all(x["relatado_por"] == "CAMP Vision" for x in lin)
+            and [x["gravidade"] for x in lin] == ["aviso", "corrigir", "aviso", "bloqueia", "aviso"] and lin[0]["categoria"] == "orientacao" and lin[3]["categoria"] == "outro", str([(x["gravidade"], x["categoria"]) for x in lin]))
+        ver("erro sem arquivo (ou de outro projeto) fica no projeto do lote; erro com arquivo fica na folha", lin[2]["codigo"] == "F026-P0001" and lin[4]["codigo"] == "F026-P0001" and lin[0]["codigo"].endswith("-D00001"))
+        ver("gravidade 'bloqueia' do erros.json impede publicar (conta como bloqueante em aberto)", _outros_bloqueantes(c, "F026-P0001") == 1)
+        importar_lote(c, lote, "teste@camp"); c.commit()
+        ver("ler de novo é idempotente (nenhum registro a mais)", c.execute("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%'").fetchone()[0] == 5)
+        c.execute("UPDATE erro SET situacao='fechado', resolucao='conferido' WHERE id=?", (lin[3]["id"],)); c.commit()
+        registrar_erros_cv(c, "F026-P0001", proj); c.commit()
+        ver("o que uma pessoa já resolveu NÃO reabre", c.execute("SELECT situacao FROM erro WHERE id=?", (lin[3]["id"],)).fetchone()[0] == "fechado" and _outros_bloqueantes(c, "F026-P0001") == 0)
+        # ---------- livro de registro, leitura incremental ----------
+        reg = prontos / "_campvision" / "registro"; reg.mkdir(parents=True)
+        L = lambda acao, doc, q: _j.dumps({"quando": q, "acao": acao, "lote_id": "L1", "codigo_projeto": "F026-P0001", "codigo_documento": doc, "operador": "Beatriz", "estacao": "scanner-a3", "detalhe": "ok"}, ensure_ascii=False) + "\n"
+        arq = reg / "2026-10.jsonl"
+        l1, l2, l3 = L("recebido", "", "2026-10-13T10:00:00-03:00"), L("lido", "F026-P0001-1972-S01-D00001", "2026-10-13T10:01:00-03:00"), L("lido", "F026-P0001-1972-S01-D00002", "2026-10-13T10:02:00-03:00")
+        arq.write_text(l1 + l2 + l3[:40], encoding="utf-8")                      # a última linha ainda está sendo escrita
+        r1 = ler_incremental(c, prontos)
+        ver("livro: lê só as linhas COMPLETAS (2) e guarda a posição em bytes", r1["linhas"] == 2 and c.execute("SELECT posicao FROM livro_posicao").fetchone()[0] == len((l1 + l2).encode("utf-8")), str(r1))
+        with arq.open("a", encoding="utf-8") as f: f.write(l3[40:] + L("conferido", "F026-P0001-1972-S01-D00003", "2026-10-13T10:03:00-03:00"))
+        r2 = ler_incremental(c, prontos)
+        ver("livro: na rodada seguinte entram só as linhas novas (a cortada, agora inteira, e a nova); nada duplica", r2["linhas"] == 2 and c.execute("SELECT COUNT(*) FROM livro_cv").fetchone()[0] == 4, str(r2))
+        ver("livro: sem mudança, não lê nada", ler_incremental(c, prontos)["linhas"] == 0)
+        (reg / "2026-11.jsonl").write_text("{linha quebrada\n" + L("erro", "", "2026-11-01T09:00:00-03:00"), encoding="utf-8")
+        ver("livro: linha quebrada é pulada sem derrubar a leitura do mês seguinte", ler_incremental(c, prontos)["linhas"] == 1)
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"),): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        h = adm.get("/api/projetos/F026-P0001/detalhe").json().get("livro_cv") or []
+        ver("o detalhe do projeto traz o Registro do CAMP Vision (mais novo primeiro, ação em português)", len(h) == 5 and h[0]["acao"] == "Erro" and any(x["acao"] == "Lido pelo CAMP Vision" for x in h), str(h[:2]))
+        # ---------- PDF conta como folha ----------
+        pasta = _P(__import__("tempfile").mkdtemp()); (pasta / "02 - Documentos textuais").mkdir()
+        (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00001.pdf").write_bytes(b"%PDF-1.4"); (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00002.pdf").write_bytes(b"%PDF-1.4")
+        (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00002.tif").write_bytes(b"II*\0"); (pasta / "02 - Documentos textuais" / "leiame.txt").write_text("x")
+        ver("PDF conta como folha (2 documentos; o TIF do mesmo código não conta de novo; .txt não conta)", contar_documentos(pasta)[0] == 2, str(contar_documentos(pasta)))
+        for l in res: print(l)
     elif modo == "importador":
         init_db(); aplicar_migracoes()
         import json as _j
@@ -1683,6 +1744,9 @@ def filho(modo):
         c = connect(); lot2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap) VALUES ('Lote autoria divergente','F026-P0001',?)", (str(pr2),)).lastrowid; c.commit(); c.close()
         j4 = op.post(f"/api/lotes/{lot2}/importar").json()
         ver("autoria divergente: as folhas NÃO entram; ficam listadas como retiradas, com o motivo", j4["criadas"] == 0 and len(j4["retirados"]) == 2 and any("autoria divergente" in x["bloqueios"] for x in j4["retirados"]) and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001'") == 3, str(j4)[:200])
+        # CAMP-008: o erros.json desse lote traz 2 erros 'bloqueia' (autoria divergente): entram em Erros relatados e travam o envio ao site até alguém resolver
+        ver("erros.json do lote com autoria divergente: 2 erros bloqueantes entram em Erros relatados (origem CAMP Vision)", sql("SELECT COUNT(*) FROM erro WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia' AND situacao='aberto'") == 2)
+        k.execute("UPDATE erro SET situacao='fechado', resolucao='autoria conferida (teste)' WHERE chave LIKE 'campvision:erros:%' AND gravidade='bloqueia'"); k.commit()   # a pessoa resolveu: o resto do teste segue como antes
         # ---------- pacote com folha sem pendência: conferir em lote só o que é seguro ----------
         montar(proj, "lote_normal"); pj = proj / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(pj.read_text(encoding="utf-8"))
         d3 = next(x for x in pk["documentos"] if x["codigo"] == D(3)); d3.update({"orientacao_incerta": False, "titulo": "Elevação sul", "tipo_de_desenho": "Elevação", "bloqueios": [], "publicavel": True})
@@ -6598,6 +6662,14 @@ else:
 print("116) Leitor do contrato 2.2 do CAMP Vision (CAMP-032): status.motivo, endereço do carimbo, retirados, TIF, sugestões, custo da releitura")
 rc, out = rodar("cv22_leitor", f"{tmp}/cv22.db")
 if rc != 0: ok(False, f"teste do leitor 2.2 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117) Erros do CAMP Vision (erros.json), livro de registro incremental e PDF como folha (CAMP-008)")
+rc, out = rodar("cv_erros_livro", f"{tmp}/cvlivro.db")
+if rc != 0: ok(False, f"teste de erros/livro não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
