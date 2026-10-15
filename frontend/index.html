@@ -203,6 +203,20 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .lab-faixa .lf-big{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis}
 .lab-faixa .lf-meio{display:flex;gap:6px;font-size:8.5px;line-height:1.15;white-space:nowrap;overflow:hidden}.lab-faixa .lf-nome{font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}.lab-faixa .lf-chave{color:#444;flex:none}
 .lab-faixa .lf-mat{margin-left:auto;flex:none;font-size:8.5px;font-weight:700;text-transform:uppercase;border:1px solid #111;border-radius:2px;padding:0 3px}
+.label.lab-std .ls-corpo{position:absolute;left:22px;top:0;right:0;bottom:0;padding:6px 9px 5px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.lab-std .ls-topo{display:flex;align-items:center;gap:6px;font-size:8px;color:#555;white-space:nowrap;overflow:hidden}
+.lab-std .ls-big{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+.lab-std .ls-nome{font-size:9px;font-weight:600;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-std .ls-campos{display:grid;gap:2px 8px;font-size:7px;line-height:1.15;min-height:0;overflow:hidden;align-content:start}
+.lab-std .ls-campos>div{min-width:0}.lab-std .ls-campos b{display:block;font-weight:600;font-size:6px;color:#666;text-transform:uppercase;letter-spacing:.02em}
+.lab-std .ls-campos span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-std .ls-obs{font-size:7px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-std .ls-barras{margin-top:auto}.lab-std .ls-barras div{font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-align:center;line-height:1.1;white-space:nowrap;overflow:hidden}
+.lab-std.peq .ls-corpo{padding:4px 6px 3px;gap:1px}.lab-std.peq .ls-big{font-size:11.5px}.lab-std.peq .ls-nome{font-size:8px}.lab-std.peq .ls-barras div{font-size:6px;letter-spacing:.8px}.lab-std.peq .logo{height:11px}
+.label.lab-tubo{display:flex;flex-direction:column;align-items:center;padding:6px 3px;box-sizing:border-box;gap:6px}
+.lab-tubo .lt-txt{flex:1;min-height:0;writing-mode:vertical-rl;transform:rotate(180deg);display:flex;flex-direction:column;gap:2px;overflow:hidden;font-size:8.5px;line-height:1.1;max-width:100%}
+.lab-tubo .lt-txt span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:100%}.lab-tubo .lt-big{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.5px}.lab-tubo .lt-nome{font-weight:600;font-size:9.5px}
+.lab-tubo .lt-barras{flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden}.lab-tubo .lt-barras>div{transform:rotate(90deg);flex:none}
 .label.lab-capa{display:flex;flex-direction:column;padding:48px 52px 40px;box-sizing:border-box;font-size:16px;border-style:dashed}
 .lab-preview .lab-capa,.lab-mini .lab-capa{zoom:.42}
 .lab-capa .lc-topo{display:flex;align-items:center;gap:12px;font-size:14px;color:#444;border-bottom:2px solid #111;padding-bottom:12px}.lab-capa .lc-topo .logo{height:44px}
@@ -1760,14 +1774,22 @@ function labelHTML(k,alvo){   /* alvo (H21, lote): {codigo,titulo,ano,folha} de 
       ${comProjeto?`<div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(arq)}</span><span class="lf-chave">${escHtml(fc)}</span></div>`:''}
       <div class="lf-meio lf-sub"><span class="lf-nome">${escHtml(comProjeto?cidAno:'')}</span>${chave?`<span class="lf-chave">${escHtml(chave)}</span>`:''}</div>
       ${obs?`<div class="lf-obs">${escHtml(obs)}</div>`:''}<div class="lf-barras">${barcode(code,16,'100%')}<div class="lf-cod">${escHtml(code)}</div></div></div>`}
-  if(vert)return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:8px 4px">${LOGO_CAMP}<span class="big" style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:13px;letter-spacing:1px">${escHtml(big)}<span style="font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:9px;margin-top:6px"> ${escHtml(pn)} · ${escHtml(arq)} · ${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span></span><div style="transform:rotate(90deg);transform-origin:center;width:${mw*S*2.6}px">${barcode(code,18,'100%')}</div></div></div>`;
-  return `<div class="label" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${escHtml(sig)} · CAMP</span></div><div class="body">
-    <div style="display:flex;align-items:center;gap:6px">${LOGO_CAMP}<span style="font-size:8px;color:#555">Casa da Arquitetura Moderna Paulista</span></div>
-    <div class="big" style="font-size:${big.length>18?12:16}px;margin:5px 0 2px">${escHtml(big)}</div>
-    ${labType==='projeto'? `<div class="label-project">${escHtml(pn)}</div>` : ''}
-    <div class="row">${lines.map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
-    ${obs?`<div style="font-size:7.5px;color:#555;margin-top:2px">${escHtml(obs)}</div>`:''}
-    <div style="position:absolute;left:10px;right:10px;bottom:7px">${barcode(code,20,'100%')}<div style="font-family:var(--mono);font-size:7px;letter-spacing:1.5px;text-align:center;margin-top:1px">${escHtml(code)}</div></div></div></div>`}
+  const comNome=['projeto','documento','tubo'].includes(labType);
+  if(vert){   /* lombada do tubo (20 × 140): logo, textos em pé (cada um numa linha, cortados com …) e o código de barras girado, cada um no seu espaço */
+    const alt=mw*S*0.92;
+    return `<div class="label lab-tubo" style="width:${mw*S}px;height:${mh*S}px">${LOGO_CAMP}
+      <div class="lt-txt"><span class="lt-big">${escHtml(big)}</span>${comNome?`<span class="lt-nome">${escHtml(pn)}</span><span>${escHtml(arq)}</span><span>${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span>`:`<span class="lt-nome">${escHtml(labType==='fundo'?nome:sig)}</span>`}</div>
+      <div class="lt-barras" style="height:${mh*S*0.34}px;width:100%"><div style="width:${mh*S*0.34}px;height:${alt*0.7}px">${barcode(code,Math.round(alt*0.7),'100%')}</div></div></div>`}
+  /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
+  const peq=mw<90,cols=peq?2:3,linhasCabem=peq?2:3;
+  const campos=lines.filter(([a])=>!(comNome&&a==='Projeto')).slice(0,cols*linhasCabem);
+  return `<div class="label lab-std${peq?' peq':''}" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${escHtml(sig)}</span></div><div class="ls-corpo">
+    <div class="ls-topo">${LOGO_CAMP}${peq?'':'<span>Casa da Arquitetura Moderna Paulista</span>'}</div>
+    <div class="ls-big">${escHtml(big)}</div>
+    ${comNome?`<div class="ls-nome">${escHtml(pn)}</div>`:''}
+    <div class="ls-campos" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${campos.map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
+    ${obs?`<div class="ls-obs">${escHtml(obs)}</div>`:''}
+    <div class="ls-barras">${barcode(code,peq?16:20,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
 /* H21: a frase de conferência, em letra grande, acima da prévia */
 function labFrase(lote,lista){const fcod=document.getElementById('l-fundo').value,pcod=document.getElementById('l-proj').value,fn=(FUNDOS.find(f=>f[0]===fcod)||[])[2]||'',pt=tituloExibicao((LABEL_PROJETO&&LABEL_PROJETO.titulo)||'');
   if(lote==='folhas')return lista.length===1?`Etiqueta de: a única folha de ${pcod} · ${pt}`:`Etiquetas de: todas as ${lista.length} folhas de ${pcod} · ${pt}`;
