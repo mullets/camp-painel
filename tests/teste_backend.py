@@ -3970,8 +3970,8 @@ def filho(modo):
         x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
         from app.publicacao import condicoes_projeto
         c = connect(); p1 = c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F085-P0180'").fetchone()
-        b = next(x_ for x_ in condicoes_projeto(c, p1)["condicoes"] if x_["id"] == "bloqueios"); c.close()
-        ver("autoria divergente oferece 'Registrar coautoria/terceiros' (e não só 'Ver erros')", not b["ok"] and (b.get("acao") or {}).get("tipo") == "autoria", str(b))
+        b = next(x_ for x_ in condicoes_projeto(c, p1)["condicoes"] if x_["id"] == "autoria_nao_confirmada"); c.close()
+        ver("autoria divergente (aviso, CAMP-046) oferece 'Registrar coautoria/terceiros'", not b["ok"] and not b["bloqueia"] and (b.get("acao") or {}).get("tipo") == "autoria", str(b))
         enviados = []
         class WPFalso:
             def definir_metadado(self, iid, mid, valor): enviados.append((iid, mid, valor))
