@@ -3,7 +3,7 @@
 Este guia mostra como **gerar, imprimir e colar** as etiquetas do acervo. Ele complementa o `TUTORIAL_OPERADOR.md` (do scanner até o site).
 A etiqueta liga o objeto físico (pasta, caixa, tubo) ao registro no painel: quem lê o código com o celular chega direto na página certa.
 
-> Estado em 15/10/2026. A tela de etiquetas do painel já existe e está em uso. A abertura automática ao finalizar o F10 está em dois PRs das estações (veja a seção 2) e **ainda precisa ser mesclada e testada em máquina real**. Nada aqui foi testado com a impressora de verdade.
+> Estado em 15/10/2026. A tela de etiquetas do painel já existe e está em uso. As estações **não** abrem a tela sozinhas: o operador abre pelo painel. Nada aqui foi testado com a impressora de verdade.
 
 ---
 
@@ -22,13 +22,12 @@ Regra simples: **material escaneado → etiqueta da pasta; onde ele mora → eti
 
 ## 2. Como abrir a tela de etiquetas
 
-Há três jeitos, todos chegam na mesma tela:
+Há dois jeitos, os dois chegam na mesma tela:
 
 1. **Pelo menu do painel:** **Etiquetas** (atalho **T**).
 2. **Pelo projeto, fundo, folha ou local:** os botões "Imprimir etiqueta" nas páginas levam direto, já com o item escolhido.
-3. **Pela estação, ao finalizar (F10):** quando os PRs das estações forem mesclados, ao terminar o F10 o navegador abre a tela já no projeto, no endereço `…/#etiquetas/projeto/F026-P0001`. Dá para desligar com `abrir_etiquetas_ao_finalizar: false` no `config.json` da estação.
 
-O navegador da estação precisa estar **logado no painel**. Senão aparece a tela de login. Faça o login uma vez e deixe salvo.
+O navegador que você usa precisa estar **logado no painel**. Senão aparece a tela de login.
 
 ---
 
@@ -154,8 +153,7 @@ Ler **não muda nada** no cadastro. Só **Mover para cá** muda.
 | O celular não lê o código | Limpe a lente, afaste um pouco, evite reflexo. Se não ler, digite o código |
 | "Não achei nada com o código…" | A etiqueta foi lida incompleta, ou o código não existe. Confira o código por extenso, impresso embaixo do código de barras |
 | Aparece "sem cidade" ou "sem data" | Falta dado no projeto. Corrija o cadastro e imprima de novo |
-| A tela abriu o login em vez das etiquetas | O navegador da estação não está logado. Faça o login e abra de novo |
-| A tela não abriu ao terminar o F10 | A abertura automática depende dos PRs das estações. Abra a tela pelo menu **Etiquetas** (**T**) |
+| A tela abriu o login em vez das etiquetas | O navegador não está logado no painel. Faça o login e abra de novo |
 | O código do fundo tem sigla errada | A sigla de 3 letras **não muda** depois de criada. Fale com o admin |
 | Caixa com código repetido em dois fundos | Escolha o fundo certo na leitura. Caixas compartilhadas ficam sem fundo |
 
@@ -164,7 +162,7 @@ Ler **não muda nada** no cadastro. Só **Mover para cá** muda.
 ## 9. Checklist rápido
 
 **Ao finalizar o lote (F10)**
-- [ ] A tela de etiquetas abriu no projeto certo (ou abra pelo menu **Etiquetas**)
+- [ ] Abra o painel → **Etiquetas** (tecla **T**) e escolha o fundo e o projeto
 - [ ] Confira a frase acima da prévia: projeto, arquiteto, cidade e ano
 - [ ] Formato **90×29** (Brother) ou o formato da sua impressora
 - [ ] Na janela de impressão: papel 29×90 mm, paisagem, sem margens, escala 100%

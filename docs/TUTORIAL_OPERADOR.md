@@ -62,7 +62,7 @@ Escaneie pelo NextImage normalmente. Os TIFs vão para a pasta local do projeto.
 ### 3.3 F10 — finalizar
 Aperte **F10**. O sistema confere duplicatas, dá o código CAMP, converte para JPG e confere TIF × JPG. O lote fica esperando na pasta local. Se aparecer erro de "estado inconsistente", há TIF sem JPG (ou o contrário): chame o responsável técnico.
 
-**Etiquetas:** ao terminar o F10, imprima a etiqueta da pasta do projeto e cole no material. A tela de etiquetas do painel (menu **Etiquetas**, tecla **T**) abre no projeto certo. Passo a passo em `TUTORIAL_ETIQUETAS.md`.
+**Etiquetas:** ao terminar o F10, imprima a etiqueta da pasta do projeto e cole no material. Abra o painel → menu **Etiquetas** (tecla **T**) e escolha o fundo e o projeto. Passo a passo em `TUTORIAL_ETIQUETAS.md`.
 
 ### 3.4 F12 — enviar ao QNAP
 Aperte **F12** (ou deixe o backup automático, se estiver ligado). O sistema copia para o QNAP, confere e **só então** apaga a cópia local. No fim ele grava, nesta ordem: informações do projeto → manifesto → **status** (último arquivo; é o sinal de "terminei" para o CAMP Vision).
