@@ -140,3 +140,7 @@ Este trecho é CONTRATO e não é mais descrito aqui: a fonte única é `campvis
   - Se o metadado não existir, o painel o cria uma vez, oculto ao público (`display: no`).
   - Se o site recusar a criação, fica pendência e a folha sobe sem ele.
 - Tipo de duplicata `quase` (nome novo no CV2) é gravado como `perceptual` no painel.
+
+## Séries (CAMP-047, segunda leva)
+S01 Desenhos e pranchas · S02 Documentos textuais · S03 Fotografias · S04 Negativos · S05 Slides · S06 Materiais · **S07 Publicações** · **S08 Redesenhos** (pasta `08 - Redesenhos`, dentro do projeto) · S99 Não identificado. O importador aceita S01–S08 e S99.
+A migração 122 só ajusta a tabela `serie`. Mover as folhas que eram S07 "Redesenhos" para S08 (o código muda, o antigo vira redirecionamento) é o roteiro `scripts/migrar_serie_s08.py`: `--simular` (padrão) só lista; `--aplicar` troca as que não estão no site; `--incluir-no-site` também as que estão (passam pelo fluxo de redirecionamento do site). Nunca roda sozinho.

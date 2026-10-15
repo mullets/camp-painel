@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-CODIGO_DOCUMENTO = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-7]|S99)-D(\d{4,6})$")
+CODIGO_DOCUMENTO = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-8]|S99)-D(\d{4,6})$")
 SINAIS = (("orientacao_incerta", "orientação incerta"), ("serie_incerta", "série incerta"), ("fora_do_periodo", "fora do período de atuação do fundo"),
           ("projeto_divergente", "projeto divergente"), ("sem_identificacao", "sem identificação (pasta com várias obras)"))
 

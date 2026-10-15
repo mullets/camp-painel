@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria"}
+MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08"}
 
 
 def rodar(modo, db):
@@ -240,26 +240,27 @@ def filho(modo):
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         c = connect()
-        ver("CAMP-031: a tabela serie tem S99 'Não identificado' e S07 continua 'Redesenhos' (não renomeada)",
-            c.execute("SELECT nome FROM serie WHERE codigo='S99'").fetchone()[0] == "Não identificado" and c.execute("SELECT nome FROM serie WHERE codigo='S07'").fetchone()[0] == "Redesenhos")
+        ver("CAMP-031/047: a tabela serie tem S99 'Não identificado', S07 'Publicações' e S08 'Redesenhos'",
+            c.execute("SELECT nome FROM serie WHERE codigo='S99'").fetchone()[0] == "Não identificado" and c.execute("SELECT nome FROM serie WHERE codigo='S07'").fetchone()[0] == "Publicações"
+            and c.execute("SELECT nome, pasta FROM serie WHERE codigo='S08'").fetchone()[:] == ("Redesenhos", "08 - Redesenhos"))
         from app.importador_lote import CODIGO_DOCUMENTO, importar_lote
-        ver("o código do documento aceita S01–S07 e S99, e recusa S00/S08/S98", all(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S01", "S06", "S07", "S99"))
-            and not any(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S00", "S08", "S98")))
+        ver("o código do documento aceita S01–S08 e S99, e recusa S00/S09/S98", all(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S01", "S06", "S07", "S08", "S99"))
+            and not any(CODIGO_DOCUMENTO.match(f"F026-P0001-1972-{s_}-D00001") for s_ in ("S00", "S09", "S98")))
         FIX = _P(__file__).parent / "fixtures" / "campvision"
         pasta = _P(__import__("tempfile").mkdtemp()) / "F026-P0001 - Tarumã"; shutil.copytree(FIX / "lote_normal", pasta)
         arq = pasta / "catalogacao" / "pacote_tainacan.json"; pk = _j.loads(arq.read_text(encoding="utf-8"))
         base = pk["documentos"][2]
         def doc(cod, serie, n):
             d_ = _j.loads(_j.dumps(base)); d_.update({"codigo": cod, "serie": serie, "duplicata_de": "", "bloqueios": [], "publicavel": True, "sequencial": n}); return d_
-        pk["documentos"] = [doc("F026-P0001-1972-S07-D00001", "S07", 1), doc("F026-P0001-1972-S99-D00002", "S99", 2), doc("F026-P0001-1972-S08-D00003", "S08", 3)]
+        pk["documentos"] = [doc("F026-P0001-1972-S07-D00001", "S07", 1), doc("F026-P0001-1972-S99-D00002", "S99", 2), doc("F026-P0001-1972-S08-D00003", "S08", 3), doc("F026-P0001-1972-S09-D00004", "S09", 4)]
         pk.pop("retirados", None); arq.write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'Tarumã',1972)")
         lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
         r = importar_lote(c, lote, "teste@camp")
         ses = dict(c.execute("SELECT codigo, serie_codigo FROM item WHERE projeto_codigo='F026-P0001'").fetchall())
-        ver("pacote com S07 e S99: as duas folhas entram, cada uma na sua série; S08 vira problema e não entra",
-            ses.get("F026-P0001-1972-S07-D00001") == "S07" and ses.get("F026-P0001-1972-S99-D00002") == "S99" and len(ses) == 2 and any("S08" in p_ for p_ in r.get("problemas", [])), str((ses, r)))
+        ver("pacote com S07, S08 e S99: as três folhas entram, cada uma na sua série; S09 vira problema e não entra",
+            ses.get("F026-P0001-1972-S07-D00001") == "S07" and ses.get("F026-P0001-1972-S08-D00003") == "S08" and ses.get("F026-P0001-1972-S99-D00002") == "S99" and len(ses) == 3 and any("S09" in p_ for p_ in r.get("problemas", [])), str((ses, r)))
         for l in res: print(l)
     elif modo == "cv22_leitor":
         init_db(); aplicar_migracoes()
@@ -457,6 +458,37 @@ def filho(modo):
         ver("o plano de publicar traz o aviso e não o bloqueio de autoria", any(x["id"] == "autoria_nao_confirmada" for x in pl["avisos"]) and not any(x["id"] == "bloqueios" for x in pl["bloqueios"]), str(pl["avisos"])[:200])
         b = c.execute("SELECT erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo='F026-P0001'").fetchone()[0]
         ver("a view de bloqueios não conta erro de autoria", b == 0, str(b))
+        c.close()
+        for l in res: print(l)
+    elif modo == "camp047_s08":
+        init_db(); aplicar_migracoes()
+        import json as _j, subprocess as _sp, sys as _sys
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        from app import serie_s08
+        from app.rotas_projetos import _serie_do_item
+        c = connect()
+        ver("_serie_do_item: 'redesenho' → S08 e 'publicações' → S07", _serie_do_item(None, {"Série": "Redesenhos"}) == "S08" and _serie_do_item(None, {"Série": "Publicações"}) == "S07" and _serie_do_item(None, {"Série": "Desenhos e pranchas"}) == "S01")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F029','Fundo 29','F29',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F029',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F029-P0001','F029',1,'Casa Tapera',1969)")
+        for n, site in ((1, None), (2, None), (3, 9001)):
+            cod = f"F029-P0001-1969-S07-D0000{n}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,tainacan_item_id,status_site) VALUES (?,?,'S07',?,'importado',?,?)", (cod, "F029-P0001", n, site, "rascunho" if site else "nao_publicado"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem) VALUES ('F029-P0001-1969-S01-D00004','F029-P0001','S01',4,'importado')")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','operador','F029-P0001-1969-S07-D00001','x')"); c.commit()
+        pl = serie_s08.planejar(c)
+        ver("simular: lista 3 folhas S07 (2 locais, 1 no site) sem gravar nada", pl["total"] == 3 and pl["locais"] == 2 and pl["no_site"] == 1 and c.execute("SELECT COUNT(*) FROM item WHERE serie_codigo='S08'").fetchone()[0] == 0, str(pl)[:200])
+        dbp = __import__("os").environ["CAMP_DB_PATH"]
+        r = _sp.run([_sys.executable, str(RAIZ / "scripts" / "migrar_serie_s08.py"), "--simular"], capture_output=True, text=True, env=dict(__import__("os").environ))
+        ver("o script em --simular lista e não grava", r.returncode == 0 and "SIMULAÇÃO" in r.stdout and c.execute("SELECT COUNT(*) FROM item WHERE serie_codigo='S08'").fetchone()[0] == 0, (r.stdout + r.stderr)[-300:])
+        c.execute("BEGIN"); out = serie_s08.aplicar(c, "teste@camp"); c.commit()
+        ver("aplicar sem --incluir-no-site troca só as 2 locais e deixa a do site", len(out["trocadas"]) == 2 and len(out["ignoradas"]) == 1 and "já está no site" in out["ignoradas"][0]["motivo"], str(out)[:250])
+        ver("as folhas trocadas ganham série S08, código novo e guardam o anterior", [tuple(x) for x in c.execute("SELECT codigo, serie_codigo, codigo_anterior FROM item WHERE serie_codigo='S08' ORDER BY codigo")] == [("F029-P0001-1969-S08-D00001", "S08", "F029-P0001-1969-S07-D00001"), ("F029-P0001-1969-S08-D00002", "S08", "F029-P0001-1969-S07-D00002")])
+        ver("a folha do site continua S07 com o código antigo (não muda em silêncio)", c.execute("SELECT serie_codigo FROM item WHERE codigo='F029-P0001-1969-S07-D00003'").fetchone()[0] == "S07")
+        ver("o erro e o histórico acompanham o código novo", c.execute("SELECT COUNT(*) FROM erro WHERE codigo='F029-P0001-1969-S08-D00001'").fetchone()[0] == 1)
+        ver("o redirecionamento antigo→novo entra (fila do site, aplicado_no_site=0)", [tuple(x) for x in c.execute("SELECT codigo_antigo, codigo_novo, entidade, aplicado_no_site FROM redirecionamento ORDER BY codigo_antigo")] == [("F029-P0001-1969-S07-D00001", "F029-P0001-1969-S08-D00001", "item", 0), ("F029-P0001-1969-S07-D00002", "F029-P0001-1969-S08-D00002", "item", 0)])
+        c.execute("BEGIN"); out2 = serie_s08.aplicar(c, "teste@camp", incluir_no_site=True); c.commit()
+        ver("com --incluir-no-site a do site também troca e entra no mapa", len(out2["trocadas"]) == 1 and c.execute("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F029-P0001-1969-S07-D00003'").fetchone()[0] == "F029-P0001-1969-S08-D00003")
         c.close()
         for l in res: print(l)
     elif modo == "cp35_metadados":
@@ -6852,6 +6884,14 @@ else:
 print("120) Autoria divergente vira aviso, contrato 2.4 (CAMP-046)")
 rc, out = rodar("camp046_autoria", f"{tmp}/c046.db")
 if rc != 0: ok(False, f"teste do CAMP-046 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("121) S08 Redesenhos, S07 Publicações e o roteiro de migração (CAMP-047)")
+rc, out = rodar("camp047_s08", f"{tmp}/c047.db")
+if rc != 0: ok(False, f"teste do CAMP-047 não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

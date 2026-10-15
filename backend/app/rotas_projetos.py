@@ -63,7 +63,8 @@ def _serie_do_item(codigo: str | None, md: dict) -> str | None:
         return m.group(1)
     texto = " ".join(str(md.get(k) or "") for k in ("Série", "Serie", "Tipo de acervo", "Categoria"))
     mapa = {
-        "redesenho": "S07",   # antes de "desenho" (que está contido nele)
+        "redesenho": "S08",   # antes de "desenho" (que está contido nele); CAMP-047: Redesenhos é S08
+        "publica": "S07",     # Publicações (S07)
         "desenho": "S01", "prancha": "S01",
         "documento textual": "S02", "textual": "S02",
         "fotografia": "S03", "foto": "S03",
@@ -467,7 +468,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "S04": "Negativos",
         "S05": "Slides",
         "S06": "Materiais",
-        "S07": "Redesenhos",
+        "S07": "Publicações",
+        "S08": "Redesenhos",
         "S99": "Não identificado",
     }
     categorias = {}

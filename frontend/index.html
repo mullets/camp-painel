@@ -1047,7 +1047,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
           <div class="lab-section-title"><span class="lab-passo">1</span> O que etiquetar</div>
           <label class="field">Fundo<select id="l-fundo"></select></label>
           <label class="field" id="f-proj">Projeto<select id="l-proj"></select></label>
-          <div id="f-doc" style="display:none"><div class="grid g2"><label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S04</option><option>S05</option><option>S06</option><option>S07</option></select></label><label class="field">Documento<input id="l-doc" value="D00019"></label></div></div>
+          <div id="f-doc" style="display:none"><div class="grid g2"><label class="field">Série<select id="l-serie"><option>S01</option><option>S02</option><option>S03</option><option>S04</option><option>S05</option><option>S06</option><option>S07</option><option>S08</option></select></label><label class="field">Documento<input id="l-doc" value="D00019"></label></div></div>
           <div id="f-caixa" style="display:none"><label class="field">Local cadastrado<select id="l-loc"><option value="">— digitar à mão —</option></select><small class="help">Escolha a caixa, gaveta ou tubo da tela "Onde está guardado": o identificador e o conteúdo vêm dela.</small></label><div class="grid g2"><label class="field">Identificador<input id="l-caixa" value="07" class="mono"></label><label class="field">Conteúdo<input id="l-cont" value="P0001–P0006"></label></div></div>
           <label class="field" id="f-volume">Volume / embalagem<select id="l-volume"><option value="1">1 de 1</option></select></label>
           <fieldset class="lab-lote" id="f-lote"><legend>Quantas etiquetas diferentes</legend>
@@ -1871,7 +1871,7 @@ P    projeto, nunca reusado
 AAAA ano do projeto, 0000 sem data
 S    série: S01 desenhos e pranchas · S02 textuais
              S03 fotografias · S04 negativos · S05 slides
-             S06 materiais · S07 redesenhos
+             S06 materiais · S07 publicações · S08 redesenhos
 D    sequencial contínuo no projeto</div><p class="help" style="margin-top:10px">Crédito padrão no site: <em>Acervo {Arquiteto}/CAMP - Casa da Arquitetura Moderna Paulista</em> (muda em Configurações → Site e sincronização).</p></div></div><div class="panel"><div class="pb">${CAMINHO.map(([n,q,t],i)=>{const x=CAMINHO_MAIS[i]||{};return `<details ${i===0?'open':''}><summary><b>${i+1}. ${escHtml(n)}</b> <span class="tag mini">${escHtml(q)}</span></summary><p>${escHtml(t)}</p><dl class="kv cm-mais"><dt>Onde no painel</dt><dd>${escHtml(x.onde||'—')}</dd><dt>Quanto tempo</dt><dd>${escHtml(x.tempo||'—')}</dd><dt>O que pode dar errado</dt><dd>${escHtml(x.erro||'—')}</dd></dl></details>`}).join('')}</div></div>`}
 // ---------- H2: glossário (as palavras do acervo explicadas onde aparecem) ----------
 const GLOSSARIO=[
@@ -1879,7 +1879,7 @@ const GLOSSARIO=[
  ['Sigla','sigla','As 3 letras do fundo (ex.: SBU). Vai no nome dos arquivos e nas etiquetas.'],
  ['Projeto (ou dossiê)','dossiê','Uma obra do arquiteto, com todas as folhas dela. Código F026-P0233. O número P nunca é reaproveitado.'],
  ['Folha (ou documento)','folha','Uma prancha, foto ou texto digitalizado. Código F026-P0233-1972-S01-D00002 (fundo, projeto, ano, série, número).'],
- ['Série','série','O tipo de material: S01 Desenhos e pranchas · S02 Documentos textuais · S03 Fotografias · S04 Negativos · S05 Slides · S06 Materiais · S07 Redesenhos.'],
+ ['Série','série','O tipo de material: S01 Desenhos e pranchas · S02 Documentos textuais · S03 Fotografias · S04 Negativos · S05 Slides · S06 Materiais · S07 Publicações · S08 Redesenhos.'],
  ['Lote','lote','O grupo de folhas que o CAMP Vision leu de uma vez, de uma pasta do scanner.'],
  ['CAMP Vision','CAMP Vision','O programa que lê as imagens digitalizadas, dá o código, gira as folhas e anota o que está escrito no carimbo.'],
  ['QNAP','QNAP','O servidor de arquivos da CAMP, onde ficam as imagens em alta (TIFF) e as cópias de leitura (JPG).'],
@@ -2513,7 +2513,7 @@ async function carregarProjetosAPI(filtro={}){const tinha=document.querySelector
   document.getElementById('projetos-body').innerHTML=r.itens.map(linhaProjetoHTML).join('');
   const cnt=document.querySelector('#v-projetos .cnt');if(cnt){cnt.dataset.servidor='1';cnt.textContent=r.total?`Mostrando ${fmtN((r.pagina-1)*r.por_pagina+1)}–${fmtN((r.pagina-1)*r.por_pagina+r.itens.length)} de ${fmtN(r.total)}`:'Nenhum projeto'}
   PROJETOS.length=0;r.itens.forEach(p=>PROJETOS.push({c:p.codigo,t:p.titulo,f:p.fundo_codigo,a:p.ano,cid:p.cidade,s:(p.series||'').split(',').filter(Boolean),n:p.folhas,st:p.status_site,u:(p.atualizado_em||'').slice(0,10)}));atualizarBarraLoteProjetos();montarPaginadorServidor('#projetos-pag',{total:r.total,pagina:r.pagina,por:r.por_pagina},p=>{PROJ_PAG.pagina=p;carregarProjetosAPI(PROJ_FILTRO_ULT)},n=>{PROJ_PAG.por=n;PROJ_PAG.pagina=1;carregarProjetosAPI(PROJ_FILTRO_ULT)})}catch(e){const msg=e.status===401?'Sessão não reconhecida pelo servidor. Saia e entre de novo.':e.message;if(tinha)marcarStale('projetos',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`);else tabelaErro('#projetos-body',msg,`carregarProjetosAPI({q:PROJETOS_ULTIMA_BUSCA})`)}}
-function nomeSerieProjeto(c){return ({S01:'Desenhos e pranchas',S02:'Documentos textuais',S03:'Fotografias',S04:'Negativos',S05:'Slides',S06:'Materiais',S07:'Redesenhos',S99:'Não identificado',SEM_SERIE:'Sem série'})[c]||c||'Sem série'}
+function nomeSerieProjeto(c){return ({S01:'Desenhos e pranchas',S02:'Documentos textuais',S03:'Fotografias',S04:'Negativos',S05:'Slides',S06:'Materiais',S07:'Publicações',S08:'Redesenhos',S99:'Não identificado',SEM_SERIE:'Sem série'})[c]||c||'Sem série'}
 const ADOCAO_TENTADA=new Set();
 async function adotarFolhaDoSite(code){
   const proj=code.slice(0,10),valida=/^F\d{3}-P\d{4}-.+/.test(code);
@@ -3117,7 +3117,7 @@ function renderItensProjetoBase(d,p){
   if(!its.length)return `<div class="panel"><div class="empty">${vazioHTML('Este projeto ainda não tem folhas no painel.','Quando o material for digitalizado e lido pelo CAMP Vision, as folhas aparecem aqui. Se a pasta já está no QNAP, o quadro "Encontradas no QNAP" abaixo mostra o que falta importar.')}</div></div>`;
   const diverge=(fonte.documentos_site||0)>0&&fonte.documentos_site!==fonte.documentos_locais,soSite=its.filter(i=>i.origem_catalogacao==='site').length;
   const source=`<div class="project-source ${diverge?'warn':''}"><span>${escHtml(fonte.documentos_locais??0)} folha(s) no painel</span><span>· ${escHtml(fonte.documentos_site??0)} no site</span>${diverge?'<span class="tag a">números diferentes</span>':''}${soSite>0&&EU&&EU.papel!=='leitura'?`<button class="btn sm" id="pd-importar" onclick="importarFolhasDoSite('${escHtml(p.codigo)}',${soSite})">Importar ${soSite} folha(s) só no site</button>`:''}</div>`;
-  const barra=barraFolhasHTML(its);const ordem=['S01','S02','S03','S04','S05','S06','S07','S99','SEM_SERIE'];
+  const barra=barraFolhasHTML(its);const ordem=['S01','S02','S03','S04','S05','S06','S07','S08','S99','SEM_SERIE'];
   const grupos={};for(const it of its){const k=it.serie_codigo||'SEM_SERIE';(grupos[k]||(grupos[k]=[])).push(it)}
   const html=[...ordem,...Object.keys(grupos).filter(k=>!ordem.includes(k))].filter(k=>grupos[k]?.length).map(k=>`<section class="project-series"><div class="project-series-head"><h3>${escHtml(nomeSerieProjeto(k))}</h3><span>${grupos[k].length}</span></div><div class="thumbs">${grupos[k].map(cardItemProjeto).join('')}</div></section>`).join('');
   return source+barra+html;
