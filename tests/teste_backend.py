@@ -1092,6 +1092,9 @@ def filho(modo):
             au["periodo"] == {"inicio": 1950, "fim": 1990} and au["titulares"][0]["nome"] == "Titular Teste" and au["titulares"][0]["grafias"] == ["T. TESTE"]
             and au["titulares"][0]["inicio"] == 1920 and au["coautores"][0]["nome"] == "Sócio Teste" and au["coautores"][0]["inicio"] == 1960
             and au["autorias_de_projeto"] == [{"projeto": "F099-P0001", "autores": ["Fulano", "Beltrano"], "papel_do_titular": "consultor"}], str(au)[:300])
+        f99 = next(f for f in lan.get("/api/estacoes/contexto", headers=T).json()["fundos"] if f["codigo_fundo"] == "F099")
+        ver("CAMP-029 (C4): no topo do fundo vêm `coautores` (lista de nomes) e `periodo_atuacao` {de, ate}, mantendo `autoridade`",
+            f99["coautores"] == ["Sócio Teste"] and f99["periodo_atuacao"] == {"de": 1950, "ate": 1990} and "autoridade" in f99, str({k_: f99.get(k_) for k_ in ("coautores", "periodo_atuacao")}))
         fj = next((f for f in lan.get("/api/fundos.json", headers=T).json()["fundos"] if f["codigo"] == "F099"), {})
         ver("/api/fundos.json traz a mesma tabela de autoridade", (fj.get("autoridade") or {}).get("titulares", [{}])[0].get("nome") == "Titular Teste", str(fj)[:200])
         cf = lan.get("/api/estacoes/contexto?fundo=F099", headers=T).json()

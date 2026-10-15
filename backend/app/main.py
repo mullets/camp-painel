@@ -291,6 +291,19 @@ def autoridade_fundos(con, codigos: list[str]) -> dict:
     return out
 
 
+def _ano(v) -> int | None:
+    m = re.match(r"\s*(\d{4})", str(v)) if v not in (None, "") else None
+    return int(m.group(1)) if m else None
+
+
+def _coautores_e_periodo(aut: dict | None) -> dict:
+    """Contrato C4: no topo de cada fundo, `coautores` (lista de nomes) e `periodo_atuacao` {de, ate} (anos; null se não houver)."""
+    aut = aut or {}
+    per = aut.get("periodo") or {}
+    return {"coautores": [c["nome"] for c in aut.get("coautores", []) if c.get("nome")],
+            "periodo_atuacao": {"de": _ano(per.get("inicio")), "ate": _ano(per.get("fim"))}}
+
+
 def _exigir_rede_local(request: Request) -> str:
     """Endpoints das estações: sem login; ver app/rede.py (LAN verdadeira ou token)."""
     return exigir_estacao(request)
@@ -320,6 +333,7 @@ def contexto_estacoes(request: Request, fundo: str | None = None) -> dict:
     aut = autoridade_fundos(con, [f["codigo_fundo"] for f in fundos])   # CV2 §4.4: titular, coautores e período de cada fundo
     for f in fundos:
         f["autoridade"] = aut.get(f["codigo_fundo"])
+        f.update(_coautores_e_periodo(f["autoridade"]))
     resposta = {"fundos": fundos}
     # Operadores: só NOMES (sem e-mail/papel) para a estação mostrar "Quem está
     # operando?". As estações não fazem login; o nome é só identificação.
