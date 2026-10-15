@@ -235,59 +235,65 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
     return r
 
 
+def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> dict:
+    """Mescla o projeto de origem no destino (transação já aberta por quem chama). Usada pela rota e pelo CAMP Vision (CAMP-009)."""
+    o = con.execute("SELECT codigo, status_site, mesclado_em FROM projeto WHERE codigo=?", (origem,)).fetchone()
+    if not o:
+        raise HTTPException(404, f"O projeto {origem} não existe.")
+    if o["mesclado_em"]:
+        raise HTTPException(409, f"O projeto {origem} já foi mesclado em {o['mesclado_em']}.")
+    if o["status_site"] == "no_ar":
+        tem_site = con.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (origem,)).fetchone()[0] or \
+            con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (origem,)).fetchone()
+        if tem_site:
+            raise HTTPException(409, f"O projeto {origem} está público no site. Despublique antes de mesclar.")
+    _destino_valido(con, destino)
+    cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (origem,))]
+    r = _mover(con, cods, destino, ator, motivo or f"mesclado em {destino}") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
+    lotes = [x[0] for x in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=?", (origem,))]
+    con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE projeto_codigo=?", (destino, origem))
+    con.execute("UPDATE pedido_releitura SET projeto_codigo=? WHERE projeto_codigo=?", (destino, origem))
+    con.execute("UPDATE projeto SET mesclado_em=?, mesclado_por=?, mesclado_quando=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (destino, ator, origem))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_mesclado',?,?)",
+                (origem, ator, _json.dumps({"destino": destino, "folhas": len(r["movidos"]), "duplicatas": len(r["duplicatas"]), "lotes": lotes, "motivo": motivo}, ensure_ascii=False)))
+    from . import redir_site
+    redir_site.registrar(con, origem, destino, "projeto", motivo or f"mesclado em {destino}", ator)     # CAMP-014: o endereço do projeto de origem passa ao destino
+    return {**r, "lotes": lotes, "origem": origem, "destino": destino}
+
+
 @router.post("/projetos/{origem}/mesclar-em")
 def mesclar_em(origem: str, d: Destino, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Move TODAS as folhas e os lotes da origem para o destino. A origem não é apagada: fica marcada 'mesclado em' e some das listas."""
     if origem == d.destino:
         raise HTTPException(400, "Origem e destino são o mesmo projeto.")
 
-    def fazer(con):
-        o = con.execute("SELECT codigo, status_site, mesclado_em FROM projeto WHERE codigo=?", (origem,)).fetchone()
-        if not o:
-            raise HTTPException(404, f"O projeto {origem} não existe.")
-        if o["mesclado_em"]:
-            raise HTTPException(409, f"O projeto {origem} já foi mesclado em {o['mesclado_em']}.")
-        if o["status_site"] == "no_ar":
-            tem_site = con.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (origem,)).fetchone()[0] or \
-                con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (origem,)).fetchone()
-            if tem_site:
-                raise HTTPException(409, f"O projeto {origem} está público no site. Despublique antes de mesclar.")
-        _destino_valido(con, d.destino)
-        cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (origem,))]
-        r = _mover(con, cods, d.destino, u["email"], d.motivo or f"mesclado em {d.destino}") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
-        lotes = [x[0] for x in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=?", (origem,))]
-        con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE projeto_codigo=?", (d.destino, origem))
-        con.execute("UPDATE pedido_releitura SET projeto_codigo=? WHERE projeto_codigo=?", (d.destino, origem))
-        con.execute("UPDATE projeto SET mesclado_em=?, mesclado_por=?, mesclado_quando=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (d.destino, u["email"], origem))
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_mesclado',?,?)",
-                    (origem, u["email"], _json.dumps({"destino": d.destino, "folhas": len(r["movidos"]), "duplicatas": len(r["duplicatas"]), "lotes": lotes, "motivo": d.motivo}, ensure_ascii=False)))
-        from . import redir_site
-        redir_site.registrar(con, origem, d.destino, "projeto", d.motivo or f"mesclado em {d.destino}", u["email"])     # CAMP-014: o endereço do projeto de origem passa ao destino
-        return {**r, "lotes": lotes, "origem": origem, "destino": d.destino}
-    res = _transacao(fazer)
+    res = _transacao(lambda con: _mesclar(con, origem, d.destino, u["email"], d.motivo))
     tarefas.add_task(_enviar_redirecionamentos)
     return res
+
+
+def _mover_lote(con, lid: int, destino: str, ator: str, motivo: str | None) -> dict:
+    """Passa o lote e as folhas dele para outro projeto (transação já aberta por quem chama)."""
+    l = con.execute("SELECT id, projeto_codigo, descartado_em FROM lista_processamento WHERE id=?", (lid,)).fetchone()
+    if not l:
+        raise HTTPException(404, "Lote não existe")
+    if l["descartado_em"]:
+        raise HTTPException(409, "Este lote foi descartado.")
+    if l["projeto_codigo"] == destino:
+        raise HTTPException(400, "O lote já está nesse projeto.")
+    _destino_valido(con, destino)
+    cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE lote_id=?", (lid,))]
+    r = _mover(con, cods, destino, ator, motivo or f"lote {lid} movido") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
+    con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE id=?", (destino, lid))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('lista',?,'lote_movido',?,?)",
+                (str(lid), ator, _json.dumps({"de": l["projeto_codigo"], "para": destino, "folhas": len(r["movidos"]), "motivo": motivo}, ensure_ascii=False)))
+    return {**r, "lote": lid, "de": l["projeto_codigo"], "para": destino}
 
 
 @router.post("/filas/{lid}/mover-para")
 def mover_lote(lid: int, d: MoverLote, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """O lote caiu no projeto errado: passa o lote e as folhas dele para o projeto certo."""
-    def fazer(con):
-        l = con.execute("SELECT id, projeto_codigo, descartado_em FROM lista_processamento WHERE id=?", (lid,)).fetchone()
-        if not l:
-            raise HTTPException(404, "Lote não existe")
-        if l["descartado_em"]:
-            raise HTTPException(409, "Este lote foi descartado.")
-        if l["projeto_codigo"] == d.projeto_codigo:
-            raise HTTPException(400, "O lote já está nesse projeto.")
-        _destino_valido(con, d.projeto_codigo)
-        cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE lote_id=?", (lid,))]
-        r = _mover(con, cods, d.projeto_codigo, u["email"], d.motivo or f"lote {lid} movido") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
-        con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE id=?", (d.projeto_codigo, lid))
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('lista',?,'lote_movido',?,?)",
-                    (str(lid), u["email"], _json.dumps({"de": l["projeto_codigo"], "para": d.projeto_codigo, "folhas": len(r["movidos"]), "motivo": d.motivo}, ensure_ascii=False)))
-        return {**r, "lote": lid, "de": l["projeto_codigo"], "para": d.projeto_codigo}
-    res = _transacao(fazer)
+    res = _transacao(lambda con: _mover_lote(con, lid, d.projeto_codigo, u["email"], d.motivo))
     tarefas.add_task(_enviar_redirecionamentos)
     return res
 
