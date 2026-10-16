@@ -1714,9 +1714,10 @@ function niimDesenhar(cv,d){const W=d.w*8,H=96,ctx=cv.getContext('2d');cv.width=
   for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(m[y][x])ctx.fillRect(qx+x*s,qy+y*s,s,s);
   const x0=qx+N*s+8,maxw=W-x0-8,fam='Helvetica, Arial, sans-serif',mono='Menlo, Consolas, monospace';
   const cabe=(t,peso,tam,f,min)=>{let z=tam;for(;z>min;z--){ctx.font=`${peso} ${z}px ${f}`;if(ctx.measureText(t).width<=maxw)return t}ctx.font=`${peso} ${min}px ${f}`;let u=t;while(u.length>1&&ctx.measureText(u+'…').width>maxw)u=u.slice(0,-1);return u===t?t:u+'…'};
-  const linhas=[[d.l1,'700',14,mono,11],[d.l2,'700',24,mono,15],[d.l3,'700',15,fam,12],[d.l4,'400',14,fam,11]].filter(l=>l[0]);
-  const alt=linhas.reduce((a,l)=>a+l[2],0)+(linhas.length-1)*5;let y=Math.max(4,Math.round((H-alt)/2));ctx.textBaseline='top';
-  for(const [t,peso,tam,f,min] of linhas){const u=cabe(String(t),peso,tam,f,min);ctx.fillText(u,x0,y);y+=tam+5}
+  const cinco=[d.l1,d.l2,d.l3,d.l4,d.l5].filter(Boolean).length>=5,G=cinco?3:5;   /* com 5 linhas (projeto e arquiteto), letras um pouco menores para caber nos 12 mm */
+  const linhas=[[d.l1,'700',cinco?12:14,mono,10],[d.l2,'700',cinco?20:24,mono,14],[d.l3,'700',cinco?14:15,fam,11],[d.l4,'400',cinco?13:14,fam,11],[d.l5,'400',12,fam,10]].filter(l=>l[0]);
+  const alt=linhas.reduce((a,l)=>a+l[2],0)+(linhas.length-1)*G;let y=Math.max(3,Math.round((H-alt)/2));ctx.textBaseline='top';
+  for(const [t,peso,tam,f,min] of linhas){const u=cabe(String(t),peso,tam,f,min);ctx.fillText(u,x0,y);y+=tam+G}
   const img=ctx.getImageData(0,0,W,H),p=img.data;for(let i=0;i<p.length;i+=4){const v=(p[i]*0.3+p[i+1]*0.59+p[i+2]*0.11)<150?0:255;p[i]=p[i+1]=p[i+2]=v;p[i+3]=255}ctx.putImageData(img,0,0)}
 function niimDesenharTodos(raiz){(raiz||document).querySelectorAll('canvas[data-niim]').forEach(cv=>{try{niimDesenhar(cv,JSON.parse(cv.dataset.niim))}catch(e){console.error(e)}})}
 async function baixarNiimbot(){const cs=[...document.querySelectorAll('#printgrid canvas[data-niim]')];if(!cs.length){toast('Escolha o que etiquetar primeiro');return}
@@ -1825,12 +1826,12 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
   else {code=`${fc}-${pc}`;big=code;lines=[]}
   const vert=mh>mw;
   if(NIIM_FMT[document.getElementById('l-fmt').value]){   /* NIIMBOT D110: QR + 4 linhas, desenhado em pontos da impressora */
-    let l1,l2,l3,l4;const comNome=['projeto','documento','tubo'].includes(labType);
-    if(labType==='documento'){const pt=String(code).split('-');l1=pt.slice(0,3).join('-');l2=pt.slice(3).join(' · ');l3=pn;l4=cidAno}
-    else if(comNome){l1=`${fc} · ${sig}`;l2=big;l3=pn;l4=mat?mat.texto:cidAno}
+    let l1,l2,l3,l4,l5;const comNome=['projeto','documento','tubo'].includes(labType);   /* 16/10: projeto E arquiteto sempre escritos */
+    if(labType==='documento'){const pt=String(code).split('-');l1=pt.slice(0,3).join('-');l2=pt.slice(3).join(' · ');l3=pn;l4=arq;l5=cidAno}
+    else if(comNome){l1=`${fc} · ${sig}`;l2=big;l3=pn;l4=arq;l5=mat?`${cidAno} · ${mat.texto}`:cidAno}
     else if(labType==='caixa'){l1=`${sig} · ${nome}`;l2=big;l3=String((lines[1]||[])[1]||'')}
     else{l2=`${fc} ${sig}`;l3=nome;l4=f[3]||''}
-    const d={codigo:code,l1,l2,l3,l4,w:mw,h:mh};
+    const d={codigo:code,l1,l2,l3,l4,l5,w:mw,h:mh};
     return `<div class="label lab-niim" style="width:${mw*8}px;height:${mh*8}px"><canvas data-niim="${escHtml(JSON.stringify(d))}" style="width:${mw*8}px;height:96px" aria-label="${escHtml(code)}"></canvas></div>`}   /* prévia: 1 ponto da impressora = 1 px */
   if(mw>=150){   /* pedido de 15/10: capa da pasta, um pouco menor que A4 (200 × 287 mm), impressa em A4 e recortada na linha */
     const tit=labType==='projeto'||labType==='documento'||labType==='tubo'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
