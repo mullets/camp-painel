@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta"}
 
 
 def rodar(modo, db):
@@ -4797,6 +4797,67 @@ def filho(modo):
         # folha de OUTRO lote com o mesmo D não é tocada (continua indo para a decisão de lote que colide)
         k.close()
         for l in res: print(l)
+    elif modo == "lote_complemento":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import importador_lote
+        from app.rotas_operacao import _ler_pasta, _importar_se_tem_pacote
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        pasta = _pl.Path(tempfile.mkdtemp()) / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        def gravar(p_, lote_atual): 
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p_, ensure_ascii=False), encoding="utf-8")
+            (pasta / "status.json").write_text(_j.dumps({"status": "pronto", "lote_atual": lote_atual}), encoding="utf-8")
+            (pasta / "info_projeto.json").write_text(_j.dumps({"codigo": "F026-P0001", "nome": "SESI"}), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'SESI',1972)")
+        c.commit(); c.close()
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        A1, A2 = "F026-P0001-1972-S01-D00001", "F026-P0001-1972-S01-D00002"
+        # 14/10: 2 folhas, lote revisado, aprovado e PUBLICADO
+        gravar(pac, "lote-1")
+        r0 = _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()
+        lote1 = sql("SELECT id FROM lista_processamento ORDER BY id LIMIT 1")
+        ver("1º aviso: cria o lote (acao 'nova')", r0["acao"] == "nova")
+        importador_lote.importar_lote(k, lote1, "teste"); k.commit()
+        k.execute("UPDATE item SET revisao='conferida', titulo='Título da pessoa' WHERE codigo=?", (A1,))
+        k.execute("UPDATE item SET revisao='conferida', status_site='no_ar', tainacan_item_id=77 WHERE codigo=?", (A2,))
+        k.execute("UPDATE lista_processamento SET etapa='publicado', aprovado_em=datetime('now') WHERE id=?", (lote1,)); k.commit()
+        antes = [tuple(r_) for r_ in k.execute("SELECT codigo, titulo, revisao, status_site, tainacan_item_id, lote_id FROM item ORDER BY codigo")]
+        # 16/10: o MESMO pacote agora traz 3 folhas novas (D00003..D00005)
+        p2 = _cp.deepcopy(pac)
+        for n_ in (3, 4, 5):
+            d_ = _cp.deepcopy(pac["documentos"][0]); d_["codigo"] = f"F026-P0001-1972-S01-D{n_:05d}"; d_["titulo"] = f"Folha nova {n_}"; p2["documentos"].append(d_)
+        gravar(p2, "lote-2")
+        r1 = _ler_pasta(k, pasta, None, "F026-P0001"); imp1 = _importar_se_tem_pacote(k, pasta); k.commit()
+        lotes = [dict(r_) for r_ in k.execute("SELECT id, nome, etapa, folhas_encontradas, aprovado_em, resultado FROM lista_processamento ORDER BY id")]
+        ver("material novo num projeto com lote PUBLICADO cria um lote NOVO (acao 'complemento')", r1["acao"] == "complemento" and len(lotes) == 2, str(r1)[:200])
+        l2 = lotes[-1] if len(lotes) == 2 else {}
+        ver("o lote novo está em REVISÃO, sem aprovação, é da mesma pasta/projeto e diz quantas folhas trouxe", l2.get("etapa") == "revisao" and not l2.get("aprovado_em") and l2.get("folhas_encontradas") == 3 and "complemento" in (l2.get("nome") or ""), str(l2)[:200])
+        ver("o aviso importa SÓ as 3 folhas novas, no lote novo", imp1 and imp1.get("criadas") == 3 and sql("SELECT COUNT(*) FROM item WHERE lote_id=?", l2.get("id")) == 3, str(imp1)[:200])
+        depois = [tuple(r_) for r_ in k.execute("SELECT codigo, titulo, revisao, status_site, tainacan_item_id, lote_id FROM item WHERE codigo IN (?,?) ORDER BY codigo", (A1, A2))]
+        ver("o lote publicado continua publicado e as folhas antigas ficam intactas (título, revisão, site, lote)", depois == antes[:2] and sql("SELECT etapa FROM lista_processamento WHERE id=?", lote1) == "publicado", str(depois))
+        ver("as folhas novas entram PENDENTES de conferência", sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='pendente'", l2.get("id")) == 3)
+        ver("o projeto registra 'material novo pronto' do complemento", sql("SELECT COUNT(*) FROM evento WHERE tipo='material_novo_pronto' AND codigo='F026-P0001' AND detalhe LIKE '%complemento%'") == 1)
+        # o MESMO aviso de novo: não cria terceiro lote nem duplica folhas
+        r2 = _ler_pasta(k, pasta, None, "F026-P0001"); imp2 = _importar_se_tem_pacote(k, pasta); k.commit()
+        ver("o mesmo aviso de novo NÃO cria um terceiro lote nem duplica folhas", sql("SELECT COUNT(*) FROM lista_processamento") == 2 and sql("SELECT COUNT(*) FROM item") == 5, f"{r2['acao']} {imp2}")
+        ver("o lote de complemento mantém a marca e a contagem DELE (3), não a da pasta inteira (5)", sql("SELECT folhas_encontradas FROM lista_processamento WHERE id=?", l2.get("id")) == 3 and '"complemento": true' in sql("SELECT resultado FROM lista_processamento WHERE id=?", l2.get("id")), "")
+        ver("reimportar o complemento não puxa as folhas pendentes do lote antigo para ele", sql("SELECT COUNT(*) FROM item WHERE lote_id=?", lote1) == 2)
+        # uma pessoa mexe numa folha do lote publicado como pendente; o complemento não a toma
+        k.execute("UPDATE item SET revisao='pendente', status_site='nao_publicado' WHERE codigo=?", (A1,)); k.commit()
+        importador_lote.importar_lote(k, l2["id"], "teste"); k.commit()
+        ver("mesmo com folha ainda pendente no lote antigo, o complemento só fica com as suas", sql("SELECT lote_id FROM item WHERE codigo=?", A1) == lote1 and sql("SELECT COUNT(*) FROM item WHERE lote_id=?", l2["id"]) == 3, "")
+        # só releitura (nada de folha nova) num projeto fechado: segue como hoje, sem lote novo, e o aviso diz o que aconteceu
+        k.execute("UPDATE lista_processamento SET aprovado_em=datetime('now'), etapa='publicado' WHERE id=?", (l2["id"],)); k.commit()
+        r3 = _ler_pasta(k, pasta, None, "F026-P0001"); imp3 = _importar_se_tem_pacote(k, pasta); k.commit()
+        ver("sem folha nova (só releitura): não cria lote", sql("SELECT COUNT(*) FROM lista_processamento") == 2 and r3["acao"] == "igual", str(r3["acao"]))
+        ver("lote aprovado e nada novo: o aviso responde 'ignorado' em vez de ficar em silêncio", isinstance(imp3, dict) and "aprovado" in str(imp3.get("ignorado")), str(imp3))
+        ver("integridade: nenhuma chave estrangeira quebrada", k.execute("PRAGMA foreign_key_check").fetchall() == [])
+        k.close()
+        for l in res: print(l)
     elif modo == "erros_automaticos":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -7614,6 +7675,14 @@ else:
 print("114) Releitura que muda a série das folhas (aviso de 14/10, F009-P0060 S01 → S03): o painel aceita a leitura nova em vez de travar")
 rc, out = rodar("releitura_muda_serie", f"{tmp}/relserie.db")
 if rc != 0: ok(False, f"teste da releitura que muda a série não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b) Material novo de projeto com lote já publicado: vira lote novo em revisão, sem mexer no que está publicado")
+rc, out = rodar("lote_complemento", f"{tmp}/lotecomp.db")
+if rc != 0: ok(False, f"teste do lote de complemento não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
