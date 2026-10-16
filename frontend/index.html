@@ -206,6 +206,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .lab-faixa .lf-nome{font-size:2.8mm;line-height:3.3mm;font-weight:600}
 .lab-faixa .lf-barras{margin-top:auto;display:flex;flex-direction:column;align-items:center}.lab-faixa .lf-barras svg{display:block;shape-rendering:crispEdges}
 .lab-faixa .lf-cod{font-family:var(--mono);font-size:2.1mm;line-height:2.4mm;letter-spacing:.15mm;text-align:center}
+.label.lab-niim{display:flex;align-items:center;justify-content:center;background:#fff}.lab-niim canvas{image-rendering:pixelated;display:block}
 .label.lab-std .ls-corpo{position:absolute;left:22px;top:0;right:0;bottom:0;padding:6px 9px 5px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .lab-std .ls-topo{display:flex;align-items:center;gap:6px;font-size:8px;color:#555;white-space:nowrap;overflow:hidden}
 .lab-std .ls-big{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
@@ -1070,7 +1071,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 
   <!-- ETIQUETAS -->
   <section class="content" id="v-etiquetas">
-    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn pri" id="lab-imprimir" onclick="window.print()">Imprimir</button></div></div>
+    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn pri" id="lab-imprimir">Imprimir</button></div></div>
     <div class="tabs" id="lab-tabs">
       <button class="on" data-t="projeto">Pasta de projeto</button>
       <button data-t="documento">Folha / documento</button>
@@ -1104,7 +1105,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
         </div>
         <div class="lab-section">
           <div class="lab-section-title"><span class="lab-passo">2</span> Como imprimir</div>
-          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option></select></label>
+          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option><optgroup label="NIIMBOT D110 (slides e negativos)"><option value="40x12">40 × 12 mm · NIIMBOT D110 (moldura do slide)</option><option value="30x12">30 × 12 mm · NIIMBOT D110 (compacta)</option><option value="50x15">50 × 15 mm · NIIMBOT D110 (envelope de negativos)</option></optgroup></select></label>
           <label class="field">Papel<select id="l-papel"><option value="rolo">Impressora de etiquetas (uma por página, no tamanho exato)</option><option value="a4">Folha A4 comum (várias por folha, para recortar)</option></select></label>
           <div class="qty"><label class="field">Cópias<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field"><span>Observação <small class="help" id="l-obs-cont" aria-live="polite">0/30</small></span><input id="l-obs" maxlength="30" placeholder="opcional, sai em letra pequena"></label></div>
           <div class="lab-note" id="l-qty-nota" style="font-size:12px;color:var(--ink3)">Na folha avulsa, as cópias viram uma sequência a partir do número informado (D00019, D00020…).</div>
@@ -1667,6 +1668,62 @@ function barcode128(text,largMm,altMm){const t=String(text).replace(/[^\x20-\x7e
   let x=0,rects='';for(const n of v){const p=C128[n];for(let i=0;i<p.length;i++){const w=+p[i];if(i%2===0)rects+=`<rect x="${x}" y="0" width="${w}" height="1"/>`;x+=w}}
   const ponto=25.4/300,mod=Math.max(2,Math.min(5,Math.floor(largMm/x/ponto)))*ponto;
   return `<svg viewBox="0 0 ${x} 1" preserveAspectRatio="none" style="width:${(x*mod).toFixed(3)}mm;height:${altMm}mm" fill="#000">${rects}</svg>`}
+/* QR Code (modo alfanumérico ou bytes, correção M, versões 1–6) para as etiquetas pequenas da NIIMBOT, onde código de barras não cabe */
+const QR_EXP=new Array(512),QR_LOG=new Array(256);(()=>{let x=1;for(let i=0;i<255;i++){QR_EXP[i]=x;QR_LOG[x]=i;x<<=1;if(x&256)x^=0x11d}for(let i=255;i<512;i++)QR_EXP[i]=QR_EXP[i-255]})();
+function qrMul(a,b){return a&&b?QR_EXP[QR_LOG[a]+QR_LOG[b]]:0}
+function qrRS(dados,n){let g=[1];for(let i=0;i<n;i++){const ng=new Array(g.length+1).fill(0);for(let j=0;j<g.length;j++){ng[j]^=g[j];ng[j+1]^=qrMul(g[j],QR_EXP[i])}g=ng}
+  const r=dados.concat(new Array(n).fill(0));for(let i=0;i<dados.length;i++){const c=r[i];if(c)for(let j=0;j<g.length;j++)r[i+j]^=qrMul(g[j],c)}return r.slice(dados.length)}
+const QR_M=[null,[1,16,10],[1,28,16],[1,44,26],[2,32,18],[2,43,24],[4,27,16]];   /* versão: [blocos, dados por bloco, correção por bloco] (nível M) */
+const QR_ALNUM='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+function qrMatriz(texto){texto=String(texto);const alnum=[...texto].every(ch=>QR_ALNUM.includes(ch)),bytes=alnum?null:[...new TextEncoder().encode(texto)];
+  let v=1;for(;v<=6;v++){const cap=QR_M[v][0]*QR_M[v][1]*8,bits=4+(alnum?9:8)+(alnum?Math.floor(texto.length/2)*11+(texto.length%2)*6:bytes.length*8);if(bits<=cap)break}
+  if(v>6)throw new Error('texto longo demais para o QR');
+  const [nb,nd,ne]=QR_M[v],cap=nb*nd*8,b=[];const put=(val,n)=>{for(let i=n-1;i>=0;i--)b.push((val>>>i)&1)};
+  if(alnum){put(2,4);put(texto.length,9);for(let i=0;i+1<texto.length;i+=2)put(QR_ALNUM.indexOf(texto[i])*45+QR_ALNUM.indexOf(texto[i+1]),11);if(texto.length%2)put(QR_ALNUM.indexOf(texto[texto.length-1]),6)}
+  else{put(4,4);put(bytes.length,8);bytes.forEach(x=>put(x,8))}
+  put(0,Math.min(4,cap-b.length));while(b.length%8)b.push(0);for(let p=0xEC;b.length<cap;p^=0xEC^0x11)put(p,8);
+  const cw=[];for(let i=0;i<b.length;i+=8)cw.push(parseInt(b.slice(i,i+8).join(''),2));
+  const blocos=[],ecs=[];for(let k=0;k<nb;k++){const d=cw.slice(k*nd,(k+1)*nd);blocos.push(d);ecs.push(qrRS(d,ne))}
+  const fim=[];for(let i=0;i<nd;i++)blocos.forEach(d=>fim.push(d[i]));for(let i=0;i<ne;i++)ecs.forEach(e=>fim.push(e[i]));
+  const N=17+4*v,m=Array.from({length:N},()=>new Array(N).fill(false)),fn=Array.from({length:N},()=>new Array(N).fill(false));
+  const set=(x,y,d)=>{m[y][x]=d;fn[y][x]=true};
+  const finder=(cx,cy)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const x=cx+dx,y=cy+dy;if(x<0||y<0||x>=N||y>=N)continue;const d=Math.max(Math.abs(dx),Math.abs(dy));set(x,y,d!==2&&d!==4)}};
+  for(let i=0;i<N;i++){set(6,i,i%2===0);set(i,6,i%2===0)}
+  finder(3,3);finder(N-4,3);finder(3,N-4);
+  if(v>=2){const p=[6,4*v+10];for(const ay of p)for(const ax of p){if((ax===6&&ay===6)||(ax===6&&ay===N-7)||(ax===N-7&&ay===6))continue;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)set(ax+dx,ay+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1)}}
+  const formato=mask=>{const dado=(0<<3)|mask;let r=dado;for(let i=0;i<10;i++)r=(r<<1)^((r>>>9)*0x537);const bits=((dado<<10)|r)^0x5412,bit=i=>((bits>>>i)&1)===1;
+    for(let i=0;i<=5;i++)set(8,i,bit(i));set(8,7,bit(6));set(8,8,bit(7));set(7,8,bit(8));for(let i=9;i<15;i++)set(14-i,8,bit(i));
+    for(let i=0;i<8;i++)set(N-1-i,8,bit(i));for(let i=8;i<15;i++)set(8,N-15+i,bit(i));set(8,N-8,true)};
+  formato(0);
+  let i=0;for(let right=N-1;right>=1;right-=2){if(right===6)right=5;for(let vert=0;vert<N;vert++)for(let j=0;j<2;j++){const x=right-j,up=((right+1)&2)===0,y=up?N-1-vert:vert;
+    if(!fn[y][x]&&i<fim.length*8){m[y][x]=((fim[i>>>3]>>>(7-(i&7)))&1)===1;i++}}}
+  const MASK=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,(x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+  const aplicar=k=>{for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!fn[y][x]&&MASK[k](x,y))m[y][x]=!m[y][x]};
+  const pena=()=>{let p=0;for(let a=0;a<N;a++){let rl=1,rc=1;for(let b=1;b<N;b++){if(m[a][b]===m[a][b-1]){rl++;if(rl===5)p+=3;else if(rl>5)p++}else rl=1;if(m[b][a]===m[b-1][a]){rc++;if(rc===5)p+=3;else if(rc>5)p++}else rc=1}}
+    for(let y=0;y<N-1;y++)for(let x=0;x<N-1;x++){const c=m[y][x];if(c===m[y][x+1]&&c===m[y+1][x]&&c===m[y+1][x+1])p+=3}
+    let esc=0;m.forEach(l=>l.forEach(c=>{if(c)esc++}));return p+Math.floor(Math.abs(esc*20-N*N*10)/(N*N))*10};
+  let melhor=0,mp=Infinity;for(let k=0;k<8;k++){aplicar(k);formato(k);const p=pena();if(p<mp){mp=p;melhor=k}aplicar(k)}
+  aplicar(melhor);formato(melhor);return m}
+
+/* NIIMBOT D110 (pedido de 16/10, slides e negativos): 203 dpi (8 pontos/mm), cabeça de 12 mm (96 pontos). Sem driver: a etiqueta é desenhada
+   em pontos da própria impressora (preto e branco puro) e baixada como imagem para imprimir pelo NiimBlue (niim.blue). Código de barras não cabe
+   em 12 mm; vai um QR (o código da folha cabe num QR de 25 × 25 módulos = 9,4 mm). */
+const NIIM_FMT={'40x12':1,'30x12':1,'50x15':1};
+function niimDesenhar(cv,d){const W=d.w*8,H=96,ctx=cv.getContext('2d');cv.width=W;cv.height=H;ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.fillStyle='#000';
+  const m=qrMatriz(d.codigo),N=m.length,s=Math.max(2,Math.floor(84/N)),qy=Math.round((H-N*s)/2),qx=8;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(m[y][x])ctx.fillRect(qx+x*s,qy+y*s,s,s);
+  const x0=qx+N*s+8,maxw=W-x0-8,fam='Helvetica, Arial, sans-serif',mono='Menlo, Consolas, monospace';
+  const cabe=(t,peso,tam,f,min)=>{let z=tam;for(;z>min;z--){ctx.font=`${peso} ${z}px ${f}`;if(ctx.measureText(t).width<=maxw)return t}ctx.font=`${peso} ${min}px ${f}`;let u=t;while(u.length>1&&ctx.measureText(u+'…').width>maxw)u=u.slice(0,-1);return u===t?t:u+'…'};
+  const linhas=[[d.l1,'700',14,mono,11],[d.l2,'700',24,mono,15],[d.l3,'700',15,fam,12],[d.l4,'400',14,fam,11]].filter(l=>l[0]);
+  const alt=linhas.reduce((a,l)=>a+l[2],0)+(linhas.length-1)*5;let y=Math.max(4,Math.round((H-alt)/2));ctx.textBaseline='top';
+  for(const [t,peso,tam,f,min] of linhas){const u=cabe(String(t),peso,tam,f,min);ctx.fillText(u,x0,y);y+=tam+5}
+  const img=ctx.getImageData(0,0,W,H),p=img.data;for(let i=0;i<p.length;i+=4){const v=(p[i]*0.3+p[i+1]*0.59+p[i+2]*0.11)<150?0:255;p[i]=p[i+1]=p[i+2]=v;p[i+3]=255}ctx.putImageData(img,0,0)}
+function niimDesenharTodos(raiz){(raiz||document).querySelectorAll('canvas[data-niim]').forEach(cv=>{try{niimDesenhar(cv,JSON.parse(cv.dataset.niim))}catch(e){console.error(e)}})}
+async function baixarNiimbot(){const cs=[...document.querySelectorAll('#printgrid canvas[data-niim]')];if(!cs.length){toast('Escolha o que etiquetar primeiro');return}
+  niimDesenharTodos(document.getElementById('printgrid'));const vistos=new Set();let n=0;
+  for(const cv of cs){const d=JSON.parse(cv.dataset.niim);if(vistos.has(d.codigo))continue;vistos.add(d.codigo);
+    const blob=await new Promise(ok=>cv.toBlob(ok,'image/png'));const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`niimbot-${d.w}x${d.h}-${d.codigo}.png`;a.click();n++;await new Promise(ok=>setTimeout(ok,250))}
+  toast(`${n===1?'1 imagem baixada':n+' imagens baixadas'}. Abra niim.blue no Chrome, conecte a D110 e imprima.`,{ms:7000})}
 let labType='projeto';function labTipoAtual(){return labType}
 document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
@@ -1767,6 +1824,14 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
   else if(labType==='fundo'){code=fc;big=`${fc} ${sig}`;lines=[['Fundo',nome],['Período',f[3]||'—']]}
   else {code=`${fc}-${pc}`;big=code;lines=[]}
   const vert=mh>mw;
+  if(NIIM_FMT[document.getElementById('l-fmt').value]){   /* NIIMBOT D110: QR + 4 linhas, desenhado em pontos da impressora */
+    let l1,l2,l3,l4;const comNome=['projeto','documento','tubo'].includes(labType);
+    if(labType==='documento'){const pt=String(code).split('-');l1=pt.slice(0,3).join('-');l2=pt.slice(3).join(' · ');l3=pn;l4=cidAno}
+    else if(comNome){l1=`${fc} · ${sig}`;l2=big;l3=pn;l4=mat?mat.texto:cidAno}
+    else if(labType==='caixa'){l1=`${sig} · ${nome}`;l2=big;l3=String((lines[1]||[])[1]||'')}
+    else{l2=`${fc} ${sig}`;l3=nome;l4=f[3]||''}
+    const d={codigo:code,l1,l2,l3,l4,w:mw,h:mh};
+    return `<div class="label lab-niim" style="width:${mw*8}px;height:${mh*8}px"><canvas data-niim="${escHtml(JSON.stringify(d))}" style="width:${mw*8}px;height:96px" aria-label="${escHtml(code)}"></canvas></div>`}   /* prévia: 1 ponto da impressora = 1 px */
   if(mw>=150){   /* pedido de 15/10: capa da pasta, um pouco menor que A4 (200 × 287 mm), impressa em A4 e recortada na linha */
     const tit=labType==='projeto'||labType==='documento'||labType==='tubo'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
     return `<div class="label lab-capa" style="width:${mw*S}px;height:${mh*S}px"><div class="lc-topo">${LOGO_CAMP}<span>Casa da Arquitetura Moderna Paulista · Acervo ${escHtml(sig)}</span></div>
@@ -1811,7 +1876,7 @@ function labFrase(lote,lista){const fcod=document.getElementById('l-fundo').valu
   if(!pcod)return 'Escolha o projeto.';
   if(labType==='documento'){const d=document.getElementById('l-doc').value.replace(/\D/g,'')||'1';return `Etiqueta de: ${pcod} · ${pt} · folha ${document.getElementById('l-serie').value}-D${String(+d).padStart(5,'0')}`}
   const vol=+document.getElementById('l-volume').value||1,v=LABEL_VOLUMES.find(x=>x.volume===vol);const m=labMaterial();return `Etiqueta de: ${pcod} · ${pt} · ${fn}${m?' · '+m.texto:''} · volume ${vol} de ${v?.total_volumes||Math.max(1,LABEL_VOLUMES.length)}`}
-function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=document.getElementById('lab-origem'),semFundo=!fcod&&!['caixa','tubo'].includes(labType),pg=document.getElementById('printgrid'),pv=document.getElementById('lab-preview'),bt=document.getElementById('lab-imprimir');
+function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=document.getElementById('lab-origem'),semFundo=!fcod&&!['caixa','tubo'].includes(labType),pg=document.getElementById('printgrid'),pv=document.getElementById('lab-preview'),bt=document.getElementById('lab-imprimir');if(bt)bt.onclick=()=>window.print();
   const lote=['projeto','documento'].includes(labType)?labLote():'um',lista=lote==='folhas'?LABEL_FOLHAS:lote==='pastas'?LABEL_LISTA:lote==='material'?labFolhasMaterial():null;
   if(orig)orig.textContent=semFundo?'Escolha o fundo para ver a etiqueta.':labFrase(lote,lista||[]);
   if(semFundo){pv.innerHTML='<div class="empty">Escolha o fundo (e o projeto) para ver a etiqueta.</div>';pv.classList.remove('grade');if(pg)pg.innerHTML='';if(bt)bt.textContent='Imprimir';return}
@@ -1820,11 +1885,13 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
   if(lista){pv.classList.add('grade');pv.innerHTML=lista.length?lista.slice(0,12).map(a=>`<div class="lab-mini">${labelHTML(0,a)}</div>`).join('')+(lista.length>12?`<div class="lab-mais">e mais ${lista.length-12}</div>`:''):'<div class="empty">Nada para etiquetar aqui.</div>';
     etiquetas=lista.slice(0,600).flatMap(a=>Array.from({length:n},()=>labelHTML(0,a)))}
   else{pv.classList.remove('grade');pv.innerHTML=labelHTML(0);etiquetas=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0))}
-  if(pg)pg.innerHTML=etiquetas.join('');if(bt)bt.textContent=etiquetas.length>1?`Imprimir ${etiquetas.length} etiquetas`:'Imprimir';
+  const niim=!!NIIM_FMT[document.getElementById('l-fmt').value];
+  if(pg)pg.innerHTML=niim?'':etiquetas.join('');if(niim&&pg){const unicas=[...new Set(etiquetas)];pg.innerHTML=unicas.join('')}niimDesenharTodos(pv);
+  if(bt){const qtd=niim?new Set(etiquetas).size:etiquetas.length;bt.textContent=niim?(qtd>1?`Baixar ${qtd} imagens para a NIIMBOT`:'Baixar imagem para a NIIMBOT'):(qtd>1?`Imprimir ${qtd} etiquetas`:'Imprimir');bt.onclick=niim?baixarNiimbot:()=>window.print()}
   /* H21: impressão no tamanho exato (@page) — uma etiqueta por página na impressora de etiquetas, ou várias numa A4 */
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
   {const pp=document.getElementById('l-papel');if(pp&&pp.closest('label'))pp.closest('label').style.display=w==='200'?'none':''}   /* a capa sai sempre numa A4 */
-  const av=document.getElementById('lab-aviso');if(av)av.innerHTML=w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
+  const av=document.getElementById('lab-aviso');if(av)av.innerHTML=niim?'NIIMBOT D110 (não tem driver para o Mac): baixe as imagens e imprima pelo <b>niim.blue</b> no Chrome. Conecte a D110 por Bluetooth ou cabo USB-C, escolha a etiqueta do mesmo tamanho, importe a imagem e imprima. Cada imagem já está no tamanho exato (8 pontos por mm).':w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
   st.textContent=w==='200'?`@media print{@page{size:A4;margin:5mm}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`
     :document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
     :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`}
