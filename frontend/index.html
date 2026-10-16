@@ -1071,7 +1071,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 
   <!-- ETIQUETAS -->
   <section class="content" id="v-etiquetas">
-    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn pri" id="lab-imprimir">Imprimir</button></div></div>
+    <div class="hdr"><div><h1>Etiquetas</h1><p class="sub">Impressão de etiquetas no padrão CAMP com código de barras Code 39, legível por qualquer leitor. A etiqueta física usa o padrão CAMP da embalagem; o vínculo digital continua pelo código arquivístico do projeto e das folhas.</p></div><div class="act"><button class="btn" id="lab-niim-baixar" hidden onclick="baixarNiimbot()">Baixar imagens</button><button class="btn pri" id="lab-imprimir">Imprimir</button></div></div>
     <div class="tabs" id="lab-tabs">
       <button class="on" data-t="projeto">Pasta de projeto</button>
       <button data-t="documento">Folha / documento</button>
@@ -1728,6 +1728,38 @@ async function baixarNiimbot(){const cs=[...document.querySelectorAll('#printgri
   for(const cv of cs){const d=JSON.parse(cv.dataset.niim);if(vistos.has(d.codigo))continue;vistos.add(d.codigo);
     const blob=await new Promise(ok=>cv.toBlob(ok,'image/png'));const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`niimbot-${d.w}x${d.h}-${d.codigo}.png`;a.click();n++;await new Promise(ok=>setTimeout(ok,250))}
   toast(`${n===1?'1 imagem baixada':n+' imagens baixadas'}. Abra niim.blue no Chrome, conecte a D110 e imprima.`,{ms:7000})}
+
+/* Impressão direta na D110 (16/10): o painel manda as imagens para o niimblue-node (servidor REST de código aberto, MIT, testado no Mac
+   com a D110) rodando NESTE computador (http://localhost:5000, com CORS). Ele conecta na impressora por cabo (serial) ou Bluetooth. */
+function niimServidor(){try{return localStorage.getItem('camp.niim.servidor')||'http://localhost:5000'}catch(_){return 'http://localhost:5000'}}
+function niimConexao(v){try{if(v===null)localStorage.removeItem('camp.niim.conexao');else if(v)localStorage.setItem('camp.niim.conexao',JSON.stringify(v));else return JSON.parse(localStorage.getItem('camp.niim.conexao')||'null')}catch(_){return null}}
+async function niimReq(caminho,corpo,ms){const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),ms||15000);
+  try{const r=await fetch(niimServidor()+caminho,{method:corpo?'POST':'GET',headers:corpo?{'Content-Type':'application/json'}:{},body:corpo?JSON.stringify(corpo):undefined,signal:ctl.signal});
+    const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.message||j.error||('a impressora respondeu '+r.status));return j}finally{clearTimeout(t)}}
+function niimAjuda(){return confirmar({titulo:'Servidor da NIIMBOT não encontrado',soOk:true,botao:'Entendi',html:`<p>Para imprimir direto, este computador precisa estar rodando o servidor de impressão da NIIMBOT (<b>niimblue-node</b>) em <code>${escHtml(niimServidor())}</code>.</p>
+  <p><b>Instalar (uma vez, no Mac da impressora):</b> no Terminal, dentro da pasta do camp-painel, rode <code>bash scripts/niimbot_mac.sh</code>. Ele instala e deixa o servidor ligando sozinho.</p>
+  <p><b>Já instalado?</b> Ligue com <code>niimblue-cli server --cors</code> no Terminal.</p><p>Enquanto isso, use <b>Baixar imagens</b> e imprima pelo niim.blue.</p>`})}
+async function niimEscolherImpressora(){toast('Procurando a NIIMBOT (cabo e Bluetooth)…',{ms:6000});
+  const achados=[];for(const tr of ['serial','ble']){try{const j=await niimReq('/scan',{transport:tr,timeout:5000},20000);(j.devices||[]).forEach(d=>{const end=tr==='ble'?(d.name||d.address):(d.path||d.address||d.name);if(end&&(tr==='ble'?/niim|d110|^d1|^b/i.test(String(d.name||'')):true))achados.push({transport:tr,address:String(end),nome:String(d.name||d.manufacturer||end)})})}catch(_){}}
+  if(!achados.length){await confirmar({titulo:'NIIMBOT não encontrada',soOk:true,botao:'Entendi',html:'<p>Ligue a D110 e conecte o cabo USB-C (ou deixe o Bluetooth do Mac ligado) e tente de novo. No Bluetooth, o Terminal (ou o serviço) precisa de permissão em Ajustes → Privacidade e Segurança → Bluetooth.</p>'});return null}
+  const r=await confirmar({titulo:'Qual impressora?',botao:'Usar esta',opcoes:achados.map((a,i)=>({valor:String(i),rotulo:a.nome,explica:a.transport==='ble'?'Bluetooth':'Cabo USB · '+a.address}))});
+  if(!r||r.valor===undefined)return null;const a=achados[+r.valor];return {transport:a.transport,address:a.address}}
+async function imprimirNiimbot(){const bt=document.getElementById('lab-imprimir'),pg=document.getElementById('printgrid');
+  const cs=[...pg.querySelectorAll('canvas[data-niim]')];if(!cs.length){toast('Escolha o que etiquetar primeiro');return}
+  try{await niimReq('/connected',null,4000)}catch(_){await niimAjuda();return}
+  const txt0=bt.textContent;bt.disabled=true;bt.setAttribute('aria-busy','true');
+  try{const st=await niimReq('/connected');
+    if(!st.connected){let cx=niimConexao();let ok=false;
+      if(cx){bt.textContent='Conectando…';try{await niimReq('/connect',cx,30000);ok=true}catch(_){niimConexao(null)}}
+      if(!ok){cx=await niimEscolherImpressora();if(!cx)return;bt.textContent='Conectando…';await niimReq('/connect',cx,30000);niimConexao(cx)}}
+    niimDesenharTodos(pg);const qt=window.NIIM_QTD||[];   /* cópias: quantas vezes cada etiqueta aparece (folha avulsa com cópias = sequência D00019, D00020…, uma de cada) */
+    const pages=cs.map((cv,i)=>({imageBase64:cv.toDataURL('image/png').split(',')[1],quantity:qt[i]||1})),total=pages.reduce((a,p)=>a+p.quantity,0);
+    let dens=2;try{dens=+(localStorage.getItem('camp.niim.densidade')||2)||2}catch(_){}
+    bt.textContent=`Imprimindo ${total}…`;
+    await niimReq('/print',{printDirection:'left',labelType:1,density:dens,pages},Math.max(60000,total*8000));
+    toast(`✔ ${total===1?'1 etiqueta impressa':total+' etiquetas impressas'} na NIIMBOT`,{ms:5000})}
+  catch(e){toast('NIIMBOT: '+e.message,{ms:8000})}
+  finally{bt.disabled=false;bt.removeAttribute('aria-busy');bt.textContent=txt0}}
 let labType='projeto';function labTipoAtual(){return labType}
 document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
@@ -1891,12 +1923,13 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
     etiquetas=lista.slice(0,600).flatMap(a=>Array.from({length:n},()=>labelHTML(0,a)))}
   else{pv.classList.remove('grade');pv.innerHTML=labelHTML(0);etiquetas=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0))}
   const niim=!!NIIM_FMT[document.getElementById('l-fmt').value];
-  if(pg)pg.innerHTML=niim?'':etiquetas.join('');if(niim&&pg){const unicas=[...new Set(etiquetas)];pg.innerHTML=unicas.join('')}niimDesenharTodos(pv);
-  if(bt){const qtd=niim?new Set(etiquetas).size:etiquetas.length;bt.textContent=niim?(qtd>1?`Baixar ${qtd} imagens para a NIIMBOT`:'Baixar imagem para a NIIMBOT'):(qtd>1?`Imprimir ${qtd} etiquetas`:'Imprimir');bt.onclick=niim?baixarNiimbot:()=>window.print()}
+  if(pg)pg.innerHTML=niim?'':etiquetas.join('');if(niim&&pg){const cont=new Map();etiquetas.forEach(h=>cont.set(h,(cont.get(h)||0)+1));pg.innerHTML=[...cont.keys()].join('');window.NIIM_QTD=[...cont.values()]}niimDesenharTodos(pv);
+  if(bt){const qtd=niim?new Set(etiquetas).size:etiquetas.length;bt.textContent=niim?(qtd>1?`Imprimir ${qtd} na NIIMBOT`:'Imprimir na NIIMBOT'):(qtd>1?`Imprimir ${qtd} etiquetas`:'Imprimir');bt.onclick=niim?imprimirNiimbot:()=>window.print()}
+  {const bb=document.getElementById('lab-niim-baixar');if(bb)bb.hidden=!niim}
   /* H21: impressão no tamanho exato (@page) — uma etiqueta por página na impressora de etiquetas, ou várias numa A4 */
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
   {const pp=document.getElementById('l-papel');if(pp&&pp.closest('label'))pp.closest('label').style.display=w==='200'?'none':''}   /* a capa sai sempre numa A4 */
-  const av=document.getElementById('lab-aviso');if(av)av.innerHTML=niim?'NIIMBOT D110 (não tem driver para o Mac): baixe as imagens e imprima pelo <b>niim.blue</b> no Chrome. Conecte a D110 por Bluetooth ou cabo USB-C, escolha a etiqueta do mesmo tamanho, importe a imagem e imprima. Cada imagem já está no tamanho exato (8 pontos por mm).':w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
+  const av=document.getElementById('lab-aviso');if(av)av.innerHTML=niim?'NIIMBOT D110: <b>Imprimir na NIIMBOT</b> manda as etiquetas para o servidor de impressão deste computador (niimblue-node, instalado uma vez com <code>scripts/niimbot_mac.sh</code>), que fala com a D110 pelo cabo USB-C ou Bluetooth. Sem o servidor: <b>Baixar imagens</b> e imprimir pelo niim.blue no Chrome.':w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
   st.textContent=w==='200'?`@media print{@page{size:A4;margin:5mm}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`
     :document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
     :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`}
