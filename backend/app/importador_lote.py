@@ -224,7 +224,12 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
 
     tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
-    existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site FROM item WHERE projeto_codigo=?", (proj,))}
+    existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site, lote_id FROM item WHERE projeto_codigo=?", (proj,))}
+    try:
+        complemento = bool((json.loads(lote["resultado"] or "{}") or {}).get("complemento"))
+    except ValueError:
+        complemento = False
+    em_outro_lote = 0
     criados = atualizados = ignoradas = 0
     problemas: list[str] = []
     duplicatas: list[tuple] = []
@@ -263,6 +268,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                                        "existente_lote": col["lote_id"], "existente_revisao": col["revisao"], "existente_status": col["status_site"],
                                        "existente_titulo": col["titulo"], "titulo": (d.get("titulo") or "").strip() or None})
                 continue
+        if complemento and cod in existentes and existentes[cod]["lote_id"] not in (None, lote_id):
+            em_outro_lote += 1                                     # lote de COMPLEMENTO: só traz as folhas novas; o que já é de outro lote (publicado, aprovado…) não se mexe
+            continue
         if cod not in existentes:
             velha = con.execute("SELECT codigo, lote_id, status_site, tainacan_item_id FROM item WHERE projeto_codigo=? AND sequencial=? AND codigo<>?",
                                 (proj, seq, cod)).fetchone()
@@ -346,6 +354,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
+    if complemento:
+        resumo["complemento"] = True
+        resumo["ja_em_outros_lotes"] = em_outro_lote
+        con.execute("UPDATE lista_processamento SET folhas_encontradas=(SELECT count(*) FROM item WHERE lote_id=?) WHERE id=?", (lote_id, lote_id))
     if novas_colisoes:                                         # "Mais inteligência" (1): o lote repete números que o projeto já usa → pergunta
         resumo["decisao_colisao"] = abrir_colisao(con, lote, proj, novas_colisoes, docs)
     if novas_colisoes or esperando:
