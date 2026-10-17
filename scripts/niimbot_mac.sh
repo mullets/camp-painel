@@ -18,8 +18,12 @@ fi
 
 echo "== 2/4 Node.js"
 if ! command -v node >/dev/null 2>&1; then
-  if command -v brew >/dev/null 2>&1; then brew install node
-  else echo "Instale o Node.js (versão LTS) em https://nodejs.org e rode este script de novo."; exit 1; fi
+  # NÃO usa o Homebrew: em macOS antigo (ex.: Big Sur, Intel) o brew compila o Node do zero e quebra (sphinx-doc / pip).
+  echo "Falta o Node.js. Baixe o instalador oficial (.pkg) da versão 22 LTS, que funciona do macOS 11 em diante:"
+  echo "   https://nodejs.org/dist/latest-v22.x/   →  o arquivo node-v22.….pkg"
+  echo "Instale (duplo clique), feche e abra o Terminal e rode este script de novo."
+  open "https://nodejs.org/dist/latest-v22.x/" 2>/dev/null || true
+  exit 1
 fi
 node -v
 
