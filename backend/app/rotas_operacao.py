@@ -765,9 +765,27 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     saida = {"pasta": str(pasta), "codigo": cod, "etapa": etapa_alvo, "folhas": n_arq, "aviso": aviso}
 
     ex = con.execute(
-        "SELECT id, etapa, folhas_encontradas FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1",
+        "SELECT id, nome, etapa, folhas_encontradas, aprovado_em, resultado FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1",
         (str(pasta),),
     ).fetchone()
+
+    # Lote JÁ fechado (aprovado, em rascunho ou publicado) e o CAMP Vision trouxe folhas que o painel ainda não tem: é MATERIAL NOVO do mesmo
+    # projeto (a pasta do projeto recebe material várias vezes). Vira um lote novo em revisão, sem tocar no que já está fechado.
+    if ex and etapa_alvo == "revisao" and (ex["etapa"] in ("publicado", "rascunho") or ex["aprovado_em"]):
+        novos = _documentos_novos(con, pasta, cod, ex["id"])
+        if novos:
+            return _criar_lote_complemento(con, pasta, cod, nome, ex, novos, contexto, status, saida)
+
+    ex_res: dict = {}
+    if ex:
+        try:
+            ex_res = json.loads(ex["resultado"] or "{}") or {}
+        except ValueError:
+            ex_res = {}
+    if ex_res.get("complemento"):                          # lote de complemento: a marca e a contagem são DELE, não da pasta inteira
+        contexto.update({k: ex_res[k] for k in ("complemento", "lote_cv", "lote_origem", "novos") if k in ex_res})
+        n_arq = ex["folhas_encontradas"] or 0
+        saida["folhas"] = n_arq
 
     if ex:
         if ex["etapa"] not in ("publicado", "rascunho") and ex["etapa"] != etapa_alvo:   # nunca regride lote já publicado/em rascunho
@@ -818,6 +836,41 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     return {**saida, "acao": "nova"}
 
 
+def _documentos_novos(con, pasta: Path, cod: str, lote_id: int) -> list[str]:
+    """Códigos que o pacote do CAMP Vision traz para o projeto e o painel ainda NÃO tem como folha.
+    Não conta a folha que espera uma decisão de "lote colide" (ela não existe de propósito) nem pacote ilegível/ausente."""
+    from .importador_lote import colisoes_decididas, ler_pacote
+    try:
+        pacote = ler_pacote(pasta)
+    except HTTPException:
+        return []
+    docs = (pacote or {}).get("documentos") if isinstance((pacote or {}).get("documentos"), list) else (pacote or {}).get("itens")
+    if not isinstance(docs, list) or (pacote or {}).get("projeto_codigo") != cod:
+        return []
+    tem = {r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (cod,))}
+    cobertas = set(colisoes_decididas(con, lote_id))
+    return [c for c in (str(d.get("codigo") or "") for d in docs if isinstance(d, dict)) if c.startswith(cod + "-") and c not in tem and c not in cobertas]
+
+
+def _criar_lote_complemento(con, pasta: Path, cod: str, nome: str, ex, novos: list[str], contexto: dict, status, saida: dict) -> dict:
+    """Cria o lote NOVO (em revisão) do material que chegou a um projeto cujo lote já está fechado. Mesma pasta, mesmo projeto."""
+    from datetime import date
+    quando = date.today().strftime("%d/%m")
+    nome_c = f"{nome} — complemento de {quando} ({len(novos)} folha{'s' if len(novos) != 1 else ''})"
+    lote_cv = status.get("lote_atual") if isinstance(status, dict) else None
+    ctx = {**contexto, "complemento": True, "lote_cv": lote_cv, "lote_origem": ex["id"], "novos": len(novos)}
+    lid = con.execute(
+        """INSERT INTO lista_processamento
+           (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json, resultado)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (nome_c, cod, str(pasta), None, len(novos), "revisao", (status or {}).get("status") if isinstance(status, dict) else "pronto_campvision2",
+         json.dumps(ctx, ensure_ascii=False)),
+    ).lastrowid
+    _evento(con, "lista", lid, EVENTO_POR_ETAPA["revisao"], "campvision2", {"pasta": str(pasta), "arquivos": len(novos), "complemento": True, "lote_origem": ex["id"]})
+    _evento(con, "projeto", cod, "material_novo_pronto", "campvision2", {"complemento": True, "lote_id": lid, "folhas": len(novos), "lote_origem": ex["id"], "lote_cv": lote_cv})
+    return {**saida, "acao": "complemento", "lote_id": lid, "folhas": len(novos), "novos": len(novos), "lote_origem": ex["id"], "nome_lote": nome_c}
+
+
 def ler_pasta_do_aviso(con, pasta_txt: str, codigo: str | None) -> dict:
     """Aviso do CAMP Vision: relê SÓ esta pasta. Recusa (400) a própria raiz e qualquer caminho que escape dela."""
     raiz = _qnap_prontos_raiz()
@@ -837,7 +890,7 @@ def ler_pasta_do_aviso(con, pasta_txt: str, codigo: str | None) -> dict:
     r = _ler_pasta(con, alvo, Path(entrada_txt) if entrada_txt else None, codigo)
     if r["acao"] == "entrada":
         return {"ok": False, "acao": "ignorada", "pasta": str(alvo), "motivo": "pasta da entrada bruta: o painel só lê o material final"}
-    r["ok"] = r["acao"] in ("nova", "atualizada", "igual")
+    r["ok"] = r["acao"] in ("nova", "atualizada", "igual", "complemento")
     if r["ok"] and r.get("etapa") == "revisao":
         r["importacao"] = _importar_se_tem_pacote(con, alvo)
     return r
@@ -849,8 +902,10 @@ def _importar_se_tem_pacote(con, pasta: Path) -> dict | None:
     lote aprovado não é tocado."""
     from .importador_lote import importar_lote, ler_pacote
     l = con.execute("SELECT id, aprovado_em FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1", (str(pasta),)).fetchone()
-    if not l or l["aprovado_em"]:
+    if not l:
         return None
+    if l["aprovado_em"]:
+        return {"ignorado": "lote aprovado: não há folha nova para importar"}   # o aviso diz o que aconteceu (antes ficava silencioso)
     try:
         if ler_pacote(pasta) is None:
             return None
@@ -916,7 +971,7 @@ def _varrer_qnap() -> dict:
             avisos.append({"pasta": r["pasta"], "motivo": r["aviso"]})
         n_processando += r["etapa"] == "processando"
         n_erro += r["etapa"] == "erro"
-        novas += r["acao"] == "nova"
+        novas += r["acao"] in ("nova", "complemento")
         atualizadas += r["acao"] == "atualizada"
 
     con.commit()
