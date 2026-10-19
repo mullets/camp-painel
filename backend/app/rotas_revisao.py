@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auth, giro_imagem as imagens
+from . import ajuste_imagem as ajuste, auth, giro_imagem as imagens
 from .db import connect
 from .importador_lote import importar_lote, ler_pacote, tirar_projeto_divergente
 from .rotas_operacao import _qnap_prontos_raiz
@@ -421,7 +421,7 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh e tente de novo")
     con = connect()
     try:
-        i = con.execute("SELECT i.giro_manual, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        i = con.execute(f"SELECT {_COLS_AJUSTE}, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
         no_site = i["status_site"] in ("rascunho", "no_ar")
@@ -430,14 +430,16 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         if i["aprovado_em"] and not no_site:
             raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
         novo = ((i["giro_manual"] or 0) + d.graus) % 360
+        rec, ang = ajuste.depois_do_giro(*ajuste.ler(i), d.graus)       # 19/10: com recorte, a caixa gira junto
         site = None
         if no_site:                                   # primeiro o site; o painel só grava se o site aceitou
             from . import publicador
             try:
-                site = publicador.girar_imagem_no_site(codigo, novo)
+                site = publicador.girar_imagem_no_site(codigo, novo, (rec, ang))
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(502, f"O site não aceitou a imagem girada, e nada foi mudado no painel: {str(e)[:240]}")
         con.execute("UPDATE item SET giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, codigo))
+        _regravar_ajuste(con, i, novo, imagens.espelho_efetivo(i), rec, ang)
         if site:
             _evento(con, "item", codigo, "giro_no_site", u["email"], {"de": i["giro_manual"], "para": novo, "anexo": site["media_id"]})
         else:
@@ -457,7 +459,7 @@ def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
         raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh e tente de novo")
     con = connect()
     try:
-        i = con.execute("SELECT i.giro_manual, i.espelhado, i.espelho_manual, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        i = con.execute(f"SELECT {_COLS_AJUSTE}, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
         if i["aprovado_em"]:
@@ -467,6 +469,7 @@ def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
         antes = imagens.espelho_efetivo(i)
         novo, giro = (0 if antes else 1), (-(i["giro_manual"] or 0)) % 360
         con.execute("UPDATE item SET espelho_manual=?, giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, giro, codigo))
+        _regravar_ajuste(con, i, giro, bool(novo), *ajuste.depois_do_espelho(*ajuste.ler(i)))      # 19/10: com recorte, a caixa espelha junto
         _evento(con, "item", codigo, "espelho", u["email"], {"de": int(antes), "para": novo, "giro": giro})
         con.commit()
         return {"espelhar": bool(novo), "giro_manual": giro}
@@ -534,11 +537,12 @@ def jpg_da_folha_no_qnap(raiz, rel):
 
 
 @router.get("/itens/{codigo}/previa")
-def previa(codigo: str, t: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
-    """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta."""
+def previa(codigo: str, t: int = 0, o: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+    """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta.
+    19/10: folha com recorte/alinhamento serve o JPG corrigido do painel (o = 1: sem o ajuste, para a tela de recortar)."""
     con = connect()
     try:
-        i = con.execute("SELECT pendencias, giro_manual, arquivo_jpg, espelhado, espelho_manual FROM item WHERE codigo=?", (codigo,)).fetchone()
+        i = con.execute(f"SELECT {_COLS_AJUSTE.replace('i.', '')} FROM item WHERE codigo=?", (codigo,)).fetchone()
     finally:
         con.close()
     try:
@@ -558,11 +562,160 @@ def previa(codigo: str, t: int = 0, u: dict = Depends(auth.exige("leitura"))) ->
         raise HTTPException(404, "Sem prévia")
     giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
     esp = bool(i) and imagens.espelho_efetivo(i)
-    if (giro or esp) and not imagens.disponivel():
+    rec, ang = ajuste.ler(i) if i and not o else (None, 0.0)
+    if (giro or esp or ajuste.tem_ajuste(rec, ang)) and not imagens.disponivel():
         raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh")
+    if ajuste.tem_ajuste(rec, ang):                    # o JPG corrigido (gera de novo se sumiu ou se a origem mudou)
+        try:
+            alvo, rel = ajuste.garantir(codigo, alvo, giro, esp, ang, rec)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(500, f"Não consegui preparar a imagem recortada: {str(e)[:120]}")
+        giro, esp = 0, False
+        if rel != i["imagem_corrigida"]:
+            c2 = connect()
+            try:
+                c2.execute("UPDATE item SET imagem_corrigida=? WHERE codigo=?", (rel, codigo)); c2.commit()
+            finally:
+                c2.close()
     if (giro or lado or esp) and imagens.disponivel():
         try:
             alvo = imagens.jpeg_girado(alvo, giro, lado or None, esp)
         except Exception as e:  # noqa: BLE001  (arquivo corrompido, disco cheio...)
             raise HTTPException(500, f"Não consegui preparar a imagem: {str(e)[:120]}")
     return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})
+
+
+# ---------------- 19/10 · recorte e alinhamento manual ----------------
+_COLS_AJUSTE = ("i.codigo, i.pendencias, i.giro_manual, i.arquivo_jpg, i.espelhado, i.espelho_manual, i.recorte, i.alinhamento, i.imagem_corrigida")
+
+
+def _regravar_ajuste(con, i, giro: int, esp: bool, rec, ang) -> str | None:
+    """Grava recorte/ângulo e (re)gera o JPG corrigido para o giro/espelho novos. Sem ajuste: limpa tudo (a folha volta à imagem do CAMP Vision)."""
+    rel = None
+    if ajuste.tem_ajuste(rec, ang):
+        origem = ajuste.origem_da_folha(_qnap_prontos_raiz(), i)
+        if origem is not None:
+            rel = ajuste.garantir(i["codigo"], origem, giro, esp, ang, rec)[1]
+    con.execute("UPDATE item SET recorte=?, alinhamento=?, imagem_corrigida=? WHERE codigo=?", (ajuste.para_gravar(rec), ang or 0, rel, i["codigo"]))
+    return rel
+
+
+class Ajuste(BaseModel):
+    recorte: dict | None = None     # {"x","y","w","h"} em frações (0–1); None = a imagem inteira
+    angulo: float = 0               # -10 a +10, positivo = horário
+
+
+@router.post("/itens/{codigo}/ajuste")
+def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Recorta e/ou endireita a folha. Guarda os parâmetros na folha e GERA o JPG corrigido (diretório de dados do painel), que passa a
+    ser a imagem da folha na prévia, nas miniaturas, nos pedidos em JPG e no site. O TIF e os arquivos do CAMP Vision não mudam.
+    Recorte inteiro e ângulo 0 = desfazer (volta à imagem do CAMP Vision). Mesmas regras do giro: lote aprovado recusa; folha no site,
+    só admin, e a imagem do site é trocada (mesmo anexo); se o site recusar, o painel grava e fica uma pendência para reenviar."""
+    if not imagens.disponivel():
+        raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh e tente de novo")
+    try:
+        rec, ang = ajuste.normalizar(d.recorte, d.angulo)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    con = connect()
+    try:
+        i = con.execute(f"SELECT {_COLS_AJUSTE}, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        no_site = i["status_site"] in ("rascunho", "no_ar")
+        if no_site and u["papel"] not in ("admin", "master"):
+            raise HTTPException(409, "Esta folha já está no site: só um admin pode mudar a imagem de lá. Peça a um admin")
+        if i["aprovado_em"] and not no_site:
+            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
+        antes = ajuste.ler(i)
+        reenviar = no_site and con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (codigo,)).fetchone()
+        if (rec, ang) == antes and not reenviar:      # nada mudou (com pendência no site, aplicar de novo reenvia)
+            return {"recorte": rec, "angulo": ang, "imagem_corrigida": bool(i["imagem_corrigida"]), "no_site": False, "mudou": False}
+        giro, esp = i["giro_manual"] or 0, imagens.espelho_efetivo(i)
+        if ajuste.tem_ajuste(rec, ang):
+            origem = ajuste.origem_da_folha(_qnap_prontos_raiz(), i)
+            if origem is None:
+                raise HTTPException(404, "A imagem desta folha não está no QNAP: sem ela não dá para recortar")
+            try:
+                ajuste.garantir(codigo, origem, giro, esp, ang, rec)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(500, f"Não consegui gerar a imagem recortada: {str(e)[:160]}")
+        site, pendencia = None, None
+        if no_site:                                   # a imagem do site acompanha; se o site recusar, o painel grava e fica a pendência
+            from . import publicador
+            try:
+                site = publicador.girar_imagem_no_site(codigo, giro, (rec, ang))
+            except Exception as e:  # noqa: BLE001
+                pendencia = f"A imagem nova não foi para o site: {str(e)[:200]}"
+                publicador._pendencia(con, "item", codigo, "pendente_imagem_ajustada", pendencia + ". Aplique de novo para reenviar")
+        rel = _regravar_ajuste(con, i, giro, esp, rec, ang)
+        con.execute("UPDATE item SET atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+        if site:
+            con.execute("UPDATE divergencia_site SET resolvida=1 WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (codigo,))
+        det = {"de": {"recorte": antes[0], "angulo": antes[1]}, "para": {"recorte": rec, "angulo": ang}}
+        if rel:
+            det["arquivo"] = rel
+        if site:
+            det["anexo"] = site["media_id"]
+        if pendencia:
+            det["site"] = pendencia
+        _evento(con, "item", codigo, "ajuste_imagem" if ajuste.tem_ajuste(rec, ang) else "ajuste_desfeito", u["email"], det)
+        con.commit()
+        return {"recorte": rec, "angulo": ang, "imagem_corrigida": bool(rel), "no_site": bool(site), "pendencia": pendencia, "mudou": True}
+    finally:
+        con.close()
+
+
+@router.get("/itens/{codigo}/ajuste")
+def ver_ajuste(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """O recorte/ângulo gravados e a orientação (giro/espelho) da folha: a tela de recortar parte daqui (o giro pode ter mudado a caixa)."""
+    con = connect()
+    try:
+        i = con.execute(f"SELECT {_COLS_AJUSTE} FROM item i WHERE i.codigo=?", (codigo,)).fetchone()
+    finally:
+        con.close()
+    if not i:
+        raise HTTPException(404, "Folha não existe")
+    rec, ang = ajuste.ler(i)
+    return {"recorte": rec, "angulo": ang, "giro_manual": i["giro_manual"] or 0, "espelhar": imagens.espelho_efetivo(i), "imagem_corrigida": bool(i["imagem_corrigida"])}
+
+
+@router.get("/itens/{codigo}/ajuste/sugerir")
+def sugerir_ajuste(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """"Endireitar automaticamente": sugere o ângulo fino (não grava nada; a pessoa confere e aplica)."""
+    if not imagens.disponivel():
+        raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh e tente de novo")
+    con = connect()
+    try:
+        i = con.execute(f"SELECT {_COLS_AJUSTE} FROM item i WHERE i.codigo=?", (codigo,)).fetchone()
+    finally:
+        con.close()
+    if not i:
+        raise HTTPException(404, "Folha não existe")
+    origem = ajuste.origem_da_folha(_qnap_prontos_raiz(), i)
+    if origem is None:
+        raise HTTPException(404, "A imagem desta folha não está no QNAP")
+    try:
+        return {"angulo": ajuste.sugerir_angulo(origem, i["giro_manual"] or 0, imagens.espelho_efetivo(i))}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Não consegui analisar a imagem: {str(e)[:120]}")
+
+
+@router.get("/itens/{codigo}/imagem-corrigida")
+def baixar_corrigida(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+    """O JPG corrigido da folha em tamanho cheio, para baixar (pedidos em JPG). Folha sem recorte/alinhamento: 404."""
+    con = connect()
+    try:
+        i = con.execute(f"SELECT {_COLS_AJUSTE} FROM item i WHERE i.codigo=?", (codigo,)).fetchone()
+    finally:
+        con.close()
+    rec, ang = ajuste.ler(i) if i else (None, 0.0)
+    if not ajuste.tem_ajuste(rec, ang):
+        raise HTTPException(404, "Esta folha não tem imagem corrigida (não foi recortada nem alinhada)")
+    origem = ajuste.origem_da_folha(_qnap_prontos_raiz(), i)
+    alvo = ajuste.caminho_gravado(i["imagem_corrigida"])
+    if origem is not None:
+        alvo = ajuste.garantir(codigo, origem, i["giro_manual"] or 0, imagens.espelho_efetivo(i), ang, rec)[0]
+    if alvo is None:
+        raise HTTPException(404, "A imagem desta folha não está no QNAP")
+    return FileResponse(alvo, media_type="image/jpeg", filename=f"{codigo}.jpg")

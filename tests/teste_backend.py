@@ -13,8 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre"}
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "projeto_divergente"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento"}
 
 
 def rodar(modo, db):
@@ -7143,6 +7142,136 @@ def filho(modo):
         ver("conferir o endereço no site parte do melhor endereço conhecido (o do espelho), não do título novo", palpites == ["https://camp.arq.br/acervo/projetos/f099-p0002-titulo-antigo/"], str(palpites))
         for l in res: print(l)
         c.close()
+    elif modo == "recorte_alinhamento":
+        # 19/10: recortar e alinhar a folha na revisão. O painel guarda os parâmetros E gera um JPG corrigido (no diretório de dados do painel),
+        # que passa a ser a imagem da folha (prévia, miniatura, pedido em JPG, site). O TIF e a prévia do CAMP Vision nunca mudam.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, shutil, io, hashlib
+        from pathlib import Path as _P
+        from app import auth, publicador, ajuste_imagem
+        from PIL import Image, ImageDraw, ImageStat
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = _P(os.environ["CAMP_DB_PATH"]).parent
+        prontos = base / "prontos_recorte"; shutil.rmtree(prontos, ignore_errors=True)
+        os.environ["CAMP_CACHE_DIR"] = str(prontos / "cache")
+        corrigidas = base / "imagens_corrigidas"; shutil.rmtree(corrigidas, ignore_errors=True)
+        P = "F026-P0093"; D = lambda n: f"{P}-1975-S01-D{n:05d}"
+        def torta(caminho):
+            # folha "torta": 400x300 branca com um retângulo PRETO 200x100 no centro (100,100)-(300,200), girada 5° anti-horário (como veio do scanner)
+            im = Image.new("RGB", (400, 300), "white"); ImageDraw.Draw(im).rectangle((100, 100, 299, 199), fill="black")
+            im = im.rotate(5, resample=Image.Resampling.BICUBIC, expand=False, fillcolor="white")
+            caminho.parent.mkdir(parents=True, exist_ok=True); im.save(caminho, "JPEG", quality=95)
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',93)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?,'F026',93,'Casa Torta',1975,9200)", (P,))
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote 1',?,'/nao/existe','revisao')", (P,)).lastrowid
+        lote_ap = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES ('Lote 2',?,'/nao/existe','publicado',datetime('now'),'adm')", (P,)).lastrowid
+        def folha(n, lt, st="nao_publicado", tid=None, media=None):
+            rel = f"_campvision/preview/{P}/{D(n)}.jpg"; torta(prontos / rel)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id,site_media_id,lote_id,revisao,pendencias) VALUES (?,?,?,?,?,'campvision',?,?,?,?,'pendente',?)",
+                      (D(n), P, "S01", n, "Planta", st, tid, media, lt, _j.dumps({"previa": rel})))
+            return prontos / rel
+        orig1 = folha(1, lote); folha(2, lote_ap); folha(3, lote_ap, "no_ar", 7003, 5553)
+        c.commit()
+        hash_orig = hashlib.sha1(orig1.read_bytes()).hexdigest()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        img = lambda r: Image.open(io.BytesIO(r.content)).convert("L")
+        escuro = lambda im, xy: im.getpixel(xy) < 90
+        cantos = lambda im: [(3, 3), (im.size[0] - 4, 3), (3, im.size[1] - 4), (im.size[0] - 4, im.size[1] - 4)]
+        col = lambda cod, k: c.execute(f"SELECT {k} FROM item WHERE codigo=?", (cod,)).fetchone()[0]
+        nev = lambda cod, t: c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo=?", (cod, t)).fetchone()[0]
+        CAIXA = {"x": 0.25, "y": 1 / 3, "w": 0.5, "h": 1 / 3}           # o retângulo, em frações da imagem endireitada
+        # ---------- antes: a folha é a prévia do CAMP Vision ----------
+        r0 = op.get(f"/api/itens/{D(1)}/previa")
+        ver("sem ajuste: a prévia é a do CAMP Vision (400x300)", r0.status_code == 200 and img(r0).size == (400, 300))
+        # ---------- endireitar automaticamente ----------
+        s = op.get(f"/api/itens/{D(1)}/ajuste/sugerir")
+        ver("'Endireitar automaticamente' sugere ~5° (a folha veio 5° anti-horário) e não grava nada", s.status_code == 200 and abs(s.json()["angulo"] - 5) <= 0.3 and col(D(1), "alinhamento") == 0, s.text)
+        ver("leitura não sugere nem ajusta (403)", le.get(f"/api/itens/{D(1)}/ajuste/sugerir").status_code == 403 and le.post(f"/api/itens/{D(1)}/ajuste", json={"angulo": 1}).status_code == 403)
+        # ---------- limites ----------
+        lim = [op.post(f"/api/itens/{D(1)}/ajuste", json=b) for b in ({"angulo": 10.5}, {"angulo": -11}, {"recorte": {"x": 0, "y": 0, "w": 0.01, "h": 0.5}},
+                                                                       {"recorte": {"x": 0.8, "y": 0, "w": 0.5, "h": 0.5}}, {"recorte": {"x": -0.1, "y": 0, "w": 0.5, "h": 0.5}}, {"recorte": {"x": "a"}})]
+        ver("limites: ângulo fora de -10..+10, recorte pequeno demais, fora da imagem ou inválido = 400 com frase; nada gravado",
+            all(r.status_code == 400 for r in lim) and "10" in lim[0].json().get("erro", lim[0].text) and col(D(1), "recorte") is None and col(D(1), "alinhamento") == 0 and nev(D(1), "ajuste_imagem") == 0, str([r.status_code for r in lim]))
+        # ---------- aplicar: recorte + ângulo ----------
+        r = op.post(f"/api/itens/{D(1)}/ajuste", json={"recorte": CAIXA, "angulo": 5})
+        ver("operador aplica recorte + 5°: 200, gravado na folha (ângulo e caixa) e o JPG corrigido registrado",
+            r.status_code == 200 and r.json()["imagem_corrigida"] is True and col(D(1), "alinhamento") == 5 and _j.loads(col(D(1), "recorte"))["w"] == 0.5 and col(D(1), "imagem_corrigida"), r.text)
+        arq = corrigidas / col(D(1), "imagem_corrigida")
+        ver("o JPG corrigido existe no diretório de dados do painel (fora do QNAP) e tem o tamanho do recorte (200x100)",
+            arq.is_file() and prontos not in arq.parents and Image.open(arq).size == (200, 100), str(arq))
+        ver("a prévia do CAMP Vision (o 'original' no QNAP) NÃO foi tocada", hashlib.sha1(orig1.read_bytes()).hexdigest() == hash_orig)
+        r1 = op.get(f"/api/itens/{D(1)}/previa?g=0&a=1")
+        p1 = img(r1)
+        ver("a prévia agora É o JPG corrigido: 200x100, o retângulo ficou RETO e ocupa tudo (os 4 cantos e o centro escuros)",
+            r1.status_code == 200 and p1.size == (200, 100) and all(escuro(p1, xy) for xy in cantos(p1)) and ImageStat.Stat(p1).mean[0] < 60 and r1.content == arq.read_bytes(), f"{p1.size} média {ImageStat.Stat(p1).mean[0]:.0f}")
+        so_recorte, _ = ajuste_imagem.garantir(D(1), orig1, 0, False, 0.0, ajuste_imagem.normalizar(CAIXA, 0)[0])
+        sr = Image.open(so_recorte).convert("L")
+        ver("controle: só recortar, sem endireitar, deixa cantos claros (o ângulo é que endireita)", sum(not escuro(sr, xy) for xy in cantos(sr)) >= 2, str([sr.getpixel(xy) for xy in cantos(sr)]))
+        mini = img(op.get(f"/api/itens/{D(1)}/previa?t=120"))
+        ver("a miniatura também sai do corrigido (120x60)", mini.size == (120, 60) and escuro(mini, (3, 3)), str(mini.size))
+        ro = img(op.get(f"/api/itens/{D(1)}/previa?o=1"))
+        ver("o=1 (tela de recortar) mostra a imagem SEM o ajuste (400x300)", ro.size == (400, 300))
+        bx = le.get(f"/api/itens/{D(1)}/imagem-corrigida")
+        ver("baixar o JPG corrigido (pedidos em JPG): 200, o mesmo arquivo, com nome do código", bx.status_code == 200 and bx.content == arq.read_bytes() and f"{D(1)}.jpg" in bx.headers.get("content-disposition", ""), str(bx.status_code))
+        k = connect(); i1 = k.execute("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (D(1),)).fetchone()
+        cam, lado = publicador.imagem_pronta_para_o_site(k, i1); k.close()
+        pub = Image.open(cam).convert("L")
+        ver("a imagem que vai ao SITE sai do corrigido (200x100, reta)", pub.size == (200, 100) and all(escuro(pub, xy) for xy in cantos(pub)), str(pub.size))
+        sid = c.execute("INSERT INTO solicitacao (solicitante, finalidade) VALUES ('Fulano','pesquisa')").lastrowid
+        c.execute("INSERT INTO solicitacao_item (solicitacao_id, codigo, formato) VALUES (?,?,'jpg_3000')", (sid, D(1))); c.commit()
+        from app.rotas_pedidos import pacote
+        pk = pacote(c, sid)
+        ver("pacote do pedido em JPG aponta o JPG corrigido para baixar", pk["linhas"][0]["jpg_corrigido"] == f"/api/itens/{D(1)}/imagem-corrigida", str(pk["linhas"]))
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE codigo=? AND tipo='ajuste_imagem'", (D(1),)).fetchall()
+        ver("histórico: evento 'ajuste_imagem' com quem fez, o antes e o depois", len(ev) == 1 and ev[0][0] == "op@camp.arq.br" and _j.loads(ev[0][1])["para"]["angulo"] == 5 and _j.loads(ev[0][1])["de"] == {"recorte": None, "angulo": 0.0}, str(ev))
+        # ---------- girar DEPOIS de recortar: a caixa gira junto ----------
+        g = op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90})
+        pg = img(op.get(f"/api/itens/{D(1)}/previa?g=90"))
+        ver("virar 90° depois de recortar: a caixa gira junto (100x200, continua só o retângulo, reto)", g.status_code == 200 and pg.size == (100, 200) and all(escuro(pg, xy) for xy in cantos(pg)), str(pg.size))
+        op.post(f"/api/itens/{D(1)}/girar", json={"graus": -90})
+        # ---------- regras ----------
+        r = op.post(f"/api/itens/{D(2)}/ajuste", json={"angulo": 2})
+        ver("lote aprovado: 409 e nada gravado", r.status_code == 409 and col(D(2), "alinhamento") == 0, r.text)
+        r = op.post(f"/api/itens/{D(3)}/ajuste", json={"angulo": 2})
+        ver("folha no site: operador recebe 409 pedindo um admin", r.status_code == 409 and "admin" in r.json().get("erro", r.text) and col(D(3), "alinhamento") == 0, r.text)
+        class Fake:
+            chamadas, falhar = [], False
+            def __init__(self, *a, **k): pass
+            def substituir_midia(self, media_id, caminho, nome=None):
+                if Fake.falhar: raise RuntimeError("500 erro interno")
+                Fake.chamadas.append((media_id, Image.open(caminho).size)); return {"id": media_id, "source_url": "http://site-falso.invalid/f.jpg"}
+        publicador.WP = Fake
+        r = adm.post(f"/api/itens/{D(3)}/ajuste", json={"recorte": CAIXA, "angulo": 5})
+        ver("folha no site: admin aplica e a imagem do site é TROCADA (mesmo anexo 5553) pela corrigida 200x100",
+            r.status_code == 200 and r.json()["no_site"] is True and Fake.chamadas == [(5553, (200, 100))] and col(D(3), "alinhamento") == 5, f"{r.text} {Fake.chamadas}")
+        Fake.falhar = True
+        r = adm.post(f"/api/itens/{D(3)}/ajuste", json={"recorte": CAIXA, "angulo": 4})
+        pend = c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (D(3),)).fetchone()[0]
+        ver("site recusa: o painel grava (4°), avisa e fica a pendência para reenviar", r.status_code == 200 and r.json()["pendencia"] and col(D(3), "alinhamento") == 4 and pend == 1, r.text)
+        Fake.falhar = False; n0 = len(Fake.chamadas)
+        r = adm.post(f"/api/itens/{D(3)}/ajuste", json={"recorte": CAIXA, "angulo": 4})
+        pend = c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (D(3),)).fetchone()[0]
+        ver("aplicar de novo SEM mudar nada, com o site de volta: reenvia (mesmo anexo) e a pendência é resolvida", r.status_code == 200 and r.json()["no_site"] and pend == 0 and len(Fake.chamadas) == n0 + 1 and Fake.chamadas[-1][0] == 5553, r.text)
+        r = adm.post(f"/api/itens/{D(3)}/ajuste", json={"recorte": CAIXA, "angulo": 4})
+        ver("sem pendência e sem mudança: não chama o site de novo nem grava evento", r.status_code == 200 and r.json()["mudou"] is False and len(Fake.chamadas) == n0 + 1 and nev(D(3), "ajuste_imagem") == 3, r.text)
+        # ---------- desfazer ----------
+        r = op.post(f"/api/itens/{D(1)}/ajuste", json={"recorte": None, "angulo": 0})
+        rd = img(op.get(f"/api/itens/{D(1)}/previa?g=0"))
+        ver("'Desfazer recorte/alinhamento': volta à prévia do CAMP Vision (400x300), colunas limpas, evento 'ajuste_desfeito'",
+            r.status_code == 200 and rd.size == (400, 300) and col(D(1), "recorte") is None and col(D(1), "alinhamento") == 0 and col(D(1), "imagem_corrigida") is None
+            and nev(D(1), "ajuste_desfeito") == 1 and le.get(f"/api/itens/{D(1)}/imagem-corrigida").status_code == 404, r.text)
+        ver("depois de tudo, a prévia do CAMP Vision continua intacta", hashlib.sha1(orig1.read_bytes()).hexdigest() == hash_orig)
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -8097,6 +8226,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"projeto divergente: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("133) Recortar e alinhar a folha na revisão (19/10): JPG corrigido no painel, prévia/miniatura/site/pedido, regras e desfazer")
+rc, out = rodar("recorte_alinhamento", f"{tmp}/recorte.db")
+if rc != 0: ok(False, f"teste do recorte/alinhamento não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"recorte: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

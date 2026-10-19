@@ -340,7 +340,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, COALESCE(i.tipos_documento, i.tipo_documento) AS tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.espelho_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar, i.rotacao_aplicada,
                i.endereco_folha, i.cliente_folha,
-               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior,
+               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
                i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por
           FROM item i
          WHERE i.projeto_codigo=?
@@ -380,6 +380,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "status_site_local": local.get("status_site"),
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
                 "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"), "giro_manual": local.get("giro_manual"),
+                "recorte": local.get("recorte"), "alinhamento": local.get("alinhamento"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -417,6 +418,11 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 d["pendencias"] = json.loads(d["pendencias"])
             except ValueError:
                 d["pendencias"] = None
+        if isinstance(d.get("recorte"), str):           # 19/10: recorte manual (frações), para a tela de recortar e a marca da prévia
+            try:
+                d["recorte"] = json.loads(d["recorte"])
+            except ValueError:
+                d["recorte"] = None
         jpg = d.pop("_arquivo_jpg", None)
         # lote anterior ao preview do CAMP Vision: se o JPG da folha existe no QNAP, a tela pode mostrar a imagem para conferir ('@jpg' = o servidor usa arquivo_jpg)
         if jpg and raiz_prontos and isinstance(d.get("pendencias"), dict) and not d["pendencias"].get("previa") and jpg_da_folha_no_qnap(raiz_prontos, jpg):

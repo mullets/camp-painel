@@ -668,12 +668,14 @@ def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     return r[0] if r else None
 
 
-def imagem_pronta_para_o_site(con, i, giro: int | None = None) -> tuple[str | None, int | None]:
+def imagem_pronta_para_o_site(con, i, giro: int | None = None, ajuste: tuple | None = None) -> tuple[str | None, int | None]:
     """(caminho, lado maior em px) da imagem da folha como ela vai ao site (CAMP-048): derivado JPEG q85 sRGB com lado maior <= 1920 px
     (menos, se os direitos do fundo pedem), feito da prévia do CAMP Vision (já girada) com o giro/espelho que a pessoa escolheu na revisão.
     Fica em cache em disco. O TIF e a prévia de ~3000 px NUNCA vão ao site. `giro` (graus, horário) substitui o giro_manual gravado.
     Sem imagem: (None, None). Sem Pillow: levanta RuntimeError (melhor não subir nada do que subir a imagem grande).
-    `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual."""
+    `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual.
+    19/10: com recorte/alinhamento (item.recorte/alinhamento, ou `ajuste` = (recorte, ângulo) que substitui o gravado), sobe o JPG
+    corrigido que o painel gera (ajuste_imagem.garantir), reduzido como sempre."""
     from .imagem_site import imagem_para_o_site, lado_publico
     caminho_img = imagem_para_o_site(con, i)
     if not caminho_img:
@@ -683,17 +685,23 @@ def imagem_pronta_para_o_site(con, i, giro: int | None = None) -> tuple[str | No
         raise RuntimeError("O painel não tem a biblioteca de imagens (Pillow): sem ela não dá para gerar a versão de até 1920 px. Instale e tente de novo")
     lado = lado_publico(con, i["fundo_codigo"])
     g = (i["giro_manual"] or 0) if giro is None else giro % 360
+    esp = espelho_efetivo(i)
+    from . import ajuste_imagem
+    rec, ang = ajuste if ajuste is not None else ajuste_imagem.ler(i)
     try:
-        derivado = derivado_publico(caminho_img, g, lado, espelho_efetivo(i))
+        if ajuste_imagem.tem_ajuste(rec, ang):          # o JPG corrigido já vem espelhado/girado/endireitado/recortado
+            caminho_img, g, esp = ajuste_imagem.garantir(i["codigo"], caminho_img, g, esp, ang, rec)[0], 0, False
+        derivado = derivado_publico(caminho_img, g, lado, esp)
     except OSError as e:
         raise RuntimeError(f"Não consegui preparar a imagem pública: {e}") from e
     return str(derivado), (lado_real(derivado) or lado)
 
 
-def girar_imagem_no_site(codigo: str, giro: int) -> dict:
+def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) -> dict:
     """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no WordPress pela imagem girada `giro` graus (sentido horário,
     o mesmo giro_manual que a folha vai ter), MANTENDO o ID do anexo (o item do Tainacan, a capa do projeto e os links continuam valendo).
-    Não grava nada no painel: quem chama grava o giro só se isto não levantar erro. Levanta RuntimeError com frase em português."""
+    Não grava nada no painel: quem chama grava o giro só se isto não levantar erro. Levanta RuntimeError com frase em português.
+    `ajuste` = (recorte, ângulo) que a folha vai ter (19/10: recorte e alinhamento); None = o gravado."""
     con = connect()
     try:
         i = con.execute("""SELECT i.*, p.fundo_codigo, p.titulo AS projeto_titulo, s.nome AS serie_nome FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
@@ -703,7 +711,7 @@ def girar_imagem_no_site(codigo: str, giro: int) -> dict:
         media = media_da_folha(con, codigo)
         if not media:
             raise RuntimeError("Não achei a imagem desta folha no site (o anexo não está registrado no painel). Sincronize com o site e tente de novo")
-        caminho, lado_pub = imagem_pronta_para_o_site(con, i, giro)
+        caminho, lado_pub = imagem_pronta_para_o_site(con, i, giro, ajuste)
         if not caminho:
             raise RuntimeError("A imagem desta folha não está no QNAP: sem ela não dá para mandar a versão girada ao site")
     finally:

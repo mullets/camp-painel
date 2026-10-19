@@ -2052,6 +2052,33 @@ Para folha digitalizada pelo verso. Sem Pillow → 503; lote aprovado ou folha n
 
 A decisão de pessoa não é desfeita por reimportação.
 
+### B.7.4a Recortar e alinhar (19/10): `POST /api/itens/{c}/ajuste`
+
+Pedido do Rafa: "quando formos conferir uma folha, ter opção de recorte e alinhamento manual, porque às vezes está vindo bem ruim". Decisão de 19/10: "salva tanto no servidor quanto no site; a TIF pode ficar original".
+
+**O que se guarda** (migração `136_recorte_alinhamento.sql`, só `ADD COLUMN` em `item`):
+- `recorte` — JSON `{"x","y","w","h"}` em frações (0–1) da imagem **já espelhada, girada (90°) e endireitada**; NULL = imagem inteira;
+- `alinhamento` — ângulo fino em graus, de −10 a +10 (passo 0,1), **positivo = horário** (o mesmo sentido do CSS `rotate`);
+- `imagem_corrigida` — o JPG corrigido que o painel gerou, relativo à pasta de imagens corrigidas.
+
+Os parâmetros são a **fonte** (permitem desfazer e refazer). Ao aplicar, o painel gera de verdade um JPG corrigido (`ajuste_imagem.garantir`): a mesma origem da prévia (a prévia do CV2 em `_campvision/preview/`, senão o JPG da folha), na ordem **espelho → giro de 90° → ângulo fino** (em torno do centro, mesma tela, cantos brancos) **→ recorte**, JPEG q92 sem subamostragem, sRGB. Fica no **diretório de dados do painel**, ao lado do banco: `imagens_corrigidas/<projeto>/<código>-<marca>.jpg` (ou `CAMP_IMAGENS_CORRIGIDAS_DIR`). **Não** fica no QNAP: o painel não grava na pasta final do CV2 (`docs/campvision.md`, "mão única"), e o TIF e a prévia do CV2 nunca mudam. A `<marca>` (SHA-1 de origem+data+tamanho+giro+espelho+ângulo+recorte) muda com os parâmetros e com o arquivo de origem: se o CV2 regravar a prévia, a versão corrigida é refeita; arquivo sumido (disco novo, banco restaurado) é refeito a partir dos parâmetros.
+
+**Onde o JPG corrigido vira A imagem da folha:**
+- prévia e miniaturas (`GET /api/itens/{c}/previa`): com ajuste, serve o corrigido (miniatura `t=` reduzida dele). `?o=1` serve a imagem **sem** o ajuste (é o que a tela de recortar mostra). A tela põe `&a=<ângulo_x_y_w_h>` na URL para o navegador não mostrar a velha;
+- o site (`publicador.imagem_pronta_para_o_site`): o derivado de até 1920 px sai do corrigido;
+- pedidos em JPG (`pacote` do pedido): a linha ganha `jpg_corrigido` = `GET /api/itens/{c}/imagem-corrigida` (baixa o corrigido em tamanho cheio, leitura+); o `caminho_qnap` continua sendo o do CV2;
+- `GET /api/itens/{c}/ajuste` (leitura+): `{recorte, angulo, giro_manual, espelhar, imagem_corrigida}`.
+
+**Regras** (as do giro): operador+; lote aprovado e folha fora do site → **409**; folha no site (`rascunho`/`no_ar`) → só admin/master (**409** para operador), e o painel troca a imagem do site mantendo o ID do anexo (`girar_imagem_no_site(codigo, giro, (recorte, ângulo))`). Diferente do giro: se o site **recusar**, o painel grava mesmo assim (a correção não se perde), responde `pendencia` e abre a pendência `pendente_imagem_ajustada` em `divergencia_site`; aplicar de novo (mesmo sem mudar nada) reenvia e, dando certo, resolve a pendência. Ângulo fora de ±10°, recorte menor que 5% ou fora da imagem → **400**. Recorte inteiro + 0° = **desfazer** (limpa as três colunas; a folha volta à imagem do CV2). Eventos `ajuste_imagem` (de, para, arquivo, anexo/site) e `ajuste_desfeito`, com quem fez.
+
+**Girar/espelhar depois de recortar:** a caixa acompanha (`ajuste_imagem.depois_do_giro`: 90° horário leva `(x,y,w,h)` a `(1−y−h, x, h, w)`; espelhar leva `x` a `1−x−w` e troca o sinal do ângulo) e o JPG corrigido é refeito.
+
+**"Endireitar automaticamente"** — `GET /api/itens/{c}/ajuste/sugerir` (operador+): só **sugere** o ângulo (não grava). Só Pillow (nenhuma dependência nova): bordas da imagem reduzida a 600 px, e o ângulo de −10 a +10 que maximiza a variância dos perfis de linhas e colunas (busca de 0,5° e depois de 0,1°). Funciona bem com folha que tem linhas retas (carimbo, moldura, paredes); a pessoa confere com a grade e aplica.
+
+**Na tela** (revisão da folha): botão **"✂ Recortar e alinhar"** (tecla **K**) troca a imagem pela tela de recortar: a imagem inteira (sem o ajuste), uma grade de 10% por cima, a caixa com 8 puxadores (cantos e bordas; mouse e toque, por `pointer events`), escurecendo o que fica de fora; o arrasto do meio move a caixa. Alinhamento: deslizador, campo numérico (°) e botões −0,5° / +0,5° (teclas `[` e `]`); a imagem gira ao vivo por CSS em torno do centro (o mesmo que o servidor faz). **Aplicar** (Enter) grava; **Cancelar** (Esc) fecha sem gravar e **não** fecha a gaveta. Com a tela aberta, setas e letras não trocam de folha nem de tela. **"Desfazer recorte/alinhamento"** aparece quando a folha tem ajuste (pede confirmação). Admin em folha que já está no site confirma "Trocar também a imagem no site?".
+
+Teste: `tests/teste_backend.py` modo `recorte_alinhamento` (no `--rapido`) e `tests/navegador_recorte.js` (Playwright, porta própria).
+
 ### B.7.5 Campo a campo e conferir/corrigida
 
 - `GET /api/itens/{c}/edicao` (operador+): os campos locais (`titulo`, `tipo_documento`, `folha`, `escala`, `dimensoes`, `suporte`, `credito`, `endereco_folha`, `cliente_folha`, `ano_folha`), a lista de tipos e, se a folha já está no site, os campos do site editáveis.
@@ -2075,7 +2102,7 @@ Na tela: "Está certo" (Enter) = `conferida`; "Salvar correção" = `PATCH` + `c
 - `POST /api/lotes/{id}/aprovar` (admin): já aprovado → 409; sem folhas → 400 "Importe as folhas"; há pendentes → 400 "Faltam conferir N folha(s)". Grava `aprovado_por/aprovado_em`; evento `revisao_aprovada` (folhas, bloqueadas). **Não muda a etapa** (é um registro; `rascunho` continua significando "foi para o site").
 - `POST /api/lotes/{id}/reabrir` (admin): não aprovado → 409; etapa `rascunho`/`publicado` → 409 "já foi para o site". Limpa a aprovação; evento `revisao_reaberta`.
 
-Lote aprovado fica protegido: importar, revisar, girar, espelhar, reter e aplicar consenso respondem 409 até reabrir.
+Lote aprovado fica protegido: importar, revisar, girar, espelhar, recortar/alinhar, reter e aplicar consenso respondem 409 até reabrir.
 
 ### B.7.8 Folha de contatos
 
@@ -2314,6 +2341,8 @@ Se uma tabela nova passar a guardar código de folha, ela tem de entrar aqui (e,
 | `GET /api/lotes/{id}/saidas-cv`, `POST /api/lotes/{id}/saidas-cv/resposta` | leitura / operador (devolver: admin) | `rotas_revisao.py` |
 | `GET /api/itens/{c}/previa` | leitura | `rotas_revisao.py` |
 | `POST /api/itens/{c}/girar`, `/espelhar`, `/revisao`, `/retencao` | operador | `rotas_revisao.py` |
+| `POST /api/itens/{c}/ajuste`, `GET /api/itens/{c}/ajuste/sugerir` | operador | `rotas_revisao.py` (recortar e alinhar, B.7.4a) |
+| `GET /api/itens/{c}/ajuste`, `/imagem-corrigida` | leitura | `rotas_revisao.py` |
 | `GET /api/itens/{c}/edicao`, `PATCH /api/itens/{c}` | operador | `rotas_itens.py` |
 | `POST /api/lotes/{id}/conferir-sem-pendencia`, `/conferir-todas` | operador | `rotas_revisao.py` |
 | `POST /api/lotes/{id}/aprovar`, `/reabrir` | admin | `rotas_revisao.py` |
@@ -3374,7 +3403,7 @@ Carregador chamado por `route_to` para cada tela:
    - `?` abre a ajuda da tela (`abrirAjuda()`; com janela lateral aberta, explica a janela);
    - `F` foca o primeiro campo de filtro da tela;
    - as letras/dígitos de `KEYS` navegam — mas não funcionam dentro de campos de texto, com Ctrl/⌘/Alt, nem se o item de menu estiver escondido para o papel.
-   - Na revisão da folha: `Enter` = "Está certo", `R` = girar, `←/→` = folha anterior/próxima. Na página da folha: `←/→` = anterior/próxima, `E` = editar (o handler usa captura e `stopPropagation`, por isso não vai para "Máquinas e site").
+   - Na revisão da folha: `Enter` = "Está certo", `R` = girar, `K` = recortar e alinhar (com a tela de recortar aberta: `[`/`]` = ±0,5°, `Enter` = Aplicar, `Esc` = Cancelar), `←/→` = folha anterior/próxima. Na página da folha: `←/→` = anterior/próxima, `E` = editar (o handler usa captura e `stopPropagation`, por isso não vai para "Máquinas e site").
 5. **Atenção**: a tabela de atalhos em `docs/padroes.md` §3 e §10 está desatualizada (é de antes do "menu por tarefa", H25). A fonte da verdade é `NAV_ATALHOS`.
 
 ### D.1.4 `API()` e as mensagens de erro (`mensagemErroAPI`)

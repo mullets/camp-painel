@@ -368,7 +368,7 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
     for e in evs:
         cod = e["codigo"] or ""
         proj = "-".join(cod.split("-")[:2]) if e["entidade"] == "item" and cod.count("-") >= 2 else cod
-        if e["entidade"] == "item" and e["tipo"] in ("revisao", "site_item_criado", "giro", "editado", "folha_retida", "folha_liberada"):
+        if e["entidade"] == "item" and e["tipo"] in ("revisao", "site_item_criado", "giro", "editado", "folha_retida", "folha_liberada", "ajuste_imagem"):
             chave = ("item", e["tipo"], e["ator"], proj)
         elif e["tipo"] in ("material_novo_pronto", "folhas_importadas_do_lote") and (e["ator"] or "").startswith("campvision"):
             chave = ("cv", proj.split("-")[0])
@@ -389,7 +389,7 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
         projs = sorted({ev["codigo"] for ev in g["evs"]})
         if chave[0] == "item":
             o_que = {"revisao": "conferiu", "site_item_criado": "enviou ao site (escondida)", "giro": "girou", "editado": "editou",
-                     "folha_retida": "reteve", "folha_liberada": "liberou"}[chave[1]]
+                     "folha_retida": "reteve", "folha_liberada": "liberou", "ajuste_imagem": "recortou/alinhou"}[chave[1]]
             if chave[1] == "site_item_criado":
                 texto = f"{quem} enviou {n} {'folha' if n == 1 else 'folhas'} de {{codigo}} ao site (ainda escondidas)"
             else:

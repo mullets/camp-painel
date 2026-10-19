@@ -12,7 +12,7 @@ estações de captura ─▶ QNAP: Arquivos/100 - Scanners  ─▶  CV2 (Ubuntu 
         │                       ENTRADA                    lê, aplica EXIF,           PRONTO (só o painel LÊ daqui)
         └─ painel: reservar nº de projeto (HTTP)           organiza, grava JSON
 ```
-- **Mão única.** O painel só **lê** a pasta final e responde a chamadas HTTP. Ele **não grava** no QNAP e **não chama** o CV2.
+- **Mão única.** O painel só **lê** a pasta final e responde a chamadas HTTP. Ele **não grava** no QNAP e **não chama** o CV2. (19/10: a folha recortada/alinhada na revisão vira um JPG corrigido do painel, gravado no diretório de dados do painel, `imagens_corrigidas/`, nunca na pasta do CV2; o TIF e a prévia do CV2 não mudam. Ver `COMO_FUNCIONA.md` B.7.4a.)
 - O painel **nunca lê a ENTRADA** (`Arquivos/100 - Scanners`): material ali nunca vira lote, mesmo que tenha `status.json`.
 - QNAP: `192.168.15.30` (o Mac mostra como `Server-Camp`), compartilhamento **`Backup Servidor CAMP`**. No painel e no CV2 ele é montado em `/mnt/qnap/acervos`.
 - Painel: `http://192.168.15.60:8000`.
