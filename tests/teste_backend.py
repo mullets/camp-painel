@@ -2563,6 +2563,9 @@ def filho(modo):
         ver("mandar o lote ao site SEM a revisão aprovada: 400 'Revise e aprove o lote'", g.status_code == 400 and "aprove o lote" in g.text, g.text[:120])
         ver("aprovar: operador 403; admin 200 (registra quem e quando); de novo 409", op.post(f"/api/lotes/{lote}/aprovar").status_code == 403 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 200 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 409 and sql("SELECT aprovado_por FROM lista_processamento WHERE id=?", lote) == "adm@camp.arq.br")
         ver("a aprovação NÃO muda a etapa ('rascunho' é 'foi para o site', com portões próprios)", sql("SELECT etapa FROM lista_processamento WHERE id=?", lote) == "revisao")
+        r_ok = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "corrigida"})
+        ver("lote aprovado: confirmar a correção de uma folha responde ok sem reabrir nada (antes: 409 e o aviso 'a revisão não mudou')",
+            r_ok.status_code == 200 and r_ok.json().get("sem_mudanca") == "lote_aprovado", r_ok.text[:160])
         ver("lote aprovado fica protegido: revisar, importar e conferir em lote dão 409", op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "pendente"}).status_code == 409 and op.post(f"/api/lotes/{lote}/importar").status_code == 409 and op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").status_code == 409)
         ver("com a revisão aprovada o portão do site libera (200)", adm.patch(f"/api/filas/{lote}", json={"etapa": "rascunho"}).status_code == 200)
         ver("lote que já foi para o site não reabre (409); reabrir exige admin e lote aprovado", adm.post(f"/api/lotes/{lote}/reabrir").status_code == 409 and op.post(f"/api/lotes/{lot2}/reabrir").status_code == 403 and adm.post(f"/api/lotes/{lot2}/reabrir").status_code == 409)

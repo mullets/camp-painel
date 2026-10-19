@@ -180,10 +180,16 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         i = con.execute("SELECT i.revisao, i.status_site, i.lote_id, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        if i["aprovado_em"]:
-            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
-        if i["status_site"] in ("rascunho", "no_ar"):
-            raise HTTPException(409, "Esta folha já está no site: a revisão do lote não se aplica")
+        fechado = "lote_aprovado" if i["aprovado_em"] else ("no_site" if i["status_site"] in ("rascunho", "no_ar") else None)
+        if fechado and d.estado == "pendente":       # reabrir continua protegido
+            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar" if fechado == "lote_aprovado"
+                                else "Esta folha já está no site: a revisão do lote não se aplica")
+        if fechado:
+            # 19/10 ("muito chato"): corrigir uma folha de lote aprovado (ou já no site) dava "os dados foram salvos, mas a revisão não mudou".
+            # A correção (PATCH) já é o que importa; "conferida/corrigida" aqui só confirma: registra o que mudou e responde ok, sem reabrir nada.
+            registrar_campos_revisados(con, codigo, d.estado, u["email"])
+            con.commit()
+            return {"ok": True, "revisao": i["revisao"], "sem_mudanca": fechado}
         con.execute("UPDATE item SET revisao=?, revisado_por=?, revisado_em=CASE WHEN ?='pendente' THEN NULL ELSE datetime('now') END, atualizado_em=datetime('now') WHERE codigo=?",
                     (d.estado, None if d.estado == "pendente" else u["email"], d.estado, codigo))
         _evento(con, "item", codigo, "revisao", u["email"], {"de": i["revisao"], "para": d.estado})
