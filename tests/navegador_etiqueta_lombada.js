@@ -32,6 +32,14 @@ const chk = (ok, msg, det = '') => { linhas.push((ok ? 'ok    ' : 'FALHA ') + ms
   chk(m.maisDir <= 17.05, 'nada da faixa passa de 17 mm: 3 mm de folga antes da dobra (antes ia até 18,5 mm e vazava)', String(m.maisDir));
   chk(m.nome && m.nome[1] > 15 && m.nome[0] < 10, 'o nome fica em pé ao longo da faixa (alto e estreito, como lombada de livro)', JSON.stringify(m.nome));
   await pg.emulateMedia({ media: 'screen' });
+  // 100 × 150 (o rolo grande da CAMP): a mesma lombada de 2 cm, agora com 150 mm de altura
+  await pg.selectOption('#l-fmt', '100x150'); await pg.waitForTimeout(500);
+  chk(await pg.$('.lab-preview .lab-d.alta [data-lombada]') !== null && /Residência Riviera/.test(await pg.textContent('.lab-preview .lab-d [data-lombada]')), '100 × 150: layout com a lombada e o nome do projeto');
+  await pg.locator('.lab-preview .label').first().screenshot({ path: (process.env.OUT || '/tmp') + '/etiqueta_100x150.png' }).catch(() => {});
+  await pg.emulateMedia({ media: 'print' }); m = await medir(); await pg.emulateMedia({ media: 'screen' });
+  chk(m.l[2] === 100 && m.l[3] === 150 && m.faixaDir === 20 && m.maisDir <= 17.05, '100 × 150: sai com 100 × 150 mm, dobra a 20 mm e nada da faixa passa de 17 mm', JSON.stringify(m));
+  chk(m.nome && m.nome[1] > 30, '100 × 150: o nome em pé ocupa a lombada (letra maior)', JSON.stringify(m.nome));
+  await pg.selectOption('#l-fmt', '100x50'); await pg.waitForTimeout(300);
   // ajuste da impressora
   await pg.click('#lab-ajuste summary'); await pg.fill('#laj-escala', '98'); await pg.fill('#laj-x', '-1.5'); await pg.waitForTimeout(300);
   await pg.emulateMedia({ media: 'print' }); m = await medir(); await pg.emulateMedia({ media: 'screen' });

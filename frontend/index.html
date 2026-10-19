@@ -212,6 +212,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .label.lab-d{display:flex;color:#000;font-family:var(--sans)}
 .lab-d .ld-fx{width:20mm;flex:none;border-right:.25mm dashed #000;display:flex;flex-direction:column;align-items:flex-start;padding:2mm 3mm 2mm 1.2mm;box-sizing:border-box;gap:1.2mm;overflow:hidden}
 .lab-d .ld-fx .logo{height:5mm;flex:none}
+.lab-d.alta .ld-fx{padding:3mm 3mm 3mm 1.2mm;gap:2mm}.lab-d.alta .ld-fx .logo{height:8mm}.lab-d.alta .ld-gira{gap:.4mm}
+.lab-d.alta .ld-gnome{font-size:5.8mm;line-height:1.05;max-width:12.2mm}.lab-d.alta .ld-gcod{font-size:2.8mm}
+.lab-d.alta .ld-corpo{padding:7mm 6mm 6mm}.lab-d.alta .ld-nome{font-size:8mm;line-height:1.1;-webkit-line-clamp:3}.lab-d.alta .ld-arq{font-size:5mm;margin-top:2mm}
+.lab-d.alta .ld-kv{grid-template-columns:minmax(0,1fr);gap:3mm;margin-top:6mm;font-size:4.4mm}.lab-d.alta .ld-kv b{font-size:3mm}.lab-d.alta .ld-obs{font-size:3.6mm;margin-top:3mm}
+.lab-d.alta .ld-barras svg{height:20mm}.lab-d.alta .ld-barras div{font-size:3.8mm;margin-top:1mm}
 .lab-ajuste{margin:8px 0}.lab-ajuste summary{cursor:pointer;color:var(--ink2)}.laj-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.label.lab-regua{border:0}
 .lab-d .ld-gira{flex:1;min-height:0;width:100%;writing-mode:vertical-rl;transform:rotate(180deg);display:flex;flex-direction:column;justify-content:flex-start;gap:.5mm;overflow:hidden}
 .lab-d .ld-gnome{font:800 4.3mm/1.1 var(--sans);max-width:9.6mm;overflow:hidden;overflow-wrap:anywhere}
@@ -1187,7 +1192,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
         </div>
         <div class="lab-section">
           <div class="lab-section-title"><span class="lab-passo">2</span> Como imprimir</div>
-          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option><optgroup label="NIIMBOT D110 (slides e negativos)"><option value="50x15">50 × 15 mm · NIIMBOT D110 (rolo T15×50, 130 etiquetas brancas)</option><option value="40x12">40 × 12 mm · NIIMBOT D110 (moldura do slide)</option><option value="30x12">30 × 12 mm · NIIMBOT D110 (compacta)</option></optgroup></select></label>
+          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="100x150">100 × 150 mm (rolo grande, com lombada de 2 cm)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option><optgroup label="NIIMBOT D110 (slides e negativos)"><option value="50x15">50 × 15 mm · NIIMBOT D110 (rolo T15×50, 130 etiquetas brancas)</option><option value="40x12">40 × 12 mm · NIIMBOT D110 (moldura do slide)</option><option value="30x12">30 × 12 mm · NIIMBOT D110 (compacta)</option></optgroup></select></label>
           <label class="field">Papel<select id="l-papel"><option value="rolo">Impressora de etiquetas (uma por página, no tamanho exato)</option><option value="a4">Folha A4 comum (várias por folha, para recortar)</option></select></label>
           <details class="lab-ajuste" id="lab-ajuste"><summary>Ajuste desta impressora <small class="help" id="laj-resumo"></small></summary>
             <p class="help">Se a etiqueta sai maior, menor ou deslocada: imprima a <b>régua de teste</b>, meça com uma régua de verdade e corrija aqui. Fica guardado neste computador, para este formato.</p>
@@ -1948,7 +1953,7 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
   else if(labType==='caixa'){const cx=document.getElementById('l-caixa').value.trim().toUpperCase(),id=/^[A-Z]/.test(cx)?cx:'CX'+cx.padStart(2,'0');code=fc?`${fc}-${id}`:id;big=code;/* H20: o identificador cadastrado (CX-001, MAP-01-G01) vai como está */lines=[['Fundo',`${sig} · ${nome}`],['Conteúdo',document.getElementById('l-cont').value]]}
   else if(labType==='fundo'){code=fc;big=`${fc} ${sig}`;lines=[['Fundo',nome],['Período',f[3]||'—']]}
   else {code=`${fc}-${pc}`;big=code;lines=[]}
-  const vert=mh>mw;
+  const vert=mh>mw&&mw<40;
   if(NIIM_FMT[document.getElementById('l-fmt').value]){   /* NIIMBOT D110: QR + 4 linhas, desenhado em pontos da impressora */
     /* 16/10: legível de longe = número do material (série · documento), projeto e arquiteto DO FUNDO, grandes; o resto pequeno embaixo */
     const comNome=['projeto','documento','tubo'].includes(labType),G=(t,z,p,m)=>[t,z,p,m];let linhas;
@@ -1986,7 +1991,8 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
       nf=alvo?(alvo.folhas??null):(mat?mat.n:(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0)),
       tarja=nf==null?'':`${nf} ${nf===1?'folha':'folhas'}`,
       kv=[['Material',mat?mat.texto:'todo o material'],['Fundo',`${fc} · ${sig}`],['Volume',`${volume} de ${totalVolumes}`],['Local',local]];   /* cidade e ano já estão na faixa */
-    return `<div class="label lab-d" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx" data-lombada>${LOGO_CAMP}<div class="ld-gira"><div class="ld-gnome">${escHtml(pn)}</div><div class="ld-gcod">${escHtml(pcod)} · ${escHtml(sig)}</div><div class="ld-gmeta">${escHtml([cid,anoTxt,tarja,`vol ${volume}/${totalVolumes}`].filter(Boolean).join(' · '))}</div></div></div>
+    const alta=mh>=100,meta=[cid,anoTxt,tarja,`vol ${volume}/${totalVolumes}`].filter(Boolean).join(' · ');   /* 100 × 150: a lombada tem 150 mm — código e o resto numa linha só */
+    return `<div class="label lab-d${alta?' alta':''}" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx" data-lombada>${LOGO_CAMP}<div class="ld-gira"><div class="ld-gnome">${escHtml(pn)}</div><div class="ld-gcod">${escHtml(pcod)} · ${escHtml(sig)}${alta&&meta?' · '+escHtml(meta):''}</div>${alta?'':`<div class="ld-gmeta">${escHtml(meta)}</div>`}</div></div>
       <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b])=>`<span><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
       ${obs?`<div class="ld-obs">${escHtml(obs)}</div>`:''}<div class="ld-barras">${barcode(code,30,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
   /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
