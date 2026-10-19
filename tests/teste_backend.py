@@ -6915,6 +6915,13 @@ def filho(modo):
         op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("tipos novos de 19/10 no vocabulário: Isométrica e Esquema", {r_[0] for r_ in c.execute("SELECT nome FROM tipo_documento WHERE nome IN ('Isométrica','Esquema')")} == {"Isométrica", "Esquema"})
+        r0 = op.patch(f"/api/itens/{I1}", json={"tipo_documento": "Corte; Isométrica; Esquema"})
+        ver("folha pode ser Corte + Isométrica + Esquema", r0.status_code == 200 and c.execute("SELECT tipos_documento FROM item WHERE codigo=?", (I1,)).fetchone()[0] == "Corte; Isométrica; Esquema", r0.text[:120])
+        op.patch(f"/api/itens/{I1}", json={"tipo_documento": "Planta"})
+        from app.importador_lote import tipo_do_painel
+        tps = {n.lower(): n for (n,) in c.execute("SELECT nome FROM tipo_documento")}
+        ver("o CAMP Vision lendo 'isométrico'/'axonometria'/'diagrama' vira o tipo novo", tipo_do_painel("isométrico", tps) == "Isométrica" and tipo_do_painel("Axonometria", tps) == "Isométrica" and tipo_do_painel("diagrama", tps) == "Esquema")
         ver("separar/juntar: espaços, vazios e repetidos", separar(" Planta ;Corte;; planta ; Elevação/Fachada") == ["Planta", "Corte", "Elevação/Fachada"] and juntar(["Corte", "", "Corte"]) == "Corte" and juntar("") is None)
         r = op.patch(f"/api/itens/{I1}", json={"tipo_documento": "Planta;Corte ; Elevação/Fachada"})
         um, tipo = c.execute("SELECT tipo_documento, tipos_documento FROM item WHERE codigo=?", (I1,)).fetchone()

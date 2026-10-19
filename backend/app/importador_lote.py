@@ -61,7 +61,9 @@ def _rotacao(v) -> int:
 
 UNIFICADO = "Elevação/Fachada"     # CAMP-051
 _ALIAS_TIPO = {"elevação": UNIFICADO, "elevacao": UNIFICADO, "fachada": UNIFICADO, "elevação/fachada": UNIFICADO, "elevacao/fachada": UNIFICADO,
-               "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO}
+               "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO,
+               "isometrica": "Isométrica", "isométrico": "Isométrica", "isometrico": "Isométrica", "axonometria": "Isométrica", "axonométrica": "Isométrica",
+               "diagrama": "Esquema", "esquemático": "Esquema", "esquematico": "Esquema"}   # 19/10: tipos novos
 
 
 def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
