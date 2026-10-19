@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao"}
+MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7259,6 +7259,79 @@ def filho(modo):
         ver("salvar a revisão manda só o que mudou e não descarta o que foi digitado em 'Está certo'", "camposRevisaoAlterados(" in html)
         c.close()
         for l in res: print(l)
+    elif modo == "tirar_folha":
+        # 19/10 ("quando salvo que é pra tirar uma folha do projeto, ele salva e pula pra próxima folha, mas não tá funcionando bem"):
+        # (a) reter folha de lote JÁ APROVADO (fora do site) e "Desfazer" (liberar): a resposta traz a revisão (conferida), que a tela usa;
+        # (b) folha no site continua recusada com mensagem clara; (c) folha movida para outro projeto sai dos contadores do lote de origem,
+        # não trava "Aprovar o lote" e não é conferida em lote pelo lote de origem (antes contava como "a conferir" e travava a aprovação).
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F099',?,?,1970)", (f"F099-P000{n}", n, f"Projeto {n}"))
+        L = {}
+        for p, apr in (("F099-P0001", False), ("F099-P0002", True)):
+            L[p] = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES (?,?,'/nao/existe','revisao',?,?)",
+                             (p, p, "2026-10-19 10:00:00" if apr else None, "adm@camp.arq.br" if apr else None)).lastrowid
+            for s_ in (1, 2, 3):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,status_site,pendencias,titulo,folha,revisao) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                          (f"{p}-1970-S01-D{s_:05d}", p, "S01", s_, "campvision", L[p], "nao_publicado", "{}", f"Prancha {s_}", f"{s_:02d}/03", "conferida" if apr else "pendente"))
+        c.execute("UPDATE item SET status_site='no_ar' WHERE codigo='F099-P0002-1970-S01-D00003'")
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op, adm = cli("op@camp.arq.br", "senha-operador-123"), cli("adm@camp.arq.br", "senha-longa-12345")
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        A, B = (lambda n: f"F099-P0001-1970-S01-D{n:05d}"), (lambda n: f"F099-P0002-1970-S01-D{n:05d}")
+        # ---------- (a) lote aprovado ----------
+        r = op.post(f"/api/itens/{B(1)}/retencao", json={"retida": True, "motivo": "sem autorização de imagem"})
+        ver("lote aprovado: reter a folha (fora do site) funciona e devolve a revisão (conferida)",
+            r.status_code == 200 and tuple(q("SELECT retida, retida_motivo, revisao FROM item WHERE codigo=?", B(1))) == (1, "sem autorização de imagem", "conferida") and r.json().get("revisao") == "conferida", r.text[:200])
+        ver("lote aprovado: reter não reabre o lote", q("SELECT aprovado_em FROM lista_processamento WHERE id=?", L["F099-P0002"])[0] is not None)
+        r = op.post(f"/api/itens/{B(1)}/retencao", json={"retida": False})
+        ver("lote aprovado: liberar ('Desfazer') devolve a folha conferida e a resposta diz isso",
+            r.status_code == 200 and tuple(q("SELECT retida, revisao FROM item WHERE codigo=?", B(1))) == (0, "conferida") and r.json().get("revisao") == "conferida", r.text[:200])
+        ver("reter/liberar ficam no histórico", q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo IN ('folha_retida','folha_liberada')", B(1))[0] == 2)
+        # ---------- (b) folha no site ----------
+        r = op.post(f"/api/itens/{B(3)}/retencao", json={"retida": True})
+        ver("folha no site: reter continua recusado com mensagem clara", r.status_code == 409 and "já está no site" in r.text and q("SELECT retida FROM item WHERE codigo=?", B(3))[0] == 0, r.text[:200])
+        # ---------- lote em revisão: reter e liberar como antes ----------
+        r = op.post(f"/api/itens/{A(1)}/retencao", json={"retida": True, "motivo": "foto de pessoa"})
+        ver("lote em revisão: reter marca a folha conferida", r.status_code == 200 and tuple(q("SELECT retida, revisao FROM item WHERE codigo=?", A(1))) == (1, "conferida"), r.text[:200])
+        # ---------- (c) folha movida para outro projeto ----------
+        r = adm.post("/api/itens/mover", json={"itens": [A(2)], "destino": "F099-P0003", "motivo": "é de outro projeto (revisão da folha)"})
+        novo = ((r.json().get("movidos") or [{}])[0]).get("para")
+        ver("mover a folha para outro projeto", r.status_code == 200 and bool(novo), r.text[:200])
+        lote = lambda p: next(x for x in op.get(f"/api/projetos/{p}/revisao").json()["lotes"] if x["id"] == L[p])
+        cA = lote("F099-P0001")["itens"]
+        ver("a folha movida sai dos contadores do lote de origem (antes continuava 'a conferir')", cA["total"] == 2 and cA["pendente"] == 1 and cA["retidas"] == 1, str(cA))
+        r = op.post(f"/api/lotes/{L['F099-P0001']}/conferir-todas")
+        ver("'Aprovar todas' do lote de origem não confere a folha que foi para outro projeto",
+            r.status_code == 200 and r.json().get("conferidas") == 1 and q("SELECT revisao FROM item WHERE codigo=?", novo)[0] == "pendente", r.text[:200])
+        c.execute("UPDATE item SET revisao='pendente' WHERE codigo=?", (novo,)); c.commit()   # no destino ela continua a conferir (independe do passo acima)
+        r = adm.post(f"/api/lotes/{L['F099-P0001']}/aprovar")
+        ver("a folha que saiu (a conferir no outro projeto) não trava 'Aprovar o lote' de origem", r.status_code == 200, r.text[:200])
+        # "criar projeto novo" no mover: a verificação diz o código que o projeto vai ganhar (a tela mostra antes de confirmar), sem criar nada
+        n0 = q("SELECT COUNT(*) FROM projeto")[0]
+        r = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F099", "titulo": "Garagem Zetaquatro", "ano": 1971})
+        ver("verificar devolve o próximo código do fundo e não cria projeto", r.status_code == 200 and r.json().get("proximo_codigo") == "F099-P0004" and q("SELECT COUNT(*) FROM projeto")[0] == n0, r.text[:200])
+        import app.publicador as _pb
+        _pb.criar_dossie_no_site = lambda codigo, ator: {"item_id": None, "metadados": [], "erro": "site desligado no teste"}   # nunca chamar o site
+        r = adm.post("/api/projetos", json={"fundo_codigo": "F099", "titulo": "Garagem Zetaquatro", "ano": 1971})
+        novo_p = r.json().get("codigo")
+        r2 = adm.post("/api/itens/mover", json={"itens": [A(3)], "destino": novo_p, "motivo": "é de outro projeto (revisão da folha)"})
+        ver("criar o projeto e mover a folha para ele (o código é o que a verificação disse)", r.status_code == 200 and novo_p == "F099-P0004" and r2.status_code == 200
+            and (r2.json().get("movidos") or [{}])[0].get("para") == "F099-P0004-1971-S01-D00001", r.text[:120] + " " + r2.text[:160])
+        c.close()
+        for l in res: print(l)
     elif modo == "nome_de_pasta":
         # projetos criados a partir de SUBPASTAS do sistema (F009-P0114 "01 - Arquivo Arquivístico (TIFF)", F022-P0009 com 5 folhas, F026-P0237)
         init_db(); _aplicar_migracoes_real()
@@ -8694,6 +8767,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"problemas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("134) Tirar uma folha do projeto na revisão (19/10): reter em lote aprovado, Desfazer, folha no site, contadores depois de mover")
+rc, out = rodar("tirar_folha", f"{tmp}/tirar_folha.db")
+if rc != 0: ok(False, f"teste de tirar folha não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"tirar folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("134) Escritórios parceiros / projetos complementares na folha (19/10): gravar, validar, histórico, sugestões, copiar, dossiê, EAD e site")
 rc, out = rodar("parceiros", f"{tmp}/parceiros.db")

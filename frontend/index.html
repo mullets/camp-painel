@@ -412,7 +412,7 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 .fila-grupo td{background:var(--surface2);padding:6px 10px}
 .mais-lista{list-style:none;margin:0;padding:0;display:grid;gap:8px}.mais-acao{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:var(--r)}.mais-acao small{display:block}.mx-folhas{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:var(--r);padding:8px;display:grid;gap:4px}.chk-entendi{display:flex;gap:8px;align-items:flex-start;margin:10px 0}
 .cv-sec{margin:6px 0;border-top:1px solid var(--line);padding-top:6px}.cv-sec summary{cursor:pointer;font-weight:600}.cv-pre{white-space:pre-wrap;max-height:50vh;overflow:auto;background:var(--surface2);padding:8px;border-radius:var(--r);font-size:var(--fs-sm2)}.cv-folha{border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;margin:0 0 8px}.cv-avisos{margin:8px 0}.cv-rel{padding-left:16px}
-.dec-outro .dec-busca{width:100%;margin:6px 0}.dec-outro-l{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.img-site-pend{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--amber-soft)}.rev-reter{margin:10px 0}.op-outro{display:grid;gap:6px;margin-top:6px}.op-outro .op-previa{margin:0}.op-sem{display:inline-flex;align-items:center;gap:6px}.mx-off{color:var(--ink3)}.rev-reter summary{cursor:pointer;color:var(--ink2);font-size:var(--fs-md)}.rev-retida{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface2)}
+.dec-outro .dec-busca{width:100%;margin:6px 0}.dec-outro-l{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.img-site-pend{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--amber-soft)}.rev-reter{margin:10px 0}.op-outro{display:grid;gap:6px;margin-top:6px}.op-outro .op-previa{margin:0}.op-np{margin-top:4px}.op-np-corpo{display:grid;gap:6px;margin-top:6px}.op-sem{display:inline-flex;align-items:center;gap:6px}.mx-off{color:var(--ink3)}.rev-reter summary{cursor:pointer;color:var(--ink2);font-size:var(--fs-md)}.rev-retida{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface2)}
 .rev-deste{margin:8px 0;padding:8px 10px;border:1px solid var(--amber);border-radius:8px}.rev-deste .help{margin:0 0 6px}.rev-mais{margin-top:10px}.rev-mais summary,.rev-campos summary{cursor:pointer;color:var(--ink2);font-size:var(--fs-md)}.rev-campos{margin:10px 0}.rev-campos summary{font-weight:500;color:var(--ink)}.rev-mais[open] summary{margin-bottom:8px}
 .rev-acoes{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 0;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:2}
 .rev-ret{margin:8px 0;font-size:var(--fs-sm2);color:var(--ink2)}.rev-ret summary{cursor:pointer}.thumb[data-rev-abrir]{cursor:pointer}.rev-giro{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:0 0 10px}
@@ -2887,7 +2887,10 @@ function formMaisHTML(acao,code){const d=window.PJ_D||{},its=(window.ITENS_PJ||[
 function folhaNoSite(i){if(!i)return false;const local=i.origem_catalogacao==='local+site'?i.status_site_local:i.status_site;return (!!i.tainacan_item_id_salvo&&local==='no_ar')||(i.origem_catalogacao==='local+site'&&i.status_site==='no_ar')}
 /* Revisão da folha: "É de outro projeto…" — busca o projeto certo (só do MESMO fundo: fundos não se misturam), mostra o código novo
    (simulando no painel) e move pela rota de sempre, /api/itens/mover. Só admin; operador vê o botão desabilitado. */
-function outroProjetoCorpoHTML(codigo,ctx){const f=String(codigo).slice(0,4);return `<div class="op-outro" data-op-folha="${escHtml(codigo)}" data-op-ctx="${escHtml(ctx)}"><label class="rev-campo"><span>Projeto certo (código ou nome; só do fundo ${escHtml(f)})</span><input class="op-busca mono" data-sem-alteracao list="op-lista" autocomplete="off" spellcheck="false" placeholder="ex.: ${escHtml(f)}-P0113 ou nome do projeto"></label><datalist id="op-lista"></datalist><p class="help op-previa" role="status"></p><div class="act"><button class="btn sm pri op-go" type="button" disabled>Mover a folha</button></div></div>`}
+function outroProjetoCorpoHTML(codigo,ctx){const f=String(codigo).slice(0,4);return `<div class="op-outro" data-op-folha="${escHtml(codigo)}" data-op-ctx="${escHtml(ctx)}"><label class="rev-campo"><span>Projeto certo (código ou nome; só do fundo ${escHtml(f)})</span><input class="op-busca mono" data-sem-alteracao list="op-lista" autocomplete="off" spellcheck="false" placeholder="ex.: ${escHtml(f)}-P0113 ou nome do projeto"></label><datalist id="op-lista"></datalist><p class="help op-previa" role="status"></p><div class="act"><button class="btn sm pri op-go" type="button" disabled>Mover a folha</button></div>${EU&&['admin','master'].includes(EU.papel)?opNovoProjetoHTML(f):''}</div>`}
+/* 19/10 ("ao mover uma folha, caso não exista o projeto que é daquele material, liberar criar um novo"): cria o projeto no MESMO fundo pela rota de
+   sempre (POST /api/projetos, com a verificação de parecidos antes) e move a folha para ele, numa confirmação só. Parecido no fundo vira escolha. */
+function opNovoProjetoHTML(f){return `<details class="op-np"><summary>O projeto não existe ainda? Criar projeto novo no fundo ${escHtml(f)}</summary><div class="op-np-corpo"><label class="rev-campo"><span>Nome do projeto (obrigatório)</span><input class="op-np-titulo" data-sem-alteracao maxlength="200" autocomplete="off"></label><label class="rev-campo"><span>Ano (opcional)</span><input class="op-np-ano mono" data-sem-alteracao inputmode="numeric" maxlength="4" autocomplete="off" placeholder="ex.: 1972"></label><label class="rev-campo"><span>Cidade (opcional)</span><input class="op-np-cidade" data-sem-alteracao maxlength="120" autocomplete="off"></label><div class="op-np-parecidos" role="status"></div><div class="act"><button class="btn sm op-np-go" type="button">Criar o projeto e mover a folha</button></div></div></details>`}
 function outroProjetoHTML(codigo,ctx){if(!EU||EU.papel==='leitura')return '';const adm=['admin','master'].includes(EU.papel);
   if(!adm)return `<span class="op-sem" title="Só um admin move folhas para outro projeto: peça a um admin"><button class="btn sm" type="button" disabled>É de outro projeto…</button> <small class="help">peça a um admin</small></span>`;
   return ctx==='rev'?`<details class="rev-reter op-det"><summary>É de outro projeto…</summary><p class="help">A folha sai deste lote e ganha o código do projeto certo. O código antigo fica guardado.</p>${outroProjetoCorpoHTML(codigo,'rev')}</details>`:`<button class="btn sm" type="button" data-op-abrir="${escHtml(codigo)}">É de outro projeto…</button>`}
@@ -2897,7 +2900,8 @@ async function opPrever(box){const inp=box.querySelector('.op-busca'),pv=box.que
   if(!reCodProj.test(dest)){if(t.length<2){pv.textContent='';return}
     try{const r=await API('/api/busca?'+new URLSearchParams({q:t,limite:12,fundo:f}));if(inp.value.trim()!==t)return;const ps=(r.resultados||[]).filter(x=>x.tipo==='projeto'&&x.codigo!==atual);
       if(dl)dl.innerHTML=ps.map(x=>`<option value="${escHtml(x.codigo)}">${escHtml(x.codigo)} · ${escHtml(tituloExibicao(x.titulo||''))}</option>`).join('');
-      pv.textContent=ps.length?`${qtd(ps.length,'projeto encontrado','projetos encontrados')} no fundo ${f}: escolha na lista.`:`Nenhum projeto do fundo ${f} com esse nome ou código.`}catch(_){pv.textContent=''}return}
+      pv.textContent=ps.length?`${qtd(ps.length,'projeto encontrado','projetos encontrados')} no fundo ${f}: escolha na lista.`:`Nenhum projeto do fundo ${f} com esse nome ou código.${box.querySelector('.op-np')?' Se ele não existe ainda, crie abaixo.':''}`;
+      const np=box.querySelector('.op-np');if(!ps.length&&np){np.open=true;const ti=np.querySelector('.op-np-titulo');if(ti&&!ti.value.trim())ti.value=t}}catch(_){pv.textContent=''}return}
   if(dest===atual){pv.textContent='A folha já está neste projeto.';return}
   if(dest.slice(0,4)!==f){pv.innerHTML=`<span class="tag r">outro fundo</span> Fundos não se misturam: escolha um projeto do fundo ${escHtml(f)}.`;return}
   pv.textContent='Conferindo…';
@@ -2910,20 +2914,48 @@ async function opPrever(box){const inp=box.querySelector('.op-busca'),pv=box.que
   catch(e){if(inp.value.trim().toUpperCase()===dest)pv.innerHTML=`<span class="tag r">não dá</span> ${escHtml(e.message)}`}}
 async function opMover(box){const cod=box.dataset.opFolha,dest=box.dataset.opDestino,novo=box.dataset.opNovo,ctx=box.dataset.opCtx,go=box.querySelector('.op-go'),pv=box.querySelector('.op-previa');if(!dest)return;
   if(!await confirmar({titulo:'Mover a folha para outro projeto?',alvo:`${cod} → ${novo||dest}`,texto:novo?`A folha sai de ${cod.slice(0,10)} e passa para ${dest} com o código ${novo}. O código antigo fica guardado na folha e aparece no histórico dos dois projetos.`:`Já existe uma folha igual em ${dest}: esta fica marcada como duplicata dela e continua com o código de hoje.`,botao:novo?'Mover a folha':'Marcar como duplicata'}))return;
-  go.disabled=true;go.textContent='Movendo…';
-  try{const r=await API('/api/itens/mover',{method:'POST',body:JSON.stringify({itens:[cod],destino:dest,motivo:'é de outro projeto (revisão da folha)'})}),m=(r.movidos||[])[0],d=(r.duplicatas||[])[0];
+  await opMoverAgora(box,dest,go)}
+/* criar(): cria o projeto antes de mover e devolve o código dele (o erro aparece no lugar e nada é movido) */
+async function opMoverAgora(box,dest,go,criar){const cod=box.dataset.opFolha,ctx=box.dataset.opCtx,pv=box.querySelector('.op-previa');
+  let b={};if(ctx==='rev'&&revisaoMostra(cod)){try{b=camposRevisaoAlterados()}catch(e){pv.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;return}}
+  const it0=(window.ITENS_PJ||[]).find(x=>x.codigo===cod),seguir=ctx==='rev'?depoisDaRevisao(cod,!!it0&&it0.revisao==='pendente'):null;
+  const t0=go.textContent;go.disabled=true;go.textContent='Movendo…';if(ctx==='rev')travarRevisao(true);
+  try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(cod),{method:'PATCH',body:JSON.stringify(b)});marcarRevisaoSalva()}   /* 19/10: o que foi corrigido na folha antes de mover ia junto para o lixo */
+    if(criar)dest=await criar();
+    const r=await API('/api/itens/mover',{method:'POST',body:JSON.stringify({itens:[cod],destino:dest,motivo:'é de outro projeto (revisão da folha)'})}),m=(r.movidos||[])[0],d=(r.duplicatas||[])[0];
     toast(m?`Folha movida para ${dest}: agora é ${m.para}`:d?`Folha marcada como duplicata de ${d.duplicata_de}`:'Nada foi movido');limparAlteracoes('drawer');   /* a busca digitada não é alteração a perder */
-    if(ctx==='rev')depoisDeMoverNaRevisao(cod,m,d);else if(ctx==='err'){closeDrawer(true);carregarErros()}else{closeDrawer(true);if(m)nav('item/'+m.para);else showItem(cod)}}
-  catch(e){pv.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;go.disabled=false;go.textContent='Tentar de novo'}}
-function depoisDeMoverNaRevisao(cod,m,d){const L=window.ITENS_PJ||[],prox=proximaPendente(cod);
+    if(ctx==='rev'){window._REV_SALVANDO=false;depoisDeMoverNaRevisao(cod,m,d,seguir)}else if(ctx==='err'){closeDrawer(true);carregarErros()}else{closeDrawer(true);if(m)nav('item/'+m.para);else showItem(cod)}}
+  catch(e){if(ctx==='rev')travarRevisao(false);const onde=criar?box.querySelector('.op-np-parecidos'):pv;onde.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;go.disabled=false;go.textContent=criar?t0:'Tentar de novo'}}
+/* "Criar o projeto e mover a folha": confere os parecidos do fundo (POST /api/projetos/verificar); havendo, mostra como escolha ("Mover para este")
+   e só cria com "É outro projeto mesmo". Uma confirmação diz o projeto novo e o código novo da folha; cria (POST /api/projetos) e move. */
+async function opCriarEMover(box,mesmoAssim){const cod=box.dataset.opFolha,f=cod.slice(0,4),np=box.querySelector('.op-np'),out=np.querySelector('.op-np-parecidos'),go=np.querySelector('.op-np-go');
+  const titulo=np.querySelector('.op-np-titulo').value.trim(),anoT=np.querySelector('.op-np-ano').value.trim(),cidade=np.querySelector('.op-np-cidade').value.trim()||null;
+  if(!titulo){out.innerHTML='<span class="tag r">falta</span> Escreva o nome do projeto.';np.querySelector('.op-np-titulo').focus();return}
+  if(anoT&&!/^\d{4}$/.test(anoT)){out.innerHTML='<span class="tag r">ano</span> Ano: use 4 algarismos (ex.: 1972) ou deixe vazio.';np.querySelector('.op-np-ano').focus();return}
+  const corpo={fundo_codigo:f,titulo,ano:+anoT||0,cidade};out.textContent='Conferindo…';
+  let v;try{v=await API('/api/projetos/verificar',{method:'POST',body:JSON.stringify(corpo)})}catch(e){out.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;return}
+  const par=(v.parecidos||[]).filter(x=>x.codigo!==cod.slice(0,10));
+  if(par.length&&!mesmoAssim){out.innerHTML=`<p class="help"><span class="tag a">já existe parecido</span> ${qtd(par.length,'projeto parecido','projetos parecidos')} no fundo ${escHtml(f)}. Se for um deles, mova para ele:</p>${par.map(x=>`<div class="dec-outro-l"><span><span class="code">${escHtml(x.codigo)}</span> ${escHtml(tituloExibicao(x.titulo||''))}${x.ano?` · ${escHtml(x.ano)}`:''}${x.cidade?` · ${escHtml(x.cidade)}`:''}</span><button class="btn sm" type="button" data-op-par="${escHtml(x.codigo)}">Mover para este</button></div>`).join('')}<div class="act"><button class="btn sm" type="button" data-op-np-mesmo="1">É outro projeto mesmo: criar novo</button></div>`;return}
+  out.textContent='';const prox=v.proximo_codigo||'',novoFolha=prox?`${prox}-${String(anoT||cod.slice(11,15)).padStart(4,'0')}-${cod.split('-')[3]||'S01'}-D00001`:'';
+  if(!await confirmar({titulo:'Criar o projeto e mover a folha?',alvo:`${cod} → ${prox||'projeto novo no fundo '+f}`,texto:`Cria o projeto "${titulo}"${anoT?` (${anoT}${cidade?', '+cidade:''})`:cidade?` (${cidade})`:''} no fundo ${f}${prox?` com o código ${prox} (o próximo livre)`:''} e move a folha para ele${novoFolha?`: ela passa a ser ${novoFolha}`:''}. O código antigo fica guardado na folha e aparece no histórico dos dois projetos.`,botao:'Criar e mover'}))return;
+  await opMoverAgora(box,null,go,async()=>{let r;try{r=await API('/api/projetos',{method:'POST',body:JSON.stringify({...corpo,confirmar_novo:!!mesmoAssim})})}
+      catch(e){if(e.status===409)throw new Error('Apareceu um projeto parecido no fundo agora: confira de novo.');throw e}
+      toast(`${r.codigo} criado${r.site&&r.site.erro?' no painel (dossiê no site pendente)':''}`);if(typeof carregarProjetosAPI==='function')carregarProjetosAPI();return r.codigo})}
+/* 19/10: depois de mover, a folha sai da lista e da página (miniatura, "Folhas (N)", contadores do lote: a página do projeto é lida de novo)
+   e a revisão segue para a próxima; nunca reabre o código antigo (não existe mais: dava 404). Duplicata: a folha fica, reabre com a marca. */
+function depoisDeMoverNaRevisao(cod,m,d,seguir){const L=window.ITENS_PJ||[],pj=window.PROJETO_PJ;seguir=seguir||depoisDaRevisao(cod,false);
   if(m){const i=L.findIndex(x=>x.codigo===cod);if(i>=0)L.splice(i,1);document.querySelectorAll(`.thumb[data-rev-abrir="${CSS.escape(cod)}"]`).forEach(c=>c.remove());setTimeout(atualizarContadorFolhas,0)}
   else if(d){const it=L.find(x=>x.codigo===cod);if(it)it.duplicata_de=d.duplicata_de}
-  if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
-  if(prox)abrirRevisaoItem(prox.codigo);else if(!m)abrirRevisaoItem(cod);else if(L.some(x=>x.lote_id))concluirConferencia();else closeDrawer(true)}
+  if(!m){abrirRevisaoItem(cod);if(pj)carregarRevisaoLote(pj);return}
+  if(seguir.fim)toast(`Folha movida para ${m.para.slice(0,10)}: agora é ${m.para} · era a última folha do lote`);
+  seguir();if(pj&&rotaAtual()==='projeto/'+pj)showProjeto(pj);else if(pj)carregarRevisaoLote(pj)}
 document.addEventListener('input',e=>{const i=e.target.closest('.op-outro .op-busca');if(!i)return;const box=i.closest('.op-outro');clearTimeout(window._opq);window._opq=setTimeout(()=>opPrever(box),300)});
 document.addEventListener('click',e=>{const a=e.target.closest('[data-op-abrir]');if(a){openDrawer('É de outro projeto',a.dataset.opAbrir,`<p class="help">Escolha o projeto certo. A folha ganha o código dele; o código antigo fica guardado e aparece no histórico dos dois projetos. Só projetos do mesmo fundo.</p>${outroProjetoCorpoHTML(a.dataset.opAbrir,'pag')}`);setTimeout(()=>{const i=document.querySelector('#d-body .op-busca');if(i)i.focus()},50);return}
-  const g=e.target.closest('.op-outro .op-go');if(g)opMover(g.closest('.op-outro'))});
-document.addEventListener('keydown',e=>{const i=e.target.closest&&e.target.closest('.op-outro .op-busca');if(i&&e.key==='Enter'){e.preventDefault();e.stopPropagation()}},true);
+  const g=e.target.closest('.op-outro .op-go');if(g)opMover(g.closest('.op-outro'));
+  const n=e.target.closest('.op-outro .op-np-go');if(n&&!n.disabled)opCriarEMover(n.closest('.op-outro'));
+  const ms=e.target.closest('.op-outro [data-op-np-mesmo]');if(ms)opCriarEMover(ms.closest('.op-outro'),true);
+  const pa=e.target.closest('.op-outro [data-op-par]');if(pa){const box=pa.closest('.op-outro'),i=box.querySelector('.op-busca');i.value=pa.dataset.opPar;box.querySelector('.op-np').open=false;box.querySelector('.op-np-parecidos').innerHTML='';opPrever(box).then(()=>{const go=box.querySelector('.op-go');if(go&&!go.disabled)go.focus()})}});
+document.addEventListener('keydown',e=>{const i=e.target.closest&&e.target.closest('.op-outro .op-busca,.op-outro .op-np input');if(i&&e.key==='Enter'){e.preventDefault();e.stopPropagation()}},true);
 async function conferirDestino(v){const o=document.getElementById('mx-dest-ok');if(!o)return;v=String(v||'').trim().toUpperCase();if(!reCodProj.test(v)){o.textContent=v?'Use o código completo, ex.: F026-P0113':'';return}
   try{const r=await API('/api/busca?q='+encodeURIComponent(v));const p=(r.resultados||[]).find(x=>x.tipo==='projeto'&&x.codigo===v);o.innerHTML=p?`Destino: <span class="code">${escHtml(p.codigo)}</span> ${escHtml(p.titulo)}`:'<span class="tag r">não encontrado</span> (ou já foi mesclado)'}catch(_){o.textContent=''}}
 async function conferirCodigoNovo(v,atual){const o=document.getElementById('mx-dest-ok');if(!o)return;v=String(v||'').trim().toUpperCase();if(!reCodProj.test(v)){o.textContent=v?'Use o código completo, ex.: F026-P0113':'';return}
@@ -3326,7 +3358,9 @@ function urlPreviaFolha(codigo,giro,t,esp,aj){return `/api/itens/${encodeURIComp
 function ajusteChave(it){if(!it||!(it.recorte||+it.alinhamento))return '';const r=it.recorte;return [+it.alinhamento||0].concat(r?[r.x,r.y,r.w,r.h]:[]).join('_')}
 async function abrirRevisaoItem(codigo){
   const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it){toast('Folha não encontrada na lista');return}
-  let ed;try{ed=await API('/api/itens/'+encodeURIComponent(codigo)+'/edicao')}catch(e){toast(e.message);return}
+  const vez=window._REV_ABRIR=(window._REV_ABRIR||0)+1;
+  let ed;try{ed=await API('/api/itens/'+encodeURIComponent(codigo)+'/edicao')}catch(e){if(vez===window._REV_ABRIR)toast(e.message);return}
+  if(vez!==window._REV_ABRIR)return;   /* 19/10: outra folha foi pedida enquanto esta carregava (ex.: depois de mover/reter): a mais nova vale */
   const p=it.pendencias||{},l=ed.local||{},op=EU&&['operador','admin','master'].includes(EU.papel),tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `;
   const aponta=apontaRevHTML(p);
   const campo=(id,rot,v,lido)=>`<label class="rev-campo"><span>${rot}</span><input id="${id}" type="text" value="${escHtml(v==null?'':v)}"${op?'':' disabled'}>${lido&&String(lido)!==String(v??'')?`<small class="rev-lido">o CAMP Vision leu: ${escHtml(lido)}</small>`:''}</label>`;   /* H9: o valor lido ao lado do campo */
@@ -3378,7 +3412,7 @@ function concluirConferencia(){const n=(window.ITENS_PJ||[]).filter(x=>x.lote_id
   const b=document.getElementById('rev-fim');if(b)b.onclick=()=>{closeDrawer(true);const e=document.getElementById('pj-proximo');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}}
 document.addEventListener('keydown',e=>{
   if(!mainEl.classList.contains('with-drawer')||(document.getElementById('d-title')||{}).textContent!=='Revisar folha')return;
-  if(/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(e.target.tagName||'')||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(e.target.tagName||'')||e.metaKey||e.ctrlKey||e.altKey||window._REV_SALVANDO||document.getElementById('conf-ov'))return;   /* SUMMARY: Enter em "Não publicar esta folha" abre o quadro, não confirma a folha */
   const cod=(document.getElementById('d-sub')||{}).textContent,L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===cod);if(i<0)return;
   if(e.key==='Enter'){const b=document.querySelector('#d-body [data-rev-item="conferida"]');if(b){e.preventDefault();b.click()}}
   else if(e.key==='ArrowRight'&&L[i+1]){e.preventDefault();abrirRevisaoItem(L[i+1].codigo)}
@@ -3664,26 +3698,43 @@ async function copiarParceiros(codigo,caixa,btn){const alvo=(caixa.querySelector
   catch(err){toast(err.message);btn.disabled=false}}
 function parceirosProjetoHTML(l){if(!(l||[]).length)return '';return `<div class="panel" id="pj-parceiros"><div class="ph"><h2>Parceiros neste projeto</h2><span class="tag">${l.length} escritório${l.length===1?'':'s'}</span></div><div class="pb"><p class="help">Escritórios de consultoria e projetos complementares informados nas folhas.</p><ul class="parc-lista">${l.map(x=>`<li><b>${escHtml(x.escritorio)}</b>${(x.disciplinas||[]).length?` · ${escHtml(x.disciplinas.join(', '))}`:''} <small class="help">(${x.folhas} folha${x.folhas===1?'':'s'})</small></li>`).join('')}</ul></div></div>`}
 async function salvarRevisaoItem(codigo,estado){
+  if(window._REV_SALVANDO)return;   /* 19/10: enquanto grava, um segundo clique (ou Enter) não roda a ação de novo; os botões ficam desligados (travarRevisao) */
+  const naTela=revisaoMostra(codigo),it0=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo),seguir=depoisDaRevisao(codigo,!!it0&&it0.revisao==='pendente');
   if(estado==='reter'||estado==='liberar'){
-    try{const mot=((document.getElementById('rv-motivo')||{}).value||'').trim()||null;
-      await API('/api/itens/'+encodeURIComponent(codigo)+'/retencao',{method:'POST',body:JSON.stringify({retida:estado==='reter',motivo:estado==='reter'?mot:null})});
-      const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){if(estado==='reter'){it.retida=1;it.retida_motivo=mot;if(it.revisao==='pendente'){it.revisao='conferida';it.revisado_por=EU&&EU.email}}else{it.retida=0;it.retida_motivo=null;it.revisao='pendente'}}
+    /* 19/10 ("tirar uma folha do projeto… não tá funcionando bem"): reter salva antes o que foi mudado nos dados da folha (antes descartava em silêncio),
+       limpa "Alterações não salvas" (o motivo digitado fazia perguntar "Sair sem salvar?" ao pular) e segue para a próxima (lote aprovado: a seguinte na ordem) */
+    let b={},salvou=false;if(estado==='reter'&&naTela){try{b=camposRevisaoAlterados()}catch(e){erroRevisao(e.message);return}}
+    travarRevisao(true);
+    try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify(b)});salvou=true;marcarRevisaoSalva()}
+      const mot=estado==='reter'&&naTela?((document.getElementById('rv-motivo')||{}).value||'').trim()||null:null;
+      const r=await API('/api/itens/'+encodeURIComponent(codigo)+'/retencao',{method:'POST',body:JSON.stringify({retida:estado==='reter',motivo:mot})});
+      if(naTela)limparAlteracoes('drawer');
+      const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){if(estado==='reter'){it.retida=1;it.retida_motivo=mot;if(it.revisao==='pendente'){it.revisao='conferida';it.revisado_por=EU&&EU.email}}else{it.retida=0;it.retida_motivo=null}if(r&&r.revisao)it.revisao=r.revisao;else if(estado==='liberar')it.revisao='pendente'}
       atualizarCartaoRevisao(codigo);if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
-      if(estado==='liberar'){toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
-      toast('Folha retida: fica só no painel, não vai ao site');const prox=proximaPendente(codigo);if(prox)abrirRevisaoItem(prox.codigo);else{concluirConferencia()}}
-    catch(e){toast(e.message)}return}
+      if(estado==='liberar'){travarRevisao(false);toast(it&&it.revisao!=='pendente'?`Folha ${codigo}: volta a ir ao site`:`Folha ${codigo}: volta a ir ao site e voltou para conferir`);if(revisaoMostra(codigo))abrirRevisaoItem(codigo);return}   /* pelo "Desfazer" com outra folha aberta: não tira a pessoa de onde está */
+      toast(`Folha ${codigo} retida: fica só no painel, não vai ao site${salvou?' · correção salva':''}${seguir.fim?' · era a última folha do lote':''}`,{acao:{rotulo:'Desfazer',fn:()=>salvarRevisaoItem(codigo,'liberar')}});
+      window._REV_SALVANDO=false;if(naTela)seguir()}   /* os botões desta folha ficam desligados até a próxima abrir */
+    catch(e){travarRevisao(false);if(naTela)erroRevisao(salvou?`Os dados da folha foram salvos, mas ela não foi retida: ${e.message}`:`Não salvou: ${e.message}`);else toast(e.message)}return}
   /* Sírio, 19/10: manda só o que a pessoa mudou; "Está certo" com campo mudado também salva (antes descartava o que foi digitado);
      se não salvar, o motivo do servidor aparece no lugar e a revisão continua aberta com o que foi digitado */
   let b,salvou=false;try{b=estado==='pendente'?{}:camposRevisaoAlterados()}catch(e){erroRevisao(e.message);return}
   if(estado==='conferida'&&Object.keys(b).length)estado='corrigida';
+  travarRevisao(true);
   try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify(b)});salvou=true;marcarRevisaoSalva()}
     await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});
     if(estado!=='pendente')limparAlteracoes('drawer');   /* os campos já foram salvos acima; o que sobrar alterado é só o motivo de "Não publicar" */
     const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){it.revisao=estado;it.revisado_por=EU&&EU.email}
     atualizarCartaoRevisao(codigo);if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
-    if(estado==='pendente'){toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
+    if(estado==='pendente'){travarRevisao(false);toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
     if(estado==='conferida')toast(`Folha ${codigo} conferida`,{acao:{rotulo:'Desfazer',fn:()=>salvarRevisaoItem(codigo,'pendente')}});else if(estado==='corrigida')toast(`Correção da folha ${codigo} salva`);
-    const prox=proximaPendente(codigo);if(prox){abrirRevisaoItem(prox.codigo)}else{concluirConferencia()}}catch(e){erroRevisao(salvou?`Os dados da folha foram salvos, mas a revisão não mudou: ${e.message}`:`Não salvou: ${e.message}`)}}
+    window._REV_SALVANDO=false;seguir()}catch(e){travarRevisao(false);erroRevisao(salvou?`Os dados da folha foram salvos, mas a revisão não mudou: ${e.message}`:`Não salvou: ${e.message}`)}}
+/* 19/10: para onde a revisão vai depois de conferir, reter ou mover a folha (calculado ANTES de mudar a lista: a folha movida sai dela).
+   A próxima a conferir; se esta era a última a conferir, "Conferência concluída"; sem nenhuma a conferir (lote aprovado, ou revendo as já conferidas),
+   a seguinte na ordem; depois da última, fecha a janela (o aviso diz que era a última). Antes: num lote aprovado ia para "Conferência concluída · Aprovar o lote". */
+function depoisDaRevisao(codigo,eraPendente){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo),p=proximaPendente(codigo),s=i>=0?L[i+1]:null;
+  const f=p?()=>abrirRevisaoItem(p.codigo):eraPendente&&L.length?()=>concluirConferencia():s?()=>abrirRevisaoItem(s.codigo):()=>closeDrawer(true);f.fim=!p&&!(eraPendente&&L.length)&&!s;return f}
+function revisaoMostra(codigo){return mainEl.classList.contains('with-drawer')&&(document.getElementById('d-title')||{}).textContent==='Revisar folha'&&(document.getElementById('d-sub')||{}).textContent===codigo}
+function travarRevisao(on){window._REV_SALVANDO=on;document.querySelectorAll('#d-body [data-rev-item],#d-body .op-go').forEach(b=>{if(on){b.dataset.travado='1';b.disabled=true}else if(b.dataset.travado){delete b.dataset.travado;b.disabled=false}})}
 const CAMPOS_REV={titulo:'rv-titulo',tipo_documento:'rv-tipo',folha:'rv-folha',escala:'rv-escala',endereco_folha:'rv-endereco',cliente_folha:'rv-cliente'};
 function camposRevisaoAlterados(){const b={},orig=el=>el.dataset.orig!=null?el.dataset.orig:el.defaultValue;
   for(const [k,id] of Object.entries(CAMPOS_REV)){const el=document.getElementById(id);if(!el)continue;const x=el.value.trim(),o=String(orig(el)||'').trim();

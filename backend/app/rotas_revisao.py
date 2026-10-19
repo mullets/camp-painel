@@ -96,10 +96,15 @@ def importar_todas(u: dict = Depends(auth.exige("operador"))):
     return tarefas.iniciar("importar_todas", "filas", u, rodar, titulo=f"Importar {len(alvo)} lote(s) da Fila")
 
 
+# 19/10: a folha movida para outro projeto ("É de outro projeto…") leva o lote_id junto (o lote é do projeto de origem). Ela não conta mais
+# nem é conferida em lote pelo lote de origem: antes "a conferir" não diminuía depois de mover e a folha que saiu travava "Aprovar o lote".
+_DO_LOTE = "item.lote_id=? AND item.projeto_codigo=(SELECT l.projeto_codigo FROM lista_processamento l WHERE l.id=item.lote_id)"
+
+
 def _contagem(con, lote_id: int) -> dict:
     c = {"total": 0, "pendente": 0, "conferida": 0, "corrigida": 0, "bloqueadas": 0, "retidas": 0}
-    c["retidas"] = con.execute("SELECT COUNT(*) FROM item WHERE lote_id=? AND retida=1", (lote_id,)).fetchone()[0]
-    for r in con.execute("SELECT revisao, status_site, COUNT(*) FROM item WHERE lote_id=? GROUP BY revisao, status_site", (lote_id,)):
+    c["retidas"] = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND retida=1", (lote_id,)).fetchone()[0]
+    for r in con.execute(f"SELECT revisao, status_site, COUNT(*) FROM item WHERE {_DO_LOTE} GROUP BY revisao, status_site", (lote_id,)):
         c["total"] += r[2]
         c[r[0]] += r[2]
         if r[1] == "bloqueado":
@@ -247,7 +252,8 @@ class RetencaoItem(BaseModel):
 
 @router.post("/itens/{codigo}/retencao")
 def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Reter a folha: ela continua no painel (conferida), mas NUNCA vai ao site (nem pela publicação do projeto, nem do fundo, nem pelo lote). Liberar a devolve para conferir."""
+    """Reter a folha: ela continua no painel (conferida), mas NUNCA vai ao site (nem pela publicação do projeto, nem do fundo, nem pelo lote). Liberar a devolve para conferir.
+    Devolve a revisão da folha depois da mudança (a tela usa no "Desfazer": no lote aprovado ela continua conferida)."""
     con = connect()
     try:
         i = con.execute("SELECT i.revisao, i.status_site, i.retida, i.lote_id, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
@@ -270,7 +276,8 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
                            atualizado_em=datetime('now') WHERE codigo=?""", (codigo,))
         _evento(con, "item", codigo, "folha_retida" if d.retida else "folha_liberada", u["email"], {"motivo": motivo})
         con.commit()
-        return {"ok": True, "retida": d.retida}
+        rev = con.execute("SELECT revisao FROM item WHERE codigo=?", (codigo,)).fetchone()[0]
+        return {"ok": True, "retida": d.retida, "revisao": rev}
     finally:
         con.close()
 
@@ -370,7 +377,7 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
         marcadas = 0
-        for i in con.execute("SELECT codigo, titulo, status_site, pendencias FROM item WHERE lote_id=? AND revisao='pendente'", (lote_id,)).fetchall():
+        for i in con.execute(f"SELECT codigo, titulo, status_site, pendencias FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchall():
             try:
                 p = json.loads(i["pendencias"] or "{}")
             except ValueError:
@@ -379,7 +386,7 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
                 continue
             con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (u["email"], i["codigo"]))
             marcadas += 1
-        restam = con.execute("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='pendente'", (lote_id,)).fetchone()[0]
+        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
         _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", u["email"], {"lote_id": lote_id, "conferidas": marcadas, "restam": restam})
         con.commit()
         return {"conferidas": marcadas, "restam": restam}
@@ -401,7 +408,7 @@ def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> d
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
         marcadas = apontadas = 0
-        for i in con.execute("SELECT codigo, status_site, pendencias FROM item WHERE lote_id=? AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar')", (lote_id,)).fetchall():
+        for i in con.execute(f"SELECT codigo, status_site, pendencias FROM item WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar')", (lote_id,)).fetchall():
             try:
                 p = json.loads(i["pendencias"] or "{}")
             except ValueError:
