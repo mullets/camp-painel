@@ -211,11 +211,19 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .label.lab-niim{display:flex;align-items:center;justify-content:center;background:#fff}.lab-niim canvas{image-rendering:pixelated;display:block}
 .label.lab-d{display:flex;color:#000;font-family:var(--sans)}
 .lab-d .ld-fx{width:20mm;flex:none;border-right:.6mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2.2mm 3mm 2.2mm 1.2mm;box-sizing:border-box;text-align:center;gap:.5mm;overflow:hidden}
-.lab-d .ld-fx>*{max-width:100%}
+.lab-d .ld-fx>*{max-width:100%;flex-shrink:0}.lab-d .ld-fobs{font:700 2.1mm/1.12 var(--sans);border:.25mm solid #000;padding:.5mm .6mm;width:100%;box-sizing:border-box;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:break-word}.lab-d.alta .ld-fobs{font-size:2.6mm;-webkit-line-clamp:3}
+.lab-d:not(.alta) .ld-fx{gap:.25mm;padding-top:1.5mm;padding-bottom:1.5mm}.lab-d:not(.alta) .ld-fx .logo{height:4mm}.lab-d:not(.alta) .ld-farq,.lab-d:not(.alta) .ld-fobs{-webkit-line-clamp:1}.lab-d:not(.alta) .ld-fano{font-size:3.2mm}.lab-d:not(.alta) .ld-tarja{padding:.6mm .5mm}
+.lab-d .ld-corpo>*{flex-shrink:0}.lab-d .ld-corpo>.ld-kv{flex:0 1 auto;min-height:0;overflow:hidden}.lab-d .ld-fx .logo{height:5mm}
+.lab-d .ld-farq{font:500 2.1mm/1.12 var(--sans);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:break-word}.lab-d .ld-fano{font:800 3.6mm/1 var(--sans)}.lab-d .ld-pnome{-webkit-line-clamp:2}
+.lab-d.alta .ld-farq{font-size:2.6mm;-webkit-line-clamp:4}.lab-d.alta .ld-fano{font-size:4.6mm}.lab-d.alta .ld-pnome{-webkit-line-clamp:5}
 .lab-d.alta .ld-fx{padding:5mm 3mm 5mm 1.2mm;justify-content:flex-start;gap:3.6mm}.lab-d.alta .logo{height:9mm}.lab-d.alta .ld-rot{font-size:2.4mm}.lab-d.alta .ld-num{font-size:7.4mm}.lab-d.alta .ld-cod{font-size:2.4mm}.lab-d.alta .ld-pnome{font-size:2.7mm;-webkit-line-clamp:6}.lab-d.alta .ld-tarja{font-size:2.6mm;padding:1.4mm .6mm}.lab-d.alta .ld-peq{font-size:2.7mm}.lab-d.alta .ld-fx .ld-vol{margin-top:auto}
 .lab-d.alta .ld-corpo{padding:7mm 6mm 6mm}.lab-d.alta .ld-nome{font-size:8mm;line-height:1.1;-webkit-line-clamp:3}.lab-d.alta .ld-arq{font-size:5mm;margin-top:2mm}
 .lab-d.alta .ld-kv{grid-template-columns:repeat(2,minmax(0,1fr));gap:2.6mm 4mm;margin-top:5mm;font-size:3.6mm}.lab-d.alta .ld-kv b{font-size:2.5mm}.lab-d.alta .ld-kv .ld-largo{grid-column:1/-1}.lab-d.alta .ld-kv span{-webkit-line-clamp:3}.lab-d.alta .ld-obs{font-size:3.6mm;margin-top:3mm}
 .lab-d.alta .ld-barras svg{height:20mm}.lab-d.alta .ld-barras div{font-size:3.8mm;margin-top:1mm}
+.lab-d.larga .ld-fx{padding:4mm 3mm 4mm 1.2mm;gap:2mm}.lab-d.larga .logo{height:7mm}
+.lab-d.larga .ld-corpo{padding:5mm 6mm 4mm}.lab-d.larga .ld-nome{font-size:7.5mm;-webkit-line-clamp:2}.lab-d.larga .ld-arq{font-size:4.6mm;margin-top:1.2mm}
+.lab-d.larga .ld-kv{grid-template-columns:repeat(3,minmax(0,1fr));gap:2.4mm 5mm;margin-top:4mm;font-size:3.5mm}.lab-d.larga .ld-kv .ld-largo{grid-column:span 2}
+.lab-d.larga .ld-barras{display:flex;align-items:center;gap:5mm}.lab-d.larga .ld-barras svg{height:13mm;width:85mm;flex:none}.lab-d.larga .ld-barras div{font-size:3.6mm;margin:0;text-align:left;white-space:nowrap}
 .lab-ajuste{margin:8px 0}.lab-ajuste summary{cursor:pointer;color:var(--ink2)}.laj-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.label.lab-regua{border:0}
 .lab-d .logo{height:6mm}.lab-d .ld-rot{font:700 1.8mm/1 var(--sans);text-transform:uppercase;letter-spacing:.2mm}
 .lab-d .ld-num{font:800 7mm/1 var(--mono);letter-spacing:-.4mm;white-space:nowrap}.lab-d .ld-cod{font:600 2.1mm/1 var(--mono);white-space:nowrap}.lab-d .ld-pnome{font:700 2.3mm/1.12 var(--sans);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:break-word;hyphens:auto}
@@ -1186,7 +1194,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
         </div>
         <div class="lab-section">
           <div class="lab-section-title"><span class="lab-passo">2</span> Como imprimir</div>
-          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="100x150">100 × 150 mm (rolo grande, com lombada de 2 cm)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option><optgroup label="NIIMBOT D110 (slides e negativos)"><option value="50x15">50 × 15 mm · NIIMBOT D110 (rolo T15×50, 130 etiquetas brancas)</option><option value="40x12">40 × 12 mm · NIIMBOT D110 (moldura do slide)</option><option value="30x12">30 × 12 mm · NIIMBOT D110 (compacta)</option></optgroup></select></label>
+          <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="150x100">150 × 100 mm deitada (rolo 100 × 150, com lombada de 2 cm)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option><optgroup label="NIIMBOT D110 (slides e negativos)"><option value="50x15">50 × 15 mm · NIIMBOT D110 (rolo T15×50, 130 etiquetas brancas)</option><option value="40x12">40 × 12 mm · NIIMBOT D110 (moldura do slide)</option><option value="30x12">30 × 12 mm · NIIMBOT D110 (compacta)</option></optgroup></select></label>
           <label class="field">Papel<select id="l-papel"><option value="rolo">Impressora de etiquetas (uma por página, no tamanho exato)</option><option value="a4">Folha A4 comum (várias por folha, para recortar)</option></select></label>
           <details class="lab-ajuste" id="lab-ajuste"><summary>Ajuste desta impressora <small class="help" id="laj-resumo"></small></summary>
             <p class="help">Se a etiqueta sai maior, menor ou deslocada: imprima a <b>régua de teste</b>, meça com uma régua de verdade e corrija aqui. Fica guardado neste computador, para este formato.</p>
@@ -1935,10 +1943,12 @@ function aplicarVolumeEtiqueta(){
   renderLabel();
 }
 /* 19/10 ("com esse tamanho cabe mais infos"): os campos da etiqueta 100 × 150. Vazio ("—") não ocupa lugar, menos o Local (é escrito à mão). */
+/* "só o tubo já ajudaria": de "Tubos 118 (RESIDÊNCIA …). Pesquisa (…)" fica "Tubos 118" */
+function labTuboOriginal(t){t=String(t||'').trim();if(!t)return '';const m=t.match(/^(.*?)\s*[(.;]/);return (m&&m[1].trim()?m[1]:t).slice(0,40)}
 function labCamposGrandes(o){const vazio=v=>v==null||['','—','0'].includes(String(v).trim());
   const cat=(window.LABEL_CATEG||[]).filter(c=>c.itens).map(c=>`${c.itens} ${String(c.nome||c.codigo).toLowerCase()}`).join(' · ');
   return [['Material',o.mat?o.mat.texto:'todo o material'],['Fundo',`${o.fc} · ${o.sig} — ${o.nome||''}`,1],['Cliente',o.cliente],['Cidade · ano',o.cidAno],['Endereço da obra',o.endereco,1],
-    ['Volume',`${o.volume} de ${o.totalVolumes}`],['Embalagem',o.tipoEmb],['Documentos no volume',o.docs],['Local',o.local||'—'],['Conteúdo',cat,1],['Identificação original',o.projeto&&o.projeto.identificacao_original,1]]
+    ['Volume',`${o.volume} de ${o.totalVolumes}`],['Embalagem',o.tipoEmb],['Documentos no volume',o.docs],['Local',o.local||'—'],['Conteúdo',cat,1],['Tubo original',labTuboOriginal(o.projeto&&o.projeto.identificacao_original)]]
     .filter(([a,v])=>a==='Local'||!vazio(v))}
 function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /* lote por material: cada folha sai no modelo de folha */   /* alvo (H21, lote): {codigo,titulo,ano,folha} de uma folha ou de uma pasta do fundo */
   const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc)||[fc||'F000','—','(selecione um fundo)',''],sig=f[1]||'—',nome=f[2];
@@ -1963,7 +1973,7 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     else linhas=[G(`${fc} ${sig}`,22,'700',1),G(nome,16,'700'),G(f[3]||'',13,'400')];
     const d={codigo:code,linhas:linhas.filter(l=>l[0]),w:mw,h:mh};
     return `<div class="label lab-niim" style="width:${mw*8}px;height:${mh*8}px"><canvas data-niim="${escHtml(JSON.stringify(d))}" style="width:${mw*8}px;height:96px" aria-label="${escHtml(code)}"></canvas></div>`}   /* prévia: 1 ponto da impressora = 1 px */
-  if(mw>=150){   /* pedido de 15/10: capa da pasta, um pouco menor que A4 (200 × 287 mm), impressa em A4 e recortada na linha */
+  if(mw>=190){   /* pedido de 15/10: capa da pasta, um pouco menor que A4 (200 × 287 mm), impressa em A4 e recortada na linha */
     const tit=labType==='projeto'||labType==='documento'||labType==='tubo'?pn:labType==='fundo'?nome:`${sig} · ${nome}`;
     return `<div class="label lab-capa" style="width:${mw*S}px;height:${mh*S}px"><div class="lc-topo">${LOGO_CAMP}<span>Casa da Arquitetura Moderna Paulista · Acervo ${escHtml(sig)}</span></div>
       <div class="lc-cod">${escHtml(big)}</div><h2 class="lc-tit">${escHtml(tit)}</h2>
@@ -1990,10 +2000,10 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     const num=codigoProjetoEtiqueta(pc).replace(/^P/,''),pcod=projeto.codigo||document.getElementById('l-proj').value||'',
       nf=alvo?(alvo.folhas??null):(mat?mat.n:(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0)),
       tarja=nf==null?'':`${nf} ${nf===1?'folha':'folhas'}`,
-      kv=mh>=100?labCamposGrandes({mat,fc,sig,nome,cliente,endereco,cidAno,volume,totalVolumes,tipoEmb,docs,local,projeto})   /* 100 × 150: cabe muito mais */
+      kv=(mh>=100||mw>=140)?labCamposGrandes({mat,fc,sig,nome,cliente,endereco,cidAno,volume,totalVolumes,tipoEmb,docs,local,projeto})   /* 100 × 150: cabe muito mais */
         :[['Material',mat?mat.texto:'todo o material'],['Fundo',`${fc} · ${sig}`],['Volume',`${volume} de ${totalVolumes}`],['Local',local]];   /* cidade e ano já estão na faixa */
-    const alta=mh>=100;   /* 100 × 150: a mesma faixa D, com mais espaço */
-    return `<div class="label lab-d${alta?' alta':''}" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx" data-lombada>${LOGO_CAMP}<div class="ld-rot">Acervo ${escHtml(sig)}</div><div class="ld-num">${escHtml(num)}</div><div class="ld-cod">${escHtml(pcod)}</div><div class="ld-pnome">${escHtml(pn)}</div>${tarja?`<div class="ld-tarja">${escHtml(tarja)}</div>`:''}<div class="ld-peq">${escHtml([cid,anoTxt].filter(Boolean).join(' · '))}</div><div class="ld-peq ld-vol">vol ${escHtml(volume)}/${escHtml(totalVolumes)}</div></div>
+    const alta=mh>=100||mw>=140,larga=mw>=140;   /* 150 × 100 deitada (rolo 100 × 150): a mesma faixa D e o corpo largo, em 3 colunas */
+    return `<div class="label lab-d${alta?' alta':''}${larga?' larga':''}" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx" data-lombada>${LOGO_CAMP}<div class="ld-rot">Acervo ${escHtml(sig)}</div><div class="ld-num">${escHtml(num)}</div><div class="ld-cod">${escHtml(pcod)}</div><div class="ld-pnome">${escHtml(pn)}</div><div class="ld-farq">${escHtml(arq)}</div><div class="ld-fano">${escHtml(anoTxt)}</div>${tarja?`<div class="ld-tarja">${escHtml(tarja)}</div>`:''}<div class="ld-peq">${escHtml(cid)}</div>${obs?`<div class="ld-fobs">${escHtml(obs)}</div>`:''}${totalVolumes>1||alta?`<div class="ld-peq ld-vol">vol ${escHtml(volume)}/${escHtml(totalVolumes)}</div>`:''}</div>
       <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b,largo])=>`<span${largo?' class="ld-largo"':''}><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
       ${obs?`<div class="ld-obs">${escHtml(obs)}</div>`:''}<div class="ld-barras">${barcode(code,30,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
   /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
@@ -2034,10 +2044,14 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
   {const pp=document.getElementById('l-papel');if(pp&&pp.closest('label'))pp.closest('label').style.display=w==='200'?'none':''}   /* a capa sai sempre numa A4 */
   const av=document.getElementById('lab-aviso');if(av)av.innerHTML=niim?'NIIMBOT D110: <b>Imprimir na NIIMBOT</b> manda as etiquetas para o servidor de impressão deste computador (niimblue-node, instalado uma vez com <code>scripts/niimbot_mac.sh</code>), que fala com a D110 pelo cabo USB-C ou Bluetooth. Sem o servidor: <b>Baixar imagens</b> e imprimir pelo niim.blue no Chrome.':w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
-  const aj=lajLer(w+'x'+h),ajCss=aj.escala!==100||aj.x||aj.y?`@media print{.printgrid .label{transform:translate(${aj.x}mm,${aj.y}mm) scale(${aj.escala/100});transform-origin:0 0}}`:'';lajMostrar(w+'x'+h,aj);
+  const aj=lajLer(w+'x'+h),rolo=document.getElementById('l-papel').value!=='a4',girada=rolo&&+w>+h&&+w>=140,   /* deitada: a página é o rolo (100 × 150) e o desenho sai girado */
+    tr=aj.escala!==100||aj.x||aj.y?`translate(${aj.x}mm,${aj.y}mm) scale(${aj.escala/100})`:'',
+    ajCss=girada?`@media print{.printgrid .giro-pag{width:${h}mm;height:${w}mm;position:relative;overflow:hidden;break-after:page;page-break-after:always${tr?`;transform:${tr};transform-origin:0 0`:''}}.printgrid .giro-pag:last-child{break-after:auto;page-break-after:auto}.printgrid .giro-pag .label{position:absolute;left:0;top:0;transform:translateX(${h}mm) rotate(90deg);transform-origin:0 0;break-after:auto!important;page-break-after:auto!important}}`
+      :tr?`@media print{.printgrid .label{transform:${tr};transform-origin:0 0}}`:'';lajMostrar(w+'x'+h,aj);
+  if(girada&&pg&&!niim)pg.innerHTML=etiquetas.map(x=>`<div class="giro-pag">${x}</div>`).join('');
   st.textContent=ajCss+(w==='200'?`@media print{@page{size:A4;margin:5mm}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`
     :document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
-    :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`)}
+    :`@media print{@page{size:${girada?h:w}mm ${girada?w:h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`)}
 
 /* 19/10 · "a escala não bate quando mando imprimir": ajuste fino por computador e formato (escala, mover), aplicado só na impressão.
    A régua de teste sai no tamanho do formato com marcas a cada mm e a dobra de 2 cm, para medir com uma régua de verdade. */
