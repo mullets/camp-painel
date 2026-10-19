@@ -337,7 +337,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close(); raise HTTPException(404, "Projeto não existe")
 
     itens_local = [dict(r) for r in con.execute("""
-        SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
+        SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, COALESCE(i.tipos_documento, i.tipo_documento) AS tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.espelho_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar, i.rotacao_aplicada,
                i.endereco_folha, i.cliente_folha,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior,
@@ -509,6 +509,7 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     agentes = [dict(r) for r in con.execute("SELECT a.forma_autorizada, ia.papel, ia.fonte FROM item_agente ia JOIN agente a ON a.id=ia.agente_id WHERE ia.item_codigo=?", (codigo,))]
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
+    d["tipo_documento"] = d.pop("tipos_documento", None) or d.get("tipo_documento")   # 19/10: a lista inteira quando há mais de um tipo
     d["tainacan_item_id"] = d.pop("wp_id_exato", None)
     from .imagens import e_imagem
     d["imagem_grande"] = d.get("documento_url") if e_imagem(d.get("documento_url")) else None

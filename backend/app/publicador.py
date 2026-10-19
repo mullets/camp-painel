@@ -641,6 +641,25 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         "ignorados": ignorados[:50],
     }
 
+def _tipos_para_site(con, codigo: str, mid, valor):
+    """19/10: folha com mais de um tipo ("Planta; Corte"). Se o metadado do site aceita vários valores, vão todos (lista);
+    se aceita um só, vai o primeiro e fica uma pendência dizendo o que não foi."""
+    from .tipos_documento import separar
+    tipos = separar(valor)
+    if len(tipos) <= 1:
+        return tipos[0] if tipos else valor
+    r = con.execute("SELECT json FROM wp_metadado WHERE id=?", (mid,)).fetchone()
+    try:
+        multiplo = str((json.loads(r[0]) if r and r[0] else {}).get("multiple") or "").lower() == "yes"
+    except Exception:  # noqa: BLE001
+        multiplo = False
+    if multiplo:
+        return tipos
+    _pendencia(con, "item", codigo, "pendente_metadado_Tipo de desenho",
+               f"O metadado “Tipo de desenho” do site aceita um só valor: foi enviado “{tipos[0]}”; ficaram de fora: {', '.join(tipos[1:])}.")
+    return tipos[0]
+
+
 def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     tid = _tax(con, taxonomia_nome)
     if not tid or not nome:
@@ -784,7 +803,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (i["fundo_codigo"],)).fetchone()
             valores = {"Código do documento": codigo, "Projeto": str(i["dossie_id"]), "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
                        "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
-                       "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
+                       "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipos_documento"] or i["tipo_documento"],
                        "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
                        "Crédito": CREDITO_AUTORIA_NAO_CONFIRMADA if i["autoria_divergente"] else None,   # CAMP-046: nunca o nome lido como fato
                        "Suporte": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
@@ -792,6 +811,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 if valor in (None, ""):
                     continue
                 mid, _ = _meta(con, COL_ACERVO, nome)
+                if nome == "Tipo de desenho" and mid:
+                    valor = _tipos_para_site(con, codigo, mid, valor)
                 if not mid and nome == "Arquivo de origem":
                     mid = _garantir_metadado_origem(con, wp)
                 if not mid:

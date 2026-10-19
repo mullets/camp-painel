@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo"}
 
 
 def rodar(modo, db):
@@ -6723,6 +6723,59 @@ def filho(modo):
         ver("a decisão descartada não aparece entre as pendentes", all(x["id"] != did for x in (pend.get("itens", pend) if isinstance(pend, dict) else pend)), str(pend)[:200])
         k.close()
         for l in res: print(l)
+    elif modo == "tipo_multiplo":
+        # 19/10: folha com mais de um tipo (planta, corte e elevação na mesma prancha)
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        import app.publicador as pub
+        from app.main import app
+        from app.tipos_documento import separar, juntar
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa de teste',1970)")
+        I1 = "F099-P0001-1970-S01-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,folha,origem) VALUES (?,?,?,?,?,?,?,'importado')", (I1, "F099-P0001", "S01", 1, "Prancha 1", "Planta", "01/02"))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("separar/juntar: espaços, vazios e repetidos", separar(" Planta ;Corte;; planta ; Elevação/Fachada") == ["Planta", "Corte", "Elevação/Fachada"] and juntar(["Corte", "", "Corte"]) == "Corte" and juntar("") is None)
+        r = op.patch(f"/api/itens/{I1}", json={"tipo_documento": "Planta;Corte ; Elevação/Fachada"})
+        um, tipo = c.execute("SELECT tipo_documento, tipos_documento FROM item WHERE codigo=?", (I1,)).fetchone()
+        ver("grava mais de um tipo: o primeiro em tipo_documento (vocabulário) e a lista em tipos_documento", r.status_code == 200 and um == "Planta" and tipo == "Planta; Corte; Elevação/Fachada", f"HTTP {r.status_code} {r.text[:120]} -> {um} / {tipo}")
+        ed = op.get(f"/api/itens/{I1}/edicao").json()
+        ver("a revisão e a edição recebem a lista inteira", ed["local"]["tipo_documento"] == "Planta; Corte; Elevação/Fachada", str(ed["local"].get("tipo_documento")))
+        dt = op.get("/api/projetos/F099-P0001/detalhe").json()
+        ver("o dossiê do projeto mostra a lista inteira", any(x.get("codigo") == I1 and x.get("tipo_documento") == "Planta; Corte; Elevação/Fachada" for x in dt.get("itens", [])))
+        ev = c.execute("SELECT detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado' ORDER BY id DESC LIMIT 1", (I1,)).fetchone()
+        ver("o histórico registra antes e depois", ev and "Planta" in ev[0] and "Elevação/Fachada" in ev[0])
+        r = op.patch(f"/api/itens/{I1}", json={"tipo_documento": "Planta; Inventado"})
+        ver("um tipo fora do vocabulário recusa tudo (400) e nada muda", r.status_code == 400 and "Inventado" in r.text and c.execute("SELECT tipos_documento FROM item WHERE codigo=?", (I1,)).fetchone()[0] == tipo, r.text[:120])
+        r = op.patch(f"/api/itens/{I1}", json={"tipo_documento": "Corte"})
+        ver("um tipo só continua funcionando (e a lista some)", r.status_code == 200 and tuple(c.execute("SELECT tipo_documento, tipos_documento FROM item WHERE codigo=?", (I1,)).fetchone()) == ("Corte", None))
+        r = op.patch(f"/api/itens/{I1}", json={"tipo_documento": ""})
+        ver("vazio limpa o tipo", r.status_code == 200 and c.execute("SELECT tipo_documento FROM item WHERE codigo=?", (I1,)).fetchone()[0] is None)
+        # site: metadado que aceita vários valores recebe a lista; que aceita um só recebe o primeiro + pendência
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id,json) VALUES (502,8013,'Tipo de desenho','Tainacan\\Metadata_Types\\Taxonomy',77,?)", (_j.dumps({"multiple": "yes"}),))
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id,json) VALUES (602,8013,'Tipo X','Tainacan\\Metadata_Types\\Taxonomy',77,?)", (_j.dumps({"multiple": "no"}),))
+        c.commit()
+        v1 = pub._tipos_para_site(c, I1, 502, "Planta; Corte")
+        v2 = pub._tipos_para_site(c, I1, 602, "Planta; Corte; Elevação/Fachada")
+        v3 = pub._tipos_para_site(c, I1, 602, "Planta")
+        c.commit()
+        pend = c.execute("SELECT COUNT(*) FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_metadado_Tipo de desenho' AND resolvida=0", (I1,)).fetchone()[0]
+        ver("site com vários valores: vai a lista", v1 == ["Planta", "Corte"], str(v1))
+        ver("site com um valor só: vai o primeiro e fica pendência", v2 == "Planta" and pend != 0, f"{v2} pend={pend}")
+        ver("um tipo só: vai como texto, igual a antes", v3 == "Planta", str(v3))
+        # exportação: um <genreform> por tipo
+        import inspect, app.exportacao as ex
+        fonte = inspect.getsource(ex)
+        ver("exportação gera um genreform por tipo", "for t in separar(i.get(\"tipos_documento\") or i.get(\"tipo_documento\"))" in fonte)
+        c.close()
+        for l in res: print(l)
     elif modo == "nome_de_pasta":
         # projetos criados a partir de SUBPASTAS do sistema (F009-P0114 "01 - Arquivo Arquivístico (TIFF)", F022-P0009 com 5 folhas, F026-P0237)
         init_db(); _aplicar_migracoes_real()
@@ -7833,6 +7886,12 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("132) Projetos com nome de pasta do sistema: lista, sugestão no mesmo fundo, juntar e descartar")
+rc, out = rodar("tipo_multiplo", f"{tmp}/tipo_multiplo.db")
+if rc != 0: ok(False, f"teste de tipo múltiplo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"tipo múltiplo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 rc, out = rodar("nome_de_pasta", f"{tmp}/nome_pasta.db")
 if rc != 0: ok(False, f"teste de nome de pasta não rodou -> {out[-1500:]}")
 else:

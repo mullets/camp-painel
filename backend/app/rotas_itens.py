@@ -93,7 +93,7 @@ def dados_edicao(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict
     try:
         i, w = _item_e_site(con, codigo)
         d = {"codigo": codigo, "status_site": i["status_site"], "no_site": bool(w),
-             "local": {k: i[k] for k in (*LIMITES_LOCAIS, "ano_folha")},
+             "local": {**{k: i[k] for k in (*LIMITES_LOCAIS, "ano_folha")}, "tipo_documento": i["tipos_documento"] or i["tipo_documento"]},
              "tipos_documento": [r[0] for r in con.execute("SELECT nome FROM tipo_documento ORDER BY nome")],
              "site": None}
         if w:
@@ -135,8 +135,17 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
             v = v.strip()
             if len(v) > lim:
                 raise HTTPException(400, f"{k}: máximo de {lim} caracteres")
-            if k == "tipo_documento" and v and not con.execute("SELECT 1 FROM tipo_documento WHERE nome=?", (v,)).fetchone():
-                raise HTTPException(400, f"Tipo de documento '{v}' não existe no vocabulário")
+            if k == "tipo_documento":   # 19/10: pode ter mais de um tipo ("Planta; Corte; Elevação/Fachada"); cada um tem de existir
+                from .tipos_documento import separar, juntar
+                lista = separar(v)
+                for t in lista:
+                    if not con.execute("SELECT 1 FROM tipo_documento WHERE nome=?", (t,)).fetchone():
+                        raise HTTPException(400, f"Tipo de documento '{t}' não existe no vocabulário")
+                atual = i["tipos_documento"] or i["tipo_documento"]
+                if (juntar(lista) or None) != (atual or None):   # tipo_documento = o primeiro (ligado ao vocabulário); a lista inteira em tipos_documento
+                    novos["tipo_documento"], novos["tipos_documento"] = (lista[0] if lista else None), (juntar(lista) if len(lista) > 1 else None)
+                    antes["tipo_documento"] = atual
+                continue
             v = v or None
             if v != i[k]:
                 novos[k], antes[k] = v, i[k]

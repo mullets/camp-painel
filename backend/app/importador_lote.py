@@ -331,6 +331,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if str(d.get("fotografo") or "").strip():       # contrato 2.2: sem coluna própria, fica junto do que o CV2 leu
             lido["fotografo"] = str(d["fotografo"]).strip()[:200]
         campos["lido_json"] = json.dumps(lido, ensure_ascii=False)
+        campos["tipos_documento"] = None          # releitura de folha NÃO conferida: vale o tipo lido (um só); conferidas mantêm o que a pessoa marcou
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
             atualizados += 1

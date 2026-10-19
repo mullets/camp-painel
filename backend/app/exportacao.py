@@ -134,8 +134,9 @@ def _c_item(pai, i: dict, ano_projeto) -> None:
     _data(did, i.get("ano_folha") or ano_projeto)
     pd = _sub(did, "physdesc")
     _sub(pd, "extent", "1 documento")
-    if i.get("tipo_documento"):
-        _sub(pd, "genreform", i["tipo_documento"])
+    from .tipos_documento import separar
+    for t in separar(i.get("tipos_documento") or i.get("tipo_documento")):          # um <genreform> por tipo (planta, corte…)
+        _sub(pd, "genreform", t)
     if i.get("dimensoes"):
         _sub(pd, "dimensions", i["dimensoes"])
     if i.get("suporte"):
