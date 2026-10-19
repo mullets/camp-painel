@@ -703,8 +703,16 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         status = json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() and status_path.stat().st_size else {}
     except Exception as e:  # noqa: BLE001
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": f"manifesto inválido: {e}"}
+    sem_manifesto = False
     if not info_path.exists() and not status_path.exists():
-        return {"acao": "ignorada", "pasta": str(pasta), "motivo": "sem info_projeto.json nem status.json nesta pasta"}
+        # Aviso do CAMP Vision (`esperado` = código que ele disse) de pasta que TEM o pacote do projeto mas não tem info_projeto.json/status.json
+        # (pasta reorganizada por --reidentificar ou reconstruída: a releitura de F026-P0009 foi lida e o painel recusava o aviso, e nada mudava na tela).
+        # Vale só quando o pacote é do MESMO projeto que o aviso disse; a varredura do QNAP (sem `esperado`) continua ignorando pasta sem manifesto.
+        pacote_cod = _codigo_do_pacote(pasta)
+        if esperado and pacote_cod and pacote_cod.upper() == esperado.strip().upper():
+            info, status, sem_manifesto = {"codigo": pacote_cod}, {"status": "pronto"}, True
+        else:
+            return {"acao": "ignorada", "pasta": str(pasta), "motivo": "sem info_projeto.json nem status.json nesta pasta"}
 
     nome_teste = pasta.name.lower() in ("asd", "sei la")
     if nome_teste:
@@ -748,6 +756,8 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     st = status.get("status") if isinstance(status, dict) else None
     etapa_alvo, conhecido = _classificar_status(st, con)
     aviso = None if conhecido else f"status desconhecido '{st}': tratado como pronto"
+    if sem_manifesto:
+        aviso = ((aviso + "; ") if aviso else "") + "a pasta não tem info_projeto.json nem status.json: lida pelo pacote do CAMP Vision"
     if leitura_parcial:
         aviso = ((aviso + "; ") if aviso else "") + "a pasta demorou para ser lida: a contagem de folhas pode estar incompleta"
     nome = info.get("nome") or info.get("titulo") or pasta.name
@@ -834,6 +844,15 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     if etapa_alvo == "revisao":
         _evento(con, "projeto", cod, "material_novo_pronto", "campvision2", contexto)
     return {**saida, "acao": "nova"}
+
+
+def _codigo_do_pacote(pasta: Path) -> str | None:
+    """Código do projeto que o pacote do CAMP Vision diz (None se não há pacote ou ele está ilegível)."""
+    from .importador_lote import ler_pacote
+    try:
+        return str(((ler_pacote(pasta) or {}).get("projeto_codigo")) or "") or None
+    except HTTPException:
+        return None
 
 
 def _documentos_novos(con, pasta: Path, cod: str, lote_id: int) -> list[str]:
