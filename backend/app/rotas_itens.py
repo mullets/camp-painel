@@ -20,6 +20,8 @@ router = APIRouter(prefix="/api", tags=["itens"])
 
 LIMITES_LOCAIS = {"titulo": 300, "tipo_documento": 120, "folha": 40, "escala": 60, "dimensoes": 120, "suporte": 160, "credito": 300,
                   "endereco_folha": 300, "cliente_folha": 200}   # endereço e cliente lidos no carimbo da folha (consenso do lote)
+ROTULOS_LOCAIS = {"titulo": "Título", "tipo_documento": "Tipo", "folha": "Folha", "escala": "Escala", "dimensoes": "Dimensões", "suporte": "Suporte",
+                  "credito": "Crédito", "endereco_folha": "Endereço da obra", "cliente_folha": "Cliente"}
 SITE_METADADOS = ("Tipo de desenho", "Técnica", "Suporte", "Endereço", "Cliente", "Fotógrafo",
                   "Data do registro fotográfico", "Informação atribuída pela catalogação")
 LIM_TEXTO_SITE = 5000
@@ -133,22 +135,26 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
             if v is None:
                 continue
             v = v.strip()
-            if len(v) > lim:
-                raise HTTPException(400, f"{k}: máximo de {lim} caracteres")
             if k == "tipo_documento":   # 19/10: pode ter mais de um tipo ("Planta; Corte; Elevação/Fachada"); cada um tem de existir
                 from .tipos_documento import separar, juntar
-                lista = separar(v)
-                for t in lista:
-                    if not con.execute("SELECT 1 FROM tipo_documento WHERE nome=?", (t,)).fetchone():
-                        raise HTTPException(400, f"Tipo de documento '{t}' não existe no vocabulário")
                 atual = i["tipos_documento"] or i["tipo_documento"]
+                ja_tem = {t.lower(): t for t in separar(atual)}
+                lista = []
+                for t in separar(v):     # sem limite de caracteres na lista inteira (Sírio, 19/10): cada tipo é conferido no vocabulário
+                    r = con.execute("SELECT nome FROM tipo_documento WHERE nome=? OR lower(nome)=lower(?) ORDER BY nome=? DESC LIMIT 1", (t, t, t)).fetchone()
+                    if not r and t.lower() not in ja_tem:   # o tipo que a folha JÁ tem não impede salvar o resto
+                        raise HTTPException(400, f"Tipo de documento '{t}' não existe no vocabulário")
+                    lista.append(r[0] if r else ja_tem[t.lower()])
                 if (juntar(lista) or None) != (atual or None):   # tipo_documento = o primeiro (ligado ao vocabulário); a lista inteira em tipos_documento
                     novos["tipo_documento"], novos["tipos_documento"] = (lista[0] if lista else None), (juntar(lista) if len(lista) > 1 else None)
                     antes["tipo_documento"] = atual
                 continue
             v = v or None
-            if v != i[k]:
-                novos[k], antes[k] = v, i[k]
+            if v == ((i[k] or "").strip() or None):
+                continue                 # Sírio, 19/10: a revisão manda todos os campos; o que não mudou não é validado de novo (o CAMP Vision pode ter lido mais longo que o limite)
+            if v and len(v) > lim:
+                raise HTTPException(400, f"{ROTULOS_LOCAIS.get(k, k)}: máximo de {lim} caracteres (tem {len(v)})")
+            novos[k], antes[k] = v, i[k]
         if d.ano_folha is not None:
             if d.ano_folha != 0 and not (1800 <= d.ano_folha <= 2100):
                 raise HTTPException(400, "Ano da folha inválido (0 para limpar)")

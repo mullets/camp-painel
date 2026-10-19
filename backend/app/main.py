@@ -7,6 +7,8 @@ import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -288,6 +290,22 @@ async def cabecalhos_seguranca(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def _http_exc(request: Request, exc: HTTPException):
     return JSONResponse({"erro": exc.detail}, status_code=exc.status_code)
+
+
+_ROTULO_CAMPO_INVALIDO = {"ano_folha": "Ano da folha", "ano": "Ano", "ano_fim": "Ano final", "graus": "Giro", "estado": "Estado"}
+_EXPLICA_INVALIDO = {"int_parsing": "use só números inteiros (ex.: 1972)", "int_type": "use só números inteiros (ex.: 1972)",
+                     "string_type": "tem de ser texto", "missing": "falta preencher", "bool_parsing": "tem de ser sim ou não"}
+
+
+@app.exception_handler(RequestValidationError)
+async def _validacao_exc(request: Request, exc: RequestValidationError):
+    """Sírio, 19/10: dado inválido (ex.: ano "1958/59") voltava só com `detail` em inglês e a tela mostrava "Unprocessable Entity".
+    Agora vem também `erro`, em português, com o nome do campo; `detail` continua igual para quem já o lia."""
+    partes = []
+    for e in exc.errors()[:3]:
+        campo = next((str(x) for x in reversed(e.get("loc") or ()) if not isinstance(x, int) and x not in ("body", "query", "path")), "")
+        partes.append(f"{_ROTULO_CAMPO_INVALIDO.get(campo, campo or 'Dado')}: {_EXPLICA_INVALIDO.get(e.get('type'), 'valor inválido')}")
+    return JSONResponse({"erro": "; ".join(partes) or "Dado inválido", "detail": jsonable_encoder(exc.errors())}, status_code=422)
 
 
 @app.get("/api/versao")

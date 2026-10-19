@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from . import auth, giro_imagem as imagens
 from .db import connect
-from .importador_lote import importar_lote, ler_pacote
+from .importador_lote import importar_lote, ler_pacote, tirar_projeto_divergente
 from .rotas_operacao import _qnap_prontos_raiz
 
 router = APIRouter(prefix="/api", tags=["revisao"])
@@ -190,6 +190,46 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         registrar_campos_revisados(con, codigo, d.estado, u["email"])
         con.commit()
         return {"ok": True, "revisao": d.estado}
+    finally:
+        con.close()
+
+
+@router.post("/itens/{codigo}/deste-projeto")
+def confirmar_deste_projeto(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """19/10 (Clube Sírio): "É deste projeto (o CAMP Vision errou)". Tira o sinal "projeto divergente" e os bloqueios que falam de outro projeto;
+    se não sobrar outro bloqueio, a folha sai de 'bloqueado' e volta a 'nao_publicado'; fecha o problema automático "folha de outro projeto"
+    que o CAMP Vision abriu para ela. Fica no histórico com quem fez. Repetir não muda nada (nem grava de novo)."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        i = con.execute("SELECT status_site, pendencias, autoria_divergente FROM item WHERE codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        try:
+            pend = json.loads(i["pendencias"] or "{}")
+        except ValueError:
+            pend = {}
+        if not isinstance(pend, dict):
+            pend = {}
+        sinais, bloqueios = tirar_projeto_divergente(pend)
+        mudou = bool(sinais or bloqueios)
+        out = {"ok": True, "mudou": mudou, "sinais_tirados": sinais, "bloqueios_tirados": bloqueios, "situacao_liberada": False, "problemas_fechados": 0}
+        status = i["status_site"]
+        if mudou:
+            con.execute("UPDATE item SET pendencias=?, atualizado_em=datetime('now') WHERE codigo=?", (json.dumps(pend, ensure_ascii=False), codigo))
+            if status == "bloqueado" and not pend["bloqueios"] and not i["autoria_divergente"]:
+                con.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (codigo,))
+                status, out["situacao_liberada"] = "nao_publicado", True
+            out["problemas_fechados"] = con.execute(
+                """UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=?
+                    WHERE codigo=? AND categoria='projeto_errado' AND origem='campvision' AND situacao IN ('aberto','em_correcao')""",
+                (f"É deste projeto: {u['email']} confirmou no painel (o CAMP Vision errou).", codigo)).rowcount
+            _evento(con, "item", codigo, "projeto_confirmado", u["email"], {k: out[k] for k in ("sinais_tirados", "bloqueios_tirados", "situacao_liberada", "problemas_fechados")})
+        con.commit()
+        return {**out, "status_site": status, "bloqueios_restantes": pend.get("bloqueios") or [], "pendencias": pend}
+    except HTTPException:
+        con.rollback()
+        raise
     finally:
         con.close()
 

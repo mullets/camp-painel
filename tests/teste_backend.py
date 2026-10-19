@@ -14,6 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "projeto_divergente"}
 
 
 def rodar(modo, db):
@@ -6850,6 +6851,101 @@ def filho(modo):
         ver("exportação gera um genreform por tipo", "for t in separar(i.get(\"tipos_documento\") or i.get(\"tipo_documento\"))" in fonte)
         c.close()
         for l in res: print(l)
+    elif modo == "projeto_divergente":
+        # 19/10 (Clube Sírio): "não foi possível salvar alterações na folha; ela consta como 'projeto divergente', mesmo estando na pasta certa".
+        # (a) salvar a revisão de uma folha cujo valor LIDO pelo CAMP Vision passa do limite do campo; (b) erro de validação sem mensagem;
+        # (c) "É deste projeto (o CAMP Vision errou)": tira o aviso, solta o bloqueio, fica no histórico, é idempotente e sobrevive à reimportação.
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile as _tf
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Clube Sírio',1970)")
+        pasta = _tf.mkdtemp(prefix="pd-lote-")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Clube Sírio','F099-P0001',?,'revisao')", (pasta,)).lastrowid
+        D = lambda n: f"F099-P0001-1970-S01-D{n:05d}"
+        def folha(n, pend, status="bloqueado", **kw):
+            cols = {"codigo": D(n), "projeto_codigo": "F099-P0001", "serie_codigo": "S01", "sequencial": n, "origem": "campvision", "lote_id": lote,
+                    "status_site": status, "pendencias": _j.dumps(pend, ensure_ascii=False), "titulo": f"Prancha {n}", **kw}
+            c.execute(f"INSERT INTO item ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", tuple(cols.values()))
+        LONGA = "Prancha 03/12 - planta do pavimento térreo e da cobertura"   # 57 caracteres: o CAMP Vision leu assim (limite do campo: 40)
+        folha(1, {"bloqueios": ["projeto divergente: o carimbo diz 'Clube Atlético Sírio'"], "sinais": ["projeto divergente", "orientação incerta"], "ressalvas": []},
+              folha=LONGA, cliente_folha="C" * 250)
+        folha(2, {"bloqueios": ["projeto divergente", "duplicata de F099-P0001-1970-S01-D00001"], "sinais": ["projeto divergente"], "ressalvas": []})
+        folha(3, {"bloqueios": [], "sinais": [], "ressalvas": []}, status="nao_publicado")
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('bloqueia','projeto_errado','campvision',?,'projeto divergente','CAMP Vision')", (D(1),))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('corrigir','projeto_errado','operador',?,'relatado por gente','Op')", (D(1),))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        pend = lambda n: _j.loads(q("SELECT pendencias FROM item WHERE codigo=?", D(n))[0])
+        # ---------- (a) salvar a revisão: a tela manda TODOS os campos, inclusive os que o CAMP Vision leu longos e a pessoa não mexeu ----------
+        r = op.patch(f"/api/itens/{D(1)}", json={"titulo": "Planta do térreo", "tipo_documento": "", "folha": LONGA, "escala": "", "ano_folha": 0, "endereco_folha": "", "cliente_folha": "C" * 250})
+        ver("salvar a revisão funciona mesmo com valor lido maior que o limite e NÃO mexido (antes: 400 'folha: máximo de 40 caracteres')",
+            r.status_code == 200 and q("SELECT titulo FROM item WHERE codigo=?", D(1))[0] == "Planta do térreo" and q("SELECT folha FROM item WHERE codigo=?", D(1))[0] == LONGA, f"HTTP {r.status_code} {r.text[:160]}")
+        r = op.patch(f"/api/itens/{D(1)}", json={"folha": LONGA + " (rev.)"})
+        ver("valor NOVO acima do limite continua recusado, com o nome do campo em português", r.status_code == 400 and r.json().get("erro", "").startswith("Folha: máximo de"), r.text[:160])
+        MUITOS = "Planta; Corte; Elevação/Fachada; Perspectiva; Detalhe; Estrutura; Croqui; Levantamento; Mobiliário; Documento; Fotografia"   # 125 caracteres
+        r = op.patch(f"/api/itens/{D(1)}", json={"tipo_documento": MUITOS})
+        ver("vários tipos juntos não esbarram no limite de 120 caracteres (cada tipo é conferido no vocabulário)",
+            len(MUITOS) > 120 and r.status_code == 200 and q("SELECT tipos_documento FROM item WHERE codigo=?", D(1))[0] == MUITOS, r.text[:160])
+        r = op.patch(f"/api/itens/{D(1)}", json={"tipo_documento": "planta; corte"})
+        ver("tipo escrito em minúsculas vira o nome do vocabulário", r.status_code == 200 and q("SELECT tipos_documento FROM item WHERE codigo=?", D(1))[0] == "Planta; Corte", r.text[:160])
+        # ---------- (b) erro de validação sempre com mensagem para a pessoa ----------
+        r = op.patch(f"/api/itens/{D(1)}", json={"ano_folha": "1958/59"})
+        ver("ano inválido: 422 com mensagem em português em 'erro' (antes: sem 'erro', a tela mostrava só 'Unprocessable Entity')",
+            r.status_code == 422 and "Ano da folha" in (r.json().get("erro") or "") and "detail" in r.json(), r.text[:200])
+        r = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "corrigida"})
+        ver("folha bloqueada por projeto divergente pode ser revisada (corrigida)", r.status_code == 200 and q("SELECT revisao FROM item WHERE codigo=?", D(1))[0] == "corrigida", r.text[:160])
+        op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "pendente"})
+        # ---------- (c) "É deste projeto (o CAMP Vision errou)" ----------
+        ver("a página da folha sabe que ela tem projeto divergente", op.get(f"/api/itens/{D(1)}").json().get("item", {}).get("projeto_divergente") is True)
+        ver("leitura não pode (403); folha inexistente 404; sem login 401",
+            le.post(f"/api/itens/{D(1)}/deste-projeto").status_code == 403 and op.post(f"/api/itens/{D(99)}/deste-projeto").status_code == 404
+            and TestClient(app, raise_server_exceptions=False).post(f"/api/itens/{D(1)}/deste-projeto").status_code == 401)
+        r = op.post(f"/api/itens/{D(1)}/deste-projeto"); j = r.json() if r.status_code == 200 else {}
+        p1 = pend(1)
+        ver("tira 'projeto divergente' dos sinais e o bloqueio que fala dele; os outros sinais ficam",
+            r.status_code == 200 and j.get("mudou") is True and p1["sinais"] == ["orientação incerta"] and p1["bloqueios"] == [], f"HTTP {r.status_code} {r.text[:200]}")
+        ver("sem outro bloqueio: a folha volta de 'bloqueado' para 'nao_publicado'", q("SELECT status_site FROM item WHERE codigo=?", D(1))[0] == "nao_publicado" and j.get("situacao_liberada") is True)
+        ver("fecha o problema automático 'folha de outro projeto' do CAMP Vision; o relatado por gente fica aberto",
+            q("SELECT situacao FROM erro WHERE codigo=? AND origem='campvision'", D(1))[0] == "ignorado" and q("SELECT situacao FROM erro WHERE codigo=? AND origem='operador'", D(1))[0] == "aberto")
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='projeto_confirmado'", (D(1),)).fetchall()
+        ver("grava no histórico quem fez e o que saiu", len(ev) == 1 and ev[0][0] == "op@camp.arq.br" and "projeto divergente" in ev[0][1], str([tuple(x) for x in ev]))
+        r2 = op.post(f"/api/itens/{D(1)}/deste-projeto")
+        ver("idempotente: repetir não muda nada nem duplica o histórico",
+            r2.status_code == 200 and r2.json().get("mudou") is False and q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='projeto_confirmado'", D(1))[0] == 1 and pend(1) == p1, r2.text[:160])
+        ver("a página da folha deixa de mostrar o aviso", op.get(f"/api/itens/{D(1)}").json().get("item", {}).get("projeto_divergente") is False)
+        r = op.post(f"/api/itens/{D(2)}/deste-projeto")
+        ver("com outro bloqueio (duplicata), tira só o do projeto e a folha continua bloqueada",
+            r.status_code == 200 and pend(2)["bloqueios"] == ["duplicata de F099-P0001-1970-S01-D00001"] and pend(2)["sinais"] == [] and q("SELECT status_site FROM item WHERE codigo=?", D(2))[0] == "bloqueado"
+            and r.json().get("bloqueios_restantes") == ["duplicata de F099-P0001-1970-S01-D00001"], r.text[:200])
+        r = op.post(f"/api/itens/{D(3)}/deste-projeto")
+        ver("folha sem o aviso: nada muda (200, mudou=false) e nada vai ao histórico", r.status_code == 200 and r.json().get("mudou") is False and q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='projeto_confirmado'", D(3))[0] == 0)
+        # ---------- a reimportação do lote não traz o aviso de volta para a folha que uma pessoa confirmou ----------
+        import pathlib as _pl
+        (_pl.Path(pasta) / "catalogacao").mkdir()
+        doc = lambda n: {"codigo": D(n), "titulo": f"Prancha {n}", "publicavel": False, "projeto_divergente": True, "bloqueios": ["projeto divergente"], "arquivos": []}
+        (_pl.Path(pasta) / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"versao": 2, "projeto_codigo": "F099-P0001", "documentos": [doc(1), doc(4)]}), encoding="utf-8")
+        from app.importador_lote import importar_lote
+        importar_lote(c, lote, "teste"); c.commit()
+        ver("reimportar: a folha confirmada continua sem o aviso e liberada", "projeto divergente" not in pend(1)["sinais"] and pend(1)["bloqueios"] == [] and q("SELECT status_site FROM item WHERE codigo=?", D(1))[0] == "nao_publicado", str(pend(1)))
+        ver("reimportar: folha nova com o aviso entra bloqueada (ninguém confirmou)", "projeto divergente" in pend(4)["sinais"] and q("SELECT status_site FROM item WHERE codigo=?", D(4))[0] == "bloqueado")
+        # ---------- tela ----------
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("a tela tem o botão 'É deste projeto (o CAMP Vision errou)' por data-* (nunca em onclick) e pergunta com confirmar()",
+            "data-deste-projeto=" in html and "É deste projeto (o CAMP Vision errou)" in html and "/deste-projeto'" in html and "onclick=\"desteProjeto" not in html)
+        ver("salvar a revisão manda só o que mudou e não descarta o que foi digitado em 'Está certo'", "camposRevisaoAlterados(" in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "nome_de_pasta":
         # projetos criados a partir de SUBPASTAS do sistema (F009-P0114 "01 - Arquivo Arquivístico (TIFF)", F022-P0009 com 5 folhas, F026-P0237)
         init_db(); _aplicar_migracoes_real()
@@ -7993,6 +8089,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("133) Folha com 'projeto divergente' (Clube Sírio, 19/10): salvar a revisão, mensagem de erro e 'É deste projeto'")
+rc, out = rodar("projeto_divergente", f"{tmp}/projeto_divergente.db")
+if rc != 0: ok(False, f"teste de projeto divergente não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"projeto divergente: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

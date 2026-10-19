@@ -1838,6 +1838,8 @@ Colunas (schema + migrações `038`, `048`, `065`): `id`, `nome`, `projeto_codig
 
 `sinais` vem de `SINAIS`: `orientacao_incerta` → "orientação incerta", `serie_incerta` → "série incerta", `fora_do_periodo` → "fora do período de atuação do fundo", `projeto_divergente` → "projeto divergente", `sem_identificacao` → "sem identificação (pasta com várias obras)".
 
+**"É deste projeto (o CAMP Vision errou)"** (19/10, Clube Sírio): `POST /api/itens/{codigo}/deste-projeto` (operador+). Tira de `pendencias` o sinal "projeto divergente" e os bloqueios que falam de projeto divergente/outro projeto/outra obra (`importador_lote.tirar_projeto_divergente`); se não sobrar bloqueio (e a folha não tiver autoria divergente), `status_site` sai de `bloqueado` para `nao_publicado`; fecha (como `ignorado`) o problema automático `projeto_errado` do CAMP Vision daquela folha; grava o evento `projeto_confirmado` com quem fez. Repetir não muda nada. A reimportação do lote respeita a confirmação (não traz o aviso de volta). Na tela: revisão da folha e página da folha (`GET /api/itens/{codigo}` traz `projeto_divergente`).
+
 `lido_json` (o que o CV2 **leu**, para medir a qualidade dele — cartão 152):
 
 ```json

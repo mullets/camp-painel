@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -18,6 +19,23 @@ from fastapi import HTTPException
 CODIGO_DOCUMENTO = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-8]|S99)-D(\d{4,6})$")
 SINAIS = (("orientacao_incerta", "orientação incerta"), ("serie_incerta", "série incerta"), ("fora_do_periodo", "fora do período de atuação do fundo"),
           ("projeto_divergente", "projeto divergente"), ("sem_identificacao", "sem identificação (pasta com várias obras)"))
+
+
+def fala_de_projeto_divergente(texto) -> bool:
+    """O sinal ou bloqueio do CAMP Vision diz que a folha é de OUTRO projeto ("projeto divergente: o carimbo diz…", "folha de outra obra")."""
+    t = "".join(ch for ch in unicodedata.normalize("NFD", str(texto or "")) if unicodedata.category(ch) != "Mn").lower().replace("_", " ")
+    return "projeto divergente" in t or "outro projeto" in t or "outra obra" in t
+
+
+def tirar_projeto_divergente(pend: dict) -> tuple[list, list]:
+    """19/10 (Clube Sírio): uma pessoa disse que a folha É deste projeto. Tira de `pend` (no lugar) os sinais e bloqueios de projeto divergente.
+    Devolve (sinais_tirados, bloqueios_tirados)."""
+    out = []
+    for chave in ("sinais", "bloqueios"):
+        lista = [x for x in (pend.get(chave) or []) if x] if isinstance(pend.get(chave), list) else []
+        out.append([x for x in lista if fala_de_projeto_divergente(x)])
+        pend[chave] = [x for x in lista if not fala_de_projeto_divergente(x)]
+    return out[0], out[1]
 
 
 def ler_pacote(pasta: Path) -> dict | None:
@@ -223,6 +241,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         raise HTTPException(400, "O pacote não traz a lista de documentos")
 
     tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
+    # folhas em que uma pessoa disse "É deste projeto (o CAMP Vision errou)": a leitura nova não traz o aviso de volta
+    confirmadas = {r[0] for r in con.execute("SELECT DISTINCT codigo FROM evento WHERE entidade='item' AND tipo='projeto_confirmado' AND codigo LIKE ?", (proj + "-%",))}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
     existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site, lote_id FROM item WHERE projeto_codigo=?", (proj,))}
     try:
@@ -310,12 +330,15 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
                 "sinais": [txt for chave, txt in SINAIS if d.get(chave)], "confianca": d.get("confianca"), "previa": d.get("preview") or "",
                 "ano_do_projeto": d.get("ano_do_projeto")}
+        publicavel = bool(d.get("publicavel"))
+        if cod in confirmadas and any(tirar_projeto_divergente(pend)) and not pend["bloqueios"] and not d.get("autoria_divergente"):
+            publicavel = True                                       # o projeto divergente era o que prendia a folha, e uma pessoa já disse que não é
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipo_do_painel(tipo_lido, tipos), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))),
                   "credito": ("Autoria não confirmada" if d.get("autoria_divergente") else (d.get("credito") or None)),   # CAMP-046: nunca o nome lido como fato
-                  "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
+                  "status_site": "nao_publicado" if publicavel else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
                   "endereco_folha": endereco_lido, "cliente_folha": cliente_lido,
                   "versao_cv2": (str(d.get("versao_cv2") or "").strip() or None), "versao_prompt": (str(d.get("versao_prompt") or "").strip() or None), "modelo_cv": (str(d.get("modelo") or "").strip() or None)}
         # O que o CARIMBO diz (contrato 2.2, auditoria F026 T1): sem isso não dá para auditar pelo painel.

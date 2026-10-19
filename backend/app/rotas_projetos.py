@@ -510,6 +510,12 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
     d["tipo_documento"] = d.pop("tipos_documento", None) or d.get("tipo_documento")   # 19/10: a lista inteira quando há mais de um tipo
+    try:
+        pend = json.loads(d.get("pendencias") or "{}")
+    except ValueError:
+        pend = {}
+    from .importador_lote import fala_de_projeto_divergente
+    d["projeto_divergente"] = isinstance(pend, dict) and any(fala_de_projeto_divergente(x) for k_ in ("sinais", "bloqueios") if isinstance(pend.get(k_), list) for x in pend[k_])
     d["tainacan_item_id"] = d.pop("wp_id_exato", None)
     from .imagens import e_imagem
     d["imagem_grande"] = d.get("documento_url") if e_imagem(d.get("documento_url")) else None
