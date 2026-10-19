@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre"}
 
 
 def rodar(modo, db):
@@ -6723,6 +6723,80 @@ def filho(modo):
         ver("a decisão descartada não aparece entre as pendentes", all(x["id"] != did for x in (pend.get("itens", pend) if isinstance(pend, dict) else pend)), str(pend)[:200])
         k.close()
         for l in res: print(l)
+    elif modo == "banco_livre":
+        # 19/10: "Está certo e próxima" levava 15–20 s: tarefas em segundo plano prendiam o banco enquanto liam o QNAP (livro do CAMP Vision)
+        # ou gravavam o espelho inteiro do site numa transação só. Aqui: enquanto elas trabalham, o painel grava em menos de 0,5 s.
+        init_db(); aplicar_migracoes()
+        import json as _j, sqlite3 as _s, time as _t, threading as _th, tempfile as _tf
+        from pathlib import Path as _P
+        import app.livro_cv as lv
+        import app.sincronizador as sz
+        db = os.environ["CAMP_DB_PATH"]
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def grava_rapido():
+            k = _s.connect(db, timeout=0.5); t0 = _t.time()
+            try:
+                k.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('item','X','revisao','teste')"); k.commit(); return int((_t.time() - t0) * 1000)
+            except _s.OperationalError:
+                return 99999
+            finally:
+                k.close()
+        # ---- 1) livro do CAMP Vision: o 2º arquivo demora (QNAP lento) depois de o 1º já ter sido lido e gravado ----
+        raiz = _P(_tf.mkdtemp()); pasta = raiz / lv.PASTA; pasta.mkdir(parents=True)
+        linha = lambda n: _j.dumps({"quando": f"2026-10-19T10:0{n}:00", "acao": "importado", "codigo_projeto": "F009-P0092", "codigo_documento": f"F009-P0092-0000-S01-D0000{n}"}) + "\n"
+        (pasta / "a.jsonl").write_text(linha(1) + linha(2)); (pasta / "b.jsonl").write_text(linha(3))
+        abrir_original = _P.open
+        lendo_b = _th.Event()
+        def abrir_lento(self, *a, **k):
+            if self.name == "b.jsonl":
+                lendo_b.set(); _t.sleep(1.5)
+            return abrir_original(self, *a, **k)
+        _P.open = abrir_lento
+        try:
+            out = {}
+            def roda():
+                c2 = connect()
+                try: out.update(lv.ler_incremental(c2, raiz))
+                finally: c2.close()
+            th = _th.Thread(target=roda); th.start()
+            lendo_b.wait(5); _t.sleep(0.2)
+            ms = grava_rapido()
+            th.join()
+        finally:
+            _P.open = abrir_original
+        ver("livro do CAMP Vision lendo o QNAP: a revisão grava na hora (antes esperava até 30 s)", ms < 500, f"{ms} ms")
+        c = connect()
+        ver("livro: as 3 linhas entram", out.get("linhas") == 3 and c.execute("SELECT COUNT(*) FROM livro_cv").fetchone()[0] == 3, str(out))
+        c.close()
+        # ---- 2) sincronização com o site: grava o espelho em lotes e solta o banco entre um lote e outro ----
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,ativo) VALUES ('F099','Fundo de teste',1)"); c.commit(); c.close()
+        class Fake:
+            def __init__(self, log=print): self.base = "https://fake"
+            def quem_sou(self): return {"name": "t", "roles": ["administrator"]}
+            def taxonomias(self): return []
+            def termos(self, tid): return []
+            def colecoes(self): return [{"id": 8013, "name": "Acervo", "slug": "a", "url": "u"}]
+            def metadados_da_colecao(self, cid): return []
+            def itens(self, cid):
+                for i in range(1, 12):
+                    yield {"id": i, "title": f"Folha {i}", "slug": f"f{i}", "url": "u", "status": "publish", "modification_date": "2026-10-19", "thumbnail": {},
+                           "metadata": {"1": {"name": "Código do documento", "value_as_string": f"F099-P0001-1970-S01-D{i:05d}"}}}
+            def anexos(self, ids): return {}
+            def paginas(self): return [{"id": 900 + j, "title": {"rendered": f"Página {j}"}, "slug": f"p{j}", "link": "u", "status": "publish"} for j in range(8)]
+        sz.WP = Fake; sz.LOTE_ESCRITA = 3
+        entre = []
+        respiro_original = sz._respiro
+        def respiro_medido(con):
+            con.commit(); entre.append(grava_rapido()); sz._inicia_transacao(con)
+        sz._respiro = respiro_medido
+        r = sz.executar(True, lambda *a, **k: None)
+        sz._respiro = respiro_original
+        c = connect()
+        ver("sincronização completa", r.get("ok") is True and c.execute("SELECT COUNT(*) FROM wp_item").fetchone()[0] == 11 and c.execute("SELECT COUNT(*) FROM wp_pagina").fetchone()[0] == 8, str(r)[:120])
+        ver("sincronização grava em lotes e, entre um lote e outro, o painel grava na hora", len(entre) >= 4 and max(entre) < 500, f"{entre}")
+        c.close()
+        for l in res: print(l)
     elif modo == "tipo_multiplo":
         # 19/10: folha com mais de um tipo (planta, corte e elevação na mesma prancha)
         init_db(); aplicar_migracoes()
@@ -7886,6 +7960,12 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("132) Projetos com nome de pasta do sistema: lista, sugestão no mesmo fundo, juntar e descartar")
+rc, out = rodar("banco_livre", f"{tmp}/banco_livre.db")
+if rc != 0: ok(False, f"teste de banco livre não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"banco livre: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 rc, out = rodar("tipo_multiplo", f"{tmp}/tipo_multiplo.db")
 if rc != 0: ok(False, f"teste de tipo múltiplo não rodou -> {out[-1500:]}")
 else:
