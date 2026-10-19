@@ -667,6 +667,14 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
                      "estacao_ip": ip, "proximo_p_local": d.proximo_p_local or None, "carimbo": d.carimbo or None}
         if d.candidatos:
             cands = candidatos_do_cv(con, d.fundo_codigo, d.candidatos)
+            pista, _ = _pista_de_p(con, d)              # 19/10: a pasta "P0092 - 03 - Preview (JPG)" aponta o projeto; entra na lista mesmo se o carimbo não casou
+            if cands and pista and not any(x["codigo"] == pista for x in cands):
+                pp = con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original,
+                                           (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
+                                      FROM projeto p WHERE p.codigo=?""", (pista,)).fetchone()
+                cands.insert(0, {"codigo": pp["codigo"], "titulo": pp["titulo"], "ano": pp["ano"] or None, "cidade": pp["cidade"],
+                                 "identificacao_original": pp["identificacao_original"], "folhas": pp["folhas"], "score": 0.8, "nivel": "provavel",
+                                 "motivos": [f"o nome da pasta começa com {pista.split('-')[-1]} (só uma pista: confira)"]})
             if cands:
                 did = decisoes.abrir_projeto_parecido(con, chave_dec, d.fundo_codigo, titulo, pedido_cv, cands, "estacao")
                 con.commit()

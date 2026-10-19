@@ -2465,6 +2465,12 @@ def filho(modo):
         ver("reservar com candidatos do CV2: 202, NÃO cria projeto, decisão com os candidatos que existem no fundo (código inexistente cai fora) e o que o carimbo diz",
             r.status_code == 202 and n_proj() == n0 and [c["codigo"] for c in dd.get("candidatos", [])] == ["F097-P0006", "F097-P0007"] and (dd.get("pedido") or {}).get("carimbo", {}).get("cliente") == "COMURB"
             and "F097-P0006 × F097-P0007" in j.get("mensagem", ""), f"{r.status_code} {str(dd)[:200]}")
+        r = reservar(**{**corpo_cv, "titulo": "Residência Wiz Sales, Rua Dr. Alberto Faria", "chave_reserva": "6" * 32, "identificacao_original": "P0001 - 03 - Preview (JPG)"}); j6 = r.json()
+        dd6 = adm.get(f"/api/decisoes/{j6.get('decisao_id')}").json() if r.status_code == 202 else {}
+        ver("candidatos do CV2 + pasta 'P0001 - 03 - …': o projeto da pasta entra PRIMEIRO na lista (F009-P0092 sumia da escolha)",
+            [c["codigo"] for c in dd6.get("candidatos", [])][:1] == ["F097-P0001"] and n_proj() == n0, str(dd6)[:200])
+        r = adm.post(f"/api/decisoes/{j6['decisao_id']}/resolver", json={"acao": "mesmo", "projeto_codigo": "F097-P0005"})
+        ver("'é outro que já existe': escolher um projeto do fundo FORA da lista de candidatos também vale", r.status_code == 200 and r.json()["projeto_codigo"] == "F097-P0005" and n_proj() == n0, r.text[:120])
         adm.post(f"/api/decisoes/{j['decisao_id']}/resolver", json={"acao": "mesmo", "projeto_codigo": "F097-P0007"})
         r = reservar(**corpo_cv); j = r.json()
         ver("depois da pessoa escolher, o CV2 recebe o código escolhido (existente=true), sem projeto novo", r.status_code == 200 and j["codigo"] == "F097-P0007" and j["existente"] is True and n_proj() == n0, r.text[:160])
