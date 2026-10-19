@@ -4,6 +4,7 @@ import re
 import logging
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -312,10 +313,32 @@ async def _validacao_exc(request: Request, exc: RequestValidationError):
     return JSONResponse({"erro": "; ".join(partes) or "Dado inválido", "detail": jsonable_encoder(exc.errors())}, status_code=422)
 
 
+def _ler_versao() -> dict:
+    """19/10: versão legível ("de 19/10 às 15:17" + o título da última mudança), não só o hash. Lida UMA vez, na subida
+    do serviço (o atualizar.sh reinicia depois de baixar o main), direto do git; sem git, cai no VERSION de sempre."""
+    import subprocess
+    raiz = Path(__file__).resolve().parents[2]
+    info = {"versao": "dev", "hash": None, "data": None, "assunto": None, "no_ar_desde": datetime.now().astimezone().isoformat(timespec="seconds")}
+    try:
+        out = subprocess.run(["git", "-C", str(raiz), "log", "-1", "--format=%h%x1f%cI%x1f%s"], capture_output=True, text=True, timeout=5).stdout.strip()
+        h, data, assunto = out.split("\x1f", 2)
+        info.update(hash=h, data=data, assunto=assunto[:140])
+    except Exception:
+        pass
+    v = Path(__file__).resolve().parents[1] / "VERSION"
+    if v.exists():
+        info["versao"] = v.read_text().strip()
+    elif info["hash"]:
+        info["versao"] = f"{info['hash']} {info['data'][:10]}"
+    return info
+
+
+_VERSAO = _ler_versao()
+
+
 @app.get("/api/versao")
 def versao() -> dict:
-    v = Path(__file__).resolve().parents[1] / "VERSION"
-    return {"versao": v.read_text().strip() if v.exists() else "dev"}
+    return _VERSAO
 
 
 @app.get("/", include_in_schema=False)

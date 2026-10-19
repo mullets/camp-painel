@@ -253,8 +253,7 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
         i = con.execute("SELECT i.revisao, i.status_site, i.retida, i.lote_id, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        if i["aprovado_em"]:
-            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
+        # 19/10: lote aprovado NÃO trava mais (o Rafa: "isso tá me irritando muito"); o que trava é a folha estar no site
         if i["status_site"] in ("rascunho", "no_ar"):
             raise HTTPException(409, "Esta folha já está no site. Despublique pela página da folha antes de retê-la.")
         motivo = (d.motivo or "").strip()[:300] or None
@@ -264,7 +263,10 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
                            revisado_por=CASE WHEN revisao='pendente' THEN ? ELSE revisado_por END, revisado_em=CASE WHEN revisao='pendente' THEN datetime('now') ELSE revisado_em END,
                            atualizado_em=datetime('now') WHERE codigo=?""", (motivo, u["email"], u["email"], codigo))
         else:
-            con.execute("""UPDATE item SET retida=0, retida_motivo=NULL, retida_por=NULL, retida_em=NULL, revisao='pendente', revisado_por=NULL, revisado_em=NULL,
+            if i["aprovado_em"]:                       # lote aprovado: volta a publicar, conferida (o lote não reabre por isso)
+                con.execute("UPDATE item SET retida=0, retida_motivo=NULL, retida_por=NULL, retida_em=NULL, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+            else:
+                con.execute("""UPDATE item SET retida=0, retida_motivo=NULL, retida_por=NULL, retida_em=NULL, revisao='pendente', revisado_por=NULL, revisado_em=NULL,
                            atualizado_em=datetime('now') WHERE codigo=?""", (codigo,))
         _evento(con, "item", codigo, "folha_retida" if d.retida else "folha_liberada", u["email"], {"motivo": motivo})
         con.commit()
@@ -439,8 +441,6 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         no_site = i["status_site"] in ("rascunho", "no_ar")
         if no_site and u["papel"] not in ("admin", "master"):
             raise HTTPException(409, "Esta folha já está no site: só um admin pode girar a imagem de lá. Peça a um admin")
-        if i["aprovado_em"] and not no_site:
-            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
         novo = ((i["giro_manual"] or 0) + d.graus) % 360
         rec, ang = ajuste.depois_do_giro(*ajuste.ler(i), d.graus)       # 19/10: com recorte, a caixa gira junto
         site = None
@@ -474,8 +474,6 @@ def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
         i = con.execute(f"SELECT {_COLS_AJUSTE}, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        if i["aprovado_em"]:
-            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
         if i["status_site"] in ("rascunho", "no_ar"):
             raise HTTPException(409, "Esta folha já está no site: a imagem lá não muda por aqui")
         antes = imagens.espelho_efetivo(i)
@@ -637,8 +635,6 @@ def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -
         no_site = i["status_site"] in ("rascunho", "no_ar")
         if no_site and u["papel"] not in ("admin", "master"):
             raise HTTPException(409, "Esta folha já está no site: só um admin pode mudar a imagem de lá. Peça a um admin")
-        if i["aprovado_em"] and not no_site:
-            raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar")
         antes = ajuste.ler(i)
         reenviar = no_site and con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (codigo,)).fetchone()
         if (rec, ang) == antes and not reenviar:      # nada mudou (com pendência no site, aplicar de novo reenvia)

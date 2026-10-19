@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao"}
+MODOS_RAPIDOS = {"versao", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao"}
 
 
 def rodar(modo, db):
@@ -2834,7 +2834,7 @@ def filho(modo):
         ver("aprovar todas (operador): marca as 3 como conferidas, inclusive as com algo apontado, e DIZ quantas tinham (a tela avisa)", t["conferidas"] == 3 and t["com_pendencia"] >= 2 and t["restam"] == 0 and sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='conferida' AND revisado_por='op@camp.arq.br'", lote) == 3, str(t))
         ver("clicar de novo não faz nada (0 conferidas) e não estraga", op.post(f"/api/lotes/{lote}/conferir-todas").json()["conferidas"] == 0)
         ver("depois de aprovar todas o lote pode ser aprovado pelo admin (e só por ele)", op.post(f"/api/lotes/{lote}/aprovar").status_code == 403 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 200)
-        ver("lote aprovado: aprovar todas e girar dão 409", op.post(f"/api/lotes/{lote}/conferir-todas").status_code == 409 and op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).status_code == 409)
+        ver("lote aprovado: aprovar todas dá 409; girar a folha (fora do site) agora pode (19/10)", op.post(f"/api/lotes/{lote}/conferir-todas").status_code == 409 and op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).status_code == 200)
         ver("a história registra o giro e a aprovação em lote", {"giro", "revisao_em_lote"} <= {r[0] for r in k.execute("SELECT DISTINCT tipo FROM evento WHERE codigo IN ('F026-P0001', ?)", (D(3),))})
         # ---------- a imagem que vai ao site sai VIRADA ----------
         envios = []
@@ -3485,6 +3485,16 @@ def filho(modo):
         ver("valor nulo apaga ('mostrar de novo')", a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": None}).status_code == 200 and a.get("/api/auth/eu/preferencias").json() == {})
         ver("só aceita chaves de ajuda (ajuda.<página>): outras e malformadas dão 400", all(a.put("/api/auth/eu/preferencias", json={"chave": k_, "valor": "1"}).status_code == 400 for k_ in ("papel", "ajuda.", "ajuda.Painel", "ajuda.x/../y", "ajuda." + "a" * 50)) and a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "x" * 50}).status_code == 400)
         for l in res: print(l)
+    elif modo == "versao":
+        init_db(); aplicar_migracoes()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        v = TestClient(app).get("/api/versao").json()
+        ver("/api/versao continua com 'versao' (compatível) e agora diz QUANDO é a versão, o título da última mudança e desde quando está no ar",
+            bool(v.get("versao")) and bool(v.get("hash")) and str(v.get("data", "")).startswith("20") and bool(v.get("assunto")) and str(v.get("no_ar_desde", "")).startswith("20"), str(v))
+        for l in res: print(l)
     elif modo == "folha_retida":
         init_db(); _aplicar_migracoes_real()
         from app import auth, publicador, wp as _wp
@@ -3539,7 +3549,11 @@ def filho(modo):
         ver("Publicar agora envia só as 3 liberadas: a retida NUNCA sobe", pub.get("ok") is True and sorted(ch["folhas"]) == [D(PR, 1), D(PR, 3), D(PR, 4)] and D(PR, 2) not in ch["folhas"], str(ch["folhas"]))
         sf = adm.post(f"/api/projetos/{PR}/subir-folhas").json()
         ver("'Enviar folhas ao site' também ignora a retida (nada a enviar, sem aviso eterno)", sf["pendentes"] == 0 and D(PR, 2) not in ch["folhas"], str(sf))
-        ver("depois de aprovado o lote, reter ou liberar dá 409 (reabra a revisão)", adm.post(f"/api/itens/{D(PR, 2)}/retencao", json={"retida": False}).status_code == 409)
+        lb2 = adm.post(f"/api/itens/{D(PR, 2)}/retencao", json={"retida": False})
+        ver("19/10: lote aprovado NÃO trava reter/liberar (sem 'reabra a revisão'); liberar ali mantém a folha conferida", lb2.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PR, 2)) == 0 and sql("SELECT revisao FROM item WHERE codigo=?", D(PR, 2)) != "pendente", lb2.text[:120])
+        g2 = adm.post(f"/api/itens/{D(PR, 2)}/girar", json={"graus": 90}); e2 = adm.post(f"/api/itens/{D(PR, 2)}/espelhar")
+        ver("19/10: girar e espelhar folha de lote aprovado (fora do site) não dá mais 'O lote desta folha já foi aprovado'", "já foi aprovado" not in g2.text and "já foi aprovado" not in e2.text, g2.text[:100] + " | " + e2.text[:100])
+        adm.post(f"/api/itens/{D(PR, 2)}/retencao", json={"retida": True})
         # liberar devolve para conferir; folha já no site não pode ser retida; permissões
         op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": True}); lb = op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": False})
         ver("liberar: a folha deixa de ser retida e volta para CONFERIR (olho humano de novo)", lb.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 1)) == 0 and sql("SELECT revisao FROM item WHERE codigo=?", D(PL, 1)) == "pendente" and sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 1)) is None)
@@ -6838,7 +6852,8 @@ def filho(modo):
         r = adm.post(f"/api/itens/{D(5)}/girar", json={"graus": 90})
         ver("publicada sem anexo conhecido: 502 dizendo que não achou a imagem no site; nada gravado", r.status_code == 502 and "imagem desta folha no site" in r.json().get("erro", r.text) and g(D(5)) == 0, r.text[:300])
         r = adm.post(f"/api/itens/{D(6)}/girar", json={"graus": 90})
-        ver("folha fora do site: gira só no painel, sem chamar o site (lote aprovado continua 409)", r.status_code == 409 and len(Fake.chamadas) == n0, r.text[:200])
+        ver("folha fora do site: gira só no painel, sem chamar o site (19/10: lote aprovado não trava mais)", r.status_code == 200 and g(D(6)) == 90 and len(Fake.chamadas) == n0, r.text[:200])
+        adm.post(f"/api/itens/{D(6)}/girar", json={"graus": -90})
         # ---------- (a) o cliente do WordPress: rota do plugin da CAMP, sem rota = frase clara ----------
         pedidos = []
         def responder(req):
@@ -7606,7 +7621,7 @@ def filho(modo):
         op.post(f"/api/itens/{D(1)}/girar", json={"graus": -90})
         # ---------- regras ----------
         r = op.post(f"/api/itens/{D(2)}/ajuste", json={"angulo": 2})
-        ver("lote aprovado: 409 e nada gravado", r.status_code == 409 and col(D(2), "alinhamento") == 0, r.text)
+        ver("lote aprovado (fora do site): ajustar agora pode (19/10, sem 'reabra a revisão')", r.status_code == 200 and "já foi aprovado" not in r.text, r.text)
         r = op.post(f"/api/itens/{D(3)}/ajuste", json={"angulo": 2})
         ver("folha no site: operador recebe 409 pedindo um admin", r.status_code == 409 and "admin" in r.json().get("erro", r.text) and col(D(3), "alinhamento") == 0, r.text)
         class Fake:
