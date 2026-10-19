@@ -122,6 +122,7 @@ def _trocar_codigo(con, antigo: str, novo: str) -> None:
     con.execute("UPDATE item_localizacao SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE pedido_releitura SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (novo, antigo))
+    con.execute("UPDATE item SET duplicata_conferida_de=? WHERE duplicata_conferida_de=?", (novo, antigo))   # a conferência da duplicata acompanha
     con.execute("UPDATE erro SET codigo=? WHERE codigo=?", (novo, antigo))
     con.execute("UPDATE revisao_campo SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE emprestimo_item SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
@@ -338,7 +339,8 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
             raise HTTPException(409, "Esta folha está pública no site. Despublique antes.")
         if troca:
             con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original,))
-        con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=?, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original, d.tipo, codigo))
+        con.execute("""UPDATE item SET duplicata_de=?, tipo_duplicata=?, duplicata_conferida_em=datetime('now'), duplicata_conferida_por=?, duplicata_conferida_de=?,
+                       atualizado_em=datetime('now') WHERE codigo=?""", (d.codigo_original, d.tipo, u["email"], d.codigo_original, codigo))   # foi uma pessoa: já conta como conferida (tela Duplicatas)
         con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (d.codigo_original, codigo))   # quem apontava para esta passa a apontar para a original
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
                     (codigo, u["email"], _json.dumps({"original": d.codigo_original, "tipo": d.tipo, "trocou": troca}, ensure_ascii=False)))
@@ -363,7 +365,8 @@ def desmarcar_duplicata(codigo: str, u: dict = Depends(auth.exige("operador"))) 
         if not a["duplicata_de"]:
             raise HTTPException(409, "Esta folha não está marcada como duplicata.")
         liberou = liberar_bloqueios_de_duplicata(con, codigo, a, u["email"])
-        con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+        con.execute("""UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, duplicata_conferida_em=datetime('now'), duplicata_conferida_por=?, duplicata_conferida_de=?,
+                       atualizado_em=datetime('now') WHERE codigo=?""", (u["email"], a["duplicata_de"], codigo))   # uma pessoa disse que não é: não volta como sugestão
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_desmarcada',?,?)",
                     (codigo, u["email"], _json.dumps({"era_de": a["duplicata_de"], "tipo": a["tipo_duplicata"], **liberou}, ensure_ascii=False)))
         con.commit()

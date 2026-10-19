@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao"}
 
 
 def rodar(modo, db):
@@ -7393,6 +7393,115 @@ def filho(modo):
         ver("conferir o endereço no site parte do melhor endereço conhecido (o do espelho), não do título novo", palpites == ["https://camp.arq.br/acervo/projetos/f099-p0002-titulo-antigo/"], str(palpites))
         for l in res: print(l)
         c.close()
+    elif modo == "duplicatas_revisao":
+        # 19/10: "teria como checar melhor quem é duplicata? tá complexo quando tem 50 folhas e 25 são duplicatas": tela Duplicatas do projeto
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        from app.rotas_revisao import _contagem
+        from app.publicacao import ELEGIVEL_LOCAL
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("migração 139: colunas de conferência da duplicata existem (opcionais)", {"duplicata_conferida_em", "duplicata_conferida_por", "duplicata_conferida_de"} <= {r[1] for r in c.execute("PRAGMA table_info(item)")})
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa das cópias',1970)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa','F099-P0001','/tmp/nao-existe-dup','revisao')").lastrowid
+        D = lambda n: f"F099-P0001-1970-S01-D{n:05d}"
+        FOLHAS = {1: ("Planta térreo", "Planta", "01/12"), 2: ("Planta térreo", "Planta", "01/12"), 3: ("Planta térreo", "Planta", "01/12"), 4: ("Planta térreo", "Planta", "01/12"),
+                  5: ("Corte AA", "Corte", "02/12"), 6: ("Corte AA", "Corte", "02/12"), 7: ("Fachada", "Elevação/Fachada", "04/12"), 8: ("Fachada", "Elevação/Fachada", "04/12"),
+                  9: ("Detalhe escada", "Detalhe", "05/12"), 10: ("Detalhe escada", "Detalhe", "05/12"), 11: ("Corte BB", "Corte", "03/12"), 12: ("corte  bb", "Corte", "3/12"),
+                  13: ("Foto 1", "Fotografia", None), 14: ("Foto 2", "Fotografia", None), 15: ("Planta cobertura", "Planta", "06/12"), 16: ("Planta subsolo", "Planta", "06/12")}
+        for n, (tit, tipo, fl) in FOLHAS.items():
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,folha,origem,lote_id,revisao,md5) VALUES (?,?,?,?,?,?,?,'campvision',?,'pendente',?)",
+                      (D(n), "F099-P0001", "S01", n, tit, tipo, fl, lote, {13: "abc123", 14: "ABC123"}.get(n)))
+        for cp, og, tp in ((2, 1, "exata"), (3, 1, "perceptual"), (4, 2, "exata"), (6, 5, "perceptual"), (8, 7, "exata"), (10, 9, "mesma_folha")):
+            c.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (D(og), tp, D(cp)))
+        c.execute("UPDATE item SET status_site='bloqueado', pendencias=? WHERE codigo=?", (_j.dumps({"bloqueios": ["duplicata de " + D(5)], "sinais": []}), D(6)))
+        c.execute("UPDATE item SET status_site='no_ar', tainacan_item_id=777 WHERE codigo=?", (D(7),))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','duplicata','campvision',?,?)", (D(2), "quase de D00001 — só a única publica"))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,thumb_url,documento_url) VALUES (777,8013,'publish','Fachada',?,'https://exemplo.test/t.jpg','https://exemplo.test/d.jpg')", (D(7),))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        col = lambda cod, k: c.execute(f"SELECT {k} FROM item WHERE codigo=?", (cod,)).fetchone()[0]
+        URL = "/api/projetos/F099-P0001/duplicatas"
+        dec = lambda *ds: op.post(URL + "/decisoes", json={"decisoes": list(ds)})
+        grupos = lambda r: {g["original"]["codigo"][-6:]: sorted(x["codigo"][-6:] for x in g["copias"]) for g in r["grupos"]}
+        # ---------- ver os grupos ----------
+        g = le.get(URL)
+        r = g.json() if g.status_code == 200 else {}
+        ver("leitura vê os grupos: a que vai ao site + as cópias; a cadeia antiga (D4 cópia de D2, cópia de D1) entra no grupo de D1",
+            g.status_code == 200 and grupos(r) == {"D00001": ["D00002", "D00003", "D00004"], "D00005": ["D00006"], "D00007": ["D00008"], "D00009": ["D00010"]}, f"{g.status_code} {g.text[:300]}")
+        ver("contagem: 6 cópias, nenhuma conferida, 4 grupos a conferir; leitura não decide", r.get("total_copias") == 6 and r.get("conferidas") == 0 and r.get("grupos_a_conferir") == 4 and r.get("pode_decidir") is False, str({k: r.get(k) for k in ("total_copias", "conferidas", "grupos_a_conferir", "pode_decidir")}))
+        cp = {x["codigo"][-6:]: x for gg in r.get("grupos", []) for x in gg["copias"]}
+        o7 = next((gg["original"] for gg in r.get("grupos", []) if gg["original"]["codigo"] == D(7)), {})
+        ver("o porquê do CAMP Vision vem junto (tipo da duplicata, problema registrado, bloqueio) e a imagem do site da original",
+            cp.get("D00002", {}).get("tipo_duplicata") == "exata" and "quase de D00001" in " ".join(cp.get("D00002", {}).get("motivos", [])) and any("duplicata de" in m for m in cp.get("D00006", {}).get("motivos", []))
+            and o7.get("thumb_url") == "https://exemplo.test/t.jpg" and o7.get("no_site") is True and "md5" not in o7, str(cp.get("D00002"))[:200])
+        sug = [sorted(x["codigo"][-6:] for x in s["folhas"]) for s in r.get("sugestoes", [])]
+        ver("'Talvez sejam duplicatas': mesmo arquivo (md5) e mesmo tipo + folha + título ('03/12' = '3/12', 'Corte BB' = 'corte  bb'); título diferente não entra",
+            sorted(sug) == [["D00011", "D00012"], ["D00013", "D00014"]], str(sug))
+        ver("operador pode decidir; leitura não grava (403) e projeto inexistente dá 404",
+            op.get(URL).json().get("pode_decidir") is True and le.post(URL + "/decisoes", json={"decisoes": [{"acao": "confirmar", "original": D(1), "copias": [D(2)]}]}).status_code == 403
+            and op.get("/api/projetos/F099-P0099/duplicatas").status_code == 404 and col(D(2), "duplicata_conferida_em") is None)
+        pend0 = _contagem(c, lote)["pendente"]
+        # ---------- confirmar ----------
+        x = dec({"acao": "confirmar", "original": D(1), "copias": [D(2), D(3), D(4)]})
+        xj = x.json()
+        ver("'Confirmar' o grupo: as 3 cópias ficam conferidas (quem e de qual original), a cadeia aponta direto para a original",
+            x.status_code == 200 and xj.get("feitas") == 1 and xj.get("conferidas") == 3 and all(col(D(n), "duplicata_conferida_de") == D(1) and col(D(n), "duplicata_conferida_por") == "op@camp.arq.br" for n in (2, 3, 4)) and col(D(4), "duplicata_de") == D(1), x.text[:300])
+        ver("confirmar conta como folha conferida na revisão do lote (as 3 cópias deixam de travar 'Aprovar o lote')",
+            all(col(D(n), "revisao") == "conferida" for n in (2, 3, 4)) and _contagem(c, lote)["pendente"] == pend0 - 3 and col(D(1), "revisao") == "pendente", f"{pend0} -> {_contagem(c, lote)['pendente']}")
+        ev = c.execute("SELECT COUNT(*) FROM evento WHERE tipo='duplicata_marcada' AND codigo IN (?,?,?) AND json_extract(detalhe,'$.conferida')=1 AND ator='op@camp.arq.br'", (D(2), D(3), D(4))).fetchone()[0]
+        ver("histórico: um 'duplicata_marcada' (conferida) por cópia, com quem fez; o problema de duplicata de D2 fecha", ev == 3 and c.execute("SELECT situacao FROM erro WHERE codigo=?", (D(2),)).fetchone()[0] == "corrigido", f"eventos={ev}")
+        # ---------- várias decisões: uma recusada não desfaz as outras ----------
+        x = dec({"acao": "nao_e", "codigo": D(10)}, {"acao": "confirmar", "original": D(9), "copias": [D(2)]})
+        rs = x.json().get("resultados", [{}, {}])
+        ver("lote de decisões: 'Não é duplicata' grava; a decisão velha (D2 não é mais cópia de D9) é recusada com o motivo, sem desfazer a outra",
+            x.status_code == 200 and rs[0].get("ok") and not rs[1].get("ok") and "atualize a tela" in rs[1].get("erro", "") and col(D(10), "duplicata_de") is None and col(D(2), "duplicata_de") == D(1), x.text[:300])
+        ver("'Não é duplicata': fica registrado quem disse e de qual folha era cópia (evento duplicata_desmarcada)",
+            col(D(10), "duplicata_conferida_de") == D(9) and col(D(10), "duplicata_conferida_em") and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='duplicata_desmarcada' AND codigo=?", (D(10),)).fetchone()[0] == 1)
+        # ---------- trocar qual publica ----------
+        x = dec({"acao": "trocar", "original": D(5), "nova": D(6)})
+        ver("'Publicar esta em vez daquela': D6 passa a ser a que vai ao site (sai o bloqueio de duplicata do CAMP Vision), D5 vira cópia conferida de D6",
+            x.status_code == 200 and x.json()["resultados"][0].get("ok") and col(D(6), "duplicata_de") is None and col(D(6), "status_site") == "nao_publicado" and _j.loads(col(D(6), "pendencias"))["bloqueios"] == []
+            and col(D(5), "duplicata_de") == D(6) and col(D(5), "duplicata_conferida_de") == D(6) and col(D(5), "tipo_duplicata") == "perceptual", x.text[:300])
+        r2 = op.get(URL).json()
+        ver("depois de trocar, o grupo mostra D6 como a que vai ao site, já conferido", grupos(r2).get("D00006") == ["D00005"] and next(gg for gg in r2["grupos"] if gg["original"]["codigo"] == D(6))["conferido"], str(grupos(r2)))
+        x = dec({"acao": "trocar", "original": D(7), "nova": D(8)})
+        ver("trocar quando a original está publicada é recusado (despublique antes) e nada muda",
+            not x.json()["resultados"][0]["ok"] and "publicada" in x.json()["resultados"][0]["erro"] and col(D(8), "duplicata_de") == D(7) and col(D(7), "duplicata_de") is None, x.text[:200])
+        n_ok = op.get(URL).json()
+        ver("contagem: 4 de 5 cópias conferidas (falta D8)", n_ok["total_copias"] == 5 and n_ok["conferidas"] == 4 and n_ok["grupos_a_conferir"] == 1, str({k: n_ok[k] for k in ("total_copias", "conferidas", "grupos_a_conferir")}))
+        # ---------- reimportação muda a original: volta a pedir conferência ----------
+        c.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (D(9), D(3))); c.commit()
+        r3 = op.get(URL).json()
+        c3 = next(x for gg in r3["grupos"] for x in gg["copias"] if x["codigo"] == D(3))
+        ver("se o CAMP Vision reimportar e apontar a cópia para outra folha, ela volta a 'a conferir'", c3["conferida"] is False and grupos(r3).get("D00009") == ["D00003"], str(grupos(r3)))
+        # ---------- sugestões ----------
+        x = dec({"acao": "marcar", "original": D(11), "copias": [D(12)]}, {"acao": "dispensar", "codigos": [D(13), D(14)]})
+        r4 = op.get(URL).json()
+        ver("aceitar a sugestão marca a cópia (conferida); 'Não são duplicatas' tira a sugestão de vez",
+            all(z["ok"] for z in x.json()["resultados"]) and col(D(12), "duplicata_de") == D(11) and col(D(12), "duplicata_conferida_de") == D(11) and r4["sugestoes"] == []
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='duplicatas_sugestao_dispensada' AND codigo='F099-P0001'").fetchone()[0] == 1, x.text[:300])
+        x = dec({"acao": "marcar", "original": D(15), "copias": [D(7)]})
+        ver("sugestão não marca folha publicada como cópia", not x.json()["resultados"][0]["ok"] and col(D(7), "duplicata_de") is None, x.text[:200])
+        ver("ação desconhecida ou lista vazia: 400", dec({"acao": "apagar", "codigo": D(1)}).status_code == 400 and op.post(URL + "/decisoes", json={"decisoes": []}).status_code == 400)
+        # ---------- as rotas de uma folha só também registram a pessoa ----------
+        x = op.delete(f"/api/itens/{D(8)}/duplicata-de")
+        y = op.post(f"/api/itens/{D(16)}/duplicata-de", json={"codigo_original": D(15)})
+        ver("rotas de uma folha (revisão): 'Não é duplicata' e 'Marcar duplicata' também contam como conferidas",
+            x.status_code == 200 and col(D(8), "duplicata_conferida_de") == D(7) and y.status_code == 200 and col(D(16), "duplicata_conferida_de") == D(15) and next(z for gg in op.get(URL).json()["grupos"] for z in gg["copias"] if z["codigo"] == D(16))["conferida"], f"{x.text[:100]} {y.text[:100]}")
+        ver("publicação: nenhuma cópia é elegível (a regra de sempre continua)", not c.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo='F099-P0001' AND duplicata_de IS NOT NULL AND {ELEGIVEL_LOCAL}").fetchone()[0])
+        c.close()
+        for l in res: print(l)
     elif modo == "recorte_alinhamento":
         # 19/10: recortar e alinhar a folha na revisão. O painel guarda os parâmetros E gera um JPG corrigido (no diretório de dados do painel),
         # que passa a ser a imagem da folha (prévia, miniatura, pedido em JPG, site). O TIF e a prévia do CAMP Vision nunca mudam.
@@ -8501,6 +8610,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"parceiros: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("135) Duplicatas do projeto (19/10): grupos lado a lado, confirmar, trocar qual publica, não é duplicata, sugestões e conferência")
+rc, out = rodar("duplicatas_revisao", f"{tmp}/duplicatas_revisao.db")
+if rc != 0: ok(False, f"teste de duplicatas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"duplicatas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

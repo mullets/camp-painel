@@ -1915,6 +1915,8 @@ Devolve quantos entraram (`problemas_registrados`).
 
 Durante o laço, cada folha com `duplicata_de` é anotada. **Depois** que todas existem (a referência é de item para item, com chave estrangeira), para cada par: se a original existe e é diferente, grava `duplicata_de` e `tipo_duplicata`. `quase` (nome novo no CV2) vira `perceptual`; só valem `exata`, `perceptual`, `mesma_folha` (outro valor → NULL). Uma duplicata não vai ao site (`publicacao.ELEGIVEL_LOCAL` exige `duplicata_de IS NULL`) e não vota no consenso.
 
+Conferência (19/10/2026, `backend/app/duplicatas.py`, migração `139`): a tela **Duplicatas** do projeto (`#duplicatas/F0xx-P0xxx`, botão "Duplicatas (n)" no topo do projeto, na aba Problemas e na revisão da folha) mostra cada grupo lado a lado (a folha que vai ao site + as cópias, com o porquê do CAMP Vision). `GET /api/projetos/{c}/duplicatas` devolve os grupos (cadeias A→B→C viram um grupo), a contagem conferida e as sugestões ("Talvez sejam duplicatas": mesmo md5, ou mesmo tipo + folha + título). `POST /api/projetos/{c}/duplicatas/decisoes` (operador) aplica `confirmar`, `trocar`, `nao_e`, `marcar` e `dispensar`, cada uma num SAVEPOINT. Conferir grava `duplicata_conferida_em/por/de`; só vale enquanto `duplicata_de = duplicata_conferida_de` (reimportação que muda a original volta a pedir conferência). Confirmar uma cópia pendente de lote não aprovado a deixa `conferida` na revisão (não trava "Aprovar o lote"). As rotas de uma folha (`POST/DELETE /api/itens/{c}/duplicata-de`) também registram a conferência.
+
 ### B.5.8 Divergências (`decisoes.abrir_divergencias`)
 
 Depois das folhas, compara o bloco `pacote.projeto` com o cadastro do projeto, para `ano`, `cidade` e `cliente` (`CAMPOS_DIVERGENCIA`):
