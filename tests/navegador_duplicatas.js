@@ -47,8 +47,9 @@ for n in (20, 21):
     await login(page, 'rafael@camp.arq.br', 'senha-bem-longa-123');
     // ---- da página do projeto para a tela ----
     await page.evaluate(() => nav('projeto/F023-P0011'));
+    await page.waitForSelector('#pd .pj-mais-menu > summary', { timeout: 15000 }); await page.click('#pd .pj-mais-menu > summary');   // 19/10 (cartões): o botão fica no menu Mais ⋯
     await page.waitForSelector('#pd [data-dupv-abrir="F023-P0011"]', { timeout: 15000 });
-    chk(/Duplicatas \(7\)/.test(await page.textContent('#pd .dethdr [data-dupv-abrir]')), 'página do projeto: botão "Duplicatas (7)" no topo');
+    chk(/Duplicatas \(7\)/.test(await page.textContent('#pd .dethdr [data-dupv-abrir]')), 'página do projeto: "Duplicatas (7)" no menu Mais ⋯ do topo');
     await page.click('#pd .dethdr [data-dupv-abrir]');
     await page.waitForFunction(() => location.hash === '#duplicatas/F023-P0011', null, { timeout: 8000 });
     await page.waitForSelector(grupo(10), { timeout: 10000 });

@@ -34,7 +34,7 @@ for c in f: con.execute("UPDATE item SET ano_folha=1960 WHERE codigo=?",(c,))`);
   chk(r.ok(), 'login do usuário semeado');
 
   // ---------- (4) consenso do lote ----------
-  await page.goto(BASE + '/#projeto/' + P); await page.waitForSelector('#pj-consenso .cs-panel', { timeout: 15000 });
+  await page.goto(BASE + '/#projeto/' + P); await page.waitForSelector('#pj-cards [data-pjc-gav="dados"]', { timeout: 15000 }); await page.click('#pj-cards [data-pjc-gav="dados"]'); await page.click('#pj-gaveta [data-pjc-porfolha]'); await page.waitForSelector('#pj-consenso .cs-panel', { timeout: 15000 });   // 19/10 (cartões): o consenso folha por folha fica na gaveta "Dados do projeto"
   const cs = await page.textContent('#pj-consenso');
   chk(/Consenso do lote/.test(cs) && /Rua A, 10/.test(cs) && /1968/.test(cs), 'o painel mostra o consenso (endereço "Rua A, 10", ano 1968): ' + cs.slice(0, 200));
   chk(await page.$$eval('#pj-consenso .cs-div', l => l.length) === 2, 'destaca a folha que diverge no ano e no endereço (D00003, duas linhas)');
@@ -62,7 +62,7 @@ for c in f: con.execute("UPDATE item SET ano_folha=1960 WHERE codigo=?",(c,))`);
 
   // ---------- (2) folha de contatos ----------
   await page.evaluate(() => closeDrawer(true));
-  await page.click('#pd [data-contatos]'); await page.waitForSelector('#ct-ov .ct-folha');
+  await page.click('#pd .pj-mais-menu > summary'); await page.click('#pd [data-contatos]'); await page.waitForSelector('#ct-ov .ct-folha');
   const nums = await page.$$eval('#ct-ov .ct-num', l => l.map(x => x.textContent));
   chk(JSON.stringify(nums) === '["1","2","3"]', 'a folha de contatos mostra todas as folhas numeradas 1..3: ' + JSON.stringify(nums));
   chk(await page.$$eval('#ct-ov .ct-img img', l => l.length) === 3, 'cada folha com a sua miniatura');
@@ -86,12 +86,12 @@ for c in f: con.execute("UPDATE item SET ano_folha=1960 WHERE codigo=?",(c,))`);
   chk(dup(D(3)) === 'None', 'na página da folha: "Não é duplicata" desfaz');
 
   // ---------- (4) "em todas", num projeto sem lote (consenso do projeto) ----------
-  await page.goto(BASE + '/#projeto/F023-P0011'); await page.waitForSelector('#pj-consenso [data-cs-todas="ano"]', { timeout: 15000 });
+  await page.goto(BASE + '/#projeto/F023-P0011'); await page.waitForSelector('#pj-cards [data-pjc-gav="dados"]', { timeout: 15000 }); await page.click('#pj-cards [data-pjc-gav="dados"]'); await page.click('#pj-gaveta [data-pjc-porfolha]'); await page.waitForSelector('#pj-consenso [data-cs-todas="ano"]', { timeout: 15000 });
   chk(/Usar 1959 nas 3/.test(await page.textContent('#pj-consenso [data-cs-todas="ano"]')), 'UM botão "Usar 1959 nas 3" (uma decisão para as folhas que não seguem o consenso)');
   await page.click('#pj-consenso [data-cs-todas="ano"]'); await page.click('#conf-ov [data-conf="sim"]');
   await page.waitForSelector('#pj-consenso [data-cs-todas="ano"]', { state: 'detached', timeout: 8000 });
   chk(py(`print(con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='F023-P0011' AND ano_folha<>1959").fetchone()[0])`) === '0', '"em todas" deixa as 3 folhas com o ano do consenso (1959)');
-  await page.click('#pd [data-contatos]'); await page.waitForSelector('#ct-ov .ct-folha');
+  await page.click('#pd .pj-mais-menu > summary'); await page.click('#pd [data-contatos]'); await page.waitForSelector('#ct-ov .ct-folha');
   chk(await page.$$eval('#ct-ov .ct-folha', l => l.length) === await page.evaluate(() => (window.ITENS_PJ || []).length), 'a folha de contatos de um projeto grande mostra todas as folhas');
   await page.keyboard.press('Escape'); chk(!(await page.$('#ct-ov')), 'Esc fecha a folha de contatos');
 

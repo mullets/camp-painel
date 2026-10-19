@@ -5,8 +5,8 @@
 //  B) como o F026-P0009 (CRASA, Sto. André): 34 folhas todas a conferir, lote parado por erro do CAMP Vision, 27 folhas sem ano no carimbo,
 //     1 diz outro ano, endereço só com pontuação diferente, cliente abreviado.
 // Prova (cada número é um ponto da conversa):
-//  1) o passo do topo diz "Lote aprovado, mas há 5 erros bloqueantes para resolver antes de publicar" (sem "Sem erros bloqueantes"), e a
-//     Situação do lote tem a linha Problemas ("18 avisos, 5 bloqueiam a publicação") e não diz "tudo certo";
+//  1) o passo a passo diz "Lote aprovado, mas há 5 erros bloqueantes para resolver antes de publicar" (sem "Sem erros bloqueantes"), e o
+//     cartão Problemas diz "5 impedem publicar · 13 avisos" em vermelho (19/10, proposta B: os cartões substituem a "Situação do lote");
 //  2) com 2 lotes, a revisão é UM quadro, uma linha de resumo por lote, detalhes fechados;
 //  3) os números que colidem viram uma frase ("7 folhas deste lote não entraram porque o número (D00001–D00007) já existe…") + tabela fechada;
 //  4) "7 arquivos na pasta do QNAP…" aparece UMA vez (depois das folhas);
@@ -14,7 +14,7 @@
 //  6) "autoria não confirmada" pequeno no rodapé do cartão (não em cima da imagem) e "Com problema (N)" = cartões com aviso;
 //  8) consenso conta FOLHAS distintas e separa "sem valor" e grafia/abreviação de diferença de verdade;
 //  9) por campo, uma linha e UM botão "Usar 1978 nas 28"; só a folha que diz outra coisa vira chip; "ver quais" mostra as sem valor;
-// 10) lote parado por erro: a primeira linha da Situação é o erro, com "Ver em Problemas" e "Pedir releitura" (sem "CAMP Vision ✔");
+// 10) lote parado por erro: o cartão Folhas fica vermelho com o erro e "Pedir releitura" (sem "CAMP Vision ✔");
 // 11) lote inteiro a conferir: o selo "a conferir" não se repete em cada cartão; "orientação incerta" fica pequeno.
 // Uso:
 //   CAMP_DB_PATH=/tmp/pj2.db python3 tests/semear_banco_teste.py
@@ -84,7 +84,10 @@ for n in range(1, 35):
   page.on('pageerror', e => erros.push('pageerror: ' + e.message));
   page.on('response', r => { if (r.status() >= 400 && !ESPERADO(r.url())) falhas.push(r.status() + ' ' + r.url().replace(BASE, '')); });
   const txt = async s => ((await page.$(s)) ? (await page.textContent(s)).replace(/\s+/g, ' ').trim() : '');
-  const abrir = async (c, linha) => { await page.evaluate(c => { window.SL = null; nav('projeto/' + c) }, c); await page.waitForSelector(`#pj-situacao .sl-linha[data-sl="${linha}"]`, { timeout: 15000 }); await page.waitForTimeout(1800) };
+  const abrir = async (c, linha) => { await page.evaluate(c => { window.SL = null; window.PJ_GAV = null; nav('projeto/' + c) }, c);
+    await page.waitForFunction(l => window.SL && SL[l] && SL.revisao && document.querySelector('#pj-cards .pjc[data-pjc="site"]'), linha, { timeout: 15000 }); await page.waitForTimeout(1800) };
+  const cartao = k => page.$eval(`#pj-cards .pjc[data-pjc="${k}"]`, c => c.innerText.replace(/\s+/g, ' ').trim()), cor = k => page.$eval(`#pj-cards .pjc[data-pjc="${k}"]`, c => c.className.replace('pjc', '').trim());
+  const gaveta = async k => { if (!(await page.isVisible(`.pj-gav[data-gav="${k}"]`))) { await page.click(`#pj-cards [data-pjc-gav="${k}"]`); await page.waitForTimeout(300) } };
   try {
     await page.goto(BASE + '/');
     await page.fill('#lg-email', 'rafael@camp.arq.br'); await page.fill('#lg-senha', 'senha-bem-longa-123'); await page.press('#lg-senha', 'Enter');
@@ -97,20 +100,20 @@ for n in range(1, 35):
     await page.waitForTimeout(800);
     const pp = await txt('#pj-proximo');
     chk(/Lote aprovado, mas há 5 erros bloqueantes para resolver antes de publicar\./.test(pp) && !/Sem erros bloqueantes/.test(pp), '(1a) passo do topo: "Lote aprovado, mas há 5 erros bloqueantes para resolver antes de publicar." (sem "Sem erros bloqueantes"): "' + pp.slice(0, 160) + '"');
-    const sp = await txt('#pj-situacao [data-sl="problemas"]');
-    chk(!!(await page.$('#pj-situacao .sl-linha.falta[data-sl="problemas"]')) && /18 avisos, 5 bloqueiam a publicação/.test(sp) && !!(await page.$('#pj-situacao [data-sl="problemas"] [data-pj-problemas]')), '(1b) Situação: linha "Problemas: 18 avisos, 5 bloqueiam a publicação" com "Ver problemas": "' + sp + '"');
-    const cab = await txt('#pj-situacao .ph');
-    chk(!/tudo certo/.test(cab) && /precisa/.test(cab), '(1b) o cabeçalho do cartão não diz "tudo certo" quando algo bloqueia: "' + cab + '"');
+    const sp = await cartao('problemas');
+    chk(await cor('problemas') === 'bl' && /5 impedem publicar/.test(sp) && /13 avisos/.test(sp) && !!(await page.$('#pj-cards [data-pjc="problemas"] [data-pjc-resolver]')), '(1b) cartão Problemas vermelho: "5 impedem publicar … 13 avisos" com "Resolver": "' + sp + '"');
+    const site = await cartao('site');
+    chk(/Não publicado/.test(site) && /libera quando os problemas forem resolvidos/.test(site) && !/pronto/.test(site), '(1b) o cartão Site não diz "pronto" quando algo bloqueia: "' + site + '"');
     const aba = await txt('.pj-tabs [role="tab"]:nth-child(4)');
     chk(/Problemas \(18\)/.test(aba) && /5 bloqueiam/.test(aba), '(1) a aba diz quantos bloqueiam: "' + aba + '"');
 
     // (2) dois lotes: um quadro, uma linha por lote, fechados
-    const rv = await txt('#pj-situacao [data-sl="revisao"]');
-    chk(await page.isHidden('#pj-revisao') && /19 de 19 folhas conferidas · lotes aprovados · 7 folhas não entraram/.test(rv), '(2) lotes aprovados: a revisão fica fechada e a linha resume "19 de 19 … · 7 folhas não entraram": "' + rv + '"');
-    await page.click('#pj-situacao [data-sl-ver="revisao"]'); await page.waitForTimeout(300);
+    const rv = await cartao('folhas');
+    chk(await page.isHidden('#pj-revisao') && /19 \/ 19 conferidas · lotes aprovados/.test(rv) && /7 folhas não entraram/.test(rv), '(2) lotes aprovados: a revisão fica fechada e o cartão Folhas resume "19 / 19 … · 7 folhas não entraram": "' + rv + '"');
+    await gaveta('folhas');
     const nH2 = await page.$$eval('#pj-revisao h2', l => l.filter(h => /Revisão do lote/.test(h.textContent)).length);
     const lotes = await page.$$eval('#pj-revisao details.rl-lote', l => l.map(d => ({ open: d.open, s: d.querySelector('summary').textContent.replace(/\s+/g, ' ').trim() })));
-    chk(nH2 === 1 && lotes.length === 2 && lotes.every(x => !x.open), '(2) "Ver detalhes" abre UM quadro "Revisão do lote" com 2 lotes fechados (' + nH2 + ' quadros, ' + JSON.stringify(lotes.map(x => x.open)) + ')');
+    chk(nH2 === 1 && lotes.length === 2 && lotes.every(x => !x.open), '(2) "Detalhes dos lotes" abre UM quadro "Revisão do lote" com 2 lotes fechados (' + nH2 + ' quadros, ' + JSON.stringify(lotes.map(x => x.open)) + ')');
     chk(lotes.some(x => /^complemento de 19\/10 \(19 folhas\)/.test(x.s) && /12 de 12 conferidas · aprovado por rafael/.test(x.s)) && lotes.some(x => /^RESIDENCIA LUIZ SALLES/.test(x.s) && /7 de 7 conferidas/.test(x.s)), '(2) cada lote numa linha: nome curto, data, "12 de 12 conferidas · aprovado por rafael": ' + JSON.stringify(lotes.map(x => x.s)));
     chk(await page.$$eval('#pj-revisao .rl-lote', l => l.every(d => !d.open && !d.querySelector('.rl-corpo').checkVisibility())), '(2) os detalhes de cada lote ficam recolhidos');
 
@@ -121,13 +124,13 @@ for n in range(1, 35):
     chk(!(await page.evaluate(() => [...document.querySelectorAll('#pj-revisao p')].some(p => (p.textContent.match(/já é de/g) || []).length > 1))), '(3) nada do parágrafo "…: o número D00001 já é de … · …"');
     chk(!(await page.$eval('#pj-revisao .rl-nao-lista', d => d.open)) && (await page.$$('#pj-revisao .rl-nao-lista tbody tr')).length === 7, '(3) a lista fica numa tabela (7 linhas) atrás de "ver as 7"');
     chk(/aprovado por rafael/.test(await txt('#pj-revisao details.rl-lote:nth-of-type(1) > summary')) && /7 folhas não entraram/.test(await txt('#pj-revisao details.rl-lote:nth-of-type(1) > summary')), '(3) a linha do lote avisa "7 folhas não entraram"');
-    await page.click('#pj-situacao [data-sl-ver="revisao"]'); await page.waitForTimeout(200);
 
-    // (4) QNAP uma vez só, depois das folhas
+    // (4) QNAP uma vez só, na gaveta "Detalhes dos lotes" (não empurra a grade)
     await page.waitForSelector('#pj-qnap-fim details.qf-dep', { state: 'attached', timeout: 10000 });
     const qn = await page.$$eval('#pd details.qf-dep summary', l => l.map(s => s.textContent.replace(/\s+/g, ' ').trim()));
     chk(qn.length === 1 && /7 arquivos na pasta do QNAP não viraram folhas do painel/.test(qn[0]), '(4) "7 arquivos na pasta do QNAP…" aparece uma vez: ' + JSON.stringify(qn));
-    chk(await page.evaluate(() => { const q = document.querySelector('#pj-qnap-fim'), t = document.querySelector('#pd .thumb'); return !!(q && t && (t.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING)) }), '(4/7) a linha "nada a fazer" fica depois das folhas');
+    chk(await page.evaluate(() => !!document.querySelector('.pj-gav[data-gav="folhas"] #pj-qnap-fim details.qf-dep')), '(4/7) a linha "nada a fazer" fica na gaveta dos lotes');
+    await page.click('.pj-gav[data-gav="folhas"] [data-pjc-fechar]'); await page.waitForTimeout(200);
 
     // (5) sem prévia: "Sem imagem" do mesmo tamanho, com Pedir releitura
     await page.waitForTimeout(800);
@@ -155,18 +158,18 @@ for n in range(1, 35):
   try {   // cada projeto num bloco: uma falha no A não esconde o B
     // ================= B =================
     await abrir(B, 'consenso');
-    await page.waitForSelector('#pj-situacao .sl-linha[data-sl="parado"]', { timeout: 6000 }).catch(() => {});
-    // (10) parado por erro: primeira linha
-    const prim = await page.$eval('#pj-situacao .sl-linha', l => ({ sl: l.dataset.sl, t: l.textContent.replace(/\s+/g, ' ') }));
-    chk(prim.sl === 'parado' && /parou com erro neste lote: Falha ao ler o carimbo/.test(prim.t) && !!(await page.$('#pj-situacao [data-sl="parado"] [data-pj-problemas]')) && !!(await page.$('#pj-situacao [data-sl="parado"] [data-releitura-projeto]')), '(10) a primeira linha da Situação é o erro do CAMP Vision, com "Ver em Problemas" e "Pedir releitura": "' + prim.t.slice(0, 160) + '"');
-    chk(!(await page.$('#pj-situacao [data-sl="cv"]')) && !/tudo certo/.test(await txt('#pj-situacao .ph')), '(10) sem a linha "CAMP Vision ✔ entregue" quando o lote está parado');
+    await page.waitForFunction(() => /bl/.test((document.querySelector('#pj-cards [data-pjc="folhas"]') || {}).className || ''), null, { timeout: 6000 }).catch(() => {});
+    // (10) parado por erro: o cartão Folhas fica vermelho com o motivo
+    const fB = await cartao('folhas');
+    chk(await cor('folhas') === 'bl' && /Lote parado por erro do CAMP Vision: Falha ao ler o carimbo/.test(fB) && !!(await page.$('#pj-cards [data-pjc="folhas"] [data-releitura-projeto]')), '(10) o cartão Folhas fica vermelho com o erro do CAMP Vision e "Pedir releitura": "' + fB.slice(0, 200) + '"');
+    chk(!/CAMP Vision: (pronto|entregue)/.test(fB), '(10) sem "CAMP Vision ✔ entregue" quando o lote está parado');
     // (8) contas de folhas distintas
-    const cs = await txt('#pj-situacao [data-sl="consenso"]');
+    const cs = await page.evaluate(() => (SL.consenso || {}).txt || '');
     const nums = (cs.match(/\d+/g) || []).map(Number);
     chk(/1 folha diz outra coisa/.test(cs) && /27 folhas sem algum dado no carimbo/.test(cs) && nums.every(n => n <= 34), '(8) consenso conta folhas (34 no projeto): "' + cs + '"');
+    chk(/1 pergunta/.test(await cartao('dados')), '(8) o cartão Dados faz UMA pergunta (o ano): "' + await cartao('dados') + '"');
     // (9) uma linha por campo, um botão
-    const csAberto = await page.isVisible('#pj-consenso');
-    if (!csAberto) { await page.click('#pj-situacao [data-sl-ver="consenso"]'); await page.waitForTimeout(300) }
+    await gaveta('dados'); if (!(await page.isVisible('#pj-consenso'))) { await page.click('#pj-gaveta [data-pjc-porfolha]'); await page.waitForTimeout(300) }
     const ano = await page.$eval('#pj-consenso .cs-campo', c => ({ t: c.textContent.replace(/\s+/g, ' '), divs: c.querySelectorAll('.cs-div').length, todas: [...c.querySelectorAll('[data-cs-todas]')].map(b => b.textContent), usar: c.querySelectorAll('[data-cs-usar]').length, li: c.querySelectorAll('li').length }));
     chk(/1978 \(6 de 34 folhas\)/.test(ano.t) && /27 folhas sem ano no carimbo/.test(ano.t) && /1 diz outra coisa/.test(ano.t), '(9) Ano numa linha: "1978 (6 de 34 folhas) · 27 folhas sem ano no carimbo · 1 diz outra coisa": "' + ano.t.slice(0, 200) + '"');
     chk(ano.divs === 1 && /D00014/.test(await txt('#pj-consenso .cs-campo .cs-div')) && /1979/.test(await txt('#pj-consenso .cs-campo .cs-div')) && ano.usar === 1 && ano.li === 0, '(9) só a folha que diz outra coisa vira chip (D00014: 1979), com a própria ação; nenhuma linha por folha "sem valor" (' + ano.divs + ' chips, ' + ano.li + ' linhas)');

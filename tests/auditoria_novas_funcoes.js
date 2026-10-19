@@ -1578,8 +1578,9 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
 { w.route_to('projeto/F003-P9001'); await sleep(3500);
   const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
   chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&!d.querySelector('#pd .tabs ~ * #pj-proximo'),'[#95] o Próximo passo deveria vir logo abaixo do título, antes dos requisitos e fora das abas');
-  const azuis=[...d.querySelectorAll('#pd .btn.pri')].map(b=>b.textContent.trim());
-  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&pp.contains(d.querySelector('#pd .btn.pri')),'[#95] deveria haver UM só botão azul na página, o do Próximo passo: '+JSON.stringify(azuis));
+  // 19/10 (proposta B): o passo a passo fica escondido (só nas gavetas); o botão azul visível é o do cartão mais urgente
+  const azuisB=[...d.querySelectorAll('#pd .btn.pri')].filter(b=>!b.closest('#pj-proximo .pp')),azuis=azuisB.map(b=>b.textContent.trim());
+  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&!!azuisB[0].closest('#pj-cards'),'[#95] deveria haver UM só botão azul visível na página, o do cartão mais urgente: '+JSON.stringify(azuis));
   chk(d.getElementById('pd-pub-det')&&!d.getElementById('pd-pub-det').open&&/\d+ de \d+ ok/.test(txt('#pd-pub-resumo'))&&/falta:/.test(txt('#pd-pub-resumo')),'[#95] os requisitos deveriam ficar recolhidos, com o resumo "N de M ok · falta: …": "'+txt('#pd-pub-resumo')+'"');
   chk(/F003 Burle Marx/.test(txt('#gcrumb'))&&/F003-P9001 · Projeto de teste/.test(txt('#gcrumb'))&&!/F003-P9001 · F003-P9001/.test(txt('#gcrumb')),'[#95] a trilha não deveria repetir o código: "'+txt('#gcrumb')+'"');
   chk(/Projeto de teste/.test(txt('#where'))&&d.querySelectorAll('#where button').length===1,'[#95] o topo deveria ter um Voltar e o nome do projeto: "'+txt('#where')+'"');
