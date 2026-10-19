@@ -40,6 +40,10 @@ const chk = (ok, msg, det = '') => { linhas.push((ok ? 'ok    ' : 'FALHA ') + ms
   await pg.emulateMedia({ media: 'print' }); m = await medir(); await pg.emulateMedia({ media: 'screen' });
   chk(m.l[2] === 100 && m.l[3] === 150 && m.faixaDir === 20 && m.maisDir <= 17.05, '100 × 150: sai com 100 × 150 mm, dobra a 20 mm e nada da faixa passa de 17 mm', JSON.stringify(m));
   chk(m.nome && /Residência Riviera/.test(m.nome[2]) && m.num <= 15.9, '100 × 150: a mesma faixa D, com o nome do projeto e o número inteiro', JSON.stringify(m));
+  const corpo = await pg.evaluate(() => { const l = document.querySelector('.lab-preview .lab-d'), kv = [...l.querySelectorAll('.ld-kv b')].map(b => b.textContent), lb = l.getBoundingClientRect().bottom;
+    return { kv, fora: [...l.querySelectorAll('.ld-corpo *')].filter(e => e.getBoundingClientRect().bottom > lb + 1).length }; });
+  chk(['Material', 'Fundo', 'Cidade · ano', 'Volume', 'Local', 'Conteúdo'].every(x => corpo.kv.includes(x)) && corpo.kv.length >= 6 && !corpo.kv.includes("Documentos no volume"), '100 × 150: o corpo traz mais campos (fundo com o nome, cidade · ano, conteúdo por tipo de material…); vazio ou 0 não ocupa lugar', corpo.kv.join(', '));
+  chk(corpo.fora === 0, '100 × 150: nada do corpo passa da borda de baixo', String(corpo.fora));
   await pg.selectOption('#l-fmt', '100x50'); await pg.waitForTimeout(300);
   // ajuste da impressora
   await pg.click('#lab-ajuste summary'); await pg.fill('#laj-escala', '98'); await pg.fill('#laj-x', '-1.5'); await pg.waitForTimeout(300);

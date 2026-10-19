@@ -212,13 +212,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .label.lab-d{display:flex;color:#000;font-family:var(--sans)}
 .lab-d .ld-fx{width:20mm;flex:none;border-right:.6mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2.2mm 3mm 2.2mm 1.2mm;box-sizing:border-box;text-align:center;gap:.5mm;overflow:hidden}
 .lab-d .ld-fx>*{max-width:100%}
-.lab-d.alta .ld-fx{padding:5mm 3mm 5mm 1.2mm;justify-content:flex-start;gap:3.6mm}.lab-d.alta .logo{height:9mm}.lab-d.alta .ld-rot{font-size:2.4mm}.lab-d.alta .ld-num{font-size:7.4mm}.lab-d.alta .ld-cod{font-size:2.4mm}.lab-d.alta .ld-pnome{font-size:3.3mm;-webkit-line-clamp:6}.lab-d.alta .ld-tarja{font-size:2.6mm;padding:1.4mm .6mm}.lab-d.alta .ld-peq{font-size:2.7mm}.lab-d.alta .ld-fx .ld-vol{margin-top:auto}
+.lab-d.alta .ld-fx{padding:5mm 3mm 5mm 1.2mm;justify-content:flex-start;gap:3.6mm}.lab-d.alta .logo{height:9mm}.lab-d.alta .ld-rot{font-size:2.4mm}.lab-d.alta .ld-num{font-size:7.4mm}.lab-d.alta .ld-cod{font-size:2.4mm}.lab-d.alta .ld-pnome{font-size:2.7mm;-webkit-line-clamp:6}.lab-d.alta .ld-tarja{font-size:2.6mm;padding:1.4mm .6mm}.lab-d.alta .ld-peq{font-size:2.7mm}.lab-d.alta .ld-fx .ld-vol{margin-top:auto}
 .lab-d.alta .ld-corpo{padding:7mm 6mm 6mm}.lab-d.alta .ld-nome{font-size:8mm;line-height:1.1;-webkit-line-clamp:3}.lab-d.alta .ld-arq{font-size:5mm;margin-top:2mm}
-.lab-d.alta .ld-kv{grid-template-columns:minmax(0,1fr);gap:3mm;margin-top:6mm;font-size:4.4mm}.lab-d.alta .ld-kv b{font-size:3mm}.lab-d.alta .ld-obs{font-size:3.6mm;margin-top:3mm}
+.lab-d.alta .ld-kv{grid-template-columns:repeat(2,minmax(0,1fr));gap:2.6mm 4mm;margin-top:5mm;font-size:3.6mm}.lab-d.alta .ld-kv b{font-size:2.5mm}.lab-d.alta .ld-kv .ld-largo{grid-column:1/-1}.lab-d.alta .ld-kv span{-webkit-line-clamp:3}.lab-d.alta .ld-obs{font-size:3.6mm;margin-top:3mm}
 .lab-d.alta .ld-barras svg{height:20mm}.lab-d.alta .ld-barras div{font-size:3.8mm;margin-top:1mm}
 .lab-ajuste{margin:8px 0}.lab-ajuste summary{cursor:pointer;color:var(--ink2)}.laj-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.label.lab-regua{border:0}
 .lab-d .logo{height:6mm}.lab-d .ld-rot{font:700 1.8mm/1 var(--sans);text-transform:uppercase;letter-spacing:.2mm}
-.lab-d .ld-num{font:800 7mm/1 var(--mono);letter-spacing:-.4mm;white-space:nowrap}.lab-d .ld-cod{font:600 2.1mm/1 var(--mono);white-space:nowrap}.lab-d .ld-pnome{font:700 2.3mm/1.12 var(--sans);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.lab-d .ld-num{font:800 7mm/1 var(--mono);letter-spacing:-.4mm;white-space:nowrap}.lab-d .ld-cod{font:600 2.1mm/1 var(--mono);white-space:nowrap}.lab-d .ld-pnome{font:700 2.3mm/1.12 var(--sans);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:break-word;hyphens:auto}
 .lab-d .ld-tarja{background:#000;color:#fff;font:700 2.2mm/1.1 var(--sans);padding:.9mm .6mm;width:100%;box-sizing:border-box;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lab-d .ld-peq{font:700 2.3mm/1.1 var(--sans);text-transform:uppercase;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .lab-d .ld-corpo{flex:1;min-width:0;padding:3mm 3.5mm 2.4mm;display:flex;flex-direction:column}
@@ -1934,6 +1934,12 @@ function aplicarVolumeEtiqueta(){
   document.getElementById('l-docs-volume').value=v?.quantidade_documentos||0;
   renderLabel();
 }
+/* 19/10 ("com esse tamanho cabe mais infos"): os campos da etiqueta 100 × 150. Vazio ("—") não ocupa lugar, menos o Local (é escrito à mão). */
+function labCamposGrandes(o){const vazio=v=>v==null||['','—','0'].includes(String(v).trim());
+  const cat=(window.LABEL_CATEG||[]).filter(c=>c.itens).map(c=>`${c.itens} ${String(c.nome||c.codigo).toLowerCase()}`).join(' · ');
+  return [['Material',o.mat?o.mat.texto:'todo o material'],['Fundo',`${o.fc} · ${o.sig} — ${o.nome||''}`,1],['Cliente',o.cliente],['Cidade · ano',o.cidAno],['Endereço da obra',o.endereco,1],
+    ['Volume',`${o.volume} de ${o.totalVolumes}`],['Embalagem',o.tipoEmb],['Documentos no volume',o.docs],['Local',o.local||'—'],['Conteúdo',cat,1],['Identificação original',o.projeto&&o.projeto.identificacao_original,1]]
+    .filter(([a,v])=>a==='Local'||!vazio(v))}
 function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /* lote por material: cada folha sai no modelo de folha */   /* alvo (H21, lote): {codigo,titulo,ano,folha} de uma folha ou de uma pasta do fundo */
   const fc=document.getElementById('l-fundo').value,f=FUNDOS.find(x=>x[0]===fc)||[fc||'F000','—','(selecione um fundo)',''],sig=f[1]||'—',nome=f[2];
   const projeto=(alvo&&labType==='projeto'?alvo:LABEL_PROJETO)||{},pc=(projeto.codigo||document.getElementById('l-proj').value||'F000-P0000').split('-').pop(),pn=tituloExibicao(projeto.titulo||'')||'(selecione um projeto)',py=projeto.ano||(alvo?'':document.getElementById('l-ano').value)||'';
@@ -1984,10 +1990,11 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     const num=codigoProjetoEtiqueta(pc).replace(/^P/,''),pcod=projeto.codigo||document.getElementById('l-proj').value||'',
       nf=alvo?(alvo.folhas??null):(mat?mat.n:(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0)),
       tarja=nf==null?'':`${nf} ${nf===1?'folha':'folhas'}`,
-      kv=[['Material',mat?mat.texto:'todo o material'],['Fundo',`${fc} · ${sig}`],['Volume',`${volume} de ${totalVolumes}`],['Local',local]];   /* cidade e ano já estão na faixa */
+      kv=mh>=100?labCamposGrandes({mat,fc,sig,nome,cliente,endereco,cidAno,volume,totalVolumes,tipoEmb,docs,local,projeto})   /* 100 × 150: cabe muito mais */
+        :[['Material',mat?mat.texto:'todo o material'],['Fundo',`${fc} · ${sig}`],['Volume',`${volume} de ${totalVolumes}`],['Local',local]];   /* cidade e ano já estão na faixa */
     const alta=mh>=100;   /* 100 × 150: a mesma faixa D, com mais espaço */
     return `<div class="label lab-d${alta?' alta':''}" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx" data-lombada>${LOGO_CAMP}<div class="ld-rot">Acervo ${escHtml(sig)}</div><div class="ld-num">${escHtml(num)}</div><div class="ld-cod">${escHtml(pcod)}</div><div class="ld-pnome">${escHtml(pn)}</div>${tarja?`<div class="ld-tarja">${escHtml(tarja)}</div>`:''}<div class="ld-peq">${escHtml([cid,anoTxt].filter(Boolean).join(' · '))}</div><div class="ld-peq ld-vol">vol ${escHtml(volume)}/${escHtml(totalVolumes)}</div></div>
-      <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b])=>`<span><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
+      <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b,largo])=>`<span${largo?' class="ld-largo"':''}><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
       ${obs?`<div class="ld-obs">${escHtml(obs)}</div>`:''}<div class="ld-barras">${barcode(code,30,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
   /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
   const peq=mw<90,cols=peq?2:3,linhasCabem=peq?2:3;
