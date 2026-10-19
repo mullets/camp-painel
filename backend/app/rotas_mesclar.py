@@ -668,9 +668,11 @@ class DescarteProjeto(BaseModel):
 
 @router.post("/projetos/{codigo}/descartar")
 def descartar_projeto(codigo: str, d: DescarteProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Projeto com nome de pasta do sistema e SEM folhas: some das listas. Não apaga nada; o número P nunca é reusado."""
+    """Descarta um projeto que não é nada (pasta do sistema, teste, cadastro errado): some das listas. Não apaga nada; o número P nunca é reusado.
+    19/10: vale para qualquer projeto sem registro no site (antes, só nome de pasta do sistema e sem folhas). As folhas dele, se houver
+    (nenhuma pode estar no site), ficam retidas: nunca vão ao site."""
     from .similaridade import nome_de_subpasta
-    motivo = ((d.motivo or "").strip() or "nome de pasta do sistema, não é uma obra")[:300]
+    motivo = (d.motivo or "").strip()[:300]
 
     def fazer(con):
         p = con.execute("SELECT codigo, titulo, mesclado_em, descartado_em, tainacan_item_id, wp_page_id FROM projeto WHERE codigo=?", (codigo,)).fetchone()
@@ -680,19 +682,24 @@ def descartar_projeto(codigo: str, d: DescarteProjeto, u: dict = Depends(auth.ex
             raise HTTPException(409, "Este projeto já foi descartado.")
         if p["mesclado_em"]:
             raise HTTPException(409, f"Este projeto já foi juntado a {p['mesclado_em']}.")
-        if not nome_de_subpasta(p["titulo"]):
-            raise HTTPException(409, "Só um projeto com nome de pasta do sistema (ex.: \"01 - Arquivo Arquivístico (TIFF)\") pode ser descartado aqui.")
-        if con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (codigo,)).fetchone()[0]:
-            raise HTTPException(409, "Este projeto tem folhas: junte ao projeto certo em vez de descartar.")
+        mot = motivo or ("nome de pasta do sistema, não é uma obra" if nome_de_subpasta(p["titulo"]) else "")
+        if len(mot) < 3:
+            raise HTTPException(400, "Explique por que este projeto é descartado.")
         if p["tainacan_item_id"] or p["wp_page_id"]:
-            raise HTTPException(409, "Este projeto tem registro no site: junte ao projeto certo em vez de descartar.")
+            raise HTTPException(409, "Este projeto tem registro no site: despublique e junte ao projeto certo em vez de descartar.")
+        no_site = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND (tainacan_item_id IS NOT NULL OR status_site IN ('no_ar','rascunho'))", (codigo,)).fetchone()[0]
+        if no_site:
+            raise HTTPException(409, f"{no_site} folha(s) deste projeto estão no site: despublique-as antes de descartar.")
+        folhas = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (codigo,))]
+        if folhas:
+            con.execute("UPDATE item SET retida=1, retida_motivo=?, atualizado_em=datetime('now') WHERE projeto_codigo=?", (f"projeto descartado: {mot}"[:300], codigo))
         lotes = [r[0] for r in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL", (codigo,))]
         con.execute("""UPDATE lista_processamento SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now')
-                        WHERE projeto_codigo=? AND descartado_em IS NULL""", (u["email"], f"projeto {codigo} descartado: {motivo}"[:300], codigo))
+                        WHERE projeto_codigo=? AND descartado_em IS NULL""", (u["email"], f"projeto {codigo} descartado: {mot}"[:300], codigo))
         con.execute("UPDATE projeto SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now') WHERE codigo=?",
-                    (u["email"], motivo, codigo))
+                    (u["email"], mot, codigo))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_descartado',?,?)",
-                    (codigo, u["email"], _json.dumps({"titulo": p["titulo"], "motivo": motivo, "lotes": lotes}, ensure_ascii=False)))
-        return {"ok": True, "codigo": codigo, "lotes": lotes}
+                    (codigo, u["email"], _json.dumps({"titulo": p["titulo"], "motivo": mot, "lotes": lotes, "folhas": folhas}, ensure_ascii=False)))
+        return {"ok": True, "codigo": codigo, "lotes": lotes, "folhas": len(folhas)}
 
     return _transacao(fazer)
