@@ -208,6 +208,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .lab-faixa .lf-cod{font-family:var(--mono);font-size:2.1mm;line-height:2.4mm;letter-spacing:.15mm;text-align:center}
 .tipos-multi{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}.tipos-multi .tm-op{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:2px 9px 2px 6px;font-size:12.5px;cursor:pointer;background:var(--surface);line-height:1.6}.tipos-multi .tm-op:has(input:checked){border-color:var(--ink);background:var(--ink);color:var(--surface)}.tipos-multi input{margin:0}.tipos-multi input:disabled+span{opacity:.6}
 .label.lab-niim{display:flex;align-items:center;justify-content:center;background:#fff}.lab-niim canvas{image-rendering:pixelated;display:block}
+.label.lab-d{display:flex;color:#000;font-family:var(--sans)}
+.lab-d .ld-fx{width:20mm;flex:none;border-right:.6mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2.2mm 1mm;box-sizing:border-box;text-align:center;gap:.6mm;overflow:hidden}
+.lab-d .logo{height:6mm}.lab-d .ld-rot{font:700 1.8mm/1 var(--sans);text-transform:uppercase;letter-spacing:.2mm}
+.lab-d .ld-num{font:800 9.5mm/1 var(--mono);letter-spacing:-.5mm}.lab-d .ld-cod{font:600 2.2mm/1 var(--mono);white-space:nowrap}
+.lab-d .ld-tarja{background:#000;color:#fff;font:700 2.2mm/1.1 var(--sans);padding:.9mm .6mm;width:100%;box-sizing:border-box;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lab-d .ld-peq{font:700 2.3mm/1.1 var(--sans);text-transform:uppercase;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.lab-d .ld-corpo{flex:1;min-width:0;padding:3mm 3.5mm 2.4mm;display:flex;flex-direction:column}
+.lab-d .ld-nome{font:700 4.2mm/1.15 var(--sans);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.lab-d .ld-arq{font:500 3.2mm/1.2 var(--sans);margin-top:.8mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-d .ld-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.1mm 3mm;margin-top:1.8mm;font-size:2.6mm;line-height:1.15}.lab-d .ld-kv span{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.lab-d .ld-kv b{display:block;font-size:1.9mm;text-transform:uppercase;letter-spacing:.1mm}
+.lab-d .ld-obs{font-size:2.2mm;margin-top:1mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-d .ld-barras{margin-top:auto}.lab-d .ld-barras svg{height:8mm;width:100%;display:block}.lab-d .ld-barras div{font:2.3mm var(--mono);letter-spacing:.6mm;text-align:center;margin-top:.4mm}
 .label.lab-std .ls-corpo{position:absolute;left:22px;top:0;right:0;bottom:0;padding:6px 9px 5px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .lab-std .ls-topo{display:flex;align-items:center;gap:6px;font-size:8px;color:#555;white-space:nowrap;overflow:hidden}
 .lab-std .ls-big{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
@@ -1893,6 +1904,14 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     return `<div class="label lab-tubo" style="width:${mw*S}px;height:${mh*S}px">${LOGO_CAMP}
       <div class="lt-txt"><span class="lt-big">${escHtml(big)}</span>${comNome?`<span class="lt-nome">${escHtml(pn)}</span><span>${escHtml(arq)}</span><span>${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span>`:`<span class="lt-nome">${escHtml(labType==='fundo'?nome:sig)}</span>`}</div>
       <div class="lt-barras" style="height:${mh*S*0.34}px;width:100%"><div style="width:${mh*S*0.34}px;height:${alt*0.7}px">${barcode(code,Math.round(alt*0.7),'100%')}</div></div></div>`}
+  if(labType==='projeto'&&mw>=90&&mh>=45){   /* padrão novo da pasta (19/10, layout D escolhido): faixa de 2 cm para reconhecer de longe — logo, acervo, NÚMERO DO PROJETO gigante, código, nº de folhas, cidade, ano e volume */
+    const num=codigoProjetoEtiqueta(pc).replace(/^P/,''),pcod=projeto.codigo||document.getElementById('l-proj').value||'',
+      nf=alvo?(alvo.folhas??null):(mat?mat.n:(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0)),
+      tarja=nf==null?'':`${nf} ${nf===1?'folha':'folhas'}`,
+      kv=[['Material',mat?mat.texto:'todo o material'],['Fundo',`${fc} · ${sig}`],['Volume',`${volume} de ${totalVolumes}`],['Local',local]];   /* cidade e ano já estão na faixa */
+    return `<div class="label lab-d" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx">${LOGO_CAMP}<div class="ld-rot">Acervo ${escHtml(sig)}</div><div class="ld-num">${escHtml(num)}</div><div class="ld-cod">${escHtml(pcod)}</div>${tarja?`<div class="ld-tarja">${escHtml(tarja)}</div>`:''}<div class="ld-peq">${escHtml(cid)}</div><div class="ld-peq">${escHtml(anoTxt)}</div><div class="ld-peq">vol ${escHtml(volume)}/${escHtml(totalVolumes)}</div></div>
+      <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b])=>`<span><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
+      ${obs?`<div class="ld-obs">${escHtml(obs)}</div>`:''}<div class="ld-barras">${barcode(code,30,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
   /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
   const peq=mw<90,cols=peq?2:3,linhasCabem=peq?2:3;
   const campos=lines.filter(([a])=>!(comNome&&a==='Projeto')).slice(0,cols*linhasCabem);
