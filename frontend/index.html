@@ -210,7 +210,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tipos-multi{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:2px}.tipos-multi .tm-op{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:2px 9px 2px 6px;font-size:12.5px;cursor:pointer;background:var(--surface);line-height:1.6}.tipos-multi .tm-op:has(input:checked){border-color:var(--ink);background:var(--ink);color:var(--surface)}.tipos-multi input{margin:0}.tipos-multi input:disabled+span{opacity:.6}
 .label.lab-niim{display:flex;align-items:center;justify-content:center;background:#fff}.lab-niim canvas{image-rendering:pixelated;display:block}
 .label.lab-d{display:flex;color:#000;font-family:var(--sans)}
-.lab-d .ld-fx{width:20mm;flex:none;border-right:.6mm solid #000;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2.2mm 1mm;box-sizing:border-box;text-align:center;gap:.6mm;overflow:hidden}
+.lab-d .ld-fx{width:20mm;flex:none;border-right:.25mm dashed #000;display:flex;flex-direction:column;align-items:flex-start;padding:2mm 3mm 2mm 1.2mm;box-sizing:border-box;gap:1.2mm;overflow:hidden}
+.lab-d .ld-fx .logo{height:5mm;flex:none}
+.lab-ajuste{margin:8px 0}.lab-ajuste summary{cursor:pointer;color:var(--ink2)}.laj-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.label.lab-regua{border:0}
+.lab-d .ld-gira{flex:1;min-height:0;width:100%;writing-mode:vertical-rl;transform:rotate(180deg);display:flex;flex-direction:column;justify-content:flex-start;gap:.5mm;overflow:hidden}
+.lab-d .ld-gnome{font:800 4.3mm/1.1 var(--sans);max-width:9.6mm;overflow:hidden;overflow-wrap:anywhere}
+.lab-d .ld-gcod{font:800 3mm/1.1 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-d .ld-gmeta{font:600 2.3mm/1.15 var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lab-d .logo{height:6mm}.lab-d .ld-rot{font:700 1.8mm/1 var(--sans);text-transform:uppercase;letter-spacing:.2mm}
 .lab-d .ld-num{font:800 9.5mm/1 var(--mono);letter-spacing:-.5mm}.lab-d .ld-cod{font:600 2.2mm/1 var(--mono);white-space:nowrap}
 .lab-d .ld-tarja{background:#000;color:#fff;font:700 2.2mm/1.1 var(--sans);padding:.9mm .6mm;width:100%;box-sizing:border-box;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1183,6 +1189,11 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
           <div class="lab-section-title"><span class="lab-passo">2</span> Como imprimir</div>
           <label class="field">Formato<select id="l-fmt"><option value="100x50">100 × 50 mm (padrão CAMP)</option><option value="70x35">70 × 35 mm</option><option value="20x140">20 × 140 mm (lombada)</option><option value="90x29">90 × 29 mm (Brother QL-700 · rolo DK-1201)</option><option value="200x287">200 × 287 mm (capa da pasta, folha A4 recortada)</option><optgroup label="NIIMBOT D110 (slides e negativos)"><option value="50x15">50 × 15 mm · NIIMBOT D110 (rolo T15×50, 130 etiquetas brancas)</option><option value="40x12">40 × 12 mm · NIIMBOT D110 (moldura do slide)</option><option value="30x12">30 × 12 mm · NIIMBOT D110 (compacta)</option></optgroup></select></label>
           <label class="field">Papel<select id="l-papel"><option value="rolo">Impressora de etiquetas (uma por página, no tamanho exato)</option><option value="a4">Folha A4 comum (várias por folha, para recortar)</option></select></label>
+          <details class="lab-ajuste" id="lab-ajuste"><summary>Ajuste desta impressora <small class="help" id="laj-resumo"></small></summary>
+            <p class="help">Se a etiqueta sai maior, menor ou deslocada: imprima a <b>régua de teste</b>, meça com uma régua de verdade e corrija aqui. Fica guardado neste computador, para este formato.</p>
+            <div class="laj-campos"><label class="field">Escala (%)<input id="laj-escala" type="number" step="0.5" min="80" max="120" value="100"></label><label class="field">Mover → (mm)<input id="laj-x" type="number" step="0.5" min="-10" max="10" value="0" title="negativo = para a esquerda"></label><label class="field">Mover ↓ (mm)<input id="laj-y" type="number" step="0.5" min="-10" max="10" value="0" title="negativo = para cima"></label></div>
+            <div class="act"><button type="button" class="btn sm" id="laj-regua">Imprimir régua de teste</button><button type="button" class="btn sm" id="laj-zerar">Zerar ajuste</button></div>
+            <p class="help" id="laj-dica"></p></details>
           <div class="qty"><label class="field">Cópias<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field"><span>Observação <small class="help" id="l-obs-cont" aria-live="polite">0/30</small></span><input id="l-obs" maxlength="30" placeholder="opcional, sai em letra pequena"></label></div>
           <div class="lab-note" id="l-qty-nota" style="font-size:12px;color:var(--ink3)">Na folha avulsa, as cópias viram uma sequência a partir do número informado (D00019, D00020…).</div>
         </div>
@@ -1975,7 +1986,7 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
       nf=alvo?(alvo.folhas??null):(mat?mat.n:(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0)),
       tarja=nf==null?'':`${nf} ${nf===1?'folha':'folhas'}`,
       kv=[['Material',mat?mat.texto:'todo o material'],['Fundo',`${fc} · ${sig}`],['Volume',`${volume} de ${totalVolumes}`],['Local',local]];   /* cidade e ano já estão na faixa */
-    return `<div class="label lab-d" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx">${LOGO_CAMP}<div class="ld-rot">Acervo ${escHtml(sig)}</div><div class="ld-num">${escHtml(num)}</div><div class="ld-cod">${escHtml(pcod)}</div>${tarja?`<div class="ld-tarja">${escHtml(tarja)}</div>`:''}<div class="ld-peq">${escHtml(cid)}</div><div class="ld-peq">${escHtml(anoTxt)}</div><div class="ld-peq">vol ${escHtml(volume)}/${escHtml(totalVolumes)}</div></div>
+    return `<div class="label lab-d" style="width:${mw}mm;height:${mh}mm"><div class="ld-fx" data-lombada>${LOGO_CAMP}<div class="ld-gira"><div class="ld-gnome">${escHtml(pn)}</div><div class="ld-gcod">${escHtml(pcod)} · ${escHtml(sig)}</div><div class="ld-gmeta">${escHtml([cid,anoTxt,tarja,`vol ${volume}/${totalVolumes}`].filter(Boolean).join(' · '))}</div></div></div>
       <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b])=>`<span><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
       ${obs?`<div class="ld-obs">${escHtml(obs)}</div>`:''}<div class="ld-barras">${barcode(code,30,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
   /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
@@ -2016,10 +2027,31 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
   {const pp=document.getElementById('l-papel');if(pp&&pp.closest('label'))pp.closest('label').style.display=w==='200'?'none':''}   /* a capa sai sempre numa A4 */
   const av=document.getElementById('lab-aviso');if(av)av.innerHTML=niim?'NIIMBOT D110: <b>Imprimir na NIIMBOT</b> manda as etiquetas para o servidor de impressão deste computador (niimblue-node, instalado uma vez com <code>scripts/niimbot_mac.sh</code>), que fala com a D110 pelo cabo USB-C ou Bluetooth. Sem o servidor: <b>Baixar imagens</b> e imprimir pelo niim.blue no Chrome.':w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
-  st.textContent=w==='200'?`@media print{@page{size:A4;margin:5mm}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`
+  const aj=lajLer(w+'x'+h),ajCss=aj.escala!==100||aj.x||aj.y?`@media print{.printgrid .label{transform:translate(${aj.x}mm,${aj.y}mm) scale(${aj.escala/100});transform-origin:0 0}}`:'';lajMostrar(w+'x'+h,aj);
+  st.textContent=ajCss+(w==='200'?`@media print{@page{size:A4;margin:5mm}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`
     :document.getElementById('l-papel').value==='a4'?`@media print{@page{size:A4;margin:8mm}.printgrid .label{width:${w}mm!important;height:${h}mm!important}}`
-    :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`}
+    :`@media print{@page{size:${w}mm ${h}mm;margin:0}.printgrid{display:block!important;padding:0!important}.printgrid .label{width:${w}mm!important;height:${h}mm!important;border:0!important;break-after:page;page-break-after:always}.printgrid .label:last-child{break-after:auto;page-break-after:auto}}`)}
 
+
+/* 19/10 · "a escala não bate quando mando imprimir": ajuste fino por computador e formato (escala, mover), aplicado só na impressão.
+   A régua de teste sai no tamanho do formato com marcas a cada mm e a dobra de 2 cm, para medir com uma régua de verdade. */
+const LAJ_CHAVE=f=>'camp.etiqueta.ajuste.'+f;
+function lajLer(f){try{const v=JSON.parse(localStorage.getItem(LAJ_CHAVE(f))||'null');if(v&&isFinite(v.escala))return {escala:Math.min(120,Math.max(80,+v.escala)),x:Math.min(10,Math.max(-10,+v.x||0)),y:Math.min(10,Math.max(-10,+v.y||0))}}catch(_){}return {escala:100,x:0,y:0}}
+function lajGravar(f,v){try{localStorage.setItem(LAJ_CHAVE(f),JSON.stringify(v))}catch(_){}}
+function lajMostrar(f,aj){const e=document.getElementById('laj-escala'),x=document.getElementById('laj-x'),y=document.getElementById('laj-y'),r=document.getElementById('laj-resumo'),d=document.getElementById('laj-dica');if(!e)return;
+  if(document.activeElement!==e)e.value=aj.escala;if(document.activeElement!==x)x.value=aj.x;if(document.activeElement!==y)y.value=aj.y;
+  const mexeu=aj.escala!==100||aj.x||aj.y;if(r)r.textContent=mexeu?`(escala ${String(aj.escala).replace('.',',')}%${aj.x?`, → ${String(aj.x).replace('.',',')} mm`:''}${aj.y?`, ↓ ${String(aj.y).replace('.',',')} mm`:''})`:'';
+  const [w]=f.split('x');if(d)d.textContent=`Na régua, a linha de ${w} mm tem de medir ${w} mm. Mediu outra coisa? Escala = ${w} ÷ medida × escala atual. Ex.: mediu ${(+w*1.04).toFixed(0)} mm → ${(100*w/(w*1.04)).toFixed(1).replace('.',',')}%.`}
+document.addEventListener('input',e=>{if(!e.target.closest||!e.target.closest('#lab-ajuste'))return;const f=document.getElementById('l-fmt').value,n=id=>+(document.getElementById(id).value||0);
+  lajGravar(f,{escala:n('laj-escala')||100,x:n('laj-x'),y:n('laj-y')});renderLabel()});
+function reguaHTML(w,h){let t='';for(let i=0;i<=w;i++){const g=i%10===0,m=i%5===0;t+=`<line x1="${i}" y1="0" x2="${i}" y2="${g?6:m?4:2.5}" stroke="#000" stroke-width="${g?.3:.15}"/>`;if(g&&i&&i<w)t+=`<text x="${i}" y="9" font-size="2.6" text-anchor="middle">${i}</text>`}
+  for(let j=0;j<=h;j++){const g=j%10===0,m=j%5===0;t+=`<line x1="0" y1="${j}" x2="${g?6:m?4:2.5}" y2="${j}" stroke="#000" stroke-width="${g?.3:.15}"/>`;if(g&&j&&j<h)t+=`<text x="8" y="${j+1}" font-size="2.6">${j}</text>`}
+  const dobra=+w>=90?`<line x1="20" y1="0" x2="20" y2="${h}" stroke="#000" stroke-width=".25" stroke-dasharray="1 1"/><text x="21" y="${h/2+8}" font-size="2.4">dobra (2 cm)</text>`:'';
+  return `<div class="label lab-regua" style="width:${w}mm;height:${h}mm"><svg viewBox="0 0 ${w} ${h}" width="${w}mm" height="${h}mm" font-family="sans-serif"><rect x=".15" y=".15" width="${w-.3}" height="${h-.3}" fill="none" stroke="#000" stroke-width=".3"/>${t}${dobra}<text x="${w/2}" y="${h/2}" font-size="3.2" text-anchor="middle">Régua de teste ${w} × ${h} mm</text><text x="${w/2}" y="${h/2+4.5}" font-size="2.4" text-anchor="middle">meça a borda de cima: tem de dar ${w} mm</text></svg></div>`}
+document.addEventListener('click',e=>{const r=e.target.closest('#laj-regua'),z=e.target.closest('#laj-zerar');if(!r&&!z)return;const f=document.getElementById('l-fmt').value;
+  if(z){lajGravar(f,{escala:100,x:0,y:0});renderLabel();toast('Ajuste zerado');return}
+  const [w,h]=f.split('x'),pg=document.getElementById('printgrid');if(!pg)return;pg.innerHTML=reguaHTML(+w,+h);
+  window.addEventListener('afterprint',()=>renderLabel(),{once:true});window.print()});
 
 // ---------- desktop: drawer de detalhes ----------
 const mainEl=document.querySelector('.main');
