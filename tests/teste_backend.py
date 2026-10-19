@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux"}
+MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5321,6 +5321,50 @@ def filho(modo):
         ver("operador não edita o projeto (a tela só mostra 'Usar no projeto' para admin)", op.patch("/api/projetos/F081-P0001", json={"cliente": "X"}).status_code == 403)
         c.close()
         print("\n".join(res))
+    elif modo == "pj2":
+        # 19/10 (2) ("continua ruim…", F009-P0092; "olha isso..", F026-P0009): o consenso separa "sem valor" e grafia/abreviação de diferença
+        # de verdade (campo novo "tipo" em cada divergente); o próximo passo traz o motivo do lote parado (erro_cv); a revisão traz criado_em.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F082','Fundo PJ2','FP2',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F082',9)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo) VALUES ('F082-P0009','F082',9,'CRASA')")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, status_json) VALUES ('F082-P0009 - CRASA','F082-P0009','/nao/existe','erro',?)",
+                         (_j.dumps({"erro": "Falha ao ler o carimbo"}),)).lastrowid
+        for n in range(1, 35):
+            ano = 1978 if n <= 6 else (1979 if n == 14 else None)
+            end = None if n >= 32 else ("AV DO ESTADO 100" if n == 12 else "AV. DO ESTADO, 100")
+            cli_ = None if n >= 32 else ("PREFEITURA MUNICIPAL DE STO ANDRÉ" if n == 20 else "PREFEITURA MUNICIPAL DE SANTO ANDRÉ")
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,revisao,ano_folha,endereco_folha,cliente_folha) VALUES (?,?,?,?,'campvision',?,'pendente',?,?,?)",
+                      (f"F082-P0009-1978-S01-D{n:05d}", "F082-P0009", "S01", n, lote, ano, end, cli_))
+        c.commit(); c.close()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        cs = {k["campo"]: k for k in x.get(f"/api/projetos/F082-P0009/consenso?lote_id={lote}").json()["campos"]}
+        tipos = lambda campo: sorted({d.get("tipo") for d in cs[campo]["divergentes"]}, key=str)  # noqa: E731
+        por = lambda campo, t: [d["codigo"][-6:] for d in cs[campo]["divergentes"] if d.get("tipo") == t]  # noqa: E731
+        ver("ano: 27 folhas 'vazio' (o carimbo não diz) e 1 'valor' (D00014 diz 1979)", len(por("ano", "vazio")) == 27 and por("ano", "valor") == ["D00014"], str(tipos("ano")))
+        ver("endereço: 'AV DO ESTADO 100' × 'AV. DO ESTADO, 100' é só grafia (não é diferença)", por("endereco", "grafia") == ["D00012"] and not por("endereco", "valor"), str(cs["endereco"]["divergentes"][:2]))
+        ver("cliente: 'STO ANDRÉ' × 'SANTO ANDRÉ' é abreviação (não é diferença)", por("cliente", "abreviacao") == ["D00020"] and not por("cliente", "valor"), str(tipos("cliente")))
+        ver("os campos antigos continuam (vazio, valor, trava): cliente antigo não quebra", all({"codigo", "valor", "vazio", "trava"} <= set(d) for k in cs.values() for d in k["divergentes"]))
+        try:
+            from app.rotas_consenso import tipo_diferenca
+        except ImportError:
+            tipo_diferenca = lambda a, b: None  # noqa: E731
+        ver("tipo_diferenca: 1979 × 1978 = valor; 'Rua B' × 'Rua A' = valor; 'Av Paulista' × 'Avenida Paulista' = abreviação",
+            tipo_diferenca(1979, 1978) == "valor" and tipo_diferenca("Rua B", "Rua A") == "valor" and tipo_diferenca("Av Paulista", "Avenida Paulista") == "abreviacao")
+        pp = x.get("/api/projetos/F082-P0009/proximo-passo").json()["lote"]
+        ver("próximo passo do lote parado traz o motivo do CAMP Vision (erro_cv) e não vaza status_json/resultado", pp["fase"] == "erro" and pp.get("erro_cv") == "Falha ao ler o carimbo" and "status_json" not in pp and "resultado" not in pp, str(pp)[:300])
+        rv = x.get("/api/projetos/F082-P0009/revisao").json()["lotes"][0]
+        ver("revisão do lote traz criado_em (a data na linha do lote)", bool(rv.get("criado_em")), str(rv.get("criado_em")))
+        r = x.post("/api/projetos/F082-P0009/consenso/aplicar", json={"campo": "ano", "itens": None, "lote_id": lote})
+        ver("'Usar 1978 nas 28' (a rota de sempre, todas as divergentes)", r.status_code == 200 and len(r.json()["aplicadas"]) == 28, r.text[:200])
+        print("\n".join(res))
     elif modo == "autorizar_lote":
         init_db(); _aplicar_migracoes_real()
         from app import auth
@@ -8896,6 +8940,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"cv_ux: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("139) Página do projeto (19/10, 2ª rodada): consenso separa sem valor/grafia/abreviação de diferença; motivo do lote parado; data do lote")
+rc, out = rodar("pj2", f"{tmp}/pj2.db")
+if rc != 0: ok(False, f"teste pj2 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"pj2: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

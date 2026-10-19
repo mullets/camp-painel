@@ -87,7 +87,7 @@ for c in f: con.execute("UPDATE item SET ano_folha=1960 WHERE codigo=?",(c,))`);
 
   // ---------- (4) "em todas", num projeto sem lote (consenso do projeto) ----------
   await page.goto(BASE + '/#projeto/F023-P0011'); await page.waitForSelector('#pj-consenso [data-cs-todas="ano"]', { timeout: 15000 });
-  chk(/em todas \(3\)/.test(await page.textContent('#pj-consenso [data-cs-todas="ano"]')), 'o botão "Usar o valor do consenso em todas (3)" aparece');
+  chk(/Usar 1959 nas 3/.test(await page.textContent('#pj-consenso [data-cs-todas="ano"]')), 'UM botão "Usar 1959 nas 3" (uma decisão para as folhas que não seguem o consenso)');
   await page.click('#pj-consenso [data-cs-todas="ano"]'); await page.click('#conf-ov [data-conf="sim"]');
   await page.waitForSelector('#pj-consenso [data-cs-todas="ano"]', { state: 'detached', timeout: 8000 });
   chk(py(`print(con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='F023-P0011' AND ano_folha<>1959").fetchone()[0])`) === '0', '"em todas" deixa as 3 folhas com o ano do consenso (1959)');

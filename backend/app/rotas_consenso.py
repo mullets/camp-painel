@@ -2,6 +2,8 @@
 do endereço e do cliente lidos em cada carimbo. Mostra o consenso e as folhas que divergem; a pessoa decide trocar, folha a folha ou em todas.
 Nada é trocado sozinho. Duplicatas não votam (seriam o mesmo carimbo contado duas vezes)."""
 import json
+import re
+import unicodedata
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,6 +31,36 @@ def _limpo(v):
 
 def _chave(v):
     return v if isinstance(v, int) else str(v).casefold()
+
+
+def _grafia(v) -> str:
+    """O valor sem acento, pontuação, caixa e espaços repetidos: "AV. DO ESTADO" e "Av do Estado" dão o mesmo."""
+    t = unicodedata.normalize("NFKD", str(v)).encode("ascii", "ignore").decode().casefold()
+    return " ".join(re.sub(r"[^\w\s]", " ", t).split())
+
+
+def _abrevia(curta: str, longa: str) -> bool:
+    """"sto" abrevia "santo", "av" abrevia "avenida": mesma 1ª letra e as letras da curta aparecem, em ordem, na longa."""
+    if not curta or not longa or len(curta) >= len(longa) or curta[0] != longa[0]:
+        return False
+    it = iter(longa)
+    return all(ch in it for ch in curta)
+
+
+def tipo_diferenca(valor, consenso) -> str:
+    """19/10 (F026-P0009: "36 folhas dizem outra coisa" num projeto de 34): nem toda diferença é uma decisão.
+    vazio = o carimbo não diz nada (falta de dado); grafia = só pontuação/caixa/acento; abreviacao = STO × SANTO; valor = diz outra coisa de verdade."""
+    if valor is None:
+        return "vazio"
+    if isinstance(valor, int) or isinstance(consenso, int):
+        return "valor"
+    a, b = _grafia(valor), _grafia(consenso)
+    if a == b or a.replace(" ", "") == b.replace(" ", ""):
+        return "grafia"
+    ta, tb = a.split(), b.split()
+    if len(ta) == len(tb) and all(x == y or _abrevia(x, y) or _abrevia(y, x) for x, y in zip(ta, tb)):
+        return "abreviacao"
+    return "valor"
 
 
 def _folhas(con, codigo: str, lote_id: int | None) -> list[dict]:
@@ -84,7 +116,8 @@ def calcular(con, codigo: str, lote_id: int | None) -> dict:
             for f in folhas:
                 v = _limpo(f[col])
                 if v is None or _chave(v) != _chave(consenso):
-                    divergentes.append({"codigo": f["codigo"], "valor": v, "vazio": v is None, "trava": _trava(f)})
+                    divergentes.append({"codigo": f["codigo"], "valor": v, "vazio": v is None, "trava": _trava(f),
+                                        "tipo": tipo_diferenca(v, consenso)})   # campo novo (opcional): vazio | grafia | abreviacao | valor
         proj = _limpo(p[col_p]) if col_p != "ano" else (p["ano"] or None)
         difere = consenso is not None and proj is not None and _chave(proj) != _chave(consenso)
         m = mantidos.get(campo)

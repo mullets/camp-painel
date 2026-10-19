@@ -29,18 +29,22 @@ def _lote(con, lote_id: int):
 def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
     from .filas_fase import fase_da_lista
+    from .rotas_operacao import _erro_do_cv
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
             raise HTTPException(404, "Projeto não existe")
         lotes = []
-        for l in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas,
+        for l in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas, l.status_json, l.resultado,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
                                 FROM lista_processamento l WHERE l.projeto_codigo=? ORDER BY l.id DESC""", (codigo,)):
             d = dict(l)
             d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
             d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"])
+            # 19/10 (F026-P0009): lote parado por erro do CAMP Vision: o motivo vai junto (campo novo, opcional), para a Situação do lote dizer o porquê
+            d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
+            d.pop("status_json", None); d.pop("resultado", None)
             lotes.append(d)
         lote = next((x for x in lotes if x["fase"] != "publicado"), lotes[0] if lotes else None)
         return {"lote": lote, "lotes": len(lotes), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
@@ -143,7 +147,7 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 importacao = json.loads(l["resultado"] or "{}").get("importacao")
             except ValueError:
                 importacao = None
-            lotes.append({"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "pacote": pacote,
+            lotes.append({"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
                           "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo})
         return {"lotes": lotes}
     finally:
