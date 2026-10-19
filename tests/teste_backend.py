@@ -4846,6 +4846,43 @@ def filho(modo):
         # folha de OUTRO lote com o mesmo D não é tocada (continua indo para a decisão de lote que colide)
         k.close()
         for l in res: print(l)
+    elif modo == "aviso_sem_manifesto":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import importador_lote
+        from app.rotas_operacao import _ler_pasta, _importar_se_tem_pacote
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        pasta = _pl.Path(tempfile.mkdtemp()) / "P0001 reorganizada"; (pasta / "catalogacao").mkdir(parents=True)
+        def gravar(p_): (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p_, ensure_ascii=False), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'SESI',1972)")
+        # o painel já tem o lote, importado do jeito antigo: ano 0000 nos códigos e arquivos que já não existem ("Sem imagem")
+        velho = _cp.deepcopy(pac)
+        for d_ in velho["documentos"]:
+            d_["codigo"] = d_["codigo"].replace("-1972-", "-0000-"); d_["arquivos"] = ["/nao/existe/mais.jpg"]
+        gravar(velho)
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('SESI','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit(); c.close()
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        importador_lote.importar_lote(k, lid, "teste"); k.commit()
+        ver("antes: as folhas estão com ano 0000", sql("SELECT COUNT(*) FROM item WHERE codigo LIKE '%-0000-%'") == 2)
+        gravar(pac)                          # a releitura do CAMP Vision corrigiu o pacote (ano 1972, arquivos certos); a pasta NÃO tem info_projeto.json nem status.json
+        r_varredura = _ler_pasta(k, pasta, None)
+        ver("a varredura do QNAP (sem código no aviso) continua ignorando pasta sem manifesto", r_varredura["acao"] == "ignorada" and "info_projeto" in r_varredura["motivo"], str(r_varredura))
+        r_outro = _ler_pasta(k, pasta, None, "F026-P0002")
+        ver("aviso que diz OUTRO projeto continua ignorado", r_outro["acao"] == "ignorada", str(r_outro))
+        r = _ler_pasta(k, pasta, None, "F026-P0001"); imp = _importar_se_tem_pacote(k, pasta); k.commit()
+        ver("aviso do projeto certo, de pasta com pacote mas sem manifesto, É lido (não é mais ignorado)", r["acao"] in ("igual", "atualizada") and r.get("codigo") == "F026-P0001", str(r))
+        ver("o aviso diz que a pasta foi lida pelo pacote", "pacote" in str(r.get("aviso")), str(r.get("aviso")))
+        ver("as folhas passam para o código novo (ano 1972), sem duplicar", sql("SELECT COUNT(*) FROM item WHERE codigo LIKE '%-1972-%'") == 2 and sql("SELECT COUNT(*) FROM item") == 2, str(imp)[:200])
+        ver("e passam a apontar para os arquivos certos (saem do 'Sem imagem')", sql("SELECT COUNT(*) FROM item WHERE arquivo_jpg LIKE '%nao/existe%'") == 0, "")
+        ver("não criou lote novo", sql("SELECT COUNT(*) FROM lista_processamento") == 1)
+        vazia = _pl.Path(tempfile.mkdtemp()) / "vazia"; vazia.mkdir()
+        ver("pasta sem pacote e sem manifesto continua ignorada, mesmo com código no aviso", _ler_pasta(k, vazia, None, "F026-P0001")["acao"] == "ignorada")
+        k.close()
+        for l in res: print(l)
     elif modo == "lote_complemento":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -8700,6 +8737,14 @@ else:
 print("114b) Material novo de projeto com lote já publicado: vira lote novo em revisão, sem mexer no que está publicado")
 rc, out = rodar("lote_complemento", f"{tmp}/lotecomp.db")
 if rc != 0: ok(False, f"teste do lote de complemento não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114c) Aviso do CAMP Vision de pasta com pacote e sem info_projeto.json/status.json: lido pelo pacote (releitura de F026-P0009)")
+rc, out = rodar("aviso_sem_manifesto", f"{tmp}/avisosemman.db")
+if rc != 0: ok(False, f"teste do aviso sem manifesto não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
