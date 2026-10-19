@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha"}
+MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5242,6 +5242,85 @@ def filho(modo):
         ver("mas o que a conferência não resolve (contagem de origem) continua travando, mesmo com o lote aprovado", ac and not ac["ok"], str(ac))
         c.close()
         print("\n".join(res))
+    elif modo == "cv_ux":
+        # 19/10 ("acho meio confuso isso tudo"): o aceite do CV2 somado à conferência do painel, sem código cru; consenso × projeto
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.publicacao import condicoes_projeto
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pasta = _P(tempfile.mkdtemp()) / "F081-P0001 - Casa"; (pasta / "catalogacao" / "lotes").mkdir(parents=True)
+        # o caso real (F009-P0092): o CV2 manda as CHAVES nas pendências e reprova só pela orientação incerta
+        aceite = {"contagem_origem_igual_saida": {"ok": True}, "duplicatas_marcadas": {"ok": True}, "orientacao_incerta_zerada": {"ok": False},
+                  "serie_incerta_zerada": {"ok": True}, "exif_conferido": True, "relatorio_gerado": True, "folhas_autoria_nao_confirmada": 0,
+                  "publicavel": False, "pendencias": ["orientacao_incerta_zerada", "publicavel"]}
+        (pasta / "catalogacao" / "lotes" / "lote-1.json").write_text(_j.dumps({"aceite": aceite}))
+        (pasta / "catalogacao" / "orientacao.txt").write_text("Orientação aplicada: 3\nincerta — conferir: D1, D2, D3\n", encoding="utf-8")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F081','Fundo UX','FUX',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F081',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cliente,endereco_obra) VALUES ('F081-P0001','F081',1,'Casa',1960,'Luiz Marcelo Sales','Rua Dr. Alberto Faria')")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aceite_json) VALUES ('Lote','F081-P0001',?,'revisao',?)", (str(pasta), _j.dumps(aceite))).lastrowid
+        D = lambda n: f"F081-P0001-1960-S01-D{n:05d}"
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,cliente_folha,endereco_folha) VALUES (?,?,?,?,?,'campvision',?,'conferida','LUIZ SALLES','RUA DR. ALBERTO FARIA')",
+                      (D(n), "F081-P0001", "S01", n, f"Planta {n}", lote))
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        ad, op, le = cli("ad@camp.arq.br", "senha-admin-12345"), cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        P = lambda: c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F081-P0001'").fetchone()  # noqa: E731
+        cond = lambda: next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)  # noqa: E731
+        ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
+        txt = _j.dumps(ac, ensure_ascii=False)
+        ver("todas as folhas conferidas (lote ainda NÃO aprovado): o aceite da orientação conta como resolvido", ac.get("situacao") == "resolvido" and not ac.get("faltam"), txt[:300])
+        it = {i["chave"]: i for i in ac.get("itens", [])}
+        ver("o item da orientação vem como 'resolvido' (conferido no painel), o resto como ok/info", it.get("orientacao_incerta_zerada", {}).get("estado") == "resolvido" and it["contagem_origem_igual_saida"]["estado"] == "ok" and it["folhas_autoria_nao_confirmada"]["estado"] == "info", str(it)[:300])
+        ver("nenhum código cru do CV2 nos motivos ('orientacao_incerta_zerada', 'publicavel')", ac.get("motivos") == ["Orientação incerta zerada ou revisada"], str(ac.get("motivos")))
+        ac2 = cond()
+        ver("a publicação usa a MESMA regra: o aceite não trava (resolvido na conferência), sem código cru no detalhe", ac2 and ac2["ok"] and "conferência do painel" in (ac2["detalhe"] or "") and "orientacao_incerta_zerada" not in (ac2["detalhe"] or "") and "publicavel" not in (ac2["detalhe"] or ""), str(ac2))
+        c.execute("UPDATE item SET revisao='pendente' WHERE codigo=?", (D(2),)); c.commit()
+        ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
+        f = (ac.get("faltam") or [{}])[0]
+        ver("com 1 folha pendente: reprovado, e o 'falta' diz o que fazer (conferir) e quantas", ac.get("situacao") == "reprovado" and f.get("acao") == "conferir" and "a folha que falta" in (f.get("como") or "") and f.get("rotulo") == "Orientação incerta zerada ou revisada", str(ac)[:300])
+        ac2 = cond()
+        ver("... e a publicação trava com o mesmo motivo em português", ac2 and not ac2["ok"] and "Falta: Orientação incerta zerada ou revisada (Conferir a folha que falta na Revisão do lote)" in (ac2["detalhe"] or ""), str(ac2))
+        c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (lote,)); c.commit()
+        ver("lote aprovado no painel também resolve (regra antiga continua)", (ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}).get("situacao") == "resolvido" and cond()["ok"])
+        ruim = {**aceite, "contagem_origem_igual_saida": {"ok": False}}
+        (pasta / "catalogacao" / "lotes" / "lote-1.json").write_text(_j.dumps({"aceite": ruim}))
+        c.execute("UPDATE lista_processamento SET aceite_json=? WHERE id=?", (_j.dumps(ruim), lote)); c.commit()
+        ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
+        ver("o que a conferência não resolve (contagem) continua 'falta', com 'Só o CAMP Vision resolve'", ac.get("situacao") == "reprovado" and [x["chave"] for x in ac.get("faltam", [])] == ["contagem_origem_igual_saida"] and "Só o CAMP Vision" in ac["faltam"][0]["como"] and not cond()["ok"], str(ac.get("faltam")))
+        c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F081-P0001'"); c.commit()
+        ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
+        ver("projeto JÁ publicado: o aceite reprovado da leitura vira só registro ('historico'), nunca 'não pode ser publicado'", ac.get("situacao") == "historico" and [x["chave"] for x in ac.get("faltam", [])] == ["contagem_origem_igual_saida"], str(ac.get("situacao")))
+        c.execute("UPDATE projeto SET status_site='nao_publicado' WHERE codigo='F081-P0001'"); c.commit()
+        ver("pendência desconhecida em snake_case vira texto legível", __import__("app.saidas_cv", fromlist=["x"]).motivos_aceite({"pendencias": ["algo_novo_do_cv2", "publicavel", "Texto livre"]}) == ["Algo novo do cv2", "Texto livre"])
+        # ---------- consenso × projeto ----------
+        cs = {x["campo"]: x for x in op.get(f"/api/projetos/F081-P0001/consenso?lote_id={lote}").json()["campos"]}
+        ver("consenso: cliente das folhas (LUIZ SALLES) ≠ projeto (Luiz Marcelo Sales) → projeto_difere; endereço igual (maiúsculas) não", cs["cliente"].get("projeto_difere") and not cs["endereco"].get("projeto_difere") and cs["cliente"].get("mantido") is None, str(cs["cliente"])[:200])
+        ver("leitura não registra 'Manter' (403)", le.post("/api/projetos/F081-P0001/consenso/manter", json={"campo": "cliente", "lote_id": lote}).status_code == 403)
+        ver("'Manter' num campo sem diferença: 409", op.post("/api/projetos/F081-P0001/consenso/manter", json={"campo": "endereco", "lote_id": lote}).status_code == 409)
+        r = op.post("/api/projetos/F081-P0001/consenso/manter", json={"campo": "cliente", "lote_id": lote})
+        cs = {x["campo"]: x for x in op.get(f"/api/projetos/F081-P0001/consenso?lote_id={lote}").json()["campos"]}
+        ver("'Manter o do projeto' só registra: o projeto não muda, a pergunta some (mantido) e fica no histórico", r.status_code == 200 and c.execute("SELECT cliente FROM projeto WHERE codigo='F081-P0001'").fetchone()[0] == "Luiz Marcelo Sales"
+            and (cs["cliente"].get("mantido") or {}).get("por") == "op@camp.arq.br" and c.execute("SELECT COUNT(*) FROM evento WHERE codigo='F081-P0001' AND tipo='consenso_mantido'").fetchone()[0] == 1, r.text[:200])
+        c.execute("UPDATE item SET cliente_folha='LUIZ SALES' WHERE lote_id=?", (lote,)); c.commit()
+        cs = {x["campo"]: x for x in op.get(f"/api/projetos/F081-P0001/consenso?lote_id={lote}").json()["campos"]}
+        ver("se o consenso mudar, a decisão antiga não vale: a diferença volta a aparecer", cs["cliente"].get("projeto_difere") and cs["cliente"].get("mantido") is None, str(cs["cliente"])[:200])
+        r = ad.patch("/api/projetos/F081-P0001", json={"cliente": "LUIZ SALES"})
+        cs = {x["campo"]: x for x in op.get(f"/api/projetos/F081-P0001/consenso?lote_id={lote}").json()["campos"]}
+        ver("'Usar no projeto' (edição do projeto que já existe, admin): o projeto passa a seguir o consenso", r.status_code == 200 and not cs["cliente"].get("projeto_difere"), r.text[:200])
+        ver("operador não edita o projeto (a tela só mostra 'Usar no projeto' para admin)", op.patch("/api/projetos/F081-P0001", json={"cliente": "X"}).status_code == 403)
+        c.close()
+        print("\n".join(res))
     elif modo == "autorizar_lote":
         init_db(); _aplicar_migracoes_real()
         from app import auth
@@ -8809,6 +8888,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"atualizar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("138) CAMP Vision na página do projeto (19/10): aceite + conferência do painel numa regra só, sem código cru; consenso × projeto (usar/manter)")
+rc, out = rodar("cv_ux", f"{tmp}/cv_ux.db")
+if rc != 0: ok(False, f"teste cv_ux não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"cv_ux: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -425,7 +425,7 @@ w.route_to('estacoes'); await sleep(2800);
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
   chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
-  chk(!/Fonte visual|reconhecidos no site/.test(txt('.project-source'))&&/folhas no painel/.test(txt('.project-source')),'a linha de números do projeto deveria falar de folhas no painel e no site, sem jargão: "'+txt('.project-source')+'"');
+  chk(!/Fonte visual|reconhecidos no site/.test(txt('.folhas-bar'))&&/\d+ no site/.test(txt('.folhas-bar .fb-cont'))&&!d.querySelector('.project-source'),'(19/10) os números do projeto (conferidas e no site) ficam na barra das folhas, sem jargão e sem o rodapé solto: "'+txt('.folhas-bar .fb-cont')+'"');
   d.querySelector('#pj-proximo [data-pp="conferir"]').click(); await sleep(2000);
   chk(/Revisar folha/.test(txt('#d-title')),'"Começar a conferir" deveria abrir a primeira folha pendente'); w.closeDrawer(true);
   w.route_to('projeto/F026-P0001'); await sleep(3600);

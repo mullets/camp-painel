@@ -58,27 +58,22 @@ def condicoes_projeto(con, p) -> dict:
     la = con.execute("""SELECT id, aceite_json FROM lista_processamento WHERE projeto_codigo=? AND aceite_json IS NOT NULL
                         ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
     if la:
-        from .saidas_cv import motivos_aceite
+        from .saidas_cv import motivos_aceite, avaliar_aceite, conferencia_do_lote
         try:
             ac = json.loads(la["aceite_json"])
         except ValueError:
             ac = {}
-        aceito = ac.get("publicavel") is not False
-        resolvido_aqui = False
-        if not aceito:
-            # O aceite é uma foto do momento da leitura. Os pontos que pedem OLHO HUMANO (orientação/série incertas, duplicatas,
-            # autoria) a conferência do painel resolve: com o lote APROVADO no painel, eles deixam de travar (aviso de 14/10, F009-P0060).
-            from .saidas_cv import itens_aceite
-            RESOLVE_CONFERENCIA = {"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"}
-            falhas = {i["chave"] for i in itens_aceite(ac) if i["ok"] is False}
-            aprovado = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (la["id"],)).fetchone()[0]
-            if falhas == {"sem_autoria_divergente"}:      # CAMP-046: CV2 antigo ainda reprova por autoria; no contrato 2.4 isso é só aviso
-                aceito = True
-            elif aprovado and falhas <= RESOLVE_CONFERENCIA:
-                aceito = resolvido_aqui = True
+        # Regra única com a tela (saidas_cv.avaliar_aceite): o aceite é uma foto do momento da leitura. Os pontos que pedem OLHO HUMANO
+        # (orientação/série incertas, duplicatas) a conferência do painel resolve: lote APROVADO ou todas as folhas do lote conferidas
+        # (aviso de 14/10, F009-P0060; 19/10: antes só valia com o lote aprovado e a tela dizia "reprovado" com tudo conferido).
+        # CAMP-046: autoria divergente é só aviso (CV2 antigo ainda reprova por ela).
+        av = avaliar_aceite(ac, conferencia_do_lote(con, la["id"])) if isinstance(ac, dict) and ac else None
+        aceito = av is None or av["situacao"] != "reprovado"
+        resolvido_aqui = bool(av and av["situacao"] == "resolvido")
         conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
                       "detalhe": ("O CAMP Vision pediu olho humano (" + "; ".join(motivos_aceite(ac)) + "): resolvido na conferência do painel") if resolvido_aqui
-                      else None if aceito else "O CAMP Vision reprovou o lote: " + "; ".join(motivos_aceite(ac) or ["sem motivo informado"]),
+                      else None if aceito else "O CAMP Vision reprovou o lote" + (lambda m: f" ({'; '.join(m)})" if m else "")(
+                          [m for m in motivos_aceite(ac) if m not in {i["rotulo"] for i in av["itens"] if i["estado"] != "falta"} and m not in {f["rotulo"] for f in av["faltam"]}]) + ". Falta: " + "; ".join(f"{f['rotulo']} ({f['como']})" for f in av["faltam"]),
                       "acao": None if aceito else {"tipo": "revisao", "rotulo": "Ver o lote", "alvo": codigo}})
 
     teste = bool(p["lote_teste"])

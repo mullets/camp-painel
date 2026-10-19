@@ -98,13 +98,82 @@ def itens_aceite(aceite: dict | None) -> list[dict]:
     return out
 
 
+def _rotulo_pendencia(x) -> str | None:
+    """Pendência do CV2 em texto para gente: o CV2 às vezes manda só a CHAVE ("orientacao_incerta_zerada; publicavel").
+    Chave conhecida vira o rótulo; "publicavel" é a conclusão (não um motivo) e sai."""
+    t = str(x.get("mensagem") or x.get("item") or x) if isinstance(x, dict) else str(x)
+    t = t.strip()
+    if not t or t == "publicavel":
+        return None
+    if t in ROTULO_ACEITE:
+        return ROTULO_ACEITE[t]
+    return t.replace("_", " ").capitalize() if re.fullmatch(r"[a-z0-9_]+", t) else t
+
+
 def motivos_aceite(aceite: dict | None) -> list[str]:
     if not aceite:
         return []
     pend = aceite.get("pendencias")
     if isinstance(pend, list) and pend:
-        return [str(x.get("mensagem") or x.get("item") or x) if isinstance(x, dict) else str(x) for x in pend]
+        out = [r for r in (_rotulo_pendencia(x) for x in pend) if r]
+        if out:
+            return list(dict.fromkeys(out))
     return [i["rotulo"] for i in itens_aceite(aceite) if i["ok"] is False]
+
+
+# O aceite é uma FOTO do momento da leitura. Os pontos que pedem OLHO HUMANO a conferência do painel resolve (aviso de 14/10, F009-P0060):
+# basta o lote aprovado OU todas as folhas do lote já conferidas. Os outros (contagem, EXIF, relatório…) só o CAMP Vision resolve.
+RESOLVE_CONFERENCIA = frozenset({"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"})
+SO_AVISO = frozenset({"sem_autoria_divergente"})   # CAMP-046 (contrato 2.4): autoria não confirmada é aviso, nunca trava
+
+
+def conferencia_do_lote(con, lote_id: int) -> dict:
+    """Quanto do lote já passou por uma pessoa no painel (duplicatas não contam: não vão ao site)."""
+    l = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+    tot, pend = con.execute("""SELECT COUNT(*), COALESCE(SUM(revisao='pendente'),0) FROM item
+                               WHERE lote_id=? AND duplicata_de IS NULL""", (lote_id,)).fetchone()
+    return {"aprovado": bool(l and l[0]), "total": int(tot or 0), "pendentes": int(pend or 0)}
+
+
+def avaliar_aceite(aceite: dict | None, conferencia: dict | None = None) -> dict | None:
+    """A regra ÚNICA (publicação e tela): o aceite do CV2 somado ao que já foi conferido no painel.
+    situacao: 'aprovado' (o CV2 aprovou ou só sobrou aviso) | 'resolvido' (reprovado só pelo que a conferência resolve, e foi conferido)
+    | 'reprovado' (falta algo). Cada item ganha 'estado': ok | resolvido | aviso | falta | info. 'faltam' diz o que fazer, sem código cru."""
+    if not aceite:
+        return None
+    cf = conferencia or {}
+    conferido = bool(cf.get("aprovado")) or (cf.get("total", 0) > 0 and cf.get("pendentes", 1) == 0)
+    pend = int(cf.get("pendentes") or 0)
+    itens, faltam = [], []
+    for i in itens_aceite(aceite):
+        if i["ok"] is True:
+            estado = "ok"
+        elif i["ok"] is None:
+            estado = "info"
+        elif i["chave"] in SO_AVISO:
+            estado = "aviso"
+        elif i["chave"] in RESOLVE_CONFERENCIA and conferido:
+            estado = "resolvido"
+        else:
+            estado = "falta"
+            if i["chave"] in RESOLVE_CONFERENCIA:
+                faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": "conferir",
+                               "como": (f"Conferir {'a folha que falta' if pend == 1 else f'as {pend} folhas que faltam'} na Revisão do lote" if pend
+                                        else "Aprovar o lote na Revisão do lote")})
+            else:
+                faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": None,
+                               "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"})
+        itens.append({**i, "estado": estado})
+    reprovado_cv = aceite.get("publicavel") is False
+    if reprovado_cv and not any(i["ok"] is False for i in itens):   # reprovado sem item marcado: o motivo está só nas pendências
+        faltam += [{"chave": None, "rotulo": m, "acao": None, "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"} for m in motivos_aceite(aceite)] or \
+                  [{"chave": None, "rotulo": "O CAMP Vision não disse o motivo", "acao": None, "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"}]
+    if not reprovado_cv or not faltam:
+        situacao = "resolvido" if reprovado_cv and any(i["estado"] == "resolvido" for i in itens) else "aprovado"
+    else:
+        situacao = "reprovado"
+    return {"situacao": situacao, "publicavel_cv": aceite.get("publicavel"), "itens": itens, "faltam": faltam,
+            "motivos": motivos_aceite(aceite), "conferencia": {"conferido": conferido, "pendentes": pend, "total": int(cf.get("total") or 0)}}
 
 
 def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
@@ -124,7 +193,7 @@ def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     return out
 
 
-def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) -> dict:
+def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None, conferencia: dict | None = None) -> dict:
     cat = Path(pasta) / "catalogacao"
     if not cat.is_dir():
         return {"existe": False, "motivo": "esta pasta não tem catalogacao/ (o CAMP Vision ainda não entregou)"}
@@ -149,7 +218,7 @@ def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) 
         "sugestoes": [x for x in sugestoes_projeto(pac, projeto) if f"sugestao:{x['campo']}" not in (respostas or {})],
         "respostas": respostas or {},
         "capa_sugerida": ((pac or {}).get("projeto") or {}).get("capa_sugerida") if pac else None,
-        "aceite": (lambda a: {"publicavel": a.get("publicavel"), "itens": itens_aceite(a), "motivos": motivos_aceite(a), "arquivo": a.get("_arquivo")} if a else None)(ler_aceite(pasta)),
+        "aceite": (lambda a: {"publicavel": a.get("publicavel"), **avaliar_aceite(a, conferencia), "arquivo": a.get("_arquivo")} if a else None)(ler_aceite(pasta)),
         "execucao": (pac or {}).get("execucao") if pac else None,
         "relatorio": ler_relatorio(_texto(cat / "relatorio.txt")),
         "decisoes": _json(cat / "decisoes.json"),

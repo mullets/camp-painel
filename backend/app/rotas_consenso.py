@@ -56,6 +56,14 @@ def calcular(con, codigo: str, lote_id: int | None) -> dict:
     if lote_id is not None and not con.execute("SELECT 1 FROM lista_processamento WHERE id=? AND projeto_codigo=?", (lote_id, codigo)).fetchone():
         raise HTTPException(404, "Este lote não é deste projeto")
     folhas = _folhas(con, codigo, lote_id)
+    mantidos = {}   # 19/10: "Manter o do projeto" (o último registro por campo vale enquanto o consenso for o mesmo)
+    for r in con.execute("SELECT ator, quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='consenso_mantido' ORDER BY id", (codigo,)):
+        try:
+            dt = json.loads(r["detalhe"] or "{}")
+        except ValueError:
+            continue
+        if isinstance(dt, dict) and dt.get("campo") in CAMPOS:
+            mantidos[dt["campo"]] = {"por": r["ator"], "em": r["quando"], "consenso": dt.get("consenso"), "projeto": dt.get("projeto")}
     campos = []
     for campo, (col, rotulo, col_p) in CAMPOS.items():
         votos, forma = Counter(), {}
@@ -78,7 +86,11 @@ def calcular(con, codigo: str, lote_id: int | None) -> dict:
                 if v is None or _chave(v) != _chave(consenso):
                     divergentes.append({"codigo": f["codigo"], "valor": v, "vazio": v is None, "trava": _trava(f)})
         proj = _limpo(p[col_p]) if col_p != "ano" else (p["ano"] or None)
-        campos.append({"campo": campo, "rotulo": rotulo, "consenso": consenso, "votos": ranking[0][1] if ranking else 0,
+        difere = consenso is not None and proj is not None and _chave(proj) != _chave(consenso)
+        m = mantidos.get(campo)
+        mantido = ({"por": m["por"], "em": m["em"]} if difere and m and m["consenso"] is not None and _chave(m["consenso"]) == _chave(consenso)
+                   and m["projeto"] is not None and _chave(m["projeto"]) == _chave(proj) else None)
+        campos.append({"projeto_difere": difere, "mantido": mantido, "campo": campo, "rotulo": rotulo, "consenso": consenso, "votos": ranking[0][1] if ranking else 0,
                        "com_valor": sum(votos.values()), "empate": bool(empate),
                        "valores": [{"valor": forma[k].most_common(1)[0][0], "folhas": n} for k, n in ranking[:8]],
                        "divergentes": divergentes, "projeto": proj})
@@ -133,5 +145,29 @@ def aplicar(codigo: str, d: AplicarConsenso, u: dict = Depends(auth.exige("opera
     except HTTPException:
         con.rollback()
         raise
+    finally:
+        con.close()
+
+
+class ManterProjeto(BaseModel):
+    campo: str
+    lote_id: int | None = None
+
+
+@router.post("/projetos/{codigo}/consenso/manter")
+def manter(codigo: str, d: ManterProjeto, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """19/10: a pessoa olhou a diferença entre o consenso das folhas e o campo do projeto e decidiu MANTER o do projeto.
+    Só registra (histórico do projeto); nada muda no projeto nem nas folhas. Se o consenso ou o projeto mudarem, a diferença volta a aparecer."""
+    if d.campo not in CAMPOS:
+        raise HTTPException(400, "Campo inválido: use ano, endereco ou cliente")
+    con = connect()
+    try:
+        c = next(x for x in calcular(con, codigo, d.lote_id)["campos"] if x["campo"] == d.campo)
+        if not c["projeto_difere"]:
+            raise HTTPException(409, "O projeto já segue o consenso das folhas (ou não há consenso).")
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'consenso_mantido',?,?)",
+                    (codigo, u["email"], json.dumps({"campo": d.campo, "consenso": c["consenso"], "projeto": c["projeto"], "lote_id": d.lote_id}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "campo": d.campo, "projeto": c["projeto"]}
     finally:
         con.close()

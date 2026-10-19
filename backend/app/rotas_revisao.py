@@ -285,7 +285,7 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
 @router.get("/lotes/{lote_id}/saidas-cv")
 def saidas_cv(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Tudo o que o CAMP Vision gravou em catalogacao/ deste lote (avisos, relatório, retiradas, propostas, decisões, orientação, sugestões, releituras)."""
-    from .saidas_cv import ler_saidas
+    from .saidas_cv import ler_saidas, conferencia_do_lote
     con = connect()
     try:
         l = con.execute("SELECT id, projeto_codigo, pasta_qnap FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -301,9 +301,14 @@ def saidas_cv(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     try:
         resp = {f"{r['tipo']}:{r['chave']}": {"acao": r["acao"], "por": r["por"], "em": r["em"], "motivo": r["motivo"], "valor": r["valor"]}
                 for r in con.execute("SELECT * FROM cv_resposta WHERE lote_id=?", (lote_id,))}
+        conf = conferencia_do_lote(con, lote_id)   # o aceite é uma foto da leitura: o que já foi conferido no painel resolve o que pede olho humano
     finally:
         con.close()
-    return {"lote_id": lote_id, "projeto_codigo": l["projeto_codigo"], **ler_saidas(pasta, dict(p) if p else {}, resp)}
+    out = ler_saidas(pasta, dict(p) if p else {}, resp, conf)
+    ac = out.get("aceite")
+    if ac and ac.get("situacao") == "reprovado" and p and p["status_site"] == "no_ar":
+        ac["situacao"] = "historico"   # 19/10: projeto JÁ publicado: o aceite da leitura vira só registro (nunca "não pode ser publicado" no que está publicado)
+    return {"lote_id": lote_id, "projeto_codigo": l["projeto_codigo"], **out}
 
 
 class RespostaCV(BaseModel):
