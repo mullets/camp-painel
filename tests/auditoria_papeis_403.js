@@ -73,6 +73,22 @@ try{
       const lin=await page.$('.content.on [data-abrir]');
       if(lin){tela=rota+' (detalhe)';await lin.click().catch(()=>{});await sleep(1100);await botoes();await page.evaluate(()=>window.closeDrawer&&closeDrawer(true)).catch(()=>{});await sleep(200)}
     }
+    // o modo de conferir (#conferir/<projeto>, 6db0b12) de um projeto com lote: a lista e a folha aberta à direita (leitura vê só para ler)
+    let conf=null;
+    for(const pj of (((await (await ctx.request.get(BASE+'/api/projetos?por_pagina=100')).json()).itens)||[])){
+      const rv=await ctx.request.get(BASE+'/api/projetos/'+encodeURIComponent(pj.codigo)+'/revisao');
+      if(rv.ok()&&(((await rv.json()).lotes)||[]).length){conf=pj.codigo;break}}
+    if(!conf)problems.push(`${papel}: não achei projeto com lote no banco de teste para abrir o modo de conferir`);
+    else{
+      tela='conferir/'+conf;await page.evaluate(r=>nav(r),tela);await sleep(ESPERA);
+      const linhasCf=await page.$$('.cf-linha');
+      if(!linhasCf.length)problems.push(`${papel} · tela ${tela}: a lista de folhas não apareceu`);
+      for(const l of linhasCf.slice(0,2)){await l.click().catch(()=>{});await sleep(900)}
+      const corpo=await page.$eval('#cf-pane',el=>el.textContent).catch(()=>'');
+      if(!/Dados da folha/.test(corpo))problems.push(`${papel} · tela ${tela}: a folha aberta não mostrou os dados ("Dados da folha")`);
+      if(papel==='leitura'&&await page.evaluate(()=>[...document.querySelectorAll('#cf-pane .rev-campos input:not([type=hidden]), #cf-pane .rev-campos select, #cf-pane .rev-campos textarea')].some(i=>!i.disabled)))problems.push(`leitura · tela ${tela}: os campos da folha deveriam vir desligados (só leitura)`);
+      det.push(tela);
+    }
     // a busca do topo e o "Meu perfil"
     tela='busca do topo';await page.fill('#q','Casa').catch(()=>{});await sleep(1200);await page.keyboard.press('Escape').catch(()=>{});
     tela='meu perfil';await page.evaluate(()=>window.abrirPerfil&&abrirPerfil()).catch(()=>{});await sleep(1000);await page.evaluate(()=>window.closeModal&&closeModal()).catch(()=>{});

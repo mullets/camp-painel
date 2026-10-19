@@ -87,11 +87,16 @@ print(con.execute("SELECT ano FROM projeto WHERE codigo='F026-P0001'").fetchone(
     const av = await page.$eval('#m-fundo', m => m.textContent);
     chk(/Já existe fundo com nome parecido/.test(av) && /F026/.test(av) && /%/.test(av), 'fundo: aviso com o parecido e a semelhança antes de criar');
     await page.keyboard.press('Escape'); await page.waitForTimeout(300);
-    // projeto novo com o mesmo nome de um de OUTRO fundo: nota forte com link
+    // projeto novo com o mesmo nome de um de OUTRO fundo: desde 14/10 (Rafael, commit 456e54f) fundos não se misturam — sem nota
+    // "já existe ... no fundo F026", o projeto é criado no fundo escolhido sem perguntar
     await page.goto(BASE + '/#projetos'); await page.waitForTimeout(800);
-    await page.evaluate(() => abrirNovoProjeto('F023')); await page.fill('#np-titulo', 'Casa Tarumã'); await page.click('#np-criar'); await page.waitForTimeout(900);
+    await page.evaluate(() => abrirNovoProjeto('F023')); await page.fill('#np-titulo', 'Casa Tarumã');
+    const pVer = page.waitForResponse(r => r.url().includes('/api/projetos/verificar'), { timeout: 10000 });
+    await page.click('#np-criar'); const ver = await (await pVer).json(); await page.waitForTimeout(900);
     const np = await page.$eval('#m-proj', m => m.textContent);
-    chk(/Já existe “Casa Tarumã” no fundo F026/.test(np) && /Abrir F026-P0001/.test(np), 'projeto novo: nota forte "já existe ... no fundo F026: é o mesmo?" com link');
+    chk(!/Já existe “Casa Tarumã” no fundo F026/.test(np) && !/Abrir F026-P0001/.test(np) && Array.isArray(ver.outros_fundos) && ver.outros_fundos.length === 0
+        && /^#projeto\/F023-P\d{4}$/.test(await page.evaluate(() => location.hash)),
+        'projeto novo com o nome de um projeto de OUTRO fundo: sem nota de outro fundo (fundos não se misturam), criado no fundo escolhido: ' + JSON.stringify(ver.outros_fundos) + ' ' + await page.evaluate(() => location.hash));
     await page.keyboard.press('Escape'); await page.waitForTimeout(300);
     // pedido repetido em 30 dias
     for (const cod of ['F026-P0001', 'F026-P0001-1968-S01-D00001']) await ctx.request.post(BASE + '/api/solicitacoes', { data: { solicitante: 'Maria Teste', email: 'maria@teste.org', finalidade: 'pesquisa', itens: [{ codigo: cod, formato: 'jpg_3000' }] } });

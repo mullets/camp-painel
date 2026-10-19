@@ -6548,7 +6548,8 @@ def filho(modo):
         k.commit()
         cs = lei.get(f"/api/projetos/F026-P0001/consenso?lote_id={lote}"); j = cs.json(); C = {x["campo"]: x for x in j.get("campos", [])}
         ver("consenso (leitura pode ver): ano 1968 por 2 de 3 folhas; D3 (1986) diverge", cs.status_code == 200 and j["folhas"] == 3 and C["ano"]["consenso"] == 1968 and C["ano"]["votos"] == 2 and [x["codigo"] for x in C["ano"]["divergentes"]] == [D(3)] and C["ano"]["projeto"] == 1972, cs.text[:400])
-        ver("consenso do endereço ignora caixa e espaços (2 votos); a folha SEM endereço aparece como vazia", C["endereco"]["consenso"] == "Rua Tarumã, 100" and C["endereco"]["divergentes"] == [{"codigo": D(3), "valor": None, "vazio": True, "trava": None}], str(C["endereco"]))
+        ver("consenso do endereço ignora caixa e espaços (2 votos); a folha SEM endereço aparece como vazia", C["endereco"]["consenso"] == "Rua Tarumã, 100" and [{k: v for k, v in x.items() if k != "tipo"} for x in C["endereco"]["divergentes"]] == [{"codigo": D(3), "valor": None, "vazio": True, "trava": None}]
+            and [x.get("tipo") for x in C["endereco"]["divergentes"]] == ["vazio"], str(C["endereco"]))   # "tipo" (2b86656): campo novo opcional
         ver("cliente: um voto para cada lado não é consenso (não sugere nada)", C["cliente"]["consenso"] is None and C["cliente"]["divergentes"] == [] and C["cliente"]["com_valor"] == 2)
         ver("aplicar: leitura 403, campo inválido 400, campo sem consenso 409",
             lei.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "ano"}).status_code == 403 and op.post("/api/projetos/F026-P0001/consenso/aplicar", json={"campo": "titulo"}).status_code == 400
