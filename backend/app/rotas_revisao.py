@@ -340,7 +340,13 @@ def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("oper
         con.execute("INSERT INTO cv_resposta (lote_id, projeto_codigo, tipo, chave, acao, valor, motivo, por) VALUES (?,?,?,?,?,?,?,?)",
                     (lote_id, l["projeto_codigo"], d.tipo, d.chave[:200], d.acao, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
         _evento(con, "projeto", l["projeto_codigo"], f"cv_{d.tipo}_{d.acao}", u["email"], {"lote": lote_id, "chave": d.chave, "valor": valor, "motivo": d.motivo})
+        fechados = []
+        if d.tipo == "retirado":                                   # 19/10: devolver à revisão resolve o problema "o CAMP Vision retirou esta folha"
+            from .problemas import fechar_resolvidos
+            fechados = fechar_resolvidos(con, u["email"])
         con.commit()
+        if fechados:
+            return {"ok": True, "problemas_fechados": len(fechados)}
         return {"ok": True}
     finally:
         con.close()

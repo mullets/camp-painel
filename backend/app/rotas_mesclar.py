@@ -189,6 +189,9 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'folha_movida',?,?)",
                     (novo, ator, _json.dumps({"de": c, "para": novo, "motivo": motivo, "tainacan_item_id_antigo": tinha_site}, ensure_ascii=False)))
         movidos.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site)})
+    if movidos:                                                    # 19/10: "folha de outro projeto" fecha quando a folha é movida (com registro no histórico)
+        from .problemas import fechar_resolvidos
+        fechar_resolvidos(con, ator)                               # a resposta não muda: _mover também serve à rota do CAMP Vision (reidentificar)
     return {"movidos": movidos, "duplicatas": duplicatas, "ignorados": ignorados}
 
 
@@ -339,8 +342,10 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
         con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (d.codigo_original, codigo))   # quem apontava para esta passa a apontar para a original
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
                     (codigo, u["email"], _json.dumps({"original": d.codigo_original, "tipo": d.tipo, "trocou": troca}, ensure_ascii=False)))
+        from .problemas import fechar_resolvidos
+        fechados = fechar_resolvidos(con, u["email"])                  # 19/10: o problema de duplicata desta folha fecha (com registro)
         con.commit()
-        return {"ok": True, "trocou": troca}
+        return {"ok": True, "trocou": troca, **({"problemas_fechados": len(fechados)} if fechados else {})}
     finally:
         con.close()
 

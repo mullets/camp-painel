@@ -1472,7 +1472,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   const er=(await J(adm,'/api/erros?situacao=todos')).b.find(x=>x.descricao==='Teste H16: imagem espelhada');
   chk(er&&er.gravidade==='aviso'&&er.codigo==='F026-P0001','[H16] o problema deveria ser criado com a gravidade escolhida: '+JSON.stringify(er&&{g:er.gravidade,c:er.codigo}));
   w.route_to('erros'); await sleep(1500);
-  chk(/Há quanto tempo/.test(txt('#v-erros thead'))&&/hoje|aberto há/.test(txt('#v-erros tbody'))&&!d.querySelector('#v-erros tbody button'),'[H16] a lista deveria ter "Há quanto tempo" e nenhum botão na linha');
+  chk(/Situação/.test(txt('#v-erros thead'))&&/hoje|aberto há/.test(txt('#v-erros tbody'))&&[...d.querySelectorAll('#v-erros tbody tr[data-abrir]')].every(r=>r.querySelectorAll('button').length<=1),'[H16] a lista deveria dizer há quanto tempo o problema está aberto e ter no máximo UM botão por linha (o que resolve; 19/10)');
   if(er){ await w.abrirErro(er.id); await sleep(300); d.querySelector('[data-err-res="corrigido"]').click(); await sleep(200);
     chk(/Escreva em uma frase/.test(txt('#ee-res-err')),'[H16] "Marcar como corrigido" sem a frase deveria pedir a explicação');
     d.getElementById('ee-res').value='Imagem girada e reenviada'; d.querySelector('[data-err-res="corrigido"]').click(); await sleep(900);
@@ -1566,7 +1566,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
     const soltas=[...v.querySelectorAll('tbody tr[onclick]')].filter(t=>!t.dataset.abrir&&!t.dataset.nav).length; if(soltas) ruins.push(r+': '+soltas+' linha(s) clicável(is) sem data-abrir'); }
   chk(!ruins.length,'[#94] padrão de tela: '+ruins.join(' | '));
   w.route_to('erros'); await sleep(1500);
-  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===4&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Em correção · Resolvidos · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
+  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===5&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Em correção · Resolvidos · Não era problema · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
   d.querySelector('#err-abas [data-err-sit="todos"]').click(); await sleep(1200);
   chk(d.querySelector('#err-abas [data-err-sit="todos"]').getAttribute('aria-pressed')==='true','[#94] clicar em "Todos" deveria ligar a aba'); w.carregarErros('abertos'); await sleep(600);
   w.route_to('fundo/F003'); await sleep(2500); const mm=[...d.querySelectorAll('#v-fundo .mais-menu')].find(x=>/Mais ⋯/.test((x.querySelector('summary')||{}).textContent||''));

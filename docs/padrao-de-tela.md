@@ -12,7 +12,7 @@ O `scripts/check_ui.py` reprova se uma variante antiga voltar (`.backbar`, `.fil
 ## 2. Abas de situação
 - Uma fileira de abas com contagem, logo abaixo do cabeçalho (ou no topo do quadro da lista): `Abertos 3 · Corrigidos 12 · Todos 15`.
 - Componente único: contêiner `.abas-sit` (com `role="group"` e `aria-label`), botões `.btn.sm` com `aria-pressed` (ou `.on`) e a contagem em `<b>`.
-- Usado em: Decisões, Filas, Projetos, Fundos, Erros (`GET /api/erros/contagem`) e Solicitações.
+- Usado em: Decisões, Filas, Projetos, Fundos, Erros (`GET /api/erros/contagem`; a lista dos Erros é agrupada por projeto, ver COMO_FUNCIONA D.2.4) e Solicitações.
 - Abas que mudam a **visão** (Uso do acervo: Pedidos · Pessoas · Materiais; abas do projeto) continuam `.tabs`.
 
 ## 3. Barra de busca

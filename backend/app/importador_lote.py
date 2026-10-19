@@ -369,6 +369,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
     registrados = registrar_problemas(con, proj, pacote, problemas, lote_id) + registrar_erros_cv(con, proj, pasta)
+    from .problemas import fechar_resolvidos
+    fechar_resolvidos(con, ator)                                   # 19/10: a folha retirada/recusada que agora entrou fecha o problema dela (com registro)
     resultado = {}
     try:
         resultado = json.loads(lote["resultado"] or "{}")

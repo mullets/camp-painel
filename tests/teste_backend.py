@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux"}
 
 
 def rodar(modo, db):
@@ -4245,7 +4245,7 @@ def filho(modo):
         auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
         op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
         ct = op.get("/api/erros/contagem").json()
-        ver("contagem das abas dos Erros (Abertos inclui em correção)", ct == {"abertos": 2, "em_correcao": 1, "corrigido": 1, "todos": 3}, str(ct))
+        ver("contagem das abas dos Erros (Abertos inclui em correção)", {k_: ct.get(k_) for k_ in ("abertos", "em_correcao", "corrigido", "todos")} == {"abertos": 2, "em_correcao": 1, "corrigido": 1, "todos": 3}, str(ct))   # 19/10: campos novos (ignorado, talvez) são opcionais
         def falso(lote_id, u):
             if lote_id == lids[1]: raise HTTPException(409, "O lote já foi aprovado")
             return {"criadas": 2}
@@ -4903,6 +4903,105 @@ def filho(modo):
         ver("relato comum continua com origem 'operador' e o e-mail de quem relatou", r.status_code == 200 and tuple(k.execute("SELECT origem, relatado_por FROM erro WHERE id=?", (r.json()["id"],)).fetchone()) == ("operador", "op@camp.arq.br"))
         lst = lei.get("/api/erros?situacao=todos").json()
         ver("a lista de Problemas traz a origem de cada um (leitura vê)", {x_["origem"] for x_ in lst} == {"campvision", "site", "operador"}, str({x_["origem"] for x_ in lst}))
+        k.close()
+        for l in res: print(l)
+    elif modo == "problemas_ux":
+        # 19/10 "a pasta de problemas tá confusa": cada problema diz de que projeto é (com o nome), o que aconteceu, o que fazer e a ação
+        # que resolve; filtros no servidor; resolver vários de uma vez; o que se resolveu sozinho fecha com registro (e o "talvez" não fecha).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F088','Fundo Problemas','FPR',1)")
+        for n, t in ((1, "Casa Tarumã"), (2, "Edifício Paulista")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F088',?)", (n,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F088-P000{n}", "F088", n, t))
+        P1, P2 = "F088-P0001", "F088-P0002"
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Lote',?,'/x','revisao',?)",
+                        (P1, _j.dumps({"retirados": [{"codigo": f"{P1}-1970-S01-D00010"}, {"codigo": f"{P1}-1970-S01-D00011"}]}))).lastrowid
+        def folha(p, q, giro=0):
+            cod = f"{p}-1970-S01-D{q:05d}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,origem,lote_id,revisao,giro_manual) VALUES (?,?,'S01',?,?,?,'campvision',?,'conferida',?)", (cod, p, q, f"Planta {q}", str(q), lid, giro))
+            return cod
+        f1, f2, f3, f4, f5, f6, f7 = folha(P1, 1), folha(P1, 2), folha(P1, 3), folha(P1, 4), folha(P1, 5), folha(P1, 6, giro=90), folha(P1, 7)
+        def erro(cod, cat, origem="operador", grav="corrigir", chave=None, desc="teste", quando="-1 minutes"):
+            return c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave,criado_em) VALUES (?,?,?,?,?,?,?,datetime('now',?))",
+                             (grav, cat, origem, cod, desc, "op@camp.arq.br", chave, quando)).lastrowid
+        r10 = erro(f"{P1}-1970-S01-D00010", "duplicata", "campvision", chave=f"campvision:retirado:{P1}-1970-S01-D00010", desc="O CAMP Vision retirou esta folha do lote: duplicata. Ela não entrou na revisão.")
+        r11 = erro(f"{P1}-1970-S01-D00011", "outro", "campvision", chave=f"campvision:retirado:{P1}-1970-S01-D00011", desc="O CAMP Vision retirou esta folha do lote: em branco.")
+        rec = erro(P1, "codigo", "campvision", chave=f"campvision:recusada:{P1}:{P1}-1970-S01-D00020", desc=f"Folha do lote que não entrou no painel: {P1}-1970-S01-D00020: código repetido.")
+        dup = erro(f2, "duplicata"); dup2 = erro(f4, "duplicata")
+        mov = erro(f3, "projeto_errado", grav="bloqueia")
+        gir = erro(f6, "orientacao", "campvision", grav="bloqueia")
+        sum_ = erro(f"{P1}-1970-S01-D00077", "metadado", "revisao")
+        fun = erro("F088", "metadado", "site", grav="aviso", desc="biografia sem fonte")
+        fresco = erro(f7, "duplicata")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("lei@camp.arq.br", "Lei", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        L = {e["id"]: e for e in lei.get("/api/erros").json()}
+        e = L.get(r11) or {}
+        ver("cada problema diz de que projeto é, com o NOME (não só o código)", e.get("projeto_codigo") == P1 and e.get("projeto_titulo") == "Casa Tarumã", str({x: e.get(x) for x in ("projeto_codigo", "projeto_titulo")}))
+        ver("folha retirada pelo CAMP Vision: diz o que aconteceu e o que fazer, e a ação é 'Devolver à revisão' no lote em que ela saiu",
+            e.get("tipo") == "retirada" and "tirou esta folha" in (e.get("o_que") or "") and "devolva à revisão" in (e.get("fazer") or "") and e.get("acao") == "devolver" and e.get("acao_rotulo") == "Devolver à revisão" and e.get("lote_id") == lid, str({x: e.get(x) for x in ("tipo", "acao", "lote_id")}))
+        ver("cada tipo aponta a ação do painel que resolve (mover, marcar duplicata, girar, abrir o lote, abrir o fundo)",
+            (L[mov].get("acao"), L[dup].get("acao"), L[gir].get("acao"), L[rec].get("acao"), L[fun].get("acao")) == ("mover", "duplicata", "girar", "abrir_lote", "abrir_fundo") and all(L[i].get("o_que") and L[i].get("fazer") for i in L),
+            str([(L[i].get("acao")) for i in (mov, dup, gir, rec, fun)]))
+        ver("folha que não existe mais e folha já girada: 'talvez resolvido' (aparece separado), mas NÃO fecha sozinho",
+            (L[sum_].get("resolvido_sozinho") or {}).get("seguro") is False and (L[gir].get("resolvido_sozinho") or {}).get("seguro") is False
+            and sql("SELECT situacao FROM erro WHERE id=?", sum_) == "aberto" and sql("SELECT situacao FROM erro WHERE id=?", gir) == "aberto", str((L[sum_].get("resolvido_sozinho"), L[gir].get("resolvido_sozinho"))))
+        ct = lei.get("/api/erros/contagem").json()
+        ver("contagem das abas: abertos, não era problema (ignorado) e quantos talvez já estejam resolvidos", ct.get("abertos") == 10 and ct.get("talvez") == 2 and "ignorado" in ct, str(ct))
+        # filtros no servidor (a mesma regra na lista e na contagem)
+        g = lambda q: {x["id"] for x in lei.get("/api/erros?" + q).json()}
+        ver("filtro por gravidade, tipo, origem, projeto e busca (inclusive pelo NOME do projeto)",
+            g("gravidade=bloqueia") == {mov, gir} and g("categoria=duplicata") == {r10, dup, dup2, fresco} and g("origem=site") == {fun} and g("projeto=F088-P0001") == set(L) - {fun}
+            and g("q=tarum") == set(L) - {fun} and g("q=biografia") == {fun} and lei.get("/api/erros/contagem?origem=campvision").json().get("abertos") == 4,
+            str([len(g(q)) for q in ("gravidade=bloqueia", "categoria=duplicata", "origem=site", "projeto=F088-P0001", "q=tarum")]))
+        ver("filtro inválido: 400 (não 500)", lei.get("/api/erros?gravidade=xyz").status_code == 400)
+        u1 = lei.get(f"/api/erros/{r11}")
+        ver("um problema sozinho (GET /api/erros/{id}) já vem explicado; inexistente: 404", u1.status_code == 200 and isinstance(u1.json(), dict) and u1.json().get("acao") == "devolver" and lei.get("/api/erros/999999").status_code == 404)
+        # resolveu-se sozinho com certeza: fecha com registro
+        r = adm.post(f"/api/lotes/{lid}/saidas-cv/resposta", json={"tipo": "retirado", "chave": f"{P1}-1970-S01-D00010", "acao": "devolver", "motivo": "a folha está boa"})
+        ver("devolver a folha retirada à revisão fecha o problema dela na hora, com o porquê e o histórico",
+            r.status_code == 200 and r.json().get("problemas_fechados") == 1 and sql("SELECT situacao FROM erro WHERE id=?", r10) == "corrigido"
+            and (sql("SELECT resolucao FROM erro WHERE id=?", r10) or "").startswith("Resolvido sozinho: Um admin devolveu a folha à revisão")
+            and sql("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo=? AND tipo='fechado_automatico'", str(r10)) == 1, r.text[:200])
+        ver("a outra retirada (não devolvida) continua aberta", sql("SELECT situacao FROM erro WHERE id=?", r11) == "aberto")
+        r = op.post(f"/api/itens/{f2}/duplicata-de", json={"codigo_original": f1})
+        ver("marcar a folha como duplicata fecha o problema de duplicata dela", r.status_code == 200 and r.json().get("problemas_fechados") == 1 and sql("SELECT situacao FROM erro WHERE id=?", dup) == "corrigido", r.text[:200])
+        r = op.post(f"/api/itens/{f5}/duplicata-de", json={"codigo_original": f4})
+        ver("'esta é a que publica' (a OUTRA folha virou a cópia) também fecha o problema de duplicata desta", r.status_code == 200 and sql("SELECT situacao FROM erro WHERE id=?", dup2) == "corrigido" and "foi marcada como cópia desta" in (sql("SELECT resolucao FROM erro WHERE id=?", dup2) or ""), sql("SELECT resolucao FROM erro WHERE id=?", dup2))
+        r = adm.post("/api/itens/mover", json={"itens": [f3], "destino": P2, "motivo": "é do Paulista"})
+        novo = (r.json().get("movidos") or [{}])[0].get("para")
+        ver("mover a folha para o projeto certo fecha o 'folha de outro projeto' (o problema acompanha o código novo)",
+            r.status_code == 200 and sql("SELECT codigo FROM erro WHERE id=?", mov) == novo and sql("SELECT situacao FROM erro WHERE id=?", mov) == "corrigido" and P2 in (sql("SELECT resolucao FROM erro WHERE id=?", mov) or ""), r.text[:200])
+        k.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,criado_em) VALUES ('corrigir','projeto_errado','operador',?,'continua errada',datetime('now','+1 minutes'))", (novo,)); k.commit()
+        depois = sql("SELECT MAX(id) FROM erro")
+        k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id) VALUES (?,?,'S01',20,'Recusada que entrou','campvision',?)", (f"{P1}-1970-S01-D00020", P1, lid)); k.commit()
+        lst = {x["id"]: x for x in lei.get("/api/erros?situacao=todos").json()}
+        ver("a folha recusada que entrou no painel (lote importado de novo) fecha ao abrir a lista, com registro",
+            lst[rec]["situacao"] == "corrigido" and "importado de novo" in (lst[rec].get("resolucao") or "") and sql("SELECT ator FROM evento WHERE entidade='erro' AND codigo=? AND tipo='fechado_automatico'", str(rec)) == "painel (automático)")
+        ver("falso alarme: um 'folha de outro projeto' relatado DEPOIS da mudança NÃO fecha; nem o de duplicata sem marcação", lst[depois]["situacao"] == "aberto" and lst[fresco]["situacao"] == "aberto")
+        # resolver vários de uma vez
+        ids = [r11, sum_, fun]
+        ver("em lote: fechar sem dizer o que foi feito = 400; leitura não pode (403)",
+            op.post("/api/erros/lote", json={"ids": ids, "situacao": "corrigido"}).status_code == 400 and lei.post("/api/erros/lote", json={"ids": ids, "situacao": "corrigido", "resolucao": "ok feito"}).status_code == 403)
+        r = op.post("/api/erros/lote", json={"ids": ids + [999999], "situacao": "ignorado", "resolucao": "conferido"})
+        ver("em lote com um id que não existe: 404 e NADA muda (tudo ou nada)", r.status_code == 404 and sql("SELECT COUNT(*) FROM erro WHERE id IN (?,?,?) AND situacao='aberto'", *ids) == 3, r.text[:150])
+        r = op.post("/api/erros/lote", json={"ids": ids, "situacao": "ignorado", "resolucao": "conferido: não era problema"})
+        ver("em lote: todos fecham com a mesma frase, cada um com o seu registro no histórico",
+            r.status_code == 200 and (r.json() if isinstance(r.json(), dict) else {}).get("atualizados") == 3 and sql("SELECT COUNT(*) FROM erro WHERE id IN (?,?,?) AND situacao='ignorado' AND resolucao='conferido: não era problema' AND resolvido_em IS NOT NULL", *ids) == 3
+            and sql("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='editado' AND codigo IN (?,?,?)", *map(str, ids)) == 3, r.text[:150])
+        r = op.post("/api/erros/lote", json={"ids": ids, "situacao": "aberto"})
+        ver("e dá para desfazer (reabrir em lote)", r.status_code == 200 and sql("SELECT COUNT(*) FROM erro WHERE id IN (?,?,?) AND situacao='aberto'", *ids) == 3)
+        ver("a edição de um só continua igual (PATCH exige a frase para fechar)", op.patch(f"/api/erros/{fresco}", json={"situacao": "corrigido"}).status_code == 400 and op.patch(f"/api/erros/{fresco}", json={"situacao": "corrigido", "resolucao": "era outra folha"}).status_code == 200)
         k.close()
         for l in res: print(l)
     elif modo == "cv2_aceite":
@@ -8234,6 +8333,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"recorte: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("133) Problemas: projeto com nome, o que fazer, ação que resolve, filtros, resolver em lote, fechar o que se resolveu sozinho")
+rc, out = rodar("problemas_ux", f"{tmp}/problemas_ux.db")
+if rc != 0: ok(False, f"teste de problemas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"problemas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

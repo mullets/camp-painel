@@ -1150,27 +1150,86 @@ ORIGENS_MANUAIS = ("operador", "revisao", "site")
 CATS = ("autoria_divergente", "projeto_errado", "duplicata", "orientacao", "espelhado", "codigo", "metadado", "credito", "arquivo_corrompido", "outro")
 
 
+class ErrosEmLote(BaseModel):
+    ids: list[int]
+    situacao: str
+    resolucao: str | None = None
+
+
+def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q) -> tuple[str, list]:
+    """A mesma regra para a lista e para a contagem das abas: situação, gravidade, tipo (categoria), origem, projeto (ou fundo) e busca."""
+    w, p = [], []
+    if situacao == "abertos": w.append("situacao IN ('aberto','em_correcao')")
+    elif situacao == "corrigido": w.append("situacao IN ('corrigido','fechado')")
+    elif situacao and situacao != "todos": w.append("situacao=?"); p.append(situacao)
+    for col, v, ok_ in (("gravidade", gravidade, GRAV), ("categoria", categoria, CATS), ("origem", origem, ("campvision",) + ORIGENS_MANUAIS)):
+        if v:
+            if v not in ok_: raise HTTPException(400, f"Filtro inválido: {v}")
+            w.append(f"{col}=?"); p.append(v)
+    if projeto:
+        pr = projeto.strip().upper()
+        w.append("(codigo=? OR codigo LIKE ? || '-%')"); p += [pr, pr]
+    if q and q.strip():
+        t = "%" + q.strip().lower() + "%"
+        w.append("(lower(codigo) LIKE ? OR lower(descricao) LIKE ? OR lower(coalesce(relatado_por,'')) LIKE ? OR lower(coalesce(resolucao,'')) LIKE ? "
+                 "OR EXISTS (SELECT 1 FROM projeto pj WHERE pj.codigo=substr(erro.codigo,1,10) AND lower(pj.titulo) LIKE ?))"); p += [t] * 5
+    return (" WHERE " + " AND ".join(w)) if w else "", p
+
+
+def _fechar_sozinhos(con) -> None:
+    """Antes de mostrar: fecha (com registro) o que se resolveu sozinho com certeza. Só banco, rápido; nunca o QNAP."""
+    from . import problemas
+    if problemas.fechar_resolvidos(con):
+        con.commit()
+
+
 @router.get("/erros/contagem")
-def contar_erros(u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """#94: a contagem das abas de situação (Abertos · Corrigidos · Todos), nas mesmas regras do filtro da lista."""
+def contar_erros(gravidade: str | None = None, categoria: str | None = None, origem: str | None = None, projeto: str | None = None, q: str | None = None,
+                 u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """#94: a contagem das abas de situação (Abertos · Em correção · Resolvidos · Todos), nas mesmas regras do filtro da lista.
+    19/10: respeita os filtros da tela e diz quantos abertos talvez já estejam resolvidos ('talvez')."""
+    from . import problemas
     con = connect()
     try:
-        q = lambda w: con.execute("SELECT COUNT(*) FROM erro" + w).fetchone()[0]
-        return {"abertos": q(" WHERE situacao IN ('aberto','em_correcao')"), "em_correcao": q(" WHERE situacao='em_correcao'"),
-                "corrigido": q(" WHERE situacao='corrigido'"), "todos": q("")}
+        _fechar_sozinhos(con)
+        out = {}
+        for k in ("abertos", "em_correcao", "corrigido", "ignorado", "todos"):
+            w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q)
+            out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
+        w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
+        out["talvez"] = sum(1 for x in problemas.enriquecer(con, con.execute("SELECT * FROM erro" + w, p).fetchall()) if x["resolvido_sozinho"])
+        return out
     finally:
         con.close()
 
 
 @router.get("/erros")
-def listar_erros(situacao: str | None = "abertos", u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+def listar_erros(situacao: str | None = "abertos", gravidade: str | None = None, categoria: str | None = None, origem: str | None = None,
+                 projeto: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    """Lista de Problemas. Cada linha traz também (campos novos, opcionais): projeto_codigo/projeto_titulo, o_que, fazer, acao,
+    acao_rotulo, lote_id, folha_existe e resolvido_sozinho ({seguro, motivo}) — ver problemas.py."""
+    from . import problemas
     con = connect()
-    sql = "SELECT * FROM erro"; p: list = []
-    if situacao == "abertos": sql += " WHERE situacao IN ('aberto','em_correcao')"
-    elif situacao and situacao != "todos": sql += " WHERE situacao=?"; p.append(situacao)
-    rows = con.execute(sql + " ORDER BY CASE gravidade WHEN 'bloqueia' THEN 0 WHEN 'corrigir' THEN 1 ELSE 2 END, criado_em DESC", p).fetchall()
-    con.close()
-    return [dict(r) for r in rows]
+    try:
+        _fechar_sozinhos(con)
+        w, p = _filtro_erros(situacao, gravidade, categoria, origem, projeto, q)
+        rows = con.execute("SELECT * FROM erro" + w + " ORDER BY CASE gravidade WHEN 'bloqueia' THEN 0 WHEN 'corrigir' THEN 1 ELSE 2 END, criado_em DESC, id DESC", p).fetchall()
+        return problemas.enriquecer(con, rows)
+    finally:
+        con.close()
+
+
+@router.get("/erros/{eid}")
+def ver_erro(eid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    from . import problemas
+    con = connect()
+    try:
+        e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Este problema não existe")
+        return problemas.enriquecer(con, [e])[0]
+    finally:
+        con.close()
 
 
 @router.post("/erros")
@@ -1209,31 +1268,64 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
     return {"id": eid, "publicado_com_bloqueio": no_ar, "projeto": pc if no_ar else None}
 
 
-@router.patch("/erros/{eid}")
-def editar_erro(eid: int, d: EdicaoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
-    con = connect()
-    e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
-    if not e:
-        con.close(); raise HTTPException(404, "Erro não existe")
+def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
+    """Muda situação/resolução/gravidade de UM problema (a regra da edição e do lote). Levanta HTTPException; não faz commit."""
     campos, vals = [], []
     if d.situacao:
         if d.situacao not in ("aberto", "em_correcao", "corrigido", "fechado", "ignorado"):
-            con.close(); raise HTTPException(400, "Situação inválida")
-        if d.situacao in ("corrigido", "fechado", "ignorado") and not (d.resolucao or e["resolucao"]):
-            con.close(); raise HTTPException(400, "Descreva a resolução antes de fechar")
+            raise HTTPException(400, "Situação inválida")
+        if d.situacao in ("corrigido", "fechado", "ignorado") and not ((d.resolucao or "").strip() or e["resolucao"]):
+            raise HTTPException(400, "Descreva a resolução antes de fechar")
         campos.append("situacao=?"); vals.append(d.situacao)
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
                 con.execute("UPDATE item SET autoria_divergente=0 WHERE codigo=?", (e["codigo"],))
-
     if d.resolucao is not None: campos.append("resolucao=?"); vals.append(d.resolucao)
     if d.gravidade:
-        if d.gravidade not in GRAV: con.close(); raise HTTPException(400, "Gravidade inválida")
+        if d.gravidade not in GRAV: raise HTTPException(400, "Gravidade inválida")
         campos.append("gravidade=?"); vals.append(d.gravidade)
     if campos:
-        con.execute(f"UPDATE erro SET {', '.join(campos)} WHERE id=?", (*vals, eid))
-        _evento(con, "erro", eid, "editado", u["email"], {"situacao": d.situacao})
+        con.execute(f"UPDATE erro SET {', '.join(campos)} WHERE id=?", (*vals, e["id"]))
+        _evento(con, "erro", e["id"], "editado", ator, {"situacao": d.situacao})
+    return bool(campos)
+
+
+@router.patch("/erros/{eid}")
+def editar_erro(eid: int, d: EdicaoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
+    con = connect()
+    try:
+        e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Erro não existe")
+        if _mudar_erro(con, e, d, u["email"]):
+            con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
+@router.post("/erros/lote")
+def editar_erros_em_lote(d: ErrosEmLote, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Resolver vários de uma vez (19/10): a mesma situação e a mesma resolução para todos os escolhidos, tudo ou nada.
+    Fechar (corrigido/ignorado) exige a frase do que foi feito, como um a um."""
+    ids = list(dict.fromkeys(int(i) for i in d.ids))
+    if not ids:
+        raise HTTPException(400, "Escolha pelo menos um problema")
+    if len(ids) > 500:
+        raise HTTPException(400, "No máximo 500 de uma vez")
+    if d.situacao not in ("aberto", "em_correcao", "corrigido", "ignorado"):
+        raise HTTPException(400, "Situação inválida")
+    if d.situacao in ("corrigido", "ignorado") and len((d.resolucao or "").strip()) < 3:
+        raise HTTPException(400, "Escreva em uma frase o que foi feito (ou por que não era problema)")
+    con = connect()
+    try:
+        rows = con.execute(f"SELECT * FROM erro WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        if len(rows) != len(ids):
+            raise HTTPException(404, f"{len(ids) - len(rows)} dos problemas escolhidos não existem mais: atualize a lista")
+        ed = EdicaoErro(situacao=d.situacao, resolucao=(d.resolucao or "").strip() or None)
+        n = sum(1 for e in rows if _mudar_erro(con, e, ed, u["email"]))
         con.commit()
-    con.close()
-    return {"ok": True}
+        return {"ok": True, "atualizados": n, "ids": ids}
+    finally:
+        con.close()
