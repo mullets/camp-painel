@@ -93,7 +93,7 @@ let PG = null;
 
   // ---------- A: lote em revisão ----------
   await pg.goto(BASE + '/#projeto/' + PA); await pg.reload(); await pg.waitForSelector(`.thumb[data-rev-abrir="${D(PA, 1)}"]`, { timeout: 15000 });
-  await pg.waitForSelector('#pj-revisao .rev-chips');
+  await pg.waitForSelector('#pj-revisao .rev-chips', { state: 'attached' });
   // Enter no "Não publicar esta folha" (teclado) abre o quadro, não marca a folha como conferida
   await pg.evaluate(c => abrirRevisaoItem(c), D(PA, 1)); await espera(async () => await aberta() === D(PA, 1));
   const nd = (await dialogos()).length;
@@ -126,7 +126,7 @@ let PG = null;
   // ---------- B: lote aprovado (nenhuma folha a conferir) ----------
   await pg.evaluate(() => closeDrawer(true));
   await pg.goto(BASE + '/#projeto/' + PB); await pg.waitForSelector(`.thumb[data-rev-abrir="${D(PB, 1)}"]`, { timeout: 15000 });
-  await pg.waitForSelector('#pj-revisao .rev-chips');
+  await pg.waitForSelector('#pj-revisao .rev-chips', { state: 'attached' });
   await reter(PB, 1, 'Prancha 1 (aprovado, retida)', 'sem autorização de imagem', 'lote aprovado', 2);
   chk(!/Conferência concluída/.test(await aberta()), 'lote aprovado: não mostra "Conferência concluída" depois de reter');
   // "Desfazer" no aviso devolve a folha (volta a poder ir ao site) sem reabrir a revisão do lote e sem tirar a pessoa da folha em que está

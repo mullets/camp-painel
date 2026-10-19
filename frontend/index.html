@@ -4550,7 +4550,7 @@ function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).ma
 function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)return;const T=[['abertos','Abertos'],['em_correcao','Em correção'],['corrigido','Resolvidos'],['ignorado','Não era problema'],['todos','Todos']];
   ab.innerHTML=T.map(([k,t])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${errFiltro===k}"${n?'':' title="Contagem indisponível agora"'}>${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
 async function carregarErros(f){if(f){errFiltro=f;LISTA_MEM.set('erros.aba',f)}const sec=document.getElementById('v-erros'),tb=document.getElementById('err-body');if(!sec||!tb)return;
-  const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;
+  const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;sec.style.minHeight=noLugar?sec.offsetHeight+'px':'';   /* 19/10: a linha resolvida some; sem isto o fim da página encurta e o navegador puxa a lista para cima */
   sec.querySelector('.aviso-exemplo')?.remove();errSincronizarFiltros();const seq=++ERR_SEQ;if(!tb.querySelector('tr[data-abrir],tr.err-gr'))tabelaCarregando('#err-body','Carregando problemas…');
   try{const p=errParams();p.set('situacao',errFiltro);const [es,n]=await Promise.all([API('/api/erros?'+p),API('/api/erros/contagem?'+errParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
     ERR_LISTA=es;errRenderAbas(n);errRender();atualizarPendencias();
