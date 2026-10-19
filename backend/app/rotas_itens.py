@@ -101,6 +101,8 @@ def dados_edicao(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict
         d["local"]["parceiros"] = parceiros.ler(i["parceiros"])        # 19/10: escritórios parceiros / projetos complementares
         d["disciplinas"] = list(parceiros.DISCIPLINAS)
         d["fundo_codigo"] = codigo.split("-")[0]
+        from .rotas_revisao import imagem_site_pendente
+        d["imagem_site_pendente"] = imagem_site_pendente(con, codigo)      # 19/10: girada/espelhada no painel, o site ainda tem a antiga
         if w:
             editaveis, leitura = _campos_do_site(con, w)
             d["site"] = {"status": w["status"], "titulo": w["titulo"] or "", "descricao": _descricao_do_site(w),

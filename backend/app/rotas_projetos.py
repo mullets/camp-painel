@@ -515,8 +515,11 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     vizinhos = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (i["projeto_codigo"],))]
     k = vizinhos.index(codigo)
     agentes = [dict(r) for r in con.execute("SELECT a.forma_autorizada, ia.papel, ia.fonte FROM item_agente ia JOIN agente a ON a.id=ia.agente_id WHERE ia.item_codigo=?", (codigo,))]
+    from .rotas_revisao import imagem_site_pendente
+    img_pend = imagem_site_pendente(con, codigo)
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
+    d["imagem_site_pendente"] = img_pend          # 19/10: girada/espelhada no painel, o site ainda mostra a antiga
     d["tipo_documento"] = d.pop("tipos_documento", None) or d.get("tipo_documento")   # 19/10: a lista inteira quando há mais de um tipo
     from .parceiros import ler as _ler_parceiros
     d["parceiros"] = _ler_parceiros(d.get("parceiros"))                                  # 19/10: escritórios parceiros / projetos complementares

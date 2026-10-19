@@ -439,12 +439,18 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         if not i:
             raise HTTPException(404, "Folha não existe")
         no_site = i["status_site"] in ("rascunho", "no_ar")
-        if no_site and u["papel"] not in ("admin", "master"):
-            raise HTTPException(409, "Esta folha já está no site: só um admin pode girar a imagem de lá. Peça a um admin")
+        adm = u["papel"] in ("admin", "master")
         novo = ((i["giro_manual"] or 0) + d.graus) % 360
         rec, ang = ajuste.depois_do_giro(*ajuste.ler(i), d.graus)       # 19/10: com recorte, a caixa gira junto
         site = None
-        if no_site:                                   # primeiro o site; o painel só grava se o site aceitou
+        if no_site and not adm:                       # 19/10: operador gira no painel; a imagem do site fica pendente até um admin clicar "Atualizar imagem no site"
+            con.execute("UPDATE item SET giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, codigo))
+            _regravar_ajuste(con, i, novo, imagens.espelho_efetivo(i), rec, ang)
+            _imagem_site_pendente(con, codigo)
+            _evento(con, "item", codigo, "giro", u["email"], {"de": i["giro_manual"], "para": novo, "site": "pendente"})
+            con.commit()
+            return {"giro_manual": novo, "no_site": False, "site_pendente": True}
+        if no_site:                                   # admin: primeiro o site; o painel só grava se o site aceitou
             from . import publicador
             try:
                 site = publicador.girar_imagem_no_site(codigo, novo, (rec, ang))
@@ -453,6 +459,7 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
         con.execute("UPDATE item SET giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, codigo))
         _regravar_ajuste(con, i, novo, imagens.espelho_efetivo(i), rec, ang)
         if site:
+            _imagem_site_resolvida(con, codigo)
             _evento(con, "item", codigo, "giro_no_site", u["email"], {"de": i["giro_manual"], "para": novo, "anexo": site["media_id"]})
         else:
             _evento(con, "item", codigo, "giro", u["email"], {"de": i["giro_manual"], "para": novo})
@@ -474,15 +481,16 @@ def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
         i = con.execute(f"SELECT {_COLS_AJUSTE}, i.status_site, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        if i["status_site"] in ("rascunho", "no_ar"):
-            raise HTTPException(409, "Esta folha já está no site: a imagem lá não muda por aqui")
+        no_site = i["status_site"] in ("rascunho", "no_ar")   # 19/10: espelha no painel; a imagem do site fica pendente ("Atualizar imagem no site")
         antes = imagens.espelho_efetivo(i)
         novo, giro = (0 if antes else 1), (-(i["giro_manual"] or 0)) % 360
         con.execute("UPDATE item SET espelho_manual=?, giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, giro, codigo))
         _regravar_ajuste(con, i, giro, bool(novo), *ajuste.depois_do_espelho(*ajuste.ler(i)))      # 19/10: com recorte, a caixa espelha junto
-        _evento(con, "item", codigo, "espelho", u["email"], {"de": int(antes), "para": novo, "giro": giro})
+        _evento(con, "item", codigo, "espelho", u["email"], {"de": int(antes), "para": novo, "giro": giro, **({"site": "pendente"} if no_site else {})})
+        if no_site:
+            _imagem_site_pendente(con, codigo)
         con.commit()
-        return {"espelhar": bool(novo), "giro_manual": giro}
+        return {"espelhar": bool(novo), "giro_manual": giro, "site_pendente": no_site}
     finally:
         con.close()
 
@@ -633,8 +641,7 @@ def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -
         if not i:
             raise HTTPException(404, "Folha não existe")
         no_site = i["status_site"] in ("rascunho", "no_ar")
-        if no_site and u["papel"] not in ("admin", "master"):
-            raise HTTPException(409, "Esta folha já está no site: só um admin pode mudar a imagem de lá. Peça a um admin")
+        so_painel = no_site and u["papel"] not in ("admin", "master")   # 19/10: operador ajusta no painel; o site fica pendente
         antes = ajuste.ler(i)
         reenviar = no_site and con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (codigo,)).fetchone()
         if (rec, ang) == antes and not reenviar:      # nada mudou (com pendência no site, aplicar de novo reenvia)
@@ -649,7 +656,10 @@ def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(500, f"Não consegui gerar a imagem recortada: {str(e)[:160]}")
         site, pendencia = None, None
-        if no_site:                                   # a imagem do site acompanha; se o site recusar, o painel grava e fica a pendência
+        if so_painel:
+            _imagem_site_pendente(con, codigo)
+            pendencia = "A imagem no site ainda é a antiga: um admin usa “Atualizar imagem no site”"
+        elif no_site:                                 # a imagem do site acompanha; se o site recusar, o painel grava e fica a pendência
             from . import publicador
             try:
                 site = publicador.girar_imagem_no_site(codigo, giro, (rec, ang))
@@ -670,6 +680,51 @@ def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -
         _evento(con, "item", codigo, "ajuste_imagem" if ajuste.tem_ajuste(rec, ang) else "ajuste_desfeito", u["email"], det)
         con.commit()
         return {"recorte": rec, "angulo": ang, "imagem_corrigida": bool(rel), "no_site": bool(site), "pendencia": pendencia, "mudou": True}
+    finally:
+        con.close()
+
+
+PEND_IMAGEM = "pendente_imagem_ajustada"
+
+
+def _imagem_site_pendente(con, codigo: str) -> None:
+    from . import publicador
+    publicador._pendencia(con, "item", codigo, PEND_IMAGEM, "A imagem no site ainda é a antiga: use “Atualizar imagem no site”")
+
+
+def _imagem_site_resolvida(con, codigo: str) -> None:
+    con.execute("UPDATE divergencia_site SET resolvida=1 WHERE entidade='item' AND codigo=? AND campo=? AND resolvida=0", (codigo, PEND_IMAGEM))
+
+
+def imagem_site_pendente(con, codigo: str) -> bool:
+    return bool(con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo=? AND resolvida=0", (codigo, PEND_IMAGEM)).fetchone())
+
+
+@router.post("/itens/{codigo}/imagem/atualizar-site")
+def atualizar_imagem_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """19/10: folha já no site que foi girada/espelhada/recortada no painel: troca o arquivo da imagem no site pela de agora
+    (mesmo anexo, o endereço não muda). Se o site recusar, nada muda e a pendência continua."""
+    con = connect()
+    try:
+        i = con.execute(f"SELECT {_COLS_AJUSTE}, i.status_site FROM item i WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        if i["status_site"] not in ("rascunho", "no_ar"):
+            raise HTTPException(409, "Esta folha não está no site: a imagem nova vai junto quando ela for publicada")
+        giro = i["giro_manual"] or 0
+    finally:
+        con.close()
+    from . import publicador
+    try:
+        site = publicador.girar_imagem_no_site(codigo, giro)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"O site não aceitou a imagem nova; a do site continua a antiga: {str(e)[:240]}")
+    con = connect()
+    try:
+        _imagem_site_resolvida(con, codigo)
+        _evento(con, "item", codigo, "imagem_atualizada_no_site", u["email"], {"anexo": site["media_id"], "giro": giro})
+        con.commit()
+        return {"ok": True, "anexo": site["media_id"]}
     finally:
         con.close()
 

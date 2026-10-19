@@ -13,12 +13,16 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"versao", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao"}
+MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao"}
 
+
+_ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
 
 def rodar(modo, db):
     if "--rapido" in sys.argv and modo not in MODOS_RAPIDOS:
         return 0, ""
+    if (modo, db) in _ADIANTADOS:
+        return _ADIANTADOS.pop((modo, db))
     env = dict(os.environ, CAMP_DB_PATH=db, CAMP_TMP_PRONTOS=os.environ.get("CAMP_TMP_PRONTOS") or str(pathlib.Path(db).parent / "prontos"), CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"), CAMP_LOG_DIR=str(pathlib.Path(db).parent / "logs"), CAMP_BACKUP_DIR=str(pathlib.Path(db).parent / "backups"))
     r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
     return r.returncode, (r.stdout + r.stderr).strip()
@@ -2822,7 +2826,9 @@ def filho(modo):
         op.post(f"/api/itens/{D(1)}/girar", json={"graus": -90})
         ver("girar: graus inválidos 400; folha inexistente 404; sem login 401", op.post(f"/api/itens/{D(3)}/girar", json={"graus": 45}).status_code == 400 and op.post("/api/itens/F026-P0001-1972-S01-D99999/girar", json={"graus": 90}).status_code == 404 and anon.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}).status_code == 401)
         k.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (D(2),)); k.commit()
-        ver("folha que já está no site não gira por aqui (409)", op.post(f"/api/itens/{D(2)}/girar", json={"graus": 90}).status_code == 409)
+        r = op.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
+        ver("19/10: folha já no site: o operador gira no painel e a imagem do site fica pendente (antes: 409)", r.status_code == 200 and r.json().get("site_pendente") is True, r.text[:200])
+        op.post(f"/api/itens/{D(2)}/girar", json={"graus": -90})
         k.execute("UPDATE item SET status_site='bloqueado' WHERE codigo=?", (D(2),)); k.commit()
         giro_imagem.disponivel = lambda: False
         ver("servidor sem o Pillow: girar dá 503 dizendo para rodar ./atualizar.sh; folha já girada não some (503, não imagem errada); miniatura cai para o original", op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).status_code == 503 and "atualizar.sh" in op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).text and previa(D(3)).status_code == 503 and previa(D(1), "?t=200").status_code == 200 and img(previa(D(1), "?t=200")).size == (600, 300))
@@ -3484,6 +3490,26 @@ def filho(modo):
         ver("é POR PESSOA: o outro usuário não vê a preferência de quem gravou", b.get("/api/auth/eu/preferencias").json() == {})
         ver("valor nulo apaga ('mostrar de novo')", a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": None}).status_code == 200 and a.get("/api/auth/eu/preferencias").json() == {})
         ver("só aceita chaves de ajuda (ajuda.<página>): outras e malformadas dão 400", all(a.put("/api/auth/eu/preferencias", json={"chave": k_, "valor": "1"}).status_code == 400 for k_ in ("papel", "ajuda.", "ajuda.Painel", "ajuda.x/../y", "ajuda." + "a" * 50)) and a.put("/api/auth/eu/preferencias", json={"chave": "ajuda.painel", "valor": "x" * 50}).status_code == 400)
+        for l in res: print(l)
+    elif modo == "atualizar_rapido":
+        import shutil, tempfile as _tf
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        sh = (RAIZ / "atualizar.sh").read_text(encoding="utf-8")
+        base = pathlib.Path(_tf.mkdtemp()); g = lambda *a, cwd=None: subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True)
+        g("init", "-q", "--bare", "-b", "main", str(base / "origem.git"))
+        g("clone", "-q", str(base / "origem.git"), str(base / "srv"))
+        srv = base / "srv"; shutil.copy(RAIZ / "atualizar.sh", srv / "atualizar.sh"); (srv / ".venv/bin").mkdir(parents=True); (srv / ".venv/bin/activate").write_text("")
+        g("-c", "user.email=t@t", "-c", "user.name=t", "add", "-A", cwd=srv); g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "Primeira versão", cwd=srv)
+        g("branch", "-M", "main", cwd=srv); g("push", "-q", "origin", "main", cwd=srv); g("branch", "-q", "--set-upstream-to=origin/main", "main", cwd=srv)
+        r = subprocess.run(["bash", "atualizar.sh"], cwd=srv, capture_output=True, text=True, timeout=60)
+        ver("já na versão mais nova: sai na hora (rc 0), diz isso com a data e o título, e NÃO roda teste, backup nem restart",
+            r.returncode == 0 and "Já está na versão mais nova" in r.stdout and "Primeira versão" in r.stdout and "backup" not in r.stdout and not (srv / "backend/backups").exists(), (r.stdout + r.stderr)[-400:])
+        ver("o script todo fica dentro de main() (o git pull que troca o arquivo no meio não o embaralha)", "\nmain() {" in sh and sh.rstrip().endswith('main "$@"\nexit $?'))
+        ver("testes da versão nova: saída num arquivo de log, só o resumo na tela, e pip só se requirements mudou",
+            "--rapido) > \"$LOG_TESTE\" 2>&1" in sh and "cmp -s \"$TESTE_DIR/backend/requirements.txt\" backend/requirements.txt ||" in sh and "git diff --quiet \"$ATUAL\" HEAD -- backend/requirements.txt" in sh)
+        ver("a suíte roda os modos independentes em paralelo (só reaproveita o que passou; --sequencial desliga)", "adiantar_em_paralelo()" in (RAIZ / "tests/teste_backend.py").read_text(encoding="utf-8"))
+        shutil.rmtree(base, ignore_errors=True)
         for l in res: print(l)
     elif modo == "versao":
         init_db(); aplicar_migracoes()
@@ -6833,9 +6859,25 @@ def filho(modo):
                 if Fake.falhar: raise RuntimeError("O site recusou trocar a imagem do anexo 5552: 500 erro interno")
                 im = Image.open(caminho); Fake.chamadas.append((media_id, im.size, vermelho(im, (24, 5)), nome)); return {"id": media_id, "source_url": "http://site-falso.invalid/f.jpg"}
         publicador.WP = Fake
-        # ---------- (a) operador recebe 409 pedindo o admin ----------
-        r = op.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
-        ver("operador: folha publicada continua 409, e a frase diz para pedir a um admin", r.status_code == 409 and "admin" in r.json().get("erro", r.text) and g(D(2)) == 0 and not Fake.chamadas, r.text[:200])
+        # ---------- (19/10) operador gira/espelha folha publicada NO PAINEL; o site fica pendente até o admin clicar "Atualizar imagem no site" ----------
+        folha(D(9), "no_ar", 7009, 5559); c.commit()
+        pend = lambda cod: c.execute("SELECT COUNT(*) FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (cod,)).fetchone()[0]
+        r = op.post(f"/api/itens/{D(9)}/girar", json={"graus": 90})
+        ver("operador: folha publicada gira no painel (200, site_pendente), SEM chamar o site, e fica a pendência", r.status_code == 200 and r.json().get("site_pendente") is True and g(D(9)) == 90 and not Fake.chamadas and pend(D(9)) == 1, r.text[:200])
+        ver("a revisão (/edicao) e a página da folha dizem que a imagem do site está desatualizada",
+            op.get(f"/api/itens/{D(9)}/edicao").json().get("imagem_site_pendente") is True and op.get(f"/api/itens/{D(9)}").json()["item"].get("imagem_site_pendente") is True, op.get(f"/api/itens/{D(9)}/edicao").text[:300] + " || " + op.get(f"/api/itens/{D(9)}").text[:200])
+        r = op.post(f"/api/itens/{D(9)}/espelhar")
+        ver("espelhar folha publicada também pode (antes: 409 'a imagem lá não muda por aqui'); a pendência não duplica", r.status_code == 200 and r.json().get("site_pendente") is True and pend(D(9)) == 1 and not Fake.chamadas, r.text[:200])
+        ver("operador não atualiza o site (403)", op.post(f"/api/itens/{D(9)}/imagem/atualizar-site").status_code == 403 and not Fake.chamadas)
+        Fake.falhar = True
+        r = adm.post(f"/api/itens/{D(9)}/imagem/atualizar-site")
+        ver("site recusa 'Atualizar imagem no site': 502 em português e a pendência continua", r.status_code == 502 and "continua a antiga" in r.json().get("erro", r.text) and pend(D(9)) == 1, r.text[:200])
+        Fake.falhar = False
+        r = adm.post(f"/api/itens/{D(9)}/imagem/atualizar-site")
+        ver("admin 'Atualizar imagem no site': troca o arquivo do MESMO anexo (5559) pela imagem de agora e a pendência some",
+            r.status_code == 200 and Fake.chamadas[-1][0] == 5559 and Fake.chamadas[-1][1] == (30, 60) and pend(D(9)) == 0 and nev(D(9), "imagem_atualizada_no_site") == 1, r.text[:200] + str(Fake.chamadas))
+        ver("'Atualizar imagem no site' em folha fora do site: 409 explicando", adm.post(f"/api/itens/{D(6)}/imagem/atualizar-site").status_code == 409)
+        c.execute("DELETE FROM evento WHERE codigo=?", (D(9),)); c.execute("DELETE FROM divergencia_site WHERE codigo=?", (D(9),)); c.execute("DELETE FROM item WHERE codigo=?", (D(9),)); c.commit(); Fake.chamadas.clear()
         # ---------- (a) admin gira: troca o arquivo do anexo no site mantendo o ID ----------
         r = adm.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
         ver("admin: folha publicada (lote já aprovado) gira: 200, giro_manual 90, avisa que foi no site", r.status_code == 200 and r.json() == {"giro_manual": 90, "no_site": True} and g(D(2)) == 90, r.text[:200])
@@ -7623,7 +7665,8 @@ def filho(modo):
         r = op.post(f"/api/itens/{D(2)}/ajuste", json={"angulo": 2})
         ver("lote aprovado (fora do site): ajustar agora pode (19/10, sem 'reabra a revisão')", r.status_code == 200 and "já foi aprovado" not in r.text, r.text)
         r = op.post(f"/api/itens/{D(3)}/ajuste", json={"angulo": 2})
-        ver("folha no site: operador recebe 409 pedindo um admin", r.status_code == 409 and "admin" in r.json().get("erro", r.text) and col(D(3), "alinhamento") == 0, r.text)
+        ver("19/10: folha no site: operador ajusta no painel, o site NÃO é chamado e fica a pendência 'Atualizar imagem no site'", r.status_code == 200 and "admin" in (r.json().get("pendencia") or "") and col(D(3), "alinhamento") == 2, r.text)
+        c.execute("UPDATE item SET recorte=NULL, alinhamento=0, imagem_corrigida=NULL WHERE codigo=?", (D(3),)); c.execute("UPDATE divergencia_site SET resolvida=1 WHERE codigo=?", (D(3),)); c.execute("DELETE FROM evento WHERE codigo=? AND tipo='ajuste_imagem'", (D(3),)); c.commit()
         class Fake:
             chamadas, falhar = [], False
             def __init__(self, *a, **k): pass
@@ -7659,6 +7702,34 @@ if "--filho" in sys.argv:
     sys.exit(filho(sys.argv[2]))
 
 tmp = tempfile.mkdtemp()
+
+def adiantar_em_paralelo():
+    """19/10 ("roda por muito tempo o atualizar"): os modos independentes rodam JÁ, em paralelo, cada um na sua pasta (banco,
+    prontos, logs e backups próprios). Independente = chamado como rodar("modo", f"{tmp}/x.db") e esse banco não aparece em
+    mais nenhum lugar do arquivo (o pai não prepara nem lê esse banco). Só o que PASSOU é reaproveitado: o que falhar roda de novo,
+    do jeito de sempre, na sua vez. --sequencial desliga."""
+    import re, concurrent.futures as cf
+    if "--sequencial" in sys.argv:
+        return
+    fonte = pathlib.Path(__file__).read_text(encoding="utf-8")
+    vistos, alvos = set(), []
+    for modo, nome in re.findall(r'rodar\("(\w+)", f"\{tmp\}/([^"]+)"\)', fonte):
+        if fonte.count("{tmp}/" + nome) != 1 or (modo, nome) in vistos or ("--rapido" in sys.argv and modo not in MODOS_RAPIDOS):
+            continue
+        vistos.add((modo, nome)); alvos.append((modo, nome))
+    def um(alvo):
+        modo, nome = alvo
+        pasta = pathlib.Path(tmp) / "paralelo" / f"{modo}-{nome}"; pasta.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ, CAMP_DB_PATH=str(pasta / nome), CAMP_TMP_PRONTOS=str(pasta / "prontos"), CAMP_COOKIE_SECURE="false", PYTHONPATH=str(RAIZ / "backend"),
+                   CAMP_LOG_DIR=str(pasta / "logs"), CAMP_BACKUP_DIR=str(pasta / "backups"))
+        r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
+        return alvo, r.returncode, (r.stdout + r.stderr).strip()
+    with cf.ThreadPoolExecutor(max_workers=max(2, min(8, os.cpu_count() or 2))) as ex:
+        for (modo, nome), rc, out in ex.map(um, alvos):
+            if rc == 0 and "FALHA" not in out:
+                _ADIANTADOS[(modo, f"{tmp}/{nome}")] = (rc, out)
+
+adiantar_em_paralelo()
 
 print("1) Banco NOVO (schema.sql + todas as migrações, rodando 2x)")
 db = f"{tmp}/novo.db"
@@ -8639,6 +8710,22 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"duplicatas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("136) Versão legível no rodapé (/api/versao com data, título da mudança e desde quando o servidor roda)")
+rc, out = rodar("versao", f"{tmp}/versao.db")
+if rc != 0: ok(False, f"teste da versão não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"versão: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("137) atualizar.sh rápido: sai na hora se já está na versão mais nova, testes em paralelo e só o resumo na tela")
+rc, out = rodar("atualizar_rapido", f"{tmp}/atualizar_rapido.db")
+if rc != 0: ok(False, f"teste do atualizar.sh não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"atualizar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
