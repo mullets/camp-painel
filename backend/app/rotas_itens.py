@@ -11,7 +11,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, parceiros
 from .db import connect
 from .publicador import _meta, atualizar_folha_no_site
 from .rotas_projetos import _colecao_config
@@ -98,6 +98,9 @@ def dados_edicao(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict
              "local": {**{k: i[k] for k in (*LIMITES_LOCAIS, "ano_folha")}, "tipo_documento": i["tipos_documento"] or i["tipo_documento"]},
              "tipos_documento": [r[0] for r in con.execute("SELECT nome FROM tipo_documento ORDER BY nome")],
              "site": None}
+        d["local"]["parceiros"] = parceiros.ler(i["parceiros"])        # 19/10: escritórios parceiros / projetos complementares
+        d["disciplinas"] = list(parceiros.DISCIPLINAS)
+        d["fundo_codigo"] = codigo.split("-")[0]
         if w:
             editaveis, leitura = _campos_do_site(con, w)
             d["site"] = {"status": w["status"], "titulo": w["titulo"] or "", "descricao": _descricao_do_site(w),
@@ -121,6 +124,7 @@ class EdicaoItem(BaseModel):
     titulo_site: str | None = None
     descricao_site: str | None = None
     metadados_site: dict[str, str] | None = None
+    parceiros: list | None = None     # [{"escritorio", "disciplina", "outra"?}]; [] limpa; ausente = não mexe
 
 
 @router.patch("/itens/{codigo}")
@@ -161,6 +165,12 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
             v = d.ano_folha or None
             if v != i["ano_folha"]:
                 novos["ano_folha"], antes["ano_folha"] = v, i["ano_folha"]
+        lista_parceiros = None
+        if d.parceiros is not None:                       # 19/10: escritórios parceiros; só grava se mudou (a revisão manda só o que mudou)
+            lista_parceiros = parceiros.normalizar(d.parceiros)
+            atual = parceiros.ler(i["parceiros"])
+            if lista_parceiros != atual:
+                novos["parceiros"], antes["parceiros"] = parceiros.para_coluna(lista_parceiros), atual
 
         titulo_site = descricao_site = None
         md_envio: dict = {}
@@ -215,6 +225,8 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
             con.execute(f"UPDATE item SET {sets}, atualizado_em=datetime('now') WHERE codigo=?", (*novos.values(), codigo))
         if novos or site_antes:
             depois = dict(novos)
+            if "parceiros" in depois:
+                depois["parceiros"] = lista_parceiros     # no histórico, a lista (não o texto JSON da coluna)
             for k in site_antes:
                 depois[f"site:{k}"] = (titulo_site if k == "título da página" else descricao_site if k == "descrição"
                                        else md_envio[k][2])

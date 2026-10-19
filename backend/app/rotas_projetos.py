@@ -464,6 +464,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "codigos_locais": [x.get("codigo") for x in itens_local],
     }
     pub = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])
+    from .parceiros import resumo_projeto as _parceiros_do_projeto
+    parceiros_projeto = _parceiros_do_projeto(con, codigo)              # 19/10: "Parceiros neste projeto" (distintos, com as disciplinas)
     con.close()
 
     md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
@@ -492,7 +494,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
             "fonte_visual": fonte_visual, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
-            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas}
+            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto}
 
 
 @router.get("/itens/{codigo}")
@@ -516,6 +518,8 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
     d["tipo_documento"] = d.pop("tipos_documento", None) or d.get("tipo_documento")   # 19/10: a lista inteira quando há mais de um tipo
+    from .parceiros import ler as _ler_parceiros
+    d["parceiros"] = _ler_parceiros(d.get("parceiros"))                                  # 19/10: escritórios parceiros / projetos complementares
     try:
         pend = json.loads(d.get("pendencias") or "{}")
     except ValueError:

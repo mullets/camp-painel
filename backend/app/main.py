@@ -80,6 +80,8 @@ app.include_router(rotas_reidentificar)
 app.include_router(rotas_legado)
 from .rotas_estante import router as rotas_estante
 app.include_router(rotas_estante)
+from .parceiros import router as rotas_parceiros
+app.include_router(rotas_parceiros)
 
 
 @app.on_event("startup")

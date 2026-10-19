@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux"}
+MODOS_RAPIDOS = {"lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros"}
 
 
 def rodar(modo, db):
@@ -4908,6 +4908,148 @@ def filho(modo):
         ver("a lista de Problemas traz a origem de cada um (leitura vê)", {x_["origem"] for x_ in lst} == {"campvision", "site", "operador"}, str({x_["origem"] for x_ in lst}))
         k.close()
         for l in res: print(l)
+    elif modo == "parceiros":
+        # 19/10: escritórios parceiros / projetos complementares na folha (calculista, instalações, paisagismo…)
+        init_db(); aplicar_migracoes()
+        import json as _j, xml.etree.ElementTree as _ET
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        import app.publicador as pub
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("migração 138: coluna item.parceiros existe", "parceiros" in [r[1] for r in c.execute("PRAGMA table_info(item)")])
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste'),('F098','Outro fundo')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1),('F099',2),('F098',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F099-P0001','F099',1,'Casa de teste',1970,7000),('F099-P0002','F099',2,'Outra casa',1971,NULL),('F098-P0001','F098',1,'Prédio',1960,NULL)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa','F099-P0001','/tmp/nao-existe-parceiros','revisao')").lastrowid
+        D = lambda n, p="F099-P0001", a=1970: f"{p}-{a}-S01-D{n:05d}"
+        for n in range(1, 6):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao) VALUES (?,?,?,?,?,'campvision',?,?)",
+                      (D(n), "F099-P0001", "S01", n, f"Estrutura {n}", lote if n <= 4 else None, "conferida" if n == 4 else "pendente"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'importado')", (D(1, "F099-P0002", 1971), "F099-P0002", "S01", 1, "Outra"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,?,?,?,'importado')", (D(1, "F098-P0001", 1960), "F098-P0001", "S01", 1, "Prédio"))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        col = lambda cod: c.execute("SELECT parceiros FROM item WHERE codigo=?", (cod,)).fetchone()[0]
+        lst = lambda cod: _j.loads(col(cod) or "[]")
+        # ---------- gravar ----------
+        r = op.patch(f"/api/itens/{D(1)}", json={"parceiros": [{"escritorio": "  Escritório   Técnico Calc ", "disciplina": "estrutura"},
+                                                                  {"escritorio": "Burle Marx & Cia", "disciplina": "Outra", "outra": "Paisagismo de cobertura"},
+                                                                  {"escritorio": "Escritório Técnico Calc", "disciplina": "Estrutura"},
+                                                                  {"escritorio": "", "disciplina": "", "outra": ""}]})
+        ver("grava dois parceiros (nome com espaços arrumado, disciplina da lista no nome oficial, 'Outra' vira o texto, repetida e linha vazia ignoradas)",
+            r.status_code == 200 and "parceiros" in r.json().get("campos", []) and lst(D(1)) == [{"escritorio": "Escritório Técnico Calc", "disciplina": "Estrutura"},
+                                                                                                  {"escritorio": "Burle Marx & Cia", "disciplina": "Paisagismo de cobertura"}], f"{r.status_code} {r.text[:200]} {col(D(1))}")
+        ed = op.get(f"/api/itens/{D(1)}/edicao").json()
+        ver("revisão/edição recebem a lista, as disciplinas e o fundo (para sugerir nomes)", ed["local"].get("parceiros") == lst(D(1)) and "Estrutura" in ed.get("disciplinas", []) and ed["disciplinas"][-1] == "Outra" and ed.get("fundo_codigo") == "F099", str(ed.get("local"))[:200])
+        it = le.get(f"/api/itens/{D(1)}").json()["item"]
+        ver("a página da folha (leitura) mostra a lista", it.get("parceiros") == lst(D(1)), str(it.get("parceiros")))
+        ev = c.execute("SELECT detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado' ORDER BY id DESC LIMIT 1", (D(1),)).fetchone()
+        det = _j.loads(ev[0]) if ev else {}
+        ver("histórico com antes (vazio) e depois (a lista)", det.get("antes", {}).get("parceiros") == [] and det.get("depois", {}).get("parceiros") == lst(D(1)), str(det)[:200])
+        n_ev = c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='editado'", (D(1),)).fetchone()[0]
+        r = op.patch(f"/api/itens/{D(1)}", json={"parceiros": [{"escritorio": "Escritório Técnico Calc", "disciplina": "Estrutura"}, {"escritorio": "Burle Marx & Cia", "disciplina": "Outra", "outra": "Paisagismo de cobertura"}]})
+        ver("mandar a mesma lista não muda nada nem enche o histórico", r.status_code == 200 and r.json()["campos"] == [] and c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='editado'", (D(1),)).fetchone()[0] == n_ev, r.text[:200])
+        # ---------- validar ----------
+        antes = col(D(1))
+        casos = [([{"escritorio": "Fulano", "disciplina": ""}], "escolha a disciplina de Fulano"),
+                 ([{"escritorio": "Fulano", "disciplina": "Astrologia"}], "não está na lista"),
+                 ([{"escritorio": "Fulano", "disciplina": "Outra"}], "escreva qual é a outra disciplina"),
+                 ([{"escritorio": "", "disciplina": "Estrutura"}], "falta o nome do escritório"),
+                 ([{"escritorio": "X" * 201, "disciplina": "Estrutura"}], "mais de 200"),
+                 ([{"escritorio": f"E{k}", "disciplina": "Acústica"} for k in range(31)], "no máximo 30"),
+                 ("texto solto", None)]
+        oks = []
+        for corpo, msg in casos:
+            rr = op.patch(f"/api/itens/{D(1)}", json={"parceiros": corpo, "titulo": "não deve gravar"})
+            oks.append(rr.status_code in (400, 422) and (msg is None or msg in (rr.json().get("erro") or "")))
+        ver("validação: sem disciplina, disciplina fora da lista, 'Outra' sem texto, sem nome, nome longo, mais de 30, formato errado -> recusa com mensagem e NADA grava",
+            all(oks) and col(D(1)) == antes and c.execute("SELECT titulo FROM item WHERE codigo=?", (D(1),)).fetchone()[0] == "Estrutura 1", str(oks))
+        ver("leitura não grava (403)", le.patch(f"/api/itens/{D(1)}", json={"parceiros": []}).status_code == 403 and col(D(1)) == antes)
+        # ---------- sugestões de nomes (do fundo primeiro) ----------
+        op.patch(f"/api/itens/{D(1, 'F098-P0001', 1960)}", json={"parceiros": [{"escritorio": "Zeta Instalações", "disciplina": "Instalações elétricas"}]})
+        s1 = op.get("/api/parceiros/sugestoes?fundo=F098").json()
+        s2 = op.get("/api/parceiros/sugestoes?fundo=F099").json()
+        n1, n2 = [x["nome"] for x in s1["nomes"]], [x["nome"] for x in s2["nomes"]]
+        ver("sugestões: nomes distintos já usados, os do fundo pedido primeiro (com disciplinas)",
+            n1[0] == "Zeta Instalações" and set(n1) == {"Zeta Instalações", "Escritório Técnico Calc", "Burle Marx & Cia"} and n2[-1] == "Zeta Instalações"
+            and s1["nomes"][0]["do_fundo"] and s1["nomes"][0]["disciplinas"] == ["Instalações elétricas"] and s1["disciplinas"][0] == "Estrutura", f"{n1} / {n2}")
+        ver("sugestões filtram pelo texto (q) e leitura também pode ver", [x["nome"] for x in le.get("/api/parceiros/sugestoes?q=burle").json()["nomes"]] == ["Burle Marx & Cia"])
+        # ---------- copiar para outras folhas ----------
+        r = op.post(f"/api/itens/{D(5)}/parceiros/copiar", json={"alvo": "projeto"})
+        ver("folha sem parceiros salvos não copia (409)", r.status_code == 409, r.text[:120])
+        fl = op.get(f"/api/itens/{D(1)}/parceiros/folhas").json()
+        ver("lista para escolher: as outras folhas do projeto, com lote e revisão", [x["codigo"] for x in fl["folhas"]] == [D(2), D(3), D(4), D(5)] and fl["folhas"][0]["mesmo_lote"] and not fl["folhas"][3]["mesmo_lote"], str(fl)[:200])
+        c.execute("UPDATE item SET parceiros=? WHERE codigo=?", (_j.dumps([{"escritorio": "Já Estava", "disciplina": "Acústica"}]), D(2))); c.commit()
+        r = op.post(f"/api/itens/{D(1)}/parceiros/copiar", json={"alvo": "lote_pendentes"}).json()
+        ver("copiar para as pendentes do lote: D2 e D3 (D4 já conferida e D5 fora do lote ficam de fora); acrescenta sem apagar o que D2 tinha",
+            r.get("aplicadas") == [D(2), D(3)] and lst(D(2))[0]["escritorio"] == "Já Estava" and len(lst(D(2))) == 3 and lst(D(3)) == lst(D(1)) and col(D(4)) is None and col(D(5)) is None, str(r)[:300])
+        evc = c.execute("SELECT detalhe FROM evento WHERE codigo=? AND tipo='editado' ORDER BY id DESC LIMIT 1", (D(2),)).fetchone()
+        dc = _j.loads(evc[0]) if evc else {}
+        ver("cada folha copiada tem histórico com antes/depois e de onde veio", dc.get("copiado_de") == D(1) and dc["antes"]["parceiros"] == [{"escritorio": "Já Estava", "disciplina": "Acústica"}] and len(dc["depois"]["parceiros"]) == 3, str(dc)[:200])
+        r = op.post(f"/api/itens/{D(1)}/parceiros/copiar", json={"alvo": "lote_pendentes"}).json()
+        ver("copiar de novo é idempotente (nada muda, motivo na resposta)", r["aplicadas"] == [] and all(x["motivo"] == "já tinha esses parceiros" for x in r["ignoradas"]), str(r)[:200])
+        r = op.post(f"/api/itens/{D(1)}/parceiros/copiar", json={"alvo": "itens", "itens": [D(2), D(5), D(1, "F099-P0002", 1971)], "modo": "substituir"}).json()
+        ver("copiar para as escolhidas, substituindo: D2 fica igual à origem, D5 recebe; folha de outro projeto fica de fora com o motivo",
+            r["aplicadas"] == [D(2), D(5)] and lst(D(2)) == lst(D(1)) and lst(D(5)) == lst(D(1)) and col(D(1, "F099-P0002", 1971)) is None
+            and r["ignoradas"] == [{"codigo": D(1, "F099-P0002", 1971), "motivo": "não é deste projeto"}], str(r)[:300])
+        ver("copiar: alvo/modo inválidos 400; leitura 403", op.post(f"/api/itens/{D(1)}/parceiros/copiar", json={"alvo": "tudo"}).status_code == 400
+            and op.post(f"/api/itens/{D(1)}/parceiros/copiar", json={"alvo": "projeto", "modo": "x"}).status_code == 400
+            and le.post(f"/api/itens/{D(1)}/parceiros/copiar", json={"alvo": "projeto"}).status_code == 403)
+        # ---------- dossiê do projeto ----------
+        dt = op.get("/api/projetos/F099-P0001/detalhe").json()
+        pp = {x["escritorio"]: x for x in dt.get("parceiros", [])}
+        ver("dossiê: 'Parceiros neste projeto' com os distintos, as disciplinas e quantas folhas",
+            set(pp) == {"Escritório Técnico Calc", "Burle Marx & Cia"} and pp["Escritório Técnico Calc"]["folhas"] == 4 and pp["Escritório Técnico Calc"]["disciplinas"] == ["Estrutura"], str(dt.get("parceiros"))[:300])
+        # ---------- limpar ----------
+        r = op.patch(f"/api/itens/{D(5)}", json={"parceiros": []})
+        ver("lista vazia limpa (NULL) e fica no histórico", r.status_code == 200 and col(D(5)) is None and _j.loads(c.execute("SELECT detalhe FROM evento WHERE codigo=? AND tipo='editado' ORDER BY id DESC LIMIT 1", (D(5),)).fetchone()[0])["depois"]["parceiros"] == [])
+        # ---------- exportação EAD ----------
+        r = le.get("/api/projetos/F099-P0001/ead.xml")
+        x = r.text
+        corp = []
+        try:
+            raiz = _ET.fromstring(x.split("?>", 1)[-1].split("]>", 1)[-1] if "<!DOCTYPE" in x else x)
+            for cc in raiz.iter("c"):
+                if cc.get("level") != "item": continue
+                uid = cc.find("did/unitid").text
+                for ca in cc.findall("controlaccess"):
+                    corp += [(uid, n.text, n.get("role")) for n in ca.findall("corpname")]
+        except Exception as e:  # noqa: BLE001
+            corp = [str(e)]
+        ver("EAD: cada folha com parceiros tem <controlaccess><corpname role=disciplina> (e não <origination>)",
+            r.status_code == 200 and (D(1), "Escritório Técnico Calc", "Estrutura") in corp and (D(1), "Burle Marx & Cia", "Paisagismo de cobertura") in corp
+            and not any(u_ == D(5) for u_, *_ in corp) and "Burle Marx &amp; Cia" in x, str(corp)[:300])
+        # ---------- site: só se a coleção já tiver o metadado ----------
+        enviados = []
+        class FakeWP:
+            n = 7100
+            def criar_item(self, cid, titulo, status="draft", descricao=""):
+                FakeWP.n += 1; return {"id": FakeWP.n, "slug": "s", "url": "u"}
+            def definir_metadado(self, wid, mid, valor): enviados.append((wid, mid, valor))
+            def patch_item(self, *a, **k): pass
+        pub.WP = FakeWP
+        c.execute("UPDATE item SET revisao='conferida' WHERE codigo IN (?,?)", (D(1), D(3))); c.commit()
+        r1 = pub.criar_folha_no_site(D(1), "teste@camp", enviar_imagem=False)
+        sem = [e_ for e_ in enviados if "Burle" in str(e_[2])]
+        pend = c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND resolvida=0 AND (campo LIKE '%arceir%' OR campo LIKE '%omplementar%' OR campo LIKE '%olaborador%')", (D(1),)).fetchone()[0]
+        ver("site SEM metadado parecido: os parceiros ficam só no painel (nada enviado, nenhuma pendência, nenhum metadado criado)", not r1.get("erro") and not sem and pend == 0, f"{r1} {sem} pend={pend}")
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (901, 8013, 'Projetos complementares', 'Tainacan\\Metadata_Types\\Textarea')"); c.commit()
+        enviados.clear()
+        r3 = pub.criar_folha_no_site(D(3), "teste@camp", enviar_imagem=False)
+        ver("site COM 'Projetos complementares' (texto): a publicação envia 'Escritório (Disciplina); …'",
+            (FakeWP.n, 901, "Escritório Técnico Calc (Estrutura); Burle Marx & Cia (Paisagismo de cobertura)") in enviados and "Projetos complementares" in r3.get("metadados", []), f"{r3} {enviados[-3:]}")
+        c.execute("UPDATE wp_metadado SET tipo='Tainacan\\Metadata_Types\\Taxonomy' WHERE id=901"); c.commit()
+        from app import parceiros as _pc
+        ver("metadado de taxonomia com esse nome NÃO é usado (o painel não cria termo no site)", _pc.metadado_no_site(c, 8013) == (None, None))
+        c.close()
+        for l in res: print(l)
     elif modo == "problemas_ux":
         # 19/10 "a pasta de problemas tá confusa": cada problema diz de que projeto é (com o nome), o que aconteceu, o que fazer e a ação
         # que resolve; filtros no servidor; resolver vários de uma vez; o que se resolveu sozinho fecha com registro (e o "talvez" não fecha).
@@ -8351,6 +8493,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"problemas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("134) Escritórios parceiros / projetos complementares na folha (19/10): gravar, validar, histórico, sugestões, copiar, dossiê, EAD e site")
+rc, out = rodar("parceiros", f"{tmp}/parceiros.db")
+if rc != 0: ok(False, f"teste de escritórios parceiros não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"parceiros: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

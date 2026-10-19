@@ -831,6 +831,17 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                     wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
                 except Exception as e:  # noqa: BLE001
                     _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
+            # 19/10: escritórios parceiros. O painel NÃO cria metadado no site: só envia se a coleção já tiver um de texto com nome
+            # conhecido (parceiros.NOMES_NO_SITE). Sem ele, os parceiros ficam só no painel (e na exportação EAD), sem pendência.
+            from . import parceiros as _parc
+            lista_p = _parc.ler(i["parceiros"] if "parceiros" in i.keys() else None)
+            if lista_p:
+                mid_p, nome_p = _parc.metadado_no_site(con, COL_ACERVO)
+                if mid_p:
+                    try:
+                        wp.definir_metadado(iid, mid_p, _parc.texto(lista_p)); out["metadados"].append(nome_p)
+                    except Exception as e:  # noqa: BLE001
+                        _pendencia(con, "item", codigo, f"pendente_metadado_{nome_p}", str(e)[:200])
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado
