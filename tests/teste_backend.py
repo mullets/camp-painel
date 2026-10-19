@@ -6340,16 +6340,18 @@ def filho(modo):
             e.status_code == 200 and e.json()["espelhar"] is False and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(1)) == 0 and vermelho(img(previa(D(1))), (5, 5)), e.text)
         r0 = previa(D(3)); e = op.post(f"/api/itens/{D(3)}/espelhar"); r1 = previa(D(3))
         ver("espelhar uma folha normal: FLIP esquerda-direita (60x30, canto vermelho vai para a direita), mesmo tamanho",
-            e.json() == {"espelhar": True, "giro_manual": 0} and img(r1).size == (60, 30) and vermelho(img(r1), (54, 5)) and not vermelho(img(r1), (5, 5)))
+            e.json() == {"espelhar": True, "giro_manual": 0, "site_pendente": False} and img(r1).size == (60, 30) and vermelho(img(r1), (54, 5)) and not vermelho(img(r1), (5, 5)))
         ver("miniatura espelhada (?t=200) também sai espelhada", vermelho(img(previa(D(3), "?t=200")), (54, 5)) and not vermelho(img(previa(D(3), "?t=200")), (5, 5)))
         op.post(f"/api/itens/{D(3)}/espelhar"); ver("desespelhar volta ao ARQUIVO ORIGINAL (bytes iguais)", previa(D(3)).content == r0.content)
         op.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}); e = op.post(f"/api/itens/{D(3)}/espelhar"); rg = previa(D(3))
         ver("folha deitada (giro 90): espelhar troca o giro por 270, para espelhar o que a pessoa VÊ (esquerda-direita na tela): canto vermelho em cima à esquerda",
-            e.json() == {"espelhar": True, "giro_manual": 270} and img(rg).size == (30, 60) and vermelho(img(rg), (5, 5)) and not vermelho(img(rg), (24, 5)), e.text)
+            e.json() == {"espelhar": True, "giro_manual": 270, "site_pendente": False} and img(rg).size == (30, 60) and vermelho(img(rg), (5, 5)) and not vermelho(img(rg), (24, 5)), e.text)
         ver("reimportar o lote NÃO desfaz a decisão de gente (espelho_manual fica)", op.post(f"/api/lotes/{lote}/importar").status_code == 200 and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(1)) == 0 and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(3)) == 1)
         ver("espelhar: leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(3)}/espelhar").status_code == 403 and anon.post(f"/api/itens/{D(3)}/espelhar").status_code == 401 and op.post("/api/itens/F026-P0001-1972-S01-D99999/espelhar").status_code == 404)
         k.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (D(2),)); k.commit()
-        ver("folha que já está no site não espelha por aqui (409)", op.post(f"/api/itens/{D(2)}/espelhar").status_code == 409)
+        e2 = op.post(f"/api/itens/{D(2)}/espelhar")
+        ver("19/10: folha já no site espelha no painel e a imagem do site fica pendente (antes: 409)", e2.status_code == 200 and e2.json().get("site_pendente") is True, e2.text[:200])
+        op.post(f"/api/itens/{D(2)}/espelhar"); k.execute("DELETE FROM evento WHERE tipo='espelho' AND codigo=?", (D(2),)); k.commit()
         k.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (D(2),)); k.commit()
         ver("a história registra o espelho (de/para)", sql("SELECT COUNT(*) FROM evento WHERE tipo='espelho' AND codigo=?", D(3)) == 3)
         envios = []
