@@ -7591,6 +7591,17 @@ def filho(modo):
         e_gente = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,situacao,resolucao) VALUES ('aviso','orientacao','operador',?,'x','Op','corrigido','resolvido à mão')", (D(2),)).lastrowid
         c.commit(); op.post(f"/api/itens/{D(2)}/revisao", json={"estado": "conferida"}); op.post(f"/api/itens/{D(2)}/revisao", json={"estado": "pendente"})
         ver("CAMP-091: o que foi resolvido de outro jeito (por gente) não reabre", sit(e_gente) == "corrigido")
+        # ---------- CAMP-092: confirmar a autoria tira também o crédito provisório ----------
+        cred = lambda n: q("SELECT credito FROM item WHERE codigo=?", D(n))[0]
+        c.execute("UPDATE item SET autoria_divergente=1, credito='Autoria não confirmada' WHERE codigo IN (?,?,?)", (D(3), D(5), D(6)))
+        c.execute("UPDATE item SET autoria_divergente=1, credito='Crédito escrito à mão' WHERE codigo=?", (D(4),)); c.commit()
+        op.post(f"/api/itens/{D(3)}/autoria-confirmada"); op.post(f"/api/itens/{D(4)}/autoria-confirmada")
+        ver("CAMP-092: 'É de <fundo>' tira o crédito 'Autoria não confirmada' (fica o padrão do fundo)", cred(3) is None, cred(3))
+        ver("CAMP-092: crédito escrito por gente não é apagado", cred(4) == "Crédito escrito à mão", cred(4))
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        ad = cli("ad@camp.arq.br", "senha-admin-12345")
+        r = ad.post("/api/projetos/F099-P0001/registrar-autoria", json={"autoria": "Fulano de Tal", "papel_no_projeto": "coautor"})
+        ver("CAMP-092: registrar a autoria do projeto tira o crédito provisório de todas as folhas", r.status_code == 200 and cred(5) is None and cred(6) is None, r.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "camp068_marcas":

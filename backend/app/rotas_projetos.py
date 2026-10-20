@@ -743,7 +743,8 @@ def registrar_autoria(codigo: str, d: RegistroAutoria, u: dict = Depends(auth.ex
     p = con.execute("SELECT codigo FROM projeto WHERE codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
-    folhas = con.execute("UPDATE item SET autoria_divergente=0 WHERE projeto_codigo=? AND autoria_divergente=1", (codigo,)).rowcount
+    folhas = con.execute("UPDATE item SET autoria_divergente=0, credito=CASE WHEN credito='Autoria não confirmada' THEN NULL ELSE credito END "
+                         "WHERE projeto_codigo=? AND autoria_divergente=1", (codigo,)).rowcount   # CAMP-092: o crédito provisório sai junto
     rotulo = PAPEIS_PROJETO[d.papel_no_projeto]
     erros = con.execute("""UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=?
                            WHERE categoria='autoria_divergente' AND situacao IN ('aberto','em_correcao') AND (codigo=? OR codigo LIKE ? || '-%')""",

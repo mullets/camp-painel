@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from . import ajuste_imagem as ajuste, auth, giro_imagem as imagens
 from .db import connect
+from .publicador import CREDITO_AUTORIA_NAO_CONFIRMADA
 from .importador_lote import CODIGO_DOCUMENTO, fala_de_projeto_divergente, importar_lote, ler_pacote, tirar_projeto_divergente
 from .rotas_operacao import _qnap_prontos_raiz
 
@@ -380,7 +381,9 @@ def confirmar_autoria_da_folha(codigo: str, u: dict = Depends(auth.exige("operad
         i = con.execute("SELECT autoria_divergente FROM item WHERE codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        con.execute("UPDATE item SET autoria_divergente=0, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+        # CAMP-092: o crédito "Autoria não confirmada" (posto pelo importador) sai junto; vazio = o crédito padrão do fundo
+        con.execute("UPDATE item SET autoria_divergente=0, credito=CASE WHEN credito=? THEN NULL ELSE credito END, atualizado_em=datetime('now') WHERE codigo=?",
+                    (CREDITO_AUTORIA_NAO_CONFIRMADA, codigo))
         ids = [r[0] for r in con.execute("SELECT id FROM erro WHERE codigo=? AND categoria='autoria_divergente' AND situacao IN ('aberto','em_correcao')", (codigo,))]
         if ids:
             con.execute(f"UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id IN ({','.join('?' * len(ids))})",
