@@ -3516,7 +3516,9 @@ def filho(modo):
             r.returncode == 0 and "Já está na versão mais nova" in r.stdout and "Primeira versão" in r.stdout and "backup" not in r.stdout and not (srv / "backend/backups").exists(), (r.stdout + r.stderr)[-400:])
         ver("o script todo fica dentro de main() (o git pull que troca o arquivo no meio não o embaralha)", "\nmain() {" in sh and sh.rstrip().endswith('main "$@"\nexit $?'))
         ver("testes da versão nova: saída num arquivo de log, só o resumo na tela, e pip só se requirements mudou",
-            "--rapido) > \"$LOG_TESTE\" 2>&1" in sh and "cmp -s \"$TESTE_DIR/backend/requirements.txt\" backend/requirements.txt ||" in sh and "git diff --quiet \"$ATUAL\" HEAD -- backend/requirements.txt" in sh)
+            'com_andamento "$LOG_TESTE" bash -c' in sh and "tests/teste_backend.py --rapido" in sh and "cmp -s \"$TESTE_DIR/backend/requirements.txt\" backend/requirements.txt ||" in sh and "git diff --quiet \"$ATUAL\" HEAD -- backend/requirements.txt" in sh)
+        ver("20/10 (visual): antes de atualizar mostra a lista do que muda (commits sem merge), os arquivos por área e as migrações novas em destaque",
+            "mostrar_mudancas" in sh and "git log --no-merges" in sh and "--diff-filter=A HEAD origin/main -- db/migrations" in sh and "Migrações novas" in sh)
         ver("a suíte roda os modos independentes em paralelo (só reaproveita o que passou; --sequencial desliga)", "adiantar_em_paralelo()" in (RAIZ / "tests/teste_backend.py").read_text(encoding="utf-8"))
         shutil.rmtree(base, ignore_errors=True)
         for l in res: print(l)
