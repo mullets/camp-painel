@@ -448,7 +448,10 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                                                 WHERE (entidade='projeto' AND codigo=?)
                                                    OR (entidade='item' AND tipo='folha_movida'
                                                        AND (codigo LIKE ? OR (json_valid(detalhe) AND json_extract(detalhe, '$.de') LIKE ?)))
-                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%"))]
+                                                   OR (entidade='lista' AND tipo IN ('lote_descartado','lote_movido')
+                                                       AND codigo IN (SELECT CAST(id AS TEXT) FROM lista_processamento WHERE projeto_codigo=?))
+                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%", codigo))]
+    # CAMP-078 (20/10, exaustão): o descarte de um lote do projeto não aparecia no Histórico do projeto (o evento é do lote)
     from .livro_cv import historico as _livro
     livro_cv = _livro(con, codigo)
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
