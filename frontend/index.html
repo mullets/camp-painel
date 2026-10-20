@@ -1711,11 +1711,13 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelect
 const esperar=ms=>new Promise(r=>setTimeout(r,ms));
 function duracaoTexto(s){s=Math.max(0,Math.round(+s||0));return s>=60?`${Math.floor(s/60)} min ${s%60} s`:s<1?'menos de 1 s':`${s} s`}
 function avisoNoLugar(html,o={}){   // o: {tipo:'ok'|'erro'|'rodando', antes: elemento|seletor (entra logo acima dele), id, ms}
+  // CAMP-075/076 (20/10, exaustão): tira o aviso antigo de mesmo id ANTES de escolher o lugar; antes, o lugar escolhido podia ser logo depois
+  // dele (varrer o QNAP duas vezes): o aviso antigo saía e o novo não entrava (erro "insertBefore … not a child of this node").
+  if(o.id)document.querySelectorAll(`.aviso-local[data-aviso="${CSS.escape(o.id)}"]`).forEach(x=>{clearTimeout(x._t);x.remove()});
   const antes=typeof o.antes==='string'?document.querySelector(o.antes):o.antes,view=document.querySelector('.content.on');
   let ref=antes&&antes.isConnected?antes:null,pai=ref?ref.parentNode:null;
   if(!pai&&view){const h=[...view.children].find(c=>c.matches('.hdr,.backbar'));ref=h?h.nextSibling:view.firstChild;pai=view}
   if(!pai)return null;
-  if(o.id)document.querySelectorAll(`.aviso-local[data-aviso="${CSS.escape(o.id)}"]`).forEach(x=>{clearTimeout(x._t);x.remove()});
   const a=document.createElement('div');a.className='aviso-local'+(o.tipo&&o.tipo!=='ok'?' '+o.tipo:'');a.setAttribute('role',o.tipo==='erro'?'alert':'status');if(o.id)a.dataset.aviso=o.id;
   a.innerHTML=`<div class="t">${html}</div><button type="button" class="x" aria-label="Fechar aviso" data-aviso-fechar>×</button>`;
   pai.insertBefore(a,ref);mudarAviso(a,null,o.tipo||'ok',o.ms);return a}
