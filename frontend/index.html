@@ -2930,8 +2930,10 @@ function tagRevisao(r,retida){if(retida)return '<span class="tag r mini rev-tag"
    (CAMP-046: a folha sobe com o crédito "Autoria não confirmada" até alguém registrar a autoria), mas vira uma marca pequena no rodapé. */
 function folhaJaConferida(it){return !!(it&&it.lote_id&&it.revisao&&it.revisao!=='pendente')}
 function avisosFolha(it){return [it.autoria_divergente?['autoria não confirmada','O autor lido no carimbo não é o titular do fundo: a folha sobe com o crédito "Autoria não confirmada" até alguém registrar a autoria.']:null,
-  it.duplicata_de?['duplicata','Marcada como cópia de '+it.duplicata_de]:null,
+  dupAConferir(it)?['duplicata','Marcada como cópia de '+it.duplicata_de]:null,
   it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it)?['espelhada?','O CAMP Vision achou que foi digitalizada pelo verso: a prévia já sai espelhada. Confira na revisão.']:null].filter(Boolean)}
+/* CAMP-100 (exaustão): a cópia que uma pessoa já conferiu (tela Duplicatas) é um fato, não um problema: sai de "Com problema" e das contagens */
+function dupAConferir(it){return !!(it&&it.duplicata_de&&!(it.duplicata_conferida_em&&it.duplicata_conferida_de===it.duplicata_de))}
 function semImagemFolha(it){return (!usaPreviaFolha(it)&&!it.thumb_url)||!!(window.SEM_IMG_PJ&&window.SEM_IMG_PJ.has(it.codigo))}
 function flagsFolha(it){return [it.lote_id&&it.revisao==='pendente'?'conferir':'',folhaComProblema(it)?'problema':'',semImagemFolha(it)?'semimg':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':''].filter(Boolean).join(' ')}
 function contagemFolhas(its){const c={todas:its.length,conferir:0,problema:0,semimg:0,site:0,lote:0,conferidas:0};for(const it of its){const f=flagsFolha(it);if(f.includes('conferir'))c.conferir++;if(f.includes('problema'))c.problema++;if(f.includes('semimg'))c.semimg++;if(f.includes('site'))c.site++;if(it.lote_id){c.lote++;if(it.revisao!=='pendente')c.conferidas++}}return c}
@@ -3258,7 +3260,7 @@ function slParado(r,code){const l=r&&r.lote;if(!l||l.fase!=='erro')return {tem:f
   return {tem:true,estado:'falta',semDetalhe:true,txt:'parou com erro neste lote'+(l.erro_cv?': '+String(l.erro_cv).slice(0,160):''),
     acao:`<button class="btn sm" data-pj-problemas="${escHtml(code)}">Ver em Problemas</button>${op?` <button class="btn sm" data-releitura-projeto="${escHtml(code)}">Pedir releitura</button>`:''}`}}
 function contaProblemas(d){const er=(d&&d.erros)||[],tem=(c,cat)=>er.some(e=>e.codigo===c&&e.categoria===cat),   // fluxo real (20/10): a mesma regra das marcas da folha (espelhada só até ser conferida) e sem contar 2x o que já tem problema aberto
-    fl=((d&&d.itens)||[]).filter(i=>(i.autoria_divergente&&!tem(i.codigo,'autoria_divergente'))||(i.duplicata_de&&!tem(i.codigo,'duplicata'))||espelhadaAConferir(i)).length;
+    fl=((d&&d.itens)||[]).filter(i=>(i.autoria_divergente&&!tem(i.codigo,'autoria_divergente'))||(dupAConferir(i)&&!tem(i.codigo,'duplicata'))||espelhadaAConferir(i)).length;
   return {total:er.length+fl,bloq:er.filter(e=>e.gravidade==='bloqueia'&&e.categoria!=='autoria_divergente').length}}   // a mesma conta da condição "bloqueios" da publicação
 function slProblemas(d,code){const {total,bloq}=contaProblemas(d);if(!total)return {tem:false};
   const txt=`${fmtN(total)} ${total===1?'aviso':'avisos'}, ${bloq?`${fmtN(bloq)} ${bloq===1?'bloqueia':'bloqueiam'} a publicação`:'nenhum bloqueia a publicação'}`;
@@ -3972,7 +3974,7 @@ const CONF_FILTROS=[['todas','Todas'],['a_conferir','A conferir'],['problema','C
 function confFolhas(){return (window.ITENS_PJ||[]).filter(x=>x.lote_id)}
 function confTemImg(it){return !!((it.pendencias&&it.pendencias.previa)||it.thumb_url)}
 function confProblemas(it){const p=it.pendencias||{},o=[];
-  if(it.autoria_divergente)o.push(['r','autoria']);if(it.duplicata_de)o.push(['a','duplicata']);if(orientIncerta(it))o.push(['a','orientação incerta']);if(espelhadaAConferir(it))o.push(['a','espelhada?']);
+  if(it.autoria_divergente)o.push(['r','autoria']);if(dupAConferir(it))o.push(['a','duplicata']);if(orientIncerta(it))o.push(['a','orientação incerta']);if(espelhadaAConferir(it))o.push(['a','espelhada?']);
   if(projetoDivergente(p))o.push(['a','outro projeto?']);if(bloqueiosResolviveis(it).length)o.push(['r','bloqueada']);
   const er=confErrosFolha(it);if(er.length)o.push([er.some(e=>e.gravidade==='bloqueia')?'r':'a',er.length>1?`${er.length} problemas`:'problema']);return o}
 /* Fluxo real (20/10): os problemas ABERTOS da folha (ex.: "ano lido 1927 diverge do projeto") não apareciam no conferir; a pessoa clicava

@@ -341,7 +341,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.espelho_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar, i.rotacao_aplicada,
                i.endereco_folha, i.cliente_folha,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
-               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por
+               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por,
+               i.duplicata_conferida_em, i.duplicata_conferida_de
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -381,6 +382,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
                 "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"), "giro_manual": local.get("giro_manual"),
                 "recorte": local.get("recorte"), "alinhamento": local.get("alinhamento"),
+                "duplicata_conferida_em": local.get("duplicata_conferida_em"), "duplicata_conferida_de": local.get("duplicata_conferida_de"),
                 "origem_catalogacao": "local+site",
             })
         else:
