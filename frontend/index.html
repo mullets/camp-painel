@@ -3715,9 +3715,10 @@ function urlPreviaFolha(codigo,giro,t,esp,aj){return `/api/itens/${encodeURIComp
 function ajusteChave(it){if(!it||!(it.recorte||+it.alinhamento))return '';const r=it.recorte;return [+it.alinhamento||0].concat(r?[r.x,r.y,r.w,r.h]:[]).join('_')}
 async function abrirRevisaoItem(codigo){
   const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it){toast('Folha não encontrada na lista');return}
-  const vez=window._REV_ABRIR=(window._REV_ABRIR||0)+1;
+  const vez=window._REV_ABRIR=(window._REV_ABRIR||0)+1,tela0=rotaAtual().split('/')[0];
   let ed;try{ed=EU&&EU.papel==='leitura'?edicaoSoLeitura(await API('/api/itens/'+encodeURIComponent(codigo))):await API('/api/itens/'+encodeURIComponent(codigo)+'/edicao')}catch(e){if(vez===window._REV_ABRIR)toast(e.message);return}
   if(vez!==window._REV_ABRIR)return;   /* 19/10: outra folha foi pedida enquanto esta carregava (ex.: depois de mover/reter): a mais nova vale */
+  if(rotaAtual().split('/')[0]!==tela0||(window.PROJETO_PJ&&String(codigo).slice(0,10)!==window.PROJETO_PJ))return;   /* CAMP-082: a pessoa saiu da tela (ex.: "Está certo" e logo "← Projeto") enquanto a próxima folha carregava: a gaveta "Revisar folha" abria sozinha por cima da outra tela */
   const conf=revConf();   /* modo de conferir: o mesmo corpo vai para o painel da direita da tela, não para a gaveta */
   const p=it.pendencias||{},l=ed.local||{},op=EU&&['operador','admin','master'].includes(EU.papel),tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `;
   const aponta=apontaRevHTML(p,it);
