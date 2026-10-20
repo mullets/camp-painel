@@ -7779,7 +7779,8 @@ def filho(modo):
             d = raiz / nome; (d / "catalogacao").mkdir(parents=True)
             if pacote: (d / "catalogacao" / "pacote_tainacan.json").write_text(fix.replace("F026-P0001", P).replace("F026", "F099"), encoding="utf-8")
             return str(d)
-        lote = lambda nome, pq, etapa="revisao", extra="": c.execute(f"INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa{extra and ', descartado_em'}) VALUES (?,?,?,?{extra and ',datetime(\'now\')'})", (nome, P, pq, etapa)).lastrowid
+        _agora = ",datetime('now')"   # fora da f-string: barra invertida dentro de {} não compila no Python 3.11 do servidor
+        lote = lambda nome, pq, etapa="revisao", extra="": c.execute(f"INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa{extra and ', descartado_em'}) VALUES (?,?,?,?{extra and _agora})", (nome, P, pq, etapa)).lastrowid
         A = lote("A antigo, já importado", pasta("A"))
         for n in (11, 12):
             c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,status_site,pendencias,titulo,revisao) VALUES (?,?,?,?,?,?,?,?,?,?)",
