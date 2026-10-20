@@ -24,7 +24,13 @@ SINAIS = (("orientacao_incerta", "orientação incerta"), ("serie_incerta", "sé
 def fala_de_projeto_divergente(texto) -> bool:
     """O sinal ou bloqueio do CAMP Vision diz que a folha é de OUTRO projeto ("projeto divergente: o carimbo diz…", "folha de outra obra")."""
     t = "".join(ch for ch in unicodedata.normalize("NFD", str(texto or "")) if unicodedata.category(ch) != "Mn").lower().replace("_", " ")
-    return "projeto divergente" in t or "outro projeto" in t or "outra obra" in t
+    # 20/10 (CAMP-069): "sem identificação (pasta com várias obras)" e "outra pasta" são o mesmo caso: o CAMP Vision acha que a folha não é deste projeto
+    return any(k in t for k in ("projeto divergente", "outro projeto", "outra obra", "outra pasta", "sem identificacao"))
+
+
+SQL_CONFIRMADAS = ("SELECT DISTINCT e.codigo FROM evento e WHERE e.entidade='item' AND e.tipo='projeto_confirmado' AND e.codigo LIKE ? "
+                   "AND NOT EXISTS (SELECT 1 FROM evento d WHERE d.entidade='item' AND d.codigo=e.codigo AND d.tipo='projeto_confirmado_desfeito' AND d.id>e.id)")
+# folhas em que a ÚLTIMA palavra de uma pessoa foi "É deste projeto" (20/10: "Desfazer" grava projeto_confirmado_desfeito e a leitura nova volta a valer)
 
 
 def tirar_projeto_divergente(pend: dict) -> tuple[list, list]:
@@ -244,7 +250,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
 
     tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
     # folhas em que uma pessoa disse "É deste projeto (o CAMP Vision errou)": a leitura nova não traz o aviso de volta
-    confirmadas = {r[0] for r in con.execute("SELECT DISTINCT codigo FROM evento WHERE entidade='item' AND tipo='projeto_confirmado' AND codigo LIKE ?", (proj + "-%",))}
+    confirmadas = {r[0] for r in con.execute(SQL_CONFIRMADAS, (proj + "-%",))}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
     existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site, lote_id FROM item WHERE projeto_codigo=?", (proj,))}
     try:

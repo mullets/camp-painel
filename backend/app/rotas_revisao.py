@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from . import ajuste_imagem as ajuste, auth, giro_imagem as imagens
 from .db import connect
-from .importador_lote import importar_lote, ler_pacote, tirar_projeto_divergente
+from .importador_lote import CODIGO_DOCUMENTO, fala_de_projeto_divergente, importar_lote, ler_pacote, tirar_projeto_divergente
 from .rotas_operacao import _qnap_prontos_raiz
 
 router = APIRouter(prefix="/api", tags=["revisao"])
@@ -286,7 +286,9 @@ def confirmar_deste_projeto(codigo: str, u: dict = Depends(auth.exige("operador"
         con.execute("BEGIN IMMEDIATE")
         i = con.execute("SELECT status_site, pendencias, autoria_divergente FROM item WHERE codigo=?", (codigo,)).fetchone()
         if not i:
-            raise HTTPException(404, "Folha não existe")
+            out = _deste_projeto_retirada(con, codigo, u)        # 20/10 (CAMP-069): a folha que o CAMP Vision retirou por "ser de outra obra"
+            con.commit()
+            return out
         try:
             pend = json.loads(i["pendencias"] or "{}")
         except ValueError:
@@ -377,6 +379,163 @@ def bloqueio_resolvido(codigo: str, d: LiberarBloqueio, u: dict = Depends(auth.e
             _evento(con, "item", codigo, "bloqueio_resolvido", u["email"], {"bloqueios": tirar, "motivo": motivo})
         con.commit()
         return {"ok": True, "mudou": bool(tirar), "bloqueios_tirados": tirar, "bloqueios_restantes": pend.get("bloqueios") or [], "status_site": status, "pendencias": pend}
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+# ---------------- 20/10 · CAMP-069: folha "de outro projeto" que nem entrou no painel; desfazer "É deste projeto" ----------------
+def _retirada_no_pacote(con, codigo: str):
+    """(lote_id, entrada em `retirados`, pasta do lote) da folha que o CAMP Vision retirou. Lê só o pacote de cada lote do projeto (um arquivo; nunca varre o QNAP).
+    Primeiro o lote cujo resumo da importação cita a folha."""
+    for l in con.execute("SELECT id, pasta_qnap FROM lista_processamento WHERE projeto_codigo=? ORDER BY (COALESCE(resultado,'') LIKE ?) DESC, id DESC LIMIT 12",
+                         (codigo[:10], f'%"{codigo}"%')):
+        pasta = Path(l["pasta_qnap"] or "")
+        try:
+            pac = ler_pacote(pasta) if pasta.is_dir() else None
+        except (HTTPException, OSError):
+            pac = None
+        for r in (pac or {}).get("retirados") or []:
+            if isinstance(r, dict) and r.get("codigo") == codigo:
+                return l["id"], r, pasta
+    return None, None, None
+
+
+def _fala_de_outro_projeto(pendencias) -> bool:
+    try:
+        p = json.loads(pendencias or "{}")
+    except ValueError:
+        return False
+    return isinstance(p, dict) and any(fala_de_projeto_divergente(x) for k in ("sinais", "bloqueios") for x in (p.get(k) or []) if isinstance(p.get(k), list))
+
+
+def _imagem_da_folha_fora_do_painel(con, codigo: str):
+    """A imagem de uma folha que não está na tabela de folhas (o CAMP Vision a retirou do lote): a prévia do pacote, o JPG listado em `arquivos`
+    ou <pasta do lote>/<série>/JPG/<código>.jpg. Só serve arquivo de dentro da raiz dos prontos ou da pasta do lote."""
+    if not CODIGO_DOCUMENTO.match(codigo):
+        return None
+    raiz = _qnap_prontos_raiz()
+    _, r, pasta = _retirada_no_pacote(con, codigo)
+    if r:
+        rel = str(r.get("preview") or "")
+        if rel and raiz:
+            try:
+                cand = (raiz / rel).resolve()
+                if (raiz / "_campvision" / "preview").resolve() in cand.parents and cand.suffix.lower() in (".jpg", ".jpeg") and cand.stem == codigo and cand.is_file():
+                    return cand
+            except OSError:
+                pass
+        for a in r.get("arquivos") or []:
+            if str(a).lower().endswith((".jpg", ".jpeg")) and raiz:
+                alvo = jpg_da_folha_no_qnap(raiz, str(a))
+                if alvo:
+                    return alvo
+    pastas = [pasta] if pasta else [Path(x[0] or "") for x in con.execute("SELECT pasta_qnap FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC LIMIT 6", (codigo[:10],))]
+    for p in pastas:
+        try:
+            if not p.is_dir():
+                continue
+            base = p.resolve()
+            for sub in [p, *sorted(x for x in p.iterdir() if x.is_dir())][:40]:
+                for cand in (sub / "JPG" / f"{codigo}.jpg", sub / f"{codigo}.jpg"):
+                    c = cand.resolve()
+                    if (c.parent == base or base in c.parents) and c.is_file():
+                        return c
+        except OSError:
+            continue
+    return None
+
+
+def _deste_projeto_retirada(con, codigo: str, u: dict) -> dict:
+    """"É deste projeto" numa folha que o CAMP Vision RETIROU por achar que é de outra obra (ou sem identificação): devolve a folha ao lote
+    (como o "Devolver à revisão" do admin, mas só para esse motivo, que é decisão de quem confere), fecha os problemas do CAMP Vision sobre ela
+    e grava no histórico. A folha entra no painel na próxima importação do lote (a tela importa logo em seguida)."""
+    if not CODIGO_DOCUMENTO.match(codigo):
+        raise HTTPException(404, "Folha não existe")
+    erros = con.execute("""SELECT id, categoria, descricao, chave FROM erro WHERE origem='campvision' AND situacao IN ('aberto','em_correcao')
+                            AND (codigo=? OR chave=?)""", (codigo, f"campvision:retirado:{codigo}")).fetchall()
+    lote_id, r, _ = _retirada_no_pacote(con, codigo)
+    txt = " ".join([str(x) for x in ((r or {}).get("bloqueios") or [])] + [str((r or {}).get("motivo") or "")])
+    de_outro = bool(r) and bool(r.get("projeto_divergente") or r.get("sem_identificacao") or fala_de_projeto_divergente(txt))
+    de_outro = de_outro or any(e["categoria"] == "projeto_errado" or fala_de_projeto_divergente(e["descricao"]) for e in erros)
+    if not r and not erros:
+        raise HTTPException(404, "Folha não existe")
+    if not de_outro:
+        raise HTTPException(409, "O CAMP Vision retirou esta folha por outro motivo (não por ser de outro projeto). Só um admin a devolve, em Problemas.")
+    if lote_id is None:
+        l = con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=? ORDER BY (COALESCE(resultado,'') LIKE ?) DESC, id DESC LIMIT 1",
+                        (codigo[:10], f'%"{codigo}"%')).fetchone()
+        if not l:
+            raise HTTPException(409, "Não achei o lote desta folha: importe o lote do CAMP Vision antes.")
+        lote_id = l["id"]
+    ja = con.execute("SELECT 1 FROM cv_resposta WHERE lote_id=? AND tipo='retirado' AND chave=?", (lote_id, codigo)).fetchone()
+    if not ja:
+        con.execute("INSERT INTO cv_resposta (lote_id, projeto_codigo, tipo, chave, acao, motivo, por) VALUES (?,?,'retirado',?,'devolver',?,?)",
+                    (lote_id, codigo[:10], codigo, "É deste projeto (o CAMP Vision errou)", u["email"]))
+    alvo = [e["id"] for e in erros if e["chave"] == f"campvision:retirado:{codigo}" or e["categoria"] == "projeto_errado" or fala_de_projeto_divergente(e["descricao"])]
+    fechados = 0
+    for eid in alvo:
+        fechados += con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=? WHERE id=?",
+                                (f"É deste projeto: {u['email']} confirmou no painel (o CAMP Vision errou).", eid)).rowcount
+    mudou = not ja or bool(fechados)
+    if mudou:
+        _evento(con, "item", codigo, "projeto_confirmado", u["email"], {"retirada": True, "lote": lote_id, "problemas_fechados": fechados,
+                                                                         "sinais_tirados": [], "bloqueios_tirados": [], "situacao_liberada": False})
+    return {"ok": True, "mudou": mudou, "retirada": True, "lote_id": lote_id, "problemas_fechados": fechados, "situacao_liberada": False,
+            "sinais_tirados": [], "bloqueios_tirados": [], "status_site": None, "bloqueios_restantes": [], "pendencias": None}
+
+
+_AVISO_DESFEITO = "projeto divergente: uma pessoa desfez o \"É deste projeto\" no painel"
+
+
+@router.post("/itens/{codigo}/deste-projeto/desfazer")
+def desfazer_deste_projeto(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """20/10 (CAMP-069, "refazer a ação"): desfaz o último "É deste projeto" da folha. O aviso do CAMP Vision volta (o mesmo texto que saiu; se não
+    houver registro, um aviso genérico de projeto divergente), a folha volta a 'bloqueado' se tinha sido liberada por isso, os problemas que a decisão
+    fechou reabrem e a folha retirada deixa de ser devolvida ao lote. A próxima importação respeita (o aviso não some de novo). Folha no site: despublique antes."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        ev = con.execute("""SELECT id, detalhe FROM evento e WHERE entidade='item' AND codigo=? AND tipo='projeto_confirmado'
+                             AND NOT EXISTS (SELECT 1 FROM evento d WHERE d.entidade='item' AND d.codigo=e.codigo AND d.tipo='projeto_confirmado_desfeito' AND d.id>e.id)
+                             ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
+        if not ev:
+            raise HTTPException(409, "Não há \"É deste projeto\" para desfazer nesta folha.")
+        try:
+            det = json.loads(ev["detalhe"] or "{}") or {}
+        except ValueError:
+            det = {}
+        i = con.execute("SELECT status_site, pendencias FROM item WHERE codigo=?", (codigo,)).fetchone()
+        out = {"ok": True, "status_site": None, "pendencias": None, "problemas_reabertos": 0, "devolucao_cancelada": False}
+        if i:
+            if i["status_site"] in ("rascunho", "no_ar"):
+                raise HTTPException(409, "Esta folha já está no site. Despublique pela página da folha antes de desfazer.")
+            try:
+                pend = json.loads(i["pendencias"] or "{}")
+            except ValueError:
+                pend = {}
+            pend = pend if isinstance(pend, dict) else {}
+            for chave in ("sinais", "bloqueios"):
+                atual = [x for x in (pend.get(chave) or []) if x] if isinstance(pend.get(chave), list) else []
+                pend[chave] = atual + [x for x in (det.get(chave + "_tirados") or []) if x not in atual]
+            if not any(fala_de_projeto_divergente(x) for x in pend["sinais"] + pend["bloqueios"]):
+                pend["bloqueios"].append(_AVISO_DESFEITO)
+            status = i["status_site"]
+            if pend["bloqueios"] and status == "nao_publicado":
+                status = "bloqueado"
+            con.execute("UPDATE item SET pendencias=?, status_site=?, atualizado_em=datetime('now') WHERE codigo=?", (json.dumps(pend, ensure_ascii=False), status, codigo))
+            out.update(status_site=status, pendencias=pend)
+        if det.get("retirada"):
+            out["devolucao_cancelada"] = con.execute("DELETE FROM cv_resposta WHERE tipo='retirado' AND acao='devolver' AND chave=? AND motivo='É deste projeto (o CAMP Vision errou)'",
+                                                     (codigo,)).rowcount > 0
+        out["problemas_reabertos"] = con.execute("""UPDATE erro SET situacao='aberto', resolvido_em=NULL, resolucao=NULL
+                                                    WHERE (codigo=? OR chave=?) AND situacao='ignorado' AND resolucao LIKE 'É deste projeto:%'""",
+                                                 (codigo, f"campvision:retirado:{codigo}")).rowcount
+        _evento(con, "item", codigo, "projeto_confirmado_desfeito", u["email"], {k: out[k] for k in ("status_site", "problemas_reabertos", "devolucao_cancelada")})
+        con.commit()
+        return out
     except HTTPException:
         con.rollback()
         raise
@@ -727,8 +886,14 @@ def previa(codigo: str, t: int = 0, o: int = 0, u: dict = Depends(auth.exige("le
             alvo = cand
     if alvo is None:                                   # lote anterior ao preview do CAMP Vision: o JPG da folha no QNAP (sempre DENTRO da raiz dos prontos)
         alvo = jpg_da_folha_no_qnap(raiz, i["arquivo_jpg"] if i else None)
+    if alvo is None and (not i or _fala_de_outro_projeto(i["pendencias"])):   # 20/10 (CAMP-069): folha retirada/"de outro projeto": ver antes de decidir
+        c2 = connect()
+        try:
+            alvo = _imagem_da_folha_fora_do_painel(c2, codigo)
+        finally:
+            c2.close()
     if alvo is None:
-        raise HTTPException(404, "Sem prévia")
+        raise HTTPException(404, "Sem prévia" if i else "Sem imagem: a folha não está no painel e não achei o JPG dela no lote")
     giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
     esp = bool(i) and imagens.espelho_efetivo(i)
     rec, ang = ajuste.ler(i) if i and not o else (None, 0.0)

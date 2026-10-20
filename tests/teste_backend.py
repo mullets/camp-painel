@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas"}
+MODOS_RAPIDOS = {"importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7571,6 +7571,105 @@ def filho(modo):
             "/autoria-confirmada'" in html and "data-cf-bloqueio-ok=" in html and "/bloqueio-resolvido'" in html and "${op&&er?`<button type=\"button\" class=\"btn sm\" data-cf-autoria-ok" not in html)
         c.close()
         for l in res: print(l)
+    elif modo == "camp069_outro_projeto":
+        # 20/10 (CAMP-069, operadora no F009-P0092): "reconhecimento automático de folhas de outros projetos, não é possível abrir para checar, ou refazer
+        # a ação". A folha que o CAMP Vision achou "de outra obra" é RETIRADA do lote: não existe no painel, o link não abria nada e só um admin a devolvia.
+        # Prova: (a) a imagem dela abre (JPG da pasta do lote); (b) "É deste projeto" vale para a retirada (operador), fecha os problemas e ela entra na
+        # importação seguinte liberada; (c) motivo que não é "outro projeto" continua só com admin; (d) "Desfazer" volta o aviso, reabre os problemas, e a
+        # reimportação respeita; refazer libera de novo; (e) "sem identificação (pasta com várias obras)" é o mesmo caso.
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile as _tf, pathlib as _pl
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.importador_lote import importar_lote
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',92)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0092','F099',92,'Residência Luiz Sales',1970)")
+        pasta = _pl.Path(_tf.mkdtemp(prefix="c069-lote-"))
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Luiz Sales','F099-P0092',?,'revisao')", (str(pasta),)).lastrowid
+        c.commit()
+        D = lambda n: f"F099-P0092-1970-S01-D{n:05d}"
+        (pasta / "catalogacao").mkdir()
+        (pasta / "01 - Desenhos e pranchas" / "JPG").mkdir(parents=True)
+        (pasta / "01 - Desenhos e pranchas" / "JPG" / f"{D(5)}.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+        doc = lambda n: {"codigo": D(n), "titulo": f"Prancha {n}", "publicavel": True, "bloqueios": [], "arquivos": []}
+        ret5 = {"codigo": D(5), "titulo": "Prancha 5", "publicavel": False, "projeto_divergente": True, "arquivos": [],
+                "bloqueios": ["projeto divergente: o carimbo diz 'Residência Fulano'"]}
+        ret6 = {"codigo": D(6), "titulo": "Prancha 6", "publicavel": False, "duplicata_de": D(1), "arquivos": [], "bloqueios": ["duplicata de " + D(1)]}
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"versao": 2, "projeto_codigo": "F099-P0092", "documentos": [doc(1)], "retirados": [ret5, ret6]}), encoding="utf-8")
+        (pasta / "catalogacao" / "erros.json").write_text(_j.dumps([{"arquivo": D(5), "categoria": "projeto errado", "gravidade": "bloqueia",
+            "detalhe": f"{D(5)[11:]} com identificação para outra pasta (RESIDÊNCIA FULANO) — fora da publicação até resolver"}]), encoding="utf-8")
+        importar_lote(c, lote, "teste"); c.commit()
+        from app.importador_lote import registrar_erros_cv
+        registrar_erros_cv(c, "F099-P0092", pasta); c.commit()
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        abertos = lambda n: q("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao')", D(n))[0]
+        pend = lambda n: _j.loads((q("SELECT pendencias FROM item WHERE codigo=?", D(n)) or ['{"sinais": [], "bloqueios": []}'])[0])
+        st = lambda n: (q("SELECT status_site FROM item WHERE codigo=?", D(n)) or [None])[0]
+        ver("cenário: D5 retirada (outra obra) fora do painel, com 2 problemas abertos (retirada + erros.json que bloqueia)",
+            q("SELECT COUNT(*) FROM item WHERE codigo=?", D(5))[0] == 0 and abertos(5) == 2, f"abertos={abertos(5)}")
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        # (a) ver a folha antes de decidir
+        r = le.get(f"/api/itens/{D(5)}/previa")
+        ver("(a) a imagem da folha retirada abre (JPG da pasta do lote), até para leitura; antes: 404 'Sem prévia'", r.status_code == 200 and r.content == b"\xff\xd8\xff\xd9", f"HTTP {r.status_code} {r.text[:120]}")
+        r = le.get(f"/api/itens/{D(7)}/previa")
+        ver("(a) folha sem imagem em lugar nenhum: 404 com o motivo em português", r.status_code == 404 and "não achei o JPG" in r.text, r.text[:160])
+        # (b) É deste projeto, na retirada
+        ver("(b) leitura não pode decidir (403)", le.post(f"/api/itens/{D(5)}/deste-projeto").status_code == 403)
+        r = op.post(f"/api/itens/{D(5)}/deste-projeto"); j = r.json() if r.status_code == 200 and isinstance(r.json(), dict) else {}
+        ver("(b) operador diz 'É deste projeto' na folha retirada (antes: 404 'Folha não existe'); fecha os 2 problemas",
+            r.status_code == 200 and j.get("retirada") is True and j.get("lote_id") == lote and j.get("problemas_fechados") == 2 and abertos(5) == 0, f"HTTP {r.status_code} {r.text[:200]}")
+        ver("(b) fica registrado: devolução ao lote e histórico com quem decidiu",
+            q("SELECT por FROM cv_resposta WHERE lote_id=? AND tipo='retirado' AND chave=?", lote, D(5)) is not None
+            and q("SELECT ator FROM evento WHERE codigo=? AND tipo='projeto_confirmado'", D(5))[0] == "op@camp.arq.br")
+        ver("(b) repetir não duplica nada", (op.post(f"/api/itens/{D(5)}/deste-projeto").json() or {}).get("mudou") is False
+            and q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='projeto_confirmado'", D(5))[0] == 1)
+        importar_lote(c, lote, "teste"); c.commit()
+        ver("(b) importar de novo: a folha entra no painel, sem o aviso e liberada (não bloqueia publicar)",
+            st(5) == "nao_publicado" and pend(5)["bloqueios"] == [] and abertos(5) == 0,
+            f"{st(5)} {pend(5)}")
+        # (c) retirada por outro motivo
+        r = op.post(f"/api/itens/{D(6)}/deste-projeto")
+        ver("(c) retirada por duplicata: 'É deste projeto' recusa (409) e continua com admin", r.status_code == 409 and "admin" in r.text and abertos(6) == 1, r.text[:160])
+        # (d) desfazer e refazer
+        ver("(d) sem decisão para desfazer: 409", op.post(f"/api/itens/{D(1)}/deste-projeto/desfazer").status_code == 409)
+        ver("(d) leitura não desfaz (403)", le.post(f"/api/itens/{D(5)}/deste-projeto/desfazer").status_code == 403)
+        r = op.post(f"/api/itens/{D(5)}/deste-projeto/desfazer"); j = r.json() if r.status_code == 200 else {}
+        ver("(d) desfazer: o aviso de outro projeto volta, a folha volta a 'bloqueado', os 2 problemas reabrem e a devolução sai",
+            r.status_code == 200 and st(5) == "bloqueado" and any("projeto divergente" in b for b in pend(5)["bloqueios"])
+            and abertos(5) == 2 and j.get("devolucao_cancelada") is True and q("SELECT 1 FROM cv_resposta WHERE chave=?", D(5)) is None, f"HTTP {r.status_code} {r.text[:240]}")
+        importar_lote(c, lote, "teste"); c.commit()
+        r = le.get(f"/api/itens/{D(5)}/previa")
+        ver("(a) já no painel, com o aviso de outro projeto e sem prévia do CAMP Vision: a imagem ainda vem da pasta do lote", r.status_code == 200, f"HTTP {r.status_code} {r.text[:120]}")
+        ver("(d) reimportar depois de desfazer: o aviso continua (a leitura volta a valer)", st(5) == "bloqueado"
+            and any("projeto divergente" in b for b in pend(5)["bloqueios"]), str(pend(5)))
+        ver("(d) desfazer de novo: 409 (já desfeito)", op.post(f"/api/itens/{D(5)}/deste-projeto/desfazer").status_code == 409)
+        r = op.post(f"/api/itens/{D(5)}/deste-projeto")
+        ver("(d) refazer 'É deste projeto' na folha (agora no painel) libera de novo e fecha os problemas",
+            r.status_code == 200 and (r.json() or {}).get("mudou") is True and st(5) == "nao_publicado" and abertos(5) == 0, r.text[:200])
+        # desfazer numa folha que estava livre (sinal só): volta o sinal, não bloqueia à toa
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, status_site, pendencias, titulo) VALUES (?,?,?,?,?,?,?,?,?)",
+                  (D(8), "F099-P0092", "S01", 8, "campvision", lote, "nao_publicado", _j.dumps({"sinais": ["sem identificação (pasta com várias obras)"], "bloqueios": []}), "P8"))
+        c.commit()
+        r = op.post(f"/api/itens/{D(8)}/deste-projeto")
+        ver("(e) 'sem identificação (pasta com várias obras)' também sai com 'É deste projeto'", r.status_code == 200 and (r.json() or {}).get("mudou") is True and pend(8)["sinais"] == [], r.text[:200])
+        r = op.post(f"/api/itens/{D(8)}/deste-projeto/desfazer")
+        ver("(d) desfazer numa folha que só tinha sinal: o sinal volta e ela NÃO fica bloqueada", r.status_code == 200 and pend(8)["sinais"] == ["sem identificação (pasta com várias obras)"]
+            and pend(8)["bloqueios"] == [] and st(8) == "nao_publicado", r.text[:200])
+        c.execute("UPDATE item SET status_site='no_ar' WHERE codigo=?", (D(5),)); c.commit()
+        ver("(d) folha no site: desfazer recusa (409, despublicar antes)", op.post(f"/api/itens/{D(5)}/deste-projeto/desfazer").status_code == 409)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: ver a folha, 'É deste projeto' e 'Desfazer' nas listas de problemas (data-*, nunca onclick)",
+            "data-fp-folha=" in html and "/deste-projeto/desfazer'" in html and "data-deste-desfazer=" in html and "onclick=\"desteProjeto" not in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "tirar_folha":
         # 19/10 ("quando salvo que é pra tirar uma folha do projeto, ele salva e pula pra próxima folha, mas não tá funcionando bem"):
         # (a) reter folha de lote JÁ APROVADO (fora do site) e "Desfazer" (liberar): a resposta traz a revisão (conferida), que a tela usa;
@@ -9230,6 +9329,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp068: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("142) CAMP-069 (20/10): folha 'de outro projeto' retirada pelo CAMP Vision: ver a imagem, 'É deste projeto' e desfazer")
+rc, out = rodar("camp069_outro_projeto", f"{tmp}/camp069.db")
+if rc != 0: ok(False, f"teste camp069 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp069: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

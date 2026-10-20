@@ -544,7 +544,7 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 /* 19/10 proposta B: quatro cartões de situação no topo do projeto + gavetas (uma aberta de cada vez); o passo a passo antigo fica só nas gavetas */
 .pj-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 14px}
 .pjc{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;min-width:0}
-.fim-conf .fim-passo{text-align:left;margin:12px 0 4px}.fim-conf .fim-passo .panel{margin:0}.pj-probs{margin:0;padding:0;list-style:none;display:grid;gap:6px}.pj-probs li{font-size:var(--fs-sm2)}
+.fim-conf .fim-passo{text-align:left;margin:12px 0 4px}.fim-conf .fim-passo .panel{margin:0}.pj-probs{margin:0;padding:0;list-style:none;display:grid;gap:6px}.pj-probs li{font-size:var(--fs-sm2)}.fp-box{display:flex;gap:12px;align-items:flex-start;margin:8px 0}.fp-box .fp-img{flex:0 0 auto;display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface2);cursor:zoom-in}.fp-box .fp-mini{display:block;width:180px;max-height:180px;object-fit:contain}.fp-box.mini .fp-mini{width:110px;max-height:110px}.fp-acoes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.fp-acoes .help{flex-basis:100%;margin:0}.fp-box.linha{margin:4px 0 0;align-items:center;gap:8px}.fp-box .sem-imagem{max-width:240px}
 .pjc.ok{border-top-color:var(--green)}.pjc.at{border-top-color:var(--amber)}.pjc.bl{border-top-color:var(--red)}
 .pjc-k{font-size:var(--fs-sm);color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
 .pjc-v{font-size:24px;font-weight:700;margin:2px 0 4px;line-height:1.2;overflow-wrap:anywhere}
@@ -3272,7 +3272,10 @@ function pjCartoesHTML(code){const g=pjGav(code),c=escHtml(code),sec=(k,tit,corp
    (lote parado por erro > problemas que impedem publicar > dados a decidir). Se a pessoa fechar, não reabre. */
 function pjProbsHTML(code){const d=window.PJ_D||{},L=((d.erros)||[]).filter(e=>e.gravidade==='bloqueia'&&['aberto','em_correcao'].includes(e.situacao||'aberto'));
   if(!L.length)return '<p class="help">Nenhum problema impede publicar.</p>';
-  return `<ul class="pj-probs">${L.slice(0,30).map(e=>{const cod=String(e.codigo||''),folha=/^F\d{3}-P\d{4}-/.test(cod);return `<li><span class="tag r">${escHtml(rotulo(e.categoria))}</span> ${folha?`<a class="lnk code" href="#conferir/${escHtml(code)}/${escHtml(cod)}">${escHtml(cod.slice(11))}</a>`:`<span class="code">${escHtml(cod)}</span>`} <span>${escHtml(e.descricao||'')}</span></li>`}).join('')}</ul>${L.length>30?`<p class="help">e mais ${L.length-30}.</p>`:''}<p class="pj-gav-rodape"><button type="button" class="btn sm" data-pjc-resolver="${escHtml(code)}">Abrir em Problemas</button></p>`}
+  const its=new Set((window.ITENS_PJ||[]).map(i=>i.codigo)),vistos=new Set();   /* 20/10 (CAMP-069): folha "de outro projeto" mostra a imagem e as decisões; uma linha por folha */
+  return `<ul class="pj-probs">${L.slice(0,30).map(e=>{const cod=String(e.codigo||''),folha=/^F\d{3}-P\d{4}-/.test(cod)&&cod.length>11,existe=its.has(cod);
+    if(folha&&ehDeOutroProjeto(e)){if(vistos.has(cod))return '';vistos.add(cod);return `<li class="pj-prob-fp"><span class="tag r">${escHtml(rotulo(e.categoria))}</span> <span class="code">${escHtml(cod.slice(11))}</span> <span>${escHtml(e.descricao||'')}</span>${foraProjetoHTML(cod,{mini:true,existe})}</li>`}
+    return `<li><span class="tag r">${escHtml(rotulo(e.categoria))}</span> ${folha&&existe?`<a class="lnk code" href="#conferir/${escHtml(code)}/${escHtml(cod)}">${escHtml(cod.slice(11))}</a>`:`<span class="code">${escHtml(folha?cod.slice(11):cod)}</span>`} <span>${escHtml(e.descricao||'')}</span></li>`}).join('')}</ul>${L.length>30?`<p class="help">e mais ${L.length-30}.</p>`:''}<p class="pj-gav-rodape"><button type="button" class="btn sm" data-pjc-resolver="${escHtml(code)}">Abrir em Problemas</button></p>`}
 function pjAutoAbrir(code){const g=pjGav(code);if(g.aberta||g.fechou||g.auto)return;const q=k=>document.querySelector(`#pj-cards [data-pjc="${k}"]`);
   const k=q('folhas')&&q('folhas').classList.contains('bl')?'folhas':q('problemas')&&q('problemas').classList.contains('bl')?'problemas':q('dados')&&q('dados').classList.contains('at')?'dados':null;
   if(!k)return;g.auto=true;g.aberta=k;const gv=document.getElementById('pj-gaveta');if(!gv)return;gv.hidden=false;gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!==k)}
@@ -3718,20 +3721,55 @@ function edicaoSoLeitura(d){d=d||{};const local={};['titulo','folha','escala','d
 function apontaRevHTML(p,it){const tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `,ok=folhaJaConferida(it);p=p||{};return [...(p.bloqueios||[]).map(x=>tag('r',x)),...(p.sinais||[]).map(x=>ok&&/orienta[cç][aã]o incerta/i.test(x)?tag('g',x+': conferida'):tag('a',x)),...(p.ressalvas||[]).map(x=>tag('a',x))].join('')||'<small class="help">Nada apontado.</small>'}
 /* Sírio, 19/10: o CAMP Vision marcou "projeto divergente" numa folha que está na pasta certa. A pessoa diz "É deste projeto": o aviso sai,
    e o bloqueio também (se era o único). Fica no histórico. Código só em data-*. */
-function falaDeProjetoDivergente(t){return /projeto divergente|outro projeto|outra obra/.test(semAcento(t).replace(/_/g,' '))}
+function falaDeProjetoDivergente(t){return /projeto divergente|outro projeto|outra obra|outra pasta|sem identificacao/.test(semAcento(t).replace(/_/g,' '))}   /* 20/10 (CAMP-069): "sem identificação" e "outra pasta" são o mesmo caso */
 function projetoDivergente(p){return !!p&&[...(Array.isArray(p.sinais)?p.sinais:[]),...(Array.isArray(p.bloqueios)?p.bloqueios:[])].some(falaDeProjetoDivergente)}
 function desteProjetoHTML(codigo){return `<div class="rev-deste" data-deste-box="${escHtml(codigo)}"><p class="help"><span class="tag a">projeto divergente</span> O CAMP Vision acha que esta folha é de outro projeto. Se ela é deste, tire o aviso.</p><button class="btn sm" type="button" data-deste-projeto="${escHtml(codigo)}">É deste projeto (o CAMP Vision errou)</button></div>`}
 async function desteProjeto(cod){
-  if(!await confirmar({titulo:'Esta folha é deste projeto?',alvo:cod,texto:'O aviso "projeto divergente" do CAMP Vision sai desta folha. Se era o único bloqueio, ela volta a poder ir ao site (depois de conferida e com o lote aprovado). Fica no histórico da folha.',botao:'É deste projeto'}))return;
+  if(!await confirmar({titulo:'Esta folha é deste projeto?',alvo:cod,texto:'O aviso "projeto divergente" do CAMP Vision sai desta folha. Se era o único bloqueio, ela volta a poder ir ao site (depois de conferida e com o lote aprovado). Se o CAMP Vision tinha tirado a folha do lote, ela volta e entra no painel para conferir. Fica no histórico da folha, e dá para desfazer.',botao:'É deste projeto'}))return;
   let r;try{r=await API('/api/itens/'+encodeURIComponent(cod)+'/deste-projeto',{method:'POST'})}catch(e){toast(e.message);return}
+  if(r.retirada){await fpVoltouAoLote(cod,r);return}
   const it=(window.ITENS_PJ||[]).find(x=>x.codigo===cod);if(it){it.pendencias=r.pendencias||it.pendencias;it.status_site=r.status_site||it.status_site}
   const resta=(r.bloqueios_restantes||[]).length;
-  toast(!r.mudou?`A folha ${cod} já estava sem o aviso`:r.situacao_liberada?`Folha ${cod}: aviso tirado; ela pode ir ao site`:resta?`Folha ${cod}: aviso tirado; continua bloqueada por: ${r.bloqueios_restantes.join('; ')}`:`Folha ${cod}: aviso tirado`);
+  toast(!r.mudou?`A folha ${cod} já estava sem o aviso`:r.situacao_liberada?`Folha ${cod}: aviso tirado; ela pode ir ao site`:resta?`Folha ${cod}: aviso tirado; continua bloqueada por: ${r.bloqueios_restantes.join('; ')}`:`Folha ${cod}: aviso tirado`,r.mudou?{acao:{rotulo:'Desfazer',fn:()=>desfazerDesteProjeto(cod)}}:{});
+  fpAtualizarListas();
   const naRev=revisaoMostra(cod);
   if(naRev){document.querySelectorAll(`[data-deste-box="${CSS.escape(cod)}"]`).forEach(x=>x.remove());const ch=document.getElementById('rv-chips');if(ch)ch.innerHTML=apontaRevHTML(r.pendencias||(it&&it.pendencias),it);atualizarCartaoRevisao(cod)}   /* não redesenha: o que foi digitado fica */
   else if(rotaAtual()==='item/'+cod)showItem(cod);
   if(window.PROJETO_PJ&&window.PROJETO_PJ===cod.slice(0,10))carregarRevisaoLote(window.PROJETO_PJ)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-deste-projeto]');if(!b||b.disabled)return;e.preventDefault();e.stopPropagation();desteProjeto(b.dataset.desteProjeto)},true);
+/* 20/10 (CAMP-069, operadora no F009-P0092): "não consigo abrir esses arquivos e acho que são sim do mesmo projeto". A folha que o CAMP Vision achou
+   de outra obra muitas vezes nem entrou no painel (foi retirada do lote): o link não abria nada. Agora, onde ela aparece como problema: a imagem
+   (um clique abre grande em outra aba; a prévia vem até da pasta do lote), "É deste projeto", "É de outro projeto…" e, depois, "Desfazer". Código só em data-*. */
+function ehDeOutroProjeto(e){return !!e&&(e.categoria==='projeto_errado'||falaDeProjetoDivergente(e.descricao||''))}
+function foraProjetoHTML(cod,o={}){const c=escHtml(cod),decide=EU&&EU.papel!=='leitura',adm=EU&&['admin','master'].includes(EU.papel);
+  const outro=!decide?'':o.existe&&!adm?`<button class="btn sm" type="button" disabled title="Mover a folha para outro projeto é com um admin">É de outro projeto…</button> <small class="help">mover: peça a um admin</small>`:`<button class="btn sm" type="button" data-fp-outro="${c}">É de outro projeto…</button>`;
+  if(o.linha)return `<div class="fp-box linha" data-fp-box="${c}"><a class="lnk" href="/api/itens/${encodeURIComponent(cod)}/previa" target="_blank" rel="noopener" data-fp-folha="${c}" title="Abrir a imagem grande em outra aba">Ver a folha</a>${decide?` <button class="btn sm" type="button" data-deste-projeto="${c}">É deste projeto</button>${o.existe?'':' '+outro}`:''}</div>`;
+  return `<div class="fp-box${o.mini?' mini':''}" data-fp-box="${c}" data-fp-existe="${o.existe?'1':''}"><a class="fp-img" href="/api/itens/${encodeURIComponent(cod)}/previa" target="_blank" rel="noopener" data-fp-folha="${c}" title="Abrir a imagem grande em outra aba"><img class="fp-mini" src="/api/itens/${encodeURIComponent(cod)}/previa?t=${o.mini?240:480}" alt="Folha ${escHtml(String(cod).slice(11))}" loading="lazy"></a>
+    <div class="fp-acoes">${o.mini?'':'<p class="help">O CAMP Vision acha que esta folha é de outro projeto. Olhe a imagem (clique para abrir grande) e decida.</p>'}${decide?`<button class="btn sm${o.mini?'':' pri'}" type="button" data-deste-projeto="${c}">É deste projeto</button>${outro}`:''}</div></div>`}
+function fpSemImagem(img){const a=img.closest('.fp-img'),box=img.closest('[data-fp-box]');if(!a||!box)return;const d=document.createElement('div');
+  d.innerHTML=semImagemHTML('Não há imagem desta folha no painel nem na pasta do lote.',box.dataset.fpExiste?box.dataset.fpBox:null,true);a.replaceWith(d.firstChild)}
+document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.classList&&t.classList.contains('fp-mini'))fpSemImagem(t)},true);
+function fpErrosDaFolha(cod){const vistos=new Set(),L=[];for(const e of [...(window.ERR_LISTA||[]),...((window.PJ_D||{}).erros||[]),...(window.ERR_ATUAL?[window.ERR_ATUAL]:[])]){const f=e.folha||e.codigo;
+  if(f===cod&&!vistos.has(e.id)&&['aberto','em_correcao'].includes(e.situacao||'aberto')){vistos.add(e.id);L.push(e.id)}}return L}
+async function fpOutro(cod){const existe=(window.ITENS_PJ||[]).some(i=>i.codigo===cod)||[...(window.ERR_LISTA||[]),...(window.ERR_ATUAL?[window.ERR_ATUAL]:[])].some(e=>e.folha===cod&&e.folha_existe);
+  if(existe){errExecutar('mover',{folha:cod,projeto_codigo:cod.slice(0,10)});return}
+  const ids=fpErrosDaFolha(cod);
+  if(!await confirmar({titulo:'Esta folha é de outro projeto?',alvo:cod,texto:'O CAMP Vision já deixou a folha fora deste projeto: ela continua fora do painel e do site. Os problemas sobre ela fecham (dá para reabrir em Problemas).',botao:'É de outro projeto'}))return;
+  try{if(ids.length)await API('/api/erros/lote',{method:'POST',body:JSON.stringify({ids,situacao:'corrigido',resolucao:'É de outro projeto: a folha fica fora deste projeto (a retirada do CAMP Vision está certa).'})});toast(`Folha ${cod}: fica fora deste projeto`)}catch(e){toast(e.message);return}
+  closeDrawer(true);fpAtualizarListas()}
+async function fpVoltouAoLote(cod,r){toast(`Folha ${cod}: volta ao projeto. Lendo o lote de novo…`);let ok=false;
+  try{await API('/api/lotes/'+encodeURIComponent(r.lote_id)+'/importar',{method:'POST'});ok=true}catch(e){}
+  toast(ok?`Folha ${cod} voltou ao projeto: está no painel para conferir`:`Folha ${cod}: decisão gravada. Ela entra no painel quando o lote for importado de novo`,{acao:{rotulo:'Desfazer',fn:()=>desfazerDesteProjeto(cod)}});
+  closeDrawer(true);fpAtualizarListas(true)}
+async function desfazerDesteProjeto(cod){let r;try{r=await API('/api/itens/'+encodeURIComponent(cod)+'/deste-projeto/desfazer',{method:'POST'})}catch(e){toast(e.message);return}
+  const it=(window.ITENS_PJ||[]).find(x=>x.codigo===cod);if(it&&r.pendencias){it.pendencias=r.pendencias;it.status_site=r.status_site||it.status_site}
+  toast(`Desfeito: a folha ${cod} voltou a ter o aviso de outro projeto`+(r.problemas_reabertos?` (${r.problemas_reabertos} problema(s) reaberto(s))`:''));
+  closeDrawer(true);if(rotaAtual()==='item/'+cod)showItem(cod);fpAtualizarListas(true)}
+function fpAtualizarListas(projeto){if(document.getElementById('v-erros')?.classList.contains('on'))carregarErros();
+  const pj=window.PROJETO_PJ;if(pj){if(projeto&&rotaAtual()==='projeto/'+pj)showProjeto(pj);else carregarRevisaoLote(pj)}}
+document.addEventListener('click',e=>{const o=e.target.closest('[data-fp-outro]'),d=e.target.closest('[data-deste-desfazer]');if(!o&&!d)return;e.preventDefault();e.stopPropagation();
+  if(o)fpOutro(o.dataset.fpOutro);else desfazerDesteProjeto(d.dataset.desteDesfazer)},true);
+document.addEventListener('click',e=>{if(e.target.closest('[data-fp-folha]'))e.stopPropagation()},true);   /* abrir a imagem não abre a gaveta da linha */
 /* H9: sem imagem, "Está certo" pergunta antes (conferir às cegas é o erro que a revisão existe para evitar) */
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-rev-item="conferida"][data-sem-imagem]');if(!b||b.dataset.ok)return;e.stopImmediatePropagation();e.preventDefault();   /* immediate: o ouvinte de [data-rev-item] também está no document e salvava antes da resposta */
   if(await confirmar({titulo:'Confirmar sem ver a imagem?',alvo:b.dataset.codigo,texto:'Esta folha não tem imagem para conferir. O ideal é pedir ao CAMP Vision para ler de novo antes.',botao:'Confirmar mesmo assim'})){b.dataset.ok='1';b.click()}},true);
@@ -4948,10 +4986,14 @@ function errSituacaoHTML(e){const dias=diasDesde(e.criado_em);
   if(e.situacao==='aberto')return `<span class="tag ${dias>7?'a':''}">${dias<1?'aberto hoje':`aberto há ${qtd(dias,'dia','dias')}`}</span>`;
   if(e.situacao==='em_correcao')return `<span class="tag b">em correção</span><br><small class="help">há ${qtd(dias,'dia','dias')}</small>`;
   return `<span class="tag ${e.situacao==='ignorado'?'':'g'}">${e.situacao==='ignorado'?'não era problema':'corrigido'}</span><br><small class="help">${escHtml(fmtData(e.resolvido_em||e.criado_em))}</small>`}
+/* 20/10 (CAMP-069): folha "de outro projeto" na tela Problemas: a imagem e as decisões (aberto); "Desfazer" (fechado por "É deste projeto") */
+function errFpHTML(e,mini){if(!e.folha||!ehDeOutroProjeto(e)&&e.tipo!=='retirada')return '';const ab=ERR_ABERTO(e);
+  if(ab&&ehDeOutroProjeto(e))return foraProjetoHTML(e.folha,{linha:mini,existe:!!e.folha_existe});
+  return !ab&&/^É deste projeto:/.test(e.resolucao||'')&&EU&&EU.papel!=='leitura'?`<div class="act"><button class="btn sm" type="button" data-deste-desfazer="${escHtml(e.folha)}">Desfazer "É deste projeto"</button></div>`:''}
 function errLinhaHTML(e,k,oculto){const ab=ERR_ABERTO(e),res=pode('problema.resolver');
   return `<tr data-abrir="erro:${escHtml(e.id)}" data-err-linha="${escHtml(e.id)}" data-err-grupo="${escHtml(k)}"${oculto?' hidden':''}><td class="err-sel-col">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.codigo)}">`:''}</td>
     <td><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span></td><td>${errOnde(e)}</td>
-    <td><p class="err-oque"><b>${escHtml(rotulo(e.categoria))}</b> — ${escHtml(e.descricao)}</p>${k==='~talvez'&&e.resolvido_sozinho?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}${ab&&e.fazer&&k!=='~talvez'?`<span class="err-fazer">O que fazer: ${escHtml(e.fazer)}</span>`:''}${!ab&&e.resolucao?`<span class="err-det">Resolução: ${escHtml(e.resolucao)}</span>`:''}${k!=='~talvez'?errAcaoBotao(e):''}</td>
+    <td><p class="err-oque"><b>${escHtml(rotulo(e.categoria))}</b> — ${escHtml(e.descricao)}</p>${k==='~talvez'&&e.resolvido_sozinho?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}${ab&&e.fazer&&k!=='~talvez'?`<span class="err-fazer">O que fazer: ${escHtml(e.fazer)}</span>`:''}${!ab&&e.resolucao?`<span class="err-det">Resolução: ${escHtml(e.resolucao)}</span>`:''}${k!=='~talvez'?errAcaoBotao(e):''}${errFpHTML(e,true)}</td>
     <td>${origemErroHTML(e)}</td><td>${errSituacaoHTML(e)}</td></tr>`}
 function errGrupoHTML(k,L){const talvez=k==='~talvez',e0=L[0],fechado=!talvez&&ERR_GR_FECHADOS.has(k),res=pode('problema.resolver'),abertos=L.filter(ERR_ABERTO);
   const nome=talvez?'<b>Podem já estar resolvidos</b> <span class="err-gr-resumo">a folha sumiu, mudou de código ou já foi girada: confira e feche</span>':e0.projeto_codigo?`<b>${escHtml(tituloExibicao(e0.projeto_titulo||'')||'Projeto sem nome')}</b> <span class="code">${escHtml(e0.projeto_codigo)}</span>`:e0.fundo_codigo?`<b>${escHtml(e0.fundo_titulo||'Fundo')}</b> <span class="code">${escHtml(e0.fundo_codigo)}</span>`:`<span class="code">${escHtml(k)}</span>`;
@@ -5032,7 +5074,7 @@ async function abrirErro(id,o={}){let e;try{e=await API('/api/erros/'+id)}catch(
   const so=e.resolvido_sozinho&&ab?`<div class="err-aviso-sozinho" role="status"><b>Pode já estar resolvido.</b> ${escHtml(e.resolvido_sozinho.motivo)}</div>`:'';
   openDrawer(e.tipo==='retirada'?'Folha retirada pelo CAMP Vision':e.tipo==='recusada'?'Folha recusada na importação':rotulo(e.categoria),e.codigo,`${so}<div class="err-bloco"><p>${onde}</p></div>
     <div class="err-bloco"><h3>O que aconteceu</h3><p>${escHtml(e.o_que||'')}</p><p class="help">${escHtml(e.descricao)}</p></div>
-    ${ab?`<div class="err-bloco"><h3>O que fazer</h3><p>${escHtml(e.fazer||'')}</p>${e.tipo==='retirada'?extra:acao?`<div class="act">${acao}</div>`:''}</div>`:''}
+    ${ab?`<div class="err-bloco"><h3>O que fazer</h3><p>${escHtml(e.fazer||'')}</p>${ehDeOutroProjeto(e)&&e.folha?errFpHTML(e,false):e.tipo==='retirada'?extra:acao?`<div class="act">${acao}</div>`:''}</div>`:errFpHTML(e,false)}
     <dl class="kv"><dt>Gravidade</dt><dd><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span>${e.gravidade==='bloqueia'?' <small class="help">o projeto não pode ser publicado até resolver</small>':''}</dd><dt>Origem</dt><dd>${escHtml((ORIGEM_ERRO[e.origem]||[])[2]||rotulo(e.origem))}${e.relatado_por?' · '+escHtml(e.relatado_por):''}</dd><dt>Relatado em</dt><dd>${fmtDataHora(e.criado_em)}</dd><dt>Situação</dt><dd>${errSituacaoHTML(e)}</dd>${e.resolucao&&(!ab||!res)?`<dt>Resolução</dt><dd>${escHtml(e.resolucao)}</dd>`:''}</dl>
     ${res?`<div class="cfg"><input type="hidden" id="ee-sit" value="${escHtml(e.situacao)}"><label class="field">${ab?'Já resolveu? Diga em uma frase o que foi feito (ou por que não era problema)':'Resolução'}<textarea id="ee-res" rows="2" placeholder="ex.: a folha foi movida para F026-P0001">${escHtml(e.resolucao||'')}</textarea><small class="erro-txt" id="ee-res-err"></small></label>
       <div class="act">${ab?`<button class="btn${acao||extra?'':' pri'}" data-err-res="corrigido" data-err-id="${escHtml(e.id)}">Marcar como corrigido</button><button class="btn" data-err-res="ignorado" data-err-id="${escHtml(e.id)}">Não era problema</button>${e.situacao==='aberto'?`<button class="btn" data-err-res="em_correcao" data-err-id="${escHtml(e.id)}">Estou corrigindo</button>`:''}`:`<button class="btn" data-err-res="aberto" data-err-id="${escHtml(e.id)}">Reabrir</button>`}</div></div>`:''}
