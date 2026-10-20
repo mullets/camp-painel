@@ -77,7 +77,7 @@ def contexto(con, erros: list) -> dict:
     folhas = {c for c in cods if c.count("-") >= 4} | {f for e in erros if (f := folha_da_chave(e))}
     projs = {c[:10] for c in cods if _PROJ.match(c)}
     fundos = {c[:4] for c in cods if re.match(r"^F\d{3}", c)}
-    ctx = {"projetos": {}, "fundos": {}, "itens": {}, "por_anterior": {}, "devolvidas": {}, "lotes": {}, "eventos": {}, "copias": {}}
+    ctx = {"projetos": {}, "fundos": {}, "itens": {}, "por_anterior": {}, "devolvidas": {}, "lotes": {}, "eventos": {}, "copias": {}, "retiradas": set()}
     for parte in _em_lotes(projs):
         q = ",".join("?" * len(parte))
         for r in con.execute(f"SELECT codigo, titulo, fundo_codigo, mesclado_em, descartado_em, status_site FROM projeto WHERE codigo IN ({q})", parte):
@@ -94,6 +94,10 @@ def contexto(con, erros: list) -> dict:
         q = ",".join("?" * len(parte))
         for r in con.execute(f"SELECT codigo, projeto_codigo, duplicata_de, codigo_anterior, giro_manual, espelho_manual, lote_id FROM item WHERE codigo IN ({q})", parte):
             ctx["itens"][r["codigo"]] = dict(r)
+        # CAMP-096 (exaustão, 20/10): folhas que o CAMP Vision RETIROU do lote (nunca entraram no painel). O problema "outra pasta" do erros.json
+        # sobre elas não é "folha que sumiu": antes a tela dizia "Esta folha não existe mais no painel… Confira e feche" num problema que impede publicar.
+        for r in con.execute(f"SELECT substr(chave, 21) FROM erro WHERE chave IN ({','.join('?' * len(parte))})", [f"campvision:retirado:{f}" for f in parte]):
+            ctx["retiradas"].add(r[0])
         for r in con.execute(f"SELECT codigo, codigo_anterior FROM item WHERE codigo_anterior IN ({q})", parte):
             ctx["por_anterior"][r["codigo_anterior"]] = r["codigo"]
         for r in con.execute(f"SELECT codigo, tipo, max(quando) AS quando FROM evento WHERE entidade='item' AND tipo IN ('folha_movida','duplicata_marcada') AND codigo IN ({q}) GROUP BY codigo, tipo", parte):
@@ -160,6 +164,13 @@ def explicar(e, ctx: dict) -> dict:
                     sozinho = {"seguro": True, "motivo": f"A folha foi movida para o projeto {novo[:10]} (agora é {novo})."}
                 else:
                     sozinho = {"seguro": False, "motivo": f"A folha mudou de código: agora é {novo}. Confira se o problema continua."}
+            elif folha in ctx["retiradas"]:
+                from .importador_lote import fala_de_projeto_divergente
+                if e["categoria"] == "projeto_errado" or fala_de_projeto_divergente(e["descricao"]):
+                    o_que = "O CAMP Vision tirou esta folha do lote por achar que é de outro projeto. Ela não está no painel e não vai ao site."
+                    fazer = "Veja a folha. Se for deste projeto, \"É deste projeto\" a devolve ao lote; se não for, \"É de outro projeto…\" e ela fica fora."
+                else:
+                    o_que = "O CAMP Vision tirou esta folha do lote antes da revisão. Ela não está no painel e não vai ao site."
             else:
                 sozinho = {"seguro": False, "motivo": "Esta folha não existe mais no painel (foi apagada ou mudou de código). Confira e feche."}
             acao = "abrir_projeto" if pj else None

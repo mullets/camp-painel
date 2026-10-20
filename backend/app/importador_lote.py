@@ -87,6 +87,25 @@ def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
     return next(iter(achados)) if len(achados) == 1 and None not in achados else None
 
 
+def _pessoa_decidiu_duplicata(con, cod: str, de: str) -> bool:
+    """CAMP-101: a releitura do CAMP Vision não desfaz o que uma pessoa decidiu na tela de duplicatas. Pula a marcação "cod é cópia de de" quando:
+    - a pessoa já julgou esta folha frente a ESSA original ("Não é duplicata", ou já conferiu): duplicata_conferida_em com conferida_de = de
+      (ou sem original: sugestão dispensada). Se o CAMP Vision apontar OUTRA original, volta a pedir conferência (migração 139);
+    - marcar fecharia um ciclo: a pessoa fez de `cod` a que vai ao site ("Publicar esta em vez da outra") e `de` agora é cópia dela.
+    Antes, "Não é duplicata" voltava a ser cópia (e contava como conferida) e a troca virava D4→D29→D4: nenhuma das duas ia ao site."""
+    r = con.execute("SELECT duplicata_conferida_em, duplicata_conferida_de FROM item WHERE codigo=?", (cod,)).fetchone()
+    if r and r["duplicata_conferida_em"] and r["duplicata_conferida_de"] in (de, None):
+        return True
+    atual, vistos = de, set()
+    while atual and atual not in vistos and len(vistos) < 60:      # segue a cadeia a partir da original: se chega em `cod`, seria ciclo
+        vistos.add(atual)
+        nxt = con.execute("SELECT duplicata_de FROM item WHERE codigo=?", (atual,)).fetchone()
+        atual = nxt["duplicata_de"] if nxt else None
+        if atual == cod:
+            return True
+    return False
+
+
 def _categoria_retirado(r: dict, motivos: list[str]) -> str:
     txt = " ".join(motivos).lower()
     if r.get("autoria_divergente") or "autoria" in txt:
@@ -253,12 +272,11 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     confirmadas = {r[0] for r in con.execute(SQL_CONFIRMADAS, (proj + "-%",))}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
     existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site, lote_id FROM item WHERE projeto_codigo=?", (proj,))}
-    movidas_para_fora = {r[0] for r in con.execute("SELECT codigo_anterior FROM item WHERE codigo_anterior LIKE ? AND projeto_codigo<>?", (proj + "-%", proj))}
     try:
         complemento = bool((json.loads(lote["resultado"] or "{}") or {}).get("complemento"))
     except ValueError:
         complemento = False
-    em_outro_lote = 0
+    em_outro_lote = movidas_fora = 0
     criados = atualizados = ignoradas = 0
     problemas: list[str] = []
     duplicatas: list[tuple] = []
@@ -273,9 +291,6 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             problemas.append(f"{cod or '(sem código)'}: código inválido, de outro projeto ou de série desconhecida")
             continue
         serie, seq = m.group(4), int(m.group(5))
-        if cod in movidas_para_fora:
-            ignoradas += 1                                         # a folha foi movida para outro projeto: a pasta antiga não a traz de volta
-            continue
         cob = cobertas.get(cod)
         if cob:
             if cob["situacao"] == "pendente":
@@ -300,6 +315,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                                        "existente_lote": col["lote_id"], "existente_revisao": col["revisao"], "existente_status": col["status_site"],
                                        "existente_titulo": col["titulo"], "titulo": (d.get("titulo") or "").strip() or None})
                 continue
+        if cod not in existentes and con.execute("SELECT 1 FROM item WHERE codigo_anterior=? AND projeto_codigo<>?", (cod, proj)).fetchone():
+            movidas_fora += 1                                      # CAMP-098: uma pessoa moveu esta folha para outro projeto; a releitura não a recria aqui
+            continue
         if complemento and cod in existentes and existentes[cod]["lote_id"] not in (None, lote_id):
             em_outro_lote += 1                                     # lote de COMPLEMENTO: só traz as folhas novas; o que já é de outro lote (publicado, aprovado…) não se mexe
             continue
@@ -345,6 +363,12 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         publicavel = bool(d.get("publicavel"))
         if cod in confirmadas and any(tirar_projeto_divergente(pend)) and not pend["bloqueios"] and not d.get("autoria_divergente"):
             publicavel = True                                       # o projeto divergente era o que prendia a folha, e uma pessoa já disse que não é
+        if d.get("duplicata_de") and ex and not con.execute("SELECT duplicata_de FROM item WHERE codigo=?", (cod,)).fetchone()[0] \
+                and _pessoa_decidiu_duplicata(con, cod, str(d["duplicata_de"])):
+            # CAMP-101: uma pessoa disse que esta folha NÃO é cópia (ou a fez a que vai ao site): o bloqueio "duplicata de …" da releitura não volta
+            pend["bloqueios"] = [b for b in pend["bloqueios"] if "duplicat" not in str(b).lower()]
+            if not pend["bloqueios"] and not d.get("autoria_divergente"):
+                publicavel = True
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipo_do_painel(tipo_lido, tipos), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
@@ -377,7 +401,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if d.get("duplicata_de"):
             duplicatas.append((cod, str(d["duplicata_de"]), d.get("tipo_duplicata")))
     for cod, de, tipo in duplicatas:                               # depois de todas existirem (a referência é de item para item)
-        if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone():
+        if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone() and not _pessoa_decidiu_duplicata(con, cod, de):
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
     registrados = registrar_problemas(con, proj, pacote, problemas, lote_id) + registrar_erros_cv(con, proj, pasta)
@@ -389,6 +413,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     except ValueError:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
+              **({"movidas_para_outro_projeto": movidas_fora} if movidas_fora else {}),
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
@@ -421,7 +446,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))
     from .estacao_eventos import conferir_contagem      # CAMP-017: o que a estação disse que enviou × o que chegou (só aviso)
     _n = lambda v: len(v) if isinstance(v, (list, tuple, set, dict)) else int(v or 0)  # noqa: E731
-    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados))
+    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora))
     if cf:
         resumo["contagem_estacao"] = cf
     return resumo

@@ -122,7 +122,8 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         restam = len(pend) - criadas - len(falhas)
         if falhas:
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
-                    "mensagem": f"{len(falhas)} folha(s) não subiram ao site; nada foi publicado. Corrija e clique de novo: o que já subiu não se repete."}
+                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")   # CAMP-111: "1 folha(s) não subiram" virava "1 folha não subiram"
+                    + " ao site; nada foi publicado. Corrija e clique de novo: o que já subiu não se repete."}
         if restam > 0:
             return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam,
                     "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}

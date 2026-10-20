@@ -236,3 +236,45 @@ def copiar(codigo: str, d: CopiarParceiros, u: dict = Depends(auth.exige("operad
         raise
     finally:
         con.close()
+
+
+class DesfazerCopia(BaseModel):
+    itens: list[str]
+
+
+@router.post("/itens/{codigo}/parceiros/copiar/desfazer")
+def desfazer_copia(codigo: str, d: DesfazerCopia, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """CAMP-087: desfaz "Copiar para outras folhas". Cada folha volta ao que tinha ANTES da última cópia vinda desta folha (o 'antes' do histórico),
+    só se ninguém mexeu nos parceiros dela depois (senão fica como está e a resposta diz por quê). Grava no histórico."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        voltaram, ficaram = [], []
+        for cod in dict.fromkeys(d.itens or []):
+            ev = None
+            for r in con.execute("SELECT detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado' ORDER BY id DESC LIMIT 20", (cod,)):
+                try:
+                    det = json.loads(r["detalhe"] or "{}")
+                except ValueError:
+                    continue
+                if "parceiros" in (det.get("depois") or {}):
+                    ev = det
+                    break
+            atual = con.execute("SELECT parceiros FROM item WHERE codigo=?", (cod,)).fetchone()
+            if not atual or not ev or ev.get("copiado_de") != codigo:
+                ficaram.append({"codigo": cod, "motivo": "a última mudança de parceiros não foi esta cópia"}); continue
+            if ler(atual["parceiros"]) != ev["depois"]["parceiros"]:
+                ficaram.append({"codigo": cod, "motivo": "os parceiros mudaram depois da cópia"}); continue
+            antes = ev["antes"]["parceiros"]
+            con.execute("UPDATE item SET parceiros=?, atualizado_em=datetime('now') WHERE codigo=?", (para_coluna(antes), cod))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'editado',?,?)",
+                        (cod, u["email"], json.dumps({"antes": {"parceiros": ev["depois"]["parceiros"]}, "depois": {"parceiros": antes},
+                                                      "copia_desfeita_de": codigo}, ensure_ascii=False)))
+            voltaram.append(cod)
+        con.commit()
+        return {"ok": True, "voltaram": voltaram, "ficaram": ficaram}
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()

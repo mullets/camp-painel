@@ -77,8 +77,14 @@ def condicoes_projeto(con, p) -> dict:
                       "acao": None if aceito else {"tipo": "revisao", "rotulo": "Ver o lote", "alvo": codigo}})
 
     teste = bool(p["lote_teste"])
+    # CAMP-114: o lote de teste do CAMP Vision é ignorado (não importa folhas); o projeto que a estação reservou para ele ficava "pronto"
+    # com "Publicar" e criava uma página vazia no site. Sem nenhuma folha e com lote de teste anotado, é lote de teste.
+    so_teste = not teste and bool(con.execute("SELECT 1 FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='lote_teste_ignorado' LIMIT 1", (codigo,)).fetchone()) \
+        and not con.execute("SELECT 1 FROM item WHERE projeto_codigo=? LIMIT 1", (codigo,)).fetchone()
+    teste = teste or so_teste
     conds.append({"id": "teste", "bloqueia": True, "ok": not teste, "texto": "Não é lote de teste",
-                  "detalhe": "Lote de teste não vai ao ar" if teste else None, "acao": None})
+                  "detalhe": ("Só chegou lote de teste do CAMP Vision para este projeto: o painel não importa nem publica" if so_teste
+                              else "Lote de teste não vai ao ar" if teste else None), "acao": None})
 
     # REVISÃO (a mesma regra do plano da publicação guiada): folha vinda do CAMP Vision precisa estar conferida e o lote aprovado
     nao_conf = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND duplicata_de IS NULL", (codigo,)).fetchone()[0]

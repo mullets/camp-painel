@@ -146,8 +146,10 @@ def _ano_da_folha(con, it) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None) -> dict:
-    """Move as folhas para o destino (transação já aberta por quem chama). Devolve o que foi movido, as duplicatas e o que foi ignorado."""
+def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None, soltar_lote: bool = False) -> dict:
+    """Move as folhas para o destino (transação já aberta por quem chama). Devolve o que foi movido, as duplicatas e o que foi ignorado.
+    `soltar_lote` (CAMP-098, folha movida por uma pessoa): a folha deixa o lote do projeto de origem (lote_id fica no histórico). Antes ela
+    continuava contando no lote de lá ("Faltam conferir 1 de 7") e o lote nunca podia ser aprovado. Mover o LOTE inteiro não solta."""
     d = _destino_valido(con, destino)
     ano = int(d["ano"] or 0)
     seq = con.execute("SELECT COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (destino,)).fetchone()[0]
@@ -186,9 +188,14 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         con.execute("""UPDATE item SET codigo=?, projeto_codigo=?, sequencial=?, codigo_anterior=?,
                        tainacan_item_id=NULL, status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
                        atualizado_em=datetime('now') WHERE codigo=?""", (novo, destino, seq, c, c))
+        lote_antigo = it["lote_id"] if soltar_lote and it["lote_id"] and con.execute(
+            "SELECT 1 FROM lista_processamento WHERE id=? AND projeto_codigo<>?", (it["lote_id"], destino)).fetchone() else None
+        if lote_antigo:
+            con.execute("UPDATE item SET lote_id=NULL WHERE codigo=?", (novo,))
         _trocar_codigo(con, c, novo)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'folha_movida',?,?)",
-                    (novo, ator, _json.dumps({"de": c, "para": novo, "motivo": motivo, "tainacan_item_id_antigo": tinha_site}, ensure_ascii=False)))
+                    (novo, ator, _json.dumps({"de": c, "para": novo, "motivo": motivo, "tainacan_item_id_antigo": tinha_site,
+                                              **({"lote_id_antigo": lote_antigo} if lote_antigo else {})}, ensure_ascii=False)))
         movidos.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site)})
     if movidos:                                                    # 19/10: "folha de outro projeto" fecha quando a folha é movida (com registro no histórico)
         from .problemas import fechar_resolvidos
@@ -247,7 +254,7 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
     """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou)."""
     if not d.itens:
         raise HTTPException(400, "Escolha pelo menos uma folha.")
-    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo), simular=d.simular)
+    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True), simular=d.simular)
     if d.simular:
         return {**r, "simulado": True}
     tarefas.add_task(_enviar_redirecionamentos)

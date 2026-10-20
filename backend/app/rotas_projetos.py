@@ -329,6 +329,30 @@ def folha_qnap_arquivo(codigo: str, lote: int, caminho: str, u: dict = Depends(a
     return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/projetos/{codigo}/marca")
+def marca_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-120 (exaustão, 20/10): uma "marca" curta do estado do projeto (folhas, lotes, problemas, pedidos de releitura, cadastro).
+    A página aberta pergunta de tempos em tempos; se a marca mudou (o CAMP Vision releu, outra pessoa aprovou, a releitura terminou),
+    mostra "Este projeto mudou" com "Atualizar", sem redesenhar sozinha (não apaga o que a pessoa está digitando). Só consultas por índice."""
+    import hashlib
+    con = connect()
+    try:
+        p = con.execute("SELECT atualizado_em, status_site, titulo, capa_item FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        partes = [tuple(p),
+                  tuple(con.execute("""SELECT COUNT(*), MAX(atualizado_em), SUM(revisao!='pendente'), SUM(status_site='no_ar'), SUM(retida), MAX(revisado_em)
+                                       FROM item WHERE projeto_codigo=?""", (codigo,)).fetchone()),
+                  tuple(con.execute("""SELECT GROUP_CONCAT(id||':'||etapa||':'||COALESCE(aprovado_em,'')||':'||COALESCE(atualizado_em,'')||':'||COALESCE(descartado_em,''))
+                                       FROM lista_processamento WHERE projeto_codigo=?""", (codigo,)).fetchone()),
+                  tuple(con.execute("""SELECT COUNT(*), MAX(id), MAX(resolvido_em) FROM erro WHERE codigo=? OR codigo LIKE ?""", (codigo, codigo + "-%")).fetchone()),
+                  tuple(con.execute("""SELECT COUNT(*), SUM(situacao IN ('aberto','em_correcao')) FROM erro WHERE codigo=? OR codigo LIKE ?""", (codigo, codigo + "-%")).fetchone()),
+                  tuple(con.execute("SELECT MAX(id), GROUP_CONCAT(estado) FROM pedido_releitura WHERE projeto_codigo=?", (codigo,)).fetchone())]
+        return {"marca": hashlib.sha1(json.dumps(partes, default=str).encode()).hexdigest()[:16]}
+    finally:
+        con.close()
+
+
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
@@ -341,7 +365,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.espelho_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar, i.rotacao_aplicada,
                i.endereco_folha, i.cliente_folha,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
-               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por
+               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por,
+               i.duplicata_conferida_em, i.duplicata_conferida_de
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -381,6 +406,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
                 "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"), "giro_manual": local.get("giro_manual"),
                 "recorte": local.get("recorte"), "alinhamento": local.get("alinhamento"),
+                "duplicata_conferida_em": local.get("duplicata_conferida_em"), "duplicata_conferida_de": local.get("duplicata_conferida_de"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -442,13 +468,26 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """, (codigo, projetos_cid, p["tainacan_item_id"] or -1)).fetchone()
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
+    # exaustão CAMP-108: decisões pendentes sobre ESTE projeto (o CAMP Vision parado perguntando se o que chegou é ele; dado diferente do cadastro).
+    # Campo novo e opcional: a página mostra a pergunta e quem decide.
+    decisoes_pend = []
+    from .decisoes import contexto as _ctx_dec, pergunta as _perg_dec
+    for dd in con.execute("SELECT * FROM decisao WHERE situacao='pendente' AND fundo_codigo=? AND contexto LIKE ? ORDER BY id", (p["fundo_codigo"], f'%"{codigo}"%')).fetchall():
+        cx = _ctx_dec(dd)
+        cands = [c.get("codigo") for c in (cx.get("candidatos") or []) if isinstance(c, dict)]
+        if codigo in cands or cx.get("projeto_codigo") == codigo:
+            decisoes_pend.append({"id": dd["id"], "tipo": dd["tipo"] or "projeto_parecido", "titulo": dd["titulo"], "origem": dd["origem"],
+                                  "criada_em": dd["criada_em"], "pergunta": _perg_dec(dd, cx)})
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     # Folha movida aparece nos DOIS projetos: no destino (o código novo começa com o projeto) e na origem (o código antigo, em detalhe.de).
     eventos = [dict(r) for r in con.execute("""SELECT tipo, ator, quando, detalhe, entidade, codigo FROM evento
                                                 WHERE (entidade='projeto' AND codigo=?)
                                                    OR (entidade='item' AND tipo='folha_movida'
                                                        AND (codigo LIKE ? OR (json_valid(detalhe) AND json_extract(detalhe, '$.de') LIKE ?)))
-                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%"))]
+                                                   OR (entidade='lista' AND tipo IN ('lote_descartado','lote_movido')
+                                                       AND codigo IN (SELECT CAST(id AS TEXT) FROM lista_processamento WHERE projeto_codigo=?))
+                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%", codigo))]
+    # CAMP-078 (20/10, exaustão): o descarte de um lote do projeto não aparecia no Histórico do projeto (o evento é do lote)
     from .livro_cv import historico as _livro
     livro_cv = _livro(con, codigo)
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
@@ -494,7 +533,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
             "fonte_visual": fonte_visual, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
-            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto}
+            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto,
+            "decisoes_pendentes": decisoes_pend}
 
 
 @router.get("/itens/{codigo}")
@@ -601,6 +641,9 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         campos.append("atualizado_em=datetime('now')")
         con.execute(f"UPDATE projeto SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'editado',?,?)", (codigo, u["email"], json.dumps({"antes": {k: p[k] for k in mud}, "depois": mud}, ensure_ascii=False)))
+        if any(k in mud for k in ("ano", "cidade", "cliente")):
+            from .decisoes import fechar_divergencias_respondidas
+            fechar_divergencias_respondidas(con, codigo, u["email"])   # exaustão CAMP-106: a mesma pergunta não fica esperando de novo em Decisões
         con.commit()
     con.close()
     site = None

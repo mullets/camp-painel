@@ -67,7 +67,8 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         for l in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas, l.status_json, l.resultado,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
-                                FROM lista_processamento l WHERE l.projeto_codigo=? ORDER BY l.id DESC""", (codigo,)):
+                                FROM lista_processamento l WHERE l.projeto_codigo=? AND l.descartado_em IS NULL ORDER BY l.id DESC""", (codigo,)):
+            # CAMP-078 (20/10, exaustão): lote descartado não é trabalho (a Fila já o tirava); o cartão Folhas continuava "o CAMP Vision está lendo"
             d = dict(l)
             d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
             d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"])
