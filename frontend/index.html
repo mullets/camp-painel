@@ -414,7 +414,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 @media(max-width:700px){.ajuda-caixa .aj-passos{display:none}}.ajuda-caixa .aj-passos-m{display:none}@media(max-width:700px){.ajuda-caixa .aj-passos-m{display:block}.ajuda-caixa .aj-passos-m ol{margin:4px 0 0 18px;padding:0}}
 .ajuda-caixa [data-ajuda-fechar]{min-height:32px}   /* H1: alvo de toque */
 [hidden]{display:none!important}
-.aviso-bloqueio{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fbeaea;border:1px solid #c0392b;color:var(--ink);padding:10px 12px;border-radius:var(--r);margin-bottom:10px}
+.aviso-cv-menor{background:var(--amber-soft,#fdf3e1);border:1px solid #e0b25a;padding:8px 12px;border-radius:var(--r);margin-bottom:10px}.aviso-cv-menor p{margin:0 0 4px}.aviso-cv-menor ul{margin:0;padding-left:18px}.aviso-cv-menor li{margin:4px 0}.aviso-bloqueio{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fbeaea;border:1px solid #c0392b;color:var(--ink);padding:10px 12px;border-radius:var(--r);margin-bottom:10px}
 .lab-origem{font-weight:600;margin:0 0 8px;min-height:1.3em}
 .sel-cel{width:44px;min-width:44px;cursor:pointer}.sel-cel input{width:18px;height:18px;cursor:pointer}
 tr[data-abrir],tr[data-nav]{cursor:pointer}tr[data-abrir]:hover td{background:var(--surface2)}
@@ -3316,8 +3316,10 @@ function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},i
   if(l&&l.fase==='processando')d.push(l.etapa==='enviado'?'na fila do CAMP Vision':'o CAMP Vision está lendo as folhas');
   if(S.cv&&S.cv.tem&&S.cv.estado==='falta'&&!parado){if(o.cor!=='bl')o.cor='at';d.push('CAMP Vision: '+escHtml(S.cv.txt))}
   if(parado){o.cor='bl';urg=true;d.push(`<b class="pjc-erro">Lote parado por erro do CAMP Vision</b>${l.erro_cv?`: ${escHtml(String(l.erro_cv).slice(0,120))}`:''}`);if(op)acoes+=` <button type="button" class="btn sm" data-releitura-projeto="${C}">Pedir releitura</button>`}
+  const avCv=(u&&u.avisos_cv)||[];   /* CAMP-122 (P1): aviso [Minor] do exiftool não é erro: 1 linha, sem vermelho */
+  if(avCv.length&&!parado)d.push(`<span class="pjc-aviso-cv">${qtd(avCv.length,'aviso do CAMP Vision','avisos do CAMP Vision')} · não impede publicar</span>`);
   if(impBt)acoes=impBt+(acoes&&acoes!==ver?' '+acoes:'');
-  const temDet=lotes.length||parado||(S.cv&&S.cv.tem);
+  const temDet=lotes.length||parado||avCv.length||(S.cv&&S.cv.tem);
   o.acoes=acoes+(temDet?` <button type="button" class="lnk pjc-lnk" data-pjc-gav="folhas" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='folhas'}">Detalhes dos lotes</button>`:'');
   return {html:pjcCartao('folhas','Folhas',o),urg}}
 function pjcProblemas(code,d){const k=contaProblemas(d),C=escHtml(code),o={d:[]};
@@ -3380,8 +3382,12 @@ function desenharCartoes(code){const box=document.getElementById('pj-cards');if(
 /* CAMP-074 (20/10, exaustão): com o lote parado por erro, a gaveta "Detalhes dos lotes" abria sozinha mas não dizia o erro (só o cartão),
    e o quadro do CAMP Vision ainda dizia "O CAMP Vision entregou o lote". Agora a gaveta começa pelo erro, com o que fazer. */
 function pjLoteParado(code){const u=window.PP_ULT&&window.PP_ULT.code===code?window.PP_ULT.r:null,l=u&&u.lote;return l&&l.fase==='erro'?l:null}
-function pjGavErroHTML(code){const l=pjLoteParado(code);if(!l)return '';const op=EU&&['operador','admin','master'].includes(EU.papel);
-  return `<div class="aviso-bloqueio" role="alert"><p><b>✖ O CAMP Vision parou com erro neste lote.</b>${l.erro_cv?` Ele disse: “${escHtml(String(l.erro_cv))}”.`:' Ele não deixou a mensagem do erro.'}</p><p class="help">Nada foi importado deste lote. ${op?'Peça uma releitura; se o erro voltar, avise quem cuida do CAMP Vision.':'Avise um operador ou admin.'}</p>${op?`<p><button type="button" class="btn sm" data-releitura-projeto="${escHtml(code)}">Pedir releitura</button></p>`:''}</div>`}
+function pjGavErroHTML(code){const l=pjLoteParado(code),op=EU&&['operador','admin','master'].includes(EU.papel),u=window.PP_ULT&&window.PP_ULT.code===code?window.PP_ULT.r:null;
+  if(!l){const av=(u&&u.avisos_cv)||[];if(!av.length)return '';const its=new Set((window.ITENS_PJ||[]).map(i=>i.codigo));   /* CAMP-122 (P1): o aviso [Minor] em linguagem de gente, com "Marcar como visto" */
+    return `<div class="aviso-cv-menor" role="status"><p><b>⚠ ${av.length===1?'Aviso':'Avisos'} do CAMP Vision · não impede publicar</b></p><ul>${av.map(a=>{const c=String(a.codigo||''),f=/^F\d{3}-P\d{4}-/.test(c)&&c.length>11;
+      return `<li>${f&&its.has(c)?`<a class="lnk code" href="#conferir/${escHtml(code)}/${escHtml(c)}">${escHtml(c.slice(11))}</a> `:''}${escHtml(a.descricao||'')}${op?` <button type="button" class="btn sm" data-cv-visto="${escHtml(a.id)}" data-codigo="${escHtml(code)}">Marcar como visto</button>`:''}</li>`}).join('')}</ul></div>`}
+  const n=Number(l.itens_total)||0;   /* CAMP-122: com folhas importadas deste lote, nunca "Nada foi importado" */
+  return `<div class="aviso-bloqueio" role="alert"><p><b>✖ O CAMP Vision parou com erro neste lote.</b>${l.erro_cv?` Ele disse: “${escHtml(String(l.erro_cv))}”.`:' Ele não deixou a mensagem do erro.'}</p><p class="help">${n?`As ${escHtml(n)} folhas que já vieram deste lote continuam no painel como estão; o erro é da última leitura.`:'Nada foi importado deste lote.'} ${op?'Peça uma releitura; se o erro voltar, avise quem cuida do CAMP Vision.':'Avise um operador ou admin.'}</p>${op?`<p><button type="button" class="btn sm" data-releitura-projeto="${escHtml(code)}">Pedir releitura</button></p>`:''}</div>`}
 function pjAbrirGaveta(code,k){const g=pjGav(code);g.aberta=k;const gv=document.getElementById('pj-gaveta');if(!gv)return;gv.hidden=!k;
   gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!==k);desenharCartoes(code);if(k&&gv.scrollIntoView)gv.scrollIntoView({behavior:'smooth',block:'nearest'})}
 function pjVerFolhas(){const g=document.querySelector('#pd .folhas-bar')||document.querySelector('#pd .pj-folhas');if(g&&g.scrollIntoView)g.scrollIntoView({behavior:'smooth',block:'start'})}
@@ -3668,6 +3674,11 @@ async function carregarProximoPasso(code){const b=document.getElementById('pj-pr
 async function avisoTarefaPub(code){const b=document.getElementById('pj-proximo');if(!b)return;try{const at=(await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa')).tarefa;
   if(at&&at.estado==='rodando'){b.insertAdjacentHTML('afterbegin',`<div class="aviso-bloqueio pp-tarefa" role="status">⏳ <b>Publicando… ${escHtml(at.feitas)} de ${escHtml(at.total)}</b>${at.folha_atual?` · agora: <span class="code">${escHtml(at.folha_atual)}</span>`:''} <button class="btn sm" data-pub-abrir="${escHtml(code)}">Acompanhar</button></div>`);acompanharTarefaPub(code,at.id)}}catch(_){}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-pub-abrir]');if(t)abrirPublicacaoGuiada(t.dataset.pubAbrir)});
+/* CAMP-122 (P1): "Marcar como visto" fecha o aviso menor do CAMP Vision (fica no histórico do problema) e tira a linha do cartão Folhas */
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-cv-visto]');if(!b||b.disabled)return;e.preventDefault();b.disabled=true;const code=b.dataset.codigo,id=Number(b.dataset.cvVisto);
+  try{await API('/api/erros/'+id,{method:'PATCH',body:JSON.stringify({situacao:'fechado',resolucao:`Visto por ${(EU&&EU.email)||'alguém'}: aviso menor do CAMP Vision (exiftool); não impede publicar.`})});
+    if(window.PJ_D&&window.PJ_D.erros)window.PJ_D.erros=window.PJ_D.erros.filter(x=>x.id!==id);toast('Aviso marcado como visto');await carregarProximoPasso(code);desenharCartoes(code)}
+  catch(err){b.disabled=false;toast(err.message)}});
 async function passoProximo(acao,lote,code,btn){const fim=!!(btn&&btn.closest('[data-fim-passo]'));   /* CAMP-070: do fim da conferência, fica ali e mostra o passo seguinte */
   if(acao==='importar'){acaoRevisaoLote('importar',lote,code,btn);return}   // CAMP-067: antes não desligava o botão nem dizia "Importando…" (QNAP lento parecia "não fez nada")
   if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else toast('Nenhuma folha pendente.');return}

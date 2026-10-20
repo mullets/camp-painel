@@ -698,6 +698,18 @@ def _anotar_lote_teste(con, pasta: Path, codigo: str | None) -> None:
 
 
 def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = None) -> dict:
+    """_ler_pasta_bruto + CAMP-122 (P1): "erro" do CAMP Vision que é só aviso [Minor] do exiftool não para o lote (avisos_cv.curar_lote)."""
+    r = _ler_pasta_bruto(con, pasta, entrada, esperado)
+    if r.get("etapa") == "erro" and r.get("acao") not in ("entrada", "ignorada"):
+        from .avisos_cv import curar_lote
+        l = con.execute("SELECT id FROM lista_processamento WHERE pasta_qnap=? AND descartado_em IS NULL ORDER BY id DESC LIMIT 1", (str(pasta),)).fetchone()
+        nova = curar_lote(con, l["id"]) if l else None
+        if nova:
+            r["etapa"], r["erro_so_avisos"] = nova, True
+    return r
+
+
+def _ler_pasta_bruto(con, pasta: Path, entrada: Path | None, esperado: str | None = None) -> dict:
     """Lê UMA pasta de lote (info_projeto.json, status.json e as imagens) e cria ou atualiza a lista dela.
 
     Usada pela varredura completa e pelo aviso do CAMP Vision. Devolve {"acao": "entrada" | "ignorada" | "nova" | "atualizada" | "igual", ...}.

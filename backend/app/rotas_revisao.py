@@ -63,6 +63,9 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
     try:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
             raise HTTPException(404, "Projeto não existe")
+        from .avisos_cv import avisos_abertos, curar_lotes
+        if curar_lotes(con, codigo):                     # CAMP-122 (P1): "erro" que é só aviso [Minor] não para o lote
+            con.commit()
         lotes = []
         for l in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas, l.status_json, l.resultado,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
@@ -80,7 +83,7 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
             pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
             lote["importar_motivo"] = None if pode else motivo
-        return {"lote": lote, "lotes": len(lotes), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
+        return {"lote": lote, "lotes": len(lotes), "avisos_cv": avisos_abertos(con, codigo), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
     finally:
         con.close()
 

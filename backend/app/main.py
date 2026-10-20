@@ -93,6 +93,12 @@ async def _startup() -> None:
     log_registrar(logging.INFO, "app_start", "Inicializando CAMP Painel")
     init_db()
     aplicar_migracoes()
+    try:                                     # CAMP-122 (P1): lote que ficou em "erro" só por aviso [Minor] do exiftool (ex.: F026-P0009) sai do vermelho
+        from .avisos_cv import curar_lotes
+        from .db import connect as _c
+        _con = _c(); curar_lotes(_con); _con.commit(); _con.close()
+    except Exception:  # noqa: BLE001  (nunca impede o painel de subir)
+        pass
     import asyncio
     asyncio.create_task(_sincronizacao_periodica())
     asyncio.create_task(_coleta_qnap_periodica())
