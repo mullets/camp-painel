@@ -3767,7 +3767,10 @@ function foraProjetoHTML(cod,o={}){const c=escHtml(cod),decide=EU&&EU.papel!=='l
   return `<div class="fp-box${o.mini?' mini':''}" data-fp-box="${c}" data-fp-existe="${o.existe?'1':''}"><a class="fp-img" href="/api/itens/${encodeURIComponent(cod)}/previa" target="_blank" rel="noopener" data-fp-folha="${c}" title="Abrir a imagem grande em outra aba"><img class="fp-mini" src="/api/itens/${encodeURIComponent(cod)}/previa?t=${o.mini?240:480}" alt="Folha ${escHtml(String(cod).slice(11))}" loading="lazy"></a>
     <div class="fp-acoes">${o.mini?'':'<p class="help">O CAMP Vision acha que esta folha é de outro projeto. Olhe a imagem (clique para abrir grande) e decida.</p>'}${decide?`<button class="btn sm${o.mini?'':' pri'}" type="button" data-deste-projeto="${c}">É deste projeto</button>${outro}`:''}</div></div>`}
 function fpSemImagem(img){const a=img.closest('.fp-img'),box=img.closest('[data-fp-box]');if(!a||!box)return;const d=document.createElement('div');
-  d.innerHTML=semImagemHTML('Não há imagem desta folha no painel nem na pasta do lote.',box.dataset.fpExiste?box.dataset.fpBox:null,true);a.replaceWith(d.firstChild)}
+  d.innerHTML=semImagemHTML('Não há imagem desta folha no painel nem na pasta do lote.',box.dataset.fpExiste?box.dataset.fpBox:null,true);
+  /* CAMP-096 (exaustão): a folha retirada nem está no painel, então "Pedir releitura" da folha não existe; pede a releitura do lote do projeto */
+  if(!box.dataset.fpExiste&&EU&&EU.papel!=='leitura')d.firstChild.insertAdjacentHTML('beforeend',`<button class="btn sm" data-releitura-projeto="${escHtml(String(box.dataset.fpBox).slice(0,10))}">Pedir releitura do lote</button>`);
+  a.replaceWith(d.firstChild)}
 document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.classList&&t.classList.contains('fp-mini'))fpSemImagem(t)},true);
 function fpErrosDaFolha(cod){const vistos=new Set(),L=[];for(const e of [...(window.ERR_LISTA||[]),...((window.PJ_D||{}).erros||[]),...(window.ERR_ATUAL?[window.ERR_ATUAL]:[])]){const f=e.folha||e.codigo;
   if(f===cod&&!vistos.has(e.id)&&['aberto','em_correcao'].includes(e.situacao||'aberto')){vistos.add(e.id);L.push(e.id)}}return L}
