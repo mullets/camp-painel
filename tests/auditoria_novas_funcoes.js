@@ -351,7 +351,12 @@ w.route_to('estacoes'); await sleep(2800);
   const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
   chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar correção" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
   w.closeDrawer(true); d.querySelector('#pj-revisao [data-rev-lote="todas"]').click(); await sleep(3600);
-  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'"Aprovar todas" deveria conferir a folha que restava');
+  // CAMP-094 (20/10): "Aprovar todas" não confere a folha com aviso (aqui a duplicata D2): ela fica para conferir uma a uma
+  { const pend=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.filter(i=>i.revisao==='pendente');
+    chk(pend.length===1&&!!pend[0].duplicata_de,'"Aprovar todas" deveria deixar só a folha com aviso (a duplicata) para conferir: '+JSON.stringify(pend.map(i=>i.codigo)));
+    for(const i of pend) await J(adm,'/api/itens/'+encodeURIComponent(i.codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado:'conferida'})});
+    await w.showProjeto(pc); await sleep(3500); }
+  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'conferida a que ficou, não resta folha pendente');
   chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/pronta para aprovar/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar: "'+txt('#pj-revisao').slice(0,160)+'"');
   d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').click(); await sleep(3600);
   const ap=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0];
@@ -404,7 +409,8 @@ w.route_to('estacoes'); await sleep(2800);
   const lq=lin('F026-P0001'); chk(!!lq&&!!lq.querySelector('[data-fila-acao="importar"]')&&/Importar/.test(lq.textContent),'uma lista em revisão sem folhas importadas (F026-P0001) deveria oferecer "Importar folhas": "'+(lq&&lq.textContent.slice(100,260))+'"');
   l9001.querySelector('[data-fila-ir="revisao"]').click(); await sleep(3400);
   chk(/projeto\/F003-P9001/.test(w.location.hash)&&!!d.getElementById('pj-revisao')&&/Revisão do lote/.test(txt('#pj-revisao')),'"Conferir folhas" deveria levar à página do projeto com a Revisão do lote: '+w.location.hash);
-  const lid=(await J(adm,'/api/projetos/F003-P9001/revisao')).b.lotes[0].id; await J(adm,'/api/lotes/'+lid+'/conferir-todas',{method:'POST'});
+  const lid=(await J(adm,'/api/projetos/F003-P9001/revisao')).b.lotes[0].id; const tod=(await J(adm,'/api/lotes/'+lid+'/conferir-todas',{method:'POST'})).b;
+  for(const f of (tod&&tod.ficaram)||[]) await J(adm,'/api/itens/'+encodeURIComponent(f.codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado:'conferida'})});   // CAMP-094: as com aviso ficam para conferir uma a uma
   w.route_to('filas'); await sleep(2800); l9001=lin('F003-P9001');
   chk(/Falta aprovar o lote|Todas as/.test(l9001.textContent),'ao VOLTAR para a Fila a tela deve mostrar o dado de agora (e não o de quando você entrou): "'+l9001.textContent.slice(100,260)+'"');
   chk(/Falta aprovar o lote/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-acao="aprovar"]'),'com tudo conferido a lista deveria pedir "Aprovar lote": "'+l9001.textContent.slice(0,120)+'"');

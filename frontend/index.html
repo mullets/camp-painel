@@ -467,7 +467,7 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 .cf-tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:150px}
 .cf-teclas{margin:0;padding:8px 12px;border-top:1px solid var(--line);font-size:var(--fs-2xs)}
 .cf-pane{padding:14px 16px;min-width:0}.cf-pane>h2{margin:0 0 8px;font-size:var(--fs-md)}
-.cf-avisos{display:grid;gap:8px;margin:0 0 12px}.cf-aviso ul{margin:0;padding-left:18px;flex-basis:100%}.cf-aviso p.help{flex-basis:100%;margin:0}.cf-aviso{background:var(--amber-soft);border-radius:var(--r);padding:8px 12px;display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap}.cf-aviso p{margin:0;flex:1;min-width:200px}.cf-aviso .act{display:flex;gap:6px;flex-wrap:wrap}
+.cf-avisos{display:grid;gap:8px;margin:0 0 12px}.cf-aviso ul{margin:0;padding-left:18px;flex-basis:100%}.cf-aviso p.help{flex-basis:100%;margin:0}.conf-lista{margin:6px 0 0;padding-left:18px;max-height:220px;overflow:auto}.cf-aviso{background:var(--amber-soft);border-radius:var(--r);padding:8px 12px;display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap}.cf-aviso p{margin:0;flex:1;min-width:200px}.cf-aviso .act{display:flex;gap:6px;flex-wrap:wrap}
 .cf-pane .rev-prev{max-height:62vh}
 .cf-pane .rev-campos-grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.cf-pane .rev-campos-grade>div.rev-campo,.cf-pane .rev-campos-grade>:not(.rev-campo),.cf-pane .rev-campo:has(#rv-titulo){grid-column:1/-1}
 @media (max-width:1180px){.cf-pane .rev-campos-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -1795,7 +1795,7 @@ function avisoResultadoLote(acao,r,projeto){const pode=EU&&['admin','master'].in
      +`<p>Próximo passo: conferir.</p>`;    const quadro=[...document.querySelectorAll('#pd .panel')].find(x=>/Revisão do lote/.test(x.textContent||'')&&x.checkVisibility&&x.checkVisibility());   // a Revisão do lote fica na gaveta (fechada): o aviso vai para o lugar visível
     const a=avisoNoLugar(h+`<div class="act"><button class="btn sm pri" data-pp="conferir" data-projeto="${pj}">Começar a conferir</button></div>`,{tipo:pb.length?'erro':'ok',antes:quadro||document.getElementById('pj-proximo')||'#pd',id:'lote',ms:0});if(a&&a.scrollIntoView)a.scrollIntoView({block:'center',behavior:'smooth'});return}
   else if(acao==='conferir')h=`<b>✔ ${qtd(r.conferidas||0,'folha conferida','folhas conferidas')} sozinha${r.conferidas===1?'':'s'} (nada apontado pelo CAMP Vision).</b> ${r.restam?`${qtd(r.restam,'precisa','precisam')} de olho humano.<div class="act"><button class="btn sm pri" data-pp="conferir" data-projeto="${pj}">Conferir as que faltam</button></div>`:'Próximo passo: aprovar o lote.'}`;
-  else if(acao==='todas')h=`<b>✔ ${qtd(r.conferidas||0,'folha marcada','folhas marcadas')} como conferida${r.conferidas===1?'':'s'}.</b> Próximo passo: aprovar o lote.`;
+  else if(acao==='todas'){const f=(r.ficaram||[]).length;h=`<b>✔ ${qtd(r.conferidas||0,'folha marcada','folhas marcadas')} como conferida${r.conferidas===1?'':'s'}.</b> ${f?`${qtd(f,'folha com aviso ficou','folhas com aviso ficaram')} para conferir uma a uma.`:'Próximo passo: aprovar o lote.'}`}
   else if(acao==='aprovar')h=`<b>✔ Lote aprovado.</b> ${pode?`Próximo passo: publicar.<div class="act"><button class="btn sm pri" data-pp="publicar" data-projeto="${pj}">Publicar</button></div>`:'Próximo passo: um administrador publica.'}`;
   else if(acao==='reabrir')h='<b>✔ Revisão reaberta:</b> as folhas voltam a poder ser editadas.';
   if(h)avisoNoLugar(h,{antes:document.getElementById('pj-proximo')||'#pd',id:'lote'})}
@@ -2576,7 +2576,7 @@ const FRASE_DETALHE={
   ajuste_imagem:o=>{const p=o.para||{};return `${p.recorte?'Recortou':'Sem recorte'} · alinhamento ${String(+p.angulo||0).replace('.',',')}°${o.anexo?' · trocada também no site':''}${o.site?' · '+o.site:''}`},
   giro:o=>`Girou de ${+o.de||0}° para ${+o.para||0}°`,giro_manual:o=>`Girou de ${+o.de||0}° para ${+o.para||0}°`,
   folha_retida:o=>o.motivo?`Motivo: ${o.motivo}`:'Fica só no painel',folha_liberada:o=>o.motivo?`Motivo: ${o.motivo}`:'Volta a poder ir ao site',
-  revisao_em_lote:o=>o.todas?`Conferiu todas as folhas do lote ${o.lote_id} (${qtd(+o.conferidas||0,'folha','folhas')})${+o.com_algo_apontado?`; ${fmtN(+o.com_algo_apontado)} com algo apontado`:''}`
+  revisao_em_lote:o=>o.todas?`Conferiu de uma vez ${qtd(+o.conferidas||0,'folha','folhas')} do lote ${o.lote_id}${+o.com_algo_apontado?`; ${fmtN(+o.com_algo_apontado)} com algo apontado`:''}${(o.ficaram_para_conferir||[]).length?`; ${fmtN(o.ficaram_para_conferir.length)} com aviso ficaram para conferir`:''}`
     :`Conferiu ${qtd(+o.conferidas||0,'folha','folhas')} do lote ${o.lote_id}; ${+o.restam?`faltam ${fmtN(+o.restam)}`:'não falta nenhuma'}`,
   revisao_aprovada:o=>`Aprovou o lote ${o.lote_id}: ${qtd(+o.folhas||0,'folha','folhas')}${+o.bloqueadas?`, ${qtd(+o.bloqueadas,'bloqueada','bloqueadas')}`:''}`,
   revisao_reaberta:o=>`Reabriu a conferência do lote ${o.lote_id}`,
@@ -4161,6 +4161,11 @@ function confProblemas(it){const p=it.pendencias||{},o=[];
   for(const x of tiposProblemaFolha(it))if(x.k.startsWith('erro-'))o.push([x.c,x.s]);return o}   /* CAMP-127: o tipo do problema, não só "problema" */
 /* Fluxo real (20/10): os problemas ABERTOS da folha (ex.: "ano lido 1927 diverge do projeto") não apareciam no conferir; a pessoa clicava
    "Está certo" sem ver, e a conferência os fechava. Agora aparecem na folha e na lista. Os que já têm aviso próprio não repetem. */
+/* CAMP-094: o que a pessoa precisa ver na folha antes de dizer que está certa (a mesma regra do servidor em "Aprovar todas"); '' = nada */
+/* os problemas abertos do projeto DESTA folha: o CONF.d de um conferir anterior pode ser de outro projeto */
+function errosDoProjeto(code){const d=[window.PJ_D,CONF.d].find(x=>x&&x.projeto&&x.projeto.codigo===code);return (d&&d.erros)||[]}
+function avisoParaConferir(i){const p=i.pendencias||{},er=errosDoProjeto(String(i.codigo).slice(0,10));
+  return i.status_site==='bloqueado'||(p.bloqueios||[]).length?'bloqueada':i.duplicata_de?'duplicata':i.autoria_divergente?'autoria':espelhadaAConferir(i)?'espelhada?':((p.sinais||[]).length||(p.ressalvas||[]).length)?'aviso do CAMP Vision':er.some(e=>e.codigo===i.codigo&&['aberto','em_correcao'].includes(e.situacao||'aberto'))?'problema aberto':''}
 function espelhadaAConferir(it){return !!(it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it))}
 /* CAMP-081: "Com problema" é UMA regra só, na página do projeto (barra e miniaturas) e no conferir: antes a página contava só autoria, duplicata e
    espelhada (1) e o conferir também orientação incerta e problemas abertos da folha (4), no mesmo lote. Folha retida também conta. */
@@ -4182,7 +4187,7 @@ function folhaComProblema(it){return tiposProblemaFolha(it).length>0}
 /* contagem por tipo (para os chips): [{k,t,c,b,n}] — o que impede publicar primeiro, depois os mais frequentes */
 function contagemTipos(its){const m=new Map();for(const it of its)for(const x of tiposProblemaFolha(it)){const a=m.get(x.k)||{...x,n:0};a.n++;m.set(x.k,a)}return [...m.values()].sort((a,b)=>(b.b-a.b)||(b.n-a.n)||a.t.localeCompare(b.t))}
 function chipsTiposHTML(its,ativo,attr){const L=contagemTipos(its);if(!L.length)return '';return L.map(x=>`<button type="button" class="btn sm chip-tipo${x.b?' chip-bloq':''}${ativo==='t-'+x.k?' on':''}" aria-pressed="${ativo==='t-'+x.k}" ${attr}="t-${escHtml(x.k)}" data-fl-t="${escHtml(x.t)}" title="${x.b?'Impede publicar':'Aviso: não impede publicar'}">${attr==='data-cf-filtro'?`${escHtml(x.t)} <b>${fmtN(x.n)}</b>`:`${escHtml(x.t)} (${fmtN(x.n)})`}</button>`).join('')}   /* no conferir, o número em <b> como os outros filtros */
-function confErrosFolha(it){const pj=String(it.codigo||'').slice(0,10),d=[window.PJ_D,CONF.d].find(x=>x&&x.projeto&&x.projeto.codigo===pj),L=(d&&d.erros)||[];   /* os dados DO projeto da folha (CONF.d pode ser de um projeto aberto antes) */
+function confErrosFolha(it){const L=errosDoProjeto(String(it.codigo||'').slice(0,10));   /* os dados DO projeto da folha (CONF.d pode ser de um projeto aberto antes) */
   return L.filter(e=>e.codigo===it.codigo&&['aberto','em_correcao'].includes(e.situacao||'aberto')&&!(e.categoria==='autoria_divergente'&&it.autoria_divergente)&&!(e.categoria==='duplicata'&&it.duplicata_de)&&!(e.categoria==='orientacao'&&orientIncerta(it)))}
 function bloqueiosResolviveis(it){const p=(it&&it.pendencias)||{};return (Array.isArray(p.bloqueios)?p.bloqueios:[]).filter(b=>b&&!falaDeProjetoDivergente(b)&&!/duplicat/i.test(String(b)))}
 function confNoFiltro(it,f){return f==='a_conferir'?it.revisao==='pendente':f==='problema'?folhaComProblema(it):f==='sem_imagem'?!confTemImg(it):String(f||'').startsWith('t-')?tiposProblemaFolha(it).some(x=>'t-'+x.k===f):true}
@@ -4504,7 +4509,7 @@ async function salvarRevisaoItem(codigo,estado){
     let b={},salvou=false;if(estado==='reter'&&naTela){try{b=camposRevisaoAlterados()}catch(e){erroRevisao(e.message);return}}
     if(estado==='reter'&&naTela){const m=document.getElementById('rv-motivo');if(m&&!m.value.trim()){erroRevisao('Diga por que esta folha não vai ao site: o motivo fica gravado e aparece para quem abrir a folha.');m.focus();return}}   /* CAMP-089: reter exige motivo */
     travarRevisao(true);
-    try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify(b)});salvou=true;marcarRevisaoSalva()}
+    try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify({...b,vistos:vistosDosCampos(b)})});salvou=true;marcarRevisaoSalva()}
       const mot=estado==='reter'&&naTela?((document.getElementById('rv-motivo')||{}).value||'').trim()||null:null;
       const r=await API('/api/itens/'+encodeURIComponent(codigo)+'/retencao',{method:'POST',body:JSON.stringify({retida:estado==='reter',motivo:mot})});
       if(naTela)limparAlteracoes(revEscopo());
@@ -4519,7 +4524,7 @@ async function salvarRevisaoItem(codigo,estado){
   let b,salvou=false;try{b=estado==='pendente'?{}:camposRevisaoAlterados()}catch(e){erroRevisao(e.message);return}
   if(estado==='conferida'&&Object.keys(b).length)estado='corrigida';
   travarRevisao(true);
-  try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify(b)});salvou=true;marcarRevisaoSalva();revCopiarCampos(codigo,b)}
+  try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify({...b,vistos:vistosDosCampos(b)})});salvou=true;marcarRevisaoSalva();revCopiarCampos(codigo,b)}
     const rr=await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});
     if(estado!=='pendente')limparAlteracoes(revEscopo());
     aplicarResolvidos(codigo,rr&&rr.resolvidos);   /* os campos já foram salvos acima; o que sobrar alterado é só o motivo de "Não publicar" */
@@ -4528,7 +4533,7 @@ async function salvarRevisaoItem(codigo,estado){
     atualizarCartaoRevisao(codigo);if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
     if(estado==='pendente'){travarRevisao(false);toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
     if(estado==='conferida')toast(`Folha ${codigo} conferida`,{acao:{rotulo:'Desfazer',fn:()=>salvarRevisaoItem(codigo,'pendente')}});else if(estado==='corrigida')toast(`Correção da folha ${codigo} salva`);
-    window._REV_SALVANDO=false;seguir()}catch(e){travarRevisao(false);erroRevisao(salvou?`Os dados da folha foram salvos, mas a revisão não mudou: ${e.message}`:`Não salvou: ${e.message}`)}}
+    window._REV_SALVANDO=false;seguir()}catch(e){travarRevisao(false);if(e.status===409&&!salvou&&/Outra pessoa mudou/.test(e.message||'')){erroConflitoRevisao(codigo,e.message);return}erroRevisao(salvou?`Os dados da folha foram salvos, mas a revisão não mudou: ${e.message}`:`Não salvou: ${e.message}`)}}
 /* 19/10: para onde a revisão vai depois de conferir, reter ou mover a folha (calculado ANTES de mudar a lista: a folha movida sai dela).
    A próxima a conferir; se esta era a última a conferir, "Conferência concluída"; sem nenhuma a conferir (lote aprovado, ou revendo as já conferidas),
    a seguinte na ordem; depois da última, fecha a janela (o aviso diz que era a última). Antes: num lote aprovado ia para "Conferência concluída · Aprovar o lote". */
@@ -4560,6 +4565,12 @@ function revisaoMostra(codigo){return !!codigo&&revAberta()===codigo}
 function revCopiarCampos(codigo,b){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it)return;['titulo','tipo_documento','folha','escala','endereco_folha','cliente_folha','ano_folha'].forEach(k=>{if(k in b)it[k]=b[k]})}
 function travarRevisao(on){window._REV_SALVANDO=on;const h=revHost();(h?[...h.querySelectorAll('[data-rev-item],.op-go')]:[]).forEach(b=>{if(on){b.dataset.travado='1';b.disabled=true}else if(b.dataset.travado){delete b.dataset.travado;b.disabled=false}})}
 const CAMPOS_REV={titulo:'rv-titulo',tipo_documento:'rv-tipo',folha:'rv-folha',escala:'rv-escala',endereco_folha:'rv-endereco',cliente_folha:'rv-cliente'};
+/* CAMP-095: o valor de cada campo mudado como a pessoa o viu ao abrir a folha; o servidor recusa (409) se outra pessoa mudou antes */
+function vistosDosCampos(b){const v={},orig=el=>el.dataset.orig!=null?el.dataset.orig:el.defaultValue;
+  for(const k of Object.keys(b)){if(CAMPOS_REV[k]){const el=document.getElementById(CAMPOS_REV[k]);if(el)v[k]=String(orig(el)||'').trim()}
+    else if(k==='ano_folha'){const a=document.getElementById('rv-ano');if(a)v[k]=String(a.defaultValue||'').trim()}
+    else if(k==='parceiros'){const pc=document.getElementById('rv-parceiros');if(pc)v[k]=parcParaApi(pc.dataset.orig||'[]')}}
+  return v}
 function camposRevisaoAlterados(){const b={},orig=el=>el.dataset.orig!=null?el.dataset.orig:el.defaultValue;
   for(const [k,id] of Object.entries(CAMPOS_REV)){const el=document.getElementById(id);if(!el)continue;const x=el.value.trim(),o=String(orig(el)||'').trim();
     if(k==='tipo_documento'?separarTipos(x).join('; ')!==separarTipos(o).join('; '):x!==o)b[k]=x}
@@ -4569,11 +4580,22 @@ function camposRevisaoAlterados(){const b={},orig=el=>el.dataset.orig!=null?el.d
 /* salvo = nada pendente na janela: sem isso, ir para a próxima folha perguntava "Sair sem salvar? … elas se perdem" logo depois de salvar (Sírio, 19/10) */
 function marcarRevisaoSalva(){[...Object.values(CAMPOS_REV),'rv-ano','rv-parceiros'].forEach(id=>{const el=document.getElementById(id);if(!el)return;if(el.dataset.orig!=null)el.dataset.orig=el.value;else el.defaultValue=el.value;const c=el.closest('.rev-campo');if(c)c.classList.remove('alterado')});limparAlteracoes(revEscopo())}
 function erroRevisao(msg){toast(msg);avisoNoLugar(`<b>✖ ${escHtml(msg)}</b>`,{tipo:'erro',antes:revSel('.rev-acoes'),id:'rev-salvar'})}
+/* CAMP-095: outra pessoa salvou esta folha antes (409): o que esta pessoa digitou fica na tela para ela copiar, e "Atualizar a folha" descarta
+   e abre a folha com os dados de agora (lista e contagem incluídas), sem passar pelo "Sair sem salvar?" */
+function erroConflitoRevisao(codigo,msg){toast(msg);avisoNoLugar(`<b>✖ ${escHtml(msg)}</b><div class="act"><button type="button" class="btn sm pri" data-rev-atualizar="${escHtml(codigo)}">Atualizar a folha</button></div>`,{tipo:'erro',antes:revSel('.rev-acoes'),id:'rev-salvar'})}
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-rev-atualizar]');if(!b)return;const codigo=b.dataset.revAtualizar;
+  limparAlteracoes(revEscopo());limparAlteracoes('conferir');ALTERACOES_PENDENTES.clear();atualizarDirtyUI();MARCA.code=null;document.querySelectorAll('[data-pj-mudou]').forEach(x=>x.remove());
+  if(revConf()){await showConferir(CONF.code,codigo);return}
+  const pj=window.PROJETO_PJ;if(pj){await showProjeto(pj);abrirRevisaoItem(codigo)}});
 async function acaoRevisaoLote(acao,lote,projeto,btn){
   if(acao==='releitura'){pedirReleitura('projeto',projeto);return}
   const rotas={importar:'importar',conferir:'conferir-sem-pendencia',todas:'conferir-todas',aprovar:'aprovar',reabrir:'reabrir'};
-  if(acao==='todas'){const L=(window.ITENS_PJ||[]).filter(x=>String(x.lote_id)===String(lote)&&x.revisao==='pendente'),ap=L.filter(i=>i.status_site==='bloqueado'||(i.pendencias&&((i.pendencias.bloqueios||[]).length||(i.pendencias.ressalvas||[]).length||(i.pendencias.sinais||[]).length))).length;
-    if(!await confirmar({titulo:`Marcar ${L.length===1?'a folha pendente':`as ${L.length} folhas pendentes`} como conferida${L.length===1?'':'s'}?`,texto:ap?`${qtd(ap,'delas tem','delas têm')} algo apontado pelo CAMP Vision (duplicata, orientação incerta…). Ficam conferidas, mas as bloqueadas continuam sem ir ao site.`:'Use só se você já olhou todas.',botao:'Marcar todas'}))return}
+  if(acao==='todas'){const L=(window.ITENS_PJ||[]).filter(x=>String(x.lote_id)===String(lote)&&x.revisao==='pendente'&&!['rascunho','no_ar'].includes(x.status_site)),com=L.filter(i=>avisoParaConferir(i)),sem=L.length-com.length;
+    /* CAMP-094 (decisão de 20/10): "Aprovar todas" não fecha aviso que ninguém viu: as folhas com aviso ficam para conferir uma a uma */
+    if(!sem){toast(`${qtd(com.length,'folha pendente tem','folhas pendentes têm')} aviso: confira uma a uma.`);return}
+    const lista=com.slice(0,12).map(i=>`<li><b>${escHtml(String(i.codigo).slice(-6))}</b> · ${escHtml(avisoParaConferir(i))}</li>`).join('')+(com.length>12?`<li>e mais ${fmtN(com.length-12)}</li>`:'');
+    if(!await confirmar({titulo:`Marcar ${sem===1?'a folha sem aviso':`as ${fmtN(sem)} folhas sem aviso`} como conferida${sem===1?'':'s'}?`,
+      html:com.length?`<p>${qtd(com.length,'folha tem','folhas têm')} aviso e ${com.length===1?'fica':'ficam'} para conferir uma a uma:</p><ul class="conf-lista">${lista}</ul>`:'<p>Use só se você já olhou todas.</p>',botao:`Marcar ${fmtN(sem)}`}))return}
   if(acao==='aprovar'&&!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;
   const quadro=btn&&btn.closest('.panel');window.QUADRO_LOTE_PERTO=!!quadro;
   if(acao==='importar'){if(btn)btn.disabled=true;const a=avisoNoLugar('<b>Importando a leitura do CAMP Vision…</b> O painel está lendo o pacote que o CAMP Vision deixou no QNAP (o CAMP Vision não roda de novo; o log dele não muda). Leva alguns segundos.',{tipo:'rodando',antes:quadro||document.getElementById('pj-proximo')||'#pd',id:'lote'});if(a&&a.scrollIntoView)a.scrollIntoView({block:'center',behavior:'smooth'})}

@@ -2837,7 +2837,12 @@ def filho(modo):
         ver("antes: 3 folhas pendentes, quase todas com algo apontado pelo CAMP Vision", sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='pendente'", lote) == 3)
         ver("aprovar todas: sem login 401; lote inexistente 404", anon.post(f"/api/lotes/{lote}/conferir-todas").status_code == 401 and op.post("/api/lotes/9999/conferir-todas").status_code == 404)
         t = op.post(f"/api/lotes/{lote}/conferir-todas").json()
-        ver("aprovar todas (operador): marca as 3 como conferidas, inclusive as com algo apontado, e DIZ quantas tinham (a tela avisa)", t["conferidas"] == 3 and t["com_pendencia"] >= 2 and t["restam"] == 0 and sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='conferida' AND revisado_por='op@camp.arq.br'", lote) == 3, str(t))
+        ver("aprovar todas (operador, CAMP-094): confere só as sem aviso; as com algo apontado ficam a conferir e voltam em 'ficaram' (a tela diz quais)",
+            t["conferidas"] + len(t["ficaram"]) == 3 and len(t["ficaram"]) >= 2 and t["com_pendencia"] == len(t["ficaram"]) and t["restam"] == len(t["ficaram"])
+            and all(sql("SELECT revisao FROM item WHERE codigo=?", x["codigo"]) == "pendente" for x in t["ficaram"]), str(t))
+        for x in t["ficaram"]:   # a pessoa olha uma a uma
+            op.post(f"/api/itens/{x['codigo']}/revisao", json={"estado": "conferida"})
+        ver("conferidas uma a uma, o lote fica todo conferido pela operadora", sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='conferida' AND revisado_por='op@camp.arq.br'", lote) == 3)
         ver("clicar de novo não faz nada (0 conferidas) e não estraga", op.post(f"/api/lotes/{lote}/conferir-todas").json()["conferidas"] == 0)
         ver("depois de aprovar todas o lote pode ser aprovado pelo admin (e só por ele)", op.post(f"/api/lotes/{lote}/aprovar").status_code == 403 and adm.post(f"/api/lotes/{lote}/aprovar").status_code == 200)
         ver("lote aprovado: aprovar todas dá 409; girar a folha (fora do site) agora pode (19/10)", op.post(f"/api/lotes/{lote}/conferir-todas").status_code == 409 and op.post(f"/api/itens/{D(1)}/girar", json={"graus": 90}).status_code == 200)
@@ -7602,6 +7607,38 @@ def filho(modo):
         ad = cli("ad@camp.arq.br", "senha-admin-12345")
         r = ad.post("/api/projetos/F099-P0001/registrar-autoria", json={"autoria": "Fulano de Tal", "papel_no_projeto": "coautor"})
         ver("CAMP-092: registrar a autoria do projeto tira o crédito provisório de todas as folhas", r.status_code == 200 and cred(5) is None and cred(6) is None, r.text[:200])
+        # ---------- CAMP-094: "Aprovar todas" não confere folha com aviso que ninguém viu ----------
+        c.execute("UPDATE item SET revisao='conferida' WHERE lote_id=?", (lote,))
+        lote2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa C 2','F099-P0001','/nao/existe','revisao')").lastrowid
+        E = lambda n: f"F099-P0001-1970-S01-D{100 + n:05d}"
+        for n in range(1, 8):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,revisao,status_site,pendencias,titulo) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (E(n), "F099-P0001", "S01", 100 + n, "campvision", lote2, "pendente", "nao_publicado", '{"bloqueios": [], "sinais": [], "ressalvas": []}', f"P {n}"))
+        c.execute("UPDATE item SET pendencias=? WHERE codigo=?", ('{"bloqueios": [], "sinais": ["orientação incerta"], "ressalvas": []}', E(3)))
+        c.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (E(1), E(4)))
+        c.execute("UPDATE item SET autoria_divergente=1 WHERE codigo=?", (E(5),))
+        c.execute("UPDATE item SET espelhado=1 WHERE codigo=?", (E(6),))
+        e7 = erro(E(7), "metadado", "corrigir"); c.commit()
+        r = op.post(f"/api/lotes/{lote2}/conferir-todas"); j = r.json() if r.status_code == 200 else {}
+        ver("CAMP-094: confere só as 2 sem aviso", j.get("conferidas") == 2 and [q("SELECT revisao FROM item WHERE codigo=?", E(n))[0] for n in (1, 2)] == ["conferida"] * 2, r.text[:300])
+        ver("CAMP-094: sinal, duplicata, autoria, espelho a confirmar e problema aberto ficam a conferir, e a resposta diz quais e por quê",
+            sorted(x["codigo"] for x in j.get("ficaram") or []) == [E(n) for n in range(3, 8)] and all(q("SELECT revisao FROM item WHERE codigo=?", E(n))[0] == "pendente" for n in range(3, 8))
+            and j.get("restam") == 5, str(j.get("ficaram")))
+        ver("CAMP-094: nenhum problema é fechado", sit(e7) == "aberto")
+        # ---------- CAMP-095: duas pessoas na mesma folha ----------
+        auth.criar_usuario("Op2", "op2@camp.arq.br", "senha-operador-456", "operador", forcar_troca=False)
+        op2 = cli("op2@camp.arq.br", "senha-operador-456")
+        tit = lambda: q("SELECT titulo, escala FROM item WHERE codigo=?", D(9))
+        r1 = op.patch(f"/api/itens/{D(9)}", json={"titulo": "Título da pessoa A", "vistos": {"titulo": "Prancha 9"}})
+        r2 = op2.patch(f"/api/itens/{D(9)}", json={"titulo": "Título da pessoa B", "vistos": {"titulo": "Prancha 9"}})
+        ver("CAMP-095: a segunda pessoa a mudar o MESMO campo recebe 409 dizendo o valor de agora, e nada dela é gravado",
+            r1.status_code == 200 and r2.status_code == 409 and "Título da pessoa A" in r2.text and tit()[0] == "Título da pessoa A", r2.text[:200])
+        r3 = op2.patch(f"/api/itens/{D(9)}", json={"escala": "1:200", "vistos": {"escala": ""}})
+        ver("CAMP-095: campo que só ela mudou grava normalmente, sem desfazer o da outra", r3.status_code == 200 and tuple(tit()) == ("Título da pessoa A", "1:200"), r3.text[:200])
+        r4 = op2.patch(f"/api/itens/{D(9)}", json={"folha": "09"})
+        ver("CAMP-095: sem 'vistos' (tela antiga) continua gravando", r4.status_code == 200)
+        r5 = op2.patch(f"/api/itens/{D(9)}", json={"ano_folha": 1975, "vistos": {"ano_folha": "1980"}})
+        ver("CAMP-095: o ano também é protegido", r5.status_code == 409 and q("SELECT ano_folha FROM item WHERE codigo=?", D(9))[0] is None, r5.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "camp068_marcas":

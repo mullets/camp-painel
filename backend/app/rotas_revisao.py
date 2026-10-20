@@ -859,29 +859,54 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
         con.close()
 
 
+def _aviso_da_folha(con, i) -> str | None:
+    """CAMP-094: o que a pessoa precisa VER nesta folha antes de dizer que está certa (None = nada). A mesma regra das marcas da tela de conferir."""
+    try:
+        p = json.loads(i["pendencias"] or "{}")
+    except ValueError:
+        p = {"bloqueios": ["pendências ilegíveis"]}
+    p = p if isinstance(p, dict) else {}
+    if i["status_site"] == "bloqueado" or p.get("bloqueios"):
+        return "bloqueada"
+    if i["duplicata_de"]:
+        return "duplicata"
+    if i["autoria_divergente"]:
+        return "autoria"
+    if i["espelhado"] and i["espelho_manual"] is None:
+        return "espelhada?"
+    if p.get("sinais") or p.get("ressalvas"):
+        return "aviso do CAMP Vision"
+    if con.execute("SELECT 1 FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') LIMIT 1", (i["codigo"],)).fetchone():
+        return "problema aberto"
+    return None
+
+
 @router.post("/lotes/{lote_id}/conferir-todas")
 def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Marca TODAS as folhas ainda pendentes do lote como conferidas (inclusive as que o CAMP Vision apontou: o botão existe para quando a pessoa já olhou).
-    Devolve quantas tinham algo apontado, para a tela dizer. Não aprova o lote: isso continua sendo do admin."""
+    """"Aprovar todas": marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver.
+    CAMP-094 (decisão de 20/10): não fecha aviso que ninguém viu. A folha com aviso ou problema aberto (bloqueio, duplicata, autoria, espelho a
+    confirmar, sinal do CAMP Vision, problema na lista) fica "a conferir" e volta em `ficaram` (código e motivo), para conferir uma a uma.
+    Não aprova o lote: isso continua sendo do admin."""
     con = connect()
     try:
         con.execute("BEGIN IMMEDIATE")
         l = _lote(con, lote_id)
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
-        marcadas = apontadas = 0
-        for i in con.execute(f"SELECT codigo, status_site, pendencias FROM item WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar')", (lote_id,)).fetchall():
-            try:
-                p = json.loads(i["pendencias"] or "{}")
-            except ValueError:
-                p = {}
-            if i["status_site"] == "bloqueado" or p.get("bloqueios") or p.get("ressalvas") or p.get("sinais"):
-                apontadas += 1
+        marcadas, ficaram = 0, []
+        for i in con.execute(f"""SELECT codigo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
+                                 WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall():
+            motivo = _aviso_da_folha(con, i)
+            if motivo:
+                ficaram.append({"codigo": i["codigo"], "motivo": motivo})
+                continue
             con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (u["email"], i["codigo"]))
             marcadas += 1
-        _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", u["email"], {"lote_id": lote_id, "todas": True, "conferidas": marcadas, "com_algo_apontado": apontadas})
+        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+        _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", u["email"], {"lote_id": lote_id, "todas": True, "conferidas": marcadas,
+                                                                                     "ficaram_para_conferir": [x["codigo"] for x in ficaram]})
         con.commit()
-        return {"conferidas": marcadas, "com_pendencia": apontadas, "restam": 0}
+        return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam}
     except HTTPException:
         con.rollback()
         raise

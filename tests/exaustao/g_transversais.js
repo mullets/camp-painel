@@ -6,6 +6,8 @@ const T = require('./_comum');
 const { chk, passo, sql, um, espera, print, txt, confirmar, imgOk, loteReal, entrar, abrirProjeto, abrirConferir } = T;
 const montar = (...a) => execFileSync('python3', [path.join(__dirname, 'g_montar.py'), ...a], { encoding: 'utf-8' }).trim();
 const api = (pg, rota, metodo = 'POST', corpo) => pg.evaluate(async ([r, m, c]) => { const x = await fetch(r, { method: m, headers: { 'Content-Type': 'application/json' }, body: c ? JSON.stringify(c) : undefined }); return { st: x.status, j: await x.json().catch(() => ({})) } }, [rota, metodo, corpo]);
+// CAMP-094: "Aprovar todas" deixa as folhas com aviso para conferir uma a uma; a montagem confere essas pela rota de cada folha
+const conferirTodas = async (pg, l) => { const r = await api(pg, `/api/lotes/${l}/conferir-todas`); for (const f of (r.j && r.j.ficaram) || []) await api(pg, `/api/itens/${encodeURIComponent(f.codigo)}/revisao`, 'POST', { estado: 'conferida' }); return r };
 const loteDe = P => um('SELECT id FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC LIMIT 1', P);
 // botões/links de AÇÃO visíveis na página (o que a pessoa pode clicar)
 const acoesVisiveis = pg => pg.evaluate(() => [...document.querySelectorAll('#pd button, #pd a.btn, #cfv button, #d-body button')].filter(b => b.offsetParent && !b.closest('[hidden]'))
@@ -19,7 +21,7 @@ T.rodar(async () => {
   const adm = await entrar('admin');
   for (const X of [B, C]) {
     sql("UPDATE erro SET situacao='ignorado', resolucao='montagem do teste' WHERE codigo LIKE ? AND gravidade='bloqueia'", X.P + '%');
-    const l = loteDe(X.P); await api(adm, `/api/lotes/${l}/conferir-todas`); const ap = await api(adm, `/api/lotes/${l}/aprovar`);
+    const l = loteDe(X.P); await conferirTodas(adm, l); const ap = await api(adm, `/api/lotes/${l}/aprovar`);
     chk(ap.st === 200, `montagem: lote de ${X.P} aprovado`, JSON.stringify(ap));
   }
   const pub = await api(adm, `/api/projetos/${C.P}/publicar-tudo`);
@@ -214,7 +216,7 @@ T.rodar(async () => {
     if (viuA) { await op.click('[data-pj-mudou] button'); await op.waitForTimeout(1500); chk(!(await op.$('[data-pj-mudou]:visible')), 'CAMP-120: "Atualizar" recarrega a página do projeto e o aviso some') }
     // (b) a operadora está editando o título no conferir quando outra pessoa aprova o lote
     await abrirConferir(op, M.P, M.D(2)); await op.fill('#rv-titulo', 'Título que eu estava digitando');
-    const ad2 = await entrar('admin'); const l = loteDe(M.P); await api(ad2, `/api/lotes/${l}/conferir-todas`); await api(ad2, `/api/lotes/${l}/aprovar`);
+    const ad2 = await entrar('admin'); const l = loteDe(M.P); await conferirTodas(ad2, l); await api(ad2, `/api/lotes/${l}/aprovar`);
     const viuB = await espera(() => op.$('[data-pj-mudou]:visible').then(Boolean), 45000);
     chk(viuB, 'CAMP-120: outra pessoa aprovou: a tela de conferir avisa que mudou', await txt(op, '#cfv'));
     chk(await op.inputValue('#rv-titulo').catch(() => '') === 'Título que eu estava digitando', 'CAMP-120: o aviso não apaga o que a pessoa estava digitando');

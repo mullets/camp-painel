@@ -127,6 +127,7 @@ class EdicaoItem(BaseModel):
     descricao_site: str | None = None
     metadados_site: dict[str, str] | None = None
     parceiros: list | None = None     # [{"escritorio", "disciplina", "outra"?}]; [] limpa; ausente = não mexe
+    vistos: dict | None = None        # CAMP-095 (opcional): o valor de cada campo mudado como a pessoa o VIU ao abrir a folha; se outra pessoa mudou antes, 409
 
 
 @router.patch("/itens/{codigo}")
@@ -221,6 +222,32 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
                     else:
                         md_envio[nome] = (mid, v, v)
                     site_antes[nome] = valores_atuais.get(nome) or ""
+        # ---------- CAMP-095: duas pessoas na mesma folha ----------
+        # Quem abriu a folha antes de outra pessoa salvar não apaga a correção dela em silêncio: se o campo que esta pessoa mudou já não é o que
+        # ela viu ao abrir, nada é gravado e a resposta diz o valor de agora. Campo não mudado por ela nem vai na requisição (a tela manda só o que mudou).
+        if d.vistos and novos:
+            conflitos = []
+            for k in novos:
+                if k not in d.vistos or k == "tipos_documento":
+                    continue
+                visto = d.vistos[k]
+                try:
+                    if k == "tipo_documento":
+                        from .tipos_documento import separar, juntar
+                        agora_v, visto_v = juntar(separar(i["tipos_documento"] or i["tipo_documento"])) or None, juntar(separar(str(visto or ""))) or None
+                    elif k == "ano_folha":
+                        agora_v, visto_v = i["ano_folha"] or None, (int(visto) if str(visto or "").strip() else None) or None
+                    elif k == "parceiros":
+                        agora_v, visto_v = parceiros.ler(i["parceiros"]), parceiros.normalizar(visto or [])
+                    else:
+                        agora_v, visto_v = (i[k] or "").strip() or None, str(visto or "").strip() or None
+                except (TypeError, ValueError, HTTPException):
+                    continue
+                if agora_v != visto_v:
+                    rot = ROTULOS_LOCAIS.get(k) or {"ano_folha": "Ano da folha", "parceiros": "Escritórios parceiros"}.get(k, k)
+                    conflitos.append(f"{rot} agora é “{agora_v if not isinstance(agora_v, list) else ', '.join(x.get('escritorio', '') for x in agora_v)}”" if agora_v else f"{rot} foi apagado")
+            if conflitos:
+                raise HTTPException(409, "Outra pessoa mudou esta folha enquanto você editava (" + "; ".join(conflitos) + "). Nada foi salvo: abra a folha de novo para ver e corrigir.")
         # ---------- grava no painel ----------
         if novos:
             sets = ", ".join(f"{k}=?" for k in novos)
