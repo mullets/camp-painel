@@ -7668,6 +7668,17 @@ def filho(modo):
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
         ver("tela: ver a folha, 'É deste projeto' e 'Desfazer' nas listas de problemas (data-*, nunca onclick)",
             "data-fp-folha=" in html and "/deste-projeto/desfazer'" in html and "data-deste-desfazer=" in html and "onclick=\"desteProjeto" not in html)
+        # (f) teste de fluxo real (20/10): o CAMP Vision manda "D00009 com identificação para outra pasta … — fora da publicação até resolver" com a
+        # categoria "projeto" (→ 'outro'), numa folha QUE JÁ ESTÁ no painel e sem sinal. "É deste projeto" fechava só 'projeto_errado': ficava
+        # "1 impede publicar (outro)" e não dava para publicar.
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,status_site,pendencias) VALUES (?,?,?,?,?,?,?,?)",
+                  (D(9), "F099-P0092", "S01", 9, "campvision", lote, "nao_publicado", '{"sinais": [], "bloqueios": []}'))
+        e9 = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('bloqueia','outro','campvision',?,?,'CAMP Vision')",
+                       (D(9), "D00009 com identificação para outra pasta (RESIDÊNCIA FULANO) — fora da publicação até resolver")).lastrowid
+        c.commit()
+        r = op.post(f"/api/itens/{D(9)}/deste-projeto")
+        ver("(f) folha no painel com o problema 'outra pasta' (categoria 'outro'): 'É deste projeto' fecha o problema que impede publicar",
+            r.status_code == 200 and q("SELECT situacao FROM erro WHERE id=?", e9)[0] == "ignorado" and r.json().get("problemas_fechados") == 1, r.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "tirar_folha":

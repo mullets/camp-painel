@@ -296,7 +296,12 @@ def confirmar_deste_projeto(codigo: str, u: dict = Depends(auth.exige("operador"
         if not isinstance(pend, dict):
             pend = {}
         sinais, bloqueios = tirar_projeto_divergente(pend)
-        mudou = bool(sinais or bloqueios)
+        # fluxo real (20/10): o CAMP Vision também manda o caso como problema em erros.json ("D00007 com identificação para outra pasta … — fora da
+        # publicação até resolver", categoria "projeto" → 'outro', gravidade bloqueia). Antes só fechava a categoria projeto_errado: esse ficava aberto
+        # e a publicação continuava travada, mesmo sem sinal na folha. Agora fecha todo problema do CAMP Vision desta folha que fala de outro projeto.
+        alvo = [r["id"] for r in con.execute("""SELECT id, categoria, descricao FROM erro WHERE codigo=? AND origem='campvision' AND situacao IN ('aberto','em_correcao')""", (codigo,))
+                if r["categoria"] == "projeto_errado" or fala_de_projeto_divergente(r["descricao"])]
+        mudou = bool(sinais or bloqueios or alvo)
         out = {"ok": True, "mudou": mudou, "sinais_tirados": sinais, "bloqueios_tirados": bloqueios, "situacao_liberada": False, "problemas_fechados": 0}
         status = i["status_site"]
         if mudou:
@@ -304,10 +309,9 @@ def confirmar_deste_projeto(codigo: str, u: dict = Depends(auth.exige("operador"
             if status == "bloqueado" and not pend["bloqueios"] and not i["autoria_divergente"]:
                 con.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (codigo,))
                 status, out["situacao_liberada"] = "nao_publicado", True
-            out["problemas_fechados"] = con.execute(
-                """UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=?
-                    WHERE codigo=? AND categoria='projeto_errado' AND origem='campvision' AND situacao IN ('aberto','em_correcao')""",
-                (f"É deste projeto: {u['email']} confirmou no painel (o CAMP Vision errou).", codigo)).rowcount
+            for eid in alvo:
+                out["problemas_fechados"] += con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=? WHERE id=?",
+                                                         (f"É deste projeto: {u['email']} confirmou no painel (o CAMP Vision errou).", eid)).rowcount
             _evento(con, "item", codigo, "projeto_confirmado", u["email"], {k: out[k] for k in ("sinais_tirados", "bloqueios_tirados", "situacao_liberada", "problemas_fechados")})
         con.commit()
         return {**out, "status_site": status, "bloqueios_restantes": pend.get("bloqueios") or [], "pendencias": pend}
