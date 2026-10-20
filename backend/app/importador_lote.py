@@ -257,7 +257,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         complemento = bool((json.loads(lote["resultado"] or "{}") or {}).get("complemento"))
     except ValueError:
         complemento = False
-    em_outro_lote = 0
+    em_outro_lote = movidas_fora = 0
     criados = atualizados = ignoradas = 0
     problemas: list[str] = []
     duplicatas: list[tuple] = []
@@ -296,6 +296,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                                        "existente_lote": col["lote_id"], "existente_revisao": col["revisao"], "existente_status": col["status_site"],
                                        "existente_titulo": col["titulo"], "titulo": (d.get("titulo") or "").strip() or None})
                 continue
+        if cod not in existentes and con.execute("SELECT 1 FROM item WHERE codigo_anterior=? AND projeto_codigo<>?", (cod, proj)).fetchone():
+            movidas_fora += 1                                      # CAMP-098: uma pessoa moveu esta folha para outro projeto; a releitura não a recria aqui
+            continue
         if complemento and cod in existentes and existentes[cod]["lote_id"] not in (None, lote_id):
             em_outro_lote += 1                                     # lote de COMPLEMENTO: só traz as folhas novas; o que já é de outro lote (publicado, aprovado…) não se mexe
             continue
@@ -385,6 +388,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     except ValueError:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
+              **({"movidas_para_outro_projeto": movidas_fora} if movidas_fora else {}),
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
@@ -417,7 +421,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))
     from .estacao_eventos import conferir_contagem      # CAMP-017: o que a estação disse que enviou × o que chegou (só aviso)
     _n = lambda v: len(v) if isinstance(v, (list, tuple, set, dict)) else int(v or 0)  # noqa: E731
-    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados))
+    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora))
     if cf:
         resumo["contagem_estacao"] = cf
     return resumo
