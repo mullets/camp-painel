@@ -119,3 +119,65 @@ def pendentes(u: dict = Depends(auth.exige("operador"))) -> dict:
         return {"limite_horas": HORAS_SEM_PROCESSAR, "itens": sem_processar(con)}
     finally:
         con.close()
+
+
+def _pasta_do_projeto(con, projeto: str) -> str | None:
+    """Pasta do projeto no QNAP: a do lote mais recente (não descartado) ou a do próprio projeto."""
+    l = con.execute("SELECT pasta_qnap FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL AND pasta_qnap IS NOT NULL AND pasta_qnap<>'' ORDER BY id DESC LIMIT 1", (projeto,)).fetchone()
+    if l:
+        return l["pasta_qnap"]
+    p = con.execute("SELECT pasta_qnap FROM projeto WHERE codigo=?", (projeto,)).fetchone()
+    return (p["pasta_qnap"] if p else None) or None
+
+
+@router.post("/estacoes/eventos/{evento_id}/ler-agora")
+def ler_agora(evento_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """"Ler agora" (quadro "Enviados pela estação e ainda sem processar"): o painel lê SOZINHO a pasta do projeto, como se o CAMP Vision tivesse
+    avisado, sem esperar ele reenviar. Cria o lote (ou o lote de complemento) e importa as folhas novas. Idempotente."""
+    from .rotas_operacao import ler_pasta_do_aviso
+    con = connect()
+    try:
+        e = con.execute("SELECT id, projeto_codigo, conferido_em FROM estacao_evento WHERE id=?", (evento_id,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Esse aviso não existe mais.")
+        proj = e["projeto_codigo"]
+        if not proj:
+            raise HTTPException(400, "Esse aviso não diz de que projeto é.")
+        pasta = _pasta_do_projeto(con, proj)
+        if not pasta:
+            raise HTTPException(400, f"O painel não sabe a pasta do projeto {proj} no QNAP. Use \"Varrer QNAP\" na Fila.")
+        r = ler_pasta_do_aviso(con, pasta, proj)
+        acao = r.get("acao")
+        if acao == "complemento":
+            msg = f"Li a pasta: {r.get('novos') or 0} folha(s) novas viraram um lote para revisar ({r.get('nome_lote') or 'complemento'})."
+        elif acao in ("nova", "atualizada"):
+            msg = "Li a pasta e o lote está na Fila para revisar."
+        elif acao == "igual":
+            msg = "Li a pasta: o painel já tem todas as folhas desse envio. Se o aviso é engano, use \"Dispensar\"."
+        else:
+            msg = r.get("motivo") or "O painel não conseguiu ler a pasta."
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'ler_pasta_agora',?,?)",
+                    (proj, u.get("email") or "operador", json.dumps({"evento_id": evento_id, "acao": acao, "pasta": pasta}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": bool(r.get("ok")), "acao": acao, "mensagem": msg, "lote_id": r.get("lote_id")}
+    finally:
+        con.close()
+
+
+@router.post("/estacoes/eventos/{evento_id}/dispensar")
+def dispensar(evento_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Tira o aviso do quadro (engano ou já resolvido por outro caminho). Fica no histórico do projeto."""
+    con = connect()
+    try:
+        e = con.execute("SELECT id, projeto_codigo, conferido_em FROM estacao_evento WHERE id=?", (evento_id,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Esse aviso não existe mais.")
+        if e["conferido_em"]:
+            return {"ok": True, "ja_estava": True}
+        con.execute("UPDATE estacao_evento SET conferido_em=datetime('now'), divergente=0 WHERE id=?", (evento_id,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'estacao_evento_dispensado',?,?)",
+                    (e["projeto_codigo"] or "estacao", u.get("email") or "admin", json.dumps({"evento_id": evento_id}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
