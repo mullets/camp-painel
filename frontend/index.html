@@ -696,6 +696,8 @@ body:not(.admin):not(.master) #machine-status,body:not(.admin):not(.master) [dat
 .x{margin-left:auto;background:none;border:0;font-size:18px;cursor:pointer;color:var(--ink3)}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* CAMP-116 (exaustão, 20/10): no tablet (768 px) "Está certo" tinha 28 px de altura; toque precisa de alvo maior. Tela de toque: 44 px em qualquer largura */
+@media (max-width:1024px){.btn{min-height:36px}}@media (pointer:coarse){.btn{min-height:44px}}
 @media (max-width:980px){
   .g3,.g4{grid-template-columns:repeat(2,1fr)}
   .lab-wrap{grid-template-columns:1fr}
