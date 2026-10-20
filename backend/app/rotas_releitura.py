@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from . import auth
 from .db import connect
-from .importador_lote import importar_lote, ler_pacote
+from .importador_lote import colisoes_decididas, importar_lote, ler_pacote
 from .rede import exigir_estacao
 from .rotas_operacao import _qnap_prontos_raiz
 
@@ -151,6 +151,18 @@ def cancelar(pid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
 
 
 # ---------------- o lado do CAMP Vision (rede local + token) ----------------
+def _codigo_de_origem(con, item_codigo: str) -> str | None:
+    """Código que a folha tem no PACOTE/acervo quando o painel a renumerou numa decisão 'lote_colide'
+    (adicionar_ao_fim). None se ela não foi renumerada."""
+    it = con.execute("SELECT lote_id FROM item WHERE codigo=?", (item_codigo,)).fetchone()
+    if not it or not it["lote_id"]:
+        return None
+    for origem, info in colisoes_decididas(con, it["lote_id"]).items():
+        if (info.get("renumeradas") or {}).get(origem) == item_codigo:
+            return origem
+    return None
+
+
 @router.get("/estacoes/pedidos-releitura")
 def pedidos_para_o_cv2(request: Request, estacao: str = "") -> dict:
     ip = exigir_estacao(request)
@@ -169,8 +181,12 @@ def pedidos_para_o_cv2(request: Request, estacao: str = "") -> dict:
                     rel = str(Path(l["pasta_qnap"]).resolve().relative_to(raiz.resolve()))
                 except ValueError:
                     rel = None
-            saida.append({"id": p["id"], "escopo": "folha" if p["item_codigo"] else "projeto", "projeto_codigo": p["projeto_codigo"], "item_codigo": p["item_codigo"],
-                          "motivo": p["motivo"], "pedido_em": p["pedido_em"], "estado": p["estado"], "pasta_relativa": rel})
+            pedido = {"id": p["id"], "escopo": "folha" if p["item_codigo"] else "projeto", "projeto_codigo": p["projeto_codigo"], "item_codigo": p["item_codigo"],
+                      "motivo": p["motivo"], "pedido_em": p["pedido_em"], "estado": p["estado"], "pasta_relativa": rel}
+            origem = _codigo_de_origem(con, p["item_codigo"]) if p["item_codigo"] else None
+            if origem:   # contrato 2.5, opcional: a folha foi renumerada pelo painel (lote_colide); o acervo ainda a chama pelo código do pacote
+                pedido["item_codigo_origem"] = origem
+            saida.append(pedido)
         return {"pedidos": saida}
     finally:
         con.close()

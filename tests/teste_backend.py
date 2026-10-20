@@ -3007,6 +3007,15 @@ def filho(modo):
         ver("cancelar: operador cancela o pedido aberto; o CV2 deixa de recebê-lo; cancelar de novo 409; depois pode pedir outro", op.post(f"/api/releituras/{p5['id']}/cancelar").status_code == 200 and all(x["id"] != p5["id"] for x in lan.get("/api/estacoes/pedidos-releitura", headers=T_).json()["pedidos"]) and op.post(f"/api/releituras/{p5['id']}/cancelar").status_code == 409 and op.post("/api/projetos/F026-P0002/releitura", json={}).json()["id"] != p5["id"] and op.post("/api/releituras/9999/cancelar").status_code == 404)
         ver("pedido antigo sem resposta é dito com franqueza ('sem_resposta' depois de 24 h) e continua aberto", (k.execute("UPDATE pedido_releitura SET pedido_em=datetime('now','-30 hours') WHERE estado='pedido'"), k.commit()) and op.get("/api/projetos/F026-P0002/releitura").json()["aberto"]["situacao"] == "sem_resposta")
         ver("tudo fica na história (pedido, cancelamento, conclusão, falha)", {"releitura_pedida", "releitura_cancelada", "releitura_concluida", "releitura_falhou"} <= {r[0] for r in k.execute("SELECT DISTINCT tipo FROM evento")})
+        # ---------- folha renumerada pelo painel (lote_colide / adicionar_ao_fim): o CV2 precisa do código do PACOTE ----------
+        c = connect()
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id) VALUES (?,?,?,?,?,'campvision',?)", (D(4), "F026-P0001", "S01", 4, "Folha renumerada", lote))
+        c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem, situacao) VALUES ('lote_colide',?,'F026','x',?,'campvision','resolvida')",
+                  (f"lote_colide:{lote}:1", _j.dumps({"colisoes": [{"codigo": D(1)}], "renumeradas": {D(1): D(4)}})))
+        c.commit(); c.close()
+        pr = op.post(f"/api/itens/{D(4)}/releitura", json={"motivo": "renumerada"}).json()
+        lst = {x["id"]: x for x in lan.get("/api/estacoes/pedidos-releitura", headers=T_).json()["pedidos"]}
+        ver("releitura de folha renumerada pelo painel manda item_codigo_origem (o código do pacote/acervo); folha normal não manda", lst[pr["id"]].get("item_codigo_origem") == D(1) and lst[pr["id"]]["item_codigo"] == D(4) and all("item_codigo_origem" not in x for i, x in lst.items() if i != pr["id"]), str(lst.get(pr["id"])))
         for l in res: print(l)
         k.close()
         return 0
