@@ -193,6 +193,45 @@ def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     return out
 
 
+_COD_FOLHA = re.compile(r"F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}")
+
+
+def _codigos_em(x) -> list[str]:
+    """Códigos de folha citados num item de proposta do CAMP Vision (texto, lista ou dicionário em qualquer formato)."""
+    return list(dict.fromkeys(_COD_FOLHA.findall(json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x)))
+
+
+def obras_na_pasta(pacote: dict | None, propostas) -> dict | None:
+    """20/10 (CAMP-126, F026-P0009): "8 obras distintas pelo código de unidade — ver propostas.obras_na_pasta". Agrupa as folhas do pacote
+    pelo `codigo_unidade` (campo do contrato em documentos[]) para a pessoa decidir se são partes do mesmo conjunto ou projetos diferentes.
+    Só existe quando o CAMP Vision apontou (aviso de obras distintas ou propostas.obras_na_pasta com itens) e há 2+ códigos de unidade.
+    Itens de obras_na_pasta que tragam códigos de folha completam os grupos (o formato do item não é fixo no contrato)."""
+    pac = pacote if isinstance(pacote, dict) else {}
+    lista = (propostas or {}).get("obras_na_pasta") if isinstance(propostas, dict) else None
+    lista = lista if isinstance(lista, list) else []
+    avisou = any(re.search(r"obras?\s+distintas|obras_na_pasta", str(a), re.I) for a in (pac.get("avisos") or []))
+    if not (avisou or lista):
+        return None
+    grupos: dict[str, list[str]] = {}
+    docs = pac.get("documentos") or pac.get("itens") or []
+    for d in docs if isinstance(docs, list) else []:
+        if isinstance(d, dict) and d.get("codigo"):
+            u = str(d.get("codigo_unidade") or "").strip()
+            if u:
+                grupos.setdefault(u, []).append(str(d["codigo"]))
+    for x in lista:
+        if isinstance(x, dict):
+            u = str(x.get("codigo_unidade") or x.get("unidade") or x.get("obra") or "").strip()
+            if u:
+                g = grupos.setdefault(u, [])
+                g.extend(c for c in _codigos_em(x) if c not in g)
+    sem = [str(d["codigo"]) for d in (docs if isinstance(docs, list) else []) if isinstance(d, dict) and d.get("codigo") and not str(d.get("codigo_unidade") or "").strip()]
+    if len(grupos) < 2:
+        return None
+    return {"grupos": [{"unidade": u, "folhas": f} for u, f in sorted(grupos.items(), key=lambda kv: (-len(kv[1]), kv[0]))],
+            "sem_unidade": sem, "propostas": len(lista)}
+
+
 def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None, conferencia: dict | None = None) -> dict:
     cat = Path(pasta) / "catalogacao"
     if not cat.is_dir():
@@ -224,4 +263,6 @@ def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None, 
         "decisoes": _json(cat / "decisoes.json"),
         "orientacao": ler_orientacao(_texto(cat / "orientacao.txt")),
         "releituras": releituras,
+        # 20/10 (CAMP-126): opcional. Grupos por código de unidade e a decisão de uma pessoa ("obras:decisao" em respostas)
+        "obras": (lambda o: {**o, "decisao": (respostas or {}).get("obras:decisao")} if o else None)(obras_na_pasta(pac, propostas)),
     }

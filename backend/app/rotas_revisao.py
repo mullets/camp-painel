@@ -625,8 +625,12 @@ def saidas_cv(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
         pasta = _qnap_prontos_raiz() / pasta
     con = connect()
     try:
-        resp = {f"{r['tipo']}:{r['chave']}": {"acao": r["acao"], "por": r["por"], "em": r["em"], "motivo": r["motivo"], "valor": r["valor"]}
-                for r in con.execute("SELECT * FROM cv_resposta WHERE lote_id=?", (lote_id,))}
+        resp = {}
+        for r in con.execute("SELECT * FROM cv_resposta WHERE lote_id=?", (lote_id,)):
+            if r["tipo"] == "proposta" and r["chave"] == "obras:decisao":     # CAMP-126: ver _responder_cv
+                resp["obras:decisao"] = {"acao": r["valor"], "por": r["por"], "em": r["em"], "motivo": r["motivo"], "valor": r["valor"]}
+            else:
+                resp[f"{r['tipo']}:{r['chave']}"] = {"acao": r["acao"], "por": r["por"], "em": r["em"], "motivo": r["motivo"], "valor": r["valor"]}
         conf = conferencia_do_lote(con, lote_id)   # o aceite é uma foto da leitura: o que já foi conferido no painel resolve o que pede olho humano
     finally:
         con.close()
@@ -647,7 +651,8 @@ class RespostaCV(BaseModel):
 
 
 _COLUNA_CV = {"titulo": "titulo", "ano": "ano", "cidade": "cidade", "uf": "uf", "cliente": "cliente", "endereco": "endereco_obra"}
-_RESPOSTAS_CV = {"sugestao": ("usar", "ignorar"), "proposta": ("aceitar", "recusar"), "retirado": ("devolver",), "releitura": ("aceitar", "ignorar")}
+# 20/10 (CAMP-126): "obras": a decisão sobre as obras distintas que o CAMP Vision achou na pasta (chave "decisao").
+_RESPOSTAS_CV = {"sugestao": ("usar", "ignorar"), "proposta": ("aceitar", "recusar"), "retirado": ("devolver",), "releitura": ("aceitar", "ignorar"), "obras": ("mesmo_conjunto", "separar")}
 
 
 def _responder_cv(con, l, d: RespostaCV, u: dict) -> None:
@@ -660,11 +665,18 @@ def _responder_cv(con, l, d: RespostaCV, u: dict) -> None:
             raise HTTPException(403, "Só um admin devolve à revisão uma folha retirada pelo CAMP Vision")
         if len((d.motivo or "").strip()) < 3:
             raise HTTPException(400, "Explique por que a folha volta para a revisão")
-    # CAMP-131: cv_resposta.tipo tem CHECK (sugestao, proposta, retirado) na base real; a resposta à releitura vai como 'proposta' com a chave 'releitura:…'
-    tipo_db, chave_db = ("proposta", "releitura:" + d.chave) if d.tipo == "releitura" else (d.tipo, d.chave)
+    # a tabela cv_resposta só aceita os tipos antigos (CHECK): a decisão das obras fica como uma "proposta" de chave própria ("obras:decisao",
+    # aceitar = mesmo conjunto, recusar = separar; o valor guarda a ação), e /saidas-cv a devolve como "obras:decisao". Nenhuma tabela é recriada.
+    # CAMP-131: pelo mesmo motivo, a resposta à releitura vai como 'proposta' com a chave 'releitura:…'
+    if d.tipo == "obras":
+        tipo_db, chave_db, acao_db = "proposta", "obras:decisao", ("aceitar" if d.acao == "mesmo_conjunto" else "recusar")
+    elif d.tipo == "releitura":
+        tipo_db, chave_db, acao_db = "proposta", "releitura:" + d.chave, d.acao
+    else:
+        tipo_db, chave_db, acao_db = d.tipo, d.chave, d.acao
     if con.execute("SELECT 1 FROM cv_resposta WHERE lote_id=? AND tipo=? AND chave=?", (l["id"], tipo_db, chave_db[:200])).fetchone():
         raise HTTPException(409, "Isso já foi respondido")
-    valor = (d.valor or "").strip()[:300] or None
+    valor = (d.acao if d.tipo == "obras" else (d.valor or "").strip()[:300]) or None
     if d.tipo == "releitura" and d.acao == "aceitar":         # CAMP-131 (P10): aplicar UMA mudança que a releitura trouxe (o valor vem do arquivo, não da tela)
         valor = _aplicar_mudanca_releitura(con, l, d.chave, u["email"])
     if d.tipo == "sugestao" and d.acao == "usar":
@@ -686,14 +698,16 @@ def _responder_cv(con, l, d: RespostaCV, u: dict) -> None:
                     raise HTTPException(400, "UF sugerida inválida (use a sigla, ex.: SP)")
             con.execute(f"UPDATE projeto SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (valor, l["projeto_codigo"]))
     con.execute("INSERT INTO cv_resposta (lote_id, projeto_codigo, tipo, chave, acao, valor, motivo, por) VALUES (?,?,?,?,?,?,?,?)",
-                (l["id"], l["projeto_codigo"], tipo_db, chave_db[:200], d.acao, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
+                (l["id"], l["projeto_codigo"], tipo_db, chave_db[:200], acao_db, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
     _evento(con, "projeto", l["projeto_codigo"], f"cv_{d.tipo}_{d.acao}", u["email"], {"lote": l["id"], "chave": d.chave, "valor": valor, "motivo": d.motivo})
 
 
 @router.post("/lotes/{lote_id}/saidas-cv/resposta")
 def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Uma pessoa responde ao CAMP Vision. sugestao: usar (grava SÓ se o campo ainda estiver vazio ou com título provisório) | ignorar.
-    proposta: aceitar | recusar (só registra; nada é aplicado sozinho). retirado: devolver (admin, motivo obrigatório; entra na próxima importação)."""
+    proposta: aceitar | recusar (só registra; nada é aplicado sozinho). retirado: devolver (admin, motivo obrigatório; entra na próxima importação).
+    obras (chave "decisao"): mesmo_conjunto (fecha o aviso das obras distintas; fica no histórico) | separar (registra; as folhas são movidas pelo
+    "Mover folhas", que continua só para admin e só dentro do fundo)."""
     con = connect()
     try:
         l = con.execute("SELECT id, projeto_codigo FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
