@@ -2933,7 +2933,7 @@ function avisosFolha(it){return [it.autoria_divergente?['autoria não confirmada
   it.duplicata_de?['duplicata','Marcada como cópia de '+it.duplicata_de]:null,
   it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it)?['espelhada?','O CAMP Vision achou que foi digitalizada pelo verso: a prévia já sai espelhada. Confira na revisão.']:null].filter(Boolean)}
 function semImagemFolha(it){return (!usaPreviaFolha(it)&&!it.thumb_url)||!!(window.SEM_IMG_PJ&&window.SEM_IMG_PJ.has(it.codigo))}
-function flagsFolha(it){return [it.lote_id&&it.revisao==='pendente'?'conferir':'',(avisosFolha(it).length||it.retida)?'problema':'',semImagemFolha(it)?'semimg':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':''].filter(Boolean).join(' ')}
+function flagsFolha(it){return [it.lote_id&&it.revisao==='pendente'?'conferir':'',folhaComProblema(it)?'problema':'',semImagemFolha(it)?'semimg':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':''].filter(Boolean).join(' ')}
 function contagemFolhas(its){const c={todas:its.length,conferir:0,problema:0,semimg:0,site:0,lote:0,conferidas:0};for(const it of its){const f=flagsFolha(it);if(f.includes('conferir'))c.conferir++;if(f.includes('problema'))c.problema++;if(f.includes('semimg'))c.semimg++;if(f.includes('site'))c.site++;if(it.lote_id){c.lote++;if(it.revisao!=='pendente')c.conferidas++}}return c}
 function barraFolhasHTML(its,noSite){if(its.length<2)return '';const c=contagemFolhas(its),b=(f,t,n)=>`<button class="btn sm${f===''?' on':''}" aria-pressed="${f===''}" data-fl-f="${f}" data-fl-t="${t}">${t} (${n})</button>`;   // #95: filtro ligado não é botão azul (o azul é só o próximo passo)
   return `<div class="folhas-bar" role="toolbar" aria-label="Filtrar folhas"><span class="fb-cont" role="status">${c.lote?`Conferidas <b>${c.conferidas} de ${c.lote}</b>`:`<b>${fmtN(its.length)}</b> folhas`}${noSite!=null?` <small class="help fb-site">· ${escHtml(Math.max(Number(noSite)||0,c.site))} no site</small>`:''}</span><div class="act">${b('','Todas',c.todas)}${b('problema','Com problema',c.problema)}${b('semimg','Sem imagem',c.semimg)}${b('conferir','A conferir',c.conferir)}${b('site','No site',c.site)}</div><div class="act fb-tam" role="group" aria-label="Tamanho das miniaturas">${['p','m','g'].map(t=>`<button class="btn sm${tamMiniaturas()===t?' on':''}" aria-pressed="${tamMiniaturas()===t}" data-tam="${t}" title="Miniaturas ${({p:'pequenas',m:'médias',g:'grandes'})[t]}">${t.toUpperCase()}</button>`).join('')}</div></div>`}
@@ -3462,7 +3462,7 @@ function cardItemProjeto(it){
   const imagem=usaPreviaFolha(it)?`<img class="img-real img-prev" src="${urlPreviaFolha(codigo,it.giro_manual,480,it.espelhar,ajusteChave(it))}" loading="lazy" alt="${escHtml(codigo)}">`:it.thumb_url?`<img class="img-real" src="${escHtml(urlThumbSite(it))}" loading="lazy" alt="${escHtml(codigo)}">`:semImagemHTML('O CAMP Vision não gerou a prévia desta folha.',/^F\d{3}-P\d{4}-/.test(codigo)?codigo:null,true);   // 19/10: no cartão, curto
   const revisavel=!!it.lote_id&&EU&&EU.papel!=='leitura';
   const rev=it.lote_id?` ${tagRevisao(it.revisao,it.retida)}`:'';
-  const flag=avisosFolha(it).map(a=>`<span class="tag a mini flag" title="${escHtml(a[1])}">${escHtml(a[0])}</span>`).join(' ');   // 19/10: embaixo do título, não em cima da imagem
+  const flag=flagsAvisosHTML(it);   // 19/10: embaixo do título, não em cima da imagem
   const status=it.status_site==='rascunho'?' <span class="tag b" style="font-size:9.5px">rascunho</span>':it.status_site==='fora_do_ar'?' <span class="tag" style="font-size:9.5px">despublicado</span>':'';
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
   const ehCapa=!!window.CAPA_PJ&&window.CAPA_PJ===codigo;   /* B12: o cartão só mostra o selo; "Usar como capa" fica na página da folha e na revisão (sem botão repetido no cartão) */
@@ -3826,7 +3826,7 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='ArrowLeft'&&L[i-1]){e.preventDefault();abrirRevisaoItem(L[i-1].codigo)}
   else if(e.key==='r'||e.key==='R'){const g=revSel('[data-rev-girar="90"]');if(g){e.preventDefault();g.click()}}});
 function atualizarCartaoRevisao(codigo){setTimeout(atualizarContadorFolhas,0);if(revConf())confDesenharLista();const c=document.querySelector(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"]`);if(c){const t=c.querySelector('.rev-tag'),it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(t&&it)t.outerHTML=tagRevisao(it.revisao,it.retida);
-  if(it){if(!orientIncerta(it))c.querySelectorAll('.or-inc').forEach(x=>x.remove());const av=c.querySelector('.cap-avisos');if(av){const fl=avisosFolha(it).map(a=>`<span class="tag a mini flag" title="${escHtml(a[1])}">${escHtml(a[0])}</span>`).join(' ');if(fl)av.innerHTML=fl;else av.remove()}c.dataset.fl=flagsFolha(it)}}}   /* CAMP-068: as marcas que a conferência resolveu saem do cartão na hora */
+  if(it){if(!orientIncerta(it))c.querySelectorAll('.or-inc').forEach(x=>x.remove());const av=c.querySelector('.cap-avisos');if(av){const fl=flagsAvisosHTML(it);if(fl)av.innerHTML=fl;else av.remove()}c.dataset.fl=flagsFolha(it)}}}   /* CAMP-068: as marcas que a conferência resolveu saem do cartão na hora */
 async function girarFolha(codigo,graus,desfazendo){
   const it0=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo),noSite=!!it0&&['rascunho','no_ar'].includes(it0.status_site_local||it0.status_site),adm=EU&&['admin','master'].includes(EU.papel);
   if(noSite&&adm&&!desfazendo&&!await confirmar({titulo:'Girar também a imagem no site?',texto:`A folha ${codigo} já está no site. O painel troca a imagem de lá pela girada (o endereço da imagem continua o mesmo). Se o site recusar, nada muda.`,botao:'Girar no site'}))return;
@@ -3969,10 +3969,17 @@ function confProblemas(it){const p=it.pendencias||{},o=[];
 /* Fluxo real (20/10): os problemas ABERTOS da folha (ex.: "ano lido 1927 diverge do projeto") não apareciam no conferir; a pessoa clicava
    "Está certo" sem ver, e a conferência os fechava. Agora aparecem na folha e na lista. Os que já têm aviso próprio não repetem. */
 function espelhadaAConferir(it){return !!(it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it))}
-function confErrosFolha(it){const L=(((CONF.d&&CONF.d.erros)||(window.PJ_D&&window.PJ_D.erros))||[]);
+/* CAMP-081: "Com problema" é UMA regra só, na página do projeto (barra e miniaturas) e no conferir: antes a página contava só autoria, duplicata e
+   espelhada (1) e o conferir também orientação incerta e problemas abertos da folha (4), no mesmo lote. Folha retida também conta. */
+/* CAMP-081: as marcas do cartão da folha são as mesmas que fazem a folha contar em "Com problema" (fora a orientação incerta, que tem a marca dela) */
+function flagsAvisosHTML(it){const av=avisosFolha(it),ja=new Set(['autoria','duplicata','orientação incerta','espelhada?']),er=confErrosFolha(it);
+  return [...av.map(a=>`<span class="tag a mini flag" title="${escHtml(a[1])}">${escHtml(a[0])}</span>`),
+    ...confProblemas(it).filter(([,t])=>!ja.has(t)).map(([c,t])=>`<span class="tag ${c} mini flag" title="${escHtml(/problema/.test(t)?er.map(e=>e.descricao||e.categoria).join(' · '):t)}">${escHtml(t)}</span>`)].join(' ')}
+function folhaComProblema(it){return !!(it&&(it.retida||avisosFolha(it).length||confProblemas(it).length))}
+function confErrosFolha(it){const pj=String(it.codigo||'').slice(0,10),d=[window.PJ_D,CONF.d].find(x=>x&&x.projeto&&x.projeto.codigo===pj),L=(d&&d.erros)||[];   /* os dados DO projeto da folha (CONF.d pode ser de um projeto aberto antes) */
   return L.filter(e=>e.codigo===it.codigo&&['aberto','em_correcao'].includes(e.situacao||'aberto')&&!(e.categoria==='autoria_divergente'&&it.autoria_divergente)&&!(e.categoria==='duplicata'&&it.duplicata_de)&&!(e.categoria==='orientacao'&&orientIncerta(it)))}
 function bloqueiosResolviveis(it){const p=(it&&it.pendencias)||{};return (Array.isArray(p.bloqueios)?p.bloqueios:[]).filter(b=>b&&!falaDeProjetoDivergente(b)&&!/duplicat/i.test(String(b)))}
-function confNoFiltro(it,f){return f==='a_conferir'?it.revisao==='pendente':f==='problema'?confProblemas(it).length>0:f==='sem_imagem'?!confTemImg(it):true}
+function confNoFiltro(it,f){return f==='a_conferir'?it.revisao==='pendente':f==='problema'?folhaComProblema(it):f==='sem_imagem'?!confTemImg(it):true}
 function confVisiveis(){return confFolhas().filter(x=>confNoFiltro(x,CONF.filtro)||x.codigo===CONF.atual)}   /* a folha aberta fica na lista mesmo fora do filtro */
 function confMiniUrl(it){const pv=it.pendencias&&it.pendencias.previa;return pv?urlPreviaFolha(it.codigo,it.giro_manual,160,it.espelhar,ajusteChave(it)):it.thumb_url?urlThumbSite(it):''}
 function confNomeFolha(it){return `${String(it.codigo).split('-').pop()} · ${separarTipos(it.tipo_documento).join(', ')||nomeSerieProjeto(it.serie_codigo)}`}
@@ -4335,7 +4342,7 @@ async function carregarFolhasQnap(code){
     const fim=document.getElementById('pj-qnap-fim');if(fim)fim.innerHTML=dep;   // "nada a fazer" vai para depois das folhas: não empurra a grade para baixo
     box.innerHTML=(fim?'':dep)+com.filter(l=>!importado(l)).map(l=>{return `<div class="panel"><div class="ph"><h2>Encontradas no QNAP, ainda não catalogadas no painel</h2><span class="tag a">${fmtN(l.fora_do_painel)} documento(s)</span></div><div class="pb"><p class="help">Lote <b>${escHtml(l.nome)}</b> (${escHtml(l.etapa)}). Estes arquivos estão na pasta do projeto no QNAP, mas ainda não viraram folhas do painel. Quando o lote tiver o pacote do CAMP Vision, a Revisão do lote (acima) importa as folhas e elas passam a aparecer na lista abaixo.${l.parcial?' <b>A leitura da pasta foi interrompida por demorar: a lista está incompleta.</b>':''}</p>${grade(l)}</div></div>`}).join('')+sumiu.map(l=>`<div class="panel"><div class="pb"><p class="help"><span class="tag r">pasta não encontrada</span> A pasta do lote <b>${escHtml(l.nome)}</b> não está acessível: <span class="mono">${escHtml(l.pasta)}</span>. Confira se o QNAP está montado.</p></div></div>`).join('')
   }catch(e){box.innerHTML='';const fim=document.getElementById('pj-qnap-fim');if(fim)fim.innerHTML=''}}
-function pjGlobais(d,p){window.ITENS_PJ=d.itens||[];window.PROJETO_PJ=p.codigo;window.CAPA_PJ=p.capa_item||null}
+function pjGlobais(d,p){window.ITENS_PJ=d.itens||[];window.PJ_D=d;window.PROJETO_PJ=p.codigo;window.CAPA_PJ=p.capa_item||null}
 function renderItensProjeto(d,p){pjGlobais(d,p);window.SEM_IMG_PJ=new Set();return renderItensProjetoBase(d,p)+parceirosProjetoHTML(d.parceiros)}
 function pjCarregarQuadros(d,p,folhas){pjGlobais(d,p);setTimeout(()=>{slGuardar(p.codigo,'problemas',slProblemas(d,p.codigo));carregarRevisaoLote(p.codigo);carregarConsenso(p.codigo);carregarSaidasCV(p.codigo);if(folhas)carregarFolhasQnap(p.codigo);
   const a=window.ACAO_APOS_PROJETO;if(!a||a.codigo!==p.codigo)return;window.ACAO_APOS_PROJETO=null;

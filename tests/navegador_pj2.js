@@ -142,10 +142,12 @@ for n in range(1, 35):
 
     // (6) autoria não confirmada no rodapé; "Com problema" coerente
     const aut = await page.evaluate(() => [...document.querySelectorAll('#pd .thumb .flag')].map(f => ({ t: f.textContent, cap: !!f.closest('.cap'), pos: getComputedStyle(f).position })));
-    chk(aut.length === 3 && aut.every(x => x.t === 'autoria não confirmada' && x.cap && x.pos === 'static'), '(6) "autoria não confirmada" é marca pequena no rodapé do cartão, não em cima da imagem: ' + JSON.stringify(aut[0]));
+    const autS = aut.filter(x => x.t === 'autoria não confirmada');   // CAMP-081 (20/10): os cartões também marcam "problema" (os problemas abertos da folha)
+    chk(autS.length === 3 && aut.every(x => x.cap && x.pos === 'static'), '(6) "autoria não confirmada" é marca pequena no rodapé do cartão, não em cima da imagem: ' + JSON.stringify(aut[0]));
     const nProb = +((await txt('.folhas-bar [data-fl-f="problema"]')).match(/\((\d+)\)/) || [])[1];
     const comAviso = await page.$$eval('#pd .thumb', l => l.filter(t => t.querySelector('.cap-avisos') || t.querySelector('.rev-tag.r')).length);
-    chk(nProb === comAviso && nProb === 3, '(6) "Com problema (' + nProb + ')" = cartões com aviso (' + comAviso + ')');
+    // CAMP-081 (20/10): "Com problema" conta também os problemas abertos das folhas (4 que impedem publicar + 3 de metadado), como o conferir; cada um tem a marca no cartão
+    chk(nProb === comAviso && nProb === 10, '(6) "Com problema (' + nProb + ')" = cartões com aviso (' + comAviso + ')');
 
     // (7) folhas perto do topo (como quem usa todo dia: "Como funciona" e a faixa do servidor já fechadas)
     for (const sel of ['.ajuda-caixa [data-ajuda-fechar]', '[data-faixa-fechar]']) { const b = await page.$(sel); if (b && await b.isVisible()) { await b.click(); await page.waitForTimeout(400) } }
