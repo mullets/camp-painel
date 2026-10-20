@@ -683,6 +683,20 @@ def _classificar_status(st, con=None) -> tuple[str, bool]:
     return "revisao", False
 
 
+def _anotar_lote_teste(con, pasta: Path, codigo: str | None) -> None:
+    """CAMP-114: o lote de teste continua IGNORADO (não vira fila, não importa folhas), mas o projeto que a estação reservou para ele fica
+    sabendo: anota no histórico "o CAMP Vision mandou lote de teste desta pasta" (uma vez por pasta). Enquanto o projeto não tiver nenhuma
+    folha, a publicação trata como lote de teste (não vai ao site) e a página diz isso; um lote de verdade depois volta ao normal."""
+    cod = str(codigo or "").strip().upper()
+    if not re.fullmatch(r"F\d{3}-P\d{4}", cod) or not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (cod,)).fetchone():
+        return
+    det = {"pasta": str(pasta)}
+    if con.execute("SELECT 1 FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='lote_teste_ignorado' AND detalhe=?",
+                   (cod, json.dumps(det, ensure_ascii=False))).fetchone():
+        return
+    _evento(con, "projeto", cod, "lote_teste_ignorado", "campvision", det)
+
+
 def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = None) -> dict:
     """Lê UMA pasta de lote (info_projeto.json, status.json e as imagens) e cria ou atualiza a lista dela.
 
@@ -720,6 +734,7 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         legado.registrar_uso("nomes_de_teste", pasta.name, con)
         nome_teste = legado.ligado(con, "nomes_de_teste")          # CAMP-024: desligado = só "teste": true (ou a pasta "teste") vale
     if info.get("teste") or pasta.name.lower() == "teste" or nome_teste:
+        _anotar_lote_teste(con, pasta, info.get("codigo") or esperado)
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": "lote de teste"}
     from .similaridade import normalizar as _norm_sim
     if re.match(r"^\d+ ?arquivo arquivistico", _norm_sim(pasta.name) or ""):   # "01 - Arquivo Arquivístico (TIFF)" é parte do lote da pasta de cima

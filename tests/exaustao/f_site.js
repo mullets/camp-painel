@@ -231,27 +231,28 @@ T.rodar(async () => {
 
   // ---------------- CAMP-114 ----------------
   passo('CAMP-114: lote de teste ("teste": true)');
+  // o CAMP Vision grava "teste": true desde o "processando"; por contrato o painel NÃO importa lote de teste (nada vira fila nem vai ao site)
   const d = loteLimpo('CASA LOTE DE TESTE', 3, true);
-  chk(um('SELECT COUNT(*) FROM item WHERE projeto_codigo=?', d.P) === 3, 'CAMP-114: as 3 folhas do lote de teste entram no painel');
+  chk(d.avisos.every(x => /lote de teste/.test(x)), 'CAMP-114: os avisos do CAMP Vision respondem "ignorada: lote de teste"', d.avisos.join(' | '));
+  chk(um('SELECT COUNT(*) FROM item WHERE projeto_codigo=?', d.P) === 0 && !um('SELECT COUNT(*) FROM lista_processamento WHERE projeto_codigo=?', d.P), 'CAMP-114: nenhuma folha nem lote do teste entra no painel');
   await T.abrirProjeto(ad, d.P); await espera(async () => !/verificando/.test(await cartaoSite(ad)));
-  const corpo = await txt(ad, '#pd');
-  chk(/lote de teste|de teste/i.test(corpo), 'CAMP-114: a página diz claramente que é lote de teste', corpo.slice(0, 400));
+  const s4 = await cartaoSite(ad);
+  chk(/lote de teste/i.test(s4), 'CAMP-114: a página do projeto diz claramente que só chegou lote de teste', s4);
   const bp4 = await btPublicar(ad);
-  chk(!bp4 || (await bp4.getAttribute('aria-disabled')) === 'true', 'CAMP-114: sem "Publicar" liberado', await cartaoSite(ad));
-  await print(ad, '114_projeto');
-  await conferirTudo(ad, d.P);
-  await T.abrirProjeto(ad, d.P);
-  const apr4 = await ad.$('[data-pp="aprovar"]:visible'); if (apr4) { await apr4.click(); await confirmar(ad); await ad.waitForTimeout(1500) }
-  await T.abrirProjeto(ad, d.P); await espera(async () => !/verificando/.test(await cartaoSite(ad)));
-  const bp5 = await btPublicar(ad);
-  chk(!bp5 || (await bp5.getAttribute('aria-disabled')) === 'true', 'CAMP-114: mesmo conferido e aprovado, não há "Publicar" liberado', await cartaoSite(ad));
-  chk(/teste/i.test(await cartaoSite(ad)), 'CAMP-114: o cartão Site diz que é teste', await cartaoSite(ad));
+  chk(!bp4 || (await bp4.getAttribute('aria-disabled')) === 'true', 'CAMP-114: sem "Publicar" liberado', s4);
   chk(!(await ad.$('[data-pp="publicar"]:visible')), 'CAMP-114: nenhum botão "Publicar" visível');
-  await print(ad, '114_aprovado');
+  await print(ad, '114_projeto');
   const rTeste = await ad.evaluate(async c2 => { const r = await fetch('/api/projetos/' + c2 + '/publicar-tudo', { method: 'POST' }); return r.status }, d.P);
-  chk(rTeste === 400 && um('SELECT status_site FROM projeto WHERE codigo=?', d.P) !== 'no_ar', 'CAMP-114: o painel recusa publicar o lote de teste mesmo chamado direto', rTeste);
-  await ad.evaluate(() => nav('painel')); await ad.waitForTimeout(2500);
-  const painel = await txt(ad, '#pd');
-  chk(!painel.includes('CASA LOTE DE TESTE'), 'CAMP-114: o lote de teste não entra no "O que fazer agora" como trabalho real', painel.slice(0, 600));
+  chk(rTeste === 400 && um('SELECT status_site FROM projeto WHERE codigo=?', d.P) !== 'no_ar' && !um('SELECT tainacan_item_id FROM projeto WHERE codigo=?', d.P), 'CAMP-114: o painel recusa publicar mesmo chamado direto (nada é criado no site)', rTeste);
+  await ad.evaluate(() => nav('painel')); await ad.waitForSelector('.ini-task', { timeout: 15000 }).catch(() => {}); await ad.waitForTimeout(1000);
+  const tarefas = await ad.$$eval('.ini-task', l => l.filter(x => x.offsetParent).map(x => x.innerText.replace(/\s+/g, ' ')));
+  chk(tarefas.length > 0 && !tarefas.some(t => t.includes('CASA LOTE DE TESTE') || t.includes(d.P)), 'CAMP-114: o lote de teste não entra no "O que fazer agora" como trabalho real', tarefas.join(' | ').slice(0, 600));
   await print(ad, '114_painel');
+  // um lote REAL depois, no mesmo projeto, volta ao normal (o aviso de teste não trava o projeto para sempre)
+  montar('processando', T.BASE, T.RAIZ, d.P, 'CASA LOTE DE TESTE'); montar('pronto', T.BASE, T.RAIZ, d.P, '2');
+  chk(um('SELECT COUNT(*) FROM item WHERE projeto_codigo=?', d.P) === 2, 'CAMP-114: chegando um lote de verdade, as folhas entram normalmente');
+  await conferirTudo(ad, d.P); await aprovarNoProjeto(ad, d.P); await T.abrirProjeto(ad, d.P); await espera(async () => !/verificando/.test(await cartaoSite(ad)));
+  const bp6 = await btPublicar(ad);
+  chk(!!bp6 && (await bp6.getAttribute('aria-disabled')) !== 'true', 'CAMP-114: com folhas de verdade conferidas e aprovadas, "Publicar" libera', await cartaoSite(ad));
+  await print(ad, '114_lote_real');
 });
