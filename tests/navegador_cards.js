@@ -159,7 +159,7 @@ for n in range(1, 35):
     await abrir(B);
     await page.waitForFunction(() => /bl/.test((document.querySelector('#pj-cards [data-pjc="folhas"]') || {}).className || ''), null, { timeout: 8000 }).catch(() => {});
     const f = await card('folhas'), d = await card('dados');
-    chk(f.v === '0 / 34' && /\bbl\b/.test(f.cls) && /34 a conferir/.test(f.d) && /Lote parado por erro do CAMP Vision: Falha ao ler o carimbo da folha D00020/.test(f.d) && f.bts[0] === 'Conferir' && f.bts.includes('Pedir releitura'), '(6) B: Folhas vermelho "0 / 34", "34 a conferir", o motivo do lote parado, "Conferir" e "Pedir releitura": ' + JSON.stringify(f));
+    chk(f.v === '0 / 34' && /\bbl\b/.test(f.cls) && /34 a conferir/.test(f.d) && /Lote parado por erro do CAMP Vision/.test(f.d) && !/Falha ao ler/.test(f.d) && f.bts[0] === 'Conferir' && !f.bts.includes('Pedir releitura') && f.bts.includes('Detalhes dos lotes'), '(6) B: Folhas vermelho "0 / 34", "34 a conferir", "Lote parado por erro" em 1 linha (CAMP-128: a mensagem e o "Pedir releitura" ficam uma vez, em Detalhes dos lotes): ' + JSON.stringify(f));
     chk(d.v === '1 pergunta' && /ano: “1978” em 6 folhas; 1 diz outra coisa/.test(d.d), '(6) B: Dados "1 pergunta" (ano), sem contar folha sem ano nem grafia diferente: ' + JSON.stringify(d));
     const gb = await page.evaluate(() => ({ folhas: document.querySelector('.pj-gav[data-gav="folhas"]').checkVisibility(), rev: !!document.getElementById('pj-revisao') }));
     chk(gb.folhas, '(9) B: lote parado por erro do CAMP Vision: "Detalhes dos lotes" já abre: ' + JSON.stringify(gb));

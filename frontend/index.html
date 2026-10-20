@@ -3293,7 +3293,11 @@ function pjDecisoesHTML(d){const L=(d&&d.decisoes_pendentes)||[];if(!L.length)re
   return L.map(x=>`<div class="aviso-bloqueio pj-dec" role="note" data-pj-dec="${escHtml(x.id)}"><b>${x.tipo==='projeto_parecido'&&x.origem==='estacao'?'O CAMP Vision está parado esperando uma decisão:':'Decisão pendente:'}</b> <span>${escHtml(x.pergunta||x.titulo||'')}</span> ${adm?`<button type="button" class="btn sm pri" data-dec-abrir="${escHtml(x.id)}">Decidir</button>`:'<small class="help">Um admin decide, em Decisões.</small>'}</div>`).join('')}
 function pjAutoAbrir(code){const g=pjGav(code);if(g.fechou)return;if(g.aberta&&!(g.auto&&g.aberta===g.autoK))return;const q=k=>document.querySelector(`#pj-cards [data-pjc="${k}"]`);
   const k=q('folhas')&&q('folhas').classList.contains('bl')?'folhas':q('problemas')&&q('problemas').classList.contains('bl')?'problemas':q('dados')&&q('dados').classList.contains('at')?'dados':null;
+  if(!k&&!g.aberta&&!g.autoK&&pjDetLotesPref()==='1'){g.aberta='folhas';const gv=document.getElementById('pj-gaveta');if(gv){gv.hidden=false;gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!=='folhas')}return}   /* CAMP-128: sem ação pendente, vale o que a pessoa deixou */
   if(!k||(g.autoK&&PJ_AUTO_ORDEM.indexOf(k)>=PJ_AUTO_ORDEM.indexOf(g.autoK)))return;g.auto=true;g.autoK=k;g.aberta=k;const gv=document.getElementById('pj-gaveta');if(!gv)return;gv.hidden=false;gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!==k)}
+/* CAMP-128 (P7): "Detalhes dos lotes" fica fechado por padrão; abre sozinho só com ação pendente no lote (lote parado). Se a pessoa o abre ou
+   fecha, a página lembra (neste navegador) e, sem ação pendente, respeita. */
+function pjDetLotesPref(v){try{if(v!==undefined)localStorage.setItem('camp.pjDetLotes',v);return localStorage.getItem('camp.pjDetLotes')}catch(_){return null}}
 function pjcCartao(k,titulo,o){return `<div class="pjc ${o.cor||''}" data-pjc="${k}"><div class="pjc-k">${titulo}</div><div class="pjc-v">${o.v}</div><div class="pjc-d">${(o.d||[]).filter(Boolean).map(x=>`<span>${x}</span>`).join('')}</div><div class="pjc-act">${o.acoes||''}</div></div>`}
 const pjcBt=(attr,txt,extra='')=>`<button type="button" class="btn sm pjc-main" ${attr}${extra}>${txt}</button>`;
 function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},its=pjItens(code),c=contagemFolhas(its),C=escHtml(code),op=EU&&['operador','admin','master'].includes(EU.papel),adm=EU&&['admin','master'].includes(EU.papel);
@@ -3315,7 +3319,8 @@ function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},i
   const nNao=lotes.reduce((n,x)=>n+((x.importacao&&x.importacao.problemas)||[]).length,0);if(nNao)d.push(qtd(nNao,'folha não entrou','folhas não entraram'));
   if(l&&l.fase==='processando')d.push(l.etapa==='enviado'?'na fila do CAMP Vision':'o CAMP Vision está lendo as folhas');
   if(S.cv&&S.cv.tem&&S.cv.estado==='falta'&&!parado){if(o.cor!=='bl')o.cor='at';d.push('CAMP Vision: '+escHtml(S.cv.txt))}
-  if(parado){o.cor='bl';urg=true;d.push(`<b class="pjc-erro">Lote parado por erro do CAMP Vision</b>${l.erro_cv?`: ${escHtml(String(l.erro_cv).slice(0,120))}`:''}`);if(op)acoes+=` <button type="button" class="btn sm" data-releitura-projeto="${C}">Pedir releitura</button>`}
+  /* CAMP-128 (P7): o cartão só resume (1 linha, nunca o texto cortado no meio); a mensagem inteira e o "Pedir releitura" ficam UMA vez, no alto de Detalhes dos lotes */
+  if(parado){o.cor='bl';urg=true;d.push('<b class="pjc-erro">Lote parado por erro do CAMP Vision</b>')}
   const avCv=(u&&u.avisos_cv)||[];   /* CAMP-122 (P1): aviso [Minor] do exiftool não é erro: 1 linha, sem vermelho */
   if(avCv.length&&!parado)d.push(`<span class="pjc-aviso-cv">${qtd(avCv.length,'aviso do CAMP Vision','avisos do CAMP Vision')} · não impede publicar</span>`);
   if(impBt)acoes=impBt+(acoes&&acoes!==ver?' '+acoes:'');
@@ -3393,8 +3398,8 @@ function pjAbrirGaveta(code,k){const g=pjGav(code);g.aberta=k;const gv=document.
 function pjVerFolhas(){const g=document.querySelector('#pd .folhas-bar')||document.querySelector('#pd .pj-folhas');if(g&&g.scrollIntoView)g.scrollIntoView({behavior:'smooth',block:'start'})}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-pjc-gav],[data-pjc-fechar],[data-pjc-porfolha],[data-pjc-ver-folhas],[data-pjc-conferir],[data-pjc-resolver],[data-pjc-publicar],[data-pjc-aba]');if(!t)return;e.preventDefault();
   const code=t.dataset.codigo||t.dataset.pjcFechar||t.dataset.pjcPorfolha||t.dataset.pjcVerFolhas||t.dataset.pjcConferir||t.dataset.pjcResolver||t.dataset.pjcPublicar;
-  if(t.dataset.pjcGav){const g=pjGav(code);if(g.aberta===t.dataset.pjcGav)g.fechou=true;pjAbrirGaveta(code,g.aberta===t.dataset.pjcGav?null:t.dataset.pjcGav);return}
-  if(t.dataset.pjcFechar){pjGav(code).fechou=true;pjAbrirGaveta(code,null);return}
+  if(t.dataset.pjcGav){const g=pjGav(code),fecha=g.aberta===t.dataset.pjcGav;if(fecha)g.fechou=true;if(t.dataset.pjcGav==='folhas'||g.aberta==='folhas')pjDetLotesPref(!fecha&&t.dataset.pjcGav==='folhas'?'1':'0');pjAbrirGaveta(code,fecha?null:t.dataset.pjcGav);return}
+  if(t.dataset.pjcFechar){const g=pjGav(code);if(g.aberta==='folhas')pjDetLotesPref('0');g.fechou=true;pjAbrirGaveta(code,null);return}
   if(t.dataset.pjcPorfolha){const g=pjGav(code),c=document.getElementById('pj-consenso');g.porFolha=!g.porFolha;if(c)c.hidden=!g.porFolha;t.setAttribute('aria-expanded',String(g.porFolha));t.textContent=g.porFolha?'Esconder o consenso folha por folha':'Ver o consenso folha por folha';return}
   if(t.dataset.pjcAba){showProjeto(code,t.dataset.pjcAba);return}
   if(t.dataset.pjcVerFolhas){if(pdTab!=='itens')showProjeto(code,'itens').then(pjVerFolhas);else pjVerFolhas();return}

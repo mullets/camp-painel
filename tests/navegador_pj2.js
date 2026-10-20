@@ -163,7 +163,7 @@ for n in range(1, 35):
     await page.waitForFunction(() => /bl/.test((document.querySelector('#pj-cards [data-pjc="folhas"]') || {}).className || ''), null, { timeout: 6000 }).catch(() => {});
     // (10) parado por erro: o cartão Folhas fica vermelho com o motivo
     const fB = await cartao('folhas');
-    chk(await cor('folhas') === 'bl' && /Lote parado por erro do CAMP Vision: Falha ao ler o carimbo/.test(fB) && !!(await page.$('#pj-cards [data-pjc="folhas"] [data-releitura-projeto]')), '(10) o cartão Folhas fica vermelho com o erro do CAMP Vision e "Pedir releitura": "' + fB.slice(0, 200) + '"');
+    chk(await cor('folhas') === 'bl' && /Lote parado por erro do CAMP Vision/.test(fB) && !(await page.$('#pj-cards [data-pjc="folhas"] [data-releitura-projeto]')) && /Falha ao ler o carimbo/.test(await page.evaluate(() => (document.getElementById('pj-gav-erro') || {}).textContent || '')), '(10) o cartão Folhas fica vermelho ("Lote parado por erro"); a mensagem e o "Pedir releitura" ficam uma vez, em Detalhes dos lotes (CAMP-128): "' + fB.slice(0, 200) + '"');
     chk(!/CAMP Vision: (pronto|entregue)/.test(fB), '(10) sem "CAMP Vision ✔ entregue" quando o lote está parado');
     // (8) contas de folhas distintas
     const cs = await page.evaluate(() => (SL.consenso || {}).txt || '');

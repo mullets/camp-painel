@@ -138,6 +138,7 @@ gravarAceite(ACEITE);
     chk(/aceite do lote no CAMP Vision/.test(await cartao('site')), 'o cartão Site diz por que não dá para publicar: "' + await cartao('site') + '"');
     chk(/aceite do lote no CAMP Vision/i.test(await txt('#pj-proximo')) && /Contagem de origem/.test(await txt('#pj-proximo')), 'o passo "Publicar" diz por que não dá para publicar (o mesmo aceite): "' + (await txt('#pj-proximo')).slice(0, 220) + '"');
     py(`con.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='${PJ}'")`);
+    await page.evaluate(() => { try { localStorage.removeItem('camp.pjDetLotes') } catch (_) {} });   // CAMP-128: a gaveta que a pessoa abriu antes fica lembrada; aqui vale o padrão (fechada)
     await abrir();
     const h = await page.evaluate(() => document.getElementById('pj-cv').textContent.replace(/\s+/g, ' '));
     chk(await page.isHidden('#pj-cv') && !(await page.$('#pj-cv .cv-resumo.falta')) && !/Falta resolver|não pode ser publicado|reprovado/.test(h) && /O projeto já está publicado/.test(h) && /Fica só como registro/.test(h), 'projeto JÁ publicado: nada de "reprovado"/"falta"; uma nota cinza de registro, quadro fechado: "' + h.slice(0, 200) + '"');
