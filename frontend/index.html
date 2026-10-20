@@ -3603,7 +3603,9 @@ async function acompanharTarefaPub(code,tid){
       await new Promise(r=>setTimeout(r,2000))}}
   finally{delete PUB_VIGIA[code]}}
 async function executarPublicacaoGuiada(code){
-  const go=document.getElementById('pub-go'),prog=document.getElementById('pub-prog');if(!go||!prog)return;go.disabled=true;prog.textContent='Iniciando…';
+  const go=document.getElementById('pub-go');if(!go)return;let prog=document.getElementById('pub-prog');
+  if(!prog){prog=document.createElement('div');prog.id='pub-prog';prog.className='help';prog.setAttribute('aria-live','polite');go.insertAdjacentElement('afterend',prog)}   /* CAMP-111: a tela de falha ("Tentar de novo (continua de onde parou)") não tinha #pub-prog e o botão não fazia nada */
+  go.disabled=true;prog.textContent='Iniciando…';
   try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/publicar-tudo?tarefa=1',{method:'POST'});vigiarTarefas();await acompanharTarefaPub(code,r.tarefa_id)}
   catch(e){prog.innerHTML=`<span class="tag r">não deu</span> ${escHtml(e.message)}`;go.disabled=false;go.textContent='Tentar de novo'}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-pub-go]');if(b&&!b.disabled)executarPublicacaoGuiada(b.dataset.pubGo)});
