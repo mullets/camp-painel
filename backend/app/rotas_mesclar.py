@@ -506,6 +506,8 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
                            ("projeto", "capa_item"), ("projeto", "mesclado_em"), ("reserva", "projeto_codigo")):
         _prefixo(con, tabela, coluna, antigo, novo)
     _prefixo(con, "cv_resposta", "chave", antigo, novo, " AND tipo='retirado'")
+    _prefixo(con, "wp_item", "codigo_detectado", antigo, novo)        # espelho do site: sem isso o redirecionamento das folhas fica 'sem_url'
+    _prefixo(con, "wp_item", "projeto_detectado", antigo, novo)
     _prefixo(con, "evento", "codigo", antigo, novo, " AND entidade IN ('projeto','item')")   # o histórico acompanha o projeto
     for r in con.execute("SELECT a, b, por, em FROM par_nao_duplicado WHERE a=? OR b=?", (antigo, antigo)).fetchall():
         a, b = sorted([novo if r["a"] == antigo else r["a"], novo if r["b"] == antigo else r["b"]])
@@ -531,6 +533,43 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
     return {"ok": True, "de": antigo, "para": novo, "folhas": folhas, "no_site": no_site, "avisos": avisos}
 
 
+def _enviar_codigos_ao_site(folhas: list[dict], ator: str) -> dict:
+    """Folhas recodificadas que já estão no site: manda o "Código do documento" novo (melhor esforço; falha vira pendência
+    'pendente_codigo_no_site', nunca desfaz o local). Mesmo caminho do serie_s08."""
+    from . import publicador
+    out = {"atualizadas": 0, "falhas": []}
+    con = connect()
+    try:
+        alvo = []
+        for f in folhas:
+            row = con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (f["para"],)).fetchone()
+            if row and row[0]:
+                alvo.append((f["para"], row[0]))
+        if not alvo:
+            return out
+        try:
+            wp = publicador.WP()
+        except Exception as e:  # noqa: BLE001
+            for novo_, _ in alvo:
+                publicador._pendencia(con, "item", novo_, "pendente_codigo_no_site", f"código novo não enviado ao site: {e}")
+                out["falhas"].append(novo_)
+            con.commit()
+            return out
+        mid, _ = publicador._meta(con, publicador.COL_ACERVO, "Código do documento")
+        for novo_, iid in alvo:
+            try:
+                if mid:
+                    wp.definir_metadado(int(iid), mid, novo_)
+                out["atualizadas"] += 1
+            except Exception as e:  # noqa: BLE001
+                publicador._pendencia(con, "item", novo_, "pendente_codigo_no_site", str(e)[:200])
+                out["falhas"].append(novo_)
+        con.commit()
+    finally:
+        con.close()
+    return out
+
+
 @router.post("/projetos/{codigo}/recodificar")
 def recodificar(codigo: str, d: Recodificar, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Muda o código do projeto e de todas as folhas dele. Só admin. O antigo fica guardado e vira redirecionamento."""
@@ -540,6 +579,7 @@ def recodificar(codigo: str, d: Recodificar, tarefas: BackgroundTasks, u: dict =
     if novo == antigo:
         raise HTTPException(400, "O código novo é igual ao atual.")
     r = _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], d.motivo))
+    tarefas.add_task(_enviar_codigos_ao_site, r["folhas"], u["email"])   # o metadado "Código do documento" no site (falha vira pendência)
     tarefas.add_task(_enviar_redirecionamentos)          # CAMP-014: manda o mapa ao site (falha não desfaz o local; o coletor repete)
     return r
 

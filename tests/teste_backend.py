@@ -4991,6 +4991,22 @@ def filho(modo):
         ver("folha movida para outro projeto NÃO volta como 'material novo' da pasta antiga", A2 not in novos, str(novos))
         r1 = _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()
         ver("reavisar a pasta antiga não cria lote de complemento", r1.get("acao") != "complemento" and sql("SELECT COUNT(*) FROM lista_processamento") == 1, str(r1)[:160])
+        # (3) recodificar projeto que já está no site: o espelho acompanha e o código novo é enviado ao site
+        from unittest import mock
+        from app import rotas_mesclar, publicador
+        k.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F010','X','XXX',1)") if not sql("SELECT COUNT(*) FROM fundo WHERE codigo='F010'") else None
+        k.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F010',1)"); k.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F010-P0001','F010',1,'Rec',1972,500)")
+        k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,tainacan_item_id,status_site) VALUES ('F010-P0001-1972-S01-D00001','F010-P0001','S01',1,'Folha','campvision',501,'no_ar')")
+        k.execute("INSERT INTO wp_item (id, codigo_detectado, projeto_detectado) VALUES (501,'F010-P0001-1972-S01-D00001','F010-P0001')"); k.commit()
+        rotas_mesclar._transacao(lambda con_: rotas_mesclar._recodificar(con_, "F010-P0001", "F010-P0900", "adm@x", "teste"))
+        k.commit(); w = k.execute("SELECT codigo_detectado, projeto_detectado FROM wp_item WHERE id=501").fetchone()
+        ver("recodificar: o espelho do site (wp_item) acompanha o código novo", tuple(w) == ("F010-P0900-1972-S01-D00001", "F010-P0900"), str(tuple(w)))
+        enviados = []
+        class WPFalso:
+            def definir_metadado(self, iid, mid, valor): enviados.append((iid, mid, valor))
+        with mock.patch.object(publicador, "WP", WPFalso), mock.patch.object(publicador, "_meta", lambda *a_, **k_: (77, None)):
+            out = rotas_mesclar._enviar_codigos_ao_site([{"de": "F010-P0001-1972-S01-D00001", "para": "F010-P0900-1972-S01-D00001"}], "adm@x")
+        ver("recodificar: o 'Código do documento' novo é enviado ao item do site", enviados == [(501, 77, "F010-P0900-1972-S01-D00001")] and out["atualizadas"] == 1, str((enviados, out)))
         for l in res: print(l)
         k.close()
         return 0
