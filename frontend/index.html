@@ -3282,7 +3282,11 @@ function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},i
   const d=[],o={cor:'',v:fmtN(its.length),d};let acoes='',urg=false;
   const ver=its.length?`<button type="button" class="btn sm" data-pjc-ver-folhas="${C}">Ver folhas</button>`:'';
   const conferirModo=op&&c.lote?` <button type="button" class="lnk pjc-lnk" data-pjc-conferir="${C}">Abrir modo conferir</button>`:'';
-  if(lotes.some(x=>x.itens.total===0)){o.cor='at';d.push('as folhas do lote ainda não foram importadas');if(op&&l0){acoes=pjcBt(`data-pp="importar" data-lote="${escHtml(l0.id)}" data-projeto="${C}"`,'Importar folhas');urg=true}}
+  // CAMP-067 (20/10, "o botão de importar não funciona sempre"): o botão importa o lote QUE ESTÁ SEM FOLHAS (antes ia no primeiro lote não aprovado,
+  // que podia ser outro), não some quando o projeto já tem folhas de outro lote, e só aparece quando a importação pode dar certo; senão o cartão diz por quê.
+  const vazios=((S.revisao&&S.revisao.todos)||lotes).filter(x=>x.itens.total===0&&!x.descartado&&!x.aprovado_em),impL=vazios.find(x=>x.pode_importar!==false),impNao=!impL&&vazios.find(x=>x.importar_motivo);let impBt='';
+  if(impL){o.cor='at';d.push('as folhas do lote ainda não foram importadas');if(op){impBt=pjcBt(`data-pp="importar" data-lote="${escHtml(impL.id)}" data-projeto="${C}"`,'Importar folhas');urg=true}}
+  else if(impNao&&!(impNao.etapa==='erro'&&parado)&&!(['enviado','processando'].includes(impNao.etapa)&&l&&l.fase==='processando')){o.cor='at';d.push(`<span class="pjc-imp-motivo">Ainda não dá para importar: ${escHtml(impNao.importar_motivo)}</span>`)}
   if(c.lote){o.v=`${fmtN(c.conferidas)} / ${fmtN(c.lote)}`;
     if(c.conferir){o.cor='at';d.unshift(`conferidas · ${fmtN(c.conferir)} a conferir`);if(op){acoes=pjcBt(`data-pjc-conferir="${C}"`,'Conferir');urg=true}else acoes=ver}
     else if(lotes.length&&!lotes.every(x=>x.aprovado_em)){o.cor='at';d.unshift('conferidas · falta aprovar o lote');if(adm&&l0){acoes=pjcBt(`data-pp="aprovar" data-lote="${escHtml(l0.id)}" data-projeto="${C}"`,'Aprovar o lote');urg=true}else{acoes=ver;d.push('falta um admin aprovar')}}
@@ -3293,6 +3297,7 @@ function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},i
   if(l&&l.fase==='processando')d.push(l.etapa==='enviado'?'na fila do CAMP Vision':'o CAMP Vision está lendo as folhas');
   if(S.cv&&S.cv.tem&&S.cv.estado==='falta'&&!parado){if(o.cor!=='bl')o.cor='at';d.push('CAMP Vision: '+escHtml(S.cv.txt))}
   if(parado){o.cor='bl';urg=true;d.push(`<b class="pjc-erro">Lote parado por erro do CAMP Vision</b>${l.erro_cv?`: ${escHtml(String(l.erro_cv).slice(0,120))}`:''}`);if(op)acoes+=` <button type="button" class="btn sm" data-releitura-projeto="${C}">Pedir releitura</button>`}
+  if(impBt)acoes=impBt+(acoes&&acoes!==ver?' '+acoes:'');
   const temDet=lotes.length||parado||(S.cv&&S.cv.tem);
   o.acoes=acoes+(temDet?` <button type="button" class="lnk pjc-lnk" data-pjc-gav="folhas" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='folhas'}">Detalhes dos lotes</button>`:'');
   return {html:pjcCartao('folhas','Folhas',o),urg}}
@@ -3611,7 +3616,7 @@ function proximoPassoHTML(r,code){
   const op=r.pode_operar,ad=r.pode_agir,f=l.fase,passos=['Importar','Conferir','Aprovar','Publicar'],cur={importar:0,conferir:1,aprovar:2,publicar:3,publicado:4}[f];
   const ixc={processando:2,erro:2,importar:3,conferir:4,aprovar:5,publicar:6,publicado:7}[f],stepper=ixc===undefined?'':caminhoMaterialHTML(ixc,f==='conferir'?` ${l.itens_conferidos}/${l.itens_total}`:'',{travado:f==='erro'?'o CAMP Vision parou com erro':''});
   const bt=(txt,acao)=>`<button class="btn pri" data-pp="${acao}" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">${txt}</button>`;
-  const T={importar:['Falta trazer as folhas do CAMP Vision para o painel.',op?bt('Importar folhas','importar'):''],
+  const T={importar:l.importar_motivo?[`Ainda não dá para importar as folhas: ${escHtml(l.importar_motivo)}`,'']:['Falta trazer as folhas do CAMP Vision para o painel.',op?bt('Importar folhas','importar'):''],   // CAMP-067
     conferir:[`Faltam conferir ${escHtml(l.itens_pendentes)} de ${escHtml(l.itens_total)} folha(s). Clique numa folha para ver, virar e conferir, ou aprove todas de uma vez.`,op?bt('Começar a conferir','conferir')+` <button class="btn" data-rev-lote="todas" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">Aprovar todas (${escHtml(l.itens_pendentes)})</button>`:''],
     aprovar:['Todas as folhas foram conferidas. Falta aprovar o lote.',ad?bt('Aprovar lote','aprovar'):'<small class="help">Falta um admin aprovar.</small>'],
     publicar:(()=>{const g=(window.PUB_G||{})[code],hum=g&&(g.condicoes||[]).find(c=>c.bloqueia&&!c.ok&&['direitos','bloqueios','teste','aceite_cv'].includes(c.id));   // 19/10: o aceite do CAMP Vision é a MESMA regra do quadro "O que o CAMP Vision entregou"
@@ -3633,13 +3638,14 @@ async function carregarProximoPasso(code){const b=document.getElementById('pj-pr
 async function avisoTarefaPub(code){const b=document.getElementById('pj-proximo');if(!b)return;try{const at=(await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa')).tarefa;
   if(at&&at.estado==='rodando'){b.insertAdjacentHTML('afterbegin',`<div class="aviso-bloqueio pp-tarefa" role="status">⏳ <b>Publicando… ${escHtml(at.feitas)} de ${escHtml(at.total)}</b>${at.folha_atual?` · agora: <span class="code">${escHtml(at.folha_atual)}</span>`:''} <button class="btn sm" data-pub-abrir="${escHtml(code)}">Acompanhar</button></div>`);acompanharTarefaPub(code,at.id)}}catch(_){}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-pub-abrir]');if(t)abrirPublicacaoGuiada(t.dataset.pubAbrir)});
-async function passoProximo(acao,lote,code){
+async function passoProximo(acao,lote,code,btn){
+  if(acao==='importar'){acaoRevisaoLote('importar',lote,code,btn);return}   // CAMP-067: antes não desligava o botão nem dizia "Importando…" (QNAP lento parecia "não fez nada")
   if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else toast('Nenhuma folha pendente.');return}
   if(acao==='publicar'){abrirPublicacaoGuiada(code);return}
   try{let r={};if(acao==='importar'){r=await API('/api/lotes/'+encodeURIComponent(lote)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`)}
     else if(acao==='aprovar'){if(!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;r=await API('/api/lotes/'+encodeURIComponent(lote)+'/aprovar',{method:'POST'});toast('Revisão aprovada')}
     await showProjeto(code);avisoResultadoLote(acao,r,code)}catch(e){toast(e.message);avisoNoLugar(`<b>✖ Não deu:</b> ${escHtml(e.message)}`,{tipo:'erro',antes:document.getElementById('pj-proximo')||'#pd',id:'lote'})}}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-pp]');if(b&&!b.disabled)passoProximo(b.dataset.pp,b.dataset.lote,b.dataset.projeto);const c=e.target.closest('[data-pp-cond]');if(c)acaoCondicao(c.dataset.ppCond,c.dataset.alvo)});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-pp]');if(b&&!b.disabled)passoProximo(b.dataset.pp,b.dataset.lote,b.dataset.projeto,b);const c=e.target.closest('[data-pp-cond]');if(c)acaoCondicao(c.dataset.ppCond,c.dataset.alvo)});
 async function carregarRevisaoLote(code){
   const box=document.getElementById('pj-revisao');if(!box)return;
   try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/revisao'),adm=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel);
@@ -3649,7 +3655,7 @@ async function carregarRevisaoLote(code){
       const bt=(acao,txt,cls,off)=>`<button class="btn sm ${cls||''}" data-rev-lote="${acao}" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}"${off?' disabled':''}${off&&typeof off==='string'?` title="${escHtml(off)}"`:''}>${txt}</button>`;
       const ret=(imp.retirados||[]).length?`<details class="rev-ret"><summary>${imp.retirados.length} folha(s) retirada(s) pelo CAMP Vision (não entraram)</summary>${imp.retirados.map(x=>`<div><span class="code">${escHtml(String(x.codigo||'').slice(-6))}</span> ${escHtml((x.bloqueios||[]).join(', '))}</div>`).join('')}</details>`:'';
       const prob=naoImportadasHTML(imp.problemas||[],code);
-      const acoes=vazio?(op?bt('importar','Importar as folhas do lote'):'<small class="help">Só operador e admin importam.</small>')   // #95: o botão azul é só o do Próximo passo
+      const acoes=vazio?(l.pode_importar===false&&l.importar_motivo?`<p class="help">Ainda não dá para importar: ${escHtml(l.importar_motivo)}</p>`:op?bt('importar','Importar as folhas do lote'):'<small class="help">Só operador e admin importam.</small>')   // #95: o botão azul é só o do Próximo passo
         :apr?(adm&&l.etapa==='revisao'?bt('reabrir','Reabrir a revisão'):'')
         :c.pendente?(op?`${bt('todas',`Aprovar todas (${c.pendente})`)}${bt('conferir','Só as sem pendência')}`:'')
         :(adm?bt('aprovar','Aprovar o lote'):'<small class="help">Todas conferidas. Falta o admin aprovar o lote.</small>');
@@ -3661,7 +3667,7 @@ async function carregarRevisaoLote(code){
       const nome=nomeCurtoLote(l.nome,code),quando=l.criado_em?fmtData(l.criado_em):'',nProb=(imp.problemas||[]).length;
       const resumo=vazio?'aguardando importação':`${fmtN(c.total-c.pendente)} de ${fmtN(c.total)} conferidas · ${apr?`aprovado por ${escHtml(String(l.aprovado_por||'').split('@')[0])}`:c.pendente?'em revisão':'falta aprovar'}`;
       return `<details class="rl-lote"${!apr?' open':''}><summary><b class="rl-nome" title="${escHtml(l.nome)}">${escHtml(nome)}</b>${quando?` <small class="help">${escHtml(quando)}</small>`:''} <span class="rl-res">${resumo}</span>${nProb?` <span class="tag a mini">${qtd(nProb,'folha não entrou','folhas não entraram')}</span>`:''}</summary><div class="rl-corpo">${info}${chips}${ret}${prob}${mais}</div></details>`};
-    box.innerHTML=varios?`<div class="panel rl-multi"><div class="ph"><h2>Revisão do lote</h2><span class="tag">${lotesV.length} lotes</span></div><div class="pb">${lotesV.map(corpo).join('')}</div></div>`:lotesV.map(corpo).join('');slGuardar(code,'revisao',Object.assign(slRevisao(lotesV),{lotes:lotesV}));carregarEstadoReleitura('projeto',code);carregarProximoPasso(code)}catch(e){box.innerHTML='';slGuardar(code,'revisao',{tem:false})}}
+    box.innerHTML=varios?`<div class="panel rl-multi"><div class="ph"><h2>Revisão do lote</h2><span class="tag">${lotesV.length} lotes</span></div><div class="pb">${lotesV.map(corpo).join('')}</div></div>`:lotesV.map(corpo).join('');slGuardar(code,'revisao',Object.assign(slRevisao(lotesV),{lotes:lotesV,todos:r.lotes||[]}));carregarEstadoReleitura('projeto',code);carregarProximoPasso(code)}catch(e){box.innerHTML='';slGuardar(code,'revisao',{tem:false})}}
 /* 19/10 (F009-P0092): "F009-P0092-1981-S01-D00001: o número D00001 já é de F009-P0092-0000-S01-D00001 · …" virou um parágrafo enorme.
    Agora: uma frase (quantas, quais números, de quem), o que fazer, e a lista numa tabela fechada. */
 function nomeCurtoLote(n,code){let t=String(n||'').replace(/^F\d{3}-P\d{4}\s*[-–:]\s*/,'').trim()||String(n||'');return t.length>48?t.slice(0,46).trimEnd()+'…':t}
@@ -4807,14 +4813,14 @@ function linhaFila(l){
     :f==='erro'?(op?bt('pri','Pedir releitura',`data-releitura-projeto="${pj}"`)+' '+bt('','Tentar de novo',`data-fila-acao="retomar" data-id="${id}"`):'<small class="help">Avise um operador</small>'):'';
   return `<tr data-fase="${escHtml(f)}" data-nav="projeto/${pj}"><td><span class="code">${pj}</span> <b>${escHtml(l.projeto_titulo)}</b><br><small class="help">${escHtml(l.fundo)} · ${escHtml(l.nome)}</small>${ad?`<details class="fila-pasta"><summary>pasta</summary><span class="mono">${escHtml(l.pasta_qnap)}</span></details>`:''}</td>
     <td><span class="tag ${T[0]}">${T[1]}</span>${l.lote_teste?' <span class="tag a">teste</span>':''} ${T[2]}${barra}${(()=>{const ix={processando:2,erro:2,importar:3,conferir:4,aprovar:5,publicar:6,publicado:7}[f];return ix===undefined?'':caminhoMaterialHTML(ix,'',{compacto:true,travado:f==='erro'?'o CAMP Vision parou com erro':''})})()}</td><td>${espera48(l)}</td><td class="fila-acao">${acao}</td></tr>`}   // #97: sem o botão "Projeto" (a linha já abre o projeto)
-async function acaoFila(acao,id){try{
-  if(acao==='importar'){const r=await API('/api/lotes/'+encodeURIComponent(id)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`+((r.retirados||[]).length?`; ${r.retirados.length} retirada(s) pelo CAMP Vision`:''))}
+async function acaoFila(acao,id,btn){const txt0=btn&&btn.textContent;try{
+  if(acao==='importar'){if(btn){btn.disabled=true;btn.textContent='Importando…'}const r=await API('/api/lotes/'+encodeURIComponent(id)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`+((r.retirados||[]).length?`; ${r.retirados.length} retirada(s) pelo CAMP Vision`:''))}
   else if(acao==='aprovar'){if(!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;await API('/api/lotes/'+encodeURIComponent(id)+'/aprovar',{method:'POST'});toast('Revisão aprovada')}
   else if(acao==='retomar'){await API('/api/filas/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({etapa:'enviado'})});toast('Lista de volta para o CAMP Vision')}
-  carregarFilas();if(typeof carregarPainel==='function')carregarPainel()}catch(e){toast(e.message)}}
+  carregarFilas();if(typeof carregarPainel==='function')carregarPainel()}catch(e){toast(e.message)}finally{if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=txt0}}}
 function irDaFila(onde,projeto){if(onde==='erros'){go('erros');return}window.ACAO_APOS_PROJETO=(onde==='revisao'||onde==='publicar')?{tipo:onde,codigo:projeto}:null;nav('projeto/'+projeto)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-filtro],[data-fila-acao],[data-fila-ir]');if(!b||b.disabled)return;   // códigos só em data-*
-  if(b.dataset.filaFiltro){FILA_FILTRO=b.dataset.filaFiltro;desenharFilas()}else if(b.dataset.filaAcao)acaoFila(b.dataset.filaAcao,b.dataset.id);else irDaFila(b.dataset.filaIr,b.dataset.projeto)});
+  if(b.dataset.filaFiltro){FILA_FILTRO=b.dataset.filaFiltro;desenharFilas()}else if(b.dataset.filaAcao)acaoFila(b.dataset.filaAcao,b.dataset.id,b);else irDaFila(b.dataset.filaIr,b.dataset.projeto)});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-importar-todas]');if(!b||b.disabled)return;
   rodarTarefa('/api/filas/importar-todas',{},{titulo:'Importando os lotes da Fila',id:'importar-todas',fim:()=>{carregarFilas();if(typeof carregarPainel==='function')carregarPainel();return '<div class="act"><button class="btn sm pri" data-fila-filtro="gente">Ver o que falta conferir</button></div>'}})});
 async function etapaFila(id,etapa){if(!etapa)return;try{await API('/api/filas/'+id,{method:'PATCH',body:JSON.stringify({etapa})});toast('Lista: '+etapa);carregarFilas();carregarPainel()}catch(e){toast(e.message)}}

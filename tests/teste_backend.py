@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2"}
+MODOS_RAPIDOS = {"importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7551,6 +7551,69 @@ def filho(modo):
             and (r2.json().get("movidos") or [{}])[0].get("para") == "F099-P0004-1971-S01-D00001", r.text[:120] + " " + r2.text[:160])
         c.close()
         for l in res: print(l)
+    elif modo == "importar_067":
+        # CAMP-067 (20/10, operadora: "o botão para a etapa importar não funciona sempre"; "pra uns projetos rola e outros não").
+        # /projetos/{p}/revisao diz, por lote sem folhas, se dá para importar (pode_importar) e, se não, POR QUE (importar_motivo):
+        # pasta fora do QNAP, CAMP Vision ainda lendo (sem pacote), lote descartado, folhas já movidas. O próximo passo leva o mesmo motivo.
+        # E importar o lote certo (o sem folhas) num projeto que JÁ tem folhas de outro lote funciona.
+        init_db(); aplicar_migracoes()
+        import shutil, tempfile
+        from pathlib import Path
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F099',?,?,1972)", (f"F099-P000{n}", n, f"Projeto {n}"))
+        P = "F099-P0001"
+        raiz = Path(tempfile.mkdtemp(prefix="imp067_"))
+        fix = (Path(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json").read_text(encoding="utf-8")
+        def pasta(nome, pacote=True):
+            d = raiz / nome; (d / "catalogacao").mkdir(parents=True)
+            if pacote: (d / "catalogacao" / "pacote_tainacan.json").write_text(fix.replace("F026-P0001", P).replace("F026", "F099"), encoding="utf-8")
+            return str(d)
+        lote = lambda nome, pq, etapa="revisao", extra="": c.execute(f"INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa{extra and ', descartado_em'}) VALUES (?,?,?,?{extra and ',datetime(\'now\')'})", (nome, P, pq, etapa)).lastrowid
+        A = lote("A antigo, já importado", pasta("A"))
+        for n in (11, 12):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,status_site,pendencias,titulo,revisao) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (f"{P}-1972-S01-D{n:05d}", P, "S01", n, "campvision", A, "nao_publicado", "{}", f"Prancha {n}", "pendente"))
+        SEM_PASTA = lote("pasta fora do QNAP", "/nao/existe/camp067")
+        LENDO = lote("CAMP Vision lendo", pasta("lendo", pacote=False), "processando")
+        DESC = lote("descartado", pasta("desc"), "revisao", extra="1")
+        MOV = lote("folhas movidas", pasta("mov"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,status_site,pendencias,titulo,revisao) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                  ("F099-P0002-1972-S01-D00001", "F099-P0002", "S01", 1, "campvision", MOV, "nao_publicado", "{}", "Movida", "pendente"))
+        B = lote("B novo, pronto para importar", pasta("B"))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        L = {x["id"]: x for x in op.get(f"/api/projetos/{P}/revisao").json()["lotes"]}
+        pi = lambda i: (L[i].get("pode_importar"), L[i].get("importar_motivo") or "")
+        ver("lote novo com pacote: pode importar, sem motivo", pi(B) == (True, ""), str(pi(B)))
+        ver("lote já importado: não oferece importar", pi(A)[0] is False, str(pi(A)))
+        ver("pasta fora do QNAP: não pode, e diz que o painel não acha a pasta", pi(SEM_PASTA)[0] is False and "não acha a pasta" in pi(SEM_PASTA)[1], str(pi(SEM_PASTA)))
+        ver("CAMP Vision ainda lendo (sem pacote): não pode, e diz que ele ainda está lendo", pi(LENDO)[0] is False and "ainda está lendo" in pi(LENDO)[1], str(pi(LENDO)))
+        ver("lote descartado: não pode, e vem marcado como descartado", pi(DESC)[0] is False and L[DESC].get("descartado") is True and "descartado" in pi(DESC)[1], str(pi(DESC)))
+        ver("folhas do lote já movidas para outro projeto: não oferece importar de novo", pi(MOV)[0] is False and "movidas" in pi(MOV)[1], str(pi(MOV)))
+        # próximo passo: a lista mais recente não publicada é B (importável): sem motivo; ao tirar a pasta de B, o motivo aparece
+        pp = op.get(f"/api/projetos/{P}/proximo-passo").json()["lote"]
+        ver("próximo passo: lote B na fase importar, sem motivo", pp["id"] == B and pp["fase"] == "importar" and not pp.get("importar_motivo"), str({k: pp.get(k) for k in ("id", "fase", "importar_motivo")}))
+        shutil.move(str(raiz / "B"), str(raiz / "B_fora"))
+        pp = op.get(f"/api/projetos/{P}/proximo-passo").json()["lote"]
+        ver("próximo passo: sem a pasta, diz por que não dá para importar", "não acha a pasta" in (pp.get("importar_motivo") or ""), str(pp.get("importar_motivo")))
+        shutil.move(str(raiz / "B_fora"), str(raiz / "B"))
+        # importar o lote certo num projeto que já tem folhas de outro lote
+        r = op.post(f"/api/lotes/{B}/importar")
+        ver("importar o lote B (o projeto já tinha folhas do lote A) traz as 3 folhas", r.status_code == 200 and r.json().get("criadas") == 3, r.text[:200])
+        L = {x["id"]: x for x in op.get(f"/api/projetos/{P}/revisao").json()["lotes"]}
+        ver("depois de importado, B não oferece mais importar", L[B]["itens"]["total"] == 3 and L[B].get("pode_importar") is False, str(L[B].get("pode_importar")))
+        shutil.rmtree(raiz, ignore_errors=True)
+        c.close()
+        for l in res: print(l)
     elif modo == "nome_de_pasta":
         # projetos criados a partir de SUBPASTAS do sistema (F009-P0114 "01 - Arquivo Arquivístico (TIFF)", F022-P0009 com 5 folhas, F026-P0237)
         init_db(); _aplicar_migracoes_real()
@@ -9058,6 +9121,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"pj2: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("140) CAMP-067: Importar só quando dá certo (o lote sem folhas); senão diz por quê (pasta, CAMP Vision lendo, descartado, folhas movidas)")
+rc, out = rodar("importar_067", f"{tmp}/importar_067.db")
+if rc != 0: ok(False, f"teste importar_067 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"importar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

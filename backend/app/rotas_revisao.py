@@ -25,6 +25,35 @@ def _lote(con, lote_id: int):
     return l
 
 
+def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None]:
+    """CAMP-067 (20/10, "o botão de importar não funciona sempre"): o painel só oferece "Importar" quando a importação pode dar certo;
+    senão diz POR QUE, em português, no lugar do botão. As mesmas condições em que POST /lotes/{id}/importar recusaria
+    (pasta, pacote, projeto do pacote, aprovado), mais lote descartado e folhas do lote já movidas para outro projeto."""
+    if l["descartado_em"]:
+        return False, "Este lote foi descartado: não há o que importar."
+    if l["aprovado_em"]:
+        return False, "O lote já foi aprovado: reabra a revisão para importar de novo."
+    if con.execute("SELECT 1 FROM item WHERE lote_id=? LIMIT 1", (l["id"],)).fetchone():
+        return False, "As folhas deste lote já foram importadas (e movidas para outro projeto)."
+    pasta = Path(l["pasta_qnap"] or "")
+    if not pasta.is_dir():
+        return False, "O painel não acha a pasta do lote no QNAP (o QNAP está montado?). Avise quem cuida do servidor."
+    if pacote is None:
+        try:
+            pacote = ler_pacote(pasta)
+        except HTTPException as e:
+            return False, str(e.detail)
+    if pacote is None:
+        if l["etapa"] in ("enviado", "processando"):
+            return False, "O CAMP Vision ainda está lendo este lote. O botão Importar aparece quando ele terminar."
+        if l["etapa"] == "erro":
+            return False, "O CAMP Vision parou com erro neste lote e não gravou as folhas. Peça a releitura."
+        return False, "O CAMP Vision não gravou o pacote deste lote (catalogacao/pacote_tainacan.json). Peça a releitura."
+    if pacote.get("projeto_codigo") and pacote.get("projeto_codigo") != l["projeto_codigo"]:
+        return False, f"O pacote da pasta é do projeto {pacote.get('projeto_codigo')}, e o lote é de {l['projeto_codigo']}. Peça a releitura."
+    return True, None
+
+
 @router.get("/projetos/{codigo}/proximo-passo")
 def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
@@ -47,6 +76,9 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             d.pop("status_json", None); d.pop("resultado", None)
             lotes.append(d)
         lote = next((x for x in lotes if x["fase"] != "publicado"), lotes[0] if lotes else None)
+        if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
+            pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
+            lote["importar_motivo"] = None if pode else motivo
         return {"lote": lote, "lotes": len(lotes), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
     finally:
         con.close()
@@ -127,6 +159,7 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             pasta = Path(l["pasta_qnap"] or "")
             acessivel = pasta.is_dir()
             pacote = {"acessivel": acessivel, "existe": False, "documentos": 0, "retirados": 0, "teste": False}
+            p = None
             if acessivel:
                 try:
                     p = ler_pacote(pasta)
@@ -136,6 +169,7 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                     docs = p.get("documentos") if isinstance(p.get("documentos"), list) else (p.get("itens") or [])
                     pacote.update({"existe": True, "documentos": len(docs), "retirados": len(p.get("retirados") or []), "teste": bool(p.get("teste"))})
             c = _contagem(con, l["id"])
+            imp_ok, imp_motivo = _pode_importar(con, l, p) if c["total"] == 0 else (False, None)
             motivo = None
             if l["aprovado_em"]:
                 motivo = "Já aprovado"
@@ -148,7 +182,8 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             except ValueError:
                 importacao = None
             lotes.append({"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
-                          "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo})
+                          "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo,
+                          "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo})   # CAMP-067: campos novos, opcionais
         return {"lotes": lotes}
     finally:
         con.close()
