@@ -1,6 +1,6 @@
 // Exaustão da página do projeto — grupo F: site e publicação (CAMP-109 a CAMP-114). Tudo por clique no navegador; o lote nasce pelo
 // caminho real (estação reserva, CAMP Vision grava a pasta e avisa). Site FALSO com falhas armáveis (tests/exaustao/f_servidor_falho.py).
-// Rodar: bash tests/exaustao/f_rodar.sh   (porta 8967, prints em /tmp/exF/f_site)
+// Rodar: bash tests/rodar_exaustao.sh tests/exaustao/f_site.js   (o executor sobe o site falso com a queda armável do CAMP-111)
 const { execFileSync } = require('child_process');
 const fs = require('fs'), path = require('path');
 const T = require('./_comum');
