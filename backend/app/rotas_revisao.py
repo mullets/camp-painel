@@ -646,51 +646,60 @@ class RespostaCV(BaseModel):
     motivo: str | None = None
 
 
-_COLUNA_CV = {"titulo": "titulo", "ano": "ano", "cidade": "cidade", "cliente": "cliente", "endereco": "endereco_obra"}
+_COLUNA_CV = {"titulo": "titulo", "ano": "ano", "cidade": "cidade", "uf": "uf", "cliente": "cliente", "endereco": "endereco_obra"}
+_RESPOSTAS_CV = {"sugestao": ("usar", "ignorar"), "proposta": ("aceitar", "recusar"), "retirado": ("devolver",), "releitura": ("aceitar", "ignorar")}
 
 
-@router.post("/lotes/{lote_id}/saidas-cv/resposta")
-def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Uma pessoa responde ao CAMP Vision. sugestao: usar (grava SÓ se o campo ainda estiver vazio ou com título provisório) | ignorar.
-    proposta: aceitar | recusar (só registra; nada é aplicado sozinho). retirado: devolver (admin, motivo obrigatório; entra na próxima importação)."""
+def _responder_cv(con, l, d: RespostaCV, u: dict) -> None:
+    """Grava UMA resposta ao CAMP Vision (a conexão é de quem chama; não faz commit). Levanta HTTPException com a mensagem para a pessoa."""
     import re as _re
-    validas = {"sugestao": ("usar", "ignorar"), "proposta": ("aceitar", "recusar"), "retirado": ("devolver",), "releitura": ("aceitar", "ignorar")}
-    if d.tipo not in validas or d.acao not in validas[d.tipo]:
+    if d.tipo not in _RESPOSTAS_CV or d.acao not in _RESPOSTAS_CV[d.tipo]:
         raise HTTPException(400, "Resposta inválida")
     if d.tipo == "retirado":
         if u["papel"] not in ("admin", "master"):
             raise HTTPException(403, "Só um admin devolve à revisão uma folha retirada pelo CAMP Vision")
         if len((d.motivo or "").strip()) < 3:
             raise HTTPException(400, "Explique por que a folha volta para a revisão")
+    # CAMP-131: cv_resposta.tipo tem CHECK (sugestao, proposta, retirado) na base real; a resposta à releitura vai como 'proposta' com a chave 'releitura:…'
+    tipo_db, chave_db = ("proposta", "releitura:" + d.chave) if d.tipo == "releitura" else (d.tipo, d.chave)
+    if con.execute("SELECT 1 FROM cv_resposta WHERE lote_id=? AND tipo=? AND chave=?", (l["id"], tipo_db, chave_db[:200])).fetchone():
+        raise HTTPException(409, "Isso já foi respondido")
+    valor = (d.valor or "").strip()[:300] or None
+    if d.tipo == "releitura" and d.acao == "aceitar":         # CAMP-131 (P10): aplicar UMA mudança que a releitura trouxe (o valor vem do arquivo, não da tela)
+        valor = _aplicar_mudanca_releitura(con, l, d.chave, u["email"])
+    if d.tipo == "sugestao" and d.acao == "usar":
+        col = _COLUNA_CV.get(d.chave)
+        if not col or not valor:
+            raise HTTPException(400, "Este campo não pode ser preenchido por sugestão")
+        atual = con.execute(f"SELECT {col} FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()[0]
+        atual_txt = "" if atual in (None, 0, "0") else str(atual).strip()
+        if atual_txt and not (d.chave == "titulo" and _re.fullmatch(r"P\d{4}", atual_txt)):
+            raise HTTPException(409, f"O campo já foi preenchido por uma pessoa ('{atual_txt}'): a sugestão não substitui")
+        if col == "ano":
+            if not _re.fullmatch(r"\d{4}", valor):
+                raise HTTPException(400, "Ano sugerido inválido")
+            con.execute("UPDATE projeto SET ano=?, atualizado_em=datetime('now') WHERE codigo=?", (int(valor), l["projeto_codigo"]))
+        else:
+            if col == "uf":
+                valor = valor.upper()
+                if not _re.fullmatch(r"[A-Z]{2}", valor):
+                    raise HTTPException(400, "UF sugerida inválida (use a sigla, ex.: SP)")
+            con.execute(f"UPDATE projeto SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (valor, l["projeto_codigo"]))
+    con.execute("INSERT INTO cv_resposta (lote_id, projeto_codigo, tipo, chave, acao, valor, motivo, por) VALUES (?,?,?,?,?,?,?,?)",
+                (l["id"], l["projeto_codigo"], tipo_db, chave_db[:200], d.acao, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
+    _evento(con, "projeto", l["projeto_codigo"], f"cv_{d.tipo}_{d.acao}", u["email"], {"lote": l["id"], "chave": d.chave, "valor": valor, "motivo": d.motivo})
+
+
+@router.post("/lotes/{lote_id}/saidas-cv/resposta")
+def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Uma pessoa responde ao CAMP Vision. sugestao: usar (grava SÓ se o campo ainda estiver vazio ou com título provisório) | ignorar.
+    proposta: aceitar | recusar (só registra; nada é aplicado sozinho). retirado: devolver (admin, motivo obrigatório; entra na próxima importação)."""
     con = connect()
     try:
         l = con.execute("SELECT id, projeto_codigo FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
         if not l:
             raise HTTPException(404, "Lote não existe")
-        # CAMP-131: cv_resposta.tipo tem CHECK (sugestao, proposta, retirado) na base real; a resposta à releitura vai como 'proposta' com a chave 'releitura:…'
-        tipo_db, chave_db = ("proposta", "releitura:" + d.chave) if d.tipo == "releitura" else (d.tipo, d.chave)
-        if con.execute("SELECT 1 FROM cv_resposta WHERE lote_id=? AND tipo=? AND chave=?", (lote_id, tipo_db, chave_db[:200])).fetchone():
-            raise HTTPException(409, "Isso já foi respondido")
-        valor = (d.valor or "").strip()[:300] or None
-        if d.tipo == "releitura" and d.acao == "aceitar":         # CAMP-131 (P10): aplicar UMA mudança que a releitura trouxe (o valor vem do arquivo, não da tela)
-            valor = _aplicar_mudanca_releitura(con, l, d.chave, u["email"])
-        if d.tipo == "sugestao" and d.acao == "usar":
-            col = _COLUNA_CV.get(d.chave)
-            if not col or not valor:
-                raise HTTPException(400, "Este campo não pode ser preenchido por sugestão")
-            atual = con.execute(f"SELECT {col} FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()[0]
-            atual_txt = "" if atual in (None, 0, "0") else str(atual).strip()
-            if atual_txt and not (d.chave == "titulo" and _re.fullmatch(r"P\d{4}", atual_txt)):
-                raise HTTPException(409, f"O campo já foi preenchido por uma pessoa ('{atual_txt}'): a sugestão não substitui")
-            if col == "ano":
-                if not _re.fullmatch(r"\d{4}", valor):
-                    raise HTTPException(400, "Ano sugerido inválido")
-                con.execute("UPDATE projeto SET ano=?, atualizado_em=datetime('now') WHERE codigo=?", (int(valor), l["projeto_codigo"]))
-            else:
-                con.execute(f"UPDATE projeto SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (valor, l["projeto_codigo"]))
-        con.execute("INSERT INTO cv_resposta (lote_id, projeto_codigo, tipo, chave, acao, valor, motivo, por) VALUES (?,?,?,?,?,?,?,?)",
-                    (lote_id, l["projeto_codigo"], tipo_db, chave_db[:200], d.acao, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
-        _evento(con, "projeto", l["projeto_codigo"], f"cv_{d.tipo}_{d.acao}", u["email"], {"lote": lote_id, "chave": d.chave, "valor": valor, "motivo": d.motivo})
+        _responder_cv(con, l, d, u)
         fechados = []
         if d.tipo == "retirado":                                   # 19/10: devolver à revisão resolve o problema "o CAMP Vision retirou esta folha"
             from .problemas import fechar_resolvidos
@@ -741,6 +750,41 @@ def _aplicar_mudanca_releitura(con, l, chave: str, ator: str) -> str:
         con.execute(f"UPDATE item SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (agora, cod))
     _evento(con, "item", cod, "releitura_aceita", ator, {"campo": campo, "valor": agora, "quando": quando})
     return agora
+
+
+class RespostasCV(BaseModel):
+    respostas: list[RespostaCV]
+
+
+@router.post("/lotes/{lote_id}/saidas-cv/respostas")
+def responder_cv_em_lote(lote_id: int, d: RespostasCV, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """20/10 (CAMP-125): várias respostas de uma vez ("Aceitar todas onde hoje está vazio", "Recusar as restantes", "Usar todas").
+    Cada uma segue as mesmas regras da resposta única (sugestão nunca troca o que alguém escreveu); a que não puder ser gravada é
+    pulada e volta em `puladas` com o motivo, e as outras ficam gravadas. Devolução de folha retirada não entra em lote."""
+    if len(d.respostas) > 500:
+        raise HTTPException(400, "Respostas demais de uma vez")
+    con = connect()
+    try:
+        l = con.execute("SELECT id, projeto_codigo FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+        if not l:
+            raise HTTPException(404, "Lote não existe")
+        feitas, puladas = 0, []
+        for r in d.respostas:
+            if r.tipo == "retirado":
+                puladas.append({"chave": r.chave, "motivo": "devolver folha retirada é uma de cada vez"})
+                continue
+            try:
+                con.execute("SAVEPOINT r1")
+                _responder_cv(con, l, r, u)
+                con.execute("RELEASE r1")
+                feitas += 1
+            except HTTPException as e:
+                con.execute("ROLLBACK TO r1"); con.execute("RELEASE r1")
+                puladas.append({"tipo": r.tipo, "chave": r.chave, "motivo": e.detail})
+        con.commit()
+        return {"ok": True, "feitas": feitas, "puladas": puladas}
+    finally:
+        con.close()
 
 
 @router.post("/lotes/{lote_id}/conferir-sem-pendencia")
