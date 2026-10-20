@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2"}
+MODOS_RAPIDOS = {"ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4846,6 +4846,62 @@ def filho(modo):
         # folha de OUTRO lote com o mesmo D não é tocada (continua indo para a decisão de lote que colide)
         k.close()
         for l in res: print(l)
+    elif modo == "ler_pasta_agora":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import auth, importador_lote
+        from fastapi.testclient import TestClient
+        from app.main import app
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        raiz = _pl.Path(tempfile.mkdtemp()); pasta = raiz / "F026 - SBU" / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        def gravar(p_):
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p_, ensure_ascii=False), encoding="utf-8")
+            (pasta / "status.json").write_text(_j.dumps({"status": "pronto", "lote_atual": "lote-2"}), encoding="utf-8")
+            (pasta / "info_projeto.json").write_text(_j.dumps({"codigo": "F026-P0001", "nome": "SESI"}), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'SESI',1972)")
+        for k_, v_ in (("qnap.raiz", str(raiz)), ("qnap.prontos_raiz", str(raiz))):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        gravar(pac)
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('SESI','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; c.commit()
+        importador_lote.importar_lote(c, lid, "teste")
+        c.execute("UPDATE item SET revisao='conferida'"); c.execute("UPDATE lista_processamento SET etapa='publicado', aprovado_em=datetime('now'), criado_em=datetime('now','-2 days') WHERE id=?", (lid,))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',2)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0002','F026',2,'Outra obra',1980)")
+        # o CAMP Vision trouxe 3 folhas novas, mas o aviso nunca chegou ao painel; a estação já tinha dito "enviado" há 3 h
+        p2 = _cp.deepcopy(pac)
+        for n_ in (3, 4, 5):
+            d_ = _cp.deepcopy(pac["documentos"][0]); d_["codigo"] = f"F026-P0001-1972-S01-D{n_:05d}"; d_["titulo"] = f"Folha nova {n_}"; p2["documentos"].append(d_)
+        gravar(p2)
+        ev = c.execute("INSERT INTO estacao_evento (chave, estacao_id, tipo_estacao, operador, projeto_codigo, evento, total_arquivos, recebido_em) VALUES ('chave-teste-0001','foto1','foto','Rafael','F026-P0001','enviado',3, datetime('now','-3 hours'))").lastrowid
+        ev2 = c.execute("INSERT INTO estacao_evento (chave, estacao_id, tipo_estacao, operador, projeto_codigo, evento, total_arquivos, recebido_em) VALUES ('chave-teste-0002','foto1','foto','Rafael','F026-P0002','enviado',9, datetime('now','-5 hours'))").lastrowid
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False); auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False); auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, lei = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("lei@camp.arq.br")
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        pend = lambda: [i["id"] for i in op.get("/api/estacoes/eventos/pendentes").json()["itens"]]
+        ver("antes: o envio aparece em 'enviados e ainda sem processar'", ev in pend(), str(pend()))
+        ver("quem só lê não usa 'Ler agora' (403)", lei.post(f"/api/estacoes/eventos/{ev}/ler-agora").status_code == 403)
+        r = op.post(f"/api/estacoes/eventos/{ev}/ler-agora"); j = r.json()
+        ver("'Ler agora': o painel lê a pasta e cria o lote de complemento (24 → aqui 3 folhas)", r.status_code == 200 and j.get("acao") == "complemento" and j.get("ok") is True and "3 folha" in j.get("mensagem", ""), r.text[:250])
+        ver("o lote novo está em revisão com as 3 folhas, e o lote publicado ficou como estava", sql("SELECT COUNT(*) FROM lista_processamento") == 2 and sql("SELECT etapa FROM lista_processamento WHERE id=?", lid) == "publicado"
+            and sql("SELECT COUNT(*) FROM item WHERE lote_id<>?", lid) == 3 and sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND revisao='conferida'", lid) == 2, "")
+        ver("o aviso sai da lista, porque o lote agora existe", ev not in pend(), str(pend()))
+        r2 = op.post(f"/api/estacoes/eventos/{ev}/ler-agora"); j2 = r2.json()
+        ver("clicar de novo não cria outro lote nem duplica folha", r2.status_code == 200 and sql("SELECT COUNT(*) FROM lista_processamento") == 2 and sql("SELECT COUNT(*) FROM item") == 5, r2.text[:200])
+        ver("fica no histórico do projeto", sql("SELECT COUNT(*) FROM evento WHERE tipo='ler_pasta_agora' AND codigo='F026-P0001'") == 2)
+        ver("aviso que não existe: 404", op.post("/api/estacoes/eventos/99999/ler-agora").status_code == 404)
+        # 'Dispensar' é de admin
+        ver("operador não dispensa (403)", op.post(f"/api/estacoes/eventos/{ev2}/dispensar").status_code == 403)
+        rd = adm.post(f"/api/estacoes/eventos/{ev2}/dispensar")
+        ver("admin dispensa: o aviso sai da lista e fica no histórico", rd.status_code == 200 and ev2 not in pend() and sql("SELECT COUNT(*) FROM evento WHERE tipo='estacao_evento_dispensado'") == 1, rd.text[:150])
+        ver("dispensar de novo é inofensivo", adm.post(f"/api/estacoes/eventos/{ev2}/dispensar").json().get("ja_estava") is True)
+        k.close()
+        for l in res: print(l)
     elif modo == "aviso_sem_manifesto":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -8746,6 +8802,14 @@ else:
 print("114c) Aviso do CAMP Vision de pasta com pacote e sem info_projeto.json/status.json: lido pelo pacote (releitura de F026-P0009)")
 rc, out = rodar("aviso_sem_manifesto", f"{tmp}/avisosemman.db")
 if rc != 0: ok(False, f"teste do aviso sem manifesto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114d) 'Ler agora' e 'Dispensar' no quadro 'Enviados pela estação e ainda sem processar'")
+rc, out = rodar("ler_pasta_agora", f"{tmp}/lerpastaagora.db")
+if rc != 0: ok(False, f"teste do 'Ler agora' não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
