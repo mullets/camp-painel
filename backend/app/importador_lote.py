@@ -87,6 +87,25 @@ def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
     return next(iter(achados)) if len(achados) == 1 and None not in achados else None
 
 
+def _pessoa_decidiu_duplicata(con, cod: str, de: str) -> bool:
+    """CAMP-101: a releitura do CAMP Vision não desfaz o que uma pessoa decidiu na tela de duplicatas. Pula a marcação "cod é cópia de de" quando:
+    - a pessoa já julgou esta folha frente a ESSA original ("Não é duplicata", ou já conferiu): duplicata_conferida_em com conferida_de = de
+      (ou sem original: sugestão dispensada). Se o CAMP Vision apontar OUTRA original, volta a pedir conferência (migração 139);
+    - marcar fecharia um ciclo: a pessoa fez de `cod` a que vai ao site ("Publicar esta em vez da outra") e `de` agora é cópia dela.
+    Antes, "Não é duplicata" voltava a ser cópia (e contava como conferida) e a troca virava D4→D29→D4: nenhuma das duas ia ao site."""
+    r = con.execute("SELECT duplicata_conferida_em, duplicata_conferida_de FROM item WHERE codigo=?", (cod,)).fetchone()
+    if r and r["duplicata_conferida_em"] and r["duplicata_conferida_de"] in (de, None):
+        return True
+    atual, vistos = de, set()
+    while atual and atual not in vistos and len(vistos) < 60:      # segue a cadeia a partir da original: se chega em `cod`, seria ciclo
+        vistos.add(atual)
+        nxt = con.execute("SELECT duplicata_de FROM item WHERE codigo=?", (atual,)).fetchone()
+        atual = nxt["duplicata_de"] if nxt else None
+        if atual == cod:
+            return True
+    return False
+
+
 def _categoria_retirado(r: dict, motivos: list[str]) -> str:
     txt = " ".join(motivos).lower()
     if r.get("autoria_divergente") or "autoria" in txt:
@@ -344,6 +363,12 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         publicavel = bool(d.get("publicavel"))
         if cod in confirmadas and any(tirar_projeto_divergente(pend)) and not pend["bloqueios"] and not d.get("autoria_divergente"):
             publicavel = True                                       # o projeto divergente era o que prendia a folha, e uma pessoa já disse que não é
+        if d.get("duplicata_de") and ex and not con.execute("SELECT duplicata_de FROM item WHERE codigo=?", (cod,)).fetchone()[0] \
+                and _pessoa_decidiu_duplicata(con, cod, str(d["duplicata_de"])):
+            # CAMP-101: uma pessoa disse que esta folha NÃO é cópia (ou a fez a que vai ao site): o bloqueio "duplicata de …" da releitura não volta
+            pend["bloqueios"] = [b for b in pend["bloqueios"] if "duplicat" not in str(b).lower()]
+            if not pend["bloqueios"] and not d.get("autoria_divergente"):
+                publicavel = True
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipo_do_painel(tipo_lido, tipos), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
@@ -376,7 +401,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if d.get("duplicata_de"):
             duplicatas.append((cod, str(d["duplicata_de"]), d.get("tipo_duplicata")))
     for cod, de, tipo in duplicatas:                               # depois de todas existirem (a referência é de item para item)
-        if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone():
+        if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone() and not _pessoa_decidiu_duplicata(con, cod, de):
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
     registrados = registrar_problemas(con, proj, pacote, problemas, lote_id) + registrar_erros_cv(con, proj, pasta)
