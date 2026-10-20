@@ -3462,8 +3462,10 @@ function pendenciasProjeto(d){if(!d||!d.projeto)return null;const code=d.projeto
   if(cv&&cv.existe){const R=cv.respostas||{},prop=cv.propostas&&typeof cv.propostas==='object'?cv.propostas:null;
     const nProp=prop?Object.entries(prop).reduce((n,[kk,v])=>n+(Array.isArray(v)?v.filter((_,i)=>!R[`proposta:${kk}:${i}`]).length:0),0):0,nSug=(cv.sugestoes||[]).length;
     add('cv_respostas',`Responder ${[nProp?qtd(nProp,'proposta','propostas'):'',nSug?qtd(nSug,'sugestão','sugestões'):''].filter(Boolean).join(' e ')} do CAMP Vision`,nProp+nSug,{cv:nProp?'propostas':'sugestoes'});
-    const ob=(cv.avisos||[]).map(x=>typeof x==='string'?x:'').map(t=>t.match(/(\d+)\s+obras distintas/i)).find(Boolean);
-    if(ob)add('obras',`Decidir sobre as ${ob[1]} obras distintas que o CAMP Vision apontou`,+ob[1],{sel:'#pj-cv .cv-avisos',gav:'folhas'});
+    /* CAMP-126 (P5): com a decisão das obras, a pendência some quando alguém decide; sem o bloco "obras" (pacote antigo), vale o texto do aviso */
+    if(cv.obras&&(cv.obras.grupos||[]).length){if(!cv.obras.decisao)add('obras',`Decidir sobre as ${cv.obras.grupos.length} obras distintas que o CAMP Vision apontou`,1,{sel:'#cv-sec-obras',gav:'folhas'})}
+    else{const ob=(cv.avisos||[]).map(x=>typeof x==='string'?x:'').map(t=>t.match(/(\d+)\s+obras distintas/i)).find(Boolean);
+      if(ob)add('obras',`Decidir sobre as ${ob[1]} obras distintas que o CAMP Vision apontou`,+ob[1],{sel:'#pj-cv .cv-avisos',gav:'folhas'})}
     const ret=Array.isArray(cv.retirados)?cv.retirados.filter(x=>!R['retirado:'+(typeof x==='object'?x.codigo||'':String(x))]).length:0;
     add('retiradas',`Decidir ${qtd(ret,'folha retirada','folhas retiradas')} pelo CAMP Vision`,ret,{cv:'retiradas'})}
   const aut=its.filter(i=>i.autoria_divergente).length;add('autoria',`Confirmar a autoria de ${qtd(aut,'folha','folhas')}`,aut,{aba:'erros'});
@@ -3471,7 +3473,7 @@ function pendenciasProjeto(d){if(!d||!d.projeto)return null;const code=d.projeto
   if(!c.conferir&&lotes.length&&!lotes.every(x=>x.aprovado_em))add('aprovar','Aprovar o lote',1,{pp:'aprovar'});
   if(its.length&&g.estado!=='no_ar'){const falta=(g.condicoes||[]).filter(x=>x.bloqueia&&!x.ok&&['direitos','teste','aceite_cv'].includes(x.id))[0];
     if(falta)add('publicar',`Publicar: falta ${faltaCondicao(falta).curto}`,1,{aba:'publicacao'});else if(!k.bloq&&!c.conferir&&!out.some(x=>x.chave==='aprovar'))add('publicar','Publicar no site',1,{publicar:true})}
-  const alt=its.filter(i=>i.alterada_apos_publicar).length;add('alteracoes',`Enviar ao site ${qtd(alt,'folha alterada','folhas alteradas')} depois de publicar`,alt,{aba:'publicacao'});
+  const alt=(d.alteracoes_site||[]).length;add('alteracoes',`Enviar ao site ${qtd(alt,'alteração','alterações')} feitas depois de publicar`,alt,{sel:'[data-enviar-alteracoes]'});   /* CAMP-124 (P3) */
   return out}
 function pjAvisosMenores(d){const k=contaProblemas(d),aut=((d&&d.erros)||[]).filter(e=>e.categoria==='autoria_divergente').length;return Math.max(0,k.total-k.bloq-aut)}
 function pjFaltaHTML(d,L){const code=d.projeto.codigo,C=escHtml(code),men=pjAvisosMenores(d),pub=d.projeto.status_site==='no_ar';
