@@ -3873,7 +3873,12 @@ async function abrirAjuste(codigo){
     <div class="aj-bts"><button type="button" class="btn sm" data-aj-auto>Endireitar automaticamente</button><button type="button" class="btn sm" data-aj-inteira>Imagem inteira</button></div>
     <div class="aj-bts"><button type="button" class="btn sm pri" data-aj-aplicar>Aplicar</button><button type="button" class="btn sm" data-aj-cancelar>Cancelar</button></div>
     <small class="help">[ e ] giram 0,5° · Enter aplica · Esc cancela. O arquivo original (TIF) não muda; dá para desfazer depois.</small></div>`;
-  ajDesenhar()}
+  ajDesenhar();ajMostrarInteiro()}
+/* CAMP-085: ao abrir pelo meio da folha (ou com a tecla K), o alto da tela de recortar ficava fora da vista: as alças de cima não eram alcançáveis
+   sem rolar. Rola até o editor (o topo logo abaixo da barra do painel), depois que a imagem carrega e o tamanho fica certo. */
+function ajMostrarInteiro(){const ed=document.getElementById('aj-ed'),im=document.getElementById('aj-img');if(!ed)return;
+  const ir=()=>{const r=ed.getBoundingClientRect(),tb=document.querySelector('.main .top')||document.querySelector('.top'),topo=(tb?tb.getBoundingClientRect().bottom:0)+8;if(r.top<topo||r.top>innerHeight*.5)mainEl.scrollTop+=r.top-topo};
+  ir();if(im&&!im.complete)im.addEventListener('load',ir,{once:true})}
 function ajDesenhar(){if(!AJ)return;const c=document.getElementById('aj-caixa'),im=document.getElementById('aj-img');if(!c||!im)return;const b=AJ.box;
   c.style.left=(b.x*100)+'%';c.style.top=(b.y*100)+'%';c.style.width=(b.w*100)+'%';c.style.height=(b.h*100)+'%';im.style.transform=AJ.ang?`rotate(${AJ.ang}deg)`:'';
   const r=document.getElementById('aj-ang'),n=document.getElementById('aj-ang-n');if(r&&+r.value!==AJ.ang)r.value=AJ.ang;if(n&&document.activeElement!==n)n.value=AJ.ang}
