@@ -269,6 +269,30 @@ def resolver_ao_conferir(con, codigo: str, estado: str, ator: str) -> dict:
     return out
 
 
+def reabrir_ao_desfazer(con, codigo: str, ator: str) -> dict:
+    """CAMP-091 (decisão de 20/10): desfazer a conferência ("Desfazer" do aviso ou "Voltar para a conferir") reabre o que ELA fechou
+    (resolver_ao_conferir: giro, espelho, dado lido) e devolve o espelho a "a confirmar" se foi ela que confirmou. Só some o que foi resolvido."""
+    out = {"problemas_reabertos": [], "espelho_reaberto": False}
+    ids = [r[0] for r in con.execute("""SELECT id FROM erro WHERE codigo=? AND origem='campvision' AND situacao='corrigido'
+                                         AND resolucao LIKE 'Resolvido na conferência:%'""", (codigo,))]
+    if ids:
+        con.execute(f"UPDATE erro SET situacao='aberto', resolvido_em=NULL, resolucao=NULL WHERE id IN ({','.join('?' * len(ids))})", ids)
+        out["problemas_reabertos"] = ids
+    ult = con.execute("""SELECT tipo, detalhe FROM evento WHERE entidade='item' AND codigo=? AND tipo IN ('conferencia_resolveu','conferencia_desfeita')
+                         ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
+    if ult and ult["tipo"] == "conferencia_resolveu":
+        try:
+            det = json.loads(ult["detalhe"] or "{}")
+        except ValueError:
+            det = {}
+        if det.get("espelho_confirmado"):
+            con.execute("UPDATE item SET espelho_manual=NULL, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+            out["espelho_reaberto"] = True
+    if ids or out["espelho_reaberto"]:
+        _evento(con, "item", codigo, "conferencia_desfeita", ator, out)
+    return out
+
+
 @router.post("/itens/{codigo}/revisao")
 def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"))) -> dict:
     if d.estado not in ("pendente", "conferida", "corrigida"):
@@ -294,8 +318,9 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         _evento(con, "item", codigo, "revisao", u["email"], {"de": i["revisao"], "para": d.estado})
         registrar_campos_revisados(con, codigo, d.estado, u["email"])
         res = resolver_ao_conferir(con, codigo, d.estado, u["email"])
+        reab = reabrir_ao_desfazer(con, codigo, u["email"]) if d.estado == "pendente" and i["revisao"] != "pendente" else None
         con.commit()
-        return {"ok": True, "revisao": d.estado, "resolvidos": res}
+        return {"ok": True, "revisao": d.estado, "resolvidos": res, **({"reabertos": reab} if reab else {})}   # 'reabertos': campo novo, opcional
     finally:
         con.close()
 

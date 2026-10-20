@@ -4523,6 +4523,7 @@ async function salvarRevisaoItem(codigo,estado){
     const rr=await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});
     if(estado!=='pendente')limparAlteracoes(revEscopo());
     aplicarResolvidos(codigo,rr&&rr.resolvidos);   /* os campos já foram salvos acima; o que sobrar alterado é só o motivo de "Não publicar" */
+    if(rr&&rr.reabertos)await aplicarReabertos(codigo,rr.reabertos);   /* CAMP-091: desfazer a conferência traz de volta as marcas que ela tirou */
     const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){it.revisao=estado;it.revisado_por=EU&&EU.email}
     atualizarCartaoRevisao(codigo);if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
     if(estado==='pendente'){travarRevisao(false);toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
@@ -4541,6 +4542,10 @@ function aplicarResolvidos(codigo,r){if(!r)return;const it=(window.ITENS_PJ||[])
   tirarErrosDaTela(r.problemas_fechados||[])}
 /* 20/10: problema sem categoria conhecida vindo do CAMP Vision não se chama "outro" na tela */
 function rotuloErro(e){return e&&e.categoria==='outro'&&e.origem==='campvision'?'aviso do CAMP Vision':rotulo(e&&e.categoria)}
+async function aplicarReabertos(codigo,r){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(r.espelho_reaberto&&it)it.espelho_manual=null;
+  if(!(r.problemas_reabertos||[]).length)return;const code=(CONF.d&&CONF.code)||(window.PJ_D&&window.PJ_D.projeto&&window.PJ_D.projeto.codigo);if(!code)return;
+  try{const d=await API('/api/projetos/'+encodeURIComponent(code)+'/detalhe');if(window.PJ_D)window.PJ_D.erros=d.erros;if(CONF.d)CONF.d.erros=d.erros;
+    if(document.getElementById('cf-linhas'))confDesenharLista();if(document.getElementById('pj-cards'))desenharCartoes(code)}catch(_){}}
 function tirarErrosDaTela(ids){if(!ids||!ids.length)return;const S=new Set(ids.map(String)),f=L=>(L||[]).filter(e=>!S.has(String(e.id)));
   /* 20/10 ("se eu resolvo um problema ele tem que sair da lista"): a aba Problemas do projeto (tabela, número da aba e resumo) também */
   S.forEach(id=>document.querySelectorAll(`#pd tr[data-abrir="erro:${CSS.escape(id)}"]`).forEach(tr=>tr.remove()));

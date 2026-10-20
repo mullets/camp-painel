@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca"}
+MODOS_RAPIDOS = {"camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7551,6 +7551,48 @@ def filho(modo):
         ver("salvar a revisão manda só o que mudou e não descarta o que foi digitado em 'Está certo'", "camposRevisaoAlterados(" in html)
         c.close()
         for l in res: print(l)
+    elif modo == "exaustao_c":
+        # Exaustão da página do projeto, grupo C (CAMP-089 a 095): as regras do backend que a tela de conferir usa.
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa Exaustão C',1970)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa C','F099-P0001','/nao/existe','revisao')").lastrowid
+        D = lambda n: f"F099-P0001-1970-S01-D{n:05d}"
+        def folha(n, pend=None, status="nao_publicado", **kw):
+            cols = {"codigo": D(n), "projeto_codigo": "F099-P0001", "serie_codigo": "S01", "sequencial": n, "origem": "campvision", "lote_id": lote, "revisao": "pendente",
+                    "status_site": status, "pendencias": _j.dumps(pend or {"bloqueios": [], "sinais": [], "ressalvas": []}, ensure_ascii=False), "titulo": f"Prancha {n}", **kw}
+            c.execute(f"INSERT INTO item ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", tuple(cols.values()))
+        erro = lambda cod, cat, grav="aviso": c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES (?,?,'campvision',?,?,'CAMP Vision')",
+                                                       (grav, cat, cod, f"{cat} em {cod}")).lastrowid
+        for n in range(1, 11):
+            folha(n)
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op = cli("op@camp.arq.br", "senha-operador-123")
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        sit = lambda eid: q("SELECT situacao FROM erro WHERE id=?", eid)[0]
+        # ---------- CAMP-091: desfazer a conferência reabre o que ela fechou ----------
+        c.execute("UPDATE item SET espelhado=1 WHERE codigo=?", (D(1),)); e_or, e_me = erro(D(1), "orientacao"), erro(D(1), "metadado", "corrigir"); c.commit()
+        op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"})
+        ver("CAMP-091: conferir fecha giro e dado lido e confirma o espelho", sit(e_or) == "corrigido" and sit(e_me) == "corrigido" and q("SELECT espelho_manual FROM item WHERE codigo=?", D(1))[0] == 1)
+        r = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "pendente"}); j = r.json() if r.status_code == 200 else {}
+        ver("CAMP-091: voltar para conferir reabre os problemas que a conferência fechou e diz quais",
+            sit(e_or) == "aberto" and sit(e_me) == "aberto" and sorted((j.get("reabertos") or {}).get("problemas_reabertos") or []) == sorted([e_or, e_me]), r.text[:200])
+        ver("CAMP-091: e o espelho volta a 'a confirmar'", q("SELECT espelho_manual FROM item WHERE codigo=?", D(1))[0] is None)
+        e_gente = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,situacao,resolucao) VALUES ('aviso','orientacao','operador',?,'x','Op','corrigido','resolvido à mão')", (D(2),)).lastrowid
+        c.commit(); op.post(f"/api/itens/{D(2)}/revisao", json={"estado": "conferida"}); op.post(f"/api/itens/{D(2)}/revisao", json={"estado": "pendente"})
+        ver("CAMP-091: o que foi resolvido de outro jeito (por gente) não reabre", sit(e_gente) == "corrigido")
+        c.close()
+        for l in res: print(l)
     elif modo == "camp068_marcas":
         # CAMP-068 (20/10, operadora): "as marcações de problemas não somem ao corrigir, na etapa de conferir". Conferir/corrigir a folha
         # resolve no BANCO o que a conferência resolve: o espelho do CAMP Vision fica confirmado e os problemas automáticos "olhe esta folha"
@@ -9645,6 +9687,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp124: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("143) Exaustão grupo C (CAMP-089 a 095): conferir parte 2 — desfazer reabre, autoria, aprovar todas, duas pessoas")
+rc, out = rodar("exaustao_c", f"{tmp}/exaustao_c.db")
+if rc != 0: ok(False, f"teste exaustao_c não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"exaustão C: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
