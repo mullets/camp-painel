@@ -442,6 +442,16 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """, (codigo, projetos_cid, p["tainacan_item_id"] or -1)).fetchone()
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
+    # exaustão CAMP-108: decisões pendentes sobre ESTE projeto (o CAMP Vision parado perguntando se o que chegou é ele; dado diferente do cadastro).
+    # Campo novo e opcional: a página mostra a pergunta e quem decide.
+    decisoes_pend = []
+    from .decisoes import contexto as _ctx_dec, pergunta as _perg_dec
+    for dd in con.execute("SELECT * FROM decisao WHERE situacao='pendente' AND fundo_codigo=? AND contexto LIKE ? ORDER BY id", (p["fundo_codigo"], f'%"{codigo}"%')).fetchall():
+        cx = _ctx_dec(dd)
+        cands = [c.get("codigo") for c in (cx.get("candidatos") or []) if isinstance(c, dict)]
+        if codigo in cands or cx.get("projeto_codigo") == codigo:
+            decisoes_pend.append({"id": dd["id"], "tipo": dd["tipo"] or "projeto_parecido", "titulo": dd["titulo"], "origem": dd["origem"],
+                                  "criada_em": dd["criada_em"], "pergunta": _perg_dec(dd, cx)})
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     # Folha movida aparece nos DOIS projetos: no destino (o código novo começa com o projeto) e na origem (o código antigo, em detalhe.de).
     eventos = [dict(r) for r in con.execute("""SELECT tipo, ator, quando, detalhe, entidade, codigo FROM evento
@@ -497,7 +507,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
             "fonte_visual": fonte_visual, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
-            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto}
+            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto,
+            "decisoes_pendentes": decisoes_pend}
 
 
 @router.get("/itens/{codigo}")
