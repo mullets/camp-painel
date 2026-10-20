@@ -157,7 +157,8 @@ let PG = null;
   }
   // a última folha do lote aprovado: reter fecha a janela com um aviso claro (não há próxima)
   await pg.evaluate(c => abrirRevisaoItem(c), D(PB, 4)); await espera(async () => await aberta() === D(PB, 4));
-  await pg.click('details.rev-reter:not(.op-det) > summary'); await pg.click(`[data-rev-item="reter"][data-codigo="${D(PB, 4)}"]`);
+  await pg.click('details.rev-reter:not(.op-det) > summary'); await pg.fill('#rv-motivo', 'última folha');   // CAMP-089: reter exige motivo
+  await pg.click(`[data-rev-item="reter"][data-codigo="${D(PB, 4)}"]`);
   await espera(async () => (await item(D(PB, 4))).item.retida === 1);
   await espera(async () => !(await pg.evaluate(() => document.querySelector('main').classList.contains('with-drawer'))) || await aberta() !== D(PB, 4));
   chk(!/Conferência concluída/.test(await aberta() || ''), 'lote aprovado, última folha: não mostra "Conferência concluída"', await aberta());
