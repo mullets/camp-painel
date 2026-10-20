@@ -134,7 +134,7 @@ Regras que o sistema impõe (README): o código vem da tabela de autoridade, nun
 
 | Quem | Como usa |
 |---|---|
-| Equipe da CAMP (papéis `leitura`, `operador`, `admin`, `master`) | navegador, em `http://192.168.15.60:8000` na rede local ou `https://painel.camp.arq.br` de fora |
+| Equipe da CAMP (papéis `leitura`, `operador`, `admin`, `master`) | navegador, em `http://painel.local` (ou `http://192.168.15.60:8000`) na rede local ou `https://painel.camp.arq.br` de fora |
 | Estações de digitalização (Macs com VueScan, estações Contex, estações "universais") | chamam rotas HTTP **sem login**, protegidas por rede local e/ou token (`estacao.token`) |
 | CAMP Vision 2 (computador Ubuntu `.40`) | chama as mesmas rotas sem login: contexto, reserva de projeto, heartbeat, aviso de lote pronto, pedidos de releitura |
 | Site (formulário de pedido de material) | chama `POST /api/pedidos/site` com o token `pedidos.token` |
@@ -143,7 +143,7 @@ Regras que o sistema impõe (README): o código vem da tabela de autoridade, nun
 
 | Peça | Onde | Endereço / caminho |
 |---|---|---|
-| Servidor do painel | Ubuntu, máquina `camp` (usuário `camp`) | `192.168.15.60:8000` (`docs/padroes.md` §1) |
+| Servidor do painel | Ubuntu, máquina `camp` (usuário `camp`) | `192.168.15.60:8000`, também `http://painel.local` (`docs/padroes.md` §1) |
 | QNAP TS-932PX ("Server-Camp" no Mac) | rede local | `192.168.15.30`, compartilhamento `Backup Servidor CAMP` |
 | QNAP TS-231P (réplica / backup frio) | rede local | `qnap.backup_ip`; réplica montada só leitura em `/mnt/qnap/replica` |
 | CAMP Vision 2 (repositório `github.com/mullets/campvision-new`) | Ubuntu dedicado | `192.168.15.40` (`campvision2.ip`) |
@@ -1256,6 +1256,13 @@ curl -sI https://painel.camp.arq.br/api/versao
 2. `systemctl status cloudflared` e `journalctl -u cloudflared -n 50` — o túnel está conectado?
 3. No painel Zero Trust da Cloudflare: o túnel `camp-painel` aparece "Healthy"? O DNS `painel.camp.arq.br` aponta para ele?
 4. Na LAN, `http://192.168.15.60:8000` continua funcionando independentemente do túnel.
+
+### Nome na rede local: `http://painel.local`
+
+`scripts/instalar_nome_local.sh` (rodar no servidor, com sudo; `--simular` mostra antes, `--verificar` confere, `--desfazer` tira):
+- **Nome:** o serviço `camp-painel-nome` anuncia `painel.local` por mDNS (avahi) com o IP atual do servidor. Mac, iPhone, Windows 10/11 e Linux com avahi acham sozinhos; nada a configurar nas máquinas. Android antigo pode não achar: use o IP.
+- **Sem `:8000`:** o serviço `camp-painel-porta80` liga uma regra `iptables` (nat, só tráfego destinado ao próprio servidor) que manda a porta 80 para a 8000. O IP de quem acessa não muda, então a regra das estações na LAN (`rede.py`) segue igual. Se já houver algo na porta 80, o script para sem mexer em nada.
+- `http://192.168.15.60:8000` e o túnel continuam valendo; estações e CAMP Vision não precisam mudar.
 
 ---
 

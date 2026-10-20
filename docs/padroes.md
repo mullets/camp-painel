@@ -3,7 +3,7 @@
 Este é o registro único do que já foi decidido. Antes de mexer em algo daqui, leia a seção. Só se muda um padrão quando o Rafael pedir.
 
 ## 1. Infraestrutura (fatos)
-- **Painel**: servidor Ubuntu `camp@camp`, `192.168.15.60:8000`, serviço `camp-painel`, repositório `~/camp-painel`. Atualiza com `./atualizar.sh` (faz backup antes).
+- **Painel**: servidor Ubuntu `camp@camp`, `192.168.15.60:8000` (na LAN também `http://painel.local`, ver `scripts/instalar_nome_local.sh`), serviço `camp-painel`, repositório `~/camp-painel`. Atualiza com `./atualizar.sh` (faz backup antes).
 - **QNAP TS-932PX**: `192.168.15.30`. **O nome que o Mac mostra é `Server-Camp`** (mesma máquina). Compartilhamento `Backup Servidor CAMP`; usuário do painel `camp-panel`; montado neste servidor em `/mnt/qnap/acervos` (raiz do compartilhamento). Ver `qnap.md`.
   - **ENTRADA** (`qnap.entrada_captura`): `Arquivos/100 - Scanners`. Os scanners gravam aqui e o CAMP Vision 2 lê. O painel não lê lotes daqui.
   - **PRONTO** (`qnap.prontos_raiz`): `Fundos e Escritorios/ACERVOS_CAMP`, no padrão `<Fundo>/01 - Projetos/<Fxxx-Pxxxx - Nome>/<série>`. O CAMP Vision 2 grava aqui e **o painel lê os lotes só daqui**.
