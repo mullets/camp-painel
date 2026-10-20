@@ -144,12 +144,20 @@ _DO_LOTE = "item.lote_id=? AND item.projeto_codigo=(SELECT l.projeto_codigo FROM
 
 def _contagem(con, lote_id: int) -> dict:
     c = {"total": 0, "pendente": 0, "conferida": 0, "corrigida": 0, "bloqueadas": 0, "retidas": 0}
-    c["retidas"] = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND retida=1", (lote_id,)).fetchone()[0]
-    for r in con.execute(f"SELECT revisao, status_site, COUNT(*) FROM item WHERE {_DO_LOTE} GROUP BY revisao, status_site", (lote_id,)):
-        c["total"] += r[2]
-        c[r[0]] += r[2]
+    # CAMP-130 (20/10, F026-P0009): "12 conferidas · 22 corrigidas · 3 retidas" somava 37 num lote de 34 (a retida também conta como
+    # conferida ou corrigida). `partes` (campo novo, opcional) divide as folhas sem sobrepor e soma o total: a retida conta só como retida.
+    partes = {"pendente": 0, "sem_mudanca": 0, "corrigida": 0, "retida": 0}
+    for r in con.execute(f"SELECT revisao, status_site, COALESCE(retida,0), COUNT(*) FROM item WHERE {_DO_LOTE} GROUP BY revisao, status_site, COALESCE(retida,0)", (lote_id,)):
+        c["total"] += r[3]
+        c[r[0]] += r[3]
         if r[1] == "bloqueado":
-            c["bloqueadas"] += r[2]
+            c["bloqueadas"] += r[3]
+        if r[2]:
+            c["retidas"] += r[3]
+            partes["retida"] += r[3]
+        else:
+            partes[{"conferida": "sem_mudanca"}.get(r[0], r[0])] += r[3]
+    c["partes"] = partes
     return c
 
 
@@ -606,7 +614,7 @@ def saidas_cv(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     from .saidas_cv import ler_saidas, conferencia_do_lote
     con = connect()
     try:
-        l = con.execute("SELECT id, projeto_codigo, pasta_qnap FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+        l = con.execute("SELECT id, projeto_codigo, pasta_qnap, aprovado_em FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
         if not l:
             raise HTTPException(404, "Lote não existe")
         p = con.execute("SELECT * FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()
@@ -626,7 +634,8 @@ def saidas_cv(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     ac = out.get("aceite")
     if ac and ac.get("situacao") == "reprovado" and p and p["status_site"] == "no_ar":
         ac["situacao"] = "historico"   # 19/10: projeto JÁ publicado: o aceite da leitura vira só registro (nunca "não pode ser publicado" no que está publicado)
-    return {"lote_id": lote_id, "projeto_codigo": l["projeto_codigo"], **out}
+    # CAMP-130: a tela diz se o aceite que falta importa (lote já aprovado por uma pessoa: não importa) — campo novo, opcional
+    return {"lote_id": lote_id, "projeto_codigo": l["projeto_codigo"], "lote_aprovado_em": l["aprovado_em"], **out}
 
 
 class RespostaCV(BaseModel):

@@ -3198,10 +3198,10 @@ function saidasCVHTML(s){if(!s)return '';if(!s.existe)return `<div class="panel"
     ${sit==='historico'?'':`<p class="cv-resumo-tit"><b>${sit==='reprovado'?`✖ Falta resolver ${faltam.length===1?'1 ponto':faltam.length+' pontos'} do CAMP Vision antes de publicar`:sit?'✔ Pronto do lado do CAMP Vision':pjLoteParado(s.projeto_codigo||window.PROJETO_PJ||'')?'✖ O CAMP Vision parou com erro (veja acima)':'O CAMP Vision entregou o lote'}</b>${entregou?` <small class="help">${escHtml(entregou)}</small>`:''}</p>`}
     ${faltam.length?`<ul class="cv-faltam">${faltam.map(f=>`<li><b>${escHtml(f.rotulo)}</b>${f.como?` <span class="help">— ${escHtml(f.como)}</span>`:''} ${btFalta(f)}</li>`).join('')}</ul>`:''}
     ${pedidos.length?`<p class="help">O CAMP Vision pediu olho humano em: ${escHtml(pedidos.join('; '))}. Isso já foi conferido no painel.</p>`:''}
-    ${!ac?'<p class="help">O CAMP Vision não mandou o aceite deste lote (o checklist).</p>':''}
+    ${!ac?aceiteFaltaHTML(s):''}
     ${olhar.length?`<p class="cv-olhar">Para olhar (não impede publicar): ${olhar.map(([t,k])=>`<button type="button" class="lnk" data-cv-abrir="${k}">${escHtml(t)}</button>`).join(' · ')}</p>`:''}</div>`;
   const icone={ok:'✔',resolvido:'✔',aviso:'⚠',falta:'✖',info:'○'};
-  const check=ac?`<details class="cv-sec" id="cv-sec-aceite"${sit==='reprovado'?' open':''}><summary>Checklist do CAMP Vision (${(ac.itens||[]).filter(i=>i.estado==='ok'||i.estado==='resolvido'||i.ok===true).length} de ${(ac.itens||[]).length} ✔)</summary><ul class="cv-aceite-itens">${(ac.itens||[]).map(i=>{const e=i.estado||(i.ok===true?'ok':i.ok===false?'falta':'info');return `<li class="cv-it-${e}"><span aria-hidden="true">${icone[e]||'○'}</span> ${escHtml(i.rotulo)}${i.detalhe!=null?` <small class="help">(${escHtml(i.detalhe)})</small>`:''}${e==='resolvido'?' <span class="tag g">conferido no painel</span>':e==='aviso'?' <span class="tag a">só aviso</span>':''}</li>`}).join('')}</ul></details>`:'';
+  const check=ac?`<details class="cv-sec" id="cv-sec-aceite"${sit==='reprovado'?' open':''}><summary title="O “aceite”: a lista do que o CAMP Vision conferiu sozinho neste lote">Checklist do CAMP Vision · aceite (${(ac.itens||[]).filter(i=>i.estado==='ok'||i.estado==='resolvido'||i.ok===true).length} de ${(ac.itens||[]).length} ✔)</summary><ul class="cv-aceite-itens">${(ac.itens||[]).map(i=>{const e=i.estado||(i.ok===true?'ok':i.ok===false?'falta':'info');return `<li class="cv-it-${e}"><span aria-hidden="true">${icone[e]||'○'}</span> ${escHtml(i.rotulo)}${i.detalhe!=null?` <small class="help">(${escHtml(i.detalhe)})</small>`:''}${e==='resolvido'?' <span class="tag g">conferido no painel</span>':e==='aviso'?' <span class="tag a">só aviso</span>':''}</li>`}).join('')}</ul></details>`:'';
   const nRet=Array.isArray(s.retirados)?s.retirados.length:0,nDec=Array.isArray(s.decisoes)?s.decisoes.length:0,nRel=(s.releituras||[]).length,nSug=(s.sugestoes||[]).length;
   const S=[{k:'sugestoes',n:nSug,nome:'sugestões',tit:`Sugestões para o projeto (${nSug})`,corpo:sug,aberto:nSug>0},
     {k:'relatorio',n:rl?1:0,nome:'relatório',tit:'Relatório do lote',corpo:rel,aberto:!!(rl&&rl.alerta_origem)},
@@ -3223,6 +3223,11 @@ function saidasCVHTML(s){if(!s)return '';if(!s.existe)return `<div class="panel"
     ${vazias.length?`<p class="help cv-nada">Nada pendente em: ${escHtml(vazias.join(', '))}.</p>`:''}
     <p class="help cv-nota">Tudo isto vem da pasta do lote; nada aqui muda o projeto sozinho.</p>
   </div></div>`}
+/* CAMP-130: o "aceite" sem explicação. É o checklist que o próprio CAMP Vision preenche sobre o lote; quando falta, não impede nada
+   (a conferência no painel vale). Lote já aprovado por uma pessoa: fica em cinza, curto. */
+function aceiteFaltaHTML(s){return s&&s.lote_aprovado_em
+  ?'<p class="help cv-aceite-falta" data-cv-aceite="sem-aprovado">Sem o checklist do CAMP Vision (o “aceite”). Não importa: o lote já foi aprovado por uma pessoa.</p>'
+  :'<p class="help cv-aceite-falta" data-cv-aceite="sem">O CAMP Vision não mandou o checklist deste lote (o “aceite”: a lista do que ele mesmo conferiu). Não impede publicar: vale a conferência feita aqui.</p>'}
 document.addEventListener('click',e=>{const a=e.target.closest('[data-cv-abrir]');if(!a)return;const d=document.getElementById('cv-sec-'+a.dataset.cvAbrir);if(d){d.open=true;if(d.scrollIntoView)d.scrollIntoView({behavior:'smooth',block:'center'})}});
 document.addEventListener('click',async e=>{const dv=e.target.closest('[data-cv-devolver]');if(dv){const b=document.querySelector(`[data-cv-dev-box="${CSS.escape(dv.dataset.cvDevolver)}"]`);if(b){b.hidden=false;const i=b.querySelector('input');if(i)i.focus()}dv.hidden=true;return}
   const b=e.target.closest('[data-cv-resp]');if(!b)return;const motivoEl=b.dataset.cvResp==='retirado'?document.querySelector(`[data-cv-dev-motivo="${CSS.escape(b.dataset.chave)}"]`):null,motivo=motivoEl?motivoEl.value.trim():null;
@@ -3703,6 +3708,12 @@ async function passoProximo(acao,lote,code,btn){const fim=!!(btn&&btn.closest('[
     if(fim){await fimConferenciaPasso(code);if(!revConf()&&window.PROJETO_PJ===code)carregarRevisaoLote(code);return}   /* a página do projeto por baixo também anda (cartões e próximo passo) */
     await showProjeto(code);avisoResultadoLote(acao,r,code)}catch(e){toast(e.message);avisoNoLugar(`<b>✖ Não deu:</b> ${escHtml(e.message)}`,{tipo:'erro',antes:document.getElementById('pj-proximo')||'#pd',id:'lote'})}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-pp]');if(b&&!b.disabled)passoProximo(b.dataset.pp,b.dataset.lote,b.dataset.projeto,b);const c=e.target.closest('[data-pp-cond]');if(c)acaoCondicao(c.dataset.ppCond,c.dataset.alvo)});
+/* CAMP-130 (20/10, F026-P0009): "12 conferidas · 22 corrigidas · 3 retidas" somava 37 num lote de 34 (a retida também contava como conferida).
+   Agora as partes não se sobrepõem e somam o total ("34 folhas: 9 sem mudança · 22 corrigidas · 3 retidas"); o que se sobrepõe vem como "das quais". */
+function revChipsHTML(c){const p=c.partes;
+  if(!p)return `<div class="rev-chips">${c.pendente?`<span class="tag a">${escHtml(c.pendente)} a conferir</span>`:''}${c.conferida?`<span class="tag g">${escHtml(c.conferida)} conferida(s)</span>`:''}${c.corrigida?`<span class="tag b">${escHtml(c.corrigida)} corrigida(s)</span>`:''}${c.retidas?`<span class="tag a">${escHtml(c.retidas)} retida(s) por você</span>`:''}</div>`;
+  const t=[p.pendente?['a',`${fmtN(p.pendente)} a conferir`]:null,p.sem_mudanca?['g',`${fmtN(p.sem_mudanca)} sem mudança`]:null,p.corrigida?['b',qtd(p.corrigida,'corrigida','corrigidas')]:null,p.retida?['a',qtd(p.retida,'retida','retidas')+' <small>(não vão ao site)</small>']:null].filter(Boolean);
+  return `<div class="rev-chips" data-rev-partes><b class="rev-total">${qtd(c.total,'folha','folhas')}:</b> ${t.map(([k,x])=>`<span class="tag ${k}">${x}</span>`).join(' ')}${c.bloqueadas?` <small class="help">· das quais ${qtd(c.bloqueadas,'bloqueada','bloqueadas')} para o site</small>`:''}</div>`}
 async function carregarRevisaoLote(code){
   const box=document.getElementById('pj-revisao');if(!box)return;
   try{const r=await API('/api/projetos/'+encodeURIComponent(code)+'/revisao'),adm=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel);
@@ -3717,7 +3728,7 @@ async function carregarRevisaoLote(code){
         :c.pendente?(op?`${bt('todas',`Aprovar todas (${c.pendente})`)}${bt('conferir','Só as sem pendência')}`:'')
         :(adm?bt('aprovar','Aprovar o lote'):'<small class="help">Todas conferidas. Falta o admin aprovar o lote.</small>');
       // 19/10: só os números que existem (sem "0 corrigida(s)"); com vários lotes, um bloco fechado por lote com uma linha de resumo
-      const chips=vazio?'<p class="help">As folhas ainda não foram importadas para o painel.</p>':`<div class="rev-chips">${c.pendente?`<span class="tag a">${escHtml(c.pendente)} a conferir</span>`:''}${c.conferida?`<span class="tag g">${escHtml(c.conferida)} conferida(s)</span>`:''}${c.corrigida?`<span class="tag b">${escHtml(c.corrigida)} corrigida(s)</span>`:''}${c.bloqueadas?`<span class="tag r">${escHtml(c.bloqueadas)} bloqueada(s) para o site</span>`:''}${c.retidas?`<span class="tag a">${escHtml(c.retidas)} retida(s) por você</span>`:''}</div>`;
+      const chips=vazio?'<p class="help">As folhas ainda não foram importadas para o painel.</p>':revChipsHTML(c);
       const info=`<p class="help">${varios?'':`<b>${escHtml(l.nome)}</b> · `}o CAMP Vision gravou ${escHtml(l.pacote.documentos)} documento(s)${l.pacote.teste?' · <b>lote de teste</b>: nada é publicável':''}.</p>`;
       const mais=`<details class="rev-mais"><summary>Mais ações do lote</summary><div class="act">${acoes}</div>${vazio||apr||!op?'':`<p class="help">${bt('importar','Importar de novo')} ${bt('releitura','Ler o projeto de novo no CAMP Vision')}</p>`}<div class="rl-estado" data-rl-projeto="${escHtml(code)}"></div></details>`;
       if(!varios)return `<div class="panel"><div class="ph"><h2>Revisão do lote</h2>${estado}</div><div class="pb">${info}${chips}${ret}${prob}${mais}</div></div>`;
