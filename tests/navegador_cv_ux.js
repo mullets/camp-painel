@@ -67,7 +67,8 @@ gravarAceite(ACEITE);
     // ---- (1)+(2) o cartão Folhas resume; o aceite resolvido pela conferência não vira pendência ----
     chk(/7 \/ 7 conferidas · lote aprovado/.test(await cartao('folhas')) && await cor('folhas') === 'ok' && !/CAMP Vision/.test(await cartao('folhas')), 'cartão Folhas verde: "7 / 7 conferidas · lote aprovado", sem pendência do CAMP Vision: "' + await cartao('folhas') + '"');
     chk(await page.evaluate(() => /pronto/.test((SL.cv || {}).txt || '') && SL.cv.estado === 'ok'), 'CAMP Vision: pronto (o que pedia olho humano já foi conferido)');
-    chk(await page.isHidden('#pj-revisao') && await page.isHidden('#pj-cv') && await page.isHidden('#pj-consenso') && await page.isHidden('#pj-gaveta'), 'os quadros grandes (revisão, consenso, CAMP Vision) ficam fechados');
+    chk(await page.isHidden('#pj-revisao') && await page.isHidden('#pj-cv') && await page.isHidden('#pj-consenso') && await page.isHidden('.pj-gav[data-gav="folhas"]'), 'os quadros grandes (revisão, consenso, CAMP Vision) ficam fechados');
+    chk(await page.isVisible('.pj-gav[data-gav="dados"]'), 'há dado a decidir: a gaveta "Dados do projeto" já abre sozinha (20/10)');
     const cv = await page.evaluate(() => document.getElementById('pj-cv').textContent.replace(/\s+/g, ' '));
     chk(!/orientacao_incerta_zerada|publicavel|reprovado|não pode ser publicado/.test(cv) && /Pronto do lado do CAMP Vision/.test(cv) && /Isso já foi conferido no painel/.test(cv), 'o quadro do CAMP Vision não mostra código cru nem "reprovado"; diz "Pronto" e que o olho humano já foi feito: "' + cv.slice(0, 260) + '"');
     chk(!(await page.evaluate(() => [...document.querySelectorAll('#pj-cv details > summary')].some(s => /\(0\)/.test(s.textContent)))) && /Nada pendente em: .*sugestões.*retiradas/.test(cv), 'seções vazias "(0)" não aparecem; viram a linha "Nada pendente em: …"');

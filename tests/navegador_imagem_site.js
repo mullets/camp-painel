@@ -38,7 +38,7 @@ con.execute("INSERT INTO divergencia_site (entidade, codigo, campo, valor_painel
   chk(/continua a antiga|não aceitou/.test(t), 'o erro aparece em português dizendo que a imagem do site continua a antiga', t.slice(0, 200));
   // revisão (gaveta) a partir da página do projeto
   await pg.goto(BASE + '/#projeto/' + P); await pg.reload(); await pg.waitForSelector(`.thumb[data-rev-abrir="${C}"]`, { timeout: 15000 });
-  await pg.click(`.thumb[data-rev-abrir="${C}"]`);
+  await pg.click(`.thumb[data-rev-abrir="${C}"] .cap`);   // a legenda: o meio do cartão sem imagem tem o botão "Pedir releitura"
   const naRev = await pg.waitForSelector(`#d-body [data-img-site-pend="${C}"] [data-img-site="${C}"]`, { timeout: 10000 }).then(() => true, () => false);
   chk(naRev, 'revisão da folha: a mesma faixa com o botão aparece na gaveta');
   // sem pendência: nada aparece

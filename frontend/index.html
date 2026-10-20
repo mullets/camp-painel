@@ -544,6 +544,7 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 /* 19/10 proposta B: quatro cartões de situação no topo do projeto + gavetas (uma aberta de cada vez); o passo a passo antigo fica só nas gavetas */
 .pj-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 14px}
 .pjc{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;min-width:0}
+.pj-probs{margin:0;padding:0;list-style:none;display:grid;gap:6px}.pj-probs li{font-size:var(--fs-sm2)}
 .pjc.ok{border-top-color:var(--green)}.pjc.at{border-top-color:var(--amber)}.pjc.bl{border-top-color:var(--red)}
 .pjc-k{font-size:var(--fs-sm);color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
 .pjc-v{font-size:24px;font-weight:700;margin:2px 0 4px;line-height:1.2;overflow-wrap:anywhere}
@@ -3265,7 +3266,15 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-pj-problem
 function pjGav(code){const g=window.PJ_GAV;return g&&g.code===code?g:(window.PJ_GAV={code,aberta:null,porFolha:false})}
 function pjItens(code){return window.PROJETO_PJ===code&&window.ITENS_PJ?window.ITENS_PJ:((window.PJ_D&&window.PJ_D.itens)||[])}
 function pjCartoesHTML(code){const g=pjGav(code),c=escHtml(code),sec=(k,tit,corpo)=>`<section class="pj-gav" data-gav="${k}" aria-label="${tit}"${g.aberta===k?'':' hidden'}><div class="pj-gav-cab"><h2>${tit}</h2><button type="button" class="btn sm" data-pjc-fechar="${c}">Fechar</button></div>${corpo}</section>`;
-  return `<div id="pj-cards" class="pj-cards" role="region" aria-label="Situação do projeto">${pjCartoesConteudo(code)}</div><div id="pj-gaveta" class="pj-gaveta"${g.aberta?'':' hidden'}>${sec('folhas','Detalhes dos lotes','<div id="pj-revisao" hidden></div><div id="pj-cv" hidden></div><div id="pj-qnap"></div><div id="pj-qnap-fim"></div>')}${sec('dados','Dados do projeto: o que decidir',`<div id="pj-perguntas"></div><p class="pj-gav-rodape"><button type="button" class="lnk" data-pjc-porfolha="${c}" aria-expanded="${g.porFolha}" aria-controls="pj-consenso">${g.porFolha?'Esconder o consenso folha por folha':'Ver o consenso folha por folha'}</button></p><div id="pj-consenso"${g.porFolha?'':' hidden'}></div>`)}</div>`}
+  return `<div id="pj-cards" class="pj-cards" role="region" aria-label="Situação do projeto">${pjCartoesConteudo(code)}</div><div id="pj-gaveta" class="pj-gaveta"${g.aberta?'':' hidden'}>${sec('folhas','Detalhes dos lotes','<div id="pj-revisao" hidden></div><div id="pj-cv" hidden></div><div id="pj-qnap"></div><div id="pj-qnap-fim"></div>')}${sec('dados','Dados do projeto: o que decidir',`<div id="pj-perguntas"></div><p class="pj-gav-rodape"><button type="button" class="lnk" data-pjc-porfolha="${c}" aria-expanded="${g.porFolha}" aria-controls="pj-consenso">${g.porFolha?'Esconder o consenso folha por folha':'Ver o consenso folha por folha'}</button></p><div id="pj-consenso"${g.porFolha?'':' hidden'}></div>`)}${sec('problemas','Problemas que impedem publicar','<div id="pj-probs"></div>')}</div>`}
+/* 20/10 ("quando tem erro ou problema já pode abrir direto"): a gaveta do cartão mais urgente abre sozinha uma vez por visita
+   (lote parado por erro > problemas que impedem publicar > dados a decidir). Se a pessoa fechar, não reabre. */
+function pjProbsHTML(code){const d=window.PJ_D||{},L=((d.erros)||[]).filter(e=>e.gravidade==='bloqueia'&&['aberto','em_correcao'].includes(e.situacao||'aberto'));
+  if(!L.length)return '<p class="help">Nenhum problema impede publicar.</p>';
+  return `<ul class="pj-probs">${L.slice(0,30).map(e=>{const cod=String(e.codigo||''),folha=/^F\d{3}-P\d{4}-/.test(cod);return `<li><span class="tag r">${escHtml(rotulo(e.categoria))}</span> ${folha?`<a class="lnk code" href="#conferir/${escHtml(code)}/${escHtml(cod)}">${escHtml(cod.slice(11))}</a>`:`<span class="code">${escHtml(cod)}</span>`} <span>${escHtml(e.descricao||'')}</span></li>`}).join('')}</ul>${L.length>30?`<p class="help">e mais ${L.length-30}.</p>`:''}<p class="pj-gav-rodape"><button type="button" class="btn sm" data-pjc-resolver="${escHtml(code)}">Abrir em Problemas</button></p>`}
+function pjAutoAbrir(code){const g=pjGav(code);if(g.aberta||g.fechou||g.auto)return;const q=k=>document.querySelector(`#pj-cards [data-pjc="${k}"]`);
+  const k=q('folhas')&&q('folhas').classList.contains('bl')?'folhas':q('problemas')&&q('problemas').classList.contains('bl')?'problemas':q('dados')&&q('dados').classList.contains('at')?'dados':null;
+  if(!k)return;g.auto=true;g.aberta=k;const gv=document.getElementById('pj-gaveta');if(!gv)return;gv.hidden=false;gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!==k)}
 function pjcCartao(k,titulo,o){return `<div class="pjc ${o.cor||''}" data-pjc="${k}"><div class="pjc-k">${titulo}</div><div class="pjc-v">${o.v}</div><div class="pjc-d">${(o.d||[]).filter(Boolean).map(x=>`<span>${x}</span>`).join('')}</div><div class="pjc-act">${o.acoes||''}</div></div>`}
 const pjcBt=(attr,txt,extra='')=>`<button type="button" class="btn sm pjc-main" ${attr}${extra}>${txt}</button>`;
 function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},its=pjItens(code),c=contagemFolhas(its),C=escHtml(code),op=EU&&['operador','admin','master'].includes(EU.papel),adm=EU&&['admin','master'].includes(EU.papel);
@@ -3289,7 +3298,7 @@ function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},i
   return {html:pjcCartao('folhas','Folhas',o),urg}}
 function pjcProblemas(code,d){const k=contaProblemas(d),C=escHtml(code),o={d:[]};
   const tipos=[...new Set(((d&&d.erros)||[]).filter(e=>e.gravidade==='bloqueia'&&e.categoria!=='autoria_divergente').map(e=>rotulo(e.categoria).toLowerCase()))];
-  if(k.bloq){o.cor='bl';o.v=fmtN(k.bloq);o.d.push(`${k.bloq===1?'impede':'impedem'} publicar${tipos.length?` (${escHtml(tipos.slice(0,3).join(', '))}${tipos.length>3?'…':''})`:''}`);if(k.total>k.bloq)o.d.push(qtd(k.total-k.bloq,'aviso','avisos'));o.acoes=pjcBt(`data-pjc-resolver="${C}"`,'Resolver')}
+  if(k.bloq){o.cor='bl';o.v=fmtN(k.bloq);o.d.push(`${k.bloq===1?'impede':'impedem'} publicar${tipos.length?` (${escHtml(tipos.slice(0,3).join(', '))}${tipos.length>3?'…':''})`:''}`);if(k.total>k.bloq)o.d.push(qtd(k.total-k.bloq,'aviso','avisos'));o.acoes=pjcBt(`data-pjc-resolver="${C}"`,'Resolver')+` <button type="button" class="lnk pjc-lnk" data-pjc-gav="problemas" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='problemas'}">Ver quais</button>`}
   else if(k.total){o.cor='at';o.v=fmtN(k.total);o.d.push(`${k.total===1?'aviso':'avisos'} · nenhum impede publicar`);o.acoes=`<button type="button" class="btn sm" data-pjc-resolver="${C}">Ver problemas</button>`}
   else{o.cor='ok';o.v='0';o.d.push('nenhum problema aberto')}
   return {html:pjcCartao('problemas','Problemas',o),urg:!!k.bloq}}
@@ -3339,14 +3348,15 @@ function pjCartoesConteudo(code){const d=window.PJ_D;if(!d||!d.projeto||d.projet
 function desenharCartoes(code){const box=document.getElementById('pj-cards');if(!box||!window.PJ_D||window.PJ_D.projeto.codigo!==code)return;box.innerHTML=pjCartoesConteudo(code);
   const S=window.SL&&window.SL.code===code?window.SL:{};
   for(const p of ['revisao','cv']){const el=document.getElementById('pj-'+p);if(el&&S[p])el.hidden=!S[p].tem}
-  const pq=document.getElementById('pj-perguntas');if(pq&&window.PROJETO_PJ===code&&S.consenso)pq.innerHTML=pjPerguntasHTML(window.CONSENSO_PJ,code)}
+  const pq=document.getElementById('pj-perguntas');if(pq&&window.PROJETO_PJ===code&&S.consenso)pq.innerHTML=pjPerguntasHTML(window.CONSENSO_PJ,code);
+  const pb=document.getElementById('pj-probs');if(pb)pb.innerHTML=pjProbsHTML(code);pjAutoAbrir(code)}
 function pjAbrirGaveta(code,k){const g=pjGav(code);g.aberta=k;const gv=document.getElementById('pj-gaveta');if(!gv)return;gv.hidden=!k;
   gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!==k);desenharCartoes(code);if(k&&gv.scrollIntoView)gv.scrollIntoView({behavior:'smooth',block:'nearest'})}
 function pjVerFolhas(){const g=document.querySelector('#pd .folhas-bar')||document.querySelector('#pd .pj-folhas');if(g&&g.scrollIntoView)g.scrollIntoView({behavior:'smooth',block:'start'})}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-pjc-gav],[data-pjc-fechar],[data-pjc-porfolha],[data-pjc-ver-folhas],[data-pjc-conferir],[data-pjc-resolver],[data-pjc-publicar],[data-pjc-aba]');if(!t)return;e.preventDefault();
   const code=t.dataset.codigo||t.dataset.pjcFechar||t.dataset.pjcPorfolha||t.dataset.pjcVerFolhas||t.dataset.pjcConferir||t.dataset.pjcResolver||t.dataset.pjcPublicar;
-  if(t.dataset.pjcGav){const g=pjGav(code);pjAbrirGaveta(code,g.aberta===t.dataset.pjcGav?null:t.dataset.pjcGav);return}
-  if(t.dataset.pjcFechar){pjAbrirGaveta(code,null);return}
+  if(t.dataset.pjcGav){const g=pjGav(code);if(g.aberta===t.dataset.pjcGav)g.fechou=true;pjAbrirGaveta(code,g.aberta===t.dataset.pjcGav?null:t.dataset.pjcGav);return}
+  if(t.dataset.pjcFechar){pjGav(code).fechou=true;pjAbrirGaveta(code,null);return}
   if(t.dataset.pjcPorfolha){const g=pjGav(code),c=document.getElementById('pj-consenso');g.porFolha=!g.porFolha;if(c)c.hidden=!g.porFolha;t.setAttribute('aria-expanded',String(g.porFolha));t.textContent=g.porFolha?'Esconder o consenso folha por folha':'Ver o consenso folha por folha';return}
   if(t.dataset.pjcAba){showProjeto(code,t.dataset.pjcAba);return}
   if(t.dataset.pjcVerFolhas){if(pdTab!=='itens')showProjeto(code,'itens').then(pjVerFolhas);else pjVerFolhas();return}
