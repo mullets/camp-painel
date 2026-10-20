@@ -3360,7 +3360,7 @@ function pjcSite(code,d){const g=(window.PUB_G||{})[code],C=escHtml(code),o={d:[
   // a mesma regra do passo a passo: só trava o que uma pessoa precisa resolver (autorizar o projeto o próprio Publicar faz); os problemas primeiro
   const fl=(g.condicoes||[]).filter(x=>x.bloqueia&&!x.ok&&['bloqueios','direitos','teste','aceite_cv'].includes(x.id)),falta=fl.find(x=>x.id==='bloqueios')||fl[0];
   // CAMP-072 (20/10, exaustão): projeto só reservado (nenhuma folha) aparecia "pronto: o painel autoriza e envia ao site" com Publicar liberado
-  if(!pjItens(code).length&&g.estado!=='rascunho'&&g.estado!=='fora_do_ar'){o.d.push('nenhuma folha ainda: nada para publicar');o.acoes=req;return {html:pjcCartao('site','Site',o),urg}}
+  if(!pjItens(code).length&&g.estado!=='rascunho'&&g.estado!=='fora_do_ar'){o.d.push(falta&&falta.id==='teste'?'lote de teste não vai ao site':'nenhuma folha ainda: nada para publicar');/* CAMP-114: o lote de teste diz o porquê */o.acoes=req;return {html:pjcCartao('site','Site',o),urg}}
   if(falta){const f=faltaCondicao(falta);o.d.push(falta.id==='bloqueios'?'libera quando os problemas forem resolvidos':'falta: '+f.curto);
     o.acoes=g.pode_agir&&falta.acao&&falta.id!=='bloqueios'?`<button type="button" class="btn sm" data-pp-cond="${escHtml(falta.acao.tipo)}" data-alvo="${escHtml(falta.acao.alvo||'')}">${escHtml(falta.acao.rotulo)}</button>`
       :g.pode_agir?`<button type="button" class="btn sm" data-pjc-publicar="${C}" aria-disabled="true" title="${escHtml(falta.id==='bloqueios'?'Resolva os problemas que impedem publicar':f.curto.replace(/<[^>]+>/g,''))}">Publicar</button>`:''}
