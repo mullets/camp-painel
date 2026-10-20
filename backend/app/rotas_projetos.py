@@ -604,6 +604,9 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         campos.append("atualizado_em=datetime('now')")
         con.execute(f"UPDATE projeto SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'editado',?,?)", (codigo, u["email"], json.dumps({"antes": {k: p[k] for k in mud}, "depois": mud}, ensure_ascii=False)))
+        if any(k in mud for k in ("ano", "cidade", "cliente")):
+            from .decisoes import fechar_divergencias_respondidas
+            fechar_divergencias_respondidas(con, codigo, u["email"])   # exaustão CAMP-106: a mesma pergunta não fica esperando de novo em Decisões
         con.commit()
     con.close()
     site = None
