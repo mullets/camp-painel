@@ -253,6 +253,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     confirmadas = {r[0] for r in con.execute(SQL_CONFIRMADAS, (proj + "-%",))}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
     existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site, lote_id FROM item WHERE projeto_codigo=?", (proj,))}
+    movidas_para_fora = {r[0] for r in con.execute("SELECT codigo_anterior FROM item WHERE codigo_anterior LIKE ? AND projeto_codigo<>?", (proj + "-%", proj))}
     try:
         complemento = bool((json.loads(lote["resultado"] or "{}") or {}).get("complemento"))
     except ValueError:
@@ -272,6 +273,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             problemas.append(f"{cod or '(sem código)'}: código inválido, de outro projeto ou de série desconhecida")
             continue
         serie, seq = m.group(4), int(m.group(5))
+        if cod in movidas_para_fora:
+            ignoradas += 1                                         # a folha foi movida para outro projeto: a pasta antiga não a traz de volta
+            continue
         cob = cobertas.get(cod)
         if cob:
             if cob["situacao"] == "pendente":

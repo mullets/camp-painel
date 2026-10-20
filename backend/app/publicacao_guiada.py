@@ -37,7 +37,7 @@ def plano(con, p) -> dict:
     retidas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1")
 
     bloqueios = [{"id": i, "texto": por_id[i]["texto"], "detalhe": por_id[i]["detalhe"], "acao": por_id[i]["acao"]}
-                 for i in ("direitos", "bloqueios", "teste", "revisao") if not por_id[i]["ok"]]
+                 for i in ("direitos", "bloqueios", "aceite_cv", "teste", "revisao") if i in por_id and not por_id[i]["ok"]]
     dossie = bool(p["tainacan_item_id"])
     passos = [
         {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
@@ -82,6 +82,8 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
             if not p:
                 raise HTTPException(404, "Projeto não existe")
+            if p["mesclado_em"] or p["descartado_em"]:
+                raise HTTPException(409, "Este projeto foi " + (f"mesclado em {p['mesclado_em']}" if p["mesclado_em"] else "descartado") + ": publique o projeto de destino.")
             pl = plano(con, p)
             pend = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} ORDER BY sequencial", (codigo,))]
         finally:

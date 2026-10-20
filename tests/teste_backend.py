@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto"}
+MODOS_RAPIDOS = {"camp017_painel", "importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4948,6 +4948,52 @@ def filho(modo):
         ver("pasta sem pacote e sem manifesto continua ignorada, mesmo com código no aviso", _ler_pasta(k, vazia, None, "F026-P0001")["acao"] == "ignorada")
         k.close()
         for l in res: print(l)
+    elif modo == "camp017_painel":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp, threading
+        from fastapi import HTTPException
+        from app import importador_lote, publicacao_guiada, rotas_publicar_tudo
+        from app.rotas_operacao import _ler_pasta, _importar_se_tem_pacote, _documentos_novos
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        pasta = _pl.Path(tempfile.mkdtemp()) / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(pac, ensure_ascii=False), encoding="utf-8")
+        (pasta / "status.json").write_text(_j.dumps({"status": "pronto", "lote_atual": "lote-1"}), encoding="utf-8")
+        (pasta / "info_projeto.json").write_text(_j.dumps({"codigo": "F026-P0001", "nome": "SESI"}), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n_ in (1, 2): c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n_,)); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1972)", (f"F026-P000{n_}", "F026", n_, f"Proj {n_}"))
+        c.commit(); c.close()
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        A1, A2 = "F026-P0001-1972-S01-D00001", "F026-P0001-1972-S01-D00002"
+        r0 = _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()
+        lote1 = sql("SELECT id FROM lista_processamento ORDER BY id LIMIT 1")
+        importador_lote.importar_lote(k, lote1, "teste"); k.commit()
+        # (1) aceite reprovado do CV2 entra no plano do "um clique"
+        k.execute("UPDATE lista_processamento SET aceite_json=? WHERE id=?", (_j.dumps({"sem_autoria_divergente": {"ok": True}, "pranchas_com_titulo": {"ok": False, "contagem": 2}, "publicavel": False}), lote1)); k.commit()
+        pl = publicacao_guiada.plano(k, k.execute("SELECT * FROM projeto WHERE codigo='F026-P0001'").fetchone())
+        ver("plano do um clique: aceite reprovado do CV2 BLOQUEIA (antes do envio ao site)", "aceite_cv" in {b["id"] for b in pl["bloqueios"]} and not pl["pode_executar"], str(pl["bloqueios"])[:200])
+        # (4) clique duplo em publicar em segundo plano: uma tarefa só
+        k.execute("UPDATE lista_processamento SET aceite_json=NULL WHERE id=?", (lote1,)); k.commit()
+        ver("trava de início de tarefa existe (checar+inserir atômico)", hasattr(rotas_publicar_tudo, "_TRAVA_INICIO"))
+        # (2) projeto mesclado/descartado não publica
+        k.execute("UPDATE projeto SET mesclado_em=datetime('now') WHERE codigo='F026-P0002'"); k.commit()
+        try:
+            publicacao_guiada.executar("F026-P0002", {"email": "x@x", "papel": "admin"})
+            st = 200
+        except HTTPException as e:
+            st = e.status_code
+        ver("publicar projeto MESCLADO é recusado (409)", st == 409, str(st))
+        # (5) folha movida para outro projeto: a pasta antiga não a traz de volta
+        k.execute("UPDATE item SET projeto_codigo='F026-P0002', codigo='F026-P0002-1972-S01-D00001', codigo_anterior=? WHERE codigo=?", (A2, A2)); k.commit()
+        novos = _documentos_novos(k, pasta, "F026-P0001", lote1)
+        ver("folha movida para outro projeto NÃO volta como 'material novo' da pasta antiga", A2 not in novos, str(novos))
+        r1 = _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()
+        ver("reavisar a pasta antiga não cria lote de complemento", r1.get("acao") != "complemento" and sql("SELECT COUNT(*) FROM lista_processamento") == 1, str(r1)[:160])
+        for l in res: print(l)
+        k.close()
+        return 0
     elif modo == "lote_complemento":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp

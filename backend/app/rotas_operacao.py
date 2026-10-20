@@ -867,6 +867,7 @@ def _documentos_novos(con, pasta: Path, cod: str, lote_id: int) -> list[str]:
     if not isinstance(docs, list) or (pacote or {}).get("projeto_codigo") != cod:
         return []
     tem = {r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (cod,))}
+    tem |= {r[0] for r in con.execute("SELECT codigo_anterior FROM item WHERE codigo_anterior LIKE ? AND projeto_codigo<>?", (cod + "-%", cod))}   # folha movida para outro projeto não volta
     cobertas = set(colisoes_decididas(con, lote_id))
     return [c for c in (str(d.get("codigo") or "") for d in docs if isinstance(d, dict)) if c.startswith(cod + "-") and c not in tem and c not in cobertas]
 

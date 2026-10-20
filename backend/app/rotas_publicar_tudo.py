@@ -132,7 +132,15 @@ def _ler(tid: int) -> dict | None:
     return t
 
 
+_TRAVA_INICIO = threading.Lock()
+
+
 def _iniciar_tarefa(codigo: str, u: dict):
+    with _TRAVA_INICIO:
+        return _iniciar_tarefa_travada(codigo, u)
+
+
+def _iniciar_tarefa_travada(codigo: str, u: dict):
     con = connect()
     try:
         p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()

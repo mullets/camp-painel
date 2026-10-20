@@ -944,6 +944,8 @@ def projetos_lote_plano(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin
             p = con.execute("SELECT * FROM projeto WHERE codigo=?", (c,)).fetchone()
             if not p:
                 bloqueados.append({"codigo": c, "titulo": "", "motivo": "Projeto não existe"}); continue
+            if p["mesclado_em"] or p["descartado_em"]:
+                bloqueados.append({"codigo": c, "titulo": p["titulo"], "motivo": "Projeto mesclado ou descartado: publique o projeto de destino"}); continue
             pl = publicacao_guiada.plano(con, p)
             if pl["bloqueios"]:
                 bloqueados.append({"codigo": c, "titulo": p["titulo"], "motivo": " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]),
