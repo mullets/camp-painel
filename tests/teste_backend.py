@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2"}
+MODOS_RAPIDOS = {"importar_067", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7478,6 +7478,99 @@ def filho(modo):
         ver("salvar a revisão manda só o que mudou e não descarta o que foi digitado em 'Está certo'", "camposRevisaoAlterados(" in html)
         c.close()
         for l in res: print(l)
+    elif modo == "camp068_marcas":
+        # CAMP-068 (20/10, operadora): "as marcações de problemas não somem ao corrigir, na etapa de conferir". Conferir/corrigir a folha
+        # resolve no BANCO o que a conferência resolve: o espelho do CAMP Vision fica confirmado e os problemas automáticos "olhe esta folha"
+        # (giro, espelho, dado lido) fecham com registro. Duplicata, outro projeto, autoria e o que veio de gente NÃO fecham por conferir.
+        # Autoria: "É de <fundo>" funciona mesmo sem problema aberto. Bloqueio do CAMP Vision: "Já resolvi" (com o que foi feito) tira a marca.
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa Marcas',1970)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa Marcas','F099-P0001','/nao/existe','revisao')").lastrowid
+        D = lambda n: f"F099-P0001-1970-S01-D{n:05d}"
+        def folha(n, pend=None, status="nao_publicado", **kw):
+            cols = {"codigo": D(n), "projeto_codigo": "F099-P0001", "serie_codigo": "S01", "sequencial": n, "origem": "campvision", "lote_id": lote, "revisao": "pendente",
+                    "status_site": status, "pendencias": _j.dumps(pend or {"bloqueios": [], "sinais": [], "ressalvas": []}, ensure_ascii=False), "titulo": f"Prancha {n}", **kw}
+            c.execute(f"INSERT INTO item ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", tuple(cols.values()))
+        erro = lambda cod, cat, origem="campvision", grav="bloqueia": c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES (?,?,?,?,?,?)",
+                                                                           (grav, cat, origem, cod, f"{cat} em {cod}", "CAMP Vision" if origem == "campvision" else "Op")).lastrowid
+        folha(1, {"bloqueios": [], "sinais": ["orientação incerta"], "ressalvas": []}, espelhado=1)
+        e_or, e_es, e_meta = erro(D(1), "orientacao"), erro(D(1), "espelhado"), erro(D(1), "metadado", grav="corrigir")
+        e_dup, e_proj, e_gente = erro(D(1), "duplicata"), erro(D(1), "projeto_errado"), erro(D(1), "orientacao", origem="operador")
+        folha(2); e_or2 = erro(D(2), "orientacao")                                   # outra folha: não fecha porque a 1 foi conferida
+        folha(3, autoria_divergente=1)                                               # autoria sem problema aberto (antes: sem botão, a marca não saía)
+        folha(4, autoria_divergente=1); e_aut = erro(D(4), "autoria_divergente", grav="aviso")
+        folha(5, {"bloqueios": ["imagem cortada: falta a margem direita", "duplicata de " + D(1), "projeto divergente"], "sinais": [], "ressalvas": []}, status="bloqueado")
+        folha(6, {"bloqueios": ["imagem cortada"], "sinais": [], "ressalvas": []}, status="bloqueado")
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        sit = lambda eid: q("SELECT situacao FROM erro WHERE id=?", eid)[0]
+        abertos_proj = lambda: [e["id"] for e in op.get("/api/projetos/F099-P0001/detalhe").json().get("erros", []) if e.get("situacao") in ("aberto", "em_correcao")]
+        # ---------- conferir a folha 1 ----------
+        r = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"}); j = r.json() if r.status_code == 200 else {}
+        rs = j.get("resolvidos") or {}
+        ver("conferir fecha os problemas do CAMP Vision que a conferência resolve (giro, espelho, dado lido) e diz quais",
+            r.status_code == 200 and sorted(rs.get("problemas_fechados") or []) == sorted([e_or, e_es, e_meta]) and all(sit(x) == "corrigido" for x in (e_or, e_es, e_meta)), f"HTTP {r.status_code} {r.text[:200]}")
+        ver("o espelho que o CAMP Vision aplicou fica confirmado (a prévia não muda: espelhar continua 1)",
+            rs.get("espelho_confirmado") is True and q("SELECT espelho_manual, COALESCE(espelho_manual, espelhado) FROM item WHERE codigo=?", D(1))[:] == (1, 1))
+        ver("NÃO fecham por conferir: duplicata, outro projeto e o problema relatado por gente", all(sit(x) == "aberto" for x in (e_dup, e_proj, e_gente)), str([sit(x) for x in (e_dup, e_proj, e_gente)]))
+        ver("problema de outra folha continua aberto", sit(e_or2) == "aberto")
+        ver("ao recarregar o projeto, os problemas resolvidos não voltam", not ({e_or, e_es, e_meta} & set(abertos_proj())) and e_dup in abertos_proj())
+        ver("fica no histórico quem resolveu na conferência",
+            q("SELECT count(*) FROM evento WHERE entidade='erro' AND tipo='fechado_na_conferencia' AND ator='op@camp.arq.br'")[0] == 3
+            and "op@camp.arq.br conferiu" in (q("SELECT resolucao FROM erro WHERE id=?", e_or)[0] or ""))
+        r = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"})
+        ver("conferir de novo não fecha nada a mais nem duplica o histórico",
+            r.status_code == 200 and (r.json().get("resolvidos") or {}).get("problemas_fechados") == [] and q("SELECT count(*) FROM evento WHERE tipo='fechado_na_conferencia'")[0] == 3)
+        r = op.post(f"/api/itens/{D(2)}/revisao", json={"estado": "pendente"})
+        ver("voltar a conferir ('pendente') não fecha problema", r.status_code == 200 and sit(e_or2) == "aberto")
+        r = op.post(f"/api/itens/{D(2)}/revisao", json={"estado": "corrigida"})
+        ver("'Salvar correção' também resolve", r.status_code == 200 and sit(e_or2) == "corrigido" and "corrigiu" in (q("SELECT resolucao FROM erro WHERE id=?", e_or2)[0] or ""))
+        # ---------- autoria ----------
+        r = op.post(f"/api/itens/{D(3)}/autoria-confirmada")
+        ver("'É do titular do fundo' tira a marca de autoria mesmo sem problema aberto (antes não havia botão)",
+            r.status_code == 200 and r.json().get("mudou") is True and q("SELECT autoria_divergente FROM item WHERE codigo=?", D(3))[0] == 0, r.text[:200])
+        r = op.post(f"/api/itens/{D(4)}/autoria-confirmada")
+        ver("com problema aberto: a marca sai e o problema de autoria fecha",
+            r.status_code == 200 and r.json().get("problemas_fechados") == [e_aut] and sit(e_aut) == "corrigido" and q("SELECT autoria_divergente FROM item WHERE codigo=?", D(4))[0] == 0)
+        ver("autoria: leitura não pode (403), folha inexistente 404",
+            le.post(f"/api/itens/{D(3)}/autoria-confirmada").status_code == 403 and op.post(f"/api/itens/{D(99)}/autoria-confirmada").status_code == 404)
+        ver("autoria confirmada na revisão continua assim ao recarregar a folha", op.get(f"/api/itens/{D(4)}").json().get("item", op.get(f"/api/itens/{D(4)}").json()).get("autoria_divergente") in (0, False))
+        # ---------- bloqueio ----------
+        ver("'Já resolvi' exige dizer o que foi feito", op.post(f"/api/itens/{D(5)}/bloqueio-resolvido", json={"motivo": "  "}).status_code == 400)
+        ver("bloqueio: leitura não pode", le.post(f"/api/itens/{D(5)}/bloqueio-resolvido", json={"motivo": "x"}).status_code == 403)
+        r = op.post(f"/api/itens/{D(5)}/bloqueio-resolvido", json={"motivo": "recortei a margem na revisão"}); j = r.json() if r.status_code == 200 else {}
+        pend5 = _j.loads(q("SELECT pendencias FROM item WHERE codigo=?", D(5))[0])
+        ver("tira só o bloqueio comum: duplicata e outro projeto (que têm ação própria) ficam, e a folha continua presa por eles",
+            r.status_code == 200 and j.get("bloqueios_tirados") == ["imagem cortada: falta a margem direita"] and len(pend5["bloqueios"]) == 2
+            and q("SELECT status_site FROM item WHERE codigo=?", D(5))[0] == "bloqueado", r.text[:300])
+        ver("guarda o que saiu, quem e por quê", (pend5.get("bloqueios_resolvidos") or [{}])[0].get("motivo") == "recortei a margem na revisão"
+            and q("SELECT count(*) FROM evento WHERE entidade='item' AND codigo=? AND tipo='bloqueio_resolvido'", D(5))[0] == 1)
+        r = op.post(f"/api/itens/{D(6)}/bloqueio-resolvido", json={"motivo": "conferi: a imagem está inteira"})
+        ver("sem outro bloqueio, a folha sai de 'bloqueado'", r.status_code == 200 and r.json().get("status_site") == "nao_publicado" and q("SELECT status_site FROM item WHERE codigo=?", D(6))[0] == "nao_publicado")
+        r = op.post(f"/api/itens/{D(6)}/bloqueio-resolvido", json={"motivo": "de novo"})
+        ver("repetir não muda nada", r.status_code == 200 and r.json().get("mudou") is False)
+        # ---------- tela ----------
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: orientação incerta e 'espelhada?' saem quando a folha já foi conferida",
+            "function folhaJaConferida(" in html and "if(folhaJaConferida(it))return false" in html and "espelho_manual==null&&!folhaJaConferida(it)" in html)
+        ver("tela: depois de salvar a revisão, tira da lista de problemas e redesenha os cartões", "aplicarResolvidos(codigo,rr&&rr.resolvidos)" in html and "function tirarErrosDaTela(" in html)
+        ver("tela: 'É de <fundo>' sem depender de problema aberto e 'Já resolvi' no bloqueio, por data-*",
+            "/autoria-confirmada'" in html and "data-cf-bloqueio-ok=" in html and "/bloqueio-resolvido'" in html and "${op&&er?`<button type=\"button\" class=\"btn sm\" data-cf-autoria-ok" not in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "tirar_folha":
         # 19/10 ("quando salvo que é pra tirar uma folha do projeto, ele salva e pula pra próxima folha, mas não tá funcionando bem"):
         # (a) reter folha de lote JÁ APROVADO (fora do site) e "Desfazer" (liberar): a resposta traz a revisão (conferida), que a tela usa;
@@ -9129,6 +9222,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"importar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("141) CAMP-068: conferir tira as marcas que a conferência resolve (giro, espelho, dado lido), autoria sem problema aberto, 'Já resolvi' no bloqueio")
+rc, out = rodar("camp068_marcas", f"{tmp}/camp068_marcas.db")
+if rc != 0: ok(False, f"teste camp068 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp068: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

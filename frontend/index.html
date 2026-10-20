@@ -2925,9 +2925,10 @@ function tagRevisao(r,retida){if(retida)return '<span class="tag r mini rev-tag"
 /* 19/10 (F009-P0092: "autoria não confirmada" laranja em cima da imagem de folha já conferida; "Com problema (10)" sem bater com as marcas):
    UMA lista dos avisos da folha, usada pelo cartão e pelo filtro "Com problema". Autoria não confirmada continua valendo depois da conferência
    (CAMP-046: a folha sobe com o crédito "Autoria não confirmada" até alguém registrar a autoria), mas vira uma marca pequena no rodapé. */
+function folhaJaConferida(it){return !!(it&&it.lote_id&&it.revisao&&it.revisao!=='pendente')}
 function avisosFolha(it){return [it.autoria_divergente?['autoria não confirmada','O autor lido no carimbo não é o titular do fundo: a folha sobe com o crédito "Autoria não confirmada" até alguém registrar a autoria.']:null,
   it.duplicata_de?['duplicata','Marcada como cópia de '+it.duplicata_de]:null,
-  it.espelhado&&it.espelho_manual==null?['espelhada?','O CAMP Vision achou que foi digitalizada pelo verso: a prévia já sai espelhada. Confira na revisão.']:null].filter(Boolean)}
+  it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it)?['espelhada?','O CAMP Vision achou que foi digitalizada pelo verso: a prévia já sai espelhada. Confira na revisão.']:null].filter(Boolean)}
 function semImagemFolha(it){return (!usaPreviaFolha(it)&&!it.thumb_url)||!!(window.SEM_IMG_PJ&&window.SEM_IMG_PJ.has(it.codigo))}
 function flagsFolha(it){return [it.lote_id&&it.revisao==='pendente'?'conferir':'',(avisosFolha(it).length||it.retida)?'problema':'',semImagemFolha(it)?'semimg':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':''].filter(Boolean).join(' ')}
 function contagemFolhas(its){const c={todas:its.length,conferir:0,problema:0,semimg:0,site:0,lote:0,conferidas:0};for(const it of its){const f=flagsFolha(it);if(f.includes('conferir'))c.conferir++;if(f.includes('problema'))c.problema++;if(f.includes('semimg'))c.semimg++;if(f.includes('site'))c.site++;if(it.lote_id){c.lote++;if(it.revisao!=='pendente')c.conferidas++}}return c}
@@ -3683,7 +3684,8 @@ function naoImportadasHTML(lista,code){if(!lista.length)return '';const re=/^(\S
 function proximaPendente(codigo){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo);return [...L.slice(i+1),...L.slice(0,Math.max(i,0))].find(x=>x.revisao==='pendente')}
 /* Cartão "Girar folha já publicada" (c): a miniatura da conferência mostra a folha como ela vai ficar no site (a prévia com o giro e o espelho
    gravados), e a marca "orientação incerta" quando o CAMP Vision não teve certeza do giro. Folha já no site e fora da conferência: a imagem do site. */
-function orientIncerta(it){const p=it&&it.pendencias,s=window.CV_SAIDAS;return !!((p&&Array.isArray(p.sinais)&&p.sinais.includes('orientação incerta'))||(s&&s.orientacao&&(s.orientacao.incertas||[]).includes(dCurto(it&&it.codigo))))}
+function orientIncerta(it){if(folhaJaConferida(it))return false;   /* CAMP-068: conferir é ter olhado a folha em pé: o aviso sai (e continua fora ao recarregar, a revisão fica gravada) */
+  const p=it&&it.pendencias,s=window.CV_SAIDAS;return !!((p&&Array.isArray(p.sinais)&&p.sinais.includes('orientação incerta'))||(s&&s.orientacao&&(s.orientacao.incertas||[]).includes(dCurto(it&&it.codigo))))}
 function usaPreviaFolha(it){return !!(it.pendencias&&it.pendencias.previa)&&(!it.thumb_url||(!!it.lote_id&&it.revisao==='pendente'))}
 function urlThumbSite(it){const u=String(it.thumb_url||'');return it.giro_manual?u+(u.includes('?')?'&':'?')+'g='+it.giro_manual:u}   /* depois de girar no site o arquivo tem o mesmo endereço: o g= evita a imagem velha guardada no navegador */
 function urlPreviaFolha(codigo,giro,t,esp,aj){return `/api/itens/${encodeURIComponent(codigo)}/previa?${t?`t=${t}&`:''}g=${giro||0}${esp?'&e=1':''}${aj?'&a='+encodeURIComponent(aj):''}`}
@@ -3696,7 +3698,7 @@ async function abrirRevisaoItem(codigo){
   if(vez!==window._REV_ABRIR)return;   /* 19/10: outra folha foi pedida enquanto esta carregava (ex.: depois de mover/reter): a mais nova vale */
   const conf=revConf();   /* modo de conferir: o mesmo corpo vai para o painel da direita da tela, não para a gaveta */
   const p=it.pendencias||{},l=ed.local||{},op=EU&&['operador','admin','master'].includes(EU.papel),tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `;
-  const aponta=apontaRevHTML(p);
+  const aponta=apontaRevHTML(p,it);
   const campo=(id,rot,v,lido)=>`<label class="rev-campo"><span>${rot}</span><input id="${id}" type="text" value="${escHtml(v==null?'':v)}"${op?'':' disabled'}>${lido&&String(lido)!==String(v??'')?`<small class="rev-lido">o CAMP Vision leu: ${escHtml(lido)}</small>`:''}</label>`;   /* H9: o valor lido ao lado do campo */
   const temImg=!!(p.previa||it.thumb_url);
   const falta=(window.ITENS_PJ||[]).filter(x=>x.lote_id&&x.revisao==='pendente').length;
@@ -3713,7 +3715,7 @@ async function abrirRevisaoItem(codigo){
 /* leitura no modo de conferir: /edicao é de operador (403); os mesmos campos vêm de /api/itens/<código> e aparecem desligados */
 function edicaoSoLeitura(d){d=d||{};const local={};['titulo','folha','escala','dimensoes','suporte','credito','endereco_folha','cliente_folha','ano_folha','tipo_documento'].forEach(k=>{local[k]=d[k]??null});local.parceiros=Array.isArray(d.parceiros)?d.parceiros:[];
   return {codigo:d.codigo,local,tipos_documento:[],disciplinas:[...new Set(local.parceiros.map(x=>x.disciplina).filter(Boolean))],fundo_codigo:d.fundo_codigo||String(d.codigo||'').split('-')[0],imagem_site_pendente:false,so_leitura:true}}
-function apontaRevHTML(p){const tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `;p=p||{};return [...(p.bloqueios||[]).map(x=>tag('r',x)),...(p.sinais||[]).map(x=>tag('a',x)),...(p.ressalvas||[]).map(x=>tag('a',x))].join('')||'<small class="help">Nada apontado.</small>'}
+function apontaRevHTML(p,it){const tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `,ok=folhaJaConferida(it);p=p||{};return [...(p.bloqueios||[]).map(x=>tag('r',x)),...(p.sinais||[]).map(x=>ok&&/orienta[cç][aã]o incerta/i.test(x)?tag('g',x+': conferida'):tag('a',x)),...(p.ressalvas||[]).map(x=>tag('a',x))].join('')||'<small class="help">Nada apontado.</small>'}
 /* Sírio, 19/10: o CAMP Vision marcou "projeto divergente" numa folha que está na pasta certa. A pessoa diz "É deste projeto": o aviso sai,
    e o bloqueio também (se era o único). Fica no histórico. Código só em data-*. */
 function falaDeProjetoDivergente(t){return /projeto divergente|outro projeto|outra obra/.test(semAcento(t).replace(/_/g,' '))}
@@ -3726,7 +3728,7 @@ async function desteProjeto(cod){
   const resta=(r.bloqueios_restantes||[]).length;
   toast(!r.mudou?`A folha ${cod} já estava sem o aviso`:r.situacao_liberada?`Folha ${cod}: aviso tirado; ela pode ir ao site`:resta?`Folha ${cod}: aviso tirado; continua bloqueada por: ${r.bloqueios_restantes.join('; ')}`:`Folha ${cod}: aviso tirado`);
   const naRev=revisaoMostra(cod);
-  if(naRev){document.querySelectorAll(`[data-deste-box="${CSS.escape(cod)}"]`).forEach(x=>x.remove());const ch=document.getElementById('rv-chips');if(ch)ch.innerHTML=apontaRevHTML(r.pendencias||(it&&it.pendencias));atualizarCartaoRevisao(cod)}   /* não redesenha: o que foi digitado fica */
+  if(naRev){document.querySelectorAll(`[data-deste-box="${CSS.escape(cod)}"]`).forEach(x=>x.remove());const ch=document.getElementById('rv-chips');if(ch)ch.innerHTML=apontaRevHTML(r.pendencias||(it&&it.pendencias),it);atualizarCartaoRevisao(cod)}   /* não redesenha: o que foi digitado fica */
   else if(rotaAtual()==='item/'+cod)showItem(cod);
   if(window.PROJETO_PJ&&window.PROJETO_PJ===cod.slice(0,10))carregarRevisaoLote(window.PROJETO_PJ)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-deste-projeto]');if(!b||b.disabled)return;e.preventDefault();e.stopPropagation();desteProjeto(b.dataset.desteProjeto)},true);
@@ -3766,7 +3768,8 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='ArrowRight'&&L[i+1]){e.preventDefault();abrirRevisaoItem(L[i+1].codigo)}
   else if(e.key==='ArrowLeft'&&L[i-1]){e.preventDefault();abrirRevisaoItem(L[i-1].codigo)}
   else if(e.key==='r'||e.key==='R'){const g=revSel('[data-rev-girar="90"]');if(g){e.preventDefault();g.click()}}});
-function atualizarCartaoRevisao(codigo){setTimeout(atualizarContadorFolhas,0);if(revConf())confDesenharLista();const c=document.querySelector(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"]`);if(c){const t=c.querySelector('.rev-tag'),it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(t&&it)t.outerHTML=tagRevisao(it.revisao,it.retida)}}
+function atualizarCartaoRevisao(codigo){setTimeout(atualizarContadorFolhas,0);if(revConf())confDesenharLista();const c=document.querySelector(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"]`);if(c){const t=c.querySelector('.rev-tag'),it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(t&&it)t.outerHTML=tagRevisao(it.revisao,it.retida);
+  if(it){if(!orientIncerta(it))c.querySelectorAll('.or-inc').forEach(x=>x.remove());const av=c.querySelector('.cap-avisos');if(av){const fl=avisosFolha(it).map(a=>`<span class="tag a mini flag" title="${escHtml(a[1])}">${escHtml(a[0])}</span>`).join(' ');if(fl)av.innerHTML=fl;else av.remove()}c.dataset.fl=flagsFolha(it)}}}   /* CAMP-068: as marcas que a conferência resolveu saem do cartão na hora */
 async function girarFolha(codigo,graus,desfazendo){
   const it0=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo),noSite=!!it0&&['rascunho','no_ar'].includes(it0.status_site_local||it0.status_site),adm=EU&&['admin','master'].includes(EU.papel);
   if(noSite&&adm&&!desfazendo&&!await confirmar({titulo:'Girar também a imagem no site?',texto:`A folha ${codigo} já está no site. O painel troca a imagem de lá pela girada (o endereço da imagem continua o mesmo). Se o site recusar, nada muda.`,botao:'Girar no site'}))return;
@@ -3905,6 +3908,7 @@ function confTemImg(it){return !!((it.pendencias&&it.pendencias.previa)||it.thum
 function confProblemas(it){const p=it.pendencias||{},o=[];
   if(it.autoria_divergente)o.push(['r','autoria']);if(it.duplicata_de)o.push(['a','duplicata']);if(orientIncerta(it))o.push(['a','orientação incerta']);
   if(projetoDivergente(p))o.push(['a','outro projeto?']);if((Array.isArray(p.bloqueios)?p.bloqueios:[]).some(b=>!falaDeProjetoDivergente(b)))o.push(['r','bloqueada']);return o}
+function bloqueiosResolviveis(it){const p=(it&&it.pendencias)||{};return (Array.isArray(p.bloqueios)?p.bloqueios:[]).filter(b=>b&&!falaDeProjetoDivergente(b)&&!/duplicat/i.test(String(b)))}
 function confNoFiltro(it,f){return f==='a_conferir'?it.revisao==='pendente':f==='problema'?confProblemas(it).length>0:f==='sem_imagem'?!confTemImg(it):true}
 function confVisiveis(){return confFolhas().filter(x=>confNoFiltro(x,CONF.filtro)||x.codigo===CONF.atual)}   /* a folha aberta fica na lista mesmo fora do filtro */
 function confMiniUrl(it){const pv=it.pendencias&&it.pendencias.previa;return pv?urlPreviaFolha(it.codigo,it.giro_manual,160,it.espelhar,ajusteChave(it)):it.thumb_url?urlThumbSite(it):''}
@@ -3919,8 +3923,9 @@ function confDesenharLista(){const L=confFolhas(),f=document.getElementById('cf-
   const s=ls.querySelector('.cf-linha.sel');if(s){const a=s.getBoundingClientRect(),b=ls.getBoundingClientRect();if(a.top<b.top||a.bottom>b.bottom)ls.scrollTop+=a.top-b.top-(b.height-a.height)/2}}
 function confErroAutoria(cod){return ((CONF.d&&CONF.d.erros)||[]).find(e=>e.categoria==='autoria_divergente'&&e.codigo===cod&&['aberto','em_correcao'].includes(e.situacao))}
 function confAvisosHTML(it){const op=EU&&['operador','admin','master'].includes(EU.papel),adm=EU&&['admin','master'].includes(EU.papel),c=escHtml(it.codigo),fundo=(CONF.d&&CONF.d.projeto&&CONF.d.projeto.fundo)||'o titular do fundo',o=[];
-  if(it.autoria_divergente){const er=confErroAutoria(it.codigo);o.push(`<div class="cf-aviso" data-cf-aviso="autoria"><p><b>Autoria:</b> o carimbo não é de ${escHtml(fundo)}. Sem decidir, a folha vai ao site com o crédito "Autoria não confirmada".</p><div class="act">${op&&er?`<button type="button" class="btn sm" data-cf-autoria-ok="${c}" data-erro="${escHtml(er.id)}">É de ${escHtml(fundo)}</button>`:''}${adm?'<button type="button" class="btn sm" data-cf-autoria-outro>É de outro arquiteto</button>':''}</div></div>`)}
+  if(it.autoria_divergente){const er=confErroAutoria(it.codigo);o.push(`<div class="cf-aviso" data-cf-aviso="autoria"><p><b>Autoria:</b> o carimbo não é de ${escHtml(fundo)}. Sem decidir, a folha vai ao site com o crédito "Autoria não confirmada".</p><div class="act">${op?`<button type="button" class="btn sm" data-cf-autoria-ok="${c}"${er?` data-erro="${escHtml(er.id)}"`:''}>É de ${escHtml(fundo)}</button>`:''}${adm?'<button type="button" class="btn sm" data-cf-autoria-outro>É de outro arquiteto</button>':''}</div></div>`)}
   if(it.duplicata_de)o.push(`<div class="cf-aviso"><p><b>Duplicata:</b> esta folha é cópia de <b>${escHtml(String(it.duplicata_de).split('-').pop())}</b> e não vai ao site.</p><div class="act"><button type="button" class="btn sm" data-dupv-abrir="${escHtml(CONF.code)}">Ver as duplicatas lado a lado</button></div></div>`);
+  const bl=bloqueiosResolviveis(it);if(bl.length)o.push(`<div class="cf-aviso" data-cf-aviso="bloqueio"><p><b>Bloqueada pelo CAMP Vision:</b> ${escHtml(bl.join('; '))}. Enquanto estiver assim, a folha não vai ao site.</p>${op?`<div class="act"><button type="button" class="btn sm" data-cf-bloqueio-ok="${c}">Já resolvi</button></div>`:''}</div>`);
   if(orientIncerta(it))o.push(`<div class="cf-aviso"><p><b>Orientação incerta:</b> o CAMP Vision não teve certeza do giro desta folha. Se ela não estiver de pé, gire.</p>${op&&it.pendencias&&it.pendencias.previa?`<div class="act"><button type="button" class="btn sm" data-rev-girar="-90" data-codigo="${c}">↺ Virar à esquerda</button><button type="button" class="btn sm" data-rev-girar="90" data-codigo="${c}">Virar à direita ↻</button></div>`:''}</div>`);
   return o.length?`<div class="cf-avisos" role="note">${o.join('')}</div>`:''}
 function confUrl(){const r='conferir/'+CONF.code+(CONF.atual?'/'+CONF.atual:'');if(rotaAtual()===r)return;history.replaceState({...(history.state||{}),camp:true,campRoute:r},'','#'+r)}   /* replace: Voltar volta para onde a pessoa estava (o projeto) */
@@ -3956,15 +3961,21 @@ async function showConferir(code,folha){if(!EU){document.getElementById('login')
   if(folha&&!L.some(x=>x.codigo===folha))toast(`A folha ${folha} não está entre as folhas a conferir deste projeto`);
   confCarregarCV(code)}
 async function confAutoriaOk(b){const cod=b.dataset.cfAutoriaOk,fundo=(CONF.d.projeto||{}).fundo||'titular do fundo';b.disabled=true;
-  try{await API('/api/erros/'+encodeURIComponent(b.dataset.erro),{method:'PATCH',body:JSON.stringify({situacao:'corrigido',resolucao:`Conferido na revisão: a folha é de ${fundo}`})});
-    const it=(window.ITENS_PJ||[]).find(x=>x.codigo===cod);if(it)it.autoria_divergente=0;CONF.d.erros=(CONF.d.erros||[]).filter(e=>String(e.id)!==String(b.dataset.erro));
-    document.querySelectorAll('#cf-pane [data-cf-aviso="autoria"]').forEach(x=>x.remove());confDesenharLista();toast(`Folha ${cod}: autoria confirmada (${fundo})`)}
+  try{const r=await API('/api/itens/'+encodeURIComponent(cod)+'/autoria-confirmada',{method:'POST'});   /* CAMP-068: tira a marca da folha e fecha os problemas de autoria dela (com ou sem problema aberto) */
+    const it=(window.ITENS_PJ||[]).find(x=>x.codigo===cod);if(it)it.autoria_divergente=0;tirarErrosDaTela(r.problemas_fechados||[]);
+    document.querySelectorAll('#cf-pane [data-cf-aviso="autoria"]').forEach(x=>x.remove());atualizarCartaoRevisao(cod);toast(`Folha ${cod}: autoria confirmada (${fundo})`)}
   catch(e){b.disabled=false;toast(e.message)}}
+async function confBloqueioOk(b){const cod=b.dataset.cfBloqueioOk,it=(window.ITENS_PJ||[]).find(x=>x.codigo===cod),bl=bloqueiosResolviveis(it);
+  const ok=await confirmar({titulo:'O bloqueio foi resolvido?',alvo:cod,texto:`O CAMP Vision prendeu esta folha por: ${bl.join('; ')}. Se você conferiu e resolveu, o bloqueio sai e ela volta a poder ir ao site. Fica no histórico da folha.`,motivo:'obrigatorio',motivoRotulo:'O que foi feito (fica no histórico)',botao:'Tirar o bloqueio',
+    acao:async v=>API('/api/itens/'+encodeURIComponent(cod)+'/bloqueio-resolvido',{method:'POST',body:JSON.stringify({motivo:v.motivo})})});
+  if(!ok)return;const r=ok.resultado||{};if(it){it.pendencias=r.pendencias||it.pendencias;it.status_site=r.status_site||it.status_site}
+  document.querySelectorAll('#cf-pane [data-cf-aviso="bloqueio"]').forEach(x=>x.remove());const ch=document.getElementById('rv-chips');if(ch)ch.innerHTML=apontaRevHTML(it&&it.pendencias,it);atualizarCartaoRevisao(cod);
+  toast(r.mudou?`Folha ${cod}: bloqueio tirado${(r.bloqueios_restantes||[]).length?' (continua presa por: '+r.bloqueios_restantes.join('; ')+')':''}`:`A folha ${cod} já estava sem bloqueio`)}
 async function confAutoriaOutro(){const code=CONF.code;await registrarAutoria(code);if(CONF.code!==code)return;   /* o projeto passa a dizer quem projetou; as folhas deixam de ficar com o aviso */
   try{const d=await API('/api/projetos/'+encodeURIComponent(code)+'/detalhe'),m=Object.fromEntries((d.itens||[]).map(x=>[x.codigo,x]));CONF.d.erros=d.erros;
     confFolhas().forEach(x=>{if(m[x.codigo])x.autoria_divergente=m[x.codigo].autoria_divergente});const it=(window.ITENS_PJ||[]).find(x=>x.codigo===CONF.atual);
     if(it&&!it.autoria_divergente)document.querySelectorAll('#cf-pane [data-cf-aviso="autoria"]').forEach(x=>x.remove());confDesenharLista()}catch(_){}}
-document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-cf-folha],[data-cf-filtro],[data-cf-projeto],[data-cf-etiquetas],[data-cf-publicar],[data-cf-erros],[data-cf-autoria-ok],[data-cf-autoria-outro]');
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-cf-folha],[data-cf-filtro],[data-cf-projeto],[data-cf-etiquetas],[data-cf-publicar],[data-cf-erros],[data-cf-autoria-ok],[data-cf-autoria-outro],[data-cf-bloqueio-ok]');
   if(!b||b.disabled||!b.closest('#cfv'))return;e.preventDefault();const code=CONF.code;
   if(b.dataset.cfFolha)confAbrir(b.dataset.cfFolha);
   else if(b.dataset.cfFiltro){CONF.filtro=b.dataset.cfFiltro;confDesenharLista()}
@@ -3973,6 +3984,7 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
   else if(b.hasAttribute('data-cf-publicar'))abrirPublicacaoGuiada(code);
   else if(b.hasAttribute('data-cf-erros'))nav('erros/'+code);
   else if(b.dataset.cfAutoriaOk)confAutoriaOk(b);
+  else if(b.dataset.cfBloqueioOk)confBloqueioOk(b);
   else if(b.hasAttribute('data-cf-autoria-outro'))confAutoriaOutro()});
 /* o que se digita no painel da direita é "alteração não salva" (a gaveta faz o mesmo no d-body); a tela de recortar não conta */
 ['input','change'].forEach(t=>document.addEventListener(t,e=>{const el=e.target;if(el&&el.closest&&el.closest('#cf-pane')&&!el.closest('[data-sem-alteracao],#aj-ed'))marcarAlteracoes('conferir')}));
@@ -4189,8 +4201,9 @@ async function salvarRevisaoItem(codigo,estado){
   if(estado==='conferida'&&Object.keys(b).length)estado='corrigida';
   travarRevisao(true);
   try{if(Object.keys(b).length){await API('/api/itens/'+encodeURIComponent(codigo),{method:'PATCH',body:JSON.stringify(b)});salvou=true;marcarRevisaoSalva();revCopiarCampos(codigo,b)}
-    await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});
-    if(estado!=='pendente')limparAlteracoes(revEscopo());   /* os campos já foram salvos acima; o que sobrar alterado é só o motivo de "Não publicar" */
+    const rr=await API('/api/itens/'+encodeURIComponent(codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado})});
+    if(estado!=='pendente')limparAlteracoes(revEscopo());
+    aplicarResolvidos(codigo,rr&&rr.resolvidos);   /* os campos já foram salvos acima; o que sobrar alterado é só o motivo de "Não publicar" */
     const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){it.revisao=estado;it.revisado_por=EU&&EU.email}
     atualizarCartaoRevisao(codigo);if(window.PROJETO_PJ)carregarRevisaoLote(window.PROJETO_PJ);
     if(estado==='pendente'){travarRevisao(false);toast('Voltou para conferir');abrirRevisaoItem(codigo);return}
@@ -4202,6 +4215,14 @@ async function salvarRevisaoItem(codigo,estado){
 function depoisDaRevisao(codigo,eraPendente){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo),p=proximaPendente(codigo),s=i>=0?L[i+1]:null;
   const conf=revConf();   /* na tela de conferir: no lugar da janela "Conferência concluída" e de fechar a gaveta, o painel da direita diz que acabou */
   const f=p?()=>abrirRevisaoItem(p.codigo):eraPendente&&L.length?()=>conf?confConcluida(true):concluirConferencia():s?()=>abrirRevisaoItem(s.codigo):()=>conf?confConcluida(false):closeDrawer(true);f.fim=!p&&!(eraPendente&&L.length)&&!s;return f}
+/* CAMP-068: o que a conferência resolveu no banco (espelho confirmado, problemas do CAMP Vision fechados) sai da tela na hora:
+   da lista de problemas do projeto, do cartão Problemas e dos avisos da folha */
+function aplicarResolvidos(codigo,r){if(!r)return;const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);
+  if(r.espelho_confirmado&&it&&it.espelho_manual==null)it.espelho_manual=it.espelhado?1:0;
+  tirarErrosDaTela(r.problemas_fechados||[])}
+function tirarErrosDaTela(ids){if(!ids||!ids.length)return;const S=new Set(ids.map(String)),f=L=>(L||[]).filter(e=>!S.has(String(e.id)));
+  if(window.PJ_D&&window.PJ_D.erros)window.PJ_D.erros=f(window.PJ_D.erros);if(CONF.d&&CONF.d.erros)CONF.d.erros=f(CONF.d.erros);
+  const code=window.PJ_D&&window.PJ_D.projeto&&window.PJ_D.projeto.codigo;if(code&&document.getElementById('pj-cards'))desenharCartoes(code)}
 function revisaoMostra(codigo){return !!codigo&&revAberta()===codigo}
 /* o que foi salvo vale também na lista da página (a tela de conferir mostra o tipo de cada folha) */
 function revCopiarCampos(codigo,b){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it)return;['titulo','tipo_documento','folha','escala','endereco_folha','cliente_folha','ano_folha'].forEach(k=>{if(k in b)it[k]=b[k]})}

@@ -215,6 +215,36 @@ def registrar_campos_revisados(con, codigo: str, estado: str, por: str) -> None:
                     (codigo, campo, a or None, b or None, res, it["versao_cv2"], por))
 
 
+# CAMP-068 (20/10, "as marcações de problemas não somem ao corrigir, na etapa de conferir"): conferir é olhar a folha e dizer que está certa.
+# O que a conferência resolve DE FATO some junto, gravado no banco (não só na tela): o espelho que o CAMP Vision aplicou fica confirmado,
+# e os problemas automáticos do CAMP Vision que são "olhe esta folha" (giro, espelho, dado lido) fecham com registro de quem conferiu.
+# Duplicata, outro projeto, autoria e retirada têm ação própria e NÃO fecham por conferir.
+CATEGORIAS_FECHADAS_AO_CONFERIR = ("orientacao", "espelhado", "metadado")
+
+
+def resolver_ao_conferir(con, codigo: str, estado: str, ator: str) -> dict:
+    out = {"espelho_confirmado": False, "problemas_fechados": []}
+    if estado not in ("conferida", "corrigida"):
+        return out
+    i = con.execute("SELECT espelhado, espelho_manual FROM item WHERE codigo=?", (codigo,)).fetchone()
+    if i and i["espelhado"] and i["espelho_manual"] is None:
+        con.execute("UPDATE item SET espelho_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (int(i["espelhado"]), codigo))
+        out["espelho_confirmado"] = True
+    q = ",".join("?" * len(CATEGORIAS_FECHADAS_AO_CONFERIR))
+    ids = [r[0] for r in con.execute(f"""SELECT id FROM erro WHERE codigo=? AND origem='campvision' AND situacao IN ('aberto','em_correcao')
+                                          AND categoria IN ({q})""", (codigo, *CATEGORIAS_FECHADAS_AO_CONFERIR))]
+    if ids:
+        quem = "corrigiu" if estado == "corrigida" else "conferiu"
+        con.execute(f"UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id IN ({','.join('?' * len(ids))})",
+                    (f"Resolvido na conferência: {ator} {quem} a folha no painel.", *ids))
+        for eid in ids:
+            _evento(con, "erro", str(eid), "fechado_na_conferencia", ator, {"codigo": codigo, "revisao": estado})
+        out["problemas_fechados"] = ids
+    if out["espelho_confirmado"] or ids:
+        _evento(con, "item", codigo, "conferencia_resolveu", ator, out)
+    return out
+
+
 @router.post("/itens/{codigo}/revisao")
 def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"))) -> dict:
     if d.estado not in ("pendente", "conferida", "corrigida"):
@@ -232,14 +262,16 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
             # 19/10 ("muito chato"): corrigir uma folha de lote aprovado (ou já no site) dava "os dados foram salvos, mas a revisão não mudou".
             # A correção (PATCH) já é o que importa; "conferida/corrigida" aqui só confirma: registra o que mudou e responde ok, sem reabrir nada.
             registrar_campos_revisados(con, codigo, d.estado, u["email"])
+            res = resolver_ao_conferir(con, codigo, d.estado, u["email"])
             con.commit()
-            return {"ok": True, "revisao": i["revisao"], "sem_mudanca": fechado}
+            return {"ok": True, "revisao": i["revisao"], "sem_mudanca": fechado, "resolvidos": res}
         con.execute("UPDATE item SET revisao=?, revisado_por=?, revisado_em=CASE WHEN ?='pendente' THEN NULL ELSE datetime('now') END, atualizado_em=datetime('now') WHERE codigo=?",
                     (d.estado, None if d.estado == "pendente" else u["email"], d.estado, codigo))
         _evento(con, "item", codigo, "revisao", u["email"], {"de": i["revisao"], "para": d.estado})
         registrar_campos_revisados(con, codigo, d.estado, u["email"])
+        res = resolver_ao_conferir(con, codigo, d.estado, u["email"])
         con.commit()
-        return {"ok": True, "revisao": d.estado}
+        return {"ok": True, "revisao": d.estado, "resolvidos": res}
     finally:
         con.close()
 
@@ -277,6 +309,74 @@ def confirmar_deste_projeto(codigo: str, u: dict = Depends(auth.exige("operador"
             _evento(con, "item", codigo, "projeto_confirmado", u["email"], {k: out[k] for k in ("sinais_tirados", "bloqueios_tirados", "situacao_liberada", "problemas_fechados")})
         con.commit()
         return {**out, "status_site": status, "bloqueios_restantes": pend.get("bloqueios") or [], "pendencias": pend}
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+@router.post("/itens/{codigo}/autoria-confirmada")
+def confirmar_autoria_da_folha(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """CAMP-068: na conferência, "A autoria é do titular do fundo". Tira o aviso "autoria não confirmada" da folha e fecha os problemas de
+    autoria abertos dela (antes o botão só aparecia se houvesse um problema aberto; sem ele, a marca não tinha como sair). Fica no histórico."""
+    con = connect()
+    try:
+        i = con.execute("SELECT autoria_divergente FROM item WHERE codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        con.execute("UPDATE item SET autoria_divergente=0, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+        ids = [r[0] for r in con.execute("SELECT id FROM erro WHERE codigo=? AND categoria='autoria_divergente' AND situacao IN ('aberto','em_correcao')", (codigo,))]
+        if ids:
+            con.execute(f"UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id IN ({','.join('?' * len(ids))})",
+                        (f"Conferido na revisão por {u['email']}: a autoria é do titular do fundo.", *ids))
+        if i["autoria_divergente"] or ids:
+            _evento(con, "item", codigo, "autoria_confirmada", u["email"], {"problemas_fechados": ids})
+        con.commit()
+        return {"ok": True, "mudou": bool(i["autoria_divergente"] or ids), "problemas_fechados": ids}
+    finally:
+        con.close()
+
+
+class LiberarBloqueio(BaseModel):
+    motivo: str
+
+
+@router.post("/itens/{codigo}/bloqueio-resolvido")
+def bloqueio_resolvido(codigo: str, d: LiberarBloqueio, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """CAMP-068: o CAMP Vision prendeu a folha ("bloqueada") por um motivo que a pessoa conferiu e resolveu. Tira esses bloqueios
+    (os de duplicata e de outro projeto têm ação própria e ficam), guarda o que saiu em pendencias.bloqueios_resolvidos com quem e por quê,
+    e, se não sobrar bloqueio nem autoria pendente, a folha sai de 'bloqueado'. Exige dizer o que foi feito."""
+    from .importador_lote import fala_de_projeto_divergente
+    from .rotas_mesclar import _e_de_duplicata
+    motivo = (d.motivo or "").strip()[:300]
+    if not motivo:
+        raise HTTPException(400, "Diga o que foi feito para resolver")
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        i = con.execute("SELECT status_site, pendencias, autoria_divergente FROM item WHERE codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        try:
+            pend = json.loads(i["pendencias"] or "{}")
+        except ValueError:
+            pend = {}
+        if not isinstance(pend, dict):
+            pend = {}
+        bloq = [b for b in (pend.get("bloqueios") or []) if b]
+        tirar = [b for b in bloq if not fala_de_projeto_divergente(b) and not _e_de_duplicata(b)]
+        status = i["status_site"]
+        if tirar:
+            pend["bloqueios"] = [b for b in bloq if b not in tirar]
+            pend.setdefault("bloqueios_resolvidos", []).append({"bloqueios": tirar, "por": u["email"], "motivo": motivo})
+            con.execute("UPDATE item SET pendencias=?, atualizado_em=datetime('now') WHERE codigo=?", (json.dumps(pend, ensure_ascii=False), codigo))
+            if status == "bloqueado" and not pend["bloqueios"] and not i["autoria_divergente"]:
+                con.execute("UPDATE item SET status_site='nao_publicado' WHERE codigo=?", (codigo,))
+                status = "nao_publicado"
+            _evento(con, "item", codigo, "bloqueio_resolvido", u["email"], {"bloqueios": tirar, "motivo": motivo})
+        con.commit()
+        return {"ok": True, "mudou": bool(tirar), "bloqueios_tirados": tirar, "bloqueios_restantes": pend.get("bloqueios") or [], "status_site": status, "pendencias": pend}
     except HTTPException:
         con.rollback()
         raise
