@@ -60,6 +60,7 @@ def _aberto(con, projeto: str, item: str | None):
 
 class NovoPedido(BaseModel):
     motivo: str | None = Field(default=None, max_length=300)
+    itens: list[str] | None = None      # CAMP-131 (P10, opcional): reler SÓ estas folhas do projeto (ex.: as que têm aviso), em vez do lote inteiro
 
 
 def _criar(projeto: str, item: str | None, motivo: str | None, u: dict) -> dict:
@@ -100,7 +101,33 @@ def pedir_da_folha(codigo: str, d: NovoPedido, u: dict = Depends(auth.exige("ope
 
 @router.post("/projetos/{codigo}/releitura")
 def pedir_do_projeto(codigo: str, d: NovoPedido, u: dict = Depends(auth.exige("operador"))) -> dict:
+    if d.itens:                                   # CAMP-131: um pedido por folha (o CV2 já atende pedido de folha), nunca o projeto inteiro
+        itens = list(dict.fromkeys(str(x).strip() for x in d.itens if str(x).strip()))[:200]
+        r = [_criar(codigo, it, d.motivo, u) for it in itens]
+        return {"pedidos": r, "folhas": len(r), "repetido": all(x.get("repetido") for x in r), "cv2": r[0]["cv2"] if r else None}
     return _criar(codigo, None, d.motivo, u)
+
+
+@router.get("/projetos/{codigo}/releitura/previa")
+def previa_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-131 (P10): o que a releitura vai fazer, com os números REAIS do projeto, ANTES de pedir (o texto da confirmação).
+    A regra é a do importador e da releitura: folha revisada por gente (conferida, corrigida, retida) nunca é sobrescrita; o site só muda quando alguém
+    publica de novo; lote já aprovado não recebe nada sozinho (o que mudou aparece em "Releituras: o que mudou" para aceitar ou ignorar)."""
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+        q = lambda w: con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {w}", (codigo,)).fetchone()[0]  # noqa: E731
+        com_aviso = [r[0] for r in con.execute("""SELECT DISTINCT e.codigo FROM erro e JOIN item i ON i.codigo=e.codigo
+                                                   WHERE i.projeto_codigo=? AND e.origem='campvision' AND e.situacao IN ('aberto','em_correcao') ORDER BY e.codigo""", (codigo,))]
+        aprovado = bool(con.execute("SELECT 1 FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL AND aprovado_em IS NOT NULL LIMIT 1", (codigo,)).fetchone())
+        folhas = q("1=1")
+        return {"folhas": folhas, "corrigidas": q("revisao='corrigida'"), "conferidas": q("revisao='conferida' AND COALESCE(retida,0)=0"),
+                "retidas": q("COALESCE(retida,0)=1"), "pendentes": q("revisao='pendente'"), "no_site": q("status_site IN ('no_ar','rascunho')"),
+                "com_aviso": com_aviso, "lote_aprovado": aprovado, "segundos_por_folha": 15,
+                "minutos": max(1, -(-folhas * 15 // 60)), "minutos_com_aviso": max(1, -(-len(com_aviso) * 15 // 60))}
+    finally:
+        con.close()
 
 
 def _estado(con, projeto: str, item: str | None) -> dict:

@@ -1,5 +1,6 @@
 """Revisão pós-CAMP Vision: importar as folhas do lote, conferir/corrigir, e o admin aprovar. Ler: leitura; revisar: operador; aprovar: admin."""
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -644,7 +645,7 @@ def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("oper
     """Uma pessoa responde ao CAMP Vision. sugestao: usar (grava SÓ se o campo ainda estiver vazio ou com título provisório) | ignorar.
     proposta: aceitar | recusar (só registra; nada é aplicado sozinho). retirado: devolver (admin, motivo obrigatório; entra na próxima importação)."""
     import re as _re
-    validas = {"sugestao": ("usar", "ignorar"), "proposta": ("aceitar", "recusar"), "retirado": ("devolver",)}
+    validas = {"sugestao": ("usar", "ignorar"), "proposta": ("aceitar", "recusar"), "retirado": ("devolver",), "releitura": ("aceitar", "ignorar")}
     if d.tipo not in validas or d.acao not in validas[d.tipo]:
         raise HTTPException(400, "Resposta inválida")
     if d.tipo == "retirado":
@@ -657,9 +658,13 @@ def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("oper
         l = con.execute("SELECT id, projeto_codigo FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
         if not l:
             raise HTTPException(404, "Lote não existe")
-        if con.execute("SELECT 1 FROM cv_resposta WHERE lote_id=? AND tipo=? AND chave=?", (lote_id, d.tipo, d.chave)).fetchone():
+        # CAMP-131: cv_resposta.tipo tem CHECK (sugestao, proposta, retirado) na base real; a resposta à releitura vai como 'proposta' com a chave 'releitura:…'
+        tipo_db, chave_db = ("proposta", "releitura:" + d.chave) if d.tipo == "releitura" else (d.tipo, d.chave)
+        if con.execute("SELECT 1 FROM cv_resposta WHERE lote_id=? AND tipo=? AND chave=?", (lote_id, tipo_db, chave_db[:200])).fetchone():
             raise HTTPException(409, "Isso já foi respondido")
         valor = (d.valor or "").strip()[:300] or None
+        if d.tipo == "releitura" and d.acao == "aceitar":         # CAMP-131 (P10): aplicar UMA mudança que a releitura trouxe (o valor vem do arquivo, não da tela)
+            valor = _aplicar_mudanca_releitura(con, l, d.chave, u["email"])
         if d.tipo == "sugestao" and d.acao == "usar":
             col = _COLUNA_CV.get(d.chave)
             if not col or not valor:
@@ -675,7 +680,7 @@ def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("oper
             else:
                 con.execute(f"UPDATE projeto SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (valor, l["projeto_codigo"]))
         con.execute("INSERT INTO cv_resposta (lote_id, projeto_codigo, tipo, chave, acao, valor, motivo, por) VALUES (?,?,?,?,?,?,?,?)",
-                    (lote_id, l["projeto_codigo"], d.tipo, d.chave[:200], d.acao, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
+                    (lote_id, l["projeto_codigo"], tipo_db, chave_db[:200], d.acao, valor, (d.motivo or "").strip()[:300] or None, u["email"]))
         _evento(con, "projeto", l["projeto_codigo"], f"cv_{d.tipo}_{d.acao}", u["email"], {"lote": lote_id, "chave": d.chave, "valor": valor, "motivo": d.motivo})
         fechados = []
         if d.tipo == "retirado":                                   # 19/10: devolver à revisão resolve o problema "o CAMP Vision retirou esta folha"
@@ -687,6 +692,46 @@ def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("oper
         return {"ok": True}
     finally:
         con.close()
+
+
+_CAMPO_RELEITURA = {"titulo": "titulo", "escala": "escala", "folha": "folha", "ano": "ano_folha", "tipo": "tipo_documento",
+                    "endereco": "endereco_folha", "cliente": "cliente_folha"}
+
+
+def _aplicar_mudanca_releitura(con, l, chave: str, ator: str) -> str:
+    """chave = "<quando>|<código da folha>|<campo>": lê catalogacao/releituras/<quando>/comparacao.json da pasta do lote e grava o "agora" na folha."""
+    try:
+        quando, cod, campo = chave.split("|", 2)
+    except ValueError:
+        raise HTTPException(400, "Mudança inválida")
+    if not re.fullmatch(r"[\w.\-]+", quando or ""):
+        raise HTTPException(400, "Mudança inválida")
+    col = _CAMPO_RELEITURA.get(campo)
+    if not col:
+        raise HTTPException(400, f"O campo '{campo}' não se aplica sozinho: corrija na própria folha")
+    it = con.execute("SELECT codigo FROM item WHERE codigo=? AND projeto_codigo=?", (cod, l["projeto_codigo"])).fetchone()
+    if not it:
+        raise HTTPException(404, "Folha não existe neste projeto")
+    lp = con.execute("SELECT pasta_qnap FROM lista_processamento WHERE id=?", (l["id"],)).fetchone()
+    pasta = Path(lp["pasta_qnap"] or "")
+    if not pasta.is_absolute():
+        pasta = _qnap_prontos_raiz() / pasta
+    try:
+        comp = json.loads((pasta / "catalogacao" / "releituras" / quando / "comparacao.json").read_text(encoding="utf-8"))
+        agora = ((comp.get(cod) or {}).get(campo) or {}).get("agora")
+    except (OSError, ValueError, AttributeError):
+        agora = None
+    if agora in (None, ""):
+        raise HTTPException(409, "O painel não acha mais esta mudança na pasta do lote (a releitura foi refeita?)")
+    agora = str(agora).strip()[:300]
+    if col == "ano_folha":
+        if not re.fullmatch(r"\d{4}", agora):
+            raise HTTPException(400, "Ano inválido na releitura")
+        con.execute("UPDATE item SET ano_folha=?, atualizado_em=datetime('now') WHERE codigo=?", (int(agora), cod))
+    else:
+        con.execute(f"UPDATE item SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (agora, cod))
+    _evento(con, "item", cod, "releitura_aceita", ator, {"campo": campo, "valor": agora, "quando": quando})
+    return agora
 
 
 @router.post("/lotes/{lote_id}/conferir-sem-pendencia")
