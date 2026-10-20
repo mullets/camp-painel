@@ -842,6 +842,32 @@ def condicoes_de_publicacao(codigo: str, u: dict = Depends(auth.exige("leitura")
         con.close()
 
 
+@router.post("/projetos/{codigo}/fechado")
+def projeto_fechado(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-123 (P2, 20/10): a página do projeto viu "nada pendente e publicado" e mostra "Projeto fechado: painel e site iguais".
+    Grava UMA vez no Histórico (repetir não grava de novo enquanto nada mudar no projeto). O painel confere de novo o que dá
+    para conferir aqui: o projeto está publicado, nenhuma folha a conferir e nenhum problema aberto que impede publicar."""
+    con = connect()
+    try:
+        p = con.execute("SELECT status_site FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        pend = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND COALESCE(retida,0)=0", (codigo,)).fetchone()[0]
+        bloq = con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ?) AND gravidade='bloqueia' AND categoria<>'autoria_divergente'
+                              AND situacao IN ('aberto','em_correcao')""", (codigo, codigo + "-%")).fetchone()[0]
+        if p["status_site"] != "no_ar" or pend or bloq:
+            return {"ok": False, "gravado": False, "motivo": "ainda há o que fazer neste projeto"}
+        ult = con.execute("SELECT tipo FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 1", (codigo,)).fetchone()
+        if ult and ult["tipo"] == "projeto_fechado":
+            return {"ok": True, "gravado": False}
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_fechado',?,?)",
+                    (codigo, u["email"], json.dumps({"texto": "Projeto fechado: painel e site iguais"}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "gravado": True}
+    finally:
+        con.close()
+
+
 @router.post("/projetos/{codigo}/publicar")
 def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Escreve no Tainacan o status do dossiê e das folhas.

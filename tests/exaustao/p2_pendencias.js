@@ -13,6 +13,49 @@ T.rodar(async () => {
     `cenário P0009: ${P} publicado, 31 folhas no site, 3 retidas`);
   const ad = await T.entrar('admin');
 
+  // ---------------- CAMP-123 (P2) ----------------
+  T.passo('CAMP-123: barra "O que falta para fechar este projeto"');
+  await T.abrirProjeto(ad, P);
+  const temBarra = await ad.waitForSelector('#pj-falta:not([hidden]) .pj-falta-lista', { timeout: 20000 }).then(() => true, () => false);
+  T.chk(temBarra, 'CAMP-123: a barra aparece logo abaixo do título', await T.txt(ad, '#pd'));
+  const ordem = await ad.evaluate(() => { const f = document.getElementById('pj-falta'), h = document.querySelector('#pd .dethdr'), c = document.getElementById('pj-cards'); return !!(f && h && c && h.compareDocumentPosition(f) & 4 && f.compareDocumentPosition(c) & 4) });
+  T.chk(ordem, 'CAMP-123: a barra fica entre o título e os cartões');
+  const itens = await ad.$$eval('#pj-falta .pj-falta-lista li', l => l.map(x => ({ k: x.dataset.pjp, t: x.innerText.replace(/\s+/g, ' ').trim() })));
+  const tx = k => (itens.find(x => x.k === k) || {}).t || '';
+  T.chk(/Responder 31 propostas e 1 sugestão/.test(tx('cv_respostas')), 'CAMP-123: "Responder 31 propostas e 1 sugestão do CAMP Vision"', JSON.stringify(itens));
+  T.chk(/8 obras distintas/.test(tx('obras')), 'CAMP-123: "Decidir sobre as 8 obras distintas"', JSON.stringify(itens));
+  T.chk(/autoria de 5 folhas/.test(tx('autoria')), 'CAMP-123: "Confirmar a autoria de 5 folhas"', JSON.stringify(itens));
+  T.chk(itens.length === 3 && itens.map(x => x.k).join(',') === 'cv_respostas,obras,autoria', 'CAMP-123: exatamente o que falta, em ordem (projeto publicado: sem Conferir, Aprovar nem Publicar)', JSON.stringify(itens));
+  const selo = await T.txt(ad, '#pj-selo');
+  T.chk(/^publicado · 3 pendências$/.test(selo), 'CAMP-123: o selo do cabeçalho diz "publicado · 3 pendências"', selo);
+  const men = await T.txt(ad, '#pj-falta .pj-falta-men summary');
+  T.chk(!men || /avisos? menor(es)? \(não impedem publicar\)/.test(men), 'CAMP-123: avisos que não impedem publicar ficam recolhidos e não contam', men);
+  await T.print(ad, 'p2_barra');
+  // cada botão leva ao lugar certo
+  await ad.click('#pj-falta li[data-pjp="cv_respostas"] [data-pjp-ir]'); await ad.waitForTimeout(900);
+  T.chk(await ad.evaluate(() => { const d = document.getElementById('cv-sec-propostas'); return !!(d && d.open && d.offsetParent) }), 'CAMP-123: "Ver" das propostas abre a gaveta e a seção "Propostas do CAMP Vision"');
+  await ad.click('#pj-falta li[data-pjp="obras"] [data-pjp-ir]'); await ad.waitForTimeout(900);
+  T.chk(await ad.evaluate(() => { const a = document.querySelector('#pj-cv .cv-avisos'); if (!a || !a.offsetParent) return false; const r = a.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0 }), 'CAMP-123: "Ver" das obras distintas leva aos avisos do CAMP Vision (na tela)');
+  await ad.click('#pj-falta li[data-pjp="autoria"] [data-pjp-ir]');
+  T.chk(await T.espera(() => ad.$eval('#pd .pj-tabs [aria-selected="true"]', b => /Problemas/.test(b.textContent))), 'CAMP-123: "Ver" da autoria abre a aba Problemas');
+  // resolver a autoria tira o item da barra (a barra acompanha)
+  for (const n of [23, 25, 26, 27, 28]) await ad.evaluate(c => fetch('/api/itens/' + c + '/autoria-confirmada', { method: 'POST' }), `${P}-1978-S01-D${String(n).padStart(5, '0')}`);
+  await T.abrirProjeto(ad, P); await ad.waitForSelector('#pj-falta:not([hidden]) .pj-falta-lista', { timeout: 20000 }).catch(() => {});
+  T.chk(!(await ad.$('#pj-falta li[data-pjp="autoria"]')) && /2 pendências/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123: confirmada a autoria, o item sai da barra e o selo diz 2 pendências', await T.txt(ad, '#pj-falta'));
+  // projeto sem nada pendente: verde, sem lista, e vai para o Histórico (uma vez só)
+  const PL = montar('limpo', T.BASE, T.RAIZ);
+  await T.abrirProjeto(ad, PL);
+  const verde = await ad.waitForSelector('#pj-falta.ok [data-pj-fechado]', { timeout: 20000 }).then(() => true, () => false);
+  T.chk(verde && /Projeto fechado: painel e site iguais/.test(await T.txt(ad, '#pj-falta')) && !(await ad.$('#pj-falta .pj-falta-lista')), 'CAMP-123: sem nada pendente, a barra fica verde: "Projeto fechado: painel e site iguais", sem lista', await T.txt(ad, '#pj-falta'));
+  T.chk(/^publicado$/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123: o selo diz só "publicado"', await T.txt(ad, '#pj-selo'));
+  await T.print(ad, 'p2_fechado');
+  T.chk(await T.espera(() => T.um("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='projeto_fechado'", PL) === 1), 'CAMP-123: "projeto fechado" gravado no Histórico');
+  await T.abrirProjeto(ad, PL); await ad.waitForTimeout(2500);
+  T.chk(T.um("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='projeto_fechado'", PL) === 1, 'CAMP-123: abrir de novo não grava outra vez');
+  await ad.evaluate(c => showProjeto(c, 'historico'), PL); await ad.waitForTimeout(1200);
+  T.chk(/fechado: painel e site iguais/.test(await T.txt(ad, '#pd')), 'CAMP-123: o Histórico mostra "fechado: painel e site iguais"');
+  T.chk(!/fechado/.test(JSON.stringify(T.sql("SELECT tipo FROM evento WHERE entidade='projeto' AND codigo=?", P))), 'CAMP-123: o projeto com pendências não ganha "fechado" no Histórico');
+
   // ---------------- CAMP-130 (P9) ----------------
   T.passo('CAMP-130: contagens do lote que somam o total e o "aceite" explicado');
   await T.abrirProjeto(ad, P); await abrirGaveta(ad, 'folhas');

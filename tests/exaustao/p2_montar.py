@@ -2,6 +2,7 @@
 """Cenário "parecido com a F026-P0009 (CRASA, Sto. André)" para os testes de P2/P9 (CAMP-123 e CAMP-130), pelo caminho real:
 
   p0009 BASE RAIZ [--sem-publicar]   -> imprime o código do projeto
+  limpo BASE RAIZ                    -> projeto de 3 folhas sem nada pendente, publicado (para o "Projeto fechado")
 
 1. a ESTAÇÃO reserva o número (POST /api/estacoes/projetos/reservar);
 2. o CAMP VISION grava a pasta final (34 folhas JPG/TIF/prévia, pacote_tainacan.json com a sugestão de UF "SP", 31 propostas
@@ -103,9 +104,48 @@ def p0009(base, raiz, publicar=True):
     print(P)
 
 
+def limpo(base, raiz):
+    """Um projeto sem nada pendente: 3 folhas lidas sem aviso, conferidas, lote aprovado e publicado (para o "Projeto fechado")."""
+    nome = "CASA LIMPA"
+    r = cv.http(base, "/api/estacoes/projetos/reservar", {"fundo_codigo": "F026", "titulo": nome, "ano": 1972, "cidade": "São Paulo", "operador": "Beatriz", "confirmar_novo": True})
+    P = r["codigo"]
+    cv.processando(base, raiz, P, nome)
+    p = cv.pasta_do(raiz, P)
+    raiz_rel = str(p.relative_to(raiz))
+    prev = Path(raiz) / "_campvision" / "preview" / P
+    jpg = p / "01 - Desenhos e pranchas" / "JPG"
+    for x in (prev, jpg):
+        x.mkdir(parents=True, exist_ok=True)
+    docs = []
+    for n in (1, 2, 3):
+        cod = f"{P}-1972-S01-D{n:05d}"
+        im = cv.prancha(f"PLANTA {n}", [nome, "Arq. Sami Bussab", "1972"], w=700, h=495)
+        im.save(jpg / f"{cod}.jpg", "JPEG", quality=70); im.save(prev / f"{cod}.jpg", "JPEG", quality=70)
+        d = cv.doc(nome, P, n, raiz_rel)
+        d["arquivos"] = [f"{raiz_rel}/01 - Desenhos e pranchas/JPG/{cod}.jpg"]
+        docs.append(d)
+    pac = {"versao": 2, "teste": False, "projeto_codigo": P, "projeto_nome": nome, "fundo_codigo": "F026",
+           "projeto": {"codigo": P, "titulo": nome, "ano": "1972", "cidade": "São Paulo", "uf": "", "cliente": "", "endereco": ""},
+           "documentos": docs, "itens": docs, "retirados": [], "propostas": {}, "avisos": []}
+    (p / "catalogacao" / "pacote_tainacan.json").write_text(json.dumps(pac, ensure_ascii=False), encoding="utf-8")
+    (p / "catalogacao" / "erros.json").write_text("[]", encoding="utf-8")
+    (p / "status.json").write_text(json.dumps({"codigo": P, "status": "pronto", "fase": "organizado_v2", "imagens": 3, "folhas": 3, "erros_bloqueantes": 0, "motivo": ""}), encoding="utf-8")
+    cv.http(base, "/api/campvision/aviso", {"codigo": P, "pasta": raiz_rel, "status": "pronto"})
+    op = Sessao(base, "operador@camp.arq.br", "senha-operador-123")
+    for n in (1, 2, 3):
+        op.chamar("POST", f"/api/itens/{P}-1972-S01-D{n:05d}/revisao", {"estado": "conferida"})
+    ad = Sessao(base, "rafael@camp.arq.br", "senha-bem-longa-123")
+    rv = ad.chamar("GET", f"/api/projetos/{P}/revisao")
+    ad.chamar("POST", f"/api/lotes/{rv['lotes'][0]['id']}/aprovar")
+    ad.chamar("POST", f"/api/projetos/{P}/publicar-tudo")
+    print(P)
+
+
 if __name__ == "__main__":
     cmd, a = sys.argv[1], sys.argv[2:]
     if cmd == "p0009":
         p0009(a[0], a[1], "--sem-publicar" not in a)
+    elif cmd == "limpo":
+        limpo(a[0], a[1])
     else:
         sys.exit(f"comando desconhecido: {cmd}")
