@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca"}
+MODOS_RAPIDOS = {"camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7711,6 +7711,46 @@ def filho(modo):
         ver("(101) cópia nova que ninguém decidiu continua sendo marcada pela releitura (D7 cópia da D1)", q("SELECT duplicata_de FROM item WHERE codigo=?", D(7))[0] == D(1))
         c.close()
         for l in res: print(l)
+    elif modo == "camp124_alteracoes_site":
+        # CAMP-124 (P3, 20/10): conta painel × site explicada e "Enviar N alterações ao site" (só o que foi corrigido depois do último envio)
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import alteracoes_site as alt, publicador
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        L = [{"codigo": f"X-{n}", "status_site": "no_ar" if n <= 4 else "nao_publicado", "retida": n == 5, "duplicata_de": "X-1" if n == 6 else None} for n in range(1, 8)]
+        cs = alt.conta_site(L, ["X-1", "X-2", "X-3", "X-4"])
+        ver("conta: 7 no painel, 4 no site; retida e duplicata explicam; a 7 não foi ao site (amarelo)", cs["painel"] == 7 and cs["site"] == 4 and cs["retidas"] == ["X-5"]
+            and cs["duplicatas"] == ["X-6"] and cs["nao_enviadas"] == ["X-7"] and not cs["fecha"], _j.dumps(cs))
+        cs2 = alt.conta_site(L[:6], ["X-1", "X-2", "X-3", "X-4"])
+        ver("conta fecha quando só retidas/duplicatas ficam fora", cs2["fecha"] and cs2["site"] == 4, _j.dumps(cs2))
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',124)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0124','F099',124,'Casa P3',1972)")
+        for n in (1, 2):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,folha,status_site,tainacan_item_id,publicado_em) VALUES (?,?,?,?,?,?,?,datetime('now','-1 day'))",
+                      (f"F099-P0124-1972-S01-D0000{n}", "F099-P0124", "S01", n, f"0{n}", "no_ar", 900 + n))
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'site_item_criado','t','{}')", (f"F099-P0124-1972-S01-D0000{n}",))
+        D1, D2 = "F099-P0124-1972-S01-D00001", "F099-P0124-1972-S01-D00002"
+        ed = lambda cod, k, a, d: (c.execute(f"UPDATE item SET {k}=? WHERE codigo=?", (d, cod)), c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'editado','t',?)", (cod, _j.dumps({"antes": {k: a}, "depois": {k: d}}))))
+        ed(D1, "folha", "01", "306"); ed(D2, "escala", None, "1:50"); ed(D2, "escala", "1:50", None); c.commit()
+        pend = alt.pendentes(c, "F099-P0124")
+        ver("só a folha corrigida depois do envio entra (a que voltou ao valor de antes, não)", [p_["codigo"] for p_ in pend] == [D1] and pend[0]["campos"][0]["antes"] == "01"
+            and pend[0]["campos"][0]["depois"] == "306", _j.dumps(pend))
+        c.close()
+        enviados = []
+        orig = publicador.atualizar_folha_no_site
+        publicador.atualizar_folha_no_site = lambda cod, wid, cid, tit, desc, md, ator: (enviados.append((cod, wid, sorted(md))), {"enviados": list(md), "falhas": []})[1]
+        try:
+            r = alt.enviar("F099-P0124", "adm@t")
+        finally:
+            publicador.atualizar_folha_no_site = orig
+        c = connect()
+        ver("enviar: manda só o campo 'Folha' da D1 ao item certo do site e grava o envio", r["enviadas"] == [D1] and enviados == [(D1, 901, ["Folha"])]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='site_alteracoes_enviadas'", (D1,)).fetchone()[0] == 1, _j.dumps([r, enviados]))
+        ver("depois de enviar, nada mais pendente", alt.pendentes(c, "F099-P0124") == [])
+        c.close()
+        for l in res: print(l)
     elif modo == "camp120_marca":
         # CAMP-120 (exaustão, 20/10): a página aberta pergunta /api/projetos/{p}/marca para saber se o projeto mudou por obra de outro
         # (CAMP Vision releu, outra pessoa aprovou, releitura terminou). A marca é estável sem mudança e muda com cada uma dessas.
@@ -9597,6 +9637,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"olhe_a_folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("145) CAMP-124 (P3, 20/10): conta painel × site explicada e 'Enviar N alterações ao site' (só o corrigido depois do envio)")
+rc, out = rodar("camp124_alteracoes_site", f"{tmp}/camp124.db")
+if rc != 0: ok(False, f"teste camp124 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp124: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

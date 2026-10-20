@@ -57,6 +57,30 @@ def capa_falsa(codigo_projeto, ator, limpar=False):
 
 publicador.girar_imagem_no_site, publicador.capa_no_site = girar_falso, capa_falsa
 
+
+# CAMP-124 (P3): "Enviar N alterações ao site" reenvia título e metadados de folhas já publicadas (publicador.atualizar_folha_no_site,
+# que chama WP().patch_item e WP().definir_metadado). O site falso aceita e anota; com o arquivo F_FALHA_ARQ + "_texto", recusa.
+from app import wp as _wp  # noqa: E402
+
+_WPBase = _wp.WP
+
+
+class WPComTextos(_WPBase):
+    def _talvez_cair(self):
+        if ARQ and os.path.exists(ARQ + "_texto"):
+            raise RuntimeError("o site respondeu 503 (Service Unavailable)")
+
+    def patch_item(self, cid, wid, **corpo):
+        self._talvez_cair()
+        return {"id": wid, **corpo}
+
+    def definir_metadado(self, wid, mid, valor):
+        self._talvez_cair()
+        return {"item_id": wid, "metadado": mid, "valor": valor}
+
+
+_wp.WP = publicador.WP = WPComTextos   # o publicador importou WP pelo nome
+
 if __name__ == "__main__":
     import uvicorn
     from app.main import app

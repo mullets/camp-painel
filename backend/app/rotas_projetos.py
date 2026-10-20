@@ -353,6 +353,23 @@ def marca_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> d
         con.close()
 
 
+@router.post("/projetos/{codigo}/site/enviar-alteracoes")
+def enviar_alteracoes_ao_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-124 (P3): reenvia ao site o que foi corrigido no painel depois da publicação (campos e imagem). Só o que mudou."""
+    from .alteracoes_site import enviar
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+    finally:
+        con.close()
+    r = enviar(codigo, u["email"])
+    if r["falhas"] and not r["enviadas"]:
+        raise HTTPException(502, "O site não aceitou as alterações; o painel continua com elas e o site com o valor antigo: "
+                                 + "; ".join(f"{x['codigo'][-6:]} ({x['erro']})" for x in r["falhas"][:3]))
+    return r
+
+
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
@@ -502,6 +519,10 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "codigos_site": [x.get("codigo") for x in itens_site],
         "codigos_locais": [x.get("codigo") for x in itens_local],
     }
+    # CAMP-124 (P3, 20/10): a conta painel × site explicada (retidas/duplicatas) e o que foi corrigido depois de publicar
+    from .alteracoes_site import conta_site as _conta_site, pendentes as _alteracoes_site
+    fonte_visual["conta_site"] = _conta_site(itens_local, fonte_visual["codigos_site"])
+    alteracoes_site = _alteracoes_site(con, codigo)
     pub = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])
     from .parceiros import resumo_projeto as _parceiros_do_projeto
     parceiros_projeto = _parceiros_do_projeto(con, codigo)              # 19/10: "Parceiros neste projeto" (distintos, com as disciplinas)
@@ -531,7 +552,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         categorias[chave]["itens"] += 1
 
     return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
-            "fonte_visual": fonte_visual, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
+            "fonte_visual": fonte_visual, "alteracoes_site": alteracoes_site, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
             "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto,
             "decisoes_pendentes": decisoes_pend}
