@@ -4252,8 +4252,14 @@ async function copiarParceiros(codigo,caixa,btn){const alvo=(caixa.querySelector
   if(alvo==='itens'&&!itens.length){toast('Escolha pelo menos uma folha');return}
   btn.disabled=true;try{const r=await API('/api/itens/'+encodeURIComponent(codigo)+'/parceiros/copiar',{method:'POST',body:JSON.stringify({alvo,itens:alvo==='itens'?itens:null,modo:caixa.querySelector('[data-parc-substituir]').checked?'substituir':'acrescentar'})});
     toast(r.aplicadas.length?`Escritórios parceiros copiados para ${r.aplicadas.length} folha(s)`:'Nenhuma folha mudou');
-    caixa.innerHTML=`<p class="help parc-copiado" role="status">✔ Copiado para ${r.aplicadas.length} folha(s).${r.ignoradas.length?` Não mudaram ${r.ignoradas.length}: ${escHtml(r.ignoradas.map(x=>x.codigo.slice(-6)+' ('+x.motivo+')').join(' · '))}`:''}</p>`}
+    caixa.innerHTML=`<p class="help parc-copiado" role="status">✔ Copiado para ${r.aplicadas.length} folha(s).${r.ignoradas.length?` Não mudaram ${r.ignoradas.length}: ${escHtml(r.ignoradas.map(x=>x.codigo.slice(-6)+' ('+x.motivo+')').join(' · '))}`:''}${r.aplicadas.length?` <button type="button" class="btn sm" data-parc-copia-desfazer="${escHtml(codigo)}" data-itens="${escHtml(JSON.stringify(r.aplicadas))}">Desfazer a cópia</button>`:''}</p>`}
   catch(err){toast(err.message);btn.disabled=false}}
+/* CAMP-087: desfazer "Copiar para outras folhas" — cada folha volta ao que tinha (se ninguém mexeu nela depois) */
+document.addEventListener('click',async e=>{const b=e.target.closest&&e.target.closest('[data-parc-copia-desfazer]');if(!b)return;e.preventDefault();b.disabled=true;
+  let itens=[];try{itens=JSON.parse(b.dataset.itens||'[]')}catch(_){}
+  try{const r=await API('/api/itens/'+encodeURIComponent(b.dataset.parcCopiaDesfazer)+'/parceiros/copiar/desfazer',{method:'POST',body:JSON.stringify({itens})});
+    const p=b.closest('.parc-copiado');if(p)p.innerHTML=`↩ Cópia desfeita: ${r.voltaram.length} folha(s) voltaram ao que tinham.${r.ficaram.length?` Ficaram como estão ${r.ficaram.length}: ${escHtml(r.ficaram.map(x=>x.codigo.slice(-6)+' ('+x.motivo+')').join(' · '))}`:''}`;
+    toast(`Cópia desfeita em ${r.voltaram.length} folha(s)`)}catch(err){toast(err.message);b.disabled=false}});
 function parceirosProjetoHTML(l){if(!(l||[]).length)return '';return `<div class="panel" id="pj-parceiros"><div class="ph"><h2>Parceiros neste projeto</h2><span class="tag">${l.length} escritório${l.length===1?'':'s'}</span></div><div class="pb"><p class="help">Escritórios de consultoria e projetos complementares informados nas folhas.</p><ul class="parc-lista">${l.map(x=>`<li><b>${escHtml(x.escritorio)}</b>${(x.disciplinas||[]).length?` · ${escHtml(x.disciplinas.join(', '))}`:''} <small class="help">(${x.folhas} folha${x.folhas===1?'':'s'})</small></li>`).join('')}</ul></div></div>`}
 async function salvarRevisaoItem(codigo,estado){
   if(window._REV_SALVANDO)return;   /* 19/10: enquanto grava, um segundo clique (ou Enter) não roda a ação de novo; os botões ficam desligados (travarRevisao) */
