@@ -4547,7 +4547,8 @@ function tirarErrosDaTela(ids){if(!ids||!ids.length)return;const S=new Set(ids.m
   const code=window.PJ_D&&window.PJ_D.projeto&&window.PJ_D.projeto.codigo;if(code&&document.getElementById('pj-cards'))desenharCartoes(code);
   if(code&&window.PJ_D){const k=contaProblemas(window.PJ_D),ab=[...document.querySelectorAll('#pd [role="tab"]')].find(b=>/^Problemas \(/.test(b.textContent));
     if(ab)ab.innerHTML=`Problemas (${fmtN(k.total)})${k.bloq?` <span class="tag r mini">${fmtN(k.bloq)} ${k.bloq===1?'bloqueia':'bloqueiam'}</span>`:''}`;
-    const pc=document.querySelector('#pd .pj-prob-conta');if(pc)pc.textContent=slProblemas(window.PJ_D,code).txt||'nenhum problema aberto'}}
+    const pc=document.querySelector('#pd .pj-prob-conta');if(pc)pc.textContent=slProblemas(window.PJ_D,code).txt||'nenhum problema aberto';
+    const pt=document.getElementById('pj-prob-tipos');if(pt&&window.PJ_D.projeto){const h=problemasPorTipoHTML(window.PJ_D,window.PJ_D.projeto);if(h)pt.outerHTML=h;else pt.remove()}}}   /* CAMP-127: os grupos por tipo também descem na hora */
 function revisaoMostra(codigo){return !!codigo&&revAberta()===codigo}
 /* o que foi salvo vale também na lista da página (a tela de conferir mostra o tipo de cada folha) */
 function revCopiarCampos(codigo,b){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it)return;['titulo','tipo_documento','folha','escala','endereco_folha','cliente_folha','ano_folha'].forEach(k=>{if(k in b)it[k]=b[k]})}

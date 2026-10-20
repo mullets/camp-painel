@@ -7,7 +7,7 @@
 //  1) quatro cartões na ordem Folhas · Problemas · Dados do projeto · Site, com os números e a cor certos (A: 19 / 19 verde; 5 vermelho;
 //     1 pergunta âmbar com "cliente: … (carimbo) × … (cadastro)"; Não publicado, "libera quando os problemas forem resolvidos");
 //  2) nada empilhado por padrão: sem "Situação do lote", sem Revisão do lote/Consenso/CAMP Vision/QNAP/passo a passo visíveis;
-//  3) a grade das folhas começa nos primeiros 700px (1366×900); filtro "Sem imagem (7)";
+//  3) a grade das folhas começa nos primeiros 760px (1366×900: a primeira fileira de miniaturas aparece sem rolar; 20/10: +barra "O que falta" do CAMP-123 e chips por tipo do CAMP-127); filtro "Sem imagem (7)";
 //  4) "Decidir" abre UMA gaveta com uma linha por pergunta (sem botão repetido por folha); "Manter o do projeto" deixa o cartão "Em ordem";
 //  5) só uma gaveta aberta por vez; "Detalhes dos lotes" mostra a Revisão do lote; "Resolver" abre a aba Problemas;
 //  6) B: Folhas vermelho "0 / 34", "34 a conferir" e o motivo do lote parado; Dados com 1 pergunta (Ano) e UM botão "Usar 1978 nas 28 folhas";
@@ -115,7 +115,7 @@ for n in range(1, 35):
     chk(!(await page.evaluate(() => [...document.querySelectorAll('#pd h2')].some(h => h.checkVisibility() && /Situação do lote|Revisão do lote|Consenso do lote|O que o CAMP Vision entregou/.test(h.textContent)))), '(2) nenhum título de quadro antigo visível');
     await page.evaluate(() => window.scrollTo(0, 0));
     const y = await page.evaluate(() => document.querySelector('#pd .thumb').getBoundingClientRect().top);
-    chk(y < 700, '(3) a grade das folhas começa nos primeiros 700px (topo em ' + Math.round(y) + 'px)');
+    chk(y < 760, '(3) a grade das folhas começa nos primeiros 760px (topo em ' + Math.round(y) + 'px)');
     chk(/Sem imagem \(7\)/.test(await txt('.folhas-bar [data-fl-f="semimg"]')), '(3) filtro "Sem imagem (7)": ' + await txt('.folhas-bar [data-fl-f="semimg"]'));
     await page.click('.folhas-bar [data-fl-f="semimg"]'); await page.waitForTimeout(200);
     chk((await page.$$eval('#pd .thumb', l => l.filter(t => !t.hidden).length)) === 7, '(3) "Sem imagem" mostra só as 7');
@@ -167,7 +167,7 @@ for n in range(1, 35):
     chk(JSON.stringify(await visiveis()) === '[]', '(2) B: depois de fechar, nada empilhado: ' + JSON.stringify(await visiveis()));
     await page.evaluate(() => window.scrollTo(0, 0));
     const y = await page.evaluate(() => document.querySelector('#pd .thumb').getBoundingClientRect().top);
-    chk(y < 700, '(3) B: a grade das folhas começa nos primeiros 700px (topo em ' + Math.round(y) + 'px)');
+    chk(y < 760, '(3) B: a grade das folhas começa nos primeiros 760px (topo em ' + Math.round(y) + 'px)');
     if (process.env.FOTOS) await page.screenshot({ path: process.env.FOTOS + '/cartoes_B.png' });
     await page.click('#pj-cards [data-pjc-gav="dados"]'); await page.waitForTimeout(300);
     const q = await page.evaluate(() => ({ n: document.querySelectorAll('#pj-perguntas > .pjq-lista > .pjq').length, todas: [...document.querySelectorAll('#pj-perguntas [data-cs-todas]')].filter(b => b.checkVisibility()).map(b => b.textContent.trim()), usar: [...document.querySelectorAll('[data-cs-usar]')].filter(b => b.checkVisibility()).length }));
