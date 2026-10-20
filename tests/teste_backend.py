@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto"}
+MODOS_RAPIDOS = {"importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7638,6 +7638,46 @@ def filho(modo):
         ver("(101) cópia nova que ninguém decidiu continua sendo marcada pela releitura (D7 cópia da D1)", q("SELECT duplicata_de FROM item WHERE codigo=?", D(7))[0] == D(1))
         c.close()
         for l in res: print(l)
+    elif modo == "camp120_marca":
+        # CAMP-120 (exaustão, 20/10): a página aberta pergunta /api/projetos/{p}/marca para saber se o projeto mudou por obra de outro
+        # (CAMP Vision releu, outra pessoa aprovou, releitura terminou). A marca é estável sem mudança e muda com cada uma dessas.
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',120)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0120','F099',120,'Casa Ao Vivo',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F099-P0120','/nao/existe','revisao')").lastrowid
+        for n in (1, 2):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,revisao) VALUES (?,?,?,?,?,?,?)", (f"F099-P0120-1972-S01-D0000{n}", "F099-P0120", "S01", n, "campvision", lote, "conferida"))
+        c.commit()
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        le, ad = cli("le@camp.arq.br", "senha-leitura-1234"), cli("ad@camp.arq.br", "senha-admin-12345")
+        m = lambda: le.get("/api/projetos/F099-P0120/marca").json().get("marca")
+        m0 = m()
+        ver("leitura lê a marca (200, texto curto)", bool(m0) and len(m0) == 16, str(m0))
+        ver("sem mudança, a marca é a mesma", m() == m0)
+        r = ad.post(f"/api/lotes/{lote}/aprovar"); m1 = m()
+        ver("outra pessoa aprovou o lote: a marca muda", r.status_code == 200 and m1 != m0, r.text[:200])
+        c.execute("INSERT INTO pedido_releitura (projeto_codigo, pedido_por, estado) VALUES ('F099-P0120','x','pedido')"); c.commit(); m2 = m()
+        c.execute("UPDATE pedido_releitura SET estado='concluido' WHERE projeto_codigo='F099-P0120'"); c.commit(); m3 = m()
+        ver("pedido de releitura aberto e depois concluído: a marca muda nas duas vezes", m2 != m1 and m3 != m2)
+        c.execute("UPDATE item SET titulo='Novo', atualizado_em=datetime('now','+1 minute') WHERE codigo='F099-P0120-1972-S01-D00001'"); c.commit()
+        ver("o CAMP Vision regravou uma folha: a marca muda", m() != m3)
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','metadado','campvision','F099-P0120-1972-S01-D00002','x')"); c.commit(); m4 = m()
+        ver("problema novo numa folha: a marca muda", m4 != m3)
+        ver("projeto que não existe: 404", le.get("/api/projetos/F099-P9999/marca").status_code == 404)
+        ver("sem login: 401", TestClient(app, raise_server_exceptions=False).get("/api/projetos/F099-P0120/marca").status_code == 401)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: vigia a marca e mostra 'Este projeto mudou' com 'Atualizar' (data-pj-mudou)", "/marca')" in html and "[data-pj-mudou]" in html and "dataset.pjMudou" in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "camp069_outro_projeto":
         # 20/10 (CAMP-069, operadora no F009-P0092): "reconhecimento automático de folhas de outros projetos, não é possível abrir para checar, ou refazer
         # a ação". A folha que o CAMP Vision achou "de outra obra" é RETIRADA do lote: não existe no painel, o link não abria nada e só um admin a devolvia.
@@ -9424,6 +9464,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"exaustao_d: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("144) CAMP-120 (20/10): a marca do projeto muda quando outro age (aprovar, releitura, CAMP Vision, problema novo) e não muda sozinha")
+rc, out = rodar("camp120_marca", f"{tmp}/camp120.db")
+if rc != 0: ok(False, f"teste camp120 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp120: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

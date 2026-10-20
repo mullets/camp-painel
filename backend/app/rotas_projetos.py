@@ -329,6 +329,30 @@ def folha_qnap_arquivo(codigo: str, lote: int, caminho: str, u: dict = Depends(a
     return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/projetos/{codigo}/marca")
+def marca_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-120 (exaustão, 20/10): uma "marca" curta do estado do projeto (folhas, lotes, problemas, pedidos de releitura, cadastro).
+    A página aberta pergunta de tempos em tempos; se a marca mudou (o CAMP Vision releu, outra pessoa aprovou, a releitura terminou),
+    mostra "Este projeto mudou" com "Atualizar", sem redesenhar sozinha (não apaga o que a pessoa está digitando). Só consultas por índice."""
+    import hashlib
+    con = connect()
+    try:
+        p = con.execute("SELECT atualizado_em, status_site, titulo, capa_item FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        partes = [tuple(p),
+                  tuple(con.execute("""SELECT COUNT(*), MAX(atualizado_em), SUM(revisao!='pendente'), SUM(status_site='no_ar'), SUM(retida), MAX(revisado_em)
+                                       FROM item WHERE projeto_codigo=?""", (codigo,)).fetchone()),
+                  tuple(con.execute("""SELECT GROUP_CONCAT(id||':'||etapa||':'||COALESCE(aprovado_em,'')||':'||COALESCE(atualizado_em,'')||':'||COALESCE(descartado_em,''))
+                                       FROM lista_processamento WHERE projeto_codigo=?""", (codigo,)).fetchone()),
+                  tuple(con.execute("""SELECT COUNT(*), MAX(id), MAX(resolvido_em) FROM erro WHERE codigo=? OR codigo LIKE ?""", (codigo, codigo + "-%")).fetchone()),
+                  tuple(con.execute("""SELECT COUNT(*), SUM(situacao IN ('aberto','em_correcao')) FROM erro WHERE codigo=? OR codigo LIKE ?""", (codigo, codigo + "-%")).fetchone()),
+                  tuple(con.execute("SELECT MAX(id), GROUP_CONCAT(estado) FROM pedido_releitura WHERE projeto_codigo=?", (codigo,)).fetchone())]
+        return {"marca": hashlib.sha1(json.dumps(partes, default=str).encode()).hexdigest()[:16]}
+    finally:
+        con.close()
+
+
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
