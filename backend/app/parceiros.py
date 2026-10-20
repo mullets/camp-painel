@@ -278,3 +278,56 @@ def desfazer_copia(codigo: str, d: DesfazerCopia, u: dict = Depends(auth.exige("
         raise
     finally:
         con.close()
+
+
+class AutoriaParceiro(BaseModel):
+    escritorio: str
+    disciplina: str = ""
+    itens: list[str] | None = None   # sem lista: todas as folhas do projeto com "autoria não confirmada" que já têm esse parceiro
+
+
+@router.post("/projetos/{projeto}/autoria-parceiro")
+def autoria_parceiro(projeto: str, d: AutoriaParceiro, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """CAMP-127 (20/10, F026-P0009): o carimbo das pranchas de estrutura é do calculista (AC Vasconcelos), não do titular do fundo, e a folha
+    ficava "autoria não confirmada" — enquanto "Parceiros neste projeto" já sabia que ele é o parceiro de estrutura. Em lote, nas folhas
+    escolhidas: o escritório entra (ou continua) como parceiro com a disciplina, a autoria fica do titular do fundo (sai o crédito
+    "Autoria não confirmada") e os problemas de autoria da folha fecham. Cada folha ganha um evento no histórico."""
+    esc = _limpo(d.escritorio)[:LIM_ESCRITORIO]
+    if not esc:
+        raise HTTPException(400, "Diga o escritório parceiro")
+    disc = _limpo(d.disciplina)[:LIM_DISCIPLINA]
+    novo = {"escritorio": esc, "disciplina": disc}
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        linhas = {r["codigo"]: r for r in con.execute(
+            "SELECT codigo, parceiros, autoria_divergente FROM item WHERE projeto_codigo=? AND autoria_divergente=1", (projeto,))}
+        if d.itens is None:
+            alvo = [c for c, r in linhas.items() if any(p["escritorio"].casefold() == esc.casefold() for p in ler(r["parceiros"]))]
+        else:
+            alvo = list(dict.fromkeys(d.itens))
+        if not alvo:
+            raise HTTPException(400, "Nenhuma folha com autoria não confirmada para esse parceiro")
+        feitas, ignoradas = [], []
+        for cod in alvo:
+            r = linhas.get(cod)
+            if not r:
+                ignoradas.append({"codigo": cod, "motivo": "não é deste projeto ou a autoria já está confirmada"}); continue
+            antes = ler(r["parceiros"])
+            depois = antes if any(p["escritorio"].casefold() == esc.casefold() for p in antes) else juntar(antes, [novo])
+            con.execute("UPDATE item SET autoria_divergente=0, parceiros=?, atualizado_em=datetime('now') WHERE codigo=?", (para_coluna(depois), cod))
+            ids = [x[0] for x in con.execute("SELECT id FROM erro WHERE codigo=? AND categoria='autoria_divergente' AND situacao IN ('aberto','em_correcao')", (cod,))]
+            if ids:
+                con.execute(f"UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id IN ({','.join('?' * len(ids))})",
+                            (f"Autoria confirmada por {u['email']}: o carimbo é de {texto([novo])}, parceiro; a autoria é do titular do fundo.", *ids))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'autoria_parceiro',?,?)",
+                        (cod, u["email"], json.dumps({"parceiro": novo, "antes": {"parceiros": antes}, "depois": {"parceiros": depois},
+                                                      "problemas_fechados": ids}, ensure_ascii=False)))
+            feitas.append(cod)
+        con.commit()
+        return {"ok": True, "parceiro": novo, "confirmadas": feitas, "ignoradas": ignoradas}
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()

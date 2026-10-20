@@ -91,7 +91,7 @@ T.rodar(async () => {
   chk(!!eRel && eRel[3] === 'aberto', 'CAMP-103: o problema foi registrado aberto', JSON.stringify(eRel));
   await abrirConferir(op, B.P, B.D(2));
   chk(/rasgada/.test(await txt(op, '#cf-pane')), 'CAMP-103: aparece na folha, no conferir', (await txt(op, '#cf-pane')).slice(0, 300));
-  chk(/problema/.test(await txt(op, `#cf-linhas [data-cf-folha="${B.D(2)}"]`)), 'CAMP-103: a linha da folha mostra a marca de problema', await txt(op, `#cf-linhas [data-cf-folha="${B.D(2)}"]`));
+  chk(/problema|rasgada/.test(await txt(op, `#cf-linhas [data-cf-folha="${B.D(2)}"]`)), 'CAMP-103: a linha da folha mostra a marca de problema (CAMP-127: com o que é o problema)', await txt(op, `#cf-linhas [data-cf-folha="${B.D(2)}"]`));
   await print(op, '103_relatado');
   await op.click('#cf-pane [data-rev-item="conferida"]'); await confirmar(op); await op.waitForTimeout(1200);
   chk(um('SELECT situacao FROM erro WHERE id=?', eRel && eRel[0]) === 'aberto', 'CAMP-103: conferir a folha NÃO fecha o problema relatado por pessoa', um('SELECT situacao FROM erro WHERE id=?', eRel && eRel[0]));
