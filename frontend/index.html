@@ -544,7 +544,7 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 /* 19/10 proposta B: quatro cartões de situação no topo do projeto + gavetas (uma aberta de cada vez); o passo a passo antigo fica só nas gavetas */
 .pj-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 14px}
 .pjc{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;min-width:0}
-.pj-probs{margin:0;padding:0;list-style:none;display:grid;gap:6px}.pj-probs li{font-size:var(--fs-sm2)}
+.fim-conf .fim-passo{text-align:left;margin:12px 0 4px}.fim-conf .fim-passo .panel{margin:0}.pj-probs{margin:0;padding:0;list-style:none;display:grid;gap:6px}.pj-probs li{font-size:var(--fs-sm2)}
 .pjc.ok{border-top-color:var(--green)}.pjc.at{border-top-color:var(--amber)}.pjc.bl{border-top-color:var(--red)}
 .pjc-k{font-size:var(--fs-sm);color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
 .pjc-v{font-size:24px;font-weight:700;margin:2px 0 4px;line-height:1.2;overflow-wrap:anywhere}
@@ -3618,9 +3618,9 @@ function proximoPassoHTML(r,code){
   const bt=(txt,acao)=>`<button class="btn pri" data-pp="${acao}" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">${txt}</button>`;
   const T={importar:l.importar_motivo?[`Ainda não dá para importar as folhas: ${escHtml(l.importar_motivo)}`,'']:['Falta trazer as folhas do CAMP Vision para o painel.',op?bt('Importar folhas','importar'):''],   // CAMP-067
     conferir:[`Faltam conferir ${escHtml(l.itens_pendentes)} de ${escHtml(l.itens_total)} folha(s). Clique numa folha para ver, virar e conferir, ou aprove todas de uma vez.`,op?bt('Começar a conferir','conferir')+` <button class="btn" data-rev-lote="todas" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">Aprovar todas (${escHtml(l.itens_pendentes)})</button>`:''],
-    aprovar:['Todas as folhas foram conferidas. Falta aprovar o lote.',ad?bt('Aprovar lote','aprovar'):'<small class="help">Falta um admin aprovar.</small>'],
+    aprovar:['Todas as folhas foram conferidas. Falta aprovar o lote.',ad?bt('Aprovar o lote','aprovar'):'<small class="help">Falta um admin aprovar.</small>'],
     publicar:(()=>{const g=(window.PUB_G||{})[code],hum=g&&(g.condicoes||[]).find(c=>c.bloqueia&&!c.ok&&['direitos','bloqueios','teste','aceite_cv'].includes(c.id));   // 19/10: o aceite do CAMP Vision é a MESMA regra do quadro "O que o CAMP Vision entregou"
-      if(hum){const f=faltaCondicao(hum);return [`Lote aprovado, mas ${f.texto}.${f.detalhe?` <small class="help">${escHtml(f.detalhe)}</small>`:''}`,ad&&hum.acao?`<button class="btn pri" data-pp-cond="${escHtml(hum.acao.tipo)}" data-alvo="${escHtml(hum.acao.alvo||'')}">${escHtml(hum.acao.rotulo)}</button>`:'<small class="help">Falta um admin resolver.</small>']}
+      if(hum){const f=faltaCondicao(hum);return [`Lote aprovado, mas ${f.texto}.${f.detalhe?` <small class="help">${escHtml(f.detalhe)}</small>`:''}`,ad&&hum.acao?`<button class="btn pri" data-pp-cond="${escHtml(hum.acao.tipo)}" data-alvo="${escHtml(hum.acao.alvo||'')}">${escHtml(hum.acao.rotulo)}</button>`:hum.id==='bloqueios'?`<a class="btn" href="#erros/${escHtml(code)}">Ver os problemas</a>`:'<small class="help">Falta um admin resolver.</small>']}
       return ['Lote aprovado. O painel autoriza e envia ao site na hora.',ad?bt('Publicar','publicar'):'<small class="help">Falta um admin publicar.</small>']})(),
     publicado:['Tudo certo: este lote já foi publicado.',linkPublicoProjeto(code)],
     processando:[l.etapa==='enviado'?'O lote está na fila do CAMP Vision.':'O CAMP Vision está lendo as folhas deste projeto.',''],
@@ -3638,12 +3638,13 @@ async function carregarProximoPasso(code){const b=document.getElementById('pj-pr
 async function avisoTarefaPub(code){const b=document.getElementById('pj-proximo');if(!b)return;try{const at=(await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa')).tarefa;
   if(at&&at.estado==='rodando'){b.insertAdjacentHTML('afterbegin',`<div class="aviso-bloqueio pp-tarefa" role="status">⏳ <b>Publicando… ${escHtml(at.feitas)} de ${escHtml(at.total)}</b>${at.folha_atual?` · agora: <span class="code">${escHtml(at.folha_atual)}</span>`:''} <button class="btn sm" data-pub-abrir="${escHtml(code)}">Acompanhar</button></div>`);acompanharTarefaPub(code,at.id)}}catch(_){}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-pub-abrir]');if(t)abrirPublicacaoGuiada(t.dataset.pubAbrir)});
-async function passoProximo(acao,lote,code,btn){
+async function passoProximo(acao,lote,code,btn){const fim=!!(btn&&btn.closest('[data-fim-passo]'));   /* CAMP-070: do fim da conferência, fica ali e mostra o passo seguinte */
   if(acao==='importar'){acaoRevisaoLote('importar',lote,code,btn);return}   // CAMP-067: antes não desligava o botão nem dizia "Importando…" (QNAP lento parecia "não fez nada")
   if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else toast('Nenhuma folha pendente.');return}
   if(acao==='publicar'){abrirPublicacaoGuiada(code);return}
   try{let r={};if(acao==='importar'){r=await API('/api/lotes/'+encodeURIComponent(lote)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`)}
-    else if(acao==='aprovar'){if(!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;r=await API('/api/lotes/'+encodeURIComponent(lote)+'/aprovar',{method:'POST'});toast('Revisão aprovada')}
+    else if(acao==='aprovar'){if(!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;if(btn)btn.disabled=true;try{r=await API('/api/lotes/'+encodeURIComponent(lote)+'/aprovar',{method:'POST'})}finally{if(btn&&btn.isConnected)btn.disabled=false}toast('Lote aprovado')}
+    if(fim){await fimConferenciaPasso(code);if(!revConf()&&window.PROJETO_PJ===code)carregarRevisaoLote(code);return}   /* a página do projeto por baixo também anda (cartões e próximo passo) */
     await showProjeto(code);avisoResultadoLote(acao,r,code)}catch(e){toast(e.message);avisoNoLugar(`<b>✖ Não deu:</b> ${escHtml(e.message)}`,{tipo:'erro',antes:document.getElementById('pj-proximo')||'#pd',id:'lote'})}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-pp]');if(b&&!b.disabled)passoProximo(b.dataset.pp,b.dataset.lote,b.dataset.projeto,b);const c=e.target.closest('[data-pp-cond]');if(c)acaoCondicao(c.dataset.ppCond,c.dataset.alvo)});
 async function carregarRevisaoLote(code){
@@ -3744,9 +3745,18 @@ function ligarRevisaoItem(codigo,dica){const b=revHost();if(!b)return;
   b.querySelectorAll('.rev-campo input,.rev-campo select').forEach(el=>{if(el.id==='rv-motivo'||el.closest('[data-parc-linhas]'))return;const orig=el.tagName==='SELECT'?((el.querySelector('option[selected]')||{}).value||''):el.type==='checkbox'?null:()=>el.dataset.orig!=null?el.dataset.orig:el.defaultValue;if(orig===null)return;const marca=()=>el.closest('.rev-campo').classList.toggle('alterado',el.value!==(typeof orig==='function'?orig():orig));el.addEventListener('input',marca);el.addEventListener('change',marca)});
   /* 19/10: clicar na imagem abre só a imagem numa aba nova (para ler); o link acompanha o giro/espelho (trocarPreviaNaTela) */
   if(dica){try{localStorage.setItem('camp.dicaRev',String(Number(localStorage.getItem('camp.dicaRev')||0)+1))}catch(_){}}}
-function concluirConferencia(){const n=(window.ITENS_PJ||[]).filter(x=>x.lote_id).length,adm=EU&&['admin','master'].includes(EU.papel),loteId=((window.ITENS_PJ||[]).find(x=>x.lote_id)||{}).lote_id;
-  openDrawer('Conferência concluída','',`<div class="estado-vazio" role="status"><b>✔ Era a última. ${n} de ${n} folhas conferidas.</b><p>${adm?'Agora você pode aprovar o lote e, depois, publicar o projeto.':'Falta um admin aprovar o lote. Ele vê o lote em Material novo → "Para admin".'}</p><div class="act">${adm&&loteId?`<button class="btn pri" data-pp="aprovar" data-lote="${escHtml(loteId)}" data-projeto="${escHtml(alvoProjetoAtual()||'')}" onclick="closeDrawer(true)">Aprovar o lote</button><button class="btn" id="rev-fim">Ver o próximo passo</button>`:'<button class="btn pri" id="rev-fim">Ver o próximo passo</button>'}</div></div>`);
-  const b=document.getElementById('rev-fim');if(b)b.onclick=()=>{closeDrawer(true);const e=document.getElementById('pj-proximo');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}}
+function concluirConferencia(){const n=(window.ITENS_PJ||[]).filter(x=>x.lote_id).length,code=window.PROJETO_PJ||alvoProjetoAtual()||'';
+  openDrawer('Conferência concluída','',`<div class="estado-vazio fim-conf" role="status"><b>✔ Era a última. ${n} de ${n} folhas conferidas.</b>${fimPassoHTML(code)}<div class="act"><button class="btn" id="rev-fim">Fechar e ver o projeto</button></div></div>`);
+  const b=document.getElementById('rev-fim');if(b)b.onclick=()=>{closeDrawer(true);const e=document.getElementById('pj-proximo');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})};fimConferenciaPasso(code)}
+/* CAMP-070 (20/10, "não consegui publicar diretamente após conferir todas as folhas, foi necessário sair da página"): ao conferir a última folha,
+   o próximo passo aparece ali mesmo, com o botão certo (o MESMO da página do projeto): "Aprovar o lote" → "Publicar", ou o que impede publicar.
+   O caminho (Importar → Conferir → Aprovar → Publicar) mostra onde o lote está. Depois de aprovar, o quadro se atualiza no lugar. */
+function fimPassoHTML(code){return `<div class="fim-passo" data-fim-passo="${escHtml(code)}" aria-live="polite"><p class="help">Vendo o próximo passo…</p></div>`}
+async function fimConferenciaPasso(code){const box=[...document.querySelectorAll('[data-fim-passo]')].find(x=>x.dataset.fimPasso===code);if(!box||!code)return;
+  try{const [r,g]=await Promise.all([API('/api/projetos/'+encodeURIComponent(code)+'/proximo-passo'),API('/api/projetos/'+encodeURIComponent(code)+'/publicacao').catch(()=>null)]);
+    if(g){window.PUB_G=window.PUB_G||{};window.PUB_G[code]=g}if(!box.isConnected)return;
+    box.innerHTML=r.lote?proximoPassoHTML(r,code):proximoPassoSemLoteHTML(code,g)}
+  catch(e){if(box.isConnected)box.innerHTML=`<p class="help">Não consegui ver o próximo passo (${escHtml(e.message)}). Ele está na página do projeto.</p>`}}
 document.addEventListener('keydown',e=>{
   if(!revTeclas())return;   /* gaveta "Revisar folha" aberta, ou a tela de conferir sem gaveta por cima */
   if(/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(e.target.tagName||'')||e.metaKey||e.ctrlKey||e.altKey||window._REV_SALVANDO||document.getElementById('conf-ov'))return;   /* SUMMARY: Enter em "Não publicar esta folha" abre o quadro, não confirma a folha */
@@ -3919,10 +3929,10 @@ function confMostrarFolha(codigo,corpo){const pn=document.getElementById('cf-pan
   if(AJ)AJ=null;CONF.atual=codigo;limparAlteracoes('conferir');
   pn.innerHTML=`<h2>${escHtml(confNomeFolha(it))}${it.folha?` <small class="help">folha ${escHtml(it.folha)}</small>`:''}</h2>${confAvisosHTML(it)}${corpo}`;
   confDesenharLista();confUrl();const g=document.querySelector('#cfv .cf-grade');if(g&&g.getBoundingClientRect().top<0)g.scrollIntoView({block:'start'})}
-function confConcluida(ultima){const pn=document.getElementById('cf-pane');if(!pn)return;const L=confFolhas(),n=L.length,adm=EU&&['admin','master'].includes(EU.papel);
+function confConcluida(ultima){const pn=document.getElementById('cf-pane');if(!pn)return;const L=confFolhas(),n=L.length,code=CONF.code;
   CONF.atual=null;limparAlteracoes('conferir');
-  pn.innerHTML=`<div class="estado-vazio" role="status"><b>✔ ${ultima?`Era a última. ${n} de ${n} folhas conferidas.`:'Era a última folha da lista.'}</b><p>${ultima?(adm?'Agora você pode aprovar o lote na página do projeto e, depois, publicar.':'Falta um admin aprovar o lote. Ele vê o lote em Material novo → "Para admin".'):'Clique numa folha da lista para rever.'}</p><div class="act"><button type="button" class="btn pri" data-cf-projeto>Ver o projeto</button></div></div>`;
-  confDesenharLista();confUrl()}
+  pn.innerHTML=`<div class="estado-vazio fim-conf" role="status"><b>✔ ${ultima?`Era a última. ${n} de ${n} folhas conferidas.`:'Era a última folha da lista.'}</b>${ultima?fimPassoHTML(code):'<p>Clique numa folha da lista para rever.</p>'}<div class="act"><button type="button" class="btn" data-cf-projeto>Ver o projeto</button></div></div>`;
+  confDesenharLista();confUrl();if(ultima)fimConferenciaPasso(code)}
 /* trocar de folha pela lista ou pelas setas: com algo digitado e não salvo, pergunta antes (como a gaveta) */
 async function confAbrir(c){if(!c||(c===CONF.atual&&revAberta()===c))return;if(temAlteracoes('conferir')){if(!await confirmarDescarte())return;limparAlteracoes('conferir')}abrirRevisaoItem(c)}
 function confMover(k){const V=confVisiveis(),i=V.findIndex(x=>x.codigo===CONF.atual),a=V[i<0?0:i+k];if(a)confAbrir(a.codigo)}
