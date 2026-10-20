@@ -221,6 +221,16 @@ def registrar_campos_revisados(con, codigo: str, estado: str, por: str) -> None:
 # e os problemas automáticos do CAMP Vision que são "olhe esta folha" (giro, espelho, dado lido) fecham com registro de quem conferiu.
 # Duplicata, outro projeto, autoria e retirada têm ação própria e NÃO fecham por conferir.
 CATEGORIAS_FECHADAS_AO_CONFERIR = ("orientacao", "espelhado", "metadado")
+# 20/10 (print da F026-P0009: "se eu resolvo um problema ele tem que sair da lista"): o aviso "série incerta na triagem … conferir na folha de
+# contatos" chega com categoria fora da lista do painel (fica 'outro'; a tabela erro tem CHECK) e não fechava ao conferir. Os avisos do CAMP Vision que só pedem
+# "olhe esta folha" fecham pela categoria OU pelo texto (o que já está na base com 'outro' também).
+_OLHE_A_FOLHA = ("conferir na folha de contatos", "serie incerta", "orientacao incerta", "espelhad")
+
+
+def pede_so_olhar_a_folha(descricao) -> bool:
+    import unicodedata
+    t = "".join(ch for ch in unicodedata.normalize("NFD", str(descricao or "")) if unicodedata.category(ch) != "Mn").lower()
+    return any(x in t for x in _OLHE_A_FOLHA)
 
 
 def resolver_ao_conferir(con, codigo: str, estado: str, ator: str) -> dict:
@@ -231,9 +241,10 @@ def resolver_ao_conferir(con, codigo: str, estado: str, ator: str) -> dict:
     if i and i["espelhado"] and i["espelho_manual"] is None:
         con.execute("UPDATE item SET espelho_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (int(i["espelhado"]), codigo))
         out["espelho_confirmado"] = True
-    q = ",".join("?" * len(CATEGORIAS_FECHADAS_AO_CONFERIR))
-    ids = [r[0] for r in con.execute(f"""SELECT id FROM erro WHERE codigo=? AND origem='campvision' AND situacao IN ('aberto','em_correcao')
-                                          AND categoria IN ({q})""", (codigo, *CATEGORIAS_FECHADAS_AO_CONFERIR))]
+    ids = [r["id"] for r in con.execute("""SELECT id, categoria, gravidade, descricao FROM erro WHERE codigo=? AND origem='campvision'
+                                              AND situacao IN ('aberto','em_correcao')""", (codigo,))
+           if r["categoria"] in CATEGORIAS_FECHADAS_AO_CONFERIR
+           or (r["categoria"] == "outro" and r["gravidade"] != "bloqueia" and pede_so_olhar_a_folha(r["descricao"]))]
     if ids:
         quem = "corrigiu" if estado == "corrigida" else "conferiu"
         con.execute(f"UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id IN ({','.join('?' * len(ids))})",

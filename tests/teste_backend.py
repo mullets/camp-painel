@@ -7751,6 +7751,50 @@ def filho(modo):
         ver("tela: vigia a marca e mostra 'Este projeto mudou' com 'Atualizar' (data-pj-mudou)", "/marca')" in html and "[data-pj-mudou]" in html and "dataset.pjMudou" in html)
         c.close()
         for l in res: print(l)
+    elif modo == "olhe_a_folha":
+        # 20/10 (print da F026-P0009: "se eu resolvo um problema ele tem que sair da lista, pelo amor de deus isso é básico!"): o aviso do CAMP Vision
+        # "série incerta na triagem … conferir na folha de contatos" vinha com categoria fora da lista ('outro') e não fechava ao conferir.
+        # Prova: conferir fecha (pelo texto); bloqueante, relatado por pessoa e de outra folha continuam; a migração 140 aplica a regra às já conferidas.
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from app.db import executar_script_idempotente
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F097','Fundo olhe')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F097',9)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F097-P0009','F097',9,'CRASA',1978)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F097-P0009','/nao/existe','revisao')").lastrowid
+        D = lambda n: f"F097-P0009-1978-S01-D{n:05d}"
+        for n, rev in ((1, "pendente"), (2, "conferida"), (3, "corrigida"), (4, "pendente")):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,lote_id,revisao) VALUES (?,?,?,?,?,?,?)", (D(n), "F097-P0009", "S01", n, "campvision", lote, rev))
+        SER = "série incerta na triagem — sinais misturados (papel escuro ou foto em prancha); conferir na folha de contatos"
+        def erro(cod, desc, grav="aviso", cat="outro", origem="campvision"):
+            return c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES (?,?,?,?,?,?)", (grav, cat, origem, cod, desc, "x")).lastrowid
+        e1 = erro(D(1), SER); e1b = erro(D(1), "D00001 com identificação para outra pasta (OUTRA) — fora da publicação até resolver", grav="bloqueia")
+        e1p = erro(D(1), "rasgo no canto", origem="revisao"); e4 = erro(D(4), SER)
+        e2 = erro(D(2), SER); e3 = erro(D(3), "orientação incerta — conferir na folha de contatos", cat="orientacao"); e2b = erro(D(2), "outra coisa qualquer")
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        sit = lambda i: c.execute("SELECT situacao FROM erro WHERE id=?", (i,)).fetchone()[0]
+        r = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"})
+        ver("conferir a folha fecha o aviso 'série incerta' (categoria 'outro', pelo texto)", r.status_code == 200 and sit(e1) == "corrigido" and e1 in ((r.json().get("resolvidos") or {}).get("problemas_fechados") or []), r.text[:300])
+        ver("o que impede publicar e o relatado por pessoa continuam abertos; o da outra folha também", sit(e1b) == "aberto" and sit(e1p) == "aberto" and sit(e4) == "aberto")
+        # migração 140: as já conferidas antes da correção
+        sql = (RAIZ / "db" / "migrations" / "140_fechar_olhe_a_folha_conferidas.sql").read_text(encoding="utf-8")
+        executar_script_idempotente(c, sql); c.commit()
+        ver("migração 140: folhas já conferidas/corrigidas têm os avisos 'olhe a folha' fechados", sit(e2) == "corrigido" and sit(e3) == "corrigido")
+        ver("migração 140: aviso de outro tipo, folha ainda a conferir e bloqueante ficam como estão", sit(e2b) == "aberto" and sit(e4) == "aberto" and sit(e1b) == "aberto")
+        ver("migração 140 deixa registro no histórico (evento por problema fechado)", c.execute("SELECT COUNT(*) FROM evento WHERE ator='migração 140'").fetchone()[0] == 2)
+        executar_script_idempotente(c, sql); c.commit()
+        ver("migração 140 rodada de novo não muda nada", c.execute("SELECT COUNT(*) FROM evento WHERE ator='migração 140'").fetchone()[0] == 2)
+        from app.problemas import enriquecer
+        ex = enriquecer(c, [dict(x) for x in c.execute("SELECT * FROM erro WHERE id=?", (e4,))])
+        ver("a gaveta do problema não diz 'Problema relatado' para aviso do CAMP Vision", ex and "relatado" not in (ex[0].get("o_que") or "").lower() and "Está certo" in (ex[0].get("fazer") or ""), str(ex)[:300])
+        c.close()
+        for l in res: print(l)
     elif modo == "camp069_outro_projeto":
         # 20/10 (CAMP-069, operadora no F009-P0092): "reconhecimento automático de folhas de outros projetos, não é possível abrir para checar, ou refazer
         # a ação". A folha que o CAMP Vision achou "de outra obra" é RETIRADA do lote: não existe no painel, o link não abria nada e só um admin a devolvia.
@@ -9545,6 +9589,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp120: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("150) 20/10: aviso 'olhe a folha' do CAMP Vision ('série incerta') fecha ao conferir; migração 140 nas já conferidas")
+rc, out = rodar("olhe_a_folha", f"{tmp}/olhe_a_folha.db")
+if rc != 0: ok(False, f"teste olhe_a_folha não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"olhe_a_folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

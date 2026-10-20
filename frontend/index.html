@@ -3282,8 +3282,8 @@ function pjProbsHTML(code){const d=window.PJ_D||{},L=((d.erros)||[]).filter(e=>e
   if(!L.length)return '<p class="help">Nenhum problema impede publicar.</p>';
   const its=new Set((window.ITENS_PJ||[]).map(i=>i.codigo)),vistos=new Set();   /* 20/10 (CAMP-069): folha "de outro projeto" mostra a imagem e as decisões; uma linha por folha */
   return `<ul class="pj-probs">${L.slice(0,30).map(e=>{const cod=String(e.codigo||''),folha=/^F\d{3}-P\d{4}-/.test(cod)&&cod.length>11,existe=its.has(cod);
-    if(folha&&ehDeOutroProjeto(e)){if(vistos.has(cod))return '';vistos.add(cod);return `<li class="pj-prob-fp"><span class="tag r">${escHtml(rotulo(e.categoria))}</span> <span class="code">${escHtml(cod.slice(11))}</span> <span>${escHtml(e.descricao||'')}</span>${foraProjetoHTML(cod,{mini:true,existe})}</li>`}
-    return `<li><span class="tag r">${escHtml(rotulo(e.categoria))}</span> ${folha&&existe?`<a class="lnk code" href="#conferir/${escHtml(code)}/${escHtml(cod)}">${escHtml(cod.slice(11))}</a>`:`<span class="code">${escHtml(folha?cod.slice(11):cod)}</span>`} <span>${escHtml(e.descricao||'')}</span></li>`}).join('')}</ul>${L.length>30?`<p class="help">e mais ${L.length-30}.</p>`:''}<p class="pj-gav-rodape"><button type="button" class="btn sm" data-pjc-resolver="${escHtml(code)}">Abrir em Problemas</button></p>`}
+    if(folha&&ehDeOutroProjeto(e)){if(vistos.has(cod))return '';vistos.add(cod);return `<li class="pj-prob-fp"><span class="tag r">${escHtml(rotuloErro(e))}</span> <span class="code">${escHtml(cod.slice(11))}</span> <span>${escHtml(e.descricao||'')}</span>${foraProjetoHTML(cod,{mini:true,existe})}</li>`}
+    return `<li><span class="tag r">${escHtml(rotuloErro(e))}</span> ${folha&&existe?`<a class="lnk code" href="#conferir/${escHtml(code)}/${escHtml(cod)}">${escHtml(cod.slice(11))}</a>`:`<span class="code">${escHtml(folha?cod.slice(11):cod)}</span>`} <span>${escHtml(e.descricao||'')}</span></li>`}).join('')}</ul>${L.length>30?`<p class="help">e mais ${L.length-30}.</p>`:''}<p class="pj-gav-rodape"><button type="button" class="btn sm" data-pjc-resolver="${escHtml(code)}">Abrir em Problemas</button></p>`}
 /* exaustão CAMP-105: os cartões chegam aos poucos (o "lote parado" só vem com o próximo passo, depois dos problemas). Uma gaveta aberta SOZINHA
    sobe para a mais urgente quando ela aparece; a que a pessoa abriu ou fechou não muda. Ordem: lote parado > problemas > dados. */
 const PJ_AUTO_ORDEM=['folhas','problemas','dados'];
@@ -3321,7 +3321,7 @@ function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},i
   o.acoes=acoes+(temDet?` <button type="button" class="lnk pjc-lnk" data-pjc-gav="folhas" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='folhas'}">Detalhes dos lotes</button>`:'');
   return {html:pjcCartao('folhas','Folhas',o),urg}}
 function pjcProblemas(code,d){const k=contaProblemas(d),C=escHtml(code),o={d:[]};
-  const tipos=[...new Set(((d&&d.erros)||[]).filter(e=>e.gravidade==='bloqueia'&&e.categoria!=='autoria_divergente').map(e=>rotulo(e.categoria).toLowerCase()))];
+  const tipos=[...new Set(((d&&d.erros)||[]).filter(e=>e.gravidade==='bloqueia'&&e.categoria!=='autoria_divergente').map(e=>rotuloErro(e).toLowerCase()))];
   if(k.bloq){o.cor='bl';o.v=fmtN(k.bloq);o.d.push(`${k.bloq===1?'impede':'impedem'} publicar${tipos.length?` (${escHtml(tipos.slice(0,3).join(', '))}${tipos.length>3?'…':''})`:''}`);if(k.total>k.bloq)o.d.push(qtd(k.total-k.bloq,'aviso','avisos'));o.acoes=pjcBt(`data-pjc-resolver="${C}"`,'Resolver')+` <button type="button" class="lnk pjc-lnk" data-pjc-gav="problemas" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='problemas'}">Ver quais</button>`}
   else if(k.total){o.cor='at';o.v=fmtN(k.total);o.d.push(`${k.total===1?'aviso':'avisos'} · nenhum impede publicar`);o.acoes=`<button type="button" class="btn sm" data-pjc-resolver="${C}">Ver problemas</button>`}
   else{o.cor='ok';o.v='0';o.d.push('nenhum problema aberto')}
@@ -4313,9 +4313,16 @@ function depoisDaRevisao(codigo,eraPendente){const L=(window.ITENS_PJ||[]).filte
 function aplicarResolvidos(codigo,r){if(!r)return;const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);
   if(r.espelho_confirmado&&it&&it.espelho_manual==null)it.espelho_manual=it.espelhado?1:0;
   tirarErrosDaTela(r.problemas_fechados||[])}
+/* 20/10: problema sem categoria conhecida vindo do CAMP Vision não se chama "outro" na tela */
+function rotuloErro(e){return e&&e.categoria==='outro'&&e.origem==='campvision'?'aviso do CAMP Vision':rotulo(e&&e.categoria)}
 function tirarErrosDaTela(ids){if(!ids||!ids.length)return;const S=new Set(ids.map(String)),f=L=>(L||[]).filter(e=>!S.has(String(e.id)));
+  /* 20/10 ("se eu resolvo um problema ele tem que sair da lista"): a aba Problemas do projeto (tabela, número da aba e resumo) também */
+  S.forEach(id=>document.querySelectorAll(`#pd tr[data-abrir="erro:${CSS.escape(id)}"]`).forEach(tr=>tr.remove()));
   if(window.PJ_D&&window.PJ_D.erros)window.PJ_D.erros=f(window.PJ_D.erros);if(CONF.d&&CONF.d.erros)CONF.d.erros=f(CONF.d.erros);
-  const code=window.PJ_D&&window.PJ_D.projeto&&window.PJ_D.projeto.codigo;if(code&&document.getElementById('pj-cards'))desenharCartoes(code)}
+  const code=window.PJ_D&&window.PJ_D.projeto&&window.PJ_D.projeto.codigo;if(code&&document.getElementById('pj-cards'))desenharCartoes(code);
+  if(code&&window.PJ_D){const k=contaProblemas(window.PJ_D),ab=[...document.querySelectorAll('#pd [role="tab"]')].find(b=>/^Problemas \(/.test(b.textContent));
+    if(ab)ab.innerHTML=`Problemas (${fmtN(k.total)})${k.bloq?` <span class="tag r mini">${fmtN(k.bloq)} ${k.bloq===1?'bloqueia':'bloqueiam'}</span>`:''}`;
+    const pc=document.querySelector('#pd .pj-prob-conta');if(pc)pc.textContent=slProblemas(window.PJ_D,code).txt||'nenhum problema aberto'}}
 function revisaoMostra(codigo){return !!codigo&&revAberta()===codigo}
 /* o que foi salvo vale também na lista da página (a tela de conferir mostra o tipo de cada folha) */
 function revCopiarCampos(codigo,b){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(!it)return;['titulo','tipo_documento','folha','escala','endereco_folha','cliente_folha','ano_folha'].forEach(k=>{if(k in b)it[k]=b[k]})}
@@ -5055,7 +5062,7 @@ function errFpHTML(e,mini){if(!e.folha||!ehDeOutroProjeto(e)&&e.tipo!=='retirada
 function errLinhaHTML(e,k,oculto){const ab=ERR_ABERTO(e),res=pode('problema.resolver');
   return `<tr data-abrir="erro:${escHtml(e.id)}" data-err-linha="${escHtml(e.id)}" data-err-grupo="${escHtml(k)}"${oculto?' hidden':''}><td class="err-sel-col">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.codigo)}">`:''}</td>
     <td><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span></td><td>${errOnde(e)}</td>
-    <td><p class="err-oque"><b>${escHtml(rotulo(e.categoria))}</b> — ${escHtml(e.descricao)}</p>${k==='~talvez'&&e.resolvido_sozinho?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}${ab&&e.fazer&&k!=='~talvez'?`<span class="err-fazer">O que fazer: ${escHtml(e.fazer)}</span>`:''}${!ab&&e.resolucao?`<span class="err-det">Resolução: ${escHtml(e.resolucao)}</span>`:''}${k!=='~talvez'?errAcaoBotao(e):''}${errFpHTML(e,true)}</td>
+    <td><p class="err-oque"><b>${escHtml(rotuloErro(e))}</b> — ${escHtml(e.descricao)}</p>${k==='~talvez'&&e.resolvido_sozinho?`<span class="err-sozinho">Pode já estar resolvido: ${escHtml(e.resolvido_sozinho.motivo)}</span>`:''}${ab&&e.fazer&&k!=='~talvez'?`<span class="err-fazer">O que fazer: ${escHtml(e.fazer)}</span>`:''}${!ab&&e.resolucao?`<span class="err-det">Resolução: ${escHtml(e.resolucao)}</span>`:''}${k!=='~talvez'?errAcaoBotao(e):''}${errFpHTML(e,true)}</td>
     <td>${origemErroHTML(e)}</td><td>${errSituacaoHTML(e)}</td></tr>`}
 function errGrupoHTML(k,L){const talvez=k==='~talvez',e0=L[0],fechado=!talvez&&ERR_GR_FECHADOS.has(k),res=pode('problema.resolver'),abertos=L.filter(ERR_ABERTO);
   const nome=talvez?'<b>Podem já estar resolvidos</b> <span class="err-gr-resumo">a folha sumiu, mudou de código ou já foi girada: confira e feche</span>':e0.projeto_codigo?`<b>${escHtml(tituloExibicao(e0.projeto_titulo||'')||'Projeto sem nome')}</b> <span class="code">${escHtml(e0.projeto_codigo)}</span>`:e0.fundo_codigo?`<b>${escHtml(e0.fundo_titulo||'Fundo')}</b> <span class="code">${escHtml(e0.fundo_codigo)}</span>`:`<span class="code">${escHtml(k)}</span>`;
@@ -5109,6 +5116,9 @@ async function errExecutar(acao,e){const proj=e.projeto_codigo,f=e.folha;
   if(acao==='duplicata'){await marcarDuplicata(f);closeDrawer(true);carregarErros();return}
   if(acao==='autoria'){await registrarAutoria(proj);closeDrawer(true);carregarErros();return}
   if(acao==='mover'){openDrawer('É de outro projeto',f,`<p class="help">Escolha o projeto certo. A folha ganha o código dele; o código antigo fica guardado e aparece no histórico dos dois projetos. Só projetos do mesmo fundo. O problema fecha sozinho quando a folha é movida.</p>${outroProjetoCorpoHTML(f,'err')}`);setTimeout(()=>{const i=document.querySelector('#d-body .op-busca');if(i)i.focus()},50);return}
+  /* 20/10 (print da F026-P0009): aberto da aba Problemas do próprio projeto, "Abrir a folha" abre a revisão ALI (conferir/girar/espelhar),
+     sem sair da lista — ao conferir, o problema sai da lista na hora. Antes ia para a página da folha, onde não dá para conferir. */
+  if(['girar','espelhar','abrir_folha'].includes(acao)&&f&&window.PROJETO_PJ===proj&&rotaAtual().startsWith('projeto/')&&(window.ITENS_PJ||[]).some(x=>x.codigo===f&&x.lote_id)){abrirRevisaoItem(f);return}
   errSair();
   if(acao==='abrir_lote'){window.ACAO_APOS_PROJETO={tipo:'cv',codigo:proj};nav('projeto/'+proj)}
   else if(['girar','espelhar','abrir_folha'].includes(acao)){window.ACAO_APOS_PROJETO={tipo:'folha',codigo:proj,folha:f};nav('projeto/'+proj)}
@@ -5136,7 +5146,7 @@ async function abrirErro(id,o={}){let e;try{e=await API('/api/erros/'+id)}catch(
   const onde=e.projeto_codigo?`<a class="lnk" href="#projeto/${escHtml(e.projeto_codigo)}" data-err-sair>${escHtml(tituloExibicao(e.projeto_titulo||'')||'Projeto')} <span class="code">${escHtml(e.projeto_codigo)}</span></a>${e.folha?` › <span class="code">${escHtml(String(e.folha).slice(11))}</span>${e.folha_existe&&e.tipo==='comum'?` <a class="lnk" href="#item/${escHtml(e.folha)}" data-err-sair>abrir a folha</a>`:''}`:''}`:e.fundo_codigo?`<a class="lnk" href="#fundo/${escHtml(e.fundo_codigo)}" data-err-sair>${escHtml(e.fundo_titulo||'Fundo')} <span class="code">${escHtml(e.fundo_codigo)}</span></a>`:`<span class="code">${escHtml(e.codigo)}</span>`;
   const extra=ab&&res&&e.tipo==='retirada'?(adm&&e.lote_id?`<div class="err-dev"><input id="err-dev-mot" maxlength="300" placeholder="Por que a folha volta para a revisão?" aria-label="Por que a folha volta para a revisão"><button class="btn pri" type="button" data-err-devolver>Devolver à revisão</button></div>`:adm?'':'<p class="help">Só um admin devolve uma folha retirada à revisão: peça a um admin.</p>')+`<div class="act"><button class="btn" type="button" data-err-retirada-certa="${escHtml(e.id)}">A retirada está certa</button></div>`:'';
   const so=e.resolvido_sozinho&&ab?`<div class="err-aviso-sozinho" role="status"><b>Pode já estar resolvido.</b> ${escHtml(e.resolvido_sozinho.motivo)}</div>`:'';
-  openDrawer(e.tipo==='retirada'?'Folha retirada pelo CAMP Vision':e.tipo==='recusada'?'Folha recusada na importação':rotulo(e.categoria),e.codigo,`${so}<div class="err-bloco"><p>${onde}</p></div>
+  openDrawer(e.tipo==='retirada'?'Folha retirada pelo CAMP Vision':e.tipo==='recusada'?'Folha recusada na importação':rotuloErro(e),e.codigo,`${so}<div class="err-bloco"><p>${onde}</p></div>
     <div class="err-bloco"><h3>O que aconteceu</h3><p>${escHtml(e.o_que||'')}</p><p class="help">${escHtml(e.descricao)}</p></div>
     ${ab?`<div class="err-bloco"><h3>O que fazer</h3><p>${escHtml(e.fazer||'')}</p>${ehDeOutroProjeto(e)&&e.folha?errFpHTML(e,false):e.tipo==='retirada'?extra:acao?`<div class="act">${acao}</div>`:''}</div>`:errFpHTML(e,false)}
     <dl class="kv"><dt>Gravidade</dt><dd><span class="tag ${GRAV_TAG[e.gravidade]}">${escHtml(e.gravidade)}</span>${e.gravidade==='bloqueia'?' <small class="help">o projeto não pode ser publicado até resolver</small>':''}</dd><dt>Origem</dt><dd>${escHtml((ORIGEM_ERRO[e.origem]||[])[2]||rotulo(e.origem))}${e.relatado_por?' · '+escHtml(e.relatado_por):''}</dd><dt>Relatado em</dt><dd>${fmtDataHora(e.criado_em)}</dd><dt>Situação</dt><dd>${errSituacaoHTML(e)}</dd>${e.resolucao&&(!ab||!res)?`<dt>Resolução</dt><dd>${escHtml(e.resolucao)}</dd>`:''}</dl>
@@ -5150,7 +5160,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-err-res]')
   document.getElementById('ee-sit').value=v;salvarErro(+b.dataset.errId)});
 async function salvarErro(id){const sit=document.getElementById('ee-sit').value;await salvarNoDrawer(async()=>{await API('/api/erros/'+id,{method:'PATCH',body:JSON.stringify({situacao:sit,resolucao:document.getElementById('ee-res').value||null})});toast({corrigido:'Problema marcado como corrigido',ignorado:'Problema fechado: não era problema',em_correcao:'Marcado: você está corrigindo',aberto:'Problema reaberto'}[sit]||'Problema atualizado');closeDrawer(true);carregarErros();carregarPainel()})}
 function exportarErros(){const L=ERR_LISTA,cab=['Projeto','Nome do projeto','Onde','Gravidade','Tipo','Detalhe','O que aconteceu','O que fazer','Origem','Relatado por','Situação','Relatado em','Resolução'];
-  const linhas=L.map(e=>[e.projeto_codigo||e.fundo_codigo||'',e.projeto_titulo||e.fundo_titulo||'',e.folha||e.codigo,e.gravidade,rotulo(e.categoria),e.descricao,e.o_que,ERR_ABERTO(e)?e.fazer:'',(ORIGEM_ERRO[e.origem]||[rotulo(e.origem)])[0],e.relatado_por||'',rotulo(e.situacao),e.criado_em,e.resolucao||'']);
+  const linhas=L.map(e=>[e.projeto_codigo||e.fundo_codigo||'',e.projeto_titulo||e.fundo_titulo||'',e.folha||e.codigo,e.gravidade,rotuloErro(e),e.descricao,e.o_que,ERR_ABERTO(e)?e.fazer:'',(ORIGEM_ERRO[e.origem]||[rotulo(e.origem)])[0],e.relatado_por||'',rotulo(e.situacao),e.criado_em,e.resolucao||'']);
   const filtros=[errFiltro,...['q','gravidade','categoria','origem','projeto'].map(k=>ERR_F[k]).filter(Boolean)].join(' · ');
   const csv='﻿'+[['Tela','Problemas'],['Exportado em',new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'medium'}).format(new Date())],['Filtro atual',filtros],[],cab,...linhas].map(r=>r.map(csvEscape).join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='camp-problemas-'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(qtd(linhas.length,'linha exportada','linhas exportadas'))}

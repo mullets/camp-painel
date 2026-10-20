@@ -133,6 +133,11 @@ def explicar(e, ctx: dict) -> dict:
            "fundo_codigo": fundo, "fundo_titulo": ctx["fundos"].get(fundo) if fundo else None,
            "folha_existe": bool(it) if folha else None, "folha_atual": None, "lote_id": None, "resolvido_sozinho": None}
     o_que, fazer = TEXTOS.get(e["categoria"], TEXTOS["outro"])
+    if e["categoria"] == "outro" and (e["origem"] or "") == "campvision":      # 20/10: não foi "relatado" por ninguém; foi o CAMP Vision
+        from .rotas_revisao import pede_so_olhar_a_folha
+        o_que = "O CAMP Vision apontou (veja o detalhe)."
+        if pede_so_olhar_a_folha(e["descricao"]):
+            fazer = "Abra a folha e confira. Se estiver certa, \"Está certo\" resolve e o aviso sai daqui; se algo estiver errado, corrija e salve."
     acao = None
     sozinho = None
     criado = e["criado_em"] or ""
