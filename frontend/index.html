@@ -5043,6 +5043,8 @@ function errSituacaoHTML(e){const dias=diasDesde(e.criado_em);
 /* 20/10 (CAMP-069): folha "de outro projeto" na tela Problemas: a imagem e as decisões (aberto); "Desfazer" (fechado por "É deste projeto") */
 function errFpHTML(e,mini){if(!e.folha||!ehDeOutroProjeto(e)&&e.tipo!=='retirada')return '';const ab=ERR_ABERTO(e);
   if(ab&&ehDeOutroProjeto(e))return foraProjetoHTML(e.folha,{linha:mini,existe:!!e.folha_existe});
+  /* CAMP-097 (exaustão): retirada por outro motivo (capa, decisão…): a decisão é de admin ("Devolver à revisão"), mas a imagem tem de dar para ver antes */
+  if(ab&&e.tipo==='retirada'&&!e.folha_existe)return `<div class="fp-box linha" data-fp-box="${escHtml(e.folha)}"><a class="lnk" href="/api/itens/${encodeURIComponent(e.folha)}/previa" target="_blank" rel="noopener" data-fp-folha="${escHtml(e.folha)}" title="Abrir a imagem grande em outra aba">Ver a folha</a></div>`;
   return !ab&&/^É deste projeto:/.test(e.resolucao||'')&&EU&&EU.papel!=='leitura'?`<div class="act"><button class="btn sm" type="button" data-deste-desfazer="${escHtml(e.folha)}">Desfazer "É deste projeto"</button></div>`:''}
 function errLinhaHTML(e,k,oculto){const ab=ERR_ABERTO(e),res=pode('problema.resolver');
   return `<tr data-abrir="erro:${escHtml(e.id)}" data-err-linha="${escHtml(e.id)}" data-err-grupo="${escHtml(k)}"${oculto?' hidden':''}><td class="err-sel-col">${res&&ab?`<input type="checkbox" class="err-sel" value="${escHtml(e.id)}"${ERR_SEL.has(e.id)?' checked':''} aria-label="Selecionar o problema ${escHtml(e.codigo)}">`:''}</td>
@@ -5109,7 +5111,9 @@ async function errExecutar(acao,e){const proj=e.projeto_codigo,f=e.folha;
 async function errFechar(id,situacao,resolucao){try{await API('/api/erros/'+id,{method:'PATCH',body:JSON.stringify({situacao,resolucao})});toast({corrigido:'Problema marcado como corrigido',ignorado:'Problema fechado: não era problema',em_correcao:'Marcado: você está corrigindo',aberto:'Problema reaberto'}[situacao]||'Problema atualizado');closeDrawer(true);carregarErros();carregarPainel()}catch(err){toast(err.message)}}
 async function errDevolver(b){const e=window.ERR_ATUAL,m=document.getElementById('err-dev-mot'),mot=(m&&m.value||'').trim();if(!e)return;if(mot.length<3){toast('Explique por que a folha volta para a revisão');if(m)m.focus();return}
   b.disabled=true;try{await API('/api/lotes/'+encodeURIComponent(e.lote_id)+'/saidas-cv/resposta',{method:'POST',body:JSON.stringify({tipo:'retirado',chave:e.folha,acao:'devolver',motivo:mot})});
-    toast('Folha devolvida à revisão: entra na próxima importação. O problema foi fechado.');closeDrawer(true);carregarErros()}catch(err){toast(err.message);b.disabled=false}}
+    /* CAMP-097 (exaustão): antes a folha só entrava "na próxima importação" (ninguém sabia que tinha de importar de novo); agora lê o lote na hora, como o "É deste projeto" */
+    let entrou=false;toast('Folha devolvida à revisão. Lendo o lote de novo…');try{await API('/api/lotes/'+encodeURIComponent(e.lote_id)+'/importar',{method:'POST'});entrou=true}catch(_){}
+    toast(entrou?`Folha ${e.folha} devolvida: já está no painel para conferir. O problema foi fechado.`:'Folha devolvida à revisão: entra quando o lote for importado de novo. O problema foi fechado.');closeDrawer(true);carregarErros()}catch(err){toast(err.message);b.disabled=false}}
 async function errEmLote(acao,b){const er=document.getElementById('err-bulk-err'),res=document.getElementById('err-bulk-res');if(er)er.textContent='';
   if(acao==='limpar'){ERR_SEL.clear();document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=false);errAtualizarSelecao();return}
   const ids=[...ERR_SEL],txt=(res&&res.value||'').trim();if(!ids.length)return;
