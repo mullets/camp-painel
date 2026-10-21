@@ -144,6 +144,8 @@ T.rodar(async () => {
 
   // ---------------- CAMP-112 ----------------
   passo('CAMP-112: folha publicada girada → "Atualizar imagem no site"');
+  // 21/10: este é o caminho com o envio automático DESLIGADO (o botão continua para quando o site recusa); o automático é provado logo depois
+  sql("UPDATE configuracao SET valor='0' WHERE chave='site.enviar_correcoes_sozinho'");
   const F = c.D(2);
   await T.abrirProjeto(op, c.P);
   await op.click(`.thumb[data-rev-abrir="${F}"] .cap`);
@@ -184,6 +186,16 @@ T.rodar(async () => {
   await ad.reload(); await ad.waitForTimeout(1500);
   chk(!(await ad.$(`[data-img-site-pend="${F}"]`)), 'CAMP-112: recarregando, a faixa continua sumida');
   await print(ad, '112_atualizada');
+  passo('21/10 (Rafa: "ao alterar aí, já altere automaticamente"): operadora gira a folha publicada e o site recebe sozinho');
+  sql("UPDATE configuracao SET valor='1' WHERE chave='site.enviar_correcoes_sozinho'");
+  const ev0 = +um("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='site_alteracoes_enviadas'", F);
+  await T.abrirProjeto(op, c.P); await op.click(`.thumb[data-rev-abrir="${F}"] .cap`);
+  await op.waitForSelector(`#d-body [data-rev-girar="90"]`, { timeout: 10000 }); await op.click(`#d-body [data-rev-girar="90"]`);
+  chk(await espera(() => +um("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='site_alteracoes_enviadas'", F) === ev0 + 1, 15000), 'automático: o site recebe a imagem girada sem ninguém clicar');
+  chk(um("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND campo='pendente_imagem_ajustada' AND COALESCE(resolvida,0)=0", F) === 0, 'automático: nenhuma pendência de imagem fica aberta');
+  await op.waitForTimeout(5000);
+  chk(!(await op.$(`[data-img-site-pend="${F}"]`)), 'automático: a faixa "site desatualizado" não aparece');
+  await op.evaluate(() => closeDrawer(true));
 
   // ---------------- CAMP-113 ----------------
   passo('CAMP-113: despublicar, republicar e trocar a capa');

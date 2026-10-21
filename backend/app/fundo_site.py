@@ -1,6 +1,6 @@
 """CAMP-015 · "Enviar fundo ao site": termo da taxonomia + página-hub do arquiteto com os campos preenchidos no painel (inclusive biografia, fontes e foto).
 
-- Só vão os campos PREENCHIDOS (a rota do hub do site ignora vazio, para não apagar texto escrito à mão no WordPress). Para LIMPAR um campo de
+- Só vão os campos PREENCHIDOS (a rota do hub do site ignora vazio, para não apagar texto já escrito no site). Para LIMPAR um campo de
   propósito, o painel manda o valor especial "__limpar__" (publicador.HUB_LIMPAR) e o site apaga só esse campo.
 - Divergência painel × site: o painel não lê o hub no site; compara o que há agora no painel com o ÚLTIMO envio (fundo_envio_site).
 - Página pública do arquiteto: leitura do espelho do site (wp_pagina /acervo/arquitetos/…); o plano de publicação avisa quando não existe."""
@@ -104,7 +104,7 @@ def _achar_no_site(con, wp, codigo: str) -> dict | None:
 
 
 def mudar_pagina_arquiteto(codigo: str, publicar: bool, ator: str, motivo: str | None = None) -> dict:
-    """21/10 (Rafa: "muito confuso publicar um arquiteto"): o painel publica (ou tira do público) a página do arquiteto, sem passar pelo wp-admin.
+    """21/10 (Rafa: "muito confuso publicar um arquiteto"): o painel publica (ou tira do público) a página do arquiteto; ninguém precisa ir ao site.
 
     Publicar: cria/atualiza antes o fundo no site (termo, página, biografia, retrato) e então põe a página como publicada. Sem ela pública o site
     esconde TODOS os projetos do fundo, mesmo os publicados. Tirar: a página volta a rascunho (e os projetos do fundo somem do público junto).

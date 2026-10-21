@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -3677,6 +3677,141 @@ def filho(modo):
         ver("leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 403 and anon.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 401 and op.post("/api/itens/F089-P0002-1970-S01-D99999/retencao", json={"retida": True}).status_code == 404)
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
+        for l in res: print(l)
+    elif modo == "metadados_lote":
+        # 21/10 ("pq demora tanto pra subir um projeto?"): o site ganhou a rota de metadados em lote (camp-wordpress CAMP-055). Os de TEXTO
+        # de cada folha vão numa chamada só; taxonomia continua um por um; sem a rota (404), tudo como antes
+        init_db(); _aplicar_migracoes_real()
+        import app.publicador as pub
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F080','Fundo Lote','LOT',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F080',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F080-P0001','F080',1,'Casa',1970,7000)")
+        D = lambda n: f"F080-P0001-1970-S01-D0000{n}"
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,folha,escala,origem) VALUES (?,?,?,?,?,?,?,?,'importado')",
+                      (D(n), "F080-P0001", "S01", n, f"Planta {n}", "Planta", f"0{n}/03", "1:50"))
+        MT = "Tainacan\\Metadata_Types\\"
+        for mid, nome, tipo in ((8030, "Código do documento", "Text"), (8052, "Escala", "Text"), (8054, "Folha", "Text"), (8060, "Título", "Text"),
+                                (8046, "Ano", "Text"), (8038, "Série", "Taxonomy")):
+            c.execute("INSERT OR REPLACE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (?,8013,?,?)", (mid, nome, MT + tipo))
+        c.commit(); c.close()
+        lotes, um_a_um, modo_site = [], [], {"rota": True, "recusa": set()}
+        class FakeWP:
+            n = 7100
+            def criar_item(self, cid, titulo, status="draft", descricao=""):
+                FakeWP.n += 1; return {"id": FakeWP.n, "slug": "x", "url": "u"}
+            def definir_metadado(self, wid, mid, valor): um_a_um.append((wid, mid, valor))
+            def patch_item(self, *a, **k): pass
+            def gravar_metadados_lote(self, wid, corpo):
+                if not modo_site["rota"]:
+                    return None
+                lotes.append((wid, dict(corpo)))
+                return {"ok": True, "gravados": [k for k in corpo if k not in modo_site["recusa"]], "erros": [{"nome": k, "motivo": "x"} for k in corpo if k in modo_site["recusa"]]}
+        pub.WP = FakeWP
+        pub.item_existente_no_site = lambda *a, **k: None
+        r1 = pub.criar_folha_no_site(D(1), "t", enviar_imagem=False)
+        ver("os metadados de texto da folha vão numa chamada só (Código, Escala, Folha, Título, Ano)", len(lotes) == 1
+            and set(lotes[0][1]) >= {"Código do documento", "Escala", "Folha", "Título", "Ano"} and lotes[0][1]["Código do documento"] == D(1), str(lotes))
+        ver("taxonomia (Série) continua um por um; nenhum texto vai duas vezes", any(m == 8038 for _w, m, _v in um_a_um) and not any(m in (8030, 8052, 8054, 8060, 8046) for _w, m, _v in um_a_um), str(um_a_um))
+        ver("a resposta da folha lista tudo o que foi gravado (lote + um por um)", {"Código do documento", "Escala", "Série"} <= set(r1["metadados"]) and r1.get("metadados_em_lote", 0) >= 5, str(r1))
+        lotes.clear(); um_a_um.clear(); modo_site["recusa"] = {"Escala"}
+        pub.criar_folha_no_site(D(2), "t", enviar_imagem=False)
+        ver("campo que o lote não gravou vai de novo um por um (nada se perde)", any(m == 8052 and v == "1:50" for _w, m, v in um_a_um) and not any(m == 8030 for _w, m, _v in um_a_um), str(um_a_um))
+        lotes.clear(); um_a_um.clear(); modo_site["rota"] = False; pub._LOTE["ok"] = None
+        pub.criar_folha_no_site(D(3), "t", enviar_imagem=False)
+        ver("site sem a rota (404): tudo um por um, como antes, e o painel lembra (não tenta o lote de novo)",
+            any(m == 8030 for _w, m, _v in um_a_um) and any(m == 8052 for _w, m, _v in um_a_um) and pub._LOTE["ok"] is False, str(um_a_um))
+        for l in res: print(l)
+    elif modo == "divergencias_corrigir":
+        # 21/10 (Rafa: "nunca mande alguém para o WordPress"): divergências que diziam "corrija no WordPress" ganham o botão que corrige daqui
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, wp as _wpm
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F081','Fundo Certo','CRT',1,4811)")
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (501,8013,'publish','Planta','F081-P0001-1960-S01-D00001')")
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (502,8013,'publish','teste sem código',NULL)")
+        c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES ('item','F081-P0001-1960-S01-D00001','fundo_trocado','F081','Outro Arquiteto')")
+        c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES ('item','502','sem_codigo',NULL,'teste sem código')")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "A", "admin"), ("op@camp.arq.br", "O", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        chamadas = []
+        class WPDiv:
+            def __init__(self, *a, **k): pass
+            def definir_metadado(self, wid, mid, v): chamadas.append(("meta", wid, mid, v))
+            def atualizar_status_item(self, cid, wid, st): chamadas.append(("status", cid, wid, st))
+        _wpm.WP = WPDiv
+        k = connect(); sql = lambda q, *a: (k.execute(q, a).fetchone() or [None])[0]
+        g = {x["titulo"]: x for x in adm.get("/api/site/divergencias/resumo").json()["grupos"]}
+        ver("as explicações não mandam mais ao WordPress e cada grupo traz o botão", all("WordPress" not in x["explicacao"] for x in g.values())
+            and g["No site, o item está no fundo errado"].get("acao") == "Corrigir no site" and g["Item do site sem código CAMP"].get("acao") == "Tirar do público", str(g)[:300])
+        ver("operador não corrige (403)", op.post("/api/site/divergencias/corrigir", json={"campo": "fundo_trocado"}).status_code == 403)
+        r = adm.post("/api/site/divergencias/corrigir", json={"campo": "fundo_trocado"})
+        ver("'Corrigir no site': grava no item do site o fundo do código (o código vale) e fecha a divergência",
+            r.status_code == 200 and ("meta", 501, 8032, 4811) in chamadas and sql("SELECT resolvida FROM divergencia_site WHERE campo='fundo_trocado'") == 1, str(chamadas) + r.text[:200])
+        r = adm.post("/api/site/divergencias/corrigir", json={"campo": "sem_codigo", "codigos": ["502"]})
+        ver("'Tirar do público': o item sem código fica privado no site (nada é apagado) e a divergência fecha",
+            r.status_code == 200 and ("status", 8013, 502, "private") in chamadas and sql("SELECT status FROM wp_item WHERE id=502") == "private" and sql("SELECT resolvida FROM divergencia_site WHERE campo='sem_codigo'") == 1, r.text[:200])
+        ver("histórico das correções", sql("SELECT COUNT(*) FROM evento WHERE tipo LIKE 'divergencia_corrigida_%'") == 2)
+        ver("tipo sem conserto automático: 400", adm.post("/api/site/divergencias/corrigir", json={"campo": "sem_itens_no_site"}).status_code == 400)
+        k.close()
+        for l in res: print(l)
+    elif modo == "correcao_automatica":
+        # 21/10 (Rafa: "quem usa esse painel não usa o WordPress… preciso que ao alterar aí, já altere automaticamente"): correção numa folha
+        # já publicada (campos e imagem) vai sozinha ao site logo depois de salvar; só fica na lista "não chegou ao site" se o site recusar
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador as _pub, alteracoes_site as _alt
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F082','Fundo Auto','AUT',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F082',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES ('F082-P0001','F082',1,'Casa',1960,'no_ar',300)")
+        F1, F2 = "F082-P0001-1960-S01-D00001", "F082-P0001-1960-S01-D00002"
+        for q, cod, wid in ((1, F1, 301), (2, F2, 302)):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,escala,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,'1:50','campvision','conferida','no_ar',?)", (cod, "F082-P0001", q, f"Planta {q}", wid))
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'site_item_criado','x','{}')", (cod,))
+        MT = "Tainacan\\Metadata_Types\\"
+        for mid, nome in ((701, "Título"), (702, "Escala")):
+            c.execute("INSERT OR IGNORE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (?,8013,?,?)", (mid, nome, MT + "Text"))
+        c.commit(); c.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        envios, giros, falhar = [], [], {"img": False}
+        def fake_atualizar(cod, wid, cid, titulo, desc, md, ator):
+            envios.append((cod, wid, titulo, {k: v[2] for k, v in md.items()})); return {"enviados": list(md), "falhas": []}
+        def fake_girar(cod, giro, ajuste=None):
+            if falhar["img"]:
+                raise RuntimeError("o site respondeu 502")
+            giros.append((cod, giro)); return {"ok": True}
+        _pub.atualizar_folha_no_site, _pub.girar_imagem_no_site = fake_atualizar, fake_girar
+        k = connect()
+        pend = lambda: [x["codigo"] for x in _alt.pendentes(k, "F082-P0001")]
+        r = op.patch(f"/api/itens/{F1}", json={"titulo": "Planta do térreo"})
+        ver("corrigir o título de uma folha publicada: o site recebe sozinho, logo depois de salvar (sem clicar em nada)",
+            r.status_code == 200 and len(envios) == 1 and envios[0][0] == F1 and envios[0][1] == 301 and "Planta do térreo" in (envios[0][2] or ""), str(envios))
+        ver("e a folha não fica na lista 'não chegou ao site'", F1 not in pend(), str(pend()))
+        ver("fica no histórico o envio", k.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='site_alteracoes_enviadas'", (F1,)).fetchone()[0] == 1)
+        r = op.post(f"/api/itens/{F2}/girar", json={"graus": 90})
+        ver("operador gira a imagem de uma folha publicada: o site recebe a imagem girada sozinho", r.status_code == 200 and giros == [(F2, 90)], str(giros) + r.text[:120])
+        ver("e não fica o aviso 'site desatualizado'", F2 not in pend() and not k.execute("SELECT 1 FROM divergencia_site WHERE codigo=? AND resolvida=0", (F2,)).fetchone(), str(pend()))
+        falhar["img"] = True
+        op.post(f"/api/itens/{F2}/girar", json={"graus": 90})
+        ver("se o site recusar, a folha fica na lista para tentar de novo (nada se perde no painel)", F2 in pend() and k.execute("SELECT giro_manual FROM item WHERE codigo=?", (F2,)).fetchone()[0] == 180, str(pend()))
+        k.execute("UPDATE configuracao SET valor='0' WHERE chave='site.enviar_correcoes_sozinho'"); k.commit()
+        n = len(envios); op.patch(f"/api/itens/{F1}", json={"escala": "1:100"})
+        ver("configuração em 0: não envia sozinho; a correção fica na lista (como antes)", len(envios) == n and F1 in pend(), str(pend()))
+        k.close()
         for l in res: print(l)
     elif modo == "folhas_enviadas":
         # 21/10 (Rafa: "e se eu quiser subir algo direto pelo admin na pagina de projeto?" → "sim, sobe"): enviar folhas pela página do projeto,
@@ -7574,6 +7709,8 @@ def filho(modo):
                 im = Image.open(caminho); Fake.chamadas.append((media_id, im.size, vermelho(im, (24, 5)), nome)); return {"id": media_id, "source_url": "http://site-falso.invalid/f.jpg"}
         publicador.WP = Fake
         # ---------- (19/10) operador gira/espelha folha publicada NO PAINEL; o site fica pendente até o admin clicar "Atualizar imagem no site" ----------
+        # 21/10: isso agora é o caminho com site.enviar_correcoes_sozinho = 0 (o padrão envia sozinho; provado logo abaixo e no modo correcao_automatica)
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='site.enviar_correcoes_sozinho'")
         folha(D(9), "no_ar", 7009, 5559); c.commit()
         pend = lambda cod: c.execute("SELECT COUNT(*) FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (cod,)).fetchone()[0]
         r = op.post(f"/api/itens/{D(9)}/girar", json={"graus": 90})
@@ -7591,6 +7728,10 @@ def filho(modo):
         ver("admin 'Atualizar imagem no site': troca o arquivo do MESMO anexo (5559) pela imagem de agora e a pendência some",
             r.status_code == 200 and Fake.chamadas[-1][0] == 5559 and Fake.chamadas[-1][1] == (30, 60) and pend(D(9)) == 0 and nev(D(9), "imagem_atualizada_no_site") == 1, r.text[:200] + str(Fake.chamadas))
         ver("'Atualizar imagem no site' em folha fora do site: 409 explicando", adm.post(f"/api/itens/{D(6)}/imagem/atualizar-site").status_code == 409)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='site.enviar_correcoes_sozinho'"); c.commit()
+        n0 = len(Fake.chamadas); r = op.post(f"/api/itens/{D(9)}/girar", json={"graus": 90})
+        ver("21/10 (padrão): operador gira a folha publicada e o site recebe a imagem nova SOZINHO (mesmo anexo), sem pendência",
+            r.status_code == 200 and len(Fake.chamadas) == n0 + 1 and Fake.chamadas[-1][0] == 5559 and pend(D(9)) == 0, r.text[:200] + str(Fake.chamadas[n0:]))
         c.execute("DELETE FROM evento WHERE codigo=?", (D(9),)); c.execute("DELETE FROM divergencia_site WHERE codigo=?", (D(9),)); c.execute("DELETE FROM item WHERE codigo=?", (D(9),)); c.commit(); Fake.chamadas.clear()
         # ---------- (a) admin gira: troca o arquivo do anexo no site mantendo o ID ----------
         r = adm.post(f"/api/itens/{D(2)}/girar", json={"graus": 90})
@@ -8995,7 +9136,9 @@ def filho(modo):
         r = op.post(f"/api/itens/{D(2)}/ajuste", json={"angulo": 2})
         ver("lote aprovado (fora do site): ajustar agora pode (19/10, sem 'reabra a revisão')", r.status_code == 200 and "já foi aprovado" not in r.text, r.text)
         r = op.post(f"/api/itens/{D(3)}/ajuste", json={"angulo": 2})
-        ver("19/10: folha no site: operador ajusta no painel, o site NÃO é chamado e fica a pendência 'Atualizar imagem no site'", r.status_code == 200 and "admin" in (r.json().get("pendencia") or "") and col(D(3), "alinhamento") == 2, r.text)
+        ver("21/10: folha no site: operador ajusta no painel e o site recebe em seguida, sozinho (aqui o site não responde: fica a pendência para tentar de novo)",
+            r.status_code == 200 and "em seguida" in (r.json().get("pendencia") or "") and col(D(3), "alinhamento") == 2
+            and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND resolvida=0", (D(3),)).fetchone()[0] >= 1, r.text)
         c.execute("UPDATE item SET recorte=NULL, alinhamento=0, imagem_corrigida=NULL WHERE codigo=?", (D(3),)); c.execute("UPDATE divergencia_site SET resolvida=1 WHERE codigo=?", (D(3),)); c.execute("DELETE FROM evento WHERE codigo=? AND tipo='ajuste_imagem'", (D(3),)); c.commit()
         class Fake:
             chamadas, falhar = [], False
@@ -10192,6 +10335,30 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"folhas enviadas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("155) 21/10: correção numa folha publicada vai sozinha ao site (campos e imagem); a lista só fica com o que o site recusou")
+rc, out = rodar("correcao_automatica", f"{tmp}/correcao_automatica.db")
+if rc != 0: ok(False, f"teste correcao_automatica não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"correção automática: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("156) 21/10: divergências com o site se corrigem pelo painel (nada de mandar ao WordPress)")
+rc, out = rodar("divergencias_corrigir", f"{tmp}/divergencias_corrigir.db")
+if rc != 0: ok(False, f"teste divergencias_corrigir não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"divergências: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("157) 21/10: publicar mais rápido: metadados de texto da folha numa chamada só (rota do site; sem ela, como antes)")
+rc, out = rodar("metadados_lote", f"{tmp}/metadados_lote.db")
+if rc != 0: ok(False, f"teste metadados_lote não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"metadados em lote: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -53,6 +53,8 @@ T.rodar(async () => {
   await T.print(ad, 'faixa_neutra');
 
   T.passo('CAMP-124 (P3): corrigir uma folha publicada → selo e "Enviar 1 alteração ao site" → enviar → somem');
+  // 21/10: caminho com o envio automático DESLIGADO (o botão "Tentar enviar de novo" fica para quando o site recusa); o automático vem depois
+  T.sql("UPDATE configuracao SET valor='0' WHERE chave='site.enviar_correcoes_sozinho'");
   await T.abrirConferir(ad, P, D(5));
   await ad.waitForSelector('#rv-folha', { timeout: 10000 });
   await ad.fill('#rv-folha', '306'); await ad.click('#cf-pane [data-rev-item="corrigida"]'); await T.confirmar(ad);
@@ -62,11 +64,11 @@ T.rodar(async () => {
   T.chk(/alterada depois de publicar/.test(selo), 'CAMP-124: a miniatura da D00005 mostra "alterada depois de publicar"', selo.slice(0, 200));
   T.chk(await ad.$$eval('.thumb .alt-site', l => l.length) === 1, 'CAMP-124: só a folha corrigida tem o selo');
   const bt = await T.txt(ad, '[data-enviar-alteracoes]');
-  T.chk(/Enviar 1 alteração ao site/.test(bt), 'CAMP-124: botão "Enviar 1 alteração ao site" (admin)', bt);
+  T.chk(/Tentar enviar de novo/.test(bt), 'CAMP-124: botão "Tentar enviar de novo" (admin)', bt);
   await T.print(ad, 'alterada');
   // operador vê o aviso, mas não o botão
   const op = await T.entrar('operador'); await T.abrirProjeto(op, P);
-  T.chk(/1 folha alterada depois de publicar/.test(await T.txt(op, '[data-conta-site]')) && !(await op.$('[data-enviar-alteracoes]')), 'CAMP-124: operador vê "1 folha alterada" e "um admin envia", sem o botão');
+  T.chk(/1 correção ainda não chegou ao site/.test(await T.txt(op, '[data-conta-site]')) && !(await op.$('[data-enviar-alteracoes]')), 'CAMP-124: operador vê "1 correção ainda não chegou ao site" e "um admin envia", sem o botão');
   // enviar
   await ad.click('[data-enviar-alteracoes]');
   const conf = await ad.waitForSelector('#conf-ov', { timeout: 5000 }).then(() => T.txt(ad, '#conf-ov'), () => '');
@@ -77,6 +79,15 @@ T.rodar(async () => {
   T.chk(await T.espera(async () => !(await ad.$('[data-enviar-alteracoes]')) && !(await ad.$('.thumb .alt-site'))), 'CAMP-124: depois de enviar, o selo e o botão somem');
   T.chk(/"Folha"/.test(T.um('SELECT detalhe FROM evento WHERE codigo=? AND tipo=\'site_texto_editado\' ORDER BY id DESC LIMIT 1', D(5)) || ''), 'CAMP-124: o metadado "Folha" foi enviado ao site (falso)');
   await T.print(ad, 'enviado');
+
+  T.passo('21/10 (Rafa: "ao alterar aí, já altere automaticamente"): com o padrão, a correção vai sozinha ao site');
+  T.sql("UPDATE configuracao SET valor='1' WHERE chave='site.enviar_correcoes_sozinho'");
+  await T.abrirConferir(ad, P, D(6));
+  await ad.waitForSelector('#rv-folha', { timeout: 10000 });
+  await ad.fill('#rv-folha', '307'); await ad.click('#cf-pane [data-rev-item="corrigida"]'); await T.confirmar(ad);
+  T.chk(await T.espera(() => T.um("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='site_alteracoes_enviadas'", D(6)) === 1, 15000), 'automático: a correção chega ao site sem ninguém clicar em enviar');
+  await T.abrirProjeto(ad, P);
+  T.chk(!(await ad.$('[data-enviar-alteracoes]')) && !(await ad.$('.thumb .alt-site')), 'automático: nem selo nem botão de enviar ficam na página');
 
   T.passo('CAMP-124 (P3): diferença sem explicação fica amarela e lista os códigos');
   // a D00010 foi conferida de novo e ficou fora do site (ninguém publicou): devia estar lá e não está

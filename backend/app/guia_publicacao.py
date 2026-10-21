@@ -109,7 +109,7 @@ def guia_agente(aid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
                "A biografia ainda não foi escrita (o painel só aceita biografia com a fonte citada)", _acao("editar_agente", "Editar o arquiteto", aid)),
             _c("retrato", False, bool(con.execute("SELECT 1 FROM agente_retrato WHERE agente_id=?", (aid,)).fetchone()), "Retrato do arquiteto",
                "Envie o retrato em Editar o arquiteto: ele vai direto para a página do arquiteto no site", _acao("editar_agente", "Editar o arquiteto", aid)),
-            # 21/10: o painel publica a página (antes: "ativar no wp-admin", fora do painel)
+            # 21/10: o painel publica a página (antes: era feito fora do painel)
             _c("pagina", True, bool(pag and pag["status"] == "publish"), "Página do arquiteto publicada no site",
                "Sem ela, nada do fundo aparece no site, nem os projetos já publicados",
                _acao("publicar_arquiteto", "Publicar a página do arquiteto", fundos[0]) if fundos else None),

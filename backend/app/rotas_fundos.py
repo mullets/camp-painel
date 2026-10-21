@@ -301,7 +301,7 @@ def arquiteto_site(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dic
 
 @router.post("/fundos/{codigo}/arquiteto-site/publicar")
 def publicar_arquiteto(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """21/10 (Rafa: "muito confuso publicar um arquiteto"): um botão. Envia o fundo ao site e publica a página do arquiteto (antes era no wp-admin)."""
+    """21/10 (Rafa: "muito confuso publicar um arquiteto"): um botão. Envia o fundo ao site e publica a página do arquiteto (antes era feito fora do painel)."""
     from . import fundo_site
     con = connect()
     try:

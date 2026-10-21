@@ -2752,7 +2752,7 @@ async function salvarFundo(code){if(!validarCampos(document.getElementById('draw
 async function carregarDescricaoSite(det){const c=det&&det.dataset.fundo,corpo=det&&det.querySelector('.fd-site-corpo');if(!c||!corpo)return;
   try{const r=await API(`/api/fundos/${encodeURIComponent(c)}/descricao-site`);const adm=['admin','master'].includes(EU&&EU.papel);
     corpo.innerHTML=`<div class="fd-site-txt">${r.texto.split('\n\n').map(l=>{const i=l.indexOf(': ');return i>0?`<p><b>${escHtml(l.slice(0,i))}:</b> ${escHtml(l.slice(i+2))}</p>`:`<p>${escHtml(l)}</p>`}).join('')}</div>`+
-      (r.faltam.length?`<p class="help">Ainda não aparece no site (campo vazio): ${escHtml(r.faltam.join(', '))}. Preencha em <b>Editar</b>. O que já foi escrito direto no site não é apagado.</p>`:'')+
+      (r.faltam.length?`<p class="help">Ainda não aparece no site (campo vazio): ${escHtml(r.faltam.join(', '))}. Preencha em <b>Editar</b>. O que já está na página do site não é apagado.</p>`:'')+
       `<p class="help">${r.mostrar_doador?'O nome de quem entregou o acervo aparece (autorizado).':'O nome de quem entregou o acervo não aparece (sem autorização).'}</p>`+
       (r.no_site?(adm?`<div class="act"><button class="btn sm" data-fd-site-enviar="${escHtml(c)}">Enviar este texto ao site agora</button></div>`:''):'<p class="help">O fundo ainda não tem página no site; o texto vai junto quando ela for criada.</p>')
     ;try{const s=await API(`/api/fundos/${encodeURIComponent(c)}/site-status`),dv=s.divergencia||{};
@@ -4121,16 +4121,21 @@ async function girarFolha(codigo,graus,desfazendo){
   const it0=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo),noSite=!!it0&&['rascunho','no_ar'].includes(it0.status_site_local||it0.status_site),adm=EU&&['admin','master'].includes(EU.papel);
   if(noSite&&adm&&!desfazendo&&!await confirmar({titulo:'Girar também a imagem no site?',texto:`A folha ${codigo} já está no site. O painel troca a imagem de lá pela girada (o endereço da imagem continua o mesmo). Se o site recusar, nada muda.`,botao:'Girar no site'}))return;
   try{const r=await API('/api/itens/'+encodeURIComponent(codigo)+'/girar',{method:'POST',body:JSON.stringify({graus:+graus})});
-    const onde=r.no_site?' (também no site)':r.site_pendente?' no painel (a do site ainda é a antiga)':'';if(r.site_pendente)mostrarImagemSitePendente(codigo);
+    const onde=r.no_site?' (também no site)':r.site_pendente&&r.site_automatico?' (o site recebe a imagem em seguida)':r.site_pendente?' no painel (a do site ainda é a antiga)':'';if(r.site_pendente)(r.site_automatico?conferirImagemSiteDepois:mostrarImagemSitePendente)(codigo);
     if(desfazendo)toast('Giro desfeito'+onde);else toast((+graus===180?`Folha ${codigo} virada de cabeça para baixo`:`Folha ${codigo} girada para a ${+graus>0?'direita':'esquerda'}`)+onde,{acao:{rotulo:'Desfazer',fn:()=>girarFolha(codigo,+graus===180?180:-graus,true)}});
     const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it)it.giro_manual=r.giro_manual;trocarPreviaNaTela(codigo,r.giro_manual,it&&it.espelhar)}catch(e){toast(e.message)}}
 function trocarPreviaNaTela(codigo,giro,esp){const aj=ajusteChave((window.ITENS_PJ||[]).find(x=>x.codigo===codigo)),im=document.getElementById('rv-img');if(im)im.src=urlPreviaFolha(codigo,giro,0,esp,aj);['rv-img-link','rv-img-link2'].forEach(id=>{const a=document.getElementById(id);if(a)a.href=urlPreviaFolha(codigo,giro,0,esp,aj)});
   document.querySelectorAll(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"] img.img-prev`).forEach(i=>{i.src=urlPreviaFolha(codigo,giro,480,esp,aj)});
   const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it&&it.thumb_url)document.querySelectorAll(`.thumb[data-rev-abrir="${CSS.escape(codigo)}"] img.img-real:not(.img-prev)`).forEach(i=>{i.src=urlThumbSite({...it,giro_manual:giro})});
   document.querySelectorAll(`[data-cf-folha="${CSS.escape(codigo)}"] .cf-mini img`).forEach(i=>{i.src=it?confMiniUrl(it):i.src})}   /* a miniatura da lista da tela de conferir */
-/* 19/10: folha já no site girada/espelhada/recortada no painel: a imagem do site fica pendente até "Atualizar imagem no site" (admin) */
+/* 19/10: folha já no site girada/espelhada/recortada no painel. 21/10: vai sozinha; este aviso é só para quando o site recusou */
 function imagemSitePendenteHTML(codigo){const adm=EU&&['admin','master'].includes(EU.papel);
   return `<div class="img-site-pend" role="status" data-img-site-pend="${escHtml(codigo)}"><span class="tag a">site desatualizado</span> <span>A imagem no site ainda é a antiga.</span> ${adm?`<button type="button" class="btn sm pri" data-img-site="${escHtml(codigo)}">Atualizar imagem no site</button>`:'<small class="help">Peça a um admin para atualizar no site.</small>'}</div>`}
+/* 21/10 (Rafa: "ao alterar aí, já altere no site automaticamente"): a imagem nova vai sozinha ao site logo depois de salvar;
+   o aviso "site desatualizado" só aparece se, alguns segundos depois, o site ainda não tiver aceitado */
+function conferirImagemSiteDepois(codigo,tent=0){setTimeout(async()=>{try{const d=await API('/api/itens/'+encodeURIComponent(codigo)+'/edicao');
+  if(!d.imagem_site_pendente){document.querySelectorAll(`[data-img-site-pend="${CSS.escape(codigo)}"]`).forEach(x=>x.remove());return}
+  if(tent<2)conferirImagemSiteDepois(codigo,tent+1);else mostrarImagemSitePendente(codigo)}catch(_){}},tent?6000:4000)}
 function mostrarImagemSitePendente(codigo){if(document.querySelector(`[data-img-site-pend="${CSS.escape(codigo)}"]`))return;
   const alvo=revSel('.rev-col-img')||(document.getElementById('d-sub')||{}).textContent===codigo&&document.getElementById('d-body')||document.querySelector('#idet .dethdr');
   if(alvo)alvo.insertAdjacentHTML('afterbegin',imagemSitePendenteHTML(codigo))}
@@ -4142,7 +4147,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-img-site]'
 async function espelharFolha(codigo,desfazendo){
   try{const r=await API('/api/itens/'+encodeURIComponent(codigo)+'/espelhar',{method:'POST'});
     const it=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo);if(it){it.espelhar=r.espelhar?1:0;it.espelho_manual=r.espelhar?1:0;it.giro_manual=r.giro_manual}
-    trocarPreviaNaTela(codigo,r.giro_manual,r.espelhar);if(r.site_pendente)mostrarImagemSitePendente(codigo);const b=document.querySelector(`[data-rev-espelhar="${CSS.escape(codigo)}"]`);if(b)b.setAttribute('aria-pressed',r.espelhar?'true':'false');
+    trocarPreviaNaTela(codigo,r.giro_manual,r.espelhar);if(r.site_pendente)(r.site_automatico?conferirImagemSiteDepois:mostrarImagemSitePendente)(codigo);const b=document.querySelector(`[data-rev-espelhar="${CSS.escape(codigo)}"]`);if(b)b.setAttribute('aria-pressed',r.espelhar?'true':'false');
     if(desfazendo)toast('Espelho desfeito');else toast(r.espelhar?`Folha ${codigo} espelhada`:`Folha ${codigo} sem espelho`,{acao:{rotulo:'Desfazer',fn:()=>espelharFolha(codigo,true)}})}catch(e){toast(e.message)}}
 /* 19/10 · Recortar e alinhar a folha na revisão ("às vezes está vindo bem ruim"). A pessoa arrasta a caixa de recorte e acerta o ângulo fino
    (−10° a +10°) com a grade por cima; a prévia ao vivo é a própria imagem girada por CSS (o mesmo giro em torno do centro que o servidor faz).
@@ -4743,7 +4748,7 @@ function contaSiteHTML(fonte,cs){const P=fonte.documentos_locais??0,S=cs?cs.site
   const lista=(L,n=8)=>L.slice(0,n).map(curto).join(', ')+(L.length>n?` e mais ${L.length-n}`:'');
   return `<span>${escHtml(P)} folha(s) no painel</span><span>· ${escHtml(S)} no site</span>${menos?`<small class="help">(${escHtml(menos.trim())} explicadas)</small>`:''}<span class="tag a">números diferentes</span>${cs.nao_enviadas.length?`<span class="cs-falta">ainda não foram ao site: <b>${lista(cs.nao_enviadas)}</b></span>`:''}${cs.so_site.length?`<span class="cs-falta">só no site: <b>${lista(cs.so_site)}</b></span>`:''}`}
 function alteracoesSiteHTML(d,code){const L=d.alteracoes_site||[];if(!L.length)return '';const adm=EU&&['admin','master'].includes(EU.papel);
-  return `<span class="cs-alt"><span class="tag a">${L.length===1?'1 folha alterada depois de publicar':`${fmtN(L.length)} folhas alteradas depois de publicar`}</span>${adm?` <button type="button" class="btn sm pri" data-enviar-alteracoes="${escHtml(code)}">Enviar ${L.length===1?'1 alteração':`${fmtN(L.length)} alterações`} ao site</button>`:' <small class="help">um admin envia ao site</small>'}</span>`}
+  return `<span class="cs-alt"><span class="tag a">${L.length===1?'1 correção ainda não chegou ao site':`${fmtN(L.length)} correções ainda não chegaram ao site`}</span>${adm?` <button type="button" class="btn sm pri" data-enviar-alteracoes="${escHtml(code)}">Tentar enviar de novo</button>`:' <small class="help">um admin envia ao site</small>'}</span>`}
 async function enviarAlteracoesSite(code){const L=(window.PJ_D&&window.PJ_D.alteracoes_site)||[];if(!L.length)return;
   const li=L.map(a=>`<li><span class="code">${escHtml(a.codigo.split('-').pop())}</span> ${[...a.campos.map(c=>`${escHtml(c.rotulo)}: <s>${escHtml(c.antes||'vazio')}</s> → <b>${escHtml(c.depois||'vazio')}</b>`),...(a.imagem?['imagem nova (girada ou recortada)']:[])].join(' · ')}</li>`).join('');
   const r=await confirmar({titulo:`Enviar ${L.length===1?'1 alteração':`${L.length} alterações`} ao site?`,html:`<p>Estas folhas foram corrigidas no painel depois de publicadas. O site passa a mostrar o valor novo; nada mais muda.</p><ul class="cs-lista">${li}</ul>`,botao:'Enviar ao site',botaoOcupado:'Enviando…',
@@ -4998,7 +5003,7 @@ async function carregarGuiaFundo(code){
   box.innerHTML=`<div class="ph"><h2>Como publicar este fundo</h2></div><div class="pb">${renderGuia(g,GUIA_FUNDO,'')}</div>`;
   let arq=document.getElementById('fd-arq');if(!arq){arq=document.createElement('div');arq.className='panel arq-site';arq.id='fd-arq';box.before(arq)}carregarArqSite(code,arq)}
 /* 21/10 (Rafa: "muito confuso publicar um arquiteto, ou deixar um público"): um quadro só, igual no fundo e no arquiteto. No site, sem a página
-   do arquiteto publicada NADA do fundo aparece (nem projeto publicado); antes isso era "ativar no wp-admin". Agora: um botão. */
+   do arquiteto publicada NADA do fundo aparece (nem projeto publicado); antes isso era feito fora do painel. Agora: um botão. */
 async function carregarArqSite(fundo,host){let e;try{e=await API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site`)}catch(err){host.innerHTML='';return}if(host.isConnected)host.innerHTML=arqSiteHTML(e)}
 function arqSiteHTML(e){const nome=e.arquiteto||'o arquiteto',pub=e.estado==='publica'||e.estado==='publica_vazia';
   const linha=pub?`<span class="tag g">publicada</span> A página de <b>${escHtml(nome)}</b> está pública no site.${e.url?` <a href="${escHtml(e.url)}" target="_blank" rel="noopener">Ver a página ↗</a>`:''}`
@@ -5185,7 +5190,7 @@ async function diagnosticarAnalytics(){
     ];
     const escopos=(d.sitekit_escopos_faltantes||[]).length?'<div class="stale-note"><span class="status-dot warn"></span><span><b>Escopos Google faltando:</b> '+escHtml((d.sitekit_escopos_faltantes||[]).join(', '))+'</span></div>':'';
     const msg=d.ok?'<div class="stale-note" style="border-color:var(--green);background:var(--green-soft)"><span class="status-dot ok"></span><span><b>Analytics funcionando.</b> '+escHtml(d.mensagem||'')+'</span></div>':'<div class="stale-note"><span class="status-dot warn"></span><span><b>Falha:</b> '+escHtml(d.erro||d.mensagem||'não identificada')+(d.acao?'<br><b>Como resolver:</b> '+escHtml(d.acao):'')+'</span></div>';
-    openDrawer('Diagnóstico do Google Analytics',d.ok?'integração funcionando':'verificação da identidade usada pelo painel',msg+escopos+'<dl class="kv">'+linhas.map(([k,v])=>'<dt>'+escHtml(k)+'</dt><dd>'+escHtml(v)+'</dd>').join('')+'</dl><div class="act"><button class="btn" onclick="abrirConfigMaquina(\'wp.usuario\')">Configurar usuário WordPress</button><a class="btn pri" href="https://camp.arq.br/wp-admin/admin.php?page=googlesitekit-settings" target="_blank">Abrir Site Kit</a></div>');
+    openDrawer('Diagnóstico do Google Analytics',d.ok?'integração funcionando':'verificação da identidade usada pelo painel',msg+escopos+'<dl class="kv">'+linhas.map(([k,v])=>'<dt>'+escHtml(k)+'</dt><dd>'+escHtml(v)+'</dd>').join('')+'</dl><div class="act"><button class="btn" onclick="abrirConfigMaquina(\'wp.usuario\')">Configurar usuário WordPress</button></div>');
   }catch(e){toast(e.message)}
 }
 function haTempo(ts){if(!ts)return '—';const t=new Date(String(ts).replace(' ','T')+'Z').getTime();if(isNaN(t))return '—';const sg=Math.max(0,Math.round((Date.now()-t)/1000));if(sg<60)return 'agora';const m=Math.round(sg/60);if(m<60)return `há ${m} min`;const h=Math.round(m/60);if(h<48)return `há ${h} h`;return `há ${Math.round(h/24)} dias`}
@@ -5198,7 +5203,13 @@ function siteRotulo(h){if(!h)return {cls:'r',txt:'sem dados'};if(!h.estado)retur
 function siteTagHTML(h){const r=siteRotulo(h);return `<span class="tag ${r.cls}">${escHtml(r.txt)}</span>`}
 async function abrirDivergencias(){
   try{const r=await API('/api/site/divergencias/resumo');
-    openDrawer('Divergências entre o painel e o site',`${fmtN(r.total)} aberta(s)`,`<p style="margin:0;color:var(--ink2)">Diferenças que o painel achou ao comparar com o site na última sincronização. Nenhuma altera nada sozinha.</p>${r.grupos.length?r.grupos.map(g=>`<div class="div-grupo"><h3>${escHtml(g.titulo)} <span class="tag">${fmtN(g.n)}</span></h3><p class="help">${escHtml(g.explicacao)}</p><ul class="list">${g.itens.slice(0,20).map(i=>`<li><span class="code">${escHtml(i.codigo)}</span><div class="t"><small>${i.valor_painel&&i.valor_site?`no painel: ${escHtml(i.valor_painel)} · no site: ${escHtml(i.valor_site)}`:escHtml(i.valor_site||i.valor_painel||'')}</small></div></li>`).join('')}</ul>${g.n>20?`<small class="help">… e mais ${fmtN(g.n-20)}</small>`:''}</div>`).join(''):'<div class="empty">Nenhuma divergência aberta.</div>'}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}catch(e){toast(e.message)}}
+    openDrawer('Divergências entre o painel e o site',`${fmtN(r.total)} aberta(s)`,`<p style="margin:0;color:var(--ink2)">Diferenças que o painel achou ao comparar com o site na última sincronização. Nenhuma altera nada sozinha.</p>${r.grupos.length?r.grupos.map(g=>{const adm=EU&&['admin','master'].includes(EU.papel),ac=g.acao&&adm?g.campo:null;return `<div class="div-grupo"><h3>${escHtml(g.titulo)} <span class="tag">${fmtN(g.n)}</span></h3><p class="help">${escHtml(g.explicacao)}</p>${ac?`<div class="act"><button class="btn sm pri" type="button" data-div-corrigir="${escHtml(ac)}">${escHtml(g.acao)}: ${g.n===1?'o item':`os ${fmtN(g.n)} itens`}</button></div>`:''}<ul class="list">${g.itens.slice(0,20).map(i=>`<li><span class="code">${escHtml(i.codigo)}</span><div class="t"><small>${i.valor_painel&&i.valor_site?`no painel: ${escHtml(i.valor_painel)} · no site: ${escHtml(i.valor_site)}`:escHtml(i.valor_site||i.valor_painel||'')}</small></div>${ac?`<button class="btn sm" type="button" data-div-corrigir="${escHtml(ac)}" data-div-codigo="${escHtml(i.codigo)}">${escHtml(g.acao)}</button>`:''}</li>`).join('')}</ul>${g.n>20?`<small class="help">… e mais ${fmtN(g.n-20)}</small>`:''}</div>`}).join(''):'<div class="empty">Nenhuma divergência aberta.</div>'}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}catch(e){toast(e.message)}}
+/* 21/10 (Rafa: "é tudo feito NESSE painel"): o conserto é daqui, não do site */
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-div-corrigir]');if(!b)return;const campo=b.dataset.divCorrigir,cod=b.dataset.divCodigo;
+  const txt=campo==='fundo_trocado'?'O site passa a ter, no campo Fundo, o fundo que o código diz (o código é que vale).':'O item fica privado no site: sai do público. Nada é apagado; dá para publicar de novo.';
+  const r=await confirmar({titulo:cod?`${b.textContent.trim()}: ${cod}?`:`${b.textContent.trim()}?`,texto:txt,botao:'Confirmar',botaoOcupado:'Corrigindo…',
+    acao:()=>API('/api/site/divergencias/corrigir',{method:'POST',body:JSON.stringify(cod?{campo,codigos:[cod]}:{campo})})});
+  if(!r)return;const x=r.resultado||{};toast(x.falhas&&x.falhas.length?`${fmtN(x.corrigidas.length)} corrigido(s); ${fmtN(x.falhas.length)} não: ${x.falhas[0].erro}`:`Corrigido: ${qtd(x.corrigidas.length,'item','itens')}`);abrirDivergencias()});
 function qnapInnerHTML(q,qi){
   const c=qi&&qi.coleta,admin=EU&&['admin','master'].includes(EU.papel),n=x=>(x==null?'—':fmtN(x)),nivel=qi&&qi.nivel_espaco,cfg=(qi&&qi.config)||{};
   const cresc=qi&&qi.crescimento_gb_dia,dias=qi&&qi.dias_ate_encher;

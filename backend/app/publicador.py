@@ -138,7 +138,7 @@ def campos_hub_fundo(con, codigo: str, com_padrao: bool = False) -> tuple[dict, 
     """B1: {meta do site: texto} e a lista do que ainda falta preencher no painel.
 
     CAMP-037: campo vazio no painel NÃO leva mais o texto padrão "Documentação em organização." ao site (o painel não consegue ler o que já
-    está lá e sobrescreveria texto escrito à mão no WordPress). O site já esconde o campo vazio. `com_padrao=True` devolve o texto antigo.
+    está lá e sobrescreveria texto já escrito no site). O site já esconde o campo vazio. `com_padrao=True` devolve o texto antigo.
 
     O nome de quem entregou o acervo só sai com fundo.mostrar_doador; sem isso, a procedência que cita
     o nome também não sai (a forma de entrada sai, sem o nome).
@@ -721,7 +721,7 @@ def imagem_pronta_para_o_site(con, i, giro: int | None = None, ajuste: tuple | N
 
 
 def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) -> dict:
-    """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no WordPress pela imagem girada `giro` graus (sentido horário,
+    """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no site pela imagem girada `giro` graus (sentido horário,
     o mesmo giro_manual que a folha vai ter), MANTENDO o ID do anexo (o item do Tainacan, a capa do projeto e os links continuam valendo).
     Não grava nada no painel: quem chama grava o giro só se isto não levantar erro. Levanta RuntimeError com frase em português.
     `ajuste` = (recorte, ângulo) que a folha vai ter (19/10: recorte e alinhamento); None = o gravado."""
@@ -826,6 +826,43 @@ def atualizar_serie_no_site(codigo: str, ator: str) -> dict:
     return out
 
 
+_LOTE = {"ok": None}     # 21/10: o site tem a rota de metadados em lote? None = ainda não sei; False = não tem (404): um por um
+
+
+def _gravar_metadados(con, wp, iid: int, fila: list, out: dict) -> list:
+    """21/10 ("pq demora tanto pra subir um projeto?"): os metadados de TEXTO da folha vão numa chamada só (POST camp/v1/painel/item/{id}/metadados,
+    do plugin da CAMP). Taxonomia, relação e data continuam um por um, como antes (o lote grava por nome e não escolhe termo).
+    Devolve o que ainda falta gravar um por um: o que não é texto, o que o lote não gravou e tudo, se o site não tiver a rota."""
+    if _LOTE["ok"] is False or not hasattr(wp, "gravar_metadados_lote"):
+        return fila
+    lote, resto = {}, []
+    for nome, mid, valor in fila:
+        r = con.execute("SELECT nome, tipo FROM wp_metadado WHERE id=?", (mid,)).fetchone()
+        tipo = (r["tipo"] or "") if r else ""
+        if r and r["nome"] and tipo.rstrip("\\").split("\\")[-1] in ("Text", "Textarea") and isinstance(valor, (str, int, float)) and r["nome"] not in lote:
+            lote[r["nome"]] = (nome, mid, str(valor))
+        else:
+            resto.append((nome, mid, valor))
+    if not lote:
+        return fila
+    try:
+        res = wp.gravar_metadados_lote(iid, {nm: v for nm, (_n, _m, v) in lote.items()})
+    except Exception:  # noqa: BLE001  (o site recusou o lote: grava um por um, que já sabe deixar pendência por campo)
+        return fila
+    if res is None:
+        _LOTE["ok"] = False
+        return fila
+    _LOTE["ok"] = True
+    feitos = set(res.get("gravados") or [])
+    for nm, (nome, mid, valor) in lote.items():
+        if nm in feitos:
+            out["metadados"].append(nome)
+        else:
+            resto.append((nome, mid, valor))
+    out["metadados_em_lote"] = len(feitos)
+    return resto
+
+
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
     con = connect()
@@ -877,6 +914,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                        "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
                        "Crédito": CREDITO_AUTORIA_NAO_CONFIRMADA if i["autoria_divergente"] else None,   # CAMP-046: nunca o nome lido como fato
                        "Suporte": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
+            fila = []
             for nome, valor in valores.items():
                 if valor in (None, ""):
                     continue
@@ -889,6 +927,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                     if nome != "Arquivo de origem":     # (a falha do "Arquivo de origem" já deixou a própria pendência)
                         _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
                     continue
+                fila.append((nome, mid, valor))
+            for nome, mid, valor in _gravar_metadados(con, wp, iid, fila, out):     # 21/10: os de texto numa chamada só; o resto um por um
                 try:
                     wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
                 except Exception as e:  # noqa: BLE001

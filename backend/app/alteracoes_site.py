@@ -98,14 +98,50 @@ def pendentes(con, projeto: str) -> list[dict]:
     return out
 
 
-def enviar(projeto: str, ator: str) -> dict:
-    """Reenvia ao site os campos corrigidos e a imagem nova de cada folha pendente. Nunca desfaz nada no painel;
+def enviar_sozinho() -> bool:
+    """21/10 (Rafa: "ao alterar aí, já altere no site automaticamente"): configuração site.enviar_correcoes_sozinho (sem a chave: sim)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='site.enviar_correcoes_sozinho'").fetchone()
+    finally:
+        con.close()
+    return not r or str(r[0]).strip() != "0"
+
+
+import threading as _threading  # noqa: E402
+_TRAVAS: dict = {}
+_TRAVA_GERAL = _threading.Lock()
+
+
+def enviar_folhas_agora(codigos: list[str], ator: str) -> None:
+    """Segundo plano, logo depois de salvar: a folha já publicada recebe no site a correção (campos e imagem). Nunca levanta.
+    Uma vez por projeto de cada vez (duas correções seguidas não mandam a mesma coisa duas vezes). Se o site recusar, a folha
+    continua em "alteradas depois de publicar", com o botão para tentar de novo."""
+    if not codigos or not enviar_sozinho():
+        return
+    por_projeto: dict = {}
+    for c in codigos:
+        por_projeto.setdefault(str(c)[:10], []).append(c)
+    for pj, cs in por_projeto.items():
+        with _TRAVA_GERAL:
+            trava = _TRAVAS.setdefault(pj, _threading.Lock())
+        with trava:
+            try:
+                enviar(pj, ator, cs)
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
+    """Reenvia ao site os campos corrigidos e a imagem nova de cada folha pendente (ou só das `codigos`). Nunca desfaz nada no painel;
     a folha só sai da lista quando o site aceitou tudo dela."""
     from . import publicador
     from .rotas_revisao import _imagem_site_resolvida
     con = connect()
     try:
         lista = pendentes(con, projeto)
+        if codigos is not None:
+            lista = [x for x in lista if x["codigo"] in set(codigos)]
         dados = {}
         for p in lista:
             i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.ano AS projeto_ano, s.nome AS serie_nome

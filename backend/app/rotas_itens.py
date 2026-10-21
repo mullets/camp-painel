@@ -281,6 +281,9 @@ def editar_item(codigo: str, d: EdicaoItem, tarefas: BackgroundTasks, u: dict = 
     site = None
     if any(k in novos for k in dados_foto.CAMPOS) and i["tainacan_item_id"]:   # 21/10: a folha no site recebe os dados da foto em seguida
         tarefas.add_task(dados_foto.enviar_varios, [codigo], u["email"])
+    from .alteracoes_site import CAMPOS as _CAMPOS_SITE, enviar_folhas_agora
+    if i["tainacan_item_id"] and i["status_site"] in ("no_ar", "rascunho") and (any(k in novos for k in _CAMPOS_SITE) or "tipos_documento" in novos):
+        tarefas.add_task(enviar_folhas_agora, [codigo], u["email"])     # 21/10: a correção vai sozinha ao site, logo depois de salvar
     if wid and (titulo_site is not None or descricao_site is not None or md_envio):
         site = atualizar_folha_no_site(codigo, wid, cid, titulo_site, descricao_site, md_envio, u["email"])
     campos = list(novos) + [f"site:{k}" for k in site_antes]

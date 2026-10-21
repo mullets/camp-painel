@@ -183,7 +183,7 @@ def _sitekit_diagnostico(wp) -> dict:
         out["wp_usuario_id"] = me.get("id")
         out["wp_roles"] = me.get("roles") or []
     except Exception as e:
-        out["mensagem"] = f"Falha ao autenticar no WordPress: {str(e)[:220]}"
+        out["mensagem"] = f"Falha ao autenticar no site: {str(e)[:220]}"
         return out
 
     try:
@@ -267,10 +267,10 @@ def analytics(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict
 
 # O Google devolve 403 "não concedeu todas as permissões durante a configuração" quando, ao conectar o Site Kit,
 # a caixa de ler os dados do Analytics ficou desmarcada na tela de consentimento.
-ACAO_PERMISSOES_SITEKIT = ('Entre no wp-admin como "{u}" → Site Kit → Configurações → Serviços conectados → Analytics → Editar '
-                           '(ou "Conceder permissão") e, na tela do Google, marque TODAS as caixas, principalmente '
-                           '"Ver e baixar seus dados do Google Analytics". Depois clique em Diagnosticar de novo. '
-                           'Alternativa sem Site Kit: preencher ga4.propriedade e ga4.conta_servico em Configurações.')
+# 21/10 (Rafa): quem usa o painel não usa o WordPress. O que só se resolve no site vira "avise quem cuida do site", com o detalhe para essa pessoa.
+ACAO_PERMISSOES_SITEKIT = ('Pelo painel: preencha ga4.propriedade e ga4.conta_servico em Configurações (não depende do site). '
+                           'Ou avise quem cuida do site: o Google do Site Kit (usuário "{u}") precisa da permissão '
+                           '"Ver e baixar seus dados do Google Analytics". Depois clique em Diagnosticar de novo.')
 
 
 def _analytics_calcular() -> dict:
@@ -450,14 +450,14 @@ def _analytics_calcular() -> dict:
         elif diag.get("sitekit_autenticado") is False:
             out["erro_codigo"] = "sitekit_usuario_nao_conectado"
             out["acao"] = (
-                f'Entre no WordPress como "{usuario}" e conecte esse usuário ao Site Kit/Google.'
-                if usuario else "Conecte ao Site Kit o mesmo usuário WordPress usado pelo painel."
+                f'Avise quem cuida do site: o usuário "{usuario}" do painel precisa estar conectado ao Site Kit/Google. Ou use ga4.propriedade e ga4.conta_servico em Configurações.'
+                if usuario else "Avise quem cuida do site: o usuário do painel precisa estar conectado ao Site Kit/Google. Ou use ga4.propriedade e ga4.conta_servico em Configurações."
             )
         elif diag.get("sitekit_reautenticar") or diag.get("sitekit_escopos_faltantes"):
             out["erro_codigo"] = "sitekit_reautenticar"
             out["acao"] = (
-                f'Reautentique o Google no Site Kit logado como "{usuario}" e conceda os escopos solicitados.'
-                if usuario else "Reautentique o Google no Site Kit e conceda os escopos solicitados."
+                f'Avise quem cuida do site: o Google do Site Kit (usuário "{usuario}") precisa ser reconectado com as permissões pedidas.'
+                if usuario else "Avise quem cuida do site: o Google do Site Kit precisa ser reconectado com as permissões pedidas."
             )
         elif "concedeu todas as permiss" in low or "granted all" in low or "insufficient scopes" in low:
             out["erro_codigo"] = "sitekit_permissoes_google"
@@ -470,7 +470,7 @@ def _analytics_calcular() -> dict:
             )
         elif "module must be active" in low or "analytics" in low and "active" in low:
             out["erro_codigo"] = "analytics_modulo_inativo"
-            out["acao"] = "Ative e configure o Google Analytics no Site Kit."
+            out["acao"] = "Avise quem cuida do site: o Google Analytics não está ativo no Site Kit. Ou use ga4.propriedade e ga4.conta_servico em Configurações."
         else:
             out["erro_codigo"] = "indisponivel"
             out["acao"] = "Use o diagnóstico do Analytics para ver a resposta exata do WordPress/Site Kit."

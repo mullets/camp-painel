@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -918,9 +918,9 @@ class Giro(BaseModel):
 
 
 @router.post("/itens/{codigo}/girar")
-def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> dict:
+def girar(codigo: str, d: Giro, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Vira a prévia da folha (e a imagem que vai ao site). A tela e o site mostram a folha já virada; o arquivo original no QNAP não é tocado.
-    Folha JÁ no site (rascunho ou publicada): só admin. O painel troca o arquivo da imagem no WordPress mantendo o ID do anexo e só grava
+    Folha JÁ no site (rascunho ou publicada): só admin. O painel troca o arquivo da imagem no site mantendo o ID do anexo e só grava
     o giro se o site aceitar; se o site falhar, nada muda no painel."""
     if d.graus not in (90, -90, 180):
         raise HTTPException(400, "graus deve ser 90, -90 ou 180")
@@ -940,9 +940,11 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
             con.execute("UPDATE item SET giro_manual=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, codigo))
             _regravar_ajuste(con, i, novo, imagens.espelho_efetivo(i), rec, ang)
             _imagem_site_pendente(con, codigo)
+            _site_logo_depois(tarefas, codigo, u)     # 21/10: a imagem nova vai sozinha ao site
             _evento(con, "item", codigo, "giro", u["email"], {"de": i["giro_manual"], "para": novo, "site": "pendente"})
             con.commit()
-            return {"giro_manual": novo, "no_site": False, "site_pendente": True}
+            from .alteracoes_site import enviar_sozinho
+            return {"giro_manual": novo, "no_site": False, "site_pendente": True, "site_automatico": enviar_sozinho()}   # 21/10: campo novo, opcional
         if no_site:                                   # admin: primeiro o site; o painel só grava se o site aceitou
             from . import publicador
             try:
@@ -963,7 +965,7 @@ def girar(codigo: str, d: Giro, u: dict = Depends(auth.exige("operador"))) -> di
 
 
 @router.post("/itens/{codigo}/espelhar")
-def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+def espelhar(codigo: str, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Espelha (ou desespelha) a prévia da folha e a imagem que vai ao site: para a folha digitalizada pelo verso, com o texto ao contrário.
     Espelha o que a pessoa VÊ: com a folha deitada (giro 90/270), o giro é trocado pelo oposto para o espelho continuar sendo esquerda-direita na tela.
     O arquivo original no QNAP não é tocado."""
@@ -982,8 +984,10 @@ def espelhar(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
         _evento(con, "item", codigo, "espelho", u["email"], {"de": int(antes), "para": novo, "giro": giro, **({"site": "pendente"} if no_site else {})})
         if no_site:
             _imagem_site_pendente(con, codigo)
+            _site_logo_depois(tarefas, codigo, u)     # 21/10: a imagem nova vai sozinha ao site
         con.commit()
-        return {"espelhar": bool(novo), "giro_manual": giro, "site_pendente": no_site}
+        from .alteracoes_site import enviar_sozinho
+        return {"espelhar": bool(novo), "giro_manual": giro, "site_pendente": no_site, "site_automatico": bool(no_site) and enviar_sozinho()}
     finally:
         con.close()
 
@@ -1128,7 +1132,7 @@ class Ajuste(BaseModel):
 
 
 @router.post("/itens/{codigo}/ajuste")
-def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -> dict:
+def ajustar(codigo: str, d: Ajuste, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Recorta e/ou endireita a folha. Guarda os parâmetros na folha e GERA o JPG corrigido (diretório de dados do painel), que passa a
     ser a imagem da folha na prévia, nas miniaturas, nos pedidos em JPG e no site. O TIF e os arquivos do CAMP Vision não mudam.
     Recorte inteiro e ângulo 0 = desfazer (volta à imagem do CAMP Vision). Mesmas regras do giro: lote aprovado recusa; folha no site,
@@ -1162,7 +1166,8 @@ def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -
         site, pendencia = None, None
         if so_painel:
             _imagem_site_pendente(con, codigo)
-            pendencia = "A imagem no site ainda é a antiga: um admin usa “Atualizar imagem no site”"
+            _site_logo_depois(tarefas, codigo, u)     # 21/10: a imagem nova vai sozinha ao site
+            pendencia = "O site recebe a imagem recortada em seguida"
         elif no_site:                                 # a imagem do site acompanha; se o site recusar, o painel grava e fica a pendência
             from . import publicador
             try:
@@ -1189,6 +1194,13 @@ def ajustar(codigo: str, d: Ajuste, u: dict = Depends(auth.exige("operador"))) -
 
 
 PEND_IMAGEM = "pendente_imagem_ajustada"
+
+
+def _site_logo_depois(tarefas, codigo: str, u: dict) -> None:
+    """21/10 (Rafa: "ao alterar aí, já altere no site automaticamente"): depois de responder, a folha já no site recebe a imagem nova.
+    Se o site recusar, continua a pendência "Atualizar imagem no site" (como antes)."""
+    from .alteracoes_site import enviar_folhas_agora
+    tarefas.add_task(enviar_folhas_agora, [codigo], u["email"])
 
 
 def _imagem_site_pendente(con, codigo: str) -> None:

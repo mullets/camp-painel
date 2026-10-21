@@ -102,7 +102,7 @@ def _url_publica_projeto(codigo: str, titulo: str, cidade: str | None = None) ->
 
 def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -> dict:
     """Endereço da página pública do projeto: o REAL (espelho das páginas do site) quando existe; senão o presumido.
-    status é o status da página no WordPress (publish = qualquer visitante abre)."""
+    status é o status da página no site (publish = qualquer visitante abre)."""
     r = con.execute("""SELECT url, status FROM wp_pagina
                         WHERE (codigo_detectado=? OR lower(slug) LIKE ?) AND url LIKE '%/acervo/projetos/%'
                         ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (codigo, codigo.lower() + "-%")).fetchone()

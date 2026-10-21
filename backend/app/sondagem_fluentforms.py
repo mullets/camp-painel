@@ -112,7 +112,7 @@ def sondar(h, form_id: int | None = None) -> list[str]:
 
     st, dados = _get(h, "/wp-json/fluentform/v1/forms", per_page=100)
     if st in (401, 403):
-        add(f"  ✖ a API respondeu {st} para os formulários: o usuário do painel no WordPress precisa ser administrador do Fluent Forms.")
+        add(f"  ✖ a API respondeu {st} para os formulários: avise quem cuida do site: o usuário do painel precisa ser administrador do Fluent Forms.")
         return L
     forms = _lista(dados)
     if st != 200 or not forms:
