@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -3677,6 +3677,69 @@ def filho(modo):
         ver("leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 403 and anon.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 401 and op.post("/api/itens/F089-P0002-1970-S01-D99999/retencao", json={"retida": True}).status_code == 404)
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
+        for l in res: print(l)
+    elif modo == "folhas_enviadas":
+        # 21/10 (Rafa: "e se eu quiser subir algo direto pelo admin na pagina de projeto?" → "sim, sobe"): enviar folhas pela página do projeto,
+        # guardadas numa pasta do painel (nunca no QNAP), com código na faixa D90001+ (não colide com o CAMP Vision)
+        import io, tempfile
+        pasta_env = tempfile.mkdtemp(prefix="folhas_env_"); os.environ["CAMP_FOLHAS_ENVIADAS_DIR"] = pasta_env
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, folhas_enviadas as _fe
+        from app.imagem_site import imagem_para_o_site
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from PIL import Image
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def img(fmt, cor=(200, 30, 30)):
+            b = io.BytesIO(); Image.new("RGB", (64, 48), cor).save(b, fmt); return b.getvalue()
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F083','Fundo Envio','ENV',1)")
+        for n, mesc in ((1, None), (2, "2026-10-01")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F083',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,mesclado_em) VALUES (?,?,?,?,1990,?)", (f"F083-P000{n}", "F083", n, f"Casa {n}", mesc))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao) VALUES ('F083-P0001-1990-S01-D00003','F083-P0001','S01',3,'Planta','campvision','conferida')")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "A", "admin"), ("op@camp.arq.br", "O", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        k = connect(); sql = lambda q, *a: (k.execute(q, a).fetchone() or [None])[0]
+        url = "/api/projetos/F083-P0001/folhas/enviar"
+        jpg1 = img("JPEG")
+        ver("operador não envia (403)", op.post(url, params={"serie": "S03", "nome": "a.jpg"}, content=jpg1).status_code == 403)
+        ver("arquivo que não é imagem: 400", adm.post(url, params={"serie": "S03", "nome": "a.pdf"}, content=b"%PDF-1.4 ...").status_code == 400)
+        ver("série que não existe: 400", adm.post(url, params={"serie": "S77", "nome": "a.jpg"}, content=jpg1).status_code == 400)
+        ver("projeto mesclado: 409", adm.post("/api/projetos/F083-P0002/folhas/enviar", params={"serie": "S03", "nome": "a.jpg"}, content=jpg1).status_code == 409)
+        r = adm.post(url, params={"serie": "S03", "nome": "IMG_0042-fachada_sul.JPG"}, content=jpg1); j = r.json(); c1 = j.get("codigo")
+        ver("JPEG: vira a folha F083-P0001-1990-S03-D90001 (faixa do painel, não colide com o CAMP Vision)", r.status_code == 200 and c1 == "F083-P0001-1990-S03-D90001", r.text[:200])
+        ver("título do nome do arquivo, tipo Fotografia, conferida por quem enviou, origem manual",
+            sql("SELECT titulo||'|'||tipo_documento||'|'||revisao||'|'||revisado_por||'|'||origem FROM item WHERE codigo=?", c1) == "IMG 0042 fachada sul|Fotografia|conferida|adm@camp.arq.br|manual")
+        cam = sql("SELECT arquivo_jpg FROM item WHERE codigo=?", c1) or ""
+        ver("o arquivo fica na pasta do painel (não no QNAP) e é o mesmo que foi enviado", cam.startswith(pasta_env) and os.path.isfile(cam) and open(cam, "rb").read() == jpg1, cam)
+        ver("a mesma imagem de novo no projeto: 409 dizendo qual folha já é", adm.post(url, params={"serie": "S03", "nome": "outra.jpg"}, content=jpg1).status_code == 409)
+        png = img("PNG", (10, 90, 200))
+        r2 = adm.post(url, params={"serie": "S05", "nome": "slide.png", "titulo": "Slide da obra", "ano": 1975}, content=png); c2 = r2.json().get("codigo")
+        ver("PNG: D90002, ganha um JPG ao lado (o original fica guardado), título e ano informados",
+            r2.status_code == 200 and c2 == "F083-P0001-1990-S05-D90002" and (sql("SELECT arquivo_jpg FROM item WHERE codigo=?", c2) or "").endswith(".jpg")
+            and (sql("SELECT arquivo_tif FROM item WHERE codigo=?", c2) or "").endswith(".png") and sql("SELECT titulo||'|'||ano_folha FROM item WHERE codigo=?", c2) == "Slide da obra|1975", r2.text[:200])
+        pv = adm.get(f"/api/itens/{c1}/previa")
+        ver("a prévia da folha enviada abre (para conferir e na página do projeto)", pv.status_code == 200 and pv.content[:3] == b"\xff\xd8\xff", f"HTTP {pv.status_code}")
+        d = adm.get("/api/projetos/F083-P0001/detalhe").json()
+        it = next((x for x in d.get("itens", []) if x["codigo"] == c1), {})
+        ver("a página do projeto lista a folha com imagem", (it.get("pendencias") or {}).get("previa") == "@jpg")
+        row = k.execute("SELECT * FROM item WHERE codigo=?", (c1,)).fetchone()
+        ver("ao publicar, o site recebe esta imagem", imagem_para_o_site(k, row) == cam)
+        fora = os.path.join(tempfile.mkdtemp(), "fora.jpg"); open(fora, "wb").write(jpg1)
+        k.execute("UPDATE item SET arquivo_jpg=? WHERE codigo=?", (fora, c2)); k.commit()
+        ver("segurança: arquivo FORA da pasta do painel não é servido como prévia (404)", adm.get(f"/api/itens/{c2}/previa").status_code == 404)
+        from app.publicacao import ELEGIVEL_LOCAL
+        ver("entra na publicação como as outras folhas", sql(f"SELECT COUNT(*) FROM item WHERE codigo=? AND {ELEGIVEL_LOCAL}", c1) == 1)
+        ver("histórico na folha e no projeto", sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_enviada_pelo_painel' AND entidade='item' AND codigo=?", c1) == 1
+            and sql("SELECT COUNT(*) FROM evento WHERE tipo='folha_enviada_pelo_painel' AND entidade='projeto' AND codigo='F083-P0001'") == 2)
+        ver("a folha que veio pelo CAMP Vision não mudou", sql("SELECT sequencial FROM item WHERE codigo='F083-P0001-1990-S01-D00003'") == 3)
+        k.close()
         for l in res: print(l)
     elif modo == "arquiteto_site":
         # 21/10 (Rafa: "muito confuso publicar um arquiteto, ou deixar um público"): no site, sem a página do arquiteto publicada NADA do fundo
@@ -10121,6 +10184,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"arquiteto: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("154) 21/10: enviar folhas direto pela página do projeto (pasta do painel, faixa D90001+)")
+rc, out = rodar("folhas_enviadas", f"{tmp}/folhas_enviadas.db")
+if rc != 0: ok(False, f"teste folhas_enviadas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"folhas enviadas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

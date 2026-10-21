@@ -1034,9 +1034,14 @@ def reabrir(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
 
 
 def jpg_da_folha_no_qnap(raiz, rel):
-    """O JPG da folha (item.arquivo_jpg, relativo à raiz dos prontos) se existir e estiver DENTRO da raiz; senão None. Serve de prévia quando o CAMP Vision não gravou preview."""
+    """O JPG da folha (item.arquivo_jpg, relativo à raiz dos prontos) se existir e estiver DENTRO da raiz; senão None. Serve de prévia quando o CAMP Vision não gravou preview.
+    21/10: ou o JPG de uma folha enviada pelo painel (só de dentro da pasta das folhas enviadas)."""
     if not rel or str(rel).startswith("http"):
         return None
+    from .folhas_enviadas import dentro
+    env = dentro(rel)
+    if env:
+        return env
     try:
         c = Path(str(rel))
         alvo = c.resolve() if c.is_absolute() else (raiz / str(rel)).resolve()

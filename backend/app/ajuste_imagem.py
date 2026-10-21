@@ -201,6 +201,9 @@ def origem_da_folha(raiz: Path, item) -> Path | None:
     jpg = item["arquivo_jpg"] if "arquivo_jpg" in k else None
     if not jpg or str(jpg).startswith("http"):
         return None
+    from .folhas_enviadas import dentro       # 21/10: folha enviada pelo painel (pasta do painel, não o QNAP)
+    if dentro(jpg):
+        return dentro(jpg)
     try:
         c = Path(str(jpg))
         alvo = c.resolve() if c.is_absolute() else (raiz / str(jpg)).resolve()

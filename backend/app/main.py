@@ -87,6 +87,8 @@ from .duplicatas import router as rotas_duplicatas
 app.include_router(rotas_duplicatas)
 from .dados_foto import router as rotas_dados_foto
 app.include_router(rotas_dados_foto)
+from .folhas_enviadas import router as rotas_folhas_enviadas
+app.include_router(rotas_folhas_enviadas)
 
 
 @app.on_event("startup")
