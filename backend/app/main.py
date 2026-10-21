@@ -85,6 +85,8 @@ from .parceiros import router as rotas_parceiros
 app.include_router(rotas_parceiros)
 from .duplicatas import router as rotas_duplicatas
 app.include_router(rotas_duplicatas)
+from .dados_foto import router as rotas_dados_foto
+app.include_router(rotas_dados_foto)
 
 
 @app.on_event("startup")

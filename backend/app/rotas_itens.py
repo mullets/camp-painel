@@ -8,10 +8,10 @@ Regras:
 """
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import auth, parceiros
+from . import auth, dados_foto, parceiros
 from .db import connect
 from .publicador import _meta, atualizar_folha_no_site
 from .rotas_projetos import _colecao_config
@@ -99,6 +99,7 @@ def dados_edicao(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict
              "tipos_documento": [r[0] for r in con.execute("SELECT nome FROM tipo_documento ORDER BY nome")],
              "site": None}
         d["local"]["parceiros"] = parceiros.ler(i["parceiros"])        # 19/10: escritórios parceiros / projetos complementares
+        d["local"].update({k: i[k] for k in dados_foto.CAMPOS})      # 21/10: ano da foto, estágio, fotógrafo
         d["disciplinas"] = list(parceiros.DISCIPLINAS)
         d["fundo_codigo"] = codigo.split("-")[0]
         from .rotas_revisao import imagem_site_pendente
@@ -127,11 +128,14 @@ class EdicaoItem(BaseModel):
     descricao_site: str | None = None
     metadados_site: dict[str, str] | None = None
     parceiros: list | None = None     # [{"escritorio", "disciplina", "outra"?}]; [] limpa; ausente = não mexe
+    foto_ano: str | None = None       # 21/10 (opcional): ano da foto, estágio, fotógrafo; "" limpa; ausente = não mexe
+    foto_estagio: str | None = None
+    foto_fotografo: str | None = None
     vistos: dict | None = None        # CAMP-095 (opcional): o valor de cada campo mudado como a pessoa o VIU ao abrir a folha; se outra pessoa mudou antes, 409
 
 
 @router.patch("/itens/{codigo}")
-def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operador"))) -> dict:
+def editar_item(codigo: str, d: EdicaoItem, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
     con = connect()
     try:
         i, w = _item_e_site(con, codigo)
@@ -174,6 +178,13 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
             atual = parceiros.ler(i["parceiros"])
             if lista_parceiros != atual:
                 novos["parceiros"], antes["parceiros"] = parceiros.para_coluna(lista_parceiros), atual
+        for k in dados_foto.CAMPOS:                       # 21/10: dados da foto
+            v = getattr(d, k)
+            if v is None:
+                continue
+            v = dados_foto.normalizar(k, v)
+            if v != (i[k] or None):
+                novos[k], antes[k] = v, i[k]
 
         titulo_site = descricao_site = None
         md_envio: dict = {}
@@ -244,7 +255,7 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
                 except (TypeError, ValueError, HTTPException):
                     continue
                 if agora_v != visto_v:
-                    rot = ROTULOS_LOCAIS.get(k) or {"ano_folha": "Ano da folha", "parceiros": "Escritórios parceiros"}.get(k, k)
+                    rot = ROTULOS_LOCAIS.get(k) or {"ano_folha": "Ano da folha", "parceiros": "Escritórios parceiros", **dados_foto.ROTULOS}.get(k, k)
                     conflitos.append(f"{rot} agora é “{agora_v if not isinstance(agora_v, list) else ', '.join(x.get('escritorio', '') for x in agora_v)}”" if agora_v else f"{rot} foi apagado")
             if conflitos:
                 raise HTTPException(409, "Outra pessoa mudou esta folha enquanto você editava (" + "; ".join(conflitos) + "). Nada foi salvo: abra a folha de novo para ver e corrigir.")
@@ -268,6 +279,8 @@ def editar_item(codigo: str, d: EdicaoItem, u: dict = Depends(auth.exige("operad
         con.close()
     # ---------- envia ao site (nunca desfaz o que já foi salvo) ----------
     site = None
+    if any(k in novos for k in dados_foto.CAMPOS) and i["tainacan_item_id"]:   # 21/10: a folha no site recebe os dados da foto em seguida
+        tarefas.add_task(dados_foto.enviar_varios, [codigo], u["email"])
     if wid and (titulo_site is not None or descricao_site is not None or md_envio):
         site = atualizar_folha_no_site(codigo, wid, cid, titulo_site, descricao_site, md_envio, u["email"])
     campos = list(novos) + [f"site:{k}" for k in site_antes]

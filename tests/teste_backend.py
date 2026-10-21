@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -3676,6 +3676,67 @@ def filho(modo):
         ver("leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 403 and anon.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 401 and op.post("/api/itens/F089-P0002-1970-S01-D99999/retencao", json={"retida": True}).status_code == 404)
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
+        for l in res: print(l)
+    elif modo == "fotos_dados":
+        # 21/10 (Rafa: "fotos precisa por ano da foto, estagio, fotografo"): dados da foto na folha, em lote e na revisão; o site só recebe
+        # o que já tem metadado de texto para isso (o painel não cria); folha publicada recebe o valor novo em segundo plano
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador as _pub, dados_foto as _df
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F087','Fundo Fotos','FOT',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F087',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F087-P0001','F087',1,'Casa',1990)")
+        F = [f"F087-P0001-1990-S03-D{q:05d}" for q in range(1, 5)]
+        for q, cod in enumerate(F, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S03',?,?,'campvision','conferida',?,?)",
+                      (cod, "F087-P0001", q, f"Foto {q}", "no_ar" if q == 4 else "nao_publicado", 771 if q == 4 else None))
+        MT = "Tainacan\\Metadata_Types\\"
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id) VALUES (601,8013,'Fotógrafo',?,NULL)", (MT + "Text",))
+        c.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id) VALUES (602,8013,'Data do registro fotográfico',?,NULL)", (MT + "Date",))
+        c.commit(); c.close()
+        for em, nome, papel in (("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        op, le = cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        site_md = []
+        class WPFoto:
+            def __init__(self, *a, **k): pass
+            def definir_metadado(self, wid, mid, valor): site_md.append((wid, mid, valor))
+        _pub.WP = WPFoto
+        k = connect(); sql = lambda q, *a: (k.execute(q, a).fetchone() or [None])[0]
+        ver("leitura não grava dados da foto (403)", le.post("/api/itens/fotos/dados", json={"itens": [F[0]], "ano": "1992"}).status_code == 403)
+        ver("ano sem 4 dígitos: 400 e nada gravado", op.post("/api/itens/fotos/dados", json={"itens": [F[0]], "ano": "noventa"}).status_code == 400 and sql("SELECT foto_ano FROM item WHERE codigo=?", F[0]) is None)
+        ver("sem campo nenhum: 400", op.post("/api/itens/fotos/dados", json={"itens": [F[0]]}).status_code == 400)
+        r = op.post("/api/itens/fotos/dados", json={"itens": F[:2] + [F[3]], "ano": "c. 1992", "estagio": "Em construção", "fotografo": "  Ana   Lima "}); j = r.json()
+        ver("em lote: as 3 fotos marcadas ganham ano, estágio e fotógrafo (espaços limpos)", r.status_code == 200 and len(j["mudadas"]) == 3
+            and sql("SELECT COUNT(*) FROM item WHERE foto_ano='c. 1992' AND foto_estagio='Em construção' AND foto_fotografo='Ana Lima'") == 3, r.text[:200])
+        ver("a não marcada fica como estava", sql("SELECT foto_ano FROM item WHERE codigo=?", F[2]) is None)
+        ver("fica no histórico (antes/depois) de cada folha", sql("SELECT COUNT(*) FROM evento WHERE tipo='editado' AND codigo IN (?,?,?) AND detalhe LIKE '%foto_fotografo%'", F[0], F[1], F[3]) == 3)
+        ver("a publicada recebe no site só o metadado de TEXTO que existe (Fotógrafo); o de data fica de fora; nada é criado",
+            j["site_em_segundo_plano"] == [F[3]] and site_md == [(771, 601, "Ana Lima")], str(site_md))
+        r2 = op.post("/api/itens/fotos/dados", json={"itens": [F[0]], "estagio": "Obra concluída"})
+        ver("campo que não veio não muda (só o estágio)", r2.status_code == 200 and sql("SELECT foto_ano||'|'||foto_estagio FROM item WHERE codigo=?", F[0]) == "c. 1992|Obra concluída")
+        rp = op.patch(f"/api/itens/{F[2]}", json={"foto_ano": "2010", "foto_fotografo": "Bruno"})
+        ver("revisão da folha (PATCH) grava os dados da foto", rp.status_code == 200 and sql("SELECT foto_ano||'|'||foto_fotografo FROM item WHERE codigo=?", F[2]) == "2010|Bruno", rp.text[:200])
+        ver("GET /edicao devolve os dados da foto", op.get(f"/api/itens/{F[2]}/edicao").json()["local"].get("foto_fotografo") == "Bruno")
+        rc = op.patch(f"/api/itens/{F[2]}", json={"foto_fotografo": "Carla", "vistos": {"foto_fotografo": "Outro"}})
+        ver("CAMP-095 vale aqui: outra pessoa mudou o fotógrafo antes → 409 e nada gravado", rc.status_code == 409 and sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[2]) == "Bruno", rc.text[:200])
+        ver("PATCH com '' apaga", op.patch(f"/api/itens/{F[2]}", json={"foto_fotografo": ""}).status_code == 200 and sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[2]) is None)
+        site_md.clear(); op.patch(f"/api/itens/{F[3]}", json={"foto_fotografo": "Davi"})
+        ver("PATCH numa publicada: o site recebe o fotógrafo novo", (771, 601, "Davi") in site_md, str(site_md))
+        pj = op.get("/api/projetos/F087-P0001/detalhe").json()
+        ver("a página do projeto recebe os dados da foto (para os blocos)", any(x.get("foto_ano") == "2010" for x in pj.get("itens", [])))
+        sg = op.get("/api/fotos/sugestoes?fundo=F087").json()
+        ver("sugestões: fotógrafos já usados e estágios", "Ana Lima" in sg["fotografos"] and "Em construção" in sg["estagios"] and "Obra concluída" in sg["estagios"], str(sg)[:200])
+        ver("ordem dos blocos pelo primeiro ano", _df.ano_de("década de 1990") == 1990 and _df.ano_de("c. 1992") == 1992 and _df.ano_de("sem data") is None)
+        ver("criar no site: para_o_site manda o fotógrafo e ignora o metadado de data", [(m, n) for m, n, v in _df.para_o_site(k, 8013, k.execute("SELECT * FROM item WHERE codigo=?", (F[0],)).fetchone())] == [(601, "Fotógrafo")])
+        _df.valor_inicial_fotografo(k, F[0], "Lido Pelo CV"); _df.valor_inicial_fotografo(k, F[2], "Lido Pelo CV"); k.commit()
+        ver("importação: o fotógrafo lido não sobrescreve o da pessoa e preenche o vazio",
+            sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[0]) == "Ana Lima" and sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[2]) == "Lido Pelo CV")
+        k.close()
         for l in res: print(l)
     elif modo == "camp136_serie":
         # 21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia")
@@ -9950,6 +10011,22 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"exaustão C: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("151) CAMP-136/139 (21/10): mudar o tipo de material (série) da folha, inclusive publicada")
+rc, out = rodar("camp136_serie", f"{tmp}/camp136.db")
+if rc != 0: ok(False, f"teste camp136_serie não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp136: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("152) 21/10: dados da foto (ano da foto, estágio, fotógrafo) em lote e na revisão; site só no metadado que já existe")
+rc, out = rodar("fotos_dados", f"{tmp}/fotos_dados.db")
+if rc != 0: ok(False, f"teste fotos_dados não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"fotos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

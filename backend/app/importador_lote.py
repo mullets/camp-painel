@@ -367,6 +367,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 "sinais": [txt for chave, txt in SINAIS if d.get(chave)] + (["orientação girada pelo CAMP Vision: confira a prévia"] if _girada_pelo_cv(d) else []),
                 "confianca": d.get("confianca"), "previa": d.get("preview") or "",
                 "ano_do_projeto": d.get("ano_do_projeto")}
+        if str(d.get("fotografo") or "").strip():                   # 21/10: a revisão mostra "o CAMP Vision leu" ao lado do Fotógrafo
+            pend["fotografo_lido"] = str(d["fotografo"]).strip()[:200]
         publicavel = bool(d.get("publicavel"))
         if cod in confirmadas and any(tirar_projeto_divergente(pend)) and not pend["bloqueios"] and not d.get("autoria_divergente"):
             publicavel = True                                       # o projeto divergente era o que prendia a folha, e uma pessoa já disse que não é
@@ -405,6 +407,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             con.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, " + ", ".join(campos) + ") VALUES (?,?,?,?,'campvision'," + ",".join("?" * len(campos)) + ")",
                         (cod, proj, serie, seq, *campos.values()))
             criados += 1
+        if lido.get("fotografo"):                    # 21/10: o fotógrafo lido vira o valor inicial da folha (nunca sobrescreve o da pessoa)
+            from .dados_foto import valor_inicial_fotografo
+            valor_inicial_fotografo(con, cod, lido["fotografo"])
         if d.get("duplicata_de"):
             duplicatas.append((cod, str(d["duplicata_de"]), d.get("tipo_duplicata")))
     for cod, de, tipo in duplicatas:                               # depois de todas existirem (a referência é de item para item)

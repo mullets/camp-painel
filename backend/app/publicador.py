@@ -904,6 +904,13 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                         wp.definir_metadado(iid, mid_p, _parc.texto(lista_p)); out["metadados"].append(nome_p)
                     except Exception as e:  # noqa: BLE001
                         _pendencia(con, "item", codigo, f"pendente_metadado_{nome_p}", str(e)[:200])
+            # 21/10: ano da foto, estágio e fotógrafo. Como os parceiros: só vai se o site já tiver o metadado de texto (nunca cria).
+            from . import dados_foto as _df
+            for mid_f, nome_f, valor_f in _df.para_o_site(con, COL_ACERVO, i):
+                try:
+                    wp.definir_metadado(iid, mid_f, valor_f); out["metadados"].append(nome_f)
+                except Exception as e:  # noqa: BLE001
+                    _pendencia(con, "item", codigo, f"pendente_metadado_{nome_f}", str(e)[:200])
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado
