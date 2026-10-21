@@ -24,6 +24,8 @@ from app.rotas_projetos import _url_publica_projeto  # noqa: E402
 
 SITE_FALSO = "http://site-falso.invalid"
 _seq = {"n": 0}
+import threading as _th  # noqa: E402
+_TRAVA = _th.RLock()   # 21/10: o painel manda várias folhas ao mesmo tempo; o site de verdade dá ids únicos, este falso também tem de dar
 
 
 def _novo_id(con) -> int:
@@ -32,34 +34,36 @@ def _novo_id(con) -> int:
 
 
 def dossie_falso(codigo, ator, *a, **k):
-    con = connect()
-    try:
-        p = con.execute("SELECT titulo, cidade, fundo_codigo FROM projeto WHERE codigo=?", (codigo,)).fetchone()
-        wid = _novo_id(con)
-        con.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft',?,?,?,?)",
-                    (wid, p["titulo"], codigo, codigo, p["fundo_codigo"]))
-        con.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo))
-        url = _url_publica_projeto(codigo, p["titulo"], p["cidade"]).replace("https://camp.arq.br", SITE_FALSO)
-        con.execute("INSERT OR REPLACE INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado,json) VALUES (?,?,?,?, 'draft', ?, ?)",
-                    (wid, p["titulo"], url.rstrip("/").rsplit("/", 1)[-1], url, codigo, json.dumps({"item": wid})))
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_dossie_criado',?,?)",
-                    (codigo, ator, json.dumps({"item_id": wid, "metadados": ["Título", "Ano"], "erro": None})))
-        con.commit()
-        return {"item_id": wid, "metadados": [], "erro": None}
-    finally:
-        con.close()
+    with _TRAVA:
+        con = connect()
+        try:
+            p = con.execute("SELECT titulo, cidade, fundo_codigo FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+            wid = _novo_id(con)
+            con.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (?,8007,'draft',?,?,?,?)",
+                        (wid, p["titulo"], codigo, codigo, p["fundo_codigo"]))
+            con.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (wid, codigo))
+            url = _url_publica_projeto(codigo, p["titulo"], p["cidade"]).replace("https://camp.arq.br", SITE_FALSO)
+            con.execute("INSERT OR REPLACE INTO wp_pagina (id,titulo,slug,url,status,codigo_detectado,json) VALUES (?,?,?,?, 'draft', ?, ?)",
+                        (wid, p["titulo"], url.rstrip("/").rsplit("/", 1)[-1], url, codigo, json.dumps({"item": wid})))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_dossie_criado',?,?)",
+                        (codigo, ator, json.dumps({"item_id": wid, "metadados": ["Título", "Ano"], "erro": None})))
+            con.commit()
+            return {"item_id": wid, "metadados": [], "erro": None}
+        finally:
+            con.close()
 
 
 def folha_falsa(codigo, ator, enviar_imagem=True, *a, **k):
-    con = connect()
-    try:
-        wid = _novo_id(con)
-        con.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado) VALUES (?,8013,'draft','folha',?,?)", (wid, codigo, codigo[:10]))
-        con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo))
-        con.commit()
-        return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
-    finally:
-        con.close()
+    with _TRAVA:
+        con = connect()
+        try:
+            wid = _novo_id(con)
+            con.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado) VALUES (?,8013,'draft','folha',?,?)", (wid, codigo, codigo[:10]))
+            con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo))
+            con.commit()
+            return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        finally:
+            con.close()
 
 
 class WPFalso:

@@ -75,9 +75,21 @@ def _meta(con, colecao_id, nome):
     return (fixo, None) if fixo else (None, None)
 
 
+import threading as _threading  # noqa: E402
+_TRAVA_METADADO = _threading.Lock()   # 21/10: folhas vão ao site em paralelo; só uma cria o metadado (a outra acha o que já existe)
+
+
 def _garantir_metadado_origem(con, wp) -> int | None:
     """CV-01: cria UMA vez, na coleção Acervo CAMP, o metadado de texto "Arquivo de origem" (oculto ao público)
     e o registra no espelho. Falhou: devolve None e a folha sobe sem ele (fica pendência)."""
+    with _TRAVA_METADADO:
+        ja = con.execute("SELECT id FROM wp_metadado WHERE colecao_id=? AND nome='Arquivo de origem'", (COL_ACERVO,)).fetchone()
+        if ja:
+            return ja[0]
+        return _criar_metadado_origem(con, wp)
+
+
+def _criar_metadado_origem(con, wp) -> int | None:
     try:
         m = wp.criar_metadado(COL_ACERVO, "Arquivo de origem",
                               "Pasta + nome original do arquivo digitalizado (CAMP Vision). Uso interno: reconciliação e releitura.")
@@ -285,6 +297,7 @@ def renomear_fundo_no_site(codigo: str, novo_titulo: str, ator: str) -> dict:
 def criar_dossie_no_site(codigo: str, ator: str) -> dict:
     """Cria o item do projeto na coleção 'Projetos CAMP' como rascunho, com os metadados que o site usa."""
     con = connect()
+    con.isolation_level = None   # 21/10: não segura o banco travado durante os pedidos ao site (ver criar_folha_no_site)
     p = con.execute("SELECT p.*, f.titulo AS fundo_titulo, f.tainacan_term_id AS fundo_termo FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=?", (codigo,)).fetchone()
     out = {"item_id": p["tainacan_item_id"], "metadados": [], "erro": None}
     if p["tainacan_item_id"]:
@@ -775,6 +788,10 @@ def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, proje
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
     con = connect()
+    # 21/10: cada gravação local vale na hora (autocommit). Antes, o UPDATE do começo abria uma transação que só fechava no fim, depois de
+    # ~15 pedidos ao site (~50 s): o banco ficava travado para escrita e o resto do painel dava "database is locked" (busy_timeout = 30 s).
+    # Gravar o vínculo com o site logo de cara também é o certo: se a rede cair no meio, o próximo envio liga no item que já existe.
+    con.isolation_level = None
     i = con.execute("""SELECT i.*, p.tainacan_item_id AS dossie_id, p.titulo AS projeto_titulo, p.fundo_codigo, p.ano AS projeto_ano,
                               f.titulo AS fundo_titulo, f.tainacan_term_id AS fundo_termo, s.nome AS serie_nome
                        FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo JOIN serie s ON s.codigo=i.serie_codigo

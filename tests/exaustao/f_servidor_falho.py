@@ -23,13 +23,20 @@ _conta = {"n": 0}
 _folha_ok = publicador.criar_folha_no_site
 
 
+_trava_conta = __import__("threading").Lock()   # 21/10: as folhas chegam em paralelo; a 4ª continua sendo UMA só
+
+
 def folha_que_cai(codigo, ator, *a, **k):
-    if ARQ and os.path.exists(ARQ):
-        _conta["n"] += 1
-        if _conta["n"] == 4:
-            os.remove(ARQ)
-            _conta["n"] = 0
-            return {"item_id": None, "metadados": [], "imagem": None, "erro": "o site respondeu 502 (Bad Gateway)"}
+    with _trava_conta:
+        cair = False
+        if ARQ and os.path.exists(ARQ):
+            _conta["n"] += 1
+            if _conta["n"] == 4:
+                os.remove(ARQ)
+                _conta["n"] = 0
+                cair = True
+    if cair:
+        return {"item_id": None, "metadados": [], "imagem": None, "erro": "o site respondeu 502 (Bad Gateway)"}
     return _folha_ok(codigo, ator, *a, **k)
 
 

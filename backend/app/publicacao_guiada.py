@@ -17,6 +17,21 @@ from fastapi import HTTPException
 from .db import connect
 from .publicacao import ELEGIVEL_LOCAL, condicoes_projeto
 
+from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: E402
+
+
+def envio_paralelo() -> int:
+    """Quantas folhas vão ao site ao mesmo tempo (configuração site.envio_paralelo, 1 a 6; sem a chave: 3)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='site.envio_paralelo'").fetchone()
+    finally:
+        con.close()
+    try:
+        return max(1, min(6, int(str(r[0]).strip()))) if r and str(r[0]).strip() else 3
+    except ValueError:
+        return 3
+
 ORCAMENTO_S = 40.0             # tempo máximo de envio de folhas por chamada (a tela repete até acabar)
 _trava = threading.Lock()
 _em_andamento: set[str] = set()
@@ -108,17 +123,29 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             _p(evento="dossie")
 
         t0, criadas, falhas = time.monotonic(), 0, []                                      # 2) folhas, em fatias de tempo (sempre avança ao menos uma)
-        for c in pend:
-            if criadas + len(falhas) > 0 and time.monotonic() - t0 >= ORCAMENTO_S:
-                break
-            _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
-            r = publicador.criar_folha_no_site(c, u["email"])
-            if r.get("erro"):
-                falhas.append({"codigo": c, "erro": r["erro"]})
-                _p(evento="folha_falhou", codigo=c, erro=r["erro"])
-            else:
-                criadas += 1
-                _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
+        # 21/10: várias folhas ao mesmo tempo (site.envio_paralelo, padrão 3). Cada folha é uma chamada inteira e independente (item próprio
+        # no site, conexão própria no banco); os avisos de andamento saem daqui, na ordem em que as folhas terminam.
+        n = envio_paralelo()
+        with ThreadPoolExecutor(max_workers=n) as ex:
+            for i0 in range(0, len(pend), n):
+                if criadas + len(falhas) > 0 and time.monotonic() - t0 >= ORCAMENTO_S:
+                    break
+                fatia = pend[i0:i0 + n]
+                for c in fatia:
+                    _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
+                futuros = {ex.submit(publicador.criar_folha_no_site, c, u["email"]): c for c in fatia}
+                for fu in as_completed(futuros):
+                    c = futuros[fu]
+                    try:
+                        r = fu.result()
+                    except Exception as e:  # noqa: BLE001
+                        r = {"erro": str(e)[:300]}
+                    if r.get("erro"):
+                        falhas.append({"codigo": c, "erro": r["erro"]})
+                        _p(evento="folha_falhou", codigo=c, erro=r["erro"])
+                    else:
+                        criadas += 1
+                        _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
         restam = len(pend) - criadas - len(falhas)
         if falhas:
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,

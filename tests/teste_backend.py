@@ -1145,6 +1145,34 @@ def filho(modo):
         pub.criar_dossie_no_site("F099-P0001", "teste@camp")
         pi = {m: v for _w, m, v in enviados}
         ver("dossiê: 'Código de Catalogação' (811) e 'Ano' (8439) vão por ID do plugin", pi.get(811) == "F099-P0001" and pi.get(8439) == "1970", str(pi))
+        # 21/10 ("pq demora tanto pra subir um projeto?"): enviar uma folha segurava o banco travado do primeiro UPDATE até o fim (~15 pedidos
+        # ao site, ~50 s); o resto do painel dava "database is locked". A sonda tenta GRAVAR no meio do envio, com espera curta (1 s).
+        import sqlite3 as _s3, os as _os3, threading as _th, time as _tm
+        sonda = []
+        def provar():
+            k = _s3.connect(_os3.environ["CAMP_DB_PATH"], timeout=1)
+            try: k.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('x','x','sonda','sonda')"); k.commit(); sonda.append(True)
+            except _s3.OperationalError: sonda.append(False)
+            finally: k.close()
+        class WPSonda(FakeWP):
+            n = 0
+            def criar_item(self, cid, titulo, status="draft", descricao=""): WPSonda.n += 1; return {"id": 7200 + WPSonda.n, "slug": "s", "url": "u"}
+            def definir_metadado(self, wid, mid, valor):
+                if len(sonda) < 2: provar()
+        pub.WP = WPSonda
+        C9 = "F099-P0001-1970-S01-D00009"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,origem) VALUES (?,?,?,?,?,?,'importado')", (C9, "F099-P0001", "S01", 9, "Corte", "Corte")); c.commit()
+        r9 = pub.criar_folha_no_site(C9, "teste@camp", enviar_imagem=False)
+        ver("21/10: durante o envio de uma folha ao site o painel continua podendo gravar (o banco não fica travado)", sonda and all(sonda) and r9.get("item_id"), str(sonda) + " " + str(r9.get("erro")))
+        ver("21/10: o vínculo com o site fica gravado logo (a próxima tentativa liga no item que já existe)", c.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (C9,)).fetchone()[0] == r9.get("item_id"))
+        # várias folhas ao mesmo tempo (site.envio_paralelo)
+        from app import publicacao_guiada as _pg
+        ver("21/10: a migração liga o envio de 3 folhas ao mesmo tempo; 1 a 6; valor ruim volta a 3", _pg.envio_paralelo() == 3, str(_pg.envio_paralelo()))
+        c.execute("UPDATE configuracao SET valor='99' WHERE chave='site.envio_paralelo'"); c.commit(); a99 = _pg.envio_paralelo()
+        c.execute("UPDATE configuracao SET valor='x' WHERE chave='site.envio_paralelo'"); c.commit(); ax = _pg.envio_paralelo()
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='site.envio_paralelo'"); c.commit(); a1 = _pg.envio_paralelo()
+        ver("21/10: limites da configuração (99 → 6, 'x' → 3, 1 → 1)", (a99, ax, a1) == (6, 3, 1), str((a99, ax, a1)))
+        c.execute("UPDATE configuracao SET valor='3' WHERE chave='site.envio_paralelo'"); c.commit()
         for l in res: print(l)
     elif modo == "importador":
         init_db(); aplicar_migracoes()
@@ -2688,11 +2716,20 @@ def filho(modo):
         # ---------- fatias de tempo: um projeto grande devolve 'parcial' e repetir termina ----------
         c = connect(); P3 = proj(3, "Casa Tres")
         for n in (1, 2, 3): folha(D(P3, n), n)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='site.envio_paralelo'")   # 21/10: uma de cada vez, para ver a fatia por folha
         c.commit(); c.close(); pg.ORCAMENTO_S = 0.0; antes = len(chamadas["status"])
         p1 = adm.post(f"/api/projetos/{P3}/publicar-tudo").json(); p2 = adm.post(f"/api/projetos/{P3}/publicar-tudo").json()
         ver("projeto grande: cada chamada envia uma fatia e devolve 'parcial' com quantas faltam (a tela repete), sem publicar ainda", p1["ok"] is False and p1["parcial"] is True and p1["restam"] == 2 and p2["parcial"] is True and p2["restam"] == 1 and len(chamadas["status"]) == antes, f"{p1.get('restam')} {p2.get('restam')}")
         p3 = adm.post(f"/api/projetos/{P3}/publicar-tudo").json(); pg.ORCAMENTO_S = 40.0
         ver("na última fatia termina: autoriza e publica (dossiê + 3 folhas)", p3["ok"] is True and p3["parcial"] is False and p3["publicados"] == 4 and len(chamadas["status"]) == antes + 4, str(p3)[:200])
+        # 21/10 ("pq demora tanto pra subir um projeto?"): com site.envio_paralelo = 3, a MESMA fatia mínima leva 3 folhas de uma vez
+        c = connect(); P4 = proj(4, "Casa Quatro")
+        for n in (1, 2, 3, 4): folha(D(P4, n), n)
+        c.execute("UPDATE configuracao SET valor='3' WHERE chave='site.envio_paralelo'"); c.commit(); c.close(); pg.ORCAMENTO_S = 0.0
+        q1 = adm.post(f"/api/projetos/{P4}/publicar-tudo").json(); pg.ORCAMENTO_S = 40.0
+        ver("21/10: com 3 ao mesmo tempo, uma fatia envia 3 folhas (antes, 1): faltam 1 de 4", q1.get("parcial") is True and q1.get("restam") == 1 and q1.get("folhas_criadas") == 3, str(q1)[:200])
+        q2 = adm.post(f"/api/projetos/{P4}/publicar-tudo").json()
+        ver("21/10: e a seguinte termina e publica (dossiê + 4 folhas)", q2.get("ok") is True and q2.get("publicados") == 5, str(q2)[:200])
         # ---------- sem nenhuma folha conferida: bloqueia ----------
         c = connect(); P2 = proj(2, "Casa Dois"); folha(D(P2, 1), 1); c.execute("UPDATE item SET lote_id=?, revisao='pendente' WHERE codigo=?", (lid, D(P2, 1))); c.commit(); c.close()
         b = adm.post(f"/api/projetos/{P2}/publicar-tudo")
@@ -3437,6 +3474,7 @@ def filho(modo):
                 if t["estado"] != "rodando": return t
                 _tm.sleep(0.2)
             return adm.get(f"/api/tarefas/{tid}").json()
+        _kc = connect(); _kc.execute("UPDATE configuracao SET valor='1' WHERE chave='site.envio_paralelo'"); _kc.commit(); _kc.close()   # 21/10: uma de cada vez para ver o "meio"
         t0 = _tm.monotonic(); r = adm.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1"); dt = _tm.monotonic() - t0; tid = r.json().get("tarefa_id")
         ver("publicar-tudo?tarefa=1 responde NA HORA (202 + tarefa_id), sem esperar as 5 folhas lentas (0,5 s cada)", r.status_code == 202 and tid and dt < 1.0, f"{r.status_code} {dt:.2f}s {r.text[:80]}")
         _tm.sleep(1.3); meio = adm.get(f"/api/tarefas/{tid}").json()
