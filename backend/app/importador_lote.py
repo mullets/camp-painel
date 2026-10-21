@@ -57,6 +57,12 @@ def ler_pacote(pasta: Path) -> dict | None:
     return dados
 
 
+def _girada_pelo_cv(d: dict) -> bool:
+    """T6 (acervo novo): o CAMP Vision girou a folha (90/180/270) e não marcou incerteza nem foi corrigida: só um olho humano vê se girou certo.
+    Vira sinal: 'Aprovar todas' deixa a folha para conferir uma a uma (a regra de CAMP-094). O espelho tem a marca própria."""
+    return _rotacao(d.get("rotacao_aplicada")) != 0 and not d.get("orientacao_incerta") and not d.get("orientacao_corrigida")
+
+
 def _rotacao(v) -> int:
     try:
         r = int(v or 0) % 360
@@ -358,7 +364,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         cliente_lido = _primeiro(d, md, ("cliente", "proprietario", "proprietário"))
         ano_folha = int(ano) if ano.isdigit() and 1800 <= int(ano) <= 2100 else None
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
-                "sinais": [txt for chave, txt in SINAIS if d.get(chave)], "confianca": d.get("confianca"), "previa": d.get("preview") or "",
+                "sinais": [txt for chave, txt in SINAIS if d.get(chave)] + (["orientação girada pelo CAMP Vision: confira a prévia"] if _girada_pelo_cv(d) else []),
+                "confianca": d.get("confianca"), "previa": d.get("preview") or "",
                 "ano_do_projeto": d.get("ano_do_projeto")}
         publicavel = bool(d.get("publicavel"))
         if cod in confirmadas and any(tirar_projeto_divergente(pend)) and not pend["bloqueios"] and not d.get("autoria_divergente"):

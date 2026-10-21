@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5171,6 +5171,56 @@ def filho(modo):
         enviados2.clear(); out = redir_site.enviar_pendentes(k, WP2()); k.commit()
         env = [e for e in enviados2 if e["codigo_antigo"] == f2]
         ver("endereço da folha MUDOU (slug novo): o 301 sai com o endereço antigo guardado e o novo", len(env) == 1 and env[0]["antigo"] == "/acervo/documentos/folha-b/" and env[0]["novo"] == "/acervo/documentos/folha-b-novo/", str(env))
+        for l in res: print(l)
+        k.close()
+        return 0
+    elif modo == "melhorias_acervo_novo":
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from unittest import mock
+        from app import importador_lote, publicacao_guiada, publicador
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'SESI',1971)")
+        c.commit(); c.close()
+        k = connect(); sql = lambda q, *a_: k.execute(q, a_).fetchone()[0]
+        # ---- T1: a pendência de criar no site fecha quando a criação dá certo depois
+        class WPFalso:
+            def criar_termo(self, tax, nome, desc=None): return {"id": 9000 + tax, "slug": "x"}
+        with mock.patch.object(publicador, "WP", WPFalso):
+            o1 = publicador.criar_fundo_no_site("F026", "adm@x")                     # sem taxonomia 'Fundos' no espelho
+        ver("T1 · sem a taxonomia do site, criar o fundo falha com texto claro e abre a pendência", bool(o1["erro"]) and sql("SELECT COUNT(*) FROM divergencia_site WHERE entidade='fundo' AND codigo='F026' AND campo='pendente_criar_no_site' AND resolvida=0") == 1, str(o1))
+        k.execute("INSERT INTO wp_taxonomia (id, nome, slug) VALUES (5001,'Fundos','fundos'),(5002,'Arquitetos','arquitetos')"); k.commit()
+        with mock.patch.object(publicador, "WP", WPFalso):
+            o2 = publicador.criar_fundo_no_site("F026", "adm@x")
+        ver("T1 · depois da sincronização, criar no site dá certo E fecha a pendência antiga", not o2["erro"] and sql("SELECT COUNT(*) FROM divergencia_site WHERE entidade='fundo' AND codigo='F026' AND campo='pendente_criar_no_site' AND resolvida=0") == 0, str(o2))
+        # ---- T6: o CV2 girou a folha sem marcar incerteza: vira sinal (a 'Aprovar todas' não a confere sozinha)
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        pasta = _pl.Path(tempfile.mkdtemp()) / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        d0, d1 = pac["documentos"][0], pac["documentos"][1]
+        d0.update(rotacao_aplicada=90, orientacao_incerta=False, orientacao_corrigida=False, titulo="", ano="1917")
+        d1.update(bloqueios=[], ressalvas=[], duplicata_de=None, tipo_duplicata="", publicavel=True, rotacao_aplicada=0, orientacao_incerta=False, orientacao_corrigida=False, titulo="Planta térrea", ano="1971")
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(pac, ensure_ascii=False), encoding="utf-8")
+        lote = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid; k.commit()
+        importador_lote.importar_lote(k, lote, "teste"); k.commit()
+        def sinais(cod): return (_j.loads(k.execute("SELECT pendencias FROM item WHERE codigo=?", (cod,)).fetchone()[0]) or {}).get("sinais") or []
+        ver("T6 · folha girada pelo CV2 (90°) sem 'incerta': ganha o sinal 'orientação girada pelo CAMP Vision'", any("girada" in s_ for s_ in sinais(d0["codigo"])), str(sinais(d0["codigo"])))
+        ver("T6 · folha que o CV2 não girou: nenhum sinal de orientação", not any("orienta" in s_ for s_ in sinais(d1["codigo"])), str(sinais(d1["codigo"])))
+        from app.rotas_revisao import _aviso_da_folha
+        i0 = k.execute("SELECT * FROM item WHERE codigo=?", (d0["codigo"],)).fetchone(); i1 = k.execute("SELECT * FROM item WHERE codigo=?", (d1["codigo"],)).fetchone()
+        ver("T6 · 'Aprovar todas' deixa a girada para conferir uma a uma e confere a que está limpa", _aviso_da_folha(k, i0) == "aviso do CAMP Vision" and _aviso_da_folha(k, i1) is None, str((_aviso_da_folha(k, i0), _aviso_da_folha(k, i1))))
+        # ---- T4 e T5: o plano de publicação avisa (não bloqueia)
+        k.execute("UPDATE item SET revisao='conferida', status_site='nao_publicado' WHERE projeto_codigo='F026-P0001'"); k.commit()
+        pl = publicacao_guiada.plano(k, k.execute("SELECT * FROM projeto WHERE codigo='F026-P0001'").fetchone())
+        ids = {a_["id"] for a_ in pl["avisos"]}
+        ver("T4 · o plano avisa que há folha sem título (e não bloqueia por isso)", "folhas_sem_titulo" in ids and not any(b_["id"] == "titulo" for b_ in pl["bloqueios"]), str(pl["avisos"])[:300])
+        ver("T5 · o plano avisa do ano da folha muito diferente do projeto (1917 x 1971)", "ano_fora_do_projeto" in ids, str(pl["avisos"])[:300])
+        k.execute("UPDATE item SET titulo='Corte AA', ano_folha=1971 WHERE projeto_codigo='F026-P0001'"); k.commit()
+        pl2 = publicacao_guiada.plano(k, k.execute("SELECT * FROM projeto WHERE codigo='F026-P0001'").fetchone())
+        ids2 = {a_["id"] for a_ in pl2["avisos"]}
+        ver("T4/T5 · com título e ano certos, os dois avisos somem", "folhas_sem_titulo" not in ids2 and "ano_fora_do_projeto" not in ids2, str(pl2["avisos"])[:300])
         for l in res: print(l)
         k.close()
         return 0
