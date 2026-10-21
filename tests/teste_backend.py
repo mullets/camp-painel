@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4022,6 +4022,49 @@ def filho(modo):
             sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[0]) == "Ana Lima" and sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[2]) == "Lido Pelo CV")
         k.close()
         for l in res: print(l)
+    elif modo == "site_renova":
+        # 21/10 (Rafa: "alterei coisas num projeto e não foram pro ar"): o plugin do site guarda os dados por 12 h para o público e só limpa quando
+        # o item é salvo inteiro; mudar um metadado pela API do Tainacan não limpava. Agora toda mudança termina regravando o código pela rota da
+        # CAMP, que limpa o cache na hora. E endereço, cliente e suporte corrigidos na folha também vão ao site.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador as _pub, wp as _wpm
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F079','Fundo Renova','RNV',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F079',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,status_site,tainacan_item_id) VALUES ('F079-P0001','F079',1,'Casa',1960,'Santos','no_ar',400)")
+        F1 = "F079-P0001-1960-S01-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',1,'Planta','campvision','conferida','no_ar',401)", (F1, "F079-P0001"))
+        c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'site_item_criado','x','{}')", (F1,))
+        c.execute("INSERT OR IGNORE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (8070,8013,'Suporte','Tainacan\\Metadata_Types\\Text')")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        lotes, metas = [], []
+        class WPR:
+            def __init__(self, *a, **k): pass
+            def definir_metadado(self, wid, mid, v): metas.append((wid, mid, v))
+            def patch_item(self, *a, **k): pass
+            def gravar_metadados_lote(self, wid, corpo): lotes.append((wid, dict(corpo))); return {"ok": True, "gravados": list(corpo)}
+        _pub.WP = WPR; _wpm.WP = WPR
+        r = adm.patch("/api/projetos/F079-P0001", json={"cidade": "Guarujá"})
+        ver("projeto publicado: a cidade nova vai ao site E o cache do site é renovado na hora (regrava o Código de Catalogação)",
+            r.status_code == 200 and r.json()["site"]["enviados"] and (400, {"Código de Catalogação": "F079-P0001"}) in lotes, str(lotes) + r.text[:200])
+        lotes.clear(); metas.clear()
+        r = adm.patch(f"/api/itens/{F1}", json={"escala": "1:100"})
+        ver("folha publicada: a escala nova vai ao site sozinha e o cache é renovado (regrava o Código do documento)",
+            r.status_code == 200 and any(w == 401 and v == "1:100" for w, _m, v in metas) and (401, {"Código do documento": F1}) in lotes, str(lotes) + str(metas))
+        metas.clear()
+        r = adm.patch(f"/api/itens/{F1}", json={"endereco_folha": "Rua Nova, 10", "cliente_folha": "Família X", "suporte": "papel vegetal"})
+        enviados = {v for _w, _m, v in metas}
+        ver("endereço, cliente e suporte corrigidos na folha também vão ao site (antes ficavam só no painel)",
+            r.status_code == 200 and {"Rua Nova, 10", "Família X", "papel vegetal"} <= enviados, str(metas))
+        class WPAntigo(WPR):
+            gravar_metadados_lote = None
+        ver("site sem a rota: não quebra nada (só não renova)", _pub.renovar_no_site(type("X", (), {})(), 401, F1) is False)
+        for l in res: print(l)
     elif modo == "camp136_serie":
         # 21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia")
         init_db(); _aplicar_migracoes_real()
@@ -7186,12 +7229,12 @@ def filho(modo):
             e.status_code == 200 and e.json()["espelhar"] is False and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(1)) == 0 and vermelho(img(previa(D(1))), (5, 5)), e.text)
         r0 = previa(D(3)); e = op.post(f"/api/itens/{D(3)}/espelhar"); r1 = previa(D(3))
         ver("espelhar uma folha normal: FLIP esquerda-direita (60x30, canto vermelho vai para a direita), mesmo tamanho",
-            e.json() == {"espelhar": True, "giro_manual": 0, "site_pendente": False} and img(r1).size == (60, 30) and vermelho(img(r1), (54, 5)) and not vermelho(img(r1), (5, 5)))
+            {k: e.json().get(k) for k in ("espelhar", "giro_manual", "site_pendente")} == {"espelhar": True, "giro_manual": 0, "site_pendente": False} and img(r1).size == (60, 30) and vermelho(img(r1), (54, 5)) and not vermelho(img(r1), (5, 5)))
         ver("miniatura espelhada (?t=200) também sai espelhada", vermelho(img(previa(D(3), "?t=200")), (54, 5)) and not vermelho(img(previa(D(3), "?t=200")), (5, 5)))
         op.post(f"/api/itens/{D(3)}/espelhar"); ver("desespelhar volta ao ARQUIVO ORIGINAL (bytes iguais)", previa(D(3)).content == r0.content)
         op.post(f"/api/itens/{D(3)}/girar", json={"graus": 90}); e = op.post(f"/api/itens/{D(3)}/espelhar"); rg = previa(D(3))
         ver("folha deitada (giro 90): espelhar troca o giro por 270, para espelhar o que a pessoa VÊ (esquerda-direita na tela): canto vermelho em cima à esquerda",
-            e.json() == {"espelhar": True, "giro_manual": 270, "site_pendente": False} and img(rg).size == (30, 60) and vermelho(img(rg), (5, 5)) and not vermelho(img(rg), (24, 5)), e.text)
+            {k: e.json().get(k) for k in ("espelhar", "giro_manual", "site_pendente")} == {"espelhar": True, "giro_manual": 270, "site_pendente": False} and img(rg).size == (30, 60) and vermelho(img(rg), (5, 5)) and not vermelho(img(rg), (24, 5)), e.text)
         ver("reimportar o lote NÃO desfaz a decisão de gente (espelho_manual fica)", op.post(f"/api/lotes/{lote}/importar").status_code == 200 and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(1)) == 0 and sql("SELECT espelho_manual FROM item WHERE codigo=?", D(3)) == 1)
         ver("espelhar: leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(3)}/espelhar").status_code == 403 and anon.post(f"/api/itens/{D(3)}/espelhar").status_code == 401 and op.post("/api/itens/F026-P0001-1972-S01-D99999/espelhar").status_code == 404)
         k.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (D(2),)); k.commit()
@@ -10359,6 +10402,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"metadados em lote: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("158) 21/10: mudança feita no painel aparece no site na hora (renova o cache do site) e endereço/cliente/suporte da folha vão juntos")
+rc, out = rodar("site_renova", f"{tmp}/site_renova.db")
+if rc != 0: ok(False, f"teste site_renova não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"site renova: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -385,6 +385,20 @@ def _valor_site(campo: str, v):
     return "" if v in (None, 0) else str(v)
 
 
+def renovar_no_site(wp, item_id, codigo: str, projeto: bool = False) -> bool:
+    """21/10 (Rafa: "alterei coisas num projeto e não foram pro ar"): o plugin do site guarda os dados dos projetos e folhas por 12 h
+    para o público e só limpa quando o item é salvo inteiro. Mudar um metadado pela API do Tainacan NÃO limpa: a equipe via o valor
+    novo e o público o antigo. Depois de qualquer mudança, o painel regrava o código do item pela rota da CAMP (camp/v1/painel/item/
+    {id}/metadados), que limpa o cache na hora. Sem a rota (site antigo) ou sem esse método (testes): não faz nada. Nunca levanta."""
+    if not item_id or not hasattr(wp, "gravar_metadados_lote"):
+        return False
+    try:
+        r = wp.gravar_metadados_lote(int(item_id), {("Código de Catalogação" if projeto else "Código do documento"): codigo})
+        return bool(r and (r.get("gravados") or r.get("ok")))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
     """Edição de campos do projeto no painel -> metadados do dossiê no Tainacan."""
     con = connect()
@@ -398,6 +412,10 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
             titulo = f"{codigo.split('-')[1]} — {p['titulo']}" + (f", {p['cidade']}" if p["cidade"] else "")
             wp.patch_item(COL_PROJETOS, p["tainacan_item_id"], title=titulo, description=p["ambito_conteudo"] or "")
             out["enviados"].append("título/descrição")
+        if "endereco_obra" in campos and (p["endereco_obra"] or "").strip():     # 21/10: só se o site tiver o campo (nunca cria nem reclama)
+            mid_e, _t = _meta(con, COL_PROJETOS, "Endereço")
+            if mid_e:
+                wp.definir_metadado(p["tainacan_item_id"], mid_e, p["endereco_obra"].strip()); out["enviados"].append("Endereço")
         for campo, nome in CAMPOS_PROJETO_SITE.items():
             if campo in campos:
                 mid, tipo_meta = _meta(con, COL_PROJETOS, nome)
@@ -406,6 +424,8 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
                     out["enviados"].append(nome)
                 else:
                     _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): a mudança não foi gravada.")
+        if out["enviados"]:
+            out["renovado"] = renovar_no_site(wp, p["tainacan_item_id"], codigo, projeto=True)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_metadados',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:300]; _pendencia(con, "projeto", codigo, "pendente_metadados_no_site", out["erro"])
@@ -816,6 +836,7 @@ def atualizar_serie_no_site(codigo: str, ator: str) -> dict:
             if nome == "Tipo de desenho":
                 valor = _tipos_para_site(con, codigo, mid, valor)
             wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
+        renovar_no_site(wp, iid, codigo)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_serie_atualizada',?,?)",
                     (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001
@@ -1035,6 +1056,8 @@ def atualizar_folha_no_site(codigo: str, wid: int, colecao_id: int, titulo: str 
                 con.execute("UPDATE wp_item SET metadados=? WHERE id=?", (json.dumps(md, ensure_ascii=False), wid))
             except Exception as e:  # noqa: BLE001
                 falha(nome, e)
+        if out["enviados"]:                     # 21/10: o público vê na hora (sem isso, até 12 h de cache no site)
+            out["renovado"] = renovar_no_site(wp, wid, codigo, projeto=int(colecao_id or 0) == COL_PROJETOS)
     finally:
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_texto_editado',?,?)",
                     (codigo, ator, json.dumps(out, ensure_ascii=False)))

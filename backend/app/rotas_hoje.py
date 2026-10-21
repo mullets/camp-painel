@@ -245,6 +245,7 @@ def corrigir_divergencias(d: CorrigirDivergencia, u: dict = Depends(auth.exige("
                 if not mid:
                     raise RuntimeError("o site não tem o campo Fundo nesta coleção")
                 wp.definir_metadado(int(w["id"]), mid, int(f["tainacan_term_id"]))
+                publicador.renovar_no_site(wp, int(w["id"]), a["codigo"], projeto=int(w["colecao_id"]) == publicador.COL_PROJETOS)
                 detalhe = {"item_site": w["id"], "fundo": f["codigo"]}
             else:
                 w = con.execute("SELECT id, colecao_id, status FROM wp_item WHERE id=?", (int(a["codigo"]) if str(a["codigo"]).isdigit() else -1,)).fetchone()

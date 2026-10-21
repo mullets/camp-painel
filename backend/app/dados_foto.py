@@ -103,6 +103,7 @@ def enviar_ao_site(codigo: str, ator: str) -> dict:
         wp = publicador.WP()
         for mid, nome, v in envio:
             wp.definir_metadado(int(i["tainacan_item_id"]), mid, v); out["metadados"].append(nome)
+        publicador.renovar_no_site(wp, int(i["tainacan_item_id"]), codigo)     # 21/10: o público vê na hora
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_dados_foto',?,?)",
                     (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001

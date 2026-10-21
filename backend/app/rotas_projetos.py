@@ -672,7 +672,7 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
     con.close()
     site = None
     if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo", "autoria", "papel_no_projeto",
-                                      "natureza", "modalidade", "situacao_obra")):
+                                      "natureza", "modalidade", "situacao_obra", "endereco_obra")):
         from .publicador import atualizar_dossie_no_site
         site = atualizar_dossie_no_site(codigo, mud, u["email"])
     return {"ok": True, "campos": list(mud), "site": site}

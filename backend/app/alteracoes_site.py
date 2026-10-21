@@ -21,6 +21,10 @@ CAMPOS = {
     "folha": ("Nº da folha", "Folha"),
     "escala": ("Escala", "Escala"),
     "ano_folha": ("Ano", "Ano"),
+    # 21/10 (Rafa: "alterei coisas num projeto e não foram pro ar"): estes também são públicos e iam só para o painel
+    "endereco_folha": ("Endereço da obra", "Endereço"),
+    "cliente_folha": ("Cliente", "Cliente"),
+    "suporte": ("Suporte", "Suporte"),
 }
 EVENTOS_ENVIO = ("site_item_criado", "site_item_reaproveitado", "site_alteracoes_enviadas")
 
@@ -53,7 +57,7 @@ def conta_site(itens_local: list[dict], codigos_site: list[str]) -> dict:
 def pendentes(con, projeto: str) -> list[dict]:
     from .rotas_revisao import imagem_site_pendente
     itens = [dict(r) for r in con.execute(
-        """SELECT codigo, titulo, tipo_documento, tipos_documento, folha, escala, ano_folha, status_site, publicado_em, tainacan_item_id
+        """SELECT codigo, titulo, tipo_documento, tipos_documento, folha, escala, ano_folha, endereco_folha, cliente_folha, suporte, status_site, publicado_em, tainacan_item_id
              FROM item WHERE projeto_codigo=? AND status_site IN ('no_ar','rascunho') AND tainacan_item_id IS NOT NULL ORDER BY codigo""", (projeto,))]
     if not itens:
         return []

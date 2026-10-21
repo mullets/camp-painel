@@ -197,6 +197,12 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
 
         _p(evento="publicar")
         res = publicar(codigo, Publicacao(acao="publicar"), u)                              # 4) publicar (revalida TODOS os portões)
+        if res.get("ok") and p["tainacan_item_id"]:                                           # 21/10: o público vê na hora (renova o cache do site)
+            try:
+                from . import wp as _wpmod
+                publicador.renovar_no_site(_wpmod.WP(), p["tainacan_item_id"], codigo, projeto=True)
+            except Exception:  # noqa: BLE001
+                pass
         con = connect()
         try:
             resultado = resultado_publicacao(con, codigo) if res.get("ok") else {}
