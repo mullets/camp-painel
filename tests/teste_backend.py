@@ -5014,6 +5014,32 @@ def filho(modo):
         with mock.patch.object(publicador, "WP", WPFalso), mock.patch.object(publicador, "_meta", lambda *a_, **k_: (77, None)):
             out = rotas_mesclar._enviar_codigos_ao_site([{"de": "F010-P0001-1972-S01-D00001", "para": "F010-P0900-1972-S01-D00001"}], "adm@x")
         ver("recodificar: o 'Código do documento' novo é enviado ao item do site", enviados == [(501, 77, "F010-P0900-1972-S01-D00001")] and out["atualizadas"] == 1, str((enviados, out)))
+
+        # (3b) redirecionamento da FOLHA: o endereço antigo é guardado antes da troca; endereço igual = nada a enviar; endereço diferente = 301
+        from app import redir_site
+        def semear(num, cod_p, url_antes):
+            k.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F010',?)", (num,)); k.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1972)", (cod_p, "F010", num, f"R{num}"))
+            f = f"{cod_p}-1972-S01-D00001"
+            k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,tainacan_item_id,status_site) VALUES (?,?,'S01',1,'F','campvision',?,'no_ar')", (f, cod_p, 600 + num))
+            k.execute("INSERT INTO wp_item (id, codigo_detectado, projeto_detectado, url, status) VALUES (?,?,?,?, 'publish')", (600 + num, f, cod_p, url_antes)); k.commit()
+            return f
+        f1 = semear(11, "F010-P0011", "https://site.test/acervo/documentos/folha-a/")
+        rotas_mesclar._transacao(lambda con_: rotas_mesclar._recodificar(con_, "F010-P0011", "F010-P0911", "adm@x", "teste"))
+        k.commit()
+        ua, un = redir_site.resolver_urls(k, "item", f1, f1.replace("P0011", "P0911"))
+        ver("recodificar: o endereço público ANTIGO da folha fica guardado e o redirecionamento o resolve", ua == "/acervo/documentos/folha-a/" and un == "/acervo/documentos/folha-a/", str((ua, un)))
+        enviados2 = []
+        class WP2:
+            def enviar_redirecionamentos(self, lista): enviados2.extend(lista); return {}
+        out = redir_site.enviar_pendentes(k, WP2()); k.commit()
+        r_f = k.execute("SELECT aplicado_no_site FROM redirecionamento WHERE codigo_antigo=?", (f1,)).fetchone()
+        ver("endereço da folha NÃO mudou: nada é enviado (sem 301 para si mesmo), fecha como aplicado e sem pendência", not any(e["codigo_antigo"] == f1 for e in enviados2) and r_f[0] == 1 and not k.execute("SELECT 1 FROM divergencia_site WHERE codigo=? AND resolvida=0", (f1,)).fetchone(), str((out, enviados2)))
+        f2 = semear(12, "F010-P0012", "https://site.test/acervo/documentos/folha-b/")
+        rotas_mesclar._transacao(lambda con_: rotas_mesclar._recodificar(con_, "F010-P0012", "F010-P0912", "adm@x", "teste"))
+        k.execute("UPDATE wp_item SET url='https://site.test/acervo/documentos/folha-b-novo/' WHERE id=612"); k.commit()
+        enviados2.clear(); out = redir_site.enviar_pendentes(k, WP2()); k.commit()
+        env = [e for e in enviados2 if e["codigo_antigo"] == f2]
+        ver("endereço da folha MUDOU (slug novo): o 301 sai com o endereço antigo guardado e o novo", len(env) == 1 and env[0]["antigo"] == "/acervo/documentos/folha-b/" and env[0]["novo"] == "/acervo/documentos/folha-b-novo/", str(env))
         for l in res: print(l)
         k.close()
         return 0

@@ -59,6 +59,9 @@ def resolver_urls(con, entidade: str, antigo: str, novo: str) -> tuple[str | Non
     """(caminho antigo, caminho novo). Projeto: espelho do site; senão url_publica_confirmada (conforme tenha o código antigo ou o novo); o novo, na falta,
     é montado como a rota pública presumida (/acervo/projetos/<codigo>-<slug>/). Folha: só o que o espelho conhece."""
     ua, un = _url_conhecida(con, entidade, antigo), _url_conhecida(con, entidade, novo)
+    if not ua:   # recodificado: o espelho já só tem o código novo; o endereço antigo foi guardado na hora da troca
+        g = con.execute("SELECT url_antiga FROM redirecionamento WHERE codigo_antigo=?", (antigo,)).fetchone()
+        ua = (g["url_antiga"] if g else None) or None
     if entidade == "projeto":
         p = con.execute("SELECT titulo, cidade, url_publica_confirmada FROM projeto WHERE codigo=?", (novo,)).fetchone()
         if p and p["url_publica_confirmada"]:
@@ -119,6 +122,10 @@ def enviar_pendentes(con=None, wp=None) -> dict:
                 from .publicador import _pendencia
                 _pendencia(con, it["entidade"], it["antigo"], "pendente_redirecionamento",
                            f"Redirecionamento {it['antigo']} → {it['novo']} não enviado ao site: não conheço o endereço público {'antigo' if not ua else 'novo'}. Sincronize com o site ou confirme a página pública do projeto.")
+                continue
+            if ua == un:   # o endereço não mudou (só o código): redirecionar para si mesmo faria laço no site; nada a enviar
+                con.execute("UPDATE redirecionamento SET aplicado_no_site=1, aplicado_em=datetime('now'), ultimo_erro='endereço não mudou: nada a redirecionar' WHERE codigo_antigo=?", (it["antigo"],))
+                out["pendentes"] -= 1
                 continue
             prontos.append({**it, "url_antiga": ua, "url_nova": un})
         con.commit()
