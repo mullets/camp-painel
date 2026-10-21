@@ -232,6 +232,38 @@ def obras_na_pasta(pacote: dict | None, propostas) -> dict | None:
             "sem_unidade": sem, "propostas": len(lista)}
 
 
+# CAMP-134 (21/10): o comparacao.json REAL do CV2 (nucleo/releitura.py) é {"resumo": {...}, "documentos": {<folha>: {"mudou": {<campo>:
+# {"antes", "agora", "confianca_agora"}}, "preencheu": [...], "erro": ""}}}. O painel lia cada chave do topo como se fosse uma folha
+# ("resumo" e "documentos" viravam duas "folhas" com dezenas de Aceitar/Ignorar sem sentido). O formato antigo {<folha>: {<campo>:
+# {"antes","agora"}}} continua aceito. Campos com nome do CV2 (titulo_prancha) e do painel (titulo) valem os dois.
+CAMPO_RELEITURA_FOLHA = {"titulo_prancha": "titulo", "titulo": "titulo", "escala": "escala", "folha": "folha", "ano": "ano_folha",
+                         "tipo": "tipo_documento", "endereco": "endereco_folha", "cliente": "cliente_folha"}
+ROTULO_CAMPO_CV = {"titulo_prancha": "Título", "titulo": "Título", "escala": "Escala", "folha": "Nº da folha", "ano": "Ano", "tipo": "Tipo",
+                   "endereco": "Endereço", "cliente": "Cliente", "data": "Data", "projeto": "Projeto", "arquiteto": "Arquiteto",
+                   "escritorio": "Escritório", "cidade": "Cidade", "uf": "UF", "total_folhas": "Total de folhas", "codigo_serie": "Código de série",
+                   "codigo_unidade": "Código de unidade", "revisao": "Revisão"}
+_COD_FOLHA = re.compile(r"F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}", re.I)
+
+
+def normalizar_comparacao(comp) -> dict:
+    """{<código da folha>: {<campo>: {"antes", "agora"}}} a partir dos dois formatos; o que não for folha (resumo etc.) fica de fora."""
+    if not isinstance(comp, dict) or comp.get("_ilegivel"):
+        return {}
+    docs = comp.get("documentos") if isinstance(comp.get("documentos"), dict) else comp
+    out = {}
+    for chave, v in docs.items():
+        m = _COD_FOLHA.search(str(chave))
+        if not m or not isinstance(v, dict):
+            continue
+        campos = v.get("mudou") if isinstance(v.get("mudou"), dict) else v
+        mud = {c: {"antes": str((x or {}).get("antes") or ""), "agora": str((x or {}).get("agora") or "")}
+               for c, x in campos.items() if isinstance(x, dict) and ("antes" in x or "agora" in x)}
+        mud = {c: x for c, x in mud.items() if x["antes"] != x["agora"]}
+        if mud:
+            out.setdefault(m.group(0).upper(), {}).update(mud)
+    return out
+
+
 def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None, conferencia: dict | None = None) -> dict:
     cat = Path(pasta) / "catalogacao"
     if not cat.is_dir():
@@ -247,7 +279,13 @@ def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None, 
         for d in sorted((x for x in rr.iterdir() if x.is_dir()), reverse=True)[:10]:
             comp = _json(d / "comparacao.json")
             if comp is not None:
-                releituras.append({"quando": d.name, "comparacao": comp})
+                norm = normalizar_comparacao(comp)
+                resumo = comp.get("resumo") if isinstance(comp, dict) and isinstance(comp.get("resumo"), dict) else None
+                releituras.append({"quando": d.name, "comparacao": norm,   # CAMP-134: já normalizado ({folha: {campo: {antes, agora}}})
+                                   "mudancas": [{"codigo": cod, "campo": c, "rotulo": ROTULO_CAMPO_CV.get(c, c.replace("_", " ")), "antes": x["antes"],
+                                                 "agora": x["agora"], "aplica": c in CAMPO_RELEITURA_FOLHA and bool(x["agora"])}
+                                                for cod, cs in sorted(norm.items()) for c, x in sorted(cs.items())],
+                                   "resumo": {k: resumo.get(k) for k in ("escopo", "motivo", "pedido_por", "relidos", "com_mudanca", "relido_em") if k in resumo} if resumo else None})
     return {
         "existe": True,
         "pacote_ilegivel": bool(isinstance(pacote, dict) and pacote.get("_ilegivel")),

@@ -754,8 +754,7 @@ def responder_cv(lote_id: int, d: RespostaCV, u: dict = Depends(auth.exige("oper
         con.close()
 
 
-_CAMPO_RELEITURA = {"titulo": "titulo", "escala": "escala", "folha": "folha", "ano": "ano_folha", "tipo": "tipo_documento",
-                    "endereco": "endereco_folha", "cliente": "cliente_folha"}
+from .saidas_cv import CAMPO_RELEITURA_FOLHA as _CAMPO_RELEITURA, normalizar_comparacao as _normalizar_comparacao   # CAMP-134: formato real do CV2
 
 
 def _aplicar_mudanca_releitura(con, l, chave: str, ator: str) -> str:
@@ -778,7 +777,7 @@ def _aplicar_mudanca_releitura(con, l, chave: str, ator: str) -> str:
         pasta = _qnap_prontos_raiz() / pasta
     try:
         comp = json.loads((pasta / "catalogacao" / "releituras" / quando / "comparacao.json").read_text(encoding="utf-8"))
-        agora = ((comp.get(cod) or {}).get(campo) or {}).get("agora")
+        agora = ((_normalizar_comparacao(comp).get(str(cod).upper()) or {}).get(campo) or {}).get("agora")
     except (OSError, ValueError, AttributeError):
         agora = None
     if agora in (None, ""):

@@ -135,15 +135,45 @@ def releitura(base, raiz, db, P):
     comp = {}
     for pid, item in pedidos:
         alvo = item or f"{P}-1978-S01-D00034"
-        comp[alvo] = {"titulo": {"antes": "PLANTA 34", "agora": "PLANTA DE COBERTURA"}, "escala": {"antes": "1:50", "agora": "1:100"}}
-    (d / "comparacao.json").write_text(json.dumps(comp, ensure_ascii=False), encoding="utf-8")
+        # CAMP-134: o formato REAL do CV2 (campvision-new nucleo/releitura.py): nome de campo do CV2 (titulo_prancha) e campos que não são da folha
+        comp[alvo] = {"mudou": {"titulo_prancha": {"antes": "PLANTA 34", "agora": "PLANTA DE COBERTURA", "confianca_agora": 0.9},
+                                "escala": {"antes": "1:50", "agora": "1:100", "confianca_agora": 0.8},
+                                "codigo_unidade": {"antes": "", "agora": "BL-A", "confianca_agora": 0.7}},
+                      "preencheu": ["codigo_unidade"], "erro": ""}
+    resumo = {"projeto_codigo": P, "escopo": "folha", "motivo": "teste", "pedido_por": "op@camp.arq.br", "relido_em": "2026-10-20T16:00:00-03:00",
+              "documentos": list(comp), "relidos": len(comp), "com_mudanca": len(comp), "campos_preenchidos": 1, "falhas": [], "custo_usd": 0.01,
+              "regravados": len(comp), "recodificadas": {}, "pasta": "x"}
+    (d / "comparacao.json").write_text(json.dumps({"resumo": resumo, "documentos": comp}, ensure_ascii=False, indent=1), encoding="utf-8")
     for pid, _ in pedidos:
         http(base, f"/api/estacoes/pedidos-releitura/{pid}/iniciado", {"estacao": "campvision2"})
         http(base, f"/api/estacoes/pedidos-releitura/{pid}/concluido", {"ok": True, "mensagem": "relida", "relidos": 1, "com_mudanca": 1, "escopo": "folha"})
     print(json.dumps({"pedidos": len(pedidos), "comparacao": list(comp)}))
 
 
+def muitas(raiz, P):
+    """CAMP-134: o caso do print de 21/10 — 6 releituras do projeto inteiro (formato real do CV2). A mais recente muda o título de 12 folhas
+    (D00001-D00012) e a escala de 5 (D00013-D00017); as 5 antigas mudavam o título das mesmas folhas para outra coisa (ficam no histórico);
+    todas mudam o código de unidade de 30 folhas (não é campo da folha: só informação)."""
+    p = pasta_do(raiz, P)
+    for k in range(6):
+        quando = f"2026102{k}-10{k}000"
+        docs = {}
+        for n in range(1, 31):
+            cod = f"{P}-1978-S01-D{n:05d}"
+            mud = {"codigo_unidade": {"antes": "", "agora": f"BL-{k}", "confianca_agora": 0.6}}
+            if n <= 12:
+                mud["titulo_prancha"] = {"antes": f"PLANTA {n}", "agora": (f"PRANCHA {n:02d} — RELIDA" if k == 5 else f"VERSAO ANTIGA {k} {n}"), "confianca_agora": 0.9}
+            elif n <= 17 and k == 5:
+                mud["escala"] = {"antes": "1:50", "agora": "1:200", "confianca_agora": 0.8}
+            docs[cod] = {"mudou": mud, "preencheu": ["codigo_unidade"], "erro": ""}
+        d = p / "catalogacao" / "releituras" / quando
+        d.mkdir(parents=True, exist_ok=True)
+        resumo = {"projeto_codigo": P, "escopo": "projeto", "motivo": "teste", "pedido_por": "op@camp.arq.br", "relidos": 34, "com_mudanca": 30, "documentos": list(docs)}
+        (d / "comparacao.json").write_text(json.dumps({"resumo": resumo, "documentos": docs}, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps({"releituras": 6}))
+
+
 if __name__ == "__main__":
     cmd, a = sys.argv[1], sys.argv[2:]
     {"crasa": lambda: crasa(*a), "legado": lambda: crasa(*a, legado=True), "erro_vazio": lambda: erro_vazio(*a),
-     "erro_com_folhas": lambda: erro_com_folhas(*a), "releitura": lambda: releitura(*a)}[cmd]()
+     "erro_com_folhas": lambda: erro_com_folhas(*a), "releitura": lambda: releitura(*a), "muitas": lambda: muitas(*a)}[cmd]()

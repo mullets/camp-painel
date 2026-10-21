@@ -74,6 +74,15 @@ T.rodar(async () => {
   T.chk(await T.imgOk(op, '#pj-cv [data-cv-obra] img'), 'CAMP-126: as miniaturas dos grupos carregam');
   T.chk(!(await op.$('#pj-cv [data-obras-separar]')), 'CAMP-126: o operador não vê "Separar" (mover é de admin); vê o aviso para pedir a um admin', ob.slice(-120));
   await T.print(op, 'obras_decisao');
+  // 21/10 (Rafa: "seria bom clicar e ver"): a miniatura do grupo abre a folha
+  { const alvo = await op.$eval('#pj-cv [data-cv-obra] .cv-obra-mini', b => b.dataset.revAbrir).catch(() => null);
+    T.chk(!!alvo, '21/10: cada miniatura do grupo é um botão que abre a folha');
+    if (alvo) {
+      await op.click('#pj-cv [data-cv-obra] .cv-obra-mini');
+      T.chk(await T.espera(async () => (await op.evaluate(() => typeof revAberta === 'function' ? revAberta() : null)) === alvo), '21/10: clicar na miniatura abre aquela folha', alvo);
+      await T.print(op, 'obras_mini_aberta');
+      await op.evaluate(() => closeDrawer(true)); await op.waitForTimeout(600);
+    } }
   await op.click('#pj-cv [data-obras-decidir="mesmo_conjunto"]');
   T.chk(await T.espera(() => T.um("SELECT valor FROM cv_resposta WHERE chave='obras:decisao' AND projeto_codigo=?", PA) === 'mesmo_conjunto'), 'CAMP-126: "São partes do mesmo conjunto" decide com 1 clique');
   T.chk(await T.espera(async () => /✔ As folhas são partes do mesmo conjunto/.test(await T.txt(op, '#pj-cv [data-cv-obras]'))), 'CAMP-126: o aviso sai e fica a marca da decisão');
