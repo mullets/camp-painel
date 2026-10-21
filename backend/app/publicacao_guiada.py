@@ -32,6 +32,16 @@ def envio_paralelo() -> int:
     except ValueError:
         return 3
 
+def publicar_arquiteto_junto() -> bool:
+    """21/10: configuração site.publicar_arquiteto_junto (sem a chave: sim)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='site.publicar_arquiteto_junto'").fetchone()
+    finally:
+        con.close()
+    return not r or str(r[0]).strip() != "0"
+
+
 ORCAMENTO_S = 40.0             # tempo máximo de envio de folhas por chamada (a tela repete até acabar)
 ANO_FOLHA_DIFERENTE = 5        # anos de diferença entre a folha e o projeto a partir dos quais o plano avisa
 _trava = threading.Lock()
@@ -88,8 +98,11 @@ def plano(con, p) -> dict:
                                           (codigo, ano_p, ANO_FOLHA_DIFERENTE))]
         if fora:
             avisos.append({"id": "ano_fora_do_projeto", "campo": None, "texto": f"{len(fora)} folha(s) com ano muito diferente do projeto ({ano_p}), por exemplo {fora[0][-6:]}: confira o ano antes de publicar."})
-    if "pagina_arquiteto" in por_id:     # CAMP-015
-        avisos.append({"id": "pagina_arquiteto", "campo": None, "texto": por_id["pagina_arquiteto"]["texto"] + ": o projeto vai ao ar, mas a página do arquiteto não aparece até ela existir."})
+    if "pagina_arquiteto" in por_id:     # CAMP-015; 21/10: sem a página do arquiteto pública, o site esconde o projeto
+        junto = publicar_arquiteto_junto() and not por_id["pagina_arquiteto"].get("sem_arquiteto")
+        avisos.append({"id": "pagina_arquiteto", "campo": None, "publica_junto": junto,
+                       "texto": "A página do arquiteto ainda não está pública no site: " + ("ela será publicada junto, porque sem ela o projeto não aparece."
+                                if junto else "o projeto fica publicado, mas só aparece no site quando a página do arquiteto for publicada (quadro “Página do arquiteto no site”, no fundo).")})
     if divergentes:     # CAMP-046 (contrato 2.4): aviso, não bloqueio
         avisos.append({"id": "autoria_nao_confirmada", "campo": None, "texto": (f"{divergentes} folha(s) com autoria não confirmada" if divergentes != 1 else "1 folha com autoria não confirmada")
                        + ": sobem ao site com o crédito “Autoria não confirmada”."})
@@ -197,7 +210,26 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             con.commit()
         finally:
             con.close()
-        return {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado}
+        arq = None
+        if res.get("ok") and publicar_arquiteto_junto():           # 5) 21/10: a página do arquiteto, sem a qual o projeto não aparece no site
+            from . import fundo_site
+            c2 = connect()
+            try:
+                pg = fundo_site.pagina_arquiteto(c2, p["fundo_codigo"])
+            finally:
+                c2.close()
+            if not pg["publica"]:
+                _p(evento="arquiteto")
+                arq = fundo_site.mudar_pagina_arquiteto(p["fundo_codigo"], True, u["email"])
+                if arq.get("ok"):
+                    feitos.append("arquiteto")
+        out = {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado}
+        if arq is not None:
+            out["arquiteto"] = arq
+            if not arq.get("ok"):
+                out["aviso_arquiteto"] = ("O projeto foi publicado, mas a página do arquiteto não: " + (arq.get("erro") or "o site não respondeu")
+                                          + ". Sem ela o projeto não aparece no site: publique-a no quadro “Página do arquiteto no site”, no fundo.")
+        return out
     finally:
         with _trava:
             _em_andamento.discard(codigo)

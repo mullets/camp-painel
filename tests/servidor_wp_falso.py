@@ -79,6 +79,27 @@ class WPFalso:
             con.close()
 
 
+    # 21/10: a página do arquiteto (a página do fundo no site). Acha uma por slug, sob /acervo/arquitetos/, e muda o status.
+    def pagina_por_slug(self, slug):
+        con = connect()
+        try:
+            r = con.execute("SELECT id, status FROM wp_pagina WHERE slug=? AND url LIKE '%/acervo/arquitetos/%'", (slug,)).fetchone()
+        finally:
+            con.close()
+        pid = r["id"] if r else 700000 + sum(ord(ch) for ch in slug)
+        return [{"id": pid, "slug": slug, "status": r["status"] if r else "draft", "link": f"{SITE_FALSO}/acervo/arquitetos/{slug}/", "title": {"raw": slug}}]
+
+    def mudar_status_pagina(self, pid, status):
+        con = connect()
+        try:
+            r = con.execute("SELECT url FROM wp_pagina WHERE id=?", (pid,)).fetchone()
+        finally:
+            con.close()
+        return {"id": pid, "status": status, "link": r["url"] if r else None}
+
+
+from app import fundo_site  # noqa: E402
+fundo_site.enviar_fundo = lambda codigo, ator: {"ok": True, "passos": ["termo do fundo e do arquiteto"], "erros": []}   # sem termo/hub reais
 publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_falsa, WPFalso
 pagina_publica.confirmar = lambda codigo, palpite: {"url": None, "como": None}
 

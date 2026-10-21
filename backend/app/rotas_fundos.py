@@ -282,6 +282,51 @@ def enviar_fundo_ao_site(codigo: str, u: dict = Depends(auth.exige("admin"))) ->
     return {**r, "mensagem": f"Fundo {codigo} enviado ao site ({', '.join(r['passos'])})"}
 
 
+class TirarArquiteto(BaseModel):
+    motivo: str
+
+
+@router.get("/fundos/{codigo}/arquiteto-site")
+def arquiteto_site(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """21/10: o quadro "Página do arquiteto no site" (fundo e arquiteto): está pública? o que falta? (só o espelho; não chama o site)"""
+    from . import fundo_site
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+        return {**fundo_site.resumo_arquiteto(con, codigo), "pode_agir": u["papel"] in ("admin", "master"), "pode_tirar": u["papel"] == "master"}
+    finally:
+        con.close()
+
+
+@router.post("/fundos/{codigo}/arquiteto-site/publicar")
+def publicar_arquiteto(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """21/10 (Rafa: "muito confuso publicar um arquiteto"): um botão. Envia o fundo ao site e publica a página do arquiteto (antes era no wp-admin)."""
+    from . import fundo_site
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Fundo não existe")
+    finally:
+        con.close()
+    r = fundo_site.mudar_pagina_arquiteto(codigo, True, u["email"])
+    if not r["ok"]:
+        raise HTTPException(409 if r.get("bloqueio") else 502, r["erro"] or "O site não publicou a página do arquiteto")
+    return {**r, "mensagem": "Página do arquiteto publicada no site" + (f". {r['aviso']}" if r.get("aviso") else "")}
+
+
+@router.post("/fundos/{codigo}/arquiteto-site/tirar")
+def tirar_arquiteto(codigo: str, d: TirarArquiteto, u: dict = Depends(auth.exige("master"))) -> dict:
+    """21/10: tira a página do arquiteto do público (volta a rascunho). Os projetos do fundo também deixam de aparecer. Exige master e motivo."""
+    from . import fundo_site
+    if not (d.motivo or "").strip():
+        raise HTTPException(400, "Informe o motivo para tirar a página do arquiteto do site")
+    r = fundo_site.mudar_pagina_arquiteto(codigo, False, u["email"], d.motivo.strip()[:300])
+    if not r["ok"]:
+        raise HTTPException(502, r["erro"] or "O site não tirou a página do arquiteto")
+    return {**r, "mensagem": "A página do arquiteto saiu do site (ficou como rascunho)"}
+
+
 @router.post("/fundos/{codigo}/criar-no-site")
 def criar_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
     from .publicador import criar_fundo_no_site

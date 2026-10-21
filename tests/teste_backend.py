@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -1755,11 +1755,12 @@ def filho(modo):
         ver("fundo inexistente: 404 e sem login: 401", adm.get("/api/fundos/F998/publicacao").status_code == 404 and anon.get("/api/fundos/F099/publicacao").status_code == 401)
         # ---------- ARQUITETO ----------
         g = le.get(f"/api/agentes/{aid2}/publicacao").json()
-        ver("arquiteto sem vínculo: falta vínculo e fundo publicado", ids(g, lambda x: x["bloqueia"] and not x["ok"]) == {"vinculo", "publicado"} and g["pode_publicar"] is False)
+        ver("arquiteto sem vínculo: falta vínculo e fundo publicado", ids(g, lambda x: x["bloqueia"] and not x["ok"]) == {"vinculo", "publicado", "pagina"} and g["pode_publicar"] is False)
         c = connect(); c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F099',?, 'produtor')", (aid,)); c.commit(); c.close()
         g = le.get(f"/api/agentes/{aid}/publicacao").json()
         ver("vinculado ao fundo: vínculo ok, mas AINDA não aparece (nenhum projeto publicado)", ids(g, lambda x: x["id"] == "vinculo" and x["ok"]) == {"vinculo"} and ids(g, lambda x: x["id"] == "publicado" and not x["ok"]) == {"publicado"})
-        ver("o checklist diz que foto/bio/ativar são FEITOS NO WORDPRESS (o painel não publica arquiteto)", any(x["id"] == "wpadmin" and not x["ok"] and "wp-admin" in (x["detalhe"] or "") and not x["bloqueia"] for x in g["condicoes"]))
+        ver("21/10: o checklist NÃO manda mais ao wp-admin: 'Publicar a página do arquiteto' é um botão do painel", not any(x["id"] == "wpadmin" or "wp-admin" in (x["detalhe"] or "") for x in g["condicoes"])
+            and any(x["id"] == "pagina" and not x["ok"] and x["bloqueia"] and (x["acao"] or {}).get("tipo") == "publicar_arquiteto" and x["acao"]["alvo"] == "F099" for x in g["condicoes"]))
         ver("biografia ausente é apontada como recomendação (e que exige fonte)", any(x["id"] == "historia" and not x["ok"] and "fonte" in x["detalhe"] and not x["bloqueia"] for x in g["condicoes"]))
         c = connect(); c.execute("UPDATE agente SET historia='Biografia com fonte', fonte_historia='Dissertação X' WHERE id=?", (aid2,)); c.commit(); c.close()
         ver("com biografia e fonte a recomendação some", any(x["id"] == "historia" and x["ok"] for x in le.get(f"/api/agentes/{aid2}/publicacao").json()["condicoes"]))
@@ -1770,7 +1771,7 @@ def filho(modo):
         g = adm.get(f"/api/agentes/{aid}/publicacao").json()
         ver("com projeto publicado: o arquiteto passa a poder aparecer", g["pode_publicar"] is True and ids(g, lambda x: x["id"] == "publicado" and x["ok"]) == {"publicado"}, str(g["proximo_passo"])[:90])
         ver("acha a página REAL do arquiteto no espelho (só em /acervo/arquitetos/)", g["pagina_url"] == "https://camp.arq.br/acervo/arquitetos/paulo-mendes-da-rocha/" and g["pagina_status"] == "publish" and ids(g, lambda x: x["id"] == "pagina" and x["ok"]) == {"pagina"}, str(g["pagina_url"]))
-        ver("próximo passo do arquiteto aponta o wp-admin", "wp-admin" in g["proximo_passo"], g["proximo_passo"][:100])
+        ver("21/10: com a página publicada, o próximo passo diz que o arquiteto está no site (nada de wp-admin)", "está no site" in g["proximo_passo"] and "wp-admin" not in g["proximo_passo"], g["proximo_passo"][:100])
         ver("arquiteto inexistente: 404", adm.get("/api/agentes/99999/publicacao").status_code == 404)
         for l in res: print(l)
     elif modo == "paginacao":
@@ -3677,6 +3678,86 @@ def filho(modo):
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
         for l in res: print(l)
+    elif modo == "arquiteto_site":
+        # 21/10 (Rafa: "muito confuso publicar um arquiteto, ou deixar um público"): no site, sem a página do arquiteto publicada NADA do fundo
+        # aparece (nem projeto publicado). Antes: "ative no wp-admin". Agora: um quadro com um botão no painel, e o "Publicar" do projeto publica junto.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, fundo_site, publicacao_guiada, publicador as _pub
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for cod, tit in (("F086", "Rino Levi"), ("F085", "Outro Arquiteto")):
+            c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES (?,?,?,1,?)", (cod, tit, "R" + cod[2:], 900 + int(cod[1:])))
+        c.execute("INSERT INTO agente (forma_autorizada,tipo) VALUES ('Rino Levi','pessoa')"); aid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F086',?,'produtor')", (aid,))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F086',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES ('F086-P0001','F086',1,'Casa',1950,'nao_publicado',555)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao) VALUES ('F086','nao_autorizado')")
+        c.commit(); c.close()
+        for em, nome, papel in (("ms@camp.arq.br", "M", "master"), ("adm@camp.arq.br", "A", "admin"), ("op@camp.arq.br", "O", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        ms, adm, op = cli("ms@camp.arq.br"), cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        chamadas, paginas = [], {"rino-levi": [{"id": 77, "slug": "rino-levi", "status": "draft", "link": "https://camp.arq.br/acervo/arquitetos/rino-levi/", "title": {"raw": "Rino Levi"}}],
+                                 "outro-arquiteto": [{"id": 78, "slug": "outro-arquiteto", "status": "draft", "link": "https://camp.arq.br/outra-area/outro-arquiteto/"}]}
+        class WPArq:
+            def __init__(self, *a, **k): pass
+            def pagina_por_slug(self, slug): chamadas.append(("busca", slug)); return paginas.get(slug, [])
+            def mudar_status_pagina(self, pid, st): chamadas.append(("status", pid, st)); return {"id": pid, "status": st, "link": "https://camp.arq.br/acervo/arquitetos/rino-levi/"}
+        _pub.WP = WPArq
+        from app import wp as _wpm
+        _wpm.WP = WPArq
+        enviados = []
+        fundo_site.enviar_fundo = lambda codigo, ator: enviados.append(codigo) or {"ok": True, "passos": ["termo"], "erros": []}
+        k = connect(); sql = lambda q, *a: (k.execute(q, a).fetchone() or [None])[0]
+        e0 = adm.get("/api/fundos/F086/arquiteto-site").json()
+        ver("quadro: sem a página, estado 'nao_existe' e diz o que bloqueia (direitos)", e0["estado"] == "nao_existe" and e0["arquiteto"] == "Rino Levi" and e0["direitos"] and e0["pode_publicar"] is False, str(e0)[:200])
+        r = adm.post("/api/fundos/F086/arquiteto-site/publicar")
+        ver("sem direitos autorizados: 409 com o motivo, e o site nem é chamado", r.status_code == 409 and "autoriza" in r.text and not chamadas and not enviados, r.text[:200])
+        adm.put("/api/fundos/F086/direitos", json={"situacao": "autorizado", "titular": "Família", "documento_autorizacao": "Termo 1"})
+        ver("operador não publica a página do arquiteto (403)", op.post("/api/fundos/F086/arquiteto-site/publicar").status_code == 403)
+        r = adm.post("/api/fundos/F086/arquiteto-site/publicar"); j = r.json()
+        ver("admin publica: envia o fundo, acha a página no site (só em /acervo/arquitetos/) e a põe publicada", r.status_code == 200 and enviados == ["F086"] and ("status", 77, "publish") in chamadas
+            and j.get("url") == "https://camp.arq.br/acervo/arquitetos/rino-levi/", r.text[:200])
+        ver("o espelho passa a ter a página publicada e fica no histórico do fundo", sql("SELECT status FROM wp_pagina WHERE id=77") == "publish" and sql("SELECT COUNT(*) FROM evento WHERE entidade='fundo' AND codigo='F086' AND tipo='site_arquiteto_publicado'") == 1)
+        e1 = adm.get("/api/fundos/F086/arquiteto-site").json()
+        ver("quadro: pública, mas sem projeto publicado ainda ('publica_vazia'); biografia e retrato como opcionais", e1["estado"] == "publica_vazia" and "biografia com fonte" in e1["falta_opcional"] and "retrato" in e1["falta_opcional"], str(e1)[:200])
+        n = len(chamadas); adm.post("/api/fundos/F086/arquiteto-site/publicar")
+        ver("publicar de novo não muda nada no site (já está publicada)", not any(x[0] == "status" for x in chamadas[n:]))
+        ver("admin não tira do site (403); master sem motivo: 400", adm.post("/api/fundos/F086/arquiteto-site/tirar", json={"motivo": "x"}).status_code == 403
+            and ms.post("/api/fundos/F086/arquiteto-site/tirar", json={"motivo": "  "}).status_code == 400)
+        r = ms.post("/api/fundos/F086/arquiteto-site/tirar", json={"motivo": "pedido da família"})
+        ver("master tira do site: a página volta a rascunho, com motivo no histórico", r.status_code == 200 and ("status", 77, "draft") in chamadas and sql("SELECT status FROM wp_pagina WHERE id=77") == "draft"
+            and "pedido da família" in (sql("SELECT detalhe FROM evento WHERE tipo='site_arquiteto_tirado'") or ""), r.text[:200])
+        adm.put("/api/fundos/F085/direitos", json={"situacao": "autorizado", "titular": "Família", "documento_autorizacao": "Termo 2"})
+        r = adm.post("/api/fundos/F085/arquiteto-site/publicar")
+        ver("página com o mesmo nome FORA de /acervo/arquitetos/ não é publicada (409: o site ainda não criou)", r.status_code == 409 and not any(x == ("status", 78, "publish") for x in chamadas), r.text[:200])
+        # o "Publicar" do projeto publica junto a página do arquiteto (sem ela, o projeto não aparece)
+        from app.publicacao import condicoes_projeto
+        pr = k.execute("SELECT * FROM projeto WHERE codigo='F086-P0001'").fetchone()
+        cond = {x["id"]: x for x in condicoes_projeto(k, pr)["condicoes"]}
+        ver("checklist do projeto: a página do arquiteto não pública vira aviso com o botão que resolve", (cond.get("pagina_arquiteto") or {}).get("acao", {}).get("tipo") == "publicar_arquiteto", str(cond.get("pagina_arquiteto"))[:200])
+        pl = publicacao_guiada.plano(k, pr)
+        av = next((a for a in pl["avisos"] if a["id"] == "pagina_arquiteto"), {})
+        ver("plano de publicação avisa que a página do arquiteto vai junto", av.get("publica_junto") is True and "publicada junto" in av.get("texto", ""), str(av)[:200])
+        from app import rotas_projetos
+        rotas_projetos.publicar = lambda codigo, d, u: {"ok": True, "alterados": 1}
+        chamadas.clear(); k.close()
+        out = publicacao_guiada.executar("F086-P0001", {"email": "adm@camp.arq.br", "papel": "admin"})
+        k = connect()
+        ver("ao publicar o projeto, a página do arquiteto (rascunho) é publicada junto", out.get("ok") and "arquiteto" in out.get("feitos", []) and ("status", 77, "publish") in chamadas, str(out)[:300])
+        chamadas.clear()
+        out2 = publicacao_guiada.executar("F086-P0001", {"email": "adm@camp.arq.br", "papel": "admin"})
+        ver("já pública: publicar o projeto de novo não mexe na página do arquiteto", out2.get("ok") and not chamadas and "arquiteto" not in out2)
+        k.execute("UPDATE wp_pagina SET status='draft' WHERE id=77"); k.execute("UPDATE configuracao SET valor='0' WHERE chave='site.publicar_arquiteto_junto'"); k.commit()
+        out3 = publicacao_guiada.executar("F086-P0001", {"email": "adm@camp.arq.br", "papel": "admin"})
+        pl3 = publicacao_guiada.plano(k, k.execute("SELECT * FROM projeto WHERE codigo='F086-P0001'").fetchone())
+        ver("configuração em 0: não publica junto e o aviso diz onde publicar", out3.get("ok") and not chamadas and any(a["id"] == "pagina_arquiteto" and not a["publica_junto"] for a in pl3["avisos"]))
+        k.close()
+        for l in res: print(l)
     elif modo == "fotos_dados":
         # 21/10 (Rafa: "fotos precisa por ano da foto, estagio, fotografo"): dados da foto na folha, em lote e na revisão; o site só recebe
         # o que já tem metadado de texto para isso (o painel não cria); folha publicada recebe o valor novo em segundo plano
@@ -3734,6 +3815,11 @@ def filho(modo):
         ver("ordem dos blocos pelo primeiro ano", _df.ano_de("década de 1990") == 1990 and _df.ano_de("c. 1992") == 1992 and _df.ano_de("sem data") is None)
         ver("criar no site: para_o_site manda o fotógrafo e ignora o metadado de data", [(m, n) for m, n, v in _df.para_o_site(k, 8013, k.execute("SELECT * FROM item WHERE codigo=?", (F[0],)).fetchone())] == [(601, "Fotógrafo")])
         _df.valor_inicial_fotografo(k, F[0], "Lido Pelo CV"); _df.valor_inicial_fotografo(k, F[2], "Lido Pelo CV"); k.commit()
+        k.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id) VALUES (603,8013,'Época',?,NULL)", (MT + "Text",))
+        k.execute("INSERT INTO wp_metadado (id,colecao_id,nome,tipo,taxonomia_id) VALUES (604,8013,'Contexto',?,NULL)", (MT + "Text",)); k.commit()
+        ver("com os metadados que o site criou (Época, Contexto): ano da foto → Época, estágio → Contexto, fotógrafo → Fotógrafo",
+            sorted((m, n, v) for m, n, v in _df.para_o_site(k, 8013, k.execute("SELECT * FROM item WHERE codigo=?", (F[0],)).fetchone()))
+            == [(601, "Fotógrafo", "Ana Lima"), (603, "Época", "c. 1992"), (604, "Contexto", "Obra concluída")])
         ver("importação: o fotógrafo lido não sobrescreve o da pessoa e preenche o vazio",
             sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[0]) == "Ana Lima" and sql("SELECT foto_fotografo FROM item WHERE codigo=?", F[2]) == "Lido Pelo CV")
         k.close()
@@ -10027,6 +10113,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"fotos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("153) 21/10: página do arquiteto no site: um botão no painel (sem wp-admin) e publicada junto com o projeto")
+rc, out = rodar("arquiteto_site", f"{tmp}/arquiteto_site.db")
+if rc != 0: ok(False, f"teste arquiteto_site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"arquiteto: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

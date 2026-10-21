@@ -1,9 +1,8 @@
 """Checklists vivos de publicação para FUNDO e ARQUITETO (o painel mostra o que falta e o botão que resolve).
 
 Fundo: usa a mesma regra única dos projetos (publicacao.condicoes_projeto).
-Arquiteto: o painel NÃO publica arquiteto no site. O arquiteto aparece quando algum fundo dele tem projeto publicado e
-está ativo no plugin do WordPress (CAMP Acervo > Arquitetos: foto, biografia, ativar). O campo "status" do agente no painel
-é só um marcador interno. O checklist diz isso com todas as letras e mostra o que o painel consegue verificar.
+Arquiteto (21/10): o arquiteto aparece no site quando a página dele (a página do fundo) está publicada e algum projeto do fundo
+está publicado. O painel publica essa página ("Publicar a página do arquiteto"; também junto com a publicação de um projeto).
 """
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -92,9 +91,14 @@ def guia_agente(aid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
         pub = con.execute("""SELECT COUNT(*) FROM projeto p JOIN fundo_agente fa ON fa.fundo_codigo=p.fundo_codigo
                               WHERE fa.agente_id=? AND p.status_site='no_ar'""", (aid,)).fetchone()[0]
         hist, fonte = bool((a["historia"] or "").strip()), bool((a["fonte_historia"] or "").strip())
-        slug = _slug_publico(a["forma_autorizada"] or "")
-        pag = con.execute("""SELECT url, status FROM wp_pagina WHERE url LIKE '%/acervo/arquitetos/%'
-                              AND (lower(slug)=? OR lower(slug) LIKE ?) ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (slug, slug + "-%")).fetchone()
+        from .fundo_site import pagina_arquiteto      # a página do arquiteto é a página do fundo no site (a mesma regra do quadro do fundo)
+        pgs = [pagina_arquiteto(con, f) for f in fundos]
+        pg = next((x for x in pgs if x["publica"]), next((x for x in pgs if x["existe"]), None))
+        pag = {"url": pg["url"], "status": pg["status"]} if pg and pg["existe"] else None
+        if not pag:                                   # fundo sem página achada: a busca antiga, pelo nome do arquiteto
+            slug = _slug_publico(a["forma_autorizada"] or "")
+            pag = con.execute("""SELECT url, status FROM wp_pagina WHERE url LIKE '%/acervo/arquitetos/%'
+                                  AND (lower(slug)=? OR lower(slug) LIKE ?) ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (slug, slug + "-%")).fetchone()
         conds = [
             _c("vinculo", True, bool(fundos), "Vinculado a um fundo (proveniência)", "O arquiteto precisa estar vinculado a pelo menos um fundo",
                _acao("vincular", "Vincular a um fundo", fundos[0] if fundos else "")),
@@ -103,19 +107,16 @@ def guia_agente(aid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
                _acao("fundo", "Abrir o fundo", fundos[0]) if fundos else None),
             _c("historia", False, hist and fonte, "Biografia/história com fonte citada",
                "A biografia ainda não foi escrita (o painel só aceita biografia com a fonte citada)", _acao("editar_agente", "Editar o arquiteto", aid)),
-            _c("termo", False, bool(a["tainacan_term_id"]), "Termo do arquiteto criado no Tainacan", "Criado automaticamente ao salvar o arquiteto; se faltar, salve-o de novo"),
-            _c("pagina", False, bool(pag and pag["status"] == "publish"), "Página pública do arquiteto existe no site",
-               ("A página existe no site, mas está como " + str(pag["status"]) + " (não publicado)") if pag else
-               "Não achei a página no espelho do site. Ela é gerada pelo plugin quando o arquiteto está ativo e tem algo publicado"),
             _c("retrato", False, bool(con.execute("SELECT 1 FROM agente_retrato WHERE agente_id=?", (aid,)).fetchone()), "Retrato do arquiteto",
                "Envie o retrato em Editar o arquiteto: ele vai direto para a página do arquiteto no site", _acao("editar_agente", "Editar o arquiteto", aid)),
-            _c("wpadmin", False, False, "Arquiteto ativado no WordPress (feito FORA do painel)",
-               "No wp-admin: CAMP Acervo > Arquitetos > ativar. Retrato e biografia já saem do painel",
-               _acao("wpadmin", "Abrir o wp-admin", "https://camp.arq.br/wp-admin/")),
+            # 21/10: o painel publica a página (antes: "ativar no wp-admin", fora do painel)
+            _c("pagina", True, bool(pag and pag["status"] == "publish"), "Página do arquiteto publicada no site",
+               "Sem ela, nada do fundo aparece no site, nem os projetos já publicados",
+               _acao("publicar_arquiteto", "Publicar a página do arquiteto", fundos[0]) if fundos else None),
         ]
         return {"condicoes": conds, "pode_publicar": all(c["ok"] for c in conds if c["bloqueia"]), "fundos": fundos,
                 "pagina_url": pag["url"] if pag else None, "pagina_status": pag["status"] if pag else None,
                 "pode_agir": u["papel"] in ("admin", "master"),
-                "proximo_passo": _proximo(conds, a["status_site"], "O painel já fez a sua parte. Falta no wp-admin só ativar o arquiteto (CAMP Acervo > Arquitetos).")}
+                "proximo_passo": _proximo(conds, a["status_site"], "O arquiteto está no site." + ("" if hist and fonte else " Falta só a biografia com fonte (opcional)."))}
     finally:
         con.close()

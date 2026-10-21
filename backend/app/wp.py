@@ -197,6 +197,20 @@ class WP:
         return r.json()
 
     # ---- WordPress ----
+    def pagina_por_slug(self, slug: str) -> list[dict]:
+        """21/10: páginas do WordPress com este slug (publicadas, rascunho ou privadas). Usado para achar a página do arquiteto."""
+        r = self._get("/wp-json/wp/v2/pages", slug=slug, status="publish,draft,private,pending", context="edit", per_page=20)
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou a busca da página: {r.status_code} {r.text[:200]}")
+        return r.json() if isinstance(r.json(), list) else []
+
+    def mudar_status_pagina(self, page_id: int, status: str) -> dict:
+        """21/10: publica (publish) ou tira do público (draft) uma página do WordPress — a página do arquiteto."""
+        r = self.h.post(f"/wp-json/wp/v2/pages/{int(page_id)}", json={"status": status})
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou mudar a página do arquiteto: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     def paginas(self) -> Iterator[dict]:
         yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None)
 

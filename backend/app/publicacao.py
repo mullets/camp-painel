@@ -137,11 +137,11 @@ def condicoes_projeto(con, p) -> dict:
     from .fundo_site import pagina_arquiteto   # CAMP-015: aviso (não bloqueia) quando o fundo não tem página pública do arquiteto no site
     pg = pagina_arquiteto(con, fundo)
     if not pg["publica"]:
-        conds.append({"id": "pagina_arquiteto", "bloqueia": False, "ok": False,
-                      "texto": f"O fundo {fundo} ainda não tem página pública do arquiteto no site",
+        conds.append({"id": "pagina_arquiteto", "bloqueia": False, "ok": False, "sem_arquiteto": bool(pg.get("sem_arquiteto")),
+                      "texto": f"A página do arquiteto (fundo {fundo}) não está pública no site: sem ela, os projetos do fundo não aparecem",
                       "detalhe": ("Não há arquiteto titular cadastrado neste fundo." if pg.get("sem_arquiteto") else
-                                  f"A página existe no site, mas está como {pg['status']} (não publicado)." if pg["existe"] else
-                                  "Não achei a página no espelho do site. Use “Enviar fundo ao site” no fundo e ative o arquiteto no WordPress."), "acao": None})
+                                  "Ela é publicada junto com o projeto, ou pelo quadro “Página do arquiteto no site”, no fundo."),
+                      "acao": None if pg.get("sem_arquiteto") else {"tipo": "publicar_arquiteto", "rotulo": "Publicar a página do arquiteto", "alvo": fundo}})
     from .imagem_site import lado_maximo_do_fundo   # B2: o limite de resolução do fundo aparece no checklist quando é mais apertado que o padrão
     lado = lado_maximo_do_fundo(con, fundo)
     if lado and lado < 3000:

@@ -8,7 +8,7 @@ Pedido (Rafa): "seria bom separar as fotos por época… fotos de 1990, 2000, 20
 - A página do projeto agrupa as fotos (S03, S04, S05) em blocos por ano da foto, estágio e fotógrafo, do ano mais antigo ao mais novo.
 - O "fotógrafo" que o CAMP Vision lê (contrato 2.2) entra como valor inicial na importação, só se a folha ainda não tiver um.
 - Site: o painel NÃO cria metadado. Envia cada valor só se a coleção já tiver um metadado de TEXTO com um dos nomes de NOMES_NO_SITE
-  (o plugin já cria "Fotógrafo" e "Data do registro fotográfico"; "Estágio da obra" depende do site). Folha já no site recebe o valor
+  (o site tem "Fotógrafo", "Época" e "Contexto": ano da foto → Época, estágio → Contexto). Folha já no site recebe o valor
   novo em segundo plano; falha vira pendência e nunca desfaz o que foi salvo no painel.
 """
 from __future__ import annotations
@@ -31,8 +31,9 @@ LIMITES = {"foto_ano": 40, "foto_estagio": 80, "foto_fotografo": 200}
 # sugestões na tela (a pessoa pode escrever outro); a lista final é decisão do Rafa
 ESTAGIOS = ("Em construção", "Obra concluída", "Em uso", "Reforma", "Maquete", "Evento")
 # metadados que o site PODE já ter (procura por nome, sem diferenciar maiúsculas); o primeiro que existir recebe o valor
-NOMES_NO_SITE = {"foto_ano": ("Data do registro fotográfico", "Ano da foto", "Data da foto"),
-                 "foto_estagio": ("Estágio da obra", "Estágio", "Fase da obra"),
+# 21/10: o site criou "Época" e "Contexto" (camp-wordpress CAMP-055, roteiro FOTOS-2) e agrupa as fotos por eles: esses vêm primeiro
+NOMES_NO_SITE = {"foto_ano": ("Época", "Data do registro fotográfico", "Ano da foto", "Data da foto"),
+                 "foto_estagio": ("Contexto", "Estágio da obra", "Estágio", "Fase da obra"),
                  "foto_fotografo": ("Fotógrafo", "Fotógrafa", "Fotógrafo(a)", "Autor da fotografia")}
 MAX_ITENS = 2000
 _ANO = re.compile(r"(?<!\d)(1[89]\d\d|20\d\d|2100)(?!\d)")
