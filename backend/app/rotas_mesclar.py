@@ -505,6 +505,10 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
         con.execute("UPDATE item SET codigo=?, projeto_codigo=?, codigo_anterior=?, atualizado_em=datetime('now') WHERE codigo=?", (nc, novo, c, c))
         _trocar_codigo(con, c, nc)                                     # item_agente, localização, releitura, duplicata_de, erro, revisão
         folhas.append({"de": c, "para": nc})
+    # endereço público que o espelho do site conhecia ANTES de o código mudar (depois o wp_item passa a ter só o código novo)
+    from . import redir_site
+    urls_antigas = {antigo: redir_site._url_conhecida(con, "projeto", antigo)}
+    urls_antigas.update({f["de"]: redir_site._url_conhecida(con, "item", f["de"]) for f in folhas})
     # o que aponta para o PROJETO (e, por prefixo, para as folhas) fora das chaves estrangeiras
     for tabela, coluna in (("lista_processamento", "projeto_codigo"), ("pedido_releitura", "projeto_codigo"), ("decisao", "projeto_codigo"),
                            ("cv_resposta", "projeto_codigo"), ("tarefa_publicacao", "projeto_codigo"), ("tarefa_publicacao", "folha_atual"),
@@ -529,6 +533,9 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
         con.execute("""INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, criado_por) VALUES (?,?,?,?,?)
                        ON CONFLICT(codigo_antigo) DO UPDATE SET codigo_novo=excluded.codigo_novo, entidade=excluded.entidade, motivo=excluded.motivo,
                                                                 criado_por=excluded.criado_por, criado_em=datetime('now'), aplicado_no_site=0, sem_site=0""", (de, para, tipo, mot, ator))
+    for cod_antigo, url in urls_antigas.items():
+        if url:
+            con.execute("UPDATE redirecionamento SET url_antiga=? WHERE codigo_antigo=?", (url, cod_antigo))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_recodificado',?,?)",
                 (novo, ator, _json.dumps({"de": antigo, "para": novo, "folhas": len(folhas), "motivo": mot}, ensure_ascii=False)))
     no_site = bool(p["tainacan_item_id"] or p["wp_page_id"]) or bool(con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (novo,)).fetchone())
