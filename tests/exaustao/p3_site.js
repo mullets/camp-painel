@@ -85,4 +85,27 @@ T.rodar(async () => {
   const f2 = await T.txt(ad, '[data-conta-site]');
   T.chk(await ad.$eval('[data-conta-site]', e => e.classList.contains('warn')) && /ainda não foram ao site: D00010/.test(f2), 'CAMP-124: folha que devia estar no site e não está → amarelo, com o código', f2);
   await T.print(ad, 'faixa_amarela');
+
+  T.passo('21/10 (Rafa, F024-P0001: "pq fica como rascunho? eu quero que suba isso"): projeto publicado com folhas que o visitante não vê');
+  T.sql("UPDATE item SET tainacan_item_id=NULL WHERE codigo=?", D(10));                       // nunca subiu
+  for (const n of [11, 12]) { T.sql("UPDATE item SET status_site='rascunho' WHERE codigo=?", D(n)); T.sql("UPDATE wp_item SET status='draft' WHERE codigo_detectado=?", D(n)) }   // subiu em rascunho
+  await T.abrirProjeto(ad, P);
+  const cs = await T.txt(ad, '#pj-cards .pjc[data-pjc="site"]');
+  T.chk(/Publicado/.test(cs) && /3 folhas ainda não aparecem no site \(2 em rascunho\)/.test(cs), 'o cartão Site diz "Publicado" e que 3 folhas ainda não aparecem (2 em rascunho)', cs);
+  const btAt = await ad.$('#pj-cards [data-pj-atualizar-no-ar]');
+  T.chk(!!btAt && /Atualizar a página pública/.test(await btAt.innerText()), 'o cartão Site tem "Atualizar a página pública"');
+  T.chk(/Publicar 3 folhas que o visitante ainda não vê/.test(await T.txt(ad, '#pj-falta')), 'a barra "O que falta" tem "Publicar 3 folhas que o visitante ainda não vê"', await T.txt(ad, '#pj-falta'));
+  await T.print(ad, 'atualizar_pagina_publica');
+  if (btAt) {
+    await btAt.click();
+    const go = await ad.waitForSelector('#pub-go:not([disabled])', { timeout: 15000 }).then(() => true, () => false);
+    T.chk(go, 'abre a publicação guiada', await T.txt(ad, '#d-body').catch(() => ''));
+    if (go) { await ad.click('#pub-go'); await T.espera(async () => !!(await ad.$('#d-body .pub-resultado')), 60000) }
+  }
+  T.chk(await T.espera(() => [10, 11, 12].every(n => T.um('SELECT status_site FROM item WHERE codigo=?', D(n)) === 'no_ar'), 20000), 'as 3 folhas ficam publicadas (a nova sobe; as de rascunho ficam públicas)',
+    JSON.stringify([10, 11, 12].map(n => T.um('SELECT status_site FROM item WHERE codigo=?', D(n)))));
+  T.chk([29, 30, 32].every(n => T.um('SELECT status_site FROM item WHERE codigo=?', D(n)) !== 'no_ar'), 'as 3 retidas continuam fora');
+  await T.abrirProjeto(ad, P);
+  T.chk(!(await ad.$('#pj-cards [data-pj-atualizar-no-ar]')) && !/visitante ainda não vê/.test(await T.txt(ad, '#pj-falta').catch(() => '')), 'atualizada, o botão e o item da barra somem');
+  await T.print(ad, 'pagina_publica_atualizada');
 });

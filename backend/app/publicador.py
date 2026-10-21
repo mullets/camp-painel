@@ -785,6 +785,40 @@ def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, proje
 
 
 @_nunca_convidado
+def atualizar_serie_no_site(codigo: str, ator: str) -> dict:
+    """CAMP-139 (21/10): a folha mudou de série (tipo de material) e continua com o MESMO item no site (o endereço vem do título, não do
+    código): grava no item os metadados que mudam — "Código do documento", "Série" e "Tipo de desenho". Falha vira pendência; nunca levanta."""
+    con = connect()
+    con.isolation_level = None
+    out = {"codigo": codigo, "metadados": [], "erro": None}
+    try:
+        i = con.execute("""SELECT i.*, s.nome AS serie_nome FROM item i LEFT JOIN serie s ON s.codigo=i.serie_codigo WHERE i.codigo=?""", (codigo,)).fetchone()
+        if not i or not i["tainacan_item_id"]:
+            out["erro"] = "a folha não tem item no site"; return out
+        iid = int(i["tainacan_item_id"])
+        wp = WP()
+        valores = {"Código do documento": codigo, "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
+                   "Tipo de desenho": i["tipos_documento"] or i["tipo_documento"]}
+        for nome, valor in valores.items():
+            if valor in (None, ""):
+                continue
+            mid, _ = _meta(con, COL_ACERVO, nome)
+            if not mid:
+                _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}”: o valor novo não foi gravado.")
+                continue
+            if nome == "Tipo de desenho":
+                valor = _tipos_para_site(con, codigo, mid, valor)
+            wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_serie_atualizada',?,?)",
+                    (codigo, ator, json.dumps(out, ensure_ascii=False)))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]
+        _pendencia(con, "item", codigo, "pendente_serie_no_site", "O tipo de material mudou no painel, mas o site não aceitou o código/série novos: " + out["erro"])
+    finally:
+        con.close()
+    return out
+
+
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
     con = connect()

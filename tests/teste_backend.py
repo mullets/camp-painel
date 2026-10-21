@@ -3658,6 +3658,17 @@ def filho(modo):
         st_chamadas.clear(); publicador.WP = WPGrava; rf = publicador.propagar_status_fundo("F089", "no_ar", "adm@camp.arq.br")
         ver("21/10: publicar o FUNDO também não publica a retida (vai privada)", (7999, "publish") not in st_chamadas and (7999, "private") in st_chamadas
             and sql("SELECT status_site FROM item WHERE codigo=?", D(PR, 2)) == "fora_do_ar", str(rf)[:200] + " " + str(st_chamadas))
+        # 21/10 (Rafa, F024-P0001: "pq fica como rascunho? eu quero que suba isso"): projeto JÁ publicado com folhas em rascunho no site
+        # e folha nova que ainda não subiu: publicar de novo ("Atualizar a página no ar") sobe a nova e torna públicas as em rascunho
+        k.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (D(PR, 3),)); k.execute("UPDATE wp_item SET status='draft' WHERE id=(SELECT tainacan_item_id FROM item WHERE codigo=?)", (D(PR, 3),))
+        k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site) VALUES (?,?,'S01',9,'Folha nova','importado','conferida','nao_publicado')", (D(PR, 9), PR)); k.commit()
+        ver("21/10: o projeto continua publicado (no ar) antes de atualizar", sql("SELECT status_site FROM projeto WHERE codigo=?", PR) == "no_ar")
+        st_chamadas.clear(); n_antes = len(ch["folhas"]); publicador.criar_folha_no_site = folha_falsa
+        at = adm.post(f"/api/projetos/{PR}/publicar-tudo").json()
+        w3 = sql("SELECT tainacan_item_id FROM item WHERE codigo=?", D(PR, 3))
+        ver("21/10: publicar de novo um projeto no ar: a folha nova sobe e a que estava em rascunho fica pública", at.get("ok") is True and D(PR, 9) in ch["folhas"][n_antes:]
+            and (w3, "publish") in st_chamadas and sql("SELECT status_site FROM item WHERE codigo=?", D(PR, 3)) == "no_ar" and sql("SELECT status_site FROM item WHERE codigo=?", D(PR, 9)) == "no_ar", str(at)[:300] + " " + str(st_chamadas))
+        ver("21/10: a retida continua fora (privada), mesmo atualizando a página no ar", (7999, "publish") not in st_chamadas)
         # liberar devolve para conferir; folha já no site não pode ser retida; permissões
         op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": True}); lb = op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": False})
         ver("liberar: a folha deixa de ser retida e volta para CONFERIR (olho humano de novo)", lb.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 1)) == 0 and sql("SELECT revisao FROM item WHERE codigo=?", D(PL, 1)) == "pendente" and sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 1)) is None)
@@ -3704,11 +3715,23 @@ def filho(modo):
         ver("problemas e localização acompanham a folha", sql("SELECT codigo FROM erro WHERE descricao='título'") == n1 and sql("SELECT item_codigo FROM item_localizacao WHERE localizacao_id=?", loc) == n1)
         ver("integridade: nenhuma chave estrangeira quebrada", k.execute("PRAGMA foreign_key_check").fetchall() == [])
         ver("de novo para a mesma série: nada muda (vem em 'ignoradas')", adm.post("/api/itens/serie", json={"itens": [n1], "serie": "S03"}).json().get("ignoradas", [{}])[0].get("codigo") == n1)
-        r3 = adm.post("/api/itens/serie", json={"itens": [f3], "serie": "S03"})
-        ver("folha publicada no site não muda (409): despublique antes", r3.status_code == 409 and sql("SELECT serie_codigo FROM item WHERE codigo=?", f3) == "S01", r3.text[:150])
+        # CAMP-139 (21/10, Rafa: "é uma fotografia e não folha de desenho… e não tenho como alterar"): a folha PUBLICADA também muda; continua
+        # com o mesmo item e status no site (o endereço vem do título) e o site recebe o código/série novos em segundo plano
+        from app import publicador as _pub
+        site_md = []
+        class WPSerie:
+            def __init__(self, *a, **k): pass
+            def definir_metadado(self, wid, mid, valor): site_md.append((wid, mid, valor))
+        _pub.WP = WPSerie
+        r3 = adm.post("/api/itens/serie", json={"itens": [f3], "serie": "S03"}); n3 = "F088-P0001-1990-S03-D00003"
+        ver("CAMP-139: folha publicada muda de série (antes: 409 'despublique antes'), continua publicada e com o mesmo item no site",
+            r3.status_code == 200 and sql("SELECT status_site FROM item WHERE codigo=?", n3) == "no_ar" and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", n3) == 991
+            and r3.json().get("site_em_segundo_plano") == 1, r3.text[:200])
+        ver("CAMP-139: sem redirecionamento (o endereço público não muda)", sql("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo=?", f3) == 0)
+        ver("CAMP-139: o site recebe o código novo no item 991 (em segundo plano)", any(w == 991 and v == n3 for w, m, v in site_md) and sql("SELECT COUNT(*) FROM evento WHERE tipo='site_serie_atualizada' AND codigo=?", n3) == 1, str(site_md))
         r4 = adm.post("/api/itens/serie", json={"itens": [f4], "serie": "S05"}); n4 = "F088-P0001-1990-S05-D00004"
-        ver("folha só em rascunho no site muda, perde o vínculo e o endereço antigo entra nos redirecionamentos", r4.status_code == 200 and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", n4) is None
-            and sql("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo=? AND codigo_novo=?", f4, n4) == 1, r4.text[:200])
+        ver("CAMP-139: folha em rascunho no site muda e continua ligada ao mesmo item (rascunho)", r4.status_code == 200 and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", n4) == 992
+            and sql("SELECT status_site FROM item WHERE codigo=?", n4) == "rascunho", r4.text[:200])
         ver("série que não existe: 400", adm.post("/api/itens/serie", json={"itens": [n1], "serie": "S77"}).status_code == 400)
         k.close()
         for l in res: print(l)

@@ -272,8 +272,8 @@ class MudarSerie(BaseModel):
 def _mudar_serie(con, codigos: list[str], serie: str, ator: str, motivo: str | None, tipo: str | None = None) -> dict:
     """21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia"): a folha passa para outra série (S01 Desenhos
     → S03 Fotografias…). A série faz parte do código, então a folha ganha o código novo com o MESMO projeto, ano e D; o antigo fica em
-    codigo_anterior e tudo o que aponta para ela acompanha (_trocar_codigo), como no mover. Folha publicada no site não muda (despublique
-    antes); a que tinha só rascunho/privado no site perde o vínculo e ganha o redirecionamento, como no mover. O QNAP não é tocado."""
+    codigo_anterior e tudo o que aponta para ela acompanha (_trocar_codigo), como no mover. Folha que já está no site (publicada ou não)
+    continua com o mesmo item e status: o site recebe o código e a série novos em segundo plano (CAMP-139). O QNAP não é tocado."""
     s = con.execute("SELECT codigo, nome FROM serie WHERE codigo=?", ((serie or "").strip().upper(),)).fetchone()
     if not s:
         raise HTTPException(400, f"A série {serie} não existe.")
@@ -284,9 +284,7 @@ def _mudar_serie(con, codigos: list[str], serie: str, ator: str, motivo: str | N
             raise HTTPException(404, f"A folha {c} não existe.")
         if it["serie_codigo"] == s["codigo"]:
             ignoradas.append({"codigo": c, "motivo": f"já é {s['nome']}"}); continue
-        if it["status_site"] == "no_ar":
-            if it["tainacan_item_id"]:
-                raise HTTPException(409, f"A folha {c} está publicada no site. Despublique esta folha antes de mudar o tipo de material; nada foi mudado.")
+        if it["status_site"] == "no_ar" and not it["tainacan_item_id"]:
             _status_velho(con, c, ator)
         m = re.match(r"^(F\d{3}-P\d{4})-(\d{4})-[^-]+-D(\d+)$", c)
         if not m:
@@ -295,18 +293,18 @@ def _mudar_serie(con, codigos: list[str], serie: str, ator: str, motivo: str | N
         if con.execute("SELECT 1 FROM item WHERE codigo=?", (novo,)).fetchone():
             raise HTTPException(409, f"O código {novo} já existe; nada foi mudado.")
         tinha_site = it["tainacan_item_id"]
+        # CAMP-139 (21/10, Rafa: "é uma fotografia e não folha de desenho… e não tenho como alterar"): a folha que já está no site (publicada
+        # ou rascunho) CONTINUA com o mesmo item e o mesmo status; o endereço público vem do título, não do código, então não muda e não há
+        # redirecionamento. O site recebe o código, a série e o tipo novos em segundo plano (atualizar_serie_no_site).
+        con.execute("""UPDATE item SET codigo=?, serie_codigo=?, codigo_anterior=?, tipo_documento=COALESCE(?, tipo_documento),
+                       atualizado_em=datetime('now') WHERE codigo=?""", (novo, s["codigo"], c, (tipo or "").strip()[:120] or None, c))
         if tinha_site:
-            from . import redir_site
-            redir_site.registrar(con, c, novo, "item", motivo or "tipo de material mudado", ator)
-        con.execute("""UPDATE item SET codigo=?, serie_codigo=?, codigo_anterior=?, tainacan_item_id=NULL,
-                       status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
-                       tipo_documento=COALESCE(?, tipo_documento), atualizado_em=datetime('now') WHERE codigo=?""",
-                    (novo, s["codigo"], c, (tipo or "").strip()[:120] or None, c))
+            con.execute("UPDATE wp_item SET codigo_detectado=? WHERE id=?", (novo, tinha_site))
         _trocar_codigo(con, c, novo)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'serie_mudada',?,?)",
                     (novo, ator, _json.dumps({"de": c, "para": novo, "serie_antes": it["serie_codigo"], "serie": s["codigo"], "tipo": tipo,
                                               "motivo": motivo, "tainacan_item_id_antigo": tinha_site}, ensure_ascii=False)))
-        feitas.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site)})
+        feitas.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site), "no_site": bool(tinha_site)})
     return {"mudadas": feitas, "ignoradas": ignoradas, "serie": s["codigo"], "serie_nome": s["nome"]}
 
 
@@ -328,9 +326,20 @@ def mudar_serie(d: MudarSerie, tarefas: BackgroundTasks, u: dict = Depends(auth.
     r = _transacao(lambda con: _mudar_serie(con, d.itens, d.serie, u["email"], d.motivo, d.tipo), simular=d.simular)
     if d.simular:
         return {**r, "simulado": True}
-    if any(x["tinha_registro_no_site"] for x in r["mudadas"]):
-        tarefas.add_task(_enviar_redirecionamentos)
-    return r
+    no_site = [x["para"] for x in r["mudadas"] if x["no_site"]]
+    if no_site:
+        tarefas.add_task(_atualizar_series_no_site, no_site, u["email"])
+    return {**r, "site_em_segundo_plano": len(no_site)}
+
+
+def _atualizar_series_no_site(codigos: list[str], ator: str) -> None:
+    """Segundo plano: o site recebe o código e a série novos de cada folha (falha vira pendência). Nunca levanta."""
+    from . import publicador
+    for c in codigos:
+        try:
+            publicador.atualizar_serie_no_site(c, ator)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> dict:
