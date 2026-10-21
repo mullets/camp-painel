@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -3665,6 +3665,52 @@ def filho(modo):
         ver("leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 403 and anon.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 401 and op.post("/api/itens/F089-P0002-1970-S01-D99999/retencao", json={"retida": True}).status_code == 404)
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
+        for l in res: print(l)
+    elif modo == "camp136_serie":
+        # 21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia")
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F088','Fundo Série','SER',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F088',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F088-P0001','F088',1,'Casa',1990)")
+        def folha(q, titulo, status="nao_publicado", tid=None):
+            cod = f"F088-P0001-1990-S01-D{q:05d}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,tipo_documento,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,'Planta','campvision','conferida',?,?)",
+                      (cod, "F088-P0001", q, titulo, status, tid)); return cod
+        f1, f2, f3, f4 = folha(1, "Vista da sala"), folha(2, "Fachada"), folha(3, "No ar", "no_ar", 991), folha(4, "Rascunho", "rascunho", 992)
+        c.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao) VALUES ('corrigir','metadado','operador',?,'título')", (f1,))
+        c.execute("INSERT INTO localizacao_fisica (tipo, identificador) VALUES ('caixa','CX-S')"); loc = c.execute("SELECT MAX(id) FROM localizacao_fisica").fetchone()[0]
+        c.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (f1, loc)); c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        k = connect(); sql = lambda q, *a: (k.execute(q, a).fetchone() or [None])[0]
+        n1 = "F088-P0001-1990-S03-D00001"
+        ser = adm.get("/api/series").json().get("series") or []
+        ver("a tela tem a lista de séries (tipos de material)", any(x["codigo"] == "S03" and x["nome"] == "Fotografias" for x in ser), str(ser)[:200])
+        ver("operador não muda o tipo de material (403: muda o código)", op.post("/api/itens/serie", json={"itens": [f1], "serie": "S03"}).status_code == 403)
+        sm = adm.post("/api/itens/serie", json={"itens": [f1], "serie": "S03", "simular": True}).json()
+        ver("simular mostra o código novo e não grava nada", sm.get("simulado") and sm["mudadas"][0]["para"] == n1 and sql("SELECT 1 FROM item WHERE codigo=?", f1) == 1, str(sm)[:200])
+        r = adm.post("/api/itens/serie", json={"itens": [f1, f2], "serie": "S03", "tipo": "Fotografia", "motivo": "é foto, não planta"}); j = r.json()
+        ver("a 'planta' que é fotografia vira S03 Fotografias: mesmo projeto, ano e D; código novo", r.status_code == 200 and [x["para"] for x in j["mudadas"]] == [n1, "F088-P0001-1990-S03-D00002"]
+            and sql("SELECT serie_codigo FROM item WHERE codigo=?", n1) == "S03" and sql("SELECT 1 FROM item WHERE codigo=?", f1) is None, r.text[:200])
+        ver("o código antigo fica guardado, o tipo da folha muda e fica no histórico", sql("SELECT codigo_anterior FROM item WHERE codigo=?", n1) == f1 and sql("SELECT tipo_documento FROM item WHERE codigo=?", n1) == "Fotografia"
+            and sql("SELECT COUNT(*) FROM evento WHERE tipo='serie_mudada' AND codigo=?", n1) == 1)
+        ver("problemas e localização acompanham a folha", sql("SELECT codigo FROM erro WHERE descricao='título'") == n1 and sql("SELECT item_codigo FROM item_localizacao WHERE localizacao_id=?", loc) == n1)
+        ver("integridade: nenhuma chave estrangeira quebrada", k.execute("PRAGMA foreign_key_check").fetchall() == [])
+        ver("de novo para a mesma série: nada muda (vem em 'ignoradas')", adm.post("/api/itens/serie", json={"itens": [n1], "serie": "S03"}).json().get("ignoradas", [{}])[0].get("codigo") == n1)
+        r3 = adm.post("/api/itens/serie", json={"itens": [f3], "serie": "S03"})
+        ver("folha publicada no site não muda (409): despublique antes", r3.status_code == 409 and sql("SELECT serie_codigo FROM item WHERE codigo=?", f3) == "S01", r3.text[:150])
+        r4 = adm.post("/api/itens/serie", json={"itens": [f4], "serie": "S05"}); n4 = "F088-P0001-1990-S05-D00004"
+        ver("folha só em rascunho no site muda, perde o vínculo e o endereço antigo entra nos redirecionamentos", r4.status_code == 200 and sql("SELECT tainacan_item_id FROM item WHERE codigo=?", n4) is None
+            and sql("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo=? AND codigo_novo=?", f4, n4) == 1, r4.text[:200])
+        ver("série que não existe: 400", adm.post("/api/itens/serie", json={"itens": [n1], "serie": "S77"}).status_code == 400)
+        k.close()
         for l in res: print(l)
     elif modo == "mesclar_mover":
         init_db(); _aplicar_migracoes_real()

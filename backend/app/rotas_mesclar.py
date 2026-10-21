@@ -261,6 +261,78 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
     return r
 
 
+class MudarSerie(BaseModel):
+    itens: list[str]
+    serie: str
+    tipo: str | None = None        # opcional: o tipo da folha passa a ser este (ex.: a "Planta" que é fotografia)
+    motivo: str | None = None
+    simular: bool = False
+
+
+def _mudar_serie(con, codigos: list[str], serie: str, ator: str, motivo: str | None, tipo: str | None = None) -> dict:
+    """21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia"): a folha passa para outra série (S01 Desenhos
+    → S03 Fotografias…). A série faz parte do código, então a folha ganha o código novo com o MESMO projeto, ano e D; o antigo fica em
+    codigo_anterior e tudo o que aponta para ela acompanha (_trocar_codigo), como no mover. Folha publicada no site não muda (despublique
+    antes); a que tinha só rascunho/privado no site perde o vínculo e ganha o redirecionamento, como no mover. O QNAP não é tocado."""
+    s = con.execute("SELECT codigo, nome FROM serie WHERE codigo=?", ((serie or "").strip().upper(),)).fetchone()
+    if not s:
+        raise HTTPException(400, f"A série {serie} não existe.")
+    feitas, ignoradas = [], []
+    for c in dict.fromkeys(codigos):
+        it = con.execute("SELECT * FROM item WHERE codigo=?", (c,)).fetchone()
+        if not it:
+            raise HTTPException(404, f"A folha {c} não existe.")
+        if it["serie_codigo"] == s["codigo"]:
+            ignoradas.append({"codigo": c, "motivo": f"já é {s['nome']}"}); continue
+        if it["status_site"] == "no_ar":
+            if it["tainacan_item_id"]:
+                raise HTTPException(409, f"A folha {c} está publicada no site. Despublique esta folha antes de mudar o tipo de material; nada foi mudado.")
+            _status_velho(con, c, ator)
+        m = re.match(r"^(F\d{3}-P\d{4})-(\d{4})-[^-]+-D(\d+)$", c)
+        if not m:
+            raise HTTPException(409, f"O código {c} não está no padrão: corrija o código antes de mudar a série.")
+        novo = f"{m.group(1)}-{m.group(2)}-{s['codigo']}-D{m.group(3)}"
+        if con.execute("SELECT 1 FROM item WHERE codigo=?", (novo,)).fetchone():
+            raise HTTPException(409, f"O código {novo} já existe; nada foi mudado.")
+        tinha_site = it["tainacan_item_id"]
+        if tinha_site:
+            from . import redir_site
+            redir_site.registrar(con, c, novo, "item", motivo or "tipo de material mudado", ator)
+        con.execute("""UPDATE item SET codigo=?, serie_codigo=?, codigo_anterior=?, tainacan_item_id=NULL,
+                       status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
+                       tipo_documento=COALESCE(?, tipo_documento), atualizado_em=datetime('now') WHERE codigo=?""",
+                    (novo, s["codigo"], c, (tipo or "").strip()[:120] or None, c))
+        _trocar_codigo(con, c, novo)
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'serie_mudada',?,?)",
+                    (novo, ator, _json.dumps({"de": c, "para": novo, "serie_antes": it["serie_codigo"], "serie": s["codigo"], "tipo": tipo,
+                                              "motivo": motivo, "tainacan_item_id_antigo": tinha_site}, ensure_ascii=False)))
+        feitas.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site)})
+    return {"mudadas": feitas, "ignoradas": ignoradas, "serie": s["codigo"], "serie_nome": s["nome"]}
+
+
+@router.get("/series")
+def listar_series(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """As séries (tipos de material) para a tela "Mudar o tipo de material"."""
+    con = connect()
+    try:
+        return {"series": [dict(r) for r in con.execute("SELECT codigo, nome FROM serie ORDER BY codigo")]}
+    finally:
+        con.close()
+
+
+@router.post("/itens/serie")
+def mudar_serie(d: MudarSerie, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Muda o tipo de material (a série) das folhas escolhidas. `simular` mostra os códigos novos sem gravar."""
+    if not d.itens:
+        raise HTTPException(400, "Escolha pelo menos uma folha.")
+    r = _transacao(lambda con: _mudar_serie(con, d.itens, d.serie, u["email"], d.motivo, d.tipo), simular=d.simular)
+    if d.simular:
+        return {**r, "simulado": True}
+    if any(x["tinha_registro_no_site"] for x in r["mudadas"]):
+        tarefas.add_task(_enviar_redirecionamentos)
+    return r
+
+
 def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> dict:
     """Mescla o projeto de origem no destino (transação já aberta por quem chama). Usada pela rota e pelo CAMP Vision (CAMP-009)."""
     o = con.execute("SELECT codigo, status_site, mesclado_em, descartado_em FROM projeto WHERE codigo=?", (origem,)).fetchone()
