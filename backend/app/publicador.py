@@ -507,17 +507,19 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             wid = int(p["tainacan_item_id"])
             r = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (wid,)).fetchone()
-            alvos.append(("projeto", p["codigo"], wid, int(r[0]) if r and r[0] else padrao_proj))
+            alvos.append(("projeto", p["codigo"], wid, int(r[0]) if r and r[0] else padrao_proj, alvo))
 
             itens = con.execute(
-                "SELECT codigo, tainacan_item_id FROM item "
+                "SELECT codigo, tainacan_item_id, COALESCE(retida,0) AS retida FROM item "
                 "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
                 iwid = int(i["tainacan_item_id"])
                 ir = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (iwid,)).fetchone()
-                alvos.append(("item", i["codigo"], iwid, int(ir[0]) if ir and ir[0] else padrao_item))
+                # 21/10: folha retida NUNCA vai ao ar: ao publicar, ela fica (ou volta a ficar) privada
+                esc = alvo == "publish" and i["retida"]
+                alvos.append(("item", i["codigo"], iwid, int(ir[0]) if ir and ir[0] else padrao_item, "private" if esc else alvo))
     finally:
         con.close()
 
@@ -531,11 +533,11 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
     sucessos = []
     if not falhas:
-        for tipo, cod, wid, cid in alvos:
+        for tipo, cod, wid, cid, st in alvos:
             tentados += 1
             try:
-                wp.atualizar_status_item(cid, wid, alvo)
-                sucessos.append((tipo, cod, wid))
+                wp.atualizar_status_item(cid, wid, st)
+                sucessos.append((tipo, cod, wid, st))
                 feitos += 1
             except Exception as e:  # noqa: BLE001
                 falhas.append({
@@ -557,13 +559,14 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         con = connect()
         try:
             con.execute("BEGIN IMMEDIATE")
-            for tipo, cod, wid in sucessos:
+            for tipo, cod, wid, st in sucessos:
+                stp = st_painel if st == alvo else "fora_do_ar"
                 con.execute(
                     f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now'), "
                     "publicado_em=CASE WHEN ?='no_ar' THEN COALESCE(publicado_em, datetime('now')) ELSE publicado_em END WHERE codigo=?",
-                    (st_painel, st_painel, cod),
+                    (stp, stp, cod),
                 )
-                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
+                con.execute("UPDATE wp_item SET status=? WHERE id=?", (st, wid))
 
             if completo:
                 con.execute(

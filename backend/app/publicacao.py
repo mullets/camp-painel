@@ -121,6 +121,11 @@ def condicoes_projeto(con, p) -> dict:
     fora = total - vinculados - retidas_sem_site
     if retidas:
         conds.append({"id": "folhas_retidas", "bloqueia": False, "ok": False, "texto": f"{retidas} folha(s) retida(s) por você: ficam só no painel, não vão ao site", "detalhe": None, "acao": None})
+    # 21/10: retida que está publicada no site (vinha do "Publicar" que não olhava a retenção): publicar de novo a esconde
+    retidas_no_ar = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1 AND tainacan_item_id IS NOT NULL AND status_site IN ('no_ar','rascunho')", (codigo,)).fetchone()[0]
+    if retidas_no_ar:
+        conds.append({"id": "retidas_no_site", "bloqueia": False, "ok": False,
+                      "texto": f"{retidas_no_ar} folha(s) retida(s) estão no site: ao publicar, elas ficam escondidas (privadas)", "detalhe": None, "acao": None})
     if ok_site and fora > 0:
         conds.append({"id": "folhas_fora", "bloqueia": False, "ok": False, "texto": f"{fora} folha(s) ainda não estão no site e não serão publicadas",
                       "detalhe": None, "acao": {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site", "alvo": codigo}})

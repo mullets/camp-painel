@@ -2559,7 +2559,7 @@ def filho(modo):
         cb = op.post(f"/api/lotes/{lote}/conferir-sem-pendencia").json()
         ver("conferir em lote marca SÓ a folha sem nenhuma pendência (D3); as 2 com duplicata/sinais ficam para olho humano", cb["conferidas"] == 1 and cb["restam"] == 2 and sql("SELECT revisao FROM item WHERE codigo=?", D(3)) == "conferida" and sql("SELECT revisao FROM item WHERE codigo=?", D(1)) == "pendente", str(cb))
         rs = adm.get(f"/api/projetos/F026-P0001/revisao").json()["lotes"]; rl = next(x for x in rs if x["id"] == lote)
-        ver("resumo do projeto: contagens, pacote encontrado e o motivo de ainda não poder aprovar", rl["itens"] == {"total": 3, "pendente": 2, "conferida": 1, "corrigida": 0, "bloqueadas": 2, "retidas": 0} and rl["pacote"]["existe"] and rl["pacote"]["documentos"] == 3 and rl["pode_aprovar"] is False and rl["motivo"] == "Faltam conferir 2 folha(s)", str(rl)[:260])
+        ver("resumo do projeto: contagens, pacote encontrado e o motivo de ainda não poder aprovar", {k_: v_ for k_, v_ in rl["itens"].items() if k_ != "partes"} == {"total": 3, "pendente": 2, "conferida": 1, "corrigida": 0, "bloqueadas": 2, "retidas": 0} and rl["pacote"]["existe"] and rl["pacote"]["documentos"] == 3 and rl["pode_aprovar"] is False and rl["motivo"] == "Faltam conferir 2 folha(s)", str({k_: rl.get(k_) for k_ in ("itens", "pode_aprovar", "motivo")}))
         ver("lote sem pacote/pasta sumida aparece no resumo sem erro", any(x["id"] == sumiu for x in adm.get("/api/projetos/F026-P0002/revisao").json()["lotes"]) and adm.get("/api/projetos/F026-P9999/revisao").status_code == 404)
         # ---------- revisar uma folha ----------
         ver("revisar: estado inválido 400; folha inexistente 404; sem login 401", op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "ok"}).status_code == 400 and op.post("/api/itens/F026-P0001-1972-S01-D99999/revisao", json={"estado": "conferida"}).status_code == 404 and anon.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"}).status_code == 401)
@@ -3596,6 +3596,30 @@ def filho(modo):
         g2 = adm.post(f"/api/itens/{D(PR, 2)}/girar", json={"graus": 90}); e2 = adm.post(f"/api/itens/{D(PR, 2)}/espelhar")
         ver("19/10: girar e espelhar folha de lote aprovado (fora do site) não dá mais 'O lote desta folha já foi aprovado'", "já foi aprovado" not in g2.text and "já foi aprovado" not in e2.text, g2.text[:100] + " | " + e2.text[:100])
         adm.post(f"/api/itens/{D(PR, 2)}/retencao", json={"retida": True})
+        # 21/10 (Rafa: "vi folhas que descartamos no adm publicadas"): a retida que TEM registro no site (subiu antes, foi tirada do ar e retida)
+        # era publicada junto com o projeto e com o fundo: o "Publicar" mandava 'publish' para toda folha com registro, sem olhar a retenção
+        k.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,projeto_detectado,fundo_detectado) VALUES (7999,8013,'private','f',?,?,'F089')", (D(PR, 2), PR))
+        k.execute("UPDATE item SET tainacan_item_id=7999, status_site='fora_do_ar' WHERE codigo=?", (D(PR, 2),)); k.commit()
+        st_chamadas = []
+        class WPGrava:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): st_chamadas.append((wid, alvo))
+        _wp.WP = WPGrava
+        rp = adm.post(f"/api/projetos/{PR}/publicar", json={"acao": "publicar", "incluir_folhas": True})
+        ver("21/10: 'Publicar' do projeto NUNCA publica a folha retida que tem registro no site: ela vai (ou fica) privada",
+            rp.status_code == 200 and (7999, "publish") not in st_chamadas and (7999, "private") in st_chamadas and sql("SELECT status_site FROM item WHERE codigo=?", D(PR, 2)) == "fora_do_ar"
+            and sql("SELECT status FROM wp_item WHERE id=7999") == "private", rp.text[:300] + " " + str(st_chamadas))
+        ver("21/10: as outras folhas continuam sendo publicadas", sum(1 for w_, a_ in st_chamadas if a_ == "publish") >= 3, str(st_chamadas))
+        # a mesma folha que o bug já deixou publicada: o checklist avisa e publicar de novo a esconde
+        k.execute("UPDATE item SET status_site='no_ar' WHERE codigo=?", (D(PR, 2),)); k.execute("UPDATE wp_item SET status='publish' WHERE id=7999"); k.commit()
+        cond = {x["id"]: x for x in adm.get(f"/api/projetos/{PR}/publicacao").json()["condicoes"]}
+        ver("21/10: o checklist avisa quantas retidas estão no site e que publicar as esconde", "retidas_no_site" in cond and "escondidas" in cond["retidas_no_site"]["texto"], str(list(cond)))
+        st_chamadas.clear(); rp = adm.post(f"/api/projetos/{PR}/publicar", json={"acao": "publicar", "incluir_folhas": True})
+        ver("21/10: publicar de novo esconde a retida que o bug publicou, e a resposta diz", (7999, "private") in st_chamadas and (7999, "publish") not in st_chamadas
+            and D(PR, 2) in (rp.json().get("retidas_escondidas") or []) and "retida" in rp.json().get("mensagem", ""), rp.text[:300])
+        st_chamadas.clear(); publicador.WP = WPGrava; rf = publicador.propagar_status_fundo("F089", "no_ar", "adm@camp.arq.br")
+        ver("21/10: publicar o FUNDO também não publica a retida (vai privada)", (7999, "publish") not in st_chamadas and (7999, "private") in st_chamadas
+            and sql("SELECT status_site FROM item WHERE codigo=?", D(PR, 2)) == "fora_do_ar", str(rf)[:200] + " " + str(st_chamadas))
         # liberar devolve para conferir; folha já no site não pode ser retida; permissões
         op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": True}); lb = op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": False})
         ver("liberar: a folha deixa de ser retida e volta para CONFERIR (olho humano de novo)", lb.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 1)) == 0 and sql("SELECT revisao FROM item WHERE codigo=?", D(PL, 1)) == "pendente" and sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 1)) is None)

@@ -902,14 +902,18 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if p["tainacan_item_id"]:
             col = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone()
             alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
+        esconder = []   # folha retida que tem registro no site: publicar NUNCA a publica; ela vai (ou volta) para privado
         if d.incluir_folhas:
-            for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
+            for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id, COALESCE(i.retida,0) FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
                                     WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.duplicata_de IS NULL
                                       AND (i.lote_id IS NULL OR i.revisao<>'pendente')""", (codigo,)):
-                alvos.append(("item", i[0], i[2] or 8013, i[1]))
+                if i[3] and alvo == "publish":
+                    esconder.append(("item", i[0], i[2] or 8013, i[1]))
+                else:
+                    alvos.append(("item", i[0], i[2] or 8013, i[1]))
     finally:
         con.close()
-    if not alvos:
+    if not alvos and not esconder:
         return {"ok": False, "alterados": 0, "total": 0, "falhas": [],
                 "mensagem": "Este projeto ainda não tem registros no site: envie as folhas ao site (como rascunho) antes de mudar a publicação."}
 
@@ -918,26 +922,39 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         wp = WP()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(503, f"Não consegui acessar o WordPress ({str(e)[:160]}). Confira a senha de aplicação em Configurações.")
-    sucessos, falhas = [], []
+    sucessos, falhas, escondidas = [], [], []
     for tipo, cod, cid, wid in alvos:
         try:
             wp.atualizar_status_item(cid, wid, alvo)
             sucessos.append((tipo, cod, wid))
         except Exception as e:  # noqa: BLE001
             falhas.append({"codigo": cod, "erro": str(e)[:240]})
+    for tipo, cod, cid, wid in esconder:   # 21/10: folha retida estava sendo publicada junto com o projeto
+        try:
+            wp.atualizar_status_item(cid, wid, "private")
+            escondidas.append((tipo, cod, wid))
+        except Exception as e:  # noqa: BLE001
+            falhas.append({"codigo": cod, "erro": "folha retida, não consegui escondê-la no site: " + str(e)[:200]})
 
     # fase 3: gravar o resultado local
     erro_db = persistir_resultado(sucessos, st_painel, alvo, "projeto", codigo, f"site_{d.acao}", u["email"],
                                   {"ok": len(sucessos), "falhas": len(falhas)})
+    if escondidas and not erro_db:
+        erro_db = persistir_resultado(escondidas, "fora_do_ar", "private", "projeto", codigo, "site_retidas_escondidas", u["email"],
+                                      {"folhas": [c for _, c, _ in escondidas]})
     if erro_db:
         falhas.append({"codigo": codigo, "erro": f"O site foi atualizado, mas não consegui registrar aqui ({erro_db[:120]}). A próxima sincronização acerta."})
-    if sucessos and not falhas:
-        msg = f"{len(sucessos)} registro(s) {RESULTADO[alvo]}."
-    elif sucessos:
+    total = len(alvos) + len(esconder)
+    if (sucessos or escondidas) and not falhas:
+        msg = f"{len(sucessos)} registro(s) {RESULTADO[alvo]}." if sucessos else "Nenhum registro publicado."
+    elif sucessos or escondidas:
         msg = f"{len(sucessos)} de {len(alvos)} registro(s) {RESULTADO[alvo]}; {len(falhas)} falharam (veja a lista)."
     else:
         msg = f"Nenhum registro foi alterado: {len(falhas)} falha(s) ao falar com o site."
-    return {"ok": bool(sucessos) and not falhas, "alterados": len(sucessos), "total": len(alvos), "falhas": falhas, "mensagem": msg}
+    if escondidas:
+        msg += f" {len(escondidas)} folha(s) retida(s) ficaram escondidas no site (não vão ao ar)."
+    return {"ok": bool(sucessos or escondidas) and not falhas, "alterados": len(sucessos), "total": total, "falhas": falhas, "mensagem": msg,
+            "retidas_escondidas": [c for _, c, _ in escondidas]}
 
 
 class AutorizarLote(BaseModel):
