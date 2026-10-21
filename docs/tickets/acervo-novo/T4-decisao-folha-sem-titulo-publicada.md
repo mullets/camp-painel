@@ -12,3 +12,6 @@ Exigir título para publicar, ou só avisar na conferência e no plano de public
 
 ## Teste quando decidido
 `cenario_160`: folhas D1, D3, D4, D6 e D8 sem título.
+
+## Resolução (padrão conservador, aguarda decisão)
+Aplicado em `claude/melhorias-acervo-novo` (commit `c2cfb48`): o plano de publicação **avisa** (não bloqueia) de folhas sem título. Para bloquear, mover o aviso `folhas_sem_titulo` para os bloqueios.

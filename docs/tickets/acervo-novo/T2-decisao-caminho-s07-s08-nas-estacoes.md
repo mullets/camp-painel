@@ -19,3 +19,6 @@ T3 (nomes das pastas do Mac).
 
 ## Teste quando decidido
 `cenario_170`: projetos B e C do acervo novo, sem preencher `materiais` à mão.
+
+## Resolução parcial
+Aplicado em `claude/melhorias-mac-series` (`camp-sistema-digitalizacao-mac`, commit `04c660c`): `MATERIAIS_PADRAO` e `config.example.json` ganham `07 - Publicações` (S07) e `08 - Redesenhos` (S08). **Estações já instaladas** precisam acrescentar os dois em `materiais` do `config.json` (fora do Git). **Windows segue só com S01**: decisão pendente sobre o Windows escanear S07/S08.

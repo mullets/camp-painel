@@ -12,3 +12,6 @@ Na conferência, destacar a prévia de folhas cuja orientação o CV2 mudou (rot
 
 ## Teste
 `cenario_160` (CV2 forçado a errar 90°, 180°, espelho, 270° e 90° incerta).
+
+## Resolução
+Aplicado em `claude/melhorias-acervo-novo` (commit `c2cfb48`): folha que o CV2 girou (90/180/270) sem marcar incerteza ganha o sinal “orientação girada pelo CAMP Vision: confira a prévia”; “Aprovar todas” a deixa para conferir uma a uma (regra do CAMP-094). Atenção: toda folha girada pelo CV2, certa ou errada, agora precisa de conferência individual.

@@ -18,8 +18,14 @@ Medido com 1 scan por pasta:
 
 Nenhuma pasta padrão do Mac chega em S08. O Mac nomeia o arquivo pelo número da pasta e o CV2 renomeia depois por nome: o nome no QNAP não é o do acervo.
 
+## Correção da premissa
+As pastas `06`–`09` do Mac são as pastas de **fundo** (a mesma lista do CV2, `estrutura.py`), não as séries do projeto; o Mac só as usaria como material se configurado à mão. O problema real: o Mac nomeia o arquivo pelo **número** da pasta, e o CV2 decide a série pelo **nome**; onde os números diferem da tabela de séries o código muda no acervo.
+
 ## Esperado
 Nomes e numeração das pastas iguais à tabela de séries, e o código no nome do arquivo igual ao do acervo. Compatível com a versão antiga do CV2 (campo novo opcional, sem renomear S07).
 
 ## Teste
 `cenario_171` (`e2e/cenarios_acervo_novo.py`) falha hoje. Teste novo em `tests/test_nucleo.py`: cada pasta de material vira o código de série da tabela.
+
+## Resolução
+Aplicado em `claude/melhorias-mac-series` (commit `04c660c`): `codigo_serie` usa a tabela de séries pelo nome da pasta (`09 - Publicações` → S07, `08 - Materiais e especificações` → S06…); nome fora da tabela mantém o número. Testes novos falham sem a correção; `cenario_171` passa (no `main` falha: S06→S01, S09→S07, S08→S06).

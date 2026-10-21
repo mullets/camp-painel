@@ -22,3 +22,6 @@ Modo rápido novo: passos acima; deve falhar sem a correção. Harness: `cenario
 
 ## Também
 Ao cadastrar o fundo com o site sem sincronizar, a pessoa recebe só um texto de erro dentro de um 200. Avaliar aviso claro na tela e nova tentativa automática depois da sincronização.
+
+## Resolução
+Aplicado em `claude/melhorias-acervo-novo` (`camp-painel`, commit `c2cfb48`): sucesso de criar fundo, projeto ou folha no site fecha a pendência anterior. Modo rápido `melhorias_acervo_novo` (falha sem a correção); `cenario_170` passa.
