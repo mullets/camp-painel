@@ -110,6 +110,11 @@ def _pendencia(con, entidade, codigo, campo, detalhe):
                 (entidade, codigo, campo, detalhe[:300], None))
 
 
+def _resolver_pendencia(con, entidade, codigo, campo):
+    """A criação no site deu certo: fecha a pendência que uma tentativa anterior deixou aberta (senão a tela segue dizendo 'pendente' com a coisa já publicada)."""
+    con.execute("UPDATE divergencia_site SET resolvida=1 WHERE entidade=? AND codigo=? AND campo=? AND resolvida=0", (entidade, codigo, campo))
+
+
 HUB_LIMPAR = "__limpar__"     # CAMP-015: valor especial que o painel manda para APAGAR um campo do hub no site (vazio continua ignorado pelo site)
 EM_ORGANIZACAO = "Documentação em organização."
 TIPO_ENTRADA = {"doacao": "Doação", "comodato": "Comodato", "deposito": "Depósito", "compra": "Compra", "transferencia": "Transferência", "outro": "Outra forma de entrada"}
@@ -269,6 +274,7 @@ def criar_fundo_no_site(codigo: str, ator: str) -> dict:
                     con.execute("INSERT OR REPLACE INTO wp_termo (id, taxonomia_id, nome, slug, json) VALUES (?,?,?,?,?)", (t["id"], ta, a[1], t.get("slug"), json.dumps(t, ensure_ascii=False)))
                     out["arquiteto_termo"] = t["id"]
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,'site_termo_criado',?,?)", (codigo, ator, json.dumps(out)))
+        _resolver_pendencia(con, "fundo", codigo, "pendente_criar_no_site")
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:300]
         _pendencia(con, "fundo", codigo, "pendente_criar_no_site", out["erro"])
@@ -308,6 +314,7 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         it = wp.criar_item(COL_PROJETOS, titulo, "draft", p["ambito_conteudo"] or "")
         iid = it["id"]
         con.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (iid, codigo))
+        _resolver_pendencia(con, "projeto", codigo, "pendente_criar_no_site")
         con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (iid, COL_PROJETOS, "draft", titulo, it.get("slug"), it.get("url"), codigo, p["fundo_codigo"], codigo, "{}", json.dumps(it, ensure_ascii=False)))
         arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (p["fundo_codigo"],)).fetchone()
@@ -860,6 +867,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
             iid = it["id"]
             con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
+            _resolver_pendencia(con, "item", codigo, "pendente_criar_no_site")
             con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (iid, COL_ACERVO, "draft", titulo, it.get("slug"), it.get("url"), codigo, i["fundo_codigo"], i["projeto_codigo"], "{}", json.dumps(it, ensure_ascii=False)))
             arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (i["fundo_codigo"],)).fetchone()

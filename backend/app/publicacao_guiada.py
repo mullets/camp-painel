@@ -33,6 +33,7 @@ def envio_paralelo() -> int:
         return 3
 
 ORCAMENTO_S = 40.0             # tempo máximo de envio de folhas por chamada (a tela repete até acabar)
+ANO_FOLHA_DIFERENTE = 5        # anos de diferença entre a folha e o projeto a partir dos quais o plano avisa
 _trava = threading.Lock()
 _em_andamento: set[str] = set()
 
@@ -72,6 +73,21 @@ def plano(con, p) -> dict:
     sem = [n for n, v in (("ano", p["ano"]), ("cidade", cidade)) if not v or str(v) == "0"]
     if sem:
         avisos.append({"id": "vazios", "campo": sem[0], "texto": "Sem " + " e sem ".join(sem) + ": a página fica sem essa informação. Preencha agora ou publique assim mesmo."})
+    # T4 (acervo novo): folha sem título é publicada com o título genérico da série, repetido. Só avisa: decisão do Rafa se vira bloqueio.
+    sem_titulo = q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} AND TRIM(COALESCE(titulo,''))=''")
+    if sem_titulo:
+        avisos.append({"id": "folhas_sem_titulo", "campo": None, "texto": (f"{sem_titulo} folhas sem título" if sem_titulo != 1 else "1 folha sem título")
+                       + ": no site aparecem com o nome da série. Preencha na conferência ou publique assim mesmo."})
+    # T5: o ano lido na folha foge muito do ano do projeto (ex.: 1917 num projeto de 1971)
+    try:
+        ano_p = int(str(p["ano"] or "").strip()[:4])
+    except ValueError:
+        ano_p = None
+    if ano_p:
+        fora = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} AND ano_folha IS NOT NULL AND ABS(ano_folha-?)>=?",
+                                          (codigo, ano_p, ANO_FOLHA_DIFERENTE))]
+        if fora:
+            avisos.append({"id": "ano_fora_do_projeto", "campo": None, "texto": f"{len(fora)} folha(s) com ano muito diferente do projeto ({ano_p}), por exemplo {fora[0][-6:]}: confira o ano antes de publicar."})
     if "pagina_arquiteto" in por_id:     # CAMP-015
         avisos.append({"id": "pagina_arquiteto", "campo": None, "texto": por_id["pagina_arquiteto"]["texto"] + ": o projeto vai ao ar, mas a página do arquiteto não aparece até ela existir."})
     if divergentes:     # CAMP-046 (contrato 2.4): aviso, não bloqueio
