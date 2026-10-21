@@ -51,7 +51,9 @@ T.rodar(async () => {
   const avCartao = num((cP.match(/(\d+) avisos?/) || [])[1]);
   const aba = await txt(op, '#pd [role="tab"]:has-text("Problemas")'), abaTot = num((aba.match(/Problemas \((\d+)\)/) || [])[1]), abaBl = num((aba.match(/(\d+) bloqueia/) || [])[1]);
   chk(abaBl === 5 && abaTot === 5 + avCartao, `CAMP-102: aba "Problemas (${abaTot}) ${abaBl} bloqueiam" bate com o cartão (5 + ${avCartao} avisos)`, aba);
-  chk(await gavAberta(op) === 'problemas', 'CAMP-102: a lista "Problemas que impedem publicar" abre sozinha', await gavAberta(op));
+  chk(await gavAberta(op) === null, 'CAMP-102 (P0): nenhuma gaveta abre sozinha', await gavAberta(op));
+  await require('./_comum').abrirGaveta(op, 'problemas');
+  chk(await gavAberta(op) === 'problemas', 'CAMP-102: o cartão Problemas abre a lista "Problemas que impedem publicar"', await gavAberta(op));
   const lis = await op.$$eval('#pj-probs li', l => l.length);
   chk(lis === 5, 'CAMP-102: a lista tem 5 linhas (uma por problema que impede publicar)', lis);
   await print(op, '102_lista');
@@ -67,11 +69,11 @@ T.rodar(async () => {
   const cond = await ad.evaluate(c => ((window.PUB_G || {})[c] || {}).condicoes || [], A.P), cb = cond.find(c => c.id === 'bloqueios') || {};
   chk(cb.ok === false && /\b5\b/.test((cb.texto || '') + ' ' + (cb.detalhe || '')), 'CAMP-102: a condição de publicar "problemas" diz 5 e trava', JSON.stringify(cb));
   // cada linha leva à folha certa no conferir
-  await abrirProjeto(op, A.P);
+  await abrirProjeto(op, A.P); await require('./_comum').abrirGaveta(op, 'problemas');
   const links = await op.$$eval('#pj-probs a[href^="#conferir/"]', l => l.map(a => a.getAttribute('href')));
   chk(links.length === 2 && links.every(h => h.startsWith('#conferir/' + A.P + '/')), 'CAMP-102: folhas no painel têm link para o conferir (D00001 e D00002)', JSON.stringify(links));
   for (const h of links) {
-    await abrirProjeto(op, A.P); await op.click(`#pj-probs a[href="${h}"]`);
+    await abrirProjeto(op, A.P); await require('./_comum').abrirGaveta(op, 'problemas'); await op.click(`#pj-probs a[href="${h}"]`);
     const alvo = h.split('/').pop();
     chk(await espera(() => op.evaluate(() => (window.CONF || {}).atual)).then(async () => (await op.evaluate(() => CONF.atual)) === alvo), `CAMP-102: o link ${alvo.slice(-6)} abre essa folha no conferir`, await op.evaluate(() => (window.CONF || {}).atual));
   }
@@ -140,7 +142,7 @@ T.rodar(async () => {
   chk(/PROBLEMAS 1\b/.test(cC) || /^PROBLEMAS 0/.test(cC) || /1 (aviso|impede)/.test(cC), 'CAMP-104: o cartão desconta o resolvido', cC);
 
   // ---------------------------------------------------------------- CAMP-105
-  passo('CAMP-105: a gaveta que abre sozinha (lote parado > problemas > dados)');
+  passo('CAMP-105 → P0 (21/10): nenhuma gaveta abre sozinha; a que a pessoa abre/fecha fica como ela deixou');
   const dados1978 = n => ({ ano: '1978', ano_do_projeto: '1972' });
   const X = lote('CASA SO DADOS', { docs: docs(1, 3, dados1978), ano_carimbo: 1978 });                           // só pergunta de dados
   const Y = lote('CASA DADOS E BLOQUEIO', { docs: docs(1, 3, dados1978), ano_carimbo: 1978, erros: [
@@ -151,21 +153,21 @@ T.rodar(async () => {
   for (const [cod, esp, nome] of [[X.P, 'dados', 'só dados'], [Y.P, 'problemas', 'problemas + dados'], [Zc, 'folhas', 'lote parado + problema']]) {
     await op.evaluate(() => nav('painel')); await op.waitForTimeout(800); await op.evaluate(() => window.scrollTo(0, 0));
     await abrirProjeto(op, cod);
-    chk(await gavAberta(op) === esp, `CAMP-105: ${nome} → abre "${esp}"`, `${await gavAberta(op)} · ${await txt(op, '#pj-cards')}`.slice(0, 400));
-    chk(await op.evaluate(() => window.scrollY) < 5, `CAMP-105: ${nome}: a página não pula para baixo ao abrir`, await op.evaluate(() => window.scrollY));
+    chk(await gavAberta(op) === null, `P0: ${nome} → nenhuma gaveta abre sozinha (antes abria "${esp}")`, `${await gavAberta(op)} · ${await txt(op, '#pj-cards')}`.slice(0, 400));
+    chk(await op.evaluate(() => window.scrollY) < 5, `CAMP-105: ${nome}: a página não pula para baixo`, await op.evaluate(() => window.scrollY));
   }
   await print(op, '105_parado');
   // fechar não reabre na mesma visita (mesmo quando os cartões se redesenham)
-  await abrirProjeto(op, Y.P);
+  await abrirProjeto(op, Y.P); await require('./_comum').abrirGaveta(op, 'problemas');
   await op.click('#pj-gaveta .pj-gav:not([hidden]) [data-pjc-fechar]'); await op.waitForTimeout(400);
   await op.evaluate(c => desenharCartoes(c), Y.P); await op.waitForTimeout(600);
   chk(await gavAberta(op) === null, 'CAMP-105: fechou → os cartões se redesenham e a gaveta não volta');
   // nova visita (sai pelo menu e volta, como uma pessoa faz) → abre de novo
   await op.evaluate(() => nav('painel')); await op.waitForTimeout(1200);
   await op.evaluate(c => nav('projeto/' + c), Y.P); await op.waitForSelector('#pj-cards .pjc[data-pjc="site"]', { timeout: 15000 }); await op.waitForTimeout(2000);
-  chk(await gavAberta(op) === 'problemas', 'CAMP-105: nova visita ao projeto → a gaveta abre de novo', await gavAberta(op));
+  chk(await gavAberta(op) === null, 'P0: nova visita ao projeto → continua fechada (nada abre sozinho)', await gavAberta(op));
   await op.goBack(); await op.waitForTimeout(800); await op.goForward(); await op.waitForTimeout(2200);
-  chk(await gavAberta(op) === 'problemas', 'CAMP-105: Voltar e Avançar do navegador → abre de novo', await gavAberta(op));
+  chk(await gavAberta(op) === null, 'P0: Voltar e Avançar do navegador → continua fechada', await gavAberta(op));
 
   // ---------------------------------------------------------------- CAMP-106
   passo('CAMP-106: consenso e folhas divergentes (28 com 1978, 3 com 1987; endereços)');
@@ -239,12 +241,16 @@ T.rodar(async () => {
   const r1 = pede();
   chk(r1.pendente === true && r1.decisao_id, 'CAMP-108: a estação pede número para "Casa do Lago Azul (reenvio)" e o painel abre a decisão (CAMP Vision espera)', JSON.stringify(r1));
   await abrirProjeto(op, Vp);
-  const avOp = await txt(op, '#pd');
+  // P0 (21/10): a decisão é um item da barra "O que falta" (sem faixa repetida na página); "Ver" abre o painel lateral com a pergunta
+  chk(/1 decisão pendente/.test(await txt(op, '#pj-falta')), 'CAMP-108 (P0): a barra "O que falta" tem "1 decisão pendente sobre este projeto"', await txt(op, '#pj-falta'));
+  await op.click('#pj-falta li[data-pjp="decisao"] [data-pjp-ir]'); await op.waitForTimeout(1200);
+  const avOp = await txt(op, '#d-body');
   chk(/parecido|é o mesmo|esperando/i.test(avOp) && /admin/i.test(avOp), 'CAMP-108: operador, na página do projeto parecido, vê a pergunta e que um admin decide', avOp.slice(0, 600));
   await print(op, '108_operador');
   await abrirProjeto(ad, Vp);
-  const bDec = await ad.$(`#pd [data-dec-abrir="${r1.decisao_id}"], #pd [data-abrir="decisao:${r1.decisao_id}"]`);
-  chk(!!bDec, 'CAMP-108: admin, na página do projeto, tem o botão para decidir', (await txt(ad, '#pd')).slice(0, 400));
+  await ad.click('#pj-falta li[data-pjp="decisao"] [data-pjp-ir]'); await ad.waitForTimeout(1200);
+  const bDec = await ad.$(`#d-body [data-dec-abrir="${r1.decisao_id}"], #d-body [data-abrir="decisao:${r1.decisao_id}"]`);
+  chk(!!bDec, 'CAMP-108: admin, pela barra "O que falta", tem o botão para decidir', (await txt(ad, '#d-body')).slice(0, 400));
   if (bDec) await bDec.click(); else await ad.evaluate(id => abrirDecisao(id), r1.decisao_id);
   await ad.waitForSelector(`#d-body [data-dec-acao="mesmo"][data-dec-id="${r1.decisao_id}"]`, { timeout: 8000 });
   await print(ad, '108_decisao');

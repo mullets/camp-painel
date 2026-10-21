@@ -65,11 +65,16 @@ def pendentes(con, projeto: str) -> list[dict]:
                          (*codigos, *EVENTOS_ENVIO)):
         base[r[0]] = r[1]
     antes: dict[str, dict] = {c: {} for c in codigos}
+    # 21/10: sem evento de envio da folha, a referência é a 1ª publicação do projeto pela ORDEM dos eventos (id). Pela hora (em segundos),
+    # a correção feita no mesmo segundo da publicação, ANTES dela, contava como "depois" e aparecia como alteração não enviada.
+    pub_ev = con.execute("SELECT MIN(id) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='site_publicar'", (projeto,)).fetchone()[0]
     for r in con.execute(f"SELECT id, codigo, detalhe, quando FROM evento WHERE entidade='item' AND tipo='editado' AND codigo IN ({marca}) ORDER BY id", codigos):
         i = por_cod[r["codigo"]]
         if r["codigo"] in base:
             if r["id"] <= base[r["codigo"]]:
                 continue
+        elif pub_ev and r["id"] < pub_ev:
+            continue
         elif i["publicado_em"] and r["quando"] < i["publicado_em"]:
             continue
         try:

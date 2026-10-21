@@ -31,7 +31,7 @@ T.rodar(async () => {
   T.passo('CAMP-125: 31 propostas resolvidas rápido, sem trocar nada escrito');
   await abrirLotes(op, PA);
   const resumo = await T.txt(op, '#pj-cv .cv-resumo');
-  T.chk(/31 propostas sem resposta/.test(resumo), 'CAMP-125: o resumo diz "31 propostas sem resposta" (8 obras + 23 da tabela)', resumo);
+  T.chk(/23 propostas sem resposta/.test(resumo) && /obras distintas/.test(resumo), 'CAMP-125 (P0): o resumo diz "23 propostas sem resposta" e, à parte, as obras (sem contar as 8 duas vezes)', resumo);
   const t0 = Date.now(), antes = JSON.stringify(T.sql('SELECT codigo, titulo, ano_folha, pendencias, status_site FROM item WHERE projeto_codigo=? ORDER BY codigo', PA));
   await op.click('#pj-cv [data-cv-abrir="propostas"]').catch(() => {});
   const nLinhas = await op.$$eval('#pj-cv .cvp-tab tr[data-cvp]', l => l.length).catch(() => 0);
@@ -67,18 +67,21 @@ T.rodar(async () => {
   T.chk(/1 decisão pendente/.test(cartaoDados), 'CAMP-126: o cartão Dados diz "1 decisão pendente" (não "Em ordem")', cartaoDados);
   const corpo = await op.evaluate(() => document.getElementById('pd').innerText);
   T.chk(!/obras_na_pasta|propostas\.|sem_codigo_de_unidade|codigo_unidade/.test(corpo), 'CAMP-126: nenhum nome de campo interno aparece na tela', (corpo.match(/.{30}(obras_na_pasta|propostas\.|codigo_unidade).{30}/) || [''])[0]);
-  const ob = await T.txt(op, '#pj-cv [data-cv-obras]');
+  const linha = await T.txt(op, '#pj-cv [data-cv-obras]');
+  T.chk(/8 códigos de unidade/.test(linha) && /mesmo conjunto/.test(linha) && !(await op.$('#pj-cv [data-cv-obra]')), 'P0: na página as unidades são 1 linha ("8 códigos de unidade", "São partes do mesmo conjunto", "Ver os grupos")', linha);
+  await op.click('#pj-cv [data-passo-abrir="obras"]'); await op.waitForSelector('#d-body [data-cv-obra]', { timeout: 10000 }).catch(() => {});
+  const ob = await T.txt(op, '#d-body [data-cv-obras]');
   T.chk(/8 códigos de unidade diferentes/.test(ob) && /mesmo conjunto/.test(ob), 'CAMP-126: o texto explica (8 códigos de unidade; mesmo conjunto ou projetos diferentes)', ob.slice(0, 200));
-  const grupos = await op.$$eval('#pj-cv [data-cv-obra]', l => l.map(g => [g.dataset.cvObra, g.querySelectorAll('img').length, g.innerText]));
+  const grupos = await op.$$eval('#d-body [data-cv-obra]', l => l.map(g => [g.dataset.cvObra, g.querySelectorAll('img').length, g.innerText]));
   T.chk(grupos.length === 8 && grupos.every(g => g[1] === 3 && /3 folhas/.test(g[2])), 'CAMP-126: 8 grupos, cada um com o código de unidade, as miniaturas e o nº de folhas', JSON.stringify(grupos.map(g => [g[0], g[1]])));
-  T.chk(await T.imgOk(op, '#pj-cv [data-cv-obra] img'), 'CAMP-126: as miniaturas dos grupos carregam');
-  T.chk(!(await op.$('#pj-cv [data-obras-separar]')), 'CAMP-126: o operador não vê "Separar" (mover é de admin); vê o aviso para pedir a um admin', ob.slice(-120));
+  T.chk(await T.imgOk(op, '#d-body [data-cv-obra] img'), 'CAMP-126: as miniaturas dos grupos carregam');
+  T.chk(!(await op.$('#d-body [data-obras-separar]')), 'CAMP-126: o operador não vê "Separar" (mover é de admin); vê o aviso para pedir a um admin', ob.slice(-120));
   await T.print(op, 'obras_decisao');
   // 21/10 (Rafa: "seria bom clicar e ver"): a miniatura do grupo abre a folha
-  { const alvo = await op.$eval('#pj-cv [data-cv-obra] .cv-obra-mini', b => b.dataset.revAbrir).catch(() => null);
+  { const alvo = await op.$eval('#d-body [data-cv-obra] .cv-obra-mini', b => b.dataset.revAbrir).catch(() => null);
     T.chk(!!alvo, '21/10: cada miniatura do grupo é um botão que abre a folha');
     if (alvo) {
-      await op.click('#pj-cv [data-cv-obra] .cv-obra-mini');
+      await op.click('#d-body [data-cv-obra] .cv-obra-mini');
       T.chk(await T.espera(async () => (await op.evaluate(() => typeof revAberta === 'function' ? revAberta() : null)) === alvo), '21/10: clicar na miniatura abre aquela folha', alvo);
       await T.print(op, 'obras_mini_aberta');
       await op.evaluate(() => closeDrawer(true)); await op.waitForTimeout(600);

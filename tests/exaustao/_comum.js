@@ -42,6 +42,8 @@ const entrar = async (papel = 'operador', opc = {}) => {
   return pg;
 };
 const abrirProjeto = async (pg, P) => { await pg.evaluate(c => { window.SL = null; window.PJ_GAV = null; nav('projeto/' + c) }, P); await pg.waitForSelector('#pj-cards .pjc[data-pjc="site"]', { timeout: 15000 }); await pg.waitForTimeout(1500) };
+// P0 (Trello 21/10): nenhuma gaveta abre sozinha; a pessoa abre pelo cartão (folhas = "Detalhes dos lotes", problemas, dados)
+const abrirGaveta = async (pg, k) => { const v = await pg.evaluate(k => { const g = document.querySelector(`.pj-gav[data-gav="${k}"]`); return !!(g && g.checkVisibility && g.checkVisibility()) }, k); if (!v) { await pg.click(`#pj-cards [data-pjc-gav="${k}"]`); await pg.waitForTimeout(1500) } };
 const abrirConferir = async (pg, P, folha) => { await pg.evaluate(r => nav(r), 'conferir/' + P + (folha ? '/' + folha : '')); await pg.waitForSelector('#cf-pane', { timeout: 15000 }); await pg.waitForTimeout(800) };
 // fim: grava relatorio.txt e sai com 1 se houver FALHA
 const fim = async () => {
@@ -51,4 +53,4 @@ const fim = async () => {
   fs.writeFileSync(path.join(SAIDA, 'relatorio.txt'), rel + '\n'); console.log(rel); process.exit(problemas.length ? 1 : 0);
 };
 const rodar = f => f().then(fim).catch(async e => { console.error(e); chk(false, 'o teste quebrou: ' + e.message); await fim() });
-module.exports = { BASE, DB, RAIZ, SAIDA, chk, passo, cv2, sql, um, espera, print, txt, confirmar, imgOk, loteReal, entrar, abrirProjeto, abrirConferir, rodar, linhas, problemas };
+module.exports = { BASE, DB, RAIZ, SAIDA, chk, passo, cv2, sql, um, espera, print, txt, confirmar, imgOk, loteReal, entrar, abrirProjeto, abrirGaveta, abrirConferir, rodar, linhas, problemas };

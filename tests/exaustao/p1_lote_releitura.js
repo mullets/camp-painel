@@ -56,10 +56,13 @@ T.rodar(async () => {
   T.chk(/Releituras: o que mudou \(1\) · 2 mudanças para decidir/.test(rl), 'CAMP-131: "Releituras: o que mudou" aberto, com 2 mudanças para decidir', rl.slice(0, 600));
   await T.print(op, 'releitura_o_que_mudou');
   const chT = `20261020-160000|${DA(34)}|titulo_prancha`, chE = `20261020-160000|${DA(34)}|escala`;
-  await op.click(`[data-rl-mud="${chT}"] [data-acao="aceitar"]`);
+  // P0 (21/10): a decisão se faz no painel lateral, aberto pela barra "O que falta"
+  await op.click('#pj-falta li[data-pjp="releituras"] [data-pjp-ir]'); await op.waitForSelector(`#d-body [data-rl-mud="${chT}"]`, { timeout: 10000 }).catch(() => {});
+  T.chk(/titulo|Título/.test(await T.txt(op, '#d-body').catch(() => '')), 'P0: "Ver" das releituras abre o painel lateral com as mudanças', (await T.txt(op, '#d-body').catch(() => '')).slice(0, 200));
+  await op.click(`#d-body [data-rl-mud="${chT}"] [data-acao="aceitar"]`);
   T.chk(await T.espera(() => T.um("SELECT titulo FROM item WHERE codigo=?", DA(34)) === 'PLANTA DE COBERTURA'), 'CAMP-131: "Aceitar" grava na folha o título que a releitura trouxe');
-  await T.abrirProjeto(op, A); await abrirDet(op); await op.waitForSelector(`[data-rl-mud="${chE}"] [data-acao="ignorar"]`, { timeout: 15000 }).catch(() => {});
-  await op.click(`[data-rl-mud="${chE}"] [data-acao="ignorar"]`);
+  await op.waitForSelector(`#d-body [data-rl-mud="${chE}"] [data-acao="ignorar"]`, { timeout: 15000 }).catch(() => {});
+  await op.click(`#d-body [data-rl-mud="${chE}"] [data-acao="ignorar"]`);
   T.chk(await T.espera(() => T.um("SELECT acao FROM cv_resposta WHERE tipo='proposta' AND chave=?", 'releitura:' + chE) === 'ignorar') && T.um("SELECT escala FROM item WHERE codigo=?", DA(34)) === '1:50',
     'CAMP-131: "Ignorar" registra e a folha fica como está');
   T.chk(T.um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND codigo<>? AND titulo LIKE 'PLANTA DE COBERTURA'", A, DA(34)) === 0, 'CAMP-131: nenhuma outra folha mudou');
@@ -81,7 +84,7 @@ T.rodar(async () => {
   f = await folhaTxt(op);
   T.chk(/Lote parado por erro do CAMP Vision/.test(f) && /\bbl\b/.test(await corFolhas(op)), 'CAMP-122: erro de verdade sem nada importado continua vermelho', f);
   T.chk(!/timeout/.test(f), 'CAMP-128: o cartão só resume (sem o texto cortado no meio)', f);
-  T.chk(await op.isVisible('.pj-gav[data-gav="folhas"]'), 'CAMP-128: com ação pendente (lote parado), Detalhes dos lotes abre sozinho');
+  await T.abrirGaveta(op, 'folhas');   // P0: nada abre sozinho (a pessoa já tinha aberto "Detalhes dos lotes" neste teste, e o painel lembra: CAMP-128)
   const pd = await op.innerText('#pd');
   T.chk((pd.match(/não respondeu \(timeout\)/g) || []).length === 1, 'CAMP-128: a mensagem do erro aparece 1 vez na página', (pd.match(/não respondeu \(timeout\)/g) || []).length);
   T.chk((await op.$$('#pd [data-releitura-projeto]:visible')).length === 1, 'CAMP-128: um só "Pedir releitura"');
@@ -110,30 +113,34 @@ T.rodar(async () => {
   T.passo('CAMP-134: 6 releituras do projeto inteiro (formato real do CV2) viram poucas decisões agrupadas');
   montar('muitas', T.RAIZ, B);
   const DB_ = n => `${B}-1978-S01-D${String(n).padStart(5, '0')}`;
-  await T.abrirProjeto(op, B); await abrirDet(op);
-  await op.waitForSelector('#pj-cv [data-rl-grupo]', { timeout: 15000 }).catch(() => {});
-  const sec = await T.txt(op, '#cv-sec-releituras');
+  await T.abrirProjeto(op, B); await op.waitForTimeout(1500);
+  T.chk(/17 mudanças da releitura/.test(await T.txt(op, '#pj-falta')), 'P0: a barra "O que falta" diz "Decidir 17 mudanças da releitura"', await T.txt(op, '#pj-falta'));
+  await op.click('#pj-falta li[data-pjp="releituras"] [data-pjp-ir]');
+  await op.waitForSelector('#d-body [data-rl-grupo]', { timeout: 15000 }).catch(() => {});
+  const sec = await T.txt(op, '#d-body');
   T.chk(!/resumo|documentos|projeto_codigo|pedido_por/.test(sec.replace(/Releituras feitas[\s\S]*$/, '')), 'CAMP-134: nada do "resumo" do arquivo vira decisão (antes: "resumo" e "documentos" viravam folhas)', sec.slice(0, 400));
-  const grupos = await op.$$eval('#pj-cv [data-rl-grupo]', l => l.map(g => [g.dataset.rlGrupo, g.querySelectorAll('tr[data-rl-mud]').length]));
+  const grupos = await op.$$eval('#d-body [data-rl-grupo]', l => l.map(g => [g.dataset.rlGrupo, g.querySelectorAll('tr[data-rl-mud]').length]));
   T.chk(JSON.stringify(grupos) === JSON.stringify([['Título', 12], ['Escala', 5]]), 'CAMP-134: duas decisões agrupadas: Título (12 folhas) e Escala (5); só a releitura mais recente vale', JSON.stringify(grupos));
   T.chk(/Título muda em 12 folhas/.test(sec) && /Aceitar as 12/.test(sec) && /Ignorar as 12/.test(sec), 'CAMP-134: "Título muda em 12 folhas" com "Aceitar as 12" e "Ignorar as 12"', sec.slice(0, 300));
-  T.chk(/Releituras: o que mudou \(6\) · 17 mudanças para decidir/.test(await T.txt(op, '#pj-cv')), 'CAMP-134: o título da seção conta 17 mudanças (12 + 5), não as centenas de antes');
-  const vis = await op.$$eval('#cv-sec-releituras button', l => l.filter(b => b.checkVisibility()).map(b => b.innerText.trim()));
-  T.chk(vis.length <= 6, `CAMP-134: com a lista fechada, a seção mostra poucos botões (${vis.length}); antes eram centenas`, JSON.stringify(vis.slice(0, 12)));
-  { const el = await op.$('#cv-saidas'); if (el) await el.screenshot({ path: require('path').join(T.SAIDA, '06b_cv_saidas.png') }).catch(() => {}) }
+  T.chk(/Aceitar todas as 17 mudanças/.test(sec), 'CAMP-134: conta 17 mudanças (12 + 5), não as centenas de antes, com "Aceitar todas as 17 mudanças" no topo', sec.slice(0, 300));
+  const vis = await op.$$eval('#d-body .passo-corpo button', l => l.filter(b => b.checkVisibility()).map(b => b.innerText.trim()));
+  T.chk(vis.length <= 8, `CAMP-134: com a lista fechada, a seção mostra poucos botões (${vis.length}); antes eram centenas`, JSON.stringify(vis.slice(0, 12)));
+  { const el = await op.$('#drawer'); if (el) await el.screenshot({ path: require('path').join(T.SAIDA, '06b_painel_lateral.png') }).catch(() => {}) }
   T.chk(/Outras leituras que mudaram, só para saber \(30\)/.test(sec) && /Releituras feitas \(6\)/.test(sec), 'CAMP-134: código de unidade (não é da folha) vira só informação, e as 6 releituras ficam no histórico fechado', sec.slice(-300));
   await T.print(op, 'releituras_agrupadas');
-  await op.click('#pj-cv [data-rl-grupo="Título"] [data-rl-todas="aceitar"]'); await T.confirmar(op);
+  await op.click('#d-body [data-rl-grupo="Título"] [data-rl-todas="aceitar"]'); await T.confirmar(op);
   T.chk(await T.espera(() => T.um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND titulo LIKE 'PRANCHA __ — RELIDA'", B) === 12, 20000), '"Aceitar as 12" grava o título relido nas 12 folhas',
     T.um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND titulo LIKE 'PRANCHA __ — RELIDA'", B));
   T.chk(T.um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND titulo LIKE 'VERSAO ANTIGA%'", B) === 0, 'CAMP-134: nenhuma folha recebe o valor de uma releitura antiga');
-  await op.waitForSelector('#pj-cv [data-rl-grupo]', { timeout: 15000 }).catch(() => {});
-  const grupos2 = await op.$$eval('#pj-cv [data-rl-grupo]', l => l.map(g => g.dataset.rlGrupo));
+  await op.waitForSelector('#d-body [data-rl-grupo]', { timeout: 15000 }).catch(() => {});
+  const gr2 = () => op.$$eval('#d-body [data-rl-grupo]', l => l.map(g => g.dataset.rlGrupo)).catch(() => []);
+  await T.espera(async () => JSON.stringify(await gr2()) === '["Escala"]', 15000);
+  const grupos2 = await gr2();
   T.chk(JSON.stringify(grupos2) === JSON.stringify(['Escala']), 'CAMP-134: decidido, o grupo Título sai; fica só Escala', JSON.stringify(grupos2));
-  await op.click('#pj-cv [data-rl-grupo="Escala"] [data-rl-todas="ignorar"]');
-  T.chk(await T.espera(async () => { const t = await op.$eval('#cv-sec-releituras', d => d.textContent).catch(() => ''); return /Nada a decidir/.test(t) && !/para decidir/.test(t) }),
+  await op.click('#d-body [data-rl-grupo="Escala"] [data-rl-todas="ignorar"]');
+  T.chk(await T.espera(async () => { const t = await op.$eval('#d-body', d => d.textContent).catch(() => ''); return /Nada a decidir/.test(t) }),
     'CAMP-134: "Ignorar as 5": a seção diz que não há nada a decidir e o título não conta mais nenhuma',
-    (await op.$eval('#cv-sec-releituras', d => d.textContent).catch(() => 'sem seção')).slice(0, 300) + ' | ' + T.um("SELECT COUNT(*) FROM cv_resposta WHERE chave LIKE 'releitura:%escala'"));
+    (await op.$eval('#d-body', d => d.textContent).catch(() => 'sem painel')).slice(0, 300) + ' | ' + T.um("SELECT COUNT(*) FROM cv_resposta WHERE chave LIKE 'releitura:%escala'"));
   T.chk(T.um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND escala='1:200'", B) === 0, 'CAMP-134: "Ignorar" não mexe na escala das folhas');
   T.chk(T.um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND codigo IN (?,?)", B, DB_(1), DB_(13)) === 2, 'montagem: as folhas existem');
   await T.print(op, 'releituras_decididas');

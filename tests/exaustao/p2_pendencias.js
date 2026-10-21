@@ -22,26 +22,30 @@ T.rodar(async () => {
   T.chk(ordem, 'CAMP-123: a barra fica entre o título e os cartões');
   const itens = await ad.$$eval('#pj-falta .pj-falta-lista li', l => l.map(x => ({ k: x.dataset.pjp, t: x.innerText.replace(/\s+/g, ' ').trim() })));
   const tx = k => (itens.find(x => x.k === k) || {}).t || '';
-  T.chk(/Responder 31 propostas e 1 sugestão/.test(tx('cv_respostas')), 'CAMP-123: "Responder 31 propostas e 1 sugestão do CAMP Vision"', JSON.stringify(itens));
-  T.chk(/8 obras distintas/.test(tx('obras')), 'CAMP-123: "Decidir sobre as 8 obras distintas"', JSON.stringify(itens));
+  T.chk(/Responder 23 propostas e 1 sugestão/.test(tx('cv_respostas')), 'CAMP-123 (P0: as 8 unidades têm item próprio): "Responder 23 propostas e 1 sugestão do CAMP Vision"', JSON.stringify(itens));
+  T.chk(/8 códigos de unidade/.test(tx('obras')), 'CAMP-123 (P0): "Decidir sobre os 8 códigos de unidade que o CAMP Vision achou"', JSON.stringify(itens));
   T.chk(/autoria de 5 folhas/.test(tx('autoria')), 'CAMP-123: "Confirmar a autoria de 5 folhas"', JSON.stringify(itens));
-  T.chk(itens.length === 4 && itens.map(x => x.k).join(',') === 'cv_respostas,obras,autoria,alteracoes', 'CAMP-123: exatamente o que falta, em ordem (projeto publicado: sem Conferir, Aprovar nem Publicar; com as alterações não enviadas do CAMP-124)', JSON.stringify(itens));
+  // 21/10: as correções de título foram feitas ANTES de publicar (foram ao site com a publicação): não são "alterações não enviadas"
+  // (antes, no mesmo segundo da publicação, contavam como depois; o caso com correção depois de publicar está no p3_site)
+  T.chk(itens.length === 3 && itens.map(x => x.k).join(',') === 'cv_respostas,obras,autoria', 'CAMP-123: exatamente o que falta, em ordem (projeto publicado: sem Conferir, Aprovar nem Publicar)', JSON.stringify(itens));
   const selo = await T.txt(ad, '#pj-selo');
-  T.chk(/^publicado · 4 pendências$/.test(selo), 'CAMP-123: o selo do cabeçalho diz "publicado · 4 pendências"', selo);
+  T.chk(/^publicado · 3 pendências$/.test(selo), 'CAMP-123: o selo do cabeçalho diz "publicado · 3 pendências"', selo);
   const men = await T.txt(ad, '#pj-falta .pj-falta-men summary');
   T.chk(!men || /avisos? menor(es)? \(não impedem publicar\)/.test(men), 'CAMP-123: avisos que não impedem publicar ficam recolhidos e não contam', men);
   await T.print(ad, 'p2_barra');
   // cada botão leva ao lugar certo
-  await ad.click('#pj-falta li[data-pjp="cv_respostas"] [data-pjp-ir]'); await ad.waitForTimeout(900);
-  T.chk(await ad.evaluate(() => { const d = document.getElementById('cv-sec-propostas'); return !!(d && d.open && d.offsetParent) }), 'CAMP-123: "Ver" das propostas abre a gaveta e a seção "Propostas do CAMP Vision"');
-  await ad.click('#pj-falta li[data-pjp="obras"] [data-pjp-ir]'); await ad.waitForTimeout(900);
-  T.chk(await ad.evaluate(() => { const a = document.querySelector('#cv-sec-obras') || document.querySelector('#pj-cv .cv-avisos'); if (!a || !a.offsetParent) return false; const r = a.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0 }), 'CAMP-123: "Ver" das obras distintas leva à decisão das obras (CAMP-126), na tela');
+  await ad.click('#pj-falta li[data-pjp="cv_respostas"] [data-pjp-ir]'); await ad.waitForTimeout(1500);
+  T.chk(await ad.evaluate(() => !!document.querySelector('#d-body [data-passo="propostas"] .cvp-tab')), 'CAMP-123 (P0): "Ver" das propostas abre o painel lateral com as propostas');
+  await ad.evaluate(() => closeDrawer(true)); await ad.waitForTimeout(300);
+  await ad.click('#pj-falta li[data-pjp="obras"] [data-pjp-ir]'); await ad.waitForTimeout(1500);
+  T.chk(await ad.evaluate(() => document.querySelectorAll('#d-body [data-passo="obras"] [data-cv-obra]').length === 8), 'CAMP-123 (P0): "Ver" das unidades abre o painel lateral com os 8 grupos');
+  await ad.evaluate(() => closeDrawer(true)); await ad.waitForTimeout(300);
   await ad.click('#pj-falta li[data-pjp="autoria"] [data-pjp-ir]');
   T.chk(await T.espera(() => ad.$eval('#pd .pj-tabs [aria-selected="true"]', b => /Problemas/.test(b.textContent))), 'CAMP-123: "Ver" da autoria abre a aba Problemas');
   // resolver a autoria tira o item da barra (a barra acompanha)
   for (const n of [23, 25, 26, 27, 28]) await ad.evaluate(c => fetch('/api/itens/' + c + '/autoria-confirmada', { method: 'POST' }), `${P}-1978-S01-D${String(n).padStart(5, '0')}`);
   await T.abrirProjeto(ad, P); await ad.waitForSelector('#pj-falta:not([hidden]) .pj-falta-lista', { timeout: 20000 }).catch(() => {});
-  T.chk(!(await ad.$('#pj-falta li[data-pjp="autoria"]')) && /3 pendências/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123: confirmada a autoria, o item sai da barra e o selo diz 3 pendências', await T.txt(ad, '#pj-falta'));
+  T.chk(!(await ad.$('#pj-falta li[data-pjp="autoria"]')) && /2 pendências/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123: confirmada a autoria, o item sai da barra e o selo diz 2 pendências', await T.txt(ad, '#pj-falta'));
   // projeto sem nada pendente: verde, sem lista, e vai para o Histórico (uma vez só)
   const PL = montar('limpo', T.BASE, T.RAIZ);
   await T.abrirProjeto(ad, PL);

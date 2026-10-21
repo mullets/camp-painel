@@ -41,8 +41,9 @@ const espera = async (f, ms = 10000) => { const t = Date.now(); while (Date.now(
   const br = await chromium.launch({ executablePath: CHROME }); const ctx = await br.newContext({ viewport: { width: 1400, height: 900 } }); const pg = await ctx.newPage();
   const erros = []; pg.on('pageerror', e => erros.push(e.message));
   await pg.goto(BASE + '/'); await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
-  // 1) página do projeto: a lista "Problemas que impedem publicar" (abre sozinha) mostra a folha com a imagem, uma vez por folha
+  // 1) página do projeto: a lista "Problemas que impedem publicar" (aberta pelo cartão; P0: nada abre sozinho) mostra a folha com a imagem, uma vez por folha
   await pg.goto(BASE + '/#projeto/' + P); await pg.reload();
+  await pg.waitForSelector('#pj-cards [data-pjc-gav="problemas"]', { timeout: 15000 }).catch(() => {}); await pg.click('#pj-cards [data-pjc-gav="problemas"]').catch(() => {});
   const naLista = await pg.waitForSelector(`#pj-probs [data-fp-box="${D(5)}"] img.fp-mini`, { timeout: 15000 }).then(() => true, () => false);
   chk(naLista, 'página do projeto: a folha "de outro projeto" aparece com a imagem em "Problemas que impedem publicar"');
   chk(await espera(() => pg.$eval(`#pj-probs [data-fp-box="${D(5)}"] img.fp-mini`, i => i.complete && i.naturalWidth > 0).catch(() => false)), 'a imagem da folha retirada carrega (vem da pasta do lote)');

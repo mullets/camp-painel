@@ -150,7 +150,7 @@ def releitura(base, raiz, db, P):
     print(json.dumps({"pedidos": len(pedidos), "comparacao": list(comp)}))
 
 
-def muitas(raiz, P):
+def muitas(raiz, P, ano="1978"):
     """CAMP-134: o caso do print de 21/10 — 6 releituras do projeto inteiro (formato real do CV2). A mais recente muda o título de 12 folhas
     (D00001-D00012) e a escala de 5 (D00013-D00017); as 5 antigas mudavam o título das mesmas folhas para outra coisa (ficam no histórico);
     todas mudam o código de unidade de 30 folhas (não é campo da folha: só informação)."""
@@ -159,7 +159,7 @@ def muitas(raiz, P):
         quando = f"2026102{k}-10{k}000"
         docs = {}
         for n in range(1, 31):
-            cod = f"{P}-1978-S01-D{n:05d}"
+            cod = f"{P}-{ano}-S01-D{n:05d}"
             mud = {"codigo_unidade": {"antes": "", "agora": f"BL-{k}", "confianca_agora": 0.6}}
             if n <= 12:
                 mud["titulo_prancha"] = {"antes": f"PLANTA {n}", "agora": (f"PRANCHA {n:02d} — RELIDA" if k == 5 else f"VERSAO ANTIGA {k} {n}"), "confianca_agora": 0.9}

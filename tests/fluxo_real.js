@@ -69,8 +69,10 @@ const print = async (pg, nome) => { nPrint++; await pg.screenshot({ path: path.j
 
   // ---------------- 2) folhas "de outra obra" ----------------
   passo('2) Folhas que o CAMP Vision achou ser de outra obra (D00007 e D00008)');
+  chk(await op.isHidden('#pj-probs'), 'P0 (21/10): nenhuma gaveta abre sozinha');
+  await op.click('#pj-cards [data-pjc-gav="problemas"]'); await op.waitForTimeout(1500);
   const naLista = await op.waitForSelector(`#pj-probs [data-fp-box="${D(7)}"]`, { timeout: 10000 }).then(() => true, () => false);
-  chk(naLista && await op.isVisible('#pj-probs'), '"Problemas que impedem publicar" abre sozinha e lista a D00007', await txt(op, '#pj-gaveta'));
+  chk(naLista && await op.isVisible('#pj-probs'), 'o cartão Problemas abre "Problemas que impedem publicar" e lista a D00007', await txt(op, '#pj-gaveta'));
   chk(await imgOk(op, `#pj-probs [data-fp-box="${D(7)}"] img`), 'a miniatura da D00007 carrega (a folha não está no painel: vem da pasta do CAMP Vision)');
   chk(await imgOk(op, `#pj-probs [data-fp-box="${D(8)}"] img`), 'a miniatura da D00008 carrega');
   await print(op, 'outra_obra_lista');

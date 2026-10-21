@@ -19,7 +19,7 @@ T.rodar(async () => {
 
   // ---------------- CAMP-096 ----------------
   T.passo('CAMP-096: folha retirada sem imagem nenhuma');
-  await T.abrirProjeto(op, P);
+  await T.abrirProjeto(op, P); await T.abrirGaveta(op, 'problemas');
   const b4 = `#pj-probs [data-fp-box="${D(4)}"]`;
   T.chk(await op.waitForSelector(b4, { timeout: 10000 }).then(() => true, () => false), 'CAMP-096: a D00004 (sem imagem) aparece em "Problemas que impedem publicar"');
   T.chk(await T.espera(async () => /Não há imagem desta folha/.test(await T.txt(op, b4))), 'CAMP-096: no lugar da miniatura diz "Não há imagem desta folha"', await T.txt(op, b4));
@@ -110,7 +110,7 @@ T.rodar(async () => {
 
   // ---------------- CAMP-099 ----------------
   T.passo('CAMP-099: desfazer "É deste projeto" depois de publicada');
-  await T.abrirProjeto(op, P);
+  await T.abrirProjeto(op, P); await T.abrirGaveta(op, 'problemas');
   await op.click(`#pj-probs [data-fp-box="${D(7)}"] [data-deste-projeto="${D(7)}"]`).catch(() => {}); await T.confirmar(op);
   T.chk(await T.espera(() => T.um('SELECT status_site FROM item WHERE codigo=?', D(7)) === 'nao_publicado', 15000), 'CAMP-099: D00007 devolvida ("É deste projeto")');
   // confere tudo e publica (admin)

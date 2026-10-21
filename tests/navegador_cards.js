@@ -103,10 +103,12 @@ for n in range(1, 35):
     chk(s && s.v === 'Não publicado' && !/\b(ok|at|bl)\b/.test(s.cls.replace('pjc', '')) && /libera quando os problemas forem resolvidos/.test(s.d) && s.bts.includes('Publicar'), '(1) Site: "Não publicado", neutro, "libera quando os problemas forem resolvidos", "Publicar": ' + JSON.stringify(s));
     chk(await page.$eval('#pj-cards [data-pjc-publicar]', b => b.getAttribute('aria-disabled') === 'true' && !!b.title), '(1) "Publicar" fica apagado e diz o porquê');
     chk((await page.$$('#pj-cards .btn.pri')).length === 1 && /Resolver/.test(await txt('#pj-cards .btn.pri')), '(1) um botão azul só, o do cartão mais urgente (Resolver)');
-    // (9) 20/10: o problema mais urgente já abre o detalhe (aqui: 5 problemas que impedem publicar); fechado, não reabre
+    // (9) P0 (Trello 21/10): nada abre sozinho; o cartão abre o detalhe (aqui: 5 problemas que impedem publicar); fechado, não reabre
+    chk(await page.isHidden('#pj-gaveta'), '(9) P0: com problema que impede publicar, nenhuma gaveta abre sozinha');
+    await page.click('#pj-cards [data-pjc-gav="problemas"]'); await page.waitForTimeout(600);
     const ga = await page.evaluate(() => ({ probs: (document.querySelector('.pj-gav[data-gav="problemas"]') || {}).checkVisibility && document.querySelector('.pj-gav[data-gav="problemas"]').checkVisibility(),
       n: document.querySelectorAll('#pj-probs .pj-probs li').length, outras: [...document.querySelectorAll('.pj-gav:not([data-gav="problemas"])')].some(x => x.checkVisibility()) }));
-    chk(ga.probs && ga.n === 5 && !ga.outras, '(9) com problema que impede publicar, a gaveta "Problemas que impedem publicar" já abre com os 5: ' + JSON.stringify(ga));
+    chk(ga.probs && ga.n === 5 && !ga.outras, '(9) o cartão abre a gaveta "Problemas que impedem publicar" com os 5: ' + JSON.stringify(ga));
     if (process.env.FOTOS) await page.screenshot({ path: process.env.FOTOS + '/cartoes_A_auto.png' });
     await page.click('.pj-gav[data-gav="problemas"] [data-pjc-fechar]'); await page.waitForTimeout(200);
     await page.evaluate(c => desenharCartoes(c), A); await page.waitForTimeout(200);
@@ -162,8 +164,7 @@ for n in range(1, 35):
     chk(f.v === '0 / 34' && /\bbl\b/.test(f.cls) && /34 a conferir/.test(f.d) && /Lote parado por erro do CAMP Vision/.test(f.d) && !/Falha ao ler/.test(f.d) && f.bts[0] === 'Conferir' && !f.bts.includes('Pedir releitura') && f.bts.includes('Detalhes dos lotes'), '(6) B: Folhas vermelho "0 / 34", "34 a conferir", "Lote parado por erro" em 1 linha (CAMP-128: a mensagem e o "Pedir releitura" ficam uma vez, em Detalhes dos lotes): ' + JSON.stringify(f));
     chk(d.v === '1 pergunta' && /ano: “1978” em 6 folhas; 1 diz outra coisa/.test(d.d), '(6) B: Dados "1 pergunta" (ano), sem contar folha sem ano nem grafia diferente: ' + JSON.stringify(d));
     const gb = await page.evaluate(() => ({ folhas: document.querySelector('.pj-gav[data-gav="folhas"]').checkVisibility(), rev: !!document.getElementById('pj-revisao') }));
-    chk(gb.folhas, '(9) B: lote parado por erro do CAMP Vision: "Detalhes dos lotes" já abre: ' + JSON.stringify(gb));
-    await page.click('.pj-gav[data-gav="folhas"] [data-pjc-fechar]'); await page.waitForTimeout(200);
+    chk(!gb.folhas, '(9) B (P0): lote parado por erro do CAMP Vision: "Detalhes dos lotes" NÃO abre sozinho (o aviso fica na barra "O que falta"): ' + JSON.stringify(gb));
     chk(JSON.stringify(await visiveis()) === '[]', '(2) B: depois de fechar, nada empilhado: ' + JSON.stringify(await visiveis()));
     await page.evaluate(() => window.scrollTo(0, 0));
     const y = await page.evaluate(() => document.querySelector('#pd .thumb').getBoundingClientRect().top);
