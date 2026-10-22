@@ -649,9 +649,13 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         msg = direitos_permitem_publicar(con, p["fundo_codigo"])
         if msg:
             con.close(); raise HTTPException(400, msg)
-        bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
-        if bloq and bloq[1]:     # CAMP-046: autoria divergente é aviso, só erro bloqueante trava
-            con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloq[1] or 0} erro(s) bloqueante(s)")
+        # A leitura do CV2 não autoriza nem veta o projeto: só bloqueio
+        # humano registrado no projeto é global. Problema de uma folha
+        # individual deve excluir apenas aquela folha.
+        from .publicacao import BLOQUEIO_DO_PROJETO
+        bloqueios_humanos = con.execute(BLOQUEIO_DO_PROJETO, (codigo,)).fetchone()[0]
+        if bloqueios_humanos:
+            con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloqueios_humanos} bloqueio(s) humano(s) no projeto")
     if d.ano is not None and not (d.ano == 0 or 1800 <= d.ano <= 2100):
         con.close(); raise HTTPException(400, "Ano inválido (0000 para sem data)")
     from .publicador import PAPEIS_PROJETO

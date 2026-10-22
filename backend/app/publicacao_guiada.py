@@ -105,17 +105,19 @@ def plano(con, p) -> dict:
                  if i in por_id and por_id[i]["bloqueia"] and not por_id[i]["ok"]]   # 21/10: só o que BLOQUEIA (o aceite do CAMP Vision virou aviso)
     um_passo = publicar_um_passo()
     a_aprovar: list[int] = []
-    if um_passo:      # CAMP-148: o lote conferido é aprovado pelo próprio Publicar; só trava se ainda há folha a conferir
-        a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
-        if a_aprovar and len(a_aprovar) == nao_aprovados and por_id.get("revisao", {}).get("detalhe") == "O lote ainda não foi aprovado na Revisão do lote":
-            bloqueios = [b for b in bloqueios if b["id"] != "revisao"]
-        else:
-            a_aprovar = []
-            falta = q("SELECT COUNT(*) FROM item i JOIN lista_processamento l ON l.id=i.lote_id WHERE i.projeto_codigo=? AND l.aprovado_em IS NULL AND i.revisao='pendente' AND i.duplicata_de IS NULL")
-            for b_ in bloqueios:
-                if b_["id"] == "revisao" and falta:      # o que falta de verdade é conferir (aprovar vem junto com o Publicar)
-                    b_.update(texto="Folhas a conferir", detalhe=f"Falta conferir {falta} folha{'' if falta == 1 else 's'} do lote (a aprovação vem junto com o Publicar)",
-                              acao={"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo})
+    # O admin sempre pode concluir a revisão das folhas JÁ conferidas no mesmo
+    # clique de Publicar. A flag permanece para liberar operador, não para
+    # obrigar o admin a procurar e aprovar cada lote manualmente.
+    a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
+    if a_aprovar and len(a_aprovar) == nao_aprovados and por_id.get("revisao", {}).get("detalhe") == "O lote ainda não foi aprovado na Revisão do lote":
+        bloqueios = [b for b in bloqueios if b["id"] != "revisao"]
+    else:
+        a_aprovar = []
+        falta = q("SELECT COUNT(*) FROM item i JOIN lista_processamento l ON l.id=i.lote_id WHERE i.projeto_codigo=? AND l.aprovado_em IS NULL AND i.revisao='pendente' AND i.duplicata_de IS NULL")
+        for b_ in bloqueios:
+            if b_["id"] == "revisao" and falta:      # o que falta de verdade é conferir (aprovar vem junto com o Publicar)
+                b_.update(texto="Folhas a conferir", detalhe=f"Falta conferir {falta} folha{'' if falta == 1 else 's'} do lote (a aprovação vem junto com o Publicar)",
+                          acao={"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo})
     dossie = bool(p["tainacan_item_id"])
     passos = ([{"id": "aprovar", "texto": "Aprovar o lote conferido" if len(a_aprovar) == 1 else f"Aprovar os {len(a_aprovar)} lotes conferidos", "estado": "sera_feito"}] if a_aprovar else []) + [
         {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
@@ -229,9 +231,12 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                         _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
         restam = len(pend) - criadas - len(falhas)
         if falhas:
+            primeira = falhas[0]
+            detalhe = f" {primeira['codigo']}: {str(primeira['erro'])[:150]}."
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
-                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")   # CAMP-111: "1 folha(s) não subiram" virava "1 folha não subiram"
-                    + " ao site; nada foi publicado. Corrija e clique de novo: o que já subiu não se repete."}
+                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")
+                    + " ao site." + detalhe
+                    + " A publicação não foi concluída; verifique esta folha e tente novamente. As demais já enviadas não serão duplicadas."}
         if restam > 0:
             return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam,
                     "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}

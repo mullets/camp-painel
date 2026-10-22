@@ -53,6 +53,40 @@ class EscolhaLoteTest(unittest.TestCase):
         lotes = [{"id": 31, "fase": "importar"}, {"id": 30, "fase": "conferir"}]
         self.assertEqual(escolher_lote_ativo(lotes)["id"], 31)
 
+    def test_f009_p0092_lote_44_vazio_nao_esconde_41_conferidas(self):
+        # Captura real do caso: lote mais novo ainda não trouxe folhas;
+        # lote anterior já contém as 41 folhas com revisão encerrada.
+        lotes = [
+            {"id": 44, "fase": "importar", "itens_total": 0, "itens_pendentes": 0},
+            {"id": 43, "fase": "aprovar", "itens_total": 41, "itens_pendentes": 0},
+        ]
+        self.assertEqual(escolher_lote_ativo(lotes)["id"], 43)
+
+    def test_lote_vazio_ainda_e_pendente_se_so_houver_publicados(self):
+        lotes = [
+            {"id": 44, "fase": "importar", "itens_total": 0},
+            {"id": 43, "fase": "publicado", "itens_total": 41},
+        ]
+        self.assertEqual(escolher_lote_ativo(lotes)["id"], 44)
+
+    def test_priorizar_lote_com_material_na_consulta_sql(self):
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        try:
+            con.executescript("""
+                CREATE TABLE lista_processamento(
+                    id INT, projeto_codigo TEXT, etapa TEXT, aprovado_em TEXT, descartado_em TEXT
+                );
+                CREATE TABLE item(lote_id INT, revisao TEXT);
+                INSERT INTO lista_processamento VALUES(43,'F009-P0092','revisao',NULL,NULL);
+                INSERT INTO lista_processamento VALUES(44,'F009-P0092','revisao',NULL,NULL);
+            """)
+            con.executemany("INSERT INTO item VALUES(43, 'conferida')", [()] * 41)
+            atual = lote_ativo_por_projeto(con)["F009-P0092"]
+            self.assertEqual((atual["lote_id"], atual["fase"], atual["itens_total"]), (43, "aprovar", 41))
+        finally:
+            con.close()
+
     def test_consulta_sql_usa_a_mesma_regra(self):
         con = sqlite3.connect(":memory:")
         con.row_factory = sqlite3.Row

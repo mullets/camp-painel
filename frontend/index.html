@@ -3409,11 +3409,11 @@ async function carregarSaidasCV(code){const b=document.getElementById('pj-cv');i
    Quadro que está em ordem fica fechado (abre em "Ver detalhes"); só o que precisa de você vem aberto. Assim as folhas ficam no alto da aba. */
 function slGuardar(code,parte,dados){if(!window.SL||window.SL.code!==code)window.SL={code,abertos:{}};window.SL[parte]=dados;desenharCartoes(code);if(parte==='revisao'||parte==='cv')pjStatusDesenhar(code)}   /* CAMP-146: a situação do topo segue o lote */
 function slRevisao(lotes){if(!lotes.length)return {tem:false};const tot=lotes.reduce((n,l)=>n+l.itens.total,0),pend=lotes.reduce((n,l)=>n+l.itens.pendente,0),apr=lotes.every(l=>l.aprovado_em),
-    vazio=lotes.some(l=>l.itens.total===0),prob=lotes.some(l=>(l.importacao&&l.importacao.problemas||[]).length),code=window.PROJETO_PJ||'',op=EU&&['operador','admin','master'].includes(EU.papel),adm=EU&&['admin','master'].includes(EU.papel),l0=lotes.find(l=>!l.aprovado_em)||lotes[0];
-  if(vazio)return {tem:true,estado:'falta',expandir:true,txt:'as folhas do lote ainda não foram importadas'};
+    vazio=lotes.some(l=>l.itens.total===0),prob=lotes.some(l=>(l.importacao&&l.importacao.problemas||[]).length),code=window.PROJETO_PJ||'',op=EU&&['operador','admin','master'].includes(EU.papel),adm=EU&&['admin','master'].includes(EU.papel),l0=lotes.find(l=>l.itens.total>0&&!l.aprovado_em&&!l.itens.pendente&&!l.descartado)||lotes.find(l=>l.itens.total>0&&!l.aprovado_em)||lotes[0];
+  if(!tot)return {tem:true,estado:'falta',expandir:true,txt:'este lote ainda não tem folhas importadas'};
   const conf=`${fmtN(tot-pend)} de ${fmtN(tot)} folhas conferidas`;
   if(pend)return {tem:true,estado:'falta',expandir:prob,txt:`${conf} · ${qtd(pend,'falta','faltam')} conferir`,acao:op?`<button class="btn sm" data-pp="conferir" data-projeto="${escHtml(code)}">Conferir</button>`:''};
-  if(!apr)return {tem:true,estado:'falta',expandir:prob,txt:`${conf} · falta aprovar o lote`,acao:adm?`<button class="btn sm" data-pp="aprovar" data-lote="${escHtml(l0.id)}" data-projeto="${escHtml(code)}">Aprovar o lote</button>`:''};
+  if(lotes.some(l=>l.itens.total>0&&!l.aprovado_em&&!l.descartado))return {tem:true,estado:'info',expandir:prob,txt:`${conf} · prontos para publicar (a aprovação acontece junto)`,acao:adm?'<small class="help">Use Publicar no topo do projeto.</small>':''};
   const nNao=lotes.reduce((n,l)=>n+((l.importacao&&l.importacao.problemas)||[]).length,0);   // 19/10: lote aprovado não abre sozinho por isso; a linha avisa
   return {tem:true,estado:'ok',txt:`${conf} · ${lotes.length>1?'lotes aprovados':'lote aprovado'}${nNao?` · ${qtd(nNao,'folha não entrou','folhas não entraram')}`:''}`}}
 function slConsenso(r){const C=(r&&r.campos||[]).filter(c=>c.com_valor>0);if(!C.length||r.folhas<2)return {tem:false};
@@ -3428,7 +3428,7 @@ function slCV(s){if(!s)return {tem:false};if(!s.existe)return {tem:true,estado:'
   if(sit==='historico')return {tem:true,estado:'ok',txt:'publicado · o que o CAMP Vision apontou na leitura fica só como registro'};
   if(sit==='reprovado')return {tem:true,estado:'falta',expandir:true,txt:'falta: '+(f.map(x=>x.rotulo).join('; ')||'o CAMP Vision reprovou o lote')};
   const extras=[alerta?'conferir a contagem':'',nSug?qtd(nSug,'sugestão','sugestões')+' para o projeto':''].filter(Boolean);
-  return {tem:true,estado:alerta?'falta':'ok',expandir:alerta,txt:(sit==='resolvido'?'pronto (o que pedia olho humano já foi conferido no painel)':sit?'pronto':'entregue, sem o checklist do aceite')+(extras.length?' · '+extras.join(' · '):'')}}
+  return {tem:true,estado:sit==='aviso'||alerta?'info':'ok',expandir:false,txt:(sit==='aviso'?'parecer do CV2 com ressalvas (não bloqueia o que o painel já conferiu)':sit==='resolvido'?'leitura conferida no painel':sit?'leitura entregue':'entregue, sem o checklist do aceite')+(extras.length?' · '+extras.join(' · '):'')}}
 /* 19/10 (F009-P0092: cartão "tudo certo" com 5 erros bloqueantes; F026-P0009: "CAMP Vision ✔" com o lote parado por erro): o cartão também tem
    a linha do lote PARADO (primeira, no lugar da linha do CAMP Vision) e a dos Problemas abertos (quantos avisos e quantos bloqueiam). */
 function slParado(r,code){const l=r&&r.lote;if(!l||l.fase!=='erro')return {tem:false};const op=EU&&['operador','admin','master'].includes(EU.papel);
@@ -3468,6 +3468,16 @@ const PJ_AUTO_ORDEM=['folhas','problemas','dados'];
    Admin decide ali mesmo (a mesma gaveta de Decisões); quem não é admin vê quem decide. */
 function pjDecisoesHTML(d){const L=(d&&d.decisoes_pendentes)||[];if(!L.length)return '';const adm=EU&&['admin','master'].includes(EU.papel);
   return L.map(x=>`<div class="aviso-bloqueio pj-dec" role="note" data-pj-dec="${escHtml(x.id)}"><b>${x.tipo==='projeto_parecido'&&x.origem==='estacao'?'O CAMP Vision está parado esperando uma decisão:':'Decisão pendente:'}</b> <span>${escHtml(x.pergunta||x.titulo||'')}</span> ${adm?`<button type="button" class="btn sm pri" data-dec-abrir="${escHtml(x.id)}">Decidir</button>`:'<small class="help">Um admin decide, em Decisões.</small>'}</div>`).join('')}
+
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-pjc-trazer-retiradas]');
+  if(!b)return;
+  e.preventDefault();e.stopPropagation();
+  const lid=b.dataset.pjcTrazerRetiradas,code=b.dataset.pjcCode;
+  const r=await confirmar({titulo:'Trazer folhas excluídas pelo CAMP Vision?',texto:'O parecer do CV2 não é uma decisão final. Só serão aceitos códigos deste projeto com arquivo de origem. As folhas voltam para conferência humana; nada vai ao site automaticamente.',botao:'Trazer para conferir',acao:()=>API('/api/lotes/'+encodeURIComponent(lid)+'/trazer-retiradas',{method:'POST',body:JSON.stringify({confirmar:true})})});
+  if(r){const res=r.resultado||{};toast(res.mensagem||(res.ok?'Folhas trazidas para conferência.':'Nenhuma folha entrou; veja o manifesto e as colisões.'));showProjeto(code)}
+},true);
+
 function pjAutoAbrir(code){const g=pjGav(code);if(g.fechou)return;if(g.aberta&&!(g.auto&&g.aberta===g.autoK))return;const q=k=>document.querySelector(`#pj-cards [data-pjc="${k}"]`);
   const k=null;   /* P0 (Trello 21/10, "a página virou uma lista sem fim"): nenhuma seção abre sozinha; a barra "O que falta" é a porta de entrada */
   if(!k&&!g.aberta&&!g.autoK&&pjDetLotesPref()==='1'){g.aberta='folhas';const gv=document.getElementById('pj-gaveta');if(gv){gv.hidden=false;gv.querySelectorAll('.pj-gav').forEach(s=>s.hidden=s.dataset.gav!=='folhas')}return}   /* CAMP-128: sem ação pendente, vale o que a pessoa deixou */
@@ -3478,29 +3488,31 @@ function pjDetLotesPref(v){try{if(v!==undefined)localStorage.setItem('camp.pjDet
 function pjcCartao(k,titulo,o){return `<div class="pjc ${o.cor||''}" data-pjc="${k}"><div class="pjc-k">${titulo}</div><div class="pjc-v">${o.v}</div><div class="pjc-d">${(o.d||[]).filter(Boolean).map(x=>`<span>${x}</span>`).join('')}</div><div class="pjc-act">${o.acoes||''}</div></div>`}
 const pjcBt=(attr,txt,extra='')=>`<button type="button" class="btn sm pjc-main" ${attr}${extra}>${txt}</button>`;
 function pjcFolhas(code){const S=window.SL&&window.SL.code===code?window.SL:{},its=pjItens(code),c=contagemFolhas(its),C=escHtml(code),op=EU&&['operador','admin','master'].includes(EU.papel),adm=EU&&['admin','master'].includes(EU.papel);
-  const lotes=(S.revisao&&S.revisao.lotes)||[],u=window.PP_ULT&&window.PP_ULT.code===code?window.PP_ULT.r:null,l=u&&u.lote,parado=!!(l&&l.fase==='erro'),l0=lotes.find(x=>!x.aprovado_em)||lotes[0];
+  const lotes=(S.revisao&&S.revisao.lotes)||[],u=window.PP_ULT&&window.PP_ULT.code===code?window.PP_ULT.r:null,l=u&&u.lote,parado=!!(l&&l.fase==='erro'),l0=lotes.find(x=>x.itens.total>0&&!x.aprovado_em&&!x.itens.pendente&&!x.descartado)||lotes.find(x=>x.itens.total>0&&!x.aprovado_em)||lotes[0];
   const d=[],o={cor:'',v:fmtN(its.length),d};let acoes='',urg=false;
   const ver=its.length?`<button type="button" class="btn sm" data-pjc-ver-folhas="${C}">Ver folhas</button>`:'';
   const conferirModo=op&&c.lote?` <button type="button" class="lnk pjc-lnk" data-pjc-conferir="${C}">Abrir modo conferir</button>`:'';
   // CAMP-067 (20/10, "o botão de importar não funciona sempre"): o botão importa o lote QUE ESTÁ SEM FOLHAS (antes ia no primeiro lote não aprovado,
   // que podia ser outro), não some quando o projeto já tem folhas de outro lote, e só aparece quando a importação pode dar certo; senão o cartão diz por quê.
   const vazios=((S.revisao&&S.revisao.todos)||lotes).filter(x=>x.itens.total===0&&!x.descartado&&!x.aprovado_em),impL=vazios.find(x=>x.pode_importar!==false),impNao=!impL&&vazios.find(x=>x.importar_motivo);let impBt='';
-  if(impL){o.cor='at';d.push('as folhas do lote ainda não foram importadas');if(op){impBt=pjcBt(`data-pp="importar" data-lote="${escHtml(impL.id)}" data-projeto="${C}"`,'Importar folhas');urg=true}}
-  else if(impNao&&!(impNao.etapa==='erro'&&parado)&&!(['enviado','processando'].includes(impNao.etapa)&&l&&l.fase==='processando')){o.cor='at';d.push(`<span class="pjc-imp-motivo">Ainda não dá para importar: ${escHtml(impNao.importar_motivo)}</span>`)}
+  if(impL){d.push(c.lote?'há outro lote aguardando importação (não impede publicar as folhas já conferidas)':'as folhas do lote ainda não foram importadas');if(!c.lote){o.cor='at';if(op){impBt=pjcBt(`data-pp="importar" data-lote="${escHtml(impL.id)}" data-projeto="${C}"`,'Importar folhas');urg=true}}}
+  else if(impNao&&!(impNao.etapa==='erro'&&parado)&&!(['enviado','processando'].includes(impNao.etapa)&&l&&l.fase==='processando')){if(!c.lote)o.cor='at';d.push(`<span class="pjc-imp-motivo">Lote adicional: ${escHtml(impNao.importar_motivo)}</span>`)}
   if(c.lote){o.v=`${fmtN(c.conferidas)} / ${fmtN(c.lote)}`;
     if(c.conferir){o.cor='at';d.unshift(`conferidas · ${fmtN(c.conferir)} a conferir`);if(op){acoes=pjcBt(`data-pjc-conferir="${C}"`,'Conferir');urg=true}else acoes=ver}
-    else if(lotes.length&&!lotes.every(x=>x.aprovado_em)){o.cor=umPasso()?'ok':'at';d.unshift(umPasso()?'conferidas · pronto para publicar':'conferidas · falta aprovar o lote');if(umPasso()){acoes=ver}else if(adm&&l0){acoes=pjcBt(`data-pp="aprovar" data-lote="${escHtml(l0.id)}" data-projeto="${C}"`,'Aprovar o lote');urg=true}else{acoes=ver;d.push('falta um admin aprovar')}}
+    else if(lotes.some(x=>x.itens.total>0&&!x.aprovado_em&&!x.descartado)){const umClique=umPasso()||adm;o.cor=umClique?'ok':'at';d.unshift(umClique?'conferidas · pronto para publicar':'conferidas · falta um admin publicar');if(umClique){acoes=ver}else{acoes=ver;d.push('a aprovação acontece junto com a publicação')}}
     else{o.cor=lotes.length?'ok':'';d.unshift(lotes.length?`conferidas · ${lotes.length>1?'lotes aprovados':'lote aprovado'}`:'conferidas');acoes=ver+conferirModo}}
   else{d.unshift(its.length?(its.length===1?'folha':'folhas'):'nenhuma folha no painel ainda');if(!acoes)acoes=ver}
   if(c.semimg)d.push(qtd(c.semimg,'sem imagem','sem imagem'));
   const nNao=lotes.reduce((n,x)=>n+((x.importacao&&x.importacao.problemas)||[]).length,0);if(nNao)d.push(qtd(nNao,'folha não entrou','folhas não entraram'));
   if(l&&l.fase==='processando')d.push(l.etapa==='enviado'?'na fila do CAMP Vision':'o CAMP Vision está lendo as folhas');
-  if(S.cv&&S.cv.tem&&S.cv.estado==='falta'&&!parado){if(o.cor!=='bl')o.cor='at';d.push('CAMP Vision: '+escHtml(S.cv.txt))}
+  if(S.cv&&S.cv.tem&&S.cv.estado==='falta'&&!parado){if(!c.lote&&o.cor!=='bl')o.cor='at';d.push('CAMP Vision (parecer, não bloqueio): '+escHtml(S.cv.txt))}
   /* CAMP-128 (P7): o cartão só resume (1 linha, nunca o texto cortado no meio); a mensagem inteira e o "Pedir releitura" ficam UMA vez, no alto de Detalhes dos lotes */
   if(parado){o.cor='bl';urg=true;d.push('<b class="pjc-erro">Lote parado por erro do CAMP Vision</b>')}
   const avCv=(u&&u.avisos_cv)||[];   /* CAMP-122 (P1): aviso [Minor] do exiftool não é erro: 1 linha, sem vermelho */
   if(avCv.length&&!parado)d.push(`<span class="pjc-aviso-cv">${qtd(avCv.length,'aviso do CAMP Vision','avisos do CAMP Vision')} · não impede publicar</span>`);
   if(impBt)acoes=impBt+(acoes&&acoes!==ver?' '+acoes:'');
+  const retirL=lotes.find(x=>!x.descartado&&!x.aprovado_em&&x.pacote&&x.pacote.existe&&x.pacote.retirados>0);
+  if(retirL&&adm)acoes+=(acoes?' ':'')+`<button type="button" class="btn sm" data-pjc-trazer-retiradas="${escHtml(retirL.id)}" data-pjc-code="${C}">Trazer ${fmtN(retirL.pacote.retirados)} retiradas à conferência</button>`;
   const temDet=lotes.length||parado||avCv.length||(S.cv&&S.cv.tem);
   o.acoes=acoes+(temDet?` <button type="button" class="lnk pjc-lnk" data-pjc-gav="folhas" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='folhas'}">Detalhes dos lotes</button>`:'');
   return {html:pjcCartao('folhas','Folhas',o),urg}}
@@ -3876,7 +3888,7 @@ function pjEstadoFolhas(d){const its=((d&&d.itens)||[]).filter(i=>i.origem_catal
   return o}
 // CAMP-147 (Trello): a página do projeto tem UM bloco "Próximo passo" (uma frase + UM botão azul). Antes da publicação (importar,
 // conferir, aprovar, erro, CAMP Vision lendo) a frase e o botão vêm do /proximo-passo (#pj-proximo, dentro do bloco); depois, do plano de publicação.
-function pjAntes(f){return PJ_FASES_ANTES.includes(f)&&!(f==='aprovar'&&umPasso())}
+function pjAntes(f){return PJ_FASES_ANTES.includes(f)&&!(f==='aprovar'&&(umPasso()||!!(EU&&['admin','master'].includes(EU.papel))))}
 function pjFaseLote(code){const u=window.PP_ULT;return u&&u.code===code&&u.r&&u.r.lote?u.r.lote.fase:null}
 const PJ_FASES_ANTES=['processando','erro','importar','conferir','aprovar'],PJ_FASE_VISTA={};
 function pjStatusCabHTML(code,d){const em=PUB_EM[code];return `<h2 class="pjs-tit">Próximo passo</h2> ${situacaoTag(em?'pronto':situacaoDoProjeto(code,d))}`}

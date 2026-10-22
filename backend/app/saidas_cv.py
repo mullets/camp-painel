@@ -154,24 +154,27 @@ def avaliar_aceite(aceite: dict | None, conferencia: dict | None = None) -> dict
             estado = "aviso"
         elif i["chave"] in RESOLVE_CONFERENCIA and conferido:
             estado = "resolvido"
-        else:
+        elif i["chave"] in RESOLVE_CONFERENCIA and pend and cf.get("total", 0):
+            # A própria folha existe no painel e ainda aguarda a pessoa:
+            # a tarefa humana é conferir, nunca obedecer ao CV2.
             estado = "falta"
-            if i["chave"] in RESOLVE_CONFERENCIA:
-                faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": "conferir",
-                               "como": (f"Conferir {'a folha que falta' if pend == 1 else f'as {pend} folhas que faltam'} na Revisão do lote" if pend
-                                        else "Aprovar o lote na Revisão do lote")})
-            else:
-                faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": None,
-                               "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"})
+            faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": "conferir",
+                           "como": f"Conferir {pend} folha(s) pendente(s) no painel"})
+        else:
+            # Contagem de arquivo, EXIF e avaliação automática são alertas de
+            # proveniência; não exigem reprocessar todo o lote nem impedem o
+            # trabalho já validado por uma pessoa.
+            estado = "aviso"
         itens.append({**i, "estado": estado})
     reprovado_cv = aceite.get("publicavel") is False
-    if reprovado_cv and not any(i["ok"] is False for i in itens):   # reprovado sem item marcado: o motivo está só nas pendências
-        faltam += [{"chave": None, "rotulo": m, "acao": None, "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"} for m in motivos_aceite(aceite)] or \
-                  [{"chave": None, "rotulo": "O CAMP Vision não disse o motivo", "acao": None, "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"}]
-    if not reprovado_cv or not faltam:
-        situacao = "resolvido" if reprovado_cv and any(i["estado"] == "resolvido" for i in itens) else "aprovado"
+    # Mesmo que publicavel=false no JSON, isso é parecer da máquina,
+    # nunca decisão arquivística do painel. Guardamos os motivos em "motivos".
+    if faltam:
+        situacao = "reprovado"  # SOMENTE folhas existentes ainda pedem conferência
+    elif reprovado_cv:
+        situacao = "resolvido" if conferido else "aviso"
     else:
-        situacao = "reprovado"
+        situacao = "aprovado"
     return {"situacao": situacao, "publicavel_cv": aceite.get("publicavel"), "itens": itens, "faltam": faltam,
             "motivos": motivos_aceite(aceite), "conferencia": {"conferido": conferido, "pendentes": pend, "total": int(cf.get("total") or 0)}}
 

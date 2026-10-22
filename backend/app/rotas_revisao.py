@@ -53,6 +53,13 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
         return False, "O CAMP Vision não gravou o pacote deste lote (catalogacao/pacote_tainacan.json). Peça a releitura."
     if pacote.get("projeto_codigo") and pacote.get("projeto_codigo") != l["projeto_codigo"]:
         return False, f"O pacote da pasta é do projeto {pacote.get('projeto_codigo')}, e o lote é de {l['projeto_codigo']}. Peça a releitura."
+    documentos = pacote.get("documentos") if isinstance(pacote.get("documentos"), list) else pacote.get("itens")
+    if not isinstance(documentos, list):
+        return False, "O CV2 não entregou uma lista de documentos válida. Preserve os arquivos e confira o manifesto."
+    if not documentos:
+        if pacote.get("retirados"):
+            return False, "O CAMP Vision retirou as folhas deste lote. Um admin pode trazê-las para conferência, sem aceitar a exclusão da máquina."
+        return False, "O pacote não contém folhas para importar. Confira o lote no QNAP; não precisa reimportar as folhas de outros lotes."
     return True, None
 
 
@@ -102,6 +109,78 @@ def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
         con.commit()
         return r
     except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+class TrazerRetiradas(BaseModel):
+    confirmar: bool = False
+
+
+@router.post("/lotes/{lote_id}/trazer-retiradas")
+def trazer_retiradas(lote_id: int, d: TrazerRetiradas, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Decisão humana: incluir documentos retirados pelo CV2 na revisão, sem publicar."""
+    if not d.confirmar:
+        raise HTTPException(400, "Confirme que deseja trazer as folhas retiradas para conferência")
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["descartado_em"] or l["aprovado_em"]:
+            raise HTTPException(409, "Este lote já foi encerrado. Reabra a revisão antes de acrescentar folhas")
+        pasta = Path(l["pasta_qnap"] or "")
+        if not pasta.is_dir():
+            raise HTTPException(409, "A pasta deste lote não está acessível no QNAP")
+        pacote = ler_pacote(pasta)
+        if not pacote or pacote.get("projeto_codigo") != l["projeto_codigo"]:
+            raise HTTPException(409, "O pacote não existe ou não corresponde ao projeto cadastrado no painel")
+        candidatas = [r for r in pacote.get("retirados") or [] if isinstance(r, dict)]
+        if not candidatas:
+            raise HTTPException(409, "Este lote não contém folhas retiradas pelo CAMP Vision")
+        ja = {r[0] for r in con.execute(
+            "SELECT chave FROM cv_resposta WHERE lote_id=? AND tipo='retirado' AND acao='devolver'", (lote_id,))}
+        aceitas, ignoradas = [], []
+        for folha in candidatas:
+            codigo = str(folha.get("codigo") or "").strip()
+            if not CODIGO_DOCUMENTO.fullmatch(codigo) or not codigo.startswith(l["projeto_codigo"] + "-"):
+                ignoradas.append({"codigo": codigo, "motivo": "código de outro projeto ou inválido"})
+                continue
+            if codigo in ja:
+                continue
+            if not (folha.get("arquivos") or folha.get("arquivo_origem")):
+                ignoradas.append({"codigo": codigo, "motivo": "sem arquivo de origem no manifesto"})
+                continue
+            # A decisão é humana e fica na trilha cv_resposta. O importador só
+            # devolve as folhas escolhidas para revisão, nunca para publicação.
+            _responder_cv(con, l, RespostaCV(
+                tipo="retirado", chave=codigo, acao="devolver",
+                motivo="Trazer à conferência; a exclusão do CV2 não é decisão final"), u)
+            aceitas.append(codigo)
+        if not aceitas:
+            raise HTTPException(409, "Nenhuma nova folha com código e origem válidos para trazer. Confira o manifesto.")
+        resultado = importar_lote(con, lote_id, u["email"])
+        # A decisão de tentar recuperar uma retirada não prova que o arquivo
+        # entrou na revisão. Colisões e códigos inválidos ainda podem impedir
+        # sua entrada: informar as duas contagens separadamente.
+        marca = ",".join("?" for _ in aceitas)
+        importadas = [r[0] for r in con.execute(
+            f"SELECT codigo FROM item WHERE codigo IN ({marca}) AND lote_id=? AND projeto_codigo=?",
+            (*aceitas, lote_id, l["projeto_codigo"]))]
+        nao_importadas = [c for c in aceitas if c not in set(importadas)]
+        _evento(con, "projeto", l["projeto_codigo"], "retiradas_trazidas_para_conferencia",
+                u["email"], {"lote_id": lote_id, "solicitadas": aceitas,
+                              "importadas": importadas, "nao_importadas": nao_importadas,
+                              "ignoradas": ignoradas, "criadas": resultado.get("criadas", 0)})
+        con.commit()
+        mensagem = ("Folhas trazidas à conferência. Confira cada aviso antes de publicar."
+                    if importadas else
+                    "Nenhuma folha entrou na revisão. Verifique colisões, arquivos e a situação do manifesto.")
+        return {"ok": bool(importadas), "solicitadas": len(aceitas), "trazidas": len(importadas),
+                "codigos": importadas, "nao_importadas": nao_importadas,
+                "ignoradas": ignoradas, "importacao": resultado, "mensagem": mensagem}
+    except Exception:
         con.rollback()
         raise
     finally:
@@ -1012,7 +1091,12 @@ def aprovar(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(409, "Este lote já foi aprovado")
         c = _contagem(con, lote_id)
         if c["total"] == 0:
-            raise HTTPException(400, "Importe as folhas do lote antes de aprovar")
+            outras = con.execute("""SELECT COUNT(*) FROM item
+                  WHERE projeto_codigo=? AND lote_id<>?""", (l["projeto_codigo"], lote_id)).fetchone()[0]
+            detalhe = (f" Este projeto já tem {outras} folha(s) em outro(s) lote(s). "
+                       "Abra o lote que tem folhas conferidas ou clique em Publicar o projeto."
+                       if outras else " Importe primeiro as folhas deste lote, ou traga as retidas para conferência.")
+            raise HTTPException(409, "Este lote não possui folhas para aprovar." + detalhe)
         if c["pendente"]:
             raise HTTPException(400, f"Faltam conferir {c['pendente']} folha(s)")
         con.execute("UPDATE lista_processamento SET aprovado_por=?, aprovado_em=datetime('now'), atualizado_em=datetime('now') WHERE id=?", (u["email"], lote_id))

@@ -205,7 +205,9 @@ def tarefa_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> 
 def publicar_tudo(codigo: str, tarefa: int = 0, u: dict = Depends(auth.exige("operador"))):
     if not publicacao_guiada.pode_publicar(u):            # CAMP-148: o operador só publica com publicacao.publicar_um_passo ligado
         raise HTTPException(403, "Só um admin publica.")
-    if publicacao_guiada.publicar_um_passo():              # CAMP-148: o mesmo clique aprova o lote conferido (só se nada mais impede)
+    # Admin publica e aprova os lotes prontos no mesmo clique; operador
+    # continua sujeito à permissão publicacao.publicar_um_passo.
+    if u["papel"] in ("admin", "master") or publicacao_guiada.publicar_um_passo():
         con = connect()
         try:
             p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
