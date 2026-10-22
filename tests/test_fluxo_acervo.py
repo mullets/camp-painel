@@ -77,13 +77,41 @@ class EscolhaLoteTest(unittest.TestCase):
                 CREATE TABLE lista_processamento(
                     id INT, projeto_codigo TEXT, etapa TEXT, aprovado_em TEXT, descartado_em TEXT
                 );
-                CREATE TABLE item(lote_id INT, revisao TEXT);
+                CREATE TABLE item(lote_id INT, projeto_codigo TEXT, revisao TEXT);
                 INSERT INTO lista_processamento VALUES(43,'F009-P0092','revisao',NULL,NULL);
                 INSERT INTO lista_processamento VALUES(44,'F009-P0092','revisao',NULL,NULL);
             """)
-            con.executemany("INSERT INTO item VALUES(43, 'conferida')", [()] * 41)
+            con.executemany("INSERT INTO item VALUES(43, 'F009-P0092', 'conferida')", [()] * 41)
             atual = lote_ativo_por_projeto(con)["F009-P0092"]
             self.assertEqual((atual["lote_id"], atual["fase"], atual["itens_total"]), (43, "aprovar", 41))
+        finally:
+            con.close()
+
+    def test_folha_movida_nao_mantem_lote_antigo_com_trabalho_fantasma(self):
+        # Mesmo lote_id preservado por proveniência, projeto_codigo mudou
+        # depois da transferência. A tela não pode pedir revisão da folha antiga.
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        try:
+            con.executescript("""
+                CREATE TABLE lista_processamento(
+                    id INT, projeto_codigo TEXT, etapa TEXT, aprovado_em TEXT, descartado_em TEXT
+                );
+                CREATE TABLE item(lote_id INT, projeto_codigo TEXT, revisao TEXT);
+                INSERT INTO lista_processamento VALUES(1,'F099-P0001','revisao',NULL,NULL);
+                INSERT INTO lista_processamento VALUES(2,'F099-P0001','revisao',NULL,NULL);
+                INSERT INTO lista_processamento VALUES(3,'F099-P0001','revisao',NULL,NULL);
+                INSERT INTO item VALUES(1,'F099-P0001','pendente');
+                INSERT INTO item VALUES(1,'F099-P0001','pendente');
+                INSERT INTO item VALUES(2,'F099-P0002','pendente');
+            """)
+            atual = lote_ativo_por_projeto(con)["F099-P0001"]
+            self.assertEqual((atual["lote_id"], atual["fase"], atual["itens_total"],
+                              atual["itens_pendentes"]), (1, "conferir", 2, 2))
+            # O lote 2 permanece rastreável; a folha transferida não vira
+            # tarefa fantasma do projeto original.
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM item WHERE lote_id=2").fetchone()[0], 1)
         finally:
             con.close()
 
@@ -99,7 +127,7 @@ class EscolhaLoteTest(unittest.TestCase):
                     aprovado_em TEXT,
                     descartado_em TEXT
                 );
-                CREATE TABLE item (lote_id INTEGER NOT NULL, revisao TEXT NOT NULL);
+                CREATE TABLE item (lote_id INTEGER NOT NULL, projeto_codigo TEXT NOT NULL, revisao TEXT NOT NULL);
             """)
             con.executemany(
                 "INSERT INTO lista_processamento VALUES (?,?,?,?,?)",
@@ -110,7 +138,8 @@ class EscolhaLoteTest(unittest.TestCase):
                     (4, "F001-P0003", "erro", None, "2026-10-22"),
                 ],
             )
-            con.executemany("INSERT INTO item VALUES (?,?)", [(1, "pendente"), (3, "conferida")])
+            con.executemany("INSERT INTO item VALUES (?,?,?)", [
+                (1, "F001-P0001", "pendente"), (3, "F001-P0002", "conferida")])
             atual = lote_ativo_por_projeto(con)
             self.assertEqual(atual["F001-P0001"]["lote_id"], 1)
             self.assertEqual(atual["F001-P0001"]["fase"], "conferir")
