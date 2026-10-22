@@ -136,7 +136,7 @@ _ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "
 # um problema (erro) em aberto ligado ao projeto ou a uma folha dele: a mesma regra da página do projeto
 COM_PROBLEMA = ("EXISTS (SELECT 1 FROM erro e WHERE (e.codigo=p.codigo OR e.codigo LIKE p.codigo || '-%') "
                 "AND e.situacao IN ('aberto','em_correcao'))")
-SITUACOES_PROJETO = ("todos", "gente", "publicado", "nao_publicado", "sem_folhas", "com_problema")
+SITUACOES_PROJETO = ("todos", "gente", "pronto", "publicado", "nao_publicado", "sem_folhas", "com_problema")
 
 
 def contar_situacoes(con, fundo=None, q=None, fases=None) -> dict:
@@ -163,6 +163,16 @@ def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao) -> tup
     elif situacao == "nao_publicado": w += " AND p.status_site<>'no_ar'"
     elif situacao == "sem_folhas": w += " AND folhas = 0"
     elif situacao == "com_problema": w += " AND " + COM_PROBLEMA          # #101: problema em aberto no projeto ou numa folha dele
+    elif situacao == "pronto":       # CAMP-149: "Pronto para publicar" (CAMP-146): lote conferido (aprovar/publicar) ou, sem lote em andamento, folhas fora do site
+        prontos = [c for c, f in fases.items() if f["fase"] in ("aprovar", "publicar")]
+        andando = [c for c, f in fases.items() if f["fase"] not in ("aprovar", "publicar", "publicado")]
+        w += " AND p.status_site<>'no_ar' AND folhas > 0"
+        if andando:
+            w += " AND p.codigo NOT IN (" + ",".join("?" * len(andando)) + ")"; par += andando
+        if prontos:
+            w += " AND (p.codigo IN (" + ",".join("?" * len(prontos)) + ") OR p.codigo NOT IN (SELECT projeto_codigo FROM lista_processamento WHERE projeto_codigo IS NOT NULL AND descartado_em IS NULL))"; par += prontos
+        else:
+            w += " AND p.codigo NOT IN (SELECT projeto_codigo FROM lista_processamento WHERE projeto_codigo IS NOT NULL AND descartado_em IS NULL)"
     elif situacao == "gente":
         cods = [c for c, f in fases.items() if f["fase"] in PRECISAM_DE_GENTE]
         if cods:
@@ -1054,9 +1064,11 @@ def _limpar_codigos(codigos) -> list[str]:
 
 
 @router.post("/projetos/lote/plano")
-def projetos_lote_plano(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+def projetos_lote_plano(d: AcaoProjetosLote, u: dict = Depends(auth.exige("operador"))) -> dict:
     """O que o 'Publicar' em lote FARIA: quais projetos seguem a mesma sequência do Publicar do projeto e quais ficam de fora (e por quê). Só lê."""
     from . import publicacao_guiada
+    if not publicacao_guiada.pode_publicar(u):            # CAMP-149: com o um passo (CAMP-148), o operador também publica vários
+        raise HTTPException(403, "Só um admin publica.")
     codigos = _limpar_codigos(d.codigos)
     publicaveis, bloqueados = [], []
     con = connect()
@@ -1079,9 +1091,12 @@ def projetos_lote_plano(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin
 
 
 @router.post("/projetos/lote")
-def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -> dict:
+def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("operador"))) -> dict:
     if d.acao not in ("publicar", "rascunho", "tirar_do_ar"):
         raise HTTPException(400, "Ação em lote inválida")
+    from . import publicacao_guiada
+    if u["papel"] not in ("admin", "master") and not (d.acao == "publicar" and publicacao_guiada.pode_publicar(u)):
+        raise HTTPException(403, "Só um admin faz esta ação em lote.")      # CAMP-149: o operador só PUBLICA em lote, e só com o um passo
     codigos = _limpar_codigos(d.codigos)
     ok, falhas, pendentes = [], [], []
     t0 = time.monotonic()
@@ -1092,6 +1107,14 @@ def projetos_lote(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin"))) -
                 from . import publicacao_guiada
                 if idx > 0 and time.monotonic() - t0 >= ORCAMENTO_LOTE_S:
                     pendentes = codigos[idx:]; break
+                if publicacao_guiada.publicar_um_passo():          # CAMP-148/149: o mesmo caminho do Publicar do projeto (aprova o lote conferido junto)
+                    cx = connect()
+                    try:
+                        px = cx.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+                        if px and not publicacao_guiada.plano(cx, px)["bloqueios"]:
+                            publicacao_guiada.aprovar_junto(cx, codigo, u)
+                    finally:
+                        cx.close()
                 while True:
                     r = publicacao_guiada.executar(codigo, u)
                     if not r.get("parcial") or time.monotonic() - t0 >= ORCAMENTO_LOTE_S:

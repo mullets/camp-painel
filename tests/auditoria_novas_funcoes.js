@@ -96,7 +96,7 @@ chk(QR.textContent.includes('Tarumã')||QR.textContent.includes('F026'),'busca v
 okl.push('recentes e favoritos pessoais');
 // lote na interface
 w.route_to('projetos'); await sleep(1200);
-w.selecionarProjetosVisiveis(true); chk(d.getElementById('proj-bulk').classList.contains('on'),'barra de lote não apareceu'); const nvis=d.querySelectorAll('#projetos-body .proj-sel').length; chk(nvis>=8&&txt('#proj-bulk-count')===nvis+' selecionados','contagem do lote: '+txt('#proj-bulk-count')+' para '+nvis+' linhas');
+w.selecionarProjetosVisiveis(true); chk(d.getElementById('proj-bulk').classList.contains('on'),'barra de lote não apareceu'); const nvis=d.querySelectorAll('#projetos-body .proj-sel').length; chk(nvis>=8&&new RegExp('^'+nvis+' projetos selecionados( · [\\d.]+ folhas?)?$').test(txt('#proj-bulk-count')),'contagem do lote (CAMP-149: "N projetos selecionados · X folhas"): '+txt('#proj-bulk-count')+' para '+nvis+' linhas');
 await w.exportarProjetosSelecionados(); await sleep(500); chk((w.__baixou||[]).length>0,'exportar seleção não gerou download');
 w.limparSelecaoProjetos(); chk(!d.getElementById('proj-bulk').classList.contains('on'),'barra de lote não sumiu ao limpar');
 await w.acaoLoteProjetos('publicar'); w.route_to('projetos'); okl.push('lote na interface: selecionar, exportar, limpar');
@@ -442,7 +442,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- LISTA DE PROJETOS: situação, filtros, ordem e "limpar" ----------
 { w.limparSelecaoProjetos&&w.limparSelecaoProjetos(); w.route_to('projetos'); await sleep(3000);
   const R=(await J(adm,'/api/projetos/resumo')).b, chips=[...d.querySelectorAll('#proj-chips [data-proj-sit]')], linhas=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')];
-  chk(chips.map(c=>c.dataset.projSit).join(',')==='todos,gente,publicado,nao_publicado,sem_folhas,com_problema','a lista de projetos deveria ter 6 filtros de situação: '+chips.map(c=>c.dataset.projSit));
+  chk(chips.map(c=>c.dataset.projSit).join(',')==='gente,pronto,publicado,com_problema,todos','(CAMP-149) as abas de Projetos deveriam ser as situações: Precisa de você, Pronto para publicar, No site, Com problema, Todos: '+chips.map(c=>c.dataset.projSit));
   chk(chips.every(c=>Number(c.querySelector('b').textContent.replace(/\D/g,''))===R[c.dataset.projSit]),'as contagens dos filtros deveriam bater com o servidor: '+JSON.stringify(R)+' / '+chips.map(c=>c.textContent.trim()).join(' | '));
   chk(d.querySelectorAll('#v-projetos thead th').length===5&&/Situação/.test(txt('#v-projetos thead'))&&!/Séries|Última atividade|Publicação/.test(txt('#v-projetos thead')),'a tabela deveria ter 4 colunas de conteúdo (Projeto, Fundo, Folhas, Situação com a frase do que falta — CAMP-146), sem Séries nem Última atividade: "'+txt('#v-projetos thead')+'"');
   chk(linhas().length>0&&/P\d{4}/.test(linhas()[0].querySelector('td:nth-child(2) .code').textContent)&&!!linhas()[0].querySelector('td:nth-child(2) b'),'a coluna Projeto deveria juntar o código e o nome');
@@ -494,7 +494,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(w.location.hash===h0&&w.eval('PROJETOS_SELECIONADOS.size')===2,'clicar na caixa deveria marcar sem navegar: hash '+h0+' -> '+w.location.hash+', selecionados='+w.eval('PROJETOS_SELECIONADOS.size'));
   const cel=d.querySelectorAll('#projetos-body .sel-cel')[2]; cel.click(); await sleep(300);
   chk(w.location.hash===h0&&w.eval('PROJETOS_SELECIONADOS.size')===3&&!!cel.querySelector('input').checked,'clicar na CÉLULA da caixa também deveria marcar sem navegar (selecionados='+w.eval('PROJETOS_SELECIONADOS.size')+')');
-  chk(/3 selecionados/.test(txt('#proj-bulk-count')),'a barra deveria dizer "3 selecionados": "'+txt('#proj-bulk-count')+'"'); w.limparSelecaoProjetos();
+  chk(/3 projetos selecionados/.test(txt('#proj-bulk-count')),'a barra deveria dizer "3 projetos selecionados": "'+txt('#proj-bulk-count')+'"'); w.limparSelecaoProjetos();
   d.querySelector('#projetos-body tr[data-nav] b').click(); await sleep(800); chk(/^#projeto\//.test(w.location.hash),'clicar no nome deveria continuar abrindo o projeto: '+w.location.hash); w.route_to('painel'); }
 // ---------- [Auditoria P0-4] os botões "Etiquetas" abrem a etiqueta do projeto/fundo/folha de ORIGEM (nunca a de outro fundo) ----------
 { const lab=()=>({f:d.getElementById('l-fundo').value,p:d.getElementById('l-proj').value,o:txt('#lab-origem'),aba:(d.querySelector('#lab-tabs .on')||{dataset:{}}).dataset.t});

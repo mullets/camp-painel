@@ -4230,9 +4230,22 @@ def filho(modo):
         ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (400 dizendo 'Falta conferir 1 folha')", r2.status_code == 400 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
         r3 = op.post(f"/api/projetos/{P3}/publicar-tudo")
         ver("ligado: bloqueio registrado por pessoa continua bloqueando, e o lote NÃO é aprovado", r3.status_code == 400 and aprovado(P3)[0] is None and st_proj(P3) != "no_ar", r3.text[:200])
+        # CAMP-149: aba "Pronto para publicar" e publicar vários de uma vez
+        lst = lambda sit: [x["codigo"] for x in adm.get(f"/api/projetos?fundo=F079&situacao={sit}").json()["itens"]]
+        pr = lst("pronto")
+        ver("CAMP-149: a aba 'Pronto para publicar' tem o conferido (P4) e não o que falta conferir (P2) nem o já publicado (P1)",
+            P4 in pr and P2 not in pr and P not in pr, str(pr))
+        rs = adm.get("/api/projetos/resumo?fundo=F079").json()
+        ver("CAMP-149: o resumo conta 'pronto' pela mesma regra da lista", rs.get("pronto") == len(pr), str(rs))
+        rl = op.post("/api/projetos/lote", json={"codigos": [P4], "acao": "publicar"})
+        ver("CAMP-149: o operador publica em lote (com o um passo) e o lote é aprovado junto",
+            rl.status_code == 200 and [x["codigo"] for x in rl.json()["ok"]] == [P4] and aprovado(P4)[0] is not None and st_proj(P4) == "no_ar", rl.text[:300])
+        ver("CAMP-149: o operador não faz outras ações em lote (Voltar para rascunho → 403)", op.post("/api/projetos/lote", json={"codigos": [P4], "acao": "rascunho"}).status_code == 403)
         # 4) Desfazer volta para rascunho (master)
         d = ms.post(f"/api/projetos/{P}/publicar", json={"acao": "rascunho"})
         ver("Desfazer (master) volta o projeto para rascunho", d.status_code == 200 and st_proj(P) == "rascunho", d.text[:200])
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='publicacao.publicar_um_passo'"); c.commit()
+        ver("CAMP-149: desligado o um passo, o operador não publica em lote (403)", op.post("/api/projetos/lote", json={"codigos": [P2], "acao": "publicar"}).status_code == 403)
         c.close()
         for l in res: print(l)
     elif modo == "camp136_serie":
@@ -7025,7 +7038,7 @@ def filho(modo):
         ver("ordenar: por folhas (as com mais folhas primeiro), por nome, por mais recentes; ordem inválida cai no código, sem erro", P_("&ordem=folhas")["itens"][0]["codigo"].endswith("P0005") and [x["titulo"] for x in P_("&ordem=nome")["itens"]] == sorted((x["titulo"] for x in P_()["itens"]), key=str.lower) and op.get("/api/projetos?fundo=F091&ordem=recentes").status_code == 200 and cods(P_("&ordem=bobagem")) == cods(P_()))
         ver("busca e fundo continuam valendo junto com a situação; fundo inexistente = lista vazia", cods(P_("&q=Projeto 5")) == ["P0005"] and cods(P_("&situacao=gente&q=Projeto 5")) == ["P0005"] and cods(P_("&situacao=publicado&q=Projeto 5")) == [] and op.get("/api/projetos?fundo=F999").json()["total"] == 0)
         rs = op.get("/api/projetos/resumo?fundo=F091").json()
-        ver("contagens dos filtros (para os chips), dentro do fundo; e respeitando a busca", rs == {"todos": 10, "gente": 7, "publicado": 1, "nao_publicado": 9, "sem_folhas": 7, "com_problema": 0} and op.get("/api/projetos/resumo?fundo=F091&q=Projeto 5").json() == {"todos": 1, "gente": 1, "publicado": 0, "nao_publicado": 1, "sem_folhas": 0, "com_problema": 0}, str(rs))
+        ver("contagens dos filtros (para os chips), dentro do fundo; e respeitando a busca", rs == {"todos": 10, "gente": 7, "pronto": 2, "publicado": 1, "nao_publicado": 9, "sem_folhas": 7, "com_problema": 0} and {k: v for k, v in op.get("/api/projetos/resumo?fundo=F091&q=Projeto 5").json().items() if k != "pronto"} == {"todos": 1, "gente": 1, "publicado": 0, "nao_publicado": 1, "sem_folhas": 0, "com_problema": 0}, str(rs))
         cg = op.get("/api/projetos/codigos?fundo=F091&situacao=gente").json()
         ver("'Selecionar todos os resultados' respeita a situação (7 projetos, não os 10)", cg["total"] == 7 and all(c_.startswith("F091-") for c_ in cg["codigos"]))
         ver("lista e contagens exigem login (401)", anon.get("/api/projetos").status_code == 401 and anon.get("/api/projetos/resumo").status_code == 401)

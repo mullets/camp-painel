@@ -119,3 +119,6 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - Continua travando: folha ainda a conferir ("Falta conferir N folhas"), bloqueio registrado por pessoa, direitos com restrição, projeto
   sem título, lote de teste. Nesses casos o lote NÃO é aprovado.
 - Some o "Autorizar" da barra em lote de Projetos (o Publicar já autoriza). Fila e Painel inicial trocam "Aprovar" por "Publicar no site".
+- **CAMP-149:** as abas de Projetos são as situações (Precisa de você · Pronto para publicar · No site · Com problema · Todos; "Não publicados"
+  e "Sem folhas" só aparecem quando vêm de um link, como os números do fundo). Na aba Pronto, marcar → "N projetos selecionados · X folhas" →
+  "Publicar os N no site" (o mesmo caminho do Publicar do projeto). Com o um passo ligado, o operador também publica em lote (só publicar).
