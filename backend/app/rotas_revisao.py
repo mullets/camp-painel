@@ -1012,7 +1012,12 @@ def aprovar(lote_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(409, "Este lote já foi aprovado")
         c = _contagem(con, lote_id)
         if c["total"] == 0:
-            raise HTTPException(400, "Importe as folhas do lote antes de aprovar")
+            outras = con.execute("""SELECT COUNT(*) FROM item
+                  WHERE projeto_codigo=? AND lote_id<>?""", (l["projeto_codigo"], lote_id)).fetchone()[0]
+            detalhe = (f" Este projeto já tem {outras} folha(s) em outro(s) lote(s). "
+                       "Abra o lote que tem folhas conferidas ou clique em Publicar o projeto."
+                       if outras else " Importe primeiro as folhas deste lote, ou traga as retidas para conferência.")
+            raise HTTPException(409, "Este lote não possui folhas para aprovar." + detalhe)
         if c["pendente"]:
             raise HTTPException(400, f"Faltam conferir {c['pendente']} folha(s)")
         con.execute("UPDATE lista_processamento SET aprovado_por=?, aprovado_em=datetime('now'), atualizado_em=datetime('now') WHERE id=?", (u["email"], lote_id))
