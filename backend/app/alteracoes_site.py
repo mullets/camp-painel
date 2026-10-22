@@ -11,6 +11,7 @@ nenhum deles, a 1ª publicação). Um campo que voltou ao valor de antes não co
 from __future__ import annotations
 
 import json
+import sqlite3
 
 from .db import connect
 
@@ -27,6 +28,15 @@ CAMPOS = {
     "suporte": ("Suporte", "Suporte"),
 }
 EVENTOS_ENVIO = ("site_item_criado", "site_item_reaproveitado", "site_alteracoes_enviadas")
+
+
+def _versao_na_fila(con, codigo: str) -> int | None:
+    """Número da edição em envio; bancos de testes anteriores à migração não têm a fila."""
+    try:
+        row = con.execute("SELECT versao FROM fila_correcao_site WHERE item_codigo=?", (codigo,)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return row[0] if row else None
 
 
 def _txt(v) -> str:
@@ -171,12 +181,13 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
                 api = publicador._tipos_para_site(con, p["codigo"], mid, valor) if k == "tipo_documento" and valor else valor
                 md[nome] = (mid, api, valor)
             editado_ate = con.execute("SELECT COALESCE(MAX(id), 0) FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado'", (p["codigo"],)).fetchone()[0]
-            dados[p["codigo"]] = (i["tainacan_item_id"], titulo_pag, md, p["imagem"], i["giro_manual"] or 0, p, faltam_metadados, editado_ate)
+            versao_fila = _versao_na_fila(con, p["codigo"])
+            dados[p["codigo"]] = (i["tainacan_item_id"], titulo_pag, md, p["imagem"], i["giro_manual"] or 0, p, faltam_metadados, editado_ate, versao_fila)
         con.commit()
     finally:
         con.close()
     enviadas, falhas = [], []
-    for cod, (wid, titulo_pag, md, img, giro, p, faltam_metadados, editado_ate) in dados.items():
+    for cod, (wid, titulo_pag, md, img, giro, p, faltam_metadados, editado_ate, versao_fila) in dados.items():
         erros = list(faltam_metadados)
         if titulo_pag is not None or md:
             r = publicador.atualizar_folha_no_site(cod, wid, publicador.COL_ACERVO, titulo_pag, None, md, ator)
@@ -191,7 +202,7 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
             # Se outra edição aconteceu enquanto a rede respondia, não grave um
             # marcador que faria parecer sincronizada uma versão nunca enviada.
             agora = con.execute("SELECT COALESCE(MAX(id), 0) FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado'", (cod,)).fetchone()[0]
-            if agora != editado_ate:
+            if agora != editado_ate or _versao_na_fila(con, cod) != versao_fila:
                 erros.append("A folha mudou durante o envio; a versão nova será reenviada")
             if not erros:
                 if img:
