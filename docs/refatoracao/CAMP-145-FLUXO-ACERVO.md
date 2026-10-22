@@ -143,3 +143,14 @@ As etapas relativas a F9/F10, OCR, arquivos de contrato e site envolvem os outro
 - Trabalho já especificado nos tickets CAMP-145 a CAMP-160 continua como dependência/histórico, não foi reaberto automaticamente.
 - Alterações visuais de UI/UX devem seguir REF-002, REF-028 e REF-034.
 
+
+## 8. Implementação 22/10/2026 — branch isolada
+
+- **REF-011 parcial:** seleção do lote ativo compartilhada entre fila e detalhe; testes unitários de regressão.
+- **REF-014 parcial:** `revisao_politica.py` centraliza alertas da folha para conferência manual e automática. Folhas sem título ou com JSON ilegível não passam sozinhas. Flag de conferência automática permanece desligada.
+- **REF-006 parcial:** migração `150_fila_correcao_site.sql` registra correções de metadados e imagens de folhas já vinculadas ao site na mesma transação; `fila_correcao_site.py` usa lease, backoff, controle de versão e retomada após reinício; `main.py` agenda a checagem; `GET /api/site/correcoes-pendentes` expõe fila somente para administrador; `GET /api/site/status` devolve contadores opcionais.
+- **Integridade:** `alteracoes_site.enviar` não declara êxito quando faltam metadados WordPress, houve edição concorrente ou mudou a versão na fila durante a transmissão.
+- **Testes executados em ambiente isolado:** 19 testes Python (estado do lote, política de conferência, trigger/rollback e retry), todos passaram; migração executada duas vezes pelo parser de instruções do SQLite. Esses testes não substituem a suíte integral nem testes reais do QNAP/WordPress.
+- **Ainda aberto:** retroalimentar correções antigas anteriores à migração 150; testar falhas de rede/reinício e publicação real; verificar toda a suíte, regressão visual, desempenho e UX para o operador. Não ligar as flags de importação/conferência/publicação e não publicar a branch no servidor antes disso.
+
+**Importante:** nenhuma das tarefas REF-006, REF-011 ou REF-014 foi dada como integralmente concluída. Código nesta branch não equivale a produção homologada.
