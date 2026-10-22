@@ -105,7 +105,10 @@ def plano(con, p) -> dict:
                  if i in por_id and por_id[i]["bloqueia"] and not por_id[i]["ok"]]   # 21/10: só o que BLOQUEIA (o aceite do CAMP Vision virou aviso)
     um_passo = publicar_um_passo()
     a_aprovar: list[int] = []
-    if um_passo:      # CAMP-148: o lote conferido é aprovado pelo próprio Publicar; só trava se ainda há folha a conferir
+    # O admin sempre pode concluir a revisão das folhas JÁ conferidas no mesmo
+    # clique de Publicar. A flag permanece para liberar operador, não para
+    # obrigar o admin a procurar e aprovar cada lote manualmente.
+    if True:
         a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
         if a_aprovar and len(a_aprovar) == nao_aprovados and por_id.get("revisao", {}).get("detalhe") == "O lote ainda não foi aprovado na Revisão do lote":
             bloqueios = [b for b in bloqueios if b["id"] != "revisao"]
