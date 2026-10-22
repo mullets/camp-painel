@@ -140,6 +140,7 @@ Algumas folhas trazem aviso. Elas **não impedem** a publicação:
 
 - **Autoria não confirmada:** o carimbo traz um nome diferente do titular do fundo (coautoria, consultoria, terceiros). A folha **continua no lote e pode ser publicada**. No site ela aparece com "Autoria não confirmada", nunca com o nome lido como fato.
 - **Orientação incerta / série incerta:** confira a imagem.
+- **Orientação girada pelo CAMP Vision:** o CAMP Vision girou a folha (90°, 180° ou 270°) e não marcou dúvida. Só quem olha vê se girou certo: compare com o original e use **Girar** se precisar. Por isso o atalho "Aprovar todas" deixa essas folhas para você conferir uma a uma.
 - Folha de **outra obra** (projeto divergente), **capa ou sem identificação** é tirada do lote ("retirados"). Confira essa lista e devolva a folha se foi engano.
 
 ### 6.4 Aprovar o lote (admin)
@@ -162,6 +163,8 @@ O painel **Publicação**, na página do projeto, mostra cada condição, com o 
 
 ### 7.2 Publicar com um clique
 No projeto, botão **Publicar**. O painel faz, em segundo plano e com progresso na tela: **dossiê → folhas como rascunho → autorizar → publicar**. A tela mostra antes o **plano** do que será feito. Se algo só uma pessoa resolve (por exemplo, direitos do fundo), o botão fica desligado com o motivo.
+
+**Avisos do plano (não impedem de publicar):** *folhas sem título* (no site aparecem com o nome da série, repetido) e *ano da folha muito diferente do ano do projeto* (5 anos ou mais; pode ser engano de leitura). Corrija na conferência ou publique assim mesmo.
 
 - Para vários projetos de um fundo: na página do fundo, **Publicar** para todos os projetos prontos (só admin master). Para vários lotes de uma vez, o painel também tem publicação em lote com a mesma sequência.
 - **Estados:** *Não publicado* (só no painel) → *Rascunho* (no site, só a equipe vê) → *Publicado* (qualquer visitante vê) → *Despublicado* (retirado de propósito). Despublicar o que já está publicado exige admin master.
