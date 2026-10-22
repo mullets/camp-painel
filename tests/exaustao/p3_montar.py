@@ -5,6 +5,7 @@ pacote_tainacan.json, status.json "pronto") e avisado ao painel por HTTP. Reapro
   python3 tests/exaustao/p3_montar.py BASE RAIZ CODIGO NOME
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -27,6 +28,8 @@ def pronto34(base, raiz, codigo, nome, n=34):
         im.save(tif / f"{cod}.tif", "TIFF")
         im.save(prev / f"{cod}.jpg", "JPEG", quality=60)
         documentos.append(cv.doc(nome, codigo, k, raiz_rel))
+        if str(k) in os.environ.get("P3_AVISOS", "").split(","):     # CAMP-150: folhas com aviso do CAMP Vision (ressalva), para o "conferir só as com aviso"
+            documentos[-1]["ressalvas"] = ["escala ilegível no carimbo"]
     pac = {"versao": 2, "teste": False, "projeto_codigo": codigo, "projeto_nome": nome, "fundo_codigo": codigo[:4],
            "projeto": {"codigo": codigo, "titulo": nome, "ano": "1972", "cidade": "Santo André", "uf": "SP", "capa_sugerida": f"{codigo}-1972-S01-D00001"},
            "documentos": documentos, "itens": documentos, "retirados": [], "propostas": {}, "avisos": []}

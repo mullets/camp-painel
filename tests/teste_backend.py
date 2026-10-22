@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4246,6 +4246,70 @@ def filho(modo):
         ver("Desfazer (master) volta o projeto para rascunho", d.status_code == 200 and st_proj(P) == "rascunho", d.text[:200])
         c.execute("UPDATE configuracao SET valor='0' WHERE chave='publicacao.publicar_um_passo'"); c.commit()
         ver("CAMP-149: desligado o um passo, o operador não publica em lote (403)", op.post("/api/projetos/lote", json={"codigos": [P2], "acao": "publicar"}).status_code == 403)
+        c.close()
+        for l in res: print(l)
+    elif modo == "conferir_so_avisos":
+        # CAMP-150 (22/10, decidido pelo Rafa): conferir só as folhas com aviso. Com revisao.conferir_so_avisos ligado, ao importar, a folha sem
+        # nenhum aviso entra conferida sozinha (registro no histórico); as com aviso esperam alguém. 48 folhas / 3 com aviso = 3 cliques.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile, copy
+        from pathlib import Path
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.rotas_revisao import AUTOMATICO
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F098','Fundo Só Avisos')")
+        for n in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F098',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F098',?,?,1972)", (f"F098-P000{n}", n, f"Projeto {n}"))
+        base = _j.loads((Path(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        modelo = next(d for d in base["documentos"] if not d.get("bloqueios"))
+        raiz = Path(tempfile.mkdtemp(prefix="soav_"))
+        def lote(P, nome):
+            docs = []
+            for k in range(1, 49):
+                d = copy.deepcopy(modelo); cod = f"{P}-1972-S01-D{k:05d}"
+                d.update(codigo=cod, projeto_codigo=P, fundo_codigo="F098", titulo=f"Planta {k}", duplicata_de=None, bloqueios=[], ressalvas=[], sinais=[], orientacao_incerta=False)
+                if k == 7: d["bloqueios"] = ["carimbo de outra obra"]
+                if k == 21: d["ressalvas"] = ["escala ilegível"]
+                if k == 40: d["bloqueios"] = ["folha cortada"]
+                docs.append(d)
+            pk = {**base, "projeto_codigo": P, "fundo_codigo": "F098", "documentos": docs, "itens": docs, "retirados": []}
+            pasta = raiz / nome; (pasta / "catalogacao").mkdir(parents=True)
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(pk, ensure_ascii=False), encoding="utf-8")
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,?,'revisao')", (nome, P, str(pasta))).lastrowid
+        L1, L2 = lote("F098-P0001", "desligado"), lote("F098-P0002", "ligado")
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        pend = lambda P: c.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND revisao='pendente'", (P,)).fetchone()[0]
+        ver("a configuração nasce desligada (migração 148)", c.execute("SELECT valor FROM configuracao WHERE chave='revisao.conferir_so_avisos'").fetchone()[0] == "0")
+        r1 = op.post(f"/api/lotes/{L1}/importar")
+        ver("desligado: as 48 folhas entram a conferir (como antes)", r1.status_code == 200 and pend("F098-P0001") == 48, r1.text[:200])
+        ver("desligado: /api/auth/eu diz conferir_so_avisos=false", op.get("/api/auth/eu").json().get("conferir_so_avisos") is False)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='revisao.conferir_so_avisos'"); c.commit()
+        r2 = op.post(f"/api/lotes/{L2}/importar")
+        j2 = r2.json() if r2.status_code == 200 else {}
+        auto = c.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='F098-P0002' AND revisao='conferida' AND revisado_por=?", (AUTOMATICO,)).fetchone()[0]
+        ver("ligado: as 45 sem aviso entram conferidas sozinhas; as 3 com aviso esperam", r2.status_code == 200 and auto == 45 and pend("F098-P0002") == 3, f"{r2.text[:200]} auto={auto} pend={pend('F098-P0002')}")
+        ver("ligado: as que esperam são exatamente as com aviso (D7, D21, D40)",
+            {r[0][-6:] for r in c.execute("SELECT codigo FROM item WHERE projeto_codigo='F098-P0002' AND revisao='pendente'")} == {"D00007", "D00021", "D00040"})
+        ver("o resultado da importação diz quantas entraram conferidas", (j2.get("importacao") or j2).get("conferidas_sozinhas") == 45 or j2.get("conferidas_sozinhas") == 45, str(j2)[:300])
+        ev = c.execute("SELECT detalhe FROM evento WHERE tipo='conferida_automaticamente' AND codigo='F098-P0002'").fetchone()
+        ver("fica no histórico: 'conferida_automaticamente' com a lista das 45", bool(ev) and len(_j.loads(ev[0])["conferidas"]) == 45)
+        ver("ligado: /api/auth/eu diz conferir_so_avisos=true", op.get("/api/auth/eu").json().get("conferir_so_avisos") is True)
+        cliques = 0
+        for cod in [r[0] for r in c.execute("SELECT codigo FROM item WHERE projeto_codigo='F098-P0002' AND revisao='pendente' ORDER BY codigo")]:
+            cliques += 1; op.post(f"/api/itens/{cod}/revisao", json={"estado": "conferida"})
+        rv = op.get("/api/projetos/F098-P0002/revisao").json()
+        l2 = next(x for x in rv["lotes"] if x["id"] == L2)
+        ver("48 folhas / 3 com aviso = 3 cliques até não faltar nada para conferir", cliques == 3 and pend("F098-P0002") == 0 and l2["itens"]["pendente"] == 0, str(l2.get("itens")))
+        ver("quem quiser ainda abre e volta qualquer folha (a conferida sozinha volta para 'a conferir')",
+            op.post("/api/itens/F098-P0002-1972-S01-D00001/revisao", json={"estado": "pendente"}).status_code == 200 and pend("F098-P0002") == 1)
+        ver("desligado de novo: o lote 1 continua com as 48 a conferir (nada mexeu nele)", pend("F098-P0001") == 48)
         c.close()
         for l in res: print(l)
     elif modo == "camp136_serie":
@@ -10614,6 +10678,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"um passo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("161) CAMP-150: conferir só as folhas com aviso (as sem aviso entram conferidas sozinhas), atrás de revisao.conferir_so_avisos")
+rc, out = rodar("conferir_so_avisos", f"{tmp}/conferir_so_avisos.db")
+if rc != 0: ok(False, f"teste conferir_so_avisos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"só avisos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

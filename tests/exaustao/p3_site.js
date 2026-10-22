@@ -109,7 +109,7 @@ T.rodar(async () => {
   await T.print(ad, 'atualizar_pagina_publica');
   if (btAt) {
     await btAt.click();
-    const fim = await T.espera(async () => !!(await ad.$('#pj-status .pjs-res')), 90000);   // 5.2: um clique, sem janela de plano
+    const fim = await T.espera(async () => !!(await ad.$('#pj-status .pjs-res')), 180000);   // 5.2: um clique, sem janela de plano (180 s: com a máquina carregada, 3 folhas passaram de 90 s)
     T.chk(fim && /Publicado ✓/.test(await T.txt(ad, '#pj-status')), 'um clique publica e o topo diz "Publicado ✓"', await T.txt(ad, '#pj-status').catch(() => ''));
   }
   T.chk(await T.espera(() => [10, 11, 12].every(n => T.um('SELECT status_site FROM item WHERE codigo=?', D(n)) === 'no_ar'), 20000), 'as 3 folhas ficam publicadas (a nova sobe; as de rascunho ficam públicas)',

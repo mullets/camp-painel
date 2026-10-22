@@ -46,7 +46,7 @@ def logout(response: Response, camp_sessao: str | None = Cookie(default=None)) -
 
 @router.get("/eu")
 def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
-    from . import publicacao_guiada
+    from . import publicacao_guiada, rotas_revisao
     from .db import connect
     con = connect()
     try:
@@ -55,7 +55,8 @@ def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
         con.close()
     return {"id": u["id"], "nome": u["nome"], "email": u["email"], "papel": u["papel"], "tem_foto": tem_foto,
             "precisa_trocar_senha": bool(u["precisa_trocar_senha"]), "totp": bool(u.get("totp")),
-            "publicar_um_passo": publicacao_guiada.publicar_um_passo()}   # CAMP-148 (campo opcional): a tela troca "Aprovar o lote" por "Publicar no site"
+            "publicar_um_passo": publicacao_guiada.publicar_um_passo(),
+            "conferir_so_avisos": rotas_revisao.conferir_so_avisos()}   # CAMP-148/150 (campos opcionais): "Publicar no site" no lugar de "Aprovar o lote"; conferir abre nas folhas com aviso
 
 
 @router.get("/eu/preferencias")

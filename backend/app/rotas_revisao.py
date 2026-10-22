@@ -880,6 +880,43 @@ def _aviso_da_folha(con, i) -> str | None:
     return None
 
 
+AUTOMATICO = "painel (sem aviso: conferida sozinha)"
+
+
+def conferir_so_avisos() -> bool:
+    """CAMP-150: configuração revisao.conferir_so_avisos (sem a chave ou 0: desligado, como antes)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='revisao.conferir_so_avisos'").fetchone()
+    finally:
+        con.close()
+    return bool(r) and str(r[0]).strip() == "1"
+
+
+def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False) -> dict:
+    """Marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver (regra do CAMP-094). Não faz commit.
+    automatico=True (CAMP-150, ao importar): o histórico diz "conferida automaticamente" e lista as folhas."""
+    l = _lote(con, lote_id)
+    marcadas, ficaram, conferidas = 0, [], []
+    for i in con.execute(f"""SELECT codigo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
+                             WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall():
+        motivo = _aviso_da_folha(con, i)
+        if motivo:
+            ficaram.append({"codigo": i["codigo"], "motivo": motivo})
+            continue
+        con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (ator, i["codigo"]))
+        marcadas += 1; conferidas.append(i["codigo"])
+    restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+    if automatico:
+        if marcadas:
+            _evento(con, "projeto", l["projeto_codigo"], "conferida_automaticamente", ator, {"lote_id": lote_id, "conferidas": conferidas,
+                                                                                          "ficaram_para_conferir": [x["codigo"] for x in ficaram]})
+    else:
+        _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", ator, {"lote_id": lote_id, "todas": True, "conferidas": marcadas,
+                                                                              "ficaram_para_conferir": [x["codigo"] for x in ficaram]})
+    return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam}
+
+
 @router.post("/lotes/{lote_id}/conferir-todas")
 def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
     """"Aprovar todas": marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver.
@@ -892,20 +929,9 @@ def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> d
         l = _lote(con, lote_id)
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
-        marcadas, ficaram = 0, []
-        for i in con.execute(f"""SELECT codigo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
-                                 WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall():
-            motivo = _aviso_da_folha(con, i)
-            if motivo:
-                ficaram.append({"codigo": i["codigo"], "motivo": motivo})
-                continue
-            con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (u["email"], i["codigo"]))
-            marcadas += 1
-        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
-        _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", u["email"], {"lote_id": lote_id, "todas": True, "conferidas": marcadas,
-                                                                                     "ficaram_para_conferir": [x["codigo"] for x in ficaram]})
+        r = conferir_sem_aviso(con, lote_id, u["email"])
         con.commit()
-        return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam}
+        return r
     except HTTPException:
         con.rollback()
         raise

@@ -461,6 +461,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora))
     if cf:
         resumo["contagem_estacao"] = cf
+    from .rotas_revisao import conferir_so_avisos, conferir_sem_aviso, AUTOMATICO
+    if conferir_so_avisos() and criados:      # CAMP-150: a folha sem nenhum aviso entra conferida sozinha (fica no histórico); as com aviso esperam alguém
+        resumo["conferidas_sozinhas"] = conferir_sem_aviso(con, lote_id, AUTOMATICO, automatico=True)["conferidas"]
     return resumo
 
 

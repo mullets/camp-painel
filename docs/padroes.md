@@ -122,3 +122,12 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - **CAMP-149:** as abas de Projetos são as situações (Precisa de você · Pronto para publicar · No site · Com problema · Todos; "Não publicados"
   e "Sem folhas" só aparecem quando vêm de um link, como os números do fundo). Na aba Pronto, marcar → "N projetos selecionados · X folhas" →
   "Publicar os N no site" (o mesmo caminho do Publicar do projeto). Com o um passo ligado, o operador também publica em lote (só publicar).
+
+## 17. Conferir só as folhas com aviso (CAMP-150, decidido pelo Rafa em 22/10/2026)
+- Configuração `revisao.conferir_so_avisos` (migração 148). **Nasce desligada (0)**: todas as folhas esperam alguém conferir.
+- Ligada (1): ao importar, a folha SEM aviso (a regra do "Aprovar todas", CAMP-094: bloqueio, duplicata, autoria, espelho a confirmar,
+  ressalva/sinal do CAMP Vision ou problema aberto) entra conferida por `painel (sem aviso: conferida sozinha)`, com o evento
+  `conferida_automaticamente` (lista das folhas). As com aviso esperam.
+- Tela: o modo conferir abre no filtro "A conferir" (só as com aviso) e diz "Folha 1 de N com aviso (M sem aviso já conferidas)"; a folha
+  começa por "Por que você está vendo esta folha" (inclusive a ressalva do CAMP Vision); some "Aprovar todas". "Todas" mostra qualquer folha,
+  e uma conferida sozinha pode voltar para "a conferir".
