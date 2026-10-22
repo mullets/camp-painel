@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.0 (15/10/2026)**. Contrato CV2 ↔ painel: **2.4** (`backend/app/contrato.py`).
+Versão deste documento: **1.1 (22/10/2026)**. Contrato CV2 ↔ painel: **2.4** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -116,7 +116,11 @@ As rotas administrativas de mover/mesclar exigem **login de admin**; o CV2 não 
 ## 6. Painel ↔ site
 
 Autenticação: Application Password do WordPress (painel → site). Rotas do site `/wp-json/camp/v1/…`:
-- `GET /solicitacoes?marcar=1` — o painel puxa pedidos (a cada `site.coleta_pedidos_min`, padrão 10; 0 desliga). `alta-resolucao`/`consulta` → `solicitacao` (origem "site"); `correcao` → `erro` (origem "site"). Idempotente pelo id do post.
+- `GET /solicitacoes?limite=200` (sem `marcar`) — **somente leitura** dos pedidos ainda não confirmados, em ordem dos mais antigos; devolve array `[{id,tipo,codigo,nome,email,instituicao,finalidade,mensagem,criado_em}]`. O painel coleta a cada `site.coleta_pedidos_min` (padrão 10; 0 desliga). Salva em `pedido_site` (chave primária `site_id`) e confirma **após COMMIT**, nunca antes.
+- **NOVO 1.1**: `POST /solicitacoes/confirmar` corpo `{"ids":[101,102]}` (até 500 IDs inteiros, auth `edit_pages`) → `{"confirmados":[101],"ja_confirmados":[102],"nao_encontrados":[],"falhas":[]}`. A operação é idempotente; ACK perdido permite reenviar sem duplicar `pedido_site`. Se o POST falhar, o coletor interrompe a paginação e deixa os IDs no site. O `GET ?marcar=1` permanece como legado durante transição; o novo coletor não o usa.
+- Recuperação dos pedidos que já tinham sido marcados pela versão antiga: `GET /solicitacoes?todas=1&pagina=N&limite=200` com Application Password; importar novamente por `site_id` sem duplicar. A varredura histórica é procedimento administrativo separado, não roda automaticamente.
+- `alta-resolucao`/`consulta` → `solicitacao` (origem "site"); `correcao` → `erro` (origem "site"). A fila local `pedido_site` permite reprocessar falhas de negócio após o ACK.
+- **Ordem de implantação**: WordPress 1.5.89 primeiro (rotas antigas continuam), painel depois. Painel novo sobre WordPress antigo não perde dados, mas acumula erro de ACK até atualizar o site.
 - `POST /painel/redirecionamentos` — mapa antigo→novo (`/acervo/projetos/<slug>`, `/acervo/documentos/<slug>`), com fila e reenvio; falha não desfaz o local.
 - `POST /painel/hub` — cria/atualiza o fundo/arquiteto; campo vazio NÃO apaga; para limpar, mandar `"__limpar__"`.
 - `POST /painel/pessoa/apagar` `{"email": "..."}` — LGPD.

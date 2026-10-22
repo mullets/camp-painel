@@ -1,12 +1,13 @@
-"""CAMP-013 · Coletor de pedidos do site (a cada `site.coleta_pedidos_min` minutos, padrão 10; 0 desliga).
+"""WP-AUD-01 · Coletor de pedidos do WordPress (a cada 10 minutos por padrão).
 
-GET /wp-json/camp/v1/solicitacoes?marcar=1 (Application Password) devolve [{id,tipo,codigo,nome,email,instituicao,finalidade,mensagem,criado_em}]
-e o site marca o que devolveu como importado. Por isso o que chega é guardado em `pedido_site` (chave = id do post no site) ANTES de qualquer
-processamento: nada se perde e nada duplica.
-  alta-resolucao  → solicitacao (origem 'site') com item pelo código, formato tif (o original em alta resolução)
-  consulta        → solicitacao (origem 'site'), SEM item: o código vai no texto ("Consulta aos originais: …"), é visita e não arquivo
-  correcao        → erro (origem 'site') ligado ao código da folha/projeto; sem código que o painel conheça, vira pedido comum para uma pessoa ver
-Falha do site é registrada em `pedido_site_coleta` e nunca derruba o painel."""
+Novo protocolo: GET /wp-json/camp/v1/solicitacoes (só leitura), grava lote em
+pedido_site e COMMIT no SQLite, depois POST /solicitacoes/confirmar {"ids":[...]}.
+Sem ACK, o WordPress deixa o pedido pendente para reenvio. A chave site_id
+garante idempotência quando uma confirmação falha; o processamento posterior
+pode ser retomado de pedido_site sem consultar o site novamente.
+As solicitações e correções viram entidades do painel após o armazenamento.
+Falhas de rede são registradas em pedido_site_coleta e não derrubam o painel.
+"""
 from __future__ import annotations
 
 import json
@@ -95,38 +96,93 @@ def processar_pendentes(con) -> dict:
     return {"importadas": importadas, "falhas": falhas, "solicitacoes": solicitacoes}
 
 
+
+LIMITE_LOTE = 200
+MAX_LOTES = 20  # impede que a requisição manual fique indefinidamente aberta
+
+
+def _buscar_lote(wp) -> list[dict]:
+    """GET não marca o pedido. Se a resposta vier inválida, não confirmar nenhum ID."""
+    r = wp.h.get("/wp-json/camp/v1/solicitacoes", params={"limite": LIMITE_LOTE})
+    if r.status_code == 404:
+        raise RuntimeError("O site ainda não tem a rota camp/v1/solicitacoes")
+    if r.status_code in (401, 403):
+        raise RuntimeError(f"O site recusou as credenciais ({r.status_code})")
+    if r.status_code >= 400:
+        raise RuntimeError(f"O site respondeu {r.status_code} ao buscar solicitações")
+    dados = r.json()
+    if isinstance(dados, dict):
+        dados = dados.get("itens", dados.get("items"))
+    if not isinstance(dados, list):
+        raise RuntimeError("O site devolveu formato inválido para as solicitações")
+    ids = set()
+    for d in dados:
+        if not isinstance(d, dict) or type(d.get("id")) is not int or d["id"] <= 0:
+            raise RuntimeError("O site devolveu solicitação sem ID válido; nada foi confirmado")
+        if d["id"] in ids:
+            raise RuntimeError("O site devolveu IDs repetidos no mesmo lote; nada foi confirmado")
+        ids.add(d["id"])
+    return dados
+
+
+def _confirmar_lote(wp, ids: list[int]) -> None:
+    """Idempotente: o WP aceita IDs novos ou que já haviam recebido ACK."""
+    r = wp.h.post("/wp-json/camp/v1/solicitacoes/confirmar", json={"ids": ids})
+    if r.status_code >= 400:
+        raise RuntimeError(f"Não foi possível confirmar solicitações no site (HTTP {r.status_code}); serão reenviadas")
+    dados = r.json()
+    if not isinstance(dados, dict):
+        raise RuntimeError("O site não devolveu o resultado da confirmação; serão reenviadas")
+    aceitos = set(dados.get("confirmados") or []) | set(dados.get("ja_confirmados") or [])
+    if aceitos != set(ids):
+        raise RuntimeError(f"Confirmação parcial do site ({len(aceitos)}/{len(ids)}); será tentada novamente")
+
+
 def coletar(con=None, wp=None, avisar: bool = True) -> dict:
-    """Uma volta do coletor. Nunca levanta: o erro vai para pedido_site_coleta."""
+    """Uma volta da coleta. Só confirma remotamente DEPOIS do commit local."""
     from .db import connect
     fechar = con is None
     con = con or connect()
-    out = {"lidas": 0, "novas": 0, "importadas": 0, "erro": None}
+    out = {"lidas": 0, "novas": 0, "confirmadas": 0, "importadas": 0, "erro": None}
     try:
         try:
             wp = wp or __import__("app.wp", fromlist=["WP"]).WP()
-            r = wp.h.get("/wp-json/camp/v1/solicitacoes", params={"marcar": 1, "limite": 200})
-            if r.status_code == 404:
-                raise RuntimeError("O site ainda não tem a rota camp/v1/solicitacoes")
-            if r.status_code in (401, 403):
-                raise RuntimeError(f"O site recusou as credenciais ({r.status_code})")
-            if r.status_code >= 400:
-                raise RuntimeError(f"O site respondeu {r.status_code}")
-            dados = r.json()
-            if isinstance(dados, dict):
-                dados = dados.get("itens") or dados.get("items") or []
-            dados = [d for d in dados if isinstance(d, dict) and str(d.get("id") or "").isdigit()]
-            out["lidas"] = len(dados)
-            for d in dados:                      # 1) guarda o que veio (idempotente pelo id do site) antes de qualquer outra coisa
-                out["novas"] += con.execute("""INSERT OR IGNORE INTO pedido_site (site_id, tipo, codigo, criado_no_site, payload) VALUES (?,?,?,?,?)""",
-                                            (int(d["id"]), str(d.get("tipo") or ""), str(d.get("codigo") or ""), str(d.get("criado_em") or ""), json.dumps(d, ensure_ascii=False))).rowcount
-            con.commit()
+            for _ in range(MAX_LOTES):
+                dados = _buscar_lote(wp)
+                if not dados:
+                    break
+                novos_lote = 0
+                try:
+                    for d in dados:
+                        novos_lote += con.execute(
+                            """INSERT OR IGNORE INTO pedido_site (site_id, tipo, codigo, criado_no_site, payload)
+                               VALUES (?,?,?,?,?)""",
+                            (d["id"], str(d.get("tipo") or ""), str(d.get("codigo") or ""),
+                             str(d.get("criado_em") or ""), json.dumps(d, ensure_ascii=False)),
+                        ).rowcount
+                    con.commit()  # ACK só depois deste ponto
+                except Exception:
+                    con.rollback()
+                    raise
+                out["lidas"] += len(dados)
+                out["novas"] += novos_lote
+                _confirmar_lote(wp, [d["id"] for d in dados])
+                out["confirmadas"] += len(dados)
+                if len(dados) < LIMITE_LOTE:
+                    break
+            else:
+                # Próxima rodada segue com o que ainda não foi confirmado.
+                out["erro"] = f"Coleta limitada a {MAX_LOTES * LIMITE_LOTE} pedidos por rodada; continuará na próxima"
         except Exception as e:  # noqa: BLE001
+            # Não confirmar remotamente é seguro: os dados locais já persistidos
+            # permanecem e o WordPress enviará os IDs pendentes outra vez.
             out["erro"] = str(e)[:200]
-        proc = processar_pendentes(con)          # 2) processa também o que sobrou de voltas anteriores
+        proc = processar_pendentes(con)
         out["importadas"] = proc["importadas"]
         if proc["falhas"] and not out["erro"]:
             out["erro"] = f"{proc['falhas']} pedido(s) não puderam ser importados (ficam para a próxima volta)"
-        con.execute("INSERT INTO pedido_site_coleta (lidas, novas, importadas, erro) VALUES (?,?,?,?)", (out["lidas"], out["novas"], out["importadas"], out["erro"]))
+        con.execute("INSERT INTO pedido_site_coleta (lidas, novas, importadas, erro) VALUES (?,?,?,?)",
+                    (out["lidas"], out["novas"], out["importadas"], out["erro"]))
         con.commit()
         if avisar:
             from .rotas_pedidos import _avisar
