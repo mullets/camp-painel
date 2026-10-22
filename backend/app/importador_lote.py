@@ -454,8 +454,17 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     aceite = ler_aceite(pasta)   # CV2 §10: o aceite do lote fica no painel e vira condição de publicar
     con.execute("UPDATE lista_processamento SET resultado=?, aceite_json=?, atualizado_em=datetime('now') WHERE id=?",
                 (json.dumps(resultado, ensure_ascii=False), json.dumps(aceite, ensure_ascii=False) if aceite else None, lote_id))
-    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folhas_importadas_do_lote',?,?)",
-                (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))
+    # Reimportar o mesmo pacote sem qualquer novidade não é uma nova atividade.
+    # Mantém o importador idempotente e evita dezenas de eventos "0 folhas novas".
+    from .historico_importacao import registrar_importacao
+    registrar_importacao(
+        con, proj, ator, lote_id,
+        {"criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas,
+         "retirados": len(retirados), "problemas": len(problemas),
+         "problemas_registrados": registrados,
+         "recodificadas": len(recodificadas), "colisoes": len(novas_colisoes)},
+        docs,
+    )
     from .estacao_eventos import conferir_contagem      # CAMP-017: o que a estação disse que enviou × o que chegou (só aviso)
     _n = lambda v: len(v) if isinstance(v, (list, tuple, set, dict)) else int(v or 0)  # noqa: E731
     cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora))
