@@ -876,4 +876,9 @@ async def _coleta_qnap_periodica() -> None:
                 await asyncio.to_thread(coletar)
             except Exception as e:  # noqa: BLE001
                 log_registrar(logging.ERROR, "qnap_coleta", f"Falha na coleta do QNAP: {str(e)[:200]}")
+            try:                    # CAMP-151: importar sozinho o lote que o CAMP Vision terminou (importacao.automatica; padrão desligado)
+                from .importar_sozinho import importar_prontos
+                await asyncio.to_thread(importar_prontos)
+            except Exception as e:  # noqa: BLE001
+                log_registrar(logging.ERROR, "importar_sozinho", f"Falha na importação automática: {str(e)[:200]}")
         await asyncio.sleep(max(1, minutos) * 60)

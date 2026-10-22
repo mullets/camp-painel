@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4310,6 +4310,58 @@ def filho(modo):
         ver("quem quiser ainda abre e volta qualquer folha (a conferida sozinha volta para 'a conferir')",
             op.post("/api/itens/F098-P0002-1972-S01-D00001/revisao", json={"estado": "pendente"}).status_code == 200 and pend("F098-P0002") == 1)
         ver("desligado de novo: o lote 1 continua com as 48 a conferir (nada mexeu nele)", pend("F098-P0001") == 48)
+        c.close()
+        for l in res: print(l)
+    elif modo == "importar_sozinho":
+        # CAMP-151 (22/10, decidido pelo Rafa): importar sozinho quando o CAMP Vision termina o lote, pelo coletor em segundo plano
+        # (nunca na requisição), atrás de importacao.automatica (padrão 0). Decisão pendente não importa; QNAP fora vira problema com o motivo.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile, shutil
+        from pathlib import Path
+        from app import importar_sozinho as _is
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F097','Fundo Importa Sozinho')")
+        for n in range(1, 6):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F097',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F097',?,?,1972)", (f"F097-P000{n}", n, f"Projeto {n}"))
+        raiz = Path(tempfile.mkdtemp(prefix="imps_"))
+        fix = (Path(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json").read_text(encoding="utf-8")
+        def pasta(P, nome, pacote=True):
+            d = raiz / nome; (d / "catalogacao").mkdir(parents=True, exist_ok=True)
+            if pacote: (d / "catalogacao" / "pacote_tainacan.json").write_text(fix.replace("F026-P0001", P).replace("F026", "F097"), encoding="utf-8")
+            return str(d)
+        lote = lambda P, pq, etapa="revisao": c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,?,?)", (P, P, pq, etapa)).lastrowid
+        L1 = lote("F097-P0001", pasta("F097-P0001", "pronto"))
+        L2 = lote("F097-P0002", pasta("F097-P0002", "colide"))
+        c.execute("INSERT INTO decisao (tipo, chave, titulo, situacao, fundo_codigo, origem, contexto) VALUES ('lote_colide',?,'x','pendente','F097','painel','{}')", (f"lote_colide:{L2}:F097-P0002-1972-S01-D00001",))
+        L3 = lote("F097-P0003", str(raiz / "nao_montado"))
+        L4 = lote("F097-P0004", pasta("F097-P0004", "lendo", pacote=False), "processando")
+        c.commit()
+        folhas = lambda L: c.execute("SELECT COUNT(*) FROM item WHERE lote_id=?", (L,)).fetchone()[0]
+        ver("a configuração nasce desligada (migração 149)", c.execute("SELECT valor FROM configuracao WHERE chave='importacao.automatica'").fetchone()[0] == "0")
+        r0 = _is.importar_prontos()
+        ver("desligado: nada é importado sozinho (alguém clica 'Importar folhas')", r0.get("desligado") is True and folhas(L1) == 0, str(r0))
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='importacao.automatica'"); c.commit()
+        r1 = _is.importar_prontos()
+        ver("ligado: o lote pronto é importado sem clique, pelo mesmo importador", folhas(L1) == 3 and any(x["lote_id"] == L1 for x in r1["importados"]), str(r1))
+        ev = c.execute("SELECT ator FROM evento WHERE tipo='importado_sozinho' AND codigo='F097-P0001'").fetchone()
+        ver("fica no histórico do projeto ('importado_sozinho', painel)", bool(ev) and "automática" in ev[0])
+        ver("decisão pendente (números que colidem): NÃO importa", folhas(L2) == 0 and any(x["lote_id"] == L2 for x in r1["esperando"]))
+        ver("o CAMP Vision ainda lendo: não importa nem reclama", folhas(L4) == 0 and not any(x["lote_id"] == L4 for x in r1["problemas"]))
+        e3 = c.execute("SELECT id, situacao, descricao, codigo FROM erro WHERE chave=?", (f"importar_sozinho:{L3}",)).fetchone()
+        ver("QNAP fora (pasta não encontrada): vira problema do projeto, com o motivo", bool(e3) and e3["situacao"] == "aberto" and "QNAP" in e3["descricao"] and e3["codigo"] == "F097-P0003", str(dict(e3) if e3 else None))
+        _is.importar_prontos()
+        ver("uma segunda passada não duplica o problema", c.execute("SELECT COUNT(*) FROM erro WHERE chave=?", (f"importar_sozinho:{L3}",)).fetchone()[0] == 1)
+        ver("e não reimporta o que já foi (o lote 1 continua com 3 folhas)", folhas(L1) == 3)
+        nova = pasta("F097-P0003", "nao_montado")
+        _is.importar_prontos()
+        ver("o QNAP volta: importa, e o problema fecha sozinho", folhas(L3) == 3 and c.execute("SELECT situacao FROM erro WHERE chave=?", (f"importar_sozinho:{L3}",)).fetchone()[0] == "corrigido")
+        import inspect
+        src = inspect.getsource(__import__("app.main", fromlist=["x"])._coleta_qnap_periodica)
+        ver("roda no laço do coletor em segundo plano (asyncio.to_thread), nunca numa rota", "importar_prontos" in src and "to_thread" in src)
+        shutil.rmtree(raiz, ignore_errors=True)
         c.close()
         for l in res: print(l)
     elif modo == "camp136_serie":
@@ -10686,6 +10738,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"só avisos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("162) CAMP-151: importar sozinho quando o CAMP Vision termina o lote (coletor em segundo plano), atrás de importacao.automatica")
+rc, out = rodar("importar_sozinho", f"{tmp}/importar_sozinho.db")
+if rc != 0: ok(False, f"teste importar_sozinho não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"importar sozinho: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -131,3 +131,11 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - Tela: o modo conferir abre no filtro "A conferir" (só as com aviso) e diz "Folha 1 de N com aviso (M sem aviso já conferidas)"; a folha
   começa por "Por que você está vendo esta folha" (inclusive a ressalva do CAMP Vision); some "Aprovar todas". "Todas" mostra qualquer folha,
   e uma conferida sozinha pode voltar para "a conferir".
+
+## 18. Importar sozinho quando o CAMP Vision termina (CAMP-151, decidido pelo Rafa em 22/10/2026)
+- Configuração `importacao.automatica` (migração 149). **Nasce desligada (0)**: alguém clica "Importar folhas" (o aviso do CAMP Vision já
+  importa quando chega; isto cobre o lote que ficou esperando).
+- Ligada (1): a cada coleta do QNAP (laço em segundo plano de `main._coleta_qnap_periodica`, NUNCA numa requisição), `importar_sozinho`
+  importa o lote em "revisao", sem folhas, não aprovado, pelo mesmo importador e com as mesmas condições do botão. Evento `importado_sozinho`.
+- Não importa: decisão pendente de números que colidem; CAMP Vision ainda lendo. Não deu (QNAP fora, pacote faltando ou de outro projeto):
+  um problema do projeto com o motivo (chave `importar_sozinho:<lote>`, um só), que fecha sozinho quando a importação der certo.
