@@ -56,3 +56,15 @@ def registrar_importacao(con, projeto: str, ator: str, lote_id: int, contagens: 
         (projeto, ator, json.dumps(detalhe, ensure_ascii=False)),
     )
     return True
+
+# Somente para a listagem de atividade. Os registros continuam no banco e
+# podem ser consultados com incluir_reimportacoes_sem_novidade=true.
+SQL_EVENTOS_COM_ATIVIDADE = """
+NOT (
+  tipo='folhas_importadas_do_lote'
+  AND CASE WHEN json_valid(detalhe) THEN
+    COALESCE(CAST(json_extract(detalhe,'$.criadas') AS INTEGER),0)=0
+    AND COALESCE(CAST(json_extract(detalhe,'$.atualizadas') AS INTEGER),0)=0
+  ELSE 0 END
+)
+"""

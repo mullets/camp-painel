@@ -751,11 +751,15 @@ _GRUPOS_EVENTO = {
 @router.get("/eventos")
 def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | None = None, q: str | None = None,
             desde: str | None = None, limite: int = 200, pagina: int = 1, por_pagina: int | None = None, grupo: str | None = None,
+            incluir_reimportacoes_sem_novidade: bool = False,
             u: dict = Depends(auth.exige("admin"))) -> dict:
     # paginação: pagina/por_pagina (máx. 1000). Sem por_pagina vale o antigo "limite" (compatibilidade).
     por = max(1, min(por_pagina if por_pagina else limite, 1000)); pagina = max(1, pagina)
     con = connect()
     sql = "SELECT * FROM evento WHERE 1=1"; p: list = []
+    if not incluir_reimportacoes_sem_novidade:
+        from .historico_importacao import SQL_EVENTOS_COM_ATIVIDADE
+        sql += " AND " + SQL_EVENTOS_COM_ATIVIDADE
     if entidade: sql += " AND entidade=?"; p.append(entidade)
     if ator: sql += " AND ator LIKE ?"; p.append(f"%{ator}%")
     if tipo: sql += " AND tipo LIKE ?"; p.append(f"%{tipo}%")
