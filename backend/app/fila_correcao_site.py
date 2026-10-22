@@ -48,9 +48,10 @@ def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0) -> dict:
         codigo, versao = item["item_codigo"], item["versao"]
         try:
             r = enviar(codigo[:10], ATOR, [codigo])
-            if not r.get("ok", False) or r.get("falhas"):
+            if not r.get("ok", False) or r.get("falhas") or codigo not in (r.get("enviadas") or []):
                 falhas = r.get("falhas") or []
-                raise RuntimeError(str(falhas[0].get("erro", "Falha ao enviar")) if falhas else "Envio não confirmado")
+                detalhe = str(falhas[0].get("erro", "Falha ao enviar")) if falhas else "WordPress não confirmou a folha"
+                raise RuntimeError(detalhe)
             sucesso, erro = True, None
         except Exception as e:
             sucesso, erro = False, f"{type(e).__name__}: {str(e)[:180]}"
@@ -59,6 +60,8 @@ def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0) -> dict:
             con.execute("BEGIN IMMEDIATE")
             if sucesso:
                 # Edição concorrente muda a versão e permanece na fila.
+                # enviar() pode ter quitado a mesma versão antes deste worker.
+                # Jamais apagar uma edição posterior: a versão precisa bater.
                 con.execute("DELETE FROM fila_correcao_site WHERE item_codigo=? AND versao=?", (codigo, versao))
                 resumo["enviadas"].append(codigo)
             else:
