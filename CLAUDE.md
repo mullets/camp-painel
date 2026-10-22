@@ -21,6 +21,7 @@ python tests/teste_backend.py               # pacote completo (~6 min)
 python scripts/check_ui.py                  # estrutura/vocabulário da UI
 bash tests/rodar_auditoria.sh [novas|xss]   # telas, funções, atalhos, XSS (mais de 5 min: por etapas)
 bash tests/rodar_um.sh tests/ARQUIVO.js     # um teste de navegador
+bash tests/rodar_fluxo_real.sh             # fluxo real de ponta a ponta: estação → CAMP Vision → conferir → aprovar → publicar (site falso), com prints
 ```
 Dependências: `pip install -r backend/requirements.txt`. Um modo de teste isolado: `CAMP_DB_PATH=/tmp/x.db PYTHONPATH=backend python tests/teste_backend.py --filho <modo>`.
 Todo ticket tem teste; **teste novo deve FALHAR sem a correção** (prove). Não afirmar o que não foi testado.

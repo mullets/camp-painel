@@ -2,6 +2,8 @@
 do endereço e do cliente lidos em cada carimbo. Mostra o consenso e as folhas que divergem; a pessoa decide trocar, folha a folha ou em todas.
 Nada é trocado sozinho. Duplicatas não votam (seriam o mesmo carimbo contado duas vezes)."""
 import json
+import re
+import unicodedata
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,6 +33,36 @@ def _chave(v):
     return v if isinstance(v, int) else str(v).casefold()
 
 
+def _grafia(v) -> str:
+    """O valor sem acento, pontuação, caixa e espaços repetidos: "AV. DO ESTADO" e "Av do Estado" dão o mesmo."""
+    t = unicodedata.normalize("NFKD", str(v)).encode("ascii", "ignore").decode().casefold()
+    return " ".join(re.sub(r"[^\w\s]", " ", t).split())
+
+
+def _abrevia(curta: str, longa: str) -> bool:
+    """"sto" abrevia "santo", "av" abrevia "avenida": mesma 1ª letra e as letras da curta aparecem, em ordem, na longa."""
+    if not curta or not longa or len(curta) >= len(longa) or curta[0] != longa[0]:
+        return False
+    it = iter(longa)
+    return all(ch in it for ch in curta)
+
+
+def tipo_diferenca(valor, consenso) -> str:
+    """19/10 (F026-P0009: "36 folhas dizem outra coisa" num projeto de 34): nem toda diferença é uma decisão.
+    vazio = o carimbo não diz nada (falta de dado); grafia = só pontuação/caixa/acento; abreviacao = STO × SANTO; valor = diz outra coisa de verdade."""
+    if valor is None:
+        return "vazio"
+    if isinstance(valor, int) or isinstance(consenso, int):
+        return "valor"
+    a, b = _grafia(valor), _grafia(consenso)
+    if a == b or a.replace(" ", "") == b.replace(" ", ""):
+        return "grafia"
+    ta, tb = a.split(), b.split()
+    if len(ta) == len(tb) and all(x == y or _abrevia(x, y) or _abrevia(y, x) for x, y in zip(ta, tb)):
+        return "abreviacao"
+    return "valor"
+
+
 def _folhas(con, codigo: str, lote_id: int | None) -> list[dict]:
     sql = """SELECT i.codigo, i.sequencial, i.lote_id, i.status_site, i.ano_folha, i.endereco_folha, i.cliente_folha, l.aprovado_em
                FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id
@@ -56,6 +88,14 @@ def calcular(con, codigo: str, lote_id: int | None) -> dict:
     if lote_id is not None and not con.execute("SELECT 1 FROM lista_processamento WHERE id=? AND projeto_codigo=?", (lote_id, codigo)).fetchone():
         raise HTTPException(404, "Este lote não é deste projeto")
     folhas = _folhas(con, codigo, lote_id)
+    mantidos = {}   # 19/10: "Manter o do projeto" (o último registro por campo vale enquanto o consenso for o mesmo)
+    for r in con.execute("SELECT ator, quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='consenso_mantido' ORDER BY id", (codigo,)):
+        try:
+            dt = json.loads(r["detalhe"] or "{}")
+        except ValueError:
+            continue
+        if isinstance(dt, dict) and dt.get("campo") in CAMPOS:
+            mantidos[dt["campo"]] = {"por": r["ator"], "em": r["quando"], "consenso": dt.get("consenso"), "projeto": dt.get("projeto")}
     campos = []
     for campo, (col, rotulo, col_p) in CAMPOS.items():
         votos, forma = Counter(), {}
@@ -76,9 +116,14 @@ def calcular(con, codigo: str, lote_id: int | None) -> dict:
             for f in folhas:
                 v = _limpo(f[col])
                 if v is None or _chave(v) != _chave(consenso):
-                    divergentes.append({"codigo": f["codigo"], "valor": v, "vazio": v is None, "trava": _trava(f)})
+                    divergentes.append({"codigo": f["codigo"], "valor": v, "vazio": v is None, "trava": _trava(f),
+                                        "tipo": tipo_diferenca(v, consenso)})   # campo novo (opcional): vazio | grafia | abreviacao | valor
         proj = _limpo(p[col_p]) if col_p != "ano" else (p["ano"] or None)
-        campos.append({"campo": campo, "rotulo": rotulo, "consenso": consenso, "votos": ranking[0][1] if ranking else 0,
+        difere = consenso is not None and proj is not None and _chave(proj) != _chave(consenso)
+        m = mantidos.get(campo)
+        mantido = ({"por": m["por"], "em": m["em"]} if difere and m and m["consenso"] is not None and _chave(m["consenso"]) == _chave(consenso)
+                   and m["projeto"] is not None and _chave(m["projeto"]) == _chave(proj) else None)
+        campos.append({"projeto_difere": difere, "mantido": mantido, "campo": campo, "rotulo": rotulo, "consenso": consenso, "votos": ranking[0][1] if ranking else 0,
                        "com_valor": sum(votos.values()), "empate": bool(empate),
                        "valores": [{"valor": forma[k].most_common(1)[0][0], "folhas": n} for k, n in ranking[:8]],
                        "divergentes": divergentes, "projeto": proj})
@@ -133,5 +178,29 @@ def aplicar(codigo: str, d: AplicarConsenso, u: dict = Depends(auth.exige("opera
     except HTTPException:
         con.rollback()
         raise
+    finally:
+        con.close()
+
+
+class ManterProjeto(BaseModel):
+    campo: str
+    lote_id: int | None = None
+
+
+@router.post("/projetos/{codigo}/consenso/manter")
+def manter(codigo: str, d: ManterProjeto, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """19/10: a pessoa olhou a diferença entre o consenso das folhas e o campo do projeto e decidiu MANTER o do projeto.
+    Só registra (histórico do projeto); nada muda no projeto nem nas folhas. Se o consenso ou o projeto mudarem, a diferença volta a aparecer."""
+    if d.campo not in CAMPOS:
+        raise HTTPException(400, "Campo inválido: use ano, endereco ou cliente")
+    con = connect()
+    try:
+        c = next(x for x in calcular(con, codigo, d.lote_id)["campos"] if x["campo"] == d.campo)
+        if not c["projeto_difere"]:
+            raise HTTPException(409, "O projeto já segue o consenso das folhas (ou não há consenso).")
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'consenso_mantido',?,?)",
+                    (codigo, u["email"], json.dumps({"campo": d.campo, "consenso": c["consenso"], "projeto": c["projeto"], "lote_id": d.lote_id}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "campo": d.campo, "projeto": c["projeto"]}
     finally:
         con.close()

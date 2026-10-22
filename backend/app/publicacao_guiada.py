@@ -17,7 +17,33 @@ from fastapi import HTTPException
 from .db import connect
 from .publicacao import ELEGIVEL_LOCAL, condicoes_projeto
 
+from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: E402
+
+
+def envio_paralelo() -> int:
+    """Quantas folhas vão ao site ao mesmo tempo (configuração site.envio_paralelo, 1 a 6; sem a chave: 3)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='site.envio_paralelo'").fetchone()
+    finally:
+        con.close()
+    try:
+        return max(1, min(6, int(str(r[0]).strip()))) if r and str(r[0]).strip() else 3
+    except ValueError:
+        return 3
+
+def publicar_arquiteto_junto() -> bool:
+    """21/10: configuração site.publicar_arquiteto_junto (sem a chave: sim)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='site.publicar_arquiteto_junto'").fetchone()
+    finally:
+        con.close()
+    return not r or str(r[0]).strip() != "0"
+
+
 ORCAMENTO_S = 40.0             # tempo máximo de envio de folhas por chamada (a tela repete até acabar)
+ANO_FOLHA_DIFERENTE = 5        # anos de diferença entre a folha e o projeto a partir dos quais o plano avisa
 _trava = threading.Lock()
 _em_andamento: set[str] = set()
 
@@ -37,7 +63,8 @@ def plano(con, p) -> dict:
     retidas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1")
 
     bloqueios = [{"id": i, "texto": por_id[i]["texto"], "detalhe": por_id[i]["detalhe"], "acao": por_id[i]["acao"]}
-                 for i in ("direitos", "bloqueios", "teste", "revisao") if not por_id[i]["ok"]]
+                 for i in ("direitos", "bloqueios", "titulo", "aceite_cv", "teste", "revisao")
+                 if i in por_id and por_id[i]["bloqueia"] and not por_id[i]["ok"]]   # 21/10: só o que BLOQUEIA (o aceite do CAMP Vision virou aviso)
     dossie = bool(p["tainacan_item_id"])
     passos = [
         {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
@@ -57,8 +84,26 @@ def plano(con, p) -> dict:
     sem = [n for n, v in (("ano", p["ano"]), ("cidade", cidade)) if not v or str(v) == "0"]
     if sem:
         avisos.append({"id": "vazios", "campo": sem[0], "texto": "Sem " + " e sem ".join(sem) + ": a página fica sem essa informação. Preencha agora ou publique assim mesmo."})
-    if "pagina_arquiteto" in por_id:     # CAMP-015
-        avisos.append({"id": "pagina_arquiteto", "campo": None, "texto": por_id["pagina_arquiteto"]["texto"] + ": o projeto vai ao ar, mas a página do arquiteto não aparece até ela existir."})
+    # T4 (acervo novo): folha sem título é publicada com o título genérico da série, repetido. Só avisa: decisão do Rafa se vira bloqueio.
+    sem_titulo = q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} AND TRIM(COALESCE(titulo,''))=''")
+    if sem_titulo:
+        avisos.append({"id": "folhas_sem_titulo", "campo": None, "texto": (f"{sem_titulo} folhas sem título" if sem_titulo != 1 else "1 folha sem título")
+                       + ": no site aparecem com o nome da série. Preencha na conferência ou publique assim mesmo."})
+    # T5: o ano lido na folha foge muito do ano do projeto (ex.: 1917 num projeto de 1971)
+    try:
+        ano_p = int(str(p["ano"] or "").strip()[:4])
+    except ValueError:
+        ano_p = None
+    if ano_p:
+        fora = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} AND ano_folha IS NOT NULL AND ABS(ano_folha-?)>=?",
+                                          (codigo, ano_p, ANO_FOLHA_DIFERENTE))]
+        if fora:
+            avisos.append({"id": "ano_fora_do_projeto", "campo": None, "texto": f"{len(fora)} folha(s) com ano muito diferente do projeto ({ano_p}), por exemplo {fora[0][-6:]}: confira o ano antes de publicar."})
+    if "pagina_arquiteto" in por_id:     # CAMP-015; 21/10: sem a página do arquiteto pública, o site esconde o projeto
+        junto = publicar_arquiteto_junto() and not por_id["pagina_arquiteto"].get("sem_arquiteto")
+        avisos.append({"id": "pagina_arquiteto", "campo": None, "publica_junto": junto,
+                       "texto": "A página do arquiteto ainda não está pública no site: " + ("ela será publicada junto, porque sem ela o projeto não aparece."
+                                if junto else "o projeto fica publicado, mas só aparece no site quando a página do arquiteto for publicada (quadro “Página do arquiteto no site”, no fundo).")})
     if divergentes:     # CAMP-046 (contrato 2.4): aviso, não bloqueio
         avisos.append({"id": "autoria_nao_confirmada", "campo": None, "texto": (f"{divergentes} folha(s) com autoria não confirmada" if divergentes != 1 else "1 folha com autoria não confirmada")
                        + ": sobem ao site com o crédito “Autoria não confirmada”."})
@@ -82,6 +127,8 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
             if not p:
                 raise HTTPException(404, "Projeto não existe")
+            if p["mesclado_em"] or p["descartado_em"]:
+                raise HTTPException(409, "Este projeto foi " + (f"mesclado em {p['mesclado_em']}" if p["mesclado_em"] else "descartado") + ": publique o projeto de destino.")
             pl = plano(con, p)
             pend = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} ORDER BY sequencial", (codigo,))]
         finally:
@@ -106,21 +153,34 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             _p(evento="dossie")
 
         t0, criadas, falhas = time.monotonic(), 0, []                                      # 2) folhas, em fatias de tempo (sempre avança ao menos uma)
-        for c in pend:
-            if criadas + len(falhas) > 0 and time.monotonic() - t0 >= ORCAMENTO_S:
-                break
-            _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
-            r = publicador.criar_folha_no_site(c, u["email"])
-            if r.get("erro"):
-                falhas.append({"codigo": c, "erro": r["erro"]})
-                _p(evento="folha_falhou", codigo=c, erro=r["erro"])
-            else:
-                criadas += 1
-                _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
+        # 21/10: várias folhas ao mesmo tempo (site.envio_paralelo, padrão 3). Cada folha é uma chamada inteira e independente (item próprio
+        # no site, conexão própria no banco); os avisos de andamento saem daqui, na ordem em que as folhas terminam.
+        n = envio_paralelo()
+        with ThreadPoolExecutor(max_workers=n) as ex:
+            for i0 in range(0, len(pend), n):
+                if criadas + len(falhas) > 0 and time.monotonic() - t0 >= ORCAMENTO_S:
+                    break
+                fatia = pend[i0:i0 + n]
+                for c in fatia:
+                    _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
+                futuros = {ex.submit(publicador.criar_folha_no_site, c, u["email"]): c for c in fatia}
+                for fu in as_completed(futuros):
+                    c = futuros[fu]
+                    try:
+                        r = fu.result()
+                    except Exception as e:  # noqa: BLE001
+                        r = {"erro": str(e)[:300]}
+                    if r.get("erro"):
+                        falhas.append({"codigo": c, "erro": r["erro"]})
+                        _p(evento="folha_falhou", codigo=c, erro=r["erro"])
+                    else:
+                        criadas += 1
+                        _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
         restam = len(pend) - criadas - len(falhas)
         if falhas:
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
-                    "mensagem": f"{len(falhas)} folha(s) não subiram ao site; nada foi publicado. Corrija e clique de novo: o que já subiu não se repete."}
+                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")   # CAMP-111: "1 folha(s) não subiram" virava "1 folha não subiram"
+                    + " ao site; nada foi publicado. Corrija e clique de novo: o que já subiu não se repete."}
         if restam > 0:
             return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam,
                     "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}
@@ -138,6 +198,12 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
 
         _p(evento="publicar")
         res = publicar(codigo, Publicacao(acao="publicar"), u)                              # 4) publicar (revalida TODOS os portões)
+        if res.get("ok") and p["tainacan_item_id"]:                                           # 21/10: o público vê na hora (renova o cache do site)
+            try:
+                from . import wp as _wpmod
+                publicador.renovar_no_site(_wpmod.WP(), p["tainacan_item_id"], codigo, projeto=True)
+            except Exception:  # noqa: BLE001
+                pass
         con = connect()
         try:
             resultado = resultado_publicacao(con, codigo) if res.get("ok") else {}
@@ -151,7 +217,26 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
             con.commit()
         finally:
             con.close()
-        return {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado}
+        arq = None
+        if res.get("ok") and publicar_arquiteto_junto():           # 5) 21/10: a página do arquiteto, sem a qual o projeto não aparece no site
+            from . import fundo_site
+            c2 = connect()
+            try:
+                pg = fundo_site.pagina_arquiteto(c2, p["fundo_codigo"])
+            finally:
+                c2.close()
+            if not pg["publica"]:
+                _p(evento="arquiteto")
+                arq = fundo_site.mudar_pagina_arquiteto(p["fundo_codigo"], True, u["email"])
+                if arq.get("ok"):
+                    feitos.append("arquiteto")
+        out = {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado}
+        if arq is not None:
+            out["arquiteto"] = arq
+            if not arq.get("ok"):
+                out["aviso_arquiteto"] = ("O projeto foi publicado, mas a página do arquiteto não: " + (arq.get("erro") or "o site não respondeu")
+                                          + ". Sem ela o projeto não aparece no site: publique-a no quadro “Página do arquiteto no site”, no fundo.")
+        return out
     finally:
         with _trava:
             _em_andamento.discard(codigo)

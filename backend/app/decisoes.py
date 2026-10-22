@@ -223,6 +223,29 @@ def abrir_divergencias(con, projeto_codigo: str, pacote: dict, lote_id: int | No
     return abertas
 
 
+def fechar_divergencias_respondidas(con, projeto_codigo: str, ator: str) -> list[int]:
+    """Exaustão CAMP-106 (decisões iguais): a decisão 'divergencia' (o CAMP Vision leu ano/cidade/cliente diferente do cadastro) e a pergunta da
+    aba Dados ("Usar 1978 no projeto") são a MESMA pergunta. Quando o cadastro passa a dizer o que o CAMP Vision leu, a decisão já foi respondida:
+    fecha sozinha, com registro, em vez de ficar esperando de novo na fila. NÃO faz commit."""
+    p = con.execute("SELECT * FROM projeto WHERE codigo=?", (projeto_codigo,)).fetchone()
+    if not p:
+        return []
+    fechadas = []
+    for d in con.execute("SELECT id, contexto FROM decisao WHERE situacao='pendente' AND tipo='divergencia' AND contexto LIKE ?", (f'%"{projeto_codigo}"%',)).fetchall():
+        ctx = contexto(d)
+        campo = ctx.get("campo")
+        if ctx.get("projeto_codigo") != projeto_codigo or campo not in CAMPOS_DIVERGENCIA:
+            continue
+        atual = _norm_valor(campo, p[CAMPOS_DIVERGENCIA[campo]])
+        if atual and atual == _norm_valor(campo, ctx.get("valor_cv")):
+            con.execute("UPDATE decisao SET situacao='resolvida', escolha='escolher', escolha_valor=?, projeto_codigo=?, resolvida_em=datetime('now'), resolvida_por=? WHERE id=?",
+                        (str(p[CAMPOS_DIVERGENCIA[campo]]), projeto_codigo, ator, d["id"]))
+            _evento(con, "decisao", str(d["id"]), "decisao_resolvida", ator, {"acao": "escolher", "valor": p[CAMPOS_DIVERGENCIA[campo]],
+                                                                              "motivo": "o cadastro do projeto já diz o que o CAMP Vision leu"})
+            fechadas.append(d["id"])
+    return fechadas
+
+
 def _aplicar_divergencia(con, ctx: dict, valor: str | None, ator: str, did: int) -> dict:
     campo, proj = ctx.get("campo"), ctx.get("projeto_codigo")
     if campo not in CAMPOS_DIVERGENCIA:

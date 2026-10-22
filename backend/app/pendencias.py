@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 
 from .filas_fase import fase_da_lista
+from .publicacao import TRAVA_SQL
 
 _PREFIXO_PASTA = re.compile(r"^(?:lote\s+)?[A-Za-z]{1,3}\d{1,5}[_ -]+", re.I)
 
@@ -143,7 +144,7 @@ def contar_pendencias(con, *, com_listas: bool = False) -> dict:
         "publicando_parcial": sum(1 for l in publicar if l["publicar"]["estado"] == "parcial"),
         "travados_direitos": len(trav),
         "travados_projetos": sum(f["projetos"] for f in trav),
-        "erros_bloqueantes": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='bloqueia'"),
+        "erros_bloqueantes": q(f"SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND {TRAVA_SQL}"),   # 21/10 (4.1)
         "pedidos_aguardando": q("SELECT COUNT(*) FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento')"),
         "erros_abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')"),             # a aba "Abertos" de Erros
         "pedidos_abertos": q("SELECT COUNT(*) FROM solicitacao WHERE situacao NOT IN ('entregue','recusada')"),  # a aba "Abertas" de Solicitações
@@ -233,8 +234,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
 
     # 4) problemas que bloqueiam: erro bloqueante aberto e lote parado com erro no CAMP Vision
     linhas = []
-    for e in con.execute("""SELECT id, codigo, descricao, criado_em FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='bloqueia'
-                            ORDER BY criado_em"""):
+    for e in con.execute(f"""SELECT id, codigo, descricao, criado_em FROM erro WHERE situacao IN ('aberto','em_correcao') AND {TRAVA_SQL}
+                            ORDER BY criado_em"""):      # 21/10 (4.1): só o que trava um projeto; problema de folha deixa só a folha de fora
         no_ar = con.execute("SELECT 1 FROM projeto WHERE status_site='no_ar' AND (?=codigo OR ? LIKE codigo||'-%')", (e["codigo"], e["codigo"])).fetchone()
         linhas.append({"sev": "r", "titulo": e["descricao"], "codigo": e["codigo"],
                        "detalhe": " · ".join(p for p in ("o projeto está no site com este problema" if no_ar else "impede publicar", texto_espera(_horas_desde(e["criado_em"]))) if p),
@@ -368,7 +369,7 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
     for e in evs:
         cod = e["codigo"] or ""
         proj = "-".join(cod.split("-")[:2]) if e["entidade"] == "item" and cod.count("-") >= 2 else cod
-        if e["entidade"] == "item" and e["tipo"] in ("revisao", "site_item_criado", "giro", "editado", "folha_retida", "folha_liberada"):
+        if e["entidade"] == "item" and e["tipo"] in ("revisao", "site_item_criado", "giro", "editado", "folha_retida", "folha_liberada", "ajuste_imagem"):
             chave = ("item", e["tipo"], e["ator"], proj)
         elif e["tipo"] in ("material_novo_pronto", "folhas_importadas_do_lote") and (e["ator"] or "").startswith("campvision"):
             chave = ("cv", proj.split("-")[0])
@@ -389,7 +390,7 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
         projs = sorted({ev["codigo"] for ev in g["evs"]})
         if chave[0] == "item":
             o_que = {"revisao": "conferiu", "site_item_criado": "enviou ao site (escondida)", "giro": "girou", "editado": "editou",
-                     "folha_retida": "reteve", "folha_liberada": "liberou"}[chave[1]]
+                     "folha_retida": "reteve", "folha_liberada": "liberou", "ajuste_imagem": "recortou/alinhou"}[chave[1]]
             if chave[1] == "site_item_criado":
                 texto = f"{quem} enviou {n} {'folha' if n == 1 else 'folhas'} de {{codigo}} ao site (ainda escondidas)"
             else:

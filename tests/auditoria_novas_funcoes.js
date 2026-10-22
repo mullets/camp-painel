@@ -1,5 +1,7 @@
 // Auditoria das funções novas (busca global, lote, recentes/favoritos, ajuda, validação, dirty-state, export,
 // estações, analytics, permissões). Uso: bash tests/rodar_auditoria.sh  (sobe servidor + banco sintético)
+// Duração: ~14 min sozinho (mais de 500 esperas fixas, ~12 min somadas); com outros testes em paralelo, mais. Não é travamento:
+// quem roda com limite de tempo use pelo menos 25 min (um limite de 10 min corta o teste no meio, rc=124).
 const {JSDOM}=require('jsdom');
 const BASE='http://127.0.0.1:8765'; const problems=[]; const okl=[];
 function jar(){ const c={}; return {c, async f(url,opt={}){ if(url.startsWith('/')) url=BASE+url;
@@ -167,14 +169,14 @@ w.route_to('item/'+IT3); await sleep(900); w.route_to('item/'+IT); await sleep(9
 await w.showProjeto('F001-P0001','itens'); await sleep(1000);
 const cardsSem=[...d.querySelectorAll('#pd .thumb')]; chk(cardsSem.length>=2,'projeto sem imagens: cards não apareceram ('+cardsSem.length+')');
 chk(cardsSem.every(c=>c.querySelector('.sem-imagem')),'folha sem imagem deveria mostrar a caixa "Sem imagem"');
-chk(!d.querySelector('#pd .thumb svg'),'PLANTA FALSA: a grade ainda desenha SVG inventado no lugar da imagem');
+chk(![...d.querySelectorAll('#pd .thumb svg')].some(s=>!s.closest('.sem-imagem .si-ic')),'PLANTA FALSA: a grade ainda desenha SVG inventado no lugar da imagem');
 chk(/Sem imagem|Sem prévia/.test(txt('#pd .sem-imagem')),'texto "Sem prévia" ausente');
 await w.showProjeto('F026-P0001','itens'); await sleep(1000);
 chk(d.querySelectorAll('#pd .thumb img.img-real').length>=6,'folhas com miniatura do site deveriam mostrar a imagem real');
 chk(!d.querySelector('#pd .thumb svg'),'projeto com imagens também não pode ter SVG sintético');
 okl.push('grade do projeto: folhas sem imagem mostram "Sem imagem"; com miniatura mostram a imagem real; zero SVG inventado');
 w.route_to('item/F001-P0001-1961-S01-D00001'); await sleep(1000);
-chk(!!d.querySelector('#idet .sem-imagem')&&!d.querySelector('#idet .viewer svg'),'folha sem imagem: deveria mostrar aviso, não desenho');
+chk(!!d.querySelector('#idet .sem-imagem')&&![...d.querySelectorAll('#idet .viewer svg')].some(s=>!s.closest('.sem-imagem .si-ic')),'folha sem imagem: deveria mostrar aviso, não desenho (o ícone do aviso não conta)');
 w.route_to('item/F001-P0001-1961-S01-D00002'); await sleep(1000);
 chk(!!d.querySelector('#idet .sem-imagem'),'documento TIFF não é imagem de navegador: deveria dizer "Sem imagem"');
 w.route_to('item/'+IT3); await sleep(1000);
@@ -320,7 +322,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/Revisão do lote/.test(txt('#pj-revisao'))&&/aguardando importação/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="importar"]'),'o projeto com pacote e sem folhas importadas deveria oferecer "Importar as folhas do lote": "'+txt('#pj-revisao').slice(0,120)+'"');
   chk(/o CAMP Vision gravou 3 documento/.test(txt('#pj-revisao')),'deveria dizer quantos documentos o CAMP Vision gravou');
   d.querySelector('#pj-revisao [data-rev-lote="importar"]').click(); await sleep(3800);
-  chk(/3 folhas importadas/.test(txt('[data-aviso="lote"]'))&&/Próximo passo: conferir/.test(txt('[data-aviso="lote"]'))&&!!d.querySelector('[data-aviso="lote"] [data-pp="conferir"]'),'[H4] depois de importar, o resultado deveria ficar NA TELA com o próximo passo e o botão "Começar a conferir": "'+txt('[data-aviso="lote"]')+'"');
+  chk(/3 folhas novas/.test(txt('[data-aviso="lote"]'))&&/Próximo passo: conferir/.test(txt('[data-aviso="lote"]'))&&!!d.querySelector('[data-aviso="lote"] [data-pp="conferir"]'),'[H4] depois de importar, o resultado deveria ficar NA TELA com o próximo passo e o botão "Começar a conferir": "'+txt('[data-aviso="lote"]')+'"');
   const dt=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b;
   chk(dt.itens.length===3&&dt.itens.every(i=>i.revisao==='pendente'&&i.lote_id===loteId),'importar deveria criar 3 folhas pendentes ligadas ao lote: '+dt.itens.length);
   chk(/3 a conferir/.test(txt('#pj-revisao'))&&/Aprovar todas \(3\)/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="todas"]')&&!d.querySelector('#pj-revisao [data-rev-lote="aprovar"]'),'depois de importar: 3 a conferir e UM botão principal "Aprovar todas (3)" (o "Aprovar o lote" só aparece quando não restar nenhuma): "'+txt('#pj-revisao').slice(0,200)+'"');
@@ -349,7 +351,12 @@ w.route_to('estacoes'); await sleep(2800);
   const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
   chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar correção" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
   w.closeDrawer(true); d.querySelector('#pj-revisao [data-rev-lote="todas"]').click(); await sleep(3600);
-  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'"Aprovar todas" deveria conferir a folha que restava');
+  // CAMP-094 (20/10): "Aprovar todas" não confere a folha com aviso (aqui a duplicata D2): ela fica para conferir uma a uma
+  { const pend=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.filter(i=>i.revisao==='pendente');
+    chk(pend.length===1&&!!pend[0].duplicata_de,'"Aprovar todas" deveria deixar só a folha com aviso (a duplicata) para conferir: '+JSON.stringify(pend.map(i=>i.codigo)));
+    for(const i of pend) await J(adm,'/api/itens/'+encodeURIComponent(i.codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado:'conferida'})});
+    await w.showProjeto(pc); await sleep(3500); }
+  chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'conferida a que ficou, não resta folha pendente');
   chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/pronta para aprovar/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar: "'+txt('#pj-revisao').slice(0,160)+'"');
   d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').click(); await sleep(3600);
   const ap=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0];
@@ -402,7 +409,8 @@ w.route_to('estacoes'); await sleep(2800);
   const lq=lin('F026-P0001'); chk(!!lq&&!!lq.querySelector('[data-fila-acao="importar"]')&&/Importar/.test(lq.textContent),'uma lista em revisão sem folhas importadas (F026-P0001) deveria oferecer "Importar folhas": "'+(lq&&lq.textContent.slice(100,260))+'"');
   l9001.querySelector('[data-fila-ir="revisao"]').click(); await sleep(3400);
   chk(/projeto\/F003-P9001/.test(w.location.hash)&&!!d.getElementById('pj-revisao')&&/Revisão do lote/.test(txt('#pj-revisao')),'"Conferir folhas" deveria levar à página do projeto com a Revisão do lote: '+w.location.hash);
-  const lid=(await J(adm,'/api/projetos/F003-P9001/revisao')).b.lotes[0].id; await J(adm,'/api/lotes/'+lid+'/conferir-todas',{method:'POST'});
+  const lid=(await J(adm,'/api/projetos/F003-P9001/revisao')).b.lotes[0].id; const tod=(await J(adm,'/api/lotes/'+lid+'/conferir-todas',{method:'POST'})).b;
+  for(const f of (tod&&tod.ficaram)||[]) await J(adm,'/api/itens/'+encodeURIComponent(f.codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado:'conferida'})});   // CAMP-094: as com aviso ficam para conferir uma a uma
   w.route_to('filas'); await sleep(2800); l9001=lin('F003-P9001');
   chk(/Falta aprovar o lote|Todas as/.test(l9001.textContent),'ao VOLTAR para a Fila a tela deve mostrar o dado de agora (e não o de quando você entrou): "'+l9001.textContent.slice(100,260)+'"');
   chk(/Falta aprovar o lote/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-acao="aprovar"]'),'com tudo conferido a lista deveria pedir "Aprovar lote": "'+l9001.textContent.slice(0,120)+'"');
@@ -425,7 +433,7 @@ w.route_to('estacoes'); await sleep(2800);
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
   chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
-  chk(!/Fonte visual|reconhecidos no site/.test(txt('.project-source'))&&/folhas no painel/.test(txt('.project-source')),'a linha de números do projeto deveria falar de folhas no painel e no site, sem jargão: "'+txt('.project-source')+'"');
+  chk(!/Fonte visual|reconhecidos no site/.test(txt('.folhas-bar'))&&/\d+ no site/.test(txt('.folhas-bar .fb-cont'))&&!d.querySelector('.project-source'),'(19/10) os números do projeto (conferidas e no site) ficam na barra das folhas, sem jargão e sem o rodapé solto: "'+txt('.folhas-bar .fb-cont')+'"');
   d.querySelector('#pj-proximo [data-pp="conferir"]').click(); await sleep(2000);
   chk(/Revisar folha/.test(txt('#d-title')),'"Começar a conferir" deveria abrir a primeira folha pendente'); w.closeDrawer(true);
   w.route_to('projeto/F026-P0001'); await sleep(3600);
@@ -723,7 +731,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- [#156] "Mais ⋯" na ficha do projeto: mesclar, mover folhas, mover lote, descartar lote, despublicar ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500); const b=d.querySelector('[data-pj-mais]');
   chk(!!b,'admin deveria ver "Mais ⋯" na ficha do projeto');
-  if(b){ b.click(); await sleep(300); chk(/Mais ações/.test(txt('#d-title'))&&d.querySelectorAll('#d-body .mais-acao').length===6,'"Mais ⋯" deveria listar as 6 ações (com Mudar o código): '+d.querySelectorAll('#d-body .mais-acao').length);
+  if(b){ b.click(); await sleep(300); chk(/Mais ações/.test(txt('#d-title'))&&d.querySelectorAll('#d-body .mais-acao').length===7&&!!d.querySelector('#d-body [data-mais="descartar_projeto"]'),'"Mais ⋯" deveria listar as 7 ações (com Mudar o código e, desde f0e922c, Descartar este projeto): '+d.querySelectorAll('#d-body .mais-acao').length);
     d.querySelector('[data-mais="mesclar"]').click(); await sleep(300);
     chk(d.getElementById('mx-go').disabled&&/mudam de código/.test(txt('#d-body')),'"Mesclar" deveria explicar a consequência e só habilitar depois de marcar "Entendi"');
     const fetchOrig=w.fetch; let req=null; const R=j=>Promise.resolve({ok:true,status:200,statusText:'OK',json:async()=>j});
@@ -802,7 +810,7 @@ w.route_to('estacoes'); await sleep(2800);
 { w.PUB_G=w.PUB_G||{}; const PP={lote:{id:1,fase:'publicar',etapa:'revisao',itens_total:2,itens_pendentes:0,itens_conferidos:2},pode_operar:true,pode_agir:true};
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'direitos',bloqueia:true,ok:false,texto:'Direitos do fundo F900 autorizados',acao:{tipo:'direitos',rotulo:'Definir direitos do fundo',alvo:'F900'}}]};
   let h=w.proximoPassoHTML(PP,'F900-P0001');
-  chk(/Definir direitos do fundo/.test(h)&&/falta resolver/i.test(h)&&!/data-pp="publicar"/.test(h),'com direitos faltando, o Próximo passo NÃO deveria oferecer "Publicar": deveria dizer o que falta e dar o botão que resolve');
+  chk(/Definir direitos do fundo/.test(h)&&/faltam os direitos do fundo F900/i.test(h)&&!/data-pp="publicar"/.test(h),'com direitos faltando, o Próximo passo NÃO deveria oferecer "Publicar": deveria dizer o que falta e dar o botão que resolve');
   w.PUB_G['F900-P0001']={estado:'rascunho',pode_agir:true,condicoes:[{id:'autorizado',bloqueia:true,ok:false,texto:'Projeto autorizado para publicação'}]};
   h=w.proximoPassoHTML(PP,'F900-P0001'); chk(/data-pp="publicar"/.test(h),'sem bloqueio de pessoa, o Próximo passo deveria oferecer "Publicar" (a guiada autoriza sozinha)');
   h=w.proximoPassoSemLoteHTML('F900-P0001',{estado:'rascunho',pode_agir:true,condicoes:[]}); chk(/Pronto para publicar/.test(h)&&/data-pp="publicar"/.test(h),'projeto sem lote e sem pendência deveria mostrar "Pronto para publicar" com o botão');
@@ -1219,7 +1227,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   okl.push('B4: autoria e papel no projeto'); }
 // ---------- [B1] texto do fundo no site: procedência, entrada, acesso e reprodução ----------
 { w.route_to('fundo/F002'); await sleep(2500); const det=d.getElementById('fd-site'); chk(!!det,'[B1] a descrição do fundo deveria ter "Como aparece no site"');
-  if(det){ await w.carregarDescricaoSite(det); await sleep(300); chk(/Procedência:/.test(txt('#fd-site .fd-site-txt'))&&/Condições de acesso e reprodução:/.test(txt('#fd-site .fd-site-txt')),'[B1] a prévia deveria mostrar procedência e condições de reprodução: '+txt('#fd-site').slice(0,160)); }
+  if(det){ await w.carregarDescricaoSite(det); await sleep(300); chk((/Procedência:/.test(txt('#fd-site .fd-site-txt'))||/campo vazio\): .*Procedência/.test(txt('#fd-site')))&&(/Condições de acesso e reprodução:/.test(txt('#fd-site .fd-site-txt'))||/campo vazio\): .*Condições de reprodução/.test(txt('#fd-site'))),'[B1] a prévia deveria mostrar procedência e condições de reprodução (ou, vazias, dizer que faltam: CAMP-037 não manda mais o texto padrão): '+txt('#fd-site').slice(0,160)); }
   await w.editarFundo('F002'); await sleep(600); chk(!!d.getElementById('ef-mostrar_doador'),'[B1] editar o fundo deveria perguntar se o nome de quem entregou pode aparecer no site'); w.closeDrawer(true);
   okl.push('B1: texto arquivístico do fundo no site, com prévia'); w.route_to('painel'); }
 // ---------- [B7] "Procurar projetos duplicados" no fundo ----------
@@ -1472,7 +1480,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   const er=(await J(adm,'/api/erros?situacao=todos')).b.find(x=>x.descricao==='Teste H16: imagem espelhada');
   chk(er&&er.gravidade==='aviso'&&er.codigo==='F026-P0001','[H16] o problema deveria ser criado com a gravidade escolhida: '+JSON.stringify(er&&{g:er.gravidade,c:er.codigo}));
   w.route_to('erros'); await sleep(1500);
-  chk(/Há quanto tempo/.test(txt('#v-erros thead'))&&/hoje|aberto há/.test(txt('#v-erros tbody'))&&!d.querySelector('#v-erros tbody button'),'[H16] a lista deveria ter "Há quanto tempo" e nenhum botão na linha');
+  chk(/Situação/.test(txt('#v-erros thead'))&&/hoje|aberto há/.test(txt('#v-erros tbody'))&&[...d.querySelectorAll('#v-erros tbody tr[data-abrir]')].every(r=>r.querySelectorAll('button').length<=1),'[H16] a lista deveria dizer há quanto tempo o problema está aberto e ter no máximo UM botão por linha (o que resolve; 19/10)');
   if(er){ await w.abrirErro(er.id); await sleep(300); d.querySelector('[data-err-res="corrigido"]').click(); await sleep(200);
     chk(/Escreva em uma frase/.test(txt('#ee-res-err')),'[H16] "Marcar como corrigido" sem a frase deveria pedir a explicação');
     d.getElementById('ee-res').value='Imagem girada e reenviada'; d.querySelector('[data-err-res="corrigido"]').click(); await sleep(900);
@@ -1566,7 +1574,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
     const soltas=[...v.querySelectorAll('tbody tr[onclick]')].filter(t=>!t.dataset.abrir&&!t.dataset.nav).length; if(soltas) ruins.push(r+': '+soltas+' linha(s) clicável(is) sem data-abrir'); }
   chk(!ruins.length,'[#94] padrão de tela: '+ruins.join(' | '));
   w.route_to('erros'); await sleep(1500);
-  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===4&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Em correção · Resolvidos · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
+  chk(d.querySelectorAll('#err-abas [data-err-sit]').length===5&&/Abertos\s*\d+/.test(txt('#err-abas'))&&!d.querySelector('#v-erros .hdr select'),'[#94] Erros deveria ter as abas Abertos · Em correção · Resolvidos · Não era problema · Todos com contagem (e não o select): "'+txt('#err-abas')+'"');
   d.querySelector('#err-abas [data-err-sit="todos"]').click(); await sleep(1200);
   chk(d.querySelector('#err-abas [data-err-sit="todos"]').getAttribute('aria-pressed')==='true','[#94] clicar em "Todos" deveria ligar a aba'); w.carregarErros('abertos'); await sleep(600);
   w.route_to('fundo/F003'); await sleep(2500); const mm=[...d.querySelectorAll('#v-fundo .mais-menu')].find(x=>/Mais ⋯/.test((x.querySelector('summary')||{}).textContent||''));
@@ -1578,8 +1586,9 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
 { w.route_to('projeto/F003-P9001'); await sleep(3500);
   const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
   chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&!d.querySelector('#pd .tabs ~ * #pj-proximo'),'[#95] o Próximo passo deveria vir logo abaixo do título, antes dos requisitos e fora das abas');
-  const azuis=[...d.querySelectorAll('#pd .btn.pri')].map(b=>b.textContent.trim());
-  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&pp.contains(d.querySelector('#pd .btn.pri')),'[#95] deveria haver UM só botão azul na página, o do Próximo passo: '+JSON.stringify(azuis));
+  // 19/10 (proposta B): o passo a passo fica escondido (só nas gavetas); o botão azul visível é o do cartão mais urgente
+  const azuisB=[...d.querySelectorAll('#pd .btn.pri')].filter(b=>!b.closest('#pj-proximo .pp')),azuis=azuisB.map(b=>b.textContent.trim());
+  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&!!azuisB[0].closest('#pj-cards'),'[#95] deveria haver UM só botão azul visível na página, o do cartão mais urgente: '+JSON.stringify(azuis));
   chk(d.getElementById('pd-pub-det')&&!d.getElementById('pd-pub-det').open&&/\d+ de \d+ ok/.test(txt('#pd-pub-resumo'))&&/falta:/.test(txt('#pd-pub-resumo')),'[#95] os requisitos deveriam ficar recolhidos, com o resumo "N de M ok · falta: …": "'+txt('#pd-pub-resumo')+'"');
   chk(/F003 Burle Marx/.test(txt('#gcrumb'))&&/F003-P9001 · Projeto de teste/.test(txt('#gcrumb'))&&!/F003-P9001 · F003-P9001/.test(txt('#gcrumb')),'[#95] a trilha não deveria repetir o código: "'+txt('#gcrumb')+'"');
   chk(/Projeto de teste/.test(txt('#where'))&&d.querySelectorAll('#where button').length===1,'[#95] o topo deveria ter um Voltar e o nome do projeto: "'+txt('#where')+'"');
@@ -1622,5 +1631,5 @@ w.location.hash='#projeto/F999-P9999'; await sleep(1000); chk(!/undefined|NaN/.t
 w.location.hash='#rota-que-nao-existe'; await sleep(600); okl.push('rota inválida: "'+txt('.content.on').slice(0,60)+'"');
 console.log('\n=== OK ==='); okl.forEach(x=>console.log(' ✓',x));
 console.log('\n=== PROBLEMAS ('+[...new Set(problems)].length+') ==='); [...new Set(problems)].forEach(x=>console.log(' ✗',x));
-process.exit(0);
+process.exit(problems.length?1:0);   // antes saía 0 mesmo com problemas: quem roda em lote não via a falha
 })().catch(e=>{console.log('FALHA DO TESTE',e);process.exit(1)});

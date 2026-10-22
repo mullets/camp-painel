@@ -25,6 +25,8 @@ def ler_incremental(con, raiz: Path | str) -> dict:
     if not pasta.is_dir():
         return {"linhas": 0, "arquivos": 0}
     for arq in sorted(pasta.glob("*.jsonl")):
+        if con.in_transaction:      # 19/10: nunca ler o QNAP (rede, lento) com uma escrita aberta: o banco ficava preso e as
+            con.commit()            # conferências/heartbeats esperavam até 30 s. Cada arquivo grava e confirma na hora.
         try:
             tamanho = arq.stat().st_size
         except OSError:

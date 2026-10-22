@@ -183,7 +183,7 @@ def _sitekit_diagnostico(wp) -> dict:
         out["wp_usuario_id"] = me.get("id")
         out["wp_roles"] = me.get("roles") or []
     except Exception as e:
-        out["mensagem"] = f"Falha ao autenticar no WordPress: {str(e)[:220]}"
+        out["mensagem"] = f"Falha ao autenticar no site: {str(e)[:220]}"
         return out
 
     try:
@@ -267,10 +267,10 @@ def analytics(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict
 
 # O Google devolve 403 "não concedeu todas as permissões durante a configuração" quando, ao conectar o Site Kit,
 # a caixa de ler os dados do Analytics ficou desmarcada na tela de consentimento.
-ACAO_PERMISSOES_SITEKIT = ('Entre no wp-admin como "{u}" → Site Kit → Configurações → Serviços conectados → Analytics → Editar '
-                           '(ou "Conceder permissão") e, na tela do Google, marque TODAS as caixas, principalmente '
-                           '"Ver e baixar seus dados do Google Analytics". Depois clique em Diagnosticar de novo. '
-                           'Alternativa sem Site Kit: preencher ga4.propriedade e ga4.conta_servico em Configurações.')
+# 21/10 (Rafa): quem usa o painel não usa o WordPress. O que só se resolve no site vira "avise quem cuida do site", com o detalhe para essa pessoa.
+ACAO_PERMISSOES_SITEKIT = ('Pelo painel: preencha ga4.propriedade e ga4.conta_servico em Configurações (não depende do site). '
+                           'Ou avise quem cuida do site: o Google do Site Kit (usuário "{u}") precisa da permissão '
+                           '"Ver e baixar seus dados do Google Analytics". Depois clique em Diagnosticar de novo.')
 
 
 def _analytics_calcular() -> dict:
@@ -450,14 +450,14 @@ def _analytics_calcular() -> dict:
         elif diag.get("sitekit_autenticado") is False:
             out["erro_codigo"] = "sitekit_usuario_nao_conectado"
             out["acao"] = (
-                f'Entre no WordPress como "{usuario}" e conecte esse usuário ao Site Kit/Google.'
-                if usuario else "Conecte ao Site Kit o mesmo usuário WordPress usado pelo painel."
+                f'Avise quem cuida do site: o usuário "{usuario}" do painel precisa estar conectado ao Site Kit/Google. Ou use ga4.propriedade e ga4.conta_servico em Configurações.'
+                if usuario else "Avise quem cuida do site: o usuário do painel precisa estar conectado ao Site Kit/Google. Ou use ga4.propriedade e ga4.conta_servico em Configurações."
             )
         elif diag.get("sitekit_reautenticar") or diag.get("sitekit_escopos_faltantes"):
             out["erro_codigo"] = "sitekit_reautenticar"
             out["acao"] = (
-                f'Reautentique o Google no Site Kit logado como "{usuario}" e conceda os escopos solicitados.'
-                if usuario else "Reautentique o Google no Site Kit e conceda os escopos solicitados."
+                f'Avise quem cuida do site: o Google do Site Kit (usuário "{usuario}") precisa ser reconectado com as permissões pedidas.'
+                if usuario else "Avise quem cuida do site: o Google do Site Kit precisa ser reconectado com as permissões pedidas."
             )
         elif "concedeu todas as permiss" in low or "granted all" in low or "insufficient scopes" in low:
             out["erro_codigo"] = "sitekit_permissoes_google"
@@ -470,7 +470,7 @@ def _analytics_calcular() -> dict:
             )
         elif "module must be active" in low or "analytics" in low and "active" in low:
             out["erro_codigo"] = "analytics_modulo_inativo"
-            out["acao"] = "Ative e configure o Google Analytics no Site Kit."
+            out["acao"] = "Avise quem cuida do site: o Google Analytics não está ativo no Site Kit. Ou use ga4.propriedade e ga4.conta_servico em Configurações."
         else:
             out["erro_codigo"] = "indisponivel"
             out["acao"] = "Use o diagnóstico do Analytics para ver a resposta exata do WordPress/Site Kit."
@@ -683,7 +683,33 @@ def _classificar_status(st, con=None) -> tuple[str, bool]:
     return "revisao", False
 
 
+def _anotar_lote_teste(con, pasta: Path, codigo: str | None) -> None:
+    """CAMP-114: o lote de teste continua IGNORADO (não vira fila, não importa folhas), mas o projeto que a estação reservou para ele fica
+    sabendo: anota no histórico "o CAMP Vision mandou lote de teste desta pasta" (uma vez por pasta). Enquanto o projeto não tiver nenhuma
+    folha, a publicação trata como lote de teste (não vai ao site) e a página diz isso; um lote de verdade depois volta ao normal."""
+    cod = str(codigo or "").strip().upper()
+    if not re.fullmatch(r"F\d{3}-P\d{4}", cod) or not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (cod,)).fetchone():
+        return
+    det = {"pasta": str(pasta)}
+    if con.execute("SELECT 1 FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='lote_teste_ignorado' AND detalhe=?",
+                   (cod, json.dumps(det, ensure_ascii=False))).fetchone():
+        return
+    _evento(con, "projeto", cod, "lote_teste_ignorado", "campvision", det)
+
+
 def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = None) -> dict:
+    """_ler_pasta_bruto + CAMP-122 (P1): "erro" do CAMP Vision que é só aviso [Minor] do exiftool não para o lote (avisos_cv.curar_lote)."""
+    r = _ler_pasta_bruto(con, pasta, entrada, esperado)
+    if r.get("etapa") == "erro" and r.get("acao") not in ("entrada", "ignorada"):
+        from .avisos_cv import curar_lote
+        l = con.execute("SELECT id FROM lista_processamento WHERE pasta_qnap=? AND descartado_em IS NULL ORDER BY id DESC LIMIT 1", (str(pasta),)).fetchone()
+        nova = curar_lote(con, l["id"]) if l else None
+        if nova:
+            r["etapa"], r["erro_so_avisos"] = nova, True
+    return r
+
+
+def _ler_pasta_bruto(con, pasta: Path, entrada: Path | None, esperado: str | None = None) -> dict:
     """Lê UMA pasta de lote (info_projeto.json, status.json e as imagens) e cria ou atualiza a lista dela.
 
     Usada pela varredura completa e pelo aviso do CAMP Vision. Devolve {"acao": "entrada" | "ignorada" | "nova" | "atualizada" | "igual", ...}.
@@ -703,8 +729,16 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         status = json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() and status_path.stat().st_size else {}
     except Exception as e:  # noqa: BLE001
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": f"manifesto inválido: {e}"}
+    sem_manifesto = False
     if not info_path.exists() and not status_path.exists():
-        return {"acao": "ignorada", "pasta": str(pasta), "motivo": "sem info_projeto.json nem status.json nesta pasta"}
+        # Aviso do CAMP Vision (`esperado` = código que ele disse) de pasta que TEM o pacote do projeto mas não tem info_projeto.json/status.json
+        # (pasta reorganizada por --reidentificar ou reconstruída: a releitura de F026-P0009 foi lida e o painel recusava o aviso, e nada mudava na tela).
+        # Vale só quando o pacote é do MESMO projeto que o aviso disse; a varredura do QNAP (sem `esperado`) continua ignorando pasta sem manifesto.
+        pacote_cod = _codigo_do_pacote(pasta)
+        if esperado and pacote_cod and pacote_cod.upper() == esperado.strip().upper():
+            info, status, sem_manifesto = {"codigo": pacote_cod}, {"status": "pronto"}, True
+        else:
+            return {"acao": "ignorada", "pasta": str(pasta), "motivo": "sem info_projeto.json nem status.json nesta pasta"}
 
     nome_teste = pasta.name.lower() in ("asd", "sei la")
     if nome_teste:
@@ -712,6 +746,7 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
         legado.registrar_uso("nomes_de_teste", pasta.name, con)
         nome_teste = legado.ligado(con, "nomes_de_teste")          # CAMP-024: desligado = só "teste": true (ou a pasta "teste") vale
     if info.get("teste") or pasta.name.lower() == "teste" or nome_teste:
+        _anotar_lote_teste(con, pasta, info.get("codigo") or esperado)
         return {"acao": "ignorada", "pasta": str(pasta), "motivo": "lote de teste"}
     from .similaridade import normalizar as _norm_sim
     if re.match(r"^\d+ ?arquivo arquivistico", _norm_sim(pasta.name) or ""):   # "01 - Arquivo Arquivístico (TIFF)" é parte do lote da pasta de cima
@@ -748,6 +783,8 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     st = status.get("status") if isinstance(status, dict) else None
     etapa_alvo, conhecido = _classificar_status(st, con)
     aviso = None if conhecido else f"status desconhecido '{st}': tratado como pronto"
+    if sem_manifesto:
+        aviso = ((aviso + "; ") if aviso else "") + "a pasta não tem info_projeto.json nem status.json: lida pelo pacote do CAMP Vision"
     if leitura_parcial:
         aviso = ((aviso + "; ") if aviso else "") + "a pasta demorou para ser lida: a contagem de folhas pode estar incompleta"
     nome = info.get("nome") or info.get("titulo") or pasta.name
@@ -765,9 +802,27 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     saida = {"pasta": str(pasta), "codigo": cod, "etapa": etapa_alvo, "folhas": n_arq, "aviso": aviso}
 
     ex = con.execute(
-        "SELECT id, etapa, folhas_encontradas FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1",
+        "SELECT id, nome, etapa, folhas_encontradas, aprovado_em, resultado FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1",
         (str(pasta),),
     ).fetchone()
+
+    # Lote JÁ fechado (aprovado, em rascunho ou publicado) e o CAMP Vision trouxe folhas que o painel ainda não tem: é MATERIAL NOVO do mesmo
+    # projeto (a pasta do projeto recebe material várias vezes). Vira um lote novo em revisão, sem tocar no que já está fechado.
+    if ex and etapa_alvo == "revisao" and (ex["etapa"] in ("publicado", "rascunho") or ex["aprovado_em"]):
+        novos = _documentos_novos(con, pasta, cod, ex["id"])
+        if novos:
+            return _criar_lote_complemento(con, pasta, cod, nome, ex, novos, contexto, status, saida)
+
+    ex_res: dict = {}
+    if ex:
+        try:
+            ex_res = json.loads(ex["resultado"] or "{}") or {}
+        except ValueError:
+            ex_res = {}
+    if ex_res.get("complemento"):                          # lote de complemento: a marca e a contagem são DELE, não da pasta inteira
+        contexto.update({k: ex_res[k] for k in ("complemento", "lote_cv", "lote_origem", "novos") if k in ex_res})
+        n_arq = ex["folhas_encontradas"] or 0
+        saida["folhas"] = n_arq
 
     if ex:
         if ex["etapa"] not in ("publicado", "rascunho") and ex["etapa"] != etapa_alvo:   # nunca regride lote já publicado/em rascunho
@@ -818,6 +873,51 @@ def _ler_pasta(con, pasta: Path, entrada: Path | None, esperado: str | None = No
     return {**saida, "acao": "nova"}
 
 
+def _codigo_do_pacote(pasta: Path) -> str | None:
+    """Código do projeto que o pacote do CAMP Vision diz (None se não há pacote ou ele está ilegível)."""
+    from .importador_lote import ler_pacote
+    try:
+        return str(((ler_pacote(pasta) or {}).get("projeto_codigo")) or "") or None
+    except HTTPException:
+        return None
+
+
+def _documentos_novos(con, pasta: Path, cod: str, lote_id: int) -> list[str]:
+    """Códigos que o pacote do CAMP Vision traz para o projeto e o painel ainda NÃO tem como folha.
+    Não conta a folha que espera uma decisão de "lote colide" (ela não existe de propósito) nem pacote ilegível/ausente."""
+    from .importador_lote import colisoes_decididas, ler_pacote
+    try:
+        pacote = ler_pacote(pasta)
+    except HTTPException:
+        return []
+    docs = (pacote or {}).get("documentos") if isinstance((pacote or {}).get("documentos"), list) else (pacote or {}).get("itens")
+    if not isinstance(docs, list) or (pacote or {}).get("projeto_codigo") != cod:
+        return []
+    tem = {r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (cod,))}
+    tem |= {r[0] for r in con.execute("SELECT codigo_anterior FROM item WHERE codigo_anterior LIKE ? AND projeto_codigo<>?", (cod + "-%", cod))}   # folha movida para outro projeto não volta
+    cobertas = set(colisoes_decididas(con, lote_id))
+    return [c for c in (str(d.get("codigo") or "") for d in docs if isinstance(d, dict)) if c.startswith(cod + "-") and c not in tem and c not in cobertas]
+
+
+def _criar_lote_complemento(con, pasta: Path, cod: str, nome: str, ex, novos: list[str], contexto: dict, status, saida: dict) -> dict:
+    """Cria o lote NOVO (em revisão) do material que chegou a um projeto cujo lote já está fechado. Mesma pasta, mesmo projeto."""
+    from datetime import date
+    quando = date.today().strftime("%d/%m")
+    nome_c = f"{nome} — complemento de {quando} ({len(novos)} folha{'s' if len(novos) != 1 else ''})"
+    lote_cv = status.get("lote_atual") if isinstance(status, dict) else None
+    ctx = {**contexto, "complemento": True, "lote_cv": lote_cv, "lote_origem": ex["id"], "novos": len(novos)}
+    lid = con.execute(
+        """INSERT INTO lista_processamento
+           (nome, projeto_codigo, pasta_qnap, folhas_esperadas, folhas_encontradas, etapa, status_json, resultado)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (nome_c, cod, str(pasta), None, len(novos), "revisao", (status or {}).get("status") if isinstance(status, dict) else "pronto_campvision2",
+         json.dumps(ctx, ensure_ascii=False)),
+    ).lastrowid
+    _evento(con, "lista", lid, EVENTO_POR_ETAPA["revisao"], "campvision2", {"pasta": str(pasta), "arquivos": len(novos), "complemento": True, "lote_origem": ex["id"]})
+    _evento(con, "projeto", cod, "material_novo_pronto", "campvision2", {"complemento": True, "lote_id": lid, "folhas": len(novos), "lote_origem": ex["id"], "lote_cv": lote_cv})
+    return {**saida, "acao": "complemento", "lote_id": lid, "folhas": len(novos), "novos": len(novos), "lote_origem": ex["id"], "nome_lote": nome_c}
+
+
 def ler_pasta_do_aviso(con, pasta_txt: str, codigo: str | None) -> dict:
     """Aviso do CAMP Vision: relê SÓ esta pasta. Recusa (400) a própria raiz e qualquer caminho que escape dela."""
     raiz = _qnap_prontos_raiz()
@@ -837,7 +937,7 @@ def ler_pasta_do_aviso(con, pasta_txt: str, codigo: str | None) -> dict:
     r = _ler_pasta(con, alvo, Path(entrada_txt) if entrada_txt else None, codigo)
     if r["acao"] == "entrada":
         return {"ok": False, "acao": "ignorada", "pasta": str(alvo), "motivo": "pasta da entrada bruta: o painel só lê o material final"}
-    r["ok"] = r["acao"] in ("nova", "atualizada", "igual")
+    r["ok"] = r["acao"] in ("nova", "atualizada", "igual", "complemento")
     if r["ok"] and r.get("etapa") == "revisao":
         r["importacao"] = _importar_se_tem_pacote(con, alvo)
     return r
@@ -849,8 +949,10 @@ def _importar_se_tem_pacote(con, pasta: Path) -> dict | None:
     lote aprovado não é tocado."""
     from .importador_lote import importar_lote, ler_pacote
     l = con.execute("SELECT id, aprovado_em FROM lista_processamento WHERE pasta_qnap=? ORDER BY id DESC LIMIT 1", (str(pasta),)).fetchone()
-    if not l or l["aprovado_em"]:
+    if not l:
         return None
+    if l["aprovado_em"]:
+        return {"ignorado": "lote aprovado: não há folha nova para importar"}   # o aviso diz o que aconteceu (antes ficava silencioso)
     try:
         if ler_pacote(pasta) is None:
             return None
@@ -916,7 +1018,7 @@ def _varrer_qnap() -> dict:
             avisos.append({"pasta": r["pasta"], "motivo": r["aviso"]})
         n_processando += r["etapa"] == "processando"
         n_erro += r["etapa"] == "erro"
-        novas += r["acao"] == "nova"
+        novas += r["acao"] in ("nova", "complemento")
         atualizadas += r["acao"] == "atualizada"
 
     con.commit()
@@ -1095,27 +1197,117 @@ ORIGENS_MANUAIS = ("operador", "revisao", "site")
 CATS = ("autoria_divergente", "projeto_errado", "duplicata", "orientacao", "espelhado", "codigo", "metadado", "credito", "arquivo_corrompido", "outro")
 
 
+class ErrosEmLote(BaseModel):
+    ids: list[int]
+    situacao: str
+    resolucao: str | None = None
+
+
+def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q) -> tuple[str, list]:
+    """A mesma regra para a lista e para a contagem das abas: situação, gravidade, tipo (categoria), origem, projeto (ou fundo) e busca."""
+    w, p = [], []
+    if situacao == "abertos": w.append("situacao IN ('aberto','em_correcao')")
+    elif situacao == "corrigido": w.append("situacao IN ('corrigido','fechado')")
+    elif situacao and situacao != "todos": w.append("situacao=?"); p.append(situacao)
+    for col, v, ok_ in (("gravidade", gravidade, GRAV), ("categoria", categoria, CATS), ("origem", origem, ("campvision",) + ORIGENS_MANUAIS)):
+        if v:
+            if v not in ok_: raise HTTPException(400, f"Filtro inválido: {v}")
+            w.append(f"{col}=?"); p.append(v)
+    if projeto:
+        pr = projeto.strip().upper()
+        w.append("(codigo=? OR codigo LIKE ? || '-%')"); p += [pr, pr]
+    if q and q.strip():
+        t = "%" + q.strip().lower() + "%"
+        w.append("(lower(codigo) LIKE ? OR lower(descricao) LIKE ? OR lower(coalesce(relatado_por,'')) LIKE ? OR lower(coalesce(resolucao,'')) LIKE ? "
+                 "OR EXISTS (SELECT 1 FROM projeto pj WHERE pj.codigo=substr(erro.codigo,1,10) AND lower(pj.titulo) LIKE ?))"); p += [t] * 5
+    return (" WHERE " + " AND ".join(w)) if w else "", p
+
+
+def _fechar_sozinhos(con) -> None:
+    """Antes de mostrar: fecha (com registro) o que se resolveu sozinho com certeza. Só banco, rápido; nunca o QNAP."""
+    from . import problemas
+    if problemas.fechar_resolvidos(con):
+        con.commit()
+
+
 @router.get("/erros/contagem")
-def contar_erros(u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """#94: a contagem das abas de situação (Abertos · Corrigidos · Todos), nas mesmas regras do filtro da lista."""
+def contar_erros(gravidade: str | None = None, categoria: str | None = None, origem: str | None = None, projeto: str | None = None, q: str | None = None,
+                 u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """#94: a contagem das abas de situação (Abertos · Em correção · Resolvidos · Todos), nas mesmas regras do filtro da lista.
+    19/10: respeita os filtros da tela e diz quantos abertos talvez já estejam resolvidos ('talvez')."""
+    from . import problemas
     con = connect()
     try:
-        q = lambda w: con.execute("SELECT COUNT(*) FROM erro" + w).fetchone()[0]
-        return {"abertos": q(" WHERE situacao IN ('aberto','em_correcao')"), "em_correcao": q(" WHERE situacao='em_correcao'"),
-                "corrigido": q(" WHERE situacao='corrigido'"), "todos": q("")}
+        _fechar_sozinhos(con)
+        out = {}
+        for k in ("abertos", "em_correcao", "corrigido", "ignorado", "todos"):
+            w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q)
+            out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
+        w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
+        out["talvez"] = sum(1 for x in problemas.enriquecer(con, con.execute("SELECT * FROM erro" + w, p).fetchall()) if x["resolvido_sozinho"])
+        return out
+    finally:
+        con.close()
+
+
+class LimpezaGeral(BaseModel):
+    simular: bool = True
+
+
+NOTA_LIMPEZA = "Limpeza geral — novo fluxo (21/10/2026): aviso automático do CAMP Vision ou da revisão, não é tarefa de ninguém."
+
+
+@router.post("/erros/limpeza-geral")
+def limpeza_geral(d: LimpezaGeral, u: dict = Depends(auth.exige("master"))) -> dict:
+    """21/10 ("publicar sem travar", 4.7): fecha de uma vez todos os problemas ABERTOS de origem automática (CAMP Vision e revisão).
+    Os relatados por pessoas (equipe, visitante do site) ficam. Nada é apagado: cada um fica fechado com a nota, e um evento
+    guarda a lista. simular=true (padrão) só conta, por tipo, e não grava nada."""
+    con = connect()
+    try:
+        filtro = "situacao IN ('aberto','em_correcao') AND origem IN ('campvision','revisao')"
+        por_tipo = [dict(r) for r in con.execute(f"SELECT categoria, gravidade, COUNT(*) AS n FROM erro WHERE {filtro} GROUP BY 1,2 ORDER BY n DESC")]
+        total = sum(x["n"] for x in por_tipo)
+        ficam = con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND origem NOT IN ('campvision','revisao')").fetchone()[0]
+        out = {"simulado": d.simular, "fecha": total, "por_tipo": por_tipo, "ficam_relatados_por_pessoas": ficam}
+        if d.simular or not total:
+            return out
+        ids = [r[0] for r in con.execute(f"SELECT id FROM erro WHERE {filtro}")]
+        con.execute(f"UPDATE erro SET situacao='fechado', resolvido_em=datetime('now'), resolucao=? WHERE {filtro}", (NOTA_LIMPEZA,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro','*','limpeza_geral',?,?)",
+                    (u["email"], json.dumps({"fechados": len(ids), "ids": ids, "por_tipo": por_tipo, "nota": NOTA_LIMPEZA}, ensure_ascii=False)))
+        con.commit()
+        return {**out, "fechados": len(ids)}
     finally:
         con.close()
 
 
 @router.get("/erros")
-def listar_erros(situacao: str | None = "abertos", u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+def listar_erros(situacao: str | None = "abertos", gravidade: str | None = None, categoria: str | None = None, origem: str | None = None,
+                 projeto: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    """Lista de Problemas. Cada linha traz também (campos novos, opcionais): projeto_codigo/projeto_titulo, o_que, fazer, acao,
+    acao_rotulo, lote_id, folha_existe e resolvido_sozinho ({seguro, motivo}) — ver problemas.py."""
+    from . import problemas
     con = connect()
-    sql = "SELECT * FROM erro"; p: list = []
-    if situacao == "abertos": sql += " WHERE situacao IN ('aberto','em_correcao')"
-    elif situacao and situacao != "todos": sql += " WHERE situacao=?"; p.append(situacao)
-    rows = con.execute(sql + " ORDER BY CASE gravidade WHEN 'bloqueia' THEN 0 WHEN 'corrigir' THEN 1 ELSE 2 END, criado_em DESC", p).fetchall()
-    con.close()
-    return [dict(r) for r in rows]
+    try:
+        _fechar_sozinhos(con)
+        w, p = _filtro_erros(situacao, gravidade, categoria, origem, projeto, q)
+        rows = con.execute("SELECT * FROM erro" + w + " ORDER BY CASE gravidade WHEN 'bloqueia' THEN 0 WHEN 'corrigir' THEN 1 ELSE 2 END, criado_em DESC, id DESC", p).fetchall()
+        return problemas.enriquecer(con, rows)
+    finally:
+        con.close()
+
+
+@router.get("/erros/{eid}")
+def ver_erro(eid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    from . import problemas
+    con = connect()
+    try:
+        e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Este problema não existe")
+        return problemas.enriquecer(con, [e])[0]
+    finally:
+        con.close()
 
 
 @router.post("/erros")
@@ -1154,31 +1346,64 @@ def criar_erro(d: NovoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
     return {"id": eid, "publicado_com_bloqueio": no_ar, "projeto": pc if no_ar else None}
 
 
-@router.patch("/erros/{eid}")
-def editar_erro(eid: int, d: EdicaoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
-    con = connect()
-    e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
-    if not e:
-        con.close(); raise HTTPException(404, "Erro não existe")
+def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
+    """Muda situação/resolução/gravidade de UM problema (a regra da edição e do lote). Levanta HTTPException; não faz commit."""
     campos, vals = [], []
     if d.situacao:
         if d.situacao not in ("aberto", "em_correcao", "corrigido", "fechado", "ignorado"):
-            con.close(); raise HTTPException(400, "Situação inválida")
-        if d.situacao in ("corrigido", "fechado", "ignorado") and not (d.resolucao or e["resolucao"]):
-            con.close(); raise HTTPException(400, "Descreva a resolução antes de fechar")
+            raise HTTPException(400, "Situação inválida")
+        if d.situacao in ("corrigido", "fechado", "ignorado") and not ((d.resolucao or "").strip() or e["resolucao"]):
+            raise HTTPException(400, "Descreva a resolução antes de fechar")
         campos.append("situacao=?"); vals.append(d.situacao)
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
                 con.execute("UPDATE item SET autoria_divergente=0 WHERE codigo=?", (e["codigo"],))
-
     if d.resolucao is not None: campos.append("resolucao=?"); vals.append(d.resolucao)
     if d.gravidade:
-        if d.gravidade not in GRAV: con.close(); raise HTTPException(400, "Gravidade inválida")
+        if d.gravidade not in GRAV: raise HTTPException(400, "Gravidade inválida")
         campos.append("gravidade=?"); vals.append(d.gravidade)
     if campos:
-        con.execute(f"UPDATE erro SET {', '.join(campos)} WHERE id=?", (*vals, eid))
-        _evento(con, "erro", eid, "editado", u["email"], {"situacao": d.situacao})
+        con.execute(f"UPDATE erro SET {', '.join(campos)} WHERE id=?", (*vals, e["id"]))
+        _evento(con, "erro", e["id"], "editado", ator, {"situacao": d.situacao})
+    return bool(campos)
+
+
+@router.patch("/erros/{eid}")
+def editar_erro(eid: int, d: EdicaoErro, u: dict = Depends(auth.exige("operador"))) -> dict:
+    con = connect()
+    try:
+        e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Erro não existe")
+        if _mudar_erro(con, e, d, u["email"]):
+            con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
+@router.post("/erros/lote")
+def editar_erros_em_lote(d: ErrosEmLote, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Resolver vários de uma vez (19/10): a mesma situação e a mesma resolução para todos os escolhidos, tudo ou nada.
+    Fechar (corrigido/ignorado) exige a frase do que foi feito, como um a um."""
+    ids = list(dict.fromkeys(int(i) for i in d.ids))
+    if not ids:
+        raise HTTPException(400, "Escolha pelo menos um problema")
+    if len(ids) > 500:
+        raise HTTPException(400, "No máximo 500 de uma vez")
+    if d.situacao not in ("aberto", "em_correcao", "corrigido", "ignorado"):
+        raise HTTPException(400, "Situação inválida")
+    if d.situacao in ("corrigido", "ignorado") and len((d.resolucao or "").strip()) < 3:
+        raise HTTPException(400, "Escreva em uma frase o que foi feito (ou por que não era problema)")
+    con = connect()
+    try:
+        rows = con.execute(f"SELECT * FROM erro WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        if len(rows) != len(ids):
+            raise HTTPException(404, f"{len(ids) - len(rows)} dos problemas escolhidos não existem mais: atualize a lista")
+        ed = EdicaoErro(situacao=d.situacao, resolucao=(d.resolucao or "").strip() or None)
+        n = sum(1 for e in rows if _mudar_erro(con, e, ed, u["email"]))
         con.commit()
-    con.close()
-    return {"ok": True}
+        return {"ok": True, "atualizados": n, "ids": ids}
+    finally:
+        con.close()

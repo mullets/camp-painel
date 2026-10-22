@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -18,6 +19,29 @@ from fastapi import HTTPException
 CODIGO_DOCUMENTO = re.compile(r"^(F\d{3})-(P\d{4})-(\d{4})-(S0[1-8]|S99)-D(\d{4,6})$")
 SINAIS = (("orientacao_incerta", "orientação incerta"), ("serie_incerta", "série incerta"), ("fora_do_periodo", "fora do período de atuação do fundo"),
           ("projeto_divergente", "projeto divergente"), ("sem_identificacao", "sem identificação (pasta com várias obras)"))
+
+
+def fala_de_projeto_divergente(texto) -> bool:
+    """O sinal ou bloqueio do CAMP Vision diz que a folha é de OUTRO projeto ("projeto divergente: o carimbo diz…", "folha de outra obra")."""
+    t = "".join(ch for ch in unicodedata.normalize("NFD", str(texto or "")) if unicodedata.category(ch) != "Mn").lower().replace("_", " ")
+    # 20/10 (CAMP-069): "sem identificação (pasta com várias obras)" e "outra pasta" são o mesmo caso: o CAMP Vision acha que a folha não é deste projeto
+    return any(k in t for k in ("projeto divergente", "outro projeto", "outra obra", "outra pasta", "sem identificacao"))
+
+
+SQL_CONFIRMADAS = ("SELECT DISTINCT e.codigo FROM evento e WHERE e.entidade='item' AND e.tipo='projeto_confirmado' AND e.codigo LIKE ? "
+                   "AND NOT EXISTS (SELECT 1 FROM evento d WHERE d.entidade='item' AND d.codigo=e.codigo AND d.tipo='projeto_confirmado_desfeito' AND d.id>e.id)")
+# folhas em que a ÚLTIMA palavra de uma pessoa foi "É deste projeto" (20/10: "Desfazer" grava projeto_confirmado_desfeito e a leitura nova volta a valer)
+
+
+def tirar_projeto_divergente(pend: dict) -> tuple[list, list]:
+    """19/10 (Clube Sírio): uma pessoa disse que a folha É deste projeto. Tira de `pend` (no lugar) os sinais e bloqueios de projeto divergente.
+    Devolve (sinais_tirados, bloqueios_tirados)."""
+    out = []
+    for chave in ("sinais", "bloqueios"):
+        lista = [x for x in (pend.get(chave) or []) if x] if isinstance(pend.get(chave), list) else []
+        out.append([x for x in lista if fala_de_projeto_divergente(x)])
+        pend[chave] = [x for x in lista if not fala_de_projeto_divergente(x)]
+    return out[0], out[1]
 
 
 def ler_pacote(pasta: Path) -> dict | None:
@@ -33,6 +57,12 @@ def ler_pacote(pasta: Path) -> dict | None:
     return dados
 
 
+def _girada_pelo_cv(d: dict) -> bool:
+    """T6 (acervo novo): o CAMP Vision girou a folha (90/180/270) e não marcou incerteza nem foi corrigida: só um olho humano vê se girou certo.
+    Vira sinal: 'Aprovar todas' deixa a folha para conferir uma a uma (a regra de CAMP-094). O espelho tem a marca própria."""
+    return _rotacao(d.get("rotacao_aplicada")) != 0 and not d.get("orientacao_incerta") and not d.get("orientacao_corrigida")
+
+
 def _rotacao(v) -> int:
     try:
         r = int(v or 0) % 360
@@ -43,7 +73,9 @@ def _rotacao(v) -> int:
 
 UNIFICADO = "Elevação/Fachada"     # CAMP-051
 _ALIAS_TIPO = {"elevação": UNIFICADO, "elevacao": UNIFICADO, "fachada": UNIFICADO, "elevação/fachada": UNIFICADO, "elevacao/fachada": UNIFICADO,
-               "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO}
+               "elevação / fachada": UNIFICADO, "elevacao / fachada": UNIFICADO, "fachada/elevação": UNIFICADO, "fachada/elevacao": UNIFICADO,
+               "isometrica": "Isométrica", "isométrico": "Isométrica", "isometrico": "Isométrica", "axonometria": "Isométrica", "axonométrica": "Isométrica",
+               "diagrama": "Esquema", "esquemático": "Esquema", "esquematico": "Esquema"}   # 19/10: tipos novos
 
 
 def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
@@ -59,6 +91,25 @@ def tipo_do_painel(tipo_lido: str | None, tipos: dict[str, str]) -> str | None:
         nome = tipos.get(_ALIAS_TIPO.get(p, "").lower()) if p in _ALIAS_TIPO else tipos.get(p)
         achados.add(nome)
     return next(iter(achados)) if len(achados) == 1 and None not in achados else None
+
+
+def _pessoa_decidiu_duplicata(con, cod: str, de: str) -> bool:
+    """CAMP-101: a releitura do CAMP Vision não desfaz o que uma pessoa decidiu na tela de duplicatas. Pula a marcação "cod é cópia de de" quando:
+    - a pessoa já julgou esta folha frente a ESSA original ("Não é duplicata", ou já conferiu): duplicata_conferida_em com conferida_de = de
+      (ou sem original: sugestão dispensada). Se o CAMP Vision apontar OUTRA original, volta a pedir conferência (migração 139);
+    - marcar fecharia um ciclo: a pessoa fez de `cod` a que vai ao site ("Publicar esta em vez da outra") e `de` agora é cópia dela.
+    Antes, "Não é duplicata" voltava a ser cópia (e contava como conferida) e a troca virava D4→D29→D4: nenhuma das duas ia ao site."""
+    r = con.execute("SELECT duplicata_conferida_em, duplicata_conferida_de FROM item WHERE codigo=?", (cod,)).fetchone()
+    if r and r["duplicata_conferida_em"] and r["duplicata_conferida_de"] in (de, None):
+        return True
+    atual, vistos = de, set()
+    while atual and atual not in vistos and len(vistos) < 60:      # segue a cadeia a partir da original: se chega em `cod`, seria ciclo
+        vistos.add(atual)
+        nxt = con.execute("SELECT duplicata_de FROM item WHERE codigo=?", (atual,)).fetchone()
+        atual = nxt["duplicata_de"] if nxt else None
+        if atual == cod:
+            return True
+    return False
 
 
 def _categoria_retirado(r: dict, motivos: list[str]) -> str:
@@ -223,8 +274,15 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         raise HTTPException(400, "O pacote não traz a lista de documentos")
 
     tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
+    # folhas em que uma pessoa disse "É deste projeto (o CAMP Vision errou)": a leitura nova não traz o aviso de volta
+    confirmadas = {r[0] for r in con.execute(SQL_CONFIRMADAS, (proj + "-%",))}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
-    existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site FROM item WHERE projeto_codigo=?", (proj,))}
+    existentes = {r["codigo"]: r for r in con.execute("SELECT codigo, revisao, status_site, lote_id FROM item WHERE projeto_codigo=?", (proj,))}
+    try:
+        complemento = bool((json.loads(lote["resultado"] or "{}") or {}).get("complemento"))
+    except ValueError:
+        complemento = False
+    em_outro_lote = movidas_fora = 0
     criados = atualizados = ignoradas = 0
     problemas: list[str] = []
     duplicatas: list[tuple] = []
@@ -263,6 +321,12 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                                        "existente_lote": col["lote_id"], "existente_revisao": col["revisao"], "existente_status": col["status_site"],
                                        "existente_titulo": col["titulo"], "titulo": (d.get("titulo") or "").strip() or None})
                 continue
+        if cod not in existentes and con.execute("SELECT 1 FROM item WHERE codigo_anterior=? AND projeto_codigo<>?", (cod, proj)).fetchone():
+            movidas_fora += 1                                      # CAMP-098: uma pessoa moveu esta folha para outro projeto; a releitura não a recria aqui
+            continue
+        if complemento and cod in existentes and existentes[cod]["lote_id"] not in (None, lote_id):
+            em_outro_lote += 1                                     # lote de COMPLEMENTO: só traz as folhas novas; o que já é de outro lote (publicado, aprovado…) não se mexe
+            continue
         if cod not in existentes:
             velha = con.execute("SELECT codigo, lote_id, status_site, tainacan_item_id FROM item WHERE projeto_codigo=? AND sequencial=? AND codigo<>?",
                                 (proj, seq, cod)).fetchone()
@@ -300,14 +364,26 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         cliente_lido = _primeiro(d, md, ("cliente", "proprietario", "proprietário"))
         ano_folha = int(ano) if ano.isdigit() and 1800 <= int(ano) <= 2100 else None
         pend = {"titulo_lido": d.get("titulo_lido") or "", "bloqueios": list(d.get("bloqueios") or []), "ressalvas": list(d.get("ressalvas") or []),
-                "sinais": [txt for chave, txt in SINAIS if d.get(chave)], "confianca": d.get("confianca"), "previa": d.get("preview") or "",
+                "sinais": [txt for chave, txt in SINAIS if d.get(chave)] + (["orientação girada pelo CAMP Vision: confira a prévia"] if _girada_pelo_cv(d) else []),
+                "confianca": d.get("confianca"), "previa": d.get("preview") or "",
                 "ano_do_projeto": d.get("ano_do_projeto")}
+        if str(d.get("fotografo") or "").strip():                   # 21/10: a revisão mostra "o CAMP Vision leu" ao lado do Fotógrafo
+            pend["fotografo_lido"] = str(d["fotografo"]).strip()[:200]
+        publicavel = bool(d.get("publicavel"))
+        if cod in confirmadas and any(tirar_projeto_divergente(pend)) and not pend["bloqueios"] and not d.get("autoria_divergente"):
+            publicavel = True                                       # o projeto divergente era o que prendia a folha, e uma pessoa já disse que não é
+        if d.get("duplicata_de") and ex and not con.execute("SELECT duplicata_de FROM item WHERE codigo=?", (cod,)).fetchone()[0] \
+                and _pessoa_decidiu_duplicata(con, cod, str(d["duplicata_de"])):
+            # CAMP-101: uma pessoa disse que esta folha NÃO é cópia (ou a fez a que vai ao site): o bloqueio "duplicata de …" da releitura não volta
+            pend["bloqueios"] = [b for b in pend["bloqueios"] if "duplicat" not in str(b).lower()]
+            if not pend["bloqueios"] and not d.get("autoria_divergente"):
+                publicavel = True
         campos = {"titulo": (d.get("titulo") or "").strip() or None, "tipo_documento": tipo_do_painel(tipo_lido, tipos), "tipo_lido": tipo_lido or None,
                   "folha": (str(d.get("folha") or "").strip() or None), "escala": (str(d.get("escala") or "").strip() or None), "ano_folha": ano_folha,
                   "arquivo_tif": tif, "arquivo_jpg": jpg, "rotacao_aplicada": 0 if d.get("orientacao_corrigida") else _rotacao(d.get("rotacao_aplicada")), "espelhado": int(bool(d.get("espelhada")) and not d.get("orientacao_corrigida")),
                   "autoria_divergente": int(bool(d.get("autoria_divergente"))),
                   "credito": ("Autoria não confirmada" if d.get("autoria_divergente") else (d.get("credito") or None)),   # CAMP-046: nunca o nome lido como fato
-                  "status_site": "nao_publicado" if d.get("publicavel") else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
+                  "status_site": "nao_publicado" if publicavel else "bloqueado", "arquivo_origem": (str(origem or "").strip() or None), "pendencias": json.dumps(pend, ensure_ascii=False), "lote_id": lote_id,
                   "endereco_folha": endereco_lido, "cliente_folha": cliente_lido,
                   "versao_cv2": (str(d.get("versao_cv2") or "").strip() or None), "versao_prompt": (str(d.get("versao_prompt") or "").strip() or None), "modelo_cv": (str(d.get("modelo") or "").strip() or None)}
         # O que o CARIMBO diz (contrato 2.2, auditoria F026 T1): sem isso não dá para auditar pelo painel.
@@ -323,6 +399,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if str(d.get("fotografo") or "").strip():       # contrato 2.2: sem coluna própria, fica junto do que o CV2 leu
             lido["fotografo"] = str(d["fotografo"]).strip()[:200]
         campos["lido_json"] = json.dumps(lido, ensure_ascii=False)
+        campos["tipos_documento"] = None          # releitura de folha NÃO conferida: vale o tipo lido (um só); conferidas mantêm o que a pessoa marcou
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
             atualizados += 1
@@ -330,22 +407,32 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             con.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, " + ", ".join(campos) + ") VALUES (?,?,?,?,'campvision'," + ",".join("?" * len(campos)) + ")",
                         (cod, proj, serie, seq, *campos.values()))
             criados += 1
+        if lido.get("fotografo"):                    # 21/10: o fotógrafo lido vira o valor inicial da folha (nunca sobrescreve o da pessoa)
+            from .dados_foto import valor_inicial_fotografo
+            valor_inicial_fotografo(con, cod, lido["fotografo"])
         if d.get("duplicata_de"):
             duplicatas.append((cod, str(d["duplicata_de"]), d.get("tipo_duplicata")))
     for cod, de, tipo in duplicatas:                               # depois de todas existirem (a referência é de item para item)
-        if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone():
+        if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone() and not _pessoa_decidiu_duplicata(con, cod, de):
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
     registrados = registrar_problemas(con, proj, pacote, problemas, lote_id) + registrar_erros_cv(con, proj, pasta)
+    from .problemas import fechar_resolvidos
+    fechar_resolvidos(con, ator)                                   # 19/10: a folha retirada/recusada que agora entrou fecha o problema dela (com registro)
     resultado = {}
     try:
         resultado = json.loads(lote["resultado"] or "{}")
     except ValueError:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
+              **({"movidas_para_outro_projeto": movidas_fora} if movidas_fora else {}),
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
+    if complemento:
+        resumo["complemento"] = True
+        resumo["ja_em_outros_lotes"] = em_outro_lote
+        con.execute("UPDATE lista_processamento SET folhas_encontradas=(SELECT count(*) FROM item WHERE lote_id=?) WHERE id=?", (lote_id, lote_id))
     if novas_colisoes:                                         # "Mais inteligência" (1): o lote repete números que o projeto já usa → pergunta
         resumo["decisao_colisao"] = abrir_colisao(con, lote, proj, novas_colisoes, docs)
     if novas_colisoes or esperando:
@@ -371,7 +458,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 (proj, ator, json.dumps({"lote_id": lote_id, "criadas": criados, "atualizadas": atualizados, "ignoradas": ignoradas, "retirados": len(retirados), "problemas": len(problemas)}, ensure_ascii=False)))
     from .estacao_eventos import conferir_contagem      # CAMP-017: o que a estação disse que enviou × o que chegou (só aviso)
     _n = lambda v: len(v) if isinstance(v, (list, tuple, set, dict)) else int(v or 0)  # noqa: E731
-    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados))
+    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora))
     if cf:
         resumo["contagem_estacao"] = cf
     return resumo

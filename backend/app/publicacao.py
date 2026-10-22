@@ -15,7 +15,17 @@ from .db import connect
 
 # Uma folha só vai ao site se: não é duplicata, não foi retida e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
 # CAMP-046 (contrato 2.4): autoria divergente NÃO é mais motivo para ficar de fora; vira AVISO ("autoria não confirmada") e a folha sobe com esse texto no crédito.
-ELEGIVEL_LOCAL = "duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')"   # retida = a pessoa decidiu que esta folha não vai ao site
+# 21/10 ("publicar sem travar", 4.1): problema que BLOQUEIA numa folha deixa só aquela folha de fora (não trava o projeto inteiro)
+SEM_BLOQUEIO_NA_FOLHA = ("NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=item.codigo AND eb.situacao IN ('aberto','em_correcao') "
+                         "AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')")
+ELEGIVEL_LOCAL = f"duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente') AND {SEM_BLOQUEIO_NA_FOLHA}"   # retida = a pessoa decidiu que esta folha não vai ao site
+# O que ainda para o projeto inteiro (lista fechada): direitos, projeto sem título e um bloqueio no PRÓPRIO projeto registrado por uma
+# pessoa (ou arquivo corrompido apontado pelo CAMP Vision sem dizer a folha). Bloqueio em folha nunca para o projeto.
+# a mesma regra para as contas gerais (Painel inicial): o bloqueio que trava um projeto (no próprio projeto ou no fundo, não numa folha)
+TRAVA_SQL = ("gravidade='bloqueia' AND categoria<>'autoria_divergente' AND length(codigo)<=10 "
+             "AND (origem<>'campvision' OR categoria='arquivo_corrompido')")
+BLOQUEIO_DO_PROJETO = ("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') AND gravidade='bloqueia' "
+                       "AND categoria<>'autoria_divergente' AND (origem<>'campvision' OR categoria='arquivo_corrompido')")
 
 
 def _outros_bloqueantes(con, codigo: str) -> int:
@@ -40,14 +50,22 @@ def condicoes_projeto(con, p) -> dict:
                   "detalhe": None if autorizado else "O projeto ainda não foi autorizado para publicação (autorizar não publica sozinho)",
                   "acao": None if autorizado else {"tipo": "autorizar", "rotulo": "Autorizar publicação", "alvo": codigo}})
 
-    b = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
-    div, err = ((b[0] or 0), (b[1] or 0)) if b else (0, 0)
-    err -= con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ? || '-%') AND situacao IN ('aberto','em_correcao')
-                          AND gravidade='bloqueia' AND categoria='autoria_divergente'""", (codigo, codigo)).fetchone()[0] if err else 0   # CAMP-046: base antiga com a view velha: autoria não conta
+    b = con.execute("SELECT itens_autoria_divergente FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
+    div = (b[0] or 0) if b else 0
+    err = con.execute(BLOQUEIO_DO_PROJETO, (codigo,)).fetchone()[0]          # 21/10 (4.1): só o bloqueio no próprio projeto
     livre = not err
-    conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Sem erros bloqueantes",
-                  "detalhe": None if livre else f"{err} erro(s) bloqueante(s)",
-                  "acao": None if livre else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo}})
+    conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Nenhum bloqueio no projeto",
+                  "detalhe": None if livre else f"Não dá para publicar porque há {err} bloqueio(s) registrado(s) no projeto",
+                  "acao": None if livre else {"tipo": "erros", "rotulo": "Ver o bloqueio", "alvo": codigo}})
+    titulo_ok = bool((p["titulo"] or "").strip())
+    if not titulo_ok:
+        conds.append({"id": "titulo", "bloqueia": True, "ok": False, "texto": "Projeto com título",
+                      "detalhe": "Não dá para publicar porque o projeto está sem título", "acao": {"tipo": "editar_projeto", "rotulo": "Dar o título", "alvo": f"{codigo}:titulo"}})
+    fora_bloq = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND NOT ({SEM_BLOQUEIO_NA_FOLHA})", (codigo,)).fetchone()[0]
+    if fora_bloq:                       # 21/10 (4.1): a folha com problema que bloqueia fica de fora; o resto publica
+        conds.append({"id": "folhas_com_bloqueio", "bloqueia": False, "ok": False,
+                      "texto": f"{fora_bloq} folha(s) com problema ficam fora desta publicação; as outras publicam",
+                      "detalhe": None, "acao": {"tipo": "erros", "rotulo": "Ver as folhas", "alvo": codigo}})
     if div:   # CAMP-046: autoria não confirmada é AVISO (não trava): a folha sobe com "Autoria não confirmada" no crédito
         conds.append({"id": "autoria_nao_confirmada", "bloqueia": False, "ok": False,
                       "texto": f"{div} folha(s) com autoria não confirmada" if div != 1 else "1 folha com autoria não confirmada",
@@ -58,32 +76,34 @@ def condicoes_projeto(con, p) -> dict:
     la = con.execute("""SELECT id, aceite_json FROM lista_processamento WHERE projeto_codigo=? AND aceite_json IS NOT NULL
                         ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
     if la:
-        from .saidas_cv import motivos_aceite
+        from .saidas_cv import motivos_aceite, avaliar_aceite, conferencia_do_lote
         try:
             ac = json.loads(la["aceite_json"])
         except ValueError:
             ac = {}
-        aceito = ac.get("publicavel") is not False
-        resolvido_aqui = False
-        if not aceito:
-            # O aceite é uma foto do momento da leitura. Os pontos que pedem OLHO HUMANO (orientação/série incertas, duplicatas,
-            # autoria) a conferência do painel resolve: com o lote APROVADO no painel, eles deixam de travar (aviso de 14/10, F009-P0060).
-            from .saidas_cv import itens_aceite
-            RESOLVE_CONFERENCIA = {"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"}
-            falhas = {i["chave"] for i in itens_aceite(ac) if i["ok"] is False}
-            aprovado = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (la["id"],)).fetchone()[0]
-            if falhas == {"sem_autoria_divergente"}:      # CAMP-046: CV2 antigo ainda reprova por autoria; no contrato 2.4 isso é só aviso
-                aceito = True
-            elif aprovado and falhas <= RESOLVE_CONFERENCIA:
-                aceito = resolvido_aqui = True
-        conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
+        # Regra única com a tela (saidas_cv.avaliar_aceite): o aceite é uma foto do momento da leitura. Os pontos que pedem OLHO HUMANO
+        # (orientação/série incertas, duplicatas) a conferência do painel resolve: lote APROVADO ou todas as folhas do lote conferidas
+        # (aviso de 14/10, F009-P0060; 19/10: antes só valia com o lote aprovado e a tela dizia "reprovado" com tudo conferido).
+        # CAMP-046: autoria divergente é só aviso (CV2 antigo ainda reprova por ela).
+        av = avaliar_aceite(ac, conferencia_do_lote(con, la["id"])) if isinstance(ac, dict) and ac else None
+        aceito = av is None or av["situacao"] != "reprovado"
+        resolvido_aqui = bool(av and av["situacao"] == "resolvido")
+        # 21/10 ("publicar sem travar", 4.1/4.5): o aceite do CAMP Vision é aviso; não trava o projeto (as folhas com dúvida ficam de fora)
+        conds.append({"id": "aceite_cv", "bloqueia": False, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
                       "detalhe": ("O CAMP Vision pediu olho humano (" + "; ".join(motivos_aceite(ac)) + "): resolvido na conferência do painel") if resolvido_aqui
-                      else None if aceito else "O CAMP Vision reprovou o lote: " + "; ".join(motivos_aceite(ac) or ["sem motivo informado"]),
+                      else None if aceito else "O CAMP Vision reprovou o lote" + (lambda m: f" ({'; '.join(m)})" if m else "")(
+                          [m for m in motivos_aceite(ac) if m not in {i["rotulo"] for i in av["itens"] if i["estado"] != "falta"} and m not in {f["rotulo"] for f in av["faltam"]}]) + ". Falta: " + "; ".join(f"{f['rotulo']} ({f['como']})" for f in av["faltam"]),
                       "acao": None if aceito else {"tipo": "revisao", "rotulo": "Ver o lote", "alvo": codigo}})
 
     teste = bool(p["lote_teste"])
+    # CAMP-114: o lote de teste do CAMP Vision é ignorado (não importa folhas); o projeto que a estação reservou para ele ficava "pronto"
+    # com "Publicar" e criava uma página vazia no site. Sem nenhuma folha e com lote de teste anotado, é lote de teste.
+    so_teste = not teste and bool(con.execute("SELECT 1 FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='lote_teste_ignorado' LIMIT 1", (codigo,)).fetchone()) \
+        and not con.execute("SELECT 1 FROM item WHERE projeto_codigo=? LIMIT 1", (codigo,)).fetchone()
+    teste = teste or so_teste
     conds.append({"id": "teste", "bloqueia": True, "ok": not teste, "texto": "Não é lote de teste",
-                  "detalhe": "Lote de teste não vai ao ar" if teste else None, "acao": None})
+                  "detalhe": ("Só chegou lote de teste do CAMP Vision para este projeto: o painel não importa nem publica" if so_teste
+                              else "Lote de teste não vai ao ar" if teste else None), "acao": None})
 
     # REVISÃO (a mesma regra do plano da publicação guiada): folha vinda do CAMP Vision precisa estar conferida e o lote aprovado
     nao_conf = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND duplicata_de IS NULL", (codigo,)).fetchone()[0]
@@ -120,6 +140,11 @@ def condicoes_projeto(con, p) -> dict:
     fora = total - vinculados - retidas_sem_site
     if retidas:
         conds.append({"id": "folhas_retidas", "bloqueia": False, "ok": False, "texto": f"{retidas} folha(s) retida(s) por você: ficam só no painel, não vão ao site", "detalhe": None, "acao": None})
+    # 21/10: retida que está publicada no site (vinha do "Publicar" que não olhava a retenção): publicar de novo a esconde
+    retidas_no_ar = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1 AND tainacan_item_id IS NOT NULL AND status_site IN ('no_ar','rascunho')", (codigo,)).fetchone()[0]
+    if retidas_no_ar:
+        conds.append({"id": "retidas_no_site", "bloqueia": False, "ok": False,
+                      "texto": f"{retidas_no_ar} folha(s) retida(s) estão no site: ao publicar, elas ficam escondidas (privadas)", "detalhe": None, "acao": None})
     if ok_site and fora > 0:
         conds.append({"id": "folhas_fora", "bloqueia": False, "ok": False, "texto": f"{fora} folha(s) ainda não estão no site e não serão publicadas",
                       "detalhe": None, "acao": {"tipo": "subir_folhas", "rotulo": "Enviar folhas ao site", "alvo": codigo}})
@@ -131,11 +156,11 @@ def condicoes_projeto(con, p) -> dict:
     from .fundo_site import pagina_arquiteto   # CAMP-015: aviso (não bloqueia) quando o fundo não tem página pública do arquiteto no site
     pg = pagina_arquiteto(con, fundo)
     if not pg["publica"]:
-        conds.append({"id": "pagina_arquiteto", "bloqueia": False, "ok": False,
-                      "texto": f"O fundo {fundo} ainda não tem página pública do arquiteto no site",
+        conds.append({"id": "pagina_arquiteto", "bloqueia": False, "ok": False, "sem_arquiteto": bool(pg.get("sem_arquiteto")),
+                      "texto": f"A página do arquiteto (fundo {fundo}) não está pública no site: sem ela, os projetos do fundo não aparecem",
                       "detalhe": ("Não há arquiteto titular cadastrado neste fundo." if pg.get("sem_arquiteto") else
-                                  f"A página existe no site, mas está como {pg['status']} (não publicado)." if pg["existe"] else
-                                  "Não achei a página no espelho do site. Use “Enviar fundo ao site” no fundo e ative o arquiteto no WordPress."), "acao": None})
+                                  "Ela é publicada junto com o projeto, ou pelo quadro “Página do arquiteto no site”, no fundo."),
+                      "acao": None if pg.get("sem_arquiteto") else {"tipo": "publicar_arquiteto", "rotulo": "Publicar a página do arquiteto", "alvo": fundo}})
     from .imagem_site import lado_maximo_do_fundo   # B2: o limite de resolução do fundo aparece no checklist quando é mais apertado que o padrão
     lado = lado_maximo_do_fundo(con, fundo)
     if lado and lado < 3000:

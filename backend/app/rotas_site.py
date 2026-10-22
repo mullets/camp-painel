@@ -56,7 +56,7 @@ def itens(fundo: str | None = None, status: str | None = None, q: str | None = N
 @router.get("/rascunhos-orfaos")
 def rascunhos_orfaos(u: dict = Depends(auth.exige("admin"))) -> dict:
     """Rascunhos do site (coleção das folhas) com o código de uma folha que já está LIGADA a outro item do site:
-    sobras de envios repetidos. Só lista, a partir do espelho do site; nada é apagado aqui (apague no WordPress, depois de conferir)."""
+    sobras de envios repetidos. Só lista, a partir do espelho do site; nada é apagado aqui (apagar é decisão de quem cuida do site, depois de conferir)."""
     from .publicador import COL_ACERVO
     con = connect()
     try:

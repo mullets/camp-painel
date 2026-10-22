@@ -122,6 +122,7 @@ def _trocar_codigo(con, antigo: str, novo: str) -> None:
     con.execute("UPDATE item_localizacao SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE pedido_releitura SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (novo, antigo))
+    con.execute("UPDATE item SET duplicata_conferida_de=? WHERE duplicata_conferida_de=?", (novo, antigo))   # a conferência da duplicata acompanha
     con.execute("UPDATE erro SET codigo=? WHERE codigo=?", (novo, antigo))
     con.execute("UPDATE revisao_campo SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
     con.execute("UPDATE emprestimo_item SET item_codigo=? WHERE item_codigo=?", (novo, antigo))
@@ -145,8 +146,10 @@ def _ano_da_folha(con, it) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None) -> dict:
-    """Move as folhas para o destino (transação já aberta por quem chama). Devolve o que foi movido, as duplicatas e o que foi ignorado."""
+def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None, soltar_lote: bool = False) -> dict:
+    """Move as folhas para o destino (transação já aberta por quem chama). Devolve o que foi movido, as duplicatas e o que foi ignorado.
+    `soltar_lote` (CAMP-098, folha movida por uma pessoa): a folha deixa o lote do projeto de origem (lote_id fica no histórico). Antes ela
+    continuava contando no lote de lá ("Faltam conferir 1 de 7") e o lote nunca podia ser aprovado. Mover o LOTE inteiro não solta."""
     d = _destino_valido(con, destino)
     ano = int(d["ano"] or 0)
     seq = con.execute("SELECT COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (destino,)).fetchone()[0]
@@ -185,10 +188,18 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
         con.execute("""UPDATE item SET codigo=?, projeto_codigo=?, sequencial=?, codigo_anterior=?,
                        tainacan_item_id=NULL, status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
                        atualizado_em=datetime('now') WHERE codigo=?""", (novo, destino, seq, c, c))
+        lote_antigo = it["lote_id"] if soltar_lote and it["lote_id"] and con.execute(
+            "SELECT 1 FROM lista_processamento WHERE id=? AND projeto_codigo<>?", (it["lote_id"], destino)).fetchone() else None
+        if lote_antigo:
+            con.execute("UPDATE item SET lote_id=NULL WHERE codigo=?", (novo,))
         _trocar_codigo(con, c, novo)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'folha_movida',?,?)",
-                    (novo, ator, _json.dumps({"de": c, "para": novo, "motivo": motivo, "tainacan_item_id_antigo": tinha_site}, ensure_ascii=False)))
+                    (novo, ator, _json.dumps({"de": c, "para": novo, "motivo": motivo, "tainacan_item_id_antigo": tinha_site,
+                                              **({"lote_id_antigo": lote_antigo} if lote_antigo else {})}, ensure_ascii=False)))
         movidos.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site)})
+    if movidos:                                                    # 19/10: "folha de outro projeto" fecha quando a folha é movida (com registro no histórico)
+        from .problemas import fechar_resolvidos
+        fechar_resolvidos(con, ator)                               # a resposta não muda: _mover também serve à rota do CAMP Vision (reidentificar)
     return {"movidos": movidos, "duplicatas": duplicatas, "ignorados": ignorados}
 
 
@@ -243,11 +254,92 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
     """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou)."""
     if not d.itens:
         raise HTTPException(400, "Escolha pelo menos uma folha.")
-    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo), simular=d.simular)
+    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True), simular=d.simular)
     if d.simular:
         return {**r, "simulado": True}
     tarefas.add_task(_enviar_redirecionamentos)
     return r
+
+
+class MudarSerie(BaseModel):
+    itens: list[str]
+    serie: str
+    tipo: str | None = None        # opcional: o tipo da folha passa a ser este (ex.: a "Planta" que é fotografia)
+    motivo: str | None = None
+    simular: bool = False
+
+
+def _mudar_serie(con, codigos: list[str], serie: str, ator: str, motivo: str | None, tipo: str | None = None) -> dict:
+    """21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia"): a folha passa para outra série (S01 Desenhos
+    → S03 Fotografias…). A série faz parte do código, então a folha ganha o código novo com o MESMO projeto, ano e D; o antigo fica em
+    codigo_anterior e tudo o que aponta para ela acompanha (_trocar_codigo), como no mover. Folha que já está no site (publicada ou não)
+    continua com o mesmo item e status: o site recebe o código e a série novos em segundo plano (CAMP-139). O QNAP não é tocado."""
+    s = con.execute("SELECT codigo, nome FROM serie WHERE codigo=?", ((serie or "").strip().upper(),)).fetchone()
+    if not s:
+        raise HTTPException(400, f"A série {serie} não existe.")
+    feitas, ignoradas = [], []
+    for c in dict.fromkeys(codigos):
+        it = con.execute("SELECT * FROM item WHERE codigo=?", (c,)).fetchone()
+        if not it:
+            raise HTTPException(404, f"A folha {c} não existe.")
+        if it["serie_codigo"] == s["codigo"]:
+            ignoradas.append({"codigo": c, "motivo": f"já é {s['nome']}"}); continue
+        if it["status_site"] == "no_ar" and not it["tainacan_item_id"]:
+            _status_velho(con, c, ator)
+        m = re.match(r"^(F\d{3}-P\d{4})-(\d{4})-[^-]+-D(\d+)$", c)
+        if not m:
+            raise HTTPException(409, f"O código {c} não está no padrão: corrija o código antes de mudar a série.")
+        novo = f"{m.group(1)}-{m.group(2)}-{s['codigo']}-D{m.group(3)}"
+        if con.execute("SELECT 1 FROM item WHERE codigo=?", (novo,)).fetchone():
+            raise HTTPException(409, f"O código {novo} já existe; nada foi mudado.")
+        tinha_site = it["tainacan_item_id"]
+        # CAMP-139 (21/10, Rafa: "é uma fotografia e não folha de desenho… e não tenho como alterar"): a folha que já está no site (publicada
+        # ou rascunho) CONTINUA com o mesmo item e o mesmo status; o endereço público vem do título, não do código, então não muda e não há
+        # redirecionamento. O site recebe o código, a série e o tipo novos em segundo plano (atualizar_serie_no_site).
+        con.execute("""UPDATE item SET codigo=?, serie_codigo=?, codigo_anterior=?, tipo_documento=COALESCE(?, tipo_documento),
+                       atualizado_em=datetime('now') WHERE codigo=?""", (novo, s["codigo"], c, (tipo or "").strip()[:120] or None, c))
+        if tinha_site:
+            con.execute("UPDATE wp_item SET codigo_detectado=? WHERE id=?", (novo, tinha_site))
+        _trocar_codigo(con, c, novo)
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'serie_mudada',?,?)",
+                    (novo, ator, _json.dumps({"de": c, "para": novo, "serie_antes": it["serie_codigo"], "serie": s["codigo"], "tipo": tipo,
+                                              "motivo": motivo, "tainacan_item_id_antigo": tinha_site}, ensure_ascii=False)))
+        feitas.append({"de": c, "para": novo, "tinha_registro_no_site": bool(tinha_site), "no_site": bool(tinha_site)})
+    return {"mudadas": feitas, "ignoradas": ignoradas, "serie": s["codigo"], "serie_nome": s["nome"]}
+
+
+@router.get("/series")
+def listar_series(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """As séries (tipos de material) para a tela "Mudar o tipo de material"."""
+    con = connect()
+    try:
+        return {"series": [dict(r) for r in con.execute("SELECT codigo, nome FROM serie ORDER BY codigo")]}
+    finally:
+        con.close()
+
+
+@router.post("/itens/serie")
+def mudar_serie(d: MudarSerie, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Muda o tipo de material (a série) das folhas escolhidas. `simular` mostra os códigos novos sem gravar."""
+    if not d.itens:
+        raise HTTPException(400, "Escolha pelo menos uma folha.")
+    r = _transacao(lambda con: _mudar_serie(con, d.itens, d.serie, u["email"], d.motivo, d.tipo), simular=d.simular)
+    if d.simular:
+        return {**r, "simulado": True}
+    no_site = [x["para"] for x in r["mudadas"] if x["no_site"]]
+    if no_site:
+        tarefas.add_task(_atualizar_series_no_site, no_site, u["email"])
+    return {**r, "site_em_segundo_plano": len(no_site)}
+
+
+def _atualizar_series_no_site(codigos: list[str], ator: str) -> None:
+    """Segundo plano: o site recebe o código e a série novos de cada folha (falha vira pendência). Nunca levanta."""
+    from . import publicador
+    for c in codigos:
+        try:
+            publicador.atualizar_serie_no_site(c, ator)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> dict:
@@ -335,12 +427,15 @@ def marcar_duplicata(codigo: str, d: DuplicataDe, u: dict = Depends(auth.exige("
             raise HTTPException(409, "Esta folha está pública no site. Despublique antes.")
         if troca:
             con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original,))
-        con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=?, atualizado_em=datetime('now') WHERE codigo=?", (d.codigo_original, d.tipo, codigo))
+        con.execute("""UPDATE item SET duplicata_de=?, tipo_duplicata=?, duplicata_conferida_em=datetime('now'), duplicata_conferida_por=?, duplicata_conferida_de=?,
+                       atualizado_em=datetime('now') WHERE codigo=?""", (d.codigo_original, d.tipo, u["email"], d.codigo_original, codigo))   # foi uma pessoa: já conta como conferida (tela Duplicatas)
         con.execute("UPDATE item SET duplicata_de=? WHERE duplicata_de=?", (d.codigo_original, codigo))   # quem apontava para esta passa a apontar para a original
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
                     (codigo, u["email"], _json.dumps({"original": d.codigo_original, "tipo": d.tipo, "trocou": troca}, ensure_ascii=False)))
+        from .problemas import fechar_resolvidos
+        fechados = fechar_resolvidos(con, u["email"])                  # 19/10: o problema de duplicata desta folha fecha (com registro)
         con.commit()
-        return {"ok": True, "trocou": troca}
+        return {"ok": True, "trocou": troca, **({"problemas_fechados": len(fechados)} if fechados else {})}
     finally:
         con.close()
 
@@ -358,7 +453,8 @@ def desmarcar_duplicata(codigo: str, u: dict = Depends(auth.exige("operador"))) 
         if not a["duplicata_de"]:
             raise HTTPException(409, "Esta folha não está marcada como duplicata.")
         liberou = liberar_bloqueios_de_duplicata(con, codigo, a, u["email"])
-        con.execute("UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, atualizado_em=datetime('now') WHERE codigo=?", (codigo,))
+        con.execute("""UPDATE item SET duplicata_de=NULL, tipo_duplicata=NULL, duplicata_conferida_em=datetime('now'), duplicata_conferida_por=?, duplicata_conferida_de=?,
+                       atualizado_em=datetime('now') WHERE codigo=?""", (u["email"], a["duplicata_de"], codigo))   # uma pessoa disse que não é: não volta como sugestão
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_desmarcada',?,?)",
                     (codigo, u["email"], _json.dumps({"era_de": a["duplicata_de"], "tipo": a["tipo_duplicata"], **liberou}, ensure_ascii=False)))
         con.commit()
@@ -490,6 +586,10 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
         con.execute("UPDATE item SET codigo=?, projeto_codigo=?, codigo_anterior=?, atualizado_em=datetime('now') WHERE codigo=?", (nc, novo, c, c))
         _trocar_codigo(con, c, nc)                                     # item_agente, localização, releitura, duplicata_de, erro, revisão
         folhas.append({"de": c, "para": nc})
+    # endereço público que o espelho do site conhecia ANTES de o código mudar (depois o wp_item passa a ter só o código novo)
+    from . import redir_site
+    urls_antigas = {antigo: redir_site._url_conhecida(con, "projeto", antigo)}
+    urls_antigas.update({f["de"]: redir_site._url_conhecida(con, "item", f["de"]) for f in folhas})
     # o que aponta para o PROJETO (e, por prefixo, para as folhas) fora das chaves estrangeiras
     for tabela, coluna in (("lista_processamento", "projeto_codigo"), ("pedido_releitura", "projeto_codigo"), ("decisao", "projeto_codigo"),
                            ("cv_resposta", "projeto_codigo"), ("tarefa_publicacao", "projeto_codigo"), ("tarefa_publicacao", "folha_atual"),
@@ -498,6 +598,8 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
                            ("projeto", "capa_item"), ("projeto", "mesclado_em"), ("reserva", "projeto_codigo")):
         _prefixo(con, tabela, coluna, antigo, novo)
     _prefixo(con, "cv_resposta", "chave", antigo, novo, " AND tipo='retirado'")
+    _prefixo(con, "wp_item", "codigo_detectado", antigo, novo)        # espelho do site: sem isso o redirecionamento das folhas fica 'sem_url'
+    _prefixo(con, "wp_item", "projeto_detectado", antigo, novo)
     _prefixo(con, "evento", "codigo", antigo, novo, " AND entidade IN ('projeto','item')")   # o histórico acompanha o projeto
     for r in con.execute("SELECT a, b, por, em FROM par_nao_duplicado WHERE a=? OR b=?", (antigo, antigo)).fetchall():
         a, b = sorted([novo if r["a"] == antigo else r["a"], novo if r["b"] == antigo else r["b"]])
@@ -512,6 +614,9 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
         con.execute("""INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, criado_por) VALUES (?,?,?,?,?)
                        ON CONFLICT(codigo_antigo) DO UPDATE SET codigo_novo=excluded.codigo_novo, entidade=excluded.entidade, motivo=excluded.motivo,
                                                                 criado_por=excluded.criado_por, criado_em=datetime('now'), aplicado_no_site=0, sem_site=0""", (de, para, tipo, mot, ator))
+    for cod_antigo, url in urls_antigas.items():
+        if url:
+            con.execute("UPDATE redirecionamento SET url_antiga=? WHERE codigo_antigo=?", (url, cod_antigo))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_recodificado',?,?)",
                 (novo, ator, _json.dumps({"de": antigo, "para": novo, "folhas": len(folhas), "motivo": mot}, ensure_ascii=False)))
     no_site = bool(p["tainacan_item_id"] or p["wp_page_id"]) or bool(con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL", (novo,)).fetchone())
@@ -523,6 +628,43 @@ def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> 
     return {"ok": True, "de": antigo, "para": novo, "folhas": folhas, "no_site": no_site, "avisos": avisos}
 
 
+def _enviar_codigos_ao_site(folhas: list[dict], ator: str) -> dict:
+    """Folhas recodificadas que já estão no site: manda o "Código do documento" novo (melhor esforço; falha vira pendência
+    'pendente_codigo_no_site', nunca desfaz o local). Mesmo caminho do serie_s08."""
+    from . import publicador
+    out = {"atualizadas": 0, "falhas": []}
+    con = connect()
+    try:
+        alvo = []
+        for f in folhas:
+            row = con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (f["para"],)).fetchone()
+            if row and row[0]:
+                alvo.append((f["para"], row[0]))
+        if not alvo:
+            return out
+        try:
+            wp = publicador.WP()
+        except Exception as e:  # noqa: BLE001
+            for novo_, _ in alvo:
+                publicador._pendencia(con, "item", novo_, "pendente_codigo_no_site", f"código novo não enviado ao site: {e}")
+                out["falhas"].append(novo_)
+            con.commit()
+            return out
+        mid, _ = publicador._meta(con, publicador.COL_ACERVO, "Código do documento")
+        for novo_, iid in alvo:
+            try:
+                if mid:
+                    wp.definir_metadado(int(iid), mid, novo_)
+                out["atualizadas"] += 1
+            except Exception as e:  # noqa: BLE001
+                publicador._pendencia(con, "item", novo_, "pendente_codigo_no_site", str(e)[:200])
+                out["falhas"].append(novo_)
+        con.commit()
+    finally:
+        con.close()
+    return out
+
+
 @router.post("/projetos/{codigo}/recodificar")
 def recodificar(codigo: str, d: Recodificar, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Muda o código do projeto e de todas as folhas dele. Só admin. O antigo fica guardado e vira redirecionamento."""
@@ -532,6 +674,7 @@ def recodificar(codigo: str, d: Recodificar, tarefas: BackgroundTasks, u: dict =
     if novo == antigo:
         raise HTTPException(400, "O código novo é igual ao atual.")
     r = _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], d.motivo))
+    tarefas.add_task(_enviar_codigos_ao_site, r["folhas"], u["email"])   # o metadado "Código do documento" no site (falha vira pendência)
     tarefas.add_task(_enviar_redirecionamentos)          # CAMP-014: manda o mapa ao site (falha não desfaz o local; o coletor repete)
     return r
 
@@ -668,9 +811,11 @@ class DescarteProjeto(BaseModel):
 
 @router.post("/projetos/{codigo}/descartar")
 def descartar_projeto(codigo: str, d: DescarteProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Projeto com nome de pasta do sistema e SEM folhas: some das listas. Não apaga nada; o número P nunca é reusado."""
+    """Descarta um projeto que não é nada (pasta do sistema, teste, cadastro errado): some das listas. Não apaga nada; o número P nunca é reusado.
+    19/10: vale para qualquer projeto sem registro no site (antes, só nome de pasta do sistema e sem folhas). As folhas dele, se houver
+    (nenhuma pode estar no site), ficam retidas: nunca vão ao site."""
     from .similaridade import nome_de_subpasta
-    motivo = ((d.motivo or "").strip() or "nome de pasta do sistema, não é uma obra")[:300]
+    motivo = (d.motivo or "").strip()[:300]
 
     def fazer(con):
         p = con.execute("SELECT codigo, titulo, mesclado_em, descartado_em, tainacan_item_id, wp_page_id FROM projeto WHERE codigo=?", (codigo,)).fetchone()
@@ -680,19 +825,24 @@ def descartar_projeto(codigo: str, d: DescarteProjeto, u: dict = Depends(auth.ex
             raise HTTPException(409, "Este projeto já foi descartado.")
         if p["mesclado_em"]:
             raise HTTPException(409, f"Este projeto já foi juntado a {p['mesclado_em']}.")
-        if not nome_de_subpasta(p["titulo"]):
-            raise HTTPException(409, "Só um projeto com nome de pasta do sistema (ex.: \"01 - Arquivo Arquivístico (TIFF)\") pode ser descartado aqui.")
-        if con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (codigo,)).fetchone()[0]:
-            raise HTTPException(409, "Este projeto tem folhas: junte ao projeto certo em vez de descartar.")
+        mot = motivo or ("nome de pasta do sistema, não é uma obra" if nome_de_subpasta(p["titulo"]) else "")
+        if len(mot) < 3:
+            raise HTTPException(400, "Explique por que este projeto é descartado.")
         if p["tainacan_item_id"] or p["wp_page_id"]:
-            raise HTTPException(409, "Este projeto tem registro no site: junte ao projeto certo em vez de descartar.")
+            raise HTTPException(409, "Este projeto tem registro no site: despublique e junte ao projeto certo em vez de descartar.")
+        no_site = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND (tainacan_item_id IS NOT NULL OR status_site IN ('no_ar','rascunho'))", (codigo,)).fetchone()[0]
+        if no_site:
+            raise HTTPException(409, f"{no_site} folha(s) deste projeto estão no site: despublique-as antes de descartar.")
+        folhas = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (codigo,))]
+        if folhas:
+            con.execute("UPDATE item SET retida=1, retida_motivo=?, atualizado_em=datetime('now') WHERE projeto_codigo=?", (f"projeto descartado: {mot}"[:300], codigo))
         lotes = [r[0] for r in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL", (codigo,))]
         con.execute("""UPDATE lista_processamento SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now')
-                        WHERE projeto_codigo=? AND descartado_em IS NULL""", (u["email"], f"projeto {codigo} descartado: {motivo}"[:300], codigo))
+                        WHERE projeto_codigo=? AND descartado_em IS NULL""", (u["email"], f"projeto {codigo} descartado: {mot}"[:300], codigo))
         con.execute("UPDATE projeto SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now') WHERE codigo=?",
-                    (u["email"], motivo, codigo))
+                    (u["email"], mot, codigo))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_descartado',?,?)",
-                    (codigo, u["email"], _json.dumps({"titulo": p["titulo"], "motivo": motivo, "lotes": lotes}, ensure_ascii=False)))
-        return {"ok": True, "codigo": codigo, "lotes": lotes}
+                    (codigo, u["email"], _json.dumps({"titulo": p["titulo"], "motivo": mot, "lotes": lotes, "folhas": folhas}, ensure_ascii=False)))
+        return {"ok": True, "codigo": codigo, "lotes": lotes, "folhas": len(folhas)}
 
     return _transacao(fazer)

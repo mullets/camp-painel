@@ -22,6 +22,7 @@ Uma só linguagem em **todas** as telas, mensagens da API e documentos. Quem esc
 ## Regras de texto
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
 - **Nunca** usar: "no ar", "fora do ar", "colocar no ar", "tirar do ar", "retirar da publicação", "não pública".
+- **Nunca** mandar a pessoa ao WordPress ("wp-admin", "corrija no WordPress"): quem usa o painel não entra no site. A ação é um botão do painel; o que só se resolve no site é "avise quem cuida do site" (padroes.md §15).
 - "Desativar/Reativar" é só para **contas de usuário** e **2FA**, nunca para conteúdo do acervo.
 - Valores internos (`no_ar`, `fora_do_ar`, `tirar_do_ar` na API) ficam como estão por compatibilidade; só os rótulos mudam.
 - Em português do Brasil, concordância normal: "projeto publicado", "folha publicada".

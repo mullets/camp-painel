@@ -63,6 +63,9 @@ PROIBIDAS = [
     (r"colocar[^`'\"<\n]{0,30}no ar", "use 'Publicar'"),
     (r"retirar[^`'\"<\n]{0,14}da publica", "use 'Voltar para rascunho' ou 'Despublicar'"),
     (r"\bnão pública\b", "use 'não publicado'"),
+    # 21/10 (Rafa): "quem usa esse painel não usa o painel do WordPress, nem tem acesso direto… nunca mande alguém para o wordpress"
+    (r"wp-admin", "quem usa o painel não entra no site: faça a ação no painel (ou 'avise quem cuida do site')"),
+    (r"\b(?:no|pelo|ao|para o|entre no)\s+WordPress\b", "quem usa o painel não entra no site: faça a ação no painel (ou 'avise quem cuida do site')"),
 ]
 for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
     conteudo = arq.read_text(encoding="utf-8")

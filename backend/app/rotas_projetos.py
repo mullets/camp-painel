@@ -102,7 +102,7 @@ def _url_publica_projeto(codigo: str, titulo: str, cidade: str | None = None) ->
 
 def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -> dict:
     """Endereço da página pública do projeto: o REAL (espelho das páginas do site) quando existe; senão o presumido.
-    status é o status da página no WordPress (publish = qualquer visitante abre)."""
+    status é o status da página no site (publish = qualquer visitante abre)."""
     r = con.execute("""SELECT url, status FROM wp_pagina
                         WHERE (codigo_detectado=? OR lower(slug) LIKE ?) AND url LIKE '%/acervo/projetos/%'
                         ORDER BY (status='publish') DESC, id DESC LIMIT 1""", (codigo, codigo.lower() + "-%")).fetchone()
@@ -329,19 +329,67 @@ def folha_qnap_arquivo(codigo: str, lote: int, caminho: str, u: dict = Depends(a
     return FileResponse(alvo, headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/projetos/{codigo}/marca")
+def marca_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-120 (exaustão, 20/10): uma "marca" curta do estado do projeto (folhas, lotes, problemas, pedidos de releitura, cadastro).
+    A página aberta pergunta de tempos em tempos; se a marca mudou (o CAMP Vision releu, outra pessoa aprovou, a releitura terminou),
+    mostra "Este projeto mudou" com "Atualizar", sem redesenhar sozinha (não apaga o que a pessoa está digitando). Só consultas por índice."""
+    import hashlib
+    con = connect()
+    try:
+        p = con.execute("SELECT atualizado_em, status_site, titulo, capa_item FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        partes = [tuple(p),
+                  tuple(con.execute("""SELECT COUNT(*), MAX(atualizado_em), SUM(revisao!='pendente'), SUM(status_site='no_ar'), SUM(retida), MAX(revisado_em)
+                                       FROM item WHERE projeto_codigo=?""", (codigo,)).fetchone()),
+                  tuple(con.execute("""SELECT GROUP_CONCAT(id||':'||etapa||':'||COALESCE(aprovado_em,'')||':'||COALESCE(atualizado_em,'')||':'||COALESCE(descartado_em,''))
+                                       FROM lista_processamento WHERE projeto_codigo=?""", (codigo,)).fetchone()),
+                  tuple(con.execute("""SELECT COUNT(*), MAX(id), MAX(resolvido_em) FROM erro WHERE codigo=? OR codigo LIKE ?""", (codigo, codigo + "-%")).fetchone()),
+                  tuple(con.execute("""SELECT COUNT(*), SUM(situacao IN ('aberto','em_correcao')) FROM erro WHERE codigo=? OR codigo LIKE ?""", (codigo, codigo + "-%")).fetchone()),
+                  tuple(con.execute("SELECT MAX(id), GROUP_CONCAT(estado) FROM pedido_releitura WHERE projeto_codigo=?", (codigo,)).fetchone())]
+        return {"marca": hashlib.sha1(json.dumps(partes, default=str).encode()).hexdigest()[:16]}
+    finally:
+        con.close()
+
+
+@router.post("/projetos/{codigo}/site/enviar-alteracoes")
+def enviar_alteracoes_ao_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-124 (P3): reenvia ao site o que foi corrigido no painel depois da publicação (campos e imagem). Só o que mudou."""
+    from .alteracoes_site import enviar
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+    finally:
+        con.close()
+    r = enviar(codigo, u["email"])
+    if r["falhas"] and not r["enviadas"]:
+        raise HTTPException(502, "O site não aceitou as alterações; o painel continua com elas e o site com o valor antigo: "
+                                 + "; ".join(f"{x['codigo'][-6:]} ({x['erro']})" for x in r["falhas"][:3]))
+    return r
+
+
 @router.get("/projetos/{codigo}/detalhe")
 def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     p = con.execute("SELECT p.*, f.titulo AS fundo, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
+    try:                                   # 21/10 (4.2): problema fantasma (folha que não existe mais, fora do projeto) não aparece aqui
+        from .problemas import fechar_resolvidos
+        if fechar_resolvidos(con):
+            con.commit()
+    except Exception:  # noqa: BLE001  (nunca derruba a página do projeto)
+        con.rollback()
 
     itens_local = [dict(r) for r in con.execute("""
-        SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, i.tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
+        SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, COALESCE(i.tipos_documento, i.tipo_documento) AS tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
                i.autoria_divergente, i.duplicata_de, i.espelhado, i.espelho_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar, i.rotacao_aplicada,
                i.endereco_folha, i.cliente_folha,
-               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior,
-               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por
+               i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
+               i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por,
+               i.duplicata_conferida_em, i.duplicata_conferida_de, i.parceiros, i.foto_ano, i.foto_estagio, i.foto_fotografo
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -380,6 +428,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "status_site_local": local.get("status_site"),
                 "tainacan_item_id_salvo": local.get("tainacan_item_id_salvo"),
                 "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"), "giro_manual": local.get("giro_manual"),
+                "recorte": local.get("recorte"), "alinhamento": local.get("alinhamento"),
+                "duplicata_conferida_em": local.get("duplicata_conferida_em"), "duplicata_conferida_de": local.get("duplicata_conferida_de"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -411,12 +461,20 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         raiz_prontos = _qnap_prontos_raiz()
     except Exception:  # noqa: BLE001
         raiz_prontos = None
+    from .parceiros import ler as _ler_parc
     for d in itens:
+        if "parceiros" in d:                            # CAMP-127: os parceiros de cada folha (lista), para a ação em lote "Confirmar: X, parceiro"
+            d["parceiros"] = _ler_parc(d.get("parceiros"))
         if isinstance(d.get("pendencias"), str):
             try:
                 d["pendencias"] = json.loads(d["pendencias"])
             except ValueError:
                 d["pendencias"] = None
+        if isinstance(d.get("recorte"), str):           # 19/10: recorte manual (frações), para a tela de recortar e a marca da prévia
+            try:
+                d["recorte"] = json.loads(d["recorte"])
+            except ValueError:
+                d["recorte"] = None
         jpg = d.pop("_arquivo_jpg", None)
         # lote anterior ao preview do CAMP Vision: se o JPG da folha existe no QNAP, a tela pode mostrar a imagem para conferir ('@jpg' = o servidor usa arquivo_jpg)
         if jpg and raiz_prontos and isinstance(d.get("pendencias"), dict) and not d["pendencias"].get("previa") and jpg_da_folha_no_qnap(raiz_prontos, jpg):
@@ -436,13 +494,26 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """, (codigo, projetos_cid, p["tainacan_item_id"] or -1)).fetchone()
     md = json.loads(site["metadados"]) if site and site["metadados"] else {}
     erros = [dict(r) for r in con.execute("SELECT * FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') ORDER BY gravidade", (codigo, codigo + "-%"))]
+    # exaustão CAMP-108: decisões pendentes sobre ESTE projeto (o CAMP Vision parado perguntando se o que chegou é ele; dado diferente do cadastro).
+    # Campo novo e opcional: a página mostra a pergunta e quem decide.
+    decisoes_pend = []
+    from .decisoes import contexto as _ctx_dec, pergunta as _perg_dec
+    for dd in con.execute("SELECT * FROM decisao WHERE situacao='pendente' AND fundo_codigo=? AND contexto LIKE ? ORDER BY id", (p["fundo_codigo"], f'%"{codigo}"%')).fetchall():
+        cx = _ctx_dec(dd)
+        cands = [c.get("codigo") for c in (cx.get("candidatos") or []) if isinstance(c, dict)]
+        if codigo in cands or cx.get("projeto_codigo") == codigo:
+            decisoes_pend.append({"id": dd["id"], "tipo": dd["tipo"] or "projeto_parecido", "titulo": dd["titulo"], "origem": dd["origem"],
+                                  "criada_em": dd["criada_em"], "pergunta": _perg_dec(dd, cx)})
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     # Folha movida aparece nos DOIS projetos: no destino (o código novo começa com o projeto) e na origem (o código antigo, em detalhe.de).
     eventos = [dict(r) for r in con.execute("""SELECT tipo, ator, quando, detalhe, entidade, codigo FROM evento
                                                 WHERE (entidade='projeto' AND codigo=?)
                                                    OR (entidade='item' AND tipo='folha_movida'
                                                        AND (codigo LIKE ? OR (json_valid(detalhe) AND json_extract(detalhe, '$.de') LIKE ?)))
-                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%"))]
+                                                   OR (entidade='lista' AND tipo IN ('lote_descartado','lote_movido')
+                                                       AND codigo IN (SELECT CAST(id AS TEXT) FROM lista_processamento WHERE projeto_codigo=?))
+                                                ORDER BY id DESC LIMIT 20""", (codigo, codigo + "-%", codigo + "-%", codigo))]
+    # CAMP-078 (20/10, exaustão): o descarte de um lote do projeto não aparecia no Histórico do projeto (o evento é do lote)
     from .livro_cv import historico as _livro
     livro_cv = _livro(con, codigo)
     filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
@@ -457,7 +528,13 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "codigos_site": [x.get("codigo") for x in itens_site],
         "codigos_locais": [x.get("codigo") for x in itens_local],
     }
+    # CAMP-124 (P3, 20/10): a conta painel × site explicada (retidas/duplicatas) e o que foi corrigido depois de publicar
+    from .alteracoes_site import conta_site as _conta_site, pendentes as _alteracoes_site
+    fonte_visual["conta_site"] = _conta_site(itens_local, fonte_visual["codigos_site"])
+    alteracoes_site = _alteracoes_site(con, codigo)
     pub = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])
+    from .parceiros import resumo_projeto as _parceiros_do_projeto
+    parceiros_projeto = _parceiros_do_projeto(con, codigo)              # 19/10: "Parceiros neste projeto" (distintos, com as disciplinas)
     con.close()
 
     md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
@@ -484,9 +561,10 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         categorias[chave]["itens"] += 1
 
     return {"projeto": projeto, "itens": itens, "categorias": list(categorias.values()),
-            "fonte_visual": fonte_visual, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
+            "fonte_visual": fonte_visual, "alteracoes_site": alteracoes_site, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
-            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas}
+            "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto,
+            "decisoes_pendentes": decisoes_pend}
 
 
 @router.get("/itens/{codigo}")
@@ -507,8 +585,20 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     vizinhos = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (i["projeto_codigo"],))]
     k = vizinhos.index(codigo)
     agentes = [dict(r) for r in con.execute("SELECT a.forma_autorizada, ia.papel, ia.fonte FROM item_agente ia JOIN agente a ON a.id=ia.agente_id WHERE ia.item_codigo=?", (codigo,))]
+    from .rotas_revisao import imagem_site_pendente
+    img_pend = imagem_site_pendente(con, codigo)
     con.close()
     d = dict(i); md = json.loads(d.pop("metadados") or "{}")
+    d["imagem_site_pendente"] = img_pend          # 19/10: girada/espelhada no painel, o site ainda mostra a antiga
+    d["tipo_documento"] = d.pop("tipos_documento", None) or d.get("tipo_documento")   # 19/10: a lista inteira quando há mais de um tipo
+    from .parceiros import ler as _ler_parceiros
+    d["parceiros"] = _ler_parceiros(d.get("parceiros"))                                  # 19/10: escritórios parceiros / projetos complementares
+    try:
+        pend = json.loads(d.get("pendencias") or "{}")
+    except ValueError:
+        pend = {}
+    from .importador_lote import fala_de_projeto_divergente
+    d["projeto_divergente"] = isinstance(pend, dict) and any(fala_de_projeto_divergente(x) for k_ in ("sinais", "bloqueios") if isinstance(pend.get(k_), list) for x in pend[k_])
     d["tainacan_item_id"] = d.pop("wp_id_exato", None)
     from .imagens import e_imagem
     d["imagem_grande"] = d.get("documento_url") if e_imagem(d.get("documento_url")) else None
@@ -581,11 +671,14 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         campos.append("atualizado_em=datetime('now')")
         con.execute(f"UPDATE projeto SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'editado',?,?)", (codigo, u["email"], json.dumps({"antes": {k: p[k] for k in mud}, "depois": mud}, ensure_ascii=False)))
+        if any(k in mud for k in ("ano", "cidade", "cliente")):
+            from .decisoes import fechar_divergencias_respondidas
+            fechar_divergencias_respondidas(con, codigo, u["email"])   # exaustão CAMP-106: a mesma pergunta não fica esperando de novo em Decisões
         con.commit()
     con.close()
     site = None
     if mud and any(k in mud for k in ("titulo", "ano", "cidade", "cliente", "tipologia", "ambito_conteudo", "autoria", "papel_no_projeto",
-                                      "natureza", "modalidade", "situacao_obra")):
+                                      "natureza", "modalidade", "situacao_obra", "endereco_obra")):
         from .publicador import atualizar_dossie_no_site
         site = atualizar_dossie_no_site(codigo, mud, u["email"])
     return {"ok": True, "campos": list(mud), "site": site}
@@ -656,7 +749,8 @@ def registrar_autoria(codigo: str, d: RegistroAutoria, u: dict = Depends(auth.ex
     p = con.execute("SELECT codigo FROM projeto WHERE codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
-    folhas = con.execute("UPDATE item SET autoria_divergente=0 WHERE projeto_codigo=? AND autoria_divergente=1", (codigo,)).rowcount
+    folhas = con.execute("UPDATE item SET autoria_divergente=0, credito=CASE WHEN credito='Autoria não confirmada' THEN NULL ELSE credito END "
+                         "WHERE projeto_codigo=? AND autoria_divergente=1", (codigo,)).rowcount   # CAMP-092: o crédito provisório sai junto
     rotulo = PAPEIS_PROJETO[d.papel_no_projeto]
     erros = con.execute("""UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=?
                            WHERE categoria='autoria_divergente' AND situacao IN ('aberto','em_correcao') AND (codigo=? OR codigo LIKE ? || '-%')""",
@@ -694,7 +788,9 @@ def verificar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
         t = d.titulo.strip()
         return {"parecidos": buscar_parecidos(con, d.fundo_codigo, t, d.ano, d.cidade, d.identificacao_original) if t else [],
                 # "Mais inteligência" (3): o mesmo nome em OUTRO fundo vira nota forte com link ("já existe 'Casa X' no fundo F012: é o mesmo?")
-                "outros_fundos": buscar_em_outros_fundos(con, d.fundo_codigo, t, d.ano, d.cidade) if t else []}
+                "outros_fundos": buscar_em_outros_fundos(con, d.fundo_codigo, t, d.ano, d.cidade) if t else [],
+                # 19/10: o código que o projeto vai ganhar se for criado agora (o mover "criar projeto novo" mostra antes de confirmar; quem cria decide na hora)
+                "proximo_codigo": (lambda r: f"{d.fundo_codigo}-{r[0]}" if r and r[0] else None)(con.execute("SELECT proximo FROM v_proximo_p WHERE fundo_codigo=?", (d.fundo_codigo,)).fetchone())}
     finally:
         con.close()
 
@@ -756,6 +852,32 @@ def condicoes_de_publicacao(codigo: str, u: dict = Depends(auth.exige("leitura")
         con.close()
 
 
+@router.post("/projetos/{codigo}/fechado")
+def projeto_fechado(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-123 (P2, 20/10): a página do projeto viu "nada pendente e publicado" e mostra "Projeto fechado: painel e site iguais".
+    Grava UMA vez no Histórico (repetir não grava de novo enquanto nada mudar no projeto). O painel confere de novo o que dá
+    para conferir aqui: o projeto está publicado, nenhuma folha a conferir e nenhum problema aberto que impede publicar."""
+    con = connect()
+    try:
+        p = con.execute("SELECT status_site FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        pend = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND COALESCE(retida,0)=0", (codigo,)).fetchone()[0]
+        from .publicacao import BLOQUEIO_DO_PROJETO
+        bloq = con.execute(BLOQUEIO_DO_PROJETO, (codigo,)).fetchone()[0]     # 21/10 (4.1): só o bloqueio no próprio projeto
+        if p["status_site"] != "no_ar" or pend or bloq:
+            return {"ok": False, "gravado": False, "motivo": "ainda há o que fazer neste projeto"}
+        ult = con.execute("SELECT tipo FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 1", (codigo,)).fetchone()
+        if ult and ult["tipo"] == "projeto_fechado":
+            return {"ok": True, "gravado": False}
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_fechado',?,?)",
+                    (codigo, u["email"], json.dumps({"texto": "Projeto fechado: painel e site iguais"}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "gravado": True}
+    finally:
+        con.close()
+
+
 @router.post("/projetos/{codigo}/publicar")
 def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Escreve no Tainacan o status do dossiê e das folhas.
@@ -786,14 +908,20 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if p["tainacan_item_id"]:
             col = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone()
             alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
+        esconder = []   # folha retida que tem registro no site: publicar NUNCA a publica; ela vai (ou volta) para privado
         if d.incluir_folhas:
-            for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
+            for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id, COALESCE(i.retida,0) FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
                                     WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.duplicata_de IS NULL
-                                      AND (i.lote_id IS NULL OR i.revisao<>'pendente')""", (codigo,)):
-                alvos.append(("item", i[0], i[2] or 8013, i[1]))
+                                      AND (i.lote_id IS NULL OR i.revisao<>'pendente')
+                                      AND NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=i.codigo AND eb.situacao IN ('aberto','em_correcao')
+                                                      AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')""", (codigo,)):   # 21/10 (4.1): folha com bloqueio fica de fora
+                if i[3] and alvo == "publish":
+                    esconder.append(("item", i[0], i[2] or 8013, i[1]))
+                else:
+                    alvos.append(("item", i[0], i[2] or 8013, i[1]))
     finally:
         con.close()
-    if not alvos:
+    if not alvos and not esconder:
         return {"ok": False, "alterados": 0, "total": 0, "falhas": [],
                 "mensagem": "Este projeto ainda não tem registros no site: envie as folhas ao site (como rascunho) antes de mudar a publicação."}
 
@@ -802,26 +930,39 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         wp = WP()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(503, f"Não consegui acessar o WordPress ({str(e)[:160]}). Confira a senha de aplicação em Configurações.")
-    sucessos, falhas = [], []
+    sucessos, falhas, escondidas = [], [], []
     for tipo, cod, cid, wid in alvos:
         try:
             wp.atualizar_status_item(cid, wid, alvo)
             sucessos.append((tipo, cod, wid))
         except Exception as e:  # noqa: BLE001
             falhas.append({"codigo": cod, "erro": str(e)[:240]})
+    for tipo, cod, cid, wid in esconder:   # 21/10: folha retida estava sendo publicada junto com o projeto
+        try:
+            wp.atualizar_status_item(cid, wid, "private")
+            escondidas.append((tipo, cod, wid))
+        except Exception as e:  # noqa: BLE001
+            falhas.append({"codigo": cod, "erro": "folha retida, não consegui escondê-la no site: " + str(e)[:200]})
 
     # fase 3: gravar o resultado local
     erro_db = persistir_resultado(sucessos, st_painel, alvo, "projeto", codigo, f"site_{d.acao}", u["email"],
                                   {"ok": len(sucessos), "falhas": len(falhas)})
+    if escondidas and not erro_db:
+        erro_db = persistir_resultado(escondidas, "fora_do_ar", "private", "projeto", codigo, "site_retidas_escondidas", u["email"],
+                                      {"folhas": [c for _, c, _ in escondidas]})
     if erro_db:
         falhas.append({"codigo": codigo, "erro": f"O site foi atualizado, mas não consegui registrar aqui ({erro_db[:120]}). A próxima sincronização acerta."})
-    if sucessos and not falhas:
-        msg = f"{len(sucessos)} registro(s) {RESULTADO[alvo]}."
-    elif sucessos:
+    total = len(alvos) + len(esconder)
+    if (sucessos or escondidas) and not falhas:
+        msg = f"{len(sucessos)} registro(s) {RESULTADO[alvo]}." if sucessos else "Nenhum registro publicado."
+    elif sucessos or escondidas:
         msg = f"{len(sucessos)} de {len(alvos)} registro(s) {RESULTADO[alvo]}; {len(falhas)} falharam (veja a lista)."
     else:
         msg = f"Nenhum registro foi alterado: {len(falhas)} falha(s) ao falar com o site."
-    return {"ok": bool(sucessos) and not falhas, "alterados": len(sucessos), "total": len(alvos), "falhas": falhas, "mensagem": msg}
+    if escondidas:
+        msg += f" {len(escondidas)} folha(s) retida(s) ficaram escondidas no site (não vão ao ar)."
+    return {"ok": bool(sucessos or escondidas) and not falhas, "alterados": len(sucessos), "total": total, "falhas": falhas, "mensagem": msg,
+            "retidas_escondidas": [c for _, c, _ in escondidas]}
 
 
 class AutorizarLote(BaseModel):
@@ -922,6 +1063,8 @@ def projetos_lote_plano(d: AcaoProjetosLote, u: dict = Depends(auth.exige("admin
             p = con.execute("SELECT * FROM projeto WHERE codigo=?", (c,)).fetchone()
             if not p:
                 bloqueados.append({"codigo": c, "titulo": "", "motivo": "Projeto não existe"}); continue
+            if p["mesclado_em"] or p["descartado_em"]:
+                bloqueados.append({"codigo": c, "titulo": p["titulo"], "motivo": "Projeto mesclado ou descartado: publique o projeto de destino"}); continue
             pl = publicacao_guiada.plano(con, p)
             if pl["bloqueios"]:
                 bloqueados.append({"codigo": c, "titulo": p["titulo"], "motivo": " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]),

@@ -167,7 +167,7 @@ class WP:
         """B1/B9: grava campos da página-hub de um fundo (rota do plugin da CAMP; ver docs/site/painel-hub.php)."""
         r = self.h.post(f"/wp-json/camp/v1/painel/hub/{int(termo_id)}", json={"meta": meta})
         if r.status_code == 404 and "rest_no_route" in r.text:
-            raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub (instale docs/site/painel-hub.php no plugin da CAMP)")
+            raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub: avise quem cuida do site (plugin da CAMP, docs/site/painel-hub.php)")
         if r.status_code >= 400:
             raise RuntimeError(f"O site recusou gravar a página do arquiteto: {r.status_code} {r.text[:200]}")
         return r.json()
@@ -197,6 +197,30 @@ class WP:
         return r.json()
 
     # ---- WordPress ----
+    def gravar_metadados_lote(self, item_id: int, corpo: dict) -> dict | None:
+        """21/10: vários metadados de um item numa chamada (rota do plugin da CAMP, CAMP-055). None = o site não tem a rota (404):
+        quem chama grava um por um, como antes."""
+        r = self.h.post(f"/wp-json/camp/v1/painel/item/{int(item_id)}/metadados", json=corpo)
+        if r.status_code == 404:
+            return None
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou os metadados: {r.status_code} {r.text[:200]}")
+        return r.json()
+
+    def pagina_por_slug(self, slug: str) -> list[dict]:
+        """21/10: páginas do WordPress com este slug (publicadas, rascunho ou privadas). Usado para achar a página do arquiteto."""
+        r = self._get("/wp-json/wp/v2/pages", slug=slug, status="publish,draft,private,pending", context="edit", per_page=20)
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou a busca da página: {r.status_code} {r.text[:200]}")
+        return r.json() if isinstance(r.json(), list) else []
+
+    def mudar_status_pagina(self, page_id: int, status: str) -> dict:
+        """21/10: publica (publish) ou tira do público (draft) uma página do WordPress — a página do arquiteto."""
+        r = self.h.post(f"/wp-json/wp/v2/pages/{int(page_id)}", json={"status": status})
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou mudar a página do arquiteto: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     def paginas(self) -> Iterator[dict]:
         yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None)
 
@@ -263,7 +287,7 @@ def _wp_substituir_midia(self, media_id: int, caminho: str, nome: str | None = N
         r = self.h.post(f"/wp-json/camp/v1/painel/midia/{int(media_id)}", content=fh.read(),
                         headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=300)
     if r.status_code == 404 and "rest_no_route" in r.text:
-        raise RuntimeError("O site ainda não tem a rota para trocar a imagem de um anexo (instale docs/site/painel-midia.php no plugin da CAMP)")
+        raise RuntimeError("O site ainda não tem a rota para trocar a imagem de um anexo: avise quem cuida do site (plugin da CAMP, docs/site/painel-midia.php)")
     if r.status_code == 401:
         raise RuntimeError("O site recusou as credenciais (401). Confira usuário e Application Password")
     if r.status_code >= 400:

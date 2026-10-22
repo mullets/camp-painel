@@ -134,7 +134,7 @@ Regras que o sistema impõe (README): o código vem da tabela de autoridade, nun
 
 | Quem | Como usa |
 |---|---|
-| Equipe da CAMP (papéis `leitura`, `operador`, `admin`, `master`) | navegador, em `http://192.168.15.60:8000` na rede local ou `https://painel.camp.arq.br` de fora |
+| Equipe da CAMP (papéis `leitura`, `operador`, `admin`, `master`) | navegador, em `http://painel.local` (ou `http://192.168.15.60:8000`) na rede local ou `https://painel.camp.arq.br` de fora |
 | Estações de digitalização (Macs com VueScan, estações Contex, estações "universais") | chamam rotas HTTP **sem login**, protegidas por rede local e/ou token (`estacao.token`) |
 | CAMP Vision 2 (computador Ubuntu `.40`) | chama as mesmas rotas sem login: contexto, reserva de projeto, heartbeat, aviso de lote pronto, pedidos de releitura |
 | Site (formulário de pedido de material) | chama `POST /api/pedidos/site` com o token `pedidos.token` |
@@ -143,7 +143,7 @@ Regras que o sistema impõe (README): o código vem da tabela de autoridade, nun
 
 | Peça | Onde | Endereço / caminho |
 |---|---|---|
-| Servidor do painel | Ubuntu, máquina `camp` (usuário `camp`) | `192.168.15.60:8000` (`docs/padroes.md` §1) |
+| Servidor do painel | Ubuntu, máquina `camp` (usuário `camp`) | `192.168.15.60:8000`, também `http://painel.local` (`docs/padroes.md` §1) |
 | QNAP TS-932PX ("Server-Camp" no Mac) | rede local | `192.168.15.30`, compartilhamento `Backup Servidor CAMP` |
 | QNAP TS-231P (réplica / backup frio) | rede local | `qnap.backup_ip`; réplica montada só leitura em `/mnt/qnap/replica` |
 | CAMP Vision 2 (repositório `github.com/mullets/campvision-new`) | Ubuntu dedicado | `192.168.15.40` (`campvision2.ip`) |
@@ -1257,6 +1257,13 @@ curl -sI https://painel.camp.arq.br/api/versao
 3. No painel Zero Trust da Cloudflare: o túnel `camp-painel` aparece "Healthy"? O DNS `painel.camp.arq.br` aponta para ele?
 4. Na LAN, `http://192.168.15.60:8000` continua funcionando independentemente do túnel.
 
+### Nome na rede local: `http://painel.local`
+
+`scripts/instalar_nome_local.sh` (rodar no servidor, com sudo; `--simular` mostra antes, `--verificar` confere, `--desfazer` tira):
+- **Nome:** o serviço `camp-painel-nome` anuncia `painel.local` por mDNS (avahi) com o IP atual do servidor. Mac, iPhone, Windows 10/11 e Linux com avahi acham sozinhos; nada a configurar nas máquinas. Android antigo pode não achar: use o IP.
+- **Sem `:8000`:** o serviço `camp-painel-porta80` liga uma regra `iptables` (nat, só tráfego destinado ao próprio servidor) que manda a porta 80 para a 8000. O IP de quem acessa não muda, então a regra das estações na LAN (`rede.py`) segue igual. Se já houver algo na porta 80, o script para sem mexer em nada.
+- `http://192.168.15.60:8000` e o túnel continuam valendo; estações e CAMP Vision não precisam mudar.
+
 ---
 
 ### A.11 Pontos de atenção encontrados na leitura do código
@@ -1838,6 +1845,8 @@ Colunas (schema + migrações `038`, `048`, `065`): `id`, `nome`, `projeto_codig
 
 `sinais` vem de `SINAIS`: `orientacao_incerta` → "orientação incerta", `serie_incerta` → "série incerta", `fora_do_periodo` → "fora do período de atuação do fundo", `projeto_divergente` → "projeto divergente", `sem_identificacao` → "sem identificação (pasta com várias obras)".
 
+**"É deste projeto (o CAMP Vision errou)"** (19/10, Clube Sírio): `POST /api/itens/{codigo}/deste-projeto` (operador+). Tira de `pendencias` o sinal "projeto divergente" e os bloqueios que falam de projeto divergente/outro projeto/outra obra (`importador_lote.tirar_projeto_divergente`); se não sobrar bloqueio (e a folha não tiver autoria divergente), `status_site` sai de `bloqueado` para `nao_publicado`; fecha (como `ignorado`) o problema automático `projeto_errado` do CAMP Vision daquela folha; grava o evento `projeto_confirmado` com quem fez. Repetir não muda nada. A reimportação do lote respeita a confirmação (não traz o aviso de volta). Na tela: revisão da folha e página da folha (`GET /api/itens/{codigo}` traz `projeto_divergente`).
+
 `lido_json` (o que o CV2 **leu**, para medir a qualidade dele — cartão 152):
 
 ```json
@@ -1912,6 +1921,8 @@ Devolve quantos entraram (`problemas_registrados`).
 ### B.5.7 Duplicatas
 
 Durante o laço, cada folha com `duplicata_de` é anotada. **Depois** que todas existem (a referência é de item para item, com chave estrangeira), para cada par: se a original existe e é diferente, grava `duplicata_de` e `tipo_duplicata`. `quase` (nome novo no CV2) vira `perceptual`; só valem `exata`, `perceptual`, `mesma_folha` (outro valor → NULL). Uma duplicata não vai ao site (`publicacao.ELEGIVEL_LOCAL` exige `duplicata_de IS NULL`) e não vota no consenso.
+
+Conferência (19/10/2026, `backend/app/duplicatas.py`, migração `139`): a tela **Duplicatas** do projeto (`#duplicatas/F0xx-P0xxx`, botão "Duplicatas (n)" no topo do projeto, na aba Problemas e na revisão da folha) mostra cada grupo lado a lado (a folha que vai ao site + as cópias, com o porquê do CAMP Vision). `GET /api/projetos/{c}/duplicatas` devolve os grupos (cadeias A→B→C viram um grupo), a contagem conferida e as sugestões ("Talvez sejam duplicatas": mesmo md5, ou mesmo tipo + folha + título). `POST /api/projetos/{c}/duplicatas/decisoes` (operador) aplica `confirmar`, `trocar`, `nao_e`, `marcar` e `dispensar`, cada uma num SAVEPOINT. Conferir grava `duplicata_conferida_em/por/de`; só vale enquanto `duplicata_de = duplicata_conferida_de` (reimportação que muda a original volta a pedir conferência). Confirmar uma cópia pendente de lote não aprovado a deixa `conferida` na revisão (não trava "Aprovar o lote"). As rotas de uma folha (`POST/DELETE /api/itens/{c}/duplicata-de`) também registram a conferência.
 
 ### B.5.8 Divergências (`decisoes.abrir_divergencias`)
 
@@ -2050,6 +2061,49 @@ Para folha digitalizada pelo verso. Sem Pillow → 503; lote aprovado ou folha n
 
 A decisão de pessoa não é desfeita por reimportação.
 
+### B.7.4a Recortar e alinhar (19/10): `POST /api/itens/{c}/ajuste`
+
+Pedido do Rafa: "quando formos conferir uma folha, ter opção de recorte e alinhamento manual, porque às vezes está vindo bem ruim". Decisão de 19/10: "salva tanto no servidor quanto no site; a TIF pode ficar original".
+
+**O que se guarda** (migração `136_recorte_alinhamento.sql`, só `ADD COLUMN` em `item`):
+- `recorte` — JSON `{"x","y","w","h"}` em frações (0–1) da imagem **já espelhada, girada (90°) e endireitada**; NULL = imagem inteira;
+- `alinhamento` — ângulo fino em graus, de −10 a +10 (passo 0,1), **positivo = horário** (o mesmo sentido do CSS `rotate`);
+- `imagem_corrigida` — o JPG corrigido que o painel gerou, relativo à pasta de imagens corrigidas.
+
+Os parâmetros são a **fonte** (permitem desfazer e refazer). Ao aplicar, o painel gera de verdade um JPG corrigido (`ajuste_imagem.garantir`): a mesma origem da prévia (a prévia do CV2 em `_campvision/preview/`, senão o JPG da folha), na ordem **espelho → giro de 90° → ângulo fino** (em torno do centro, mesma tela, cantos brancos) **→ recorte**, JPEG q92 sem subamostragem, sRGB. Fica no **diretório de dados do painel**, ao lado do banco: `imagens_corrigidas/<projeto>/<código>-<marca>.jpg` (ou `CAMP_IMAGENS_CORRIGIDAS_DIR`). **Não** fica no QNAP: o painel não grava na pasta final do CV2 (`docs/campvision.md`, "mão única"), e o TIF e a prévia do CV2 nunca mudam. A `<marca>` (SHA-1 de origem+data+tamanho+giro+espelho+ângulo+recorte) muda com os parâmetros e com o arquivo de origem: se o CV2 regravar a prévia, a versão corrigida é refeita; arquivo sumido (disco novo, banco restaurado) é refeito a partir dos parâmetros.
+
+**Onde o JPG corrigido vira A imagem da folha:**
+- prévia e miniaturas (`GET /api/itens/{c}/previa`): com ajuste, serve o corrigido (miniatura `t=` reduzida dele). `?o=1` serve a imagem **sem** o ajuste (é o que a tela de recortar mostra). A tela põe `&a=<ângulo_x_y_w_h>` na URL para o navegador não mostrar a velha;
+- o site (`publicador.imagem_pronta_para_o_site`): o derivado de até 1920 px sai do corrigido;
+- pedidos em JPG (`pacote` do pedido): a linha ganha `jpg_corrigido` = `GET /api/itens/{c}/imagem-corrigida` (baixa o corrigido em tamanho cheio, leitura+); o `caminho_qnap` continua sendo o do CV2;
+- `GET /api/itens/{c}/ajuste` (leitura+): `{recorte, angulo, giro_manual, espelhar, imagem_corrigida}`.
+
+**Regras** (as do giro): operador+; lote aprovado e folha fora do site → **409**; folha no site (`rascunho`/`no_ar`) → só admin/master (**409** para operador), e o painel troca a imagem do site mantendo o ID do anexo (`girar_imagem_no_site(codigo, giro, (recorte, ângulo))`). Diferente do giro: se o site **recusar**, o painel grava mesmo assim (a correção não se perde), responde `pendencia` e abre a pendência `pendente_imagem_ajustada` em `divergencia_site`; aplicar de novo (mesmo sem mudar nada) reenvia e, dando certo, resolve a pendência. Ângulo fora de ±10°, recorte menor que 5% ou fora da imagem → **400**. Recorte inteiro + 0° = **desfazer** (limpa as três colunas; a folha volta à imagem do CV2). Eventos `ajuste_imagem` (de, para, arquivo, anexo/site) e `ajuste_desfeito`, com quem fez.
+
+**Girar/espelhar depois de recortar:** a caixa acompanha (`ajuste_imagem.depois_do_giro`: 90° horário leva `(x,y,w,h)` a `(1−y−h, x, h, w)`; espelhar leva `x` a `1−x−w` e troca o sinal do ângulo) e o JPG corrigido é refeito.
+
+**"Endireitar automaticamente"** — `GET /api/itens/{c}/ajuste/sugerir` (operador+): só **sugere** o ângulo (não grava). Só Pillow (nenhuma dependência nova): bordas da imagem reduzida a 600 px, e o ângulo de −10 a +10 que maximiza a variância dos perfis de linhas e colunas (busca de 0,5° e depois de 0,1°). Funciona bem com folha que tem linhas retas (carimbo, moldura, paredes); a pessoa confere com a grade e aplica.
+
+**Na tela** (revisão da folha): botão **"✂ Recortar e alinhar"** (tecla **K**) troca a imagem pela tela de recortar: a imagem inteira (sem o ajuste), uma grade de 10% por cima, a caixa com 8 puxadores (cantos e bordas; mouse e toque, por `pointer events`), escurecendo o que fica de fora; o arrasto do meio move a caixa. Alinhamento: deslizador, campo numérico (°) e botões −0,5° / +0,5° (teclas `[` e `]`); a imagem gira ao vivo por CSS em torno do centro (o mesmo que o servidor faz). **Aplicar** (Enter) grava; **Cancelar** (Esc) fecha sem gravar e **não** fecha a gaveta. Com a tela aberta, setas e letras não trocam de folha nem de tela. **"Desfazer recorte/alinhamento"** aparece quando a folha tem ajuste (pede confirmação). Admin em folha que já está no site confirma "Trocar também a imagem no site?".
+
+Teste: `tests/teste_backend.py` modo `recorte_alinhamento` (no `--rapido`) e `tests/navegador_recorte.js` (Playwright, porta própria).
+
+### B.7.4b Escritórios parceiros / projetos complementares (19/10)
+
+Pedido: "na descrição dos documentos, espaço para identificação de escritórios parceiros no desenvolvimento de projetos, principalmente consultoria / projetos complementares (engenharia, instalações, paisagismo etc.)".
+
+- **Onde fica:** coluna `item.parceiros` (migração `138_item_parceiros.sql`, só `ADD COLUMN`), JSON `[{"escritorio": "...", "disciplina": "Estrutura"}]`; `NULL` = nenhum. Coluna e não tabela própria porque a lista é da folha e é salva junto com ela (mesmo `PATCH`, mesmo evento `editado`, como `recorte` e `pendencias`), e mover/recodificar folha (que copia a linha inteira, `importador_lote._recodificar_por_releitura`) leva os parceiros sem código a mais. Regras em `backend/app/parceiros.py`.
+- **Disciplinas** (lista fixa, `parceiros.DISCIPLINAS`): Estrutura, Fundações, Instalações elétricas, Instalações hidráulicas, Ar-condicionado/climatização, Luminotécnica, Acústica, Paisagismo, Interiores, Comunicação visual, Engenharia (geral), Consultoria, Outra. "Outra" exige o texto (guardado como o próprio texto; ao reabrir, volta como "Outra" + o texto).
+- **Gravar:** `PATCH /api/itens/{c}` com `parceiros: [{escritorio, disciplina, outra?}]` (operador+). `[]` limpa; ausente não mexe; igual ao atual não grava nem gera evento. Validação (400, nada é gravado): nome obrigatório (até 200), disciplina obrigatória e da lista (ou "Outra" com texto até 80), no máximo 30; espaços repetidos são arrumados, disciplina escrita em minúsculas vira o nome da lista, linha repetida (mesmo escritório e disciplina) entra uma vez, linha toda vazia é ignorada. Evento `editado` com `antes.parceiros` / `depois.parceiros` (listas).
+- **Leitura:** `GET /api/itens/{c}/edicao` traz `local.parceiros`, `disciplinas` e `fundo_codigo`; `GET /api/itens/{c}` traz `item.parceiros`; `GET /api/projetos/{c}/detalhe` traz `parceiros` (distintos do projeto, com as disciplinas e quantas folhas; duplicatas não contam).
+- **Sugestões de nome** (para não digitar o mesmo escritório de dez jeitos): `GET /api/parceiros/sugestoes?fundo=F026&q=` (leitura) devolve os nomes distintos já usados no painel, os do fundo primeiro (`do_fundo`), depois por número de folhas, com as disciplinas. A tela põe num `<datalist id="parc-nomes">`.
+- **Copiar para outras folhas** (o mesmo calculista em todas as pranchas de estrutura): `GET /api/itens/{c}/parceiros/folhas` lista as outras folhas do projeto (lote, revisão, quantos parceiros já têm); `POST /api/itens/{c}/parceiros/copiar` `{alvo, itens?, modo}` (operador+) copia os parceiros **salvos** da folha. `alvo`: `lote_pendentes` (as ainda a conferir do mesmo lote), `lote`, `projeto` ou `itens` (as escolhidas). `modo`: `acrescentar` (padrão: não apaga o que a outra folha já tem) ou `substituir`. Como o consenso do lote (`rotas_consenso.py`): resposta `{aplicadas, ignoradas[{codigo, motivo}]}` (outro projeto, "já tinha esses parceiros"); cada folha mudada ganha `editado` com antes/depois, `copiado_de` e `modo`. Folha sem parceiros salvos: 409. Duplicatas só entram se escolhidas uma a uma.
+- **Tela:** bloco "Escritórios parceiros" (`parceirosEditorHTML`) em "Dados da folha" na revisão (`rv-parceiros`) e na edição da folha (`ei-parceiros`): uma linha por escritório (nome com sugestões + disciplina; "Outra" abre o campo do texto), "+ Adicionar escritório", ✕ para remover, "Copiar para outras folhas…". O bloco guarda a lista num campo escondido com `data-orig`, como o Tipo: `camposRevisaoAlterados`/`salvarItem` mandam `parceiros` só se mudou e `marcarRevisaoSalva` limpa o "alterado". "Copiar…" salva antes os parceiros desta folha se mudaram (só eles) e abre a escolha (pendentes do lote, o lote, o projeto, ou escolher; "Trocar os parceiros que elas já têm"); a caixa de escolha não conta como alteração a perder (`data-sem-alteracao`). Página da folha: "Escritórios parceiros" na Descrição (`#it-parceiros`). Página do projeto: painel "Parceiros neste projeto" (`#pj-parceiros`) quando há algum.
+- **Site:** o painel **não cria metadado** no site. Na publicação da folha (`publicador.criar_folha_no_site`), se a coleção de folhas já tiver um metadado de **texto** chamado "Escritórios parceiros", "Projetos complementares", "Parceiros", "Consultores", "Colaboradores" ou "Colaborador" (pelo espelho `wp_metadado`, sem diferenciar maiúsculas; taxonomia/relação não servem), envia "Escritório (Disciplina); …" para ele. Senão os parceiros ficam **só no painel** (e na exportação EAD), sem pendência. Em 19/10 não havia como conferir o espelho real a partir do ambiente de desenvolvimento; os testes semeiam os dois casos. Editar os parceiros de uma folha que já está no site não reenvia (só a publicação envia).
+- **EAD 2002** (`exportacao._c_item`): `<controlaccess><head>Escritórios parceiros / projetos complementares</head><corpname role="Estrutura">Escritório X</corpname>…</controlaccess>` na folha. Não é `<origination>`: em ISAD(G) 3.2.1 / EAD, `origination` é o **produtor** (quem produziu/acumulou o conjunto — o titular do fundo); os escritórios parceiros são entidades ligadas ao documento, isto é, **pontos de acesso** (`controlaccess`), e a disciplina vai em `role`, que o EAD 2002 aceita em `corpname`. O CSV de folhas não mudou.
+- **Contrato:** nada muda para estações, CAMP Vision ou site (campo só do painel; o envio ao site usa um metadado que já exista). Versão do contrato não sobe.
+- **Testes:** modo `parceiros` em `tests/teste_backend.py` (rápido) e `tests/navegador_parceiros.js` (Playwright, porta 8931).
+
 ### B.7.5 Campo a campo e conferir/corrigida
 
 - `GET /api/itens/{c}/edicao` (operador+): os campos locais (`titulo`, `tipo_documento`, `folha`, `escala`, `dimensoes`, `suporte`, `credito`, `endereco_folha`, `cliente_folha`, `ano_folha`), a lista de tipos e, se a folha já está no site, os campos do site editáveis.
@@ -2073,7 +2127,7 @@ Na tela: "Está certo" (Enter) = `conferida`; "Salvar correção" = `PATCH` + `c
 - `POST /api/lotes/{id}/aprovar` (admin): já aprovado → 409; sem folhas → 400 "Importe as folhas"; há pendentes → 400 "Faltam conferir N folha(s)". Grava `aprovado_por/aprovado_em`; evento `revisao_aprovada` (folhas, bloqueadas). **Não muda a etapa** (é um registro; `rascunho` continua significando "foi para o site").
 - `POST /api/lotes/{id}/reabrir` (admin): não aprovado → 409; etapa `rascunho`/`publicado` → 409 "já foi para o site". Limpa a aprovação; evento `revisao_reaberta`.
 
-Lote aprovado fica protegido: importar, revisar, girar, espelhar, reter e aplicar consenso respondem 409 até reabrir.
+Lote aprovado fica protegido: importar, revisar, girar, espelhar, recortar/alinhar, reter e aplicar consenso respondem 409 até reabrir.
 
 ### B.7.8 Folha de contatos
 
@@ -2312,6 +2366,8 @@ Se uma tabela nova passar a guardar código de folha, ela tem de entrar aqui (e,
 | `GET /api/lotes/{id}/saidas-cv`, `POST /api/lotes/{id}/saidas-cv/resposta` | leitura / operador (devolver: admin) | `rotas_revisao.py` |
 | `GET /api/itens/{c}/previa` | leitura | `rotas_revisao.py` |
 | `POST /api/itens/{c}/girar`, `/espelhar`, `/revisao`, `/retencao` | operador | `rotas_revisao.py` |
+| `POST /api/itens/{c}/ajuste`, `GET /api/itens/{c}/ajuste/sugerir` | operador | `rotas_revisao.py` (recortar e alinhar, B.7.4a) |
+| `GET /api/itens/{c}/ajuste`, `/imagem-corrigida` | leitura | `rotas_revisao.py` |
 | `GET /api/itens/{c}/edicao`, `PATCH /api/itens/{c}` | operador | `rotas_itens.py` |
 | `POST /api/lotes/{id}/conferir-sem-pendencia`, `/conferir-todas` | operador | `rotas_revisao.py` |
 | `POST /api/lotes/{id}/aprovar`, `/reabrir` | admin | `rotas_revisao.py` |
@@ -3372,7 +3428,7 @@ Carregador chamado por `route_to` para cada tela:
    - `?` abre a ajuda da tela (`abrirAjuda()`; com janela lateral aberta, explica a janela);
    - `F` foca o primeiro campo de filtro da tela;
    - as letras/dígitos de `KEYS` navegam — mas não funcionam dentro de campos de texto, com Ctrl/⌘/Alt, nem se o item de menu estiver escondido para o papel.
-   - Na revisão da folha: `Enter` = "Está certo", `R` = girar, `←/→` = folha anterior/próxima. Na página da folha: `←/→` = anterior/próxima, `E` = editar (o handler usa captura e `stopPropagation`, por isso não vai para "Máquinas e site").
+   - Na revisão da folha: `Enter` = "Está certo", `R` = girar, `K` = recortar e alinhar (com a tela de recortar aberta: `[`/`]` = ±0,5°, `Enter` = Aplicar, `Esc` = Cancelar), `←/→` = folha anterior/próxima. Na página da folha: `←/→` = anterior/próxima, `E` = editar (o handler usa captura e `stopPropagation`, por isso não vai para "Máquinas e site").
 5. **Atenção**: a tabela de atalhos em `docs/padroes.md` §3 e §10 está desatualizada (é de antes do "menu por tarefa", H25). A fonte da verdade é `NAV_ATALHOS`.
 
 ### D.1.4 `API()` e as mensagens de erro (`mensagemErroAPI`)
@@ -3660,11 +3716,14 @@ A verificação que **cria** decisões acontece em outros pontos: `POST /api/est
 
 Ver também a seção 4 (regras). Na tela (`carregarErros`):
 
-1. Abas `#err-abas`: Abertos (`aberto`+`em_correcao`), Em correção, Resolvidos (`corrigido`), Todos — contagem por `GET /api/erros/contagem`; lista por `GET /api/erros?situacao=…` (leitura), ordenada por gravidade (bloqueia → corrigir → aviso) e data. A aba escolhida fica em `LISTA_MEM['erros.aba']`.
-2. Colunas: Gravidade (vermelho bloqueia, amarelo corrigir, cinza aviso), Onde (código; se é folha, link para o projeto), Problema (categoria + descrição + resolução), Origem (`origemErroHTML`: automático / site / painel / revisão, e quem relatou), Há quanto tempo (amarelo depois de 7 dias), Situação.
+1. Abas `#err-abas`: Abertos (`aberto`+`em_correcao`), Em correção, Resolvidos (`corrigido`/`fechado`), Não era problema (`ignorado`), Todos — contagem por `GET /api/erros/contagem` (respeita os filtros; traz também `talvez`); lista por `GET /api/erros?situacao=…&gravidade=…&categoria=…&origem=…&projeto=…&q=…` (leitura), ordenada por gravidade (bloqueia → corrigir → aviso) e data. Aba e filtros ficam em `LISTA_MEM` (`erros.aba`, `erros.filtros`). `#erros/<projeto>` mostra só aquele projeto ("Só este projeto"; a aba Problemas do projeto tem "Resolver na tela de Problemas").
+2. **Agrupada por projeto** (19/10, "a pasta de problemas tá confusa"): cada grupo mostra o NOME e o código do projeto (ou do fundo), quantos problemas, quantos bloqueiam e quantas folhas foram retiradas/recusadas pelo CAMP Vision, "Abrir o projeto ›" e "Só este projeto"; o grupo recolhe (▸/▾, guardado em `erros.grupos_fechados`). Os abertos que **talvez** já estejam resolvidos ficam num grupo separado no topo ("Podem já estar resolvidos"). Colunas: seleção, Gravidade, Onde (folha `ano-série-D`; "fora do painel", "não existe mais", "agora é …"), O que aconteceu e o que fazer (categoria + descrição, "O que fazer: …" e UM botão com a ação que resolve), Origem, Situação (há quanto tempo; amarelo depois de 7 dias). A tabela não ordena por coluna (`data-sem-ordenar`): os grupos não se misturam. Até 25 grupos, depois "Mostrar mais". "Exportar visão" exporta TUDO do filtro (`exportarErros`), com o que aconteceu e o que fazer.
+   - **Ações** (`errExecutar`, reaproveitam o que já existe): Devolver à revisão (admin; detalhe com o motivo → `POST /api/lotes/{lote}/saidas-cv/resposta`) ou "A retirada está certa"; Abrir o lote no projeto (rola até "O que o CAMP Vision entregou" e abre as retiradas); Abrir a folha para girar / espelhar / Abrir a folha (abre o projeto e a revisão da folha, `ACAO_APOS_PROJETO.tipo='folha'`); Marcar de qual folha é cópia (`marcarDuplicata`); Mover para o projeto certo (admin; `outroProjetoCorpoHTML(...,'err')` → `/api/itens/mover`); Registrar a autoria (admin; `registrarAutoria`); Abrir o projeto / o fundo. O que é de admin aparece desabilitado para o operador, com "peça a um admin".
+   - **Em lote**: caixas por linha, por grupo e "todos os abertos"; a barra `#err-bulk` (no rodapé) pede UMA frase e aplica Marcar como corrigido / Não era problema / Estou corrigindo a todos (`POST /api/erros/lote`, tudo ou nada); o aviso traz **Desfazer** (volta cada um à situação de antes).
+   - **Mesmo lugar**: depois de resolver, a lista recarrega e fica na mesma rolagem; ao sair por um link ou ação da lista e voltar (Voltar do navegador), a rolagem é restaurada (`errSair`/`ERR_VOLTAR`).
 3. **"Relatar problema"** (modal `#m-erro`, `relatarProblema()`): código com sugestões (`neSugerirCodigos` → `/api/busca`) e confirmação do nome (`neAcharTitulo`), gravidade em cartões (Corrigir / Bloqueia / Aviso), categoria com exemplo (`NE_EXEMPLOS`), "Quem viu o problema" (Eu mesmo = `operador`; Um visitante do site = `site`, que exige o nome/e-mail de quem avisou), descrição. `POST /api/erros` (operador).
    - Se o problema bloqueia e o projeto **já está publicado**, o servidor devolve `publicado_com_bloqueio`; o admin vê a pergunta "Despublicar até resolver" (chama `POST /api/projetos/{c}/publicar` com `acao:'tirar_do_ar'`) ou "Manter publicado"; o operador recebe o aviso para chamar um administrador.
-4. Linha → `abrirErro(id)`: gravidade, descrição, origem, data. Para operador+ (`pode('problema.resolver')`): campo "O que foi feito (ou por que não era problema)" e os botões **Marcar como corrigido**, **Não era problema (ignorar)**, **Estou corrigindo** (`em_correcao`), **Reabrir**, "Abrir a folha/o projeto" e, para autoria divergente em projeto (admin), **"É de outro autor: registrar coautoria/terceiros"** (`registrarAutoria`). Fechar sem frase é recusado na tela e no servidor. `PATCH /api/erros/{id}` (operador).
+4. Linha → `abrirErro(id)` (`GET /api/erros/{id}`): o projeto e a folha com links, **O que aconteceu**, **O que fazer** com o botão da ação (o único azul), gravidade, origem, data e situação; o aviso "Pode já estar resolvido" quando for o caso; ‹ Anterior / Próximo › na ordem da lista. Para operador+ (`pode('problema.resolver')`): "Já resolveu? Diga em uma frase o que foi feito" e **Marcar como corrigido**, **Não era problema**, **Estou corrigindo** (`em_correcao`), **Reabrir**. Fechar sem frase é recusado na tela e no servidor. `PATCH /api/erros/{id}` (operador).
 5. Os botões "Relatar problema" também existem na página do projeto e da folha (`data-relatar-folha`).
 
 ### D.2.5 Pedidos de material (`#solicitacoes`, tecla 5)
@@ -3768,6 +3827,13 @@ Uso típico no celular (`backend/app/rotas_estante.py`).
    - na janela de impressão: impressora Brother, papel 29 mm × 90 mm, paisagem, sem margens, escala 100% (o aviso abaixo da prévia diz isso);
    - o painel lembra o último formato escolhido neste navegador (`localStorage` `camp.lab.fmt`; a lombada de tubo continua com o formato próprio).
 9. **Projeto, arquiteto, cidade e ano sempre** (15/10/2026): em todos os formatos, as etiquetas de pasta, de folha e de tubo trazem o nome do projeto, o **arquiteto** (a autoria cadastrada no projeto; sem ela, o nome do fundo) com o código do fundo, a cidade e o ano; sem dado, aparecem "sem cidade" e "sem data".
+
+10. **Material** (15/10/2026): na pasta de projeto e no tubo, escolher a série (S01–S08) mostra quantas folhas dela já estão no painel; "Uma para cada folha de <material>" imprime uma etiqueta por folha, cada uma com o seu código. **Capa da pasta** 200 × 287 mm (A4 recortada). Logo da CAMP em vetor (`LOGO_CAMP`) em todas.
+11. **Brother refeita** (15/10/2026): a faixa 90 × 29 fica dentro da área útil da DK-1201 (~3 mm nas pontas, ~1,5 mm em cima/embaixo), texto preto sem cinza, e o código de barras da faixa é **Code 128** com barras em pontos inteiros de 300 dpi (`barcode128`); as outras etiquetas seguem em Code 39.
+12. **NIIMBOT D110** (16/10/2026), para slides e negativos: formatos `40x12` (moldura do slide), `30x12` e `50x15` (envelope de negativos). A D110 imprime a 203 dpi com cabeça de 12 mm (96 pontos) e **não tem driver** (nem Mac nem Windows). A etiqueta é desenhada nos pontos da impressora (`niimDesenhar`, canvas preto e branco): **QR** do código (`qrMatriz`, sem biblioteca; código de barras não cabe em 12 mm), série · documento grande, nome do projeto (quebra em 2 linhas), **arquiteto do fundo**, e código + cidade pequenos.
+    - **Imprimir na NIIMBOT**: o painel manda as imagens para o **niimblue-node** (servidor REST de código aberto, MIT, testado no Mac com a D110) rodando no próprio Mac da impressora, em `http://localhost:5000` (`localStorage camp.niim.servidor` muda o endereço). Na primeira vez ele procura a impressora (cabo e Bluetooth) e pergunta qual usar; a escolha fica em `camp.niim.conexao`. Densidade padrão 2 (`camp.niim.densidade`, 1–3).
+    - **Instalar no Mac** (uma vez): `bash scripts/niimbot_mac.sh` (ferramentas da Apple, Node.js, `@mmote/niimblue-node@1.4.1` e um LaunchAgent que liga o servidor sozinho, só para este computador). Cabo USB-C é o mais estável; pelo Bluetooth o macOS precisa dar permissão ao servidor (ou rodar `niimblue-cli server --cors` no Terminal). Remover: `bash scripts/niimbot_mac.sh --remover`.
+    - Sem o servidor: **Baixar imagens** (uma PNG por etiqueta no tamanho exato) e imprimir pelo **niim.blue** no Chrome.
 
 ### D.2.12 Empréstimos (`#emprestimos`, tecla O)
 
@@ -3923,7 +3989,7 @@ Dados: `GET /api/itens/{codigo}` (leitura). Se der 404 e o código parecer de fo
 1. Cabeçalho: tipo do documento e número da folha, código, nome do projeto; "Ver página pública" (se publicada), "Relatar problema nesta folha", botões de duplicata (`duplicataBotoesHTML`), "Usar como capa" (`botaoCapaHTML`, admin, `POST /api/projetos/{c}/capa`); a régua dos 7 passos para esta folha (retida = "parado: folha retida"); paginador "← anterior · N / M · próxima →".
 2. Imagem grande com zoom (roda do mouse, duplo clique, botões − / +, arrastar quando ampliada — `zoomAplicar`).
 3. Aviso vermelho de autoria divergente; aviso "Salvo no painel, mas o site não aceitou" depois de uma edição com falha no site.
-4. **Descrição**: Título, Série, Tipo, Folha, Escala, Data da folha, Suporte, Crédito, mais os metadados do site; botões **"Pedir ao CAMP Vision para ler de novo"** (`POST /api/itens/{c}/releitura`, operador; estado em `GET /api/itens/{c}/releitura`) e **"Editar"** (`editarItem` → `GET /api/itens/{c}/edicao` e `PATCH /api/itens/{c}`, operador; se a folha está no site, envia para lá).
+4. **Descrição**: Título, Série, Tipo, Folha, Escala, Data da folha, Suporte, Escritórios parceiros (quando há; B.7.4b), Crédito, mais os metadados do site; botões **"Pedir ao CAMP Vision para ler de novo"** (`POST /api/itens/{c}/releitura`, operador; estado em `GET /api/itens/{c}/releitura`) e **"Editar"** (`editarItem` → `GET /api/itens/{c}/edicao` e `PATCH /api/itens/{c}`, operador; se a folha está no site, envia para lá).
 5. **Arquivos e publicação**: imagem mostrada (miniatura ou documento), TIFF em alta (caminhos só no `title` para admin), publicação, no site, origem, **Onde está** (`GET /api/itens/{c}/localizacao` e, se emprestada, `GET /api/itens/{c}/emprestimo`) e "Etiqueta" (→ `#etiquetas/folha/<c>`).
 6. Teclas: ← / → (anterior/próxima), E (editar, quem não é leitura).
 
@@ -3957,6 +4023,14 @@ Rótulos na tela: `ROTULO` (categorias e situações) e `ORIGEM_ERRO` (automáti
 ### D.4.3 Fechar e reabrir
 
 `PATCH /api/erros/{id}` (operador): `situacao` ∈ cinco valores; fechar (`corrigido`, `fechado`, `ignorado`) exige `resolucao`; ao fechar grava `resolvido_em` e, se a categoria é `autoria_divergente` e a situação não é `ignorado`, zera `item.autoria_divergente`. Mudar `gravidade` também é possível. Evento `erro / editado`.
+
+### D.4.3a Explicação, ação e o que se resolveu sozinho (`problemas.py`, 19/10)
+
+`problemas.enriquecer` acrescenta a cada linha de `GET /api/erros` (campos novos, opcionais): `tipo` (`retirada`/`recusada`/`comum`, pela `chave`), `alvo`, `folha`, `projeto_codigo`, `projeto_titulo`, `fundo_codigo`, `fundo_titulo`, `folha_existe`, `folha_atual`, `lote_id` (o lote em que a folha saiu: o `resultado` da importação guarda as retiradas), `o_que`, `fazer`, `acao`, `acao_rotulo` e `resolvido_sozinho` (`{seguro, motivo}`). Só lê o banco (nunca o QNAP).
+
+`problemas.fechar_resolvidos` fecha como `corrigido`, com `resolucao` "Resolvido sozinho: …" e o evento `erro / fechado_automatico`, só o que é **certo**: a folha retirada foi devolvida à revisão por um admin (`cv_resposta`); a folha retirada ou recusada entrou no painel (lote importado de novo); depois do relato, a folha foi marcada como cópia (ou outra foi marcada como cópia dela) num problema de duplicata (evento `duplicata_marcada`); depois do relato, a folha foi movida para outro projeto num problema de "folha de outro projeto" (evento `folha_movida`). Roda ao listar/contar os problemas, na importação do lote, ao devolver uma retirada, ao marcar duplicata e ao mover folhas. O **talvez** (folha que não existe mais ou mudou de código, folha já girada/espelhada, projeto juntado a outro, descartado ou inexistente) nunca fecha sozinho: aparece separado para uma pessoa conferir. Teste: modo `problemas_ux` (inclui os falsos alarmes) e `tests/navegador_problemas.js`.
+
+`POST /api/erros/lote` (operador): `{ids, situacao, resolucao}` — a mesma regra do `PATCH` para cada um (fechar exige a frase), tudo ou nada (id que não existe → 404 e nada muda), no máximo 500.
 
 ### D.4.4 O que bloqueia a publicação
 
@@ -4156,6 +4230,7 @@ Usam Chromium de verdade e um servidor **próprio** em outra porta (nunca a 8765
 | `tests/auditoria_papeis_403.js` | entra como operador e leitor, abre cada tela permitida e falha se alguma chamada voltar 403 | `BASE` (8765; sugerido 8800–8809) |
 | `tests/auditoria_estante.js` | Ler etiqueta no celular (390 px), digitando o código, e conferência de caixa; stub do ZXing se `ZXING_LOCAL` não for dado | `CAMP_BASE` (8850) |
 | `tests/decisoes_tipos_ui.js` | Decisões com um caso de cada tipo e o aviso de fundo parecido (semeia direto no banco por `python3 -c`) | 8871 |
+| `tests/navegador_parceiros.js` | escritórios parceiros: adicionar dois na revisão, salvar sem "Sair sem salvar?", sugestão de nome, copiar para outra folha, página da folha, edição, "Parceiros neste projeto", XSS | 8931 |
 | `tests/navegador_tarefas_hoje.js` | "Melhorar a base", "Agora não", qualidade da base, melhorias, ficha do arquiteto pela rota, celular, nenhum erro de console | 8880 |
 | `tests/notificacoes_ui.js` | Estações → Alertas → "Quem recebe cada aviso" | 8890 |
 | `tests/revisao_pos_cv_ui.js` | folha de contatos, duplicata, Espelhar, consenso do lote | 8861 |

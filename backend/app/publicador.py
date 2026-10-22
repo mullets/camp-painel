@@ -75,9 +75,21 @@ def _meta(con, colecao_id, nome):
     return (fixo, None) if fixo else (None, None)
 
 
+import threading as _threading  # noqa: E402
+_TRAVA_METADADO = _threading.Lock()   # 21/10: folhas vão ao site em paralelo; só uma cria o metadado (a outra acha o que já existe)
+
+
 def _garantir_metadado_origem(con, wp) -> int | None:
     """CV-01: cria UMA vez, na coleção Acervo CAMP, o metadado de texto "Arquivo de origem" (oculto ao público)
     e o registra no espelho. Falhou: devolve None e a folha sobe sem ele (fica pendência)."""
+    with _TRAVA_METADADO:
+        ja = con.execute("SELECT id FROM wp_metadado WHERE colecao_id=? AND nome='Arquivo de origem'", (COL_ACERVO,)).fetchone()
+        if ja:
+            return ja[0]
+        return _criar_metadado_origem(con, wp)
+
+
+def _criar_metadado_origem(con, wp) -> int | None:
     try:
         m = wp.criar_metadado(COL_ACERVO, "Arquivo de origem",
                               "Pasta + nome original do arquivo digitalizado (CAMP Vision). Uso interno: reconciliação e releitura.")
@@ -96,6 +108,11 @@ def _pendencia(con, entidade, codigo, campo, detalhe):
         return                                    # já está na lista: publicar de novo não empilha o mesmo aviso
     con.execute("INSERT INTO divergencia_site (entidade, codigo, campo, valor_painel, valor_site) VALUES (?,?,?,?,?)",
                 (entidade, codigo, campo, detalhe[:300], None))
+
+
+def _resolver_pendencia(con, entidade, codigo, campo):
+    """A criação no site deu certo: fecha a pendência que uma tentativa anterior deixou aberta (senão a tela segue dizendo 'pendente' com a coisa já publicada)."""
+    con.execute("UPDATE divergencia_site SET resolvida=1 WHERE entidade=? AND codigo=? AND campo=? AND resolvida=0", (entidade, codigo, campo))
 
 
 HUB_LIMPAR = "__limpar__"     # CAMP-015: valor especial que o painel manda para APAGAR um campo do hub no site (vazio continua ignorado pelo site)
@@ -121,7 +138,7 @@ def campos_hub_fundo(con, codigo: str, com_padrao: bool = False) -> tuple[dict, 
     """B1: {meta do site: texto} e a lista do que ainda falta preencher no painel.
 
     CAMP-037: campo vazio no painel NÃO leva mais o texto padrão "Documentação em organização." ao site (o painel não consegue ler o que já
-    está lá e sobrescreveria texto escrito à mão no WordPress). O site já esconde o campo vazio. `com_padrao=True` devolve o texto antigo.
+    está lá e sobrescreveria texto já escrito no site). O site já esconde o campo vazio. `com_padrao=True` devolve o texto antigo.
 
     O nome de quem entregou o acervo só sai com fundo.mostrar_doador; sem isso, a procedência que cita
     o nome também não sai (a forma de entrada sai, sem o nome).
@@ -257,6 +274,7 @@ def criar_fundo_no_site(codigo: str, ator: str) -> dict:
                     con.execute("INSERT OR REPLACE INTO wp_termo (id, taxonomia_id, nome, slug, json) VALUES (?,?,?,?,?)", (t["id"], ta, a[1], t.get("slug"), json.dumps(t, ensure_ascii=False)))
                     out["arquiteto_termo"] = t["id"]
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('fundo',?,'site_termo_criado',?,?)", (codigo, ator, json.dumps(out)))
+        _resolver_pendencia(con, "fundo", codigo, "pendente_criar_no_site")
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:300]
         _pendencia(con, "fundo", codigo, "pendente_criar_no_site", out["erro"])
@@ -285,6 +303,7 @@ def renomear_fundo_no_site(codigo: str, novo_titulo: str, ator: str) -> dict:
 def criar_dossie_no_site(codigo: str, ator: str) -> dict:
     """Cria o item do projeto na coleção 'Projetos CAMP' como rascunho, com os metadados que o site usa."""
     con = connect()
+    con.isolation_level = None   # 21/10: não segura o banco travado durante os pedidos ao site (ver criar_folha_no_site)
     p = con.execute("SELECT p.*, f.titulo AS fundo_titulo, f.tainacan_term_id AS fundo_termo FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=?", (codigo,)).fetchone()
     out = {"item_id": p["tainacan_item_id"], "metadados": [], "erro": None}
     if p["tainacan_item_id"]:
@@ -295,6 +314,7 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         it = wp.criar_item(COL_PROJETOS, titulo, "draft", p["ambito_conteudo"] or "")
         iid = it["id"]
         con.execute("UPDATE projeto SET tainacan_item_id=? WHERE codigo=?", (iid, codigo))
+        _resolver_pendencia(con, "projeto", codigo, "pendente_criar_no_site")
         con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (iid, COL_PROJETOS, "draft", titulo, it.get("slug"), it.get("url"), codigo, p["fundo_codigo"], codigo, "{}", json.dumps(it, ensure_ascii=False)))
         arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (p["fundo_codigo"],)).fetchone()
@@ -365,6 +385,20 @@ def _valor_site(campo: str, v):
     return "" if v in (None, 0) else str(v)
 
 
+def renovar_no_site(wp, item_id, codigo: str, projeto: bool = False) -> bool:
+    """21/10 (Rafa: "alterei coisas num projeto e não foram pro ar"): o plugin do site guarda os dados dos projetos e folhas por 12 h
+    para o público e só limpa quando o item é salvo inteiro. Mudar um metadado pela API do Tainacan NÃO limpa: a equipe via o valor
+    novo e o público o antigo. Depois de qualquer mudança, o painel regrava o código do item pela rota da CAMP (camp/v1/painel/item/
+    {id}/metadados), que limpa o cache na hora. Sem a rota (site antigo) ou sem esse método (testes): não faz nada. Nunca levanta."""
+    if not item_id or not hasattr(wp, "gravar_metadados_lote"):
+        return False
+    try:
+        r = wp.gravar_metadados_lote(int(item_id), {("Código de Catalogação" if projeto else "Código do documento"): codigo})
+        return bool(r and (r.get("gravados") or r.get("ok")))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
     """Edição de campos do projeto no painel -> metadados do dossiê no Tainacan."""
     con = connect()
@@ -378,6 +412,10 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
             titulo = f"{codigo.split('-')[1]} — {p['titulo']}" + (f", {p['cidade']}" if p["cidade"] else "")
             wp.patch_item(COL_PROJETOS, p["tainacan_item_id"], title=titulo, description=p["ambito_conteudo"] or "")
             out["enviados"].append("título/descrição")
+        if "endereco_obra" in campos and (p["endereco_obra"] or "").strip():     # 21/10: só se o site tiver o campo (nunca cria nem reclama)
+            mid_e, _t = _meta(con, COL_PROJETOS, "Endereço")
+            if mid_e:
+                wp.definir_metadado(p["tainacan_item_id"], mid_e, p["endereco_obra"].strip()); out["enviados"].append("Endereço")
         for campo, nome in CAMPOS_PROJETO_SITE.items():
             if campo in campos:
                 mid, tipo_meta = _meta(con, COL_PROJETOS, nome)
@@ -386,6 +424,8 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
                     out["enviados"].append(nome)
                 else:
                     _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): a mudança não foi gravada.")
+        if out["enviados"]:
+            out["renovado"] = renovar_no_site(wp, p["tainacan_item_id"], codigo, projeto=True)
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'site_metadados',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001
         out["erro"] = str(e)[:300]; _pendencia(con, "projeto", codigo, "pendente_metadados_no_site", out["erro"])
@@ -507,17 +547,19 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             wid = int(p["tainacan_item_id"])
             r = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (wid,)).fetchone()
-            alvos.append(("projeto", p["codigo"], wid, int(r[0]) if r and r[0] else padrao_proj))
+            alvos.append(("projeto", p["codigo"], wid, int(r[0]) if r and r[0] else padrao_proj, alvo))
 
             itens = con.execute(
-                "SELECT codigo, tainacan_item_id FROM item "
+                "SELECT codigo, tainacan_item_id, COALESCE(retida,0) AS retida FROM item "
                 "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
                 iwid = int(i["tainacan_item_id"])
                 ir = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (iwid,)).fetchone()
-                alvos.append(("item", i["codigo"], iwid, int(ir[0]) if ir and ir[0] else padrao_item))
+                # 21/10: folha retida NUNCA vai ao ar: ao publicar, ela fica (ou volta a ficar) privada
+                esc = alvo == "publish" and i["retida"]
+                alvos.append(("item", i["codigo"], iwid, int(ir[0]) if ir and ir[0] else padrao_item, "private" if esc else alvo))
     finally:
         con.close()
 
@@ -531,11 +573,11 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
     sucessos = []
     if not falhas:
-        for tipo, cod, wid, cid in alvos:
+        for tipo, cod, wid, cid, st in alvos:
             tentados += 1
             try:
-                wp.atualizar_status_item(cid, wid, alvo)
-                sucessos.append((tipo, cod, wid))
+                wp.atualizar_status_item(cid, wid, st)
+                sucessos.append((tipo, cod, wid, st))
                 feitos += 1
             except Exception as e:  # noqa: BLE001
                 falhas.append({
@@ -557,13 +599,14 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         con = connect()
         try:
             con.execute("BEGIN IMMEDIATE")
-            for tipo, cod, wid in sucessos:
+            for tipo, cod, wid, st in sucessos:
+                stp = st_painel if st == alvo else "fora_do_ar"
                 con.execute(
                     f"UPDATE {tipo} SET status_site=?, atualizado_em=datetime('now'), "
                     "publicado_em=CASE WHEN ?='no_ar' THEN COALESCE(publicado_em, datetime('now')) ELSE publicado_em END WHERE codigo=?",
-                    (st_painel, st_painel, cod),
+                    (stp, stp, cod),
                 )
-                con.execute("UPDATE wp_item SET status=? WHERE id=?", (alvo, wid))
+                con.execute("UPDATE wp_item SET status=? WHERE id=?", (st, wid))
 
             if completo:
                 con.execute(
@@ -641,6 +684,25 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         "ignorados": ignorados[:50],
     }
 
+def _tipos_para_site(con, codigo: str, mid, valor):
+    """19/10: folha com mais de um tipo ("Planta; Corte"). Se o metadado do site aceita vários valores, vão todos (lista);
+    se aceita um só, vai o primeiro e fica uma pendência dizendo o que não foi."""
+    from .tipos_documento import separar
+    tipos = separar(valor)
+    if len(tipos) <= 1:
+        return tipos[0] if tipos else valor
+    r = con.execute("SELECT json FROM wp_metadado WHERE id=?", (mid,)).fetchone()
+    try:
+        multiplo = str((json.loads(r[0]) if r and r[0] else {}).get("multiple") or "").lower() == "yes"
+    except Exception:  # noqa: BLE001
+        multiplo = False
+    if multiplo:
+        return tipos
+    _pendencia(con, "item", codigo, "pendente_metadado_Tipo de desenho",
+               f"O metadado “Tipo de desenho” do site aceita um só valor: foi enviado “{tipos[0]}”; ficaram de fora: {', '.join(tipos[1:])}.")
+    return tipos[0]
+
+
 def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     tid = _tax(con, taxonomia_nome)
     if not tid or not nome:
@@ -649,12 +711,14 @@ def _termo_por_nome(con, taxonomia_nome: str, nome: str):
     return r[0] if r else None
 
 
-def imagem_pronta_para_o_site(con, i, giro: int | None = None) -> tuple[str | None, int | None]:
+def imagem_pronta_para_o_site(con, i, giro: int | None = None, ajuste: tuple | None = None) -> tuple[str | None, int | None]:
     """(caminho, lado maior em px) da imagem da folha como ela vai ao site (CAMP-048): derivado JPEG q85 sRGB com lado maior <= 1920 px
     (menos, se os direitos do fundo pedem), feito da prévia do CAMP Vision (já girada) com o giro/espelho que a pessoa escolheu na revisão.
     Fica em cache em disco. O TIF e a prévia de ~3000 px NUNCA vão ao site. `giro` (graus, horário) substitui o giro_manual gravado.
     Sem imagem: (None, None). Sem Pillow: levanta RuntimeError (melhor não subir nada do que subir a imagem grande).
-    `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual."""
+    `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual.
+    19/10: com recorte/alinhamento (item.recorte/alinhamento, ou `ajuste` = (recorte, ângulo) que substitui o gravado), sobe o JPG
+    corrigido que o painel gera (ajuste_imagem.garantir), reduzido como sempre."""
     from .imagem_site import imagem_para_o_site, lado_publico
     caminho_img = imagem_para_o_site(con, i)
     if not caminho_img:
@@ -664,17 +728,23 @@ def imagem_pronta_para_o_site(con, i, giro: int | None = None) -> tuple[str | No
         raise RuntimeError("O painel não tem a biblioteca de imagens (Pillow): sem ela não dá para gerar a versão de até 1920 px. Instale e tente de novo")
     lado = lado_publico(con, i["fundo_codigo"])
     g = (i["giro_manual"] or 0) if giro is None else giro % 360
+    esp = espelho_efetivo(i)
+    from . import ajuste_imagem
+    rec, ang = ajuste if ajuste is not None else ajuste_imagem.ler(i)
     try:
-        derivado = derivado_publico(caminho_img, g, lado, espelho_efetivo(i))
+        if ajuste_imagem.tem_ajuste(rec, ang):          # o JPG corrigido já vem espelhado/girado/endireitado/recortado
+            caminho_img, g, esp = ajuste_imagem.garantir(i["codigo"], caminho_img, g, esp, ang, rec)[0], 0, False
+        derivado = derivado_publico(caminho_img, g, lado, esp)
     except OSError as e:
         raise RuntimeError(f"Não consegui preparar a imagem pública: {e}") from e
     return str(derivado), (lado_real(derivado) or lado)
 
 
-def girar_imagem_no_site(codigo: str, giro: int) -> dict:
-    """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no WordPress pela imagem girada `giro` graus (sentido horário,
+def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) -> dict:
+    """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no site pela imagem girada `giro` graus (sentido horário,
     o mesmo giro_manual que a folha vai ter), MANTENDO o ID do anexo (o item do Tainacan, a capa do projeto e os links continuam valendo).
-    Não grava nada no painel: quem chama grava o giro só se isto não levantar erro. Levanta RuntimeError com frase em português."""
+    Não grava nada no painel: quem chama grava o giro só se isto não levantar erro. Levanta RuntimeError com frase em português.
+    `ajuste` = (recorte, ângulo) que a folha vai ter (19/10: recorte e alinhamento); None = o gravado."""
     con = connect()
     try:
         i = con.execute("""SELECT i.*, p.fundo_codigo, p.titulo AS projeto_titulo, s.nome AS serie_nome FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
@@ -684,7 +754,7 @@ def girar_imagem_no_site(codigo: str, giro: int) -> dict:
         media = media_da_folha(con, codigo)
         if not media:
             raise RuntimeError("Não achei a imagem desta folha no site (o anexo não está registrado no painel). Sincronize com o site e tente de novo")
-        caminho, lado_pub = imagem_pronta_para_o_site(con, i, giro)
+        caminho, lado_pub = imagem_pronta_para_o_site(con, i, giro, ajuste)
         if not caminho:
             raise RuntimeError("A imagem desta folha não está no QNAP: sem ela não dá para mandar a versão girada ao site")
     finally:
@@ -742,9 +812,85 @@ def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, proje
 
 
 @_nunca_convidado
+def atualizar_serie_no_site(codigo: str, ator: str) -> dict:
+    """CAMP-139 (21/10): a folha mudou de série (tipo de material) e continua com o MESMO item no site (o endereço vem do título, não do
+    código): grava no item os metadados que mudam — "Código do documento", "Série" e "Tipo de desenho". Falha vira pendência; nunca levanta."""
+    con = connect()
+    con.isolation_level = None
+    out = {"codigo": codigo, "metadados": [], "erro": None}
+    try:
+        i = con.execute("""SELECT i.*, s.nome AS serie_nome FROM item i LEFT JOIN serie s ON s.codigo=i.serie_codigo WHERE i.codigo=?""", (codigo,)).fetchone()
+        if not i or not i["tainacan_item_id"]:
+            out["erro"] = "a folha não tem item no site"; return out
+        iid = int(i["tainacan_item_id"])
+        wp = WP()
+        valores = {"Código do documento": codigo, "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
+                   "Tipo de desenho": i["tipos_documento"] or i["tipo_documento"]}
+        for nome, valor in valores.items():
+            if valor in (None, ""):
+                continue
+            mid, _ = _meta(con, COL_ACERVO, nome)
+            if not mid:
+                _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}”: o valor novo não foi gravado.")
+                continue
+            if nome == "Tipo de desenho":
+                valor = _tipos_para_site(con, codigo, mid, valor)
+            wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
+        renovar_no_site(wp, iid, codigo)
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_serie_atualizada',?,?)",
+                    (codigo, ator, json.dumps(out, ensure_ascii=False)))
+    except Exception as e:  # noqa: BLE001
+        out["erro"] = str(e)[:300]
+        _pendencia(con, "item", codigo, "pendente_serie_no_site", "O tipo de material mudou no painel, mas o site não aceitou o código/série novos: " + out["erro"])
+    finally:
+        con.close()
+    return out
+
+
+_LOTE = {"ok": None}     # 21/10: o site tem a rota de metadados em lote? None = ainda não sei; False = não tem (404): um por um
+
+
+def _gravar_metadados(con, wp, iid: int, fila: list, out: dict) -> list:
+    """21/10 ("pq demora tanto pra subir um projeto?"): os metadados de TEXTO da folha vão numa chamada só (POST camp/v1/painel/item/{id}/metadados,
+    do plugin da CAMP). Taxonomia, relação e data continuam um por um, como antes (o lote grava por nome e não escolhe termo).
+    Devolve o que ainda falta gravar um por um: o que não é texto, o que o lote não gravou e tudo, se o site não tiver a rota."""
+    if _LOTE["ok"] is False or not hasattr(wp, "gravar_metadados_lote"):
+        return fila
+    lote, resto = {}, []
+    for nome, mid, valor in fila:
+        r = con.execute("SELECT nome, tipo FROM wp_metadado WHERE id=?", (mid,)).fetchone()
+        tipo = (r["tipo"] or "") if r else ""
+        if r and r["nome"] and tipo.rstrip("\\").split("\\")[-1] in ("Text", "Textarea") and isinstance(valor, (str, int, float)) and r["nome"] not in lote:
+            lote[r["nome"]] = (nome, mid, str(valor))
+        else:
+            resto.append((nome, mid, valor))
+    if not lote:
+        return fila
+    try:
+        res = wp.gravar_metadados_lote(iid, {nm: v for nm, (_n, _m, v) in lote.items()})
+    except Exception:  # noqa: BLE001  (o site recusou o lote: grava um por um, que já sabe deixar pendência por campo)
+        return fila
+    if res is None:
+        _LOTE["ok"] = False
+        return fila
+    _LOTE["ok"] = True
+    feitos = set(res.get("gravados") or [])
+    for nm, (nome, mid, valor) in lote.items():
+        if nm in feitos:
+            out["metadados"].append(nome)
+        else:
+            resto.append((nome, mid, valor))
+    out["metadados_em_lote"] = len(feitos)
+    return resto
+
+
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
     con = connect()
+    # 21/10: cada gravação local vale na hora (autocommit). Antes, o UPDATE do começo abria uma transação que só fechava no fim, depois de
+    # ~15 pedidos ao site (~50 s): o banco ficava travado para escrita e o resto do painel dava "database is locked" (busy_timeout = 30 s).
+    # Gravar o vínculo com o site logo de cara também é o certo: se a rede cair no meio, o próximo envio liga no item que já existe.
+    con.isolation_level = None
     i = con.execute("""SELECT i.*, p.tainacan_item_id AS dossie_id, p.titulo AS projeto_titulo, p.fundo_codigo, p.ano AS projeto_ano,
                               f.titulo AS fundo_titulo, f.tainacan_term_id AS fundo_termo, s.nome AS serie_nome
                        FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo JOIN serie s ON s.codigo=i.serie_codigo
@@ -779,29 +925,53 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
             iid = it["id"]
             con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
+            _resolver_pendencia(con, "item", codigo, "pendente_criar_no_site")
             con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (iid, COL_ACERVO, "draft", titulo, it.get("slug"), it.get("url"), codigo, i["fundo_codigo"], i["projeto_codigo"], "{}", json.dumps(it, ensure_ascii=False)))
             arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (i["fundo_codigo"],)).fetchone()
             valores = {"Código do documento": codigo, "Projeto": str(i["dossie_id"]), "Série": _termo_por_nome(con, "Séries", i["serie_nome"]) or i["serie_nome"],
                        "Tipo de arquivo": _termo_por_nome(con, "Tipos de arquivo", "Preview (JPG)") or "Preview (JPG)",
-                       "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipo_documento"],
+                       "Ano": str(i["ano_folha"] or i["projeto_ano"] or ""), "Escala": i["escala"], "Folha": i["folha"], "Tipo de desenho": i["tipos_documento"] or i["tipo_documento"],
                        "Título": titulo, "Fundo": i["fundo_termo"] or i["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None,
                        "Crédito": CREDITO_AUTORIA_NAO_CONFIRMADA if i["autoria_divergente"] else None,   # CAMP-046: nunca o nome lido como fato
                        "Suporte": i["suporte"], "Arquivo de origem": i["arquivo_origem"] if "arquivo_origem" in i.keys() else None}
+            fila = []
             for nome, valor in valores.items():
                 if valor in (None, ""):
                     continue
                 mid, _ = _meta(con, COL_ACERVO, nome)
+                if nome == "Tipo de desenho" and mid:
+                    valor = _tipos_para_site(con, codigo, mid, valor)
                 if not mid and nome == "Arquivo de origem":
                     mid = _garantir_metadado_origem(con, wp)
                 if not mid:
                     if nome != "Arquivo de origem":     # (a falha do "Arquivo de origem" já deixou a própria pendência)
                         _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
                     continue
+                fila.append((nome, mid, valor))
+            for nome, mid, valor in _gravar_metadados(con, wp, iid, fila, out):     # 21/10: os de texto numa chamada só; o resto um por um
                 try:
                     wp.definir_metadado(iid, mid, valor); out["metadados"].append(nome)
                 except Exception as e:  # noqa: BLE001
                     _pendencia(con, "item", codigo, f"pendente_metadado_{nome}", str(e)[:200])
+            # 19/10: escritórios parceiros. O painel NÃO cria metadado no site: só envia se a coleção já tiver um de texto com nome
+            # conhecido (parceiros.NOMES_NO_SITE). Sem ele, os parceiros ficam só no painel (e na exportação EAD), sem pendência.
+            from . import parceiros as _parc
+            lista_p = _parc.ler(i["parceiros"] if "parceiros" in i.keys() else None)
+            if lista_p:
+                mid_p, nome_p = _parc.metadado_no_site(con, COL_ACERVO)
+                if mid_p:
+                    try:
+                        wp.definir_metadado(iid, mid_p, _parc.texto(lista_p)); out["metadados"].append(nome_p)
+                    except Exception as e:  # noqa: BLE001
+                        _pendencia(con, "item", codigo, f"pendente_metadado_{nome_p}", str(e)[:200])
+            # 21/10: ano da foto, estágio e fotógrafo. Como os parceiros: só vai se o site já tiver o metadado de texto (nunca cria).
+            from . import dados_foto as _df
+            for mid_f, nome_f, valor_f in _df.para_o_site(con, COL_ACERVO, i):
+                try:
+                    wp.definir_metadado(iid, mid_f, valor_f); out["metadados"].append(nome_f)
+                except Exception as e:  # noqa: BLE001
+                    _pendencia(con, "item", codigo, f"pendente_metadado_{nome_f}", str(e)[:200])
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado
@@ -886,6 +1056,8 @@ def atualizar_folha_no_site(codigo: str, wid: int, colecao_id: int, titulo: str 
                 con.execute("UPDATE wp_item SET metadados=? WHERE id=?", (json.dumps(md, ensure_ascii=False), wid))
             except Exception as e:  # noqa: BLE001
                 falha(nome, e)
+        if out["enviados"]:                     # 21/10: o público vê na hora (sem isso, até 12 h de cache no site)
+            out["renovado"] = renovar_no_site(wp, wid, codigo, projeto=int(colecao_id or 0) == COL_PROJETOS)
     finally:
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_texto_editado',?,?)",
                     (codigo, ator, json.dumps(out, ensure_ascii=False)))

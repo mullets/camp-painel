@@ -10,6 +10,7 @@ Regras checadas (todas com a tabela de autoridade como referência):
 from __future__ import annotations
 
 import json
+import time
 import re
 import traceback
 import threading
@@ -38,6 +39,16 @@ class ColecaoVaziaSuspeita(Exception):
     def __init__(self, cid: int, nome: str, antes: int):
         self.cid, self.nome, self.antes = cid, nome, antes
         super().__init__(f"a coleção {nome} (id {cid}) devolveu 0 itens, mas o espelho tinha {antes}: sincronização interrompida e nada foi apagado")
+
+
+LOTE_ESCRITA = 250   # linhas por transação na gravação do espelho: cada lote leva poucos ms e deixa as telas gravarem entre um e outro
+
+
+def _respiro(con) -> None:
+    """Confirma o lote, dá uma folga curta para quem está esperando o banco (a revisão, as estações) e reabre a escrita."""
+    con.commit()
+    time.sleep(0.08)
+    _inicia_transacao(con)
 
 
 def _inicia_transacao(con) -> None:
@@ -181,7 +192,9 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
                                     (m["id"], cid, m.get("name"), (m.get("metadata_type") or "").split("\\")[-1],
                                      int(mo["taxonomy_id"]) if str(mo.get("taxonomy_id", "")).isdigit() else None,
                                      json.dumps({k: m.get(k) for k in ("slug", "required", "multiple", "status")}, ensure_ascii=False)))
-                    for it, md, cod, f, p, doc, thumb_url in linhas:
+                    for k_, (it, md, cod, f, p, doc, thumb_url) in enumerate(linhas):
+                        if k_ and k_ % LOTE_ESCRITA == 0:   # 19/10: solta o banco a cada lote (antes: milhares de linhas numa transação só, e
+                            _respiro(con)   # conferências e heartbeats esperavam até 30 s)
                         con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, documento_url, thumb_url, "
                                     "codigo_detectado, fundo_detectado, projeto_detectado, metadados, modificado_em, json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                     (it["id"], cid, it.get("status"), it.get("title"), it.get("slug"), it.get("url"), doc[:500] if doc else None,
@@ -200,10 +213,12 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
         # ---- 3) páginas (rede antes do lock) ----
         paginas = list(wp.paginas())
 
-        # ---- 4) fecha numa única transação: páginas, remoção do que sumiu, reconciliação, divergências ----
+        # ---- 4) páginas em lotes curtos (cada lote solta o banco); depois, numa transação só: remoção do que sumiu, reconciliação, divergências ----
         _inicia_transacao(con)
         try:
-            for pg in paginas:
+            for k_, pg in enumerate(paginas):
+                if k_ and k_ % LOTE_ESCRITA == 0:
+                    _respiro(con)
                 titulo = (pg.get("title") or {}).get("rendered", "") if isinstance(pg.get("title"), dict) else str(pg.get("title"))
                 cod, _, _ = detectar_codigo(pg.get("slug", ""), titulo)
                 con.execute("INSERT OR REPLACE INTO wp_pagina (id, titulo, slug, url, status, pai_id, codigo_detectado, json) VALUES (?,?,?,?,?,?,?,?)",

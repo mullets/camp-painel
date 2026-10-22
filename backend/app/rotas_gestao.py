@@ -721,7 +721,7 @@ def logs_tecnicos(nivel: str | None = None, q: str | None = None, limite: int = 
 # H23 · filtros rápidos em linguagem ("Publicações", "Edições", "Pedidos", "Feito pelo CAMP Vision")
 _GRUPOS_EVENTO = {
     "publicacoes": "(tipo LIKE '%publica%' OR tipo LIKE 'site\\_%' ESCAPE '\\' OR tipo IN ('fora_do_ar','status_site','autorizado_ao_publicar'))",
-    "edicoes": "(tipo LIKE '%edit%' OR tipo IN ('direitos','autorizado_em_lote','autorizacao_em_lote','autoria_registrada','capa_escolhida','retrato_atualizado','retrato_removido','biografia_apagada','termo_direitos','giro','giro_manual','giro_no_site','giro_marcado','foto_atualizada','foto_removida','folha_retida','folha_liberada','projeto_mesclado','folha_movida','lote_movido','duplicata_marcada','duplicata_desmarcada','espelho','consenso_aplicado'))",
+    "edicoes": "(tipo LIKE '%edit%' OR tipo IN ('direitos','autorizado_em_lote','autorizacao_em_lote','autoria_registrada','capa_escolhida','retrato_atualizado','retrato_removido','biografia_apagada','termo_direitos','giro','giro_manual','giro_no_site','giro_marcado','foto_atualizada','foto_removida','folha_retida','folha_liberada','projeto_mesclado','folha_movida','lote_movido','duplicata_marcada','duplicata_desmarcada','duplicatas_sugestao_dispensada','espelho','consenso_aplicado','ajuste_imagem','ajuste_desfeito'))",
     "pedidos": "(entidade IN ('solicitacao','uso') OR tipo LIKE 'uso\\_%' ESCAPE '\\')",
     "campvision": "(ator LIKE '%vision%' OR ator IN ('importacao','campvision','cv') OR tipo IN ('material_novo_pronto','material_adicionado_ao_existente','releitura_concluida','folhas_importadas_do_lote','importacao_folhas'))",
 }

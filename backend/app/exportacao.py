@@ -134,8 +134,9 @@ def _c_item(pai, i: dict, ano_projeto) -> None:
     _data(did, i.get("ano_folha") or ano_projeto)
     pd = _sub(did, "physdesc")
     _sub(pd, "extent", "1 documento")
-    if i.get("tipo_documento"):
-        _sub(pd, "genreform", i["tipo_documento"])
+    from .tipos_documento import separar
+    for t in separar(i.get("tipos_documento") or i.get("tipo_documento")):          # um <genreform> por tipo (planta, corte…)
+        _sub(pd, "genreform", t)
     if i.get("dimensoes"):
         _sub(pd, "dimensions", i["dimensoes"])
     if i.get("suporte"):
@@ -152,6 +153,16 @@ def _c_item(pai, i: dict, ano_projeto) -> None:
     _paragrafos(c, "odd", *notas)
     if i.get("credito"):
         _paragrafos(c, "prefercite", i["credito"])
+    # 19/10: escritórios parceiros / projetos complementares. Não são <origination> (ISAD(G) 3.2.1 = o produtor que acumulou o
+    # material, o titular do fundo): são entidades ligadas ao documento, ou seja, PONTOS DE ACESSO. Um <corpname> por escritório,
+    # com a disciplina em role (o EAD 2002 permite role em corpname dentro de controlaccess).
+    from .parceiros import ler as _ler_parceiros
+    lista = _ler_parceiros(i.get("parceiros"))
+    if lista:
+        ca = _sub(c, "controlaccess")
+        _sub(ca, "head", "Escritórios parceiros / projetos complementares")
+        for p in lista:
+            _sub(ca, "corpname", p["escritorio"], role=p.get("disciplina"))
 
 
 def _c_projeto(pai, p: dict, itens: list[dict]) -> None:

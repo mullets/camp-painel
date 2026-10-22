@@ -52,7 +52,15 @@ con.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,tit
     const page = await entrar('rafael@camp.arq.br', 'senha-bem-longa-123');
     await page.evaluate(() => { nav('projeto/F026-P0090') });
     await page.waitForSelector('.thumb[data-rev-abrir="F026-P0090-1968-S01-D00002"]', { timeout: 15000 });
-    await page.click('.thumb[data-rev-abrir="F026-P0090-1968-S01-D00002"]');
+    // a folha não tem imagem: o cartão mostra "Sem imagem" com o botão "Pedir releitura" no meio (2b86656). O botão faz só a ação
+    // dele (confirmação), sem abrir a revisão por baixo; o cartão continua abrindo a revisão pelo resto (aqui, a legenda)
+    const btRel = '.thumb[data-rev-abrir="F026-P0090-1968-S01-D00002"] [data-releitura-item]';
+    await page.waitForSelector(btRel, { timeout: 15000 });
+    await page.click(btRel); await page.waitForSelector('#conf-ov', { timeout: 5000 }); await page.waitForTimeout(600);
+    chk(/reler esta folha/.test(await page.textContent('#conf-ov')) && !(await page.$('#d-body .op-det')),
+        '"Pedir releitura" dentro do cartão abre só a confirmação (a revisão não abre por baixo)');
+    await page.click('#conf-ov [data-conf="nao"]'); await page.waitForSelector('#conf-ov', { state: 'detached', timeout: 5000 });
+    await page.click('.thumb[data-rev-abrir="F026-P0090-1968-S01-D00002"] .cap');
     await page.waitForSelector('#d-body .op-det summary', { timeout: 10000 });
     chk(/É de outro projeto/.test(await page.textContent('#d-body .op-det summary')), 'revisão: a folha tem "É de outro projeto…"');
     await page.click('#d-body .op-det summary');
@@ -99,7 +107,10 @@ con.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,tit
     chk((await page.textContent('#d-body .op-novo')).trim() === 'F026-P0091-1969-S01-D00002', 'página da folha: "É de outro projeto…" abre a busca e mostra o próximo código (D00002)');
     // ---------------- projeto publicado: Mover folhas ----------------
     await page.evaluate(() => { nav('projeto/F026-P0092') });   // sem fechar nada antes: a busca digitada não conta como alteração a perder
-    await page.waitForSelector('[data-pj-mais]', { timeout: 15000 });
+    // desde caf753f (proposta B) "Mesclar, mover, mudar código…" fica dentro do menu "Mais ⋯" do cabeçalho
+    await page.waitForSelector('.pj-mais-menu summary', { timeout: 15000 });
+    await page.click('.pj-mais-menu summary');
+    await page.waitForSelector('[data-pj-mais]', { timeout: 5000 });
     await page.click('[data-pj-mais]');
     await page.waitForSelector('[data-mais="mover"]', { timeout: 5000 });
     chk(!(await page.isDisabled('[data-mais="mover"]')), 'projeto publicado: "Mover folhas para outro projeto" fica disponível');
@@ -119,7 +130,7 @@ con.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,tit
     const op = await entrar('operador@camp.arq.br', 'senha-operador-123');
     await op.evaluate(() => { nav('projeto/F026-P0090') });
     await op.waitForSelector('.thumb[data-rev-abrir="F026-P0090-1968-S01-D00003"]', { timeout: 15000 });
-    await op.click('.thumb[data-rev-abrir="F026-P0090-1968-S01-D00003"]');
+    await op.click('.thumb[data-rev-abrir="F026-P0090-1968-S01-D00003"] .cap');
     await op.waitForSelector('#d-body .op-sem button', { timeout: 10000 });
     chk(await op.isDisabled('#d-body .op-sem button') && /peça a um admin/.test(await op.textContent('#d-body .op-sem')), 'operador: "É de outro projeto…" aparece desabilitado com "peça a um admin"');
     chk(!(await op.$('#d-body .op-outro')), 'operador: não há busca nem botão de mover');

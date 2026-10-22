@@ -194,7 +194,9 @@ def pacote(con, sid: int) -> dict:
         for f in folhas:
             arq = f["arquivo_tif"] if fmt == "tif" else f["arquivo_jpg"] if fmt.startswith("jpg") else None
             linhas.append({"pedido": cod, "codigo": f["codigo"], "titulo": f["titulo"], "formato": fmt, "resolucao": FORMATOS[fmt],
-                           "caminho_qnap": arq or None, "pasta_projeto": f["pasta_qnap"], "entregue": bool(si["entregue"])})
+                           "caminho_qnap": arq or None, "pasta_projeto": f["pasta_qnap"], "entregue": bool(si["entregue"]),
+                           # 19/10: folha recortada/alinhada na revisão: o JPG a entregar é o corrigido do painel (o do QNAP é o do CAMP Vision)
+                           "jpg_corrigido": f"/api/itens/{f['codigo']}/imagem-corrigida" if fmt.startswith("jpg") and "imagem_corrigida" in f.keys() and f["imagem_corrigida"] else None})
     por_fmt: dict[str, int] = {}
     for l in linhas:
         por_fmt[l["formato"]] = por_fmt.get(l["formato"], 0) + 1

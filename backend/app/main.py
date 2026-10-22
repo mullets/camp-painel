@@ -4,9 +4,12 @@ import re
 import logging
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -78,6 +81,14 @@ app.include_router(rotas_reidentificar)
 app.include_router(rotas_legado)
 from .rotas_estante import router as rotas_estante
 app.include_router(rotas_estante)
+from .parceiros import router as rotas_parceiros
+app.include_router(rotas_parceiros)
+from .duplicatas import router as rotas_duplicatas
+app.include_router(rotas_duplicatas)
+from .dados_foto import router as rotas_dados_foto
+app.include_router(rotas_dados_foto)
+from .folhas_enviadas import router as rotas_folhas_enviadas
+app.include_router(rotas_folhas_enviadas)
 
 
 @app.on_event("startup")
@@ -86,6 +97,12 @@ async def _startup() -> None:
     log_registrar(logging.INFO, "app_start", "Inicializando CAMP Painel")
     init_db()
     aplicar_migracoes()
+    try:                                     # CAMP-122 (P1): lote que ficou em "erro" só por aviso [Minor] do exiftool (ex.: F026-P0009) sai do vermelho
+        from .avisos_cv import curar_lotes
+        from .db import connect as _c
+        _con = _c(); curar_lotes(_con); _con.commit(); _con.close()
+    except Exception:  # noqa: BLE001  (nunca impede o painel de subir)
+        pass
     import asyncio
     asyncio.create_task(_sincronizacao_periodica())
     asyncio.create_task(_coleta_qnap_periodica())
@@ -290,10 +307,48 @@ async def _http_exc(request: Request, exc: HTTPException):
     return JSONResponse({"erro": exc.detail}, status_code=exc.status_code)
 
 
+_ROTULO_CAMPO_INVALIDO = {"ano_folha": "Ano da folha", "ano": "Ano", "ano_fim": "Ano final", "graus": "Giro", "estado": "Estado"}
+_EXPLICA_INVALIDO = {"int_parsing": "use só números inteiros (ex.: 1972)", "int_type": "use só números inteiros (ex.: 1972)",
+                     "string_type": "tem de ser texto", "missing": "falta preencher", "bool_parsing": "tem de ser sim ou não"}
+
+
+@app.exception_handler(RequestValidationError)
+async def _validacao_exc(request: Request, exc: RequestValidationError):
+    """Sírio, 19/10: dado inválido (ex.: ano "1958/59") voltava só com `detail` em inglês e a tela mostrava "Unprocessable Entity".
+    Agora vem também `erro`, em português, com o nome do campo; `detail` continua igual para quem já o lia."""
+    partes = []
+    for e in exc.errors()[:3]:
+        campo = next((str(x) for x in reversed(e.get("loc") or ()) if not isinstance(x, int) and x not in ("body", "query", "path")), "")
+        partes.append(f"{_ROTULO_CAMPO_INVALIDO.get(campo, campo or 'Dado')}: {_EXPLICA_INVALIDO.get(e.get('type'), 'valor inválido')}")
+    return JSONResponse({"erro": "; ".join(partes) or "Dado inválido", "detail": jsonable_encoder(exc.errors())}, status_code=422)
+
+
+def _ler_versao() -> dict:
+    """19/10: versão legível ("de 19/10 às 15:17" + o título da última mudança), não só o hash. Lida UMA vez, na subida
+    do serviço (o atualizar.sh reinicia depois de baixar o main), direto do git; sem git, cai no VERSION de sempre."""
+    import subprocess
+    raiz = Path(__file__).resolve().parents[2]
+    info = {"versao": "dev", "hash": None, "data": None, "assunto": None, "no_ar_desde": datetime.now().astimezone().isoformat(timespec="seconds")}
+    try:
+        out = subprocess.run(["git", "-C", str(raiz), "log", "-1", "--format=%h%x1f%cI%x1f%s"], capture_output=True, text=True, timeout=5).stdout.strip()
+        h, data, assunto = out.split("\x1f", 2)
+        info.update(hash=h, data=data, assunto=assunto[:140])
+    except Exception:
+        pass
+    v = Path(__file__).resolve().parents[1] / "VERSION"
+    if v.exists():
+        info["versao"] = v.read_text().strip()
+    elif info["hash"]:
+        info["versao"] = f"{info['hash']} {info['data'][:10]}"
+    return info
+
+
+_VERSAO = _ler_versao()
+
+
 @app.get("/api/versao")
 def versao() -> dict:
-    v = Path(__file__).resolve().parents[1] / "VERSION"
-    return {"versao": v.read_text().strip() if v.exists() else "dev"}
+    return _VERSAO
 
 
 @app.get("/", include_in_schema=False)
@@ -645,6 +700,14 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
                      "estacao_ip": ip, "proximo_p_local": d.proximo_p_local or None, "carimbo": d.carimbo or None}
         if d.candidatos:
             cands = candidatos_do_cv(con, d.fundo_codigo, d.candidatos)
+            pista, _ = _pista_de_p(con, d)              # 19/10: a pasta "P0092 - 03 - Preview (JPG)" aponta o projeto; entra na lista mesmo se o carimbo não casou
+            if cands and pista and not any(x["codigo"] == pista for x in cands):
+                pp = con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original,
+                                           (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
+                                      FROM projeto p WHERE p.codigo=?""", (pista,)).fetchone()
+                cands.insert(0, {"codigo": pp["codigo"], "titulo": pp["titulo"], "ano": pp["ano"] or None, "cidade": pp["cidade"],
+                                 "identificacao_original": pp["identificacao_original"], "folhas": pp["folhas"], "score": 0.8, "nivel": "provavel",
+                                 "motivos": [f"o nome da pasta começa com {pista.split('-')[-1]} (só uma pista: confira)"]})
             if cands:
                 did = decisoes.abrir_projeto_parecido(con, chave_dec, d.fundo_codigo, titulo, pedido_cv, cands, "estacao")
                 con.commit()

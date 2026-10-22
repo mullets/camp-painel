@@ -98,13 +98,82 @@ def itens_aceite(aceite: dict | None) -> list[dict]:
     return out
 
 
+def _rotulo_pendencia(x) -> str | None:
+    """Pendência do CV2 em texto para gente: o CV2 às vezes manda só a CHAVE ("orientacao_incerta_zerada; publicavel").
+    Chave conhecida vira o rótulo; "publicavel" é a conclusão (não um motivo) e sai."""
+    t = str(x.get("mensagem") or x.get("item") or x) if isinstance(x, dict) else str(x)
+    t = t.strip()
+    if not t or t == "publicavel":
+        return None
+    if t in ROTULO_ACEITE:
+        return ROTULO_ACEITE[t]
+    return t.replace("_", " ").capitalize() if re.fullmatch(r"[a-z0-9_]+", t) else t
+
+
 def motivos_aceite(aceite: dict | None) -> list[str]:
     if not aceite:
         return []
     pend = aceite.get("pendencias")
     if isinstance(pend, list) and pend:
-        return [str(x.get("mensagem") or x.get("item") or x) if isinstance(x, dict) else str(x) for x in pend]
+        out = [r for r in (_rotulo_pendencia(x) for x in pend) if r]
+        if out:
+            return list(dict.fromkeys(out))
     return [i["rotulo"] for i in itens_aceite(aceite) if i["ok"] is False]
+
+
+# O aceite é uma FOTO do momento da leitura. Os pontos que pedem OLHO HUMANO a conferência do painel resolve (aviso de 14/10, F009-P0060):
+# basta o lote aprovado OU todas as folhas do lote já conferidas. Os outros (contagem, EXIF, relatório…) só o CAMP Vision resolve.
+RESOLVE_CONFERENCIA = frozenset({"orientacao_incerta_zerada", "serie_incerta_zerada", "duplicatas_marcadas", "sem_autoria_divergente"})
+SO_AVISO = frozenset({"sem_autoria_divergente"})   # CAMP-046 (contrato 2.4): autoria não confirmada é aviso, nunca trava
+
+
+def conferencia_do_lote(con, lote_id: int) -> dict:
+    """Quanto do lote já passou por uma pessoa no painel (duplicatas não contam: não vão ao site)."""
+    l = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
+    tot, pend = con.execute("""SELECT COUNT(*), COALESCE(SUM(revisao='pendente'),0) FROM item
+                               WHERE lote_id=? AND duplicata_de IS NULL""", (lote_id,)).fetchone()
+    return {"aprovado": bool(l and l[0]), "total": int(tot or 0), "pendentes": int(pend or 0)}
+
+
+def avaliar_aceite(aceite: dict | None, conferencia: dict | None = None) -> dict | None:
+    """A regra ÚNICA (publicação e tela): o aceite do CV2 somado ao que já foi conferido no painel.
+    situacao: 'aprovado' (o CV2 aprovou ou só sobrou aviso) | 'resolvido' (reprovado só pelo que a conferência resolve, e foi conferido)
+    | 'reprovado' (falta algo). Cada item ganha 'estado': ok | resolvido | aviso | falta | info. 'faltam' diz o que fazer, sem código cru."""
+    if not aceite:
+        return None
+    cf = conferencia or {}
+    conferido = bool(cf.get("aprovado")) or (cf.get("total", 0) > 0 and cf.get("pendentes", 1) == 0)
+    pend = int(cf.get("pendentes") or 0)
+    itens, faltam = [], []
+    for i in itens_aceite(aceite):
+        if i["ok"] is True:
+            estado = "ok"
+        elif i["ok"] is None:
+            estado = "info"
+        elif i["chave"] in SO_AVISO:
+            estado = "aviso"
+        elif i["chave"] in RESOLVE_CONFERENCIA and conferido:
+            estado = "resolvido"
+        else:
+            estado = "falta"
+            if i["chave"] in RESOLVE_CONFERENCIA:
+                faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": "conferir",
+                               "como": (f"Conferir {'a folha que falta' if pend == 1 else f'as {pend} folhas que faltam'} na Revisão do lote" if pend
+                                        else "Aprovar o lote na Revisão do lote")})
+            else:
+                faltam.append({"chave": i["chave"], "rotulo": i["rotulo"], "acao": None,
+                               "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"})
+        itens.append({**i, "estado": estado})
+    reprovado_cv = aceite.get("publicavel") is False
+    if reprovado_cv and not any(i["ok"] is False for i in itens):   # reprovado sem item marcado: o motivo está só nas pendências
+        faltam += [{"chave": None, "rotulo": m, "acao": None, "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"} for m in motivos_aceite(aceite)] or \
+                  [{"chave": None, "rotulo": "O CAMP Vision não disse o motivo", "acao": None, "como": "Só o CAMP Vision resolve: o lote precisa ser lido de novo"}]
+    if not reprovado_cv or not faltam:
+        situacao = "resolvido" if reprovado_cv and any(i["estado"] == "resolvido" for i in itens) else "aprovado"
+    else:
+        situacao = "reprovado"
+    return {"situacao": situacao, "publicavel_cv": aceite.get("publicavel"), "itens": itens, "faltam": faltam,
+            "motivos": motivos_aceite(aceite), "conferencia": {"conferido": conferido, "pendentes": pend, "total": int(cf.get("total") or 0)}}
 
 
 def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
@@ -124,7 +193,78 @@ def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     return out
 
 
-def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) -> dict:
+_COD_FOLHA = re.compile(r"F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}")
+
+
+def _codigos_em(x) -> list[str]:
+    """Códigos de folha citados num item de proposta do CAMP Vision (texto, lista ou dicionário em qualquer formato)."""
+    return list(dict.fromkeys(_COD_FOLHA.findall(json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x)))
+
+
+def obras_na_pasta(pacote: dict | None, propostas) -> dict | None:
+    """20/10 (CAMP-126, F026-P0009): "8 obras distintas pelo código de unidade — ver propostas.obras_na_pasta". Agrupa as folhas do pacote
+    pelo `codigo_unidade` (campo do contrato em documentos[]) para a pessoa decidir se são partes do mesmo conjunto ou projetos diferentes.
+    Só existe quando o CAMP Vision apontou (aviso de obras distintas ou propostas.obras_na_pasta com itens) e há 2+ códigos de unidade.
+    Itens de obras_na_pasta que tragam códigos de folha completam os grupos (o formato do item não é fixo no contrato)."""
+    pac = pacote if isinstance(pacote, dict) else {}
+    lista = (propostas or {}).get("obras_na_pasta") if isinstance(propostas, dict) else None
+    lista = lista if isinstance(lista, list) else []
+    avisou = any(re.search(r"obras?\s+distintas|obras_na_pasta", str(a), re.I) for a in (pac.get("avisos") or []))
+    if not (avisou or lista):
+        return None
+    grupos: dict[str, list[str]] = {}
+    docs = pac.get("documentos") or pac.get("itens") or []
+    for d in docs if isinstance(docs, list) else []:
+        if isinstance(d, dict) and d.get("codigo"):
+            u = str(d.get("codigo_unidade") or "").strip()
+            if u:
+                grupos.setdefault(u, []).append(str(d["codigo"]))
+    for x in lista:
+        if isinstance(x, dict):
+            u = str(x.get("codigo_unidade") or x.get("unidade") or x.get("obra") or "").strip()
+            if u:
+                g = grupos.setdefault(u, [])
+                g.extend(c for c in _codigos_em(x) if c not in g)
+    sem = [str(d["codigo"]) for d in (docs if isinstance(docs, list) else []) if isinstance(d, dict) and d.get("codigo") and not str(d.get("codigo_unidade") or "").strip()]
+    if len(grupos) < 2:
+        return None
+    return {"grupos": [{"unidade": u, "folhas": f} for u, f in sorted(grupos.items(), key=lambda kv: (-len(kv[1]), kv[0]))],
+            "sem_unidade": sem, "propostas": len(lista)}
+
+
+# CAMP-134 (21/10): o comparacao.json REAL do CV2 (nucleo/releitura.py) é {"resumo": {...}, "documentos": {<folha>: {"mudou": {<campo>:
+# {"antes", "agora", "confianca_agora"}}, "preencheu": [...], "erro": ""}}}. O painel lia cada chave do topo como se fosse uma folha
+# ("resumo" e "documentos" viravam duas "folhas" com dezenas de Aceitar/Ignorar sem sentido). O formato antigo {<folha>: {<campo>:
+# {"antes","agora"}}} continua aceito. Campos com nome do CV2 (titulo_prancha) e do painel (titulo) valem os dois.
+CAMPO_RELEITURA_FOLHA = {"titulo_prancha": "titulo", "titulo": "titulo", "escala": "escala", "folha": "folha", "ano": "ano_folha",
+                         "tipo": "tipo_documento", "endereco": "endereco_folha", "cliente": "cliente_folha"}
+ROTULO_CAMPO_CV = {"titulo_prancha": "Título", "titulo": "Título", "escala": "Escala", "folha": "Nº da folha", "ano": "Ano", "tipo": "Tipo",
+                   "endereco": "Endereço", "cliente": "Cliente", "data": "Data", "projeto": "Projeto", "arquiteto": "Arquiteto",
+                   "escritorio": "Escritório", "cidade": "Cidade", "uf": "UF", "total_folhas": "Total de folhas", "codigo_serie": "Código de série",
+                   "codigo_unidade": "Código de unidade", "revisao": "Revisão"}
+_COD_FOLHA = re.compile(r"F\d{3}-P\d{4}-\d{4}-S\d{2}-D\d{5}", re.I)
+
+
+def normalizar_comparacao(comp) -> dict:
+    """{<código da folha>: {<campo>: {"antes", "agora"}}} a partir dos dois formatos; o que não for folha (resumo etc.) fica de fora."""
+    if not isinstance(comp, dict) or comp.get("_ilegivel"):
+        return {}
+    docs = comp.get("documentos") if isinstance(comp.get("documentos"), dict) else comp
+    out = {}
+    for chave, v in docs.items():
+        m = _COD_FOLHA.search(str(chave))
+        if not m or not isinstance(v, dict):
+            continue
+        campos = v.get("mudou") if isinstance(v.get("mudou"), dict) else v
+        mud = {c: {"antes": str((x or {}).get("antes") or ""), "agora": str((x or {}).get("agora") or "")}
+               for c, x in campos.items() if isinstance(x, dict) and ("antes" in x or "agora" in x)}
+        mud = {c: x for c, x in mud.items() if x["antes"] != x["agora"]}
+        if mud:
+            out.setdefault(m.group(0).upper(), {}).update(mud)
+    return out
+
+
+def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None, conferencia: dict | None = None) -> dict:
     cat = Path(pasta) / "catalogacao"
     if not cat.is_dir():
         return {"existe": False, "motivo": "esta pasta não tem catalogacao/ (o CAMP Vision ainda não entregou)"}
@@ -139,7 +279,13 @@ def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) 
         for d in sorted((x for x in rr.iterdir() if x.is_dir()), reverse=True)[:10]:
             comp = _json(d / "comparacao.json")
             if comp is not None:
-                releituras.append({"quando": d.name, "comparacao": comp})
+                norm = normalizar_comparacao(comp)
+                resumo = comp.get("resumo") if isinstance(comp, dict) and isinstance(comp.get("resumo"), dict) else None
+                releituras.append({"quando": d.name, "comparacao": norm,   # CAMP-134: já normalizado ({folha: {campo: {antes, agora}}})
+                                   "mudancas": [{"codigo": cod, "campo": c, "rotulo": ROTULO_CAMPO_CV.get(c, c.replace("_", " ")), "antes": x["antes"],
+                                                 "agora": x["agora"], "aplica": c in CAMPO_RELEITURA_FOLHA and bool(x["agora"])}
+                                                for cod, cs in sorted(norm.items()) for c, x in sorted(cs.items())],
+                                   "resumo": {k: resumo.get(k) for k in ("escopo", "motivo", "pedido_por", "relidos", "com_mudanca", "relido_em") if k in resumo} if resumo else None})
     return {
         "existe": True,
         "pacote_ilegivel": bool(isinstance(pacote, dict) and pacote.get("_ilegivel")),
@@ -149,10 +295,12 @@ def ler_saidas(pasta: str | Path, projeto: dict, respostas: dict | None = None) 
         "sugestoes": [x for x in sugestoes_projeto(pac, projeto) if f"sugestao:{x['campo']}" not in (respostas or {})],
         "respostas": respostas or {},
         "capa_sugerida": ((pac or {}).get("projeto") or {}).get("capa_sugerida") if pac else None,
-        "aceite": (lambda a: {"publicavel": a.get("publicavel"), "itens": itens_aceite(a), "motivos": motivos_aceite(a), "arquivo": a.get("_arquivo")} if a else None)(ler_aceite(pasta)),
+        "aceite": (lambda a: {"publicavel": a.get("publicavel"), **avaliar_aceite(a, conferencia), "arquivo": a.get("_arquivo")} if a else None)(ler_aceite(pasta)),
         "execucao": (pac or {}).get("execucao") if pac else None,
         "relatorio": ler_relatorio(_texto(cat / "relatorio.txt")),
         "decisoes": _json(cat / "decisoes.json"),
         "orientacao": ler_orientacao(_texto(cat / "orientacao.txt")),
         "releituras": releituras,
+        # 20/10 (CAMP-126): opcional. Grupos por código de unidade e a decisão de uma pessoa ("obras:decisao" em respostas)
+        "obras": (lambda o: {**o, "decisao": (respostas or {}).get("obras:decisao")} if o else None)(obras_na_pasta(pac, propostas)),
     }

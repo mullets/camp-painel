@@ -3,7 +3,10 @@
 Usa as mesmas regras do resto do painel (publicacao.condicoes_projeto, direitos_permitem_publicar, qnap_coletor.nivel_espaco):
 nenhuma regra nova é inventada aqui, para os números nunca divergirem das telas.
 """
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from . import auth, qnap_coletor, qualidade_base as qb
 from .db import connect
@@ -13,16 +16,19 @@ router = APIRouter(prefix="/api", tags=["hoje"])
 # O que cada divergência entre o painel e o site significa, em português (o campo cru nunca aparece na tela).
 DIVERGENCIAS = {
     "sem_codigo": ("Item do site sem código CAMP",
-                   "O item existe no site, mas o painel não achou o código nele (quase sempre item de teste). Corrija ou apague no WordPress."),
+                   "O item existe no site, mas o painel não achou o código nele (quase sempre item de teste). “Tirar do público” deixa o item privado no site (nada é apagado)."),
     "fundo_inexistente": ("Aponta para um fundo que não existe no painel",
                           "O termo ou item do site usa um código de fundo que o painel não conhece. Cadastre o fundo ou corrija o código no site."),
     "publicado_em_fundo_fora_do_ar": ("Público no site, mas o fundo está despublicado no painel",
                                       "A folha continua visível no site embora o fundo tenha sido despublicado aqui. Despublique a folha ou publique o fundo de novo."),
     "fundo_trocado": ("No site, o item está no fundo errado",
-                      "O código da folha diz um fundo (no painel) e o campo Fundo do item no site diz outro (no site). Corrija o campo Fundo no WordPress: o código é que vale."),
+                      "O código da folha diz um fundo (no painel) e o campo Fundo do item no site diz outro (no site). “Corrigir no site” grava o fundo do código: o código é que vale."),
     "sem_itens_no_site": ("Fundo sem nenhuma folha no site",
                           "Normal para fundos ainda não publicados. Só exige ação se o fundo deveria estar no site."),
 }
+# 21/10 (Rafa: "é tudo feito NESSE painel somente", ninguém da equipe usa o site por dentro): as divergências que pediam conserto
+# no site ganham o botão que conserta daqui. {campo: rótulo do botão}
+ACOES_DIVERGENCIA = {"fundo_trocado": "Corrigir no site", "sem_codigo": "Tirar do público"}
 PENDENTE = ("Texto editado no painel que ainda não foi gravado no site",
             "A gravação no site falhou; o painel tenta de novo na próxima sincronização.")
 TIPOS_PUBLICACAO = ("site_publicar", "site_rascunho", "site_tirar_do_ar", "site_no_ar", "site_fora_do_ar")
@@ -47,6 +53,9 @@ def divergencias_resumo(u: dict = Depends(auth.exige("leitura"))) -> dict:
             g["n"] += 1
             if len(g["itens"]) < 50:
                 g["itens"].append({"entidade": r["entidade"], "codigo": r["codigo"], "valor_painel": r["valor_painel"], "valor_site": r["valor_site"]})
+            g["campo"] = r["campo"] if r["campo"] in ACOES_DIVERGENCIA else g.get("campo")
+            if r["campo"] in ACOES_DIVERGENCIA:
+                g["acao"] = ACOES_DIVERGENCIA[r["campo"]]
         lista = sorted(grupos.values(), key=lambda g: -g["n"])
         return {"total": sum(g["n"] for g in lista), "grupos": lista}
     finally:
@@ -195,3 +204,63 @@ def melhorias(u: dict = Depends(auth.exige("leitura"))) -> dict:
         return qb.melhorias(con)
     finally:
         con.close()
+
+
+class CorrigirDivergencia(BaseModel):
+    campo: str                       # fundo_trocado | sem_codigo
+    codigos: list[str] | None = None  # sem = todas as abertas deste tipo
+
+
+@router.post("/site/divergencias/corrigir")
+def corrigir_divergencias(d: CorrigirDivergencia, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """21/10: conserta pelo painel o que antes mandava corrigir no site.
+    - fundo_trocado: grava no item do site o fundo que o código diz (o código é que vale);
+    - sem_codigo: o item do site sem código CAMP fica privado (sai do público; nada é apagado, dá para publicar de novo).
+    Cada item: ok → divergência resolvida + histórico; falha → fica aberta e volta em `falhas`."""
+    from . import publicador, wp as _wpmod
+    if d.campo not in ACOES_DIVERGENCIA:
+        raise HTTPException(400, "Esta divergência não tem conserto automático pelo painel")
+    con = connect()
+    try:
+        q = "SELECT id, entidade, codigo FROM divergencia_site WHERE resolvida=0 AND campo=?"
+        args: list = [d.campo]
+        if d.codigos:
+            q += f" AND codigo IN ({','.join('?' * len(d.codigos))})"; args += d.codigos
+        alvos = con.execute(q + " ORDER BY codigo LIMIT 500", args).fetchall()
+    finally:
+        con.close()
+    if not alvos:
+        return {"ok": True, "corrigidas": [], "falhas": []}
+    wp = _wpmod.WP()
+    corrigidas, falhas = [], []
+    for a in alvos:
+        con = connect()
+        try:
+            if d.campo == "fundo_trocado":
+                w = con.execute("SELECT id, colecao_id FROM wp_item WHERE upper(codigo_detectado)=upper(?) ORDER BY id DESC LIMIT 1", (a["codigo"],)).fetchone()
+                f = con.execute("SELECT codigo, titulo, tainacan_term_id FROM fundo WHERE codigo=?", (a["codigo"][:4],)).fetchone()
+                if not w or not f or not f["tainacan_term_id"]:
+                    raise RuntimeError("o fundo do código ainda não existe no site" if w else "o item não está no espelho do site (sincronize)")
+                mid, _ = publicador._meta(con, w["colecao_id"], "Fundo")
+                if not mid:
+                    raise RuntimeError("o site não tem o campo Fundo nesta coleção")
+                wp.definir_metadado(int(w["id"]), mid, int(f["tainacan_term_id"]))
+                publicador.renovar_no_site(wp, int(w["id"]), a["codigo"], projeto=int(w["colecao_id"]) == publicador.COL_PROJETOS)
+                detalhe = {"item_site": w["id"], "fundo": f["codigo"]}
+            else:
+                w = con.execute("SELECT id, colecao_id, status FROM wp_item WHERE id=?", (int(a["codigo"]) if str(a["codigo"]).isdigit() else -1,)).fetchone()
+                if not w:
+                    raise RuntimeError("o item não está no espelho do site (sincronize)")
+                wp.atualizar_status_item(w["colecao_id"], int(w["id"]), "private")
+                con.execute("UPDATE wp_item SET status='private' WHERE id=?", (w["id"],))
+                detalhe = {"item_site": w["id"], "antes": w["status"]}
+            con.execute("UPDATE divergencia_site SET resolvida=1 WHERE id=?", (a["id"],))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES (?,?,?,?,?)",
+                        (a["entidade"], a["codigo"], "divergencia_corrigida_" + d.campo, u["email"], json.dumps(detalhe, ensure_ascii=False)))
+            con.commit()
+            corrigidas.append(a["codigo"])
+        except Exception as e:  # noqa: BLE001
+            falhas.append({"codigo": a["codigo"], "erro": str(e)[:200]})
+        finally:
+            con.close()
+    return {"ok": not falhas, "corrigidas": corrigidas, "falhas": falhas}

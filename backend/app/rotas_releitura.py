@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from . import auth
 from .db import connect
-from .importador_lote import importar_lote, ler_pacote
+from .importador_lote import colisoes_decididas, importar_lote, ler_pacote
 from .rede import exigir_estacao
 from .rotas_operacao import _qnap_prontos_raiz
 
@@ -60,6 +60,7 @@ def _aberto(con, projeto: str, item: str | None):
 
 class NovoPedido(BaseModel):
     motivo: str | None = Field(default=None, max_length=300)
+    itens: list[str] | None = None      # CAMP-131 (P10, opcional): reler SÓ estas folhas do projeto (ex.: as que têm aviso), em vez do lote inteiro
 
 
 def _criar(projeto: str, item: str | None, motivo: str | None, u: dict) -> dict:
@@ -100,7 +101,33 @@ def pedir_da_folha(codigo: str, d: NovoPedido, u: dict = Depends(auth.exige("ope
 
 @router.post("/projetos/{codigo}/releitura")
 def pedir_do_projeto(codigo: str, d: NovoPedido, u: dict = Depends(auth.exige("operador"))) -> dict:
+    if d.itens:                                   # CAMP-131: um pedido por folha (o CV2 já atende pedido de folha), nunca o projeto inteiro
+        itens = list(dict.fromkeys(str(x).strip() for x in d.itens if str(x).strip()))[:200]
+        r = [_criar(codigo, it, d.motivo, u) for it in itens]
+        return {"pedidos": r, "folhas": len(r), "repetido": all(x.get("repetido") for x in r), "cv2": r[0]["cv2"] if r else None}
     return _criar(codigo, None, d.motivo, u)
+
+
+@router.get("/projetos/{codigo}/releitura/previa")
+def previa_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """CAMP-131 (P10): o que a releitura vai fazer, com os números REAIS do projeto, ANTES de pedir (o texto da confirmação).
+    A regra é a do importador e da releitura: folha revisada por gente (conferida, corrigida, retida) nunca é sobrescrita; o site só muda quando alguém
+    publica de novo; lote já aprovado não recebe nada sozinho (o que mudou aparece em "Releituras: o que mudou" para aceitar ou ignorar)."""
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+        q = lambda w: con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {w}", (codigo,)).fetchone()[0]  # noqa: E731
+        com_aviso = [r[0] for r in con.execute("""SELECT DISTINCT e.codigo FROM erro e JOIN item i ON i.codigo=e.codigo
+                                                   WHERE i.projeto_codigo=? AND e.origem='campvision' AND e.situacao IN ('aberto','em_correcao') ORDER BY e.codigo""", (codigo,))]
+        aprovado = bool(con.execute("SELECT 1 FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL AND aprovado_em IS NOT NULL LIMIT 1", (codigo,)).fetchone())
+        folhas = q("1=1")
+        return {"folhas": folhas, "corrigidas": q("revisao='corrigida'"), "conferidas": q("revisao='conferida' AND COALESCE(retida,0)=0"),
+                "retidas": q("COALESCE(retida,0)=1"), "pendentes": q("revisao='pendente'"), "no_site": q("status_site IN ('no_ar','rascunho')"),
+                "com_aviso": com_aviso, "lote_aprovado": aprovado, "segundos_por_folha": 15,
+                "minutos": max(1, -(-folhas * 15 // 60)), "minutos_com_aviso": max(1, -(-len(com_aviso) * 15 // 60))}
+    finally:
+        con.close()
 
 
 def _estado(con, projeto: str, item: str | None) -> dict:
@@ -151,6 +178,18 @@ def cancelar(pid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
 
 
 # ---------------- o lado do CAMP Vision (rede local + token) ----------------
+def _codigo_de_origem(con, item_codigo: str) -> str | None:
+    """Código que a folha tem no PACOTE/acervo quando o painel a renumerou numa decisão 'lote_colide'
+    (adicionar_ao_fim). None se ela não foi renumerada."""
+    it = con.execute("SELECT lote_id FROM item WHERE codigo=?", (item_codigo,)).fetchone()
+    if not it or not it["lote_id"]:
+        return None
+    for origem, info in colisoes_decididas(con, it["lote_id"]).items():
+        if (info.get("renumeradas") or {}).get(origem) == item_codigo:
+            return origem
+    return None
+
+
 @router.get("/estacoes/pedidos-releitura")
 def pedidos_para_o_cv2(request: Request, estacao: str = "") -> dict:
     ip = exigir_estacao(request)
@@ -169,8 +208,12 @@ def pedidos_para_o_cv2(request: Request, estacao: str = "") -> dict:
                     rel = str(Path(l["pasta_qnap"]).resolve().relative_to(raiz.resolve()))
                 except ValueError:
                     rel = None
-            saida.append({"id": p["id"], "escopo": "folha" if p["item_codigo"] else "projeto", "projeto_codigo": p["projeto_codigo"], "item_codigo": p["item_codigo"],
-                          "motivo": p["motivo"], "pedido_em": p["pedido_em"], "estado": p["estado"], "pasta_relativa": rel})
+            pedido = {"id": p["id"], "escopo": "folha" if p["item_codigo"] else "projeto", "projeto_codigo": p["projeto_codigo"], "item_codigo": p["item_codigo"],
+                      "motivo": p["motivo"], "pedido_em": p["pedido_em"], "estado": p["estado"], "pasta_relativa": rel}
+            origem = _codigo_de_origem(con, p["item_codigo"]) if p["item_codigo"] else None
+            if origem:   # contrato 2.5, opcional: a folha foi renumerada pelo painel (lote_colide); o acervo ainda a chama pelo código do pacote
+                pedido["item_codigo_origem"] = origem
+            saida.append(pedido)
         return {"pedidos": saida}
     finally:
         con.close()

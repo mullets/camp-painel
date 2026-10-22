@@ -81,7 +81,7 @@ def achar_form(h, con) -> tuple[int | None, str | None, str | None]:
     fid = int(cfg[0]) if cfg and str(cfg[0]).strip().isdigit() else None
     st, dados = _get(h, "/wp-json/fluentform/v1/forms", per_page=100)
     if st in (401, 403):
-        return None, None, f"o site recusou a lista de formulários (HTTP {st}): o usuário do painel no WordPress precisa ser administrador do Fluent Forms"
+        return None, None, f"o site recusou a lista de formulários (HTTP {st}): avise quem cuida do site: o usuário do painel precisa ser administrador do Fluent Forms"
     forms = _lista(dados)
     if st != 200 or not forms:
         return None, None, f"não consegui listar os formulários do site (HTTP {st})"
