@@ -3475,7 +3475,7 @@ document.addEventListener('click',async e=>{
   e.preventDefault();e.stopPropagation();
   const lid=b.dataset.pjcTrazerRetiradas,code=b.dataset.pjcCode;
   const r=await confirmar({titulo:'Trazer folhas excluídas pelo CAMP Vision?',texto:'O parecer do CV2 não é uma decisão final. Só serão aceitos códigos deste projeto com arquivo de origem. As folhas voltam para conferência humana; nada vai ao site automaticamente.',botao:'Trazer para conferir',acao:()=>API('/api/lotes/'+encodeURIComponent(lid)+'/trazer-retiradas',{method:'POST',body:JSON.stringify({confirmar:true})})});
-  if(r){toast('Solicitação registrada. Confira as folhas antes de publicar.');showProjeto(code)}
+  if(r){const res=r.resultado||{};toast(res.mensagem||(res.ok?'Folhas trazidas para conferência.':'Nenhuma folha entrou; veja o manifesto e as colisões.'));showProjeto(code)}
 },true);
 
 function pjAutoAbrir(code){const g=pjGav(code);if(g.fechou)return;if(g.aberta&&!(g.auto&&g.aberta===g.autoK))return;const q=k=>document.querySelector(`#pj-cards [data-pjc="${k}"]`);
@@ -3888,7 +3888,7 @@ function pjEstadoFolhas(d){const its=((d&&d.itens)||[]).filter(i=>i.origem_catal
   return o}
 // CAMP-147 (Trello): a página do projeto tem UM bloco "Próximo passo" (uma frase + UM botão azul). Antes da publicação (importar,
 // conferir, aprovar, erro, CAMP Vision lendo) a frase e o botão vêm do /proximo-passo (#pj-proximo, dentro do bloco); depois, do plano de publicação.
-function pjAntes(f){return PJ_FASES_ANTES.includes(f)&&!(f==='aprovar'&&umPasso())}
+function pjAntes(f){return PJ_FASES_ANTES.includes(f)&&!(f==='aprovar'&&(umPasso()||!!(EU&&['admin','master'].includes(EU.papel))))}
 function pjFaseLote(code){const u=window.PP_ULT;return u&&u.code===code&&u.r&&u.r.lote?u.r.lote.fase:null}
 const PJ_FASES_ANTES=['processando','erro','importar','conferir','aprovar'],PJ_FASE_VISTA={};
 function pjStatusCabHTML(code,d){const em=PUB_EM[code];return `<h2 class="pjs-tit">Próximo passo</h2> ${situacaoTag(em?'pronto':situacaoDoProjeto(code,d))}`}
