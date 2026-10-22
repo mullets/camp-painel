@@ -170,7 +170,20 @@ class WP:
             raise RuntimeError("O site ainda não tem a rota camp/v1/painel/hub: avise quem cuida do site (plugin da CAMP, docs/site/painel-hub.php)")
         if r.status_code >= 400:
             raise RuntimeError(f"O site recusou gravar a página do arquiteto: {r.status_code} {r.text[:200]}")
-        return r.json()
+        resposta = r.json()
+        if not isinstance(resposta, dict):
+            raise RuntimeError("WordPress respondeu formato inválido ao atualizar o hub")
+        # WP-AUD-13: HTTP 200 pode significar escrita parcial. Não declarar
+        # publicação bem-sucedida antes de checar os campos confirmados.
+        # Rotas antigas não enviam ok; manter compatibilidade com elas.
+        if resposta.get("ok") is False:
+            faltantes = resposta.get("retry") or []
+            total = len(faltantes) if isinstance(faltantes, list) else 0
+            raise RuntimeError(
+                f"Atualização incompleta da página do arquiteto: {total} campo(s) sem confirmação. "
+                "Confira pendências e tente novamente."
+            )
+        return resposta
 
     def criar_item(self, colecao_id: int, titulo: str, status: str = "draft", descricao: str = "") -> dict:
         r = self.h.post(f"/wp-json/tainacan/v2/collection/{colecao_id}/items", json={"title": titulo, "status": status, "description": descricao})
