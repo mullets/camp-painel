@@ -35,7 +35,16 @@ def _preferir_lote(atual: dict | None, candidato: dict) -> dict:
     Se todos estão publicados, mantém o mais recente. Sem efeitos colaterais.
     A Fila e o detalhe do projeto devem usar esta mesma política (CAMP-145).
     """
-    if atual is None or (atual["fase"] == "publicado" and candidato["fase"] != "publicado"):
+    if atual is None:
+        return candidato
+    if atual["fase"] == "publicado" and candidato["fase"] != "publicado":
+        return candidato
+    # Uma leitura nova do CV2 sem folhas não pode esconder um lote anterior
+    # que JÁ tem documentos conferidos. F009-P0092: 41 folhas conferidas
+    # e lote mais recente vazio resultavam em botões Importar/Aprovar inúteis.
+    if (atual["fase"] in ("importar", "erro", "processando") and not atual.get("itens_total")
+            and candidato["fase"] not in ("publicado", "processando", "erro")
+            and candidato.get("itens_total", 0) > 0):
         return candidato
     return atual
 
