@@ -3,10 +3,13 @@ on:
   push:
     branches:
       - claude/wp-aud-publicacao-20261022
+      - claude/wp-aud-13-hub-client-20261022
   pull_request:
     paths:
       - 'backend/app/coletor_pedidos_site.py'
       - 'tests/teste_coleta_pedidos_ack.py'
+      - 'backend/app/wp.py'
+      - 'tests/test_hub_contract.py'
       - '.github/workflows/wp-auditoria-painel.yml'
 permissions:
   contents: read
@@ -21,8 +24,12 @@ jobs:
       - name: Dependencias do backend
         run: python -m pip install -r backend/requirements.txt
       - name: Sintaxe Python
-        run: python -m py_compile backend/app/coletor_pedidos_site.py tests/teste_coleta_pedidos_ack.py
+        run: python -m py_compile backend/app/coletor_pedidos_site.py tests/teste_coleta_pedidos_ack.py backend/app/wp.py tests/test_hub_contract.py
       - name: Falhas de commit, ACK e 225 pedidos
         env:
           PYTHONPATH: backend
         run: python -m unittest discover -s tests -p 'teste_coleta_pedidos_ack.py' -v
+      - name: Contrato e falhas parciais do hub
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s tests -p 'test_hub_contract.py' -v
