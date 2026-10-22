@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - claude/wp-aud-01-pedidos-ack
+      - claude/wp-aud-05-auditoria-publicacao
   pull_request:
     paths:
       - 'backend/app/coletor_pedidos_site.py'
@@ -26,3 +27,7 @@ jobs:
         env:
           PYTHONPATH: backend
         run: python -m unittest discover -s tests -p 'teste_coleta_pedidos_ack.py' -v
+      - name: Auditoria da publicacao somente leitura
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s tests -p 'teste_auditoria_publicacao.py' -v
