@@ -41,8 +41,10 @@ def _norm(v) -> str:
 
 
 @router.get("/busca")
-def busca_global(q: str, limite: int = 20, fundo: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """`fundo` (opcional): só projetos desse fundo (ex.: escolher o destino de "É de outro projeto…", que não pode ser de outro fundo)."""
+def busca_global(q: str, limite: int = 20, fundo: str | None = None, so: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """`fundo` (opcional): só projetos desse fundo (ex.: escolher o destino de "É de outro projeto…", que não pode ser de outro fundo).
+    `so=projeto` (CAMP-153, opcional): só projetos, achados também pelo nome do arquiteto (fundo ou agente do fundo): o campo de busca
+    que substitui "digite o código" em mover, mesclar e Nova lista."""
     termo = (q or "").strip()
     if not termo:
         return {"q": termo, "resultados": []}
@@ -53,6 +55,25 @@ def busca_global(q: str, limite: int = 20, fundo: str | None = None, u: dict = D
     con = connect()
     con.create_function("norm", 1, _norm)
     resultados = []
+
+    if so == "projeto":
+        for r in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, p.cidade, f.titulo AS fundo_titulo
+                                  FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo
+                                 WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL AND (? IS NULL OR p.fundo_codigo=?)
+                                   AND (p.codigo LIKE ? OR norm(p.titulo) LIKE ? OR norm(p.cidade) LIKE ? OR norm(f.titulo) LIKE ? OR f.sigla LIKE ?
+                                        OR EXISTS (SELECT 1 FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id
+                                                    WHERE fa.fundo_codigo=p.fundo_codigo AND norm(a.forma_autorizada) LIKE ?))
+                                 ORDER BY p.codigo LIMIT ?""", (fundo, fundo, like, nl, nl, nl, like, nl, limite)).fetchall():
+            exato = str(r["codigo"]).upper() == termo.upper()
+            no_nome = _norm(r["titulo"]).startswith(nt) or str(r["codigo"]).upper().startswith(termo.upper())
+            resultados.append({"tipo": "projeto", "codigo": r["codigo"], "titulo": r["titulo"],
+                               "subtitulo": " · ".join(x for x in (r["fundo_codigo"], r["fundo_titulo"], r["cidade"]) if x),
+                               "rota": f"projeto/{r['codigo']}", "score": 0 if exato else 1 if no_nome else 2})
+        con.close()
+        resultados.sort(key=lambda x: (x["score"], x["titulo"].lower()))
+        for x in resultados:
+            x.pop("score", None)
+        return {"q": termo, "resultados": resultados[:limite]}
 
     for r in ([] if fundo else con.execute("""SELECT codigo, sigla, titulo FROM fundo
                             WHERE ativo=1 AND (codigo LIKE ? OR sigla LIKE ? OR norm(titulo) LIKE ?)

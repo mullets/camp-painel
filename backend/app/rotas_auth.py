@@ -44,6 +44,17 @@ def logout(response: Response, camp_sessao: str | None = Cookie(default=None)) -
     return {"ok": True}
 
 
+def _importacao_automatica() -> bool:
+    """CAMP-151/153 (campo opcional do /eu): ligada, "Varrer QNAP" sai da tela do operador."""
+    from .db import connect
+    from .importar_sozinho import ligado
+    con = connect()
+    try:
+        return ligado(con)
+    finally:
+        con.close()
+
+
 @router.get("/eu")
 def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
     from . import publicacao_guiada, rotas_revisao
@@ -56,7 +67,8 @@ def eu(u: dict = Depends(auth.usuario_atual)) -> dict:
     return {"id": u["id"], "nome": u["nome"], "email": u["email"], "papel": u["papel"], "tem_foto": tem_foto,
             "precisa_trocar_senha": bool(u["precisa_trocar_senha"]), "totp": bool(u.get("totp")),
             "publicar_um_passo": publicacao_guiada.publicar_um_passo(),
-            "conferir_so_avisos": rotas_revisao.conferir_so_avisos()}   # CAMP-148/150 (campos opcionais): "Publicar no site" no lugar de "Aprovar o lote"; conferir abre nas folhas com aviso
+            "conferir_so_avisos": rotas_revisao.conferir_so_avisos(),
+            "importacao_automatica": _importacao_automatica()}   # CAMP-148/150 (campos opcionais): "Publicar no site" no lugar de "Aprovar o lote"; conferir abre nas folhas com aviso
 
 
 @router.get("/eu/preferencias")
