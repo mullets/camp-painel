@@ -5699,9 +5699,9 @@ function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)re
    Primeiro mostra quantos e de que tipo (nada muda); só depois de confirmar grava. Só o admin master vê o botão. */
 const ROT_CAT_ERRO={projeto_errado:'folha de outro projeto',duplicata:'duplicata',orientacao:'rotação',espelhado:'pelo verso',autoria_divergente:'autoria',codigo:'código',metadado:'dado da folha',credito:'crédito',arquivo_corrompido:'arquivo corrompido',outro:'outros'};
 async function limpezaGeral(){let s;try{s=await API('/api/erros/limpeza-geral',{method:'POST',body:JSON.stringify({simular:true})})}catch(e){toast(e.message);return}
-  if(!s.fecha){toast('Nenhum aviso automático aberto.');return}
+  if(!s.fecha){toast('Nenhum aviso automático comprovadamente resolvido.');return}
   const lista=s.por_tipo.map(x=>`<li>${fmtN(x.n)} · ${escHtml(ROT_CAT_ERRO[x.categoria]||x.categoria)}${x.gravidade==='bloqueia'?' (marcados como bloqueio)':''}</li>`).join('');
-  const r=await confirmar({titulo:`Fechar ${fmtN(s.fecha)} avisos automáticos?`,html:`<p>São avisos que o CAMP Vision e a revisão criaram sozinhos; não são tarefa de ninguém. Cada um fica fechado com a nota “limpeza geral — novo fluxo” e continua no histórico. Os ${fmtN(s.ficam_relatados_por_pessoas)} relatados por pessoas ficam abertos.</p><ul class="conf-lista">${lista}</ul>`,
+  const r=await confirmar({titulo:`Fechar ${fmtN(s.fecha)} avisos comprovadamente resolvidos?`,html:`<p>Só entram aqui avisos que o painel conseguiu demonstrar que já foram resolvidos. Bloqueios, autoria, duplicatas, arquivos corrompidos e códigos incertos continuam abertos. Cada encerramento fica no histórico. Outros ${fmtN(s.automaticos_que_pedem_decisao||0)} alertas automáticos ainda exigem decisão e ${fmtN(s.ficam_relatados_por_pessoas)} relatos humanos permanecem abertos.</p><ul class="conf-lista">${lista}</ul>`,
     botao:`Fechar ${fmtN(s.fecha)}`,botaoOcupado:'Fechando…',acao:()=>API('/api/erros/limpeza-geral',{method:'POST',body:JSON.stringify({simular:false})})});
   if(!r)return;toast(`${fmtN((r.resultado||{}).fechados||0)} avisos automáticos fechados`);carregarErros()}
 document.addEventListener('click',e=>{if(e.target.closest('#err-limpeza'))limpezaGeral()});
