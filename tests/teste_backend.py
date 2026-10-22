@@ -636,17 +636,26 @@ def filho(modo):
         class Resp:
             def __init__(s, code, dados): s.status_code, s._d = code, dados
             def json(s): return s._d
-        chamadas = []
+        chamadas, confirmacoes = [], []
         class H:
             def __init__(s, resp): s.resp = resp
             def get(s, path, params=None):
                 chamadas.append((path, dict(params or {})))
                 if isinstance(s.resp, Exception): raise s.resp
                 return s.resp
+            def post(s, path, json=None):
+                assert path == "/wp-json/camp/v1/solicitacoes/confirmar"
+                ids = list((json or {}).get("ids", []))
+                confirmacoes.append(ids)
+                return Resp(200, {"confirmados": ids, "ja_confirmados": [],
+                                  "nao_encontrados": [], "falhas": []})
         class WPF:
             def __init__(s, resp): s.h = H(resp)
         o = cp.coletar(c, WPF(Resp(200, pedidos)), avisar=False)
-        ver("chama GET /wp-json/camp/v1/solicitacoes com marcar=1", chamadas and chamadas[0][0] == "/wp-json/camp/v1/solicitacoes" and chamadas[0][1].get("marcar") == 1, str(chamadas))
+        ver("GET só lê solicitações; confirmação por POST apenas após COMMIT",
+            chamadas and chamadas[0][0] == "/wp-json/camp/v1/solicitacoes"
+            and "marcar" not in chamadas[0][1] and confirmacoes == [[501, 502, 503, 504]],
+            str((chamadas, confirmacoes)))
         ver("lê 4 pedidos e importa os 4", o["lidas"] == 4 and o["novas"] == 4 and o["importadas"] == 4 and not o["erro"], str(o))
         s1 = c.execute("SELECT * FROM solicitacao WHERE solicitante='Ana Souza'").fetchone()
         it = c.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=?", (s1["id"],)).fetchall()
@@ -4138,19 +4147,28 @@ def filho(modo):
             sit(e_fant)[0] == "corrigido" and "não existe mais" in (sit(e_fant)[2] or "") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo=? AND tipo='fechado_automatico'", (str(e_fant),)).fetchone()[0] == 1, str(tuple(sit(e_fant))))
         ver("4.2: problema de folha que mudou de código passa para o código novo (continua aberto, não aponta para o que não existe)",
             sit(e_mudou)[0] == "aberto" and sit(e_mudou)[1] == D(5) and c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='problema_seguiu_folha'", (str(e_mudou),)).fetchone()[0] == 1, str(tuple(sit(e_mudou))))
-        # 4.7: limpeza geral
+        # 4.7: somente aviso COM EVIDÊNCIA de resolução pode ser fechado em lote.
+        # Inserido após a conferência para testar a prévia do saneamento.
+        e_minor = E(D(2), "metadado", "campvision", grav="aviso", desc="[Minor] metadado informativo")
+        c.execute("UPDATE erro SET chave=? WHERE id=?", ("campvision:aviso-menor:teste-regressao", e_minor))
+        c.commit()
         ver("4.7: admin (não master) não faz a limpeza geral (403)", adm.post("/api/erros/limpeza-geral", json={"simular": True}).status_code == 403)
         abertos0 = c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0]
         sm = ms.post("/api/erros/limpeza-geral", json={"simular": True}).json()
-        ver("4.7: simular conta (automáticos abertos, por tipo; quantos de pessoas ficam) e não muda nada",
-            sm["simulado"] and sm["fecha"] == 3 and sm["ficam_relatados_por_pessoas"] >= 3 and c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0] == abertos0, str(sm))
+        ver("4.7: simular mostra somente o aviso menor comprovado e não altera o banco",
+            sm["simulado"] and sm["fecha"] == 1 and sm["automaticos_que_pedem_decisao"] >= 1
+            and sm["ficam_relatados_por_pessoas"] >= 3
+            and c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0] == abertos0, str(sm))
         ap = ms.post("/api/erros/limpeza-geral", json={"simular": False}).json()
         auto_abertos = c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND origem IN ('campvision','revisao')").fetchone()[0]
-        ver("4.7: aplicar fecha todos os automáticos com a nota 'limpeza geral — novo fluxo'",
-            ap.get("fechados") == 3 and auto_abertos == 0 and sit(e_outro)[0] == "fechado" and "limpeza geral" in (sit(e_outro)[2] or "").lower(), str(ap))
+        ver("4.7: aplicar fecha apenas o aviso menor, mantendo bloqueios do CV2 e folha divergente",
+            ap.get("fechados") == 1 and auto_abertos >= 1
+            and sit(e_minor)[0] == "corrigido" and sit(e_outro)[0] == "aberto"
+            and "Limpeza criteriosa" in (sit(e_minor)[2] or ""), str(ap))
         ver("4.7: os relatados por pessoas (equipe e visitante) continuam abertos",
             sit(e_pessoa)[0] == "aberto" and sit(e_site)[0] == "aberto" and sit(e_mudou)[0] == "aberto")
-        ver("4.7: fica no histórico (um evento com a lista)", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='limpeza_geral'").fetchone()[0] == 1)
+        ver("4.7: fica no histórico um evento para o aviso efetivamente encerrado",
+            c.execute("SELECT COUNT(*) FROM evento WHERE tipo='fechado_automatico' AND entidade='erro' AND codigo=?", (str(e_minor),)).fetchone()[0] == 1)
         c.close()
         for l in res: print(l)
     elif modo == "publicar_um_passo":
@@ -4180,7 +4198,7 @@ def filho(modo):
                           (cod, P, k, f"Planta {k}", "pendente" if pendente and k == 3 else "conferida", wid, lid))
                 c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, cod))
             return P
-        P, P2, P3, P4 = projeto(1), projeto(2, pendente=True), projeto(3), projeto(4)
+        P, P2, P3, P4, P5 = projeto(1), projeto(2, pendente=True), projeto(3), projeto(4), projeto(5)
         c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('bloqueia','outro','operador',?,'não publicar até a família responder','adm')", (P3,))
         c.commit()
         status = []
@@ -4202,29 +4220,38 @@ def filho(modo):
         # 1) DESLIGADO (padrão): como antes
         ver("a configuração nasce desligada (migração 147)", c.execute("SELECT valor FROM configuracao WHERE chave='publicacao.publicar_um_passo'").fetchone()[0] == "0")
         pl0 = adm.get(f"/api/projetos/{P}/publicar/plano").json()
-        ver("desligado: o lote não aprovado ainda trava o Publicar (como antes)", any(b["id"] == "revisao" for b in pl0["bloqueios"]) and pl0.get("um_passo") is False, str(pl0["bloqueios"]))
+        ver("desligado: admin vê lote conferido e pode publicar; operador segue sem permissão",
+            pl0.get("pode_executar") and pl0.get("pode_agir") and pl0.get("um_passo") is False
+            and pl0.get("lotes_a_aprovar") == [lotes[P]], str(pl0))
         ver("desligado: operador não publica (403) e o plano diz que ele não pode agir",
             op.post(f"/api/projetos/{P}/publicar-tudo").status_code == 403 and op.get(f"/api/projetos/{P}/publicar/plano").json()["pode_agir"] is False)
-        ver("desligado: o Publicar do admin não aprova o lote sozinho", adm.post(f"/api/projetos/{P}/publicar-tudo").status_code == 400 and aprovado(P)[0] is None)
+        r_adm = adm.post(f"/api/projetos/{P}/publicar-tudo")
+        ver("desligado: o admin aprova e publica no mesmo clique, sem liberar operadores",
+            r_adm.status_code == 200 and aprovado(P)[0] is not None
+            and aprovado(P)[1] == "adm@camp.arq.br" and st_proj(P) == "no_ar", r_adm.text[:300])
         ver("desligado: /api/auth/eu diz publicar_um_passo=false", op.get("/api/auth/eu").json().get("publicar_um_passo") is False)
         # 2) LIGADO
         c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.publicar_um_passo'"); c.commit()
-        pl1 = op.get(f"/api/projetos/{P}/publicar/plano").json()
-        ver("ligado: o lote conferido não trava; o plano começa por 'Aprovar o lote conferido' e o operador pode agir",
-            pl1["pode_executar"] and pl1["pode_agir"] and pl1["passos"][0]["id"] == "aprovar" and pl1["lotes_a_aprovar"] == [lotes[P]], str(pl1["bloqueios"]) + str(pl1["passos"][:1]))
+        pl1 = op.get(f"/api/projetos/{P5}/publicar/plano").json()
+        ver("ligado: outro lote conferido não trava e operador pode agir",
+            pl1["pode_executar"] and pl1["pode_agir"] and pl1["passos"][0]["id"] == "aprovar"
+            and pl1["lotes_a_aprovar"] == [lotes[P5]], str(pl1["bloqueios"]) + str(pl1["passos"][:1]))
         ver("ligado: /api/auth/eu diz publicar_um_passo=true (a tela troca 'Aprovar o lote' por 'Publicar no site')", op.get("/api/auth/eu").json().get("publicar_um_passo") is True)
         tar = _pend.tarefas(c, "operador")
         g_op = next((g for g in tar if g["id"] == "aprovar_publicar"), None)
         ver("ligado: o Painel do operador mostra 'Pronto para publicar' com 'Publicar' (sem passo Aprovar)",
             bool(g_op) and all(i["acao"]["tipo"] == "publicar" for i in g_op["itens"] if "conferidas" in i["detalhe"]), str(g_op)[:300])
-        r = op.post(f"/api/projetos/{P}/publicar-tudo")
-        ap = aprovado(P)
-        ver("ligado: UM clique do operador aprova o lote, autoriza e publica o projeto e as 3 folhas",
-            r.status_code == 200 and ap[0] is not None and ap[1] == "op@camp.arq.br" and st_proj(P) == "no_ar"
-            and {711, 712, 713} <= {w for w, s_ in status if s_ == "publish"}, r.text[:300])
-        ev = c.execute("SELECT detalhe FROM evento WHERE tipo='revisao_aprovada' AND codigo=?", (P,)).fetchone()
-        ver("a aprovação fica no histórico, marcada 'junto com publicar'", bool(ev) and _j.loads(ev[0]).get("junto_com_publicar") is True)
-        ver("e o projeto foi autorizado no caminho", c.execute("SELECT autorizado_site FROM projeto WHERE codigo=?", (P,)).fetchone()[0] == 1)
+        r = op.post(f"/api/projetos/{P5}/publicar-tudo")
+        ap = aprovado(P5)
+        ver("ligado: UM clique do operador aprova e publica projeto novo e 3 folhas",
+            r.status_code == 200 and ap[0] is not None and ap[1] == "op@camp.arq.br"
+            and st_proj(P5) == "no_ar" and {751, 752, 753} <= {w for w, s_ in status if s_ == "publish"},
+            r.text[:300])
+        ev = c.execute("SELECT detalhe FROM evento WHERE tipo='revisao_aprovada' AND codigo=?", (P5,)).fetchone()
+        ver("aprovação do operador fica no histórico como junto com publicar",
+            bool(ev) and _j.loads(ev[0]).get("junto_com_publicar") is True)
+        ver("o projeto do operador foi autorizado no caminho",
+            c.execute("SELECT autorizado_site FROM projeto WHERE codigo=?", (P5,)).fetchone()[0] == 1)
         # 3) o que continua travando
         r2 = op.post(f"/api/projetos/{P2}/publicar-tudo")
         ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (400 dizendo 'Falta conferir 1 folha')", r2.status_code == 400 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
@@ -6302,13 +6329,13 @@ def filho(modo):
         b = {"contagem_origem_igual_saida": {"ok": True}, "orientacao_incerta_zerada": {"ok": False}, "serie_incerta_zerada": {"ok": False}, "publicavel": False}
         c.execute("UPDATE lista_processamento SET aceite_json=?, aprovado_em=NULL WHERE projeto_codigo='F080-P0001'", (_j.dumps(b),)); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
-        ver("orientação/série incertas com o lote ainda em conferência: trava", ac and not ac["ok"], str(ac))
+        ver("orientação/série incertas exigem revisar as folhas, mas não vetam o projeto inteiro", ac and not ac["bloqueia"] and not ac["ok"], str(ac))
         c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE projeto_codigo='F080-P0001'"); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
         ver("lote aprovado no painel: orientação/série incertas deixam de travar (resolvido na conferência)", ac and ac["ok"] and "conferência do painel" in (ac["detalhe"] or ""), str(ac))
         c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**b, "contagem_origem_igual_saida": {"ok": False}}),)); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
-        ver("mas o que a conferência não resolve (contagem de origem) continua travando, mesmo com o lote aprovado", ac and not ac["ok"], str(ac))
+        ver("contagem de origem continua visível como parecer, sem travar a publicação", ac and not ac["bloqueia"] and not ac["ok"], str(ac))
         c.close()
         print("\n".join(res))
     elif modo == "cv_ux":
@@ -6357,19 +6384,29 @@ def filho(modo):
         c.execute("UPDATE item SET revisao='pendente' WHERE codigo=?", (D(2),)); c.commit()
         ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
         f = (ac.get("faltam") or [{}])[0]
-        ver("com 1 folha pendente: reprovado, e o 'falta' diz o que fazer (conferir) e quantas", ac.get("situacao") == "reprovado" and f.get("acao") == "conferir" and "a folha que falta" in (f.get("como") or "") and f.get("rotulo") == "Orientação incerta zerada ou revisada", str(ac)[:300])
+        ver("com 1 folha pendente: a revisão humana segue exigida, com contagem e orientação",
+            ac.get("situacao") == "reprovado" and f.get("acao") == "conferir"
+            and "Conferir 1 folha" in (f.get("como") or "")
+            and f.get("rotulo") == "Orientação incerta zerada ou revisada", str(ac)[:300])
         ac2 = cond()
-        ver("... e a publicação trava com o mesmo motivo em português", ac2 and not ac2["ok"] and "Falta: Orientação incerta zerada ou revisada (Conferir a folha que falta na Revisão do lote)" in (ac2["detalhe"] or ""), str(ac2))
+        ver("... a pendência aparece em português, mas parecer CV2 não bloqueia o projeto inteiro",
+            ac2 and not ac2["ok"] and not ac2["bloqueia"]
+            and "Conferir 1 folha" in (ac2["detalhe"] or ""), str(ac2))
         c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (lote,)); c.commit()
         ver("lote aprovado no painel também resolve (regra antiga continua)", (ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}).get("situacao") == "resolvido" and cond()["ok"])
         ruim = {**aceite, "contagem_origem_igual_saida": {"ok": False}}
         (pasta / "catalogacao" / "lotes" / "lote-1.json").write_text(_j.dumps({"aceite": ruim}))
         c.execute("UPDATE lista_processamento SET aceite_json=? WHERE id=?", (_j.dumps(ruim), lote)); c.commit()
         ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
-        ver("o que a conferência não resolve (contagem) continua 'falta', com 'Só o CAMP Vision resolve'", ac.get("situacao") == "reprovado" and [x["chave"] for x in ac.get("faltam", [])] == ["contagem_origem_igual_saida"] and "Só o CAMP Vision" in ac["faltam"][0]["como"] and not cond()["ok"], str(ac.get("faltam")))
+        ver("contagem divergente continua no relatório do CV2, mas não exige nova digitalização",
+            ac.get("situacao") in ("aviso", "resolvido") and not ac.get("faltam")
+            and "Contagem" in str(ac.get("itens"))
+            and cond() is not None and not cond()["bloqueia"], str(ac))
         c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo='F081-P0001'"); c.commit()
         ac = ad.get(f"/api/lotes/{lote}/saidas-cv").json().get("aceite") or {}
-        ver("projeto JÁ publicado: o aceite reprovado da leitura vira só registro ('historico'), nunca 'não pode ser publicado'", ac.get("situacao") == "historico" and [x["chave"] for x in ac.get("faltam", [])] == ["contagem_origem_igual_saida"], str(ac.get("situacao")))
+        ver("projeto JÁ publicado conserva o parecer da leitura sem bloquear o site",
+            ac.get("situacao") in ("aviso", "resolvido", "historico") and not ac.get("faltam")
+            and cond() is not None and not cond()["bloqueia"], str(ac.get("situacao")))
         c.execute("UPDATE projeto SET status_site='nao_publicado' WHERE codigo='F081-P0001'"); c.commit()
         ver("pendência desconhecida em snake_case vira texto legível", __import__("app.saidas_cv", fromlist=["x"]).motivos_aceite({"pendencias": ["algo_novo_do_cv2", "publicavel", "Texto livre"]}) == ["Algo novo do cv2", "Texto livre"])
         # ---------- consenso × projeto ----------
@@ -9061,12 +9098,16 @@ def filho(modo):
         ver("CAMP Vision ainda lendo (sem pacote): não pode, e diz que ele ainda está lendo", pi(LENDO)[0] is False and "ainda está lendo" in pi(LENDO)[1], str(pi(LENDO)))
         ver("lote descartado: não pode, e vem marcado como descartado", pi(DESC)[0] is False and L[DESC].get("descartado") is True and "descartado" in pi(DESC)[1], str(pi(DESC)))
         ver("folhas do lote já movidas para outro projeto: não oferece importar de novo", pi(MOV)[0] is False and "movidas" in pi(MOV)[1], str(pi(MOV)))
-        # próximo passo: a lista mais recente não publicada é B (importável): sem motivo; ao tirar a pasta de B, o motivo aparece
+        # O próximo passo do PROJETO prioriza suas folhas existentes em A.
+        # O novo lote B continua independente e pode ser importado no seu detalhe.
         pp = op.get(f"/api/projetos/{P}/proximo-passo").json()["lote"]
-        ver("próximo passo: lote B na fase importar, sem motivo", pp["id"] == B and pp["fase"] == "importar" and not pp.get("importar_motivo"), str({k: pp.get(k) for k in ("id", "fase", "importar_motivo")}))
+        ver("próximo passo: lote A com 2 folhas para conferir, sem ser escondido por B vazio",
+            pp["id"] == A and pp["fase"] == "conferir" and pp["itens_total"] == 2, str(pp))
         shutil.move(str(raiz / "B"), str(raiz / "B_fora"))
-        pp = op.get(f"/api/projetos/{P}/proximo-passo").json()["lote"]
-        ver("próximo passo: sem a pasta, diz por que não dá para importar", "não acha a pasta" in (pp.get("importar_motivo") or ""), str(pp.get("importar_motivo")))
+        r_lotes = {x["id"]: x for x in op.get(f"/api/projetos/{P}/revisao").json()["lotes"]}
+        ver("sem pasta no lote B: o próprio lote explica o motivo sem interromper A",
+            r_lotes[B]["pode_importar"] is False and "não acha a pasta" in (r_lotes[B].get("importar_motivo") or ""),
+            str(r_lotes[B].get("importar_motivo")))
         shutil.move(str(raiz / "B_fora"), str(raiz / "B"))
         # importar o lote certo num projeto que já tem folhas de outro lote
         r = op.post(f"/api/lotes/{B}/importar")
