@@ -4,6 +4,7 @@ on:
     branches:
       - claude/wp-aud-01-pedidos-ack
       - claude/wp-aud-05-auditoria-publicacao
+      - claude/wp-aud-01-recuperacao-historica
   pull_request:
     paths:
       - 'backend/app/coletor_pedidos_site.py'
@@ -31,3 +32,7 @@ jobs:
         env:
           PYTHONPATH: backend
         run: python -m unittest discover -s tests -p 'teste_auditoria_publicacao.py' -v
+      - name: Recuperar pedidos da versao antiga em modo simular
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s tests -p 'teste_recuperar_pedidos_site.py' -v
