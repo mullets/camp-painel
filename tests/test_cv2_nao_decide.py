@@ -52,12 +52,12 @@ class LotesSeparadosTest(unittest.TestCase):
                 aprovado_em TEXT, descartado_em TEXT
             );
             CREATE TABLE item (
-                codigo TEXT, lote_id INTEGER, revisao TEXT, duplicata_de TEXT
+                codigo TEXT, lote_id INTEGER, projeto_codigo TEXT, revisao TEXT, duplicata_de TEXT
             );
             INSERT INTO lista_processamento VALUES (43, 'F009-P0092', 'revisao', NULL, NULL);
             INSERT INTO lista_processamento VALUES (44, 'F009-P0092', 'revisao', NULL, NULL);
         """)
-        self.con.executemany("INSERT INTO item VALUES (?,43,'conferida',NULL)",
+        self.con.executemany("INSERT INTO item VALUES (?,43,'F009-P0092','conferida',NULL)",
                              [(f'F009-P0092-1981-S01-D{x:05}',) for x in range(1,42)])
         self.con.commit()
 
@@ -65,6 +65,16 @@ class LotesSeparadosTest(unittest.TestCase):
         self.con.close()
 
     def test_publicacao_aprova_so_o_lote_que_tem_folhas(self):
+        ids, total = lotes_para_aprovar(self.con, "F009-P0092")
+        self.assertEqual((ids, total), ([43], 1))
+
+    def test_folha_movida_nao_impede_aprovar_lote_do_projeto_original(self):
+        # Uma folha migrada pode continuar referindo o lote histórico 44,
+        # mas não integra o projeto F009-P0092 e não exige sua aprovação.
+        self.con.execute(
+            "INSERT INTO item VALUES (?,?,?,? ,?)",
+            ("F009-P0093-1981-S01-D00001", 44, "F009-P0093", "pendente", None),
+        )
         ids, total = lotes_para_aprovar(self.con, "F009-P0092")
         self.assertEqual((ids, total), ([43], 1))
 
