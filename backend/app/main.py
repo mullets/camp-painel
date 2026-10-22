@@ -111,8 +111,31 @@ async def _startup() -> None:
     asyncio.create_task(_lgpd_periodica())
     asyncio.create_task(_reconciliacao_noturna())
     asyncio.create_task(_coleta_pedidos_site_periodica())
+    asyncio.create_task(_fila_correcao_site_periodica())
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
+
+
+async def _fila_correcao_site_periodica() -> None:
+    """REF-006: retoma correções locais que o WordPress não confirmou.
+
+    Só trabalha na fila SQLite; nenhuma varredura de QNAP nem chamada de rede
+    dentro de uma requisição. A flag já existente de envio automático continua
+    controlando a execução.
+    """
+    import asyncio
+    from .fila_correcao_site import executar_pendentes
+    await asyncio.sleep(75)
+    while True:
+        try:
+            resultado = await asyncio.to_thread(executar_pendentes)
+            if resultado.get("falhas"):
+                log_registrar(logging.WARNING, "site_correcao_retry",
+                              "Correções ao site ainda pendentes", quantidade=len(resultado["falhas"]))
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.ERROR, "site_correcao_retry",
+                          "Falha na fila de correções", erro_tipo=type(e).__name__)
+        await asyncio.sleep(120)
 
 
 async def _coleta_pedidos_site_periodica() -> None:
