@@ -59,8 +59,8 @@ def pode_publicar(u: dict) -> bool:
 
 def lotes_para_aprovar(con, codigo: str) -> tuple[list[int], int]:
     """([lotes conferidos e ainda não aprovados], quantos lotes não aprovados existem). Só lote com folhas e nenhuma a conferir."""
-    nao_aprovados = con.execute("""SELECT l.id, (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS tot,
-                                          (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente' AND i.duplicata_de IS NULL) AS pen
+    nao_aprovados = con.execute("""SELECT l.id, (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS tot,
+                                          (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente' AND i.duplicata_de IS NULL) AS pen
                                      FROM lista_processamento l
                                     WHERE l.projeto_codigo=? AND l.aprovado_em IS NULL AND l.descartado_em IS NULL AND l.etapa IN ('revisao','rascunho')""", (codigo,)).fetchall()
     com_folhas = [r for r in nao_aprovados if r["tot"]]
