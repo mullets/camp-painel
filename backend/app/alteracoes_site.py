@@ -192,6 +192,8 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
         if titulo_pag is not None or md:
             r = publicador.atualizar_folha_no_site(cod, wid, publicador.COL_ACERVO, titulo_pag, None, md, ator)
             erros += [f"{x['campo']}: {x['erro']}" for x in r.get("falhas") or []]
+            if not (r.get("enviados") or []):
+                erros.append("O WordPress não confirmou nenhum metadado ou título")
         if img:
             try:
                 publicador.girar_imagem_no_site(cod, giro)
@@ -209,6 +211,12 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
                     _imagem_site_resolvida(con, cod)
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_alteracoes_enviadas',?,?)",
                             (cod, ator, json.dumps({"campos": p["campos"], "imagem": img}, ensure_ascii=False)))
+                # O envio imediato também confirma a versão persistente.
+                # Remover somente a versão que acabou de ser enviada evita
+                # deixar uma correção velha encalhada na fila após sucesso.
+                if versao_fila is not None:
+                    con.execute("DELETE FROM fila_correcao_site WHERE item_codigo=? AND versao=?",
+                                (cod, versao_fila))
                 enviadas.append(cod)
             else:
                 falhas.append({"codigo": cod, "erro": "; ".join(erros)[:300]})
