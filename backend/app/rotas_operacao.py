@@ -1230,6 +1230,17 @@ def _fechar_sozinhos(con) -> None:
         con.commit()
 
 
+@router.get("/erros/diagnostico")
+def diagnostico_erros(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """REF-041: investigar o volume de erros sem fechar ou excluir registros."""
+    from .diagnostico_erros import diagnosticar
+    con = connect()
+    try:
+        return diagnosticar(con)
+    finally:
+        con.close()
+
+
 @router.get("/erros/contagem")
 def contar_erros(gravidade: str | None = None, categoria: str | None = None, origem: str | None = None, projeto: str | None = None, q: str | None = None,
                  u: dict = Depends(auth.exige("leitura"))) -> dict:
