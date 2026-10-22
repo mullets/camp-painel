@@ -23,9 +23,9 @@ ELEGIVEL_LOCAL = f"duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR rev
 # pessoa (ou arquivo corrompido apontado pelo CAMP Vision sem dizer a folha). Bloqueio em folha nunca para o projeto.
 # a mesma regra para as contas gerais (Painel inicial): o bloqueio que trava um projeto (no próprio projeto ou no fundo, não numa folha)
 TRAVA_SQL = ("gravidade='bloqueia' AND categoria<>'autoria_divergente' AND length(codigo)<=10 "
-             "AND (origem<>'campvision' OR categoria='arquivo_corrompido')")
+             "AND origem<>'campvision'")
 BLOQUEIO_DO_PROJETO = ("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') AND gravidade='bloqueia' "
-                       "AND categoria<>'autoria_divergente' AND (origem<>'campvision' OR categoria='arquivo_corrompido')")
+                       "AND categoria<>'autoria_divergente' AND origem<>'campvision'")
 
 
 def _outros_bloqueantes(con, codigo: str) -> int:
