@@ -53,6 +53,13 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
         return False, "O CAMP Vision não gravou o pacote deste lote (catalogacao/pacote_tainacan.json). Peça a releitura."
     if pacote.get("projeto_codigo") and pacote.get("projeto_codigo") != l["projeto_codigo"]:
         return False, f"O pacote da pasta é do projeto {pacote.get('projeto_codigo')}, e o lote é de {l['projeto_codigo']}. Peça a releitura."
+    documentos = pacote.get("documentos") if isinstance(pacote.get("documentos"), list) else pacote.get("itens")
+    if not isinstance(documentos, list):
+        return False, "O CV2 não entregou uma lista de documentos válida. Preserve os arquivos e confira o manifesto."
+    if not documentos:
+        if pacote.get("retirados"):
+            return False, "O CAMP Vision retirou as folhas deste lote. Um admin pode trazê-las para conferência, sem aceitar a exclusão da máquina."
+        return False, "O pacote não contém folhas para importar. Confira o lote no QNAP; não precisa reimportar as folhas de outros lotes."
     return True, None
 
 
