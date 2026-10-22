@@ -35,13 +35,22 @@ class FilaCorrecaoSiteTest(unittest.TestCase):
         return c
 
     def test_envio_confirmado_tira_fila(self):
-        with patch("app.alteracoes_site.enviar", return_value={"ok": True, "falhas": [], "total": 1}) as send:
+        with patch("app.alteracoes_site.enviar", return_value={"ok": True, "falhas": [], "total": 1, "enviadas": ["F001-P0001-S01-D00001"]}) as send:
             res = fila.executar_pendentes()
         self.assertEqual(len(res["enviadas"]), 1)
         c = self.con()
         self.assertEqual(c.execute("SELECT COUNT(*) FROM fila_correcao_site").fetchone()[0], 0)
         c.close()
         send.assert_called_once()
+
+    def test_sucesso_sem_folha_confirmada_nao_pode_quitar(self):
+        with patch("app.alteracoes_site.enviar", return_value={"ok": True, "enviadas": [], "total": 0}):
+            r = fila.executar_pendentes(limite=1)
+        self.assertEqual(len(r["falhas"]), 1)
+        c = self.con()
+        row = c.execute("SELECT estado, tentativas FROM fila_correcao_site").fetchone()
+        c.close()
+        self.assertEqual((row["estado"], row["tentativas"]), ("pendente", 1))
 
     def test_erro_mantem_pendente_e_backoff(self):
         with patch("app.alteracoes_site.enviar", side_effect=RuntimeError("WP 500")):
@@ -59,7 +68,7 @@ class FilaCorrecaoSiteTest(unittest.TestCase):
         c.execute("UPDATE fila_correcao_site SET estado='executando', reservado_ate='2020-01-01'")
         c.commit()
         c.close()
-        with patch("app.alteracoes_site.enviar", return_value={"ok": True}):
+        with patch("app.alteracoes_site.enviar", return_value={"ok": True, "enviadas": ["F001-P0001-S01-D00001"], "total": 1}):
             res = fila.executar_pendentes()
         self.assertEqual(len(res["enviadas"]), 1)
 
@@ -69,7 +78,7 @@ class FilaCorrecaoSiteTest(unittest.TestCase):
             c.execute("UPDATE fila_correcao_site SET versao=versao+1, estado='pendente' WHERE item_codigo=?", (args[2][0],))
             c.commit()
             c.close()
-            return {"ok": True}
+            return {"ok": True, "enviadas": [args[2][0]], "total": 1}
         with patch("app.alteracoes_site.enviar", side_effect=mudou):
             fila.executar_pendentes(limite=1)
         c = self.con()
