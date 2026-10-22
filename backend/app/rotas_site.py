@@ -28,8 +28,12 @@ def status(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     r = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     abertas = con.execute("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0").fetchone()[0]
+    fila_existe = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fila_correcao_site'").fetchone()
+    fila = con.execute("SELECT COUNT(*) AS total, SUM(CASE WHEN tentativas>0 THEN 1 ELSE 0 END) AS erros FROM fila_correcao_site").fetchone() if fila_existe else None
     con.close()
-    return {"ultima": dict(r) if r else None, "divergencias_abertas": abertas}
+    return {"ultima": dict(r) if r else None, "divergencias_abertas": abertas,
+            "correcoes_pendentes": fila["total"] if fila else 0,
+            "correcoes_com_falha": (fila["erros"] or 0) if fila else 0}
 
 
 @router.get("/divergencias")
@@ -38,6 +42,24 @@ def divergencias(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     rows = con.execute("SELECT * FROM divergencia_site WHERE resolvida=0 ORDER BY campo, codigo LIMIT 500").fetchall()
     con.close()
     return [dict(r) for r in rows]
+
+
+@router.get("/correcoes-pendentes")
+def correcoes_pendentes(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """REF-006: diagnóstico somente leitura da fila de alterações para o WordPress."""
+    con = connect()
+    try:
+        existe = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fila_correcao_site'").fetchone()
+        if not existe:
+            return {"total": 0, "correcoes": [], "fila_disponivel": False}
+        total = con.execute("SELECT COUNT(*) FROM fila_correcao_site").fetchone()[0]
+        registros = con.execute("""SELECT item_codigo, versao, estado, tentativas, proxima_em,
+                                          reservado_ate, ultimo_erro, atualizado_em
+                                     FROM fila_correcao_site
+                                 ORDER BY tentativas DESC, atualizado_em LIMIT 200""").fetchall()
+        return {"total": total, "correcoes": [dict(x) for x in registros], "fila_disponivel": True}
+    finally:
+        con.close()
 
 
 @router.get("/itens")
