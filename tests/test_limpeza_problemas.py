@@ -27,20 +27,20 @@ class ProblemasAutomaticosTest(unittest.TestCase):
                               ator TEXT,detalhe TEXT,quando TEXT DEFAULT (datetime('now')));
           INSERT INTO fundo VALUES ('F026','Sami Bussab');
           INSERT INTO projeto VALUES ('F026-P0004','Escola','F026',NULL,NULL,'no_ar');
-          INSERT INTO item VALUES ('F026-P0004-S01-D00001','F026-P0004',NULL,NULL,0,NULL,
+          INSERT INTO item VALUES ('F026-P0004-1978-S01-D00001','F026-P0004',NULL,NULL,0,NULL,
                                    37,'conferida','2026-10-22 16:10:20');
           INSERT INTO erro(id,gravidade,categoria,origem,codigo,descricao,chave,criado_em)
           VALUES (1,'aviso','metadado','campvision','F026-P0004',
                   'IPTC:By-line exceeds length limit (truncated)',
                   'campvision:aviso-menor:hash','2026-10-22 16:10:00');
           INSERT INTO erro(id,gravidade,categoria,origem,codigo,descricao,chave,criado_em)
-          VALUES (2,'corrigir','orientacao','campvision','F026-P0004-S01-D00001',
+          VALUES (2,'corrigir','orientacao','campvision','F026-P0004-1978-S01-D00001',
                   'orientacao incerta','campvision:erros:hash2','2026-10-22 16:00:00');
           INSERT INTO erro(id,gravidade,categoria,origem,codigo,descricao,chave,criado_em)
-          VALUES (3,'bloqueia','arquivo_corrompido','campvision','F026-P0004-S01-D00001',
+          VALUES (3,'bloqueia','arquivo_corrompido','campvision','F026-P0004-1978-S01-D00001',
                   'TIF corrompido','campvision:erros:hash3','2026-10-22 16:00:00');
           INSERT INTO erro(id,gravidade,categoria,origem,codigo,descricao,chave,criado_em)
-          VALUES (4,'corrigir','duplicata','campvision','F026-P0004-S01-D00001',
+          VALUES (4,'corrigir','duplicata','campvision','F026-P0004-1978-S01-D00001',
                   'possível duplicata','campvision:erros:hash4','2026-10-22 16:00:00');
         """)
 
