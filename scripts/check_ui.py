@@ -78,6 +78,14 @@ if "const SITUACOES={chegando:['b','Chegando'],conferir:['a','Para conferir'],pr
 for antigo in ("'CAMP Vision lendo',n(", "'Publicadas',n(", "fundos travados por direitos", "publicação bloqueada até existir termo"):
     if antigo in text:
         errors.append(f"situação: '{antigo}' voltou (CAMP-146)")
+# --- CAMP-152 (padrao-de-tela §1): na página do projeto, Despublicar e Voltar para rascunho só no "Mais ⋯", em vermelho (perigo-txt + menuitem)
+for m in re.finditer(r"publicarProjeto\('\$\{c\}','(rascunho|tirar_do_ar)',this\)", text):
+    trecho = text[text.rfind("<button", 0, m.start()):m.start()]
+    if 'perigo-txt' not in trecho or 'role="menuitem"' not in trecho:
+        errors.append(f"perigo: botão '{m.group(1)}' do projeto fora do menu 'Mais ⋯' ou sem vermelho (linha {text.count(chr(10), 0, m.start()) + 1}) — CAMP-152")
+fb = re.search(r"function botoesPublicacao\(code,g\)\{.*?\n  return h\}", text, re.S)
+if fb and re.search(r"rascunho|tirar_do_ar", fb.group(0)):
+    errors.append("perigo: a aba Publicação voltou a ter Voltar para rascunho/Despublicar fora do 'Mais ⋯' (CAMP-152)")
 for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
     conteudo = arq.read_text(encoding="utf-8")
     for padrao, dica in PROIBIDAS:

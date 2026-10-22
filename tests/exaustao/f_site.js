@@ -222,17 +222,13 @@ T.rodar(async () => {
   const achou = await itemDesp.count() > 0 && await itemDesp.isVisible();
   chk(achou, 'CAMP-113: o menu "Mais ⋯" mostra "despublicar" num projeto no ar', await txt(ad, '#pd .pj-mais-menu'));
   await print(ad, '113_menu_mais');
-  if (achou) await itemDesp.click(); else await ad.click('#pd .pj-mais-menu [data-pj-mais]').catch(() => {});
-  const bDesp = await ad.waitForSelector('[data-mais="despublicar"]:not([disabled])', { timeout: 8000 }).then(() => true, () => false);
-  chk(bDesp, 'CAMP-113: a lista de ações oferece "Despublicar"');
-  if (bDesp) {
-    await ad.click('[data-mais="despublicar"]');
-    await ad.waitForTimeout(800); await print(ad, '113_despublicar_form');
-    const go = ad.locator('#d-body button', { hasText: /^Despublicar$/ }).first();
-    chk(await go.count() > 0 && !(await go.isEnabled()), 'CAMP-113: "Despublicar" só libera depois de marcar "Entendi"');
-    const ent = await ad.$('#d-body input[type="checkbox"]'); if (ent) await ent.check();
-    if (await go.count()) { await go.click(); await confirmar(ad) }
-  }
+  // CAMP-152: "Despublicar…" é o item vermelho do "Mais ⋯"; a confirmação diz o alvo e a consequência (antes: um formulário com "Entendi")
+  if (achou) await itemDesp.click();
+  const conf = await ad.waitForSelector('#conf-ov [data-conf="sim"]', { state: 'visible', timeout: 8000 }).then(() => true, () => false);
+  const tconf = conf ? await txt(ad, '#conf-ov') : '';
+  chk(conf && tconf.includes(c.P) && /deixam de ser públicas/.test(tconf), 'CAMP-113/152: "Despublicar…" pede confirmação dizendo o projeto e o que acontece', tconf.slice(0, 200));
+  await print(ad, '113_despublicar_confirmar');
+  if (conf) await ad.click('#conf-ov [data-conf="sim"]');
   chk(await espera(() => um('SELECT status_site FROM projeto WHERE codigo=?', c.P) === 'fora_do_ar'), 'CAMP-113: projeto despublicado (fora do ar)', um('SELECT status_site FROM projeto WHERE codigo=?', c.P));
   chk(um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site='no_ar'", c.P) === 0, 'CAMP-113: nenhuma folha fica pública', JSON.stringify(sql("SELECT status_site, COUNT(*) FROM item WHERE projeto_codigo=? GROUP BY 1", c.P)));
   await T.abrirProjeto(ad, c.P); await espera(async () => !/verificando/.test(await cartaoSite(ad)));
