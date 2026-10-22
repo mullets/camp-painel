@@ -8623,6 +8623,13 @@ def filho(modo):
         sit = lambda eid: q("SELECT situacao FROM erro WHERE id=?", eid)[0]
         abertos_proj = lambda: [e["id"] for e in op.get("/api/projetos/F099-P0001/detalhe").json().get("erros", []) if e.get("situacao") in ("aberto", "em_correcao")]
         # ---------- conferir a folha 1 ----------
+        r_incompleto = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"})
+        ver("REF-015: Está certo e próxima recusa título vazio, sem conferir nem fechar problemas",
+            r_incompleto.status_code == 409 and "título" in r_incompleto.text.lower()
+            and q("SELECT revisao FROM item WHERE codigo=?", D(1))[0] == "pendente"
+            and sit(e_or) == "aberto", r_incompleto.text[:250])
+        c.execute("UPDATE item SET titulo=? WHERE codigo=?", ("Prancha 1", D(1)))
+        c.commit()
         r = op.post(f"/api/itens/{D(1)}/revisao", json={"estado": "conferida"}); j = r.json() if r.status_code == 200 else {}
         rs = j.get("resolvidos") or {}
         ver("conferir fecha os problemas do CAMP Vision que a conferência resolve (giro, espelho, dado lido) e diz quais",
