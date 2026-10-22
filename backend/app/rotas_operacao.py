@@ -1265,29 +1265,46 @@ class LimpezaGeral(BaseModel):
     simular: bool = True
 
 
-NOTA_LIMPEZA = "Limpeza geral — novo fluxo (21/10/2026): aviso automático do CAMP Vision ou da revisão, não é tarefa de ninguém."
+NOTA_LIMPEZA = "Limpeza criteriosa: aviso automático comprovadamente resolvido, sem remover histórico."
 
 
 @router.post("/erros/limpeza-geral")
 def limpeza_geral(d: LimpezaGeral, u: dict = Depends(auth.exige("master"))) -> dict:
-    """21/10 ("publicar sem travar", 4.7): fecha de uma vez todos os problemas ABERTOS de origem automática (CAMP Vision e revisão).
-    Os relatados por pessoas (equipe, visitante do site) ficam. Nada é apagado: cada um fica fechado com a nota, e um evento
-    guarda a lista. simular=true (padrão) só conta, por tipo, e não grava nada."""
+    """Prévia padrão; execução só dos avisos seguros. Nunca fecha bloqueios nem dúvidas de autoria/código."""
+    from .limpeza_segura import candidatos_seguros
     con = connect()
     try:
-        filtro = "situacao IN ('aberto','em_correcao') AND origem IN ('campvision','revisao')"
-        por_tipo = [dict(r) for r in con.execute(f"SELECT categoria, gravidade, COUNT(*) AS n FROM erro WHERE {filtro} GROUP BY 1,2 ORDER BY n DESC")]
-        total = sum(x["n"] for x in por_tipo)
-        ficam = con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND origem NOT IN ('campvision','revisao')").fetchone()[0]
-        out = {"simulado": d.simular, "fecha": total, "por_tipo": por_tipo, "ficam_relatados_por_pessoas": ficam}
-        if d.simular or not total:
+        if not d.simular:
+            con.execute("BEGIN IMMEDIATE")
+        candidatos = candidatos_seguros(con)
+        por_tipo_map = {}
+        for x in candidatos:
+            k = (x["categoria"], x["gravidade"])
+            por_tipo_map[k] = por_tipo_map.get(k, 0) + 1
+        por_tipo = [{"categoria": c, "gravidade": g, "n": n} for (c,g),n in
+                    sorted(por_tipo_map.items(), key=lambda x:(-x[1], x[0]))]
+        ficam = con.execute("""SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')
+                               AND origem NOT IN ('campvision','revisao')""").fetchone()[0]
+        outros_auto = con.execute("""SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')
+                                  AND origem IN ('campvision','revisao')""").fetchone()[0] - len(candidatos)
+        out = {"simulado": d.simular, "fecha": len(candidatos), "por_tipo": por_tipo,
+               "ficam_relatados_por_pessoas": ficam, "automaticos_que_pedem_decisao": outros_auto}
+        if d.simular:
             return out
-        ids = [r[0] for r in con.execute(f"SELECT id FROM erro WHERE {filtro}")]
-        con.execute(f"UPDATE erro SET situacao='fechado', resolvido_em=datetime('now'), resolucao=? WHERE {filtro}", (NOTA_LIMPEZA,))
-        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro','*','limpeza_geral',?,?)",
-                    (u["email"], json.dumps({"fechados": len(ids), "ids": ids, "por_tipo": por_tipo, "nota": NOTA_LIMPEZA}, ensure_ascii=False)))
+        ids = []
+        for x in candidatos:
+            n = con.execute("""UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=?
+                              WHERE id=? AND situacao IN ('aberto','em_correcao')""",
+                            (NOTA_LIMPEZA + " " + x["motivo"], x["id"])).rowcount
+            if n:
+                ids.append(x["id"])
+                _evento(con, "erro", x["id"], "fechado_automatico", u["email"],
+                        {"codigo": x["codigo"], "motivo": x["motivo"]})
         con.commit()
         return {**out, "fechados": len(ids)}
+    except Exception:
+        con.rollback()
+        raise
     finally:
         con.close()
 
