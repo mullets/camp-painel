@@ -379,10 +379,17 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         raise HTTPException(400, "estado deve ser pendente, conferida ou corrigida")
     con = connect()
     try:
-        i = con.execute("SELECT i.revisao, i.status_site, i.lote_id, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
+        i = con.execute("SELECT i.revisao, i.status_site, i.lote_id, i.titulo, i.tipo_documento, i.tipos_documento, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
         fechado = "lote_aprovado" if i["aprovado_em"] else ("no_site" if i["status_site"] in ("rascunho", "no_ar") else None)
+        if d.estado in ("conferida", "corrigida") and not fechado:
+            from .revisao_politica import falta_titulo_para_conferencia
+            if falta_titulo_para_conferencia(i):
+                sem_tipo = not str(i["tipos_documento"] or i["tipo_documento"] or "").strip()
+                campos = "título e tipo documental" if sem_tipo else "título"
+                raise HTTPException(409, f"Antes de marcar a folha como conferida, preencha {campos}. A leitura do CAMP Vision pode estar incompleta; confirme os dados no painel.")
+
         if fechado and d.estado == "pendente":       # reabrir continua protegido
             raise HTTPException(409, "O lote desta folha já foi aprovado: reabra a revisão para mudar" if fechado == "lote_aprovado"
                                 else "Esta folha já está no site: a revisão do lote não se aplica")
