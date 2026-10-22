@@ -4108,6 +4108,10 @@ def filho(modo):
         ver("4.1: a folha com problema fica de fora; o aviso diz quantas", "folhas_com_bloqueio" in cond and cond["folhas_com_bloqueio"]["texto"].startswith("1 folha") and not cond["folhas_com_bloqueio"]["bloqueia"])
         ver("4.1: só ela sai da conta do que vai ao site (3 de 4)", c.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL}", (P,)).fetchone()[0] == 3)
         ver("4.1/4.5: aceite reprovado do CAMP Vision é aviso, não trava", not cond["aceite_cv"]["bloqueia"])
+        from app import publicacao_guiada as _pg
+        plx = _pg.plano(c, pj(P))
+        ver("4.1: e o plano do botão Publicar também não trava pelo aceite (antes: bloqueios=[aceite_cv] e o Publicar recusava)",
+            plx["pode_executar"] is True and not any(b_["id"] == "aceite_cv" for b_ in plx["bloqueios"]), str(plx["bloqueios"]))
         status = []
         class WPF:
             def __init__(self, *a, **k): pass

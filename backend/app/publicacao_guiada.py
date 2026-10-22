@@ -63,7 +63,8 @@ def plano(con, p) -> dict:
     retidas = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND retida=1")
 
     bloqueios = [{"id": i, "texto": por_id[i]["texto"], "detalhe": por_id[i]["detalhe"], "acao": por_id[i]["acao"]}
-                 for i in ("direitos", "bloqueios", "aceite_cv", "teste", "revisao") if i in por_id and not por_id[i]["ok"]]
+                 for i in ("direitos", "bloqueios", "titulo", "aceite_cv", "teste", "revisao")
+                 if i in por_id and por_id[i]["bloqueia"] and not por_id[i]["ok"]]   # 21/10: só o que BLOQUEIA (o aceite do CAMP Vision virou aviso)
     dossie = bool(p["tainacan_item_id"])
     passos = [
         {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
