@@ -1,4 +1,4 @@
-# CAMP-145 — Refatoração dos fluxos de acervo SEM alterar o visual
+# CAMP-145 — Refatoração dos fluxos de acervo com UI/UX coerente
 
 **Estado:** plano de execução e contrato de regressão. **Nenhuma automação operacional é habilitada por este documento.**  
 **Base auditada:** main em `d8552bb` (22/10/2026).  
@@ -10,7 +10,7 @@ O painel é a **fonte da verdade do acervo**: localização e arquivos no QNAP, 
 
 **Fluxo-alvo (CAMP-145):** duas decisões na estação (F9 escolher/criar projeto e F10 terminar), processamento e importação automáticos, revisão humana SOMENTE dos avisos, uma ação de publicar; correções no painel propagadas ao site sem entrar no wp-admin.
 
-**Restrição absoluta:** não redesenhar nem mudar aparência. Preservar HTML renderizado, CSS, tokens, posicionamento, tamanhos, cores, iconografia, responsividade, navegação, nomes e acessibilidade atuais. Alterar fluxo de dados e orquestração sem reestilizar. Nenhuma alteração de `frontend/index.html` nesta primeira etapa.
+**Diretriz de UI/UX (22/10/2026, decisão posterior):** melhorar a experiência interna quando houver ganho demonstrável, mantendo identidade visual, linguagem, tokens, componentes, tipografia e hierarquia coerentes com a CAMP. É permitido ajustar disposição, densidade, hierarquia, estados, navegação e interações; mudanças devem ser deliberadas, demonstradas por prints antes/depois, testadas em desktop/mobile e claro/escuro, e revisadas por acessibilidade. Não redesenhar a marca nem criar um segundo design system. Nenhuma alteração de `frontend/index.html` nesta primeira etapa.
 
 ## 2. Caminho canônico
 
@@ -78,7 +78,7 @@ As etapas relativas a F9/F10, OCR, arquivos de contrato e site envolvem os outro
 
 ### Fase 0 — Congelar o comportamento observável
 - Registrar respostas e eventos dos endpoints, dados reais *anonimizados* e fixtures de lotes normais, problemáticos, incompletos e reiniciados.
-- Tirar screenshots determinísticos de desktop e celular, claro/escuro, todos os estados críticos: Fila, Projetos, Fundo, Projeto, Folha, Publicação, Máquinas, configurações e erros.
+- Tirar screenshots determinísticos de desktop e celular, claro/escuro, todos os estados críticos: Fila, Projetos, Fundo, Projeto, Folha, Publicação, Máquinas, configurações e erros. Aprovar diferenças intencionais de UX e barrar as acidentais.
 - Comparar DOM, texto, estilos computados, foco, teclado e capturas pixel a pixel no mesmo ambiente. O teste `p16_estilos_iguais.js` já captura seis telas; **não substitui** screenshots ou uma auditoria de interação.
 - Congelar rotas, payloads, permissões e contratos das cinco aplicações.
 
@@ -110,16 +110,17 @@ As etapas relativas a F9/F10, OCR, arquivos de contrato e site envolvem os outro
 - Comparar acervo local, índices do painel, espelho e WordPress. Não apagar originais ou reescrever autoria automaticamente.
 - Verificar integridade do NAS, presença de TIFF/DNG/JPG, hashes conhecidos, réplica e estado da publicação. Preservar material arquivístico.
 
-### Fase 5 — Separar implementação da interface, mantendo o visual
+### Fase 5 — Refatorar a interface e aperfeiçoar UI/UX sem romper a identidade
 - Extrair serviços de domínio, casos de uso, adaptadores QNAP/CV2/WP e persistência. Rotas são finas.
-- Só modularizar `index.html` depois do baseline: manter DOM/CSS, ordem de carregamento e eventos. Substituir scripts gradualmente e comparar.
-- Nenhuma mudança visual é autorizada por este plano; melhoria de UX significa menos passos na lógica já estabelecida, não uma nova interface.
+- Só modularizar `index.html` depois do baseline: preservar contratos, tokens, acessibilidade, ordem de carregamento e comportamento. Substituir scripts gradualmente e comparar.
+- Melhorias de UI/UX são permitidas: hierarquia de informação, filtros, busca, tarefas, estados de sincronização, revisão e responsividade; sem criar uma segunda identidade visual. Registrar antes/depois, rationale, teste de regressão e critério de aceite.
+- O trabalho de interface está planejado nos tickets REF-021 a REF-029 e REF-031 do quadro CAMP Acervos — Painel de administração.
 
 ### Fase 6 — Homologação e implantação
 - `python3 -m unittest tests/test_fluxo_acervo.py` + `python tests/teste_backend.py --rapido` + suíte completa + `python scripts/check_ui.py`.
 - `bash tests/rodar_auditoria.sh`, `bash tests/rodar_fluxo_real.sh` e exaustão com WordPress falso e cenários de queda de rede.
 - Testar contrato com estação Windows, Mac, CV2 e `camp-wordpress`, inclusive clientes em versão anterior.
-- Auditoria visual aprovada sem diferenças e backup restaurável verificado **antes** de qualquer merge.
+- Auditoria visual aprovada **sem diferenças inesperadas** (mudanças intencionais têm aprovação documentada) e backup restaurável verificado **antes** de qualquer merge.
 - Somente o responsável autoriza PR/merge; `main` tem atualização de produção. Não executar scripts de deploy, tocar no QNAP real nem ativar flags nesta branch.
 
 ## 6. Critérios de conclusão
@@ -130,7 +131,15 @@ As etapas relativas a F9/F10, OCR, arquivos de contrato e site envolvem os outro
 - Quando WordPress falha, a operação aparece como pendente e volta automaticamente até ser confirmada.
 - Edição de metadados/imagem publicada propaga e reconcilia, sem divergência silenciosa.
 - QNAP continua com os originais; sem perda de metadados, identidade, arquivo ou audit trail.
-- 0 alterações visuais detectadas nas páginas e resoluções protegidas.
+- 0 regressões visuais inesperadas; mudanças de UX aprovadas, consistentes e documentadas antes/depois.
 - Sem mudanças de contrato inesperadas, sem migração destrutiva, sem alteração em produção.
 
 **Esta branch inicia a Fase 1. As Fases 0 (baseline completo) e 2–6 são trabalho futuro, não estão concluídas por criar este documento.**
+
+## 7. Gestão no Trello (22/10/2026)
+
+- Quadro reutilizado: https://trello.com/b/uoFbT5xV/camp-acervos-painel-de-administra%C3%A7%C3%A3o (novo quadro bloqueado pelo limite do workspace; cartões antigos preservados).
+- Tickets REF-000 a REF-039; REF-011 em implementação, demais planejados.
+- Trabalho já especificado nos tickets CAMP-145 a CAMP-160 continua como dependência/histórico, não foi reaberto automaticamente.
+- Alterações visuais de UI/UX devem seguir REF-002, REF-028 e REF-034.
+
