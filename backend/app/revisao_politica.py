@@ -37,3 +37,13 @@ def motivo_para_conferir(folha: Mapping, problema_aberto: bool = False) -> str |
     if problema_aberto:
         return "problema aberto"
     return None
+
+
+def falta_titulo_para_conferencia(folha: Mapping) -> bool:
+    """Título vazio não pode ser aprovado por clique humano nem automático.
+
+    O tipo documental pode exigir classificação posterior: quando também
+    estiver ausente, a interface deve orientar o preenchimento dos dois.
+    Esta regra não transforma parecer do CV2 em decisão definitiva.
+    """
+    return not str(folha.get("titulo") or "").strip()

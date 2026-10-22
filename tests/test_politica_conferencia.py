@@ -1,6 +1,6 @@
 """Regressões da classificação de folhas, sem dependências externas."""
 import unittest
-from app.revisao_politica import motivo_para_conferir
+from app.revisao_politica import motivo_para_conferir, falta_titulo_para_conferencia
 
 def folha(**kw):
     i = dict(codigo="F001-P0001-S01-D00001", titulo="Planta térrea", status_site="nao_publicado",
@@ -9,6 +9,12 @@ def folha(**kw):
     return i
 
 class PoliticaConferenciaTest(unittest.TestCase):
+    def test_revisao_humana_exige_titulo_com_ou_sem_tipo_documental(self):
+        for titulo in ("", " ", None):
+            self.assertTrue(falta_titulo_para_conferencia(folha(titulo=titulo, tipo_documento=None)))
+            self.assertTrue(falta_titulo_para_conferencia(folha(titulo=titulo, tipo_documento="Planta")))
+        self.assertFalse(falta_titulo_para_conferencia(folha(titulo="Projeto sem tipo definido", tipo_documento=None)))
+
     def test_limpa(self):
         self.assertIsNone(motivo_para_conferir(folha()))
     def test_48_folhas_3_avisos(self):
