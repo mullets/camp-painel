@@ -89,7 +89,7 @@ ${montar(PD, 174)}
     if (aprB) {
       await pg.click('#d-body [data-fim-passo] [data-pp="aprovar"]'); await pg.click('#conf-ov [data-conf="sim"]');
       chk(await ate(pg, '#d-body [data-fim-passo] [data-pp="publicar"]'), '(B) aprovado: a gaveta mostra "Publicar"', await txt(pg, '#d-body'));
-      chk(await pg.waitForSelector('#pj-proximo [data-pp="publicar"]', { state: 'attached', timeout: 10000 }).then(() => true, () => false), '(B) a página por baixo já mostra "Publicar" no próximo passo, sem recarregar', await txt(pg, '#pj-proximo'));
+      chk(await pg.waitForSelector('#pj-status [data-pjs-publicar]:not([disabled])', { state: 'attached', timeout: 10000 }).then(() => true, () => false), '(B) a página por baixo já mostra "Publicar" (ligado) no Próximo passo, sem recarregar (CAMP-147: o bloco do topo)', await txt(pg, '#pj-status'));
       const folhas = await pg.waitForFunction(() => /lote aprovado/.test((document.querySelector('#pj-cards [data-pjc="folhas"]') || {}).textContent || ''), null, { timeout: 8000 }).then(() => true, () => false);
       chk(folhas, '(B) o cartão Folhas passa a dizer "lote aprovado" sem recarregar', await txt(pg, '#pj-cards [data-pjc="folhas"]'));
       await pg.evaluate(() => closeDrawer(true));

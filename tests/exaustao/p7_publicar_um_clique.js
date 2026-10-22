@@ -16,14 +16,13 @@ T.rodar(async () => {
   T.chk((av.importacao || {}).criadas === 34, 'o aviso do CAMP Vision importa as 34 folhas', JSON.stringify(av).slice(0, 200));
   const ad = await T.entrar('admin');
 
-  T.passo('5.1: antes de conferir, o bloco diz o que falta e o botão fica desligado');
+  T.passo('5.1 + CAMP-147: antes de conferir, o bloco Próximo passo diz o que falta, com o botão que resolve');
   await T.abrirProjeto(ad, P);
-  await ad.waitForSelector('#pj-status .pjs-acao', { timeout: 15000 });
-  await T.espera(async () => !/verificando/.test(await T.txt(ad, '#pj-status')));
-  const s0 = await T.txt(ad, '#pj-status');
-  T.chk(/CASA UM CLIQUE/i.test(s0) && s0.includes(P) && /1972/.test(s0), 'o bloco tem o título, o código e o ano', s0);
-  T.chk(/34 a conferir/.test(s0) && await ad.$eval('#pj-status [data-pjs-publicar]', b => b.disabled), 'antes de conferir: "34 a conferir" e Publicar desligado', s0);
-  T.chk(/(Nenhuma folha pronta|Não dá para publicar porque).*34 folhas esperam conferência/.test(s0) && await ad.$$eval('#pj-status .pjs-razao button', bs => bs.some(b => /Conferir as folhas/.test(b.textContent))), 'a razão vem em uma linha, com o botão que resolve ("Conferir as folhas")', s0);
+  await T.espera(async () => /Faltam conferir/.test(await T.txt(ad, '#pj-status')), 15000);
+  const s0 = await T.txt(ad, '#pj-status'), cab = await T.txt(ad, '#pd .dethdr');
+  T.chk(/CASA UM CLIQUE/i.test(cab) && cab.includes(P) && /1972/.test(cab) && /Próximo passo/.test(s0) && /Para conferir/.test(s0), 'o título, o código e o ano no cabeçalho; o bloco "Próximo passo" com a situação "Para conferir"', cab.slice(0, 120) + ' | ' + s0.slice(0, 120));
+  T.chk(/Faltam conferir 34/.test(s0) && !(await ad.$('#pj-status [data-pjs-publicar]:not([disabled])')), 'antes de conferir: "Faltam conferir 34" e nada de Publicar ligado', s0);
+  T.chk(!!(await ad.$('#pj-status .btn.pri[data-pp="conferir"]')), 'o botão que resolve ("Começar a conferir") é o azul do bloco', s0);
 
   T.passo('conferir, reter 2 e 1 folha "de outro projeto"');
   const r0 = await ad.evaluate(async (P) => {

@@ -432,13 +432,13 @@ w.route_to('estacoes'); await sleep(2800);
   chk(grupo('Início')==='painel'&&grupo('Trabalho do dia')==='decisoes,filas,erros,solicitacoes'&&grupo('Acervo')==='projetos,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos'&&grupo('Acompanhamento')==='relatorios,uso,estacoes,auditoria,qualidade,config'&&grupo('Ajuda')==='caminho,glossario','[H25] cada grupo deveria ter os itens certos: '+['Início','Trabalho do dia','Acervo','Acompanhamento','Ajuda'].map(grupo).join(' | '));
   chk(txt('#nav [data-v="projetos"] kbd')==='6'&&txt('#nav [data-v="decisoes"] kbd')==='2'&&txt('#nav [data-v="filas"] kbd')==='3'&&txt('#nav [data-v="etiquetas"] kbd')==='T','os atalhos deveriam seguir a ordem do menu (Decisões 2, Material novo 3, Projetos 6, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
-  chk(!!d.querySelector('#pj-proximo .steps')&&[...d.querySelectorAll('#pj-proximo .steps span')].map(x=>x.textContent.trim().split(' ')[0]).join(',')==='Digitalizar,Enviar,Leitura,Importar,Conferir,Aprovar,Publicar','o topo do projeto deveria mostrar os 4 passos (Importar, Conferir, Aprovar, Publicar): "'+txt('#pj-proximo').slice(0,120)+'"');
-  chk(/Conferir \d+\/\d+/.test(txt('#pj-proximo .steps .cur'))&&/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
+  chk(!d.querySelector('#pj-status .steps')&&!!d.querySelector('#pj-status #pj-proximo')&&/Próximo passo/.test(txt('#pj-status .pjs-tit')),'(CAMP-147) o topo do projeto é UM bloco "Próximo passo" (frase + botão), sem o caminho de 7 passos: "'+txt('#pj-status').slice(0,120)+'"');
+  chk(/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
   chk(!/Fonte visual|reconhecidos no site/.test(txt('.folhas-bar'))&&/\d+ no site/.test(txt('.folhas-bar .fb-cont'))&&!d.querySelector('.project-source'),'(19/10) os números do projeto (conferidas e no site) ficam na barra das folhas, sem jargão e sem o rodapé solto: "'+txt('.folhas-bar .fb-cont')+'"');
   d.querySelector('#pj-proximo [data-pp="conferir"]').click(); await sleep(2000);
   chk(/Revisar folha/.test(txt('#d-title')),'"Começar a conferir" deveria abrir a primeira folha pendente'); w.closeDrawer(true);
   w.route_to('projeto/F026-P0001'); await sleep(3600);
-  chk(/Falta trazer as folhas/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="importar"]')&&/Importar/.test(txt('#pj-proximo .steps .cur')),'um projeto com lote ainda não importado deveria pedir "Importar folhas" no passo 1: "'+txt('#pj-proximo')+'"'); }
+  chk(/Falta trazer as folhas|Ainda não dá para importar/.test(txt('#pj-proximo'))&&(!!d.querySelector('#pj-proximo [data-pp="importar"]')||/Ainda não dá para importar/.test(txt('#pj-proximo'))),'um projeto com lote ainda não importado deveria pedir "Importar folhas" no passo 1: "'+txt('#pj-proximo')+'"'); }
 // ---------- LISTA DE PROJETOS: situação, filtros, ordem e "limpar" ----------
 { w.limparSelecaoProjetos&&w.limparSelecaoProjetos(); w.route_to('projetos'); await sleep(3000);
   const R=(await J(adm,'/api/projetos/resumo')).b, chips=[...d.querySelectorAll('#proj-chips [data-proj-sit]')], linhas=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')];
@@ -621,7 +621,7 @@ w.route_to('estacoes'); await sleep(2800);
   // faixa "Publicando…" na página do projeto
   let terminou=false; w.fetch=(u,o={})=>/\/api\/projetos\/F003-P9001\/tarefa$/.test(String(u))?R({tarefa:terminou?null:{...rodando,id:13}}):/\/api\/tarefas\/13$/.test(String(u))?R(terminou?{id:13,estado:'ok',etapa:'fim',feitas:5,total:5,falhas:[],log:[],resultado:{ok:true,mensagem:'Pronto.'}}:{...rodando,id:13}):fetchOrig(u,o);
   w.route_to('projeto/F003-P9001'); await sleep(3800);
-  chk(!!d.querySelector('#pj-proximo .pp-tarefa')&&/Publicando… 3 de 5/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pub-abrir]'),'a página do projeto deveria avisar "Publicando… 3 de 5" com o botão Acompanhar: "'+txt('#pj-proximo').slice(0,120)+'"');
+  await sleep(1500); chk(/Publicando/.test(txt('#pj-status'))&&!d.querySelector('#pj-proximo .pp-tarefa'),'(CAMP-147) a página do projeto deveria mostrar "Publicando…" no botão do Próximo passo (sem um aviso a mais): "'+txt('#pj-status').slice(0,120)+'"');
   terminou=true; await sleep(2600); w.fetch=fetchOrig; w.route_to('painel'); }
 // ---------- [Folha retida] na conferência dá para NÃO publicar uma folha: ela fica no painel, mas nunca vai ao site ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500); const pend=(w.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');
@@ -666,7 +666,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(sp.map(x=>x.firstChild.textContent.trim()).join(',')==='Digitalizar,Enviar ao QNAP,Leitura do CAMP Vision,Importar,Conferir 3/14,Aprovar o lote,Publicar','o caminho deveria ter os 7 passos oficiais na ordem: '+sp.map(x=>x.textContent).join(' | '));
   chk(dd.querySelectorAll('span.done').length===4&&dd.querySelectorAll('span.cur').length===1&&/Conferir 3\/14/.test(dd.querySelector('span.cur').textContent)&&/você está aqui/.test(dd.querySelector('span.cur').textContent),'4 feitos, 1 atual com "3/14" e "você está aqui"');
   w.route_to('caminho'); await sleep(500); chk(d.querySelectorAll('#v-caminho-corpo details').length===7&&/Leva alguns minutos por pasta/.test(txt('#v-caminho-corpo'))&&d.querySelectorAll('#v-caminho-corpo .steps.caminho span').length===7,'a página #caminho deveria explicar os 7 passos');
-  w.route_to('projeto/F003-P9001'); await sleep(3500); chk(d.querySelectorAll('#pj-proximo .steps.caminho span').length===7,'a página do projeto deveria mostrar o caminho de 7 passos com "você está aqui"'); w.route_to('painel'); }
+  w.route_to('projeto/F003-P9001'); await sleep(3500); chk(!d.querySelector('#pd .steps.caminho'),'(CAMP-147) o caminho de 7 passos fica na Fila; a página do projeto mostra só o Próximo passo'); w.route_to('painel'); }
 // ---------- [H2] glossário: página com busca e balão no ponto de uso ----------
 { chk(w.eval('GLOSSARIO.length')>=22,'o glossário deveria ter pelo menos os 22 termos');
   w.route_to('glossario'); await sleep(500); const n=d.querySelectorAll('#gl-lista .gl-item').length; w.filtrarGlossario('rascunho'); const vis=[...d.querySelectorAll('#gl-lista .gl-item')].filter(e=>!e.hidden).length; w.filtrarGlossario('');
@@ -969,7 +969,7 @@ const bp=d.getElementById('pd-publicar'); chk(bp&&!bp.disabled&&bp.getAttribute(
 let _conf=0;w.confirm=()=>{_conf++;return true}; bp.click(); await sleep(2500);
 // 22/10 (etapa 2, "publicar sem travar"): Publicar é UM clique, sem janela de plano. Se algo trava, o topo do projeto diz o porquê, com o botão que resolve
 const st0=txt('#pj-status');
-chk(_conf===0&&!d.getElementById('pub-go')&&/Não dá para publicar porque/.test(st0)&&/[Dd]ireitos/.test(st0)&&[...d.querySelectorAll('#pj-status .pjs-razao button')].some(b=>/Definir direitos do fundo/.test(b.textContent))&&d.querySelector('#pj-status [data-pjs-publicar]').disabled===true,'clicar em Publicar com direitos pendentes: sem janela e sem confirmar, o topo diz "Não dá para publicar porque…" com "Definir direitos do fundo" e o botão desligado: '+st0.slice(0,200));
+chk(_conf===0&&!d.getElementById('pub-go')&&/Não dá para publicar porque|Para publicar, também falta/.test(st0)&&/[Dd]ireitos/.test(st0)&&[...d.querySelectorAll('#pj-status .pjs-razao button')].some(b=>/Definir direitos do fundo/.test(b.textContent))&&!d.querySelector('#pj-status [data-pjs-publicar]:not([disabled])'),'clicar em Publicar com direitos pendentes: sem janela e sem confirmar, o topo diz "Não dá para publicar porque…" com "Definir direitos do fundo" e o botão desligado: '+st0.slice(0,200));
 chk(!/Autorizar publicação/.test(st0),'a autorização NÃO deveria ser pedida: o painel faz sozinho');
 chk(!d.querySelector('.dethdr #pd-publicar'),'o botão Publicar não deveria mais ficar no cabeçalho (escondia o porquê)');
 chk(txt('#pd-pub').includes('Sem erros bloqueantes'),'checklist deveria listar também o que JÁ está ok');
@@ -1588,8 +1588,8 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
   chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&!d.querySelector('#pd .tabs ~ * #pj-proximo'),'[#95] o Próximo passo deveria vir logo abaixo do título, antes dos requisitos e fora das abas');
   // 19/10 (proposta B): o passo a passo fica escondido (só nas gavetas); o botão azul visível é o do cartão mais urgente
-  const azuisB=[...d.querySelectorAll('#pd .btn.pri')].filter(b=>!b.closest('#pj-proximo .pp')),azuis=azuisB.map(b=>b.textContent.trim());
-  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&!!azuisB[0].closest('#pj-cards'),'[#95] deveria haver UM só botão azul visível na página, o do cartão mais urgente: '+JSON.stringify(azuis));
+  await sleep(300); const azuisB=[...d.querySelectorAll('#pd .btn.pri')],azuis=azuisB.map(b=>b.textContent.trim());
+  chk(azuis.length===1&&/conferir/i.test(azuis[0])&&!!azuisB[0].closest('#pj-status'),'[#95/CAMP-147] deveria haver UM só botão azul na página, o do Próximo passo: '+JSON.stringify(azuis));
   chk(d.getElementById('pd-pub-det')&&!d.getElementById('pd-pub-det').open&&/\d+ de \d+ ok/.test(txt('#pd-pub-resumo'))&&/falta:/.test(txt('#pd-pub-resumo')),'[#95] os requisitos deveriam ficar recolhidos, com o resumo "N de M ok · falta: …": "'+txt('#pd-pub-resumo')+'"');
   chk(/F003 Burle Marx/.test(txt('#gcrumb'))&&/F003-P9001 · Projeto de teste/.test(txt('#gcrumb'))&&!/F003-P9001 · F003-P9001/.test(txt('#gcrumb')),'[#95] a trilha não deveria repetir o código: "'+txt('#gcrumb')+'"');
   chk(/Projeto de teste/.test(txt('#where'))&&d.querySelectorAll('#where button').length===1,'[#95] o topo deveria ter um Voltar e o nome do projeto: "'+txt('#where')+'"');
