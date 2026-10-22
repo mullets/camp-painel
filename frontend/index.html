@@ -3428,7 +3428,7 @@ function slCV(s){if(!s)return {tem:false};if(!s.existe)return {tem:true,estado:'
   if(sit==='historico')return {tem:true,estado:'ok',txt:'publicado · o que o CAMP Vision apontou na leitura fica só como registro'};
   if(sit==='reprovado')return {tem:true,estado:'falta',expandir:true,txt:'falta: '+(f.map(x=>x.rotulo).join('; ')||'o CAMP Vision reprovou o lote')};
   const extras=[alerta?'conferir a contagem':'',nSug?qtd(nSug,'sugestão','sugestões')+' para o projeto':''].filter(Boolean);
-  return {tem:true,estado:alerta?'falta':'ok',expandir:alerta,txt:(sit==='resolvido'?'pronto (o que pedia olho humano já foi conferido no painel)':sit?'pronto':'entregue, sem o checklist do aceite')+(extras.length?' · '+extras.join(' · '):'')}}
+  return {tem:true,estado:sit==='aviso'||alerta?'info':'ok',expandir:false,txt:(sit==='aviso'?'parecer do CV2 com ressalvas (não bloqueia o que o painel já conferiu)':sit==='resolvido'?'leitura conferida no painel':sit?'leitura entregue':'entregue, sem o checklist do aceite')+(extras.length?' · '+extras.join(' · '):'')}}
 /* 19/10 (F009-P0092: cartão "tudo certo" com 5 erros bloqueantes; F026-P0009: "CAMP Vision ✔" com o lote parado por erro): o cartão também tem
    a linha do lote PARADO (primeira, no lugar da linha do CAMP Vision) e a dos Problemas abertos (quantos avisos e quantos bloqueiam). */
 function slParado(r,code){const l=r&&r.lote;if(!l||l.fase!=='erro')return {tem:false};const op=EU&&['operador','admin','master'].includes(EU.papel);
