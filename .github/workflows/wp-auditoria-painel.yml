@@ -1,0 +1,28 @@
+name: CAMP Painel - auditoria coleta de pedidos (sem deploy)
+on:
+  push:
+    branches:
+      - claude/wp-aud-publicacao-20261022
+  pull_request:
+    paths:
+      - 'backend/app/coletor_pedidos_site.py'
+      - 'tests/teste_coleta_pedidos_ack.py'
+      - '.github/workflows/wp-auditoria-painel.yml'
+permissions:
+  contents: read
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependencias do backend
+        run: python -m pip install -r backend/requirements.txt
+      - name: Sintaxe Python
+        run: python -m py_compile backend/app/coletor_pedidos_site.py tests/teste_coleta_pedidos_ack.py
+      - name: Falhas de commit, ACK e 225 pedidos
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s tests -p 'teste_coleta_pedidos_ack.py' -v

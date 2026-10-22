@@ -7,9 +7,9 @@ Cartão "Sobras" #12. O formulário de pedido de material do site (camp.arq.br) 
 ninguém precisar digitar de novo. O pedido aparece em **Pedidos de material**, na aba "Abertas", com origem "site", e o
 admin recebe um e-mail (se `avisos.pedido_novo` = 1 e o SMTP estiver configurado).
 
-O lado do site ainda **não** está ligado: este documento é o que a pessoa que fizer essa ligação precisa saber.
+O fluxo **atual** é o painel buscar os pedidos gravados pelo WordPress. O antigo modelo de envio direto (push) abaixo permanece como alternativa, não é requisito para a coleta.
 
-## Antes de ligar
+## Antes de ligar o push (alternativo, não usado pela coleta atual)
 
 1. No painel, em Configurações → "Site e sincronização", defina `pedidos.token` (é uma senha: use 32 letras/números
    aleatórios). Enquanto estiver vazio, a rota responde **503** e nada é gravado.
@@ -105,11 +105,13 @@ O mapa fica na tabela `redirecionamento` (`codigo_antigo`, `codigo_novo`, `entid
 painel só a zera quando o destino muda.
 
 ## O painel busca no site (CAMP-013)
-Além de receber `POST /api/pedidos/site`, o painel **busca** no site a cada `site.coleta_pedidos_min` minutos (padrão 10; 0 desliga): `GET /wp-json/camp/v1/solicitacoes?marcar=1` com a Application Password. O que chega é guardado em `pedido_site` (chave = id do post no site, idempotente) e vira:
+Além de permitir o `POST /api/pedidos/site` alternativo, o painel **busca** a cada `site.coleta_pedidos_min` minutos (padrão 10; 0 desliga): `GET /wp-json/camp/v1/solicitacoes?limite=200` com Application Password (**sem marcar**). Salva primeiro cada registro em `pedido_site`, executa `COMMIT` e, só depois, chama `POST /wp-json/camp/v1/solicitacoes/confirmar` com `{"ids":[...]}` (contrato v1.1). Se cair a rede ou o ACK falhar, o site continua oferecendo o registro; a chave `site_id` evita duplicação. A coleta avança em lotes de 200 e limita cada rodada a 20 lotes, continuando na próxima. O que chega é guardado em `pedido_site` (chave = id do post no site, idempotente) e vira:
 - `alta-resolucao` → pedido (origem `site`) com item pelo código, formato `tif`;
 - `consulta` → pedido sem item (o código vai no texto: é visita aos originais, não arquivo);
 - `correcao` → erro (origem `site`) ligado ao código da folha/projeto; sem código que o painel conheça, vira pedido comum para uma pessoa ver.
 Falha do site fica em `pedido_site_coleta` (e no log) e nunca derruba o painel. `GET /api/pedidos/coleta` mostra a última volta; `POST /api/pedidos/coletar` (admin) busca agora.
+
+**Recuperação da fase antiga (`marcar=1`):** usar `GET /wp-json/camp/v1/solicitacoes?todas=1&pagina=N&limite=200` para inventariar o histórico; comparar os IDs com `pedido_site.site_id` e reintroduzir apenas os faltantes. Fazer como procedimento de auditoria em staging/ambiente controlado, com relatório e sem expor PII. Não habilitar varredura histórica automática no serviço ativo. Durante a implantação, publicar a rota de ACK no WordPress antes de ativar o coletor novo.
 
 ## O painel ENVIA os redirecionamentos ao site (CAMP-014)
 Quando o painel recodifica um projeto, mescla projetos, move folha que já tinha registro no site ou migra série (S07→S08), a linha entra em `redirecionamento` (fila: `aplicado_no_site=0`) e o painel manda ao site `POST /wp-json/camp/v1/painel/redirecionamentos` com `{"itens":[{"antigo":"/acervo/projetos/…/","novo":"/acervo/projetos/…/","tipo":301,"codigo_antigo","codigo_novo","entidade"}]}` (caminhos do próprio site; `/acervo/projetos/<slug>` e `/acervo/documentos/<slug>`). Cadeias já resolvidas (A→B + B→C = A→C e B→C). O endereço vem do espelho do site; para projeto sem página no espelho, `projeto.url_publica_confirmada`; sem endereço, vira pendência (`pendente_redirecionamento`) e espera a sincronização. Código que nunca esteve no site fica `sem_site=1` (continua no mapa público `GET /api/redirecionamentos`). Falha do site não desfaz o local: `tentativas`/`ultimo_erro` na linha e o coletor de 10 min repete. `GET /api/site/redirecionamentos` mostra a fila; `POST /api/site/redirecionamentos/enviar` (admin) envia agora.
