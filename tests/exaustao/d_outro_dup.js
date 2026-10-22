@@ -123,8 +123,7 @@ T.rodar(async () => {
   if (aprovar) { await ad.click('#cf-pane [data-fim-passo] [data-pp="aprovar"]'); await T.confirmar(ad) }
   const pub = await ad.waitForSelector('#cf-pane [data-fim-passo] [data-pp="publicar"]', { timeout: 10000 }).then(() => true, () => false);
   T.chk(pub, 'CAMP-099: nada impede publicar (os problemas de outro projeto foram decididos)', await T.txt(ad, '#cf-pane [data-fim-passo]'));
-  if (pub) { await ad.click('#cf-pane [data-fim-passo] [data-pp="publicar"]'); await ad.waitForSelector('#pub-go:not([disabled])', { timeout: 15000 }).catch(() => {});
-    await ad.click('#pub-go').catch(() => {}); await ad.waitForSelector('#d-body .pub-resultado', { timeout: 60000 }).catch(() => {}); await ad.keyboard.press('Escape') }
+  if (pub) { await ad.click('#cf-pane [data-fim-passo] [data-pp="publicar"]'); await T.espera(async () => !!(await ad.$('#pj-status .pjs-res')), 90000) }   // 5.2: um clique publica
   T.chk(await T.espera(() => T.um('SELECT status_site FROM item WHERE codigo=?', D(7)) === 'no_ar', 20000), 'CAMP-099: a D00007 está no site', T.um('SELECT status_site FROM item WHERE codigo=?', D(7)));
   const antes = JSON.stringify(T.sql("SELECT status_site, pendencias FROM item WHERE codigo=?", D(7))) + JSON.stringify(T.sql("SELECT id, situacao FROM erro WHERE codigo=? ORDER BY id", D(7)));
   await irErros(op, P, 'ignorado');

@@ -39,11 +39,9 @@ const publicarPeloCartao = async (ad, P) => {
   await T.abrirProjeto(ad, P);
   const b = await ad.waitForSelector('#pj-cards [data-pjc-publicar]:not([aria-disabled="true"])', { timeout: 10000 }).catch(() => null);
   if (!b) return { ok: false, texto: 'sem botão Publicar' };
-  await b.click();
-  if (!(await ad.waitForSelector('#pub-go:not([disabled])', { timeout: 15000 }).then(() => true, () => false))) return { ok: false, texto: await txt(ad, '#d-body') };
-  await ad.click('#pub-go');
-  await espera(async () => !!(await ad.$('#d-body .pub-resultado')) || /não subiram|Não consegui|nada foi publicado|Tentar de novo/i.test(await txt(ad, '#d-body')), 60000);
-  return { ok: !!(await ad.$('#d-body .pub-resultado')), texto: await txt(ad, '#d-body') };
+  await b.click();   // 5.2: um clique publica; o resultado aparece no bloco do topo
+  await espera(async () => !!(await ad.$('#pj-status .pjs-res')), 90000);
+  return { ok: !!(await ad.$('#pj-status .pjs-res.ok')), texto: await txt(ad, '#pj-status') };
 };
 
 T.rodar(async () => {
@@ -108,7 +106,7 @@ T.rodar(async () => {
   chk(!!bp2 && (await bp2.getAttribute('aria-disabled')) === 'true' && /Resolva os problemas/.test(await bp2.getAttribute('title') || ''), 'CAMP-110: bloqueio de pessoa no projeto → Publicar desligado com "Resolva os problemas que impedem publicar"', s2);
   chk(/libera quando os problemas/i.test(s2), 'CAMP-110: cartão Site diz que libera quando os problemas forem resolvidos', s2);
   if (bp2 && await bp2.isEnabled()) { await bp2.click(); await ad.waitForTimeout(800) }
-  chk(!(await ad.$('#pub-go:not([disabled])')), 'CAMP-110: clicar no Publicar desligado não publica');
+  chk(!(await ad.$('#pub-go:not([disabled])')) && !/Publicando/.test(await txt(ad, '#pj-status')) && um("SELECT COUNT(*) FROM tarefa_publicacao WHERE projeto_codigo=?", b.P) === 0, 'CAMP-110: clicar no Publicar desligado não publica');
   chk(!!(await ad.$('#pj-cards .pjc[data-pjc="problemas"] [data-pjc-resolver]')), 'CAMP-110: o cartão Problemas tem o caminho para resolver');
   await print(ad, '110_publicar_desligado');
   sql("UPDATE erro SET situacao='corrigido', resolucao='família respondeu' WHERE id=?", eTrava);
@@ -138,11 +136,10 @@ T.rodar(async () => {
   const subiram = um('SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL', c.P);
   chk(subiram === 9, `CAMP-111: as outras 9 folhas subiram como rascunho, só a 4ª ficou: ${subiram}`);
   chk(/1 folha não subiu ao site/.test(r1.texto), 'CAMP-111: a frase concorda ("1 folha não subiu ao site")', r1.texto.slice(0, 300));
-  const deNovo = ad.locator('#d-body #pub-go', { hasText: /Tentar de novo/ }).first();
+  const deNovo = ad.locator('#pj-status [data-pjs-publicar]').first();
   const temDeNovo = await deNovo.count() > 0 && await deNovo.isEnabled();
-  chk(temDeNovo, 'CAMP-111: a janela oferece tentar de novo', r1.texto.slice(0, 300));
-  if (temDeNovo) { await deNovo.click(); await espera(async () => !!(await ad.$('#d-body .pub-resultado')), 60000) }
-  else { await ad.evaluate(() => closeDrawer(true)); await publicarPeloCartao(ad, c.P) }
+  chk(temDeNovo, 'CAMP-111: o topo do projeto oferece publicar de novo', r1.texto.slice(0, 300));
+  if (temDeNovo) { await deNovo.click(); await espera(async () => !!(await ad.$('#pj-status .pjs-res.ok')), 90000) }
   await print(ad, '111_retomou');
   chk(um('SELECT status_site FROM projeto WHERE codigo=?', c.P) === 'no_ar' && um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site='no_ar'", c.P) === 10, 'CAMP-111: tentar de novo continua de onde parou e publica as 10');
   const noSite = sql("SELECT codigo_detectado, COUNT(*) FROM wp_item WHERE projeto_detectado=? AND colecao_id=8013 GROUP BY codigo_detectado HAVING COUNT(*)>1", c.P);

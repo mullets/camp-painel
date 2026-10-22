@@ -188,15 +188,10 @@ const print = async (pg, nome) => { nPrint++; await pg.screenshot({ path: path.j
   await print(ad, 'admin_publicar');
   if (temPub) {
     await ad.locator('[data-pp="publicar"]:visible, [data-pjc-publicar]:not([aria-disabled]):visible').first().click();
-    const go = await ad.waitForSelector('#pub-go:not([disabled])', { timeout: 15000 }).then(() => true, () => false);
-    chk(go, 'a publicação guiada abre com "Publicar agora" liberado', await txt(ad, '#d-body'));
-    await print(ad, 'publicacao_plano');
-    if (go) {
-      await ad.click('#pub-go');
-      const fim = await ad.waitForSelector('#d-body .pub-resultado', { timeout: 60000 }).then(() => true, () => false);
-      const corpo = await txt(ad, '#d-body'); chk(fim && /Publicado|O que ficou público/.test(corpo), 'publicado: a tela diz o que ficou público', corpo.slice(0, 400));
-      await print(ad, 'publicado');
-    }
+    // 5.2: um clique publica, sem janela de plano; o resultado aparece no topo do projeto
+    const fim = await ad.waitForSelector('#pj-status .pjs-res', { timeout: 90000 }).then(() => true, () => false);
+    const corpo = await txt(ad, '#pj-status'); chk(fim && /Publicado ✓/.test(corpo), 'publicado: o topo do projeto diz "Publicado ✓"', corpo.slice(0, 400));
+    await print(ad, 'publicado');
   }
   await ad.keyboard.press('Escape'); await ad.waitForTimeout(800);
   const barra = await txt(ad, '.folhas-bar'), mSite = barra.match(/· (\d+) no site/), fSite = barra.match(/No site \((\d+)\)/);
