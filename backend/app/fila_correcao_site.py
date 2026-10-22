@@ -11,6 +11,16 @@ from .db import connect
 ATOR = "painel (reenvio automático ao site)"
 
 
+def reenvio_ativo() -> bool:
+    """Nova rotina desligada até ser homologada; o envio imediato legado continua."""
+    con = connect()
+    try:
+        row = con.execute("SELECT valor FROM configuracao WHERE chave='site.reenvio_persistente'").fetchone()
+        return bool(row) and str(row[0]).strip() == "1"
+    finally:
+        con.close()
+
+
 def _reclamar(con):
     """Reserva uma correção disponível; lease expira para sobreviver ao restart."""
     con.execute("BEGIN IMMEDIATE")
@@ -31,7 +41,7 @@ def _reclamar(con):
 def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0) -> dict:
     """Executa correções já autorizadas, sem bloquear requisições do painel."""
     from .alteracoes_site import enviar, enviar_sozinho
-    if not enviar_sozinho():
+    if not enviar_sozinho() or not reenvio_ativo():
         return {"desligado": True}
     resumo = {"enviadas": [], "falhas": []}
     inicio = time.monotonic()
