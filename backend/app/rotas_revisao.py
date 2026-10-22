@@ -59,7 +59,7 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
 @router.get("/projetos/{codigo}/proximo-passo")
 def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
-    from .filas_fase import fase_da_lista
+    from .filas_fase import fase_da_lista, escolher_lote_ativo
     from .rotas_operacao import _erro_do_cv
     con = connect()
     try:
@@ -81,7 +81,7 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
             d.pop("status_json", None); d.pop("resultado", None)
             lotes.append(d)
-        lote = next((x for x in lotes if x["fase"] != "publicado"), lotes[0] if lotes else None)
+        lote = escolher_lote_ativo(lotes)
         if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
             pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
             lote["importar_motivo"] = None if pode else motivo
@@ -838,12 +838,8 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
         marcadas = 0
-        for i in con.execute(f"SELECT codigo, titulo, status_site, pendencias FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchall():
-            try:
-                p = json.loads(i["pendencias"] or "{}")
-            except ValueError:
-                p = {"bloqueios": ["pendências ilegíveis"]}
-            if i["status_site"] == "bloqueado" or not (i["titulo"] or "").strip() or p.get("bloqueios") or p.get("ressalvas") or p.get("sinais"):
+        for i in con.execute(f"SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchall():
+            if _aviso_da_folha(con, i):
                 continue
             con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (u["email"], i["codigo"]))
             marcadas += 1
@@ -859,26 +855,14 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
 
 
 def _aviso_da_folha(con, i) -> str | None:
-    """CAMP-094: o que a pessoa precisa VER nesta folha antes de dizer que está certa (None = nada). A mesma regra das marcas da tela de conferir."""
-    try:
-        p = json.loads(i["pendencias"] or "{}")
-    except ValueError:
-        p = {"bloqueios": ["pendências ilegíveis"]}
-    p = p if isinstance(p, dict) else {}
-    if i["status_site"] == "bloqueado" or p.get("bloqueios"):
-        return "bloqueada"
-    if i["duplicata_de"]:
-        return "duplicata"
-    if i["autoria_divergente"]:
-        return "autoria"
-    if i["espelhado"] and i["espelho_manual"] is None:
-        return "espelhada?"
-    if p.get("sinais") or p.get("ressalvas"):
-        return "aviso do CAMP Vision"
+    """Uma mesma política protege a conferência manual e automática."""
+    from .revisao_politica import motivo_para_conferir
+    motivo = motivo_para_conferir(dict(i))
+    if motivo:
+        return motivo
     if con.execute("SELECT 1 FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') LIMIT 1", (i["codigo"],)).fetchone():
         return "problema aberto"
     return None
-
 
 AUTOMATICO = "painel (sem aviso: conferida sozinha)"
 
@@ -898,7 +882,7 @@ def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False) -
     automatico=True (CAMP-150, ao importar): o histórico diz "conferida automaticamente" e lista as folhas."""
     l = _lote(con, lote_id)
     marcadas, ficaram, conferidas = 0, [], []
-    for i in con.execute(f"""SELECT codigo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
+    for i in con.execute(f"""SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
                              WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall():
         motivo = _aviso_da_folha(con, i)
         if motivo:
