@@ -231,9 +231,12 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                         _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
         restam = len(pend) - criadas - len(falhas)
         if falhas:
+            primeira = falhas[0]
+            detalhe = f" {primeira['codigo']}: {str(primeira['erro'])[:150]}."
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
-                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")   # CAMP-111: "1 folha(s) não subiram" virava "1 folha não subiram"
-                    + " ao site; nada foi publicado. Corrija e clique de novo: o que já subiu não se repete."}
+                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")
+                    + " ao site." + detalhe
+                    + " A publicação não foi concluída; verifique esta folha e tente novamente. As demais já enviadas não serão duplicadas."}
         if restam > 0:
             return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam,
                     "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}
