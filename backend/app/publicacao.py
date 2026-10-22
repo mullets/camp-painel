@@ -15,7 +15,17 @@ from .db import connect
 
 # Uma folha só vai ao site se: não é duplicata, não foi retida e, quando veio da revisão do CAMP Vision (tem lote), já foi conferida/corrigida.
 # CAMP-046 (contrato 2.4): autoria divergente NÃO é mais motivo para ficar de fora; vira AVISO ("autoria não confirmada") e a folha sobe com esse texto no crédito.
-ELEGIVEL_LOCAL = "duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente')"   # retida = a pessoa decidiu que esta folha não vai ao site
+# 21/10 ("publicar sem travar", 4.1): problema que BLOQUEIA numa folha deixa só aquela folha de fora (não trava o projeto inteiro)
+SEM_BLOQUEIO_NA_FOLHA = ("NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=item.codigo AND eb.situacao IN ('aberto','em_correcao') "
+                         "AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')")
+ELEGIVEL_LOCAL = f"duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente') AND {SEM_BLOQUEIO_NA_FOLHA}"   # retida = a pessoa decidiu que esta folha não vai ao site
+# O que ainda para o projeto inteiro (lista fechada): direitos, projeto sem título e um bloqueio no PRÓPRIO projeto registrado por uma
+# pessoa (ou arquivo corrompido apontado pelo CAMP Vision sem dizer a folha). Bloqueio em folha nunca para o projeto.
+# a mesma regra para as contas gerais (Painel inicial): o bloqueio que trava um projeto (no próprio projeto ou no fundo, não numa folha)
+TRAVA_SQL = ("gravidade='bloqueia' AND categoria<>'autoria_divergente' AND length(codigo)<=10 "
+             "AND (origem<>'campvision' OR categoria='arquivo_corrompido')")
+BLOQUEIO_DO_PROJETO = ("SELECT COUNT(*) FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') AND gravidade='bloqueia' "
+                       "AND categoria<>'autoria_divergente' AND (origem<>'campvision' OR categoria='arquivo_corrompido')")
 
 
 def _outros_bloqueantes(con, codigo: str) -> int:
@@ -40,14 +50,22 @@ def condicoes_projeto(con, p) -> dict:
                   "detalhe": None if autorizado else "O projeto ainda não foi autorizado para publicação (autorizar não publica sozinho)",
                   "acao": None if autorizado else {"tipo": "autorizar", "rotulo": "Autorizar publicação", "alvo": codigo}})
 
-    b = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
-    div, err = ((b[0] or 0), (b[1] or 0)) if b else (0, 0)
-    err -= con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ? || '-%') AND situacao IN ('aberto','em_correcao')
-                          AND gravidade='bloqueia' AND categoria='autoria_divergente'""", (codigo, codigo)).fetchone()[0] if err else 0   # CAMP-046: base antiga com a view velha: autoria não conta
+    b = con.execute("SELECT itens_autoria_divergente FROM v_bloqueios_publicacao WHERE codigo=?", (codigo,)).fetchone()
+    div = (b[0] or 0) if b else 0
+    err = con.execute(BLOQUEIO_DO_PROJETO, (codigo,)).fetchone()[0]          # 21/10 (4.1): só o bloqueio no próprio projeto
     livre = not err
-    conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Sem erros bloqueantes",
-                  "detalhe": None if livre else f"{err} erro(s) bloqueante(s)",
-                  "acao": None if livre else {"tipo": "erros", "rotulo": "Ver erros", "alvo": codigo}})
+    conds.append({"id": "bloqueios", "bloqueia": True, "ok": livre, "texto": "Nenhum bloqueio no projeto",
+                  "detalhe": None if livre else f"Não dá para publicar porque há {err} bloqueio(s) registrado(s) no projeto",
+                  "acao": None if livre else {"tipo": "erros", "rotulo": "Ver o bloqueio", "alvo": codigo}})
+    titulo_ok = bool((p["titulo"] or "").strip())
+    if not titulo_ok:
+        conds.append({"id": "titulo", "bloqueia": True, "ok": False, "texto": "Projeto com título",
+                      "detalhe": "Não dá para publicar porque o projeto está sem título", "acao": {"tipo": "editar_projeto", "rotulo": "Dar o título", "alvo": f"{codigo}:titulo"}})
+    fora_bloq = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND NOT ({SEM_BLOQUEIO_NA_FOLHA})", (codigo,)).fetchone()[0]
+    if fora_bloq:                       # 21/10 (4.1): a folha com problema que bloqueia fica de fora; o resto publica
+        conds.append({"id": "folhas_com_bloqueio", "bloqueia": False, "ok": False,
+                      "texto": f"{fora_bloq} folha(s) com problema ficam fora desta publicação; as outras publicam",
+                      "detalhe": None, "acao": {"tipo": "erros", "rotulo": "Ver as folhas", "alvo": codigo}})
     if div:   # CAMP-046: autoria não confirmada é AVISO (não trava): a folha sobe com "Autoria não confirmada" no crédito
         conds.append({"id": "autoria_nao_confirmada", "bloqueia": False, "ok": False,
                       "texto": f"{div} folha(s) com autoria não confirmada" if div != 1 else "1 folha com autoria não confirmada",
@@ -70,7 +88,8 @@ def condicoes_projeto(con, p) -> dict:
         av = avaliar_aceite(ac, conferencia_do_lote(con, la["id"])) if isinstance(ac, dict) and ac else None
         aceito = av is None or av["situacao"] != "reprovado"
         resolvido_aqui = bool(av and av["situacao"] == "resolvido")
-        conds.append({"id": "aceite_cv", "bloqueia": True, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
+        # 21/10 ("publicar sem travar", 4.1/4.5): o aceite do CAMP Vision é aviso; não trava o projeto (as folhas com dúvida ficam de fora)
+        conds.append({"id": "aceite_cv", "bloqueia": False, "ok": aceito, "texto": "Aceite do lote no CAMP Vision",
                       "detalhe": ("O CAMP Vision pediu olho humano (" + "; ".join(motivos_aceite(ac)) + "): resolvido na conferência do painel") if resolvido_aqui
                       else None if aceito else "O CAMP Vision reprovou o lote" + (lambda m: f" ({'; '.join(m)})" if m else "")(
                           [m for m in motivos_aceite(ac) if m not in {i["rotulo"] for i in av["itens"] if i["estado"] != "falta"} and m not in {f["rotulo"] for f in av["faltam"]}]) + ". Falta: " + "; ".join(f"{f['rotulo']} ({f['como']})" for f in av["faltam"]),

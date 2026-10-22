@@ -152,6 +152,8 @@ def explicar(e, ctx: dict) -> dict:
             sozinho = {"seguro": True, "motivo": f"Um admin devolveu a folha à revisão ({dv['por']}, {str(dv['em'])[:16]})" + (f": {dv['motivo']}" if dv.get("motivo") else "") + "."}
         elif it and it["projeto_codigo"] == proj:
             sozinho = {"seguro": True, "motivo": "A folha entrou no painel quando o lote foi importado de novo; agora ela passa pela revisão."}
+        # 21/10: a folha RETIRADA continua aqui até a bandeja "A identificar" (etapa 3 do "publicar sem travar"): é por este problema que
+        # um admin devolve a folha que o CAMP Vision tirou por engano. Não trava nada (gravidade 'corrigir'); a limpeza geral fecha as antigas.
     elif tipo == "recusada":
         out["lote_id"] = _lote_da_folha(ctx, proj, None) if proj else None
         o_que = "A folha veio no lote do CAMP Vision, mas o painel não aceitou ao importar (veja o motivo no detalhe)."
@@ -167,8 +169,8 @@ def explicar(e, ctx: dict) -> dict:
                 out["folha_atual"] = novo
                 if e["categoria"] == "projeto_errado" and novo[:10] != folha[:10]:
                     sozinho = {"seguro": True, "motivo": f"A folha foi movida para o projeto {novo[:10]} (agora é {novo})."}
-                else:
-                    sozinho = {"seguro": False, "motivo": f"A folha mudou de código: agora é {novo}. Confira se o problema continua."}
+                else:   # 21/10 (4.2): o problema segue a folha (passa para o código novo), em vez de ficar apontando para um código que não existe
+                    sozinho = {"seguro": True, "mover_para": novo, "motivo": f"A folha mudou de código: o problema passou para {novo}."}
             elif folha in ctx["retiradas"]:
                 from .importador_lote import fala_de_projeto_divergente
                 if e["categoria"] == "projeto_errado" or fala_de_projeto_divergente(e["descricao"]):
@@ -177,7 +179,7 @@ def explicar(e, ctx: dict) -> dict:
                 else:
                     o_que = "O CAMP Vision tirou esta folha do lote antes da revisão. Ela não está no painel e não vai ao site."
             else:
-                sozinho = {"seguro": False, "motivo": "Esta folha não existe mais no painel (foi apagada ou mudou de código). Confira e feche."}
+                sozinho = {"seguro": True, "motivo": "A folha não existe mais no painel. Fechado sozinho, fica no histórico."}
             acao = "abrir_projeto" if pj else None
         else:
             acao = {"orientacao": "girar", "espelhado": "espelhar", "duplicata": "duplicata", "projeto_errado": "mover",
@@ -200,12 +202,12 @@ def explicar(e, ctx: dict) -> dict:
     elif fundo:
         acao = "abrir_fundo"
     if not sozinho and pj:
-        if pj.get("mesclado_em"):
-            sozinho = {"seguro": False, "motivo": f"O projeto foi juntado ao {pj['mesclado_em']}. Confira lá se o problema continua."}
+        if pj.get("mesclado_em"):          # 21/10 (4.2): as folhas foram para o destino com os problemas delas; o que sobrou aqui é fantasma
+            sozinho = {"seguro": True, "motivo": f"O projeto foi juntado a outro ({pj['mesclado_em']}). Fechado sozinho, fica no histórico."}
         elif pj.get("descartado_em"):
-            sozinho = {"seguro": False, "motivo": "O projeto foi descartado (era uma pasta, não uma obra). Confira e feche."}
+            sozinho = {"seguro": True, "motivo": "O projeto foi descartado (era uma pasta, não uma obra). Fechado sozinho, fica no histórico."}
     if proj and not pj and not sozinho:
-        sozinho = {"seguro": False, "motivo": f"O projeto {proj} não existe mais no painel. Confira e feche."}
+        sozinho = {"seguro": True, "motivo": f"O projeto {proj} não existe mais no painel. Fechado sozinho, fica no histórico."}
     out.update(o_que=o_que, fazer=fazer, acao=acao, acao_rotulo=ROTULO_ACAO.get(acao), resolvido_sozinho=sozinho)
     return out
 
@@ -226,6 +228,13 @@ def fechar_resolvidos(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
     for e in abertos:
         s = explicar(e, ctx)["resolvido_sozinho"]
         if not (s and s["seguro"]):
+            continue
+        if s.get("mover_para"):            # 21/10 (4.2): segue a folha; continua aberto
+            n = con.execute("UPDATE erro SET codigo=? WHERE id=? AND situacao IN ('aberto','em_correcao')", (s["mover_para"], e["id"])).rowcount
+            if n:
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'problema_seguiu_folha',?,?)",
+                            (str(e["id"]), ator, json.dumps({"de": e["codigo"], "para": s["mover_para"]}, ensure_ascii=False)))
+                fechados.append(e["id"])
             continue
         n = con.execute("UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id=? AND situacao IN ('aberto','em_correcao')",
                         ("Resolvido sozinho: " + s["motivo"], e["id"])).rowcount

@@ -376,6 +376,12 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     p = con.execute("SELECT p.*, f.titulo AS fundo, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo=?", (codigo,)).fetchone()
     if not p:
         con.close(); raise HTTPException(404, "Projeto não existe")
+    try:                                   # 21/10 (4.2): problema fantasma (folha que não existe mais, fora do projeto) não aparece aqui
+        from .problemas import fechar_resolvidos
+        if fechar_resolvidos(con):
+            con.commit()
+    except Exception:  # noqa: BLE001  (nunca derruba a página do projeto)
+        con.rollback()
 
     itens_local = [dict(r) for r in con.execute("""
         SELECT i.codigo, i.serie_codigo, i.sequencial, i.titulo, COALESCE(i.tipos_documento, i.tipo_documento) AS tipo_documento, i.folha, i.escala, i.ano_folha, i.status_site,
@@ -857,8 +863,8 @@ def projeto_fechado(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> di
         if not p:
             raise HTTPException(404, "Projeto não existe")
         pend = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente' AND COALESCE(retida,0)=0", (codigo,)).fetchone()[0]
-        bloq = con.execute("""SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ?) AND gravidade='bloqueia' AND categoria<>'autoria_divergente'
-                              AND situacao IN ('aberto','em_correcao')""", (codigo, codigo + "-%")).fetchone()[0]
+        from .publicacao import BLOQUEIO_DO_PROJETO
+        bloq = con.execute(BLOQUEIO_DO_PROJETO, (codigo,)).fetchone()[0]     # 21/10 (4.1): só o bloqueio no próprio projeto
         if p["status_site"] != "no_ar" or pend or bloq:
             return {"ok": False, "gravado": False, "motivo": "ainda há o que fazer neste projeto"}
         ult = con.execute("SELECT tipo FROM evento WHERE entidade='projeto' AND codigo=? ORDER BY id DESC LIMIT 1", (codigo,)).fetchone()
@@ -906,7 +912,9 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if d.incluir_folhas:
             for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id, COALESCE(i.retida,0) FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
                                     WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.duplicata_de IS NULL
-                                      AND (i.lote_id IS NULL OR i.revisao<>'pendente')""", (codigo,)):
+                                      AND (i.lote_id IS NULL OR i.revisao<>'pendente')
+                                      AND NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=i.codigo AND eb.situacao IN ('aberto','em_correcao')
+                                                      AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')""", (codigo,)):   # 21/10 (4.1): folha com bloqueio fica de fora
                 if i[3] and alvo == "publish":
                     esconder.append(("item", i[0], i[2] or 8013, i[1]))
                 else:

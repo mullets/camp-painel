@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4065,6 +4065,90 @@ def filho(modo):
             gravar_metadados_lote = None
         ver("site sem a rota: não quebra nada (só não renova)", _pub.renovar_no_site(type("X", (), {})(), 401, F1) is False)
         for l in res: print(l)
+    elif modo == "publicar_sem_travar":
+        # 21/10 — especificação "CAMP Acervos — publicar sem travar", etapa 1 (4.1, 4.2, 4.7): caso F024-P0002, em que 11 folhas "de outro
+        # projeto" travaram o projeto inteiro, problemas fantasmas ("não existe mais") ficavam abertos e a fila tinha ~700 avisos automáticos
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth, publicador as _pub, wp as _wpm
+        from app.publicacao import condicoes_projeto, ELEGIVEL
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F078','Fundo Travar','TRV',1)")
+        for n in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F078',?)", (n,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id) VALUES ('F078-P0001','F078',1,'Residência',1972,1,500)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site) VALUES ('F078-P0002','F078',2,'',1972,1)")
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (500,8007,'draft','Residência','F078-P0001')")
+        P = "F078-P0001"; D = lambda n: f"{P}-1972-S01-D{n:05d}"
+        for n in range(1, 5):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,'campvision','conferida','rascunho',?)",
+                      (D(n), P, n, f"Planta {n}", 600 + n))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (600 + n, D(n)))
+        E = lambda cod, cat, orig, grav="bloqueia", desc="x": c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES (?,?,?,?,?,'t')", (grav, cat, orig, cod, desc)).lastrowid
+        e_outro = E(D(3), "projeto_errado", "campvision", desc="folha de outra obra")            # a folha 3 é "de outro projeto"
+        e_proj_cv = E(P, "outro", "campvision", desc="aviso do CV no projeto")                    # bloqueio automático no projeto: não trava mais
+        e_fant = E(f"{P}-1972-S01-D00099", "metadado", "campvision", grav="corrigir")               # folha que não existe mais
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,codigo_anterior) VALUES (?,?,'S01',5,'Corte','campvision','conferida',?)",
+                  (D(5), P, f"{P}-1972-S01-D00050"))
+        e_mudou = E(f"{P}-1972-S01-D00050", "orientacao", "operador", grav="corrigir")              # a folha mudou de código
+        e_pessoa = E(D(4), "metadado", "operador", grav="corrigir", desc="título errado")         # relatado por pessoa
+        e_site = E(P, "outro", "site", grav="aviso", desc="visitante: foto escura")
+        e_auto2 = E(D(1), "orientacao", "campvision", grav="aviso")
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aceite_json) VALUES ('Lote',?,'/x','revisao',datetime('now'),?)",
+                  (P, _j.dumps({"publicavel": False, "pendencias": ["2 folhas com projeto divergente"]})))
+        c.commit()
+        pj = lambda cod: c.execute("SELECT * FROM projeto WHERE codigo=?", (cod,)).fetchone()
+        g = condicoes_projeto(c, pj(P)); cond = {x["id"]: x for x in g["condicoes"]}
+        ver("4.1: folha 'de outro projeto' (bloqueio do CAMP Vision) NÃO trava o projeto: dá para publicar", g["pode_publicar"] is True,
+            str([(x["id"], x["ok"]) for x in g["condicoes"] if x["bloqueia"] and not x["ok"]]))
+        ver("4.1: a folha com problema fica de fora; o aviso diz quantas", "folhas_com_bloqueio" in cond and cond["folhas_com_bloqueio"]["texto"].startswith("1 folha") and not cond["folhas_com_bloqueio"]["bloqueia"])
+        ver("4.1: só ela sai da conta do que vai ao site (3 de 4)", c.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL}", (P,)).fetchone()[0] == 3)
+        ver("4.1/4.5: aceite reprovado do CAMP Vision é aviso, não trava", not cond["aceite_cv"]["bloqueia"])
+        status = []
+        class WPF:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st): status.append((wid, st)); return {"status": st}
+            def gravar_metadados_lote(self, *a, **k): return {"ok": True, "gravados": []}
+        _pub.WP = WPF; _wpm.WP = WPF
+        import app.rotas_projetos as _rp
+        _rp.WP = WPF
+        for em, nome, papel in (("ms@camp.arq.br", "M", "master"), ("adm@camp.arq.br", "A", "admin")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        ms, adm = cli("ms@camp.arq.br"), cli("adm@camp.arq.br")
+        r = adm.post(f"/api/projetos/{P}/publicar", json={"acao": "publicar"})
+        publicadas = {w for w, st in status if st == "publish"}
+        ver("4.1: Publicar publica o projeto e as 3 folhas; a folha com problema NÃO vai", r.status_code == 200 and {500, 601, 602, 604} <= publicadas and 603 not in publicadas, r.text[:200] + str(status))
+        E(P, "outro", "operador", desc="não publicar até a família responder")
+        c.commit()
+        ver("o que ainda para o projeto: bloqueio registrado por uma PESSOA no próprio projeto", condicoes_projeto(c, pj(P))["pode_publicar"] is False)
+        ver("e projeto sem título (lista fechada)", any(x["id"] == "titulo" and not x["ok"] for x in condicoes_projeto(c, pj("F078-P0002"))["condicoes"]))
+        # 4.2: fantasmas fecham sozinhos ao abrir o projeto
+        adm.get(f"/api/projetos/{P}/detalhe")
+        sit = lambda i: c.execute("SELECT situacao, codigo, resolucao FROM erro WHERE id=?", (i,)).fetchone()
+        ver("4.2: problema de folha que não existe mais fecha sozinho ao abrir o projeto, com o motivo e no histórico",
+            sit(e_fant)[0] == "corrigido" and "não existe mais" in (sit(e_fant)[2] or "") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo=? AND tipo='fechado_automatico'", (str(e_fant),)).fetchone()[0] == 1, str(tuple(sit(e_fant))))
+        ver("4.2: problema de folha que mudou de código passa para o código novo (continua aberto, não aponta para o que não existe)",
+            sit(e_mudou)[0] == "aberto" and sit(e_mudou)[1] == D(5) and c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='problema_seguiu_folha'", (str(e_mudou),)).fetchone()[0] == 1, str(tuple(sit(e_mudou))))
+        # 4.7: limpeza geral
+        ver("4.7: admin (não master) não faz a limpeza geral (403)", adm.post("/api/erros/limpeza-geral", json={"simular": True}).status_code == 403)
+        abertos0 = c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0]
+        sm = ms.post("/api/erros/limpeza-geral", json={"simular": True}).json()
+        ver("4.7: simular conta (automáticos abertos, por tipo; quantos de pessoas ficam) e não muda nada",
+            sm["simulado"] and sm["fecha"] == 3 and sm["ficam_relatados_por_pessoas"] >= 3 and c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0] == abertos0, str(sm))
+        ap = ms.post("/api/erros/limpeza-geral", json={"simular": False}).json()
+        auto_abertos = c.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND origem IN ('campvision','revisao')").fetchone()[0]
+        ver("4.7: aplicar fecha todos os automáticos com a nota 'limpeza geral — novo fluxo'",
+            ap.get("fechados") == 3 and auto_abertos == 0 and sit(e_outro)[0] == "fechado" and "limpeza geral" in (sit(e_outro)[2] or "").lower(), str(ap))
+        ver("4.7: os relatados por pessoas (equipe e visitante) continuam abertos",
+            sit(e_pessoa)[0] == "aberto" and sit(e_site)[0] == "aberto" and sit(e_mudou)[0] == "aberto")
+        ver("4.7: fica no histórico (um evento com a lista)", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='limpeza_geral'").fetchone()[0] == 1)
+        c.close()
+        for l in res: print(l)
     elif modo == "camp136_serie":
         # 21/10 (Rafa: "preciso mudar o tipo de material, tem coisa como planta e é fotografia")
         init_db(); _aplicar_migracoes_real()
@@ -4663,7 +4747,8 @@ def filho(modo):
         auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
         lei = TestClient(app, raise_server_exceptions=False); lei.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
         p = lei.get("/api/painel/pendencias").json()
-        esperado = {"lotes_importar": 1, "lotes_conferir": 2, "folhas_conferir": 3, "lotes_aprovar": 1, "prontos_publicar": 1, "travados_direitos": 1, "lotes_erro": 1, "lotes_lendo": 1, "erros_bloqueantes": 1, "decisoes": 3, "decisoes_pastas": 3, "material_novo": 3, "esperam_admin": 3, "lotes_publicar": 2}
+        # 21/10 ("publicar sem travar"): o problema semeado é de AUTORIA, que nunca impede publicar (CAMP-046): a conta nova não o inclui
+        esperado = {"lotes_importar": 1, "lotes_conferir": 2, "folhas_conferir": 3, "lotes_aprovar": 1, "prontos_publicar": 1, "travados_direitos": 1, "lotes_erro": 1, "lotes_lendo": 1, "erros_bloqueantes": 0, "decisoes": 3, "decisoes_pastas": 3, "material_novo": 3, "esperam_admin": 3, "lotes_publicar": 2}
         ver("contar_pendencias: um número por assunto, certo (o projeto mesclado não conta)", all(p.get(k_) == v_ for k_, v_ in esperado.items()), str({k_: (p.get(k_), v_) for k_, v_ in esperado.items() if p.get(k_) != v_}))
         filas = [f_ for f_ in lei.get("/api/filas").json() if f_["projeto_codigo"] != PM]
         conta = lambda fase: sum(1 for f_ in filas if f_.get("fase") == fase)  # noqa: E731
@@ -5910,11 +5995,13 @@ def filho(modo):
         ver("cada tipo aponta a ação do painel que resolve (mover, marcar duplicata, girar, abrir o lote, abrir o fundo)",
             (L[mov].get("acao"), L[dup].get("acao"), L[gir].get("acao"), L[rec].get("acao"), L[fun].get("acao")) == ("mover", "duplicata", "girar", "abrir_lote", "abrir_fundo") and all(L[i].get("o_que") and L[i].get("fazer") for i in L),
             str([(L[i].get("acao")) for i in (mov, dup, gir, rec, fun)]))
-        ver("folha que não existe mais e folha já girada: 'talvez resolvido' (aparece separado), mas NÃO fecha sozinho",
-            (L[sum_].get("resolvido_sozinho") or {}).get("seguro") is False and (L[gir].get("resolvido_sozinho") or {}).get("seguro") is False
-            and sql("SELECT situacao FROM erro WHERE id=?", sum_) == "aberto" and sql("SELECT situacao FROM erro WHERE id=?", gir) == "aberto", str((L[sum_].get("resolvido_sozinho"), L[gir].get("resolvido_sozinho"))))
+        ver("21/10 ('publicar sem travar', 4.2): problema de folha que não existe mais FECHA sozinho, com registro (antes ficava 'talvez', aberto)",
+            sum_ not in L and sql("SELECT situacao FROM erro WHERE id=?", sum_) == "corrigido" and "não existe mais" in (sql("SELECT resolucao FROM erro WHERE id=?", sum_) or "")
+            and sql("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo=? AND tipo='fechado_automatico'", str(sum_)) == 1, str(sql("SELECT resolucao FROM erro WHERE id=?", sum_)))
+        ver("folha já girada: continua 'talvez resolvido' (aparece separado), mas NÃO fecha sozinho",
+            (L[gir].get("resolvido_sozinho") or {}).get("seguro") is False and sql("SELECT situacao FROM erro WHERE id=?", gir) == "aberto", str(L[gir].get("resolvido_sozinho")))
         ct = lei.get("/api/erros/contagem").json()
-        ver("contagem das abas: abertos, não era problema (ignorado) e quantos talvez já estejam resolvidos", ct.get("abertos") == 10 and ct.get("talvez") == 2 and "ignorado" in ct, str(ct))
+        ver("contagem das abas: abertos, não era problema (ignorado) e quantos talvez já estejam resolvidos", ct.get("abertos") == 9 and ct.get("talvez") == 1 and "ignorado" in ct, str(ct))
         # filtros no servidor (a mesma regra na lista e na contagem)
         g = lambda q: {x["id"] for x in lei.get("/api/erros?" + q).json()}
         ver("filtro por gravidade, tipo, origem, projeto e busca (inclusive pelo NOME do projeto)",
@@ -5947,7 +6034,8 @@ def filho(modo):
             lst[rec]["situacao"] == "corrigido" and "importado de novo" in (lst[rec].get("resolucao") or "") and sql("SELECT ator FROM evento WHERE entidade='erro' AND codigo=? AND tipo='fechado_automatico'", str(rec)) == "painel (automático)")
         ver("falso alarme: um 'folha de outro projeto' relatado DEPOIS da mudança NÃO fecha; nem o de duplicata sem marcação", lst[depois]["situacao"] == "aberto" and lst[fresco]["situacao"] == "aberto")
         # resolver vários de uma vez
-        ids = [r11, sum_, fun]
+        novo_l = k.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('corrigir','metadado','operador',?,'para o lote','op@camp.arq.br')", (f5,)).lastrowid; k.commit()
+        ids = [r11, novo_l, fun]
         ver("em lote: fechar sem dizer o que foi feito = 400; leitura não pode (403)",
             op.post("/api/erros/lote", json={"ids": ids, "situacao": "corrigido"}).status_code == 400 and lei.post("/api/erros/lote", json={"ids": ids, "situacao": "corrigido", "resolucao": "ok feito"}).status_code == 403)
         r = op.post("/api/erros/lote", json={"ids": ids + [999999], "situacao": "ignorado", "resolucao": "conferido"})
@@ -5984,7 +6072,7 @@ def filho(modo):
         c.commit()
         P = lambda: c.execute("SELECT p.*, f.sigla FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.codigo='F080-P0001'").fetchone()  # noqa: E731
         g = condicoes_projeto(c, P()); ac = next((x for x in g["condicoes"] if x["id"] == "aceite_cv"), None)
-        ver("aceite reprovado TRAVA a publicação (mesma regra única), com o motivo", ac and ac["bloqueia"] and not ac["ok"] and "autoria divergente" in ac["detalhe"], str(ac))
+        ver("21/10 ('publicar sem travar'): aceite reprovado vira AVISO (não trava o projeto), com o motivo", ac and not ac["bloqueia"] and not ac["ok"] and "autoria divergente" in ac["detalhe"], str(ac))
         c.execute("UPDATE lista_processamento SET aceite_json=? WHERE projeto_codigo='F080-P0001'", (_j.dumps({**a, "publicavel": True, "pendencias": []}),)); c.commit()
         ac = next((x for x in condicoes_projeto(c, P())["condicoes"] if x["id"] == "aceite_cv"), None)
         ver("aceite aprovado libera", ac and ac["ok"])
@@ -6155,7 +6243,7 @@ def filho(modo):
         pv = x.post("/api/projetos/autorizar/previa", json={"fundo": "F079"}).json()
         ver("prévia do fundo: 1 pronto, 2 de fora com o motivo (erro bloqueante, lote de teste), 1 já autorizado",
             [p_["codigo"] for p_ in pv["prontos"]] == ["F079-P0001"] and {f_["codigo"] for f_ in pv["fora"]} == {"F079-P0002", "F079-P0003"} and pv["ja_autorizados"] == ["F079-P0004"]
-            and any("erro" in m for m in next(f_ for f_ in pv["fora"] if f_["codigo"] == "F079-P0002")["motivos"]), str(pv)[:400])
+            and any("bloqueio" in m for m in next(f_ for f_ in pv["fora"] if f_["codigo"] == "F079-P0002")["motivos"]), str(pv)[:400])
         ver("operador não autoriza", o.post("/api/projetos/autorizar", json={"fundo": "F079"}).status_code == 403)
         r = x.post("/api/projetos/autorizar", json={"fundo": "F079"}).json()
         c = connect()
@@ -8925,7 +9013,8 @@ def filho(modo):
             def upload_media(self, *a, **k): raise AssertionError("não deveria subir imagem neste teste")
         publicador.WP = Fake
         r1 = adm.post("/api/projetos/F099-P0001/subir-folhas"); n1 = len(Fake.itens)
-        ver("1º envio: cria no site as 5 folhas que podem ir", r1.status_code == 200 and r1.json()["criadas"] == 5 and n1 == 5, r1.text[:300])
+        ver("1º envio: cria no site as 4 folhas que podem ir (21/10, 4.1: a folha 5 tem um problema que bloqueia: só ela fica fora)",
+            r1.status_code == 200 and r1.json()["criadas"] == 4 and n1 == 4 and not um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(5))[0], r1.text[:300])
         r2 = adm.post("/api/projetos/F099-P0001/subir-folhas")
         ver("2º envio: nada pendente e NENHUM item novo no site", r2.status_code == 200 and r2.json()["pendentes"] == 0 and len(Fake.itens) == n1, r2.text[:200])
         id1 = um("SELECT tainacan_item_id FROM item WHERE codigo=?", F(1))[0]
@@ -10410,6 +10499,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"site renova: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("159) 21/10: publicar sem travar (etapa 1): folha com problema fica de fora, fantasmas fecham sozinhos, limpeza geral dos automáticos")
+rc, out = rodar("publicar_sem_travar", f"{tmp}/publicar_sem_travar.db")
+if rc != 0: ok(False, f"teste publicar_sem_travar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"sem travar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

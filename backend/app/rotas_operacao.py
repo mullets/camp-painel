@@ -1250,6 +1250,37 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
         con.close()
 
 
+class LimpezaGeral(BaseModel):
+    simular: bool = True
+
+
+NOTA_LIMPEZA = "Limpeza geral — novo fluxo (21/10/2026): aviso automático do CAMP Vision ou da revisão, não é tarefa de ninguém."
+
+
+@router.post("/erros/limpeza-geral")
+def limpeza_geral(d: LimpezaGeral, u: dict = Depends(auth.exige("master"))) -> dict:
+    """21/10 ("publicar sem travar", 4.7): fecha de uma vez todos os problemas ABERTOS de origem automática (CAMP Vision e revisão).
+    Os relatados por pessoas (equipe, visitante do site) ficam. Nada é apagado: cada um fica fechado com a nota, e um evento
+    guarda a lista. simular=true (padrão) só conta, por tipo, e não grava nada."""
+    con = connect()
+    try:
+        filtro = "situacao IN ('aberto','em_correcao') AND origem IN ('campvision','revisao')"
+        por_tipo = [dict(r) for r in con.execute(f"SELECT categoria, gravidade, COUNT(*) AS n FROM erro WHERE {filtro} GROUP BY 1,2 ORDER BY n DESC")]
+        total = sum(x["n"] for x in por_tipo)
+        ficam = con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND origem NOT IN ('campvision','revisao')").fetchone()[0]
+        out = {"simulado": d.simular, "fecha": total, "por_tipo": por_tipo, "ficam_relatados_por_pessoas": ficam}
+        if d.simular or not total:
+            return out
+        ids = [r[0] for r in con.execute(f"SELECT id FROM erro WHERE {filtro}")]
+        con.execute(f"UPDATE erro SET situacao='fechado', resolvido_em=datetime('now'), resolucao=? WHERE {filtro}", (NOTA_LIMPEZA,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro','*','limpeza_geral',?,?)",
+                    (u["email"], json.dumps({"fechados": len(ids), "ids": ids, "por_tipo": por_tipo, "nota": NOTA_LIMPEZA}, ensure_ascii=False)))
+        con.commit()
+        return {**out, "fechados": len(ids)}
+    finally:
+        con.close()
+
+
 @router.get("/erros")
 def listar_erros(situacao: str | None = "abertos", gravidade: str | None = None, categoria: str | None = None, origem: str | None = None,
                  projeto: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:

@@ -44,31 +44,26 @@ T.rodar(async () => {
     ] });
   chk(A.r.ok && (A.r.importacao || {}).criadas === 8, 'CAMP-102: o lote entra pelo aviso do CAMP Vision (8 folhas, 2 retiradas)', JSON.stringify(A.r).slice(0, 300));
   const bloqBanco = um("SELECT COUNT(*) FROM erro WHERE (codigo=? OR codigo LIKE ?) AND situacao IN ('aberto','em_correcao') AND gravidade='bloqueia'", A.P, A.P + '-%');
-  chk(bloqBanco === 5, 'CAMP-102: no banco, 5 problemas que impedem publicar', bloqBanco);
+  // 21/10 ("publicar sem travar", 4.1): problema que bloqueia numa FOLHA deixa só ela de fora; o aviso automático no projeto não trava.
+  // Antes: "5 impedem publicar" (o projeto inteiro parado). Agora: nada impede, 2 folhas do painel (D00001, D00002) ficam fora.
+  chk(bloqBanco === 5, 'CAMP-102: no banco, 5 avisos que o CAMP Vision marcou como bloqueio', bloqBanco);
   await abrirProjeto(op, A.P);
-  const cP = await cartao(op, 'problemas'), vP = num(await txt(op, '#pj-cards .pjc[data-pjc="problemas"] .pjc-v'));
-  chk(vP === 5 && /impedem publicar/.test(cP), 'CAMP-102: cartão Problemas: 5 impedem publicar', cP);
-  const avCartao = num((cP.match(/(\d+) avisos?/) || [])[1]);
-  const aba = await txt(op, '#pd [role="tab"]:has-text("Problemas")'), abaTot = num((aba.match(/Problemas \((\d+)\)/) || [])[1]), abaBl = num((aba.match(/(\d+) bloqueia/) || [])[1]);
-  chk(abaBl === 5 && abaTot === 5 + avCartao, `CAMP-102: aba "Problemas (${abaTot}) ${abaBl} bloqueiam" bate com o cartão (5 + ${avCartao} avisos)`, aba);
+  const cP = await cartao(op, 'problemas');
+  chk(/nenhum impede publicar/.test(cP) && /2 folhas ficam fora desta publicação/.test(cP), 'sem travar: cartão Problemas diz que nada impede publicar e que 2 folhas ficam fora', cP);
+  const aba = await txt(op, '#pd [role="tab"]:has-text("Problemas")');
+  chk(/Problemas \(\d+\)/.test(aba) && !/bloqueia|NaN/.test(aba), 'sem travar: a aba Problemas mostra o total, sem "bloqueiam"', aba);
   chk(await gavAberta(op) === null, 'CAMP-102 (P0): nenhuma gaveta abre sozinha', await gavAberta(op));
   await require('./_comum').abrirGaveta(op, 'problemas');
-  chk(await gavAberta(op) === 'problemas', 'CAMP-102: o cartão Problemas abre a lista "Problemas que impedem publicar"', await gavAberta(op));
-  const lis = await op.$$eval('#pj-probs li', l => l.length);
-  chk(lis === 5, 'CAMP-102: a lista tem 5 linhas (uma por problema que impede publicar)', lis);
+  chk(await gavAberta(op) === 'problemas', 'sem travar: "Ver quais" abre a lista das folhas que ficam fora', await gavAberta(op));
+  const lis = await op.$$eval('#pj-probs li', l => l.map(x => x.textContent));
+  chk(lis.length === 4 && !lis.some(t => /folha de rosto/.test(t)), 'sem travar: a lista tem só folhas (D00001, D00002 e as 2 de outra obra), sem o aviso do projeto', JSON.stringify(lis).slice(0, 300));
   await print(op, '102_lista');
-  // a mesma conta na tela Problemas, no Painel e na publicação
-  await op.evaluate(c => nav('erros/' + c), A.P); await op.waitForSelector('#err-body', { timeout: 15000 }); await op.waitForTimeout(1500);
-  const tela = await op.evaluate(() => [...document.querySelectorAll('#err-body tr[data-err-linha]')].map(t => t.innerText.replace(/\s+/g, ' ')));
-  const telaBl = tela.filter(t => /impede publicar|bloqueia/i.test(t)).length;
-  chk(telaBl === 5, `CAMP-102: tela Problemas do projeto mostra os mesmos 5 que impedem publicar (${tela.length} linhas)`, tela.join(' || ').slice(0, 500));
-  await print(op, '102_tela_problemas');
   const base1 = grupoTotal(await painel(op), 'problemas');
-  chk(base1 - base0 === 5, `CAMP-102: Painel "Problemas que bloqueiam" sobe exatamente 5 (${base0} → ${base1})`);
+  chk(base1 === base0, `sem travar: o Painel "Problemas que bloqueiam" não sobe com aviso automático (${base0} → ${base1})`);
   await abrirProjeto(ad, A.P);
-  const cond = await ad.evaluate(c => ((window.PUB_G || {})[c] || {}).condicoes || [], A.P), cb = cond.find(c => c.id === 'bloqueios') || {};
-  chk(cb.ok === false && /\b5\b/.test((cb.texto || '') + ' ' + (cb.detalhe || '')), 'CAMP-102: a condição de publicar "problemas" diz 5 e trava', JSON.stringify(cb));
-  // cada linha leva à folha certa no conferir
+  const cond = await ad.evaluate(c => ((window.PUB_G || {})[c] || {}).condicoes || [], A.P), cb = cond.find(c => c.id === 'bloqueios') || {}, cf = cond.find(c => c.id === 'folhas_com_bloqueio') || {};
+  chk(cb.ok === true && /2 folha/.test(cf.texto || ''), 'sem travar: a publicação não trava e avisa que 2 folhas ficam fora', JSON.stringify([cb, cf]).slice(0, 300));
+  // cada linha de folha do painel leva à folha certa no conferir
   await abrirProjeto(op, A.P); await require('./_comum').abrirGaveta(op, 'problemas');
   const links = await op.$$eval('#pj-probs a[href^="#conferir/"]', l => l.map(a => a.getAttribute('href')));
   chk(links.length === 2 && links.every(h => h.startsWith('#conferir/' + A.P + '/')), 'CAMP-102: folhas no painel têm link para o conferir (D00001 e D00002)', JSON.stringify(links));
@@ -78,7 +73,6 @@ T.rodar(async () => {
     chk(await espera(() => op.evaluate(() => (window.CONF || {}).atual)).then(async () => (await op.evaluate(() => CONF.atual)) === alvo), `CAMP-102: o link ${alvo.slice(-6)} abre essa folha no conferir`, await op.evaluate(() => (window.CONF || {}).atual));
   }
   await abrirProjeto(op, A.P);
-  chk(await op.$$eval('#pj-probs li', l => l.some(x => /folha de rosto/.test(x.textContent) && !x.querySelector('a[href^="#conferir/"]'))), 'CAMP-102: problema do projeto (sem folha) aparece sem link para folha');
 
   // ---------------------------------------------------------------- CAMP-103
   passo('CAMP-103: problema relatado por pessoa');
@@ -123,8 +117,9 @@ T.rodar(async () => {
   const eProj = sql("SELECT id, codigo, gravidade FROM erro WHERE codigo=? AND situacao='aberto' ORDER BY id", C.P);
   chk(eProj.length === 2 && eProj.every(e => e[1] === C.P), 'CAMP-104: os 2 problemas sem folha ficam no código do projeto', JSON.stringify(eProj));
   await abrirProjeto(op, C.P);
-  chk(/1 impede publicar/.test(await cartao(op, 'problemas')) && /1 aviso/.test(await cartao(op, 'problemas')), 'CAMP-104: cartão Problemas conta os dois (1 impede, 1 aviso)', await cartao(op, 'problemas'));
-  chk(await op.$$eval('#pj-probs li', l => l.length === 1 && !l[0].querySelector('a')), 'CAMP-104: na lista, o problema do projeto aparece sem link quebrado para folha', await txt(op, '#pj-probs'));
+  // 21/10 ("publicar sem travar"): aviso automático no projeto (mesmo marcado "bloqueia" pelo CAMP Vision) não trava; só o de pessoa trava
+  chk(/2 avisos/.test(await cartao(op, 'problemas')) && /nenhum impede publicar/.test(await cartao(op, 'problemas')), 'CAMP-104: cartão Problemas conta os dois avisos e diz que nada impede publicar', await cartao(op, 'problemas'));
+  chk(!(await op.$$eval('#pj-probs li a[href^="#conferir/"]', l => l.length)), 'CAMP-104: problema do projeto nunca vira link quebrado para folha', await txt(op, '#pj-probs').catch(() => ''));
   await abrirConferir(op, C.P);
   chk(Number(await op.$eval('#cf-filtros [data-cf-filtro="problema"] b', b => b.textContent).catch(() => -1)) === 0, 'CAMP-104: no conferir, nenhuma folha fica marcada por problema do projeto');
   await op.evaluate(c => nav('erros/' + c), C.P); await op.waitForSelector('#err-body tr[data-err-linha]', { timeout: 15000 }); await op.waitForTimeout(800);

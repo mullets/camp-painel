@@ -92,18 +92,26 @@ T.rodar(async () => {
   if (aprF) { await aprF.click(); await confirmar(ad) }
   await espera(async () => !(await ad.$('#cf-pane [data-fim-passo] [data-pp="aprovar"]')), 10000);
   await ad.waitForTimeout(1500);
+  // 21/10 ("publicar sem travar", 4.1): as 2 folhas "de outra pasta" ficam FORA; elas não travam mais o projeto
   const fimTxt = await txt(ad, '#cf-pane [data-fim-passo]');
-  chk(/impede|bloque|problema/i.test(fimTxt) && !(await ad.$('#cf-pane [data-fim-passo] [data-pp="publicar"]')), 'CAMP-110: o fim da conferência diz o que impede publicar (sem "Publicar")', fimTxt);
-  chk(!!(await ad.$('#cf-pane [data-fim-passo] a[href*="erros"], #cf-pane [data-fim-passo] [data-pp-cond], #cf-pane [data-fim-passo] [data-pjc-resolver]')), 'CAMP-110: o fim da conferência tem o link para os problemas', fimTxt);
+  chk(!/impede publicar/i.test(fimTxt), 'sem travar: o fim da conferência não diz mais que o projeto está impedido', fimTxt);
   await print(ad, '110_fim_conferir');
   await T.abrirProjeto(ad, b.P); await espera(async () => !/verificando/.test(await cartaoSite(ad)));
+  const bpL = await btPublicar(ad);
+  chk(!!bpL && (await bpL.getAttribute('aria-disabled')) !== 'true', 'sem travar: com 2 folhas de outra pasta, Publicar continua ligado', await cartaoSite(ad));
+  const cProb = await T.txt(ad, '#pj-cards .pjc[data-pjc="problemas"]');
+  chk(/de outro projeto|ficam fora/.test(cProb) && !!(await ad.$('#pj-cards .pjc[data-pjc="problemas"] [data-pjc-gav="problemas"]')), 'sem travar: o cartão Problemas diz quais ficam fora e tem "Ver quais"', cProb);
+  // o que AINDA trava: bloqueio registrado por uma pessoa no próprio projeto
+  const eTrava = sql("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('bloqueia','outro','operador',?,'não publicar até a família responder','adm') RETURNING id", b.P)[0][0];
+  await T.abrirProjeto(ad, b.P); await espera(async () => !/verificando/.test(await cartaoSite(ad)));
   const bp2 = await btPublicar(ad), s2 = await cartaoSite(ad);
-  chk(!!bp2 && (await bp2.getAttribute('aria-disabled')) === 'true' && /Resolva os problemas/.test(await bp2.getAttribute('title') || ''), 'CAMP-110: Publicar desligado com "Resolva os problemas que impedem publicar"', s2);
+  chk(!!bp2 && (await bp2.getAttribute('aria-disabled')) === 'true' && /Resolva os problemas/.test(await bp2.getAttribute('title') || ''), 'CAMP-110: bloqueio de pessoa no projeto → Publicar desligado com "Resolva os problemas que impedem publicar"', s2);
   chk(/libera quando os problemas/i.test(s2), 'CAMP-110: cartão Site diz que libera quando os problemas forem resolvidos', s2);
   if (bp2 && await bp2.isEnabled()) { await bp2.click(); await ad.waitForTimeout(800) }
   chk(!(await ad.$('#pub-go:not([disabled])')), 'CAMP-110: clicar no Publicar desligado não publica');
-  chk(!!(await ad.$('#pj-cards .pjc[data-pjc="problemas"] [data-pjc-resolver], #pj-cards .pjc[data-pjc="problemas"] [data-pjc-gav="problemas"]')), 'CAMP-110: o cartão Problemas tem o caminho para resolver');
+  chk(!!(await ad.$('#pj-cards .pjc[data-pjc="problemas"] [data-pjc-resolver]')), 'CAMP-110: o cartão Problemas tem o caminho para resolver');
   await print(ad, '110_publicar_desligado');
+  sql("UPDATE erro SET situacao='corrigido', resolucao='família respondeu' WHERE id=?", eTrava);
   // resolve: as duas são mesmo de outra obra
   await ad.evaluate(c => nav('erros/' + c), b.P);
   for (const n of [7, 8]) {
