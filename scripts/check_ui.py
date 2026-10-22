@@ -32,8 +32,26 @@ for token in required_dom:
 # Impede voltar a crescer sem controle: o teto é o número atual (13/10/2026). Novo layout
 # usa classes/componentes; quem tirar estilo inline pode baixar este número.
 inline = len(re.findall(r'\bstyle="', text))
-if inline > 171:
-    errors.append(f"orçamento de estilos inline excedido: {inline} > 171")
+if inline > 157:     # CAMP-155 (22/10/2026): o teto desce para o número de hoje
+    errors.append(f"orçamento de estilos inline excedido: {inline} > 157")
+
+# --- CAMP-155: só os tokens do padrão (docs/padroes.md). No CSS e na marcação da página, tamanho de fonte e raio crus não podem
+# crescer (o que é igual a um token já virou var(--fs-*) / var(--r*)), e o âmbar fora dos tokens não volta. O JS fica de fora: as
+# janelas de impressão (etiquetas, folha de contatos) têm CSS próprio, sem os tokens.
+_pagina = text[text.index("<style>"):text.index("<script>")] if "<style>" in text and "<script>" in text else text
+for _nome, _pad, _teto in (("tamanho de fonte cru (px)", r"font-size:\d+(\.\d+)?px", 65), ("raio cru (px)", r"border-radius:\d+(\.\d+)?px", 39)):
+    _n = len(re.findall(_pad, _pagina))
+    if _n > _teto:
+        errors.append(f"tokens: {_nome} subiu para {_n} (teto {_teto}): use var(--fs-*) / var(--r-sm|--r|--r-md|--r-lg) — CAMP-155")
+for _cru, _tok in (("font-size:11px", "--fs-2xs"), ("font-size:11.5px", "--fs-xs"), ("font-size:12px", "--fs-sm"), ("font-size:12.5px", "--fs-sm2"),
+                   ("font-size:13px", "--fs-md"), ("font-size:14px", "--fs-base"), ("font-size:17px", "--fs-lg"), ("border-radius:4px", "--r-sm"),
+                   ("border-radius:6px", "--r"), ("border-radius:8px", "--r-md"), ("border-radius:12px", "--r-lg")):
+    if re.search(re.escape(_cru) + r"(?![\d.])", _pagina):
+        errors.append(f"tokens: '{_cru}' tem token igual ({_tok}): use var({_tok}) — CAMP-155")
+if re.search(r"#(c98a00|b7791f|fdf3e1)\b", text, re.I):
+    errors.append("tokens: âmbar fora dos tokens (#c98a00/#b7791f/#fdf3e1): use var(--amber) / var(--amber-soft) — CAMP-155")
+if "var(--panel" in text:
+    errors.append("tokens: --panel não existe (no escuro vira branco): use var(--surface) — CAMP-155")
 
 # Detecta HTML/JS de componentes sem seu CSS, causa da regressão real do dashboard.
 pairs = [

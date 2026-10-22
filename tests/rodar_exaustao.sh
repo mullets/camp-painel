@@ -27,6 +27,7 @@ PY
   n_ok=$(grep -c '^ok' "$SAIDA/$nome/saida.txt"); n_f=$(grep -c '^FALHA' "$SAIDA/$nome/saida.txt")
   resumo+="$( [ $rc -eq 0 ] && echo 'ok   ' || echo 'FALHA') $nome: $n_ok ok, $n_f falha(s)"$'\n'
   [ $rc -ne 0 ] && falhas=$((falhas+1)) && grep '^FALHA' "$SAIDA/$nome/saida.txt" | sed 's/^/      /' | head -20
+  [ $rc -ne 0 ] && cp "$TMP/servidor.log" "$SAIDA/$nome/servidor.log" 2>/dev/null   # para investigar a falha (o TMP é apagado em seguida)
   rm -rf "$TMP"
 done
 printf '%s' "$resumo"; echo "prints e relatórios: $SAIDA"
