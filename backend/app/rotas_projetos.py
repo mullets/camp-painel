@@ -526,7 +526,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     # CAMP-078 (20/10, exaustão): o descarte de um lote do projeto não aparecia no Histórico do projeto (o evento é do lote)
     from .livro_cv import historico as _livro
     livro_cv = _livro(con, codigo)
-    filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
+    filas = [dict(r) for r in con.execute("SELECT id, nome, etapa, folhas_esperadas, folhas_encontradas, atualizado_em, aprovado_em, descartado_em, descartado_motivo, (SELECT COUNT(*) FROM item i WHERE i.lote_id=lista_processamento.id AND i.projeto_codigo=lista_processamento.projeto_codigo) AS folhas_no_lote FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,))]
     colecoes = {r["id"]: r["nome"] for r in con.execute("SELECT id, nome FROM wp_colecao").fetchall()}
     fonte_visual = {
         "colecao_projetos_id": projetos_cid,
