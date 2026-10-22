@@ -59,7 +59,7 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
 @router.get("/projetos/{codigo}/proximo-passo")
 def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
-    from .filas_fase import fase_da_lista
+    from .filas_fase import fase_da_lista, escolher_lote_ativo
     from .rotas_operacao import _erro_do_cv
     con = connect()
     try:
@@ -81,7 +81,7 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
             d.pop("status_json", None); d.pop("resultado", None)
             lotes.append(d)
-        lote = next((x for x in lotes if x["fase"] != "publicado"), lotes[0] if lotes else None)
+        lote = escolher_lote_ativo(lotes)
         if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
             pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
             lote["importar_motivo"] = None if pode else motivo
