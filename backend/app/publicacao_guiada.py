@@ -108,17 +108,16 @@ def plano(con, p) -> dict:
     # O admin sempre pode concluir a revisão das folhas JÁ conferidas no mesmo
     # clique de Publicar. A flag permanece para liberar operador, não para
     # obrigar o admin a procurar e aprovar cada lote manualmente.
-    if True:
-        a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
-        if a_aprovar and len(a_aprovar) == nao_aprovados and por_id.get("revisao", {}).get("detalhe") == "O lote ainda não foi aprovado na Revisão do lote":
-            bloqueios = [b for b in bloqueios if b["id"] != "revisao"]
-        else:
-            a_aprovar = []
-            falta = q("SELECT COUNT(*) FROM item i JOIN lista_processamento l ON l.id=i.lote_id WHERE i.projeto_codigo=? AND l.aprovado_em IS NULL AND i.revisao='pendente' AND i.duplicata_de IS NULL")
-            for b_ in bloqueios:
-                if b_["id"] == "revisao" and falta:      # o que falta de verdade é conferir (aprovar vem junto com o Publicar)
-                    b_.update(texto="Folhas a conferir", detalhe=f"Falta conferir {falta} folha{'' if falta == 1 else 's'} do lote (a aprovação vem junto com o Publicar)",
-                              acao={"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo})
+    a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
+    if a_aprovar and len(a_aprovar) == nao_aprovados and por_id.get("revisao", {}).get("detalhe") == "O lote ainda não foi aprovado na Revisão do lote":
+        bloqueios = [b for b in bloqueios if b["id"] != "revisao"]
+    else:
+        a_aprovar = []
+        falta = q("SELECT COUNT(*) FROM item i JOIN lista_processamento l ON l.id=i.lote_id WHERE i.projeto_codigo=? AND l.aprovado_em IS NULL AND i.revisao='pendente' AND i.duplicata_de IS NULL")
+        for b_ in bloqueios:
+            if b_["id"] == "revisao" and falta:      # o que falta de verdade é conferir (aprovar vem junto com o Publicar)
+                b_.update(texto="Folhas a conferir", detalhe=f"Falta conferir {falta} folha{'' if falta == 1 else 's'} do lote (a aprovação vem junto com o Publicar)",
+                          acao={"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo})
     dossie = bool(p["tainacan_item_id"])
     passos = ([{"id": "aprovar", "texto": "Aprovar o lote conferido" if len(a_aprovar) == 1 else f"Aprovar os {len(a_aprovar)} lotes conferidos", "estado": "sera_feito"}] if a_aprovar else []) + [
         {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
