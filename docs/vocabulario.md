@@ -28,6 +28,10 @@ As MESMAS 5 em todo o painel: Fila, Projetos, página do projeto, Painel inicial
 - Direitos "não definida" NÃO impede publicar (padroes.md §12): a tela diz "não impede publicar; registre o termo quando tiver".
   O número "fundos travados por direitos" saiu do Painel inicial.
 
+## Menu (CAMP-154)
+Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador, ajuda): **Precisa de você** (o Painel inicial),
+**Projetos**, **Fundos e arquitetos**, **Pedidos do site** (antes "Pedidos de material") e **Máquinas** (antes "Máquinas e site"). O resto fica em **Mais**.
+
 ## Ações (o que o usuário FAZ)
 | Botão | Efeito | Observação |
 |---|---|---|
