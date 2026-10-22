@@ -611,9 +611,10 @@ def mudar_etapa(lid: int, d: EtapaFila, u: dict = Depends(auth.exige("operador")
     if d.etapa in ("rascunho", "publicado"):
         if not l["autorizado_site"]:
             con.close(); raise HTTPException(400, "Projeto não autorizado para o site. Autorize na página do projeto.")
-        bloq = con.execute("SELECT itens_autoria_divergente, erros_bloqueantes FROM v_bloqueios_publicacao WHERE codigo=?", (l["projeto_codigo"],)).fetchone()
-        if bloq and bloq[1]:     # CAMP-046: autoria divergente é aviso, só erro bloqueante trava
-            con.close(); raise HTTPException(400, f"Bloqueado: {bloq[1] or 0} erro(s) bloqueante(s)")
+        from .publicacao import BLOQUEIO_DO_PROJETO
+        bloqueios_humanos = con.execute(BLOQUEIO_DO_PROJETO, (l["projeto_codigo"],)).fetchone()[0]
+        if bloqueios_humanos:
+            con.close(); raise HTTPException(400, f"Bloqueado: {bloqueios_humanos} decisão(ões) humanas no projeto")
         if u["papel"] not in ("admin", "master"):
             con.close(); raise HTTPException(403, "Mandar para o site exige admin")
         if con.execute("SELECT 1 FROM item WHERE lote_id=? LIMIT 1", (lid,)).fetchone() and not l["aprovado_em"]:
