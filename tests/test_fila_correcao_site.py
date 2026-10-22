@@ -23,8 +23,11 @@ class FilaCorrecaoSiteTest(unittest.TestCase):
         self.patch_connect.start()
         self.patch_flag = patch("app.alteracoes_site.enviar_sozinho", return_value=True)
         self.patch_flag.start()
+        self.patch_reenvio = patch.object(fila, "reenvio_ativo", return_value=True)
+        self.patch_reenvio.start()
 
     def tearDown(self):
+        self.patch_reenvio.stop()
         self.patch_flag.stop()
         self.patch_connect.stop()
         self.tmp.cleanup()
