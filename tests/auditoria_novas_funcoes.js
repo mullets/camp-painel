@@ -319,7 +319,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- REVISÃO DO LOTE: importar o pacote do CAMP Vision, conferir, corrigir e aprovar ----------
 { w.confirm=()=>true; w.closeDrawer(true); const pc='F003-P9002', D=n=>pc+'-1972-S01-D0000'+n, loteId=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].id;
   w.route_to('projeto/'+pc); await sleep(3500);
-  chk(/Revisão do lote/.test(txt('#pj-revisao'))&&/aguardando importação/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="importar"]'),'o projeto com pacote e sem folhas importadas deveria oferecer "Importar as folhas do lote": "'+txt('#pj-revisao').slice(0,120)+'"');
+  chk(/Revisão do lote/.test(txt('#pj-revisao'))&&/Chegando/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="importar"]'),'o projeto com pacote e sem folhas importadas deveria oferecer "Importar as folhas do lote": "'+txt('#pj-revisao').slice(0,120)+'"');
   chk(/o CAMP Vision gravou 3 documento/.test(txt('#pj-revisao')),'deveria dizer quantos documentos o CAMP Vision gravou');
   d.querySelector('#pj-revisao [data-rev-lote="importar"]').click(); await sleep(3800);
   chk(/3 folhas novas/.test(txt('[data-aviso="lote"]'))&&/Próximo passo: conferir/.test(txt('[data-aviso="lote"]'))&&!!d.querySelector('[data-aviso="lote"] [data-pp="conferir"]'),'[H4] depois de importar, o resultado deveria ficar NA TELA com o próximo passo e o botão "Começar a conferir": "'+txt('[data-aviso="lote"]')+'"');
@@ -357,7 +357,7 @@ w.route_to('estacoes'); await sleep(2800);
     for(const i of pend) await J(adm,'/api/itens/'+encodeURIComponent(i.codigo)+'/revisao',{method:'POST',body:JSON.stringify({estado:'conferida'})});
     await w.showProjeto(pc); await sleep(3500); }
   chk((await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0].itens.pendente===0,'conferida a que ficou, não resta folha pendente');
-  chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/pronta para aprovar/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar: "'+txt('#pj-revisao').slice(0,160)+'"');
+  chk(/Aprovar o lote/.test(txt('#pj-revisao'))&&d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').disabled===false&&/Pronto para publicar/.test(txt('#pj-revisao')),'com todas revisadas, "Aprovar o lote" deveria liberar: "'+txt('#pj-revisao').slice(0,160)+'"');
   d.querySelector('#pj-revisao [data-rev-lote="aprovar"]').click(); await sleep(3600);
   const ap=(await J(adm,'/api/projetos/'+pc+'/revisao')).b.lotes[0];
   chk(!!ap.aprovado_em&&ap.etapa==='revisao'&&/aprovado por/.test(txt('#pj-revisao'))&&!!d.querySelector('#pj-revisao [data-rev-lote="reabrir"]'),'aprovar deveria registrar quem/quando, manter a etapa e oferecer "Reabrir a revisão": '+JSON.stringify({a:ap.aprovado_em,e:ap.etapa}));
@@ -401,7 +401,8 @@ w.route_to('estacoes'); await sleep(2800);
   const chips=[...d.querySelectorAll('#fila-chips [data-fila-filtro]')], lin=cod=>[...d.querySelectorAll('#filas-body tr')].find(t=>t.textContent.includes(cod));
   chk(chips.length===4&&['gente','processando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, CAMP Vision lendo, Publicadas, Todas): '+chips.length);
   chk(chips.find(c=>c.getAttribute('aria-pressed')==='true').dataset.filaFiltro==='gente','o filtro padrão deveria ser "Precisam de você" quando há o que fazer');
-  chk(/para conferir/.test(txt('#fila-resumo'))&&/para importar/.test(txt('#fila-resumo')),'o resumo deveria dizer quantas listas estão em cada ponto: "'+txt('#fila-resumo')+'"');
+  chk(/para conferir/.test(txt('#fila-resumo'))&&/chegando/.test(txt('#fila-resumo')),   // CAMP-146: as 5 situações
+  'o resumo deveria dizer quantas listas estão em cada ponto: "'+txt('#fila-resumo')+'"');
   chk(d.querySelectorAll('#v-filas thead th').length===4&&!/Pasta no QNAP|Aprovação/.test(txt('#v-filas thead')),'a tabela deveria ter 4 colunas (Projeto, Situação, Atualizado, ação), sem "Pasta no QNAP" nem "Aprovação"');
   chk(!!d.querySelector('#filas-body details.fila-pasta'),'a pasta do QNAP deveria ficar recolhida dentro de cada linha');
   let l9001=lin('F003-P9001');
@@ -418,7 +419,7 @@ w.route_to('estacoes'); await sleep(2800);
   l9001=lin('F003-P9001');
   chk(/Lote aprovado/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-ir="publicar"]'),'depois de aprovar a lista deveria pedir "Publicar": "'+l9001.textContent.slice(0,120)+'"');
   const bPu=l9001&&l9001.querySelector('[data-fila-ir="publicar"]'); if(bPu){bPu.click(); await sleep(4500)}
-  chk(/projeto\/F003-P9001/.test(w.location.hash)&&/Publicar/.test(txt('#d-title')),'"Publicar" deveria levar ao projeto e abrir o plano de publicação: '+w.location.hash+' / '+txt('#d-title')); w.closeDrawer(true);
+  await sleep(1500); chk(/projeto\/F003-P9001/.test(w.location.hash)&&!d.getElementById('pub-go')&&!!d.getElementById('pj-status'),'"Publicar" deveria levar ao projeto e publicar ali mesmo, sem janela de plano (etapa 2): '+w.location.hash+' / '+txt('#pj-status').slice(0,80)); w.closeDrawer(true);
   w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="processando"]').click(); await sleep(400);
   chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>t.dataset.fase==='processando'),'o filtro "CAMP Vision lendo" deveria mostrar só listas em leitura');
   d.querySelector('[data-fila-filtro="todas"]').click(); await sleep(300);
@@ -443,12 +444,12 @@ w.route_to('estacoes'); await sleep(2800);
   const R=(await J(adm,'/api/projetos/resumo')).b, chips=[...d.querySelectorAll('#proj-chips [data-proj-sit]')], linhas=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')];
   chk(chips.map(c=>c.dataset.projSit).join(',')==='todos,gente,publicado,nao_publicado,sem_folhas,com_problema','a lista de projetos deveria ter 6 filtros de situação: '+chips.map(c=>c.dataset.projSit));
   chk(chips.every(c=>Number(c.querySelector('b').textContent.replace(/\D/g,''))===R[c.dataset.projSit]),'as contagens dos filtros deveriam bater com o servidor: '+JSON.stringify(R)+' / '+chips.map(c=>c.textContent.trim()).join(' | '));
-  chk(d.querySelectorAll('#v-projetos thead th').length===6&&/Situação/.test(txt('#v-projetos thead'))&&!/Séries|Última atividade|Publicação/.test(txt('#v-projetos thead')),'a tabela deveria ter 5 colunas de conteúdo (Projeto, Fundo, Folhas, Situação, Atualizado), sem Séries nem Última atividade: "'+txt('#v-projetos thead')+'"');
+  chk(d.querySelectorAll('#v-projetos thead th').length===5&&/Situação/.test(txt('#v-projetos thead'))&&!/Séries|Última atividade|Publicação/.test(txt('#v-projetos thead')),'a tabela deveria ter 4 colunas de conteúdo (Projeto, Fundo, Folhas, Situação com a frase do que falta — CAMP-146), sem Séries nem Última atividade: "'+txt('#v-projetos thead')+'"');
   chk(linhas().length>0&&/P\d{4}/.test(linhas()[0].querySelector('td:nth-child(2) .code').textContent)&&!!linhas()[0].querySelector('td:nth-child(2) b'),'a coluna Projeto deveria juntar o código e o nome');
   d.querySelector('[data-proj-sit="gente"]').click(); await sleep(2000);
-  chk(linhas().length===R.gente&&linhas().every(t=>/Conferir|Importar folhas|Aprovar lote|Pronto para publicar|Erro no CAMP Vision/.test(t.textContent)),'"Precisam de você" deveria mostrar só projetos com algo a fazer, cada um dizendo o quê: '+linhas().length+' de '+R.gente);
+  chk(linhas().length===R.gente&&linhas().every(t=>/Chegando|Para conferir|Pronto para publicar|Com problema/.test(t.textContent)),'"Precisam de você" deveria mostrar só projetos com algo a fazer, cada um dizendo o quê: '+linhas().length+' de '+R.gente);
   chk(d.querySelector('[data-proj-sit="gente"]').getAttribute('aria-pressed')==='true'&&!d.getElementById('proj-limpar').hidden,'o filtro ativo deveria ficar marcado e aparecer "Limpar filtros"');
-  const l9001=linhas().find(t=>t.textContent.includes('F003-P9001')); chk(!!l9001&&/Conferir \d+/.test(l9001.textContent),'F003-P9001 deveria aparecer como "Conferir N": "'+(l9001&&l9001.textContent.slice(0,140))+'"');
+  const l9001=linhas().find(t=>t.textContent.includes('F003-P9001')); chk(!!l9001&&/Para conferir/.test(l9001.textContent)&&/\d+ folhas? faltam? conferir/.test(l9001.textContent),'F003-P9001 deveria aparecer como "Para conferir · N folhas faltam conferir": "'+(l9001&&l9001.textContent.slice(0,140))+'"');
   w.limparSelecaoProjetos(); await w.selecionarTodosProjetosDoFiltro(); await sleep(900);
   chk(w.eval('PROJETOS_SELECIONADOS.size')===R.gente,'"Selecionar todos os resultados" deveria respeitar o filtro: '+w.eval('PROJETOS_SELECIONADOS.size')+' de '+R.gente); w.limparSelecaoProjetos();
   d.getElementById('proj-fundo').value='F003'; d.getElementById('proj-fundo').dispatchEvent(new w.Event('change',{bubbles:true})); await sleep(2000);
@@ -841,7 +842,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- [Auditoria P1-15] contagens que batem ----------
 { w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
   const esp={decisoes:P.decisoes,'filas/conferir':P.lotes_conferir,'filas/admin':P.esperam_admin,'fundos/travados':P.travados_direitos};
-  chk(k.length===4&&k.every(([r,v])=>esp[r]===v),'[H6b] os 4 números do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
+  chk(k.length===3&&k.every(([r,v])=>esp[r]===v),'[H6b/CAMP-146] os 3 números (saiu "travados por direitos") do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
   chk(txt('#n-dec')===(P.decisoes?String(P.decisoes):'')&&txt('#n-filas')===(P.material_novo?String(P.material_novo):''),'[H6b] os contadores do menu deveriam vir da mesma fonte: decisões '+txt('#n-dec')+' / filas '+txt('#n-filas'));
   for(const [r,v] of k){ w.route_to(r); await sleep(2200); const sel={decisoes:'#dec-body tr[data-abrir]','filas/conferir':'#filas-body tr[data-fase]','filas/admin':'#filas-body tr[data-fase]','fundos/travados':'#fundos-body tr[data-nav]'}[r];
     chk(d.querySelectorAll(sel).length===v,`[H6b] clicar no número ${v} (${r}) deveria abrir uma lista com ${v} linha(s): ${d.querySelectorAll(sel).length}`) }
@@ -965,10 +966,11 @@ const faltam=[...d.querySelectorAll('#pd-pub .chk.falta')].map(e=>e.textContent)
 chk(faltam.length===2&&faltam.some(t=>t.includes('Direitos do fundo F026'))&&faltam.some(t=>t.includes('autorizado para publicação')),'checklist deveria mostrar exatamente 2 pendências (direitos e autorização): '+faltam.length);
 chk(!!d.querySelector('#pd-pub .chk.falta button')&&txt('#pd-pub').includes('Definir direitos do fundo')&&txt('#pd-pub').includes('Autorizar publicação'),'cada pendência deveria ter o botão que a resolve');
 const bp=d.getElementById('pd-publicar'); chk(bp&&!bp.disabled&&bp.getAttribute('aria-disabled')!=='true','o botão Publicar deveria estar SEMPRE ativo (o plano é que explica o que falta)');
-let _conf=0;w.confirm=()=>{_conf++;return true}; bp.click(); await sleep(1300);
-chk(_conf===0&&txt('#d-title').includes('Publicar')&&/O que vou fazer/.test(txt('#d-body'))&&d.querySelectorAll('#d-body h3 + ul.checklist li').length===4&&/Marcar o projeto como liberado/.test(txt('#d-body'))&&/Tornar a página e as \d+ folha/.test(txt('#d-body')),'clicar em Publicar deveria abrir o PLANO com os 4 passos (dossiê, folhas, autorizar, publicar), sem pedir confirmação ('+d.querySelectorAll('#d-body h3 + ul.checklist li').length+' passos, confirm='+_conf+'): \"'+txt('#d-body').slice(0,160)+'\"');
-chk(d.querySelectorAll('#d-body .chk.falta').length===1&&/Direitos do fundo F026/.test(txt('#d-body'))&&d.querySelectorAll('#d-body .chk.falta button').length===1&&/Definir direitos do fundo/.test(txt('#d-body'))&&d.getElementById('pub-go').disabled===true,'só o que SÓ uma pessoa resolve (direitos do fundo) deveria bloquear, com o botão que resolve, e \"Publicar agora\" ficar desligado');
-chk(!/Autorizar publicação/.test(txt('#d-body').replace('Autorizar o projeto para publicação','')),'a autorização NÃO deveria ser pedida: o painel faz sozinho'); w.closeDrawer(true);
+let _conf=0;w.confirm=()=>{_conf++;return true}; bp.click(); await sleep(2500);
+// 22/10 (etapa 2, "publicar sem travar"): Publicar é UM clique, sem janela de plano. Se algo trava, o topo do projeto diz o porquê, com o botão que resolve
+const st0=txt('#pj-status');
+chk(_conf===0&&!d.getElementById('pub-go')&&/Não dá para publicar porque/.test(st0)&&/[Dd]ireitos/.test(st0)&&[...d.querySelectorAll('#pj-status .pjs-razao button')].some(b=>/Definir direitos do fundo/.test(b.textContent))&&d.querySelector('#pj-status [data-pjs-publicar]').disabled===true,'clicar em Publicar com direitos pendentes: sem janela e sem confirmar, o topo diz "Não dá para publicar porque…" com "Definir direitos do fundo" e o botão desligado: '+st0.slice(0,200));
+chk(!/Autorizar publicação/.test(st0),'a autorização NÃO deveria ser pedida: o painel faz sozinho');
 chk(!d.querySelector('.dethdr #pd-publicar'),'o botão Publicar não deveria mais ficar no cabeçalho (escondia o porquê)');
 chk(txt('#pd-pub').includes('Sem erros bloqueantes'),'checklist deveria listar também o que JÁ está ok');
 // força o clique (como se o botão estivesse ativo): o erro vira um painel que FICA, com tudo o que falta e os botões
@@ -985,10 +987,9 @@ r=await J(adm,'/api/projetos/F026-P0001',{method:'PATCH',body:JSON.stringify({au
 await w.carregarPublicacao('F026-P0001'); await sleep(900);
 chk(d.querySelectorAll('#pd-pub .chk.falta').length===0&&d.getElementById('pd-publicar')&&d.getElementById('pd-publicar').getAttribute('aria-disabled')!=='true','com os requisitos cumpridos o botão Publicar deveria ficar ativo');
 // Publicar com um clique: sem o que só uma pessoa resolve, o plano libera e o clique executa (aqui o WordPress não tem credencial: o erro tem que ser dito e dar para tentar de novo)
-w.closeDrawer(true); d.getElementById('pd-publicar').click(); await sleep(1300);
-chk(d.querySelectorAll('#d-body .chk.falta').length===0&&d.getElementById('pub-go').disabled===false&&/Eu faço a sequência inteira/.test(txt('#d-body')),'com os requisitos humanos cumpridos o plano deveria liberar \"Publicar agora\": \"'+txt('#d-body').slice(0,140)+'\"');
-d.getElementById('pub-go').click(); await sleep(4500);
-chk(/não terminou|não deu/.test(txt('#d-body'))&&txt('#d-body').trim().length>40&&d.getElementById('pub-go').disabled===false&&/Tentar de novo/.test(txt('#pub-go')),'sem credencial do WordPress o clique deveria explicar o que houve e deixar TENTAR DE NOVO: \"'+txt('#d-body').slice(0,160)+'\"'); w.closeDrawer(true);
+w.closeDrawer(true); d.getElementById('pd-publicar').click(); await sleep(6000);
+{const st1=txt('#pj-status'),bt1=d.querySelector('#pj-status [data-pjs-publicar]');
+chk(!d.getElementById('pub-go')&&/Não terminou/.test(st1)&&!!d.querySelector('#pj-status .pjs-res.erro')&&bt1&&bt1.disabled===false,'sem credencial do site o clique único deveria dizer "Não terminou: …" no topo do projeto e deixar o Publicar ligado para tentar de novo: "'+st1.slice(0,200)+'"')}
 // WordPress sem credencial neste ambiente: o erro tem que ser EXPLICADO e FICAR na tela
 await w.publicarProjeto('F026-P0001','publicar'); await sleep(1800);
 chk(txt('#d-title').includes('Não foi possível publicar')&&txt('#d-body').includes('WordPress')&&txt('#d-body').includes('Configurações'),'sem credencial do WordPress deveria explicar e apontar Configurações: '+txt('#d-body').slice(0,120));
@@ -1526,9 +1527,9 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
 // ---------- [H12] Projetos: busca grande, coluna "Próximo passo", seleção no padrão do Gmail, Novo projeto com ajuda ----------
 { w.route_to('projetos'); await sleep(2000);
   const q=d.getElementById('proj-q'); chk(!!q&&!!q.closest('.busca-grande')&&!!(q.compareDocumentPosition(d.getElementById('proj-chips'))&4),'[H12] a busca deveria vir grande, acima das abas');
-  chk(/Próximo passo/.test(txt('#v-projetos thead'))&&!/Atualizado/.test(txt('#v-projetos thead')),'[H12] a coluna "Próximo passo" no lugar de "Atualizado"');
+  chk(/Situação/.test(txt('#v-projetos thead'))&&!/Atualizado|Próximo passo/.test(txt('#v-projetos thead')),'[H12/CAMP-146] uma coluna "Situação" (com o que falta) no lugar de "Atualizado" e "Próximo passo"');
   const lin=[...d.querySelectorAll('#projetos-body tr[data-nav]')].find(t=>t.textContent.includes('F003-P9001'));
-  chk(!!lin&&/→ Conferir 3 folhas/.test(lin.textContent),'[H12] F003-P9001 deveria dizer "→ Conferir 3 folhas": '+(lin?lin.querySelector('.prox-passo').textContent:'linha não achada'));
+  chk(!!lin&&/Para conferir/.test(lin.textContent)&&/3 folhas faltam conferir/.test(lin.textContent),'[H12/CAMP-146] F003-P9001 deveria dizer "Para conferir · 3 folhas faltam conferir": '+(lin?lin.querySelector('.prox-passo').textContent:'linha não achada'));
   chk(!/Selecionar todos os resultados/.test(txt('#v-projetos .filterbar')),'[H12] "Selecionar todos os resultados" não deveria ficar sempre à vista');
   w.eval('PROJ_TOTAL=999'); w.selecionarProjetosVisiveis(true); await sleep(100);
   chk(/Todos os \d+ desta página estão marcados/.test(txt('#proj-sel-todos-msg'))&&!!d.querySelector('[data-proj-sel-todos]'),'[H12] marcar a página inteira deveria oferecer "Marcar todos os N resultados": "'+txt('#proj-sel-todos-msg')+'"');

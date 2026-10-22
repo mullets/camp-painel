@@ -11,6 +11,23 @@ Uma só linguagem em **todas** as telas, mensagens da API e documentos. Quem esc
 | `no_ar` | Publicado | `publicado` | Público: qualquer visitante vê |
 | `fora_do_ar` | Despublicado | `despublicado` | Retirado do público de propósito (privado no site); fundo exige motivo |
 
+## Situação (onde o projeto ou o lote está no trabalho) — CAMP-146, decidido pelo Rafa em 22/10/2026
+As MESMAS 5 em todo o painel: Fila, Projetos, página do projeto, Painel inicial e celular. Só o rótulo: a fase guardada
+(`filas_fase.py`) e a API não mudam. Na tela vem sempre de `situacaoTag()` / `situacaoDe()` (`SITUACOES` no `index.html`).
+| Fase interna (NÃO muda) | Situação | O que significa |
+|---|---|---|
+| `processando`, `importar` (e projeto sem folhas) | **Chegando** | o CAMP Vision está lendo, ou as folhas ainda não vieram para o painel |
+| `conferir` | **Para conferir** | há folhas que ninguém conferiu |
+| `aprovar`, `publicar` (e projeto com folhas fora do site) | **Pronto para publicar** | conferido; falta o clique de publicar |
+| `publicado` (ou projeto público) | **No site** | qualquer visitante vê |
+| `erro` (ou algo que trava o projeto inteiro) | **Com problema** | o CAMP Vision parou com erro, direitos com restrição registrada, projeto sem título ou bloqueio de pessoa |
+- Ao lado da situação vem UMA frase do que falta ("3 folhas faltam conferir"). Nunca duas colunas dizendo a mesma coisa.
+- O `check_ui` reprova as etiquetas antigas de situação (Em leitura, Na fila, Lendo, Importar folhas, Conferir N, Aprovar lote,
+  Publicada, aguardando importação, em revisão, pronta para aprovar).
+- "No site" é o nome da situação. O estado da folha/projeto no site (tabela acima) continua "publicado", "rascunho"…
+- Direitos "não definida" NÃO impede publicar (padroes.md §12): a tela diz "não impede publicar; registre o termo quando tiver".
+  O número "fundos travados por direitos" saiu do Painel inicial.
+
 ## Ações (o que o usuário FAZ)
 | Botão | Efeito | Observação |
 |---|---|---|
@@ -30,4 +47,4 @@ Uma só linguagem em **todas** as telas, mensagens da API e documentos. Quem esc
 ## Quem vê o quê (modo operador, 13/10/2026)
 - Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
 - A tela "Máquinas e site" e o resumo de máquinas do topo são só para admin.
-- Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê.
+- Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).

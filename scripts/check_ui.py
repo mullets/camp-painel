@@ -67,6 +67,17 @@ PROIBIDAS = [
     (r"wp-admin", "quem usa o painel não entra no site: faça a ação no painel (ou 'avise quem cuida do site')"),
     (r"\b(?:no|pelo|ao|para o|entre no)\s+WordPress\b", "quem usa o painel não entra no site: faça a ação no painel (ou 'avise quem cuida do site')"),
 ]
+
+# --- CAMP-146: as 5 situações (Chegando · Para conferir · Pronto para publicar · No site · Com problema). Os rótulos antigos de
+# situação não voltam como etiqueta (chip) na tela: a situação vem de situacaoTag() (docs/vocabulario.md "Situação")
+SITUACAO_ANTIGA = r'<span class="tag[^"]*">\s*(?:Em leitura|Na fila|Lendo|Importar folhas|Importar|Conferir(?: \$\{[^}]*\})?|Aprovar(?: lote)?|Publicar|Publicada|Erro(?: no CAMP Vision)?|aguardando importação|em revisão|pronta para aprovar)\s*</span>'
+for m in re.finditer(SITUACAO_ANTIGA, text):
+    errors.append(f"situação: etiqueta antiga '{m.group(0)[:60]}' em {HTML.relative_to(ROOT)}:{text.count(chr(10), 0, m.start()) + 1} — use situacaoTag() (CAMP-146)")
+if "const SITUACOES={chegando:['b','Chegando'],conferir:['a','Para conferir'],pronto:['g','Pronto para publicar'],no_site:['g','No site'],problema:['r','Com problema']}" not in text:
+    errors.append("situação: o mapa SITUACOES (as 5 situações do CAMP-146) sumiu ou mudou de nome sem atualizar docs/vocabulario.md")
+for antigo in ("'CAMP Vision lendo',n(", "'Publicadas',n(", "fundos travados por direitos", "publicação bloqueada até existir termo"):
+    if antigo in text:
+        errors.append(f"situação: '{antigo}' voltou (CAMP-146)")
 for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
     conteudo = arq.read_text(encoding="utf-8")
     for padrao, dica in PROIBIDAS:

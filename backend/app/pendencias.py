@@ -209,7 +209,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {texto_espera(h)}" if h and h > 48 else ""),
                            "acao": _acao("Importar", "importar", l["id"])})
     if linhas:
-        grupos.append({"id": "conferir", "titulo": "Conferir folhas", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
+        grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"}})
 
     # 3) aprovar e publicar (admin)
@@ -229,7 +229,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det,
                        "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
     if linhas and admin:
-        grupos.append({"id": "aprovar_publicar", "titulo": "Aprovar e publicar", "quem": "admin", "total": len(linhas), "itens": linhas[:por_grupo],
+        grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "admin", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes que esperam um admin", "rota": "filas/admin"}})
 
     # 4) problemas que bloqueiam: erro bloqueante aberto e lote parado com erro no CAMP Vision
@@ -259,7 +259,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     except Exception:  # noqa: BLE001
         pass
     if linhas:
-        grupos.append({"id": "problemas", "titulo": "Problemas que bloqueiam", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
+        grupos.append({"id": "problemas", "titulo": "Com problema", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} problemas", "rota": "erros"}})
 
     # 5) pedidos esperando resposta

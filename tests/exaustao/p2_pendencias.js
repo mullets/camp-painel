@@ -29,7 +29,7 @@ T.rodar(async () => {
   // (antes, no mesmo segundo da publicação, contavam como depois; o caso com correção depois de publicar está no p3_site)
   T.chk(itens.length === 3 && itens.map(x => x.k).join(',') === 'cv_respostas,obras,autoria', 'CAMP-123: exatamente o que falta, em ordem (projeto publicado: sem Conferir, Aprovar nem Publicar)', JSON.stringify(itens));
   const selo = await T.txt(ad, '#pj-selo');
-  T.chk(/^publicado · 3 pendências$/.test(selo), 'CAMP-123: o selo do cabeçalho diz "publicado · 3 pendências"', selo);
+  T.chk(/^No site · 3 pendências$/.test(selo), 'CAMP-123/146: o selo do cabeçalho diz a situação "No site · 3 pendências"', selo);
   const men = await T.txt(ad, '#pj-falta .pj-falta-men summary');
   T.chk(!men || /avisos? menor(es)? \(não impedem publicar\)/.test(men), 'CAMP-123: avisos que não impedem publicar ficam recolhidos e não contam', men);
   await T.print(ad, 'p2_barra');
@@ -51,7 +51,7 @@ T.rodar(async () => {
   await T.abrirProjeto(ad, PL);
   const verde = await ad.waitForSelector('#pj-falta.ok [data-pj-fechado]', { timeout: 20000 }).then(() => true, () => false);
   T.chk(verde && /Projeto fechado: painel e site iguais/.test(await T.txt(ad, '#pj-falta')) && !(await ad.$('#pj-falta .pj-falta-lista')), 'CAMP-123: sem nada pendente, a barra fica verde: "Projeto fechado: painel e site iguais", sem lista', await T.txt(ad, '#pj-falta'));
-  T.chk(/^publicado$/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123: o selo diz só "publicado"', await T.txt(ad, '#pj-selo'));
+  T.chk(/^No site$/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123/146: o selo diz só "No site"', await T.txt(ad, '#pj-selo'));
   await T.print(ad, 'p2_fechado');
   T.chk(await T.espera(() => T.um("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='projeto_fechado'", PL) === 1), 'CAMP-123: "projeto fechado" gravado no Histórico');
   await T.abrirProjeto(ad, PL); await ad.waitForTimeout(2500);
