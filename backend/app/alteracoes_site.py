@@ -11,6 +11,7 @@ nenhum deles, a 1ª publicação). Um campo que voltou ao valor de antes não co
 from __future__ import annotations
 
 import json
+import sqlite3
 
 from .db import connect
 
@@ -27,6 +28,15 @@ CAMPOS = {
     "suporte": ("Suporte", "Suporte"),
 }
 EVENTOS_ENVIO = ("site_item_criado", "site_item_reaproveitado", "site_alteracoes_enviadas")
+
+
+def _versao_na_fila(con, codigo: str) -> int | None:
+    """Número da edição em envio; bancos de testes anteriores à migração não têm a fila."""
+    try:
+        row = con.execute("SELECT versao FROM fila_correcao_site WHERE item_codigo=?", (codigo,)).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return row[0] if row else None
 
 
 def _txt(v) -> str:
@@ -151,7 +161,7 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
             i = con.execute("""SELECT i.*, p.titulo AS projeto_titulo, p.ano AS projeto_ano, s.nome AS serie_nome
                                  FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo LEFT JOIN serie s ON s.codigo=i.serie_codigo
                                 WHERE i.codigo=?""", (p["codigo"],)).fetchone()
-            md, titulo_pag = {}, None
+            md, titulo_pag, faltam_metadados = {}, None, []
             for c in p["campos"]:
                 k = c["campo"]
                 nome = CAMPOS[k][1]
@@ -166,19 +176,24 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
                     valor = _txt(i[k])
                 mid, _ = publicador._meta(con, publicador.COL_ACERVO, nome)
                 if not mid:
+                    faltam_metadados.append(f"Metadado “{nome}” não encontrado no WordPress")
                     continue
                 api = publicador._tipos_para_site(con, p["codigo"], mid, valor) if k == "tipo_documento" and valor else valor
                 md[nome] = (mid, api, valor)
-            dados[p["codigo"]] = (i["tainacan_item_id"], titulo_pag, md, p["imagem"], i["giro_manual"] or 0, p)
+            editado_ate = con.execute("SELECT COALESCE(MAX(id), 0) FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado'", (p["codigo"],)).fetchone()[0]
+            versao_fila = _versao_na_fila(con, p["codigo"])
+            dados[p["codigo"]] = (i["tainacan_item_id"], titulo_pag, md, p["imagem"], i["giro_manual"] or 0, p, faltam_metadados, editado_ate, versao_fila)
         con.commit()
     finally:
         con.close()
     enviadas, falhas = [], []
-    for cod, (wid, titulo_pag, md, img, giro, p) in dados.items():
-        erros = []
+    for cod, (wid, titulo_pag, md, img, giro, p, faltam_metadados, editado_ate, versao_fila) in dados.items():
+        erros = list(faltam_metadados)
         if titulo_pag is not None or md:
             r = publicador.atualizar_folha_no_site(cod, wid, publicador.COL_ACERVO, titulo_pag, None, md, ator)
             erros += [f"{x['campo']}: {x['erro']}" for x in r.get("falhas") or []]
+            if not (r.get("enviados") or []):
+                erros.append("O WordPress não confirmou nenhum metadado ou título")
         if img:
             try:
                 publicador.girar_imagem_no_site(cod, giro)
@@ -186,11 +201,22 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
                 erros.append(f"imagem: {str(e)[:200]}")
         con = connect()
         try:
+            # Se outra edição aconteceu enquanto a rede respondia, não grave um
+            # marcador que faria parecer sincronizada uma versão nunca enviada.
+            agora = con.execute("SELECT COALESCE(MAX(id), 0) FROM evento WHERE entidade='item' AND codigo=? AND tipo='editado'", (cod,)).fetchone()[0]
+            if agora != editado_ate or _versao_na_fila(con, cod) != versao_fila:
+                erros.append("A folha mudou durante o envio; a versão nova será reenviada")
             if not erros:
                 if img:
                     _imagem_site_resolvida(con, cod)
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_alteracoes_enviadas',?,?)",
                             (cod, ator, json.dumps({"campos": p["campos"], "imagem": img}, ensure_ascii=False)))
+                # O envio imediato também confirma a versão persistente.
+                # Remover somente a versão que acabou de ser enviada evita
+                # deixar uma correção velha encalhada na fila após sucesso.
+                if versao_fila is not None:
+                    con.execute("DELETE FROM fila_correcao_site WHERE item_codigo=? AND versao=?",
+                                (cod, versao_fila))
                 enviadas.append(cod)
             else:
                 falhas.append({"codigo": cod, "erro": "; ".join(erros)[:300]})
