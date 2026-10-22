@@ -29,6 +29,25 @@ def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_e
     return "publicar" if aprovado_em else "aprovar"
 
 
+def _preferir_lote(atual: dict | None, candidato: dict) -> dict:
+    """Escolhe o primeiro lote NÃO publicado, respeitando a ordem do mais novo ao mais antigo.
+
+    Se todos estão publicados, mantém o mais recente. Sem efeitos colaterais.
+    A Fila e o detalhe do projeto devem usar esta mesma política (CAMP-145).
+    """
+    if atual is None or (atual["fase"] == "publicado" and candidato["fase"] != "publicado"):
+        return candidato
+    return atual
+
+
+def escolher_lote_ativo(lotes: list[dict]) -> dict | None:
+    """Escolhe o lote que precisa de atenção; recebe os lotes do mais recente ao mais antigo."""
+    escolhido = None
+    for lote in lotes:
+        escolhido = _preferir_lote(escolhido, lote)
+    return escolhido
+
+
 def lote_ativo_por_projeto(con) -> dict:
     """Para cada projeto com lista, a lista que ainda pede algo (a mais recente que não está publicada) ou, se todas estão publicadas, a mais recente.
     {projeto: {"fase", "itens_pendentes", "itens_total", "lote_id"}}. A MESMA regra do 'próximo passo' do projeto e da Fila."""
@@ -38,9 +57,5 @@ def lote_ativo_por_projeto(con) -> dict:
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS pen
                             FROM lista_processamento l WHERE l.descartado_em IS NULL ORDER BY l.id DESC"""):
         d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
-        atual = por_projeto.get(l["pc"])
-        if atual is None:
-            por_projeto[l["pc"]] = d                      # a mais recente de todas
-        elif atual["fase"] == "publicado" and d["fase"] != "publicado":
-            por_projeto[l["pc"]] = d                      # se a mais recente já foi publicada e uma anterior ainda pede algo, é essa que importa
+        por_projeto[l["pc"]] = _preferir_lote(por_projeto.get(l["pc"]), d)
     return por_projeto
