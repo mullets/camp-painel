@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4151,6 +4151,88 @@ def filho(modo):
         ver("4.7: os relatados por pessoas (equipe e visitante) continuam abertos",
             sit(e_pessoa)[0] == "aberto" and sit(e_site)[0] == "aberto" and sit(e_mudou)[0] == "aberto")
         ver("4.7: fica no histórico (um evento com a lista)", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='limpeza_geral'").fetchone()[0] == 1)
+        c.close()
+        for l in res: print(l)
+    elif modo == "publicar_um_passo":
+        # CAMP-148 (22/10, decidido pelo Rafa): "Publicar no site" único — com o lote conferido, o clique aprova o lote, autoriza e publica;
+        # o operador também pode. Atrás de publicacao.publicar_um_passo (padrão 0 = como antes). Bloqueio de verdade continua bloqueando.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth, publicador as _pub, wp as _wpm, publicacao_guiada as _pg, pendencias as _pend
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F079','Fundo Um Passo','UMP',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        lotes = {}
+        def projeto(n, pendente=False):
+            P = f"F079-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F079',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id) VALUES (?,'F079',?,'Casa',1975,0,?)", (P, n, 700 + n * 10))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft','Casa',?)", (700 + n * 10, P))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote',?,'/x','revisao')", (P,)).lastrowid
+            lotes[P] = lid
+            for k in range(1, 4):
+                cod, wid = f"{P}-1975-S01-D{k:05d}", 700 + n * 10 + k
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id,lote_id) VALUES (?,?,'S01',?,?,'campvision',?,'rascunho',?,?)",
+                          (cod, P, k, f"Planta {k}", "pendente" if pendente and k == 3 else "conferida", wid, lid))
+                c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, cod))
+            return P
+        P, P2, P3, P4 = projeto(1), projeto(2, pendente=True), projeto(3), projeto(4)
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('bloqueia','outro','operador',?,'não publicar até a família responder','adm')", (P3,))
+        c.commit()
+        status = []
+        class WPF:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st): status.append((wid, st)); return {"status": st}
+            def gravar_metadados_lote(self, *a, **k): return {"ok": True, "gravados": []}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        _pub.WP = WPF; _wpm.WP = WPF
+        import app.rotas_projetos as _rp
+        _rp.WP = WPF
+        for em, nome, papel in (("ms@camp.arq.br", "M", "master"), ("adm@camp.arq.br", "A", "admin"), ("op@camp.arq.br", "O", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        ms, adm, op = cli("ms@camp.arq.br"), cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        aprovado = lambda P_: c.execute("SELECT aprovado_em, aprovado_por FROM lista_processamento WHERE id=?", (lotes[P_],)).fetchone()
+        st_proj = lambda P_: c.execute("SELECT status_site FROM projeto WHERE codigo=?", (P_,)).fetchone()[0]
+        # 1) DESLIGADO (padrão): como antes
+        ver("a configuração nasce desligada (migração 147)", c.execute("SELECT valor FROM configuracao WHERE chave='publicacao.publicar_um_passo'").fetchone()[0] == "0")
+        pl0 = adm.get(f"/api/projetos/{P}/publicar/plano").json()
+        ver("desligado: o lote não aprovado ainda trava o Publicar (como antes)", any(b["id"] == "revisao" for b in pl0["bloqueios"]) and pl0.get("um_passo") is False, str(pl0["bloqueios"]))
+        ver("desligado: operador não publica (403) e o plano diz que ele não pode agir",
+            op.post(f"/api/projetos/{P}/publicar-tudo").status_code == 403 and op.get(f"/api/projetos/{P}/publicar/plano").json()["pode_agir"] is False)
+        ver("desligado: o Publicar do admin não aprova o lote sozinho", adm.post(f"/api/projetos/{P}/publicar-tudo").status_code == 400 and aprovado(P)[0] is None)
+        ver("desligado: /api/auth/eu diz publicar_um_passo=false", op.get("/api/auth/eu").json().get("publicar_um_passo") is False)
+        # 2) LIGADO
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.publicar_um_passo'"); c.commit()
+        pl1 = op.get(f"/api/projetos/{P}/publicar/plano").json()
+        ver("ligado: o lote conferido não trava; o plano começa por 'Aprovar o lote conferido' e o operador pode agir",
+            pl1["pode_executar"] and pl1["pode_agir"] and pl1["passos"][0]["id"] == "aprovar" and pl1["lotes_a_aprovar"] == [lotes[P]], str(pl1["bloqueios"]) + str(pl1["passos"][:1]))
+        ver("ligado: /api/auth/eu diz publicar_um_passo=true (a tela troca 'Aprovar o lote' por 'Publicar no site')", op.get("/api/auth/eu").json().get("publicar_um_passo") is True)
+        tar = _pend.tarefas(c, "operador")
+        g_op = next((g for g in tar if g["id"] == "aprovar_publicar"), None)
+        ver("ligado: o Painel do operador mostra 'Pronto para publicar' com 'Publicar' (sem passo Aprovar)",
+            bool(g_op) and all(i["acao"]["tipo"] == "publicar" for i in g_op["itens"] if "conferidas" in i["detalhe"]), str(g_op)[:300])
+        r = op.post(f"/api/projetos/{P}/publicar-tudo")
+        ap = aprovado(P)
+        ver("ligado: UM clique do operador aprova o lote, autoriza e publica o projeto e as 3 folhas",
+            r.status_code == 200 and ap[0] is not None and ap[1] == "op@camp.arq.br" and st_proj(P) == "no_ar"
+            and {711, 712, 713} <= {w for w, s_ in status if s_ == "publish"}, r.text[:300])
+        ev = c.execute("SELECT detalhe FROM evento WHERE tipo='revisao_aprovada' AND codigo=?", (P,)).fetchone()
+        ver("a aprovação fica no histórico, marcada 'junto com publicar'", bool(ev) and _j.loads(ev[0]).get("junto_com_publicar") is True)
+        ver("e o projeto foi autorizado no caminho", c.execute("SELECT autorizado_site FROM projeto WHERE codigo=?", (P,)).fetchone()[0] == 1)
+        # 3) o que continua travando
+        r2 = op.post(f"/api/projetos/{P2}/publicar-tudo")
+        ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (400 dizendo 'Falta conferir 1 folha')", r2.status_code == 400 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
+        r3 = op.post(f"/api/projetos/{P3}/publicar-tudo")
+        ver("ligado: bloqueio registrado por pessoa continua bloqueando, e o lote NÃO é aprovado", r3.status_code == 400 and aprovado(P3)[0] is None and st_proj(P3) != "no_ar", r3.text[:200])
+        # 4) Desfazer volta para rascunho (master)
+        d = ms.post(f"/api/projetos/{P}/publicar", json={"acao": "rascunho"})
+        ver("Desfazer (master) volta o projeto para rascunho", d.status_code == 200 and st_proj(P) == "rascunho", d.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "camp136_serie":
@@ -10511,6 +10593,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"sem travar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160) CAMP-148: Publicar no site em um passo (aprova o lote junto; operador também), atrás de publicacao.publicar_um_passo")
+rc, out = rodar("publicar_um_passo", f"{tmp}/publicar_um_passo.db")
+if rc != 0: ok(False, f"teste publicar_um_passo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"um passo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

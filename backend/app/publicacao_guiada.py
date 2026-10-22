@@ -42,6 +42,44 @@ def publicar_arquiteto_junto() -> bool:
     return not r or str(r[0]).strip() != "0"
 
 
+def publicar_um_passo() -> bool:
+    """CAMP-148: configuração publicacao.publicar_um_passo (sem a chave ou 0: desligado, como antes)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='publicacao.publicar_um_passo'").fetchone()
+    finally:
+        con.close()
+    return bool(r) and str(r[0]).strip() == "1"
+
+
+def pode_publicar(u: dict) -> bool:
+    """Quem pode apertar Publicar: admin; com publicar_um_passo ligado, o operador também (CAMP-148, decisão do Rafa)."""
+    return u["papel"] in ("admin", "master") or (u["papel"] == "operador" and publicar_um_passo())
+
+
+def lotes_para_aprovar(con, codigo: str) -> tuple[list[int], int]:
+    """([lotes conferidos e ainda não aprovados], quantos lotes não aprovados existem). Só lote com folhas e nenhuma a conferir."""
+    nao_aprovados = con.execute("""SELECT l.id, (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS tot,
+                                          (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente' AND i.duplicata_de IS NULL) AS pen
+                                     FROM lista_processamento l
+                                    WHERE l.projeto_codigo=? AND l.aprovado_em IS NULL AND l.descartado_em IS NULL AND l.etapa IN ('revisao','rascunho')""", (codigo,)).fetchall()
+    com_folhas = [r for r in nao_aprovados if r["tot"]]
+    return [r["id"] for r in com_folhas if not r["pen"]], len(com_folhas)
+
+
+def aprovar_junto(con, codigo: str, u: dict) -> list[int]:
+    """CAMP-148: aprova os lotes conferidos do projeto como parte do Publicar (fica no histórico como 'revisao_aprovada' junto_com_publicar)."""
+    ids, _ = lotes_para_aprovar(con, codigo)
+    for lid in ids:
+        c = con.execute("""SELECT COUNT(*) AS total, SUM(CASE WHEN revisao='bloqueado' THEN 1 ELSE 0 END) AS bloq FROM item WHERE lote_id=?""", (lid,)).fetchone()
+        con.execute("UPDATE lista_processamento SET aprovado_por=?, aprovado_em=datetime('now'), atualizado_em=datetime('now') WHERE id=? AND aprovado_em IS NULL", (u["email"], lid))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'revisao_aprovada',?,?)",
+                    (codigo, u["email"], json.dumps({"lote_id": lid, "folhas": c["total"], "bloqueadas": c["bloq"] or 0, "junto_com_publicar": True})))
+    if ids:
+        con.commit()
+    return ids
+
+
 ORCAMENTO_S = 40.0             # tempo máximo de envio de folhas por chamada (a tela repete até acabar)
 ANO_FOLHA_DIFERENTE = 5        # anos de diferença entre a folha e o projeto a partir dos quais o plano avisa
 _trava = threading.Lock()
@@ -65,8 +103,21 @@ def plano(con, p) -> dict:
     bloqueios = [{"id": i, "texto": por_id[i]["texto"], "detalhe": por_id[i]["detalhe"], "acao": por_id[i]["acao"]}
                  for i in ("direitos", "bloqueios", "titulo", "aceite_cv", "teste", "revisao")
                  if i in por_id and por_id[i]["bloqueia"] and not por_id[i]["ok"]]   # 21/10: só o que BLOQUEIA (o aceite do CAMP Vision virou aviso)
+    um_passo = publicar_um_passo()
+    a_aprovar: list[int] = []
+    if um_passo:      # CAMP-148: o lote conferido é aprovado pelo próprio Publicar; só trava se ainda há folha a conferir
+        a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
+        if a_aprovar and len(a_aprovar) == nao_aprovados and por_id.get("revisao", {}).get("detalhe") == "O lote ainda não foi aprovado na Revisão do lote":
+            bloqueios = [b for b in bloqueios if b["id"] != "revisao"]
+        else:
+            a_aprovar = []
+            falta = q("SELECT COUNT(*) FROM item i JOIN lista_processamento l ON l.id=i.lote_id WHERE i.projeto_codigo=? AND l.aprovado_em IS NULL AND i.revisao='pendente' AND i.duplicata_de IS NULL")
+            for b_ in bloqueios:
+                if b_["id"] == "revisao" and falta:      # o que falta de verdade é conferir (aprovar vem junto com o Publicar)
+                    b_.update(texto="Folhas a conferir", detalhe=f"Falta conferir {falta} folha{'' if falta == 1 else 's'} do lote (a aprovação vem junto com o Publicar)",
+                              acao={"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo})
     dossie = bool(p["tainacan_item_id"])
-    passos = [
+    passos = ([{"id": "aprovar", "texto": "Aprovar o lote conferido" if len(a_aprovar) == 1 else f"Aprovar os {len(a_aprovar)} lotes conferidos", "estado": "sera_feito"}] if a_aprovar else []) + [
         {"id": "dossie", "texto": "Criar a página do projeto no site (ainda escondida)" if not dossie else "Página do projeto no site", "estado": "feito" if dossie else "sera_feito"},
         {"id": "folhas", "texto": (f"Enviar {a_enviar} folha(s) ao site (ainda escondidas)" if a_enviar else "Folhas no site") if elegiveis else f"0 de {total_locais} folhas prontas ({nao_conferidas} a conferir)",
          "estado": "sera_feito" if a_enviar else ("feito" if elegiveis else "aguarda")},
@@ -108,7 +159,7 @@ def plano(con, p) -> dict:
         avisos.append({"id": "autoria_nao_confirmada", "campo": None, "texto": (f"{divergentes} folha(s) com autoria não confirmada" if divergentes != 1 else "1 folha com autoria não confirmada")
                        + ": sobem ao site com o crédito “Autoria não confirmada”."})
     return {"passos": passos, "bloqueios": bloqueios, "avisos": avisos, "pode_executar": not bloqueios, "ja_publicado": p["status_site"] == "no_ar",
-            "folhas_a_enviar": a_enviar, "folhas_a_publicar": elegiveis,
+            "folhas_a_enviar": a_enviar, "folhas_a_publicar": elegiveis, "um_passo": um_passo, "lotes_a_aprovar": a_aprovar,
             "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas, "retidas": retidas}}
 
 

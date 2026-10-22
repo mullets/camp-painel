@@ -19,7 +19,7 @@ def plano(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
         if not p:
             raise HTTPException(404, "Projeto não existe")
-        return {**publicacao_guiada.plano(con, p), "pode_agir": u["papel"] in ("admin", "master")}
+        return {**publicacao_guiada.plano(con, p), "pode_agir": publicacao_guiada.pode_publicar(u)}
     finally:
         con.close()
 
@@ -202,7 +202,17 @@ def tarefa_do_projeto(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> 
 
 
 @router.post("/projetos/{codigo}/publicar-tudo")
-def publicar_tudo(codigo: str, tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
+def publicar_tudo(codigo: str, tarefa: int = 0, u: dict = Depends(auth.exige("operador"))):
+    if not publicacao_guiada.pode_publicar(u):            # CAMP-148: o operador só publica com publicacao.publicar_um_passo ligado
+        raise HTTPException(403, "Só um admin publica.")
+    if publicacao_guiada.publicar_um_passo():              # CAMP-148: o mesmo clique aprova o lote conferido (só se nada mais impede)
+        con = connect()
+        try:
+            p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
+            if p and not publicacao_guiada.plano(con, p)["bloqueios"]:
+                publicacao_guiada.aprovar_junto(con, codigo, u)
+        finally:
+            con.close()
     if tarefa:
         return _iniciar_tarefa(codigo, u)
     try:

@@ -845,7 +845,9 @@ def condicoes_de_publicacao(codigo: str, u: dict = Depends(auth.exige("leitura")
         if not p:
             raise HTTPException(404, "Projeto não existe")
         r = condicoes_projeto(con, p)
+        from .publicacao_guiada import pode_publicar
         r.update({"estado": p["status_site"], "pode_agir": u["papel"] in ("admin", "master"),
+                  "eu_publico": pode_publicar(u),   # CAMP-148 (campo opcional): quem está vendo pode apertar Publicar (com o um passo, o operador também)
                   "pode_despublicar": u["papel"] == "master" or p["status_site"] != "no_ar"})
         return r
     finally:

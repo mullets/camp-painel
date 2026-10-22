@@ -212,11 +212,14 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"}})
 
-    # 3) aprovar e publicar (admin)
+    # 3) aprovar e publicar (admin; CAMP-148: com publicacao.publicar_um_passo, o operador também, e "aprovar" já é publicar)
+    from .publicacao_guiada import publicar_um_passo
+    um_passo = publicar_um_passo()
     linhas = []
     for l in sorted([l for l in L if l["fase"] == "aprovar"], key=lambda l: str(l["atualizado_em"] or "")):
         linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
-                       "detalhe": f"as {l['itens_total']} folhas já foram conferidas · falta aprovar o lote", "acao": _acao("Aprovar", "aprovar", l["id"])})
+                       "detalhe": f"as {l['itens_total']} folhas já foram conferidas · " + ("pronto para publicar (o clique aprova o lote junto)" if um_passo else "falta aprovar o lote"),
+                       "acao": _acao("Publicar", "publicar", l["projeto_codigo"]) if um_passo else _acao("Aprovar", "aprovar", l["id"])})
     ordem = {"parcial": 0, "pronto": 1, "travado": 2}
     for l in sorted([l for l in L if l["fase"] == "publicar"], key=lambda l: (ordem[l["publicar"]["estado"]], str(l["atualizado_em"] or ""))):
         s = l["publicar"]
@@ -228,8 +231,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             det, rot, sev = f"travado: {s['falta']}", "Ver o que falta", "a"
         linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det,
                        "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
-    if linhas and admin:
-        grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "admin", "total": len(linhas), "itens": linhas[:por_grupo],
+    if linhas and (admin or (um_passo and papel == "operador")):
+        grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "operador" if um_passo else "admin", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes que esperam um admin", "rota": "filas/admin"}})
 
     # 4) problemas que bloqueiam: erro bloqueante aberto e lote parado com erro no CAMP Vision

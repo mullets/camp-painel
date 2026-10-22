@@ -109,3 +109,13 @@ O painel não bloqueia a publicação só porque os direitos de um fundo estão 
 - Correção numa folha ou projeto já publicado vai ao site sozinha, logo depois de salvar. A lista "alteradas depois de publicar" só aparece quando o site recusou, para tentar de novo.
 - `scripts/check_ui.py` reprova "wp-admin" e "no/pelo/ao WordPress" no HTML e no backend.
 
+
+## 16. Publicar no site em um passo (CAMP-148, decidido pelo Rafa em 22/10/2026)
+- Configuração `publicacao.publicar_um_passo` (migração 147). **Nasce desligada (0)**: tudo como antes (um admin aprova o lote e publica).
+- Ligada (1): com as folhas conferidas, o Próximo passo já é "Publicar N folhas"; o MESMO clique aprova o lote (evento `revisao_aprovada`
+  com `junto_com_publicar`), autoriza e publica. Sem confirmação; o resultado fica no bloco, com Desfazer (quem pode despublicar).
+- Ligada, o **operador também publica** (decisão do Rafa). Os outros botões da aba Publicação continuam de admin (`pode_agir`); o Publicar
+  usa `eu_publico` em /publicacao e `pode_agir` no plano (`publicacao_guiada.pode_publicar`). Cuidado: `pode_publicar` em /publicacao é outra coisa (as condições).
+- Continua travando: folha ainda a conferir ("Falta conferir N folhas"), bloqueio registrado por pessoa, direitos com restrição, projeto
+  sem título, lote de teste. Nesses casos o lote NÃO é aprovado.
+- Some o "Autorizar" da barra em lote de Projetos (o Publicar já autoriza). Fila e Painel inicial trocam "Aprovar" por "Publicar no site".
