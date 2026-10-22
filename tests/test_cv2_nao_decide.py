@@ -3,11 +3,13 @@
 Isolado: PYTHONPATH=backend python3 -m unittest tests.test_cv2_nao_decide
 """
 import sqlite3
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from app.saidas_cv import avaliar_aceite
 from app.publicacao_guiada import lotes_para_aprovar
 from app.rotas_revisao import _pode_importar
