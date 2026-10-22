@@ -15,7 +15,7 @@ from pathlib import Path
 _EXPECTED = {"no_ar": "publish", "rascunho": "draft", "fora_do_ar": "private"}
 
 
-def diagnosticar(painel: list[dict], itens_site: list[dict]) -> dict:
+def diagnosticar(painel: list[dict], itens_site: list[dict], completo: bool = False) -> dict:
     """Comparar por ID Tainacan. Nenhuma chamada à rede ou escrita de banco."""
     by_id = {int(s["id"]): s for s in itens_site if s.get("id") is not None}
     by_painel = {int(p["tainacan_item_id"]): p for p in painel if p.get("tainacan_item_id")}
@@ -35,11 +35,12 @@ def diagnosticar(painel: list[dict], itens_site: list[dict]) -> dict:
         else:
             corretos += 1
     for id_, s in sorted(by_id.items()):
-        if id_ not in by_painel and str(s.get("status") or "") == "publish":
+        if completo and id_ not in by_painel and str(s.get("status") or "") == "publish":
             orfao.append({"id": id_, "status": "publish", "tipo": s.get("tipo", "desconhecido")})
     return {"total_painel": len(by_painel), "total_site": len(by_id), "corretos": corretos,
             "faltando_no_site": faltando, "status_divergente": divergente,
-            "publicos_sem_vinculo_no_painel": orfao, "somente_leitura": True}
+            "publicos_sem_vinculo_no_painel": orfao, "orfaos_nao_avaliados": not completo,
+            "somente_leitura": True}
 
 
 def executar(limite: int = 300) -> dict:

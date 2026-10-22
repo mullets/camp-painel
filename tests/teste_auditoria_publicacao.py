@@ -14,12 +14,14 @@ class AuditTest(unittest.TestCase):
   site=[{"id":10,"status":"publish","tipo":"projeto"},
         {"id":20,"status":"private","tipo":"projeto"},
         {"id":40,"status":"publish","tipo":"projeto"}]
-  x=diagnosticar(painel,site)
+  x=diagnosticar(painel,site,completo=True)
   self.assertEqual(x["corretos"],1)
   self.assertEqual(x["faltando_no_site"][0]["codigo"],"F001-P0003")
   self.assertEqual(x["status_divergente"][0]["codigo"],"F001-P0002")
   self.assertEqual(x["publicos_sem_vinculo_no_painel"][0]["id"],40)
   self.assertTrue(x["somente_leitura"])
+  self.assertEqual(diagnosticar(painel,site)["publicos_sem_vinculo_no_painel"],[])
+  self.assertTrue(diagnosticar(painel,site)["orfaos_nao_avaliados"])
 
 if __name__=="__main__":
  unittest.main()
