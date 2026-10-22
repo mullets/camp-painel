@@ -131,7 +131,7 @@ def conferencia_do_lote(con, lote_id: int) -> dict:
     """Quanto do lote já passou por uma pessoa no painel (duplicatas não contam: não vão ao site)."""
     l = con.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
     tot, pend = con.execute("""SELECT COUNT(*), COALESCE(SUM(revisao='pendente'),0) FROM item
-                               WHERE lote_id=? AND duplicata_de IS NULL""", (lote_id,)).fetchone()
+                               WHERE lote_id=? AND projeto_codigo=(SELECT projeto_codigo FROM lista_processamento WHERE id=?) AND duplicata_de IS NULL""", (lote_id, lote_id)).fetchone()
     return {"aprovado": bool(l and l[0]), "total": int(tot or 0), "pendentes": int(pend or 0)}
 
 
