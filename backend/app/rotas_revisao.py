@@ -108,6 +108,66 @@ def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
         con.close()
 
 
+class TrazerRetiradas(BaseModel):
+    confirmar: bool = False
+
+
+@router.post("/lotes/{lote_id}/trazer-retiradas")
+def trazer_retiradas(lote_id: int, d: TrazerRetiradas, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Decisão humana: incluir documentos retirados pelo CV2 na revisão, sem publicar."""
+    if not d.confirmar:
+        raise HTTPException(400, "Confirme que deseja trazer as folhas retiradas para conferência")
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["descartado_em"] or l["aprovado_em"]:
+            raise HTTPException(409, "Este lote já foi encerrado. Reabra a revisão antes de acrescentar folhas")
+        pasta = Path(l["pasta_qnap"] or "")
+        if not pasta.is_dir():
+            raise HTTPException(409, "A pasta deste lote não está acessível no QNAP")
+        pacote = ler_pacote(pasta)
+        if not pacote or pacote.get("projeto_codigo") != l["projeto_codigo"]:
+            raise HTTPException(409, "O pacote não existe ou não corresponde ao projeto cadastrado no painel")
+        candidatas = [r for r in pacote.get("retirados") or [] if isinstance(r, dict)]
+        if not candidatas:
+            raise HTTPException(409, "Este lote não contém folhas retiradas pelo CAMP Vision")
+        ja = {r[0] for r in con.execute(
+            "SELECT chave FROM cv_resposta WHERE lote_id=? AND tipo='retirado' AND acao='devolver'", (lote_id,))}
+        aceitas, ignoradas = [], []
+        for folha in candidatas:
+            codigo = str(folha.get("codigo") or "").strip()
+            if not CODIGO_DOCUMENTO.fullmatch(codigo) or not codigo.startswith(l["projeto_codigo"] + "-"):
+                ignoradas.append({"codigo": codigo, "motivo": "código de outro projeto ou inválido"})
+                continue
+            if codigo in ja:
+                continue
+            if not (folha.get("arquivos") or folha.get("arquivo_origem")):
+                ignoradas.append({"codigo": codigo, "motivo": "sem arquivo de origem no manifesto"})
+                continue
+            # A decisão é humana e fica na trilha cv_resposta. O importador só
+            # devolve as folhas escolhidas para revisão, nunca para publicação.
+            _responder_cv(con, l, RespostaCV(
+                tipo="retirado", chave=codigo, acao="devolver",
+                motivo="Trazer à conferência; a exclusão do CV2 não é decisão final"), u)
+            aceitas.append(codigo)
+        if not aceitas:
+            raise HTTPException(409, "Nenhuma nova folha com código e origem válidos para trazer. Confira o manifesto.")
+        resultado = importar_lote(con, lote_id, u["email"])
+        _evento(con, "projeto", l["projeto_codigo"], "retiradas_trazidas_para_conferencia",
+                u["email"], {"lote_id": lote_id, "codigos": aceitas,
+                              "ignoradas": ignoradas, "criadas": resultado.get("criadas", 0)})
+        con.commit()
+        return {"ok": True, "trazidas": len(aceitas), "codigos": aceitas,
+                "ignoradas": ignoradas, "importacao": resultado,
+                "mensagem": "Folhas trazidas ao painel. Confira os avisos antes de publicar."}
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
 @router.post("/filas/importar-todas")
 def importar_todas(u: dict = Depends(auth.exige("operador"))):
     """#97 + H4: "Importar todas (N)" da Fila vira UMA tarefa: importa, um por um, os lotes que esperam importação
