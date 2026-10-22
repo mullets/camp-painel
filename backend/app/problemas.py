@@ -92,7 +92,7 @@ def contexto(con, erros: list) -> dict:
             ctx["fundos"][r["codigo"]] = r["titulo"]
     for parte in _em_lotes(folhas):
         q = ",".join("?" * len(parte))
-        for r in con.execute(f"SELECT codigo, projeto_codigo, duplicata_de, codigo_anterior, giro_manual, espelho_manual, lote_id FROM item WHERE codigo IN ({q})", parte):
+        for r in con.execute(f"SELECT codigo, projeto_codigo, duplicata_de, codigo_anterior, giro_manual, espelho_manual, lote_id, revisao, revisado_em FROM item WHERE codigo IN ({q})", parte):
             ctx["itens"][r["codigo"]] = dict(r)
         # CAMP-096 (exaustão, 20/10): folhas que o CAMP Vision RETIROU do lote (nunca entraram no painel). O problema "outra pasta" do erros.json
         # sobre elas não é "folha que sumiu": antes a tela dizia "Esta folha não existe mais no painel… Confira e feche" num problema que impede publicar.
@@ -201,6 +201,23 @@ def explicar(e, ctx: dict) -> dict:
         acao = "autoria" if e["categoria"] == "autoria_divergente" else "abrir_projeto"
     elif fundo:
         acao = "abrir_fundo"
+    # O CAMP Vision produzia centenas de "erros" que eram apenas aviso
+    # técnico menor. Eles ficam no histórico, mas não são tarefas humanas.
+    # Os avisos mais graves, retirada, duplicata e autoria NÃO são fechados.
+    chave = e["chave"] or ""
+    if not sozinho and e["origem"] == "campvision" and e["gravidade"] == "aviso" and chave.startswith("campvision:aviso-menor:"):
+        sozinho = {"seguro": True, "motivo": "Aviso menor do exiftool, sem ação necessária. O original e o registro do lote permanecem preservados."}
+    if not sozinho and it and e["origem"] == "campvision" and e["gravidade"] != "bloqueia":
+        revisado = str(it.get("revisado_em") or "")
+        conferiu_depois = (it.get("revisao") in ("conferida", "corrigida") and bool(revisado)
+                           and revisado >= criado)
+        categoria_conferivel = e["categoria"] in ("orientacao", "espelhado", "metadado")
+        if not categoria_conferivel and e["categoria"] == "outro":
+            from .rotas_revisao import pede_so_olhar_a_folha
+            categoria_conferivel = pede_so_olhar_a_folha(e["descricao"])
+        if conferiu_depois and categoria_conferivel:
+            sozinho = {"seguro": True, "pela_conferencia": True,
+                       "motivo": f"A folha foi conferida ou corrigida por {revisado}; o alerta técnico de revisão foi atendido."}
     if not sozinho and pj:
         if pj.get("mesclado_em"):          # 21/10 (4.2): as folhas foram para o destino com os problemas delas; o que sobrou aqui é fantasma
             sozinho = {"seguro": True, "motivo": f"O projeto foi juntado a outro ({pj['mesclado_em']}). Fechado sozinho, fica no histórico."}
@@ -236,8 +253,9 @@ def fechar_resolvidos(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
                             (str(e["id"]), ator, json.dumps({"de": e["codigo"], "para": s["mover_para"]}, ensure_ascii=False)))
                 fechados.append(e["id"])
             continue
+        prefixo = "Resolvido na conferência: " if s.get("pela_conferencia") else "Resolvido sozinho: "
         n = con.execute("UPDATE erro SET situacao='corrigido', resolvido_em=datetime('now'), resolucao=? WHERE id=? AND situacao IN ('aberto','em_correcao')",
-                        ("Resolvido sozinho: " + s["motivo"], e["id"])).rowcount
+                        (prefixo + s["motivo"], e["id"])).rowcount
         if n:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'fechado_automatico',?,?)",
                         (str(e["id"]), ator, json.dumps({"codigo": e["codigo"], "motivo": s["motivo"]}, ensure_ascii=False)))
