@@ -1,7 +1,7 @@
 """REF-040: reexecução do mesmo pacote não inventa uma atividade."""
 import sqlite3
 import unittest
-from app.historico_importacao import registrar_importacao
+from app.historico_importacao import registrar_importacao, SQL_EVENTOS_COM_ATIVIDADE
 
 class HistoricoImportacaoTest(unittest.TestCase):
     def setUp(self):
@@ -38,6 +38,19 @@ class HistoricoImportacaoTest(unittest.TestCase):
         self.d.append({"codigo": "F026-P0004-S01-D00002", "titulo": "Corte"})
         self.assertTrue(self.registrar(criadas=1))
         self.assertEqual(self.eventos(), 2)
+
+    def test_historico_normal_oculta_zero_mas_bruto_preserva(self):
+        eventos = [
+            ("folhas_importadas_do_lote", '{"lote_id":37,"criadas":0,"atualizadas":0,"problemas":7}'),
+            ("folhas_importadas_do_lote", '{"lote_id":38,"criadas":2,"atualizadas":0}'),
+            ("projeto_editado", '{}'),
+            ("folhas_importadas_do_lote", '{nao-json'),
+        ]
+        self.con.executemany("INSERT INTO evento(entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,?,?,?)",
+                             [(self.p, tipo, 'Rafael', detalhe) for tipo, detalhe in eventos])
+        normal = self.con.execute("SELECT tipo FROM evento WHERE " + SQL_EVENTOS_COM_ATIVIDADE).fetchall()
+        self.assertEqual(len(normal), 3)
+        self.assertEqual(self.eventos(), 4)  # auditoria inteira não foi tocada
 
     def test_somente_novo_problema_e_evento_util(self):
         self.assertTrue(self.registrar(criadas=0, problemas_registrados=1))
