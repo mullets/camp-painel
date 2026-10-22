@@ -1167,6 +1167,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
   <section class="content" id="v-erros">
     <div class="hdr" data-erros-hdr><div><h1>Problemas</h1><p class="sub">O que está errado no material, agrupado por projeto. Cada problema diz o que aconteceu, o que fazer e tem o botão que resolve. Autoria não confirmada não bloqueia: a folha sobe ao site com esse aviso.</p></div><div class="act"><button class="btn" type="button" id="err-limpeza" hidden>Limpeza geral…</button><button class="btn pri" onclick="relatarProblema()">Relatar problema</button></div></div>
     <div class="abas-sit" id="err-abas" role="group" aria-label="Filtrar por situação"></div>
+    <div class="panel" id="err-diagnostico" role="region" aria-label="Resumo de problemas do acervo" aria-live="polite" hidden></div>
     <div class="panel"><div class="filterbar err-filtros"><input type="search" id="err-q" placeholder="Buscar código, nome do projeto ou texto… (tecla F)" aria-label="Buscar problemas" autocomplete="off">
       <select id="err-grav" aria-label="Gravidade"><option value="">Toda gravidade</option><option value="bloqueia">Bloqueia</option><option value="corrigir">Corrigir</option><option value="aviso">Aviso</option></select>
       <select id="err-cat" aria-label="Tipo de problema"><option value="">Todo tipo</option><option value="projeto_errado">Folha de outro projeto</option><option value="duplicata">Duplicata</option><option value="orientacao">Orientação / rotação</option><option value="espelhado">Digitalizado pelo verso</option><option value="autoria_divergente">Autoria divergente</option><option value="codigo">Código errado</option><option value="metadado">Metadado errado</option><option value="credito">Crédito errado</option><option value="arquivo_corrompido">Arquivo corrompido</option><option value="outro">Outro</option></select>
@@ -5704,11 +5705,42 @@ async function limpezaGeral(){let s;try{s=await API('/api/erros/limpeza-geral',{
     botao:`Fechar ${fmtN(s.fecha)}`,botaoOcupado:'Fechando…',acao:()=>API('/api/erros/limpeza-geral',{method:'POST',body:JSON.stringify({simular:false})})});
   if(!r)return;toast(`${fmtN((r.resultado||{}).fechados||0)} avisos automáticos fechados`);carregarErros()}
 document.addEventListener('click',e=>{if(e.target.closest('#err-limpeza'))limpezaGeral()});
+
+async function errCarregarDiagnostico(){
+  const el=document.getElementById('err-diagnostico');
+  if(!el)return;
+  if(!EU||!['admin','master'].includes(EU.papel)){el.hidden=true;return}
+  try{
+    const d=await API('/api/erros/diagnostico');
+    if(!d||!Number.isFinite(d.abertos)){el.hidden=true;return}
+    const principais=(d.projetos_com_mais_alertas||[]).slice(0,4);
+    el.innerHTML=`<div class="ph"><h2>Entenda os problemas do acervo</h2></div>
+      <div class="pb">
+        <p class="help">${fmtN(d.abertos)} abertos no total. ${fmtN(d.bloqueantes)} bloqueiam a publicação; ${fmtN(d.avisos)} são avisos. Destes, ${fmtN(d.avisos_menores_exiftool)} são avisos menores do exiftool.</p>
+        <div class="act">
+          <button type="button" class="btn sm" data-err-diag-grav="bloqueia">Ver bloqueios (${fmtN(d.bloqueantes)})</button>
+          <button type="button" class="btn sm" data-err-diag-grav="aviso">Ver avisos (${fmtN(d.avisos)})</button>
+        </div>
+        ${principais.length?`<p class="help">Projetos com mais ocorrências: ${principais.map(x=>`<button type="button" class="btn sm" data-err-diag-proj="${escHtml(x.projeto)}">${escHtml(x.projeto)} · ${fmtN(x.quantidade)}</button>`).join(' ')}</p>`:''}
+        ${(d.repeticoes_exatas||[]).length?`<small class="help">Há mensagens repetidas registradas. Não serão apagadas automaticamente; veja os casos antes de resolver.</small>`:''}
+      </div>`;
+    el.hidden=false;
+  }catch(_){el.hidden=true}
+}
+document.addEventListener('click',e=>{
+  const grav=e.target.closest('[data-err-diag-grav]'),pj=e.target.closest('[data-err-diag-proj]');
+  if(!grav&&!pj)return;
+  errFiltro='abertos';LISTA_MEM.set('erros.aba','abertos');
+  if(grav){ERR_F.gravidade=grav.dataset.errDiagGrav;ERR_F.projeto=''}
+  if(pj){ERR_F.projeto=pj.dataset.errDiagProj;ERR_F.gravidade=''}
+  errMudouFiltro();
+});
+
 async function carregarErros(f){{const bl=document.getElementById('err-limpeza');if(bl)bl.hidden=!(EU&&EU.papel==='master')}if(f){errFiltro=f;LISTA_MEM.set('erros.aba',f)}const sec=document.getElementById('v-erros'),tb=document.getElementById('err-body');if(!sec||!tb)return;
   const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;sec.style.minHeight=noLugar?sec.offsetHeight+'px':'';   /* 19/10: a linha resolvida some; sem isto o fim da página encurta e o navegador puxa a lista para cima */
   sec.querySelector('.aviso-exemplo')?.remove();errSincronizarFiltros();const seq=++ERR_SEQ;if(!tb.querySelector('tr[data-abrir],tr.err-gr'))tabelaCarregando('#err-body','Carregando problemas…');
   try{const p=errParams();p.set('situacao',errFiltro);const [es,n]=await Promise.all([API('/api/erros?'+p),API('/api/erros/contagem?'+errParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
-    ERR_LISTA=es;errRenderAbas(n);errRender();atualizarPendencias();
+    ERR_LISTA=es;errRenderAbas(n);errRender();atualizarPendencias();errCarregarDiagnostico();
     if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#err-body','Não consegui carregar os problemas: '+e.message,'carregarErros()')}errRenderAbas(null)}}
 function errMudouFiltro(){LISTA_MEM.set('erros.filtros',{q:ERR_F.q,gravidade:ERR_F.gravidade,categoria:ERR_F.categoria,origem:ERR_F.origem});ERR_GR_LIMITE=25;carregarErros()}
