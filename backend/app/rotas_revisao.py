@@ -161,13 +161,25 @@ def trazer_retiradas(lote_id: int, d: TrazerRetiradas, u: dict = Depends(auth.ex
         if not aceitas:
             raise HTTPException(409, "Nenhuma nova folha com código e origem válidos para trazer. Confira o manifesto.")
         resultado = importar_lote(con, lote_id, u["email"])
+        # A decisão de tentar recuperar uma retirada não prova que o arquivo
+        # entrou na revisão. Colisões e códigos inválidos ainda podem impedir
+        # sua entrada: informar as duas contagens separadamente.
+        marca = ",".join("?" for _ in aceitas)
+        importadas = [r[0] for r in con.execute(
+            f"SELECT codigo FROM item WHERE codigo IN ({marca}) AND lote_id=? AND projeto_codigo=?",
+            (*aceitas, lote_id, l["projeto_codigo"]))]
+        nao_importadas = [c for c in aceitas if c not in set(importadas)]
         _evento(con, "projeto", l["projeto_codigo"], "retiradas_trazidas_para_conferencia",
-                u["email"], {"lote_id": lote_id, "codigos": aceitas,
+                u["email"], {"lote_id": lote_id, "solicitadas": aceitas,
+                              "importadas": importadas, "nao_importadas": nao_importadas,
                               "ignoradas": ignoradas, "criadas": resultado.get("criadas", 0)})
         con.commit()
-        return {"ok": True, "trazidas": len(aceitas), "codigos": aceitas,
-                "ignoradas": ignoradas, "importacao": resultado,
-                "mensagem": "Folhas trazidas ao painel. Confira os avisos antes de publicar."}
+        mensagem = ("Folhas trazidas à conferência. Confira cada aviso antes de publicar."
+                    if importadas else
+                    "Nenhuma folha entrou na revisão. Verifique colisões, arquivos e a situação do manifesto.")
+        return {"ok": bool(importadas), "solicitadas": len(aceitas), "trazidas": len(importadas),
+                "codigos": importadas, "nao_importadas": nao_importadas,
+                "ignoradas": ignoradas, "importacao": resultado, "mensagem": mensagem}
     except Exception:
         con.rollback()
         raise
