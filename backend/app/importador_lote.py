@@ -44,6 +44,14 @@ def tirar_projeto_divergente(pend: dict) -> tuple[list, list]:
     return out[0], out[1]
 
 
+def assinatura_pacote(pacote: dict | None) -> str | None:
+    """Impressão digital do pacote do CAMP Vision: diz se a leitura na pasta ainda é a que foi importada (23/10)."""
+    if not isinstance(pacote, dict):
+        return None
+    import hashlib
+    return hashlib.sha256(json.dumps(pacote, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:20]
+
+
 def ler_pacote(pasta: Path) -> dict | None:
     arq = pasta / "catalogacao" / "pacote_tainacan.json"
     if not arq.is_file():
@@ -464,7 +472,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         pass
     resumo = {"criadas": criados, "atualizadas": atualizados, "ignoradas_ja_revisadas": ignoradas, "retirados": retirados, "problemas": problemas,
               **({"movidas_para_outro_projeto": movidas_fora} if movidas_fora else {}),
-              "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
+              "problemas_registrados": registrados, "teste": bool(pacote.get("teste")),
+              "pacote_sha": assinatura_pacote(pacote)}             # campo novo, opcional: a varredura mantém a importação enquanto o pacote não mudar
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
     if religadas:                                                  # campo novo, opcional: folhas que já estavam no projeto e só ganharam a imagem de volta
