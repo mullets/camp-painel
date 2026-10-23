@@ -15,7 +15,21 @@ FASES = ("erro", "importar", "conferir", "aprovar", "publicar", "processando", "
 PRECISAM_DE_GENTE = ("erro", "importar", "conferir", "aprovar", "publicar")
 
 
-def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_em: str | None) -> str:
+def importado_sem_folhas(resultado) -> bool:
+    """23/10 ("clico em Importar, dá 0 folhas importadas e o lote volta para o fim da lista"): o pacote JÁ foi importado e não trouxe
+    folha nova para este lote (todas retiradas pelo CAMP Vision, ou já estavam no projeto). Importar de novo não muda nada: não é trabalho.
+    Uma decisão "lote colide" ainda esperando continua pedindo gente (vai em Decidir)."""
+    if isinstance(resultado, str):
+        import json
+        try:
+            resultado = json.loads(resultado or "{}")
+        except ValueError:
+            return False
+    imp = (resultado or {}).get("importacao") if isinstance(resultado, dict) else None
+    return isinstance(imp, dict) and not imp.get("esperando_decisao")
+
+
+def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_em: str | None, resultado=None) -> str:
     if etapa == "erro":
         return "erro"
     if etapa == "publicado":
@@ -23,6 +37,8 @@ def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_e
     if etapa in ("enviado", "processando"):
         return "processando"
     if itens_total == 0:                           # revisao ou rascunho sem folhas importadas
+        if etapa == "revisao" and importado_sem_folhas(resultado):
+            return "publicado"                     # concluído: importado, nada novo (o projeto mostra o lote anterior, o que tem folhas)
         return "importar" if etapa == "revisao" else "publicar"
     if itens_pendentes > 0:
         return "conferir"
@@ -61,10 +77,10 @@ def lote_ativo_por_projeto(con) -> dict:
     """Para cada projeto com lista, a lista que ainda pede algo (a mais recente que não está publicada) ou, se todas estão publicadas, a mais recente.
     {projeto: {"fase", "itens_pendentes", "itens_total", "lote_id"}}. A MESMA regra do 'próximo passo' do projeto e da Fila."""
     por_projeto: dict = {}
-    for l in con.execute("""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em,
+    for l in con.execute("""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em, l.resultado,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS it,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS pen
                             FROM lista_processamento l WHERE l.descartado_em IS NULL ORDER BY l.id DESC"""):
-        d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
+        d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"], l["resultado"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
         por_projeto[l["pc"]] = _preferir_lote(por_projeto.get(l["pc"]), d)
     return por_projeto

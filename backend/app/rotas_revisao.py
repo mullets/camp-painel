@@ -83,7 +83,7 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             # CAMP-078 (20/10, exaustão): lote descartado não é trabalho (a Fila já o tirava); o cartão Folhas continuava "o CAMP Vision está lendo"
             d = dict(l)
             d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
-            d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"])
+            d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"], d.get("resultado"))
             # 19/10 (F026-P0009): lote parado por erro do CAMP Vision: o motivo vai junto (campo novo, opcional), para a Situação do lote dizer o porquê
             d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
             d.pop("status_json", None); d.pop("resultado", None)

@@ -568,7 +568,7 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     for r in rows:
         d = dict(r)
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
-        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"))
+        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
         saida.append(d)
     return saida
@@ -820,6 +820,15 @@ def _ler_pasta_bruto(con, pasta: Path, entrada: Path | None, esperado: str | Non
             ex_res = json.loads(ex["resultado"] or "{}") or {}
         except ValueError:
             ex_res = {}
+    if isinstance(ex_res.get("importacao"), dict) and ex_res["importacao"].get("pacote_sha"):
+        # 23/10: a varredura regrava o lote e apagava "já importado" (o lote sem folha nova voltava para Importar a cada passada).
+        # Mesmo pacote na pasta = a importação continua valendo; pacote novo = importar de novo.
+        from .importador_lote import assinatura_pacote, ler_pacote
+        try:
+            if assinatura_pacote(ler_pacote(pasta)) == ex_res["importacao"]["pacote_sha"]:
+                contexto["importacao"] = ex_res["importacao"]
+        except HTTPException:
+            pass
     if ex_res.get("complemento"):                          # lote de complemento: a marca e a contagem são DELE, não da pasta inteira
         contexto.update({k: ex_res[k] for k in ("complemento", "lote_cv", "lote_origem", "novos") if k in ex_res})
         n_arq = ex["folhas_encontradas"] or 0

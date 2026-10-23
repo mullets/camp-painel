@@ -49,14 +49,14 @@ def texto_espera(horas: float | None) -> str:
 def lotes(con) -> list[dict]:
     """Os lotes da Fila (os mesmos de /api/filas), cada um com a fase."""
     saida = []
-    for r in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
+    for r in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
                               FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo
                              WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL"""):
         d = dict(r)
-        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"))
+        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None))
         saida.append(d)
     return saida
 

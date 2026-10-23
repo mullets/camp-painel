@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -6004,6 +6004,44 @@ def filho(modo):
         ver("'Encontradas no QNAP, ainda não catalogadas' não lista mais as 7 (são as folhas do site)", not [c_ for c_ in fora if c_ in {N(n) for n in range(1, 8)}], str(fora)[:300])
         k.close()
         for l in res: print(l)
+    elif modo == "importado_sem_folhas":
+        # 23/10 (Precisa de você): "clico em Importar, ele atualiza, sai da lista e volta pro fim dela, e dá 0 folhas importadas".
+        # O pacote só tinha folhas retiradas pelo CAMP Vision: importar não traz nada, e a varredura do QNAP apagava a marca "já importado".
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, copy as _cp
+        from app import importador_lote, pendencias
+        from app.filas_fase import lote_ativo_por_projeto
+        from app.rotas_operacao import _ler_pasta
+        EX = _pl.Path(__file__).resolve().parent / "contrato"
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        pac = _j.loads((EX / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        so_retirados = _cp.deepcopy(pac); so_retirados["retirados"] = [dict(d_, bloqueios=["autoria divergente"]) for d_ in pac["documentos"]]; so_retirados["documentos"] = []
+        pasta = _pl.Path(tempfile.mkdtemp()) / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        def gravar(p_):
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(p_, ensure_ascii=False), encoding="utf-8")
+            (pasta / "status.json").write_text(_j.dumps({"status": "pronto", "lote_atual": "lote-1"}), encoding="utf-8")
+            (pasta / "info_projeto.json").write_text(_j.dumps({"codigo": "F026-P0001", "nome": "SESI"}), encoding="utf-8")
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'SESI',1972)")
+        c.commit(); c.close()
+        k = connect()
+        importar_na_lista = lambda: [x for g in pendencias.tarefas(k, "admin") if g["id"] == "conferir" for x in g["itens"] if (x.get("acao") or {}).get("tipo") == "importar"]
+        fase = lambda: lote_ativo_por_projeto(k)["F026-P0001"]["fase"]
+        gravar(so_retirados); _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()
+        lote = k.execute("SELECT id FROM lista_processamento").fetchone()[0]
+        ver("antes de importar: o lote pede Importar", fase() == "importar" and len(importar_na_lista()) == 1, fase())
+        r = importador_lote.importar_lote(k, lote, "teste"); k.commit()
+        ver("o pacote só tinha retiradas: 0 folhas importadas, 2 retiradas", r["criadas"] == 0 and len(r["retirados"]) == 2, str(r)[:200])
+        ver("depois de importar: sai de 'Precisa de você' (não pede Importar de novo)", not importar_na_lista() and fase() != "importar", fase())
+        _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()      # a varredura do QNAP passa de novo pela mesma pasta
+        ver("a varredura do QNAP com o MESMO pacote não traz o lote de volta para Importar", not importar_na_lista() and fase() != "importar", fase())
+        gravar(pac); _ler_pasta(k, pasta, None, "F026-P0001"); k.commit()   # o CAMP Vision leu de novo e agora há folhas
+        ver("pacote NOVO na pasta: o lote volta a pedir Importar", fase() == "importar" and len(importar_na_lista()) == 1, fase())
+        r2 = importador_lote.importar_lote(k, lote, "teste"); k.commit()
+        ver("e importar traz as folhas novas para conferir", r2["criadas"] == 2 and fase() == "conferir", f"{r2.get('criadas')} {fase()}")
+        k.close()
+        for l in res: print(l)
     elif modo == "lote_complemento":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -10444,6 +10482,14 @@ else:
 print("114b2) Folha lida sem ano que já foi ao site: a leitura com o ano devolve a imagem, sem trocar o código nem repetir a folha (F009-P0092)")
 rc, out = rodar("ano_lido_depois", f"{tmp}/anolido.db")
 if rc != 0: ok(False, f"teste do ano lido depois não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b3) Lote importado sem folha nova (só retiradas) sai de 'Precisa de você' e não volta a cada varredura do QNAP")
+rc, out = rodar("importado_sem_folhas", f"{tmp}/importsemfolhas.db")
+if rc != 0: ok(False, f"teste do lote importado sem folhas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
