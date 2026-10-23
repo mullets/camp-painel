@@ -232,12 +232,13 @@ def _recodificar_por_releitura(con, antigo: str, novo: str, serie: str, ator: st
                 (novo, ator, json.dumps({"de": antigo, "para": novo, "motivo": "a nova leitura do CAMP Vision mudou a série"}, ensure_ascii=False)))
 
 
-def _atualizar_arquivos(con, cod: str, d: dict) -> None:
-    """Só os arquivos (TIF, JPG, origem) e a prévia da leitura nova; título, giro, revisão e o resto que a pessoa fez ficam."""
+def _atualizar_arquivos(con, cod: str, d: dict, cod_arquivo: str | None = None) -> None:
+    """Só os arquivos (TIF, JPG, origem) e a prévia da leitura nova; título, giro, revisão e o resto que a pessoa fez ficam.
+    `cod_arquivo`: o código com que o CAMP Vision gravou os arquivos, quando não é o da folha (ver _ano_lido_depois)."""
     arqs = [str(a) for a in (d.get("arquivos") or [])]
     tif = next((a for a in arqs if a.lower().endswith((".tif", ".tiff"))), None)
     jpg = next((a for a in arqs if a.lower().endswith((".jpg", ".jpeg"))), None)
-    tif = tif or _tif_irmao(con, jpg, cod)
+    tif = tif or _tif_irmao(con, jpg, cod_arquivo or cod)
     if not (tif or jpg):
         return
     row = con.execute("SELECT pendencias FROM item WHERE codigo=?", (cod,)).fetchone()
@@ -249,6 +250,33 @@ def _atualizar_arquivos(con, cod: str, d: dict) -> None:
         pend["previa"] = d.get("preview")
     con.execute("UPDATE item SET arquivo_tif=COALESCE(?, arquivo_tif), arquivo_jpg=COALESCE(?, arquivo_jpg), pendencias=?, atualizado_em=datetime('now') WHERE codigo=?",
                 (tif, jpg, json.dumps(pend, ensure_ascii=False), cod))
+
+
+def _ano_lido_depois(con, antigo: str, novo: str) -> bool:
+    """23/10 (F009-P0092): a folha `antigo` foi lida sem ano (…-0000-…), foi ao site, e o CAMP Vision, ao achar o ano, renomeou os
+    arquivos para `novo` (…-1981-…, mesma série, mesmo D). O painel não troca o código de folha que já está no site (é do Rafa
+    decidir), então a leitura nova era recusada ("o número já é de …") e a folha antiga ficava sem imagem para sempre.
+    É a mesma folha quando: mesmo projeto, série e D; a antiga tem ano 0000 e a nova não; e os arquivos da antiga sumiram do
+    acervo (ou já são os da nova, numa reimportação). Se a antiga ainda tem imagem, pode ser outra folha: continua recusada."""
+    a, n = CODIGO_DOCUMENTO.match(antigo or ""), CODIGO_DOCUMENTO.match(novo or "")
+    if not a or not n or a.group(3) != "0000" or n.group(3) == "0000":
+        return False
+    if (a.group(1), a.group(2), a.group(4), int(a.group(5))) != (n.group(1), n.group(2), n.group(4), int(n.group(5))):
+        return False
+    raiz = _raiz_prontos(con)
+    if not raiz or not raiz.is_dir():
+        return False                                               # sem o acervo montado não dá para ver se os arquivos sumiram
+    r = con.execute("SELECT arquivo_jpg, arquivo_tif FROM item WHERE codigo=?", (antigo,)).fetchone()
+    arqs = [x for x in (r["arquivo_jpg"], r["arquivo_tif"]) if x] if r else []
+    if any(Path(x).stem.lower() == novo.lower() for x in arqs):
+        return True                                                # já religada antes (reimportação)
+    for x in arqs:
+        try:
+            if (raiz / x).is_file():
+                return False
+        except OSError:
+            return False
+    return True
 
 
 def importar_lote(con, lote_id: int, ator: str) -> dict:
@@ -290,6 +318,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     novas_colisoes: list[dict] = []
     esperando = puladas_colisao = 0
     recodificadas: list[dict] = []
+    religadas: list[dict] = []
     for d in docs:
         cod = str(d.get("codigo") or "")
         m = CODIGO_DOCUMENTO.match(cod)
@@ -344,6 +373,15 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 _atualizar_arquivos(con, cod, d)                    # (aviso de 14/10: D00001 conferida apontava para o JPG S01 que não existe mais)
             continue
         outro = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND sequencial=? AND codigo<>?", (proj, seq, cod)).fetchone()
+        if outro and _ano_lido_depois(con, outro[0], cod):
+            antes = con.execute("SELECT arquivo_jpg, arquivo_tif FROM item WHERE codigo=?", (outro[0],)).fetchone()
+            _atualizar_arquivos(con, outro[0], d, cod_arquivo=cod)  # a folha (e o código dela no site) fica; só a imagem volta
+            depois = con.execute("SELECT arquivo_jpg, arquivo_tif FROM item WHERE codigo=?", (outro[0],)).fetchone()
+            if tuple(antes) != tuple(depois):
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'arquivos_religados',?,?)",
+                            (outro[0], ator, json.dumps({"arquivos_de": cod, "lote": lote_id, "motivo": "o CAMP Vision leu o ano e renomeou os arquivos"}, ensure_ascii=False)))
+            religadas.append({"folha": outro[0], "arquivos_de": cod})
+            continue
         if outro:
             problemas.append(f"{cod}: o número D{seq:05d} já é de {outro[0]}")
             continue
@@ -429,6 +467,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
               "problemas_registrados": registrados, "teste": bool(pacote.get("teste"))}
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
+    if religadas:                                                  # campo novo, opcional: folhas que já estavam no projeto e só ganharam a imagem de volta
+        resumo["religadas"] = religadas
     if complemento:
         resumo["complemento"] = True
         resumo["ja_em_outros_lotes"] = em_outro_lote

@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5939,6 +5939,71 @@ def filho(modo):
         for l in res: print(l)
         k.close()
         return 0
+    elif modo == "ano_lido_depois":
+        # 23/10 (F009-P0092): 7 folhas lidas sem ano (…-0000-…) foram ao site como rascunho; o CAMP Vision achou o ano e renomeou os
+        # arquivos para …-1981-…. O lote complemento era recusado ("o número D00001 já é de …-0000-…"), as 7 ficavam "Sem imagem"
+        # e a releitura falhava sempre. Agora: as 7 mantêm o código (o do site), ganham os arquivos novos, e nada se repete.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile
+        from app import importador_lote
+        from app.rotas_projetos import folhas_qnap
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(tempfile.mkdtemp(prefix="ano-lido-"))
+        relp = "F009 - EOL Euclides Oliveira/01 - Projetos/F009-P0092 - RESIDENCIA LUIZ SALLES"
+        pasta = raiz / relp; (pasta / "catalogacao").mkdir(parents=True)
+        P, V, N = "F009-P0092", lambda n: f"F009-P0092-0000-S01-D{n:05d}", lambda n: f"F009-P0092-1981-S01-D{n:05d}"
+        arq = lambda cod, ext: f"{relp}/01 - Desenhos e pranchas/{ext.upper()}/{cod}.{ext}"
+        def criar(rel):
+            f_ = raiz / rel; f_.parent.mkdir(parents=True, exist_ok=True); f_.write_bytes(b"x")
+        k = connect(); q = lambda s_, *a: k.execute(s_, a).fetchone()
+        k.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        k.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F009','Euclides Oliveira')"); k.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F009',92)")
+        k.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,?)", (P, "F009", 92, "Residência Luiz Salles", 1978))
+        l28 = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES ('lote 1',?,?,'processando',datetime('now'))", (P, str(pasta))).lastrowid
+        l44 = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('complemento de 22/10',?,?,'revisao',?)",
+                        (P, str(pasta), _j.dumps({"complemento": True}))).lastrowid
+        for n in range(1, 8):          # as 7 do site: arquivos …-0000-… NÃO existem mais no acervo
+            k.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, tainacan_item_id, titulo,
+                         arquivo_jpg, arquivo_tif, pendencias) VALUES (?,?,'S01',?,'campvision',?,'conferida','rascunho',?,?,?,?,?)""",
+                      (V(n), P, n, l28, 94000 + n, f"Título da pessoa {n}", arq(V(n), "jpg"), arq(V(n), "tif"),
+                       _j.dumps({"previa": f"_campvision/preview/{P}/{V(n)}.jpg", "bloqueios": [], "sinais": [], "ressalvas": []})))
+        # controle: D00009 sem ano, mas a imagem dela CONTINUA no acervo → pode ser outra folha: continua recusada
+        criar(arq(V(9), "jpg"))
+        k.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, titulo, arquivo_jpg)
+                     VALUES (?,?,'S01',9,'campvision',?,'conferida','rascunho','Controle',?)""", (V(9), P, l28, arq(V(9), "jpg")))
+        docs = []
+        for n in list(range(1, 8)) + [9]:
+            criar(arq(N(n), "jpg")); criar(arq(N(n), "tif"))
+            docs.append({"codigo": N(n), "titulo": f"Lido {n}", "ano": "1981", "publicavel": True, "arquivos": [arq(N(n), "tif"), arq(N(n), "jpg")],
+                         "preview": f"_campvision/preview/{P}/{N(n)}.jpg"})
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"projeto_codigo": P, "documentos": docs}, ensure_ascii=False), encoding="utf-8")
+        k.commit()
+        antes = [tuple(r_) for r_ in k.execute("SELECT codigo, titulo, revisao, status_site, tainacan_item_id, lote_id FROM item WHERE sequencial<=7 ORDER BY codigo")]
+        total0 = q("SELECT COUNT(*) FROM item")[0]
+        r = importador_lote.importar_lote(k, l44, "teste"); k.commit()
+        probs = r.get("problemas") or []
+        ver("as 7 já não são recusadas com 'o número já é de …-0000-…'", not [x for x in probs if "-0000-S01-D0000" in x and "já é de" in x and "D00009" not in x], str(probs)[:300])
+        ver("o resumo da importação lista as 7 religadas (campo novo, opcional)", len(r.get("religadas") or []) == 7, str(r.get("religadas"))[:200])
+        ver("as 7 mantêm o código do site, o título da pessoa, a revisão, o rascunho e o item do site", [tuple(r_) for r_ in k.execute(
+            "SELECT codigo, titulo, revisao, status_site, tainacan_item_id, lote_id FROM item WHERE sequencial<=7 ORDER BY codigo")] == antes)
+        ver("e ganham os arquivos novos (JPG e TIF …-1981-…) e a prévia nova",
+            all(q("SELECT arquivo_jpg FROM item WHERE codigo=?", V(n))[0] == arq(N(n), "jpg") and q("SELECT arquivo_tif FROM item WHERE codigo=?", V(n))[0] == arq(N(n), "tif")
+                and _j.loads(q("SELECT pendencias FROM item WHERE codigo=?", V(n))[0])["previa"] == f"_campvision/preview/{P}/{N(n)}.jpg" for n in range(1, 8)),
+            str(q("SELECT arquivo_jpg, arquivo_tif FROM item WHERE codigo=?", V(1))))
+        ver("nenhuma folha repetida: não cria …-1981-… para as 7", q("SELECT COUNT(*) FROM item WHERE codigo LIKE '%-1981-%'")[0] == 0 and q("SELECT COUNT(*) FROM item")[0] == total0)
+        ver("fica no histórico de cada folha (arquivos_religados)", q("SELECT COUNT(*) FROM evento WHERE tipo='arquivos_religados'")[0] == 7)
+        ver("controle: folha sem ano que AINDA tem imagem continua recusada (pode ser outra folha)",
+            any("D00009" in x and "já é de" in x for x in probs) and q("SELECT arquivo_jpg FROM item WHERE codigo=?", V(9))[0] == arq(V(9), "jpg"), str(probs)[:300])
+        r2 = importador_lote.importar_lote(k, l44, "teste"); k.commit()
+        ver("importar de novo: as 7 continuam religadas, sem novo histórico nem recusa",
+            len(r2.get("religadas") or []) == 7 and q("SELECT COUNT(*) FROM evento WHERE tipo='arquivos_religados'")[0] == 7
+            and not [x for x in (r2.get("problemas") or []) if "D00009" not in x], str(r2.get("problemas"))[:300])
+        fq = folhas_qnap(P, {"email": "t", "papel": "leitura"})
+        fora = [d_["codigo"] for l_ in fq["lotes"] for d_ in l_["documentos"]]
+        ver("'Encontradas no QNAP, ainda não catalogadas' não lista mais as 7 (são as folhas do site)", not [c_ for c_ in fora if c_ in {N(n) for n in range(1, 8)}], str(fora)[:300])
+        k.close()
+        for l in res: print(l)
     elif modo == "lote_complemento":
         init_db(); _aplicar_migracoes_real()
         import json as _j, pathlib as _pl, tempfile, copy as _cp
@@ -10371,6 +10436,14 @@ else:
 print("114b) Material novo de projeto com lote já publicado: vira lote novo em revisão, sem mexer no que está publicado")
 rc, out = rodar("lote_complemento", f"{tmp}/lotecomp.db")
 if rc != 0: ok(False, f"teste do lote de complemento não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b2) Folha lida sem ano que já foi ao site: a leitura com o ano devolve a imagem, sem trocar o código nem repetir a folha (F009-P0092)")
+rc, out = rodar("ano_lido_depois", f"{tmp}/anolido.db")
+if rc != 0: ok(False, f"teste do ano lido depois não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
