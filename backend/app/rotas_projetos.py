@@ -299,6 +299,8 @@ def folhas_qnap(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             raise HTTPException(404, "Projeto não existe")
         conhecidos = {(r[0] or "").lower() for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (codigo,))}
         conhecidos |= {(r[0] or "").lower() for r in con.execute("SELECT codigo_detectado FROM wp_item WHERE projeto_detectado=?", (codigo,))}
+        # 23/10 (F009-P0092): a folha que manteve o código antigo mas usa os arquivos com o código novo também já está no painel
+        conhecidos |= {Path(x).stem.lower() for r in con.execute("SELECT arquivo_jpg, arquivo_tif FROM item WHERE projeto_codigo=?", (codigo,)) for x in r if x}
         lotes = []
         for l in con.execute("SELECT id, nome, etapa, pasta_qnap FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,)):
             base = {"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "pasta": l["pasta_qnap"]}
