@@ -115,12 +115,21 @@ def _decisoes(con) -> list[dict]:
     return out
 
 
-def contar_pendencias(con, *, com_listas: bool = False) -> dict:
+def chave_adiar_lote(lote_id) -> str:
+    """23/10 ("quero poder clicar para ignorar e sair da contagem"): o "Agora não" de um lote em Para conferir (tarefa_adiada, 7 dias, por pessoa)."""
+    return f"lote:{lote_id}"
+
+
+def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None = None) -> dict:
     """{decisoes, decisoes_pastas, decisoes_estacao, lotes_importar, lotes_conferir, folhas_conferir, lotes_aprovar, lotes_publicar,
     prontos_publicar, publicando_parcial, travados_direitos, travados_projetos, erros_bloqueantes, pedidos_aguardando,
     lotes_processando, lotes_lendo, lotes_na_fila, lotes_erro, publicando, material_novo, esperam_admin}.
     decisoes = perguntas abertas; decisoes_pastas = quantas vezes elas chegaram (a mesma pergunta repetida pela estação vira UMA decisão, com várias chaves)."""
     L = lotes(con)
+    if usuario_id:                                  # os lotes que ESTA pessoa adiou ("Agora não") saem da lista e das contagens dela
+        from .qualidade_base import adiadas
+        fora = adiadas(con, usuario_id)
+        L = [l for l in L if chave_adiar_lote(l["id"]) not in fora]
     por = {}
     for l in L:
         por.setdefault(l["fase"], []).append(l)
@@ -196,18 +205,21 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     conf = sorted([l for l in L if l["fase"] in ("importar", "conferir")],      # importar primeiro (um clique e destrava a conferência), depois o maior lote, depois o mais antigo
                   key=lambda l: (0 if l["fase"] == "importar" else 1, -(l["itens_pendentes"] or 0), str(l["atualizado_em"] or "")))
     maior = max((l["itens_pendentes"] or 0 for l in conf if l["fase"] == "conferir"), default=0)
+    marcou_maior = False                            # 23/10: com empate, "o maior lote da fila" aparecia em todos (1 de 1, 1 de 4…)
     linhas = []
     for l in conf:
         h = _horas_desde(l["atualizado_em"])
         if l["fase"] == "conferir":
-            det = [f"{l['itens_pendentes']} de {l['itens_total']} folhas a conferir", "o maior lote da fila" if l["itens_pendentes"] == maior and len(conf) > 1 else None,
+            e_maior = l["itens_pendentes"] == maior and len(conf) > 1 and not marcou_maior and sum(1 for x in conf if x["fase"] == "conferir" and x["itens_pendentes"] == maior) == 1
+            marcou_maior = marcou_maior or e_maior
+            det = [f"{l['itens_pendentes']} de {l['itens_total']} folhas a conferir", "o maior lote da fila" if e_maior else None,
                    texto_espera(h) if h and h > 48 else None]
             linhas.append({"sev": "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": " · ".join(p for p in det if p),
-                           "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
+                           "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
         else:
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {texto_espera(h)}" if h and h > 48 else ""),
-                           "acao": _acao("Importar", "importar", l["id"])})
+                           "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
     if linhas:
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"}})

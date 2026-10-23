@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -8685,6 +8685,91 @@ def filho(modo):
         ver("CAMP-095: o ano também é protegido", r5.status_code == 409 and q("SELECT ano_folha FROM item WHERE codigo=?", D(9))[0] is None, r5.text[:200])
         c.close()
         for l in res: print(l)
+    elif modo == "agora_nao_lote":
+        # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
+        # SÓ de quem clicou, por 7 dias. E "o maior lote da fila" aparecia em todos os lotes com o mesmo tamanho.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        lotes_ = []
+        for n in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P000{n}", "F099", n, f"Projeto {n}"))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,'/x','revisao')", (f"Lote {n}", f"F099-P000{n}")).lastrowid
+            lotes_.append(lid)
+            c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, titulo) VALUES (?,?,'S01',1,'campvision',?,'pendente','nao_publicado','T')",
+                      (f"F099-P000{n}-1970-S01-D00001", f"F099-P000{n}", lid))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        def cli(em, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s_}); return x
+        op, ad = cli("op@camp.arq.br", "senha-operador-123"), cli("ad@camp.arq.br", "senha-admin-12345")
+        def conferir(x):
+            d = x.get("/api/painel").json()
+            g = [g_ for g_ in d.get("tarefas", []) if g_["id"] == "conferir"]
+            return (g[0]["itens"] if g else []), d.get("pendencias", {})
+        itens, pend = conferir(op)
+        ver("antes: os 2 lotes em Para conferir, cada um com 'Agora não'", len(itens) == 2 and all(i.get("adiar") for i in itens) and pend.get("lotes_conferir") == 2, str(itens)[:200])
+        ver("empate: 'o maior lote da fila' não aparece em lote nenhum", not any("o maior lote" in i["detalhe"] for i in itens), str([i["detalhe"] for i in itens]))
+        alvo = ([i.get("adiar") for i in itens if i["codigo"] == "F099-P0001"] or [None])[0] or f"lote:{lotes_[0]}"
+        r = op.post(f"/api/hoje/tarefas/{alvo}/agora-nao")
+        ver("'Agora não' no lote responde ok", r.status_code == 200, r.text[:160])
+        itens, pend = conferir(op)
+        ver("depois: o lote some da lista de quem clicou", [i["codigo"] for i in itens] == ["F099-P0002"], str([i["codigo"] for i in itens]))
+        ver("e sai da contagem (1 lote, 1 folha para conferir)", pend.get("lotes_conferir") == 1 and pend.get("folhas_conferir") == 1, str(pend.get("lotes_conferir")))
+        ver("o contador do menu também (/api/pendencias)", op.get("/api/pendencias").json().get("lotes_conferir") == 1)
+        itens_ad, pend_ad = conferir(ad)
+        ver("para outra pessoa o lote continua lá (é só para quem clicou)", len(itens_ad) == 2 and pend_ad.get("lotes_conferir") == 2, str(pend_ad.get("lotes_conferir")))
+        for l in res: print(l)
+    elif modo == "releitura_tipos":
+        # 23/10 (print: "erro aqui ao aceitar infos do cv2"): Aceitar o Tipo da releitura "Planta / Corte / Detalhe" dava 500
+        # (FOREIGN KEY: tipo_documento é ligado ao vocabulário). Título e Cliente funcionavam.
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile as _tf, pathlib as _pl
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','T')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'P',1970)")
+        pasta = _pl.Path(_tf.mkdtemp()); Q = "2026-10-23T10-00-00"
+        (pasta / "catalogacao" / "releituras" / Q).mkdir(parents=True)
+        D = lambda n: f"F099-P0001-1970-S01-D{n:05d}"
+        (pasta / "catalogacao" / "releituras" / Q / "comparacao.json").write_text(_j.dumps({"documentos": {
+            D(1): {"mudou": {"tipo": {"antes": "Planta", "agora": "Planta / Corte / Detalhe"}, "titulo": {"antes": "Planta", "agora": "PLANTA / DETALHES / CORTE A-A"}}},
+            D(2): {"mudou": {"cliente": {"antes": "", "agora": "MINISTÉRIO DAS RELAÇÕES EXTERIORES - ITAMARATY"}, "tipo": {"antes": "Planta", "agora": "Planta / Elevação/Fachada"}}},
+            D(3): {"mudou": {"tipo": {"antes": "Planta", "agora": "Planta / Coisa Inventada"}}}}}, ensure_ascii=False), encoding="utf-8")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L','F099-P0001',?,'revisao')", (str(pasta),)).lastrowid
+        for n in (1, 2, 3):
+            c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, titulo, tipo_documento) VALUES (?,?,'S01',?,'campvision',?,'conferida','nao_publicado','Planta','Planta')", (D(n), "F099-P0001", n, lid))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        q = lambda s_, *a: c.execute(s_, a).fetchone()
+        r = op.post(f"/api/lotes/{lid}/saidas-cv/resposta", json={"tipo": "releitura", "chave": f"{Q}|{D(1)}|tipo", "acao": "aceitar"})
+        ver("Aceitar o Tipo 'Planta / Corte / Detalhe' funciona (antes: 500)", r.status_code == 200, f"HTTP {r.status_code} {r.text[:160]}")
+        ver("a folha fica com os 3 tipos, como se a pessoa escolhesse na tela", tuple(q("SELECT tipo_documento, tipos_documento FROM item WHERE codigo=?", D(1))) == ("Planta", "Planta; Corte; Detalhe"),
+            str(tuple(q("SELECT tipo_documento, tipos_documento FROM item WHERE codigo=?", D(1)))))
+        r = op.post(f"/api/lotes/{lid}/saidas-cv/respostas", json={"respostas": [
+            {"tipo": "releitura", "chave": f"{Q}|{D(1)}|titulo", "acao": "aceitar"}, {"tipo": "releitura", "chave": f"{Q}|{D(2)}|cliente", "acao": "aceitar"},
+            {"tipo": "releitura", "chave": f"{Q}|{D(2)}|tipo", "acao": "aceitar"}, {"tipo": "releitura", "chave": f"{Q}|{D(3)}|tipo", "acao": "aceitar"}]})
+        j = r.json() if r.status_code == 200 else {}
+        ver("'Aceitar todas' funciona (título, cliente e tipos)", r.status_code == 200 and q("SELECT cliente_folha FROM item WHERE codigo=?", D(2))[0].startswith("MINISTÉRIO")
+            and q("SELECT titulo FROM item WHERE codigo=?", D(1))[0] == "PLANTA / DETALHES / CORTE A-A", f"HTTP {r.status_code} {r.text[:200]}")
+        ver("'Elevação/Fachada' (com barra no nome) continua um tipo só", q("SELECT tipos_documento FROM item WHERE codigo=?", D(2))[0] == "Planta; Elevação/Fachada",
+            str(q("SELECT tipos_documento FROM item WHERE codigo=?", D(2))[0]))
+        ver("tipo que não existe no vocabulário: é pulado com o motivo (não 500) e a folha fica como estava",
+            any("não existe no vocabulário" in (p_.get("motivo") or "") for p_ in j.get("puladas", [])) and q("SELECT tipo_documento FROM item WHERE codigo=?", D(3))[0] == "Planta", str(j)[:300])
+        c.close()
+        for l in res: print(l)
     elif modo == "camp068_marcas":
         # CAMP-068 (20/10, operadora): "as marcações de problemas não somem ao corrigir, na etapa de conferir". Conferir/corrigir a folha
         # resolve no BANCO o que a conferência resolve: o espelho do CAMP Vision fica confirmado e os problemas automáticos "olhe esta folha"
@@ -10490,6 +10575,22 @@ else:
 print("114b3) Lote importado sem folha nova (só retiradas) sai de 'Precisa de você' e não volta a cada varredura do QNAP")
 rc, out = rodar("importado_sem_folhas", f"{tmp}/importsemfolhas.db")
 if rc != 0: ok(False, f"teste do lote importado sem folhas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b4) 'Agora não' num lote de Para conferir: some da lista e da contagem só de quem clicou")
+rc, out = rodar("agora_nao_lote", f"{tmp}/agoranaolote.db")
+if rc != 0: ok(False, f"teste do Agora não em lote não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b5) Aceitar o Tipo da releitura com vários tipos ('Planta / Corte / Detalhe') não dá mais erro 500")
+rc, out = rodar("releitura_tipos", f"{tmp}/releituratipos.db")
+if rc != 0: ok(False, f"teste da releitura com vários tipos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

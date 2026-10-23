@@ -873,6 +873,27 @@ def _aplicar_mudanca_releitura(con, l, chave: str, ator: str) -> str:
         if not re.fullmatch(r"\d{4}", agora):
             raise HTTPException(400, "Ano inválido na releitura")
         con.execute("UPDATE item SET ano_folha=?, atualizado_em=datetime('now') WHERE codigo=?", (int(agora), cod))
+    elif col == "tipo_documento":
+        # 23/10 (erro 500 em "Aceitar"): o CV2 lê vários tipos juntos ("Planta / Corte / Detalhe"), e tipo_documento é ligado ao vocabulário
+        # (chave estrangeira). Mesma regra de editar a folha: cada tipo tem de existir; o primeiro em tipo_documento, a lista em tipos_documento.
+        from .importador_lote import _ALIAS_TIPO
+        from .tipos_documento import juntar
+        tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
+        lista = []
+        for parte in re.split(r"\s*;\s*|\s+/\s+", " ".join(agora.split())):
+            p_ = parte.strip().lower()
+            if not p_:
+                continue
+            nome = tipos.get(_ALIAS_TIPO.get(p_, "").lower()) if p_ in _ALIAS_TIPO else tipos.get(p_)
+            if not nome:
+                raise HTTPException(400, f"O tipo “{parte.strip()}” que o CAMP Vision leu não existe no vocabulário: escolha o tipo na própria folha")
+            if nome not in lista:
+                lista.append(nome)
+        if not lista:
+            raise HTTPException(400, "A releitura não trouxe um tipo válido")
+        agora = juntar(lista)
+        con.execute("UPDATE item SET tipo_documento=?, tipos_documento=?, atualizado_em=datetime('now') WHERE codigo=?",
+                    (lista[0], agora if len(lista) > 1 else None, cod))
     else:
         con.execute(f"UPDATE item SET {col}=?, atualizado_em=datetime('now') WHERE codigo=?", (agora, cod))
     _evento(con, "item", cod, "releitura_aceita", ator, {"campo": campo, "valor": agora, "quando": quando})
