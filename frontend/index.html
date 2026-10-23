@@ -4748,7 +4748,23 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-autoria-pa
 function parceirosProjetoHTML(l,d,p){if(!(l||[]).length)return '';p=p||{};return `<div class="panel" id="pj-parceiros"><div class="ph"><h2>Parceiros neste projeto</h2><span class="tag">${l.length} escritório${l.length===1?'':'s'}</span></div><div class="pb"><p class="help">Escritórios de consultoria e projetos complementares informados nas folhas.</p><ul class="parc-lista">${l.map(x=>{const pend=((d&&d.itens)||[]).filter(i=>i.autoria_divergente&&(i.parceiros||[]).some(q=>q.escritorio.toLocaleLowerCase('pt-BR')===x.escritorio.toLocaleLowerCase('pt-BR'))),op=EU&&['operador','admin','master'].includes(EU.papel);
     return `<li><b>${escHtml(x.escritorio)}</b>${(x.disciplinas||[]).length?` · ${escHtml(x.disciplinas.join(', '))}`:''} <small class="help">(${x.folhas} folha${x.folhas===1?'':'s'})</small>${pend.length?` <span class="tag a mini">${pend.length} com autoria não confirmada</span>${op?` <button type="button" class="btn sm" data-autoria-parceiro="${escHtml(x.escritorio)}" data-disc="${escHtml((x.disciplinas||[])[0]||'')}" data-projeto="${escHtml(p.codigo)}" data-n="${pend.length}">Confirmar: ${escHtml(x.escritorio)}, parceiro</button>`:''}`:''}</li>`}).join('')}</ul></div></div>`}   /* CAMP-127: liga "Parceiros neste projeto" à autoria não confirmada */
 async function salvarRevisaoItem(codigo,estado){
-  if(window._REV_SALVANDO)return;   /* 19/10: enquanto grava, um segundo clique (ou Enter) não roda a ação de novo; os botões ficam desligados (travarRevisao) */
+  if(window._REV_SALVANDO)return;
+  // REF-015: o erro aparece ANTES do envio, junto ao campo, sem perder
+  // a imagem, o que já foi digitado ou a posição na fila de conferência.
+  if(estado==='conferida'||estado==='corrigida'){
+    const host=revHost(), titulo=host&&host.querySelector('#rv-titulo');
+    if(titulo && !titulo.value.trim()){
+      const dados=titulo.closest('details');if(dados)dados.open=true;
+      erroRevisao('Preencha o título antes de marcar a folha como conferida. Você pode corrigir a leitura do CAMP Vision aqui.');
+      titulo.focus();return;
+    }
+    const tipo=host&&host.querySelector('#rv-tipo');
+    if(tipo && !tipo.value.trim()){
+      if(!await confirmar({titulo:'Conferir sem tipo documental?',alvo:codigo,
+        texto:'Nenhum tipo foi selecionado. Você pode continuar sem essa classificação, mas confirme que verificou a folha; o CAMP Vision pode ter interpretado o documento incorretamente.',
+        botao:'Conferir sem tipo'}))return;
+    }
+  }   /* 19/10: enquanto grava, um segundo clique (ou Enter) não roda a ação de novo; os botões ficam desligados (travarRevisao) */
   const naTela=revisaoMostra(codigo),it0=(window.ITENS_PJ||[]).find(x=>x.codigo===codigo),seguir=depoisDaRevisao(codigo,!!it0&&it0.revisao==='pendente');
   if(estado==='reter'||estado==='liberar'){
     /* 19/10 ("tirar uma folha do projeto… não tá funcionando bem"): reter salva antes o que foi mudado nos dados da folha (antes descartava em silêncio),
