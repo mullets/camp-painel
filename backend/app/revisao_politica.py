@@ -39,6 +39,16 @@ def motivo_para_conferir(folha: Mapping, problema_aberto: bool = False) -> str |
     return None
 
 
+def _campo(folha, nome: str):
+    """Lê um campo de dict ou de sqlite3.Row (que não tem .get)."""
+    if hasattr(folha, "get"):
+        return folha.get(nome)
+    try:
+        return folha[nome]
+    except (KeyError, IndexError):
+        return None
+
+
 def falta_titulo_para_conferencia(folha: Mapping) -> bool:
     """Título vazio não pode ser aprovado por clique humano nem automático.
 
@@ -46,4 +56,4 @@ def falta_titulo_para_conferencia(folha: Mapping) -> bool:
     estiver ausente, a interface deve orientar o preenchimento dos dois.
     Esta regra não transforma parecer do CV2 em decisão definitiva.
     """
-    return not str(folha.get("titulo") or "").strip()
+    return not str(_campo(folha, "titulo") or "").strip()
