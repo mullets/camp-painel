@@ -46,7 +46,7 @@ def divergencias(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
 
 @router.get("/correcoes-pendentes")
 def correcoes_pendentes(u: dict = Depends(auth.exige("admin"))) -> dict:
-    """REF-006: diagnóstico somente leitura da fila de alterações para o WordPress."""
+    """REF-006: diagnóstico somente leitura da fila de alterações para o site."""
     con = connect()
     try:
         existe = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fila_correcao_site'").fetchone()
