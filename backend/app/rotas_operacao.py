@@ -85,7 +85,7 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
     # H6b: o que fazer agora, o caminho do material, o quanto está no site e as frases do dia, TODOS da fonte única (pendencias)
     from . import pendencias as pd
-    n = pd.contar_pendencias(con, com_listas=True)
+    n = pd.contar_pendencias(con, com_listas=True, usuario_id=u["id"])
     d["pendencias"] = {k: v for k, v in n.items() if not k.startswith("_")}
     d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"])
     d["caminho"] = pd.caminho(con, n)
@@ -103,7 +103,7 @@ def pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
     from .pendencias import contar_pendencias
     con = connect()
     try:
-        return contar_pendencias(con)
+        return contar_pendencias(con, usuario_id=u.get("id"))   # 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa
     finally:
         con.close()
 
