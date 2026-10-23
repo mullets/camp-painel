@@ -1,4 +1,4 @@
-"""REF-006: retentativa persistente de alterações de folha no WordPress.
+"""REF-006: retentativa persistente de alterações de folha no site.
 
 A trigger registra edições no mesmo commit SQLite. O envio existente continua
 sendo usado; o worker nunca cria, publica ou exclui uma folha por conta própria.

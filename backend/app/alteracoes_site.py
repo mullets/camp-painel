@@ -176,7 +176,7 @@ def enviar(projeto: str, ator: str, codigos: list[str] | None = None) -> dict:
                     valor = _txt(i[k])
                 mid, _ = publicador._meta(con, publicador.COL_ACERVO, nome)
                 if not mid:
-                    faltam_metadados.append(f"Metadado “{nome}” não encontrado no WordPress")
+                    faltam_metadados.append(f"Metadado “{nome}” não encontrado no site")
                     continue
                 api = publicador._tipos_para_site(con, p["codigo"], mid, valor) if k == "tipo_documento" and valor else valor
                 md[nome] = (mid, api, valor)
