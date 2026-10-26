@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -1972,6 +1972,7 @@ def filho(modo):
         for l in res: print(l)
     elif modo == "campvision":
         init_db(); aplicar_migracoes()
+        _c0 = connect(); _c0.execute("UPDATE configuracao SET valor='1' WHERE chave='decisoes.parecido_estacao'"); _c0.commit(); _c0.close()   # 26/10: estes testes cobrem a pergunta LIGADA (o padrão é desligada)
         import json as _j, shutil as _sh
         from pathlib import Path as _P
         from app import auth
@@ -8279,8 +8280,42 @@ def filho(modo):
         ver("rodar --aplicar de novo não soma o giro outra vez", g(D(2)) == 90 and g(f"{P}-0000-S03-D00007") == 0 and nev(D(2), "giro_marcado") == 1)
         for l in res: print(l)
         c.close()
+    elif modo == "parecido_desligado":
+        # 26/10 (Rafael): "o sistema responde que um projeto com nome semelhante é o mesmo projeto, mas não é: tira isso" — no F9 da estação.
+        # Padrão: não pergunta (cria direto); a pista do número P ainda pergunta; a configuração liga de volta.
+        init_db(); _aplicar_migracoes_real()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F009','Euclides Oliveira','EOL',1),('F001','Arnaldo Martino','ARM',1)")
+        for f, n, t in (("F009", 60, "Residência Luiz Salles"), ("F001", 2, "Edifício Copan Norte")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1984)", (f"{f}-P{n:04d}", f, n, t))
+        c.commit()
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        lan = com_ip("192.168.15.40")
+        reservar = lambda **kw: lan.post("/api/estacoes/projetos/reservar", json={"ano": 1984, "operador": "Rafael", **kw})
+        q = lambda s_, *a: c.execute(s_, a).fetchone()[0]
+        r = reservar(fundo_codigo="F009", titulo="Residência Luiz Sales Filho", chave_reserva="a" * 32)
+        ver("F9 com nome PARECIDO no fundo: cria o projeto novo direto (antes: 202 'Aguardando decisão no painel')",
+            r.status_code == 200 and (r.json().get("codigo") or "").startswith("F009-P") and r.json().get("codigo") != "F009-P0060", f"HTTP {r.status_code} {r.text[:160]}")
+        ver("e não abre pergunta de projeto parecido em Decisões", q("SELECT COUNT(*) FROM decisao WHERE tipo='projeto_parecido'") == 0)
+        r = reservar(fundo_codigo="F009", titulo="P0060 - Outra coisa", chave_reserva="c" * 32)
+        ver("a pista do número P (pasta 'P0060 - …') continua perguntando (é a estação apontando o projeto, não nome parecido)", r.status_code == 202, f"HTTP {r.status_code} {r.text[:160]}")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='decisoes.parecido_estacao'"); c.commit()
+        r = reservar(fundo_codigo="F009", titulo="Residência Luiz Salles", chave_reserva="d" * 32)
+        ver("com decisoes.parecido_estacao=1, volta a perguntar (202)", r.status_code == 202, f"HTTP {r.status_code} {r.text[:160]}")
+        c.close()
+        for l in res: print(l)
     elif modo == "aviso_cv_14_10":
         init_db(); _aplicar_migracoes_real()
+        _c0 = connect(); _c0.execute("UPDATE configuracao SET valor='1' WHERE chave='decisoes.parecido_estacao'"); _c0.commit(); _c0.close()   # 26/10: estes testes cobrem a pergunta LIGADA (o padrão é desligada)
         from app import auth
         from fastapi.testclient import TestClient
         from app.main import app
@@ -10591,6 +10626,14 @@ else:
 print("114b5) Aceitar o Tipo da releitura com vários tipos ('Planta / Corte / Detalhe') não dá mais erro 500")
 rc, out = rodar("releitura_tipos", f"{tmp}/releituratipos.db")
 if rc != 0: ok(False, f"teste da releitura com vários tipos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b6) Projeto de nome parecido: o F9 da estação não pergunta mais, a não ser que a configuração ligue")
+rc, out = rodar("parecido_desligado", f"{tmp}/parecidodesl.db")
+if rc != 0: ok(False, f"teste do projeto parecido desligado não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

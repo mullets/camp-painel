@@ -29,6 +29,15 @@ def da_chave(con, chave: str):
     return con.execute("SELECT d.* FROM decisao_chave dc JOIN decisao d ON d.id=dc.decisao_id WHERE dc.chave=?", (chave,)).fetchone()
 
 
+def pergunta_ligada(con, chave: str) -> bool:
+    """26/10: a pergunta por NOME parecido no F9 da estação ('decisoes.parecido_estacao') fica desligada por padrão (configuração)."""
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+    except Exception:  # noqa: BLE001  (banco sem a migração 152: desligada)
+        return False
+    return bool(r) and str(r[0]).strip() == "1"
+
+
 def abrir_projeto_parecido(con, chave: str, fundo: str, titulo: str, pedido: dict, parecidos: list[dict], origem: str) -> int:
     """Abre (ou devolve, se a chave já tem) a decisão 'é o mesmo projeto?'. NÃO faz commit."""
     ja = da_chave(con, chave)

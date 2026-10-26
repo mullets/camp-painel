@@ -739,7 +739,9 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
                                     + " × ".join(c["codigo"] for c in cands) + "). Tente de novo em instantes."})
         if not d.confirmar_novo:
             pista, titulo_busca = _pista_de_p(con, d)
-            parecidos = buscar_parecidos(con, d.fundo_codigo, titulo_busca, d.ano, d.cidade, identificacao)
+            # 26/10 (Rafael): "nome semelhante não é o mesmo projeto: tira isso". A busca por NOME só pergunta com decisoes.parecido_estacao=1;
+            # a pista do número P (pasta "P0092 - …") continua perguntando: é a estação dizendo qual projeto é, não um nome parecido.
+            parecidos = buscar_parecidos(con, d.fundo_codigo, titulo_busca, d.ano, d.cidade, identificacao) if decisoes.pergunta_ligada(con, "decisoes.parecido_estacao") else []
             if pista and not any(x["codigo"] == pista for x in parecidos):
                 pp = con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original,
                                            (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
