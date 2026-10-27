@@ -49,8 +49,8 @@ T.rodar(async () => {
   // projeto sem nada pendente: verde, sem lista, e vai para o Histórico (uma vez só)
   const PL = montar('limpo', T.BASE, T.RAIZ);
   await T.abrirProjeto(ad, PL);
-  const verde = await ad.waitForSelector('#pj-falta.ok [data-pj-fechado]', { timeout: 20000 }).then(() => true, () => false);
-  T.chk(verde && /Projeto fechado: painel e site iguais/.test(await T.txt(ad, '#pj-falta')) && !(await ad.$('#pj-falta .pj-falta-lista')), 'CAMP-123: sem nada pendente, a barra fica verde: "Projeto fechado: painel e site iguais", sem lista', await T.txt(ad, '#pj-falta'));
+  const verde = await ad.waitForSelector('#pj-status [data-pj-fechado]', { timeout: 20000 }).then(() => true, () => false);   // UX-36 (visual): dito no Próximo passo, sem faixa a mais
+  T.chk(verde && /Projeto fechado: painel e site iguais/.test(await T.txt(ad, '#pj-status')) && !(await ad.$('#pj-falta:not([hidden]) .pj-falta-lista')), 'CAMP-123: sem nada pendente, o Próximo passo diz "✔ Projeto fechado: painel e site iguais", sem lista', await T.txt(ad, '#pj-status'));
   T.chk(/^No site$/.test(await T.txt(ad, '#pj-selo')), 'CAMP-123/146: o selo diz só "No site"', await T.txt(ad, '#pj-selo'));
   await T.print(ad, 'p2_fechado');
   T.chk(await T.espera(() => T.um("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='projeto_fechado'", PL) === 1), 'CAMP-123: "projeto fechado" gravado no Histórico');
