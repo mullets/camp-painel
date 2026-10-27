@@ -57,6 +57,7 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 
 ## 10. Menu: 5 destinos + "Mais" (CAMP-154, 22/10/2026; antes: menu por trabalho, 09/10/2026)
 - **Precisa de você** (1) — o Painel inicial: junta Decisões, Material novo e Problemas que bloqueiam (o número ao lado soma os três). É o CAMP-059.
+- **Números do menu (UX-19, 27/10/2026): uma regra só, "itens que pedem ação de você"**, todos de `pendencias.pedem_acao` no servidor. Problemas conta só o que bloqueia ou pede correção; os avisos ficam na aba **Avisos** da tela Problemas e não entram no número.
 - **Projetos** (2) · **Fundos e arquitetos** (3) · **Pedidos do site** (4) · **Máquinas** (5, só admin).
 - **Mais**: Decisões (D), Material novo (N), Problemas (P), Arquitetos (I), Onde está guardado (W), Ler etiqueta (X), Etiquetas (T), Empréstimos (O),
   Relatórios (L), Downloads do site (U), Histórico de ações (A), Qualidade do CAMP Vision (Q), Configurações (C), Como o material anda (M), Glossário (G).

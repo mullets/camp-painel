@@ -5708,7 +5708,10 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   pa.then(a=>{window._analyticsAtual=a;const el=document.getElementById('ini-visitas');if(el&&a){el.innerHTML=iniVisitasHTML(a);const t=document.getElementById('ini-vis-tag');if(t)t.innerHTML=a.disponivel?'':'<span class="tag a">desligado</span>';aplicarPermissoes&&aplicarPermissoes()}});
 }catch(e){if(e.status===401||e.status===428)return;if(tinha)marcarStale('painel',e.message,'carregarPainel()');else sec.innerHTML=`<div class="panel"><div class="pb state-row"><b>Não foi possível carregar o painel.</b><div>${escHtml(e.message)}</div><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div></div>`}}
 function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{const el=document.getElementById(id);if(!el)return;el.textContent=n?fmtN(n):'';el.hidden=!n;el.classList.toggle('r',!!vermelho&&!!n)};
-  pr('n-dec',p.decisoes,true);pr('n-filas',p.material_novo);pr('n-gente',(+p.decisoes||0)+(+p.material_novo||0)+(+p.erros_bloqueantes||0),!!p.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',p.erros_abertos);pr('n-sol',p.pedidos_abertos);pr('n-emp',p.emprestimos_atrasados,true)}
+  /* UX-19: os números do menu seguem UMA regra, "itens que pedem ação de você", e vêm todos de pendencias.pedem_acao (servidor).
+     Problemas conta só o que bloqueia ou pede correção (os avisos têm aba própria). Servidor antigo sem o campo: as contas de antes. */
+  const A=p.pedem_acao||{precisa_de_voce:(+p.decisoes||0)+(+p.material_novo||0)+(+p.erros_bloqueantes||0),decisoes:p.decisoes,material_novo:p.material_novo,problemas:p.erros_abertos,pedidos:p.pedidos_abertos,emprestimos:p.emprestimos_atrasados};
+  pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true)}
 async function atualizarPendencias(){try{atualizarContadoresMenu(await API('/api/pendencias'))}catch(_){}}
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
@@ -5861,7 +5864,7 @@ function origemErroHTML(e){const o=ORIGEM_ERRO[e.origem]||[rotulo(e.origem),'','
 /* UX-06 ("abas e lista zeradas com 574 abertos"): o filtro e a aba guardados para o F5 valem por 12 h. Antes ficavam para sempre: dias depois
    a tela abria com um filtro esquecido (Tipo, Gravidade…), as abas contavam só o filtro ("Todos 0") e ninguém via por quê. */
 const ERR_MEM_VALIDO=(()=>{const t=+LISTA_MEM.get('erros.filtros_em',0);return t>0&&Date.now()-t<12*3600e3})();
-let errFiltro=ERR_MEM_VALIDO?LISTA_MEM.get('erros.aba','abertos'):'abertos';
+let errFiltro=ERR_MEM_VALIDO?LISTA_MEM.get('erros.aba','pedem_acao'):'pedem_acao';if(errFiltro==='abertos')errFiltro='pedem_acao';   /* UX-19: "Abertos" = o que bloqueia ou pede correção; os avisos têm aba própria */
 /* Problemas (19/10, "a pasta de problemas tá confusa"): agrupados por projeto (com o nome), filtros por gravidade/tipo/origem e busca no servidor,
    o que aconteceu + o que fazer + o botão que resolve (ações que já existem no painel), resolver vários de uma vez e voltar para a lista no mesmo lugar.
    O que se resolveu sozinho com certeza o servidor fecha (com registro); o "talvez" aparece num grupo separado no topo. */
@@ -5876,7 +5879,7 @@ function errTemFiltro(){return ['q','gravidade','categoria','origem','projeto'].
 /* UX-06: os filtros ativos, em palavras ("Tipo: Duplicata · Busca: riviera"), para o aviso acima da lista e para o estado vazio */
 function errFiltrosTexto(){const op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
   return [ERR_F.projeto?'Projeto: '+ERR_F.projeto:'',ERR_F.gravidade?'Gravidade: '+op('err-grav',ERR_F.gravidade):'',ERR_F.categoria?'Tipo: '+op('err-cat',ERR_F.categoria):'',ERR_F.origem?'Origem: '+op('err-orig',ERR_F.origem):'',ERR_F.q?`Busca: "${ERR_F.q}"`:''].filter(Boolean)}
-let ERR_SEM_FILTRO=null;
+let ERR_SEM_FILTRO=null,ERR_N=null;
 function errSincronizarFiltros(){const v=(id,x)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=x||''};v('err-q',ERR_F.q);v('err-grav',ERR_F.gravidade);v('err-cat',ERR_F.categoria);v('err-orig',ERR_F.origem);
   const pf=document.getElementById('err-proj-filtro');if(pf){pf.hidden=!ERR_F.projeto;pf.innerHTML=ERR_F.projeto?`Só <span class="code">${escHtml(ERR_F.projeto)}</span> <button type="button" class="btn sm lnk" data-err-tirar-proj>ver todos os projetos</button>`:''}
   const l=document.getElementById('err-limpar');if(l)l.hidden=!errTemFiltro();
@@ -5915,7 +5918,7 @@ function errGrupoHTML(k,L){const talvez=k==='~talvez',e0=L[0],fechado=!talvez&&E
 function errRender(){const tb=document.getElementById('err-body');if(!tb)return;const gr=new Map();
   ERR_LISTA.forEach(e=>{const k=errGrupoChave(e);if(!gr.has(k))gr.set(k,[]);gr.get(k).push(e)});
   const chaves=[...gr.keys()].sort((a,b)=>(b==='~talvez')-(a==='~talvez')),vis=chaves.slice(0,ERR_GR_LIMITE),nProj=chaves.filter(k=>k!=='~talvez').length;
-  tb.innerHTML=ERR_LISTA.length?vis.map(k=>errGrupoHTML(k,gr.get(k))).join(''):`<tr><td colspan="6" class="empty">${errTemFiltro()?vazioHTML('Nenhum problema com estes filtros.',`Filtro ativo: ${errFiltrosTexto().join(' · ')}.${ERR_SEM_FILTRO&&ERR_SEM_FILTRO.abertos?` Sem filtro há ${qtd(ERR_SEM_FILTRO.abertos,'problema aberto','problemas abertos')}.`:''} Limpe o filtro para ver a lista inteira.`,'<button class="btn sm pri" data-err-limpar-tudo>Limpar</button>'):vazioHTML('Nenhum problema nesta situação.',errFiltro==='abertos'?'Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui, no projeto dele.':'Veja as outras abas. Achou algo errado numa folha? Relate aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':'')}</td></tr>`;
+  tb.innerHTML=ERR_LISTA.length?vis.map(k=>errGrupoHTML(k,gr.get(k))).join(''):`<tr><td colspan="6" class="empty">${errTemFiltro()?vazioHTML('Nenhum problema com estes filtros.',`Filtro ativo: ${errFiltrosTexto().join(' · ')}.${ERR_SEM_FILTRO&&ERR_SEM_FILTRO.abertos?` Sem filtro há ${qtd(ERR_SEM_FILTRO.abertos,'problema aberto','problemas abertos')}.`:''} Limpe o filtro para ver a lista inteira.`,'<button class="btn sm pri" data-err-limpar-tudo>Limpar</button>'):errFiltro==='pedem_acao'&&ERR_N&&ERR_N.avisos?vazioHTML('Nada pede ação agora.',`Nenhum problema bloqueia a publicação nem pede correção. Há ${qtd(ERR_N.avisos,'aviso','avisos')}, que não impedem publicar.`,'<button class="btn sm" data-err-sit="avisos">Ver os avisos</button>'):vazioHTML('Nenhum problema nesta situação.',errFiltro==='pedem_acao'?'Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui, no projeto dele.':'Veja as outras abas. Achou algo errado numa folha? Relate aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':'')}</td></tr>`;
   const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=ERR_LISTA.length?`${qtd(ERR_LISTA.length,'problema','problemas')} · ${qtd(nProj,'grupo','grupos')}`:'';
   const m=document.getElementById('err-mais');if(m){m.hidden=chaves.length<=ERR_GR_LIMITE;m.innerHTML=m.hidden?'':`<span class="pg-info">Mostrando ${fmtN(vis.length)} de ${fmtN(chaves.length)} grupos</span><span class="pg-nav"><button class="btn sm" data-err-mais-grupos>Mostrar mais ${fmtN(Math.min(25,chaves.length-vis.length))}</button></span>`}
   errAtualizarSelecao()}
@@ -5923,8 +5926,8 @@ function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).ma
   const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);const c=document.getElementById('err-bulk-n');if(c)c.textContent=qtd(n,'selecionado','selecionados');
   const t=document.getElementById('err-sel-todos');if(t){t.disabled=!ids.size||!pode('problema.resolver');t.checked=ids.size>0&&n===ids.size;t.indeterminate=n>0&&n<ids.size}
   document.querySelectorAll('#err-body [data-err-sel-grupo]').forEach(g=>{const L=ERR_LISTA.filter(e=>ERR_ABERTO(e)&&errGrupoChave(e)===g.dataset.errSelGrupo),k=L.filter(e=>ERR_SEL.has(e.id)).length;g.checked=k>0&&k===L.length;g.indeterminate=k>0&&k<L.length})}
-function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)return;const T=[['abertos','Abertos'],['em_correcao','Em correção'],['corrigido','Resolvidos'],['ignorado','Não era problema'],['todos','Todos']];
-  ab.innerHTML=T.map(([k,t])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${errFiltro===k}"${n?(errTemFiltro()?` title="${escHtml('Conta só o filtro ativo: '+errFiltrosTexto().join(' · '))}"`:''):' title="Contagem indisponível agora"'}>${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
+function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)return;const T=[['pedem_acao','Abertos'],['avisos','Avisos'],['em_correcao','Em correção'],['corrigido','Resolvidos'],['ignorado','Não era problema'],['todos','Todos']];   /* UX-19: avisos em aba própria */
+  ab.innerHTML=T.map(([k,t])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${errFiltro===k}"${n?(errTemFiltro()?` title="${escHtml('Conta só o filtro ativo: '+errFiltrosTexto().join(' · '))}"`:k==='pedem_acao'?' title="Bloqueiam a publicação ou pedem correção"':k==='avisos'?' title="Só avisos: não impedem publicar nem pedem ação agora"':''):' title="Contagem indisponível agora"'}>${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
 /* 21/10 ("publicar sem travar", 4.7): fecha de uma vez os avisos automáticos (CAMP Vision, revisão); os relatados por pessoas ficam.
    Primeiro mostra quantos e de que tipo (nada muda); só depois de confirmar grava. Só o admin master vê o botão. */
 const ROT_CAT_ERRO={projeto_errado:'folha de outro projeto',duplicata:'duplicata',orientacao:'rotação',espelhado:'pelo verso',autoria_divergente:'autoria',codigo:'código',metadado:'dado da folha',credito:'crédito',arquivo_corrompido:'arquivo corrompido',outro:'outros'};
@@ -5960,7 +5963,7 @@ async function errCarregarDiagnostico(){
 document.addEventListener('click',e=>{
   const grav=e.target.closest('[data-err-diag-grav]'),pj=e.target.closest('[data-err-diag-proj]');
   if(!grav&&!pj)return;
-  errFiltro='abertos';LISTA_MEM.set('erros.aba','abertos');
+  errFiltro=grav&&grav.dataset.errDiagGrav==='aviso'?'avisos':'pedem_acao';LISTA_MEM.set('erros.aba',errFiltro);   /* UX-19 */
   Object.assign(ERR_F,{q:'',categoria:'',origem:''});   /* UX-06: "Ver avisos" com um Tipo guardado de antes dava "Todos 0" */
   if(grav){ERR_F.gravidade=grav.dataset.errDiagGrav;ERR_F.projeto=''}
   if(pj){ERR_F.projeto=pj.dataset.errDiagProj;ERR_F.gravidade=''}
@@ -5978,12 +5981,14 @@ async function carregarErros(f){if(!f)carregarDupProjetos();{const bl=document.g
   const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;sec.style.minHeight=noLugar?sec.offsetHeight+'px':'';   /* 19/10: a linha resolvida some; sem isto o fim da página encurta e o navegador puxa a lista para cima */
   sec.querySelector('.aviso-exemplo')?.remove();errSincronizarFiltros();const seq=++ERR_SEQ;if(!tb.querySelector('tr[data-abrir],tr.err-gr'))tabelaCarregando('#err-body','Carregando problemas…');
   try{const p=errParams();p.set('situacao',errFiltro);const [es,n]=await Promise.all([API('/api/erros?'+p),API('/api/erros/contagem?'+errParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
-    ERR_LISTA=es;ERR_SEM_FILTRO=(n&&n.sem_filtro)||null;errSincronizarFiltros();errRenderAbas(n);errRender();atualizarPendencias();errCarregarDiagnostico();
+    ERR_LISTA=es;ERR_N=n;ERR_SEM_FILTRO=(n&&n.sem_filtro)||null;errSincronizarFiltros();errRenderAbas(n);errRender();atualizarPendencias();errCarregarDiagnostico();
     if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#err-body','Não consegui carregar os problemas: '+e.message,'carregarErros()')}errRenderAbas(null)}}
 function errMudouFiltro(){LISTA_MEM.set('erros.filtros',{q:ERR_F.q,gravidade:ERR_F.gravidade,categoria:ERR_F.categoria,origem:ERR_F.origem});LISTA_MEM.set('erros.filtros_em',Date.now());ERR_GR_LIMITE=25;carregarErros()}
 document.addEventListener('input',e=>{if(e.target.id!=='err-q')return;clearTimeout(window._errQ);window._errQ=setTimeout(()=>{ERR_F.q=e.target.value.trim();errMudouFiltro()},300)});
-document.addEventListener('change',e=>{const m={'err-grav':'gravidade','err-cat':'categoria','err-orig':'origem'}[e.target.id];if(m){ERR_F[m]=e.target.value;errMudouFiltro();return}
+document.addEventListener('change',e=>{const m={'err-grav':'gravidade','err-cat':'categoria','err-orig':'origem'}[e.target.id];if(m){ERR_F[m]=e.target.value;
+    if(m==='gravidade'){if(ERR_F.gravidade==='aviso'&&errFiltro==='pedem_acao')errFiltro='avisos';else if(['bloqueia','corrigir'].includes(ERR_F.gravidade)&&errFiltro==='avisos')errFiltro='pedem_acao';LISTA_MEM.set('erros.aba',errFiltro)}   /* UX-19: gravidade "Aviso" mora na aba Avisos */
+    errMudouFiltro();return}
   if(e.target.id==='err-sel-todos'){ERR_LISTA.filter(ERR_ABERTO).forEach(x=>e.target.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=e.target.checked);errAtualizarSelecao();return}
   const g=e.target.closest&&e.target.closest('[data-err-sel-grupo]');if(g){ERR_LISTA.filter(x=>ERR_ABERTO(x)&&errGrupoChave(x)===g.dataset.errSelGrupo).forEach(x=>g.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll(`#err-body tr[data-err-grupo="${CSS.escape(g.dataset.errSelGrupo)}"] .err-sel`).forEach(c=>c.checked=g.checked);errAtualizarSelecao();return}
   const s=e.target.closest&&e.target.closest('#err-body .err-sel');if(s){s.checked?ERR_SEL.add(+s.value):ERR_SEL.delete(+s.value);errAtualizarSelecao()}});

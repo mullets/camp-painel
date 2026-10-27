@@ -1247,6 +1247,9 @@ def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q) -> tuple[s
     """A mesma regra para a lista e para a contagem das abas: situação, gravidade, tipo (categoria), origem, projeto (ou fundo) e busca."""
     w, p = [], []
     if situacao == "abertos": w.append("situacao IN ('aberto','em_correcao')")
+    # UX-19: avisos em aba própria. "pedem_acao" = abertos que bloqueiam ou pedem correção; "avisos" = abertos só de aviso.
+    elif situacao == "pedem_acao": w.append("situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'")
+    elif situacao == "avisos": w.append("situacao IN ('aberto','em_correcao') AND gravidade='aviso'")
     elif situacao == "corrigido": w.append("situacao IN ('corrigido','fechado')")
     elif situacao and situacao != "todos": w.append("situacao=?"); p.append(situacao)
     for col, v, ok_ in (("gravidade", gravidade, GRAV), ("categoria", categoria, CATS), ("origem", origem, ("campvision",) + ORIGENS_MANUAIS)):
@@ -1291,7 +1294,7 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
     try:
         _fechar_sozinhos(con)
         out = {}
-        for k in ("abertos", "em_correcao", "corrigido", "ignorado", "todos"):
+        for k in ("abertos", "pedem_acao", "avisos", "em_correcao", "corrigido", "ignorado", "todos"):   # UX-19: pedem_acao e avisos (campos novos)
             w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q)
             out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
         w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
@@ -1300,7 +1303,7 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
         # em vez de abas e lista zeradas sem explicação.
         if any(x and str(x).strip() for x in (gravidade, categoria, origem, projeto, q)):
             out["sem_filtro"] = {k: con.execute("SELECT COUNT(*) FROM erro" + _filtro_erros(k, None, None, None, None, None)[0],
-                                                _filtro_erros(k, None, None, None, None, None)[1]).fetchone()[0] for k in ("abertos", "todos")}
+                                                _filtro_erros(k, None, None, None, None, None)[1]).fetchone()[0] for k in ("abertos", "pedem_acao", "avisos", "todos")}
         return out
     finally:
         con.close()

@@ -71,10 +71,10 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
     chk(!(await page.$('#v-erros thead th.sortable')), 'a tabela agrupada não tem colunas de ordenar (quebrariam os grupos)');
 
     // ---- filtros e busca ----
-    await page.selectOption('#err-orig', 'site'); await recarregou();
+    await page.selectOption('#err-orig', 'site'); await page.click('#err-abas [data-err-sit="avisos"]'); await recarregou();   // UX-19: o do visitante é um aviso (aba Avisos)
     chk((await page.locator('#err-body tr[data-err-linha]').count()) === 1 && /fotógrafa/.test(await page.textContent('#err-body')), 'filtro de origem "Visitante do site": só o problema do visitante');
     chk(!(await page.isHidden('#err-limpar')), '"Limpar filtros" aparece quando há filtro');
-    await page.selectOption('#err-orig', ''); await page.selectOption('#err-grav', 'bloqueia'); await recarregou();
+    await page.selectOption('#err-orig', ''); await page.selectOption('#err-grav', 'bloqueia'); await recarregou();   // UX-19: "Bloqueia" volta sozinho para a aba Abertos
     chk((await page.locator('#err-body tr[data-err-linha]').count()) === 2, 'filtro de gravidade "Bloqueia": os 2 que bloqueiam');
     await page.click('#err-limpar'); await recarregou();
     await page.fill('#err-q', 'riviera'); await page.waitForTimeout(700); await recarregou();

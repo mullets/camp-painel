@@ -167,6 +167,13 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     n["emprestimos_atrasados"] = contar_atrasados(con)                       # originais fora com o prazo vencido (tela Empréstimos)
     n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"]            # contador do menu: o que é de operador
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
+    # UX-19: os números do menu seguem UMA regra, "itens que pedem ação de você", e vêm todos daqui (campo novo, opcional).
+    # Problemas: só o que bloqueia ou pede correção (os avisos têm aba própria e não pedem ação); o resto é o que a lista mostra.
+    n["erros_pedem_acao"] = q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'")
+    n["erros_avisos"] = n["erros_abertos"] - n["erros_pedem_acao"]
+    n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] + n["material_novo"] + n["erros_bloqueantes"], "decisoes": n["decisoes"],
+                       "material_novo": n["material_novo"], "problemas": n["erros_pedem_acao"], "pedidos": n["pedidos_abertos"],
+                       "emprestimos": n["emprestimos_atrasados"]}
     if com_listas:
         n["_lotes"], n["_decisoes"], n["_travados"] = L, dec, trav
     return n
