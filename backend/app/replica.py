@@ -12,7 +12,11 @@ SENTINELA = Path("_campvision") / "sentinela.json"
 
 def estado(con, agora: datetime | None = None) -> dict:
     r = con.execute("SELECT valor FROM configuracao WHERE chave='replica.raiz'").fetchone()
-    raiz = (r[0] if r else "") or ""
+    return estado_de((r[0] if r else "") or "", agora)
+
+
+def estado_de(raiz: str, agora: datetime | None = None) -> dict:
+    """A mesma regra, a partir do caminho (sem banco): a tela Máquinas a roda como sonda em segundo plano (lê arquivo no QNAP)."""
     if not raiz.strip():
         return {"configurada": False, "nivel": None, "texto": "Ainda não há réplica do acervo configurada (Configurações → replica.raiz)."}
     agora = agora or datetime.now(timezone.utc)

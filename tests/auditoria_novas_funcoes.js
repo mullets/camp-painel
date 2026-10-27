@@ -399,7 +399,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- FILAS: cada lista diz o que falta e tem UM botão para o próximo passo ----------
 { w.confirm=()=>true; w.route_to('filas'); await sleep(3000);
   const chips=[...d.querySelectorAll('#fila-chips [data-fila-filtro]')], lin=cod=>[...d.querySelectorAll('#filas-body tr')].find(t=>t.textContent.includes(cod));
-  chk(chips.length===4&&['gente','processando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, CAMP Vision lendo, Publicadas, Todas): '+chips.length);
+  chk(chips.length===4&&['gente','chegando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, Chegando, No site, Todas): '+chips.length);
   chk(chips.find(c=>c.getAttribute('aria-pressed')==='true').dataset.filaFiltro==='gente','o filtro padrão deveria ser "Precisam de você" quando há o que fazer');
   chk(/para conferir/.test(txt('#fila-resumo'))&&/chegando/.test(txt('#fila-resumo')),   // CAMP-146: as 5 situações
   'o resumo deveria dizer quantas listas estão em cada ponto: "'+txt('#fila-resumo')+'"');
@@ -420,8 +420,8 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/Lote aprovado/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-ir="publicar"]'),'depois de aprovar a lista deveria pedir "Publicar": "'+l9001.textContent.slice(0,120)+'"');
   const bPu=l9001&&l9001.querySelector('[data-fila-ir="publicar"]'); if(bPu){bPu.click(); await sleep(4500)}
   await sleep(1500); chk(/projeto\/F003-P9001/.test(w.location.hash)&&!d.getElementById('pub-go')&&!!d.getElementById('pj-status'),'"Publicar" deveria levar ao projeto e publicar ali mesmo, sem janela de plano (etapa 2): '+w.location.hash+' / '+txt('#pj-status').slice(0,80)); w.closeDrawer(true);
-  w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="processando"]').click(); await sleep(400);
-  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>t.dataset.fase==='processando'),'o filtro "CAMP Vision lendo" deveria mostrar só listas em leitura');
+  w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="chegando"]').click(); await sleep(400);
+  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>['processando','importar'].includes(t.dataset.fase)),'o filtro "Chegando" (UX-05: o mesmo número do resumo) deveria mostrar só listas em leitura ou com folhas para importar');
   d.querySelector('[data-fila-filtro="todas"]').click(); await sleep(300);
   chk(d.querySelectorAll('#filas-body tr[data-fase]').length===(await J(adm,'/api/filas')).b.length,'o filtro "Todas" deveria mostrar todas as listas do servidor');
   await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }

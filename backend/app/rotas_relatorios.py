@@ -147,9 +147,10 @@ def _publicacoes(con, de: str, ate: str, meses: list[str]) -> dict:
           FROM projeto p
          WHERE p.lote_teste=0 AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND substr(p.publicado_em,1,10) BETWEEN ? AND ?
          ORDER BY p.publicado_em, p.codigo""", (de, ate)).fetchall()]
-    hoje = con.execute("""SELECT
-        (SELECT COUNT(*) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE p.lote_teste=0 AND i.status_site='no_ar'),
-        (SELECT COUNT(*) FROM projeto WHERE lote_teste=0 AND mesclado_em IS NULL AND descartado_em IS NULL AND status_site='no_ar')""").fetchone()
+    # UX-05: "hoje estão publicados (sem contar projetos de teste)": a regra dos Relatórios, na fonte única (contagens)
+    from .contagens import no_site_sem_teste
+    ns = no_site_sem_teste(con)
+    hoje = (ns["folhas"], ns["projetos"])
     return {
         "folhas": sum(x["folhas"] for x in pm),
         "projetos": sum(x["projetos"] for x in pm),
@@ -187,6 +188,7 @@ def _pedidos(con, de: str, ate: str, meses: list[str]) -> dict:
 
 
 def _problemas(con, de: str, ate: str, meses: list[str]) -> dict:
+    from .contagens import erros_abertos
     vazio = lambda: {"abertos": 0, "resolvidos": 0}  # noqa: E731
     por_mes = {m: vazio() for m in meses}
     tipos: dict[str, dict] = {}
@@ -204,7 +206,7 @@ def _problemas(con, de: str, ate: str, meses: list[str]) -> dict:
     return {
         "abertos": sum(x["abertos"] for x in pm), "resolvidos": res[0], "descartados": desc,
         "ainda_abertos": ainda,
-        "em_aberto_hoje": con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0],
+        "em_aberto_hoje": erros_abertos(con),   # UX-05: a aba "Abertos" de Problemas
         "tempo_medio_dias": _dias(res[1]),
         "por_mes": pm,
         "por_tipo": sorted(tipos.values(), key=lambda x: (-x["abertos"], -x["resolvidos"], x["rotulo"])),
@@ -264,6 +266,8 @@ def calcular(de: str, ate: str, com_acessos: bool = True) -> dict:
             "pedidos": _pedidos(con, de, ate, meses),
             "problemas": _problemas(con, de, ate, meses),
         }
+        from .contagens import medir
+        out["contagens"] = medir(con)          # UX-05: os números de hoje, da mesma fonte das outras telas (com "medido_em")
     finally:
         con.close()
     out["acessos"] = _acessos(de, ate, meses) if com_acessos else {"disponivel": False, "motivo": SEM_GA4, "por_mes": [], "paginas": []}

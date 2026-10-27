@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5170,7 +5170,8 @@ def filho(modo):
         filas = [f_ for f_ in lei.get("/api/filas").json() if f_["projeto_codigo"] != PM]
         conta = lambda fase: sum(1 for f_ in filas if f_.get("fase") == fase)  # noqa: E731
         ver("o painel e a Fila dão o MESMO número em cada fase (mesma regra)", (conta("importar"), conta("conferir"), conta("aprovar"), conta("erro")) == (p["lotes_importar"], p["lotes_conferir"], p["lotes_aprovar"], p["lotes_erro"]) and conta("publicar") == p["prontos_publicar"] + p["travados_direitos"], str([(f_["projeto_codigo"], f_.get("fase")) for f_ in filas]))
-        ver("/api/painel traz os mesmos números (fonte única)", lei.get("/api/painel").json()["pendencias"] == p)
+        _sem_hora = lambda d_: {k_: v_ for k_, v_ in d_.items() if k_ != "medido_em"}  # noqa: E731  (UX-05: cada resposta diz a sua hora)
+        ver("/api/painel traz os mesmos números (fonte única)", _sem_hora(lei.get("/api/painel").json()["pendencias"]) == _sem_hora(p))
         r = lei.get("/api/painel/ritmo?dias=14").json()
         hoje, ontem = r["dias"][-1], r["dias"][-2]
         ver("ritmo: 14 dias, hoje 2 conferidas, ontem 3; média 2,5; 3 folhas a conferir zeram em ~1 dia", len(r["dias"]) == 14 and hoje["conferidas"] == 2 and ontem["conferidas"] == 3 and r["media_conferidas"] == 2.5 and r["folhas_a_conferir"] == 3 and r["dias_para_zerar"] == 1, str({k_: r[k_] for k_ in ("media_conferidas", "folhas_a_conferir", "dias_para_zerar")}) + " " + str(r["dias"][-2:]))
@@ -9232,6 +9233,130 @@ def filho(modo):
         e = c.execute("SELECT situacao, resolucao, fechado_por FROM erro WHERE id=?", (eb[1],)).fetchone()
         ver("Desfazer reabre como estava (sem autor de fechamento)", d_.get("voltaram") == 1 and e["situacao"] == "aberto" and e["resolucao"] is None and e["fechado_por"] is None, str(dict(e)))
         for l in res: print(l)
+    elif modo == "ux05_contagens":
+        # UX-05: "o mesmo dado aparece com números diferentes em telas diferentes". Um banco com os casos que separavam as contas
+        # (problema do CAMP Vision marcado "bloqueia", projeto juntado publicado, lote de projeto descartado, folha que foi para outro
+        # projeto com o lote antigo, fundo inativo publicado, lote conferido esperando aprovar) e a MESMA métrica comparada em
+        # /api/painel, /api/pendencias, /api/filas, /api/erros/contagem, /api/estacoes e /api/relatorios.
+        init_db(); _aplicar_migracoes_real()
+        import functools as _ft
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='http://127.0.0.1:9' WHERE chave='wp.url'")
+        import tempfile as _tf, pathlib as _pl
+        raiz_q = _pl.Path(_tf.mkdtemp()); (raiz_q / "ACERVOS_CAMP").mkdir()           # QNAP "montado" (pasta com conteúdo)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(raiz_q),))
+        c.execute("INSERT INTO fundo (codigo,titulo,status_site) VALUES ('F099','Fundo de teste','no_ar')")
+        c.execute("INSERT INTO fundo (codigo,titulo,status_site,ativo) VALUES ('F098','Fundo inativo','no_ar',0)")
+        def proj(n, **kw):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            cod = f"F099-P{n:04d}"
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, "F099", n, f"Projeto {n}"))
+            for k, v in kw.items():
+                c.execute(f"UPDATE projeto SET {k}=? WHERE codigo=?", (v, cod))
+            return cod
+        def lote(cod, etapa, aprovado=False):
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES (?,?,'/x',?,?)",
+                             (f"Lote {cod}", cod, etapa, "2026-10-01 10:00:00" if aprovado else None)).lastrowid
+        seq = [0]
+        def folha(cod, lid, revisao="pendente", status="nao_publicado"):
+            seq[0] += 1
+            c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, titulo) VALUES (?,?,'S01',?,'campvision',?,?,?,'T')",
+                      (f"{cod}-1970-S01-D{seq[0]:05d}", cod, seq[0], lid, revisao, status))
+        p1 = proj(1); l1 = lote(p1, "revisao"); folha(p1, l1); folha(p1, l1)                     # conferir (2 folhas)
+        p2 = proj(2); lote(p2, "revisao")                                                     # importar (sem folhas)
+        p3 = proj(3); l3 = lote(p3, "revisao"); folha(p3, l3, "conferida")                    # aprovar (todas conferidas)
+        p4 = proj(4, status_site="no_ar"); l4 = lote(p4, "revisao", aprovado=True); folha(p4, l4, "conferida", "no_ar")   # publicar
+        p5 = proj(5); lote(p5, "processando")                                                  # CAMP Vision lendo
+        p6 = proj(6); lote(p6, "erro")                                                         # com erro
+        p7 = proj(7, descartado_em="2026-10-01 10:00:00"); l7 = lote(p7, "revisao"); folha(p7, l7)   # projeto descartado: não conta
+        proj(8, status_site="no_ar", mesclado_em="2026-10-01 10:00:00")                        # juntado e publicado: não conta no site
+        p9 = proj(9); l9 = lote(p9, "revisao"); folha(p9, l9, "conferida")                     # a folha pendente do lote foi para outro projeto
+        p10 = proj(10); folha(p10, l9, "pendente")
+        p11 = proj(11, lote_teste=1, status_site="no_ar"); folha(p11, None, "conferida", "no_ar")   # projeto de teste publicado (está no site)
+        for g_, o_, cod in (("bloqueia", "campvision", p1), ("bloqueia", "revisao", p3 + "-1970-S01-D00003"), ("bloqueia", "operador", p3), ("aviso", "operador", p4)):
+            c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES (?,'outro',?,?,'teste')", (g_, o_, cod))
+        c.execute("INSERT INTO solicitacao (solicitante, finalidade, situacao) VALUES ('A','pesquisa','aguarda_resposta')")
+        c.execute("INSERT INTO solicitacao (solicitante, finalidade, situacao) VALUES ('B','pesquisa','em_preparacao')")
+        c.execute("INSERT INTO solicitacao (solicitante, finalidade, situacao) VALUES ('C','pesquisa','entregue')")
+        c.execute("INSERT INTO divergencia_site (entidade, codigo, campo) VALUES ('item','X','titulo')")
+        c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb, entrada_bruta, prontos) VALUES (1, 1000, 120, 3, 4)")   # 12% livre
+        c.execute("INSERT INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado) VALUES ('foto1','foto','estacao','ocioso')")
+        c.execute("INSERT INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado) VALUES ('campvision2','processamento','campvision','ocioso')")
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        pend = x.get("/api/pendencias").json()
+        pai = x.get("/api/painel").json()
+        filas = x.get("/api/filas").json()
+        errc = x.get("/api/erros/contagem").json()
+        est = x.get("/api/estacoes").json()
+        rel = x.get("/api/relatorios").json()
+        g = lambda d, *ks: _ft.reduce(lambda a, k: a.get(k) if isinstance(a, dict) else None, ks, d)  # noqa: E731
+        ver("as 6 rotas respondem", all(isinstance(v, (dict, list)) for v in (pend, pai, filas, errc, est, rel)) and "detail" not in pai and "detail" not in est,
+            str([type(v).__name__ for v in (pend, pai, filas, errc, est, rel)]))
+        mesmo = lambda nome, vals: ver(f"{nome}: o mesmo número em todas as rotas", len(set(map(str, vals.values()))) == 1, str(vals))  # noqa: E731
+        mesmo("problemas que impedem publicar", {"pendencias": pend.get("erros_bloqueantes"), "painel.erros": g(pai, "erros", "bloqueantes"),
+                                                  "painel.pendencias": g(pai, "pendencias", "erros_bloqueantes"), "esperado": 1})
+        mesmo("problemas abertos", {"pendencias": pend.get("erros_abertos"), "painel.erros": g(pai, "erros", "abertos"), "erros/contagem": errc.get("abertos"),
+                                     "relatorios": g(rel, "problemas", "em_aberto_hoje"), "esperado": 4})
+        mesmo("folhas no site", {"pendencias": pend.get("folhas_no_site"), "painel.itens": g(pai, "itens", "no_ar"), "painel.no_site": g(pai, "no_site", "folhas", "no_ar"),
+                                  "estacoes": g(est, "contagens", "folhas_no_site"), "esperado": 2})
+        mesmo("folhas no site sem projeto de teste (Relatórios)", {"relatorios": g(rel, "publicacoes", "publicados_hoje", "folhas"), "contagens": pend.get("folhas_no_site_sem_teste"), "esperado": 1})
+        mesmo("projetos no site", {"pendencias": pend.get("projetos_no_site"), "painel.projetos": g(pai, "projetos", "no_ar"), "painel.no_site": g(pai, "no_site", "projetos", "no_ar"),
+                                    "esperado": 2})
+        mesmo("projetos no site sem projeto de teste (Relatórios)", {"relatorios": g(rel, "publicacoes", "publicados_hoje", "projetos"), "contagens": pend.get("projetos_no_site_sem_teste"), "esperado": 1})
+        mesmo("total de projetos", {"pendencias": pend.get("projetos_total"), "painel.projetos": g(pai, "projetos", "total"), "painel.no_site": g(pai, "no_site", "projetos", "total"), "esperado": 9})
+        mesmo("fundos no site", {"pendencias": pend.get("fundos_no_site"), "painel.fundos": g(pai, "fundos", "no_ar"), "painel.no_site": g(pai, "no_site", "fundos", "no_ar"), "esperado": 1})
+        mesmo("pedidos abertos", {"pendencias": pend.get("pedidos_abertos"), "painel": g(pai, "solicitacoes", "abertas"), "esperado": 2})
+        mesmo("pedidos esperando resposta", {"pendencias": pend.get("pedidos_aguardando"), "painel": g(pai, "solicitacoes", "aguardam"), "esperado": 1})
+        mesmo("decisões", {"pendencias": pend.get("decisoes"), "painel": g(pai, "decisoes", "pendentes"), "esperado": 0})
+        mesmo("diferenças com o site", {"pendencias": pend.get("site_divergencias"), "painel": g(pai, "site", "divergencias"), "estacoes": g(est, "site", "divergencias"), "esperado": 1})
+        vivos = [l for l in filas if not l.get("adiado")] if isinstance(filas, list) else []
+        for fase, chave, esp in (("importar", "lotes_importar", 1), ("conferir", "lotes_conferir", 1), ("aprovar", "lotes_aprovar", 2), ("publicar", "lotes_publicar", 1),
+                                 ("erro", "lotes_erro", 1), ("processando", "lotes_processando", 1)):
+            mesmo(f"lotes na fase {fase}", {"filas (linhas)": sum(1 for l in vivos if l["fase"] == fase), "pendencias": pend.get(chave), "painel": g(pai, "pendencias", chave),
+                                           "estacoes": g(est, "contagens", chave), "esperado": esp})
+        mesmo("folhas para conferir", {"filas (linhas)": sum(l["itens_pendentes"] for l in vivos if l["fase"] == "conferir"), "pendencias": pend.get("folhas_conferir"), "esperado": 2})
+        ver("a Fila não mostra o lote do projeto descartado", isinstance(filas, list) and all(l["projeto_codigo"] != p7 for l in filas), str([l.get("projeto_codigo") for l in vivos]))
+        mesmo("material novo (Máquinas: lotes esperando importar e conferir)", {"pendencias": pend.get("material_novo"), "estacoes.pipeline": g(est, "pipeline", "aguardando_revisao"),
+                                                                                 "painel": g(pai, "pendencias", "material_novo"), "esperado": 2})
+        mesmo("Precisa de você (menu e saudação)", {"pendencias": pend.get("precisa_de_voce"), "painel.pendencias": g(pai, "pendencias", "precisa_de_voce"),
+                                                     "painel.contagens": g(pai, "contagens", "precisa_de_voce"), "esperado": 3})
+        mesmo("lotes em revisão (etapa)", {"painel.filas": g(pai, "filas", "revisao"), "contagens": g(pai, "contagens", "lotes_etapa", "revisao"), "esperado": 5})
+        ver("cada resposta diz quando foi medida (medido_em)", all(v for v in (pend.get("medido_em"), g(pai, "contagens", "medido_em"), g(est, "contagens", "medido_em"),
+                                                                              g(rel, "contagens", "medido_em"), errc.get("medido_em"), g(est, "site", "http", "medido_em"))),
+            str([pend.get("medido_em"), g(est, "site", "http", "medido_em")]))
+        er = est.get("estacoes_resumo") or {}
+        ver("estações de captura: 1 de 6 ligadas (o CAMP Vision e o QNAP não contam)", er.get("total") == 6 and er.get("ligadas") == 1, str(er))
+        eg = est.get("estado_geral") or {}
+        parte = {p_["id"]: p_ for p_ in eg.get("partes", [])}
+        ver("topo herda o pior estado: QNAP com 12% livre deixa o topo em atenção (não 'ok')", eg.get("nivel") in ("atencao", "critico") and g(parte, "qnap", "nivel") == "atencao", str(eg)[:300])
+        try:
+            from app import contagens as cg
+        except ImportError:
+            cg = None
+        def eg_(http, pct):
+            c.execute("DELETE FROM qnap_snapshot"); c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb) VALUES (1, 1000, ?)", (pct * 10,)); c.commit()
+            return cg.estado_geral(c, qnap_montado=True, site_http=http, backup={"existe": True, "ok": True, "idade_horas": 2})["nivel"] if cg else None
+        ver("tudo ok: topo ok", eg_({"estado": "online", "ms": 400}, 60) == "ok")
+        ver("site lento (> 3 s): topo em atenção", eg_({"estado": "lento", "ms": 5200}, 60) == "atencao")
+        ver("site sem resposta 2 vezes: topo crítico", eg_({"estado": "sem_resposta", "alerta": True}, 60) == "critico")
+        ver("QNAP quase cheio (3%): topo crítico mesmo com o site ok", eg_({"estado": "online", "ms": 400}, 3) == "critico")
+        ver("QNAP desconectado: topo crítico", bool(cg) and cg.estado_geral(c, qnap_montado=False, site_http={"estado": "online"}, backup=None)["nivel"] == "critico")
+        # UX-19 + UX-03: o número do menu é pedem_acao.precisa_de_voce; o que a pessoa escondeu por 7 dias sai da conta dela, igual em todo lugar
+        from app.qualidade_base import adiar as _adiar
+        uid_ = c.execute("SELECT id FROM usuario WHERE email='ad@camp.arq.br'").fetchone()[0]
+        eid_ = c.execute("SELECT id FROM erro WHERE gravidade='bloqueia' AND origem='operador'").fetchone()[0]
+        _adiar(c, uid_, f"erro:{eid_}"); c.commit()
+        pend2 = x.get("/api/pendencias").json(); pai2 = x.get("/api/painel").json()
+        mesmo("Precisa de você depois de esconder um problema (UX-03)", {"pendencias": pend2.get("precisa_de_voce"), "pedem_acao": g(pend2, "pedem_acao", "precisa_de_voce"),
+                                                                          "painel.pendencias": g(pai2, "pendencias", "precisa_de_voce"), "painel.pedem_acao": g(pai2, "pendencias", "pedem_acao", "precisa_de_voce"), "esperado": 2})
+        for l in res: print(l)
     elif modo == "agora_nao_lote":
         # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
         # SÓ de quem clicou, por 7 dias. E "o maior lote da fila" aparecia em todos os lotes com o mesmo tamanho.
@@ -11917,6 +12042,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-03: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("163) UX-05: a mesma métrica dá o mesmo número em todas as rotas (painel, pendências, filas, problemas, máquinas, relatórios)")
+rc, out = rodar("ux05_contagens", f"{tmp}/ux05_contagens.db")
+if rc != 0: ok(False, f"teste ux05_contagens não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-05: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

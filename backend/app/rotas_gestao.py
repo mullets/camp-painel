@@ -569,6 +569,8 @@ def _medir_site(url: str) -> dict:
         res = {"status": r.status_code, "ms": ms, "ok": r.status_code == 200, "estado": estado}
     except Exception as e:  # noqa: BLE001
         res = {"status": None, "ok": False, "erro": str(e)[:120], "estado": "sem_resposta"}
+    from .contagens import agora_iso
+    res["medido_em"] = agora_iso()                       # UX-05: a tela diz "medido há X" (Home e Máquinas mostram a MESMA medição)
     with _SONDAS_LOCK:
         _SITE_ESTADOS.append(res["estado"]); del _SITE_ESTADOS[:-2]
         res["alerta"] = len(_SITE_ESTADOS) == 2 and all(x == "sem_resposta" for x in _SITE_ESTADOS)
@@ -631,9 +633,11 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     else:
         out["qnap"]["coletando"] = True
 
-    out["pipeline"]["aguardando_revisao"] = con.execute(
-        "SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao'"
-    ).fetchone()[0]
+    # UX-05: "lotes lidos esperando importar e conferir" = o material novo das contagens (o mesmo número do menu e da Home)
+    from . import contagens as cg
+    cont = cg.medir(con, usuario_id=u.get("id"))
+    out["pipeline"]["aguardando_revisao"] = cont["material_novo"]
+    out["contagens"] = cont
 
     heartbeats = {r["estacao_id"]: dict(r) for r in con.execute("""
         SELECT *,
@@ -715,7 +719,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     s = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     out["site"] = {
         "ultima_sincronizacao": dict(s) if s else None,
-        "divergencias": con.execute("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0").fetchone()[0],
+        "divergencias": cont["site_divergencias"],
         "escritas_pendentes": con.execute("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0 AND campo LIKE 'pendente%'").fetchone()[0],
         "rascunhos_no_site": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='draft'").fetchone()[0],
         "publicados_sem_codigo": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND codigo_detectado IS NULL").fetchone()[0],
@@ -725,11 +729,22 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     from .rede import negadas_por_token
     admin_ = u.get("papel") in ("admin", "master")
     out["estacoes_negadas"] = [{**n, "ip": n["ip"] if admin_ else None} for n in negadas_por_token(con)]   # IP só para admin
-    con.close()
     try:
         out["backup"] = bk.estado_publico()
     except Exception as e:  # noqa: BLE001  (o painel nunca cai por causa do indicador de backup)
         out["backup"] = {"existe": False, "erro": str(e)[:120]}
+    # UX-05: o resumo das estações e o estado do topo (o PIOR entre QNAP, site, CAMP Vision, cópias) saem daqui, uma regra só
+    out["estacoes_resumo"] = cg.estacoes_ligadas(out["maquinas"])
+    try:
+        # a sentinela da réplica fica no QNAP (SMB): também é uma sonda em segundo plano (UX-12), nunca lida dentro da requisição
+        from . import replica as _rp
+        raiz_rp = _cfg(con, "replica.raiz", "")
+        rp = (_valor_sonda(_sonda(("replica", raiz_rp), lambda: _rp.estado_de(raiz_rp), fr), ate, {"configurada": True, "nivel": None})
+              if raiz_rp.strip() else _rp.estado_de(""))
+        out["estado_geral"] = cg.estado_geral(con, qnap_montado=out["qnap"].get("montado"), site_http=out["site"]["http"], backup=out.get("backup"),
+                                              maquinas=out["maquinas"], replica_estado=rp)
+    finally:
+        con.close()
     return out
 
 

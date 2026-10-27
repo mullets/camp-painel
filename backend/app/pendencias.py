@@ -47,12 +47,13 @@ def texto_espera(horas: float | None) -> str:
 
 
 def lotes(con) -> list[dict]:
-    """Os lotes da Fila (os mesmos de /api/filas), cada um com a fase."""
+    """Os lotes da Fila (os mesmos de /api/filas), cada um com a fase. UX-05: folhas do lote = as que ainda estão no projeto do lote
+    (a mesma conta de /api/filas; uma folha que foi para outro projeto não conta mais neste lote)."""
     saida = []
     for r in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
-                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id) AS itens_total,
-                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.revisao='pendente') AS itens_pendentes
+                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
+                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
                               FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo
                              WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL"""):
         d = dict(r)
@@ -137,6 +138,7 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     publicar = por.get("publicar", [])
     for l in publicar:
         l["publicar"] = _situacao_publicar(_plano_projeto(con, l["projeto_codigo"], planos))
+    from . import contagens as cg
     dec = _decisoes(con)
     trav = fundos_travados(con)
     q = lambda sql: con.execute(sql).fetchone()[0]  # noqa: E731
@@ -153,10 +155,11 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
         "publicando_parcial": sum(1 for l in publicar if l["publicar"]["estado"] == "parcial"),
         "travados_direitos": len(trav),
         "travados_projetos": sum(f["projetos"] for f in trav),
-        "erros_bloqueantes": q(f"SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND {TRAVA_SQL}"),   # 21/10 (4.1)
-        "pedidos_aguardando": q("SELECT COUNT(*) FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento')"),
-        "erros_abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')"),             # a aba "Abertos" de Erros
-        "pedidos_abertos": q("SELECT COUNT(*) FROM solicitacao WHERE situacao NOT IN ('entregue','recusada')"),  # a aba "Abertas" de Solicitações
+        # UX-05: as definições ficam em contagens.py (a mesma regra em todas as rotas)
+        "erros_bloqueantes": cg.erros_bloqueantes(con),   # 21/10 (4.1)
+        "pedidos_aguardando": cg.pedidos_esperando(con),
+        "erros_abertos": cg.erros_abertos(con),             # a aba "Abertos" de Erros
+        "pedidos_abertos": cg.pedidos_abertos(con),  # a aba "Abertas" de Solicitações
         "lotes_processando": len(por.get("processando", [])),
         "lotes_lendo": sum(1 for l in por.get("processando", []) if l["etapa"] == "processando"),
         "lotes_na_fila": sum(1 for l in por.get("processando", []) if l["etapa"] == "enviado"),
@@ -167,25 +170,9 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     n["emprestimos_atrasados"] = contar_atrasados(con)                       # originais fora com o prazo vencido (tela Empréstimos)
     n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"]            # contador do menu: o que é de operador
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
-    # UX-19: os números do menu seguem UMA regra, "itens que pedem ação de você", e vêm todos daqui (campo novo, opcional).
-    # Problemas: só o que bloqueia ou pede correção (os avisos têm aba própria e não pedem ação); o resto é o que a lista mostra.
-    n["erros_pedem_acao"] = q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'")
-    n["erros_avisos"] = n["erros_abertos"] - n["erros_pedem_acao"]
-    # UX-03: o que ESTA pessoa escondeu ("Esconder por 7 dias") também sai dos números dela (os lotes já saíram acima)
-    esc_dec, esc_bloq, esc_prob = 0, 0, 0
-    if usuario_id:
-        from .qualidade_base import adiadas
-        fora_ = adiadas(con, usuario_id)
-        ids_dec = {int(k[8:]) for k in fora_ if k.startswith("decisao:") and k[8:].isdigit()}
-        ids_err = [int(k[5:]) for k in fora_ if k.startswith("erro:") and k[5:].isdigit()]
-        esc_dec = sum(1 for d in dec if d["id"] in ids_dec)
-        if ids_err:
-            marc = ",".join("?" * len(ids_err))
-            esc_bloq = con.execute(f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND situacao IN ('aberto','em_correcao') AND {TRAVA_SQL}", ids_err).fetchone()[0]
-            esc_prob = con.execute(f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'", ids_err).fetchone()[0]
-    n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] - esc_dec + n["material_novo"] + n["erros_bloqueantes"] - esc_bloq, "decisoes": n["decisoes"],
-                       "material_novo": n["material_novo"], "problemas": n["erros_pedem_acao"] - esc_prob, "pedidos": n["pedidos_abertos"],
-                       "emprestimos": n["emprestimos_atrasados"]}
+    # UX-19 + UX-03 + UX-05: "itens que pedem ação de você" (os números do menu, a saudação e a Home), com o que esta pessoa
+    # escondeu por 7 dias fora da conta dela: UMA regra, em contagens.pedem_acao
+    cg.pedem_acao(con, n, dec, usuario_id)
     if com_listas:
         n["_lotes"], n["_decisoes"], n["_travados"] = L, dec, trav
     return n
@@ -380,15 +367,9 @@ def caminho(con, n: dict) -> list[dict]:
 
 
 def no_site(con) -> dict:
-    """Quanto do acervo já está no site (substitui "Acervo em números")."""
-    q = lambda sql: con.execute(sql).fetchone()[0]  # noqa: E731
-    return {
-        "folhas": {"no_ar": q("SELECT COUNT(*) FROM item WHERE status_site='no_ar'"), "total": q("SELECT COUNT(*) FROM item")},
-        "projetos": {"no_ar": q("SELECT COUNT(*) FROM projeto WHERE status_site='no_ar' AND mesclado_em IS NULL AND descartado_em IS NULL"),
-                     "total": q("SELECT COUNT(*) FROM projeto WHERE mesclado_em IS NULL AND descartado_em IS NULL"),
-                     "sem_folhas": q("SELECT COUNT(*) FROM projeto p WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL AND p.status_site!='no_ar' AND NOT EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=p.codigo)")},
-        "fundos": {"no_ar": q("SELECT COUNT(*) FROM fundo WHERE ativo=1 AND status_site='no_ar'"), "total": q("SELECT COUNT(*) FROM fundo WHERE ativo=1")},
-    }
+    """Quanto do acervo já está no site (substitui "Acervo em números"). UX-05: a definição única fica em contagens.no_site."""
+    from .contagens import no_site as _no_site
+    return _no_site(con)
 
 
 # ---------------- "Hoje": até 6 frases do dia, com os eventos repetidos juntos ----------------

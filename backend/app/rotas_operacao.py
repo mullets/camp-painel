@@ -45,23 +45,26 @@ def _qnap_prontos_raiz() -> Path:
 def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     q = lambda sql, *p: con.execute(sql, p).fetchone()[0]  # noqa: E731
+    # UX-05: os números vêm da fonte única (contagens.py); os campos antigos continuam, com os MESMOS valores das outras telas
+    from . import contagens as cg
+    from . import pendencias as pd
+    n = pd.contar_pendencias(con, com_listas=True, usuario_id=u["id"])
+    cont = cg.medir(con, n=n)
+    et, ns = cont["lotes_etapa"], cg.no_site(con)
     d = {
-        "filas": {"total": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa NOT IN ('publicado')"),
-                  "processando": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='processando'"),
-                  "revisao": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao'"),
-                  "erro": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='erro'")},
-        "solicitacoes": {"abertas": q("SELECT COUNT(*) FROM solicitacao WHERE situacao NOT IN ('entregue','recusada')"),
-                         "aguardam": q("SELECT COUNT(*) FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento')")},
-        "erros": {"abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')"),
-                  "bloqueantes": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='bloqueia'")},
-        "fundos": {"total": q("SELECT COUNT(*) FROM fundo WHERE ativo=1"), "no_ar": q("SELECT COUNT(*) FROM fundo WHERE status_site='no_ar'"),
+        "filas": {"total": sum(v for k, v in et.items() if k != "publicado"), "processando": et["processando"], "revisao": et["revisao"], "erro": et["erro"]},
+        "solicitacoes": {"abertas": cont["pedidos_abertos"], "aguardam": cont["pedidos_aguardando"]},
+        "erros": {"abertos": cont["erros_abertos"], "bloqueantes": cont["erros_bloqueantes"]},
+        "fundos": {"total": ns["fundos"]["total"], "no_ar": ns["fundos"]["no_ar"],
                    "proximo": q("SELECT codigo FROM v_proximo_fundo"), "sem_sigla": q("SELECT COUNT(*) FROM fundo WHERE sigla IS NULL AND ativo=1")},
-        "projetos": {"total": q("SELECT COUNT(*) FROM projeto"), "no_ar": q("SELECT COUNT(*) FROM projeto WHERE status_site='no_ar'"),
-                     "rascunho": q("SELECT COUNT(*) FROM projeto WHERE status_site='rascunho'"), "bloqueados": q("SELECT COUNT(*) FROM projeto WHERE status_site='bloqueado'")},
-        "itens": {"total": q("SELECT COUNT(*) FROM item"), "no_ar": q("SELECT COUNT(*) FROM item WHERE status_site='no_ar'"),
+        "projetos": {"total": ns["projetos"]["total"], "no_ar": ns["projetos"]["no_ar"],
+                     "rascunho": q(f"SELECT COUNT(*) FROM projeto WHERE status_site='rascunho' AND {cg.PROJETO_VIVO}"),
+                     "bloqueados": q(f"SELECT COUNT(*) FROM projeto WHERE status_site='bloqueado' AND {cg.PROJETO_VIVO}")},
+        "itens": {"total": ns["folhas"]["total"], "no_ar": ns["folhas"]["no_ar"],
                   "rascunho": q("SELECT COUNT(*) FROM item WHERE status_site='rascunho'"), "autoria_divergente": q("SELECT COUNT(*) FROM item WHERE autoria_divergente=1")},
-        "site": {"divergencias": q("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0")},
-        "decisoes": {"pendentes": q("SELECT COUNT(*) FROM decisao WHERE situacao='pendente'")},
+        "site": {"divergencias": cont["site_divergencias"]},
+        "decisoes": {"pendentes": cont["decisoes"]},
+        "contagens": cont,
     }
     s = con.execute("SELECT iniciada_em, terminada_em, ok, itens FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     d["site"]["ultima_sincronizacao"] = dict(s) if s else None
@@ -84,9 +87,7 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
         WHERE i.criado_em >= date('now','-30 days') GROUP BY 1 ORDER BY 3 DESC LIMIT 6""")]
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
     # H6b: o que fazer agora, o caminho do material, o quanto está no site e as frases do dia, TODOS da fonte única (pendencias)
-    from . import pendencias as pd
-    n = pd.contar_pendencias(con, com_listas=True, usuario_id=u["id"])
-    d["pendencias"] = {k: v for k, v in n.items() if not k.startswith("_")}
+    d["pendencias"] = dict(cont)          # UX-05: exatamente o que /api/pendencias devolve (a mesma função, contagens.medir)
     d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"])
     d["caminho"] = pd.caminho(con, n)
     d["no_site"] = pd.no_site(con)
@@ -101,10 +102,10 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
 @router.get("/pendencias")
 def pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Só os números (contadores do menu, Filas e painel): a MESMA função do painel inicial."""
-    from .pendencias import contar_pendencias
+    from .contagens import medir
     con = connect()
     try:
-        return contar_pendencias(con, usuario_id=u.get("id"))   # 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa
+        return medir(con, usuario_id=u.get("id"))   # 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa; UX-05: + no site, etapas, medido_em
     finally:
         con.close()
 
@@ -584,12 +585,16 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
-                          WHERE l.descartado_em IS NULL
+                          WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL   -- UX-05: os mesmos lotes das contagens
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()
+    from .qualidade_base import adiadas
+    from .pendencias import chave_adiar_lote
+    fora = adiadas(con, u["id"]) if u.get("id") else set()
     from .filas_fase import fase_da_lista
     saida = []
     for r in rows:
         d = dict(r)
+        d["adiado"] = chave_adiar_lote(d["id"]) in fora   # UX-05: "Agora não" desta pessoa: fica na lista, sai das contagens dela
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
@@ -1252,12 +1257,13 @@ def _escondidos(con, usuario_id) -> list[int]:
 def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, escondidos=None) -> tuple[str, list]:
     """A mesma regra para a lista e para a contagem das abas: situação, gravidade, tipo (categoria), origem, projeto (ou fundo) e busca."""
     w, p = [], []
+    from .contagens import ERROS_ABERTOS, ERROS_PEDEM_ACAO, ERROS_AVISOS
     if escondidos and situacao in ("pedem_acao", "avisos"):
         w.append(f"id NOT IN ({','.join('?' * len(escondidos))})"); p += list(escondidos)
-    if situacao == "abertos": w.append("situacao IN ('aberto','em_correcao')")
-    # UX-19: avisos em aba própria. "pedem_acao" = abertos que bloqueiam ou pedem correção; "avisos" = abertos só de aviso.
-    elif situacao == "pedem_acao": w.append("situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'")
-    elif situacao == "avisos": w.append("situacao IN ('aberto','em_correcao') AND gravidade='aviso'")
+    if situacao == "abertos": w.append(ERROS_ABERTOS)          # UX-05: a mesma regra do menu e da Home
+    # UX-19: avisos em aba própria. "pedem_acao" = abertos que bloqueiam ou pedem correção; "avisos" = abertos só de aviso (regra em contagens.py).
+    elif situacao == "pedem_acao": w.append(ERROS_PEDEM_ACAO)
+    elif situacao == "avisos": w.append(ERROS_AVISOS)
     elif situacao == "corrigido": w.append("situacao IN ('corrigido','fechado')")
     elif situacao and situacao != "todos": w.append("situacao=?"); p.append(situacao)
     for col, v, ok_ in (("gravidade", gravidade, GRAV), ("categoria", categoria, CATS), ("origem", origem, ("campvision",) + ORIGENS_MANUAIS)):
@@ -1306,6 +1312,8 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
         for k in ("abertos", "pedem_acao", "avisos", "em_correcao", "corrigido", "ignorado", "todos"):   # UX-19: pedem_acao e avisos (campos novos)
             w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q, esc)
             out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
+        from .contagens import agora_iso
+        out["medido_em"] = agora_iso()        # UX-05
         w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
         out["talvez"] = sum(1 for x in problemas.enriquecer(con, con.execute("SELECT * FROM erro" + w, p).fetchall()) if x["resolvido_sozinho"])
         # UX-06: com filtro, quantos existem SEM ele (campo novo, opcional). A tela usa para dizer "sem estes filtros há 574 abertos"
