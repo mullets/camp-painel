@@ -172,6 +172,18 @@ def _iniciar_tarefa_travada(codigo: str, u: dict):
     return JSONResponse(status_code=202, content={"tarefa_id": tid})
 
 
+ATOR_AUTOMATICO = "painel (automático)"      # o mesmo de sincronizador.ATOR_AUTOMATICO (sem importar: evita ciclo)
+
+
+def _nomes_dos_atores() -> dict:
+    """e-mail -> nome cadastrado (o cartão da tarefa mostra "Rafael", como o resto do painel, nunca o e-mail)."""
+    con = connect()
+    try:
+        return {r[0]: r[1] for r in con.execute("SELECT email, nome FROM usuario WHERE email IS NOT NULL AND COALESCE(nome,'')<>''")}
+    finally:
+        con.close()
+
+
 @router.get("/tarefas")
 def tarefas(u: dict = Depends(auth.exige("leitura"))) -> dict:
     """H4 · o chip do topo: as tarefas rodando agora (de qualquer pessoa) e as que ESTA pessoa começou e terminaram nas últimas 24 h
@@ -184,7 +196,8 @@ def tarefas(u: dict = Depends(auth.exige("leitura"))) -> dict:
     finally:
         con.close()
     def curta(t: dict) -> dict:
-        return {**t, "log": (t.get("log") or [])[-8:]}
+        return {**t, "log": (t.get("log") or [])[-8:], "ator_nome": nomes.get(t.get("ator") or "")}
+    nomes = _nomes_dos_atores()
     lidas = [t for t in map(_ler, rod) if t]                       # _ler marca como interrompida a que perdeu a thread
     return {"rodando": [curta(t) for t in lidas if t["estado"] == "rodando"],
             "terminadas": [curta(t) for t in map(_ler, ter) if t] + [curta(t) for t in lidas if t["estado"] != "rodando" and t["ator"] == u["email"]]}
@@ -213,7 +226,7 @@ def tarefa(tid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     t = _ler(tid)
     if not t:
         raise HTTPException(404, "Tarefa não existe")
-    return t
+    return {**t, "ator_nome": _nomes_dos_atores().get(t.get("ator") or "")}
 
 
 @router.get("/projetos/{codigo}/tarefa")

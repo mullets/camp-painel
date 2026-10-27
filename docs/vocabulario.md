@@ -93,6 +93,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   (o que falhou fica até a pessoa fechar). Tudo fica em **Tarefas e avisos recentes** (menu do avatar), com a seção
   **Avisos desta sessão**.
 - Número que ainda está carregando aparece como esqueleto (barra cinza animada), nunca como "0".
+- Cartão de tarefa (27/10): título ("⏳ Publicando F009-P0092"), depois "**começou 15:08 · Rafael**" (o NOME cadastrado, nunca o
+  e-mail; só a hora quando é hoje, "26/10, 15:08" de outro dia), a etapa atual numa linha própria em destaque ("**Publicando** · 23 s até
+  agora") e a lista de passos com a hora ("15:08 · Projeto liberado para publicação"), sem repetir a etapa atual.
+- A sincronização automática com o site é do painel ("O painel (automático)"): não aparece em "Suas tarefas" nem no chip do topo.
+  Em Máquinas → Catálogo local × site: "**conferindo agora**" enquanto roda e, com intervalo abaixo de 60 min, "A conferência completa
+  leva vários minutos: recomendado a cada 60 min (ajuste o intervalo da sincronização automática em Configurações)."
 
 ## Ações (o que o usuário FAZ)
 | Botão | Efeito | Observação |
