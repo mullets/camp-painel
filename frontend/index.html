@@ -825,6 +825,7 @@ body:not(.admin):not(.master) #machine-status,body:not(.admin):not(.master) [dat
 /* Problemas (19/10): agrupados por projeto, com o que fazer e o botão que resolve; resolver vários de uma vez */
 .err-filtros select{max-width:190px}.err-filtros input[type="search"]{flex:1 1 260px;min-width:200px}
 .err-proj-filtro{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-sm2)}
+.err-filtro-ativo{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--amber-soft);font-size:var(--fs-sm2)}.err-filtro-ativo[hidden]{display:none}
 #err-bulk input{flex:1 1 260px;min-width:180px}#err-bulk .erro-txt{flex-basis:100%}
 .err-tab td{vertical-align:top}.err-sel-col{width:34px}
 .err-tab tr.err-gr td{background:var(--surface2);border-top:2px solid var(--line);padding-top:10px;padding-bottom:10px}
@@ -1194,6 +1195,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
       <select id="err-cat" aria-label="Tipo de problema"><option value="">Todo tipo</option><option value="projeto_errado">Folha de outro projeto</option><option value="duplicata">Duplicata</option><option value="orientacao">Orientação / rotação</option><option value="espelhado">Digitalizado pelo verso</option><option value="autoria_divergente">Autoria divergente</option><option value="codigo">Código errado</option><option value="metadado">Metadado errado</option><option value="credito">Crédito errado</option><option value="arquivo_corrompido">Arquivo corrompido</option><option value="outro">Outro</option></select>
       <select id="err-orig" aria-label="Origem"><option value="">Toda origem</option><option value="campvision">CAMP Vision (automático)</option><option value="revisao">Revisão</option><option value="operador">Painel (equipe)</option><option value="site">Visitante do site</option></select>
       <span class="err-proj-filtro" id="err-proj-filtro" hidden></span><button type="button" class="btn sm lnk" id="err-limpar" hidden>Limpar filtros</button><span class="cnt" id="err-cnt"></span></div>
+      <div class="err-filtro-ativo" id="err-filtro-ativo" role="status" hidden></div>
       <div class="tw"><table class="err-tab" data-sem-ordenar>
       <thead><tr><th class="err-sel-col"><input type="checkbox" id="err-sel-todos" title="Selecionar todos os abertos da lista" aria-label="Selecionar todos os abertos da lista"></th><th>Gravidade</th><th>Onde</th><th>O que aconteceu e o que fazer</th><th>Origem</th><th>Situação</th></tr></thead>
       <tbody id="err-body"></tbody>
@@ -5856,19 +5858,29 @@ const GRAV_TAG={bloqueia:'r',corrigir:'a',aviso:''};
 // cartão 13: de onde veio o problema. 'campvision' é registrado sozinho na importação do lote; 'site' = um visitante avisou
 const ORIGEM_ERRO={campvision:['automático','b','Registrado sozinho ao importar o lote do CAMP Vision'],site:['site','','Um visitante do site avisou'],operador:['painel','','Relatado por alguém da equipe no painel'],revisao:['revisão','','Achado na revisão das folhas']};
 function origemErroHTML(e){const o=ORIGEM_ERRO[e.origem]||[rotulo(e.origem),'',''];return `<span class="tag ${o[1]}" title="${escHtml(o[2])}">${escHtml(o[0])}</span>${e.relatado_por?`<br><small class="help">${escHtml(e.relatado_por)}</small>`:''}`}
-let errFiltro=LISTA_MEM.get('erros.aba','abertos');
+/* UX-06 ("abas e lista zeradas com 574 abertos"): o filtro e a aba guardados para o F5 valem por 12 h. Antes ficavam para sempre: dias depois
+   a tela abria com um filtro esquecido (Tipo, Gravidade…), as abas contavam só o filtro ("Todos 0") e ninguém via por quê. */
+const ERR_MEM_VALIDO=(()=>{const t=+LISTA_MEM.get('erros.filtros_em',0);return t>0&&Date.now()-t<12*3600e3})();
+let errFiltro=ERR_MEM_VALIDO?LISTA_MEM.get('erros.aba','abertos'):'abertos';
 /* Problemas (19/10, "a pasta de problemas tá confusa"): agrupados por projeto (com o nome), filtros por gravidade/tipo/origem e busca no servidor,
    o que aconteceu + o que fazer + o botão que resolve (ações que já existem no painel), resolver vários de uma vez e voltar para a lista no mesmo lugar.
    O que se resolveu sozinho com certeza o servidor fecha (com registro); o "talvez" aparece num grupo separado no topo. */
-let ERR_F=Object.assign({q:'',gravidade:'',categoria:'',origem:''},LISTA_MEM.get('erros.filtros',{}),{projeto:''});
+let ERR_F=Object.assign({q:'',gravidade:'',categoria:'',origem:''},ERR_MEM_VALIDO?LISTA_MEM.get('erros.filtros',{}):{},{projeto:''});
+{const ok_={gravidade:['bloqueia','corrigir','aviso'],categoria:['autoria_divergente','projeto_errado','duplicata','orientacao','espelhado','codigo','metadado','credito','arquivo_corrompido','outro'],origem:['campvision','revisao','operador','site']};
+  for(const k of Object.keys(ok_))if(ERR_F[k]&&!ok_[k].includes(ERR_F[k]))ERR_F[k]='';if(typeof ERR_F.q!=='string')ERR_F.q=''}   /* UX-06: valor guardado que não existe mais no filtro não vira filtro invisível */
 let ERR_LISTA=[],ERR_SEL=new Set(),ERR_VOLTAR=null,ERR_GR_LIMITE=25,ERR_SEQ=0;
 const ERR_GR_FECHADOS=new Set(LISTA_MEM.get('erros.grupos_fechados',[]));
 const ERR_ABERTO=e=>['aberto','em_correcao'].includes(e.situacao);
 function errParams(){const p=new URLSearchParams();['q','gravidade','categoria','origem','projeto'].forEach(k=>{if(ERR_F[k])p.set(k,ERR_F[k])});return p}
 function errTemFiltro(){return ['q','gravidade','categoria','origem','projeto'].some(k=>ERR_F[k])}
+/* UX-06: os filtros ativos, em palavras ("Tipo: Duplicata · Busca: riviera"), para o aviso acima da lista e para o estado vazio */
+function errFiltrosTexto(){const op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
+  return [ERR_F.projeto?'Projeto: '+ERR_F.projeto:'',ERR_F.gravidade?'Gravidade: '+op('err-grav',ERR_F.gravidade):'',ERR_F.categoria?'Tipo: '+op('err-cat',ERR_F.categoria):'',ERR_F.origem?'Origem: '+op('err-orig',ERR_F.origem):'',ERR_F.q?`Busca: "${ERR_F.q}"`:''].filter(Boolean)}
+let ERR_SEM_FILTRO=null;
 function errSincronizarFiltros(){const v=(id,x)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=x||''};v('err-q',ERR_F.q);v('err-grav',ERR_F.gravidade);v('err-cat',ERR_F.categoria);v('err-orig',ERR_F.origem);
   const pf=document.getElementById('err-proj-filtro');if(pf){pf.hidden=!ERR_F.projeto;pf.innerHTML=ERR_F.projeto?`Só <span class="code">${escHtml(ERR_F.projeto)}</span> <button type="button" class="btn sm lnk" data-err-tirar-proj>ver todos os projetos</button>`:''}
-  const l=document.getElementById('err-limpar');if(l)l.hidden=!errTemFiltro()}
+  const l=document.getElementById('err-limpar');if(l)l.hidden=!errTemFiltro();
+  const fa=document.getElementById('err-filtro-ativo');if(fa){const L=errFiltrosTexto();fa.hidden=!L.length;fa.innerHTML=L.length?`<span><b>Filtro ativo:</b> ${escHtml(L.join(' · '))}</span>${ERR_SEM_FILTRO?`<small class="help">sem filtro: ${escHtml(qtd(ERR_SEM_FILTRO.abertos,'aberto','abertos'))}</small>`:''}<button type="button" class="btn sm" data-err-limpar-tudo>Limpar</button>`:''}}
 function errSair(){ERR_VOLTAR={pos:mainEl.scrollTop,ate:Date.now()+30*60000}}   /* ao voltar (Voltar do navegador ou menu), a lista abre no mesmo lugar */
 function errOnde(e){if(e.alvo==='folha'){const curto=String(e.folha||'').slice(11)||e.folha;return `<span class="code" title="${escHtml(e.folha)}">${escHtml(curto)}</span>${e.folha_existe===false&&e.tipo==='comum'?`<br><small class="help">${e.folha_atual?`agora é <span class="code">${escHtml(e.folha_atual.slice(11))}</span>`:'não existe mais'}</small>`:e.tipo==='retirada'?'<br><small class="help">fora do painel</small>':''}`}
   return e.alvo==='projeto'?'<small class="help">o projeto todo</small>':e.alvo==='fundo'?'<small class="help">o fundo todo</small>':`<span class="code">${escHtml(e.codigo)}</span>`}
@@ -5903,7 +5915,7 @@ function errGrupoHTML(k,L){const talvez=k==='~talvez',e0=L[0],fechado=!talvez&&E
 function errRender(){const tb=document.getElementById('err-body');if(!tb)return;const gr=new Map();
   ERR_LISTA.forEach(e=>{const k=errGrupoChave(e);if(!gr.has(k))gr.set(k,[]);gr.get(k).push(e)});
   const chaves=[...gr.keys()].sort((a,b)=>(b==='~talvez')-(a==='~talvez')),vis=chaves.slice(0,ERR_GR_LIMITE),nProj=chaves.filter(k=>k!=='~talvez').length;
-  tb.innerHTML=ERR_LISTA.length?vis.map(k=>errGrupoHTML(k,gr.get(k))).join(''):`<tr><td colspan="6" class="empty">${errTemFiltro()?vazioHTML('Nenhum problema com estes filtros.','Mude a busca ou os filtros, ou limpe tudo para ver a lista inteira.','<button class="btn sm" data-err-limpar-tudo>Limpar filtros</button>'):vazioHTML('Nenhum problema nesta situação.',errFiltro==='abertos'?'Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui, no projeto dele.':'Veja as outras abas. Achou algo errado numa folha? Relate aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':'')}</td></tr>`;
+  tb.innerHTML=ERR_LISTA.length?vis.map(k=>errGrupoHTML(k,gr.get(k))).join(''):`<tr><td colspan="6" class="empty">${errTemFiltro()?vazioHTML('Nenhum problema com estes filtros.',`Filtro ativo: ${errFiltrosTexto().join(' · ')}.${ERR_SEM_FILTRO&&ERR_SEM_FILTRO.abertos?` Sem filtro há ${qtd(ERR_SEM_FILTRO.abertos,'problema aberto','problemas abertos')}.`:''} Limpe o filtro para ver a lista inteira.`,'<button class="btn sm pri" data-err-limpar-tudo>Limpar</button>'):vazioHTML('Nenhum problema nesta situação.',errFiltro==='abertos'?'Quando você ou o CAMP Vision encontrar algo errado numa folha (autoria, duplicata, folha virada), ele aparece aqui, no projeto dele.':'Veja as outras abas. Achou algo errado numa folha? Relate aqui.',pode('problema.resolver')?'<button class="btn sm pri" onclick="relatarProblema()">Relatar problema</button>':'')}</td></tr>`;
   const cnt=document.getElementById('err-cnt');if(cnt)cnt.textContent=ERR_LISTA.length?`${qtd(ERR_LISTA.length,'problema','problemas')} · ${qtd(nProj,'grupo','grupos')}`:'';
   const m=document.getElementById('err-mais');if(m){m.hidden=chaves.length<=ERR_GR_LIMITE;m.innerHTML=m.hidden?'':`<span class="pg-info">Mostrando ${fmtN(vis.length)} de ${fmtN(chaves.length)} grupos</span><span class="pg-nav"><button class="btn sm" data-err-mais-grupos>Mostrar mais ${fmtN(Math.min(25,chaves.length-vis.length))}</button></span>`}
   errAtualizarSelecao()}
@@ -5912,7 +5924,7 @@ function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).ma
   const t=document.getElementById('err-sel-todos');if(t){t.disabled=!ids.size||!pode('problema.resolver');t.checked=ids.size>0&&n===ids.size;t.indeterminate=n>0&&n<ids.size}
   document.querySelectorAll('#err-body [data-err-sel-grupo]').forEach(g=>{const L=ERR_LISTA.filter(e=>ERR_ABERTO(e)&&errGrupoChave(e)===g.dataset.errSelGrupo),k=L.filter(e=>ERR_SEL.has(e.id)).length;g.checked=k>0&&k===L.length;g.indeterminate=k>0&&k<L.length})}
 function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)return;const T=[['abertos','Abertos'],['em_correcao','Em correção'],['corrigido','Resolvidos'],['ignorado','Não era problema'],['todos','Todos']];
-  ab.innerHTML=T.map(([k,t])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${errFiltro===k}"${n?'':' title="Contagem indisponível agora"'}>${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
+  ab.innerHTML=T.map(([k,t])=>`<button class="btn sm" data-err-sit="${k}" aria-pressed="${errFiltro===k}"${n?(errTemFiltro()?` title="${escHtml('Conta só o filtro ativo: '+errFiltrosTexto().join(' · '))}"`:''):' title="Contagem indisponível agora"'}>${t}${n?` <b>${fmtN(n[k]||0)}</b>`:''}</button>`).join('')}
 /* 21/10 ("publicar sem travar", 4.7): fecha de uma vez os avisos automáticos (CAMP Vision, revisão); os relatados por pessoas ficam.
    Primeiro mostra quantos e de que tipo (nada muda); só depois de confirmar grava. Só o admin master vê o botão. */
 const ROT_CAT_ERRO={projeto_errado:'folha de outro projeto',duplicata:'duplicata',orientacao:'rotação',espelhado:'pelo verso',autoria_divergente:'autoria',codigo:'código',metadado:'dado da folha',credito:'crédito',arquivo_corrompido:'arquivo corrompido',outro:'outros'};
@@ -5949,6 +5961,7 @@ document.addEventListener('click',e=>{
   const grav=e.target.closest('[data-err-diag-grav]'),pj=e.target.closest('[data-err-diag-proj]');
   if(!grav&&!pj)return;
   errFiltro='abertos';LISTA_MEM.set('erros.aba','abertos');
+  Object.assign(ERR_F,{q:'',categoria:'',origem:''});   /* UX-06: "Ver avisos" com um Tipo guardado de antes dava "Todos 0" */
   if(grav){ERR_F.gravidade=grav.dataset.errDiagGrav;ERR_F.projeto=''}
   if(pj){ERR_F.projeto=pj.dataset.errDiagProj;ERR_F.gravidade=''}
   errMudouFiltro();
@@ -5961,21 +5974,21 @@ async function carregarDupProjetos(){const el=document.getElementById('err-dup-p
     el.hidden=!r.total;el.innerHTML=r.total?`<details${aberto?' open':''}><summary class="ph"><h2>Possíveis projetos duplicados <span class="n" id="err-dup-n">${escHtml(r.total)}</span></h2></summary><div class="pb"><p class="help">Projetos do mesmo fundo com nome parecido. Abra os dois e confira; se são o mesmo, use “Mesclar” no projeto. “Não é duplicata” tira o par desta lista de vez.</p>${r.pares.map(x=>`<div class="dup-par"><div class="dup-lados">${lado(x.a)}<span class="dup-x" aria-hidden="true">×</span>${lado(x.b)}</div><small class="help"><span class="tag ${x.nivel==='forte'?'r':'a'}">${x.nivel==='forte'?'muito parecido':'parecido'} · ${escHtml(Math.round(x.score*100))}%</span> ${escHtml((x.motivos||[]).join(' · '))}</small><div class="act"><button class="btn sm" data-np-abrir="${escHtml(x.a.codigo)}">Abrir ${escHtml(x.a.codigo)}</button><button class="btn sm" data-np-abrir="${escHtml(x.b.codigo)}">Abrir ${escHtml(x.b.codigo)}</button>${op?`<button class="btn sm" data-dup-nao="${escHtml(x.a.codigo)}" data-dup-outro="${escHtml(x.b.codigo)}" data-dup-f="${escHtml(x.fundo)}">Não é duplicata</button>`:''}</div></div>`).join('')}${r.total>r.pares.length?`<p class="help">Mostrando ${escHtml(r.pares.length)} de ${escHtml(r.total)}: os mais parecidos primeiro.</p>`:''}</div></details>`:''}
   catch(_){el.hidden=true}finally{delete el.dataset.carregando}}
 function errDupContar(){const n=document.getElementById('err-dup-n'),el=document.getElementById('err-dup-proj');if(!n||!el)return;const v=Math.max(0,(+n.textContent||0)-1);n.textContent=v;if(!el.querySelector('.dup-par'))el.hidden=true}
-async function carregarErros(f){if(!f)carregarDupProjetos();{const bl=document.getElementById('err-limpeza');if(bl)bl.hidden=!(EU&&EU.papel==='master')}if(f){errFiltro=f;LISTA_MEM.set('erros.aba',f)}const sec=document.getElementById('v-erros'),tb=document.getElementById('err-body');if(!sec||!tb)return;
+async function carregarErros(f){if(!f)carregarDupProjetos();{const bl=document.getElementById('err-limpeza');if(bl)bl.hidden=!(EU&&EU.papel==='master')}if(f){errFiltro=f;LISTA_MEM.set('erros.aba',f);LISTA_MEM.set('erros.filtros_em',Date.now())}const sec=document.getElementById('v-erros'),tb=document.getElementById('err-body');if(!sec||!tb)return;
   const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;sec.style.minHeight=noLugar?sec.offsetHeight+'px':'';   /* 19/10: a linha resolvida some; sem isto o fim da página encurta e o navegador puxa a lista para cima */
   sec.querySelector('.aviso-exemplo')?.remove();errSincronizarFiltros();const seq=++ERR_SEQ;if(!tb.querySelector('tr[data-abrir],tr.err-gr'))tabelaCarregando('#err-body','Carregando problemas…');
   try{const p=errParams();p.set('situacao',errFiltro);const [es,n]=await Promise.all([API('/api/erros?'+p),API('/api/erros/contagem?'+errParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
-    ERR_LISTA=es;errRenderAbas(n);errRender();atualizarPendencias();errCarregarDiagnostico();
+    ERR_LISTA=es;ERR_SEM_FILTRO=(n&&n.sem_filtro)||null;errSincronizarFiltros();errRenderAbas(n);errRender();atualizarPendencias();errCarregarDiagnostico();
     if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#err-body','Não consegui carregar os problemas: '+e.message,'carregarErros()')}errRenderAbas(null)}}
-function errMudouFiltro(){LISTA_MEM.set('erros.filtros',{q:ERR_F.q,gravidade:ERR_F.gravidade,categoria:ERR_F.categoria,origem:ERR_F.origem});ERR_GR_LIMITE=25;carregarErros()}
+function errMudouFiltro(){LISTA_MEM.set('erros.filtros',{q:ERR_F.q,gravidade:ERR_F.gravidade,categoria:ERR_F.categoria,origem:ERR_F.origem});LISTA_MEM.set('erros.filtros_em',Date.now());ERR_GR_LIMITE=25;carregarErros()}
 document.addEventListener('input',e=>{if(e.target.id!=='err-q')return;clearTimeout(window._errQ);window._errQ=setTimeout(()=>{ERR_F.q=e.target.value.trim();errMudouFiltro()},300)});
 document.addEventListener('change',e=>{const m={'err-grav':'gravidade','err-cat':'categoria','err-orig':'origem'}[e.target.id];if(m){ERR_F[m]=e.target.value;errMudouFiltro();return}
   if(e.target.id==='err-sel-todos'){ERR_LISTA.filter(ERR_ABERTO).forEach(x=>e.target.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=e.target.checked);errAtualizarSelecao();return}
   const g=e.target.closest&&e.target.closest('[data-err-sel-grupo]');if(g){ERR_LISTA.filter(x=>ERR_ABERTO(x)&&errGrupoChave(x)===g.dataset.errSelGrupo).forEach(x=>g.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll(`#err-body tr[data-err-grupo="${CSS.escape(g.dataset.errSelGrupo)}"] .err-sel`).forEach(c=>c.checked=g.checked);errAtualizarSelecao();return}
   const s=e.target.closest&&e.target.closest('#err-body .err-sel');if(s){s.checked?ERR_SEL.add(+s.value):ERR_SEL.delete(+s.value);errAtualizarSelecao()}});
 document.addEventListener('click',async e=>{const t=e.target;
-  if(t.closest('#err-limpar,[data-err-limpar-tudo]')){Object.assign(ERR_F,{q:'',gravidade:'',categoria:'',origem:''});['err-q','err-grav','err-cat','err-orig'].forEach(i=>{const el=document.getElementById(i);if(el)el.value=''});if(ERR_F.projeto){ERR_F.projeto='';nav('erros')}else errMudouFiltro();return}
+  if(t.closest('#err-limpar,[data-err-limpar-tudo]')){Object.assign(ERR_F,{q:'',gravidade:'',categoria:'',origem:''});['err-q','err-grav','err-cat','err-orig'].forEach(i=>{const el=document.getElementById(i);if(el)el.value=''});LISTA_MEM.set('erros.filtros',{});if(ERR_F.projeto){ERR_F.projeto='';ERR_SEM_FILTRO=null;nav('erros')}else errMudouFiltro();return}   /* UX-06: antes, com "Só este projeto", o Limpar não apagava o filtro guardado e ele voltava no F5 */
   if(t.closest('[data-err-tirar-proj]')){nav('erros');return}
   const so=t.closest('[data-err-so-proj]');if(so){nav('erros/'+so.dataset.errSoProj);return}
   if(t.closest('[data-err-sair]')){errSair();return}

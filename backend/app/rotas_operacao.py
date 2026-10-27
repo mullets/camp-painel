@@ -1296,6 +1296,11 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
             out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
         w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
         out["talvez"] = sum(1 for x in problemas.enriquecer(con, con.execute("SELECT * FROM erro" + w, p).fetchall()) if x["resolvido_sozinho"])
+        # UX-06: com filtro, quantos existem SEM ele (campo novo, opcional). A tela usa para dizer "sem estes filtros há 574 abertos"
+        # em vez de abas e lista zeradas sem explicação.
+        if any(x and str(x).strip() for x in (gravidade, categoria, origem, projeto, q)):
+            out["sem_filtro"] = {k: con.execute("SELECT COUNT(*) FROM erro" + _filtro_erros(k, None, None, None, None, None)[0],
+                                                _filtro_erros(k, None, None, None, None, None)[1]).fetchone()[0] for k in ("abertos", "todos")}
         return out
     finally:
         con.close()
