@@ -1,5 +1,7 @@
 // Home ("Precisa de você") enxuta, no navegador de verdade (Playwright + Chromium):
 //  - UX-18: o cartão "decisões" só aparece quando há decisão pendente (nunca "0 decisões — nenhuma esperando").
+//  - UX-21: filas pelo papel: o operador vê "Decidir" (de admin) esmaecida e no fim, sem perder os dados; o admin e quem só lê
+//    não têm nada esmaecido.
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/ag_k/home.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/ag_k/home.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8951)
@@ -52,6 +54,28 @@ async function abrirHome(page) {
     chk(k === null && !/nenhuma esperando/.test(await P.locator('#v-painel').innerText()), `UX-18: sem decisão pendente o cartão some (era "0 decisões — nenhuma esperando"): ${k}`);
     chk(kp.length >= 1 && !kp.includes('decisoes') && nKpis === String(kp.length), `UX-18: os outros números continuam e a grade se ajusta (${kp.join(', ')}; --n=${nKpis})`);
     py(`con.execute("UPDATE decisao SET situacao='pendente' WHERE id IN (${idsDec})")`);   // devolve a semente como estava
+    // ---------- UX-21 ----------
+    const grupos = pg => pg.evaluate(() => [...document.querySelectorAll('#ini-tarefas .ini-tg')].map(g => ({ id: g.dataset.iniGrupo, outro: g.classList.contains('ini-outro'), op: +getComputedStyle(g).opacity, linhas: g.querySelectorAll('.ini-task').length, txt: g.querySelector('.ini-tgh').textContent })));
+    await abrirHome(P);
+    const gA = await grupos(P);
+    chk(gA.length > 1 && gA.every(g => !g.outro && g.op === 1), `UX-21: admin (master) executa todas as filas: nada esmaecido (${gA.map(g => g.id).join(', ')})`);
+    chk(gA[0].id === 'decidir', `UX-21: para o admin, "Decidir" continua no topo (${gA[0].id})`);
+    const op = await entrar(browser, 'operador@camp.arq.br', 'senha-operador-123', erros);
+    await abrirHome(op.page);
+    const api = await op.page.evaluate(async () => (await (await fetch('/api/painel', { credentials: 'same-origin' })).json()).tarefas.map(g => ({ id: g.id, quem: g.quem, n: g.itens.length })));
+    const gO = await grupos(op.page);
+    const dO = gO.find(g => g.id === 'decidir'), meusO = gO.filter(g => !g.outro);
+    chk(!!dO && dO.outro && dO.op < 1 && /quem faz é um admin/.test(dO.txt), `UX-21: operador vê "Decidir" esmaecida e com "quem faz é um admin" (${JSON.stringify(dO)})`);
+    chk(gO[gO.length - 1].id === 'decidir' && meusO.length >= 1 && meusO.every(g => g.op === 1 && api.find(a => a.id === g.id).quem !== 'admin'), `UX-21: as filas do operador vêm primeiro, sem esmaecer; a de admin, no fim (${gO.map(g => g.id + (g.outro ? '*' : '')).join(', ')})`);
+    chk(gO.length === api.length && gO.every(g => g.linhas === api.find(a => a.id === g.id).n), `UX-21: nenhuma fila nem linha escondida: só esmaecida (${gO.length} grupos = servidor ${api.length})`);
+    const kO = await op.page.evaluate(() => { const b = document.querySelector('#v-painel .ini-kpi[data-ini-rota="decisoes"]'); return b ? { outro: b.classList.contains('ini-outro'), op: +getComputedStyle(b).opacity } : null; });
+    chk(!!kO && kO.outro && kO.op < 1, `UX-21: o número de decisões (de admin) esmaecido para o operador: ${JSON.stringify(kO)}`);
+    await op.ctx.close();
+    const le = await entrar(browser, 'leitor@camp.arq.br', 'senha-leitor-1234', erros);
+    await abrirHome(le.page);
+    const gL = await grupos(le.page);
+    chk(gL.length >= 1 && gL.every(g => !g.outro), `UX-21: quem só lê não executa nenhuma fila: nada esmaecido, vê tudo (${gL.map(g => g.id).join(', ')})`);
+    await le.ctx.close();
     await adm.ctx.close();
   } catch (e) { problemas.push('exceção: ' + (e && e.stack || e)); }
   finally { await browser.close(); }

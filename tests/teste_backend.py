@@ -9937,7 +9937,10 @@ def filho(modo):
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
         ver("UX-18: o cartão de decisões só entra com decisão pendente (nunca '0 decisões — nenhuma esperando')",
-            "...(+p.decisoes?[k('warn',p.decisoes" in html and "'nenhuma esperando'" not in html)
+            "...(+p.decisoes?[k(" in html and "'nenhuma esperando'" not in html)
+        ver("UX-21: filas pelo papel: as de outro papel esmaecidas (ini-outro) e no fim, sem esconder; quem só lê não tem nada esmaecido",
+            "function iniGrupoMeu(quem)" in html and "gs=[...g0.filter(g=>iniGrupoMeu(g.quem)),...g0.filter(g=>!iniGrupoMeu(g.quem))]" in html
+            and ".ini-tg.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
         for l in res: print(l)
     elif modo == "ux12_desempenho":
         # UX-12 (26/10, logs técnicos): /api/estacoes alternava 20 ms e 3–10 s (ping às estações desligadas DENTRO da requisição quando
