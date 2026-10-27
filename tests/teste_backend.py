@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo"}
+MODOS_RAPIDOS = {"ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -438,6 +438,86 @@ def filho(modo):
         it = itens_aceite({"exif_conferido": {"ok": False, "contagem": 2, "faltam": [{"arquivo": "a.tif", "motivo": "sem permissão"}, "b.tif"]}, "publicavel": False})
         ver("aceite: exif_conferido com a lista dos arquivos traz arquivo e motivo para a tela", it and it[0].get("arquivos") == [{"arquivo": "a.tif", "motivo": "sem permissão"}, {"arquivo": "b.tif", "motivo": None}], it)
         ver("aceite: sem lista, o item fica como antes (sem 'arquivos')", "arquivos" not in itens_aceite({"exif_conferido": {"ok": False, "contagem": 2}})[0])
+        for l in res: print(l)
+    elif modo == "ux35_dispensar":
+        # UX-35: "Dispensar este lote" — lote com erro do CAMP Vision que ninguém consegue resolver sai das listas e contagens de TODOS
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from app import auth, alertas
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F016','Outro','OUT',1)")
+        for f, n, t in (("F026", 9, "CRASA, Sto. André"), ("F016", 24, "Fazenda Fernando Millan")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1978)", (f"{f}-P{n:04d}", f, n, t))
+        st = lambda a, b: _j.dumps({"status": "erro", "mensagem": f"Aceite reprovado: EXIF conferido em {a} de {b} arquivos"})
+        l1 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, status_json, criado_em) VALUES ('L1','F026-P0009','/x/a','erro',?, '2026-10-08 12:00:00')", (st(67, 68),)).lastrowid
+        l2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, status_json, criado_em) VALUES ('L2','F016-P0024','/x/b','erro',?, '2026-10-14 12:00:00')", (st(6, 48),)).lastrowid
+        c.execute("UPDATE lista_processamento SET etapa_desde=datetime('now','-7 days')"); c.commit()
+        cli = {}
+        for nome, papel in (("adm", "admin"), ("op", "operador"), ("lei", "leitura")):
+            auth.criar_usuario(nome, f"{nome}@camp.arq.br", "senha-longa-12345", papel, forcar_troca=False)
+            cli[nome] = TestClient(app, raise_server_exceptions=False); cli[nome].post("/api/auth/login", json={"email": f"{nome}@camp.arq.br", "senha": "senha-longa-12345"})
+        def nums(k):
+            pe, pa, F = cli[k].get("/api/pendencias").json(), cli[k].get("/api/painel").json(), cli[k].get("/api/filas").json()
+            prob = [i for g in pa.get("tarefas") or [] for i in g.get("itens", []) if (i.get("acao") or {}).get("tipo") == "fila_erro" or (i.get("dispensar") and k == "lei")]
+            return {"pendencias": pe.get("lotes_erro"), "painel.pendencias": (pa.get("pendencias") or {}).get("lotes_erro"),
+                    "contagens": (pa.get("contagens") or {}).get("lotes_erro"), "lotes_etapa": ((pa.get("contagens") or {}).get("lotes_etapa") or {}).get("erro"),
+                    "painel.filas": (pa.get("filas") or {}).get("erro"), "filas": sum(1 for x in F if x["fase"] == "erro" and not x.get("dispensado")),
+                    "precisa_de_voce": len(prob)}, {x["id"]: x for x in F}, prob
+        def iguais(d, v): return all(x == v for x in d.values())
+        n0, F0, p0 = nums("adm")
+        ver("antes: os 2 lotes com erro contam igual em todas as rotas (2)", iguais(n0, 2), n0)
+        ver("antes: o item do Precisa de você traz 'dispensar' (o id do lote) para o Ignorar ▾", {i.get("dispensar") for i in p0} == {l1, l2}, p0)
+        ver("antes: /api/filas traz dispensado=None", F0[l1].get("dispensado") is None and "dispensado" in F0[l1], F0[l1])
+        a0 = (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("campvision") or {})
+        ver("antes: o alerta do CAMP Vision conta os 2 lotes parados com erro", a0.get("lotes_erro") == 2 and a0.get("critico") is True, a0)
+        r = cli["lei"].post(f"/api/filas/{l2}/dispensar", json={"motivo": "x"})
+        ver("leitor não dispensa (403)", r.status_code == 403, r.status_code)
+        r = cli["op"].post(f"/api/filas/{l2}/dispensar", json={"motivo": "o CAMP Vision não reescreve o status.json"})
+        ver("operador dispensa o lote de 14/10 (6 de 48)", r.status_code == 200 and r.json().get("ok"), r.text)
+        for k in ("adm", "op", "lei"):
+            n1, F1, p1 = nums(k)
+            ver(f"depois ({k}): o lote dispensado sai de todas as contagens (1 em todas)", iguais(n1, 1), n1)
+            ver(f"depois ({k}): continua em /api/filas com dispensado (por, em, motivo) — fica em Todas", (F1[l2].get("dispensado") or {}).get("por") == "op@camp.arq.br"
+                and (F1[l2]["dispensado"] or {}).get("motivo") == "o CAMP Vision não reescreve o status.json" and F1[l2]["etapa"] == "erro", F1[l2])
+        ver("não muda a etapa nem o status.json", tuple(c.execute("SELECT etapa, status_json FROM lista_processamento WHERE id=?", (l2,)).fetchone()) == ("erro", st(6, 48)))
+        a1 = (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("campvision") or {})
+        ver("alerta do CAMP Vision: o lote dispensado não conta", a1.get("lotes_erro") == 1, a1)
+        cli["op"].post(f"/api/filas/{l1}/dispensar", json={})
+        a2 = (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("campvision") or {})
+        ver("alerta do CAMP Vision: com os 2 dispensados, nenhum lote parado com erro (sem e-mail por eles)", not a2.get("critico") and not a2.get("lotes_erro") and "parado(s) com erro" not in (a2.get("texto") or ""), a2)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='avisos.fila_travada.ligado'"); c.commit()
+        ft = (alertas.avaliar_extras(c).get("fila_travada") or {})
+        ver("alerta 'Lote parado na Fila' não lista lote dispensado", l1 not in (ft.get("lotes") or []) and l2 not in (ft.get("lotes") or []), ft)
+        n2, _, _ = nums("adm")
+        ver("com os 2 dispensados: 0 em todas as rotas", iguais(n2, 0), n2)
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='projeto' AND codigo='F016-P0024' AND tipo='lote_dispensado'").fetchone()
+        ver("Histórico: evento lote_dispensado no projeto com autor, motivo e o erro", ev and ev["ator"] == "op@camp.arq.br" and "reescreve" in ev["detalhe"] and "6 de 48" in ev["detalhe"], dict(ev) if ev else None)
+        pj = cli["adm"].get("/api/projetos/F016-P0024/detalhe").json()
+        ver("histórico do projeto mostra a dispensa", any(e.get("tipo") == "lote_dispensado" for e in pj.get("eventos") or []), [e.get("tipo") for e in pj.get("eventos") or []])
+        r = cli["lei"].delete(f"/api/filas/{l2}/dispensar")
+        ver("leitor não volta a mostrar (403)", r.status_code == 403, r.status_code)
+        r = cli["op"].delete(f"/api/filas/{l2}/dispensar")
+        n3, F3, _ = nums("adm")
+        ver("Voltar a mostrar: o lote volta às contagens (1) e perde o 'dispensado'", r.status_code == 200 and iguais(n3, 1) and F3[l2].get("dispensado") is None, (r.text, n3))
+        ver("Histórico: evento lote_dispensa_desfeita", c.execute("SELECT 1 FROM evento WHERE codigo='F016-P0024' AND tipo='lote_dispensa_desfeita' AND ator='op@camp.arq.br'").fetchone() is not None)
+        cli["op"].post(f"/api/filas/{l2}/dispensar", json={})
+        ver("dispensado de novo: 0", iguais(nums("adm")[0], 0))
+        c.execute("UPDATE lista_processamento SET status_json=? WHERE id=?", (st(40, 48), l2)); c.commit()
+        n4, F4, _ = nums("op")
+        ver("o CAMP Vision releu e o motivo mudou (40 de 48): a dispensa deixa de valer e o lote volta sozinho", iguais(n4, 1) and F4[l2].get("dispensado") is None, n4)
+        c.execute("UPDATE lista_processamento SET etapa='processando' WHERE id=?", (l1,)); c.commit()
+        c.execute("UPDATE lista_processamento SET etapa='erro' WHERE id=?", (l1,)); c.commit()
+        n5, F5, _ = nums("op")
+        ver("mudou de etapa e voltou ao MESMO erro: é outra leitura, a dispensa não vale mais", iguais(n5, 2) and F5[l1].get("dispensado") is None, n5)
+        c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (l1,)); c.commit()
+        r = cli["op"].post(f"/api/filas/{l1}/dispensar", json={})
+        ver("lote que não está com erro não é dispensado (400)", r.status_code == 400, r.status_code)
         for l in res: print(l)
     elif modo == "ux33_numeros":
         # UX-33: números para pessoas em pt-BR também nas mensagens do servidor (backup, exportação)
@@ -12183,6 +12263,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-08: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117d) UX-35: dispensar lote com erro do CAMP Vision que ninguém consegue resolver (para todos; volta sozinho se o erro mudar)")
+rc, out = rodar("ux35_dispensar", f"{tmp}/ux35.db")
+if rc != 0: ok(False, f"teste ux35_dispensar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-35: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("117c) UX-33: números em pt-BR nas mensagens do servidor (backup, exportação)")
 rc, out = rodar("ux33_numeros", f"{tmp}/ux33.db")

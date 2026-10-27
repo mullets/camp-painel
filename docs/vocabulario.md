@@ -91,6 +91,8 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 | **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s |
 | **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
+| **Dispensar este lote** (UX-35) | só em lote parado com erro do CAMP Vision, operador ou acima: o lote sai das listas e das contagens **para todos** (Material novo, Precisa de você, menu, alertas por e-mail). Nada é apagado nem muda no QNAP; volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar. No Ignorar ▾ aparece como **Dispensar este lote (para todos)**. Desfazer por 8 s |
+| **dispensado** / **Voltar a mostrar** (UX-35) | o lote dispensado continua em Material novo › Todas com o chip "dispensado"; "Voltar a mostrar" desfaz a dispensa (fica no Histórico) |
 
 ## Etiquetas e lugar físico (UX-25)
 | Termo | Onde | O que significa |

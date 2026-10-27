@@ -608,10 +608,13 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     from .filas_fase import fase_da_lista
     from .pendencias import projetos_lendo_agora, releituras_abertas
     lendo, pedidos = projetos_lendo_agora(con), releituras_abertas(con)
+    from .dispensa_lote import validas
+    dispensados = validas(con)
     saida = []
     for r in rows:
         d = dict(r)
         d["adiado"] = chave_adiar_lote(d["id"]) in fora   # UX-05: "Agora não" desta pessoa: fica na lista, sai das contagens dela
+        d["dispensado"] = dispensados.get(d["id"])         # UX-35 (campo novo, opcional): {por, em, motivo}; fica só em "Todas", para todos
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
         from .pendencias import identificador_lote, _e_complemento, marcar_parado
         marcar_parado(d, lendo)                          # UX-09 (campos novos, opcionais): parado_h, parado, leitura_interrompida
@@ -683,6 +686,56 @@ def mudar_etapa(lid: int, d: EtapaFila, u: dict = Depends(auth.exige("operador")
     _evento(con, "projeto", l["projeto_codigo"], f"fila_{d.etapa}", u["email"])
     con.commit(); con.close()
     return {"ok": True}
+
+
+class DispensaLote(BaseModel):
+    motivo: str | None = None
+
+
+@router.post("/filas/{lid}/dispensar")
+def dispensar_lote(lid: int, d: DispensaLote | None = None, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-35: "Dispensar este lote" — lote com erro do CAMP Vision que ninguém consegue resolver sai das listas e das contagens de TODOS.
+    Não apaga nada, não mexe no QNAP nem na etapa/status.json. Guarda a assinatura do erro: se o CAMP Vision reler e o erro mudar, volta."""
+    from .dispensa_lote import assinatura_do_lote, _mensagem_cv
+    motivo = ((d.motivo if d else None) or "").strip()[:300] or None
+    con = connect()
+    try:
+        l = con.execute("SELECT * FROM lista_processamento WHERE id=? AND descartado_em IS NULL", (lid,)).fetchone()
+        if not l:
+            raise HTTPException(404, "Lote não encontrado")
+        if l["etapa"] != "erro":
+            raise HTTPException(400, "Só dá para dispensar um lote parado com erro do CAMP Vision.")
+        erro_cv = _mensagem_cv(l["status_json"], l["resultado"])[:500] or None
+        con.execute("""INSERT INTO lote_dispensado (lote_id, assinatura, etapa, erro_cv, motivo, por, em) VALUES (?,?,?,?,?,?,datetime('now'))
+                       ON CONFLICT(lote_id) DO UPDATE SET assinatura=excluded.assinatura, etapa=excluded.etapa, erro_cv=excluded.erro_cv,
+                                                          motivo=excluded.motivo, por=excluded.por, em=excluded.em""",
+                    (lid, assinatura_do_lote(l), l["etapa"], erro_cv, motivo, u["email"]))
+        from .pendencias import identificador_lote, _e_complemento
+        det = {"lote": lid, "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"])), "motivo": motivo, "erro_cv": (erro_cv or "")[:200] or None}
+        _evento(con, "projeto", l["projeto_codigo"], "lote_dispensado", u["email"], det)     # Histórico de ações e histórico do projeto
+        con.commit()
+        return {"ok": True, "id": lid, "mensagem": "Lote dispensado: saiu das listas e das contagens. Volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar."}
+    finally:
+        con.close()
+
+
+@router.delete("/filas/{lid}/dispensar")
+def voltar_a_mostrar_lote(lid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-35: "Voltar a mostrar" desfaz a dispensa (o lote volta às listas e às contagens de todos)."""
+    con = connect()
+    try:
+        l = con.execute("SELECT id, nome, criado_em, resultado, projeto_codigo FROM lista_processamento WHERE id=?", (lid,)).fetchone()
+        if not l:
+            raise HTTPException(404, "Lote não encontrado")
+        if not con.execute("DELETE FROM lote_dispensado WHERE lote_id=?", (lid,)).rowcount:
+            return {"ok": True, "id": lid, "mensagem": "Este lote já estava sendo mostrado."}
+        from .pendencias import identificador_lote, _e_complemento
+        _evento(con, "projeto", l["projeto_codigo"], "lote_dispensa_desfeita", u["email"],
+                {"lote": lid, "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"]))})
+        con.commit()
+        return {"ok": True, "id": lid, "mensagem": "O lote voltou para as listas e as contagens."}
+    finally:
+        con.close()
 
 
 @router.get("/estacoes/contexto-operador")
