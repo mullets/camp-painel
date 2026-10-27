@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
+MODOS_RAPIDOS = {"dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4734,6 +4734,43 @@ def filho(modo):
         r3 = le.get("/api/duplicados/projetos").json()
         ver("o relatório se refaz quando um nome muda (não fica preso no guardado)", ("F072-P0003", "F072-P0004") in {(x["a"]["codigo"], x["b"]["codigo"]) for x in r3.get("pares") or []})
         ver("projeto que não existe: 404", le.get("/api/projetos/F072-P0999/parecidos").status_code == 404)
+        for l in res: print(l)
+    elif modo == "dup_nao_trava":
+        # 27/10 (produção: "Não foi possível carregar o painel · A operação demorou demais", só ia recarregando 5×): a conta dos
+        # possíveis projetos duplicados (UX-29) rodava DENTRO da requisição, e cada página aberta começava a sua, em paralelo.
+        # Agora: UMA conta por vez, numa thread; a rota espera no máximo 2 s e devolve o último resultado com calculando=True.
+        init_db(); _aplicar_migracoes_real()
+        import threading as _th, time as _tm
+        from app import auth, projetos_duplicados as pdp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F073','Fundo Lento','FLE',1)")
+        for n, t in {1: "Jockey Club", 2: "Edifício Jockey Club São Paulo", 3: "Casa Azul"}.items():
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F073',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo) VALUES (?,?,?,?)", (f"F073-P{n:04d}", "F073", n, t))
+        c.commit(); c.close()
+        auth.criar_usuario("Admin", "admin@camp.arq.br", "senha-bem-longa-123", "admin", forcar_troca=False)
+        cl = TestClient(app); cl.post("/api/auth/login", json={"email": "admin@camp.arq.br", "senha": "senha-bem-longa-123"})
+        orig, chamadas = pdp._calcular, []
+        def lento(con, ass):
+            chamadas.append(1); _tm.sleep(5); return orig(con, ass)
+        pdp._calcular = lento
+        tempos, resp = [], []
+        def pedir():
+            t0 = _tm.monotonic(); r = cl.get("/api/duplicados/projetos?limite=50"); tempos.append(_tm.monotonic() - t0); resp.append(r.json())
+        ts = [_th.Thread(target=pedir) for _ in range(5)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        ver("5 páginas abertas ao mesmo tempo: cada uma responde em até ~2 s (antes: esperava a conta inteira)", max(tempos) < 3.5, str([round(x, 1) for x in tempos]))
+        ver("e a conta roda UMA vez só (antes: uma por página, em paralelo)", len(chamadas) == 1, str(len(chamadas)))
+        ver("enquanto calcula, a resposta diz calculando=True", all(r.get("calculando") is True for r in resp), str([r.get("calculando") for r in resp]))
+        _tm.sleep(4)
+        r = cl.get("/api/duplicados/projetos?limite=50").json()
+        ver("quando a conta acaba, vem o resultado (o par do Jockey) e calculando=False", r.get("calculando") is False and r.get("total", 0) >= 1, str(r)[:200])
+        ver("e não calcula de novo enquanto nada muda", len(chamadas) == 1, str(len(chamadas)))
+        pdp._calcular = orig
         for l in res: print(l)
     elif modo == "importar_sozinho":
         # CAMP-151 (22/10, decidido pelo Rafa): importar sozinho quando o CAMP Vision termina o lote, pelo coletor em segundo plano
@@ -12880,6 +12917,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"verificar destino: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("27/10: a conta dos duplicados não prende o painel (uma por vez, em segundo plano, resposta em até 2 s)")
+rc, out = rodar("dup_nao_trava", f"{tmp}/dup_nao_trava.db")
+if rc != 0: ok(False, f"teste dup_nao_trava não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"duplicados não travam: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-29: possível duplicata ao criar/editar projeto e o relatório em Problemas")
 rc, out = rodar("ux29_duplicata", f"{tmp}/ux29_duplicata.db")
