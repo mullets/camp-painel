@@ -405,7 +405,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .np-par{border:1px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0}
 .btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 .ajuda-caixa{background:var(--blue-soft);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:var(--r);padding:12px 14px;margin:0 0 14px;max-height:none}
-.ajuda-caixa .aj-topo{display:flex;justify-content:space-between;align-items:center;gap:10px}.ajuda-caixa h2{font-size:var(--fs-base);margin:0;font-weight:600}.ajuda-caixa h2:focus{outline:2px solid var(--blue);outline-offset:2px}
+.ajuda-caixa .aj-topo{display:flex;justify-content:space-between;align-items:center;gap:10px}.ajuda-recolhida{padding:6px 14px}.ajuda-recolhida>summary{cursor:pointer;list-style:none}.ajuda-recolhida>summary::-webkit-details-marker{display:none}.ajuda-recolhida>summary h2{display:inline;font-weight:500;color:var(--ink2)}.ajuda-recolhida[open]>summary h2{font-weight:600;color:inherit}.ajuda-caixa h2{font-size:var(--fs-base);margin:0;font-weight:600}.ajuda-caixa h2:focus{outline:2px solid var(--blue);outline-offset:2px}
 .ajuda-caixa .aj-serve{margin:8px 0 4px}.ajuda-caixa .aj-passos{margin:4px 0 6px 18px;padding:0;display:grid;gap:3px}.ajuda-caixa details{margin:4px 0}.ajuda-caixa summary{cursor:pointer;color:var(--ink2);font-size:var(--fs-md)}.ajuda-caixa details p,.ajuda-caixa details ul{margin:6px 0 0}.ajuda-caixa details ul{padding-left:18px}
 .ajuda-caixa .aj-rodape{margin:6px 0 0;font-size:var(--fs-sm)}.ajuda-caixa.destaque{box-shadow:0 0 0 3px var(--blue)}
 .vd-op{display:block;cursor:pointer}.dec-op{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--surface)}.dec-op header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.dec-folhas{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.dec-folhas img{width:64px;height:64px;object-fit:cover;border-radius:var(--r);background:var(--surface2)}
@@ -1132,8 +1132,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
   <div class="top">
     <div class="search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-      <input id="q" placeholder="Buscar projeto, fundo, arquiteto ou código" autocomplete="off" aria-label="Buscar projeto, fundo, arquiteto ou código">
-      <span class="hint">F0xx-P000x</span>
+      <input id="q" placeholder="Buscar projeto, fundo, arquiteto ou código (F0xx-P000x)" autocomplete="off" aria-label="Buscar projeto, fundo, arquiteto ou código">
       <div class="res" id="qres"></div>
     </div>
     <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span>Rafael</span><div class="av">RM</div></div><div class="who-menu" id="who-menu" role="menu" hidden><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
@@ -2378,18 +2377,26 @@ function marcarTermosTela(){const sec=document.querySelector('.content.on');if(!
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('termo'))mostrarTermo(e.target);if(e.key==='Escape')document.getElementById('termo-pop')?.remove()});
 function montarPaginasAjuda(){const c=document.getElementById('v-caminho-corpo'),g=document.getElementById('v-glossario-corpo');if(c&&!c.dataset.ok){c.innerHTML=paginaCaminhoHTML();c.dataset.ok='1'}if(g&&!g.dataset.ok){g.innerHTML=paginaGlossarioHTML();g.dataset.ok='1'}}
 function chaveAjudaAtual(){const on=document.querySelector('section.content.on'),v=on&&on.id&&on.id.startsWith('v-')?on.id.slice(2):null;return v&&AJUDA_PAGINAS[v]?v:null}
-function caixaAjudaHTML(k,novo){const vt=new Set(),a=AJUDA_PAGINAS[k],papel=EU&&EU.papel?{admin:'admin',master:'admin',operador:'operador',leitura:'leitura'}[EU.papel]:'';
-  return `<section class="ajuda-caixa" role="note" aria-labelledby="aj-t-${k}" data-ajuda="${k}"><div class="aj-topo"><h2 id="aj-t-${k}" tabindex="-1"><span aria-hidden="true">ⓘ</span> Como funciona esta página${novo?' <span class="tag b">Novo</span>':''}</h2><button class="btn sm" data-ajuda-fechar="${k}">Entendi ✕</button></div>
+/* UX-31: depois do PRIMEIRO "Entendi" (qualquer página; preferência no servidor, por pessoa), as caixas das outras páginas chegam RECOLHIDAS
+   (uma linha "ⓘ Como funciona esta página" que abre no clique). O "?" (reabrirAjuda) continua abrindo a caixa inteira. */
+function ajudaJaFechouAlguma(){return !!AJUDA_VISTAS&&Object.keys(AJUDA_VISTAS).some(x=>x.startsWith('ajuda.')&&AJUDA_VISTAS[x])}
+function caixaAjudaHTML(k,novo,recolhida){const vt=new Set(),a=AJUDA_PAGINAS[k],papel=EU&&EU.papel?{admin:'admin',master:'admin',operador:'operador',leitura:'leitura'}[EU.papel]:'';
+  const tit=`<h2 id="aj-t-${k}" tabindex="-1"><span aria-hidden="true">ⓘ</span> Como funciona esta página${novo?' <span class="tag b">Novo</span>':''}</h2>`;
+  if(recolhida)return `<details class="ajuda-caixa ajuda-recolhida" role="note" aria-labelledby="aj-t-${k}" data-ajuda="${k}"><summary>${tit}</summary><div class="aj-topo"><span></span><button class="btn sm" data-ajuda-fechar="${k}">Entendi ✕</button></div>${caixaAjudaCorpo(k,a,vt,papel)}</details>`;
+  return `<section class="ajuda-caixa" role="note" aria-labelledby="aj-t-${k}" data-ajuda="${k}"><div class="aj-topo">${tit}<button class="btn sm" data-ajuda-fechar="${k}">Entendi ✕</button></div>${caixaAjudaCorpo(k,a,vt,papel)}</section>`}
+function caixaAjudaCorpo(k,a,vt,papel){return `
   <p class="aj-serve"><b>Para que serve:</b> ${comTermos(escHtml(a.serve),vt)}</p><ol class="aj-passos">${a.passos.map(p=>`<li>${comTermos(escHtml(p),vt)}</li>`).join('')}</ol><details class="aj-passos-m"><summary>Ver os passos</summary><ol>${a.passos.map(p=>`<li>${escHtml(p)}</li>`).join('')}</ol></details>
   ${a.cores.length?`<details><summary>O que significam as cores e etiquetas</summary><ul>${a.cores.map(([e,m])=>`<li><b>${escHtml(e)}</b>: ${escHtml(m)}</li>`).join('')}</ul></details>`:''}
   ${a.cuidados?`<details><summary>Cuidados</summary><p>${escHtml(a.cuidados)}</p></details>`:''}<details><summary>Quem pode</summary><p>${escHtml(a.quem)}${papel?` Você é <b>${escHtml(papel)}</b>.`:''}</p></details>
-  <p class="aj-rodape"><button class="lnk" data-ajuda-atalhos>Passo a passo e atalhos de teclado</button> · <button class="lnk" onclick="nav('caminho')">Como o material anda</button> · <button class="lnk" onclick="nav('glossario')">Glossário</button></p></section>`}
+  <p class="aj-rodape"><button class="lnk" data-ajuda-atalhos>Passo a passo e atalhos de teclado</button> · <button class="lnk" onclick="nav('caminho')">Como o material anda</button> · <button class="lnk" onclick="nav('glossario')">Glossário</button></p>`}
 function garantirCaixaAjuda(forcar){
   const k=chaveAjudaAtual();if(!k||!EU||AJUDA_VISTAS===null)return;const sec=document.getElementById('v-'+k);if(!sec)return;
   const versao=String(AJUDA_PAGINAS[k].v),vista=AJUDA_VISTAS['ajuda.'+k],abrir=forcar||AJUDA_FORCADA.has(k)||vista!==versao;
   let box=sec.querySelector(':scope > .ajuda-caixa');
   if(box&&!abrir){box.remove();return}
-  if(!box&&abrir){const hdr=sec.querySelector(':scope > .hdr');const html=caixaAjudaHTML(k,!!vista&&vista!==versao);hdr?hdr.insertAdjacentHTML('afterend',html):sec.insertAdjacentHTML('afterbegin',html)}}
+  const inteira=forcar||AJUDA_FORCADA.has(k);
+  if(box&&abrir&&inteira&&box.classList.contains('ajuda-recolhida')){box.remove();box=null}   // UX-31: o "?" troca a linha recolhida pela caixa inteira
+  if(!box&&abrir){const hdr=sec.querySelector(':scope > .hdr');const html=caixaAjudaHTML(k,!!vista&&vista!==versao,!inteira&&ajudaJaFechouAlguma());hdr?hdr.insertAdjacentHTML('afterend',html):sec.insertAdjacentHTML('afterbegin',html)}}
 async function carregarPreferenciasAjuda(){const ch='camp.ajuda.vistas.'+((EU&&EU.email)||'');try{const c=JSON.parse(localStorage.getItem(ch)||'null');if(c&&AJUDA_VISTAS===null){AJUDA_VISTAS=c;garantirCaixaAjuda()}}catch(_){}   /* H1: o que já se sabe aparece na hora (sem piscar a caixa) */
   try{AJUDA_VISTAS=await API('/api/auth/eu/preferencias')}catch(_){AJUDA_VISTAS=AJUDA_VISTAS||{}}guardarVistasLocal();garantirCaixaAjuda()}
 function guardarVistasLocal(){try{localStorage.setItem('camp.ajuda.vistas.'+((EU&&EU.email)||''),JSON.stringify(AJUDA_VISTAS||{}))}catch(_){}}

@@ -1326,7 +1326,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   chk([...d.querySelectorAll('#nav > button[data-v]:not(.nav-sec)')].map(b=>b.dataset.v).join(',')==='painel,projetos,fundos,solicitacoes,estacoes'&&!!d.getElementById('nav-mais-pc'),'[CAMP-154] o menu deveria ter 5 destinos e o "Mais"');
   w.route_to('filas'); await sleep(1200); chk(/^Material novo/.test(txt('#v-filas h1'))&&/Material novo/.test(txt('#gcrumb'))&&/Trabalho do dia/.test(txt('#gcrumb')),'[H25] título e trilha deveriam acompanhar o nome do menu: "'+txt('#v-filas h1')+'" / "'+txt('#gcrumb')+'"');
   chk(!!d.querySelector('#v-filas .hdr .help-h1')&&!d.querySelector('.top .help-top'),'[H25] o "?" deveria ficar ao lado do título da página, e não perdido no topo');
-  chk(d.getElementById('q').placeholder==='Buscar projeto, fundo, arquiteto ou código','[H25] a busca deveria dizer o que procura: '+d.getElementById('q').placeholder);
+  chk(d.getElementById('q').placeholder==='Buscar projeto, fundo, arquiteto ou código (F0xx-P000x)','[H25] a busca deveria dizer o que procura: '+d.getElementById('q').placeholder);
   d.querySelector('.who').click(); await sleep(100); const wm=d.getElementById('who-menu');
   chk(!wm.hidden&&/Meu perfil/.test(wm.textContent)&&/Atalhos/.test(wm.textContent)&&/Mostrar de novo as explicações/.test(wm.textContent)&&/Sair/.test(wm.textContent),'[H25] o avatar deveria abrir o menu (Meu perfil · Atalhos · Mostrar de novo as explicações · Sair)');
   d.body.click(); await sleep(50); chk(wm.hidden,'[H25] clicar fora deveria fechar o menu do avatar');
