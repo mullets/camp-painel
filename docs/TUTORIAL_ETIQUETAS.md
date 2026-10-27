@@ -69,6 +69,7 @@ O código de barras é **Code 39**. Qualquer leitor comum lê.
    | **70×35** | 70 × 35 mm | Etiqueta pequena |
    | **20×140** | 20 × 140 mm | Lombada de tubo |
    | **90×29** | 90 × 29 mm | **Brother QL-700**, rolo **DK-1201** |
+   | **50×15**, **40×12**, **30×12** | 50 × 15, 40 × 12, 30 × 12 mm | **NIIMBOT D110** (slides e negativos), com QR |
 
 2. **Papel:** impressora de etiquetas (uma por página, no tamanho exato) **ou** folha A4 com várias etiquetas.
 3. **Cópias:** de 1 a 60. Na folha avulsa, as cópias viram **sequência** (D00019, D00020…).
@@ -84,6 +85,15 @@ Para a **Brother QL-700** com o rolo DK-1201, configure:
 - Orientação: **paisagem**
 - Margens: **nenhuma**
 - Escala: **100%**
+
+Para a **NIIMBOT D110** (formatos 50×15, 40×12 e 30×12), é igual às outras impressoras (desde 27/10, UX-42): clique em **Imprimir** e, na janela de impressão, configure:
+
+- Impressora: a **NIIMBOT** da rede (instalada no servidor de impressão, como as outras)
+- Papel: o tamanho do formato (ex.: **40 × 12 mm**)
+- Margens: **nenhuma**
+- Escala: **100%** (desmarque "ajustar à página")
+
+Sai uma etiqueta por página. O painel não fala mais direto com a NIIMBOT (o programa niimblue-node no Mac não é usado mais). **Baixar imagens** continua como opção: salva uma imagem de cada etiqueta.
 
 O painel lembra o último **formato** e o **papel** escolhidos **por pessoa**: valem em qualquer computador em que você entrar com o seu login (UX-25). A impressora em si é escolhida na janela de impressão do navegador, que lembra a última usada.
 

@@ -107,6 +107,8 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 | **Etiquetar e guardar** | Próximo passo do projeto aprovado ou publicado | abre Etiquetas já preenchida, com o passo "Onde guardar" |
 | **Onde guardar** / **Guardar nesta caixa** | Etiquetas, aba Pasta de projeto | põe numa caixa só as folhas do projeto que ainda não têm lugar |
 | **Impressas** / **Reimprimir** | Etiquetas | histórico do que saiu no Imprimir; reimprimir volta a etiqueta como saiu |
+| **Imprimir** (formatos NIIMBOT, UX-42) | Etiquetas | como nas outras impressoras: abre a janela de impressão, onde se escolhe a NIIMBOT da rede. Não usar mais "Imprimir na NIIMBOT", "Procurando a NIIMBOT", "NIIMBOT não encontrada" |
+| **Baixar imagens** | Etiquetas, formatos NIIMBOT | opção secundária: uma imagem por etiqueta |
 | **sem lugar** | Painel inicial, Onde está guardado | folha sem caixa, gaveta, tubo, mapoteca ou estante cadastrada |
 
 ### Página do arquiteto incompleta (UX-38, 27/10/2026)

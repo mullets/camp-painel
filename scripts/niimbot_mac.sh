@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# NÃO USADO MAIS (27/10, UX-42): o painel imprime na NIIMBOT pela janela de impressão, como nas outras impressoras (a NIIMBOT da rede,
+# no servidor de impressão). Este script fica só para DESINSTALAR o servidor dos Macs onde ele foi instalado: bash scripts/niimbot_mac.sh --remover
 # Instala no Mac da etiquetadora o servidor de impressão da NIIMBOT D110 (niimblue-node, código aberto, MIT) e deixa ele ligando sozinho.
 # O painel (Etiquetas → formato NIIMBOT → "Imprimir na NIIMBOT") manda as etiquetas para http://localhost:5000; o servidor fala com a D110
 # pelo cabo USB-C (recomendado) ou Bluetooth. Uso: bash scripts/niimbot_mac.sh        Desinstalar: bash scripts/niimbot_mac.sh --remover
