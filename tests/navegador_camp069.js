@@ -75,7 +75,8 @@ const espera = async (f, ms = 10000) => { const t = Date.now(); while (Date.now(
   // o de "folha retirada" fecha sozinho de novo (a folha já está no painel); o que importa é o que bloqueia publicar reabrir
   chk(JSON.parse(q(`SELECT COUNT(*) FROM erro WHERE codigo='${D(5)}' AND situacao='aberto' AND gravidade='bloqueia'`))[0][0] === 1, 'Desfazer: o problema "de outro projeto" que bloqueia publicar reabre');
   // 5) "É de outro projeto…" na folha que nem entrou no painel: fecha os problemas dela (fica fora)
-  await pg.click('#err-abas [data-err-sit="abertos"]'); await pg.waitForSelector(`#err-body [data-fp-outro="${D(6)}"]`, { timeout: 10000 });
+  // UX-19: a aba "Abertos" agora é data-err-sit="pedem_acao" (bloqueia/corrigir); os 2 problemas desta folha (bloqueia + corrigir) ficam nela
+  await pg.click('#err-abas [data-err-sit="pedem_acao"]'); await pg.waitForSelector(`#err-body [data-fp-outro="${D(6)}"]`, { timeout: 10000 });
   await pg.click(`#err-body [data-fp-outro="${D(6)}"]`); await pg.click('#conf-ov [data-conf="sim"]');
   chk(await espera(() => JSON.parse(q(`SELECT COUNT(*) FROM erro WHERE codigo='${D(6)}' AND situacao='corrigido'`))[0][0] === 2), '"É de outro projeto…" (folha fora do painel): os problemas fecham como corrigidos, a folha fica fora');
   // 6) a gaveta do problema também tem a imagem e as decisões
