@@ -142,6 +142,7 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 
 ## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
 - Na frente da Home (**Precisa de você**) só ficam **O que fazer agora** (com **O caminho do material**), **Está tudo funcionando?** e **Hoje**.
+- **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar), e não no bloco recolhido.
 - **Números do acervo**: bloco recolhido no fim da Home com Qualidade da base, Ritmo das últimas 2 semanas, Quanto do acervo já está no site,
   Melhorias de hoje e, com o Google Analytics ligado, Visitas ao site. Abre num clique e fica lembrado neste navegador.
 - **Visitas ao site** com o Google Analytics desligado mora em **Configurações** (com "Ver como ligar"), não na Home.

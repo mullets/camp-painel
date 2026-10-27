@@ -93,7 +93,7 @@ No passo **3 · Onde guardar**, o painel diz quantas folhas do projeto ainda est
 
 ### Impressas (histórico e reimprimir)
 A aba **Impressas** lista as últimas 100 etiquetas impressas: quando, qual etiqueta, formato, quantas e quem imprimiu. **Reimprimir** volta a etiqueta exatamente como saiu (projeto, folha ou caixa, material, volume, formato e papel); confira a prévia e clique em **Imprimir**.
-O Painel inicial mostra, discreto, **"N folhas publicadas sem lugar"**: folhas que o público já vê e que ainda não têm caixa.
+O Painel inicial mostra, discreto, no fim de **O que fazer agora**, **"N folhas publicadas sem lugar"**: folhas que o público já vê e que ainda não têm caixa.
 
 ---
 

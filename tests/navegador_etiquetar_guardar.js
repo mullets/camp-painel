@@ -89,7 +89,7 @@ const login = pg => pg.evaluate(() => fetch('/api/auth/login', { method: 'POST',
   const imp2 = await pg.evaluate(() => fetch('/api/etiquetas/impressas').then(r => r.json()));
   chk(imp2.length === 2 && imp2[0].codigo === 'F023-P0011', 'a reimpressão também entra no histórico', String(imp2.length));
   // 5) Painel inicial: o número some
-  await pg.goto(BASE + '/#painel'); await pg.waitForSelector('#ini-t-site', { timeout: 15000 }); await pg.waitForTimeout(1200);
+  await pg.goto(BASE + '/#painel'); await pg.waitForSelector('#ini-t-fazer', { timeout: 15000 }); await pg.waitForTimeout(1200);
   chk(!(await pg.$('#ini-semlugar')), 'Painel inicial: sem folhas publicadas sem lugar, a linha não aparece');
   chk(erros.length === 0, 'nenhum erro de JavaScript', erros.join(' | '));
   await br.close();
