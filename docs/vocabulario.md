@@ -67,6 +67,14 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 | **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
 
+## Etiquetas e lugar físico (UX-25)
+| Termo | Onde | O que significa |
+|---|---|---|
+| **Etiquetar e guardar** | Próximo passo do projeto aprovado ou publicado | abre Etiquetas já preenchida, com o passo "Onde guardar" |
+| **Onde guardar** / **Guardar nesta caixa** | Etiquetas, aba Pasta de projeto | põe numa caixa só as folhas do projeto que ainda não têm lugar |
+| **Impressas** / **Reimprimir** | Etiquetas | histórico do que saiu no Imprimir; reimprimir volta a etiqueta como saiu |
+| **sem lugar** | Painel inicial, Onde está guardado | folha sem caixa, gaveta, tubo, mapoteca ou estante cadastrada |
+
 ## Regras de texto
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.

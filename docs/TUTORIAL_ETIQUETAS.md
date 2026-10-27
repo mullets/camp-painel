@@ -82,7 +82,15 @@ Para a **Brother QL-700** com o rolo DK-1201, configure:
 - Margens: **nenhuma**
 - Escala: **100%**
 
-O painel lembra o último formato escolhido, mas **só neste navegador**. Em outra estação, escolha de novo uma vez.
+O painel lembra o último **formato** e o **papel** escolhidos **por pessoa**: valem em qualquer computador em que você entrar com o seu login (UX-25). A impressora em si é escolhida na janela de impressão do navegador, que lembra a última usada.
+
+### Ao fim do lote: "Etiquetar e guardar" (UX-25)
+Depois de aprovar ou publicar, o **Próximo passo** da página do projeto tem o botão **Etiquetar e guardar**. Ele abre Etiquetas já com o fundo e o projeto escolhidos: é só clicar em **Imprimir** (2 cliques a partir do projeto).
+No passo **3 · Onde guardar**, o painel diz quantas folhas do projeto ainda estão sem lugar e sugere a caixa: a que já guarda o projeto ou a **próxima CX-### livre**. **Guardar nesta caixa** cria a caixa (se ainda não existe, no fundo do projeto) e coloca nela **só as folhas sem lugar**; as que já têm lugar não mudam. Depois, **Imprimir etiqueta da caixa**.
+
+### Impressas (histórico e reimprimir)
+A aba **Impressas** lista as últimas 100 etiquetas impressas: quando, qual etiqueta, formato, quantas e quem imprimiu. **Reimprimir** volta a etiqueta exatamente como saiu (projeto, folha ou caixa, material, volume, formato e papel); confira a prévia e clique em **Imprimir**.
+O Painel inicial mostra, discreto, **"N folhas publicadas sem lugar"**: folhas que o público já vê e que ainda não têm caixa.
 
 ---
 

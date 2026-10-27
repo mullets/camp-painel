@@ -178,6 +178,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 #v-etiquetas{max-width:1480px}
 #v-etiquetas .hdr{align-items:flex-start}
 #v-etiquetas .tabs{overflow-x:auto;white-space:nowrap;padding-bottom:1px}
+/* UX-25: "Onde guardar" (passo 3), aba "Impressas" e o contador discreto do Painel inicial */
+#v-etiquetas [hidden]{display:none!important}
+#v-etiquetas .lab-impressas .hint{margin-left:auto;color:var(--ink3);font-size:var(--fs-sm)}
+#l-guardar-res .al-res{margin-top:8px}
+.ini-semlugar{margin:0;padding:0 16px 14px;font-size:var(--fs-sm);color:var(--ink3)}
 .lab-wrap{display:grid;grid-template-columns:minmax(380px,460px) minmax(420px,1fr);gap:20px;align-items:start}
 .lab-form{min-width:0;overflow:hidden}
 .lab-form .pb{padding:0!important}
@@ -279,7 +284,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 @media print{
   body{background:#fff}
   .app,.top,.side,.content{display:block!important;padding:0;border:0}
-  .side,.top,.content:not(#v-etiquetas),#v-etiquetas .hdr,#v-etiquetas .lab-form,#v-etiquetas .lab-preview-shell,#v-etiquetas .tabs,.lab-note,.gcrumb,.toast,.ajuda-caixa,.drawer,.modal{display:none!important}
+  .side,.top,.content:not(#v-etiquetas),#v-etiquetas .hdr,#v-etiquetas .lab-form,#v-etiquetas .lab-preview-shell,#v-etiquetas .tabs,#v-etiquetas .lab-impressas,.lab-note,.gcrumb,.toast,.ajuda-caixa,.drawer,.modal{display:none!important}
   #v-etiquetas{display:block!important;max-width:none!important;margin:0!important;padding:0!important}
   .lab-wrap{display:none!important}
   .printgrid{display:grid!important;grid-template-columns:repeat(2,max-content);gap:6mm;padding:8mm;align-items:start;justify-content:start}
@@ -1251,6 +1256,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
       <button data-t="caixa">Caixa ou gaveta</button>
       <button data-t="tubo">Lombada de tubo</button>
       <button data-t="fundo">Fundo</button>
+      <button data-t="impressas">Impressas</button>
     </div>
     <div class="lab-wrap">
       <div class="panel lab-form">
@@ -1288,6 +1294,13 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
           <div class="qty"><label class="field">Cópias<input id="l-qty" type="number" value="2" min="1" max="60"></label><label class="field"><span>Observação <small class="help" id="l-obs-cont" aria-live="polite">0/30</small></span><input id="l-obs" maxlength="30" placeholder="opcional, sai em letra pequena"></label></div>
           <div class="lab-note" id="l-qty-nota" style="font-size:var(--fs-sm);color:var(--ink3)">Na folha avulsa, as cópias viram uma sequência a partir do número informado (D00019, D00020…).</div>
         </div>
+        <div class="lab-section" id="f-guardar" hidden>
+          <div class="lab-section-title"><span class="lab-passo">3</span> Onde guardar</div>
+          <p class="help" id="l-guardar-sit" aria-live="polite"></p>
+          <label class="field">Caixa<input id="l-guardar-cx" class="mono" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CX-001" aria-describedby="l-guardar-ajuda"><small class="help" id="l-guardar-ajuda">O identificador escrito na caixa. Se ela ainda não existe em "Onde está guardado", é criada no fundo do projeto. Só as folhas sem lugar entram nela; as outras não mudam de lugar.</small></label>
+          <div class="act"><button type="button" class="btn" id="l-guardar-bt">Guardar nesta caixa</button></div>
+          <div id="l-guardar-res" role="status"></div>
+        </div>
       </div>
       <div class="lab-preview-shell">
         <div class="lab-origem" id="lab-origem"></div>
@@ -1296,6 +1309,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
         <p class="lab-aviso" id="lab-aviso">Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.</p>
       </div>
     </div>
+    <div class="panel lab-impressas" id="lab-impressas" hidden><div class="ph"><h2>Etiquetas impressas</h2><span class="hint">as últimas 100, mais recentes primeiro</span></div><div class="tw"><table><thead><tr><th>Quando</th><th>Etiqueta</th><th>Formato</th><th class="num">Quantas</th><th>Quem</th><th></th></tr></thead><tbody id="lab-impressas-body"></tbody></table></div></div>
     <div class="printgrid" id="printgrid"></div>
   </section>
 
@@ -1981,15 +1995,21 @@ async function imprimirNiimbot(){const bt=document.getElementById('lab-imprimir'
     let dens=2;try{dens=+(localStorage.getItem('camp.niim.densidade')||2)||2}catch(_){}
     bt.textContent=`Imprimindo ${total}…`;
     await niimReq('/print',{printDirection:'left',labelType:1,density:dens,pages},Math.max(60000,total*8000));
-    toast(`✔ ${total===1?'1 etiqueta impressa':total+' etiquetas impressas'} na NIIMBOT`,{ms:5000})}
+    toast(`✔ ${total===1?'1 etiqueta impressa':total+' etiquetas impressas'} na NIIMBOT`,{ms:5000});labRegistrarImpressao(total,'niimbot')}
   catch(e){toast('NIIMBOT: '+e.message,{ms:8000})}
   finally{bt.disabled=false;bt.removeAttribute('aria-busy');bt.textContent=txt0}}
 let labType='projeto';function labTipoAtual(){return labType}
-document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
+document.getElementById('lab-tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.t==='impressas'){labMostrarImpressas(true);return}labMostrarImpressas(false);labType=b.dataset.t;document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.getElementById('f-proj').style.display=labType==='fundo'||labType==='caixa'?'none':'';document.getElementById('f-doc').style.display=labType==='documento'?'':'none';document.getElementById('f-caixa').style.display=labType==='caixa'?'':'none';
-  document.getElementById('l-fmt').value=labType==='tubo'?'20x140':labFmtPreferido();labAjustarCampos();renderLabel()});
-function labFmtPreferido(){let f='100x50';try{const v=localStorage.getItem('camp.lab.fmt');if(v&&v!=='20x140'&&document.querySelector(`#l-fmt option[value="${v}"]`))f=v}catch(_){}return f}
-document.getElementById('l-fmt')?.addEventListener('change',e=>{try{if(e.target.value!=='20x140')localStorage.setItem('camp.lab.fmt',e.target.value)}catch(_){}});
+  document.getElementById('l-fmt').value=labType==='tubo'?'20x140':labFmtPreferido();labAjustarCampos();renderLabel();labGuardarAtualizar()});
+function labFmtPreferido(){let f='100x50';try{const v=(AJUDA_VISTAS&&AJUDA_VISTAS['etiqueta.formato'])||localStorage.getItem('camp.lab.fmt');if(v&&v!=='20x140'&&document.querySelector(`#l-fmt option[value="${v}"]`))f=v}catch(_){}return f}
+/* UX-25: o último formato e papel valem para a PESSOA (preferência no servidor, em qualquer computador); o deste navegador fica de reserva */
+let LAB_PREF_FILA=Promise.resolve();   /* em fila: o API() junta escritas iguais em curso (mesmo método e caminho), e formato + papel seguidos perderiam o papel */
+function labGuardarPref(chave,valor){try{AJUDA_VISTAS=AJUDA_VISTAS||{};AJUDA_VISTAS['etiqueta.'+chave]=valor;if(EU)LAB_PREF_FILA=LAB_PREF_FILA.then(()=>API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'etiqueta.'+chave,valor})})).catch(()=>{})}catch(_){}}
+function labAplicarPrefs(){const f=document.getElementById('l-fmt'),pp=document.getElementById('l-papel');let mudou=false;if(labType!=='tubo'&&f){const v=labFmtPreferido();if(f.value!==v){f.value=v;mudou=true}}
+  const pv=AJUDA_VISTAS&&AJUDA_VISTAS['etiqueta.papel'];if(pp&&pv&&pp.value!==pv&&[...pp.options].some(o=>o.value===pv)){pp.value=pv;mudou=true}if(mudou)renderLabel()}
+document.getElementById('l-fmt')?.addEventListener('change',e=>{try{if(e.target.value!=='20x140')localStorage.setItem('camp.lab.fmt',e.target.value)}catch(_){}if(e.target.value!=='20x140')labGuardarPref('formato',e.target.value)});
+document.getElementById('l-papel')?.addEventListener('change',e=>labGuardarPref('papel',e.target.value));
 /* H21: o que aparece em cada aba (volume só na pasta; lote de folhas na folha; lote de pastas na pasta) */
 function labAjustarCampos(){const vis=(id,v)=>{const el=document.getElementById(id);if(el)el.style.display=v?'':'none'},temProj=['projeto','documento'].includes(labType);
   vis('f-volume',labType==='projeto'&&labLote()==='um');vis('f-material',['projeto','tubo'].includes(labType));labPreencherMaterial();vis('f-lote',temProj);vis('f-lote-folhas',labType==='documento');vis('f-lote-pastas',labType==='projeto');vis('f-lote-material',labType==='projeto'&&!!((document.getElementById('l-material')||{}).value));vis('f-cadastro-wrap',temProj);vis('l-qty-nota',labType==='documento'&&labLote()==='um');
@@ -2015,7 +2035,9 @@ function labMaterial(alvo){const c=(document.getElementById('l-material')||{}).v
   const n=alvo?null:((window.LABEL_CATEG||[]).find(x=>x.codigo===c)||{}).itens||0;return {codigo:c,nome:nomeSerieProjeto(c),n,texto:nomeSerieProjeto(c)+(n==null?'':' · '+n)}}
 function codigoProjetoEtiqueta(pc){const n=parseInt(String(pc||'').replace(/\D/g,''),10)||0;return 'P'+String(n).padStart(3,'0')}
 async function aplicarRotaEtiquetas(route){
-  const [,tipo,...r]=route.split('/'),id=decodeURIComponent(r.join('/')),aba={projeto:'projeto',fundo:'fundo',folha:'documento'}[tipo];
+  const [,tipo,...r]=route.split('/'),id=decodeURIComponent(r.join('/')),aba={projeto:'projeto',fundo:'fundo',folha:'documento',guardar:'projeto',tubo:'tubo'}[tipo];
+  await (window.PREFS_PRONTAS||Promise.resolve());labAplicarPrefs();   // UX-25: último formato e papel da pessoa
+  if(tipo==='impressas'){labMostrarImpressas(true);return}labMostrarImpressas(false);
   if((tipo==='local'||tipo==='caixa')&&id){await (window.FUNDOS_PRONTOS||Promise.resolve());   // #112: #etiquetas/local/<id> (o antigo #etiquetas/caixa/<id> continua valendo)
     document.querySelector('#lab-tabs [data-t="caixa"]')?.click();const l=(await carregarLocaisEtiqueta()).find(x=>String(x.id)===id);if(!l){toast('Localização não encontrada');return}
     document.getElementById('l-loc').value=String(l.id);aplicarLocalEtiqueta(l);return}
@@ -2027,7 +2049,7 @@ async function aplicarRotaEtiquetas(route){
   if(aba!=='fundo'){const pc=(id.match(/^F\d{3}-P\d{4}/)||[])[0],sp=document.getElementById('l-proj');if(pc&&[...sp.options].some(o=>o.value===pc)){sp.value=pc;await carregarDadosProjetoEtiqueta()}}
   const bt=document.querySelector(`#lab-tabs [data-t="${aba}"]`);if(bt)bt.click();
   if(tipo==='folha'){const m=id.match(/-D(\d+)$/),dd=document.getElementById('l-doc');if(m&&dd)dd.value=String(+m[1])}
-  renderLabel()}
+  renderLabel();if(tipo==='guardar'){await labGuardarAtualizar();const g=document.getElementById('f-guardar');if(g&&!g.hidden&&g.scrollIntoView)g.scrollIntoView({block:'nearest'})}}
 /* #112: a aba Caixa ou gaveta lista os locais cadastrados; escolher um preenche fundo, identificador e conteúdo */
 let LOCAIS_ETQ=null;
 function carregarLocaisEtiqueta(forcar){if(LOCAIS_ETQ&&!forcar)return LOCAIS_ETQ;
@@ -2060,7 +2082,7 @@ async function carregarDadosProjetoEtiqueta(){
     document.getElementById('l-cliente').value=LABEL_PROJETO.cliente||'';
     const sel=document.getElementById('l-volume');
     sel.innerHTML=vs.length?vs.map(v=>`<option value="${escHtml(v.volume)}">${escHtml(v.volume)} de ${escHtml(v.total_volumes)} · ${escHtml(v.tipo)} ${escHtml(v.identificador)}</option>`).join(''):'<option value="1">1 de 1 · sem localização cadastrada</option>';
-    aplicarVolumeEtiqueta();
+    aplicarVolumeEtiqueta();labGuardarAtualizar();
   }catch(e){toast('Etiquetas: '+e.message)}
 }
 function aplicarVolumeEtiqueta(){
@@ -2144,6 +2166,54 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     <div class="ls-campos" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${campos.map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
     ${obs?`<div class="ls-obs">${escHtml(obs)}</div>`:''}
     <div class="ls-barras">${barcode(code,peq?16:20,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
+/* UX-25 · histórico "Impressas": cada Imprimir registra o que saiu (tipo, código, formato, papel e o que é preciso para sair igual de novo) */
+function labCodigoAtual(lote){const v=id=>(document.getElementById(id)||{}).value||'',fc=v('l-fundo'),pc=v('l-proj');
+  if(lote==='pastas'||labType==='fundo')return fc;
+  if(labType==='caixa'){const cx=v('l-caixa').trim().toUpperCase(),id=/^[A-Z]/.test(cx)?cx:'CX'+cx.padStart(2,'0');return fc?`${fc}-${id}`:id}
+  if(labType==='documento'&&lote==='um'&&pc){const d=v('l-doc').replace(/\D/g,'')||'1',py=(LABEL_PROJETO&&LABEL_PROJETO.ano)||v('l-ano')||'0000';return `${pc}-${py}-${v('l-serie')}-D${String(+d).padStart(5,'0')}`}
+  return pc}
+function labRegistrarImpressao(qtd,papel){try{if(!EU)return;const lote=['projeto','documento'].includes(labType)?labLote():'um',codigo=labCodigoAtual(lote),v=id=>(document.getElementById(id)||{}).value||'';if(!codigo)return;
+  const cfg={material:v('l-material')||undefined,volume:labType==='projeto'&&lote==='um'?(+v('l-volume')||1):undefined,local_id:labType==='caixa'&&v('l-loc')?+v('l-loc'):undefined,copias:+v('l-qty')||1};
+  API('/api/etiquetas/impressas',{method:'POST',body:JSON.stringify({tipo:labType,codigo,quantidade:Math.max(1,qtd||1),formato_mm:v('l-fmt'),papel:papel||(v('l-papel')==='a4'?'a4':'rolo'),lote,config:cfg})}).then(()=>{LAB_IMPRESSAS=null}).catch(()=>{})}catch(_){}}
+let LAB_IMPRESSAS=null;const LAB_TIPO_NOME={projeto:'Pasta',documento:'Folha',caixa:'Caixa',tubo:'Lombada',fundo:'Fundo'},LAB_LOTE_NOME={folhas:'todas as folhas',pastas:'todas as pastas do fundo',material:'cada folha do material'};
+function labMostrarImpressas(on){const w=document.querySelector('#v-etiquetas .lab-wrap'),pi=document.getElementById('lab-impressas'),bi=document.getElementById('lab-imprimir'),bn=document.getElementById('lab-niim-baixar');if(!w||!pi)return;
+  w.hidden=!!on;pi.hidden=!on;if(bi)bi.hidden=!!on;if(on&&bn)bn.hidden=true;
+  if(on){document.querySelectorAll('#lab-tabs button').forEach(x=>x.classList.toggle('on',x.dataset.t==='impressas'));carregarImpressas()}
+  else{const ti=document.querySelector('#lab-tabs [data-t="impressas"]');if(ti&&ti.classList.contains('on')){ti.classList.remove('on');document.querySelector(`#lab-tabs [data-t="${labType}"]`)?.classList.add('on')}}}
+async function carregarImpressas(){const tb=document.getElementById('lab-impressas-body');if(!tb)return;tb.innerHTML='<tr><td colspan="6" class="empty">Carregando…</td></tr>';
+  try{LAB_IMPRESSAS=await API('/api/etiquetas/impressas?limite=100')}catch(e){tb.innerHTML=`<tr><td colspan="6" class="empty">${escHtml(e.message)}</td></tr>`;return}
+  tb.innerHTML=LAB_IMPRESSAS.length?LAB_IMPRESSAS.map(x=>`<tr><td>${escHtml(fmtDataHora(x.impressa_em))}</td><td><b>${escHtml(LAB_TIPO_NOME[x.tipo]||x.tipo)}</b> <span class="code">${escHtml(x.codigo)}</span>${x.titulo?' · '+escHtml(tituloExibicao(x.titulo)):''}${LAB_LOTE_NOME[x.lote]?` <small class="help">(${escHtml(LAB_LOTE_NOME[x.lote])})</small>`:''}</td><td>${escHtml(String(x.formato_mm).replace('x',' × '))} mm${x.papel==='a4'?' · A4':x.papel==='niimbot'?' · NIIMBOT':''}</td><td class="num">${escHtml(x.quantidade)}</td><td>${escHtml(x.usuario||'—')}</td><td><button type="button" class="btn sm" data-lab-reimp="${escHtml(x.id)}">Reimprimir</button></td></tr>`).join('')
+    :'<tr><td colspan="6" class="empty">Nenhuma etiqueta impressa ainda. Cada clique em Imprimir aparece aqui.</td></tr>'}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-lab-reimp]');if(b)labReimprimir(+b.dataset.labReimp)});
+/* Reimprimir: volta a etiqueta exatamente como saiu (aba, fundo, projeto, folha ou caixa, material, volume, lote, formato e papel); a pessoa confere a prévia e clica em Imprimir */
+async function labReimprimir(id){const x=(LAB_IMPRESSAS||[]).find(i=>i.id===id);if(!x)return;const c=x.config||{},set=(k,val)=>{const el=document.getElementById(k);if(el&&val!=null&&val!=='')el.value=String(val)};
+  document.querySelector(`#lab-tabs [data-t="${x.tipo}"]`)?.click();await (window.FUNDOS_PRONTOS||Promise.resolve());
+  if(x.tipo==='caixa'&&c.local_id){const l=(await carregarLocaisEtiqueta(true)).find(i=>i.id===c.local_id);if(l){set('l-loc',l.id);aplicarLocalEtiqueta(l)}}
+  else{const fc=(String(x.codigo).match(/^F\d{3}/)||[])[0]||'',lf=document.getElementById('l-fundo');
+    if(fc&&lf&&[...lf.options].some(o=>o.value===fc)){lf.value=fc;await carregarProjetosEtiqueta()}
+    const pc=(String(x.codigo).match(/^F\d{3}-P\d{4}/)||[])[0],sp=document.getElementById('l-proj');if(pc&&sp&&[...sp.options].some(o=>o.value===pc)){sp.value=pc;await carregarDadosProjetoEtiqueta()}
+    if(x.tipo==='caixa')set('l-caixa',String(x.codigo).replace(/^F\d{3}-/,''));
+    if(x.tipo==='documento'){const m=String(x.codigo).match(/-(S\d{2})-D(\d+)$/);if(m){set('l-serie',m[1]);set('l-doc',String(+m[2]))}}}
+  set('l-material',c.material||'');if(c.volume){set('l-volume',c.volume);aplicarVolumeEtiqueta()}
+  const r=document.querySelector(`input[name="l-lote"][value="${x.lote||'um'}"]`);if(r)r.checked=true;labAjustarCampos();
+  set('l-qty',c.copias||1);if(x.formato_mm&&document.querySelector(`#l-fmt option[value="${x.formato_mm}"]`))set('l-fmt',x.formato_mm);if(x.papel==='a4'||x.papel==='rolo')set('l-papel',x.papel);
+  renderLabel();toast('Etiqueta pronta para imprimir de novo: confira a prévia e clique em Imprimir.',{ms:5000});document.getElementById('lab-imprimir')?.focus()}
+/* UX-25 · "Onde guardar" (passo 3, aba Pasta de projeto): quantas folhas do projeto ainda não têm lugar e a caixa sugerida (a que já guarda o projeto, ou a próxima CX-### livre) */
+async function labGuardarAtualizar(){const g=document.getElementById('f-guardar'),pc=(document.getElementById('l-proj')||{}).value||'',op=!!(EU&&['operador','admin','master'].includes(EU.papel));if(!g)return;
+  if(labType!=='projeto'||!pc||!LABEL_PROJETO||LABEL_PROJETO.codigo!==pc||!op){g.hidden=true;return}g.hidden=false;
+  const total=LABEL_FOLHAS.length,com=LABEL_VOLUMES.reduce((a,v)=>a+(+v.quantidade_documentos||0),0),sem=Math.max(0,total-com),onde=LABEL_VOLUMES.map(v=>v.identificador).filter(Boolean),sit=document.getElementById('l-guardar-sit'),inp=document.getElementById('l-guardar-cx'),bt=document.getElementById('l-guardar-bt');
+  if(sit)sit.textContent=!total?'Este projeto ainda não tem folhas no painel.':!sem?`Todas as ${total} folhas já têm lugar: ${onde.join(', ')}.`:`${sem===total?(total===1?'A folha deste projeto está':`As ${total} folhas deste projeto estão`):`${sem} de ${total} folhas estão`} sem lugar${onde.length?` (as outras estão em ${onde.join(', ')})`:''}.`;
+  if(bt)bt.disabled=!sem;
+  if(inp&&inp.dataset.proj!==pc){inp.dataset.proj=pc;inp.value='';const ex=LABEL_VOLUMES.find(v=>v.tipo==='caixa');let sug=ex&&ex.identificador;
+    if(!sug){let ls=[];try{ls=await API('/api/localizacoes')}catch(_){}const [pre,n]=LOC_MODELO.caixa,usados=ls.map(l=>String(l.identificador||'').toUpperCase()).filter(x=>x.startsWith(pre)).map(x=>parseInt(x.slice(pre.length),10)).filter(x=>!isNaN(x));sug=pre+String((usados.length?Math.max(...usados):0)+1).padStart(n,'0')}
+    if(!inp.value)inp.value=sug;inp.placeholder=sug}}
+async function labGuardar(){const pc=document.getElementById('l-proj').value,inp=document.getElementById('l-guardar-cx'),res=document.getElementById('l-guardar-res'),bt=document.getElementById('l-guardar-bt'),ident=(inp.value||'').trim().toUpperCase();
+  if(!ident){toast('Escreva o identificador da caixa (ex.: CX-001)');inp.focus();return}bt.disabled=true;
+  try{const r=await API('/api/etiquetas/guardar',{method:'POST',body:JSON.stringify({projeto_codigo:pc,identificador:ident})});toast(r.mensagem);LOCAIS_ETQ=null;delete inp.dataset.proj;await carregarDadosProjetoEtiqueta();
+    if(res)res.innerHTML=`<div class="al-res ${r.guardadas?'ok':'aviso'}"><b>${escHtml(r.mensagem)}</b><div class="al-res-acoes"><button type="button" class="btn sm" onclick="nav('etiquetas/local/${+r.localizacao_id}')">Imprimir etiqueta da caixa</button></div></div>`}
+  catch(e){toast(e.message);if(res)res.innerHTML=`<div class="al-res aviso"><b>${escHtml(e.message)}</b></div>`}finally{labGuardarAtualizar()}}
+document.getElementById('l-guardar-bt')?.addEventListener('click',labGuardar);
+document.getElementById('l-proj')?.addEventListener('change',()=>{const r=document.getElementById('l-guardar-res');if(r)r.innerHTML=''});
 /* H21: a frase de conferência, em letra grande, acima da prévia */
 function labFrase(lote,lista){const fcod=document.getElementById('l-fundo').value,pcod=document.getElementById('l-proj').value,fn=(FUNDOS.find(f=>f[0]===fcod)||[])[2]||'',pt=tituloExibicao((LABEL_PROJETO&&LABEL_PROJETO.titulo)||'');
   if(lote==='folhas')return lista.length===1?`Etiqueta de: a única folha de ${pcod} · ${pt}`:`Etiquetas de: todas as ${lista.length} folhas de ${pcod} · ${pt}`;
@@ -2166,7 +2236,7 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
   else{pv.classList.remove('grade');pv.innerHTML=labelHTML(0);etiquetas=Array.from({length:n},(_,k)=>labelHTML(labType==='documento'?k:0))}
   const niim=!!NIIM_FMT[document.getElementById('l-fmt').value];
   if(pg)pg.innerHTML=niim?'':etiquetas.join('');if(niim&&pg){const cont=new Map();etiquetas.forEach(h=>cont.set(h,(cont.get(h)||0)+1));pg.innerHTML=[...cont.keys()].join('');window.NIIM_QTD=[...cont.values()]}niimDesenharTodos(pv);
-  if(bt){const qtd=niim?new Set(etiquetas).size:etiquetas.length;bt.textContent=niim?(qtd>1?`Imprimir ${qtd} na NIIMBOT`:'Imprimir na NIIMBOT'):(qtd>1?`Imprimir ${qtd} etiquetas`:'Imprimir');bt.onclick=niim?imprimirNiimbot:()=>window.print()}
+  if(bt){const qtd=niim?new Set(etiquetas).size:etiquetas.length;bt.textContent=niim?(qtd>1?`Imprimir ${qtd} na NIIMBOT`:'Imprimir na NIIMBOT'):(qtd>1?`Imprimir ${qtd} etiquetas`:'Imprimir');bt.onclick=niim?imprimirNiimbot:()=>{labRegistrarImpressao(etiquetas.length);window.print()}}
   {const bb=document.getElementById('lab-niim-baixar');if(bb)bb.hidden=!niim}
   /* H21: impressão no tamanho exato (@page) — uma etiqueta por página na impressora de etiquetas, ou várias numa A4 */
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
@@ -4030,6 +4100,7 @@ function pjStatusHTML(code,d){d=d||window.PJ_D||{};const p=d.projeto||{},e=pjEst
   const res=fim?(fim.ok?`<p class="pjs-res ok" role="status"><b>Publicado ✓</b>${fim.url?` · <a href="${escHtml(fim.url)}" target="_blank" rel="noopener">Ver no site ↗</a>`:''}${fim.fora?` · ${qtd(fim.fora,'folha ficou fora','folhas ficaram fora')} (veja em Problemas)`:''}${fim.desfazer&&Date.now()-fim.em<10e3?` · <button type="button" class="btn sm" data-pjs-desfazer="${escHtml(code)}">Desfazer</button>`:''}</p>`
     :`<p class="pjs-res erro" role="alert"><b>Não terminou:</b> ${escHtml(fim.msg||'')}</p>`):'';
   const avs=!pub&&!em&&adm&&pl&&pl.pode_executar&&umPasso()?(pl.avisos||[]).map(a=>`<li>${escHtml(a.texto)}</li>`).join(''):'';   // CAMP-148: avisos que não bloqueiam, no próprio bloco
+  if(pub||['publicar','publicado'].includes(pjFaseLote(code)))bt+=` <a class="btn" href="#etiquetas/guardar/${escHtml(code)}" data-pjs-etiquetar>Etiquetar e guardar</a>`;   // UX-25: depois de aprovar ou publicar, etiqueta e caixa em 2 cliques
   return `${cnt}<div class="pjs-acao">${bt}<span class="pjs-estado">${estado}</span></div>${razao?`<p class="pjs-razao">${razao}</p>`:''}${avs?`<ul class="pjs-avisos" aria-label="Avisos (não impedem publicar)">${avs}</ul>`:''}${res}`}
 function umBotaoAzul(){const pd=document.getElementById('pd');if(!pd)return;pd.querySelectorAll('.btn.pri').forEach(b=>{if(!b.closest('#pj-status'))b.classList.remove('pri')});
   const no=[...pd.querySelectorAll('#pj-status .btn.pri')];no.slice(1).forEach(b=>b.classList.remove('pri'))}
@@ -5735,7 +5806,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
       ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div id="ini-visitas">${iniVisitasHTML(null)}</div></section>`:''}
     </div>
   </div>`;
-  garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();
+  garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();iniSemLugar();
   if(rotaAtual()==='painel/qualidade'){const q=document.getElementById('ini-qualidade');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'})}
   pr.then(r=>{const el=document.getElementById('ini-ritmo');if(el)el.innerHTML=iniRitmoHTML(r,p)});
   Promise.all([pe,pq,prp]).then(([e,qi,rp])=>{PAINEL_EST=e;PAINEL_QI=qi;PAINEL_REP=rp;if(e)iniSaudeAtualizar();else{const el=document.getElementById('ini-saude');if(el)el.innerHTML='<div class="pb state-row"><b>Não consegui verificar as máquinas agora.</b><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div>'}});
@@ -6194,6 +6265,10 @@ async function carregarResumoLocal(){const el=document.getElementById('loc-resum
   rs=rs.filter(r=>r.fundo_codigo&&(Object.keys(r.tipos||{}).length||r.localizadas));
   el.innerHTML=rs.length?`<h3>Por fundo</h3><ul class="loc-fundos">${rs.map(r=>{const t=Object.entries(r.tipos||{}).map(([k,n])=>`${n} ${n===1?k:(LOC_PLURAL[k]||k)}`).join(', ')||'nenhum recipiente próprio',falta=r.folhas-r.localizadas;
     return `<li><span class="code">${escHtml(r.fundo_codigo)}</span> <b>${escHtml(r.fundo||'')}</b><span>${escHtml(t)} · ${escHtml(r.localizadas)} de ${escHtml(r.folhas)} folha${r.folhas===1?'':'s'} localizada${r.localizadas===1?'':'s'}</span>${falta>0?`<button class="lnk" onclick="verSemLugar('${escHtml(r.fundo_codigo)}')">Ver ${falta} sem lugar</button>`:'<span class="ok-txt">tudo localizado</span>'}</li>`}).join('')}</ul>`:''}
+/* UX-25: no Painel inicial, uma linha discreta sob "Quanto do acervo já está no site": folhas publicadas que ainda não têm lugar físico */
+async function iniSemLugar(){let r;try{r=await API('/api/etiquetas/sem-lugar')}catch(_){return}const sec=document.getElementById('ini-t-site')?.closest('section');if(!sec)return;let el=document.getElementById('ini-semlugar');
+  if(!r||!r.folhas){if(el)el.remove();return}if(!el){el=document.createElement('p');el.id='ini-semlugar';el.className='ini-semlugar';sec.appendChild(el)}
+  el.innerHTML=`<button type="button" class="ini-link" onclick="nav('localizacao')">${fmtN(r.folhas)} ${r.folhas===1?'folha publicada sem lugar':'folhas publicadas sem lugar'}</button> · em ${fmtN(r.projetos)} ${r.projetos===1?'projeto':'projetos'}`}
 async function verSemLugar(f){const ps=await API('/api/localizacoes/sem-lugar?fundo='+encodeURIComponent(f));const n=ps.reduce((a,p)=>a+p.faltam,0);
   openDrawer(`Folhas sem lugar · ${f}`,`${n} folha${n===1?'':'s'} em ${ps.length} projeto${ps.length===1?'':'s'}`,`<p class="help">Abra uma caixa (ou crie uma em "Nova localização") e aloque o projeto nela. Clique no projeto para ver as folhas.</p><div class="tw"><table><thead><tr><th>Projeto</th><th class="num">Sem lugar</th></tr></thead><tbody>${ps.map(p=>`<tr data-nav="projeto/${escHtml(p.codigo)}"><td><span class="code">${escHtml(p.codigo)}</span> ${escHtml(tituloExibicao(p.titulo))}</td><td class="num">${escHtml(p.faltam)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Nenhuma.</td></tr>'}</tbody></table></div>`);const o=document.getElementById('d-open');if(o)o.style.display='none'}
 // H20: modelo de identificador por tipo, com o próximo número livre já preenchido (CX-001, GV-01, TB-001, MAP-01-G01, EST-A-03)
@@ -6853,7 +6928,7 @@ function versaoHTML(v){const dt=x=>{const d=new Date(x);return isNaN(d)?'':`${St
   return `Versão de <b>${escHtml(dt(v.data))}</b>${v.assunto?`<br><small>${escHtml(v.assunto)}</small>`:''}${v.no_ar_desde?`<br><small>servidor atualizado em ${escHtml(dt(v.no_ar_desde))}</small>`:''}`}
 if(MODO_SERVIDOR){limparExemplos();API('/api/versao').then(v=>{const f=document.getElementById('foot');f.innerHTML=versaoHTML(v);f.title=v.hash?`código ${v.hash}`:(v.versao||'')}).catch(()=>{document.getElementById('foot').textContent='Servidor não respondeu'})}
 
-function aplicarUsuario(u){EU=u;umPassoMarcar();if(u&&u.publicar_um_passo===undefined)API('/api/auth/eu').then(x=>{if(EU&&x&&x.id===EU.id){EU.publicar_um_passo=!!x.publicar_um_passo;EU.conferir_so_avisos=!!x.conferir_so_avisos;EU.importacao_automatica=!!x.importacao_automatica;umPassoMarcar()}}).catch(()=>{});atualizarTopoEstacoes();clearInterval(window._estTopTimer);if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}const r0=rotaAtual().split('/')[0];window.FUNDOS_PRONTOS=carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();if(r0!=='projetos')carregarProjetosAPI();if(r0!=='painel')carregarPainel();if(r0!=='filas')carregarFilas();if(r0!=='solicitacoes')carregarSolicitacoes();if(r0!=='erros')carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;atualizarAvatarTopo(u);document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}aplicarPermissoes();carregarPreferenciasAjuda().finally(vigiarTarefas);route_to(rotaAtual())}
+function aplicarUsuario(u){EU=u;umPassoMarcar();if(u&&u.publicar_um_passo===undefined)API('/api/auth/eu').then(x=>{if(EU&&x&&x.id===EU.id){EU.publicar_um_passo=!!x.publicar_um_passo;EU.conferir_so_avisos=!!x.conferir_so_avisos;EU.importacao_automatica=!!x.importacao_automatica;umPassoMarcar()}}).catch(()=>{});atualizarTopoEstacoes();clearInterval(window._estTopTimer);if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}const r0=rotaAtual().split('/')[0];window.FUNDOS_PRONTOS=carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();if(r0!=='projetos')carregarProjetosAPI();if(r0!=='painel')carregarPainel();if(r0!=='filas')carregarFilas();if(r0!=='solicitacoes')carregarSolicitacoes();if(r0!=='erros')carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;atualizarAvatarTopo(u);document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}aplicarPermissoes();(window.PREFS_PRONTAS=carregarPreferenciasAjuda()).finally(vigiarTarefas);route_to(rotaAtual())}
 async function checarSessao(){try{aplicarUsuario(await API('/api/auth/eu'))}catch(e){if(!MODO_SERVIDOR){return}document.getElementById('login').classList.add('on')}}
 /* CAMP-120 (exaustão, 20/10): com a página do projeto (ou a tela de conferir) aberta, o CAMP Vision relê o lote, outra pessoa aprova ou a releitura
    termina, e a tela continuava mostrando o estado velho (com botões que já não valiam). Agora, a cada 12 s, a tela pergunta a "marca" do projeto;

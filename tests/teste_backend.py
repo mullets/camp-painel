@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
+MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10537,6 +10537,81 @@ def filho(modo):
         ver("direitos autorizados e com sigla: sem pendência", por.get("F023", {}).get("pendencias") == [], str(por.get("F023", {}).get("pendencias")))
         ver("sem sigla também é pendência", "sem_sigla" in (por.get("F030", {}).get("pendencias") or []), str(por.get("F030", {}).get("pendencias")))
         for l in res: print(l)
+    elif modo == "ux25_etiquetas":
+        # UX-25: etiquetar e guardar ao fim do lote — histórico de impressas, guardar só as folhas sem lugar, contador de publicadas sem lugar, formato por pessoa
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        ver("migração 190: etiqueta_impressao tem papel, lote e config", {"papel", "lote", "config"} <= {r[1] for r in c.execute("PRAGMA table_info(etiqueta_impressao)")})
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste'),('F098','Outro fundo')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1),('F099',2),('F098',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa de teste',1970),('F099-P0002','F099',2,'Outra casa',1971),('F098-P0001','F098',1,'Prédio',1960)")
+        D = lambda n, p="F099-P0001", a=1970: f"{p}-{a}-S01-D{n:05d}"
+        for n in range(1, 6):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site) VALUES (?,?,?,?,?,'importado',?)", (D(n), "F099-P0001", "S01", n, f"Folha {n}", "no_ar" if n <= 4 else "nao_publicado"))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site) VALUES (?,?,?,?,?,'importado','no_ar')", (D(1, "F098-P0001", 1960), "F098-P0001", "S01", 1, "Prédio"))
+        old = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F099','gaveta','GV-01')").lastrowid
+        c.execute("INSERT INTO item_localizacao (item_codigo,localizacao_id) VALUES (?,?)", (D(1), old))
+        outra = c.execute("INSERT INTO localizacao_fisica (fundo_codigo,tipo,identificador) VALUES ('F098','caixa','CX-007')").lastrowid
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s_}); return x
+        op, le = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-1234")
+        # ---------- folhas publicadas sem lugar ----------
+        r = le.get("/api/etiquetas/sem-lugar")
+        ver("sem lugar: conta só folhas PUBLICADAS sem lugar (4 publicadas no F099, 1 já na GV-01, + 1 no F098 = 4 em 2 projetos)", r.status_code == 200 and r.json() == {"folhas": 4, "projetos": 2}, r.text)
+        # ---------- guardar ----------
+        r = le.post("/api/etiquetas/guardar", json={"projeto_codigo": "F099-P0001", "identificador": "CX-001"})
+        ver("leitura não guarda (403)", r.status_code == 403, str(r.status_code))
+        for ident in ("", "CX 001", "<b>"):
+            r = op.post("/api/etiquetas/guardar", json={"projeto_codigo": "F099-P0001", "identificador": ident})
+            ver(f"identificador inválido recusado ({ident!r})", r.status_code == 400, r.text)
+        r = op.post("/api/etiquetas/guardar", json={"projeto_codigo": "F099-P0009", "identificador": "CX-001"})
+        ver("projeto que não existe: 404", r.status_code == 404, r.text)
+        r = op.post("/api/etiquetas/guardar", json={"projeto_codigo": "f099-p0001", "identificador": "cx-007"})
+        j = r.json()
+        lid = j.get("localizacao_id")
+        loc = c.execute("SELECT fundo_codigo, tipo, identificador FROM localizacao_fisica WHERE id=?", (lid,)).fetchone()
+        ver("guardar cria a caixa no fundo do projeto (a CX-007 do OUTRO fundo não serve)", r.status_code == 200 and j["criada"] and lid != outra and tuple(loc) == ("F099", "caixa", "CX-007"), r.text)
+        onde = dict(c.execute("SELECT item_codigo, localizacao_id FROM item_localizacao WHERE item_codigo LIKE 'F099-P0001-%'").fetchall())
+        ver("só as 4 folhas sem lugar entram; a que estava na GV-01 NÃO muda de lugar", j["guardadas"] == 4 and j["ja_tinham_lugar"] == 1 and onde[D(1)] == old and all(onde[D(n)] == lid for n in range(2, 6)), str(onde))
+        ver("a mensagem diz o objeto, a caixa e o que ficou onde estava", "4 folhas de Casa de teste guardadas em CX-007 (CX-007 foi criada)" in j["mensagem"] and "1 folha já tinha lugar" in j["mensagem"], j["mensagem"])
+        ver("histórico: localização criada e alocação registradas", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='localizacao' AND codigo=? AND tipo IN ('criada','alocacao')", (str(lid),)).fetchone()[0] == 2)
+        r = op.post("/api/etiquetas/guardar", json={"projeto_codigo": "F099-P0001", "identificador": "CX-007"})
+        ver("guardar de novo: reaproveita a caixa e não muda nada", r.status_code == 200 and not r.json()["criada"] and r.json()["localizacao_id"] == lid and r.json()["guardadas"] == 0 and "nada mudou" in r.json()["mensagem"], r.text)
+        r = op.post("/api/etiquetas/guardar", json={"projeto_codigo": "F099-P0002", "identificador": "TB-003"})
+        ver("prefixo TB- vira tubo; projeto sem folhas: diz isso", r.status_code == 200 and r.json()["tipo"] == "tubo" and "ainda não tem folhas" in r.json()["mensagem"], r.text)
+        ver("sem lugar depois de guardar: só a do F098", le.get("/api/etiquetas/sem-lugar").json() == {"folhas": 1, "projetos": 1})
+        # ---------- impressas ----------
+        r = le.post("/api/etiquetas/impressas", json={"tipo": "projeto", "codigo": "F099-P0001", "quantidade": 2, "formato_mm": "100x50", "papel": "rolo", "lote": "um", "config": {"volume": 1, "copias": 2}})
+        ver("registrar impressão (qualquer pessoa logada)", r.status_code == 200 and r.json().get("id"), r.text)
+        op.post("/api/etiquetas/impressas", json={"tipo": "caixa", "codigo": "F099-CX-007", "formato_mm": "90x29", "papel": "a4", "config": {"local_id": lid}})
+        for corpo, nome in (({"tipo": "pasta", "codigo": "X"}, "tipo desconhecido"), ({"tipo": "projeto", "codigo": ""}, "código vazio"), ({"tipo": "projeto", "codigo": "F099-P0001", "formato_mm": "grande"}, "formato"),
+                            ({"tipo": "projeto", "codigo": "F099-P0001", "papel": "outro"}, "papel"), ({"tipo": "projeto", "codigo": "F099-P0001", "config": {"x": "y" * 3000}}, "config longa")):
+            r = op.post("/api/etiquetas/impressas", json=corpo)
+            ver(f"impressão inválida recusada ({nome})", r.status_code in (400, 422), f"{r.status_code} {r.text[:120]}")
+        h = le.get("/api/etiquetas/impressas").json()
+        ver("histórico: mais recente primeiro, com quem imprimiu, título e config", len(h) == 2 and h[0]["codigo"] == "F099-CX-007" and h[0]["usuario"] == "Op" and h[0]["titulo"] == "Fundo de teste" and h[0]["config"] == {"local_id": lid}
+            and h[1]["usuario"] == "Le" and h[1]["titulo"] == "Casa de teste" and h[1]["quantidade"] == 2 and h[1]["lote"] == "um", str(h)[:400])
+        ver("sem login: 401", TestClient(app).get("/api/etiquetas/impressas").status_code == 401)
+        # ---------- último formato e papel por pessoa ----------
+        r1 = le.put("/api/auth/eu/preferencias", json={"chave": "etiqueta.formato", "valor": "70x35"})
+        r2 = le.put("/api/auth/eu/preferencias", json={"chave": "etiqueta.papel", "valor": "a4"})
+        p_ = le.get("/api/auth/eu/preferencias").json()
+        ver("formato e papel da etiqueta ficam guardados para a pessoa", r1.status_code == 200 and r2.status_code == 200 and p_.get("etiqueta.formato") == "70x35" and p_.get("etiqueta.papel") == "a4", f"{r1.text} {r2.text} {p_}")
+        ver("e não valem para outra pessoa", "etiqueta.formato" not in op.get("/api/auth/eu/preferencias").json())
+        r3 = le.put("/api/auth/eu/preferencias", json={"chave": "etiqueta.formato", "valor": "<script>"})
+        r4 = le.put("/api/auth/eu/preferencias", json={"chave": "etiqueta.papel", "valor": "carta"})
+        r5 = le.put("/api/auth/eu/preferencias", json={"chave": "etiqueta.impressora", "valor": "x"})
+        ver("valores e chaves fora do previsto são recusados", (r3.status_code, r4.status_code, r5.status_code) == (400, 400, 400), f"{r3.status_code} {r4.status_code} {r5.status_code}")
+        for l in res: print(l)
+        c.close()
     elif modo == "duplicata_rascunhos":
         init_db(); _aplicar_migracoes_real()
         import json as _j
@@ -11982,6 +12057,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"tirar folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-25) Etiquetar e guardar ao fim do lote: impressas (histórico), guardar só o que não tem lugar, publicadas sem lugar, formato por pessoa")
+rc, out = rodar("ux25_etiquetas", f"{tmp}/ux25_etiquetas.db")
+if rc != 0: ok(False, f"teste ux25_etiquetas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-25: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("134) Escritórios parceiros / projetos complementares na folha (19/10): gravar, validar, histórico, sugestões, copiar, dossiê, EAD e site")
 rc, out = rodar("parceiros", f"{tmp}/parceiros.db")
