@@ -6,6 +6,9 @@ Importar levava as folhas ao projeto errado (e dali ao site, com a proveniência
 Regra (motor em similaridade.compatibilidade_pasta):
 - nota do nome da pasta × título do projeto (e × identificação original dele) abaixo de 0,5 = "Verificar destino";
 - pasta só com código/número ("P0001", "F026-P0030") também é "Verificar destino" (não há nome para comparar);
+- 27/10 (falso alarme F009-P0092): o endereço depois de vírgula/" - " (rua, lote, quadra, bairro) não entra na comparação, tratamento
+  ("Sr.", "Dra.") não conta, e a maioria das palavras distintivas do título na pasta (≥ 2 e ≥ 2/3) basta;
+- a avaliação é recalculada a cada leitura (nada é gravado): mudar a regra libera/trava os lotes ainda não importados na hora;
 - vale para o lote que o CAMP Vision trouxe (resultado.origem = campvision2) e que ainda NÃO tem folhas no painel. Lista aberta à mão
   ("Nova lista") é de uma pessoa que escolheu o projeto; lote já importado antes desta regra não volta a ser travado.
 O lote suspeito não importa (nem pelo botão, nem por "Importar todas", nem sozinho) até uma pessoa escolher:

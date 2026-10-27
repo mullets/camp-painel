@@ -197,17 +197,40 @@ _LIMPA_PASTA = (
 )
 
 
+# Falso alarme em produção (27/10): "RESIDENCIA LUIZ SALES, RUA ALBERTO FARIA LOTES 27 E 28 QUADRA 70 - ALTO DOS PINHEIROS" × F009-P0092
+# "Residência Sr. Luiz Marcelo Sales" dava 0,14: o endereço (rua, lotes, quadra, bairro) enchia a pasta de palavras que o título não tem.
+# O endereço só é cortado quando vem DEPOIS de um separador (vírgula, ";", " - ") e o trecho começa por rua/avenida/lote/quadra/nº…:
+# o primeiro trecho (o nome) nunca é cortado, e "Edifício Rua Augusta" (sem separador) continua inteiro.
+_SEPARADOR_PASTA = re.compile(r"\s*[,;]\s*|\s+[-–—]\s+")
+_INICIO_ENDERECO = {"rua", "r", "av", "avenida", "alameda", "al", "praca", "pca", "travessa", "tv", "estrada", "rodovia", "rod", "largo",
+                    "lote", "lotes", "lt", "quadra", "qd", "n", "no", "numero", "km"}
+# tratamento de pessoa: não diz qual é a obra ("Residência Sr. Luiz…" × pasta "Residência Luiz…")
+_TRATAMENTOS = {"sr", "sra", "srs", "sras", "srta", "dr", "dra", "drs", "eng", "arq", "prof", "profa", "dona", "dom"}
+
+
+def _sem_endereco(t: str) -> str:
+    partes = _SEPARADOR_PASTA.split(t)
+    for i, parte in enumerate(partes[1:], start=1):
+        pal = normalizar(parte).split()
+        if pal and pal[0] in _INICIO_ENDERECO:
+            nome = " ".join(partes[:i])
+            # só corta se sobrar um nome de verdade: "Residência, Rua Groenlândia 300" fica inteiro (o endereço é o nome)
+            return nome if any(w not in GENERICAS and w not in _GENERICAS_PASTA and w not in _TRATAMENTOS for w in tokens(nome)) else t
+    return t
+
+
 def limpar_nome_de_pasta(nome: str | None) -> str:
     t = str(nome or "").replace("_", " ")
     for rx, novo in _LIMPA_PASTA:
         t = rx.sub(novo, t)
-    return " ".join(t.split()).strip(" -–—.")
+    t = " ".join(t.split()).strip(" -–—.,;")
+    return " ".join(_sem_endereco(t).split()).strip(" -–—.,;")
 
 
 def tokens_de_pasta(nome: str | None) -> list[str]:
     """Palavras que dizem qual é a obra. Vazio = a pasta só tem código/número/ano ("P0001", "F026-P0030")."""
     ts = [w for w in tokens_distintivos(limpar_nome_de_pasta(nome)) if not (w.isdigit() and len(w) > 3)]
-    return [w for w in dict.fromkeys(ts) if w not in _GENERICAS_PASTA]
+    return [w for w in dict.fromkeys(ts) if w not in _GENERICAS_PASTA and w not in _TRATAMENTOS]
 
 
 def _mesma_palavra(a: str, b: str) -> bool:
@@ -218,15 +241,33 @@ def _mesma_palavra(a: str, b: str) -> bool:
 def compatibilidade_pasta(pasta: str | None, titulo: str | None) -> float | None:
     """0..1: o nome da pasta combina com o título do projeto? None = um dos dois não tem palavra para comparar.
     1.0 quando todas as palavras do nome MENOR estão no outro ("Banco Cidade" em "Residência Banco Cidade - Agência Matriz";
-    "Jockey Club" em "Edifício Jockey Club São Paulo"); senão a fração de palavras em comum (Jaccard): "Clube Sírio" x "Clube Ipê" = 0,33.
+    "Jockey Club" em "Edifício Jockey Club São Paulo") ou quando a maioria das palavras distintivas do título está na pasta
+    (_titulo_na_pasta); o endereço depois de vírgula/" - " (rua, lote, quadra, bairro…) não entra na conta; senão a fração de palavras em comum (Jaccard): "Clube Sírio" x "Clube Ipê" = 0,33.
     Número de designação conta como palavra ("Casa 2" x "Casa 1" = 0)."""
     a, b = tokens_de_pasta(pasta), tokens_de_pasta(titulo)
     if not a or not b:
         return None
     comuns = sum(1 for x in a if any(_mesma_palavra(x, y) for y in b))
-    if comuns >= min(len(a), len(b)):
+    if comuns >= min(len(a), len(b)) or _titulo_na_pasta(a, b):
         return 1.0
     return round(comuns / (len(a) + len(b) - comuns), 3)
+
+
+# Palavras que muitos nomes têm e que, sozinhas, não dizem qual é a obra: não contam para "o título está na pasta"
+# ("Clube Ipê" × "Clube Atlético" não combina por causa de "Clube").
+_FRACAS_PASTA = {"clube", "sociedade", "associacao", "cia", "companhia", "banco", "agencia", "igreja", "escola", "colegio", "hotel", "loja",
+                 "instituto", "hospital", "fabrica", "garagem", "apartamentos", "torre", "bloco", "sao", "santo", "santa", "brasil", "paulo"}
+
+
+def _titulo_na_pasta(pasta: list[str], titulo: list[str]) -> bool:
+    """A MAIORIA das palavras distintivas do título está na pasta: pelo menos 2 e pelo menos 2/3 delas ("Luiz Marcelo Sales" →
+    "Luiz" e "Sales" na pasta). Palavras fracas (clube, banco, são…) não contam; número de designação do título que falta na pasta
+    impede ("Casa Luiz Sales 2" × pasta "Luiz Sales 1")."""
+    fortes = [w for w in titulo if w not in _FRACAS_PASTA]
+    if any(any(ch.isdigit() for ch in w) and w not in pasta for w in fortes):
+        return False
+    achadas = sum(1 for w in fortes if any(_mesma_palavra(w, x) for x in pasta))
+    return achadas >= 2 and 3 * achadas >= 2 * len(fortes)
 
 
 # palavras que todo nome de fundo pode ter e que não distinguem um do outro

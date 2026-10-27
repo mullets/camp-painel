@@ -4856,7 +4856,9 @@ def filho(modo):
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F071','Fundo Destino','FDE',1)")
         projs = {10: "Cia. Sto Amaro", 95: "Edifício Marambaia", 4: "Clube Sírio (S. Festas)", 168: "Sociedade Antioquina do Brasil", 6: "Clube Ipê",
-                 7: "IAMSPE", 1: "Concurso Bairro Novo", 30: "Casa X", 2: "Residência Tarumã", 3: "Edifício São Luís", 5: "Jockey Club", 8: "Residência James Francis King"}
+                 7: "IAMSPE", 1: "Concurso Bairro Novo", 30: "Casa X", 2: "Residência Tarumã", 3: "Edifício São Luís", 5: "Jockey Club", 8: "Residência James Francis King",
+                 92: "Residência Sr. Luiz Marcelo Sales", 11: "Residência Dr. José Carlos Pereira", 12: "Edifício Itaparica", 9: "Residência Sra. Maria e Antonio Ferraz",
+                 13: "Residência Souza", 14: "Clube Paulistano"}
         for n, t in projs.items():
             c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F071',?)", (n,))
             c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F071',?,?,1972)", (f"F071-P{n:04d}", n, t))
@@ -4870,9 +4872,16 @@ def filho(modo):
                              (nome, P, str(d), _j.dumps({"origem": origem} if origem else {}))).lastrowid
         suspeitos = {"Marambaia": lote(10, "Edifício Marambaia - 1970-1971 (37 folhas)"), "Antioquina": lote(4, "Sociedade Antioquina do Brasil (26 folhas)"),
                      "Garagem": lote(6, "Edifício Residêncial com Garagem"), "Apartamentos": lote(7, "Prédio de Apartamentos com Garagem"),
-                     "Correios": lote(1, "ECT - Correios"), "P0001": lote(30, "P0001")}
+                     "Correios": lote(1, "ECT - Correios"), "P0001": lote(30, "P0001"),
+                     # 27/10: o endereço não faz um nome genérico passar ("Residência" e "Clube" sozinhos não bastam)
+                     "Silva × Souza com endereço": lote(13, "Residência Silva, Rua Souza 10"), "Clube × Clube com endereço": lote(14, "Clube Atlético, Rua Colômbia 77 - Jardim Europa")}
         bons = {"caixa e acento": lote(2, "RESIDENCIA TARUMA - 1972 (3 folhas)"), "idêntico": lote(3, "Edifício São Luís"),
-                "nome contido": lote(5, "F071-P0005 - Edifício Jockey Club São Paulo"), "erro de digitação": lote(8, "Residência James Franics King - SP")}
+                "nome contido": lote(5, "F071-P0005 - Edifício Jockey Club São Paulo"), "erro de digitação": lote(8, "Residência James Franics King - SP"),
+                # 27/10, falso alarme em produção (F009-P0092): nome do projeto + endereço comprido (rua, lotes, quadra, bairro)
+                "nome + endereço (F009-P0092)": lote(92, "RESIDENCIA LUIZ SALES, RUA ALBERTO FARIA LOTES 27 E 28 QUADRA 70 - ALTO DOS PINHEIROS"),
+                "nome + avenida e bairro": lote(11, "CASA JOSE CARLOS PEREIRA, AV. BRIGADEIRO LUIS ANTONIO 1200 - JARDINS"),
+                "nome + endereço depois de ' - '": lote(12, "Edifício Itaparica - Rua Haddock Lobo, 500 - Cerqueira César (12 folhas)"),
+                "nome + endereço sem vírgula": lote(9, "RESIDENCIA ANTONIO FERRAZ RUA GROENLANDIA LOTE 5 QUADRA 3 JARDIM AMERICA")}
         manual = lote(95, "Lote qualquer", origem=None)          # "Nova lista" à mão: uma pessoa escolheu o projeto
         c.commit()
         for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
@@ -4887,6 +4896,8 @@ def filho(modo):
         for k, L in bons.items():
             ver(f"nome compatível ({k}): importa sem passo extra", filas[L].get("destino_suspeito") is False, str(filas[L].get("destino_motivo")))
         ver("lista aberta à mão (não veio do CAMP Vision): não é travada", filas[manual].get("destino_suspeito") is False)
+        dl = op.get(f"/api/lotes/{bons['nome + endereço (F009-P0092)']}/destino").json()
+        ver("F009-P0092: o endereço sai do nome comparado e a nota passa", dl["suspeito"] is False and dl["nome_limpo"] == "RESIDENCIA LUIZ SALES" and (dl["nota"] or 0) >= 0.5, str({k: dl.get(k) for k in ("nome_limpo", "nota", "motivo")}))
         d = op.get(f"/api/lotes/{suspeitos['Marambaia']}/destino").json()
         ver("Marambaia: pasta × projeto lado a lado, e a sugestão é F071-P0095 (Edifício Marambaia)", d["suspeito"] and d["projeto"]["codigo"] == "F071-P0010" and [s["codigo"] for s in d["sugestoes"]][:1] == ["F071-P0095"] and len(d["amostra"]) == 3, str({k: d.get(k) for k in ("motivo", "sugestoes", "amostra")}))
         ver("Antioquina: sugere F071-P0168", [s["codigo"] for s in op.get(f"/api/lotes/{suspeitos['Antioquina']}/destino").json()["sugestoes"]][:1] == ["F071-P0168"])
@@ -4907,7 +4918,7 @@ def filho(modo):
         msg = (t.get("resultado") or {}).get("mensagem") or ""
         ver("Importar todas: não importa nenhum lote suspeito", r.status_code == 202 and all(folhas(L) == 0 for L in suspeitos.values()), str([folhas(L) for L in suspeitos.values()]))
         ver("Importar todas: importa os compatíveis e a lista à mão", all(folhas(L) == 3 for L in list(bons.values()) + [manual]), str([folhas(L) for L in bons.values()]))
-        ver("Importar todas: diz quantos ficaram de fora", "6 lote(s) ficaram de fora: Verificar destino" in msg, msg)
+        ver("Importar todas: diz quantos ficaram de fora", f"{len(suspeitos)} lote(s) ficaram de fora: Verificar destino" in msg, msg)
         c.execute("UPDATE configuracao SET valor='1' WHERE chave='importacao.automatica'"); c.commit()
         r1 = _is.importar_prontos()
         ver("importação automática: o suspeito espera (não importa nem vira problema)", folhas(suspeitos["Correios"]) == 0 and any(x["lote_id"] == suspeitos["Correios"] for x in r1["esperando"])
