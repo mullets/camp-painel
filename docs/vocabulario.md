@@ -47,6 +47,13 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
   o mesmo clique leva os lotes juntos).
 - No **Hoje**, a mesma ação da mesma pessoa no mesmo projeto em até 10 min é UMA frase, com **(2×)** quando ela repetiu de verdade.
 
+### Estados travados e idade do lote (UX-09, 27/10/2026)
+- **Leitura interrompida**: lote em "sendo lido" (situação Chegando) há mais de 2 h sem o CAMP Vision dizer, no sinal dele, que lê este projeto.
+  Não é uma 6ª situação: é o chip `leitura interrompida` (vermelho) ao lado de **Chegando**. O botão é **Ler de novo** (1 clique: o mesmo pedido de
+  releitura do projeto; clicar de novo não cria outro). Depois do clique a linha diz **releitura pedida agora** e o botão vira **Ver na Fila**.
+- **parado há 16 dias** / **parado há 5 h**: tempo do lote na MESMA etapa (não "esperando há", que media a última leitura da pasta).
+  Em Material novo a coluna se chama **Parado há** e o clique no título ordena pelo mais parado; na Home, **mais parado primeiro**.
+
 ## Menu (UX-28; antes CAMP-154)
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
 topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);

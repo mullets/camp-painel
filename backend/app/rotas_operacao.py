@@ -42,7 +42,7 @@ def _qnap_prontos_raiz() -> Path:
 
 # ---------------- painel inicial ----------------
 @router.get("/painel")
-def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
+def painel(ordem: str = "padrao", u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     q = lambda sql, *p: con.execute(sql, p).fetchone()[0]  # noqa: E731
     # UX-05: os números vêm da fonte única (contagens.py); os campos antigos continuam, com os MESMOS valores das outras telas
@@ -88,7 +88,7 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
     # H6b: o que fazer agora, o caminho do material, o quanto está no site e as frases do dia, TODOS da fonte única (pendencias)
     d["pendencias"] = dict(cont)          # UX-05: exatamente o que /api/pendencias devolve (a mesma função, contagens.medir)
-    d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"])
+    d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
     d["caminho"] = pd.caminho(con, n)
     d["no_site"] = pd.no_site(con)
     d["hoje_frases"] = pd.atividade_hoje(con)
@@ -606,12 +606,16 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     from .pendencias import chave_adiar_lote
     fora = adiadas(con, u["id"]) if u.get("id") else set()
     from .filas_fase import fase_da_lista
+    from .pendencias import projetos_lendo_agora, releituras_abertas
+    lendo, pedidos = projetos_lendo_agora(con), releituras_abertas(con)
     saida = []
     for r in rows:
         d = dict(r)
         d["adiado"] = chave_adiar_lote(d["id"]) in fora   # UX-05: "Agora não" desta pessoa: fica na lista, sai das contagens dela
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
-        from .pendencias import identificador_lote, _e_complemento
+        from .pendencias import identificador_lote, _e_complemento, marcar_parado
+        marcar_parado(d, lendo)                          # UX-09 (campos novos, opcionais): parado_h, parado, leitura_interrompida
+        d["releitura_pedida_em"] = pedidos.get(d["projeto_codigo"]) if d["leitura_interrompida"] else None
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04 (campo novo, opcional)
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha

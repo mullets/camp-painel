@@ -83,11 +83,66 @@ def _e_complemento(resultado) -> bool:
         return False
 
 
+# ---------------- UX-09: estado travado e idade do lote ----------------
+LEITURA_SEM_SINAL_H = 2          # "sendo lido" há mais que isto sem o CAMP Vision dizer que lê este projeto = leitura interrompida
+
+
+def projetos_lendo_agora(con) -> tuple[set, bool]:
+    """(projetos que o CAMP Vision disse estar lendo nas últimas 2 h, algum heartbeat 'processando' recente SEM projeto?).
+    Lê só o banco (o último heartbeat de cada máquina): nunca o QNAP."""
+    proj, sem_projeto = set(), False
+    try:
+        for (pc,) in con.execute("SELECT projeto_codigo FROM estacao_heartbeat WHERE estado='processando' AND atualizado_em >= datetime('now', ?)",
+                                 (f"-{LEITURA_SEM_SINAL_H} hours",)):
+            if pc:
+                proj.add(str(pc).strip().upper())
+            else:
+                sem_projeto = True
+    except Exception:  # noqa: BLE001  (banco sem a tabela: ninguém está lendo)
+        pass
+    return proj, sem_projeto
+
+
+def texto_parado(horas: float | None) -> str:
+    if horas is None:
+        return ""
+    if horas < 48:
+        return f"parado há {max(1, round(horas))} h"
+    return f"parado há {round(horas / 24)} dias"
+
+
+def _ha(horas: float | None) -> str:
+    return "agora" if horas is None or horas < 1 else texto_parado(horas).replace("parado ", "")
+
+
+def marcar_parado(d: dict, lendo: tuple[set, bool]) -> dict:
+    """Campos novos (opcionais) no lote: parado_h (horas na MESMA etapa, de etapa_desde: a varredura do QNAP regrava atualizado_em a cada
+    passada, então ele não serve de idade), parado ("parado há 16 dias") e leitura_interrompida: etapa 'processando' há mais de 2 h sem
+    heartbeat do CAMP Vision dizendo que lê este projeto. Conservador: se uma máquina diz que está lendo sem dizer o quê, não marca."""
+    h = _horas_desde(d.get("parado_desde") or d.get("etapa_desde") or d.get("criado_em"))
+    d["parado_h"] = round(h, 1) if h is not None else None
+    d["parado"] = texto_parado(h)
+    proj, sem_projeto = lendo
+    d["leitura_interrompida"] = bool(d.get("etapa") == "processando" and h is not None and h > LEITURA_SEM_SINAL_H
+                                     and str(d.get("projeto_codigo") or "").upper() not in proj and not sem_projeto)
+    return d
+
+
+def releituras_abertas(con) -> dict:
+    """{projeto: pedido_em} dos pedidos de releitura do projeto inteiro ainda abertos (o "Ler de novo" já clicado)."""
+    try:
+        return {r[0]: r[1] for r in con.execute("SELECT projeto_codigo, MIN(pedido_em) FROM pedido_releitura WHERE item_codigo IS NULL AND estado IN ('pedido','em_andamento') GROUP BY projeto_codigo")}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def lotes(con) -> list[dict]:
     """Os lotes da Fila (os mesmos de /api/filas), cada um com a fase. UX-05: folhas do lote = as que ainda estão no projeto do lote
     (a mesma conta de /api/filas; uma folha que foi para outro projeto não conta mais neste lote)."""
     saida = []
+    lendo = projetos_lendo_agora(con)
     for r in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
+                                   COALESCE(l.etapa_desde, l.criado_em) AS parado_desde,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
@@ -95,6 +150,7 @@ def lotes(con) -> list[dict]:
                              WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL"""):
         d = dict(r)
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04
+        marcar_parado(d, lendo)                                                                                  # UX-09
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None))
         saida.append(d)
     return saida
@@ -199,14 +255,15 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
         "erros_abertos": cg.erros_abertos(con),             # a aba "Abertos" de Erros
         "pedidos_abertos": cg.pedidos_abertos(con),  # a aba "Abertas" de Solicitações
         "lotes_processando": len(por.get("processando", [])),
-        "lotes_lendo": sum(1 for l in por.get("processando", []) if l["etapa"] == "processando"),
+        "lotes_lendo": sum(1 for l in por.get("processando", []) if l["etapa"] == "processando" and not l.get("leitura_interrompida")),   # UX-09
+        "leituras_interrompidas": sum(1 for l in por.get("processando", []) if l.get("leitura_interrompida")),
         "lotes_na_fila": sum(1 for l in por.get("processando", []) if l["etapa"] == "enviado"),
         "lotes_erro": len(por.get("erro", [])),
         "publicando": q("SELECT COUNT(*) FROM tarefa_publicacao WHERE estado='rodando' AND tipo='publicar'"),
     }
     from .rotas_emprestimos import contar_atrasados
     n["emprestimos_atrasados"] = contar_atrasados(con)                       # originais fora com o prazo vencido (tela Empréstimos)
-    n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"]            # contador do menu: o que é de operador
+    n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"] + n["leituras_interrompidas"]   # contador do menu: o que é de operador (UX-09: + "Ler de novo")
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
     # UX-19 + UX-03 + UX-05: "itens que pedem ação de você" (os números do menu, a saudação e a Home), com o que esta pessoa
     # escondeu por 7 dias fora da conta dela: UMA regra, em contagens.pedem_acao
@@ -224,7 +281,7 @@ def _acao(rotulo: str, tipo: str, alvo) -> dict:
     return {"rotulo": rotulo, "tipo": tipo, "alvo": alvo}
 
 
-def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_id: int | None = None) -> list[dict]:
+def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_id: int | None = None, ordem: str = "padrao") -> list[dict]:
     """Grupos na ordem Decidir → Conferir → Aprovar e publicar → Problemas que bloqueiam → Pedidos. Cada linha: sev (r|a|b), titulo, codigo, detalhe, acao."""
     n = n or contar_pendencias(con, com_listas=True)
     admin = papel in ("admin", "master")
@@ -256,19 +313,19 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     marcou_maior = False                            # 23/10: com empate, "o maior lote da fila" aparecia em todos (1 de 1, 1 de 4…)
     linhas = []
     for l in conf:
-        h = _horas_desde(l["atualizado_em"])
+        parado = l["parado"] if (l.get("parado_h") or 0) >= 24 else None      # UX-09: idade na etapa (etapa_desde), não o atualizado_em que a varredura regrava
         if l["fase"] == "conferir":
             e_maior = l["itens_pendentes"] == maior and len(conf) > 1 and not marcou_maior and sum(1 for x in conf if x["fase"] == "conferir" and x["itens_pendentes"] == maior) == 1
             marcou_maior = marcou_maior or e_maior
             det = [f"{l['itens_pendentes']} de {l['itens_total']} folhas a conferir", "o maior lote da fila" if e_maior else None,
-                   texto_espera(h) if h and h > 48 else None]
+                   parado]
             linhas.append({"sev": "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": " · ".join(p for p in det if p),
-                           "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
+                           "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
         else:
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
-                           "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {texto_espera(h)}" if h and h > 48 else ""),
-                           "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
-    linhas = vis(linhas)
+                           "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {parado}" if parado else ""),
+                           "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
+    linhas = _por_idade(vis(linhas), ordem)
     if linhas:
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"}})
@@ -280,8 +337,9 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     lote_txt = lambda l: l["identificador"] + (f" · {l['itens_total']} {'folha' if l['itens_total'] == 1 else 'folhas'}" if l["itens_total"] else "")  # noqa: E731  (UX-04: folhas REAIS do lote)
     for l in sorted([l for l in L if l["fase"] == "aprovar"], key=lambda l: str(l["atualizado_em"] or "")):
         linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
-                       "detalhe": f"as {l['itens_total']} folhas já foram conferidas · " + ("pronto para publicar (o clique aprova o lote junto)" if um_passo else "falta aprovar o lote"),
-                       "lote": lote_txt(l), "_lote": l, "adiar": chave_adiar_lote(l["id"]),
+                       "detalhe": f"as {l['itens_total']} folhas já foram conferidas · " + ("pronto para publicar (o clique aprova o lote junto)" if um_passo else "falta aprovar o lote")
+                       + (f" · {l['parado']}" if (l.get("parado_h") or 0) >= 24 else ""),
+                       "parado_h": l.get("parado_h"), "lote": lote_txt(l), "_lote": l, "adiar": chave_adiar_lote(l["id"]),
                        "acao": _acao("Publicar", "publicar", l["projeto_codigo"]) if um_passo else _acao("Aprovar", "aprovar", l["id"])})
     ordem = {"parcial": 0, "pronto": 1, "travado": 2}
     for l in sorted([l for l in L if l["fase"] == "publicar"], key=lambda l: (ordem[l["publicar"]["estado"]], str(l["atualizado_em"] or ""))):
@@ -292,9 +350,11 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             det, rot, sev = f"{s['total']} folhas prontas · nada impede publicar", "Publicar", "b"
         else:
             det, rot, sev = f"travado: {s['falta']}", "Ver o que falta", "a"
+        if (l.get("parado_h") or 0) >= 24:
+            det += f" · {l['parado']}"
         linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det, "adiar": chave_adiar_lote(l["id"]),
-                       "lote": lote_txt(l), "_lote": l, "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
-    linhas = _juntar_lotes_do_projeto(vis(linhas))
+                       "parado_h": l.get("parado_h"), "lote": lote_txt(l), "_lote": l, "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
+    linhas = _por_idade(_juntar_lotes_do_projeto(vis(linhas)), ordem)
     if linhas and (admin or (um_passo and papel == "operador")):
         grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "operador" if um_passo else "admin", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {sum(x.get('lotes', 1) for x in linhas)} lotes que esperam um admin", "rota": "filas/admin"}})
@@ -318,6 +378,14 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         o_que = exp["texto"][:160] if exp and exp.get("tipo") != "erro" and exp.get("texto") else None
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
                        "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
+    pedidos = releituras_abertas(con)
+    for l in [l for l in L if l.get("leitura_interrompida")]:       # UX-09: "sendo lido" há mais de 2 h sem sinal do CAMP Vision deste projeto
+        ped = pedidos.get(l["projeto_codigo"])
+        det = [f"o CAMP Vision começou a ler e não dá sinal deste lote há mais de {LEITURA_SEM_SINAL_H} h", l["parado"],
+               f"releitura pedida {_ha(_horas_desde(ped))}: esperando o CAMP Vision" if ped else None]
+        linhas.append({"sev": "a", "titulo": f"Leitura interrompida: {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
+                       "detalhe": " · ".join(p for p in det if p), "lote": l["identificador"], "parado_h": l.get("parado_h"), "adiar": chave_adiar_lote(l["id"]),
+                       "acao": _acao("Ver na Fila", "rota", "filas/gente") if ped else _acao("Ler de novo", "reler", l["projeto_codigo"])})
     for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
                             WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
         try:
@@ -412,12 +480,20 @@ def _juntar_lotes_do_projeto(linhas: list[dict]) -> list[dict]:
         x["lotes"] = len(ls)
         x["lote"] = f"{len(ls)} lotes prontos · " + " · ".join(l["identificador"] for l in ls)
         x["adiar"] = "lote:" + ",".join(str(l["id"]) for l in ls)
+        x["parado_h"] = max((l.get("parado_h") or 0) for l in ls)
         if all(l["fase"] == "aprovar" for l in ls):
             tot = sum(l["itens_total"] or 0 for l in ls)
             x["detalhe"] = f"as {tot} folhas dos {len(ls)} lotes já foram conferidas · pronto para publicar (o clique aprova os lotes junto)"
         if x["acao"]["rotulo"] == "Publicar":
             x["acao"] = {**x["acao"], "rotulo": "Publicar projeto"}
     return out
+
+
+def _por_idade(linhas: list[dict], ordem: str) -> list[dict]:
+    """UX-09: "Mais parado primeiro" (?ordem=parado no /api/painel): a linha que está há mais tempo na mesma etapa sobe."""
+    if ordem != "parado":
+        return linhas
+    return sorted(linhas, key=lambda x: -(x.get("parado_h") or 0))
 
 
 def caminho(con, n: dict) -> list[dict]:

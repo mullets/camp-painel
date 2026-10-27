@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes"}
+MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9330,6 +9330,76 @@ def filho(modo):
         H = [h for h in ad.get("/api/painel").json()["hoje_frases"] if h["codigo"] == "F099-P0003"]
         ver("Hoje: a mesma ação 24 min depois é outra frase (só junta o que é seguido)", len(H) == 2 and "×" not in H[0]["texto"], str(H))
         for l in res: print(l)
+    elif modo == "ux09_travados":
+        # UX-09: estado travado. Lote "sendo lido" há mais de 2 h sem heartbeat do CAMP Vision deste projeto vira "Leitura interrompida"
+        # com "Ler de novo" (o MESMO pedido de releitura, 1 clique, sem duplicar); idade "parado há X dias" pela etapa (etapa_desde, não o
+        # atualizado_em que a varredura regrava) visível e ordenável na Home (?ordem=parado) e em Material novo; tudo lido do banco.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.alertas import avaliar_extras
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F099','Fundo de teste','FDT',1)")
+        nomes = {1: "Edifício Lido", 2: "Casa Lendo Agora", 3: "Casa Recém Chegada", 4: "Casa Sinal Velho", 5: "Casa Grande Nova", 6: "Casa Pequena Antiga"}
+        for n, t in nomes.items():
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P000{n}", "F099", n, t))
+        seq = [0]
+        def lote(n, etapa, horas, folhas=0, pend=0):
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, criado_em) VALUES (?,?,?,?,datetime('now',?))",
+                            (nomes[n], f"F099-P000{n}", f"/x/{n}", etapa, f"-{horas} hours")).lastrowid
+            c.execute("UPDATE lista_processamento SET etapa_desde=datetime('now',?), atualizado_em=datetime('now') WHERE id=?", (f"-{horas} hours", lid))   # a varredura regrava atualizado_em
+            for k in range(folhas):
+                seq[0] += 1
+                c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, titulo) VALUES (?,?,'S01',?,'campvision',?,?,'nao_publicado','Planta')",
+                          (f"F099-P000{n}-1970-S01-D{seq[0]:05d}", f"F099-P000{n}", seq[0], lid, "pendente" if k < pend else "conferida"))
+            return lid
+        def hb(est, proj, min_atras):
+            c.execute("""INSERT OR REPLACE INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado, projeto_codigo, atualizado_em)
+                         VALUES (?,'campvision','campvision2','processando',?,datetime('now',?))""", (est, proj, f"-{min_atras} minutes"))
+        lA = lote(1, "processando", 177)                     # o caso do card: "sendo lido pelo CAMP Vision há 177 h"
+        lB = lote(2, "processando", 3); hb("cv-1", "F099-P0002", 5)     # lendo de verdade: o CAMP Vision diz que lê este projeto
+        lC = lote(3, "processando", 0.5)                     # acabou de começar
+        lD = lote(4, "processando", 5); hb("cv-2", "F099-P0004", 180)   # o último sinal deste projeto foi há 3 h
+        lE = lote(5, "revisao", 2, folhas=9, pend=9)          # maior lote, novo
+        lF = lote(6, "revisao", 16 * 24, folhas=2, pend=2)    # menor, parado há 16 dias
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        F = {l["id"]: l for l in op.get("/api/filas").json()}
+        ver("Material novo: 'sendo lido' há 177 h sem sinal do CAMP Vision deste projeto = leitura interrompida", F[lA].get("leitura_interrompida") is True, str({k: F[lA].get(k) for k in ("leitura_interrompida", "parado", "parado_h")}))
+        ver("...e o lote que o CAMP Vision diz estar lendo agora NÃO (falso alarme também é defeito)", F[lB].get("leitura_interrompida") is False)
+        ver("...nem o que começou há 30 min", F[lC].get("leitura_interrompida") is False)
+        ver("...mas sinal deste projeto só de 3 h atrás conta como interrompida", F[lD].get("leitura_interrompida") is True)
+        ver("idade pela etapa: 'parado há 7 dias' (177 h) e 'parado há 16 dias', mesmo com atualizado_em de agora", F[lA].get("parado") == "parado há 7 dias" and F[lF].get("parado") == "parado há 16 dias" and F[lF]["parado_h"] > 380, str((F[lA].get("parado"), F[lF].get("parado"))))
+        P = op.get("/api/pendencias").json()
+        ver("contagens: o interrompido não conta como 'lendo' (só o B e o C) e entra no Material novo", P.get("lotes_lendo") == 2 and P.get("leituras_interrompidas") == 2 and P["material_novo"] == 2 + 2 and P["pedem_acao"]["material_novo"] == P["material_novo"], str({k: P.get(k) for k in ("lotes_lendo", "leituras_interrompidas", "material_novo")}))
+        def grupos(q=""):
+            return {g["id"]: g for g in op.get("/api/painel" + q).json().get("tarefas", [])}
+        G = grupos()
+        li = [i for i in (G.get("problemas") or {}).get("itens", []) if i["codigo"] == "F099-P0001"]
+        ver("Home: 'Leitura interrompida: Edifício Lido' com 'Ler de novo' (1 clique) e 'parado há 7 dias'", li and li[0]["titulo"] == "Leitura interrompida: Edifício Lido" and (li[0]["acao"] or {}).get("tipo") == "reler"
+            and (li[0]["acao"] or {}).get("rotulo") == "Ler de novo" and "parado há 7 dias" in li[0]["detalhe"], str(li)[:300])
+        conf = (G.get("conferir") or {}).get("itens", [])
+        ver("Home: o lote parado mostra a idade da etapa ('parado há 16 dias'), não 'esperando' pelo atualizado_em", any(i["codigo"] == "F099-P0006" and "parado há 16 dias" in i["detalhe"] for i in conf), str([i["detalhe"] for i in conf]))
+        ver("Home, ordem normal: o maior lote primeiro", [i["codigo"] for i in conf][:2] == ["F099-P0005", "F099-P0006"], str([i["codigo"] for i in conf]))
+        conf2 = (grupos("?ordem=parado").get("conferir") or {}).get("itens", [])
+        ver("Home, 'mais parado primeiro' (?ordem=parado): o de 16 dias sobe", [i["codigo"] for i in conf2][:2] == ["F099-P0006", "F099-P0005"], str([i["codigo"] for i in conf2]))
+        r1 = op.post("/api/projetos/F099-P0001/releitura", json={"motivo": "Leitura interrompida"}).json()
+        r2 = op.post("/api/projetos/F099-P0001/releitura", json={"motivo": "Leitura interrompida"}).json()
+        ver("'Ler de novo' usa o pedido de releitura que já existe: o 2º clique não cria outro", r1.get("estado") == "pedido" and r2.get("repetido") is True
+            and c.execute("SELECT COUNT(*) FROM pedido_releitura WHERE projeto_codigo='F099-P0001'").fetchone()[0] == 1, f"{r1.get('estado')} {r2.get('repetido')}")
+        li = [i for i in (grupos().get("problemas") or {}).get("itens", []) if i["codigo"] == "F099-P0001"]
+        F = {l["id"]: l for l in op.get("/api/filas").json()}
+        ver("depois do pedido: a Home diz 'releitura pedida' e troca o botão por 'Ver na Fila'; Material novo traz quando foi pedida", li and "releitura pedida" in li[0]["detalhe"] and li[0]["acao"]["rotulo"] == "Ver na Fila" and F[lA].get("releitura_pedida_em"), str(li)[:250])
+        ex = avaliar_extras(c)["fila_travada"]["texto"]
+        ver("aviso 'Lote parado na Fila': o interrompido diz 'leitura interrompida', não 'sendo lido pelo CAMP Vision há 177 h'", "Edifício Lido (F099-P0001): leitura interrompida" in ex and "Edifício Lido (F099-P0001): sendo lido" not in ex, ex[:300])
+        hb("cv-3", None, 1); c.commit()
+        ver("conservador: uma máquina diz que lê sem dizer o projeto → ninguém é marcado interrompido", not any(l.get("leitura_interrompida") for l in op.get("/api/filas").json()))
+        for l in res: print(l)
     elif modo == "ux03_ignorar":
         # UX-03: "Ignorar ▾" em todo item do Precisa de você. "Agora não" esconde só para quem clicou por 7 dias (some da lista, dos
         # números e de Abertos em Problemas; aparece em Problemas › Ignorados; Desfazer/Mostrar de novo); "Não mostrar mais" muda o
@@ -12563,6 +12633,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-04: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-09: leitura interrompida (sem sinal há mais de 2 h) com Ler de novo; idade da etapa visível e ordenável")
+rc, out = rodar("ux09_travados", f"{tmp}/ux09_travados.db")
+if rc != 0: ok(False, f"teste ux09_travados não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-09: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

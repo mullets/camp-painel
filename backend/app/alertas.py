@@ -208,12 +208,17 @@ def avaliar_extras(con, agora: datetime | None = None) -> dict:
                                 WHERE descartado_em IS NULL AND etapa IN ('enviado','processando','revisao')
                                   AND COALESCE(etapa_desde, criado_em) < ? ORDER BY desde""", (limite,)).fetchall()
         partes = []
+        from .pendencias import projetos_lendo_agora, LEITURA_SEM_SINAL_H
+        lendo, sem_projeto = projetos_lendo_agora(con)
         for l in lotes[:10]:
             try:
                 h = int((agora - datetime.fromisoformat(l["desde"])).total_seconds() // 3600)
             except (TypeError, ValueError):
                 h = horas
-            partes.append(f"- {l['nome']} ({l['projeto_codigo']}): {ETAPA_TXT.get(l['etapa'], l['etapa'])} há {h} h")
+            etapa_txt = ETAPA_TXT.get(l["etapa"], l["etapa"])
+            if l["etapa"] == "processando" and h > LEITURA_SEM_SINAL_H and str(l["projeto_codigo"] or "").upper() not in lendo and not sem_projeto:
+                etapa_txt = "leitura interrompida (o CAMP Vision não dá sinal deste lote; use Ler de novo na Fila)"   # UX-09: "sendo lido há 177 h" não existe
+            partes.append(f"- {l['nome']} ({l['projeto_codigo']}): {etapa_txt} há {h} h")
         if len(lotes) > 10:
             partes.append(f"- e mais {len(lotes) - 10} lote(s)")
         texto = (f"{len(lotes)} lote(s) parado(s) na mesma etapa da Fila há mais de {horas} h:\n" + "\n".join(partes)
