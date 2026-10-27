@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto"}
+MODOS_RAPIDOS = {"ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4950,6 +4950,205 @@ def filho(modo):
         shutil.rmtree(raiz, ignore_errors=True)
         c.close()
         for l in res: print(l)
+    elif modo == "ux43_destino_auto":
+        # UX-43 (27/10, Rafael: "quero que você verifique destino sozinho.. crie a pasta sozinho..."): o painel resolve "Verificar destino" —
+        # (a) mover para o projeto do fundo que combina (≥ 0,8 e 0,15 acima do 2º), (b) criar o projeto (nenhum ≥ 0,5; próximo P, nunca reusado),
+        # (c) deixar para uma pessoa. Padrão simular (não muda nada); aplicar só em segundo plano, simulando cada lote antes; nunca 2× o mesmo lote.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile, shutil, time
+        from pathlib import Path
+        from app import auth, destino_auto as da
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): print(f"{'ok' if cond else 'FALHA'}|{nome}|{det}", flush=True)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F073','Fundo Destino Auto','FDA',1)")
+        projs = {10: "Cia. Sto Amaro", 95: "Edifício Marambaia", 4: "Clube Sírio (S. Festas)", 168: "Sociedade Antioquina do Brasil", 6: "Clube Ipê",
+                 7: "IAMSPE", 1: "Concurso Bairro Novo", 30: "Casa X", 2: "Residência Tarumã", 3: "Edifício São Luís", 40: "Edifício Jangada",
+                 41: "Residência Jangada", 42: "Clube Atlético Paulista", 8: "Escola Normal", 9: "Residência Alfa", 11: "Igreja Matriz", 12: "Hotel Central"}
+        for n, t in projs.items():
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F073',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F073',?,?,1972)", (f"F073-P{n:04d}", n, t))
+        raiz = Path(tempfile.mkdtemp(prefix="ux43_"))
+        fix = (Path(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json").read_text(encoding="utf-8")
+        def lote(n, nome):
+            P = f"F073-P{n:04d}"
+            d = raiz / f"{P} - {nome[:20]}"; (d / "catalogacao").mkdir(parents=True, exist_ok=True)
+            (d / "catalogacao" / "pacote_tainacan.json").write_text(fix.replace("F026-P0001", P).replace("F026", "F073"), encoding="utf-8")
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES (?,?,?,'revisao',?)",
+                             (nome, P, str(d), _j.dumps({"origem": "campvision2"}))).lastrowid
+        # os 6 casos do card UX-01 + criar + empate + zona cinzenta
+        L = {"Marambaia": lote(10, "Edifício Marambaia - 1970-1971 (37 folhas)"), "Antioquina": lote(4, "Sociedade Antioquina do Brasil (26 folhas)"),
+             "Garagem": lote(6, "Edifício Residêncial com Garagem"), "Apartamentos": lote(7, "Prédio de Apartamentos com Garagem"),
+             "Correios": lote(1, "ECT - Correios"), "P0001": lote(30, "P0001"),
+             "empate": lote(2, "Jangada - 1965"), "cinzenta": lote(3, "Clube Atlético Ipiranga"),
+             "bom": lote(8, "ESCOLA NORMAL (3 folhas)"), "com folhas": lote(9, "Pavilhão Desconhecido"), "decisão humana": lote(11, "Hotel Central Anexo"),
+             "complemento": lote(12, "Cine Ópera")}
+        c.execute("UPDATE lista_processamento SET resultado=? WHERE id=?", (_j.dumps({"origem": "campvision2", "complemento": True}), L["complemento"]))
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, lote_id) VALUES ('F073-P0009-1972-S01-D00001','F073-P0009','S01',1,?)", (L["com folhas"],))
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        async def _lan(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("192.168.15.40", 50000)}
+            await app(scope, receive, send)
+        lan = TestClient(_lan, raise_server_exceptions=False)
+        rd = op.post(f"/api/lotes/{L['decisão humana']}/destino", json={"acao": "decisao", "justificativa": "o carimbo diz outra coisa"})
+        ver("preparo: o lote 'decisão humana' foi para Decisões por uma pessoa", rd.status_code == 200, rd.text[:200])
+        foto = lambda: (c.execute("SELECT COUNT(*) FROM projeto").fetchone()[0], c.execute("SELECT COUNT(*) FROM numero_p").fetchone()[0],
+                        c.execute("SELECT COUNT(*) FROM destino_auto").fetchone()[0], c.execute("SELECT COUNT(*) FROM evento WHERE tipo LIKE 'destino_automatico%'").fetchone()[0],
+                        tuple(r[0] for r in c.execute("SELECT projeto_codigo FROM lista_processamento ORDER BY id")))
+        # ---------------- simular (o padrão) ----------------
+        ver("a migração nasce em simular", da.modo(c) == "simular" and c.execute("SELECT valor FROM configuracao WHERE chave='destino.automatico'").fetchone()[0] == "simular")
+        antes = foto()
+        # sem QNAP: nada do automático lê a pasta (o painel nunca varre o QNAP dentro de uma requisição)
+        import app.importador_lote as _il, app.rotas_operacao as _ro
+        _orig = (_il.ler_pacote, _ro._qnap_prontos_raiz)
+        def _proibido(*a, **k): raise AssertionError("leu o QNAP")
+        _il.ler_pacote = _proibido; _ro._qnap_prontos_raiz = _proibido
+        try:
+            g = le.get("/api/destino-automatico"); gj = g.json() if g.status_code == 200 else {}
+            r0 = da.rodada()
+        finally:
+            _il.ler_pacote, _ro._qnap_prontos_raiz = _orig
+        ver("a prévia e a rodada não leem o QNAP (só o banco)", g.status_code == 200 and "aplicados" in r0, g.text[:300])
+        pv = {p["lote_id"]: p for p in gj.get("previa") or []}
+        def faz(k): p = pv.get(L[k]) or {}; return (p.get("acao"), p.get("para"), p.get("titulo"))
+        ver("prévia: Marambaia → mover para F073-P0095", faz("Marambaia")[:2] == ("mover", "F073-P0095"), str(pv.get(L["Marambaia"])))
+        ver("prévia: Sociedade Antioquina → mover para F073-P0168", faz("Antioquina")[:2] == ("mover", "F073-P0168"), str(pv.get(L["Antioquina"])))
+        ver("prévia: 'Edifício Residêncial com Garagem' → criar F073-P0169 'Edifício Residencial com Garagem' (acento corrigido)",
+            faz("Garagem") == ("criar", "F073-P0169", "Edifício Residencial com Garagem"), str(pv.get(L["Garagem"])))
+        ver("prévia: 'Prédio de Apartamentos com Garagem' → criar o seu (só 'garagem' em comum não junta os dois)",
+            faz("Apartamentos") == ("criar", "F073-P0170", "Prédio de Apartamentos com Garagem"), str(pv.get(L["Apartamentos"])))
+        ver("prévia: 'ECT - Correios' → criar F073-P0171", faz("Correios") == ("criar", "F073-P0171", "ECT - Correios"), str(pv.get(L["Correios"])))
+        ver("prévia: o ano da pasta vai para o projeto criado ('1970-1971' → 1970 até 1971)", da.titulo_da_pasta("Edifício Marambaia - 1970-1971 (37 folhas)") == {"titulo": "Edifício Marambaia", "ano": 1970, "ano_fim": 1971},
+            str(da.titulo_da_pasta("Edifício Marambaia - 1970-1971 (37 folhas)")))
+        ver("prévia: pasta só com o código ('P0001') → uma pessoa, com o motivo", faz("P0001")[0] == "pessoa" and "só tem o código" in (pv.get(L["P0001"]) or {}).get("motivo", ""), str(pv.get(L["P0001"])))
+        ver("prévia: empate entre dois projetos → uma pessoa", faz("empate")[0] == "pessoa" and "dois projetos" in (pv.get(L["empate"]) or {}).get("motivo", ""), str(pv.get(L["empate"])))
+        ver("prévia: nota na zona cinzenta (0,5) → uma pessoa", faz("cinzenta")[0] == "pessoa" and "entre 50% e 80%" in (pv.get(L["cinzenta"]) or {}).get("motivo", ""), str(pv.get(L["cinzenta"])))
+        ver("prévia: fora o lote compatível, o lote com folhas, o da decisão humana e o complemento",
+            all(L[k] not in pv for k in ("bom", "com folhas", "decisão humana", "complemento")), str([k for k in ("bom", "com folhas", "decisão humana", "complemento") if L[k] in pv]))
+        ver("simular não muda nada (projetos, números P, decisões, Histórico, projeto dos lotes)", foto() == antes and r0.get("aplicados") == [], str((antes, foto(), r0)))
+        filas = {x["id"]: x for x in op.get("/api/filas").json()}
+        ver("a Fila mostra em cada lote o que o painel faria", (filas[L["Marambaia"]].get("destino_auto") or {}).get("para") == "F073-P0095"
+            and (filas[L["Garagem"]].get("destino_auto") or {}).get("acao") == "criar", str(filas[L["Marambaia"]].get("destino_auto")))
+        dv = op.get(f"/api/lotes/{L['Antioquina']}/destino").json()
+        ver("Verificar destino mostra 'O painel faria' (painel_faria) e o modo", (dv.get("painel_faria") or {}).get("para") == "F073-P0168" and dv.get("modo_automatico") == "simular", str(dv.get("painel_faria")))
+        # ---------------- quem pode ----------------
+        ver("operador não aplica nem muda o modo (403)", op.post("/api/destino-automatico/aplicar", json={"lotes": [L["Marambaia"]]}).status_code == 403
+            and op.post("/api/destino-automatico/modo", json={"modo": "aplicar"}).status_code == 403)
+        ver("modo inválido: 400", adm.post("/api/destino-automatico/modo", json={"modo": "talvez"}).status_code == 400)
+        # ---------------- "Aplicar estas N decisões" (admin, em simular) ----------------
+        r = adm.post("/api/destino-automatico/aplicar", json={"lotes": [L["Marambaia"], L["Garagem"], L["P0001"]]})
+        t = {}
+        if r.status_code == 202:
+            fim = time.time() + 30
+            while time.time() < fim:
+                t = adm.get(f"/api/tarefas/{r.json()['tarefa_id']}").json()
+                if t["estado"] != "rodando": break
+                time.sleep(0.1)
+        tr = t.get("resultado") or {}
+        ver("Aplicar (admin): roda como tarefa em segundo plano e aplica as 2 decisões (o 'P0001' fica para uma pessoa)", r.status_code == 202 and t.get("estado") == "ok"
+            and sorted(x["lote_id"] for x in tr.get("aplicados") or []) == sorted([L["Marambaia"], L["Garagem"]]), str(t)[:400])
+        pg = c.execute("SELECT codigo, titulo, origem, identificacao_original, ano FROM projeto WHERE codigo='F073-P0169'").fetchone()
+        ver("criar: F073-P0169 'Edifício Residencial com Garagem', origem automatico, com o nome da pasta como identificação", bool(pg) and pg["titulo"] == "Edifício Residencial com Garagem"
+            and pg["origem"] == "automatico" and pg["identificacao_original"] == "Edifício Residêncial com Garagem", str(dict(pg) if pg else None))
+        ver("mover: o lote continua no projeto antigo (a pasta tem o código antigo) e fica 'movendo para F073-P0095'",
+            c.execute("SELECT projeto_codigo FROM lista_processamento WHERE id=?", (L["Marambaia"],)).fetchone()[0] == "F073-P0010"
+            and "movendo para F073-P0095" in (op.get(f"/api/lotes/{L['Marambaia']}/destino").json().get("motivo") or ""))
+        ri = op.post(f"/api/lotes/{L['Marambaia']}/importar")
+        ver("o lote 'movendo' não importa no projeto antigo (409) e diz que o CAMP Vision vai reorganizar a pasta", ri.status_code == 409 and "CAMP Vision vai reorganizar" in ri.text, ri.text[:200])
+        ver("enquanto 'movendo', 'É deste projeto' é recusado (desfaça antes)", op.post(f"/api/lotes/{L['Marambaia']}/destino", json={"acao": "confirmar", "justificativa": "conferi"}).status_code == 409)
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='projeto' AND codigo='F073-P0010' AND tipo='destino_automatico'").fetchone()
+        ver("Histórico: lote, projeto antigo, novo, nota e autor 'painel (automático)' (e quem apertou Aplicar)", bool(ev) and ev["ator"] == "painel (automático)"
+            and _j.loads(ev["detalhe"]).get("para") == "F073-P0095" and _j.loads(ev["detalhe"]).get("nota") == 1.0 and _j.loads(ev["detalhe"]).get("aplicado_por") == "adm@camp.arq.br",
+            str(ev and dict(ev)))
+        ver("Histórico nos dois projetos e no lote", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='destino_automatico' AND json_extract(detalhe,'$.lote_id')=?", (L["Marambaia"],)).fetchone()[0] == 3)
+        # ---------------- o CAMP Vision ----------------
+        cv = lan.get("/api/campvision/destinos")
+        dcv = {x["lote_id"]: x for x in (cv.json().get("destinos") or [])} if cv.status_code == 200 else {}
+        ver("CAMP Vision: GET /api/campvision/destinos lista as pastas a reorganizar, com o comando", cv.status_code == 200 and (dcv.get(L["Marambaia"]) or {}).get("para") == "F073-P0095"
+            and (dcv.get(L["Marambaia"]) or {}).get("comando") == "vigia.py --reidentificar F073-P0010" and (dcv.get(L["Garagem"]) or {}).get("criado") is True, cv.text[:300])
+        async def _fora(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("8.8.8.8", 50000)}
+            await app(scope, receive, send)
+        ver("... e só da rede local ou com o token (403 de fora)", TestClient(_fora, raise_server_exceptions=False).get("/api/campvision/destinos").status_code == 403)
+        # ---------------- aplicar (o coletor) ----------------
+        ver("admin passa o modo para aplicar", adm.post("/api/destino-automatico/modo", json={"modo": "aplicar"}).status_code == 200 and da.modo(c) == "aplicar")
+        r1 = da.rodada()
+        ap = {x["lote_id"]: x for x in r1["aplicados"]}
+        ver("aplicar (coletor): Antioquina movida para F073-P0168", (ap.get(L["Antioquina"]) or {}).get("para") == "F073-P0168", str(r1)[:400])
+        ver("aplicar: 'Prédio de Apartamentos com Garagem' cria F073-P0170 (não cai no projeto Garagem criado antes)", (ap.get(L["Apartamentos"]) or {}).get("para") == "F073-P0170"
+            and (c.execute("SELECT titulo FROM projeto WHERE codigo='F073-P0170'").fetchone() or [None])[0] == "Prédio de Apartamentos com Garagem", str(ap.get(L["Apartamentos"])))
+        ver("aplicar: 'ECT - Correios' cria F073-P0171", (ap.get(L["Correios"]) or {}).get("para") == "F073-P0171", str(ap.get(L["Correios"])))
+        ver("aplicar: P0001, empate e zona cinzenta ficam para uma pessoa, com o motivo", {x["lote_id"] for x in r1["pessoa"]} >= {L["P0001"], L["empate"], L["cinzenta"]}
+            and not any(L[k] in ap for k in ("P0001", "empate", "cinzenta")), str(r1["pessoa"])[:300])
+        ver("aplicar: o lote com folhas, o da decisão humana, o compatível e o complemento ficam intocados",
+            not c.execute(f"SELECT 1 FROM destino_auto WHERE lote_id IN ({L['com folhas']},{L['decisão humana']},{L['bom']},{L['complemento']})").fetchone()
+            and c.execute("SELECT COUNT(*) FROM item WHERE lote_id=?", (L["com folhas"],)).fetchone()[0] == 1)
+        d1 = op.get(f"/api/lotes/{L['P0001']}/destino").json()
+        ver("o lote da P0001 continua 'Verificar destino' para uma pessoa", d1.get("suspeito") is True and not d1.get("automatico"))
+        n_auto = c.execute("SELECT COUNT(*) FROM destino_auto").fetchone()[0]
+        r2 = da.rodada()
+        ver("segunda rodada não repete nada", r2["aplicados"] == [] and c.execute("SELECT COUNT(*) FROM destino_auto").fetchone()[0] == n_auto == 5, str(r2)[:300])
+        cods = [r[0] for r in c.execute("SELECT codigo FROM projeto WHERE origem='automatico' ORDER BY codigo")]
+        ver("nenhum código reutilizado: os criados são novos e seguem o maior P do fundo", cods == ["F073-P0169", "F073-P0170", "F073-P0171"]
+            and tuple(c.execute("SELECT COUNT(*), COUNT(DISTINCT numero) FROM numero_p WHERE fundo_codigo='F073'").fetchone()) == (len(projs) + 3, len(projs) + 3), str(cods))
+        g2 = le.get("/api/destino-automatico").json()
+        ver("quadro 'Projetos criados pelo painel' traz os 3, com o lote de origem", sorted(x["codigo"] for x in g2.get("criados") or []) == cods
+            and all(x.get("lote_id") for x in g2["criados"]), str(g2.get("criados"))[:300])
+        # ---------------- teto por rodada ----------------
+        nomes_teto = ["Pavilhão Aurora", "Galpão Boreal", "Mercado Cometa", "Estação Dourada", "Ginásio Esmeralda", "Teatro Farol", "Museu Girassol",
+                      "Biblioteca Horizonte", "Capela Iris", "Quiosque Jasmim", "Armazém Lírio", "Mirante Nascente"]
+        for nm in nomes_teto:
+            lote(1, nm)
+        c.commit()
+        r3 = da.rodada()
+        ver(f"teto: no máximo {da.TETO} lotes por rodada", len(r3["aplicados"]) == da.TETO, str(len(r3["aplicados"])))
+        r3b = da.rodada()
+        ver("... e a rodada seguinte faz o resto (sem repetir)", len(r3b["aplicados"]) == 2
+            and tuple(c.execute("SELECT COUNT(DISTINCT lote_id), COUNT(*) FROM destino_auto").fetchone()) == (n_auto + 12, n_auto + 12), str(r3b)[:300])
+        # ---------------- Desfazer ----------------
+        dG = c.execute("SELECT id FROM destino_auto WHERE lote_id=?", (L["Garagem"],)).fetchone()[0]
+        ver("Desfazer é só de admin (403 para operador)", op.post(f"/api/destino-automatico/{dG}/desfazer").status_code == 403)
+        rdz = adm.post(f"/api/destino-automatico/{dG}/desfazer")
+        dvg = op.get(f"/api/lotes/{L['Garagem']}/destino").json()
+        ver("Desfazer: o lote volta a 'Verificar destino' para uma pessoa e o projeto criado (vazio) é descartado", rdz.status_code == 200
+            and dvg.get("suspeito") is True and not dvg.get("automatico") and dvg.get("liberado") is False
+            and c.execute("SELECT descartado_em IS NOT NULL FROM projeto WHERE codigo='F073-P0169'").fetchone()[0] == 1, rdz.text[:300])
+        ver("Desfazer de novo: 409", adm.post(f"/api/destino-automatico/{dG}/desfazer").status_code == 409)
+        r4 = da.rodada()
+        ver("o lote desfeito não é decidido de novo pelo painel", L["Garagem"] not in {x["lote_id"] for x in r4["aplicados"]}
+            and c.execute("SELECT COUNT(*) FROM destino_auto WHERE lote_id=?", (L["Garagem"],)).fetchone()[0] == 1)
+        novo = lote(1, "Ginásio Poliesportivo Kappa"); c.commit()
+        r5 = da.rodada()
+        pn = [x["para"] for x in r5["aplicados"] if x["lote_id"] == novo]
+        ver("o número do projeto desfeito (P0169) nunca volta: o próximo criado pega um número novo", bool(pn) and pn[0] != "F073-P0169" and int(pn[0][-4:]) > 171, str(pn))
+        # ---------------- o CAMP Vision reorganizou ----------------
+        dM = c.execute("SELECT id FROM destino_auto WHERE lote_id=?", (L["Marambaia"],)).fetchone()[0]
+        time.sleep(1.1)
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Marambaia','F073-P0095',?, 'revisao', '{\"origem\": \"campvision2\"}')",
+                  (str(raiz / "F073-P0095 - Marambaia"),)); c.commit()
+        acM = {x["id"]: x for x in le.get("/api/destino-automatico").json()["acoes"]}.get(dM) or {}
+        ver("quando o material chega ao projeto novo (pasta reorganizada pelo CAMP Vision), a ação fica 'concluido' e sem Desfazer",
+            acM.get("estado") == "concluido" and acM.get("pode_desfazer") is False, str(acM))
+        ver("... Desfazer recusado (409) e o CAMP Vision não recebe mais esta pasta", adm.post(f"/api/destino-automatico/{dM}/desfazer").status_code == 409
+            and L["Marambaia"] not in {x["lote_id"] for x in lan.get("/api/campvision/destinos").json()["destinos"]})
+        da.rodada()
+        ver("a rodada grava 'concluido' e o Histórico do lote", c.execute("SELECT estado FROM destino_auto WHERE id=?", (dM,)).fetchone()[0] == "concluido"
+            and c.execute("SELECT 1 FROM evento WHERE entidade='lista' AND codigo=? AND tipo='destino_automatico_concluido'", (str(L["Marambaia"]),)).fetchone() is not None)
+        # ---------------- desligado ----------------
+        adm.post("/api/destino-automatico/modo", json={"modo": "desligado"})
+        outro = lote(1, "Teatro Municipal Ômega"); c.commit()
+        r6 = da.rodada()
+        ver("desligado: nada é aplicado e a Fila não mostra prévia", r6["aplicados"] == [] and not c.execute("SELECT 1 FROM destino_auto WHERE lote_id=?", (outro,)).fetchone()
+            and not {x["id"]: x for x in op.get("/api/filas").json()}[outro].get("destino_auto"))
+        shutil.rmtree(raiz, ignore_errors=True)
+        c.close()
     elif modo == "ux29_duplicata":
         # UX-29 (27/10): possível duplicata ao criar ou editar projeto (antes de salvar) e o relatório em Problemas; "Não é duplicata" silencia o par.
         init_db(); _aplicar_migracoes_real()
@@ -13089,6 +13288,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"projeto divergente: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-43) Verificar destino resolvido pelo painel: mover para o projeto certo ou criar o projeto; simular por padrão; Desfazer; nunca 2× o mesmo lote")
+rc, out = rodar("ux43_destino_auto", f"{tmp}/ux43_destino_auto.db")
+if rc != 0 or "|" not in out: ok(False, f"teste do destino automático não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-43: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-44) Recorte automático na borda do papel + branco/contraste só no derivado público; original intacto; manual vence; reprocessar simula")
 rc, out = rodar("ux44_recorte_auto", f"{tmp}/ux44_recorte_auto.db")

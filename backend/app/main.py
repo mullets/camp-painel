@@ -91,6 +91,8 @@ from .dados_foto import router as rotas_dados_foto
 app.include_router(rotas_dados_foto)
 from .folhas_enviadas import router as rotas_folhas_enviadas
 app.include_router(rotas_folhas_enviadas)
+from .destino_auto import router as rotas_destino_auto   # UX-43
+app.include_router(rotas_destino_auto)
 
 
 @app.on_event("startup")
@@ -916,6 +918,11 @@ async def _coleta_qnap_periodica() -> None:
                 await asyncio.to_thread(coletar)
             except Exception as e:  # noqa: BLE001
                 log_registrar(logging.ERROR, "qnap_coleta", f"Falha na coleta do QNAP: {str(e)[:200]}")
+            try:                    # UX-43: Verificar destino pelo painel (destino.automatico; padrão simular = não muda nada). Antes de importar.
+                from .destino_auto import rodada as _rodada_destino
+                await asyncio.to_thread(_rodada_destino)
+            except Exception as e:  # noqa: BLE001
+                log_registrar(logging.ERROR, "destino_automatico", f"Falha no destino automático: {str(e)[:200]}")
             try:                    # CAMP-151: importar sozinho o lote que o CAMP Vision terminou (importacao.automatica; padrão desligado)
                 from .importar_sozinho import importar_prontos
                 await asyncio.to_thread(importar_prontos)

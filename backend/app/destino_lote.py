@@ -15,6 +15,8 @@ O lote suspeito não importa (nem pelo botão, nem por "Importar todas", nem soz
 - "É deste projeto" (com justificativa): fica no Histórico do lote e do projeto (evento destino_confirmado) e o lote importa;
 - "Mover para <sugerido>" ou "Criar decisão": abre a decisão lote_destino (admin decide). Mover a pasta de verdade depende de o CAMP Vision
   reidentificar os arquivos (a pasta e o pacote têm o código antigo): o painel não move nada sozinho.
+UX-43: o painel pode decidir sozinho (destino_auto.py, configuração destino.automatico): o lote fica "movendo para F0xx-P0yyy" até o
+CAMP Vision reorganizar a pasta, sem importar no projeto antigo.
 """
 from __future__ import annotations
 
@@ -95,7 +97,7 @@ def avaliar(con, l, pacote: dict | None = None, completo: bool = True) -> dict:
     pasta = nome_da_pasta(l)
     out = {"aplica": aplica(con, l), "nome_pasta": pasta, "nome_limpo": limpar_nome_de_pasta(pasta),
            "projeto": {"codigo": l["projeto_codigo"], "titulo": p["titulo"] if p else None}, "nota": None, "so_codigo": False,
-           "suspeito": False, "liberado": True, "motivo": None, "sugestoes": [], "confirmado": None, "decisao": None, "amostra": []}
+           "suspeito": False, "liberado": True, "motivo": None, "sugestoes": [], "confirmado": None, "decisao": None, "amostra": [], "automatico": None}
     if not out["aplica"] or not p:
         return out
     n = nota(pasta, p)
@@ -114,7 +116,13 @@ def avaliar(con, l, pacote: dict | None = None, completo: bool = True) -> dict:
     out["decisao"] = decisao(con, l["id"])
     dec = out["decisao"] or {}
     out["liberado"] = bool(out["confirmado"])
-    if not out["liberado"] and dec.get("situacao") == "resolvida" and dec.get("escolha") == "outro_projeto":
+    from .destino_auto import do_lote               # UX-43: o painel já decidiu este lote sozinho (mover ou criar o projeto)
+    auto = out["automatico"] = do_lote(con, l["id"])
+    if auto and not out["liberado"]:
+        alvo = f"{auto['para']} (“{auto['para_titulo']}”{', projeto criado pelo painel' if auto['criado'] else ''})"
+        out["motivo"] = (f"movendo para {alvo}: o CAMP Vision vai reorganizar a pasta" if auto["estado"] == "movendo" else
+                         f"o painel moveu este lote para {alvo} e o CAMP Vision já reorganizou a pasta; se ainda sobrou material aqui, escolha “É deste projeto”")
+    if not out["liberado"] and not auto and dec.get("situacao") == "resolvida" and dec.get("escolha") == "outro_projeto":
         out["motivo"] += f"; decidido (decisão {dec['id']}): a pasta é de {dec.get('escolha_valor')}. O CAMP Vision precisa reidentificar a pasta antes"
     if completo:
         out["sugestoes"] = sugestoes(con, l, p["fundo_codigo"], pasta, n)
@@ -128,6 +136,8 @@ def bloqueio(con, l) -> str | None:
     a = avaliar(con, l, completo=False)
     if a["liberado"]:
         return None
+    if a["automatico"]:                                # UX-43: o motivo já diz para onde vai e quem falta (o CAMP Vision)
+        return f"{PREFIXO_MOTIVO}: {a['motivo']}."
     dec = a["decisao"] or {}
     extra = f" Está em Decisões (decisão {dec['id']})." if dec.get("situacao") == "pendente" else " Escolha \"É deste projeto\" ou crie uma decisão."
     return f"{PREFIXO_MOTIVO}: {a['motivo']}.{'' if dec.get('escolha') == 'outro_projeto' else extra}"
