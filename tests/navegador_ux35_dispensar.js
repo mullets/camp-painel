@@ -108,7 +108,7 @@ const chipN = async (page, k) => +(await page.locator(`#fila-chips [data-fila-fi
     await op.waitForSelector('#conf-ov', { timeout: 5000 }); await op.click('#conf-ov [data-conf="sim"]');
     await op.waitForFunction(() => !/CRASA/.test((document.getElementById('ini-tarefas') || {}).textContent || ''), null, { timeout: 10000 });
     chk(true, 'Home: o item some depois de dispensar pelo Ignorar ▾');
-    chk(await op.evaluate(() => fraseEvento({ tipo: 'lote_dispensado', entidade: 'projeto', codigo: 'F016-P0024', ator: 'operador@camp.arq.br' })) === 'Operador dispensou um lote com erro do CAMP Vision do projeto F016-P0024 (sai das listas para todos)',
+    chk(await op.evaluate(() => fraseEvento({ tipo: 'lote_dispensado', entidade: 'projeto', codigo: 'F016-P0024', ator: 'operador@camp.arq.br' })) === 'Operador dispensou um lote parado no CAMP Vision do projeto F016-P0024 (sai das listas para todos)',
       'Histórico: frase em português: "' + await op.evaluate(() => fraseEvento({ tipo: 'lote_dispensado', entidade: 'projeto', codigo: 'F016-P0024', ator: 'operador@camp.arq.br' })) + '"');
 
     // leitor: não vê os botões

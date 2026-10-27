@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
+MODOS_RAPIDOS = {"ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -584,6 +584,90 @@ def filho(modo):
         c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (l1,)); c.commit()
         r = cli["op"].post(f"/api/filas/{l1}/dispensar", json={})
         ver("lote que não está com erro não é dispensado (400)", r.status_code == 400, r.status_code)
+        for l in res: print(l)
+    elif modo == "ux39_dispensar_interrompida":
+        # UX-39: "Dispensar este lote" também para a Leitura interrompida (UX-09: 'processando' há mais de 2 h sem sinal do CAMP Vision).
+        # O print do Rafael: F009-P0092 Residência Sr. Luiz Marcelo Sales, lote de 19/10, parado há 8 dias, releitura pedida "umas 10x".
+        init_db(); aplicar_migracoes()
+        from app import auth, alertas
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F009','Fundo nove','NOV',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F016','Outro','OUT',1)")
+        for f, n, t in (("F009", 92, "Residência Sr. Luiz Marcelo Sales"), ("F016", 30, "Casa de outro")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1978)", (f"{f}-P{n:04d}", f, n, t))
+        la = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, criado_em, etapa_desde) VALUES ('LA','F009-P0092','/x/a','processando','2026-10-19 12:00:00', datetime('now','-8 days'))").lastrowid
+        lb = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, criado_em, etapa_desde) VALUES ('LB','F016-P0030','/x/b','processando','2026-10-20 12:00:00', datetime('now','-3 days'))").lastrowid
+        c.execute("INSERT INTO pedido_releitura (projeto_codigo, pedido_por) VALUES ('F009-P0092','op@camp.arq.br')")
+        c.commit()
+        cli = {}
+        for nome, papel in (("adm", "admin"), ("op", "operador"), ("lei", "leitura")):
+            auth.criar_usuario(nome, f"{nome}@camp.arq.br", "senha-longa-12345", papel, forcar_troca=False)
+            cli[nome] = TestClient(app, raise_server_exceptions=False); cli[nome].post("/api/auth/login", json={"email": f"{nome}@camp.arq.br", "senha": "senha-longa-12345"})
+        def nums(k):
+            pe, pa, F = cli[k].get("/api/pendencias").json(), cli[k].get("/api/painel").json(), cli[k].get("/api/filas").json()
+            it = [i for g in pa.get("tarefas") or [] for i in g.get("itens", []) if str(i.get("titulo") or "").startswith("Leitura interrompida")]
+            cg = pa.get("contagens") or {}
+            return {"pendencias": pe.get("leituras_interrompidas"), "painel.pendencias": (pa.get("pendencias") or {}).get("leituras_interrompidas"),
+                    "contagens": cg.get("leituras_interrompidas"), "lotes_etapa": (cg.get("lotes_etapa") or {}).get("processando"),
+                    "material_novo": (pa.get("pendencias") or {}).get("material_novo"),
+                    "filas": sum(1 for x in F if x.get("leitura_interrompida") and not x.get("dispensado")),
+                    "precisa_de_voce": len(it)}, {x["id"]: x for x in F}, it
+        def iguais(d, v): return all(x == v for x in d.values())
+        n0, F0, p0 = nums("adm")
+        ver("antes: as 2 leituras interrompidas contam igual em todas as rotas (2)", iguais(n0, 2), n0)
+        ver("antes: o item do print (releitura pedida, parado há 8 dias, Ver na Fila) traz 'dispensar' (o id do lote)",
+            any(i.get("dispensar") == la and "releitura pedida" in (i.get("detalhe") or "") and "parado há 8 dias" in (i.get("detalhe") or "")
+                and (i.get("acao") or {}).get("rotulo") == "Ver na Fila" for i in p0) and {i.get("dispensar") for i in p0} == {la, lb}, p0)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='avisos.fila_travada.ligado'"); c.commit()
+        ft0 = (alertas.avaliar_extras(c).get("fila_travada") or {})
+        ver("antes: o alerta 'Lote parado na Fila' lista a leitura interrompida", la in (ft0.get("lotes") or []), ft0)
+        r = cli["lei"].post(f"/api/filas/{la}/dispensar", json={"motivo": "x"})
+        ver("leitor não dispensa (403)", r.status_code == 403, r.status_code)
+        r = cli["op"].post(f"/api/filas/{la}/dispensar", json={"motivo": "já mandei ler de novo umas 10x"})
+        ver("operador dispensa a leitura interrompida de 19/10", r.status_code == 200 and r.json().get("ok"), r.text)
+        for k in ("adm", "op", "lei"):
+            n1, F1, p1 = nums(k)
+            ver(f"depois ({k}): o lote dispensado sai de todas as contagens (1 em todas)", iguais(n1, 1), n1)
+            ver(f"depois ({k}): sai do Precisa de você", all(i.get("dispensar") != la for i in p1), p1)
+            ver(f"depois ({k}): continua em /api/filas com dispensado (por, motivo, estado) — fica em Todas", (F1[la].get("dispensado") or {}).get("por") == "op@camp.arq.br"
+                and (F1[la]["dispensado"] or {}).get("motivo") == "já mandei ler de novo umas 10x" and (F1[la]["dispensado"] or {}).get("estado") == "leitura_interrompida", F1[la])
+        ver("não muda a etapa nem etapa_desde", c.execute("SELECT etapa FROM lista_processamento WHERE id=?", (la,)).fetchone()[0] == "processando")
+        ft1 = (alertas.avaliar_extras(c).get("fila_travada") or {})
+        ver("alerta 'Lote parado na Fila' não lista o lote dispensado (o outro continua)", la not in (ft1.get("lotes") or []) and lb in (ft1.get("lotes") or []), ft1)
+        c.execute("INSERT INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado) VALUES ('cv2','processamento','campvision2','vigiando')"); c.commit()
+        a1 = (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("campvision") or {})
+        ver("alerta do CAMP Vision: a leitura dispensada não conta como 'lote com erro' (nem negativo)", (a1.get("lotes_erro") or 0) == 0 and "com erro" not in (a1.get("texto") or "") and a1.get("nivel") != "nao_medido", a1)
+        c.execute("DELETE FROM estacao_heartbeat"); c.commit()
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='projeto' AND codigo='F009-P0092' AND tipo='lote_dispensado'").fetchone()
+        ver("Histórico: evento lote_dispensado com motivo e estado leitura_interrompida", ev and ev["ator"] == "op@camp.arq.br" and "10x" in ev["detalhe"] and "leitura_interrompida" in ev["detalhe"], dict(ev) if ev else None)
+        r = cli["lei"].delete(f"/api/filas/{la}/dispensar")
+        ver("leitor não volta a mostrar (403)", r.status_code == 403, r.status_code)
+        r = cli["op"].delete(f"/api/filas/{la}/dispensar")
+        n2, F2, _ = nums("adm")
+        ver("Voltar a mostrar: o lote volta às contagens (2) e perde o 'dispensado'", r.status_code == 200 and iguais(n2, 2) and F2[la].get("dispensado") is None, (r.text, n2))
+        cli["op"].post(f"/api/filas/{la}/dispensar", json={})
+        ver("dispensado de novo: 1", iguais(nums("adm")[0], 1))
+        c.execute("INSERT INTO estacao_heartbeat (estacao_id, tipo_estacao, app, estado, projeto_codigo) VALUES ('cv2','processamento','campvision2','processando','F009-P0092')"); c.commit()
+        n3, F3, _ = nums("adm")
+        ver("o CAMP Vision diz que está lendo o projeto: não é mais leitura interrompida e a dispensa não se aplica", F3[la].get("dispensado") is None and not F3[la].get("leitura_interrompida"), F3[la])
+        c.execute("DELETE FROM estacao_heartbeat"); c.commit()
+        ver("o sinal some sem o CAMP Vision mexer no lote (mesma etapa_desde): continua dispensado", nums("adm")[1][la].get("dispensado") is not None)
+        c.execute("UPDATE lista_processamento SET etapa_desde=datetime('now','-3 hours') WHERE id=?", (la,)); c.commit()
+        n4, F4, _ = nums("op")
+        ver("o CAMP Vision reescreveu o status (etapa_desde mudou): a dispensa deixa de valer e o lote volta sozinho", iguais(n4, 2) and F4[la].get("dispensado") is None and F4[la].get("leitura_interrompida"), n4)
+        cli["op"].post(f"/api/filas/{lb}/dispensar", json={})
+        ver("dispensar o outro: 1", iguais(nums("adm")[0], 1))
+        c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (lb,)); c.commit()
+        ver("o lote saiu de 'processando': a dispensa não vale mais", nums("adm")[1][lb].get("dispensado") is None)
+        c.execute("UPDATE lista_processamento SET etapa='processando' WHERE id=?", (lb,)); c.commit()
+        c.execute("UPDATE lista_processamento SET etapa_desde=datetime('now','-1 hours') WHERE id=?", (lb,)); c.commit()
+        r = cli["op"].post(f"/api/filas/{lb}/dispensar", json={})
+        ver("lote 'sendo lido' há menos de 2 h (não interrompido) não é dispensado (400)", r.status_code == 400, r.status_code)
         for l in res: print(l)
     elif modo == "ux33_numeros":
         # UX-33: números para pessoas em pt-BR também nas mensagens do servidor (backup, exportação)
@@ -12481,6 +12565,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-35: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117e) UX-39: dispensar também a leitura interrompida (para todos; volta sozinho se o CAMP Vision mexer no lote)")
+rc, out = rodar("ux39_dispensar_interrompida", f"{tmp}/ux39.db")
+if rc != 0: ok(False, f"teste ux39_dispensar_interrompida não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-39: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("117c) UX-33: números em pt-BR nas mensagens do servidor (backup, exportação)")
 rc, out = rodar("ux33_numeros", f"{tmp}/ux33.db")

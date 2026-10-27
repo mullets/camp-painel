@@ -699,22 +699,23 @@ class DispensaLote(BaseModel):
 def dispensar_lote(lid: int, d: DispensaLote | None = None, u: dict = Depends(auth.exige("operador"))) -> dict:
     """UX-35: "Dispensar este lote" — lote com erro do CAMP Vision que ninguém consegue resolver sai das listas e das contagens de TODOS.
     Não apaga nada, não mexe no QNAP nem na etapa/status.json. Guarda a assinatura do erro: se o CAMP Vision reler e o erro mudar, volta."""
-    from .dispensa_lote import assinatura_do_lote, _mensagem_cv
+    from .dispensa_lote import assinatura_do_lote, _mensagem_cv, estado_dispensavel
     motivo = ((d.motivo if d else None) or "").strip()[:300] or None
     con = connect()
     try:
         l = con.execute("SELECT * FROM lista_processamento WHERE id=? AND descartado_em IS NULL", (lid,)).fetchone()
         if not l:
             raise HTTPException(404, "Lote não encontrado")
-        if l["etapa"] != "erro":
-            raise HTTPException(400, "Só dá para dispensar um lote parado com erro do CAMP Vision.")
-        erro_cv = _mensagem_cv(l["status_json"], l["resultado"])[:500] or None
+        estado = estado_dispensavel(l, con=con)       # UX-39: também leitura interrompida (processando > 2 h sem sinal do CAMP Vision)
+        if not estado:
+            raise HTTPException(400, "Só dá para dispensar um lote parado com erro do CAMP Vision ou com a leitura interrompida.")
+        erro_cv = (_mensagem_cv(l["status_json"], l["resultado"])[:500] or None) if estado == "erro" else None
         con.execute("""INSERT INTO lote_dispensado (lote_id, assinatura, etapa, erro_cv, motivo, por, em) VALUES (?,?,?,?,?,?,datetime('now'))
                        ON CONFLICT(lote_id) DO UPDATE SET assinatura=excluded.assinatura, etapa=excluded.etapa, erro_cv=excluded.erro_cv,
                                                           motivo=excluded.motivo, por=excluded.por, em=excluded.em""",
                     (lid, assinatura_do_lote(l), l["etapa"], erro_cv, motivo, u["email"]))
         from .pendencias import identificador_lote, _e_complemento
-        det = {"lote": lid, "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"])), "motivo": motivo, "erro_cv": (erro_cv or "")[:200] or None}
+        det = {"lote": lid, "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"])), "motivo": motivo, "erro_cv": (erro_cv or "")[:200] or None, "estado": estado}
         _evento(con, "projeto", l["projeto_codigo"], "lote_dispensado", u["email"], det)     # Histórico de ações e histórico do projeto
         con.commit()
         return {"ok": True, "id": lid, "mensagem": "Lote dispensado: saiu das listas e das contagens. Volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar."}

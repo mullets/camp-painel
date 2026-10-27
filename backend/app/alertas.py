@@ -137,7 +137,7 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
                           FROM estacao_heartbeat WHERE app LIKE 'campvision%' OR tipo_estacao='processamento' ORDER BY atualizado_em DESC LIMIT 1""").fetchone()
     erros = con.execute("SELECT COUNT(*) FROM lista_processamento WHERE etapa='erro' AND descartado_em IS NULL").fetchone()[0]
     from .dispensa_lote import validas                 # UX-35: lote com erro dispensado não pede e-mail (volta sozinho se o erro mudar)
-    erros -= len(validas(con))
+    erros -= sum(1 for v in validas(con).values() if v.get("estado") == "erro")   # UX-39: a leitura interrompida dispensada não é 'erro'
     if hb is not None or erros:
         parado = hb is not None and hb["idade"] > 3600
         partes = []
@@ -209,7 +209,7 @@ def avaliar_extras(con, agora: datetime | None = None) -> dict:
                                  FROM lista_processamento
                                 WHERE descartado_em IS NULL AND etapa IN ('enviado','processando','revisao')
                                   AND COALESCE(etapa_desde, criado_em) < ? ORDER BY desde""", (limite,)).fetchall()
-        from .dispensa_lote import validas            # UX-35: o lote dispensado não entra no aviso (hoje a etapa 'erro' já fica de fora)
+        from .dispensa_lote import validas            # UX-35/UX-39: o lote dispensado (erro ou leitura interrompida) não entra no aviso
         disp = validas(con)
         lotes = [l for l in lotes if l["id"] not in disp]
         partes = []

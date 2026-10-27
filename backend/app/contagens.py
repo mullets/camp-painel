@@ -83,9 +83,10 @@ def lotes_por_etapa(con) -> dict:
     for etapa, n in con.execute(f"SELECT l.etapa, COUNT(*) FROM lista_processamento l WHERE {LOTE_VIVO} GROUP BY l.etapa"):
         out[etapa] = n
     from .dispensa_lote import validas                 # UX-35: o lote com erro dispensado (para todos) não conta como "com erro"
-    disp = list(validas(con))
+    disp = list(validas(con))                          # UX-39: nem a leitura interrompida dispensada como "processando"
     if disp:
-        out["erro"] -= _q(con, f"SELECT COUNT(*) FROM lista_processamento l WHERE {LOTE_VIVO} AND l.etapa='erro' AND l.id IN ({','.join('?' * len(disp))})", *disp)
+        for etapa, n in con.execute(f"SELECT l.etapa, COUNT(*) FROM lista_processamento l WHERE {LOTE_VIVO} AND l.id IN ({','.join('?' * len(disp))}) GROUP BY l.etapa", disp):
+            out[etapa] -= n
     return out
 
 
