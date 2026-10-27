@@ -96,7 +96,8 @@ await w.abrirPerfil(); await sleep(600); if(!d.querySelector('#pf-nova')) proble
 w.route_to('painel'); await sleep(1800); if(d.querySelector('#v-painel .aviso-exemplo')) problems.push('painel ainda com aviso de exemplo');
 if(!/(Bom dia|Boa tarde|Boa noite)/.test(txt('#ini-saud'))) problems.push('painel: a saudação com o resumo do dia está ausente: "'+txt('#v-painel').slice(0,120)+'"');
 if(!txt('#v-painel').includes('O que fazer agora')) problems.push('painel: bloco "O que fazer agora" ausente');
-if(!d.getElementById('cfg-visitas')) problems.push('configurações: bloco Visitas ao site ausente (admin)');   // UX-30: saiu da Home para Configurações
+if(!txt('#v-painel').includes('Visitas ao site')) problems.push('painel: bloco Visitas ao site ausente (admin)');   // voltou à Home (pedido do Rafael, 27/10/2026)
+if(!d.getElementById('cfg-visitas')) problems.push('configurações: bloco Visitas ao site ausente (admin)');
 if(!txt('#v-painel').includes('QNAP')) problems.push('painel: status QNAP ausente');
 if(!/Site (funcionando|sem resposta|não respondeu|sem medida)/.test(txt('#ini-saude'))) problems.push('painel: status do site ausente');
 okl.push('painel operacional e audiência renderizados'); checkDom('painel');

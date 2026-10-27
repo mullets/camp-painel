@@ -2,9 +2,9 @@
 //  - UX-18: o cartão "decisões" só aparece quando há decisão pendente (nunca "0 decisões — nenhuma esperando").
 //  - UX-21: filas pelo papel: o operador vê "Decidir" (de admin) esmaecida e no fim, sem perder os dados; o admin e quem só lê
 //    não têm nada esmaecido.
-//  - UX-30: a Home mostra só "O que fazer agora" (com o caminho do material), "Está tudo funcionando?" e "Hoje"; qualidade, ritmo,
-//    % no site e melhorias por pessoa ficam no bloco recolhido "Números do acervo" (abre num clique, lembra o estado, a rota
-//    painel/qualidade abre); "Visitas ao site — desligado" saiu da Home e aparece em Configurações.
+//  - UX-30 desfeito a pedido do Rafael (27/10/2026): qualidade, melhorias, % no site e visitas ao site voltam à coluna da direita,
+//    abaixo de "Hoje", e o ritmo à esquerda, SEMPRE abertos (falha se voltarem a um bloco recolhido/escondido); com o GA desligado,
+//    "Visitas ao site" mostra "desligado" sem chamar /api/analytics (UX-12). Configurações continua com o painel de visitas.
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/ag_k/home.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/ag_k/home.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8951)
@@ -80,31 +80,34 @@ async function abrirHome(page) {
     chk(gL.length >= 1 && gL.every(g => !g.outro), `UX-21: quem só lê não executa nenhuma fila: nada esmaecido, vê tudo (${gL.map(g => g.id).join(', ')})`);
     await le.ctx.close();
 
-    // ---------- UX-30 ----------
+    // ---------- UX-30 desfeito a pedido do Rafael (27/10/2026): métricas de volta à grade, sempre abertas ----------
     py(`con.execute("UPDATE configuracao SET valor='' WHERE chave IN ('ga4.propriedade','ga4.conta_servico')"); con.execute("UPDATE configuracao SET valor='0' WHERE chave='analytics.site_kit'")`);
-    await P.evaluate(() => { try { localStorage.removeItem('camp.ini.numeros') } catch (_) {} });
+    const chamadasGA = []; P.on('request', r => { if (/\/api\/analytics(\?|$)/.test(r.url())) chamadasGA.push(r.url()); });
     await abrirHome(P);
+    await P.waitForSelector('#ini-qualidade .qb-geral', { timeout: 8000 }).catch(() => {});
+    await P.waitForTimeout(1500);
     const vis = sel => P.locator(sel).first().isVisible();
-    const naGrade = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid h2')].map(h => h.textContent.trim()));
-    chk(JSON.stringify(naGrade) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Está tudo funcionando?', 'Hoje']), `UX-30: na frente da Home só o que fazer agora e a saúde do sistema: ${naGrade.join(' · ')}`);
-    const fechado = await P.evaluate(() => { const d = document.getElementById('ini-numeros'); return d && d.tagName === 'DETAILS' && !d.open; });
-    chk(fechado && !(await vis('#ini-qualidade')) && !(await vis('#ini-ritmo')) && !(await vis('#ini-melhorias')) && !(await vis('#ini-t-site')), 'UX-30: qualidade, ritmo, % no site e melhorias estão no bloco "Números do acervo", recolhido');
-    const tela = await P.locator('#v-painel').innerText();
-    chk(!/Visitas ao site/.test(tela) && !(await P.$('#ini-visitas')) && !/desligado/.test(tela), 'UX-30: "Visitas ao site — desligado" saiu da Home (GA desligado)');
-    await P.click('#ini-numeros > summary');
-    await P.waitForSelector('#ini-qualidade .qb-geral', { timeout: 8000 });
-    chk(await vis('#ini-ritmo svg') && await vis('#ini-melhorias') && /Folhas/.test(await P.locator('#ini-numeros .ini-prog').innerText()), 'UX-30: um clique abre o bloco e as métricas estão todas lá (nada apagado)');
-    await abrirHome(P);
-    chk(await P.evaluate(() => document.getElementById('ini-numeros').open), 'UX-30: quem abriu o bloco encontra aberto de novo ao voltar à Home');
-    await P.click('#ini-numeros > summary'); await P.waitForTimeout(200);
-    await abrirHome(P);
-    chk(await P.evaluate(() => !document.getElementById('ini-numeros').open), 'UX-30: fechou, fica fechado');
+    const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2')].map(h => h.textContent.trim())));
+    chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Ritmo das últimas 2 semanas']),
+      `UX-30 desfeito: coluna da esquerda com o ritmo de volta depois do caminho: ${JSON.stringify(colunas[0])}`);
+    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Está tudo funcionando?', 'Hoje', 'Qualidade da base', 'Melhorias de hoje', 'Quanto do acervo já está no site', 'Visitas ao site']),
+      `UX-30 desfeito: coluna da direita completa (saúde, Hoje e as métricas abaixo): ${JSON.stringify(colunas[1])}`);
+    const recolhido = await P.evaluate(() => ({ det: ['ini-qualidade', 'ini-melhorias', 'ini-ritmo', 'ini-t-site', 'ini-visitas'].filter(id => { const e = document.getElementById(id); return !e || !!e.closest('details'); }), numeros: !!document.getElementById('ini-numeros') }));
+    chk(!recolhido.det.length && !recolhido.numeros, `UX-30 desfeito: nenhum bloco recolhido "Números do acervo" na Home: ${JSON.stringify(recolhido)}`);
+    const visiveis = [];
+    for (const sel of ['#ini-qualidade .qb-geral', '#ini-melhorias', '#ini-ritmo', '#ini-t-site', '#v-painel .ini-prog', '#ini-visitas']) if (await vis(sel)) visiveis.push(sel);
+    chk(visiveis.length === 6 && /Folhas/.test(await P.locator('#v-painel .ini-prog').innerText()), `UX-30 desfeito: qualidade, melhorias, ritmo, % no site e visitas visíveis sem clicar em nada: ${visiveis.join(', ')}`);
+    const visT = await P.evaluate(() => ({ tag: (document.getElementById('ini-vis-tag') || {}).textContent || '', t: (document.getElementById('ini-visitas') || {}).textContent || '' }));
+    chk(visT.tag === 'desligado', `Visitas ao site com o GA desligado mostra "desligado" como antes: ${JSON.stringify(visT).slice(0, 160)}`);
+    chk(chamadasGA.length === 0, `UX-12: com o GA desligado a Home não chamou /api/analytics (${chamadasGA.length})`);
     await P.evaluate(() => nav('painel/qualidade')); await P.waitForTimeout(1500);
-    chk(await P.evaluate(() => document.getElementById('ini-numeros').open) && await vis('#ini-qualidade .qb-geral'), 'UX-30: "Ver quanto falta em cada fundo" (rota painel/qualidade) abre o bloco na qualidade da base');
-    py(`con.execute("UPDATE configuracao SET valor='1' WHERE chave='analytics.site_kit'")`);   // GA "ligado": as visitas são métrica e vão para o bloco
-    await abrirHome(P);
-    chk(await P.evaluate(() => !!document.querySelector('#ini-numeros #ini-visitas') && !document.querySelector('.ini-grid #ini-visitas')), 'UX-30: com o GA ligado, as visitas ficam no bloco "Números do acervo", não na frente');
-    py(`con.execute("UPDATE configuracao SET valor='0' WHERE chave='analytics.site_kit'")`);
+    chk(await vis('#ini-qualidade .qb-geral'), '"Ver quanto falta em cada fundo" (rota painel/qualidade) leva à qualidade da base, aberta');
+    // operador (não admin) também vê as métricas abertas; o cartão de visitas é só de admin, como antes do UX-30
+    const op2 = await entrar(browser, 'operador@camp.arq.br', 'senha-operador-123', erros);
+    await abrirHome(op2.page);
+    const opV = await op2.page.evaluate(() => ({ q: !!document.querySelector('.ini-grid #ini-qualidade'), m: !!document.querySelector('.ini-grid #ini-melhorias'), r: !!document.querySelector('.ini-grid #ini-ritmo'), v: !!document.getElementById('ini-visitas'), det: !!document.getElementById('ini-numeros') }));
+    chk(opV.q && opV.m && opV.r && !opV.v && !opV.det, `operador: métricas abertas na grade, sem o cartão de visitas (só admin): ${JSON.stringify(opV)}`);
+    await op2.ctx.close();
     await P.evaluate(() => nav('config'));
     await P.waitForFunction(() => /não está ligado/.test((document.getElementById('cfg-visitas') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
     const cfg = await P.evaluate(() => ({ t: (document.getElementById('cfg-visitas') || {}).textContent || '', tag: (document.getElementById('cfg-vis-tag') || {}).textContent || '', bt: !!document.querySelector('#cfg-visitas [onclick^="diagnosticarAnalytics"]:not([hidden])') }));
