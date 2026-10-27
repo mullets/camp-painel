@@ -70,23 +70,24 @@ def _pode_ser_parecido(a: dict, b: dict) -> bool:
     return SequenceMatcher(None, a["txt"], b["txt"]).quick_ratio() >= 0.65
 
 
-def todos_os_pares(con) -> list[dict]:
-    """Pares de projetos do mesmo fundo que parecem ser o mesmo (do mais para o menos parecido). Guardado até um projeto mudar."""
-    ass = _assinatura(con)
-    with _TRAVA:
-        if _CACHE.get("ass") == ass:
-            return _CACHE["pares"]
+def _calcular(con, ass) -> list[dict]:
+    """A conta pesada (todos os pares de cada fundo). Cede a vez a outras threads de tempos em tempos: com fundos de 300 projetos
+    são dezenas de milhares de pares em Python puro, e sem ceder a conta prende o servidor (a Home passava de 30 s, 27/10)."""
+    import time as _t
     nao = _nao_sao(con)
     por_fundo: dict[str, list[dict]] = {}
     for r in con.execute("""SELECT p.codigo, p.titulo, p.ano, p.cidade, p.identificacao_original, p.fundo_codigo,
                                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas
                               FROM projeto p WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL ORDER BY p.codigo"""):
         por_fundo.setdefault(r["fundo_codigo"], []).append(dict(r))
-    pares = []
+    pares, k = [], 0
     for ps in por_fundo.values():
         pre = [_pre(x) for x in ps]
         for i, x in enumerate(ps):
             for j in range(i + 1, len(ps)):
+                k += 1
+                if k % 300 == 0:
+                    _t.sleep(0.002)            # cede o GIL: as requisições do painel seguem respondendo durante a conta
                 y = ps[j]
                 if (x["codigo"], y["codigo"]) in nao or not _pode_ser_parecido(pre[i], pre[j]):
                     continue
@@ -95,9 +96,39 @@ def todos_os_pares(con) -> list[dict]:
                 if n:
                     pares.append({"fundo": x["fundo_codigo"], "a": x, "b": y, "score": score, "nivel": n, "motivos": motivos})
     pares.sort(key=lambda p: (-p["score"], p["a"]["codigo"]))
-    with _TRAVA:
-        _CACHE.update({"ass": ass, "pares": pares})
     return pares
+
+
+def _rodar_conta(ass) -> None:
+    con = connect()
+    try:
+        pares = _calcular(con, ass)
+        with _TRAVA:
+            _CACHE.update({"ass": ass, "pares": pares})
+    finally:
+        con.close()
+        with _TRAVA:
+            _CACHE.pop("em_curso", None)
+
+
+def todos_os_pares(con, espera_s: float | None = None) -> tuple[list[dict], bool]:
+    """(pares, calculando). A conta roda UMA vez por vez, numa thread própria, nunca repetida em paralelo (antes, cada página que
+    abria começava a sua: recarregar 5× = 5 contas ao mesmo tempo, e o painel inteiro parava). Quem pede espera no máximo
+    `espera_s` (None = até acabar); se não acabou, recebe o último resultado guardado (ou nenhum) com calculando=True."""
+    ass = _assinatura(con)
+    with _TRAVA:
+        if _CACHE.get("ass") == ass:
+            return _CACHE["pares"], False
+        t = _CACHE.get("em_curso")
+        if t is None or not t.is_alive():
+            t = threading.Thread(target=_rodar_conta, args=(ass,), name="duplicados-projetos", daemon=True)
+            _CACHE["em_curso"] = t
+            t.start()
+    t.join(espera_s)
+    with _TRAVA:
+        if _CACHE.get("ass") == ass:
+            return _CACHE["pares"], False
+        return list(_CACHE.get("pares") or []), True
 
 
 @router.get("/projetos/{codigo}/parecidos")
@@ -121,12 +152,12 @@ def possiveis_duplicatas(limite: int = 50, u: dict = Depends(auth.exige("leitura
     limite = max(1, min(int(limite or 50), 200))
     con = connect()
     try:
-        pares = todos_os_pares(con)
+        pares, calculando = todos_os_pares(con, espera_s=2.0)   # nunca prende a requisição: no máximo 2 s
         vis = [dict(x) for x in pares[:limite]]
         cp = capas(con, {c for x in vis for c in (x["a"]["codigo"], x["b"]["codigo"])})
         for x in vis:
             x["a"] = {**x["a"], "capa": cp.get(x["a"]["codigo"])}
             x["b"] = {**x["b"], "capa": cp.get(x["b"]["codigo"])}
-        return {"total": len(pares), "pares": vis}
+        return {"total": len(pares), "pares": vis, "calculando": calculando}
     finally:
         con.close()
