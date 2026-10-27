@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.1 (22/10/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
+Versão deste documento: **1.2 (27/10/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -123,6 +123,7 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
 - **Ordem de implantação**: WordPress 1.5.89 primeiro (rotas antigas continuam), painel depois. Painel novo sobre WordPress antigo não perde dados, mas acumula erro de ACK até atualizar o site.
 - `POST /painel/redirecionamentos` — mapa antigo→novo (`/acervo/projetos/<slug>`, `/acervo/documentos/<slug>`), com fila e reenvio; falha não desfaz o local.
 - `POST /painel/hub` — cria/atualiza o fundo/arquiteto; campo vazio NÃO apaga; para limpar, mandar `"__limpar__"`.
+- **NOVO 1.2** (UX-41, site plugin 1.6.3): datas do arquiteto no mesmo `{"meta": {...}}` do hub, OPCIONAIS: `_camp_arq_nascimento` e `_camp_arq_falecimento` (pessoa: ano, ex. `"1925"`) e `_camp_arq_atuacao` (escritório/família: `"1964–2010"`, `"desde 1964"`, `"até 2010"`), vindos de `agente.existencia_inicio/existencia_fim`. Só vai o preenchido; o painel nunca manda `"__limpar__"` para datas (não há como esvaziá-las no painel). O site mantém o texto escrito à mão quando ele já contém o valor (`"São Paulo, 1925"` × `"1925"`, resposta em `mantidos`, opcional) e, com um só ano no texto, troca só o ano. Site anterior a 1.6.3 devolve as chaves em `ignorados` (sem erro). Ordem: site primeiro, painel depois.
 - `POST /painel/pessoa/apagar` `{"email": "..."}` — LGPD.
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.

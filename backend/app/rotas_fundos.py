@@ -441,11 +441,17 @@ def editar_agente(aid: int, d: EdicaoAgente, u: dict = Depends(auth.exige("admin
         from .publicador import renomear_agente_no_site
         site = renomear_agente_no_site(aid, mud["forma_autorizada"], u["email"])
     hub = None
-    if "historia" in mud or "fonte_historia" in mud:   # B9: a biografia do painel é a do site (página do arquiteto)
-        from .publicador import enviar_agente_ao_hub
-        c2 = connect(); a2 = c2.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone(); c2.close()
+    bio = "historia" in mud or "fonte_historia" in mud
+    datas = "existencia_inicio" in mud or "existencia_fim" in mud
+    if bio or datas:   # B9: a biografia do painel é a do site (página do arquiteto); UX-41: as datas também
+        from .publicador import enviar_agente_ao_hub, datas_hub_agente
+        c2 = connect(); a2 = c2.execute("SELECT tipo, historia, fonte_historia, existencia_inicio, existencia_fim FROM agente WHERE id=?", (aid,)).fetchone(); c2.close()
         from .publicador import HUB_LIMPAR
-        hub = enviar_agente_ao_hub(aid, {"_camp_bio": a2["historia"] or HUB_LIMPAR, "_camp_bio_fontes": a2["fonte_historia"] or HUB_LIMPAR}, u["email"])   # CAMP-015: esvaziar no painel apaga no site
+        meta = {"_camp_bio": a2["historia"] or HUB_LIMPAR, "_camp_bio_fontes": a2["fonte_historia"] or HUB_LIMPAR} if bio else {}   # CAMP-015: esvaziar no painel apaga no site
+        if datas:
+            meta.update(datas_hub_agente(a2))
+        if meta:
+            hub = enviar_agente_ao_hub(aid, meta, u["email"])
     return {"ok": True, "campos": list(mud), "site": site, "hub": hub}
 
 
@@ -526,12 +532,13 @@ def apagar_biografia(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
 def reenviar_agente(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Reenvia biografia e retrato (ex.: depois que o fundo ganhou página no site, ou depois de uma falha)."""
     con = connect()
-    a = con.execute("SELECT forma_autorizada, historia, fonte_historia FROM agente WHERE id=?", (aid,)).fetchone()
+    a = con.execute("SELECT forma_autorizada, tipo, historia, fonte_historia, existencia_inicio, existencia_fim FROM agente WHERE id=?", (aid,)).fetchone()
     tem = con.execute("SELECT 1 FROM agente_retrato WHERE agente_id=?", (aid,)).fetchone(); con.close()
     if not a:
         raise HTTPException(404, "Arquiteto não existe")
-    from .publicador import enviar_agente_ao_hub
+    from .publicador import enviar_agente_ao_hub, datas_hub_agente
     meta = {k: v for k, v in (("_camp_bio", a["historia"] or ""), ("_camp_bio_fontes", a["fonte_historia"] or "")) if v.strip()}   # reenviar manda só o preenchido (limpar é pedido à parte)
+    meta.update(datas_hub_agente(a))   # UX-41: as datas vão junto
     if tem:
         meta["_camp_foto_id"] = "subir"
     hub = enviar_agente_ao_hub(aid, meta, u["email"])
