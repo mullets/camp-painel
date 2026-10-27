@@ -37,9 +37,9 @@ if inline > 157:     # CAMP-155 (22/10/2026): o teto desce para o número de hoj
 
 # --- CAMP-155: só os tokens do padrão (docs/padroes.md). No CSS e na marcação da página, tamanho de fonte e raio crus não podem
 # crescer (o que é igual a um token já virou var(--fs-*) / var(--r*)), e o âmbar fora dos tokens não volta. O JS fica de fora: as
-# janelas de impressão (etiquetas, folha de contatos) têm CSS próprio, sem os tokens.
+# janelas de impressão (etiquetas, folha de contatos) têm CSS próprio, sem os tokens. UX-27 (27/10/2026): o teto da fonte crua desceu de 65 para 50.
 _pagina = text[text.index("<style>"):text.index("<script>")] if "<style>" in text and "<script>" in text else text
-for _nome, _pad, _teto in (("tamanho de fonte cru (px)", r"font-size:\d+(\.\d+)?px", 65), ("raio cru (px)", r"border-radius:\d+(\.\d+)?px", 39)):
+for _nome, _pad, _teto in (("tamanho de fonte cru (px)", r"font-size:\d+(\.\d+)?px", 50), ("raio cru (px)", r"border-radius:\d+(\.\d+)?px", 39)):
     _n = len(re.findall(_pad, _pagina))
     if _n > _teto:
         errors.append(f"tokens: {_nome} subiu para {_n} (teto {_teto}): use var(--fs-*) / var(--r-sm|--r|--r-md|--r-lg) — CAMP-155")
