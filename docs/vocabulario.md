@@ -77,6 +77,8 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 **Público** (**Pedidos de alta resolução**, antes "Pedidos do site" e "Pedidos de material"; **Downloads**, antes "Downloads do site");
 **Acompanhamento**; **Administração** (**Máquinas**, antes "Máquinas e site"; **Configurações**); **Ajuda**. O resto fica em **Mais**.
 "Fundos e arquitetos" deixou de existir: são dois itens, cada um com a sua página.
+**Recolher menu** / **Expandir menu** (UX-28): o botão "‹" no topo do menu e as teclas `[` ou `⌘/Ctrl+B`. Recolhido, o menu é uma barra
+estreita só com ícones; o nome do item, o número e a tecla aparecem na dica ao passar o mouse ou focar. Não usar "barra lateral".
 
 ## Avisos (UX-22)
 - Todo aviso rápido (toast) some sozinho em no máximo 8 s; o aviso de tarefa concluída no topo some em 8 s quando deu certo
