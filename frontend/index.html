@@ -869,6 +869,9 @@ tr.emp-atrasado td{background:var(--red-soft)}tr.emp-atrasado td:first-child{box
 .state-row .retry{margin-top:8px}
 .skeleton-line{display:inline-block;width:min(320px,70%);height:10px;border-radius:999px;background:linear-gradient(90deg,var(--line2),var(--surface2),var(--line2));background-size:200% 100%;animation:camp-skeleton 1.2s linear infinite}
 @keyframes camp-skeleton{to{background-position:-200% 0}}
+/* UX-22: número ainda carregando = esqueleto do tamanho de um número (nunca "0") */
+.num-skel{display:inline-block;width:2.4em;height:.8em;vertical-align:-1px;border-radius:var(--r-sm);background:linear-gradient(90deg,var(--line2),var(--surface2),var(--line2));background-size:200% 100%;animation:camp-skeleton 1.2s linear infinite}
+.toast-hist{list-style:none;margin:0;padding:0}.toast-hist li{padding:6px 0;border-bottom:1px solid var(--line2)}.toast-hist small{color:var(--ink3);margin-right:6px}
 .stale-note{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:8px 10px;border:1px solid var(--amber);border-radius:var(--r-md);background:var(--amber-soft);font-size:var(--fs-sm);color:var(--ink2)}
 .stale-note b{color:var(--ink)}.stale-note .btn{margin-left:auto}
 
@@ -1128,7 +1131,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
       <span class="hint">F0xx-P000x</span>
       <div class="res" id="qres"></div>
     </div>
-    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span>Rafael</span><div class="av">RM</div></div><div class="who-menu" id="who-menu" role="menu" hidden><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
+    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span>Rafael</span><div class="av">RM</div></div><div class="who-menu" id="who-menu" role="menu" hidden><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
     <div class="system-banner" id="system-banner" onclick="go('estacoes')"><span class="health-dot"></span><div><b id="system-banner-title">Atenção no sistema</b><span id="system-banner-text"></span></div><span class="when" id="system-banner-when"></span></div>
   </div>
 
@@ -1152,7 +1155,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
   <div id="fila-sem-processar"></div>
   <div class="panel"><div class="filterbar"><input placeholder="Filtrar por projeto, fundo ou lista… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
     <thead><tr><th>Projeto</th><th>Situação</th><th>Atualizado</th><th></th></tr></thead>
-    <tbody id="filas-body"></tbody>
+    <tbody id="filas-body"><tr><td colspan="4" class="empty">Carregando…</td></tr></tbody>
   </table></div></div>
   <details class="fila-ajuda"><summary>Como funciona</summary><p>O CAMP Vision lê as pastas do QNAP e grava o resultado. Aí o trabalho passa para você, nesta ordem: <b>importar</b> as folhas para o painel, <b>conferir</b> (clique na folha; dá para virar, corrigir e aprovar todas de uma vez), <b>aprovar</b> o lote (admin) e <b>publicar</b> o projeto no site (admin). A lista só aparece em "Publicadas" quando o projeto é publicado.</p></details>
 </section>
@@ -1806,7 +1809,7 @@ function seguirTarefa(tid,o={}){
     vigiarTarefas();return t})();
   TAREFAS_SEGUINDO.set(tid,p);p.finally(()=>TAREFAS_SEGUINDO.delete(tid));return p}
 // o chip do topo: "⏳ Publicando F022-P0009 · 3 de 5" enquanto roda; depois "✔ … ×" até a pessoa ver (preferência 'tarefas.vista')
-let TAREFAS_EST={rodando:[],terminadas:[]},TAREFAS_TIMER=null;
+let TAREFAS_EST={rodando:[],terminadas:[]},TAREFAS_TIMER=null,CHIP_FECHAR=null;
 function tarefasVista(){return (AJUDA_VISTAS&&AJUDA_VISTAS['tarefas.vista'])||''}
 function tarefasConcluidasNaoVistas(){if(AJUDA_VISTAS===null)return [];const v=tarefasVista();return (TAREFAS_EST.terminadas||[]).filter(t=>!TAREFAS_VISTAS_AQUI.has(t.id)&&(t.terminada_em||'')>v)}
 function salvarTarefasVista(m){if(!m||m<=tarefasVista())return;AJUDA_VISTAS=AJUDA_VISTAS||{};AJUDA_VISTAS['tarefas.vista']=m;API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'tarefas.vista',valor:m})}).catch(()=>{})}
@@ -1822,6 +1825,9 @@ async function vigiarNovidades(){clearTimeout(TAREFAS_TIMER);if(!EU||!MODO_SERVI
   try{const n=await API('/api/novidades?'+q);if(n.tarefas){TAREFAS_EST=n.tarefas;desenharChipTarefas()}if(n.estacoes)atualizarTopoEstacoes(n.estacoes);if(r&&q.has('projeto')&&MARCA.escritas===n0)aplicarMarca(r,n.marca)}catch(_){}
   agendarNovidades()}
 function desenharChipTarefas(){const c=document.getElementById('tarefas-chip');if(!c)return;const R=TAREFAS_EST.rodando||[],N=tarefasConcluidasNaoVistas();
+  /* UX-22: "✔ F009-P0019 publicado…" ficava preso no topo até a pessoa clicar. Agora o que deu certo some sozinho em 8 s (com a aba à vista)
+     e continua em Tarefas e avisos recentes; o que falhou (✖) fica até a pessoa fechar */
+  clearTimeout(CHIP_FECHAR);CHIP_FECHAR=null;if(!R.length&&N.length&&N.every(t=>t.estado==='ok')&&!document.hidden)CHIP_FECHAR=setTimeout(()=>{if(!document.hidden)marcarTarefasVistas()},8000);
   if(R.length){const t=R[0];c.className='tarefas-chip';c.hidden=false;c.innerHTML=`<button type="button" class="abrir" data-tarefas-abrir title="Ver o andamento">⏳ ${R.length>1?`${R.length} tarefas em andamento`:`${escHtml(nomeTarefa(t))}${+t.total?` · ${fmtN(t.feitas)} de ${fmtN(t.total)}`:''}`}</button>`}
   else if(N.length){const t=N[0],ok=t.estado==='ok';c.className='tarefas-chip '+(ok?'ok':'erro');c.hidden=false;c.innerHTML=`<button type="button" class="abrir" data-tarefas-abrir title="Ver o que aconteceu">${ok?'✔':'✖'} ${escHtml(fimTarefaTexto(t))}${N.length>1?` · e mais ${N.length-1}`:''}</button><button type="button" class="x" data-tarefas-visto aria-label="Já vi, fechar o aviso" title="Já vi">×</button>`}
   else{c.hidden=true;c.innerHTML=''}
@@ -1831,7 +1837,7 @@ function tarefaCardHTML(t){const rod=t.estado==='rodando',ok=t.estado==='ok',log
   return `<div class="tarefa-card"><h3>${rod?'⏳':ok?'✔':'✖'} ${escHtml(nomeTarefa(t))}</h3><small class="help">começou ${escHtml(fmtDataHora(t.iniciada_em))} · ${escHtml(t.ator)}</small>${rod?andamentoTarefaHTML(t):`<p style="margin:6px 0">${escHtml(fimTarefaTexto(t))}</p>`}${falhasTarefaHTML(t)}${log?`<ul class="dec-motivos">${log}</ul>`:''}${proj}</div>`}
 function tarefasListaHTML(){const R=TAREFAS_EST.rodando||[],T=TAREFAS_EST.terminadas||[];
   return (R.length?`<h3 class="hoje-h">Em andamento</h3>${R.map(tarefaCardHTML).join('')}`:'<p class="help">Nenhuma tarefa rodando agora.</p>')+(T.length?`<h3 class="hoje-h">Suas tarefas das últimas 24 h</h3>${T.map(tarefaCardHTML).join('')}`:'')}
-function abrirTarefas(){marcarTarefasVistas();openDrawer('Tarefas','o que está rodando no servidor e o que terminou',`<p class="help">Pode fechar esta janela ou a aba: as tarefas continuam no servidor.</p><div data-tarefas-lista>${tarefasListaHTML()}</div>`);vigiarTarefas()}
+function abrirTarefas(){marcarTarefasVistas();openDrawer('Tarefas e avisos recentes','o que está rodando no servidor, o que terminou e os avisos desta sessão',`<p class="help">Pode fechar esta janela ou a aba: as tarefas continuam no servidor.</p><div data-tarefas-lista>${tarefasListaHTML()}</div><div data-avisos-hist>${avisosHistoricoHTML()}</div>`);vigiarTarefas()}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-tarefas-abrir],[data-tarefas-visto],[data-tarefa-projeto]');if(!b)return;
   if(b.dataset.tarefaProjeto){closeDrawer(true);nav('projeto/'+b.dataset.tarefaProjeto)}else if(b.hasAttribute('data-tarefas-visto'))marcarTarefasVistas();else abrirTarefas()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&EU)vigiarTarefas()});
@@ -1856,9 +1862,14 @@ document.addEventListener('click',e=>{if(!e.target.closest('[data-copiar-senha]'
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,()=>{});else{const r=document.createRange();r.selectNodeContents(document.getElementById('senha-temp'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);try{document.execCommand('copy');ok()}catch(_){}}});
 
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m&&m.id!=='m-senha')closeModal()}));
-let tt;function toast(m,o={}){const t=document.getElementById('toast');t.textContent=m;t.classList.toggle('com-acao',!!o.acao);   // H4: o.acao={rotulo,fn} ("Desfazer"), fica 8 s
+/* UX-22: todo aviso (toast) fecha sozinho em no máximo 8 s e fica no histórico desta sessão (menu do avatar › Tarefas e avisos recentes) */
+const NUM_SKEL='<span class="num-skel" role="img" aria-label="carregando"></span>';
+let TOAST_HIST=[];try{TOAST_HIST=JSON.parse(sessionStorage.getItem('camp.avisos')||'[]');if(!Array.isArray(TOAST_HIST))TOAST_HIST=[]}catch(_){TOAST_HIST=[]}
+function guardarAviso(m){if(!m)return;TOAST_HIST.unshift({em:new Date().toISOString(),m:String(m)});TOAST_HIST=TOAST_HIST.slice(0,30);try{sessionStorage.setItem('camp.avisos',JSON.stringify(TOAST_HIST))}catch(_){}}
+function avisosHistoricoHTML(){return TOAST_HIST.length?`<h3 class="hoje-h">Avisos desta sessão</h3><ul class="toast-hist">${TOAST_HIST.map(a=>`<li><small>${escHtml(fmtDataHora(a.em))}</small>${escHtml(a.m)}</li>`).join('')}</ul>`:''}
+let tt;function toast(m,o={}){const t=document.getElementById('toast');t.textContent=m;guardarAviso(m);t.classList.toggle('com-acao',!!o.acao);   // H4: o.acao={rotulo,fn} ("Desfazer"), fica 8 s
   if(o.acao){const b=document.createElement('button');b.type='button';b.className='toast-acao';b.textContent=o.acao.rotulo||'Desfazer';b.onclick=()=>{clearTimeout(tt);t.classList.remove('on','com-acao');b.remove();o.acao.fn()};t.appendChild(b)}
-  t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on','com-acao'),o.ms||(o.acao?8000:2600))}
+  t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on','com-acao'),Math.min(o.ms||(o.acao?8000:2600),8000))}
 const th=document.getElementById('theme');th.addEventListener('change',()=>{document.documentElement.dataset.theme=th.value;try{localStorage.setItem('camp.theme',th.value)}catch(e){}});
 try{const t=localStorage.getItem('camp.theme');if(t){th.value=t;document.documentElement.dataset.theme=t}}catch(e){}
 
@@ -2229,7 +2240,7 @@ document.querySelectorAll('thead th').forEach(th=>{if(!th.textContent.trim()||th
 document.querySelectorAll('[data-filter]').forEach(inp=>{const panel=inp.closest('.panel')||inp.closest('.busca-grande')?.nextElementSibling;if(!panel)return;const cnt=panel.querySelector('.cnt');const _sec=inp.closest('section.content'),_mk=_sec&&_sec.id!=='v-projetos'?'busca.'+_sec.id:null;
   if(_mk&&!inp.id){const lb=document.createElement('button');lb.type='button';lb.className='btn sm lnk filtro-limpar';lb.textContent='Limpar filtros';lb.hidden=true;inp.after(lb);lb.addEventListener('click',()=>{inp.value='';inp.dispatchEvent(new Event('input',{bubbles:true}));inp.focus()});
     inp.addEventListener('input',()=>{lb.hidden=!inp.value;LISTA_MEM.set(_mk,inp.value||'')});const v0=LISTA_MEM.get(_mk,'');if(v0){inp.value=v0;lb.hidden=false;new MutationObserver(()=>inp.dispatchEvent(new Event('input'))).observe(panel.querySelector('tbody')||panel,{childList:true})}}   // H12: a busca grande fica acima do quadro da lista
-const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{if(r.querySelector('td.empty,td.state-row'))return;tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});if(cnt.dataset.servidor!=='1')cnt.textContent=t?`${n} de ${tot}`:`${tot} ${tot===1?'registro':'registros'}`};inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
+const upd=()=>{const t=inp.value.trim().toLowerCase();let n=0,tot=0;panel.querySelectorAll('tbody tr').forEach(r=>{if(r.querySelector('td.empty,td.state-row'))return;tot++;const ok=!t||r.textContent.toLowerCase().includes(t);r.style.display=ok?'':'none';if(ok)n++});if(cnt.dataset.servidor!=='1'){if(!tot&&[...panel.querySelectorAll('tbody td.state-row,tbody td.empty')].some(x=>x.classList.contains('state-row')||/^Carregando/.test(x.textContent.trim())))cnt.innerHTML=NUM_SKEL;else cnt.textContent=t?`${n} de ${tot}`:`${tot} ${tot===1?'registro':'registros'}`}};   /* UX-22: carregando, nunca "0 registros" */inp.addEventListener('input',upd);new MutationObserver(upd).observe(panel.querySelector('tbody'),{childList:true});upd()});
 
 const AJUDA_TELAS={
   painel:{titulo:'Painel',intro:'Resumo da operação. Comece pelos avisos e pelo bloco Precisa de atenção.',passos:[['Veja a saúde','Máquinas, QNAP e publicação mostram se a operação está funcionando.'],['Resolva pendências','Abra os itens em Precisa de atenção antes de publicar material.'],['Use os atalhos','A busca global é o caminho mais rápido para um código conhecido.']]},
@@ -2713,7 +2724,7 @@ function atualizarContadoresFundos(){
     so_site:fs.filter(f=>f.so_no_site).length,
     pendencia:fs.filter(fundoComPendencia).length
   };
-  Object.entries(counts).forEach(([k,v])=>{const e=document.getElementById('ffc-'+k);if(e)e.textContent=v});
+  Object.entries(counts).forEach(([k,v])=>{const e=document.getElementById('ffc-'+k);if(e){if(FUNDOS_API==null)e.innerHTML=NUM_SKEL;else e.textContent=v}});   /* UX-22: antes da lista chegar, esqueleto (não "0") */
 }
 function setFiltroFundos(k){
   FUNDO_FILTRO=k;
@@ -2728,7 +2739,7 @@ document.getElementById('fundos-q')?.addEventListener('input',fundosLimparVisive
 document.getElementById('fundos-limpar')?.addEventListener('click',()=>{const q=document.getElementById('fundos-q');if(q)q.value='';try{localStorage.setItem(FUNDO_BUSCA_KEY,'')}catch(_){}const b=document.querySelector('#fundos-filtros [data-ff="todos"]');if(b)b.click();else renderTabelaFundos();fundosLimparVisivel()});
 document.addEventListener('click',e=>{if(e.target.closest('#fundos-filtros'))setTimeout(fundosLimparVisivel,0)});
 
-async function carregarFundosAPI(){const tinha=!!(FUNDOS_API&&FUNDOS_API.length);if(!tinha)tabelaCarregando('#fundos-body','Carregando fundos…');try{const fs=await API('/api/fundos/resumo');limparStale('fundos');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${escHtml(f.data_fim||'')}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();atualizarContadoresFundos();
+async function carregarFundosAPI(){const tinha=!!(FUNDOS_API&&FUNDOS_API.length);if(!tinha){tabelaCarregando('#fundos-body','Carregando fundos…');atualizarContadoresFundos()}try{const fs=await API('/api/fundos/resumo');limparStale('fundos');FUNDOS_API=fs;FUNDOS.length=0;fs.filter(f=>!f.so_no_site).forEach(f=>FUNDOS.push([f.codigo,f.sigla||'',f.titulo,f.data_inicio?`${f.data_inicio}–${escHtml(f.data_fim||'')}`:'',f.projetos,f.no_site,f.status_site==='fora_do_ar'?2:(f.no_site>0||f.status_site==='no_ar')?1:0]));renderFundos();renderLabel();atualizarContadoresFundos();
   const q=document.getElementById('fundos-q');if(q)q.value=localStorage.getItem(FUNDO_BUSCA_KEY)||'';
   if(!document.querySelector(`#fundos-filtros [data-ff="${FUNDO_FILTRO}"]`))FUNDO_FILTRO='todos';
   document.querySelectorAll('#fundos-filtros [data-ff]').forEach(b=>b.classList.toggle('on',b.dataset.ff===FUNDO_FILTRO));
@@ -6304,7 +6315,9 @@ async function atualizarTopoEstacoes(dado){
     const wpTitle=['WordPress / página pública',siteRotulo(s.http).txt,ult?'última sincronização '+fmtDataHora(ult):'ainda não sincronizado',prox?'próxima '+fmtDataHora(prox):null].filter(Boolean);
     const wp=`<button type="button" class="ms-linha ${wpSt}" role="menuitem" onclick="go('estacoes')" title="${escHtml(wpTitle.join(' · '))}"><span class="ms ${wpSt}" aria-hidden="true">${iconeWordpress()}</span><span><b>Página pública (WordPress)</b><small>${escHtml(wpTitle.slice(1).join(' · '))}</small></span></button>`;
     const qOk=!qn||qn.online!==false,sOk=wpSt==='on',tudo=qOk&&sOk;
-    const resumo=`<span class="ms-ponto ${tudo?'on':'off'}" aria-hidden="true"></span><span class="ms-txt"><b>${lig} de ${capt.length}</b> máquinas ligadas</span><span class="ms-extra"> · QNAP ${qOk?'ok':'sem resposta'} · site ${sOk?'ok':'sem resposta'}</span>`;
+    /* UX-22: estação com IP ainda não medida (online null, a 1ª medição corre em segundo plano) = esqueleto, nunca "0 de 6"; site sem medida idem */
+    const medindo=capt.some(m=>m.ip&&m.online==null),siteMedindo=s.http==null;
+    const resumo=`<span class="ms-ponto ${tudo?'on':'off'}" aria-hidden="true"></span><span class="ms-txt"><b>${medindo?NUM_SKEL:lig} de ${capt.length}</b> máquinas ligadas</span><span class="ms-extra"> · QNAP ${qOk?'ok':'sem resposta'} · site ${siteMedindo?NUM_SKEL:sOk?'ok':'sem resposta'}</span>`;
     const du=dataUtc(ult),min=du?Math.max(0,Math.round((Date.now()-du.getTime())/60000)):null,ha=min==null?'':min<1?'agora':min<60?`há ${min} min`:min<1440?`há ${Math.round(min/60)} h`:`há ${Math.round(min/1440)} dias`;
     const syncTxt=ult?`<span class="sync-mini" title="O painel confere o site a cada ${escHtml(s.intervalo_sync_min||15)} min: o que foi publicado, despublicado ou mudado lá. ${escHtml(wpTitle.slice(2).join(' · '))}">Site conferido ${ha}</span>`:'';   /* H25: antes "sync 21:43" */
     const aberto=!!el.querySelector('details.ms-menu[open]');
@@ -6691,7 +6704,7 @@ async function boasVindas(u){const [rota,nome]=COMECO_PAPEL[u&&u.papel]||COMECO_
 function whoMenu(abrir){const m=document.getElementById('who-menu'),w=document.querySelector('.who');if(!m||!w)return;const v=abrir===undefined?m.hidden:abrir;m.hidden=!v;w.setAttribute('aria-expanded',String(v));if(v){const b=m.querySelector('button');if(b)b.focus()}}
 document.querySelector('.who').addEventListener('click',e=>{if(!EU)return;e.stopPropagation();whoMenu()});
 document.querySelector('.who').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&EU){e.preventDefault();whoMenu(true)}});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-who]');if(b){whoMenu(false);const a=b.dataset.who;if(a==='perfil')abrirPerfil();else if(a==='atalhos')abrirAjudaAtalhos();else if(a==='explicacoes')reverExplicacoes();else if(a==='sair')sair();return}if(!e.target.closest('#who-menu'))whoMenu(false)});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-who]');if(b){whoMenu(false);const a=b.dataset.who;if(a==='perfil')abrirPerfil();else if(a==='atalhos')abrirAjudaAtalhos();else if(a==='explicacoes')reverExplicacoes();else if(a==='avisos')abrirTarefas();else if(a==='sair')sair();return}if(!e.target.closest('#who-menu'))whoMenu(false)});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('who-menu').hidden){whoMenu(false);document.querySelector('.who').focus()}});
 async function reverExplicacoes(){AJUDA_VISTAS=AJUDA_VISTAS||{};Object.keys(AJUDA_VISTAS).filter(k=>k.startsWith('ajuda.')).forEach(k=>delete AJUDA_VISTAS[k]);AJUDA_FORCADA.clear();garantirCaixaAjuda();
   try{await API('/api/auth/eu/preferencias/ajuda',{method:'DELETE'})}catch(_){}toast('As caixas "Como funciona esta página" voltam a aparecer em todas as telas.')}

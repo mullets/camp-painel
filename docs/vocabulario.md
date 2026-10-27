@@ -43,6 +43,12 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador, ajuda): **Precisa de você** (o Painel inicial),
 **Projetos**, **Fundos e arquitetos**, **Pedidos do site** (antes "Pedidos de material") e **Máquinas** (antes "Máquinas e site"). O resto fica em **Mais**.
 
+## Avisos (UX-22)
+- Todo aviso rápido (toast) some sozinho em no máximo 8 s; o aviso de tarefa concluída no topo some em 8 s quando deu certo
+  (o que falhou fica até a pessoa fechar). Tudo fica em **Tarefas e avisos recentes** (menu do avatar), com a seção
+  **Avisos desta sessão**.
+- Número que ainda está carregando aparece como esqueleto (barra cinza animada), nunca como "0".
+
 ## Ações (o que o usuário FAZ)
 | Botão | Efeito | Observação |
 |---|---|---|
