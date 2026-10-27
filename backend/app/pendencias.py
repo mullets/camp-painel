@@ -141,6 +141,8 @@ def lotes(con) -> list[dict]:
     (a mesma conta de /api/filas; uma folha que foi para outro projeto não conta mais neste lote)."""
     saida = []
     lendo = projetos_lendo_agora(con)
+    from .dispensa_lote import validas
+    dispensados = validas(con)                       # UX-35: lote com erro dispensado (para todos) enquanto o erro for o mesmo
     for r in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
                                    COALESCE(l.etapa_desde, l.criado_em) AS parado_desde,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
@@ -152,6 +154,7 @@ def lotes(con) -> list[dict]:
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04
         marcar_parado(d, lendo)                                                                                  # UX-09
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None))
+        d["dispensado"] = dispensados.get(d["id"])                                                               # UX-35
         saida.append(d)
     return saida
 
@@ -220,7 +223,7 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     prontos_publicar, publicando_parcial, travados_direitos, travados_projetos, erros_bloqueantes, pedidos_aguardando,
     lotes_processando, lotes_lendo, lotes_na_fila, lotes_erro, publicando, material_novo, esperam_admin}.
     decisoes = perguntas abertas; decisoes_pastas = quantas vezes elas chegaram (a mesma pergunta repetida pela estação vira UMA decisão, com várias chaves)."""
-    L = lotes(con)
+    L = [l for l in lotes(con) if not l.get("dispensado")]   # UX-35: o lote dispensado sai das listas e das contagens de TODOS
     if usuario_id:                                  # os lotes que ESTA pessoa adiou ("Agora não") saem da lista e das contagens dela
         from .qualidade_base import adiadas
         fora = adiadas(con, usuario_id)
@@ -377,7 +380,9 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             exp = None
         o_que = exp["texto"][:160] if exp and exp.get("tipo") != "erro" and exp.get("texto") else None
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
-                       "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
+                       "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]),
+                       "dispensar": l["id"],                     # UX-35 (campo novo, opcional): "Dispensar este lote (para todos)" no Ignorar ▾
+                       "acao": _acao("Ver o erro", "fila_erro", l["id"])})
     pedidos = releituras_abertas(con)
     for l in [l for l in L if l.get("leitura_interrompida")]:       # UX-09: "sendo lido" há mais de 2 h sem sinal do CAMP Vision deste projeto
         ped = pedidos.get(l["projeto_codigo"])

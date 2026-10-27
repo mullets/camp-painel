@@ -5,6 +5,7 @@ Aqui fica a definição ÚNICA de cada métrica; /api/painel, /api/pendencias, /
 /api/relatorios leem daqui (e devolvem o bloco "contagens", com "medido_em", para a tela dizer "atualizado há X").
 
 - Lotes: os de pendencias.lotes() (lote não descartado, de projeto que não foi juntado nem descartado), com a fase de filas_fase.
+  UX-35: o lote com erro do CAMP Vision dispensado (dispensa_lote.validas) não conta em nada, para ninguém, enquanto o erro for o mesmo.
 - Problemas abertos: situação aberto/em correção. "Impedem publicar": a mesma regra do botão Publicar (publicacao.TRAVA_SQL).
 - Pedidos abertos: tudo menos entregue/recusado; "esperando": aguarda resposta/orçamento.
 - No site: folha/projeto/fundo com status_site='no_ar' (projeto juntado ou descartado não conta; fundo só ativo).
@@ -81,6 +82,10 @@ def lotes_por_etapa(con) -> dict:
     out = {e: 0 for e in ("enviado", "processando", "revisao", "rascunho", "publicado", "erro")}
     for etapa, n in con.execute(f"SELECT l.etapa, COUNT(*) FROM lista_processamento l WHERE {LOTE_VIVO} GROUP BY l.etapa"):
         out[etapa] = n
+    from .dispensa_lote import validas                 # UX-35: o lote com erro dispensado (para todos) não conta como "com erro"
+    disp = list(validas(con))
+    if disp:
+        out["erro"] -= _q(con, f"SELECT COUNT(*) FROM lista_processamento l WHERE {LOTE_VIVO} AND l.etapa='erro' AND l.id IN ({','.join('?' * len(disp))})", *disp)
     return out
 
 
