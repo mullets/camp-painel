@@ -10,7 +10,8 @@ import json
 
 from .db import connect
 
-ROTULOS = {"_camp_bio": "Biografia", "_camp_bio_fontes": "Fontes da biografia", "_camp_foto_id": "Foto"}
+ROTULOS = {"_camp_bio": "Biografia", "_camp_bio_fontes": "Fontes da biografia", "_camp_foto_id": "Foto",
+           "_camp_arq_nascimento": "Nascimento", "_camp_arq_falecimento": "Falecimento", "_camp_arq_atuacao": "Período de atuação"}
 
 
 def _produtor(con, codigo: str):
@@ -32,6 +33,8 @@ def meta_desejado(con, codigo: str) -> dict:
         r = con.execute("SELECT atualizado_em FROM agente_retrato WHERE agente_id=?", (a["id"],)).fetchone()
         if r:
             out["_camp_foto_id"] = f"retrato:{r[0]}"
+        from .publicador import datas_hub_agente
+        out.update(datas_hub_agente(a))   # UX-41: as datas do arquiteto
     return out
 
 
@@ -164,12 +167,13 @@ def mudar_pagina_arquiteto(codigo: str, publicar: bool, ator: str, motivo: str |
 
 def faltas_arquiteto(con, a) -> list[dict]:
     """UX-38: o que falta no cadastro do arquiteto, campo a campo, na ordem em que aparece na edição.
-    `site`: vai para a página do arquiteto no site (biografia, fonte, retrato). As datas ficam só no painel (o site não as recebe)."""
+    `site`: vai para a página do arquiteto no site (datas, biografia, fonte, retrato). UX-41: as datas também vão ao site
+    (Nascimento/Falecimento, ou Período de atuação de escritório/família)."""
     if not a:
         return [{"campo": "arquiteto", "rotulo": "cadastrar o arquiteto titular do fundo", "site": True}]
     out = []
     if not (a["existencia_inicio"] or a["existencia_fim"]):
-        out.append({"campo": "datas", "rotulo": "datas de nascimento e morte" if a["tipo"] == "pessoa" else "datas de início e fim", "site": False})
+        out.append({"campo": "datas", "rotulo": "datas de nascimento e morte" if a["tipo"] == "pessoa" else "datas de início e fim", "site": True})
     if not (a["historia"] or "").strip():
         out.append({"campo": "historia", "rotulo": "biografia", "site": True})
     if not (a["fonte_historia"] or "").strip():
@@ -286,6 +290,7 @@ def enviar_fundo(codigo: str, ator: str) -> dict:
                 meta["_camp_bio_fontes"] = a["fonte_historia"].strip()
             if tem_retrato:
                 meta["_camp_foto_id"] = "subir"
+            meta.update(publicador.datas_hub_agente(a))   # UX-41: as datas do arquiteto vão à página dele no site
         aid = a["id"] if a else None
     finally:
         con.close()

@@ -113,10 +113,11 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 - Quadro **Página do arquiteto no site** (fundo e arquiteto): faltando biografia, fonte da biografia ou retrato, a ação principal é
   **Completar os dados do arquiteto** (abre a edição do arquiteto com os campos que faltam destacados e o cursor no primeiro).
   **Publicar a página do arquiteto** continua permitido, mas não é o botão azul. Sem arquiteto, a ação é **Vincular arquiteto**.
-- Frase do que falta: "Falta para a página ficar boa: biografia, fonte da biografia, retrato." Fundo sem projeto publicado: "Este fundo
+- Frase do que falta: "Falta para a página ficar boa: datas de nascimento e morte, biografia, fonte da biografia, retrato." (UX-41: as datas entram) Fundo sem projeto publicado: "Este fundo
   ainda não tem projeto publicado: mesmo publicada, a página só aparece no site com o primeiro projeto publicado (e é publicada junto com ele)."
-- Na edição do arquiteto, o bloco **O que falta para a página no site** (cada item leva ao campo; **datas de nascimento e morte** dizem
-  "fica só no painel; o site não recebe") e **Voltar ao fundo F0xx**.
+- Na edição do arquiteto, o bloco **O que falta para a página no site** (cada item leva ao campo) e **Voltar ao fundo F0xx**.
+  UX-41: as **datas de nascimento e morte** (escritório/família: **datas de início e fim**) também vão à página do arquiteto no site
+  (lá: Nascimento, Falecimento ou Período de atuação); não se diz mais "fica só no painel; o site não recebe".
 - O site sem a página do arquiteto: nunca "espere um minuto". O erro diz o que houve ("O fundo não chegou ao site…" ou "O site tem o fundo,
   mas não criou a página deste arquiteto… o site cria as páginas que faltam uma vez por hora") e vem com os botões que resolvem
   (**Completar os dados do arquiteto**, **Ver os projetos**, **Vincular arquiteto**).

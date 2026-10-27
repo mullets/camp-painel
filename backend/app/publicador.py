@@ -116,6 +116,26 @@ def _resolver_pendencia(con, entidade, codigo, campo):
 
 
 HUB_LIMPAR = "__limpar__"     # CAMP-015: valor especial que o painel manda para APAGAR um campo do hub no site (vazio continua ignorado pelo site)
+HUB_DATAS = ("_camp_arq_nascimento", "_camp_arq_falecimento", "_camp_arq_atuacao")   # UX-41: campos da página do arquiteto no site que recebem as datas
+
+
+def datas_hub_agente(a) -> dict:
+    """UX-41: as datas do arquiteto (existencia_inicio/existencia_fim, anos) nos campos que a página do arquiteto no site já mostra
+    ("Nascimento", "Falecimento", "Período de atuação"). Pessoa: ano de nascimento e de morte; escritório/família: período de atuação.
+    Só o PREENCHIDO vai (o site ignora vazio). O painel não tem como esvaziar as datas (null no PATCH = não mexe), então nunca manda
+    "__limpar__" para elas: o que estiver escrito à mão no site ("São Paulo, 1925") fica, e o site guarda o local quando o ano é o mesmo."""
+    if not a:
+        return {}
+    ini, fim = a["existencia_inicio"], a["existencia_fim"]
+    if a["tipo"] == "pessoa":
+        return {k: str(int(v)) for k, v in (("_camp_arq_nascimento", ini), ("_camp_arq_falecimento", fim)) if v}
+    if ini and fim:
+        return {"_camp_arq_atuacao": f"{int(ini)}–{int(fim)}"}
+    if ini or fim:
+        return {"_camp_arq_atuacao": f"desde {int(ini)}" if ini else f"até {int(fim)}"}
+    return {}
+
+
 EM_ORGANIZACAO = "Documentação em organização."
 TIPO_ENTRADA = {"doacao": "Doação", "comodato": "Comodato", "deposito": "Depósito", "compra": "Compra", "transferencia": "Transferência", "outro": "Outra forma de entrada"}
 

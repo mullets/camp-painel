@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
+MODOS_RAPIDOS = {"ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -439,6 +439,68 @@ def filho(modo):
         ver("aceite: exif_conferido com a lista dos arquivos traz arquivo e motivo para a tela", it and it[0].get("arquivos") == [{"arquivo": "a.tif", "motivo": "sem permissão"}, {"arquivo": "b.tif", "motivo": None}], it)
         ver("aceite: sem lista, o item fica como antes (sem 'arquivos')", "arquivos" not in itens_aceite({"exif_conferido": {"ok": False, "contagem": 2}})[0])
         for l in res: print(l)
+    elif modo == "ux41_datas_site":
+        # UX-41 (Rafa, F013 "João Xavier": "Datas de nascimento e morte (fica só no painel; o site não recebe)" → "pode ir pro site sim").
+        # As datas do arquiteto vão à página dele no site pela rota do hub (CAMP-001), nos campos que o site já mostra:
+        # _camp_arq_nascimento/_camp_arq_falecimento (pessoa) ou _camp_arq_atuacao (escritório/família). Vazio não vai; datas nunca vão como "__limpar__".
+        init_db(); aplicar_migracoes()
+        from app import auth, publicador, fundo_site
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F013','João Xavier','JXA',1,913)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F016','Escritório X','EXA',1,916)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F017','Sem Datas','SDA',1,917)")
+        aid = c.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim, historia, fonte_historia) VALUES ('pessoa','João Xavier',1925,2021,'Arquiteto.','Entrevista, 2020')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F013',?,'produtor')", (aid,))
+        eid = c.execute("INSERT INTO agente (tipo, forma_autorizada, existencia_inicio, existencia_fim) VALUES ('entidade_coletiva','Escritório X',1964,2010)").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F016',?,'produtor')", (eid,))
+        sid = c.execute("INSERT INTO agente (tipo, forma_autorizada, historia, fonte_historia) VALUES ('pessoa','Sem Datas','Arquiteta.','Livro X')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F017',?,'produtor')", (sid,))
+        c.execute("INSERT INTO wp_taxonomia (id, nome, slug) VALUES (11,'Fundos','fundos'),(12,'Arquitetos','arquitetos')")
+        c.commit()
+        chamadas = []
+        class WPF:
+            def __init__(s, *a, **k): pass
+            def gravar_hub(s, termo, meta): chamadas.append((termo, dict(meta))); return {"ok": True, "page_id": 5}
+            def upload_media(s, caminho, titulo="", nome=None): return {"id": 7777, "source_url": "http://x/r.jpg"}
+            def criar_termo(s, *a, **k): return {"id": 1}
+        publicador.WP = WPF
+        def do_arquiteto(termo):
+            return [m for t, m in chamadas if t == termo and "_camp_acervo_procedencia" not in m and "_camp_acervo_acesso" not in m]
+        d0 = fundo_site.divergencia(c, "F013")
+        ver("divergência antes do envio: Nascimento e Falecimento entram como pendentes", {"_camp_arq_nascimento", "_camp_arq_falecimento"} <= {m["campo"] for m in d0["mudancas"]}
+            and "Nascimento" in [m["rotulo"] for m in d0["mudancas"]], d0)
+        r = fundo_site.enviar_fundo("F013", "teste")
+        m = (do_arquiteto(913) or [{}])[-1]
+        ver("Enviar fundo ao site: as datas de pessoa vão no payload do hub (_camp_arq_nascimento='1925', _camp_arq_falecimento='2021') junto da biografia",
+            r["ok"] and m.get("_camp_arq_nascimento") == "1925" and m.get("_camp_arq_falecimento") == "2021" and m.get("_camp_bio") == "Arquiteto.", chamadas)
+        d1 = fundo_site.divergencia(c, "F013")
+        ver("depois do envio: em dia", not d1["pendente"], d1)
+        chamadas.clear(); fundo_site.enviar_fundo("F016", "teste")
+        m = (do_arquiteto(916) or [{}])[-1]
+        ver("escritório: as datas vão como Período de atuação '1964–2010' (não como nascimento/morte)", m == {"_camp_arq_atuacao": "1964–2010"}, chamadas)
+        chamadas.clear(); fundo_site.enviar_fundo("F017", "teste")
+        ver("sem datas no painel: nenhuma chave de data vai (vazio não apaga o que está escrito no site) e nada vai como '__limpar__'",
+            all(not (set(mm) & {"_camp_arq_nascimento", "_camp_arq_falecimento", "_camp_arq_atuacao"}) and "__limpar__" not in mm.values() for _t, mm in chamadas) and chamadas, chamadas)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        chamadas.clear(); r = x.patch(f"/api/agentes/{aid}", json={"existencia_fim": 2022})
+        ver("editar só a data de morte manda as datas ao site (e não mexe na biografia)", r.status_code == 200 and chamadas == [(913, {"_camp_arq_nascimento": "1925", "_camp_arq_falecimento": "2022"})], (r.text[:200], chamadas))
+        ver("a resposta da edição traz o envio ao site", (r.json().get("hub") or {}).get("fundos") == ["F013"], r.text[:300])
+        d2 = fundo_site.divergencia(c, "F013")
+        ver("a divergência (comparada com o último 'Enviar fundo ao site') aponta a data mudada", {mm["campo"]: mm["tipo"] for mm in d2["mudancas"]}.get("_camp_arq_falecimento") == "mudou", d2)
+        chamadas.clear(); r = x.patch(f"/api/agentes/{aid}", json={"existencia_inicio": None, "existencia_fim": None, "lugares": "São Paulo"})
+        ver("PATCH com datas vazias não manda nada ao site (vazio não apaga; datas nunca vão como '__limpar__')", r.status_code == 200 and chamadas == [], chamadas)
+        chamadas.clear(); r = x.post(f"/api/agentes/{aid}/enviar-ao-site")
+        ver("'Enviar ao site' do arquiteto reenvia biografia E datas", r.status_code == 200 and chamadas and chamadas[-1][1].get("_camp_arq_nascimento") == "1925"
+            and chamadas[-1][1].get("_camp_arq_falecimento") == "2022" and chamadas[-1][1].get("_camp_bio") == "Arquiteto.", chamadas)
+        f = fundo_site.faltas_arquiteto(c, c.execute("SELECT * FROM agente WHERE id=?", (sid,)).fetchone())
+        ver("o que falta: as datas agora vão ao site (site=True), não 'fica só no painel'", f and f[0]["campo"] == "datas" and f[0]["site"] is True, f)
+        c.close()
+        for l in res: print(l)
     elif modo == "ux38_arquiteto_dados":
         # UX-38 (Rafa, print do F013 "João Xavier": "já devia me jogar na página dele para pôr o que falta de dados"): fundo com direitos, arquiteto
         # vinculado sem datas/biografia/retrato e 0 projetos. Antes: "Publicar" azul → erro "o site ainda não criou a página... espere um minuto".
@@ -474,8 +536,8 @@ def filho(modo):
         e = adm.get("/api/fundos/F013/arquiteto-site").json()
         ver("quadro: o que falta vem campo a campo, na ordem da edição (datas, biografia, fonte, retrato)",
             [x["campo"] for x in e.get("falta", [])] == ["datas", "historia", "fonte_historia", "retrato"], e)
-        ver("quadro: datas de pessoa = 'datas de nascimento e morte' e ficam só no painel; biografia, fonte e retrato vão ao site",
-            (e.get("falta") or [{}])[0].get("rotulo") == "datas de nascimento e morte" and [x["site"] for x in e["falta"]] == [False, True, True, True], e)
+        ver("quadro: datas de pessoa = 'datas de nascimento e morte'; UX-41: datas, biografia, fonte e retrato vão todos ao site",
+            (e.get("falta") or [{}])[0].get("rotulo") == "datas de nascimento e morte" and [x["site"] for x in e["falta"]] == [True, True, True, True], e)
         ver("quadro: 0 projetos, 0 publicados, fundo já no site; o resumo antigo (falta_opcional) continua", e.get("projetos") == 0 and e.get("projetos_publicados") == 0
             and e.get("fundo_no_site") is True and e.get("falta_opcional") == ["biografia com fonte", "retrato"], e)
         r = adm.post("/api/fundos/F013/arquiteto-site/publicar"); j = r.json()
@@ -12669,6 +12731,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-38: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117f) UX-41: as datas do arquiteto vão à página dele no site (campo opcional do hub; vazio não apaga)")
+rc, out = rodar("ux41_datas_site", f"{tmp}/ux41.db")
+if rc != 0: ok(False, f"teste ux41_datas_site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-41: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("117d) UX-35: dispensar lote com erro do CAMP Vision que ninguém consegue resolver (para todos; volta sozinho se o erro mudar)")
 rc, out = rodar("ux35_dispensar", f"{tmp}/ux35.db")

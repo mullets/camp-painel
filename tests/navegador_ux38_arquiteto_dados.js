@@ -47,7 +47,7 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
   chk(pri.length === 1 && pri[0] === 'completar:Completar os dados do arquiteto', 'fundo: a ação principal (azul) é "Completar os dados do arquiteto"', JSON.stringify(pri));
   const pub = await pg.$('#fd-arq [data-arq-publicar="F013"]');
   chk(!!pub && !(await pub.evaluate(b => b.classList.contains('pri') || b.disabled)), '"Publicar a página do arquiteto" continua (é permitido), mas não é o botão azul');
-  chk(/Falta para a página ficar boa: biografia, fonte da biografia, retrato/.test(t0), 'o quadro diz o que falta (biografia, fonte da biografia, retrato)', t0.slice(0, 300));
+  chk(/Falta para a página ficar boa: datas de nascimento e morte, biografia, fonte da biografia, retrato/.test(t0), 'o quadro diz o que falta (UX-41: datas também vão ao site; biografia, fonte da biografia, retrato)', t0.slice(0, 300));
   chk(/ainda não tem projeto publicado/.test(t0) && !/nem os projetos já publicados/.test(t0), 'sem projeto publicado: diz a verdade (a página só aparece com o primeiro projeto publicado)', t0.slice(0, 300));
 
   // publicar sem a página no site: o erro diz a verdade e traz o botão que resolve
@@ -70,7 +70,7 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
   const tb = await pg.textContent('#d-body .arq-falta').catch(() => '');
   chk(/O que falta para a página no site/.test(tb) && /Datas de nascimento e morte/.test(tb) && /Biografia/.test(tb) && /Fonte da biografia/.test(tb) && /Retrato/.test(tb),
     'na página do arquiteto: o bloco "O que falta para a página no site" com os itens', tb.slice(0, 300));
-  chk(/fica só no painel/.test(tb), 'as datas dizem que ficam só no painel (o site não recebe)');
+  chk(!/fica só no painel|o site não recebe/.test(tb), 'UX-41: as datas vão ao site; o bloco não diz mais "fica só no painel; o site não recebe"', tb.slice(0, 300));
   const pubAg = await pg.$('#d-body .arq-site [data-arq-publicar="F013"]');
   chk(!pubAg || !(await pubAg.evaluate(b => b.classList.contains('pri'))), 'na página do arquiteto, "Publicar" também não é azul enquanto falta dado');
   const volta = await pg.$('#d-body .arq-falta [data-arq-voltar="F013"]');
