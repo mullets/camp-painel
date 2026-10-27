@@ -23,6 +23,7 @@ TITULOS = {
     "puxar_uso": "Buscar pedidos no site",
     "importar_todas": "Importar os lotes da Fila",
     "bagit": "Gerar pacote BagIt",
+    "enviar_correcoes": "Enviar correções ao site",
 }
 
 

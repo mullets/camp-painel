@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
+MODOS_RAPIDOS = {"ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -584,6 +584,113 @@ def filho(modo):
         c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (l1,)); c.commit()
         r = cli["op"].post(f"/api/filas/{l1}/dispensar", json={})
         ver("lote que não está com erro não é dispensado (400)", r.status_code == 400, r.status_code)
+        for l in res: print(l)
+    elif modo == "ux40_enviar_fila":
+        # UX-40 (Rafael, 27/10: "Sim" para "um botão 'Enviar as 78 agora' que manda uma rodada só, com o resultado de cada envio na tela,
+        # deixando o reenvio automático desligado"). Site FALSO (publicador.WP substituído): nenhuma chamada ao WordPress de verdade.
+        init_db(); aplicar_migracoes()
+        import json, threading, time as _t
+        from app import auth, publicador as _pub, fila_correcao_site as _fila
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F040','Fundo Fila','FIL',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F040',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES ('F040-P0001','F040',1,'Casa',1960,'no_ar',400)")
+        F = [f"F040-P0001-1960-S01-D0000{k}" for k in range(1, 6)]
+        for k, cod in enumerate(F, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,escala,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,'1:50','campvision','conferida','no_ar',?)",
+                      (cod, "F040-P0001", k, f"Planta {k}", 400 + k))
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'site_item_criado','x','{}')", (cod,))
+        c.execute("INSERT OR IGNORE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (702,?,'Escala','Tainacan\\Metadata_Types\\Text')", (_pub.COL_ACERVO,))
+        # 4 folhas corrigidas no painel (a trigger põe na fila); o envio imediato não aconteceu (o site estava fora): ficaram esperando
+        for cod in F[:4]:
+            c.execute("UPDATE item SET escala='1:100' WHERE codigo=?", (cod,))
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'editado','op@camp.arq.br',?)", (cod, json.dumps({"antes": {"escala": "1:50"}})))
+        # a 5ª está na fila, mas o painel não vê nada diferente do site: não pode ser reenviada
+        c.execute("UPDATE item SET espelho_manual=1 WHERE codigo=?", (F[4],))
+        c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel) VALUES ('item',?,'pendente_Escala_no_site','o site respondeu 502')", (F[0],))
+        c.commit()
+        ver("antes: 5 folhas na fila de correções", c.execute("SELECT COUNT(*) FROM fila_correcao_site").fetchone()[0] == 5)
+        flag = lambda: c.execute("SELECT valor FROM configuracao WHERE chave='site.reenvio_persistente'").fetchone()[0]
+        ver("antes: o reenvio automático está desligado (site.reenvio_persistente = 0)", flag() == "0", flag())
+        chamadas = []
+        class WPFalso:
+            def __init__(self, *a, **k): pass
+            def patch_item(self, cid, wid, **k): chamadas.append(("titulo", wid))
+            def definir_metadado(self, wid, mid, valor):
+                _t.sleep(0.3)                      # o site é lento: a rodada demora mais que a requisição
+                chamadas.append(("meta", wid, valor))
+                if wid == 404:
+                    raise RuntimeError("o site respondeu 502")
+                return {}
+        _pub.WP = WPFalso
+        _pub.renovar_no_site = lambda *a, **k: True
+        r0 = _fila.executar_pendentes()
+        ver("o trabalhador automático continua parado (flag 0): nada sai sozinho", r0.get("desligado") and not chamadas and c.execute("SELECT COUNT(*) FROM fila_correcao_site").fetchone()[0] == 5, (r0, chamadas))
+        cli = {}
+        for nome, papel in (("adm", "admin"), ("op", "operador"), ("lei", "leitura")):
+            auth.criar_usuario(nome, f"{nome}@camp.arq.br", "senha-longa-12345", papel, forcar_troca=False)
+            cli[nome] = TestClient(app, raise_server_exceptions=False); cli[nome].post("/api/auth/login", json={"email": f"{nome}@camp.arq.br", "senha": "senha-longa-12345"})
+        URL = "/api/site/correcoes-pendentes/enviar?tarefa=1"
+        for k in ("lei", "op"):
+            r = cli[k].post(URL)
+            ver(f"{k} não manda (403)", r.status_code == 403, r.status_code)
+        ver("depois dos 403: nada foi ao site", not chamadas, chamadas)
+        adm2 = TestClient(app, raise_server_exceptions=False); adm2.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        resp, ini = {}, threading.Barrier(2)
+        def clicar(nome, cl):
+            ini.wait(); t0 = _t.monotonic(); r = cl.post(URL); resp[nome] = (r.status_code, r.json() if r.status_code < 500 else r.text, _t.monotonic() - t0)
+        th = [threading.Thread(target=clicar, args=(n, cl)) for n, cl in (("a", cli["adm"]), ("b", adm2))]
+        [x.start() for x in th]; [x.join() for x in th]
+        tids = {resp[k][1].get("tarefa_id") for k in resp if isinstance(resp[k][1], dict)}
+        ver("dois cliques ao mesmo tempo: UMA tarefa (o segundo recebe a mesma, já rodando)",
+            len(tids) == 1 and None not in tids and sorted(resp[k][0] for k in resp) == [200, 202] and any(resp[k][1].get("ja_rodando") for k in resp), resp)
+        tid = sorted(x for x in tids if x)[0] if any(tids) else None
+        ver("a requisição volta na hora (a rodada segue em segundo plano)", all(resp[k][2] < 5 for k in resp), {k: round(resp[k][2], 2) for k in resp})
+        t = {}
+        for _ in range(300):
+            t = cli["adm"].get(f"/api/tarefas/{tid}").json()
+            if t.get("estado") != "rodando":
+                break
+            _t.sleep(0.1)
+        rr = t.get("resultado") or {}
+        ver("a tarefa terminou com a contagem: 3 enviadas, 2 falharam, 2 ainda na fila", len(rr.get("enviadas") or []) == 3 and len(rr.get("falhas") or []) == 2 and rr.get("ainda_na_fila") == 2
+            and "3 enviadas, 2 falharam, 2 ainda na fila" in (rr.get("mensagem") or ""), t)
+        ver("andamento contado item a item (5 de 5)", t.get("total") == 5 and t.get("feitas") == 5, (t.get("total"), t.get("feitas")))
+        fila = {r[0]: dict(r) for r in c.execute("SELECT * FROM fila_correcao_site")}
+        ver("as que o site aceitou saíram da fila", all(cod not in fila for cod in F[:3]), list(fila))
+        ver("a que o site recusou ficou na fila com o motivo (e a próxima tentativa adiada)", F[3] in fila and "502" in (fila[F[3]]["ultimo_erro"] or "") and fila[F[3]]["tentativas"] == 1, fila.get(F[3]))
+        fal = {x["codigo"]: x["erro"] for x in rr.get("falhas") or []}
+        ver("a tela recebe cada falha com o motivo legível", "o site respondeu 502" in (fal.get(F[3]) or "") and not (fal.get(F[3]) or "").startswith("RuntimeError")
+            and "Nada a enviar" in (fal.get(F[4]) or "") and len(t.get("falhas") or []) == 2, fal)
+        por_wid = {}
+        for x in chamadas:
+            por_wid[x[1]] = por_wid.get(x[1], 0) + 1
+        ver("uma rodada só: cada folha foi ao site UMA vez", por_wid == {401: 1, 402: 1, 403: 1, 404: 1}, por_wid)
+        ver("o que o site já tem não é reenviado (a 5ª folha não foi ao site e não sai da fila como se tivesse ido)", 405 not in por_wid and F[4] in fila, (por_wid, list(fila)))
+        ver("a escrita pendente antiga da folha que o site aceitou sai da lista", c.execute("SELECT resolvida FROM divergencia_site WHERE codigo=? AND campo='pendente_Escala_no_site'", (F[0],)).fetchone()[0] == 1)
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE tipo='site_correcoes_enviadas'").fetchall()
+        d = json.loads(ev[0]["detalhe"]) if ev else {}
+        ver("Histórico de ações: quem mandou, quantas enviadas, quantas falharam", len(ev) == 1 and ev[0]["ator"] == "adm@camp.arq.br" and d.get("enviadas") == 3 and d.get("falharam") == 2 and d.get("ainda_na_fila") == 2, [dict(x) for x in ev])
+        h = cli["adm"].get("/api/eventos", params={"grupo": "publicacoes"}).json()
+        lista_h = h.get("eventos") or h.get("itens") or [] if isinstance(h, dict) else h
+        ver("o evento aparece no Histórico de ações (grupo Publicações)", any(e.get("tipo") == "site_correcoes_enviadas" for e in lista_h), str(h)[:300])
+        ver("depois: site.reenvio_persistente continua 0", flag() == "0", flag())
+        ver("ninguém ligou o trabalhador: o automático continua não mandando nada", _fila.executar_pendentes().get("desligado") is True)
+        n = len(chamadas)
+        r = cli["adm"].post(URL); tid2 = r.json().get("tarefa_id")
+        t2 = {}
+        for _ in range(100):
+            t2 = cli["adm"].get(f"/api/tarefas/{tid2}").json()
+            if t2.get("estado") != "rodando":
+                break
+            _t.sleep(0.1)
+        ver("logo depois, de novo: a que falhou espera a próxima tentativa (não martela o site) e nada sai", tid2 != tid and len(chamadas) == n and "Nada saiu nesta rodada" in ((t2.get("resultado") or {}).get("mensagem") or ""), t2.get("resultado"))
+        ct = _fila.contar(c)
+        ver("contagem para a tela: 2 na fila, 0 prontas (as duas esperam a próxima tentativa)", ct["total"] == 2 and ct["prontas"] == 0 and ct["proxima_em"], ct)
+        c.close()
         for l in res: print(l)
     elif modo == "ux39_dispensar_interrompida":
         # UX-39: "Dispensar este lote" também para a Leitura interrompida (UX-09: 'processando' há mais de 2 h sem sinal do CAMP Vision).
@@ -12567,6 +12674,14 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-35: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("117e) UX-39: dispensar também a leitura interrompida (para todos; volta sozinho se o CAMP Vision mexer no lote)")
+print("117e) UX-40: \"Enviar as N agora\" manda uma rodada da fila de correções ao site (manual; o automático continua desligado)")
+rc, out = rodar("ux40_enviar_fila", f"{tmp}/ux40.db")
+if rc != 0: ok(False, f"teste ux40_enviar_fila não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-40: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
 rc, out = rodar("ux39_dispensar_interrompida", f"{tmp}/ux39.db")
 if rc != 0: ok(False, f"teste ux39_dispensar_interrompida não rodou -> {out[-1500:]}")
 else:

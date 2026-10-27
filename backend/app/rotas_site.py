@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, BackgroundTasks, Depends
 
 from . import auth
@@ -60,6 +62,70 @@ def correcoes_pendentes(u: dict = Depends(auth.exige("admin"))) -> dict:
         return {"total": total, "correcoes": [dict(x) for x in registros], "fila_disponivel": True}
     finally:
         con.close()
+
+
+_INICIO_RODADA = __import__("threading").Lock()
+
+
+@router.post("/correcoes-pendentes/enviar")
+def enviar_correcoes_pendentes(tarefa: int = 1, u: dict = Depends(auth.exige("admin"))):
+    """UX-40 (Rafael, 27/10: "Sim" para um botão que manda UMA rodada, com o resultado de cada envio na tela, deixando o
+    reenvio automático desligado). Sempre vira tarefa em segundo plano: a resposta volta na hora (202) e o site lento não prende
+    o servidor. Uma rodada por vez: um segundo clique devolve a tarefa que já está rodando. Usa a mesma rotina do trabalhador
+    (fila_correcao_site.executar_pendentes), com forcar_manual=True; `site.reenvio_persistente` não muda."""
+    from . import fila_correcao_site as fila, tarefas
+
+    def rodar(p) -> dict:
+        con = connect()
+        try:
+            antes = fila.contar(con)
+        finally:
+            con.close()
+        p.total(min(antes["prontas"], fila.LOTE_MAX))
+        p.passo("Enviando ao site as correções que estão esperando")
+
+        def andou(codigo, ok, erro):
+            p.passo("Enviando ao site as correções que estão esperando", codigo)
+            p.feita(1, f"{codigo}: {'enviada' if ok else 'falhou: ' + limpar(erro)}")
+
+        r = fila.executar_pendentes(limite=fila.LOTE_MAX, orcamento_s=900.0, forcar_manual=True, ator=u["email"],
+                                    ao_terminar_item=andou)
+        if r.get("desligado"):
+            return {"ok": False, "mensagem": "O envio de correções ao site está desligado em Configurações "
+                                             "(site.enviar_correcoes_sozinho = 0). Nada foi enviado."}
+        if r.get("ocupado"):
+            return {"ok": False, "mensagem": "Já há uma rodada de envio ao site em andamento. Nada foi enviado de novo."}
+        con = connect()
+        try:
+            depois = fila.contar(con)
+            falhas = [{"codigo": f["codigo"], "erro": limpar(f["erro"])} for f in r["falhas"]]
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('site','correcoes','site_correcoes_enviadas',?,?)",
+                        (u["email"], json.dumps({"enviadas": len(r["enviadas"]), "falharam": len(falhas),
+                                                 "ainda_na_fila": depois["total"], "manual": True,
+                                                 "falhas": falhas[:50]}, ensure_ascii=False)))
+            con.commit()
+        finally:
+            con.close()
+        n_env, n_fal = len(r["enviadas"]), len(falhas)
+        msg = (f"Envio ao site: {n_env} {'enviada' if n_env == 1 else 'enviadas'}, {n_fal} {'falhou' if n_fal == 1 else 'falharam'}, "
+               f"{depois['total']} ainda na fila")
+        if not n_env and not n_fal:
+            msg = f"Nada saiu nesta rodada: nenhuma correção pronta para enviar ({depois['total']} ainda na fila)"
+        return {"ok": not falhas, "mensagem": msg, "enviadas": r["enviadas"], "falhas": falhas,
+                "ainda_na_fila": depois["total"], "esperando_proxima_tentativa": depois["total"] - depois["prontas"],
+                "proxima_em": depois["proxima_em"]}
+
+    with _INICIO_RODADA:                        # dois cliques ao mesmo tempo: uma tarefa só
+        return tarefas.iniciar("enviar_correcoes", "site", u, rodar)
+
+
+def limpar(erro) -> str:
+    """"RuntimeError: o site respondeu 502" → "o site respondeu 502" (o tipo do erro fica só no banco)."""
+    t = str(erro or "")
+    for pre in ("RuntimeError: ", "Exception: "):
+        if t.startswith(pre):
+            return t[len(pre):]
+    return t
 
 
 @router.get("/itens")

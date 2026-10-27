@@ -1029,8 +1029,10 @@ def atualizar_folha_no_site(codigo: str, wid: int, colecao_id: int, titulo: str 
                 wp.patch_item(colecao_id, wid, **corpo)
                 if titulo is not None:
                     out["enviados"].append("título da página"); con.execute("UPDATE wp_item SET titulo=? WHERE id=?", (titulo, wid))
+                    _resolver_pendencia(con, "item", codigo, "pendente_título_no_site")   # UX-40: o site confirmou; a escrita pendente antiga sai
                 if descricao is not None:
                     out["enviados"].append("descrição")
+                    _resolver_pendencia(con, "item", codigo, "pendente_descrição_no_site")
                     row = con.execute("SELECT json, metadados FROM wp_item WHERE id=?", (wid,)).fetchone()
                     try:
                         j = json.loads(row["json"] or "{}") if row else {}
@@ -1047,6 +1049,7 @@ def atualizar_folha_no_site(codigo: str, wid: int, colecao_id: int, titulo: str 
             try:
                 wp.definir_metadado(wid, mid, valor_api)
                 out["enviados"].append(nome)
+                _resolver_pendencia(con, "item", codigo, f"pendente_{nome}_no_site")    # UX-40: idem, campo a campo
                 row = con.execute("SELECT metadados FROM wp_item WHERE id=?", (wid,)).fetchone()
                 try:
                     md = json.loads((row["metadados"] if row else None) or "{}")

@@ -178,3 +178,13 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 - O que está desligado fora do horário de trabalho fica recolhido em "**N desligadas (normal)**".
 - Nenhuma frase manda editar chave: o resumo do dia é o interruptor "**Mandar todo dia às 18h um e-mail com o resumo do dia**"
   e o campo "Quem recebe o resumo"; o e-mail diz "desligue o Resumo do dia em Máquinas → Alertas".
+
+## Correções esperando o site (UX-40, 27/10/2026)
+- Em Máquinas → **Catálogo local × site**, ao lado de "**N escritas pendentes**": "**N correções de folhas esperando o site**" e o botão
+  (só admin/master) "**Enviar as N agora**" ("Enviar a correção agora" com uma; "Enviar 50 das N agora" acima de 50, o teto da rodada).
+  Confirmação: "Manda agora ao site as N correções que estão esperando. Uma rodada só; o reenvio automático continua desligado."
+- Resultado: "**Enviadas** · **falharam** · **ainda na fila**", com cada folha que falhou e o motivo. Folha que falhou "**espera a próxima
+  tentativa**" (não sai de novo no clique seguinte). "**Nada a enviar**: o painel não vê diferença desta folha para o site."
+- "Escritas pendentes" conta toda gravação no site que falhou (fundo, projeto, arquiteto, folha); o botão só manda as correções de folhas.
+- Ao lado de **Sincronizar agora**: "Só lê o site e atualiza as diferenças: não envia nada."
+- No Histórico de ações: "{quem} mandou ao site as correções de folhas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
