@@ -211,6 +211,13 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Ao lado de **Sincronizar agora**: "Só lê o site e atualiza as diferenças: não envia nada."
 - No Histórico de ações: "{quem} mandou ao site as correções de folhas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
 
+## Publicação paciente com o site lento (27/10/2026)
+- No acompanhamento da publicação: "**Folha X: o site demorou (…). Tentando de novo em N s (tentativa 2 de 3)**"; quando o painel
+  passa a mandar menos folhas juntas: "**O site está lento: enviando N de cada vez**"; quando volta: "**O site voltou a responder bem:
+  enviando N de cada vez**". Folha que não subiu nem na 3ª: "**NÃO subiu (depois de 3 tentativas)**".
+- No resultado: "**N folha(s) precisaram de nova tentativa (o site demorou)**". Falha de vez: "(o site não respondeu em 3 tentativas)" e
+  "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas".
+
 ## Recorte automático das imagens públicas (UX-44, 27/10/2026)
 - Só a imagem que vai ao site (até 1.920 px) e o "**Ver como vai ao site**" são recortados na borda do papel e clareados (branco e contraste
   pelo papel). O TIF e a prévia do CAMP Vision não mudam. O recorte feito à mão ("Recortar e alinhar") sempre vence.

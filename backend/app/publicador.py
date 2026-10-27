@@ -805,6 +805,21 @@ STATUS_DO_SITE = {"publish": "no_ar", "draft": "rascunho", "pending": "rascunho"
 META_CODIGO_DOCUMENTO = 8030      # "Código do documento" na coleção Acervo CAMP (o espelho wp_metadado manda, se tiver)
 
 
+ESPELHO_RECENTE_S = 2 * 3600     # 27/10: sincronização completa e bem-sucedida há menos disto dispensa perguntar ao site pelo código
+
+
+def espelho_basta(con, codigo: str) -> bool:
+    """27/10 (site lento, ~3,4 s por pedido): a busca pelo código no site antes de criar a folha pode ser pulada quando o espelho é recente:
+    a última sincronização COMPLETA deu certo e começou há menos de ESPELHO_RECENTE_S (ela lê todos os itens, em qualquer status), e
+    tudo o que o painel cria depois entra no espelho na hora. Nunca pula quando a folha tem tentativa anterior que falhou
+    (pendente_criar_no_site): aí o item pode existir sem o painel saber."""
+    if con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0", (codigo,)).fetchone():
+        return False
+    r = con.execute("SELECT 1 FROM sincronizacao WHERE ok=1 AND terminada_em IS NOT NULL AND iniciada_em >= datetime('now', ?) LIMIT 1",
+                    (f"-{int(ESPELHO_RECENTE_S)} seconds",)).fetchone()
+    return bool(r)
+
+
 def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, projeto: str | None = None) -> dict | None:
     """Antes de criar a folha no Tainacan: já existe um item com este código? (um rascunho de envio anterior cuja ligação se perdeu).
     1) o espelho do site (wp_item.codigo_detectado); 2) o próprio site, pelo metadado "Código do documento" (8030).
@@ -815,7 +830,7 @@ def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, proje
     if r:
         return {"id": int(r["id"]), "status": r["status"], "como": "espelho do site"}
     buscar = getattr(wp, "buscar_por_codigo", None)
-    if not buscar:
+    if not buscar or espelho_basta(con, codigo):
         return None
     mid = _meta(con, COL_ACERVO, "Código do documento")[0] or META_CODIGO_DOCUMENTO
     try:
@@ -839,6 +854,107 @@ def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, proje
                     (int(it["id"]), COL_ACERVO, it.get("status"), it.get("title"), it.get("slug"), it.get("url"), codigo, fundo, projeto,
                      json.dumps(md, ensure_ascii=False), json.dumps(it, ensure_ascii=False)))
         return {"id": int(it["id"]), "status": it.get("status"), "como": "busca no site pelo código"}
+    return None
+
+
+_TRAVA_ORFAO = _threading.Lock()   # 27/10: duas folhas de mesmo título tentando de novo ao mesmo tempo não ligam no mesmo item
+
+
+FUSO_SITE = "America/Sao_Paulo"   # o Tainacan devolve a data de criação no horário do site, sem fuso
+MARGEM_RELOGIO_S = 120            # diferença aceitável entre o relógio do painel e o do site
+MOTIVO_TALVEZ_DUPLICADO = "item possivelmente duplicado no site — confira"
+
+
+class ItemTalvezDuplicado(RuntimeError):
+    """Mais de um item do site pode ser o que a tentativa anterior criou: não liga nenhum e não cria outro (fica pendente para alguém conferir)."""
+
+
+def _criado_em(it: dict):
+    """Quando o item foi criado no site: (datetime UTC sem fuso, True) com hora; (date no horário do site, False) quando o site só dá o dia
+    (o Tainacan pode formatar `creation_date` só com a data); (None, None) se não der para comparar.
+    `date_gmt` já vem em UTC; `creation_date`/`date` vêm no horário do site (FUSO_SITE) a menos que tragam o fuso."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    for chave in ("date_gmt", "creation_date", "date"):
+        v = it.get(chave)
+        if isinstance(v, dict):
+            v = v.get("raw") or v.get("rendered")
+        if not v or not isinstance(v, str):
+            continue
+        txt = v.strip().replace("Z", "+00:00")
+        d, com_hora = None, True
+        try:
+            d = datetime.fromisoformat(txt); com_hora = len(txt) > 10
+        except ValueError:
+            for fmt, h in (("%d/%m/%Y %H:%M:%S", True), ("%d/%m/%Y %H:%M", True), ("%d/%m/%Y", False)):
+                try:
+                    d = datetime.strptime(txt, fmt); com_hora = h; break
+                except ValueError:
+                    pass
+        if d is None:
+            continue
+        if not com_hora:
+            return d.date(), False
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc if chave == "date_gmt" else ZoneInfo(FUSO_SITE))
+        return d.astimezone(timezone.utc).replace(tzinfo=None), True
+    return None, None
+
+
+def item_orfao_no_site(con, wp, codigo: str, titulo: str) -> dict | None:
+    """27/10 (publicação paciente): a tentativa anterior desta folha deixou "pendente_criar_no_site" — por exemplo, o pedido de criar
+    o item esgotou o tempo DEPOIS de o WordPress criá-lo. Esse item ainda não tem o código gravado (os metadados vêm depois), então
+    item_existente_no_site não o acha. Procura no site um item com EXATAMENTE o título que o painel dá à folha, na coleção das folhas,
+    sem código de folha em nenhum metadado, que nenhuma outra folha do painel usa e CRIADO depois do início da 1ª tentativa que falhou
+    (detectada_em da pendência, com MARGEM_RELOGIO_S): títulos repetem ("Corte", "Planta"), um item antigo de mesmo título não é deste envio.
+    Um candidato: liga a folha nele (o envio segue gravando metadados e imagem nele). Mais de um (ou um sem data comparável): não liga
+    nenhum e NÃO cria — levanta ItemTalvezDuplicado (fica pendente para conferir). Se a busca falhar, levanta: criar sem conferir duplicaria."""
+    from datetime import datetime, timedelta
+    pend = con.execute("SELECT MIN(detectada_em) FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0",
+                       (codigo,)).fetchone()
+    if not pend or not pend[0]:
+        return None
+    buscar = getattr(wp, "buscar_por_titulo", None)
+    if not buscar:
+        return None
+    desde = datetime.strptime(pend[0][:19], "%Y-%m-%d %H:%M:%S") - timedelta(seconds=MARGEM_RELOGIO_S)
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    dia_desde = desde.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(FUSO_SITE)).date()
+    try:
+        achados = buscar(COL_ACERVO, titulo) or []
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"não consegui conferir no site se a tentativa anterior já criou a folha ({str(e)[:160]})") from e
+    from .wp import detectar_codigo, metadados_texto
+    with _TRAVA_ORFAO:
+        ligados = {x[0] for x in con.execute("SELECT tainacan_item_id FROM item WHERE tainacan_item_id IS NOT NULL AND codigo<>?", (codigo,))}
+        candidatos, incertos = [], []
+        for it in sorted(achados, key=lambda x: int(x.get("id") or 0)):
+            if not it.get("id") or int(it["id"]) in ligados:
+                continue
+            col = it.get("collection_id")
+            if col not in (None, "") and str(col) != str(COL_ACERVO):          # outra coleção: não é folha
+                continue
+            achou = detectar_codigo(it.get("slug", ""), *metadados_texto(it).values())[0] or ""
+            if "-D" in achou.upper():                             # já é de alguma folha (tem código de folha): não é o órfão desta
+                continue
+            quando, com_hora = _criado_em(it)
+            if quando is None:
+                incertos.append(it)
+            elif com_hora and quando >= desde:
+                candidatos.append(it)
+            elif not com_hora and quando >= dia_desde:            # só o dia (sem hora): pode ser um item antigo do mesmo dia — não liga sozinho
+                incertos.append(it)
+        if len(candidatos) + len(incertos) > 1 or incertos:
+            ids = ", ".join(str(x["id"]) for x in candidatos + incertos)
+            con.execute("UPDATE divergencia_site SET valor_painel=? WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0",
+                        (f"{MOTIVO_TALVEZ_DUPLICADO} (itens {ids} com o mesmo título)"[:300], codigo))
+            raise ItemTalvezDuplicado(f"{MOTIVO_TALVEZ_DUPLICADO}: itens {ids} com o mesmo título, criados depois da tentativa que falhou")
+        if candidatos:
+            it = candidatos[0]
+            con.execute("UPDATE item SET tainacan_item_id=?, status_site=? WHERE codigo=? AND tainacan_item_id IS NULL",
+                        (int(it["id"]), STATUS_DO_SITE.get(it.get("status"), "rascunho"), codigo))
+            return it
     return None
 
 
@@ -937,6 +1053,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         con.close(); out["erro"] = "a folha ainda não foi conferida na revisão do lote: confira antes de enviar ao site"; return out
     if not i["dossie_id"]:
         con.close(); out["erro"] = "o projeto ainda não tem dossiê no site (crie o projeto no site primeiro)"; return out
+    inicio = con.execute("SELECT datetime('now')").fetchone()[0]      # 27/10: início desta tentativa (o órfão só vale se criado depois)
     try:
         wp = WP()
         p_num = codigo.split("-")[1]
@@ -953,8 +1070,14 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 con.commit(); con.close()
                 return out
         else:
-            it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
-            iid = it["id"]
+            orfao = item_orfao_no_site(con, wp, codigo, titulo)     # 27/10: a tentativa anterior criou o item e a resposta não chegou?
+            if orfao:
+                it = orfao
+                out["reaproveitado"] = {"item_id": int(orfao["id"]), "como": "item criado na tentativa anterior (a resposta do site não chegou)",
+                                        "status": orfao.get("status")}
+            else:
+                it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
+            iid = int(it["id"])
             con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
             _resolver_pendencia(con, "item", codigo, "pendente_criar_no_site")
             con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -1020,9 +1143,14 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 _pendencia(con, "item", codigo, "pendente_imagem_no_site", str(e)[:200]); out["imagem"] = f"falhou: {e}"[:120]
         out["item_id"] = iid
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,?,?,?)",
-                    (codigo, "site_item_reaproveitado" if existente else "site_item_criado", ator, json.dumps(out, ensure_ascii=False)))
+                    (codigo, "site_item_reaproveitado" if out.get("reaproveitado") else "site_item_criado", ator, json.dumps(out, ensure_ascii=False)))
     except Exception as e:  # noqa: BLE001
+        from .wp import erro_passageiro
         out["erro"] = str(e)[:300]; _pendencia(con, "item", codigo, "pendente_criar_no_site", out["erro"])
+        con.execute("""UPDATE divergencia_site SET detectada_em=? WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site'
+                       AND resolvida=0 AND detectada_em > ?""", (inicio, codigo, inicio))      # a pendência começa no INÍCIO da tentativa
+        out["passageiro"] = (isinstance(e, ItemTalvezDuplicado) or erro_passageiro(e)
+                             or (e.__cause__ is not None and erro_passageiro(e.__cause__)))   # 27/10: vale tentar de novo
     con.commit(); con.close()
     return out
 
