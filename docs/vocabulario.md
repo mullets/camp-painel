@@ -122,3 +122,10 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 - **Visitas ao site** com o Google Analytics desligado mora em **Configurações** (com "Ver como ligar"), não na Home.
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").
+
+## Máquinas em abas (UX-24, 27/10/2026)
+- Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);
+  "Alertas" (admin) e "Logs" (admin/master) somem para o operador, e o servidor recusa esses dados a ele (403).
+- O que está desligado fora do horário de trabalho fica recolhido em "**N desligadas (normal)**".
+- Nenhuma frase manda editar chave: o resumo do dia é o interruptor "**Mandar todo dia às 18h um e-mail com o resumo do dia**"
+  e o campo "Quem recebe o resumo"; o e-mail diz "desligue o Resumo do dia em Máquinas → Alertas".

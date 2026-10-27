@@ -35,7 +35,7 @@ con.execute("UPDATE configuracao SET valor='24' WHERE chave='avisos.fila_travada
   await ctx.route('**/*', rt => rt.request().url().startsWith(BASE) ? rt.continue() : rt.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   const page = await abrir(ctx, 'rafael@camp.arq.br', 'senha-bem-longa-123');
 
-  await page.goto(BASE + '/#estacoes');
+  await page.goto(BASE + '/#estacoes/alertas');   // UX-24: alertas e preferências ficam na aba Alertas
   await page.waitForSelector('#avpref-painel #avp-lista li', { timeout: 20000 });
   const itens = await page.$$eval('#avp-lista li[data-avp]', l => l.map(x => x.dataset.avp));
   chk(itens.length === 9 && ['fila_travada', 'bloqueio', 'pedido_painel', 'pedido', 'qnap'].every(a => itens.includes(a)), 'a tela lista os 9 assuntos: ' + itens.join(','));

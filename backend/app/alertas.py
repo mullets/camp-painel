@@ -80,7 +80,7 @@ def _mandar(con, smtp, enviar, destinos, assunto, tipo, titulo, corpo, chave=Non
     for para in destinos:
         ok, erro = False, None
         if not email_envio.configurado(smtp):
-            erro = "SMTP não configurado (Configurações → smtp.*)"
+            erro = "SMTP não configurado (Configurações → E-mail e avisos)"
         else:
             try:
                 res = enviar(smtp, para, titulo, corpo, responder_para=responder_para) if responder_para else enviar(smtp, para, titulo, corpo)
@@ -383,6 +383,16 @@ def salvar_preferencias(con, dados: dict, ator: str) -> dict:
             mud[p["ligado"]] = "1" if a["ligado"] else "0"
         if "emails" in a:
             mud[f"avisos.{p['assunto']}.email"] = emails(a["emails"], p["nome"])
+    # UX-24: o resumo do dia vira um interruptor com rótulo na aba Alertas (antes a tela mandava "mudar alertas.resumo_diario para 1").
+    if isinstance(dados.get("resumo"), dict):
+        rz = dados["resumo"]
+        if "ligado" in rz:
+            mud["alertas.resumo_diario"] = "1" if rz["ligado"] else "0"
+        if "email" in rz:
+            e_ = emails(rz["email"], "Quem recebe o resumo do dia")
+            if "," in e_:
+                raise ValueError("Quem recebe o resumo do dia: escreva um e-mail só (vazio: o primeiro da lista geral).")
+            mud["alertas.resumo_email"] = e_
     for chave, valor in mud.items():
         atual = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
         if atual is None:
@@ -439,7 +449,7 @@ def texto_resumo(n: dict, dia: str, base: str) -> tuple[str, str]:
         "",
         f"Ver no painel: {base}/#painel",
         "",
-        "— CAMP Painel (resumo automático; para não receber mais, mude alertas.resumo_diario para 0 nas Configurações)",
+        "— CAMP Painel (resumo automático; para não receber mais, desligue o Resumo do dia em Máquinas → Alertas)",
     ]
     return f"[CAMP Painel] Resumo do dia {d}", "\n".join(linhas)
 
@@ -451,7 +461,7 @@ def resumo_estado(con) -> dict:
         ult = con.execute("SELECT dia, para, ok, erro, enviado_em FROM resumo_diario_envio ORDER BY dia DESC LIMIT 1").fetchone()
     except Exception:  # noqa: BLE001
         ult = None
-    return {"ligado": ligado, "para": para, "hora": HORA_RESUMO, "ultimo": dict(ult) if ult else None}
+    return {"ligado": ligado, "para": para, "email": _cfg(con, "alertas.resumo_email").strip(), "hora": HORA_RESUMO, "ultimo": dict(ult) if ult else None}
 
 
 def resumo_diario(con, agora: datetime | None = None, enviar=None, forcar: bool = False) -> dict:
@@ -474,9 +484,9 @@ def resumo_diario(con, agora: datetime | None = None, enviar=None, forcar: bool 
     smtp = email_envio.configuracao(con)
     ok, erro = False, None
     if not para:
-        erro = "Sem destinatário (Configurações → alertas.resumo_email)"
+        erro = "Sem destinatário: escolha quem recebe em Máquinas → Alertas → Resumo do dia"
     elif not email_envio.configurado(smtp):
-        erro = "SMTP não configurado (Configurações → smtp.*)"
+        erro = "SMTP não configurado (Configurações → E-mail e avisos)"
     else:
         try:
             res = (enviar or email_envio.enviar)(smtp, para, titulo, corpo)

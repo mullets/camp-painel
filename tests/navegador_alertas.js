@@ -36,7 +36,7 @@ con.execute("UPDATE configuracao SET valor='' WHERE chave='replica.raiz'")
     await page.goto(BASE + '/');
     await page.fill('#lg-email', 'rafael@camp.arq.br'); await page.fill('#lg-senha', 'senha-bem-longa-123'); await page.press('#lg-senha', 'Enter');
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
-    await page.evaluate(() => nav('estacoes'));
+    await page.evaluate(() => nav('estacoes/alertas'));   // UX-24: a aba Alertas
     await page.waitForSelector('#al-lista li[data-alerta="qnap"]', { timeout: 30000 });
     const q = await linha('qnap');
     chk(q && q.nivel === 'atencao' && /atenção/.test(q.txt) && /12% livre/.test(q.txt) && !/ainda não medido/.test(q.txt), '"QNAP quase cheio" com 12% livre: atenção, com o número da tela: ' + JSON.stringify(q));

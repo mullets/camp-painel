@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home"}
+MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5882,7 +5882,7 @@ def filho(modo):
         ver("os números do dia: importadas 7, revisadas 3 (não a de outro dia), publicadas 2 (1 projeto), 1 pedido novo, 1 problema aberto que impede publicar",
             (n.get("importadas"), n.get("revisadas"), n.get("publicadas"), n.get("projetos_publicados"), n.get("pedidos_novos"), n.get("problemas_abertos"), n.get("problemas_bloqueiam")) == (7, 3, 2, 1, 1, 1, 1), str(n))
         corpo = enviados[0]["corpo"] if enviados else ""
-        ver("o e-mail é em frases simples, com o link do painel e como desligar", "Folhas importadas do CAMP Vision: 7" in corpo and "Pedidos novos de material: 1" in corpo and "Problemas abertos: 1, 1 impede publicar" in corpo and "/#painel" in corpo and "alertas.resumo_diario" in corpo, corpo[:300])
+        ver("o e-mail é em frases simples, com o link do painel e como desligar", "Folhas importadas do CAMP Vision: 7" in corpo and "Pedidos novos de material: 1" in corpo and "Problemas abertos: 1, 1 impede publicar" in corpo and "/#painel" in corpo and "Máquinas → Alertas" in corpo and "alertas.resumo_diario" not in corpo, corpo[:300])
         r = alertas.resumo_diario(c, agora=hoje18 + _td(minutes=5), enviar=falso)
         ver("uma vez por dia: às 18h10 não manda de novo", r.get("motivo") == "já enviado hoje" and len(enviados) == 1)
         r = alertas.resumo_diario(c, agora=hoje18 + _td(days=1), enviar=falso)
@@ -9585,6 +9585,50 @@ def filho(modo):
         a = alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("qnap") or {}
         ver("espaço estável (70% livre): normal", a.get("nivel") == "ok", str(a)[:200])
         for l in res: print(l)
+    elif modo == "ux24_maquinas":
+        # UX-24: Máquinas separa "Agora" (operador) de "Alertas" e "Logs" (admin/master). No SERVIDOR: logs, alertas, preferências
+        # de aviso e configurações respondem 403 ao operador; o resumo do dia vira um interruptor gravado pela rota existente
+        # (PUT /api/alertas/preferencias, só admin), em vez de a tela mandar "mudar alertas.resumo_diario para 1".
+        init_db(); _aplicar_migracoes_real()
+        from app import alertas, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='rafael@camp.arq.br' WHERE chave='avisos.email'"); c.commit()
+        auth.criar_usuario("Adm", "adm24@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op24@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        auth.criar_usuario("Ms", "ms24@camp.arq.br", "senha-longa-12345", "master", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, ms = cli("adm24@camp.arq.br"), cli("op24@camp.arq.br"), cli("ms24@camp.arq.br")
+        cfgv = lambda k: (c.execute("SELECT valor FROM configuracao WHERE chave=?", (k,)).fetchone() or [None])[0]  # noqa: E731
+        so_admin = [("GET", "/api/logs", None), ("GET", "/api/alertas", None), ("GET", "/api/alertas/preferencias", None),
+                    ("PUT", "/api/alertas/preferencias", {"resumo": {"ligado": True}}), ("POST", "/api/alertas/resumo", None),
+                    ("POST", "/api/alertas/verificar", None), ("GET", "/api/config", None), ("PUT", "/api/config/alertas.resumo_diario", {"valor": "1"})]
+        negados = [(m_, u_, op.request(m_, u_, json=b_).status_code) for m_, u_, b_ in so_admin]
+        ver("operador: logs, alertas, preferências de aviso e configurações dão 403 (ler e gravar)", all(st_ == 403 for _, _, st_ in negados), str(negados))
+        ver("o operador não conseguiu ligar o resumo do dia", cfgv("alertas.resumo_diario") == "0", str(cfgv("alertas.resumo_diario")))
+        ver("operador continua lendo o estado das máquinas (aba Agora)", op.get("/api/estacoes").status_code == 200 and op.get("/api/replica").status_code == 200)
+        ver("admin e master leem logs e alertas", all(x_.get(u_).status_code == 200 for x_ in (adm, ms) for u_ in ("/api/logs", "/api/alertas", "/api/alertas/preferencias")))
+        r = adm.put("/api/alertas/preferencias", json={"resumo": {"ligado": True, "email": "equipe@camp.arq.br"}})
+        g = adm.get("/api/alertas").json().get("resumo") or {}
+        ver("interruptor do resumo (admin): grava alertas.resumo_diario=1 e quem recebe pela rota existente", r.status_code == 200 and cfgv("alertas.resumo_diario") == "1"
+            and cfgv("alertas.resumo_email") == "equipe@camp.arq.br" and g.get("ligado") is True and g.get("para") == "equipe@camp.arq.br", f"{r.status_code} {r.text[:200]} {g}")
+        ev = c.execute("SELECT ator FROM evento WHERE entidade='config' AND codigo='alertas.resumo_diario' ORDER BY id DESC LIMIT 1").fetchone()
+        ver("a mudança fica no Histórico com quem fez", ev is not None and ev[0] == "adm24@camp.arq.br", str(ev and tuple(ev)))
+        r = adm.put("/api/alertas/preferencias", json={"resumo": {"ligado": False}})
+        ver("desligar pelo interruptor grava 0 e não mexe em quem recebe", r.status_code == 200 and cfgv("alertas.resumo_diario") == "0" and cfgv("alertas.resumo_email") == "equipe@camp.arq.br")
+        r = adm.put("/api/alertas/preferencias", json={"resumo": {"email": "isso não é email"}})
+        r2 = adm.put("/api/alertas/preferencias", json={"resumo": {"email": "a@camp.arq.br, b@camp.arq.br"}})
+        ver("e-mail inválido ou dois e-mails no resumo: 400 com frase e nada gravado", r.status_code == 400 and "não parece um e-mail" in r.text and r2.status_code == 400 and cfgv("alertas.resumo_email") == "equipe@camp.arq.br", f"{r.text[:120]} {r2.text[:120]}")
+        _t, corpo = alertas.texto_resumo(alertas.numeros_do_dia(c, "2026-10-27"), "2026-10-27", "https://painel.camp.arq.br")
+        ver("o e-mail do resumo diz onde desligar sem pedir para editar chave", "alertas.resumo_diario" not in corpo and "Máquinas → Alertas" in corpo, corpo[-160:])
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='alertas.resumo_email'"); c.execute("UPDATE configuracao SET valor='' WHERE chave='avisos.email'"); c.commit()
+        rr = alertas.resumo_diario(c, forcar=True, enviar=lambda *a, **k: None)
+        ver("sem destinatário: o motivo aponta o interruptor, não a chave", "alertas.resumo_email" not in (rr.get("erro") or "") and "Máquinas → Alertas" in (rr.get("erro") or ""), str(rr.get("erro")))
+        for l in res: print(l)
     elif modo == "agora_nao_lote":
         # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
         # SÓ de quem clicou, por 7 dias. E "o maior lote da fila" aparecia em todos os lotes com o mesmo tamanho.
@@ -12423,6 +12467,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Home: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("166) UX-24: Máquinas — logs, alertas e configurações só para admin/master no servidor; resumo do dia por interruptor")
+rc, out = rodar("ux24_maquinas", f"{tmp}/ux24_maquinas.db")
+if rc != 0: ok(False, f"teste ux24_maquinas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-24: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
