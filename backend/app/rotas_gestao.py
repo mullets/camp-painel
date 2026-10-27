@@ -772,7 +772,8 @@ def backup_agora(tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
         r = _backup_agora(u)
         extra = r.get("extra")
         b = r["tamanho_bytes"]
-        tam = f"{b / 1048576:.1f} MB" if b >= 1048576 else f"{max(1, round(b / 1024))} KB"
+        from .formato import tamanho_br
+        tam = tamanho_br(b / 1048576, "MB") if b >= 1048576 else f"{max(1, round(b / 1024))} KB"   # UX-33: "1.548,1 MB"
         return {**r, "mensagem": f"Backup feito: {tam}" + (" · a cópia extra FALHOU" if extra and not extra.get("ok") else "") + "."}
     return tarefas.iniciar("backup", "backup", u, rodar)
 

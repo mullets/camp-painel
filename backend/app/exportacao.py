@@ -386,7 +386,8 @@ def _gravar_com_hash(destino: Path, conteudo: bytes) -> tuple[str, int]:
 def _tamanho(n: int) -> str:
     for unidade, fator in (("GB", 1e9), ("MB", 1e6), ("KB", 1e3)):
         if n >= fator:
-            return f"{n / fator:.1f} {unidade}"
+            from .formato import tamanho_br
+            return tamanho_br(n / fator, unidade)        # UX-33: "1,5 GB", nunca "1.5 GB"
     return f"{n} bytes"
 
 
@@ -429,7 +430,8 @@ def gerar_bag(codigo: str, ator: str, p=None) -> dict:
     except OSError as e:
         raise HTTPException(500, f"Não consegui usar a pasta de exportação {destino_base}: {e.strerror or e}")
     if total_bytes + len(ead) + len(csv_b) + (1 << 20) > livre:
-        raise HTTPException(507, f"Falta espaço em {destino_base}: o pacote precisa de {total_bytes / 1e9:.1f} GB e há {livre / 1e9:.1f} GB livres.")
+        from .formato import num_br
+        raise HTTPException(507, f"Falta espaço em {destino_base}: o pacote precisa de {num_br(total_bytes / 1e9)} GB e há {num_br(livre / 1e9)} GB livres.")
 
     carimbo = datetime.now().strftime("%Y%m%d-%H%M%S")
     nome = f"{codigo}-{carimbo}"

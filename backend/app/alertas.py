@@ -5,6 +5,7 @@ Cartão "Notificações": cada assunto liga/desliga em 'avisos.<assunto>.ligado'
 'avisos.<assunto>.email' (vazia = avisos.email). Assuntos novos: lote parado na Fila (fila_travada, um aviso para a Fila),
 problema que impede publicar (bloqueio, um aviso por problema) e pedido registrado à mão no painel (pedido_painel)."""
 from __future__ import annotations
+from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 
 from datetime import datetime, timedelta
 
@@ -129,7 +130,7 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
         if dias is not None and dias < d_av:              # UX-02: o alerta também vale por dias até encher (< 30 atenção, < 10 crítico)
             enche += f" Menos de {d_av:g} dias para encher já é atenção; menos de {d_cr:g}, crítico."
         n_ = {"ok": "ok", "aviso": "atencao", "critico": "critico"}[nivel]
-        base = f"O QNAP está com {('%g' % pct).replace('.', ',')}% livre ({round(snap['livre_gb'] or 0)} GB).{enche}"
+        base = f"O QNAP está com {('%g' % pct).replace('.', ',')}% livre ({num_br(round(snap['livre_gb'] or 0), 0)} GB).{enche}"
         out["qnap"] = {"critico": nivel == "critico", "nivel": n_, "livre_pct": pct, "dias_ate_encher": dias, "medido_em": snap.get("coletado_em"),
                        "texto": base + (" Libere espaço ou amplie o armazenamento antes que a digitalização pare." if n_ != "ok" else "")}
     hb = con.execute("""SELECT estacao_id, CAST((julianday('now') - julianday(atualizado_em)) * 86400 AS INTEGER) AS idade

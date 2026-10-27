@@ -8,6 +8,7 @@ Regras (nenhuma é nova; só juntadas num lugar para os números baterem entre a
 Proibido recalcular estes números no navegador.
 """
 from __future__ import annotations
+from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 
 import json
 import re
@@ -492,7 +493,7 @@ def alertas_criticos(con) -> list[dict]:
         _, pct = qnap_coletor.nivel_espaco(con, snap.get("total_gb"), snap.get("livre_gb"))
         _, dias = qnap_coletor._tendencia(con, snap.get("livre_gb"))
         ritmo_txt = f" No ritmo desta semana, enche em cerca de {dias} {'dia' if dias == 1 else 'dias'}." if dias else ""
-        out.append({"id": "qnap", "titulo": f"QNAP quase cheio: {round(snap.get('livre_gb') or 0)} GB livres ({str(pct).replace('.', ',')}%).",
+        out.append({"id": "qnap", "titulo": f"QNAP quase cheio: {num_br(round(snap.get('livre_gb') or 0), 0)} GB livres ({str(pct).replace('.', ',')}%).",
                     "texto": (ritmo_txt + " Libere espaço antes de digitalizar mais.").strip(), "acao": {"rotulo": "Ver o que ocupa espaço", "rota": "estacoes"}})
     cv = av.get("campvision") or {}
     if cv.get("parado"):

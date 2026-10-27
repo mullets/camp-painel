@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
+MODOS_RAPIDOS = {"ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -438,6 +438,19 @@ def filho(modo):
         it = itens_aceite({"exif_conferido": {"ok": False, "contagem": 2, "faltam": [{"arquivo": "a.tif", "motivo": "sem permissão"}, "b.tif"]}, "publicavel": False})
         ver("aceite: exif_conferido com a lista dos arquivos traz arquivo e motivo para a tela", it and it[0].get("arquivos") == [{"arquivo": "a.tif", "motivo": "sem permissão"}, {"arquivo": "b.tif", "motivo": None}], it)
         ver("aceite: sem lista, o item fica como antes (sem 'arquivos')", "arquivos" not in itens_aceite({"exif_conferido": {"ok": False, "contagem": 2}})[0])
+        for l in res: print(l)
+    elif modo == "ux33_numeros":
+        # UX-33: números para pessoas em pt-BR também nas mensagens do servidor (backup, exportação)
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        from app.formato import num_br, tamanho_br
+        from app.exportacao import _tamanho
+        ver("num_br: vírgula decimal e ponto de milhar", [num_br(1548.1), num_br(30.73), num_br(12), num_br(4.269, 2), num_br(1234567.891, 2)] == ["1.548,1", "30,7", "12", "4,27", "1.234.567,89"],
+            [num_br(1548.1), num_br(30.73), num_br(12), num_br(4.269, 2), num_br(1234567.891, 2)])
+        ver("tamanho do pacote de exportação em pt-BR", [_tamanho(1_548_100_000), _tamanho(30_730_000), _tamanho(512)] == ["1,5 GB", "30,7 MB", "512 bytes"], [_tamanho(1_548_100_000), _tamanho(30_730_000)])
+        ver("tamanho_br junta a unidade", tamanho_br(1548.1, "MB") == "1.548,1 MB")
+        fonte = (RAIZ / "backend" / "app" / "rotas_gestao.py").read_text(encoding="utf-8")
+        ver("mensagem 'Backup feito' usa tamanho_br (não f'{b / 1048576:.1f} MB')", "tamanho_br(b / 1048576" in fonte and ":.1f} MB" not in fonte)
         for l in res: print(l)
     elif modo == "cp42":
         init_db(); aplicar_migracoes()
@@ -11773,6 +11786,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-08: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117c) UX-33: números em pt-BR nas mensagens do servidor (backup, exportação)")
+rc, out = rodar("ux33_numeros", f"{tmp}/ux33.db")
+if rc != 0: ok(False, f"teste ux33_numeros não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-33: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("118) Migrações em transação por arquivo, IP real atrás do túnel e serviço com proxy-headers (CAMP-042)")
 rc, out = rodar("cp42", f"{tmp}/cp42.db")

@@ -3,6 +3,7 @@
 Usa as mesmas regras do resto do painel (publicacao.condicoes_projeto, direitos_permitem_publicar, qnap_coletor.nivel_espaco):
 nenhuma regra nova é inventada aqui, para os números nunca divergirem das telas.
 """
+from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -117,7 +118,7 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
         if nivel in ("critico", "aviso") and snap:
             acoes.append({"id": "qnap_espaco", "prioridade": 100 if nivel == "critico" else 60, "impacto": 0, "rota": "estacoes",
                           "titulo": "QNAP quase cheio" if nivel == "critico" else "QNAP com pouco espaço",
-                          "detalhe": f"{round(snap['livre_gb'])} GB livres ({str(livre_pct).replace('.', ',')}%)"})
+                          "detalhe": f"{num_br(round(snap['livre_gb']), 0)} GB livres ({str(livre_pct).replace('.', ',')}%)"})
         for pb in con.execute("""SELECT p.codigo, p.titulo FROM projeto p WHERE p.status_site='no_ar' AND EXISTS (SELECT 1 FROM erro e WHERE e.gravidade='bloqueia'
                                  AND e.situacao IN ('aberto','em_correcao') AND (e.codigo=p.codigo OR e.codigo LIKE p.codigo||'-%')) ORDER BY p.codigo LIMIT 5"""):
             acoes.append({"id": "pub_bloq_" + pb["codigo"], "prioridade": 98, "impacto": 1, "rota": "projeto/" + pb["codigo"],
