@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10242,6 +10242,193 @@ def filho(modo):
         hb("cv-3", None, 1); c.commit()
         ver("conservador: uma máquina diz que lê sem dizer o projeto → ninguém é marcado interrompido", not any(l.get("leitura_interrompida") for l in op.get("/api/filas").json()))
         for l in res: print(l)
+    elif modo == "publicacao_paciente":
+        # 27/10 (produção, F009-P0131: site em ~3,4 s, "Folha … NÃO subiu: The read operation timed out"): publicação PACIENTE. O envio usa o
+        # criar_folha_no_site DE VERDADE contra um site FALSO no nível do cliente (nenhuma chamada sai do processo) que esgota o tempo, devolve 503
+        # e 400, e num caso CRIA o item e só depois esgota o tempo. Prova: tudo sobe sem duplicar; 400 não repete; o paralelo cai e o
+        # acompanhamento avisa; o resumo conta as novas tentativas; a folha que falha 3× fica pendente e sai no próximo Publicar.
+        init_db(); _aplicar_migracoes_real()
+        import threading as _th, time as _t, httpx as _hx
+        from datetime import datetime as _dt
+        from app import auth, publicador as _pub, wp as _wpm, publicacao_guiada as _pg, rotas_publicar_tudo as _rpt
+        import app.rotas_projetos as _rp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # 0) o que é passageiro, o tempo de espera do cliente e a estimativa
+        ep = getattr(_wpm, "erro_passageiro", lambda e: False)
+        ver("passageiro: tempo esgotado (exceção e texto), conexão, 429/502/503/504; NÃO: 400, 403, 404, validação",
+            ep(_hx.ReadTimeout("The read operation timed out")) and ep("The read operation timed out") and ep(_hx.ConnectError("x"))
+            and ep("Tainacan recusou criar item: 503 Service Unavailable") and ep("Tainacan recusou criar item: 429 x") and ep("WordPress recusou listar anexos (502): x")
+            and not ep("Tainacan recusou criar item: 400 campo inválido") and not ep("Tainacan recusou criar item: 403 proibido") and not ep("folha não existe")
+            and not ep("Tainacan recusou criar item: 404 rest_no_route"))
+        tp_ = getattr(_wpm, "TIMEOUT_PADRAO", None)
+        ver("o cliente do site espera até 90 s de leitura (era 60 s) e 15 s de conexão", tp_ is not None and tp_.read == 90 and tp_.connect == 15, str(tp_))
+        spf_ = getattr(_rpt, "_s_por_folha", None)
+        ini = _dt(2026, 10, 27, 16, 0, 0); fim = _dt(2026, 10, 27, 16, 4, 3)
+        tt = {"feitas": 4, "total": 37, "log": [{"em": "2026-10-27 16:00:05", "texto": "Dossiê criado no site"}] + [{"em": e, "texto": f"Folha D{n} enviada"} for n, e in
+              enumerate(("2026-10-27 16:03:51", "2026-10-27 16:03:55", "2026-10-27 16:03:59", "2026-10-27 16:04:03"))]}
+        spf = spf_(tt, ini, fim) if spf_ else None
+        ver("estimativa pelo ritmo das folhas recentes: a 1ª lenta (3 min 51 s) não faz a tela dizer ~60 s por folha (4 s)", spf == 4, str(spf))
+        tt2 = {"feitas": 1, "total": 37, "log": [{"em": "2026-10-27 16:03:51", "texto": "Folha D1 enviada"}]}
+        ver("com uma folha só ainda não há ritmo: média desde o início", spf_ and spf_(tt2, ini, _dt(2026, 10, 27, 16, 3, 51)) == 231)
+        log12 = [{"em": f"2026-10-27 16:{m:02d}:00", "texto": f"Folha D{m} enviada"} for m in range(0, 12)] + [{"em": "2026-10-27 16:11:30", "texto": "Folha D99 NÃO subiu: x"}]
+        ver("com mais de 10 enviadas, só as 10 últimas contam", spf_ and spf_({"feitas": 12, "log": log12}, ini, _dt(2026, 10, 27, 16, 11, 0)) == 60)
+        # mudar status: 120 s e, no tempo esgotado, relê o item antes de dizer que falhou (o site limpa o cache dentro da requisição)
+        vistos_st = []
+        def tr_status(fica):
+            def h(req):
+                vistos_st.append((req.method, req.url.path, (req.extensions.get("timeout") or {}).get("read")))
+                if req.method == "PATCH": raise _hx.ReadTimeout("The read operation timed out", request=req)
+                return _hx.Response(200, json={"id": 5, "status": fica})
+            w = _wpm.WP.__new__(_wpm.WP); w.h = _hx.Client(base_url="http://site-falso.invalid", transport=_hx.MockTransport(h)); return w
+        try:
+            j_ok = tr_status("publish").atualizar_status_item(8013, 5, "publish"); e_ok = None
+        except Exception as e:  # noqa: BLE001
+            j_ok, e_ok = None, e
+        ver("status: PATCH com 120 s de leitura; tempo esgotado + item relido já 'publish' = deu certo",
+            (j_ok or {}).get("status") == "publish" and ("PATCH", "/wp-json/tainacan/v2/items/5", 120.0) in vistos_st and any(m == "GET" for m, _p, _r in vistos_st), f"{j_ok} {e_ok} {vistos_st}")
+        try:
+            tr_status("draft").atualizar_status_item(8013, 5, "publish"); e_d = None
+        except Exception as e:  # noqa: BLE001
+            e_d = e
+        ver("status: tempo esgotado + item relido ainda 'draft' = falha, dizendo que releu (e conta como passageiro)", e_d is not None and "relido" in str(e_d) and ep(e_d), str(e_d))
+        # a saúde do site mede a PÁGINA PÚBLICA; a API REST fica à parte (não muda o estado)
+        from app import rotas_gestao as _rg
+        urls_med = []
+        class _Resp:
+            def __init__(self, sc): self.status_code = sc
+        _get_real = _hx.get
+        def _get_falso(u, *a, **k):
+            urls_med.append(u); return _Resp(200)
+        _hx.get = _get_falso
+        try:
+            med = _rg._medir_site("http://site-falso.invalid")
+        finally:
+            _hx.get = _get_real
+        ver("saúde do site: o estado vem de GET / (página pública); /wp-json/ é medida à parte como 'api'",
+            urls_med and urls_med[0] == "http://site-falso.invalid/" and "http://site-falso.invalid/wp-json/" in urls_med and med.get("medido") == "pagina_publica" and "api" in med and med["estado"] == "online", f"{urls_med} {med}")
+        # espelho recente dispensa a busca pelo código no site (menos um pedido por folha), mas nunca depois de tentativa que falhou
+        c = connect()
+        eb = getattr(_pub, "espelho_basta", lambda *a: False)
+        e0 = eb(c, "F077-P0001-1975-S01-D00099")
+        c.execute("INSERT INTO sincronizacao (iniciada_em, terminada_em, ok) VALUES (datetime('now','-30 minutes'), datetime('now','-20 minutes'), 1)"); c.commit()
+        e1 = eb(c, "F077-P0001-1975-S01-D00099")
+        _pub._pendencia(c, "item", "F077-P0001-1975-S01-D00099", "pendente_criar_no_site", "The read operation timed out"); c.commit()
+        e2 = eb(c, "F077-P0001-1975-S01-D00099")
+        c.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-3 hours')"); c.execute("DELETE FROM divergencia_site"); c.commit()
+        e3 = eb(c, "F077-P0001-1975-S01-D00099")
+        ver("espelho: sem sincronização recente pergunta ao site; com sincronização completa há 30 min, não; com tentativa anterior falha ou sincronização de 3 h atrás, pergunta",
+            (e0, e1, e2, e3) == (False, True, False, False), str((e0, e1, e2, e3)))
+        c.execute("DELETE FROM sincronizacao"); c.commit(); c.close()
+        # 1) o projeto e o site falso
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F077','Fundo Paciente','PAC',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F077','autorizado','Fam','Termo')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.envio_paralelo','4','x',0)")
+        P = "F077-P0001"
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F077',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id) VALUES (?,'F077',1,'Casa Paciente',1975,1,6100)", (P,))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (6100,8007,'draft','Casa Paciente',?)", (P,))
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES ('Lote',?,'/x','revisao',datetime('now'),'adm@camp.arq.br')", (P,)).lastrowid
+        D = lambda k: f"{P}-1975-S01-D{k:05d}"
+        for k in range(1, 9):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,lote_id) VALUES (?,?,'S01',?,?,'campvision','conferida','nao_publicado',?)",
+                      (D(k), P, k, f"Planta {k}", lid))
+        c.commit()
+        trava = _th.Lock()
+        site = {"itens": {}, "n": 8800, "chamadas": {}, "no_ar": 0, "max_depois": 0, "reduzido": False, "status": []}
+        # comportamento por folha (pela 1ª parte do título): efeito de cada tentativa de criar o item; depois da lista, cria normalmente
+        efeitos = {"Planta 1": ["timeout"], "Planta 2": ["cria_e_timeout"], "Planta 3": ["503", "503"], "Planta 4": ["400"] * 9, "Planta 5": ["timeout"] * 3}
+        def nome_meta(mid): return {8030: "Código do documento"}.get(int(mid), f"m{mid}")
+        def tainacan(it):
+            return {"id": it["id"], "title": it["title"], "status": it["status"], "slug": "", "metadata": {f"s{m}": {"name": nome_meta(m), "value": v} for m, v in it["meta"].items()}}
+        class SiteFalso:
+            def __init__(self, *a, **k): pass
+            def criar_item(self, cid, titulo, status="draft", descricao=""):
+                chave = titulo.split(" — ")[0]
+                with trava:
+                    n = site["chamadas"][chave] = site["chamadas"].get(chave, 0) + 1
+                    site["no_ar"] += 1
+                    if site["reduzido"]: site["max_depois"] = max(site["max_depois"], site["no_ar"])
+                    ef = efeitos.get(chave) or []
+                    ef = ef[n - 1] if n <= len(ef) else "ok"
+                try:
+                    _t.sleep(0.05)
+                    if ef == "timeout": raise _hx.ReadTimeout("The read operation timed out")
+                    if ef == "503": raise RuntimeError("Tainacan recusou criar item: 503 Service Unavailable")
+                    if ef == "400": raise RuntimeError("Tainacan recusou criar item: 400 campo inválido")
+                    with trava:
+                        site["n"] += 1; it = {"id": site["n"], "title": titulo, "status": status, "meta": {}, "colecao": cid}
+                        site["itens"][it["id"]] = it
+                    if ef == "cria_e_timeout": raise _hx.ReadTimeout("The read operation timed out")   # o WordPress criou; a resposta não chegou
+                    return {"id": it["id"], "slug": "s", "url": "u"}
+                finally:
+                    with trava: site["no_ar"] -= 1
+            def buscar_por_codigo(self, cid, mid, codigo):
+                with trava: return [tainacan(i) for i in site["itens"].values() if i["meta"].get(int(mid)) == codigo]
+            def buscar_por_titulo(self, cid, titulo):
+                with trava: return [tainacan(i) for i in site["itens"].values() if i["title"] == titulo]
+            def definir_metadado(self, wid, mid, valor):
+                with trava: site["itens"][int(wid)]["meta"][int(mid)] = valor
+                return {}
+            def gravar_metadados_lote(self, *a, **k): return None
+            def atualizar_status_item(self, cid, wid, st):
+                with trava:
+                    site["status"].append((wid, st))
+                    if int(wid) in site["itens"]: site["itens"][int(wid)]["status"] = st
+                return {"status": st}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        _pub.WP = SiteFalso; _wpm.WP = SiteFalso; _rp.WP = SiteFalso
+        _pg.ESPERAS_S = (0.05, 0.1)
+        auth.criar_usuario("A", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        def esperar(tid, ate=30):
+            t0 = _t.monotonic()
+            while _t.monotonic() - t0 < ate:
+                t = adm.get(f"/api/tarefas/{tid}").json()
+                if t["estado"] != "rodando": return t
+                _t.sleep(0.1)
+            return adm.get(f"/api/tarefas/{tid}").json()
+        log_orig = _rpt._log
+        def _log_espiao(tid, texto):                 # sabe quando o paralelo caiu, para medir os pedidos simultâneos depois disso
+            if texto.startswith("O site está lento"):
+                with trava: site["reduzido"] = True
+            log_orig(tid, texto)
+        _rpt._log = _log_espiao
+        r = adm.post(f"/api/projetos/{P}/publicar-tudo?tarefa=1"); t1 = esperar(r.json().get("tarefa_id"))
+        txt = " | ".join(x["texto"] for x in t1.get("log") or [])
+        r1 = t1.get("resultado") or {}
+        por_codigo = lambda: {cod: [i["id"] for i in site["itens"].values() if i["meta"].get(8030) == cod] for cod in map(D, range(1, 9))}
+        pc = por_codigo()
+        ligado = lambda k: c.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (D(k),)).fetchone()[0]
+        ver("timeout e 503 passageiros: as folhas 1, 2 e 3 subiram na nova tentativa (antes: 'NÃO subiu' na 1ª)", all(ligado(k) for k in (1, 2, 3)) and all(len(pc[D(k)]) == 1 for k in (1, 2, 3)), str(pc) + " " + txt[:300])
+        ver("o item que o site CRIOU antes do tempo esgotar é reaproveitado: 1 só item com o título da folha 2, criado 1 vez, com o código gravado",
+            site["chamadas"].get("Planta 2") == 1 and sum(1 for i in site["itens"].values() if i["title"].startswith("Planta 2 ")) == 1 and pc[D(2)] == [ligado(2)], str(site["chamadas"]) + " " + str(pc[D(2)]))
+        ver("folha 3 (503, 503, ok): 3 tentativas, nenhuma duplicada", site["chamadas"].get("Planta 3") == 3 and len(pc[D(3)]) == 1, str(site["chamadas"]))
+        ver("erro 400 NÃO repete: o site foi chamado 1 vez para a folha 4 e ela fica pendente", site["chamadas"].get("Planta 4") == 1 and not ligado(4), str(site["chamadas"]))
+        ver("a folha que esgota o tempo 3× fica pendente (3 tentativas, nenhum item no site)", site["chamadas"].get("Planta 5") == 3 and not ligado(5) and not pc[D(5)], str(site["chamadas"]))
+        ver("a tarefa termina 'falhou' com as 2 folhas e nada é tornado público", t1["estado"] == "falhou" and {f["codigo"] for f in t1["falhas"]} == {D(4), D(5)} and not site["status"], str(t1.get("falhas")))
+        ver("o resumo conta: 4 folhas precisaram de nova tentativa (1, 2, 3, 5) e 2 falharam de vez", r1.get("novas_tentativas") == 4 and r1.get("falharam_de_vez") == 2, str({k_: r1.get(k_) for k_ in ("novas_tentativas", "falharam_de_vez", "mensagem")}))
+        ver("a mensagem diz que o próximo Publicar envia só as que faltam, sem duplicar", "sem duplicar" in (r1.get("mensagem") or "") and "4 folha(s) precisaram de nova tentativa" in (r1.get("mensagem") or ""), r1.get("mensagem"))
+        ver("o paralelo cai depois dos erros passageiros (4 → 2 → 1) e o acompanhamento avisa", "O site está lento: enviando 2 de cada vez" in txt and "O site está lento: enviando 1 de cada vez" in txt, txt[:400])
+        ver("depois de reduzir, o site nunca recebeu mais que 2 pedidos de criar ao mesmo tempo", site["reduzido"] and site["max_depois"] <= 2, str(site["max_depois"]))
+        ver("o acompanhamento mostra a nova tentativa (tentativa 2 de 3) e a falha de vez (depois de 3 tentativas)",
+            "o site demorou" in txt and "tentativa 2 de 3" in txt and f"Folha {D(5)} NÃO subiu (depois de 3 tentativas)" in txt and f"Folha {D(4)} NÃO subiu:" in txt, txt[:500])
+        # 2) próximo Publicar: o site voltou ao normal; só as 2 pendentes sobem e nada duplica
+        efeitos.clear()
+        antes = dict(site["chamadas"]); n_itens = len(site["itens"])
+        ev = []
+        r2 = _pg.executar(P, {"email": "adm@camp.arq.br", "papel": "admin"}, progresso=ev.append)
+        pc2 = por_codigo()
+        ver("o próximo Publicar envia só as 2 que faltavam e publica", r2.get("ok") is True and r2.get("folhas_criadas") == 2 and len(site["itens"]) == n_itens + 2
+            and {k_ for k_ in site["chamadas"] if site["chamadas"][k_] != antes.get(k_)} == {"Planta 4", "Planta 5"}, str({k_: r2.get(k_) for k_ in ("ok", "folhas_criadas", "mensagem")}))
+        ver("no fim: 8 folhas, 8 itens no site, um por código (nenhuma duplicada)", all(len(v) == 1 for v in pc2.values()) and len([i for i in site["itens"].values() if i["colecao"] == 8013]) == 8, str(pc2))
+        ver("sem erro, o resumo não fala de nova tentativa e o estado do envio é descartado", r2.get("novas_tentativas") == 0 and not any(e.get("evento") == "paralelo" for e in ev) and P not in getattr(_pg, "_ritmos", {}), str(r2.get("mensagem")))
+        c.close()
+        for l in res: print(l)
     elif modo == "ux17_clique_duplo":
         # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
         # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
@@ -13946,6 +14133,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-37: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Publicação paciente com o site lento: tenta de novo sem duplicar, 400 não repete, reduz o paralelo, estimativa pelo ritmo recente")
+rc, out = rodar("publicacao_paciente", f"{tmp}/publicacao_paciente.db")
+if rc != 0: ok(False, f"teste publicacao_paciente não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Publicação paciente: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")

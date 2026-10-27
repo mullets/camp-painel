@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from .db import connect
 from .publicacao import ELEGIVEL_LOCAL, condicoes_projeto
 
-from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: E402
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait  # noqa: E402
 
 
 def envio_paralelo() -> int:
@@ -85,6 +85,24 @@ ANO_FOLHA_DIFERENTE = 5        # anos de diferença entre a folha e o projeto a 
 _trava = threading.Lock()
 _em_andamento: set[str] = set()
 JANELA_REPETIDO_S = 60         # UX-17: Publicar de novo logo depois de publicar, sem nada novo, não publica 2×
+
+
+# 27/10 (produção, F009-P0131: o site respondendo em ~3,4 s e uma folha "NÃO subiu: The read operation timed out"): publicação PACIENTE.
+TENTATIVAS_POR_FOLHA = 3       # a primeira + 2 novas, só quando o erro é passageiro (tempo esgotado, conexão, 429/502/503/504)
+ESPERAS_S = (10.0, 30.0)       # espera antes da 2ª e da 3ª tentativa (crescente: dá tempo ao site de respirar)
+SUBIR_APOS = 8                 # folhas seguidas sem erro para voltar a mandar uma a mais ao mesmo tempo (até site.envio_paralelo)
+RITMO_VALE_S = 15 * 60         # o estado da publicação (tentativas, paralelo) vale entre as fatias de uma mesma publicação
+_ritmos: dict[str, dict] = {}  # projeto -> {limite, tentativas, pronta_em, novas, estaveis, seq, reduziu_seq, em}
+
+
+def _ritmo(codigo: str, n: int) -> dict:
+    """O estado do envio deste projeto, mantido entre as fatias de tempo (a tela/tarefa chama executar() de novo enquanto for parcial)."""
+    st = _ritmos.get(codigo)
+    if not st or time.monotonic() - st["em"] > RITMO_VALE_S:
+        st = _ritmos[codigo] = {"limite": n, "tentativas": {}, "pronta_em": {}, "novas": set(), "estaveis": 0, "seq": 0, "reduziu_seq": -1}
+    st["limite"] = max(1, min(st["limite"], n))
+    st["em"] = time.monotonic()
+    return st
 
 
 def publicacao_recente(con, codigo: str, janela_s: int = JANELA_REPETIDO_S) -> dict | None:
@@ -203,6 +221,7 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         if codigo in _em_andamento:
             raise HTTPException(409, "Este projeto já está sendo publicado agora. Aguarde terminar.")
         _em_andamento.add(codigo)
+    manter_ritmo = False                       # 27/10: só a resposta parcial guarda tentativas/ritmo para a próxima fatia
     try:
         con = connect()
         try:
@@ -240,37 +259,82 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         t0, criadas, falhas = time.monotonic(), 0, []                                      # 2) folhas, em fatias de tempo (sempre avança ao menos uma)
         # 21/10: várias folhas ao mesmo tempo (site.envio_paralelo, padrão 3). Cada folha é uma chamada inteira e independente (item próprio
         # no site, conexão própria no banco); os avisos de andamento saem daqui, na ordem em que as folhas terminam.
+        # 27/10 (publicação paciente): erro passageiro (site lento) não derruba a folha na hora: ela volta para a fila e tenta de novo depois
+        # de 10 s e 30 s (criar_folha_no_site confere se a tentativa que esgotou o tempo já criou o item, para não duplicar). A cada leva de
+        # erros passageiros o envio passa a mandar METADE das folhas ao mesmo tempo (mínimo 1); depois de SUBIR_APOS folhas seguidas sem erro,
+        # sobe de novo uma a uma até o configurado. Tentativas e ritmo valem entre as fatias de tempo da mesma publicação.
+        from .wp import erro_passageiro
         n = envio_paralelo()
+        st = _ritmo(codigo, n)
+        aguardando, em_voo, processadas = list(pend), {}, 0
         with ThreadPoolExecutor(max_workers=n) as ex:
-            for i0 in range(0, len(pend), n):
-                if criadas + len(falhas) > 0 and time.monotonic() - t0 >= ORCAMENTO_S:
-                    break
-                fatia = pend[i0:i0 + n]
-                for c in fatia:
-                    _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
-                futuros = {ex.submit(publicador.criar_folha_no_site, c, u["email"]): c for c in fatia}
-                for fu in as_completed(futuros):
-                    c = futuros[fu]
+            while aguardando or em_voo:
+                agora = time.monotonic()
+                acabou_tempo = processadas > 0 and agora - t0 >= ORCAMENTO_S
+                if not acabou_tempo:
+                    while len(em_voo) < st["limite"]:
+                        prontas = [c for c in aguardando if st["pronta_em"].get(c, 0) <= agora]
+                        if not prontas:
+                            break
+                        c = prontas[0]
+                        aguardando.remove(c)
+                        _p(evento="folha", codigo=c, feitas=criadas, total=len(pend))
+                        st["seq"] += 1
+                        em_voo[ex.submit(publicador.criar_folha_no_site, c, u["email"])] = (c, st["seq"])
+                if not em_voo:
+                    if acabou_tempo or not aguardando:
+                        break
+                    proxima = min(st["pronta_em"].get(c, 0) for c in aguardando)       # só há folhas esperando a nova tentativa
+                    time.sleep(max(0.01, min(proxima - time.monotonic(), 1.0)))
+                    continue
+                prontos, _ = wait(list(em_voo), timeout=0.5, return_when=FIRST_COMPLETED)
+                for fu in prontos:
+                    c, seq = em_voo.pop(fu)
                     try:
                         r = fu.result()
                     except Exception as e:  # noqa: BLE001
-                        r = {"erro": str(e)[:300]}
-                    if r.get("erro"):
-                        falhas.append({"codigo": c, "erro": r["erro"]})
-                        _p(evento="folha_falhou", codigo=c, erro=r["erro"])
-                    else:
+                        r = {"erro": str(e)[:300], "passageiro": erro_passageiro(e)}
+                    processadas += 1
+                    if not r.get("erro"):
                         criadas += 1
+                        st["estaveis"] += 1
                         _p(evento="folha_ok", codigo=c, feitas=criadas, total=len(pend))
+                        if st["estaveis"] >= SUBIR_APOS and st["limite"] < n:
+                            st["limite"] += 1; st["estaveis"] = 0
+                            _p(evento="paralelo", n=st["limite"], subiu=True)
+                        continue
+                    passageiro = bool(r.get("passageiro")) or erro_passageiro(r["erro"])
+                    feitas_c = st["tentativas"][c] = st["tentativas"].get(c, 0) + 1
+                    if passageiro:
+                        st["estaveis"] = 0
+                        if seq > st["reduziu_seq"] and st["limite"] > 1:              # uma redução por leva (as que já tinham saído não contam de novo)
+                            st["limite"] = max(1, st["limite"] // 2); st["reduziu_seq"] = st["seq"]
+                            _p(evento="paralelo", n=st["limite"], subiu=False)
+                    if passageiro and feitas_c < TENTATIVAS_POR_FOLHA:
+                        espera = ESPERAS_S[min(feitas_c, len(ESPERAS_S)) - 1]
+                        st["pronta_em"][c] = time.monotonic() + espera
+                        st["novas"].add(c)
+                        aguardando.append(c)
+                        _p(evento="folha_nova_tentativa", codigo=c, erro=r["erro"], tentativa=feitas_c + 1, de=TENTATIVAS_POR_FOLHA, espera_s=espera)
+                        continue
+                    falhas.append({"codigo": c, "erro": r["erro"], "tentativas": feitas_c, "passageiro": passageiro})
+                    _p(evento="folha_falhou", codigo=c, erro=r["erro"], tentativas=feitas_c)
+        novas = len(st["novas"])
         restam = len(pend) - criadas - len(falhas)
         if falhas:
             primeira = falhas[0]
             detalhe = f" {primeira['codigo']}: {str(primeira['erro'])[:150]}."
+            de_vez = sum(1 for f in falhas if f["passageiro"])
             return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
+                    "novas_tentativas": novas, "falharam_de_vez": len(falhas),
                     "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")
-                    + " ao site." + detalhe
-                    + " A publicação não foi concluída; verifique esta folha e tente novamente. As demais já enviadas não serão duplicadas."}
+                    + " ao site" + (f" (o site não respondeu em {TENTATIVAS_POR_FOLHA} tentativas)" if de_vez == len(falhas) else "") + "." + detalhe
+                    + " A publicação não foi concluída; " + ("tente de novo quando o site estiver mais rápido: " if de_vez == len(falhas) else "verifique esta folha e tente novamente: ")
+                    + "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas."
+                    + (f" {novas} folha(s) precisaram de nova tentativa." if novas else "")}
         if restam > 0:
-            return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam,
+            manter_ritmo = True
+            return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam, "novas_tentativas": novas,
                     "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}
 
         _p(evento="autorizar")
@@ -296,7 +360,7 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         try:
             resultado = resultado_publicacao(con, codigo) if res.get("ok") else {}
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'publicacao_guiada',?,?)",
-                        (codigo, u["email"], json.dumps({"feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados"), "ok": res.get("ok"),
+                        (codigo, u["email"], json.dumps({"feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados"), "ok": res.get("ok"), "novas_tentativas": novas,
                                                          **({"folhas_publicadas": resultado["folhas_publicadas"]} if resultado else {})}, ensure_ascii=False)))
             if res.get("ok"):          # a Fila deixa de pedir ação: as listas JÁ APROVADAS deste projeto passam a "publicadas"
                 for (lid,) in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=? AND aprovado_em IS NOT NULL AND etapa IN ('revisao','rascunho')", (codigo,)).fetchall():
@@ -318,7 +382,10 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                 arq = fundo_site.mudar_pagina_arquiteto(p["fundo_codigo"], True, u["email"])
                 if arq.get("ok"):
                     feitos.append("arquiteto")
-        out = {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado}
+        out = {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado,
+               "novas_tentativas": novas, "falharam_de_vez": 0}
+        if novas and out.get("mensagem"):                       # 27/10: o resumo conta o que precisou de paciência
+            out["mensagem"] = str(out["mensagem"]).rstrip(".") + f". {novas} folha(s) precisaram de nova tentativa (o site demorou)."
         if arq is not None:
             out["arquiteto"] = arq
             if not arq.get("ok"):
@@ -326,6 +393,8 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                                           + ". Sem ela o projeto não aparece no site: publique-a no quadro “Página do arquiteto no site”, no fundo.")
         return out
     finally:
+        if not manter_ritmo:
+            _ritmos.pop(codigo, None)
         with _trava:
             _em_andamento.discard(codigo)
 
