@@ -10042,6 +10042,11 @@ def filho(modo):
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         c = connect()
+        # Sem rede de verdade: no servidor da CAMP (atualizar.sh) os IPs padrão das estações EXISTEM na LAN e respondiam ao ping,
+        # e o teste contava "2 de 6 ligadas" (27/10). Ping e porta falsos: só o heartbeat da foto1 conta como ligada.
+        from app import rotas_gestao as _rg
+        _rg._ping = lambda ip, timeout=1.2: False
+        _rg._porta = lambda ip, porta, timeout=0.8: False
         c.execute("UPDATE configuracao SET valor='http://127.0.0.1:9' WHERE chave='wp.url'")
         import tempfile as _tf, pathlib as _pl
         raiz_q = _pl.Path(_tf.mkdtemp()); (raiz_q / "ACERVOS_CAMP").mkdir()           # QNAP "montado" (pasta com conteúdo)
