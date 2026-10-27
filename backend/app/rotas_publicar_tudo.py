@@ -190,14 +190,16 @@ def tarefas(u: dict = Depends(auth.exige("leitura"))) -> dict:
     (o aviso de conclusão fica até ela fechar; a tela guarda na preferência 'tarefas.vista' até quando — terminada_em — ela já viu)."""
     con = connect()
     try:
-        rod = [r[0] for r in con.execute("SELECT id FROM tarefa_publicacao WHERE estado='rodando' ORDER BY id DESC LIMIT 20")]
+        # a sincronização automática é do painel, não de uma pessoa: não entra no chip nem em "Suas tarefas" (aparece em Máquinas)
+        rod = [r[0] for r in con.execute("SELECT id FROM tarefa_publicacao WHERE estado='rodando' AND ator IS NOT ? ORDER BY id DESC LIMIT 20",
+                                         (ATOR_AUTOMATICO,))]
         ter = [r[0] for r in con.execute("""SELECT id FROM tarefa_publicacao WHERE estado!='rodando' AND ator=? AND terminada_em >= datetime('now','-1 day')
                                             ORDER BY id DESC LIMIT 10""", (u["email"],))]
     finally:
         con.close()
+    nomes = _nomes_dos_atores()
     def curta(t: dict) -> dict:
         return {**t, "log": (t.get("log") or [])[-8:], "ator_nome": nomes.get(t.get("ator") or "")}
-    nomes = _nomes_dos_atores()
     lidas = [t for t in map(_ler, rod) if t]                       # _ler marca como interrompida a que perdeu a thread
     return {"rodando": [curta(t) for t in lidas if t["estado"] == "rodando"],
             "terminadas": [curta(t) for t in map(_ler, ter) if t] + [curta(t) for t in lidas if t["estado"] != "rodando" and t["ator"] == u["email"]]}
