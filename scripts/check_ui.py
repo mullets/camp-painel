@@ -138,8 +138,21 @@ else:
     if len(set(todas)) != len(todas):
         errors.append("atalhos: há teclas repetidas em NAV_ATALHOS")
     for k in todas:
-        if k in ("f", "k", "b", "?"):
-            errors.append(f"atalhos: a tecla '{k}' é reservada (F filtro, ⌘K busca, ⌘B barra, ? ajuda)")
+        if k in ("f", "k", "b", "?", "["):
+            errors.append(f"atalhos: a tecla '{k}' é reservada (F filtro, ⌘K busca, [ e ⌘B recolher o menu, ? ajuda)")
+    # UX-28 (menu recolhido): a ajuda de atalhos diz cada tecla do menu com o NOME ATUAL do item ("1–5" = 1..5; "D · N · P" na ordem da descrição)
+    nomes = {v: re.sub(r"<[^>]+>", "", n).strip() for v, n in re.findall(r'<button data-v="(\w+)"[^>]*>(?:<svg.*?</svg>)?([^<]*)', menu.group(1), re.S)}
+    aj = re.search(r"const AJUDA_ATALHOS=\[(.*?)\];", text)
+    na_ajuda = {}
+    for k, d in re.findall(r"\['([^']*)','([^']*)'\]", aj.group(1) if aj else ""):
+        m = re.fullmatch(r"(\d)–(\d)", k)
+        ks = [str(i) for i in range(int(m.group(1)), int(m.group(2)) + 1)] if m else k.split(" · ")
+        ds = d.split(" · ")
+        if len(ks) == len(ds) and all(re.fullmatch(r"[A-Z0-9]", x) for x in ks):
+            na_ajuda.update({x: re.sub(r"\s*\(.*\)$", "", ds[i]).strip() for i, x in enumerate(ks)})
+    for v, k in teclas.items():
+        if v in nomes and na_ajuda.get(k) != nomes[v]:
+            errors.append(f"atalhos: a ajuda (AJUDA_ATALHOS) diz {k} = '{na_ajuda.get(k)}', mas o item do menu se chama '{nomes[v]}'")
 
 if errors:
     print("UI CHECK FALHOU")

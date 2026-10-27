@@ -45,7 +45,7 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 .app{display:grid;grid-template-columns:var(--side) 1fr;height:100%}
 .side{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:4px}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
-.brand .mark{width:30px;height:30px;border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:var(--fs-2xs);letter-spacing:.5px}
+.brand .mark{min-width:30px;padding:0 2px;height:30px;flex:none;border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:var(--fs-2xs);letter-spacing:.5px}
 .brand b{font-weight:600;display:block;line-height:1.2}
 .brand small{color:var(--ink3)}
 .nav{display:flex;flex-direction:column;gap:2px}
@@ -339,17 +339,32 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 }
 
 /* desktop: drawer, sidebar collapse, sorting, filters */
-.app.collapsed{--side:64px}
-.app.collapsed .brand div,.app.collapsed .nav button span:not(.n),.app.collapsed .nav .grp,.app.collapsed .side .foot,.app.collapsed .nav button .n{display:none}
-.app.collapsed .nav button{justify-content:center;padding:10px}
-.app.collapsed .brand{justify-content:center;padding-bottom:14px}
+/* UX-28: menu recolhido = barra estreita só com ícones (só no computador; o celular tem a barra de baixo e ignora o recolhido).
+   O nome do item é texto solto no botão: some com font-size:0 e continua sendo o nome lido pelo leitor de tela; nome, número e tecla
+   aparecem na dica (#nav-dica) ao passar o mouse ou focar. Contador vira bolinha no canto do ícone; título de grupo vira linha fina;
+   a tecla (kbd) e o rodapé de versão somem. */
+@media (min-width:721px){
+  .app.collapsed{--side:64px}
+  .app.collapsed .side{padding:18px 8px}
+  .app.collapsed .brand>div:not(.mark),.app.collapsed .side .foot,.app.collapsed .nav button kbd{display:none}
+  .app.collapsed .brand{justify-content:center;padding:4px 0 14px}
+  .app.collapsed .nav button{justify-content:center;gap:0;padding:10px 0;font-size:0;line-height:0;position:relative;white-space:nowrap}
+  .app.collapsed .nav button svg{width:18px;height:18px}
+  .app.collapsed .nav button .n:not([hidden]){position:absolute;top:6px;left:calc(50% + 5px);margin:0;width:8px;height:8px;padding:0;border-radius:50%;font-size:0;background:var(--ink3);box-shadow:0 0 0 2px var(--surface)}
+  .app.collapsed .nav button .n.r:not([hidden]){background:var(--red)}
+  .app.collapsed .nav .grp{font-size:0;line-height:0;height:0;margin:7px 8px;border-top:1px solid var(--line);overflow:hidden;color:transparent}
+  .app.collapsed .collapse svg{transform:rotate(180deg)}
+}
+.nav-dica{position:fixed;z-index:90;pointer-events:none;background:var(--ink);color:var(--surface);font-size:var(--fs-sm);line-height:1.3;padding:5px 9px;border-radius:var(--r);white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.nav-dica kbd{margin-left:8px;color:var(--ink);background:var(--surface);border-color:var(--surface)}
+.nav-dica .nd-n{margin-left:6px}
 .collapse{position:absolute;right:-12px;top:22px;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--surface);cursor:pointer;display:grid;place-items:center;color:var(--ink3);z-index:6}
 .collapse svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 .side{position:relative}
 .side .nav button .n{transition:none}
 kbd{font-family:var(--mono);font-size:var(--fs-sm);border:1px solid var(--line);border-bottom-width:2px;border-radius:var(--r-sm);padding:0 5px;color:var(--ink3);background:var(--surface)}
 .nav button kbd{margin-left:auto;opacity:0;transition:opacity .15s}
-.nav button:hover kbd{opacity:1}
+.nav button:hover kbd,.nav button:focus-visible kbd{opacity:1}
 .nav button .n+kbd{margin-left:6px}
 .filterbar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
 .filterbar input{padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-width:220px}
@@ -1126,7 +1141,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 </head>
 <body>
 <div class="app">
-<aside class="side"><button class="collapse" id="collapse" title="Recolher barra lateral (Cmd+B)"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+<aside class="side"><button type="button" class="collapse" id="collapse" title="Recolher menu ([ ou ⌘/Ctrl + B)" aria-label="Recolher menu ([ ou ⌘/Ctrl + B)" aria-expanded="true" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
   <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
   <nav class="nav" id="nav">
     <!-- UX-28: menu pela ordem do trabalho. Topo (as filas do dia, sempre à vista) · Acervo · Público · Acompanhamento · Administração · Ajuda; o resto no "Mais". Nome do menu = título da página -->
@@ -2366,7 +2381,7 @@ const AJUDA_TELAS={
   conferir:{titulo:'Conferir folhas',intro:'Modo de trabalho para conferir um projeto inteiro: a lista das folhas à esquerda, a folha aberta à direita.',passos:[['Escolha a folha','Clique na lista ou use ↑ e ↓. Os filtros mostram só as que faltam, as com problema ou as sem imagem.'],['Leia os avisos da folha','Autoria, duplicata e orientação incerta aparecem no alto, com o botão para resolver.'],['Confira e siga','Enter (Está certo) passa para a próxima; corrija o campo e use Salvar correção. R gira, K recorta e alinha.']]},
   config:{titulo:'Configurações',intro:'Infraestrutura, usuários e preferências administrativas.',passos:[['Altere somente o necessário','Configurações de integração podem afetar toda a operação.'],['Salve campo a campo','O painel avisa quando existem alterações não salvas.'],['Use usuários e papéis','Dê somente as permissões necessárias para cada função.']]}
 };
-const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–5','Precisa de você · Projetos · Fundos · Pedidos de alta resolução · Máquinas'],['D · N · P','Decisões · Material novo · Problemas'],['I · W','Arquitetos · Onde está guardado'],['T · L · U','Etiquetas · Relatórios · Downloads'],['X · O','Ler etiqueta · Empréstimos'],['A · C','Histórico de ações · Configurações'],['Q','Qualidade do CAMP Vision'],['M · G','Como o material anda · Glossário'],['F','Focar filtro da tela'],['↑ ↓ · Enter · R · K','Conferir folhas: mudar de folha · está certo e próxima · girar · recortar e alinhar'],['J · K · Enter · I','Precisa de você e Problemas: descer · subir na lista · abrir o item · ignorar (esconder por 7 dias). Sem item escolhido, I abre Arquitetos'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
+const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['[ · ⌘/Ctrl + B','Recolher/expandir o menu (recolhido, só os ícones)'],['1–5','Precisa de você · Projetos · Fundos · Pedidos de alta resolução · Máquinas'],['D · N · P','Decisões · Material novo · Problemas'],['I · W','Arquitetos · Onde está guardado'],['T · L · U','Etiquetas · Relatórios · Downloads'],['X · O','Ler etiqueta · Empréstimos'],['A · C','Histórico de ações · Configurações'],['Q','Qualidade do CAMP Vision'],['M · G','Como o material anda · Glossário'],['F','Focar filtro da tela'],['↑ ↓ · Enter · R · K','Conferir folhas: mudar de folha · está certo e próxima · girar · recortar e alinhar'],['J · K · Enter · I','Precisa de você e Problemas: descer · subir na lista · abrir o item · ignorar (esconder por 7 dias). Sem item escolhido, I abre Arquitetos'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
 function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||AJUDA_TELAS.painel}
 // ---------- Como funciona esta página (H1): uma caixa curta no topo de cada tela; "Entendi" fecha, o "?" traz de volta ----------
 // v = versão do texto: se mudar, a caixa volta a aparecer uma vez para quem já tinha fechado, com a etiqueta "Novo".
@@ -2551,7 +2566,16 @@ function instalarExportacoes(){
 
 // ---------- atalhos e barra lateral ----------
 const appEl=document.querySelector('.app');
-function setCollapsed(c){appEl.classList.toggle('collapsed',c);try{localStorage.setItem('camp.side',c?'1':'')}catch(e){}}
+function setCollapsed(c){appEl.classList.toggle('collapsed',c);navDica(null);const cb=document.getElementById('collapse');if(cb){const t=(c?'Expandir menu':'Recolher menu')+' ([ ou ⌘/Ctrl + B)';cb.title=t;cb.setAttribute('aria-label',t);cb.setAttribute('aria-expanded',String(!c))}try{localStorage.setItem('camp.side',c?'1':'')}catch(e){}}
+/* UX-28: menu recolhido — a dica ao lado do ícone diz o nome do item, o número (se houver) e a tecla (mouse e foco pelo teclado) */
+function navDica(b){let d=document.getElementById('nav-dica');if(!b||!appEl.classList.contains('collapsed')||(window.matchMedia&&matchMedia('(max-width:720px)').matches)){if(d)d.hidden=true;return}
+  if(!d){d=document.createElement('div');d.id='nav-dica';d.className='nav-dica';d.setAttribute('role','tooltip');document.body.appendChild(d)}
+  const nome=[...b.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(),n=b.querySelector('.n:not([hidden])'),k=NAV_ATALHOS[b.dataset.v]||(b.id==='nav-busca'?'⌘/Ctrl + K':'');
+  d.innerHTML=`${escHtml(nome)}${n&&n.textContent.trim()?`<span class="nd-n">(${escHtml(n.textContent.trim())})</span>`:''}${k?`<kbd>${escHtml(k)}</kbd>`:''}`;
+  d.hidden=false;const r=b.getBoundingClientRect();d.style.left=(r.right+10)+'px';d.style.top=Math.max(4,r.top+r.height/2-d.offsetHeight/2)+'px'}
+{const nv=document.getElementById('nav'),alvo=e=>e.target.closest&&e.target.closest('#nav > button');
+  nv.addEventListener('mouseover',e=>navDica(alvo(e)));nv.addEventListener('mouseleave',()=>navDica(null));
+  nv.addEventListener('focusin',e=>navDica(alvo(e)));nv.addEventListener('focusout',()=>navDica(null));nv.addEventListener('click',()=>navDica(null))}
 document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!appEl.classList.contains('collapsed')));
 try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
@@ -2565,6 +2589,7 @@ document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='b'){e.preventDefault();setCollapsed(!appEl.classList.contains('collapsed'));return}
   if(e.key==='Escape'){if(document.querySelector('.modal.on')&&mainEl.classList.contains('rev-cheia')){closeModal();return}closeModal();closeDrawer();qres.classList.remove('open');e.target.blur();return}   // UX-10: na tela cheia, Esc fecha só a janela por cima (ex.: Relatar problema) e a conferência continua
   if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.key==='['&&!document.querySelector('.modal.on,#conf-ov')){e.preventDefault();setCollapsed(!appEl.classList.contains('collapsed'));return}   /* UX-28: [ recolhe/expande o menu sem modificador (o ⌘/Ctrl+B abre os favoritos em alguns navegadores); no ajuste do recorte, [ e ] giram (a tecla não chega aqui) */
   if(e.key==='?'){e.preventDefault();if(typeof revTeclas==='function'&&revTeclas()){ajudaAtalhosRevisao();return}abrirAjuda();return}   // UX-10: conferindo uma folha, ? lista todos os atalhos da conferência
   if(typeof revTeclas==='function'&&revTeclas())return;   // CAMP-154: conferindo uma folha, as letras são da revisão (R gira, K recorta, Enter confere)
   const dest=KEYS[e.key.length===1?e.key.toLowerCase():e.key];

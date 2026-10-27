@@ -44,5 +44,17 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) pr
   d.activeElement&&d.activeElement.blur(); tecla('?'); await sleep(400); chk(!!d.querySelector('section.content.on > .ajuda-caixa')||/Atalhos|Ajuda/.test((d.getElementById('d-title')||{}).textContent||''),'? deveria abrir a ajuda (a caixa "Como funciona esta página")'); d.body.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await sleep(300);
   // 5) a lista da ajuda e a dica do painel falam a mesma coisa que o menu
   const ajuda=w.eval('AJUDA_ATALHOS.map(a=>a.join(" => ")).join(" | ")'); linhas.push('ajuda: '+ajuda); chk(/1–5/.test(ajuda)&&/D · N · P/.test(ajuda)&&/Precisa de você/.test(ajuda),'a ajuda deveria listar 1–5 (os 5 destinos) e D · N · P: '+ajuda);
+  // UX-28 (menu recolhido): cada tecla do menu aparece na ajuda ao lado do NOME ATUAL do item ("1–5" = 1,2,3,4,5; "D · N · P" = D, N, P, na ordem da descrição)
+  { const AJ=JSON.parse(w.eval('JSON.stringify(AJUDA_ATALHOS)')), NA=JSON.parse(w.eval('JSON.stringify(NAV_ATALHOS)')), naAjuda={};
+    for(const [k,desc] of AJ){ const m=k.match(/^(\d)–(\d)$/); const ks=m?Array.from({length:+m[2]-+m[1]+1},(_,i)=>String(+m[1]+i)):k.split(' · '); const ds=desc.split(' · ');
+      if(ks.length===ds.length&&ks.every(x=>/^[A-Z0-9]$/.test(x))) ks.forEach((x,i)=>{naAjuda[x]=ds[i].replace(/\s*\(.*\)$/,'').trim()}) }
+    for(const [v,k] of Object.entries(NA)){ const b=d.querySelector(`#nav button[data-v="${v}"]`); const nome=b?[...b.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim():'';
+      const ok=naAjuda[k]===nome; linhas.push(`${ok?'ok ':'ERRO'} ajuda: ${k} = "${naAjuda[k]}" (menu: "${nome}")`); chk(ok,`ajuda: a tecla ${k} aparece como "${naAjuda[k]}", mas o item do menu se chama "${nome}"`) } }
+  // UX-28: [ recolhe/expande o menu; recolhido, TODAS as teclas do menu continuam valendo
+  { const col=()=>d.querySelector('.app').classList.contains('collapsed'); w.location.hash='#painel'; await sleep(300); d.activeElement&&d.activeElement.blur&&d.activeElement.blur();
+    const a0=col(); tecla('['); await sleep(100); chk(col()!==a0,'[ deveria recolher/expandir o menu'); if(!col()){tecla('[');await sleep(100)} chk(col(),'menu recolhido para conferir as teclas');
+    for(const [v,k] of Object.entries(JSON.parse(w.eval('JSON.stringify(NAV_ATALHOS)')))){ w.location.hash=v==='config'?'#painel':'#config'; await sleep(250); tecla(k.toLowerCase()); await sleep(400); const ok=rota()===v; linhas.push(`${ok?'ok ':'ERRO'} recolhido: ${k} -> "${rota()}"`); chk(ok,`menu recolhido: a tecla ${k} deveria abrir "${v}", abriu "${rota()}"`) }
+    const q2=d.getElementById('q'); tecla('k',{ctrlKey:true}); await sleep(100); chk(d.activeElement===q2,'recolhido: Ctrl+K deveria focar a busca'); q2.blur();
+    tecla('['); await sleep(100); chk(!col(),'[ de novo deveria expandir o menu') }
   console.log(linhas.join('\n')); console.log(`\n=== ATALHOS: ${problems.length} problema(s) ===`); problems.forEach(p=>console.log(' ✗ '+p)); process.exit(problems.length?1:0);
 })().catch(e=>{console.log('ERRO no teste:',e.message);process.exit(2)});
