@@ -81,14 +81,16 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         if curar_lotes(con, codigo):                     # CAMP-122 (P1): "erro" que é só aviso [Minor] não para o lote
             con.commit()
         lotes = []
-        for l in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas, l.status_json, l.resultado,
+        from .filas_fase import SQL_PROJETO_NO_AR, SQL_FORA_DO_SITE
+        for l in con.execute(f"""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas, l.status_json, l.resultado,
+                                       {SQL_PROJETO_NO_AR} AS _no_ar, {SQL_FORA_DO_SITE} AS _fora,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
                                 FROM lista_processamento l WHERE l.projeto_codigo=? AND l.descartado_em IS NULL ORDER BY l.id DESC""", (codigo,)):
             # CAMP-078 (20/10, exaustão): lote descartado não é trabalho (a Fila já o tirava); o cartão Folhas continuava "o CAMP Vision está lendo"
             d = dict(l)
             d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
-            d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"], d.get("resultado"))
+            d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"], d.get("resultado"), d.pop("_no_ar"), d.pop("_fora"))   # UX-36
             # 19/10 (F026-P0009): lote parado por erro do CAMP Vision: o motivo vai junto (campo novo, opcional), para a Situação do lote dizer o porquê
             d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
             d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08 (campo novo, opcional)
@@ -355,7 +357,9 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
             raise HTTPException(404, "Projeto não existe")
         lotes = []
-        for l in con.execute("SELECT * FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC", (codigo,)):
+        from .filas_fase import SQL_FORA_DO_SITE, fase_da_lista
+        no_ar = con.execute("SELECT status_site FROM projeto WHERE codigo=?", (codigo,)).fetchone()[0] == "no_ar"
+        for l in con.execute(f"SELECT l.*, {SQL_FORA_DO_SITE} AS _fora FROM lista_processamento l WHERE l.projeto_codigo=? ORDER BY l.id DESC", (codigo,)):
             pasta = Path(l["pasta_qnap"] or "")
             acessivel = pasta.is_dir()
             pacote = {"acessivel": acessivel, "existe": False, "documentos": 0, "retirados": 0, "teste": False}
@@ -385,7 +389,10 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             lotes.append({"id": l["id"], "nome": l["nome"], "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"])), "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
                           "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo,
                           "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo,
-                          "destino_suspeito": bool(imp_motivo and imp_motivo.startswith("Verificar destino"))})   # CAMP-067: campos novos, opcionais
+                          "destino_suspeito": bool(imp_motivo and imp_motivo.startswith("Verificar destino")),   # CAMP-067: campos novos, opcionais
+                          # UX-36 (campo novo, opcional): a MESMA fase da Fila e do /proximo-passo; a tela não recalcula pela etapa
+                          # (lote aprovado com o projeto no site e as folhas lá = "publicado", não "Pronto para publicar")
+                          "fase": fase_da_lista(l["etapa"], c["total"], c["pendente"], l["aprovado_em"], l["resultado"], no_ar, l["_fora"])})
         return {"lotes": lotes}
     finally:
         con.close()
@@ -904,7 +911,8 @@ def _responder_cv(con, l, d: RespostaCV, u: dict) -> None:
         valor = _aplicar_mudanca_releitura(con, l, d.chave, u["email"])
     if d.tipo == "sugestao" and d.acao == "usar":
         col = _COLUNA_CV.get(d.chave)
-        if not col or not valor:
+        from .saidas_cv import valor_sugerido_valido
+        if not col or not valor or not valor_sugerido_valido(valor):     # UX-37: "<parameter …>null" nunca vira dado do projeto
             raise HTTPException(400, "Este campo não pode ser preenchido por sugestão")
         atual = con.execute(f"SELECT {col} FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()[0]
         atual_txt = "" if atual in (None, 0, "0") else str(atual).strip()

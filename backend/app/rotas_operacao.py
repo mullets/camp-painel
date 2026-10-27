@@ -595,7 +595,9 @@ def _erro_do_cv_explicado(d: dict) -> dict | None:
 @router.get("/filas")
 def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
-    rows = con.execute("""SELECT l.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, p.autorizado_site, p.lote_teste,
+    from .filas_fase import SQL_FORA_DO_SITE
+    rows = con.execute(f"""SELECT l.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, p.autorizado_site, p.lote_teste,
+                                 p.status_site AS projeto_status_site, {SQL_FORA_DO_SITE} AS fora_do_site,
                                  (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=l.projeto_codigo) AS folhas_painel,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
@@ -620,7 +622,8 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         marcar_parado(d, lendo)                          # UX-09 (campos novos, opcionais): parado_h, parado, leitura_interrompida
         d["releitura_pedida_em"] = pedidos.get(d["projeto_codigo"]) if d["leitura_interrompida"] else None
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04 (campo novo, opcional)
-        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
+        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"),
+                                  d.get("projeto_status_site") == "no_ar", d.get("fora_do_site"))   # UX-36 (campos novos, opcionais)
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
         d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08: em linguagem de gente (campo novo, opcional)
         d["destino_suspeito"] = False                    # UX-01 (campo novo, opcional): a pasta não parece deste projeto → "Verificar destino"

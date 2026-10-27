@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo"}
+MODOS_RAPIDOS = {"ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9585,6 +9585,97 @@ def filho(modo):
         _rr.importar_lote = _orig
         c.close()
         for l in res: print(l)
+    elif modo == "ux36_publicado_em_dia":
+        # UX-36 (F026-P0030, 27/10): projeto publicado, lote aprovado, 12 folhas no site (com avisos) e 1 retida. O lote ficava na fase
+        # "publicar" (só a publicação guiada marcava 'publicado') e o painel dizia "Pronto para publicar" e "Atualizar no site" em azul.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, pendencias as _pend
+        from app.filas_fase import lote_ativo_por_projeto
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F036','Fundo Em Dia','EMD',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F036',30)")
+        P = "F036-P0030"
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site,tainacan_item_id,status_site) VALUES (?,'F036',30,'Ed. de Apartamentos',1977,'São Paulo',1,9300,'no_ar')", (P,))
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES ('Lote',?,'/x','revisao',datetime('now','-2 days'),'adm@camp.arq.br')", (P,)).lastrowid
+        for k in range(1, 14):
+            cod, retida = f"{P}-1977-S01-D{k:05d}", int(k == 10)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id,lote_id,retida) VALUES (?,?,'S01',?,?,'campvision','conferida',?,?,?,?)",
+                      (cod, P, k, f"Planta {k}", "nao_publicado" if retida else "no_ar", None if retida else 9300 + k, lid, retida))
+        c.commit()
+        auth.criar_usuario("A", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        def fases():
+            pp = adm.get(f"/api/projetos/{P}/proximo-passo").json()
+            rv = adm.get(f"/api/projetos/{P}/revisao").json()
+            fl = [x for x in adm.get("/api/filas").json() if x.get("projeto_codigo") == P]
+            cc = connect()
+            try:
+                ativo = lote_ativo_por_projeto(cc).get(P, {}).get("fase")
+                n_pub = _pend.contar_pendencias(cc)["lotes_publicar"]
+            finally:
+                cc.close()
+            return {"proximo_passo": (pp.get("lote") or {}).get("fase"), "revisao": ((rv.get("lotes") or [{}])[0]).get("fase"),
+                    "filas": fl[0]["fase"] if fl else None, "lista": ativo, "lotes_publicar": n_pub}
+        f = fases()
+        ver("publicado, 12 folhas no site e 1 retida: a fase do lote é 'publicado' em todo lugar (Próximo passo, revisão, Fila, lista de projetos)",
+            f["proximo_passo"] == f["revisao"] == f["filas"] == f["lista"] == "publicado", str(f))
+        ver("...e não conta em 'Publicar' na Fila / Precisa de você", f["lotes_publicar"] == 0, str(f))
+        sit = adm.get("/api/projetos?situacao=pronto").json()
+        ver("...e não está na aba Pronto para publicar de Projetos", P not in [x.get("codigo") for x in sit.get("itens", [])], str(sit)[:200])
+        c.execute("UPDATE item SET status_site='rascunho' WHERE codigo=?", (f"{P}-1977-S01-D00003",)); c.commit()
+        f = fases()
+        ver("uma folha do lote ainda em rascunho (o visitante não vê): o lote volta a pedir publicar", f["proximo_passo"] == f["revisao"] == f["filas"] == f["lista"] == "publicar" and f["lotes_publicar"] == 1, str(f))
+        c.execute("UPDATE item SET status_site='no_ar' WHERE codigo=?", (f"{P}-1977-S01-D00003",))
+        c.execute("UPDATE projeto SET status_site='rascunho' WHERE codigo=?", (P,)); c.commit()
+        f = fases()
+        ver("projeto em rascunho (fora do público): o lote aprovado continua pedindo publicar", f["proximo_passo"] == f["revisao"] == f["filas"] == f["lista"] == "publicar", str(f))
+        c.execute("UPDATE projeto SET status_site='no_ar' WHERE codigo=?", (P,))
+        c.execute("UPDATE item SET duplicata_de=? WHERE codigo=?", (f"{P}-1977-S01-D00001", f"{P}-1977-S01-D00005"))
+        c.execute("UPDATE item SET status_site='nao_publicado', tainacan_item_id=NULL WHERE codigo=?", (f"{P}-1977-S01-D00005",)); c.commit()
+        f = fases()
+        ver("duplicata fora do site também não conta como pendente (como a retida)", f["proximo_passo"] == "publicado" and f["lotes_publicar"] == 0, str(f))
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux37_sugestao_quebrada":
+        # UX-37 (F026-P0030, 27/10): o CAMP Vision gravou a UF sugerida como '<parameter name="valor">null' (texto quebrado de chamada de
+        # ferramenta do modelo). O painel mostrava "sugestão: UF <parameter …>null" + "Usar …" e contava 1 sugestão na pendência.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _pl.Path(tempfile.mkdtemp())
+        c = connect(); c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F037','Fundo Sugestão','FSG',1)")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F037',30)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F037-P0030','F037',30,'Ed. de Apartamentos',1977)")
+        cat = raiz / "F037-P0030" / "catalogacao"; cat.mkdir(parents=True)
+        (cat / "pacote_tainacan.json").write_text(_j.dumps({"projeto": {"uf": '<parameter name="valor">null', "cidade": "São Paulo", "cliente": "null",
+                                                                          "endereco": "Rua das Mangueiras</parameter>\n</invoke>", "titulo": "None"}, "documentos": []}), encoding="utf-8")
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote','F037-P0030',?,'revisao')", (str(cat.parent),)).lastrowid
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.get(f"/api/lotes/{lid}/saidas-cv").json()
+        sug = {s_["campo"]: s_["sugerido"] for s_ in (r.get("sugestoes") or [])}
+        ver("só a sugestão válida aparece (cidade São Paulo); UF '<parameter …>null', cliente 'null', endereço com </invoke> e título 'None' são ignorados",
+            sug == {"cidade": "São Paulo"}, str(sug))
+        ver("nenhuma sugestão mostrada tem marcação de ferramenta", not any("<" in str(v) for v in sug.values()), str(sug))
+        u = x.post(f"/api/lotes/{lid}/saidas-cv/resposta", json={"tipo": "sugestao", "chave": "cliente", "acao": "usar", "valor": "null"})
+        u2 = x.post(f"/api/lotes/{lid}/saidas-cv/resposta", json={"tipo": "sugestao", "chave": "endereco", "acao": "usar", "valor": '<parameter name="valor">Rua X'})
+        p_ = c.execute("SELECT cliente, endereco_obra, uf FROM projeto WHERE codigo='F037-P0030'").fetchone()
+        ver("'Usar' com valor quebrado é recusado (400) e nada é gravado no projeto", u.status_code == 400 and u2.status_code == 400 and tuple(p_) == (None, None, None),
+            f"{u.status_code} {u2.status_code} {tuple(p_)}")
+        ok_ = x.post(f"/api/lotes/{lid}/saidas-cv/resposta", json={"tipo": "sugestao", "chave": "cidade", "acao": "usar", "valor": "São Paulo"})
+        ver("a sugestão válida continua funcionando ('Usar' grava a cidade)", ok_.status_code == 200 and c.execute("SELECT cidade FROM projeto WHERE codigo='F037-P0030'").fetchone()[0] == "São Paulo", ok_.text[:150])
+        c.close()
+        for l in res: print(l)
     elif modo == "ux03_ignorar":
         # UX-03: "Ignorar ▾" em todo item do Precisa de você. "Agora não" esconde só para quem clicou por 7 dias (some da lista, dos
         # números e de Abertos em Problemas; aparece em Problemas › Ignorados; Desfazer/Mostrar de novo); "Não mostrar mais" muda o
@@ -9681,7 +9772,7 @@ def filho(modo):
         p1 = proj(1); l1 = lote(p1, "revisao"); folha(p1, l1); folha(p1, l1)                     # conferir (2 folhas)
         p2 = proj(2); lote(p2, "revisao")                                                     # importar (sem folhas)
         p3 = proj(3); l3 = lote(p3, "revisao"); folha(p3, l3, "conferida")                    # aprovar (todas conferidas)
-        p4 = proj(4, status_site="no_ar"); l4 = lote(p4, "revisao", aprovado=True); folha(p4, l4, "conferida", "no_ar")   # publicar
+        p4 = proj(4, status_site="no_ar"); l4 = lote(p4, "revisao", aprovado=True); folha(p4, l4, "conferida", "no_ar"); folha(p4, l4, "conferida", "rascunho")   # publicar (UX-36: com uma folha ainda fora do público)
         p5 = proj(5); lote(p5, "processando")                                                  # CAMP Vision lendo
         p6 = proj(6); lote(p6, "erro")                                                         # com erro
         p7 = proj(7, descartado_em="2026-10-01 10:00:00"); l7 = lote(p7, "revisao"); folha(p7, l7)   # projeto descartado: não conta
@@ -12842,6 +12933,22 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-17: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-36: projeto publicado e em dia não pede mais publicar (lote aprovado com as folhas no site = publicado)")
+rc, out = rodar("ux36_publicado_em_dia", f"{tmp}/ux36_publicado_em_dia.db")
+if rc != 0: ok(False, f"teste ux36_publicado_em_dia não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-36: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-37: sugestão do CAMP Vision com valor quebrado (<parameter …>null, null, None) é ignorada")
+rc, out = rodar("ux37_sugestao_quebrada", f"{tmp}/ux37_sugestao_quebrada.db")
+if rc != 0: ok(False, f"teste ux37_sugestao_quebrada não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-37: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

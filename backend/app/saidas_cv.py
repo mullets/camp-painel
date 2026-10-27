@@ -185,6 +185,21 @@ def avaliar_aceite(aceite: dict | None, conferencia: dict | None = None) -> dict
             "motivos": motivos_aceite(aceite), "conferencia": {"conferido": conferido, "pendentes": pend, "total": int(cf.get("total") or 0)}}
 
 
+# UX-37 (F026-P0030, 27/10): o CAMP Vision gravou como UF sugerida o texto quebrado de uma chamada de ferramenta do modelo
+# ('<parameter name="valor">null'). O painel mostrava "sugestão: UF <parameter …>null" com o botão "Usar …" e contava 1 sugestão na
+# pendência. Valor vazio, "null"/"None"/"undefined" ou com marcação (<parameter, <invoke, </…>) não é sugestão: é ignorado aqui, na
+# entrada (o contrato com o CV2 não muda; pendência no campvision-new: não gravar isso).
+_MARCACAO = re.compile(r"<\s*/|<\s*(parameter|invoke|function|antml|tool)\b", re.I)
+
+
+def valor_sugerido_valido(v) -> bool:
+    """O valor que o CAMP Vision sugeriu serve para mostrar e usar? Não: vazio, null/None/undefined, ou com marcação de ferramenta."""
+    if v is None or isinstance(v, (dict, list, bool)):
+        return False
+    t = str(v).strip()
+    return bool(t) and t.strip("\"'").lower() not in ("null", "none", "undefined", "nil", "nan") and not _MARCACAO.search(t)
+
+
 def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     """Campos do bloco 'projeto' do pacote como SUGESTÃO. Só sugere onde o painel está vazio (ou com o título provisório 'P0001'):
     nunca propõe trocar o que uma pessoa já escreveu."""
@@ -193,7 +208,7 @@ def sugestoes_projeto(pacote: dict | None, projeto: dict) -> list[dict]:
     bp, out = pacote["projeto"], []
     for campo in CAMPOS_PROJETO:
         sug = bp.get(campo)
-        sug = str(sug).strip() if sug not in (None, "") else ""
+        sug = str(sug).strip() if valor_sugerido_valido(sug) else ""      # UX-37: valor quebrado = sem sugestão
         atual = projeto.get(_COLUNA[campo])
         atual_txt = "" if atual in (None, 0, "0") else str(atual).strip()
         provisorio = campo == "titulo" and bool(re.fullmatch(r"P\d{4}", atual_txt))
