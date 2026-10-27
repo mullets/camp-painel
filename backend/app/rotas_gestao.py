@@ -559,16 +559,26 @@ def _qnap_estado_completo(raiz: Path, entrada: Path | None, prontos: Path) -> di
 
 def _medir_site(url: str) -> dict:
     """Três estados: online (< 3 s), lento (3 a 15 s: o site responde, só demora) e sem_resposta (15 s sem resposta, erro de rede ou status 5xx).
-    Só 'sem_resposta' DUAS medições seguidas vira alerta (o site lento não pode alternar entre online e offline)."""
+    Só 'sem_resposta' DUAS medições seguidas vira alerta (o site lento não pode alternar entre online e offline).
+    27/10 (investigação do site): o estado vem da PÁGINA PÚBLICA (`GET /`, o que o visitante recebe, servida do cache). Antes media o índice
+    da API REST (`/wp-json/`, nunca em cache, ~3,4 s) e chamava isso de "site lento". A API continua medida à parte, em `api`
+    (só informação: não muda o estado nem o alerta)."""
     import httpx
     t0 = time.time()
     try:
-        r = httpx.get(url + "/wp-json/", timeout=15, follow_redirects=True)
+        r = httpx.get(url + "/", timeout=15, follow_redirects=True)
         ms = round((time.time() - t0) * 1000)
         estado = "sem_resposta" if r.status_code >= 500 else ("online" if ms < 3000 else "lento")
-        res = {"status": r.status_code, "ms": ms, "ok": r.status_code == 200, "estado": estado}
+        res = {"status": r.status_code, "ms": ms, "ok": r.status_code == 200, "estado": estado, "medido": "pagina_publica"}
     except Exception as e:  # noqa: BLE001
-        res = {"status": None, "ok": False, "erro": str(e)[:120], "estado": "sem_resposta"}
+        res = {"status": None, "ok": False, "erro": str(e)[:120], "estado": "sem_resposta", "medido": "pagina_publica"}
+    if res["status"] is not None and res["status"] < 500:          # a API do site (o que o painel usa para publicar), só quando a página respondeu
+        m0 = time.monotonic()
+        try:
+            ra = httpx.get(url + "/wp-json/", timeout=15, follow_redirects=True)
+            res["api"] = {"status": ra.status_code, "ms": round((time.monotonic() - m0) * 1000)}
+        except Exception as e:  # noqa: BLE001
+            res["api"] = {"status": None, "erro": str(e)[:120]}
     from .contagens import agora_iso
     res["medido_em"] = agora_iso()                       # UX-05: a tela diz "medido há X" (Home e Máquinas mostram a MESMA medição)
     with _SONDAS_LOCK:

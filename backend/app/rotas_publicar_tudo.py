@@ -70,7 +70,15 @@ def _rodar_tarefa(tid: int, codigo: str, u: dict) -> None:
         elif e == "folha_ok":
             estado["feitas"] += 1; _atualizar(tid, feitas=estado["feitas"]); _log(tid, f"Folha {ev.get('codigo')} enviada")
         elif e == "folha_falhou":
-            estado["falhas"].append({"codigo": ev.get("codigo"), "erro": ev.get("erro")}); _log(tid, f"Folha {ev.get('codigo')} NÃO subiu: {ev.get('erro')}")
+            estado["falhas"].append({"codigo": ev.get("codigo"), "erro": ev.get("erro")})
+            vezes = f" (depois de {ev['tentativas']} tentativas)" if (ev.get("tentativas") or 0) > 1 else ""
+            _log(tid, f"Folha {ev.get('codigo')} NÃO subiu{vezes}: {ev.get('erro')}")
+        elif e == "folha_nova_tentativa":          # 27/10: o site demorou; a folha volta para a fila
+            _log(tid, f"Folha {ev.get('codigo')}: o site demorou ({str(ev.get('erro') or '')[:80]}). Tentando de novo em {int(ev.get('espera_s') or 0)} s "
+                      f"(tentativa {ev.get('tentativa')} de {ev.get('de')})")
+        elif e == "paralelo":
+            n = ev.get("n")
+            _log(tid, f"O site voltou a responder bem: enviando {n} de cada vez" if ev.get("subiu") else f"O site está lento: enviando {n} de cada vez")
         elif e == "autorizar":
             _atualizar(tid, etapa="autorizar", folha_atual=None); _log(tid, "Projeto liberado para publicação")
         elif e == "publicar":
@@ -128,9 +136,36 @@ def _ler(tid: int) -> dict | None:
     ini = datetime.strptime(t["iniciada_em"], "%Y-%m-%d %H:%M:%S") if t.get("iniciada_em") else None
     fim = datetime.strptime(t["terminada_em"], "%Y-%m-%d %H:%M:%S") if t.get("terminada_em") else datetime.utcnow()
     t["decorrido_s"] = max(0, int((fim - ini).total_seconds())) if ini else None
-    t["s_por_folha"] = round(t["decorrido_s"] / t["feitas"]) if t["decorrido_s"] is not None and t["feitas"] else None
+    t["s_por_folha"] = _s_por_folha(t, ini, fim)
     t["faltam_s"] = round(t["s_por_folha"] * (t["total"] - t["feitas"])) if t["s_por_folha"] and t["estado"] == "rodando" and t["total"] > t["feitas"] else None
     return t
+
+
+JANELA_ESTIMATIVA = 10      # 27/10: a estimativa usa o ritmo das últimas folhas enviadas, não a média desde o começo
+
+
+def _s_por_folha(t: dict, ini, fim) -> int | None:
+    """Segundos por folha no ritmo RECENTE: tempo desde a folha enviada há JANELA_ESTIMATIVA folhas (pelo histórico da tarefa) até agora,
+    dividido pelas folhas enviadas nesse intervalo. Antes era o tempo total ÷ folhas feitas: com a 1ª folha demorando (site lento,
+    nova tentativa) a tela dizia "1 de 37 · faltam cerca de 138 min" e não se corrigia. Com poucas folhas, cai na média desde o início."""
+    feitas = t.get("feitas") or 0
+    if not ini or not feitas:
+        return None
+    marcas = []
+    for x in t.get("log") or []:
+        tx = str(x.get("texto") or "")
+        if tx.startswith("Folha ") and tx.endswith(" enviada"):
+            try:
+                marcas.append(datetime.strptime(x["em"], "%Y-%m-%d %H:%M:%S"))
+            except (KeyError, TypeError, ValueError):
+                pass
+    if len(marcas) > JANELA_ESTIMATIVA:
+        ref, n = marcas[-JANELA_ESTIMATIVA - 1], JANELA_ESTIMATIVA
+    elif len(marcas) >= 2:
+        ref, n = marcas[0], len(marcas) - 1                       # da 1ª enviada até agora (não conta o dossiê e a espera da 1ª folha)
+    else:
+        ref, n = ini, feitas
+    return max(1, round(max(0.0, (fim - ref).total_seconds()) / n))
 
 
 _TRAVA_INICIO = threading.Lock()

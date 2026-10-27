@@ -17,6 +17,29 @@ from .db import connect
 RE_CODIGO = re.compile(r"\bF(\d{3})(?:-P(\d{4}))?(?:-(\d{4}))?(?:-S(\d{2}))?(?:-D(\d{5}))?\b", re.I)
 
 
+# 27/10 (produção, F009-P0131): com o site respondendo em ~3,4 s e 5 folhas ao mesmo tempo, a criação do item passou dos 60 s de leitura
+# ("The read operation timed out") e a folha "NÃO subiu". Leitura/escrita: 90 s (margem para o site sobrecarregado sem esperar para sempre).
+# Conexão: 15 s (site sem resposta falha logo e entra na nova tentativa). O upload da imagem tem o próprio teto (300 s, em upload_media).
+TIMEOUT_PADRAO = httpx.Timeout(90.0, connect=15.0)
+# 27/10 (investigação do site): mudar o status (publicar/despublicar) faz o site limpar o cache INTEIRO dentro da própria requisição;
+# passa fácil dos 60 s com o site lento. 120 s, e num tempo esgotado o painel RELÊ o item antes de dizer que falhou.
+TIMEOUT_STATUS = httpx.Timeout(120.0, connect=15.0)
+_RE_STATUS_PASSAGEIRO = re.compile(r"(?:recusou|falhou)[^:]*:\s*\(?(?:429|502|503|504)\b|\((?:429|502|503|504)\)")
+_TEXTO_PASSAGEIRO = ("timed out", "timeout", "tempo esgotado", "connection reset", "connection refused", "connection aborted",
+                     "server disconnected", "remoteprotocolerror", "connecterror", "readerror", "temporarily unavailable")
+
+
+def erro_passageiro(e) -> bool:
+    """O erro é do tipo que passa sozinho (site lento ou sobrecarregado): tempo de resposta esgotado, conexão caída, 429/502/503/504.
+    Aceita a exceção ou o texto do erro (as rotinas de envio devolvem o texto). 400/401/403/404 e erro de validação NÃO são passageiros."""
+    if isinstance(e, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
+        return True
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response is not None and e.response.status_code in (429, 502, 503, 504)
+    t = str(e or "").lower()
+    return bool(t) and (any(x in t for x in _TEXTO_PASSAGEIRO) or bool(_RE_STATUS_PASSAGEIRO.search(t)))
+
+
 def _cfg(chave: str, padrao: str = "") -> str:
     con = connect()
     r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
@@ -67,7 +90,7 @@ class WP:
             raise RuntimeError("Application Password não configurada (Configurações → wp.app_password ou WP_APP_PASSWORD no .env)")
         tok = base64.b64encode(f"{usuario}:{senha}".encode()).decode()
         self.h = httpx.Client(base_url=self.base, headers={"Authorization": f"Basic {tok}", "User-Agent": "CAMP-Painel/0.3"},
-                              timeout=60, follow_redirects=True)
+                              timeout=TIMEOUT_PADRAO, follow_redirects=True)
 
     def _get(self, path: str, **params) -> httpx.Response:
         r = self.h.get(path, params=params)
@@ -121,7 +144,7 @@ class WP:
         yield from self._paginado(f"/wp-json/tainacan/v2/taxonomy/{tid}/terms", log=None, hideempty=0)
 
     # ---- escrita (Tainacan) ----
-    def editar_item(self, item_id: int, campos: dict, colecao_id: int | None = None) -> dict:
+    def editar_item(self, item_id: int, campos: dict, colecao_id: int | None = None, timeout=None) -> dict:
         """Edita um item do Tainacan. O endereço que o site aceita é /items/{id} (PLURAL, sem a coleção): conferido no site em produção.
         A forma /collection/{id}/items/{id} responde 404 `rest_no_route` (foi o que travou o Publicar); fica só como reserva, depois do POST.
         Só tenta outro endereço quando a resposta é 404/405 (rota inexistente); 400/401/403/5xx são erros de verdade e param na hora."""
@@ -131,7 +154,7 @@ class WP:
         tentativas.append(("post", f"/wp-json/tainacan/v2/items/{item_id}"))
         ultimo, tentados = None, []
         for metodo, url in tentativas:
-            r = getattr(self.h, metodo)(url, json=campos)
+            r = getattr(self.h, metodo)(url, json=campos, **({"timeout": timeout} if timeout is not None else {}))
             tentados.append(f"{metodo.upper()} {url.replace('/wp-json/tainacan/v2', '')}")
             if r.status_code < 400:
                 return r.json()
@@ -145,11 +168,30 @@ class WP:
         """status: publish | draft | private. Confere se o site de fato ficou com o status pedido (um 200 que mantém 'draft' não é publicado)."""
         if status not in ("publish", "draft", "private"):
             raise ValueError("status inválido")
-        j = self.editar_item(item_id, {"status": status}, colecao_id)
+        try:
+            j = self.editar_item(item_id, {"status": status}, colecao_id, timeout=TIMEOUT_STATUS)
+        except httpx.TimeoutException as e:
+            # 27/10: o site pode ter mudado o status e só demorado a responder (limpeza de cache). Relê antes de chamar de falha.
+            j = self.ler_item(item_id, colecao_id)
+            if not isinstance(j, dict) or j.get("status") != status:
+                raise RuntimeError(f"O site não respondeu a tempo ao mudar o item {item_id} para '{status}' e, relido, continua "
+                                   f"'{(j or {}).get('status') if isinstance(j, dict) else '?'}' (The read operation timed out)") from e
         ficou = j.get("status") if isinstance(j, dict) else None
         if ficou and ficou != status:
             raise RuntimeError(f"Tainacan aceitou, mas o item {item_id} continuou como '{ficou}' em vez de '{status}' (campo obrigatório vazio ou regra do site?)")
         return j
+
+    def ler_item(self, item_id: int, colecao_id: int | None = None) -> dict | None:
+        """27/10: o item como o site o tem agora (para conferir o status depois de um tempo esgotado). Tenta /items/{id}; na falta da rota, pela coleção."""
+        urls = [f"/wp-json/tainacan/v2/items/{int(item_id)}"] + ([f"/wp-json/tainacan/v2/collection/{int(colecao_id)}/items/{int(item_id)}"] if colecao_id else [])
+        for url in urls:
+            r = self.h.get(url, params={"context": "edit"})
+            if r.status_code in (404, 405):
+                continue
+            if r.status_code >= 400:
+                raise RuntimeError(f"Tainacan recusou ler o item {item_id}: {r.status_code} {r.text[:160]}")
+            return r.json()
+        return None
 
     def criar_termo(self, taxonomia_id: int, nome: str, descricao: str = "") -> dict:
         r = self.h.post(f"/wp-json/tainacan/v2/taxonomy/{taxonomia_id}/terms", json={"name": nome, "description": descricao})
@@ -354,6 +396,23 @@ def _wp_buscar_por_codigo(self, colecao_id: int, metadado_id: int, codigo: str) 
 
 
 WP.buscar_por_codigo = _wp_buscar_por_codigo
+
+
+def _wp_buscar_por_titulo(self, colecao_id: int, titulo: str) -> list[dict]:
+    """27/10: itens da coleção (qualquer status) com EXATAMENTE este título (busca de texto do próprio Tainacan, `search`, conferida aqui).
+    Serve para achar o item que o site criou numa tentativa cuja resposta não chegou (tempo esgotado): ele ainda não tem o código gravado."""
+    r = self.h.get(f"/wp-json/tainacan/v2/collection/{int(colecao_id)}/items",
+                   params={"search": titulo, "status": "publish,draft,private,pending", "perpage": 50, "orderby": "id", "order": "DESC"})
+    if r.status_code >= 400:
+        raise RuntimeError(f"Tainacan recusou procurar o título: {r.status_code} {r.text[:160]}")
+    dados = r.json()
+    if isinstance(dados, dict):
+        dados = dados.get("items") or []
+    alvo = " ".join(str(titulo).split()).casefold()
+    return [d for d in dados if isinstance(d, dict) and " ".join(str(d.get("title") or "").split()).casefold() == alvo]
+
+
+WP.buscar_por_titulo = _wp_buscar_por_titulo
 
 
 def _wp_apagar_pessoa(self, email: str) -> dict:
