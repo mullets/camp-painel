@@ -39,9 +39,12 @@ Ao digitar o nome em **Novo projeto** ou **Editar**: "Já existe projeto parecid
 **Abrir este** (e, ao editar, **Não é duplicata**). Em Problemas, o quadro **Possíveis projetos duplicados (N)**. "Não é duplicata" vale para o
 par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 
-## Menu (CAMP-154)
-Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador, ajuda): **Precisa de você** (o Painel inicial),
-**Projetos**, **Fundos e arquitetos**, **Pedidos do site** (antes "Pedidos de material") e **Máquinas** (antes "Máquinas e site"). O resto fica em **Mais**.
+## Menu (UX-28; antes CAMP-154)
+Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
+topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);
+**Público** (**Pedidos de alta resolução**, antes "Pedidos do site" e "Pedidos de material"; **Downloads**, antes "Downloads do site");
+**Acompanhamento**; **Administração** (**Máquinas**, antes "Máquinas e site"; **Configurações**); **Ajuda**. O resto fica em **Mais**.
+"Fundos e arquitetos" deixou de existir: são dois itens, cada um com a sua página.
 
 ## Avisos (UX-22)
 - Todo aviso rápido (toast) some sozinho em no máximo 8 s; o aviso de tarefa concluída no topo some em 8 s quando deu certo

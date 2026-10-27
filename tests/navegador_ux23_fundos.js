@@ -3,7 +3,7 @@
 //   (cd backend && CAMP_DB_PATH=/tmp/x.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8946)
 //   CAMP_DB_PATH=/tmp/x.db CAMP_BASE=http://127.0.0.1:8946 node tests/navegador_ux23_fundos.js
 // Colunas "Projetos", "Projetos no site", "Folhas no site", "Rascunhos no site" (com explicação); sem "+N rasc."; a aba "Com pendência"
-// conta "direitos ainda não registrados"; o título da página é o nome do menu ("Fundos e arquitetos").
+// conta "direitos ainda não registrados"; o título da página é o nome do menu ("Fundos", desde o UX-28).
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8946', DB = process.env.CAMP_DB_PATH;
@@ -53,7 +53,7 @@ const chk = (ok, m) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + m); if (!ok) p
   // título = nome do menu
   const primeiro = sel => page.$eval(sel, e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim());
   const h1 = await primeiro('#v-fundos h1'), menu = await primeiro('.side [data-v="fundos"]');
-  chk(h1 === menu && h1 === 'Fundos e arquitetos', `título da página = nome do menu ("${h1}" × "${menu}")`);
+  chk(h1 === menu && h1 === 'Fundos', `título da página = nome do menu ("${h1}" × "${menu}")`);   // UX-28: Fundos e Arquitetos são itens separados
   await page.click('[data-fundos-arq]', { timeout: 3000 }).catch(() => {}); await page.waitForTimeout(500);
   chk(/#arquitetos$/.test(page.url()), '"Ver arquitetos" leva à lista de arquitetos');
   chk(erros.length === 0, 'sem erro no console' + (erros.length ? ': ' + erros.join(' | ') : ''));

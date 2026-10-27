@@ -7335,7 +7335,7 @@ def filho(modo):
         if abriu:
             ver("planilha abre no openpyxl, uma aba por seção", wb.sheetnames == ["Resumo", "Folhas", "Publicações", "Pedidos", "Problemas", "Acessos ao site"], wb.sheetnames)
             vals = {r_[0]: r_[1] for r_ in wb["Resumo"].iter_rows(values_only=True) if r_ and r_[0]}
-            ver("Resumo da planilha bate com a tela", vals.get("Folhas digitalizadas no período (CAMP Vision)") == 3 and vals.get("Folhas migradas/importadas do site (evento único)") == 2 and vals.get("Projetos publicados no período") == 1 and vals.get("Pedidos do site atendidos") == 2
+            ver("Resumo da planilha bate com a tela", vals.get("Folhas digitalizadas no período (CAMP Vision)") == 3 and vals.get("Folhas migradas/importadas do site (evento único)") == 2 and vals.get("Projetos publicados no período") == 1 and vals.get("Pedidos de alta resolução atendidos") == 2
                 and vals.get("Tempo médio de entrega (dias)") == 12.5 and vals.get("Problemas resolvidos") == 2 and vals.get("Pessoas que visitaram o site") == 50, vals)
             fol = [tuple(x for x in r_ if x is not None) for r_ in wb["Folhas"].iter_rows(values_only=True)]
             ver("aba Folhas: total por mês e o cruzamento mês x fundo", ("Total", 3, 2, 4, 9) in fol and ("mar/2025", 0, 4, 4) in fol, fol[:14])

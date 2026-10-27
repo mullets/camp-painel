@@ -338,8 +338,8 @@ def planilha(r: dict) -> bytes:
         ["Folhas no acervo ao fim do período", f["acervo_ao_fim"]],
         ["Folhas publicadas no período", pb["folhas"]],
         ["Projetos publicados no período", pb["projetos"]],
-        ["Pedidos do site recebidos", pd["recebidos"]],
-        ["Pedidos do site atendidos", pd["atendidos"]],
+        ["Pedidos de alta resolução recebidos", pd["recebidos"]],
+        ["Pedidos de alta resolução atendidos", pd["atendidos"]],
         ["Tempo médio de entrega (dias)", nd(pd["tempo_medio_dias"])],
         ["Problemas abertos", pr["abertos"]],
         ["Problemas resolvidos", pr["resolvidos"]],
@@ -379,7 +379,7 @@ def planilha(r: dict) -> bytes:
     texto(s, "Publicados hoje (situação atual)", f"{pb['publicados_hoje']['folhas']} folhas", f"{pb['publicados_hoje']['projetos']} projetos")
 
     s = aba("Pedidos")
-    tabela(s, "Pedidos do site por mês", ["Mês", "Recebidos", "Atendidos"],
+    tabela(s, "Pedidos de alta resolução por mês", ["Mês", "Recebidos", "Atendidos"],
            [[m["rotulo"], m["recebidos"], m["atendidos"]] for m in pd["por_mes"]], ["Total", pd["recebidos"], pd["atendidos"]])
     tabela(s, "Por finalidade", ["Finalidade", "Recebidos", "Atendidos"],
            [[x["rotulo"], x["recebidos"], x["atendidos"]] for x in pd["por_finalidade"]], ["Total", pd["recebidos"], pd["atendidos"]])

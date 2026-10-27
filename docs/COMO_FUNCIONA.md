@@ -3411,18 +3411,19 @@ Carregador chamado por `route_to` para cada tela:
 
 ### D.1.3 Menu, grupos, `NAV_ATALHOS` e teclas
 
-1. O menu está no HTML (linhas 895–922). Cada item é `<button data-v="tela">ícone SVG + rótulo + <span class="n"> (contador) + <kbd></button>`. Os grupos são `<div class="grp">`:
-   - **Início**: Painel.
-   - **Trabalho do dia**: Decisões (`#n-dec`, vermelho), Material novo (`#n-filas`), Problemas (`#n-err`), Pedidos de material (`#n-sol`).
-   - **Acervo**: Projetos, Fundos, Arquitetos, Onde está guardado, Ler etiqueta, Etiquetas, Empréstimos (`#n-emp`, vermelho).
-   - **Acompanhamento**: Relatórios, Downloads do site, Máquinas e site, Histórico de ações, Qualidade do CAMP Vision (`data-pode="rota.qualidade"`), Configurações.
+1. O menu está no HTML (`<nav class="nav" id="nav">`). Cada item é `<button data-v="tela">ícone SVG + rótulo + <span class="n"> (contador) + <kbd></button>`; os que ficam no "Mais" têm `class="nav-sec"`. Ordem do trabalho (UX-28, ver `padroes.md` §10):
+   - **Topo** (sempre à vista): Precisa de você, Material novo (`#n-filas`), Problemas (`#n-err`), Decisões (`#n-dec`), Projetos, Busca (`#nav-busca`, foca a busca do ⌘K).
+   - **Acervo**: Fundos, Arquitetos, Onde está guardado, Ler etiqueta, Etiquetas, Empréstimos (`#n-emp`).
+   - **Público**: Pedidos de alta resolução (`#n-sol`), Downloads.
+   - **Acompanhamento**: Relatórios, Histórico de ações, Qualidade do CAMP Vision (`data-pode="rota.qualidade"`).
+   - **Administração** (`data-grp="admin"`, só admin): Máquinas, Configurações.
    - **Ajuda**: Como o material anda, Glossário.
-   - botão `#nav-mais` ("Mais"), visível só no celular.
+   - botões `#nav-mais-pc` ("Mais" no computador) e `#nav-mais` ("Mais" no celular).
 2. Os contadores vêm de `atualizarContadoresMenu(p)` com os números de `pendencias.contar_pendencias` (servidor): `decisoes`, `material_novo` (= lotes para importar + para conferir), `erros_abertos`, `pedidos_abertos`, `emprestimos_atrasados`. Atualizam ao carregar o painel e por `atualizarPendencias()` (`GET /api/pendencias`) depois de cada ação.
 3. **`NAV_ATALHOS`** (linha ~1989) é a **única** tabela de teclas:
-   `painel:1, decisoes:2, filas:3, erros:4, solicitacoes:5, projetos:6, fundos:7, arquitetos:8, localizacao:9, estante:X, etiquetas:T, emprestimos:O, relatorios:L, uso:U, estacoes:E, auditoria:A, qualidade:Q, config:C, caminho:M, glossario:G`.
+   `painel:1, projetos:2, fundos:3, solicitacoes:4, estacoes:5, decisoes:D, filas:N, erros:P, arquitetos:I, localizacao:W, estante:X, etiquetas:T, emprestimos:O, relatorios:L, uso:U, auditoria:A, qualidade:Q, config:C, caminho:M, glossario:G`.
    - Dela saem: os `<kbd>` do menu (o script reescreve o conteúdo de cada `<kbd>`), o mapa `KEYS` (tecla → tela) e a lista de ajuda `AJUDA_ATALHOS`.
-   - Regra conferida por `scripts/check_ui.py`: os dígitos 1–9 ficam nas nove primeiras entradas **na ordem visual do menu**; depois só letras; nenhuma tecla repetida; `F`, `K`, `B` e `?` são reservadas.
+   - Regra conferida por `scripts/check_ui.py`: os dígitos 1–9 crescem **na ordem visual do menu** e só ficam em item sempre à vista (fora do "Mais"); letras podem ficar entre eles (UX-28); nenhuma tecla repetida; `F`, `K`, `B` e `?` são reservadas.
 4. Teclas fixas (handler `keydown` na linha ~1992):
    - `⌘/Ctrl+K` foca a busca do topo; `⌘/Ctrl+B` recolhe/abre a barra lateral (`setCollapsed`, guarda em `localStorage['camp.side']`);
    - `Esc` fecha modal, janela lateral e resultados da busca;
@@ -3758,7 +3759,7 @@ Pedidos de TIFF/JPG em alta resolução (tabelas `solicitacao` e `solicitacao_it
 
 ### D.2.7 Fundos (`#fundos`, tecla 7)
 
-1. `GET /api/fundos/resumo` (leitura). Título da página = nome do menu, **Fundos e arquitetos** (botão "Ver arquitetos"). Colunas (UX-23, unidade explícita): Código, Sigla (tracejada quando falta), Nome, Período, Projetos (no painel), Projetos no site (`projetos_no_site`: páginas de projeto publicadas), Folhas no site (`folhas_no_site`), Rascunhos no site (`rascunhos_site`; o título da célula separa páginas de projeto e folhas; legenda abaixo da tabela), Site, Pendências (`pendenciasFundo`: "direitos com restrição", "falta sigla", "N projetos travados por direitos"; "direitos ainda não registrados" em cinza, porque não bloqueia — `docs/padroes.md` §12).
+1. `GET /api/fundos/resumo` (leitura). Título da página = nome do menu, **Fundos** (UX-28: Arquitetos é outro item do menu; o botão "Ver arquitetos" continua). Colunas (UX-23, unidade explícita): Código, Sigla (tracejada quando falta), Nome, Período, Projetos (no painel), Projetos no site (`projetos_no_site`: páginas de projeto publicadas), Folhas no site (`folhas_no_site`), Rascunhos no site (`rascunhos_site`; o título da célula separa páginas de projeto e folhas; legenda abaixo da tabela), Site, Pendências (`pendenciasFundo`: "direitos com restrição", "falta sigla", "N projetos travados por direitos"; "direitos ainda não registrados" em cinza, porque não bloqueia — `docs/padroes.md` §12).
 2. Abas: Todos, Publicados, Não publicados, Com pendência (UX-23: campo `pendencias` do resumo — direitos ainda não registrados ou com restrição, sem sigla, travado; "não registrados" não impede publicar, mas conta aqui); "Filtros ▾" com Rascunhos, Despublicados, Com restrição de direitos, Travados por direitos, Sem sigla, Só no site. Busca por código, sigla ou nome. Filtro e busca ficam em `localStorage`.
 3. **"Reservar próximo código"** (admin, `fundo.reservar`, modal `#m-fundo`):
    1. o código vem de `GET /api/fundos/proximo` (admin);
