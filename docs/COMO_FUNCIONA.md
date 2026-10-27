@@ -3758,8 +3758,8 @@ Pedidos de TIFF/JPG em alta resolução (tabelas `solicitacao` e `solicitacao_it
 
 ### D.2.7 Fundos (`#fundos`, tecla 7)
 
-1. `GET /api/fundos/resumo` (leitura). Colunas: Código, Sigla (tracejada quando falta), Nome, Período, Projetos, Publicados, Site, Pendências (`pendenciasFundo`: "direitos com restrição", "falta sigla", "N projetos travados por direitos"; "direitos ainda não registrados" em cinza, porque não bloqueia — `docs/padroes.md` §12).
-2. Abas: Todos, Publicados, Não publicados, Com pendência; "Filtros ▾" com Rascunhos, Despublicados, Com restrição de direitos, Travados por direitos, Sem sigla, Só no site. Busca por código, sigla ou nome. Filtro e busca ficam em `localStorage`.
+1. `GET /api/fundos/resumo` (leitura). Título da página = nome do menu, **Fundos e arquitetos** (botão "Ver arquitetos"). Colunas (UX-23, unidade explícita): Código, Sigla (tracejada quando falta), Nome, Período, Projetos (no painel), Projetos no site (`projetos_no_site`: páginas de projeto publicadas), Folhas no site (`folhas_no_site`), Rascunhos no site (`rascunhos_site`; o título da célula separa páginas de projeto e folhas; legenda abaixo da tabela), Site, Pendências (`pendenciasFundo`: "direitos com restrição", "falta sigla", "N projetos travados por direitos"; "direitos ainda não registrados" em cinza, porque não bloqueia — `docs/padroes.md` §12).
+2. Abas: Todos, Publicados, Não publicados, Com pendência (UX-23: campo `pendencias` do resumo — direitos ainda não registrados ou com restrição, sem sigla, travado; "não registrados" não impede publicar, mas conta aqui); "Filtros ▾" com Rascunhos, Despublicados, Com restrição de direitos, Travados por direitos, Sem sigla, Só no site. Busca por código, sigla ou nome. Filtro e busca ficam em `localStorage`.
 3. **"Reservar próximo código"** (admin, `fundo.reservar`, modal `#m-fundo`):
    1. o código vem de `GET /api/fundos/proximo` (admin);
    2. o nome sugere a sigla pelas iniciais (`nfIniciais`: "Carlos Henrique Heck" → CHH) e confere na hora se já é de outro fundo;

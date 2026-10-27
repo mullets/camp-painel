@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9989,6 +9989,39 @@ def filho(modo):
         ver("nenhuma cidade é mudada no banco", sql("SELECT COUNT(*) FROM projeto WHERE cidade='SAO PAULO'") == 1 and sql("SELECT COUNT(*) FROM projeto WHERE cidade='São Paulo'") == 1)
         k.close()
         for l in res: print(l)
+    elif modo == "ux23_fundos_colunas":
+        # UX-23: a lista de Fundos separa "Projetos no site", "Folhas no site" e "Rascunhos no site" (antes "Publicados" somava páginas
+        # de projeto e folhas) e conta "direitos ainda não registrados" como pendência (a aba "Com pendência" dizia 0).
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F016','Fundo 16','F16',1),('F023','Fundo 23','F23',1),('F030','Fundo 30',NULL,1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo, situacao) VALUES ('F023','autorizado')")
+        for n in range(1, 4):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F016',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo) VALUES (?,?,?,?)", (f"F016-P{n:04d}", "F016", n, f"Casa {n}"))
+        wid = [1000]
+        def wp(fundo, col, st, k):
+            for _ in range(k):
+                wid[0] += 1
+                c.execute("INSERT INTO wp_item (id, colecao_id, status, fundo_detectado) VALUES (?,?,?,?)", (wid[0], col, st, fundo))
+        wp("F016", 8007, "publish", 2); wp("F016", 8013, "publish", 25); wp("F016", 8007, "draft", 1); wp("F016", 8013, "draft", 7)
+        c.commit(); c.close()
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        le = TestClient(app, raise_server_exceptions=False); le.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-longa-12345"})
+        r = le.get("/api/fundos/resumo"); por = {f["codigo"]: f for f in (r.json() if r.status_code == 200 else [])}
+        f16 = por.get("F016", {})
+        ver("Projetos (painel) × Projetos no site × Folhas no site, cada um na sua unidade", f16.get("projetos") == 3 and f16.get("projetos_no_site") == 2 and f16.get("folhas_no_site") == 25, str(f16)[:300])
+        ver("Rascunhos no site separados em páginas de projeto e folhas", f16.get("rascunhos_projetos_site") == 1 and f16.get("rascunhos_folhas_site") == 7 and f16.get("rascunhos_site") == 8)
+        ver("os campos antigos continuam (no_site = projetos + folhas)", f16.get("no_site") == 27)
+        ver("direitos ainda não registrados contam como pendência", f16.get("pendencias") == ["direitos_nao_registrados"], str(f16.get("pendencias")))
+        ver("direitos autorizados e com sigla: sem pendência", por.get("F023", {}).get("pendencias") == [], str(por.get("F023", {}).get("pendencias")))
+        ver("sem sigla também é pendência", "sem_sigla" in (por.get("F030", {}).get("pendencias") or []), str(por.get("F030", {}).get("pendencias")))
+        for l in res: print(l)
     elif modo == "duplicata_rascunhos":
         init_db(); _aplicar_migracoes_real()
         import json as _j
@@ -11378,6 +11411,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-15: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-23) Lista de Fundos: colunas com unidade (projetos × folhas × rascunhos no site) e direitos não registrados como pendência")
+rc, out = rodar("ux23_fundos_colunas", f"{tmp}/ux23.db")
+if rc != 0: ok(False, f"teste do UX-23 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-23: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("133) Folha com 'projeto divergente' (Clube Sírio, 19/10): salvar a revisão, mensagem de erro e 'É deste projeto'")
 rc, out = rodar("projeto_divergente", f"{tmp}/projeto_divergente.db")
