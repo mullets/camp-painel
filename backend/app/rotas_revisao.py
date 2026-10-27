@@ -911,7 +911,8 @@ def _responder_cv(con, l, d: RespostaCV, u: dict) -> None:
         valor = _aplicar_mudanca_releitura(con, l, d.chave, u["email"])
     if d.tipo == "sugestao" and d.acao == "usar":
         col = _COLUNA_CV.get(d.chave)
-        if not col or not valor:
+        from .saidas_cv import valor_sugerido_valido
+        if not col or not valor or not valor_sugerido_valido(valor):     # UX-37: "<parameter …>null" nunca vira dado do projeto
             raise HTTPException(400, "Este campo não pode ser preenchido por sugestão")
         atual = con.execute(f"SELECT {col} FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()[0]
         atual_txt = "" if atual in (None, 0, "0") else str(atual).strip()
