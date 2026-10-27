@@ -52,3 +52,10 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 - Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
 - A tela "Máquinas e site" e o resumo de máquinas do topo são só para admin.
 - Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).
+
+## Conferência (UX-10, 27/10/2026)
+- **Tela cheia** / **Sair da tela cheia**: o botão (e a tecla F) da gaveta "Revisar folha". "Começar a conferir" já abre em tela cheia.
+- **sugerido do projeto**: valor do projeto (ano, cidade, cliente) mostrado em cinza num campo vazio da folha. Não é dado lido nem
+  confirmado; só vale se a pessoa aceitar (Tab) e salvar. Nunca chamar de "lido" ou "herdado" na tela.
+- **Mais tipos**: onde ficam os tipos documentais além dos 4 mais usados no projeto.
+- **Atalhos da conferência**: a lista que a tecla ? abre na revisão.
