@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas"}
+MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -6332,6 +6332,7 @@ def filho(modo):
         ver("material novo num projeto com lote PUBLICADO cria um lote NOVO (acao 'complemento')", r1["acao"] == "complemento" and len(lotes) == 2, str(r1)[:200])
         l2 = lotes[-1] if len(lotes) == 2 else {}
         ver("o lote novo está em REVISÃO, sem aprovação, é da mesma pasta/projeto e diz quantas folhas trouxe", l2.get("etapa") == "revisao" and not l2.get("aprovado_em") and l2.get("folhas_encontradas") == 3 and "complemento" in (l2.get("nome") or ""), str(l2)[:200])
+        ver("UX-04: o nome do complemento não leva a contagem do pacote ('(3 folhas)'): a contagem do lote é a das folhas", "folhas)" not in (l2.get("nome") or "x folhas)") and "complemento de " in (l2.get("nome") or ""), str(l2.get("nome")))
         ver("o aviso importa SÓ as 3 folhas novas, no lote novo", imp1 and imp1.get("criadas") == 3 and sql("SELECT COUNT(*) FROM item WHERE lote_id=?", l2.get("id")) == 3, str(imp1)[:200])
         depois = [tuple(r_) for r_ in k.execute("SELECT codigo, titulo, revisao, status_site, tainacan_item_id, lote_id FROM item WHERE codigo IN (?,?) ORDER BY codigo", (A1, A2))]
         ver("o lote publicado continua publicado e as folhas antigas ficam intactas (título, revisão, site, lote)", depois == antes[:2] and sql("SELECT etapa FROM lista_processamento WHERE id=?", lote1) == "publicado", str(depois))
@@ -9248,6 +9249,86 @@ def filho(modo):
         ver("...e registra no histórico", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='mesclado'").fetchone()[0] == 2)
         d2 = ad.post(f"/api/erros/desfazer/{m.get('desfazer')}").json()
         ver("Desfazer do mesclar reabre as cópias", d2.get("voltaram") == 2 and abertos() == n0, str(d2))
+        for l in res: print(l)
+    elif modo == "ux04_lotes":
+        # UX-04: lotes do mesmo projeto. O identificador do lote ("complemento de 19/10") aparece sempre; a contagem é a das folhas REAIS
+        # do lote (o "(19 folhas)" do nome era o pacote no dia em que o lote nasceu); lotes do mesmo projeto prontos para publicar viram UMA
+        # linha ("2 lotes prontos · Publicar projeto"); eventos iguais no "Hoje" viram uma frase "(2×)", e publicar pelo Próximo passo
+        # (site_publicar + publicacao_guiada) não aparece mais duas vezes.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F099','Fundo de teste','FDT',1)")
+        for n, t in ((1, "Residência Riviera"), (2, "Casa do Lago"), (3, "Escola Nova")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P000{n}", "F099", n, t))
+        seq = [0]
+        def lote(proj, nome, etapa, aprovado, criado, folhas, pendentes=0, resultado=None):
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, criado_em, resultado) VALUES (?,?,?,?,?,?,?)",
+                            (nome, proj, f"/x/{proj}", etapa, "2026-10-20 10:00:00" if aprovado else None, criado, resultado)).lastrowid
+            for k in range(folhas):
+                seq[0] += 1
+                c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, lote_id, revisao, status_site, titulo) VALUES (?,?,'S01',?,'campvision',?,?,'nao_publicado','Planta')",
+                          (f"{proj}-1970-S01-D{seq[0]:05d}", proj, seq[0], lid, "pendente" if k < pendentes else "conferida"))
+            return lid
+        A = "F099-P0001"
+        l1 = lote(A, "Residência Riviera", "publicado", True, "2026-10-14 13:00:00", 0)
+        # o caso do card: "complemento de 19/10 (19 folhas)" com 12 folhas de verdade; "complemento de 20/10 (7 folhas)" com 22
+        l2 = lote(A, "Residência Riviera — complemento de 19/10 (19 folhas)", "revisao", True, "2026-10-19 13:00:00", 12, resultado='{"complemento": true}')
+        l3 = lote(A, "Residência Riviera — complemento de 20/10 (7 folhas)", "revisao", True, "2026-10-20 13:00:00", 22, resultado='{"complemento": true}')
+        lb = lote("F099-P0002", "Casa do Lago", "revisao", False, "2026-10-21 13:00:00", 5, pendentes=2)          # parcialmente conferido
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        def grupos():
+            return {g["id"]: g for g in ad.get("/api/painel").json().get("tarefas", [])}
+        G = grupos()
+        pub = [i for i in (G.get("aprovar_publicar") or {}).get("itens", []) if i["codigo"] == A]
+        ver("os 2 lotes prontos do MESMO projeto viram UMA linha (antes: 2 linhas iguais, parecia duplicata)", len(pub) == 1, str(pub)[:300])
+        p0 = pub[0] if pub else {}
+        ver("...com o identificador de cada lote: '2 lotes prontos · complemento de 19/10 · complemento de 20/10'",
+            p0.get("lote") == "2 lotes prontos · complemento de 19/10 · complemento de 20/10" and p0.get("lotes") == 2, str(p0.get("lote")))
+        ver("...e o botão age no projeto ('Publicar projeto' ou 'Ver o que falta')", (p0.get("acao") or {}).get("tipo") in ("publicar", "projeto")
+            and (p0.get("acao") or {}).get("rotulo") in ("Publicar projeto", "Ver o que falta", "Terminar de publicar"), str(p0.get("acao")))
+        ver("...e 'Agora não' na linha junta esconde os dois lotes (chave lote:l2,l3)", p0.get("adiar") == f"lote:{l2},{l3}", str(p0.get("adiar")))
+        ver("nenhum texto do Precisa de você repete o '(19 folhas)' do nome", "(19 folhas)" not in str(G) and "(7 folhas)" not in str(G))
+        conf = [i for i in (G.get("conferir") or {}).get("itens", []) if i["codigo"] == "F099-P0002"]
+        ver("lote parcialmente conferido: a linha mostra o identificador do lote ('lote de 21/10') e '2 de 5 folhas a conferir'",
+            conf and conf[0].get("lote") == "lote de 21/10" and conf[0]["detalhe"].startswith("2 de 5 folhas a conferir"), str(conf)[:200])
+        F = {l["id"]: l for l in ad.get("/api/filas").json()}
+        ver("Material novo: identificador do complemento sem a contagem velha, e a contagem é a das folhas reais (12 e 22)",
+            F[l2].get("identificador") == "complemento de 19/10" and F[l2]["itens_total"] == 12 and F[l3].get("identificador") == "complemento de 20/10" and F[l3]["itens_total"] == 22,
+            str({k: (F[k].get("identificador"), F[k]["itens_total"]) for k in (l2, l3)}))
+        ver("lote comum: identificador pela data em que chegou ('lote de 14/10')", F[l1].get("identificador") == "lote de 14/10", str(F[l1].get("identificador")))
+        R = {l["id"]: l for l in ad.get(f"/api/projetos/{A}/revisao").json()["lotes"]}
+        ver("página do projeto: cada lote com o identificador e a contagem real (12 de 12)", R[l2].get("identificador") == "complemento de 19/10" and R[l2]["itens"]["total"] == 12, str(R[l2].get("identificador")))
+        r = ad.post(f"/api/hoje/tarefas/lote:{l2},{l3}/agora-nao", json={"titulo": "Residência Riviera"})
+        G2 = grupos()
+        ver("'Agora não' na linha junta: os dois lotes saem da lista (nenhum fica sobrando sozinho)", r.status_code == 200 and not any(i["codigo"] == A for i in (G2.get("aprovar_publicar") or {}).get("itens", [])), r.text[:150])
+        ver("...cada lote fica escondido com a sua chave (lote:N)", {x[0] for x in c.execute("SELECT tarefa_id FROM tarefa_adiada")} == {f"lote:{l2}", f"lote:{l3}"})
+        ad.delete(f"/api/hoje/tarefas/lote:{l2},{l3}/agora-nao")
+        ver("...e Desfazer traz a linha de volta", any(i["codigo"] == A for i in (grupos().get("aprovar_publicar") or {}).get("itens", [])))
+        # um lote só do projeto continua uma linha simples (sem '1 lotes prontos')
+        c.execute("UPDATE lista_processamento SET etapa='publicado' WHERE id=?", (l3,)); c.commit()
+        p1 = [i for i in (grupos().get("aprovar_publicar") or {}).get("itens", []) if i["codigo"] == A]
+        ver("com 1 lote pronto: linha simples com 'complemento de 19/10 · 12 folhas'", len(p1) == 1 and p1[0].get("lote") == "complemento de 19/10 · 12 folhas" and not p1[0].get("lotes")
+            and p1[0].get("adiar") == f"lote:{l2}", str(p1)[:200])
+        # Hoje: publicar pelo Próximo passo grava site_publicar + publicacao_guiada no mesmo instante
+        def ev(cod, tipo, quando):
+            c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, quando) VALUES ('projeto',?,?,'ad@camp.arq.br',datetime('now','localtime','start of day','+12 hours','utc',?))", (cod, tipo, quando))   # meio-dia de hoje: nunca vira ontem
+        ev("F099-P0003", "site_publicar", "-30 minutes"); ev("F099-P0003", "publicacao_guiada", "-30 minutes"); c.commit()
+        H = [h for h in ad.get("/api/painel").json()["hoje_frases"] if h["codigo"] == "F099-P0003"]
+        ver("Hoje: UMA publicação pelo Próximo passo = UMA frase, sem '(2×)' (antes 'Ad publicou F099-P0003' 2×)", len(H) == 1 and "publicou" in H[0]["texto"] and "×" not in H[0]["texto"], str(H))
+        ev("F099-P0003", "site_publicar", "-29 minutes"); ev("F099-P0003", "publicacao_guiada", "-29 minutes"); c.commit()
+        H = [h for h in ad.get("/api/painel").json()["hoje_frases"] if h["codigo"] == "F099-P0003"]
+        ver("Hoje: a mesma ação repetida em 1 minuto vira UMA frase com '(2×)'", len(H) == 1 and H[0]["texto"].endswith("(2×)"), str(H))
+        ev("F099-P0003", "site_publicar", "-5 minutes"); c.commit()
+        H = [h for h in ad.get("/api/painel").json()["hoje_frases"] if h["codigo"] == "F099-P0003"]
+        ver("Hoje: a mesma ação 24 min depois é outra frase (só junta o que é seguido)", len(H) == 2 and "×" not in H[0]["texto"], str(H))
         for l in res: print(l)
     elif modo == "ux03_ignorar":
         # UX-03: "Ignorar ▾" em todo item do Precisa de você. "Agora não" esconde só para quem clicou por 7 dias (some da lista, dos
@@ -12475,6 +12556,13 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-24: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+print("UX-04: lotes do mesmo projeto identificados e juntos, contagem real do lote, eventos iguais juntos no Hoje")
+rc, out = rodar("ux04_lotes", f"{tmp}/ux04_lotes.db")
+if rc != 0: ok(False, f"teste ux04_lotes não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-04: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

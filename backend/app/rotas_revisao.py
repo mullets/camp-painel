@@ -362,7 +362,8 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 importacao = json.loads(l["resultado"] or "{}").get("importacao")
             except ValueError:
                 importacao = None
-            lotes.append({"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
+            from .pendencias import identificador_lote, _e_complemento
+            lotes.append({"id": l["id"], "nome": l["nome"], "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"])), "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
                           "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo,
                           "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo,
                           "destino_suspeito": bool(imp_motivo and imp_motivo.startswith("Verificar destino"))})   # CAMP-067: campos novos, opcionais

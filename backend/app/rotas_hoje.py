@@ -5,6 +5,7 @@ nenhuma regra nova é inventada aqui, para os números nunca divergirem das tela
 """
 from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -174,6 +175,12 @@ def _evento_tarefa(con, tarefa_id: str, tipo: str, ator: str, detalhe: dict) -> 
                 (ent, cod, tipo, ator, json.dumps(detalhe, ensure_ascii=False)))
 
 
+def _chaves_da_tarefa(tarefa_id: str) -> list[str]:
+    """"lote:12,13" (linha com os lotes do mesmo projeto, UX-04) → ["lote:12", "lote:13"]; qualquer outra chave fica como veio."""
+    m = re.fullmatch(r"lote:(\d+(?:,\d+)+)", tarefa_id or "")
+    return [f"lote:{x}" for x in m.group(1).split(",")] if m else [tarefa_id]
+
+
 @router.post("/hoje/tarefas/{tarefa_id}/agora-nao")
 def agora_nao(tarefa_id: str, d: AgoraNao | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Esconde esta tarefa só para quem clicou, por 7 dias. Depois ela volta sozinha (se ainda existir)."""
@@ -181,14 +188,15 @@ def agora_nao(tarefa_id: str, d: AgoraNao | None = None, u: dict = Depends(auth.
         raise HTTPException(400, "Tarefa inválida")
     con = connect()
     try:
-        ate = qb.adiar(con, u["id"], tarefa_id)
         titulo = ((d.titulo if d else None) or "").strip()[:300] or None
-        if titulo:
-            try:
-                con.execute("UPDATE tarefa_adiada SET titulo=? WHERE usuario_id=? AND tarefa_id=?", (titulo, u["id"], tarefa_id))
-            except Exception:  # noqa: BLE001  (banco sem a migração 166: guarda sem o título)
-                pass
-        _evento_tarefa(con, tarefa_id, "escondido_7_dias", u["email"], {"ate": ate, "titulo": titulo})
+        for tid in _chaves_da_tarefa(tarefa_id):            # UX-04: a linha que junta lotes do mesmo projeto ("lote:1,2") esconde cada um
+            ate = qb.adiar(con, u["id"], tid)
+            if titulo:
+                try:
+                    con.execute("UPDATE tarefa_adiada SET titulo=? WHERE usuario_id=? AND tarefa_id=?", (titulo, u["id"], tid))
+                except Exception:  # noqa: BLE001  (banco sem a migração 166: guarda sem o título)
+                    pass
+            _evento_tarefa(con, tid, "escondido_7_dias", u["email"], {"ate": ate, "titulo": titulo})
         con.commit()
         return {"ok": True, "ate": ate, "mensagem": f"Escondida por {qb.DIAS_ADIAR} dias. Depois ela volta, se ainda precisar."}
     finally:
@@ -200,9 +208,12 @@ def mostrar_de_novo(tarefa_id: str, u: dict = Depends(auth.exige("leitura"))) ->
     """UX-03: o Desfazer do "Esconder por 7 dias" e o "Mostrar de novo" de Problemas › Ignorados (só o da própria pessoa)."""
     con = connect()
     try:
-        n = con.execute("DELETE FROM tarefa_adiada WHERE usuario_id=? AND tarefa_id=?", (u["id"], tarefa_id)).rowcount
-        if n:
-            _evento_tarefa(con, tarefa_id, "mostrado_de_novo", u["email"], {})
+        n = 0
+        for tid in _chaves_da_tarefa(tarefa_id):
+            k = con.execute("DELETE FROM tarefa_adiada WHERE usuario_id=? AND tarefa_id=?", (u["id"], tid)).rowcount
+            if k:
+                _evento_tarefa(con, tid, "mostrado_de_novo", u["email"], {})
+            n += k
         con.commit()
         return {"ok": True, "voltou": bool(n)}
     finally:

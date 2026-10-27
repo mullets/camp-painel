@@ -611,6 +611,8 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         d = dict(r)
         d["adiado"] = chave_adiar_lote(d["id"]) in fora   # UX-05: "Agora não" desta pessoa: fica na lista, sai das contagens dela
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
+        from .pendencias import identificador_lote, _e_complemento
+        d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04 (campo novo, opcional)
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
         d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08: em linguagem de gente (campo novo, opcional)
@@ -964,7 +966,9 @@ def _criar_lote_complemento(con, pasta: Path, cod: str, nome: str, ex, novos: li
     """Cria o lote NOVO (em revisão) do material que chegou a um projeto cujo lote já está fechado. Mesma pasta, mesmo projeto."""
     from datetime import date
     quando = date.today().strftime("%d/%m")
-    nome_c = f"{nome} — complemento de {quando} ({len(novos)} folha{'s' if len(novos) != 1 else ''})"
+    # UX-04: o nome não leva mais "(N folhas)": era o número do pacote no dia (documentos que o painel não tinha), nunca atualizado, e brigava
+    # com a contagem real do lote na tela ("complemento de 19/10 (19 folhas)" com 12 de 12). A contagem do lote é a das folhas (item.lote_id).
+    nome_c = f"{nome} — complemento de {quando}"
     lote_cv = status.get("lote_atual") if isinstance(status, dict) else None
     ctx = {**contexto, "complemento": True, "lote_cv": lote_cv, "lote_origem": ex["id"], "novos": len(novos)}
     lid = con.execute(

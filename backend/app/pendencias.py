@@ -12,6 +12,7 @@ from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 
 import json
 import re
+from collections import Counter
 from datetime import datetime
 
 from .filas_fase import fase_da_lista
@@ -47,6 +48,41 @@ def texto_espera(horas: float | None) -> str:
     return f"esperando há {round(horas / 24)} dias"
 
 
+_RE_COMPLEMENTO = re.compile(r"complemento de (\d{1,2}/\d{1,2})", re.I)
+
+
+def _dia_mes(ts: str | None) -> str:
+    """'2026-10-19 13:00:00' (UTC, como o banco grava) → '19/10' no fuso do servidor (o mesmo do date(...,'localtime') das consultas)."""
+    if not ts:
+        return ""
+    try:
+        from datetime import timezone
+        d = datetime.fromisoformat(str(ts).replace("T", " ")[:19]).replace(tzinfo=timezone.utc).astimezone()
+        return d.strftime("%d/%m")
+    except ValueError:
+        return ""
+
+
+def identificador_lote(nome: str | None, criado_em: str | None = None, complemento: bool = False) -> str:
+    """UX-04: o que distingue um lote dos outros do MESMO projeto ("complemento de 19/10", "lote de 14/10").
+    O "(19 folhas)" que o nome do complemento trazia era a contagem do pacote no dia em que o lote nasceu (documentos que o painel ainda
+    não tinha), nunca atualizada: a contagem do lote é a das folhas reais (item.lote_id), por isso não entra aqui."""
+    m = _RE_COMPLEMENTO.search(nome or "")
+    if m:
+        return f"complemento de {m.group(1)}"
+    dm = _dia_mes(criado_em)
+    if complemento:
+        return f"complemento de {dm}" if dm else "complemento"
+    return f"lote de {dm}" if dm else "lote"
+
+
+def _e_complemento(resultado) -> bool:
+    try:
+        return bool((json.loads(resultado or "{}") or {}).get("complemento"))
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def lotes(con) -> list[dict]:
     """Os lotes da Fila (os mesmos de /api/filas), cada um com a fase. UX-05: folhas do lote = as que ainda estão no projeto do lote
     (a mesma conta de /api/filas; uma folha que foi para outro projeto não conta mais neste lote)."""
@@ -58,6 +94,7 @@ def lotes(con) -> list[dict]:
                               FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo
                              WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL"""):
         d = dict(r)
+        d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None))
         saida.append(d)
     return saida
@@ -226,11 +263,11 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             det = [f"{l['itens_pendentes']} de {l['itens_total']} folhas a conferir", "o maior lote da fila" if e_maior else None,
                    texto_espera(h) if h and h > 48 else None]
             linhas.append({"sev": "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": " · ".join(p for p in det if p),
-                           "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
+                           "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
         else:
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {texto_espera(h)}" if h and h > 48 else ""),
-                           "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
+                           "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
     linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
@@ -240,10 +277,11 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     from .publicacao_guiada import publicar_um_passo
     um_passo = publicar_um_passo()
     linhas = []
+    lote_txt = lambda l: l["identificador"] + (f" · {l['itens_total']} {'folha' if l['itens_total'] == 1 else 'folhas'}" if l["itens_total"] else "")  # noqa: E731  (UX-04: folhas REAIS do lote)
     for l in sorted([l for l in L if l["fase"] == "aprovar"], key=lambda l: str(l["atualizado_em"] or "")):
         linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                        "detalhe": f"as {l['itens_total']} folhas já foram conferidas · " + ("pronto para publicar (o clique aprova o lote junto)" if um_passo else "falta aprovar o lote"),
-                       "adiar": chave_adiar_lote(l["id"]),
+                       "lote": lote_txt(l), "_lote": l, "adiar": chave_adiar_lote(l["id"]),
                        "acao": _acao("Publicar", "publicar", l["projeto_codigo"]) if um_passo else _acao("Aprovar", "aprovar", l["id"])})
     ordem = {"parcial": 0, "pronto": 1, "travado": 2}
     for l in sorted([l for l in L if l["fase"] == "publicar"], key=lambda l: (ordem[l["publicar"]["estado"]], str(l["atualizado_em"] or ""))):
@@ -255,11 +293,11 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         else:
             det, rot, sev = f"travado: {s['falta']}", "Ver o que falta", "a"
         linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det, "adiar": chave_adiar_lote(l["id"]),
-                       "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
-    linhas = vis(linhas)
+                       "lote": lote_txt(l), "_lote": l, "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
+    linhas = _juntar_lotes_do_projeto(vis(linhas))
     if linhas and (admin or (um_passo and papel == "operador")):
         grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "operador" if um_passo else "admin", "total": len(linhas), "itens": linhas[:por_grupo],
-                       "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes que esperam um admin", "rota": "filas/admin"}})
+                       "ver_todos": {"rotulo": f"Ver os {sum(x.get('lotes', 1) for x in linhas)} lotes que esperam um admin", "rota": "filas/admin"}})
 
     # 4) problemas que bloqueiam: erro bloqueante aberto e lote parado com erro no CAMP Vision
     linhas = []
@@ -279,7 +317,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             exp = None
         o_que = exp["texto"][:160] if exp and exp.get("tipo") != "erro" and exp.get("texto") else None
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
-                       "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
+                       "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
     for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
                             WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
         try:
@@ -348,6 +386,40 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     return grupos
 
 
+def _juntar_lotes_do_projeto(linhas: list[dict]) -> list[dict]:
+    """UX-04: dois lotes do MESMO projeto prontos para publicar apareciam como duas linhas iguais (parecia duplicata). Publicar é do
+    projeto (o mesmo clique leva os lotes juntos), então eles viram UMA linha: "2 lotes prontos · complemento de 19/10 · …" e o botão
+    "Publicar projeto". Só junta linhas cujo botão age no projeto (Publicar, Terminar de publicar, Ver o que falta); o "Aprovar" de um
+    admin continua por lote. O "Agora não" da linha junta esconde todos os lotes dela (chave "lote:1,2")."""
+    out: list[dict] = []
+    por_proj: dict = {}
+    for x in linhas:
+        lote = x.pop("_lote", None)
+        a = x.get("acao") or {}
+        if lote is None or a.get("tipo") not in ("publicar", "projeto"):
+            out.append(x)
+            continue
+        chave = (x["codigo"], a.get("tipo"), a.get("rotulo"))
+        if chave not in por_proj:
+            por_proj[chave] = {**x, "_lotes": [lote]}
+            out.append(por_proj[chave])
+        else:
+            por_proj[chave]["_lotes"].append(lote)
+    for x in out:
+        ls = x.pop("_lotes", None)
+        if not ls or len(ls) < 2:
+            continue
+        x["lotes"] = len(ls)
+        x["lote"] = f"{len(ls)} lotes prontos · " + " · ".join(l["identificador"] for l in ls)
+        x["adiar"] = "lote:" + ",".join(str(l["id"]) for l in ls)
+        if all(l["fase"] == "aprovar" for l in ls):
+            tot = sum(l["itens_total"] or 0 for l in ls)
+            x["detalhe"] = f"as {tot} folhas dos {len(ls)} lotes já foram conferidas · pronto para publicar (o clique aprova os lotes junto)"
+        if x["acao"]["rotulo"] == "Publicar":
+            x["acao"] = {**x["acao"], "rotulo": "Publicar projeto"}
+    return out
+
+
 def caminho(con, n: dict) -> list[dict]:
     """Os 7 passos do material com a quantidade em cada um. 'acumula' = o passo de gente com mais trabalho; 'pronto' = pode avançar."""
     from . import qnap_coletor
@@ -395,6 +467,13 @@ def _nome(con, ator: str, cache: dict) -> str:
     return cache[ator]
 
 
+def _horas_entre(a: str | None, b: str | None) -> float:
+    try:
+        return abs((datetime.fromisoformat(str(a).replace("T", " ")[:19]) - datetime.fromisoformat(str(b).replace("T", " ")[:19])).total_seconds()) / 3600
+    except ValueError:
+        return 1e9
+
+
 def atividade_hoje(con, limite: int = 6) -> list[dict]:
     """[{quando, texto, codigo}] mais recente primeiro. Em `texto`, {codigo} marca onde o código entra (a tela o mostra como código)."""
     evs = con.execute("""SELECT id, entidade, codigo, tipo, ator, quando, detalhe FROM evento
@@ -402,6 +481,7 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
     nomes: dict = {}
     grupos: dict = {}
     ordem: list = []
+    ultimo: dict = {}
     for e in evs:
         cod = e["codigo"] or ""
         proj = "-".join(cod.split("-")[:2]) if e["entidade"] == "item" and cod.count("-") >= 2 else cod
@@ -411,6 +491,16 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
             chave = ("cv", proj.split("-")[0])
         elif e["tipo"] == "revisao_em_lote":
             chave = ("rev_lote", e["ator"], proj)
+        elif e["entidade"] in ("projeto", "lista") and _VERBOS.get(e["tipo"]):
+            # UX-04: a MESMA ação da mesma pessoa no mesmo projeto em até 10 min vira UMA frase ("(2×)" quando repetiu de verdade).
+            # Publicar pelo Próximo passo grava 'site_publicar' E 'publicacao_guiada' (os dois "publicou"): eram 2 frases iguais às 16:16.
+            sig = (e["entidade"], e["codigo"], _VERBOS[e["tipo"]], e["ator"])
+            ult = ultimo.get(sig)
+            if ult and _horas_entre(grupos[ult]["evs"][-1]["quando"], e["quando"]) <= 1 / 6:
+                chave = ult
+            else:
+                chave = ("ev", e["id"])
+                ultimo[sig] = chave
         else:
             chave = ("ev", e["id"])
         if chave not in grupos:
@@ -453,7 +543,8 @@ def atividade_hoje(con, limite: int = 6) -> list[dict]:
                 if e0["entidade"] == "projeto":
                     p = con.execute("SELECT titulo FROM projeto WHERE codigo=?", (e0["codigo"],)).fetchone()
                     titulo = f" {titulo_limpo(p[0])}" if p and p[0] else ""
-                texto, cod = f"{quem} {verbo} {{codigo}}{titulo}", e0["codigo"]
+                vezes = max(Counter(ev["tipo"] for ev in g["evs"]).values())      # 'site_publicar' + 'publicacao_guiada' = 1 publicação
+                texto, cod = f"{quem} {verbo} {{codigo}}{titulo}" + (f" ({vezes}×)" if vezes > 1 else ""), e0["codigo"]
             else:
                 continue                                # evento técnico sem frase: fica no histórico completo, não no resumo do dia
         out.append({"quando": e0["quando"], "texto": texto, "codigo": cod})

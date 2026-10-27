@@ -114,7 +114,7 @@ for n in range(1, 35):
     const nH2 = await page.$$eval('#pj-revisao h2', l => l.filter(h => /Revisão do lote/.test(h.textContent)).length);
     const lotes = await page.$$eval('#pj-revisao details.rl-lote', l => l.map(d => ({ open: d.open, s: d.querySelector('summary').textContent.replace(/\s+/g, ' ').trim() })));
     chk(nH2 === 1 && lotes.length === 2 && lotes.every(x => !x.open), '(2) "Detalhes dos lotes" abre UM quadro "Revisão do lote" com 2 lotes fechados (' + nH2 + ' quadros, ' + JSON.stringify(lotes.map(x => x.open)) + ')');
-    chk(lotes.some(x => /^complemento de 19\/10 \(19 folhas\)/.test(x.s) && /12 de 12 conferidas · aprovado por rafael/.test(x.s)) && lotes.some(x => /^RESIDENCIA LUIZ SALLES/.test(x.s) && /7 de 7 conferidas/.test(x.s)), '(2) cada lote numa linha: nome curto, data, "12 de 12 conferidas · aprovado por rafael": ' + JSON.stringify(lotes.map(x => x.s)));
+    chk(lotes.some(x => /^complemento de 19\/10 /.test(x.s) && !/\(19 folhas\)/.test(x.s) && /12 de 12 conferidas · aprovado por rafael/.test(x.s)) && lotes.some(x => /^RESIDENCIA LUIZ SALLES/.test(x.s) && /7 de 7 conferidas/.test(x.s)), '(2) cada lote numa linha: identificador (UX-04: sem o "(19 folhas)" antigo do nome, que brigava com 12 de 12), data, "12 de 12 conferidas · aprovado por rafael": ' + JSON.stringify(lotes.map(x => x.s)));
     chk(await page.$$eval('#pj-revisao .rl-lote', l => l.every(d => !d.open && !d.querySelector('.rl-corpo').checkVisibility())), '(2) os detalhes de cada lote ficam recolhidos');
 
     // (3) colisões: uma frase + tabela fechada

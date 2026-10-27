@@ -39,6 +39,14 @@ Ao digitar o nome em **Novo projeto** ou **Editar**: "Já existe projeto parecid
 **Abrir este** (e, ao editar, **Não é duplicata**). Em Problemas, o quadro **Possíveis projetos duplicados (N)**. "Não é duplicata" vale para o
 par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 
+### Lotes do mesmo projeto (UX-04, 27/10/2026)
+- **Identificador do lote**: o que distingue um lote dos outros do mesmo projeto, sempre abaixo do título (Precisa de você, Material novo,
+  página do projeto): **complemento de 19/10** (material novo que chegou a um projeto com lote fechado) ou **lote de 14/10** (a data em que chegou).
+  A contagem ao lado é a das folhas REAIS do lote ("12 folhas"); o nome do lote não leva mais "(N folhas)".
+- **N lotes prontos**: lotes do mesmo projeto prontos para publicar ficam numa linha só, com o botão **Publicar projeto** (publicar é do projeto:
+  o mesmo clique leva os lotes juntos).
+- No **Hoje**, a mesma ação da mesma pessoa no mesmo projeto em até 10 min é UMA frase, com **(2×)** quando ela repetiu de verdade.
+
 ## Menu (UX-28; antes CAMP-154)
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
 topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);
