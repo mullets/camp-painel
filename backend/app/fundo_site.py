@@ -132,8 +132,10 @@ def mudar_pagina_arquiteto(codigo: str, publicar: bool, ator: str, motivo: str |
         if not alvo:
             alvo = _achar_no_site(con, wp, codigo)
         if not alvo:
-            out["erro"] = ("O site ainda não criou a página deste arquiteto. Ela nasce quando o fundo vai ao site: espere um minuto e tente de novo."
-                           if publicar else "Não achei a página do arquiteto no site.")
+            if publicar:
+                out.update(motivo_sem_pagina(con, codigo, out.get("aviso")))
+            else:
+                out["erro"] = "Não achei a página do arquiteto no site."
             out["bloqueio"] = "sem_pagina"
             return out
         novo = "publish" if publicar else "draft"
@@ -160,6 +162,59 @@ def mudar_pagina_arquiteto(codigo: str, publicar: bool, ator: str, motivo: str |
     return out
 
 
+def faltas_arquiteto(con, a) -> list[dict]:
+    """UX-38: o que falta no cadastro do arquiteto, campo a campo, na ordem em que aparece na edição.
+    `site`: vai para a página do arquiteto no site (biografia, fonte, retrato). As datas ficam só no painel (o site não as recebe)."""
+    if not a:
+        return [{"campo": "arquiteto", "rotulo": "cadastrar o arquiteto titular do fundo", "site": True}]
+    out = []
+    if not (a["existencia_inicio"] or a["existencia_fim"]):
+        out.append({"campo": "datas", "rotulo": "datas de nascimento e morte" if a["tipo"] == "pessoa" else "datas de início e fim", "site": False})
+    if not (a["historia"] or "").strip():
+        out.append({"campo": "historia", "rotulo": "biografia", "site": True})
+    if not (a["fonte_historia"] or "").strip():
+        out.append({"campo": "fonte_historia", "rotulo": "fonte da biografia", "site": True})
+    if not con.execute("SELECT 1 FROM agente_retrato WHERE agente_id=?", (a["id"],)).fetchone():
+        out.append({"campo": "retrato", "rotulo": "retrato", "site": True})
+    return out
+
+
+def _projetos(con, codigo: str) -> tuple[int, int]:
+    """(projetos do fundo, projetos publicados) — sem os mesclados e os descartados."""
+    r = con.execute("""SELECT COUNT(*), COALESCE(SUM(status_site='no_ar'),0) FROM projeto
+                       WHERE fundo_codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL""", (codigo,)).fetchone()
+    return int(r[0] or 0), int(r[1] or 0)
+
+
+def motivo_sem_pagina(con, codigo: str, aviso: str | None = None) -> dict:
+    """UX-38: o site não tem a página do arquiteto. Antes a resposta era sempre "espere um minuto", o que só vale logo depois de o fundo
+    chegar ao site. Agora diz o que de fato aconteceu e devolve as ações que resolvem: {erro, acoes:[{tipo, rotulo}], falta:[...]}.
+
+    No site (plugin do acervo): a página nasce quando o termo do fundo é criado (e a conferência de hora em hora cria as que faltarem);
+    e a página de um fundo sem projeto publicado fica escondida do público mesmo publicada."""
+    f = con.execute("SELECT tainacan_term_id FROM fundo WHERE codigo=?", (codigo,)).fetchone()
+    a = _produtor(con, codigo)
+    total, pub = _projetos(con, codigo)
+    falta = faltas_arquiteto(con, a)
+    if not (f and f["tainacan_term_id"]):
+        partes = ["O fundo não chegou ao site, e a página do arquiteto só nasce quando ele chega."
+                  + (f" {aviso.strip().rstrip('.')}." if aviso else "") + " Tente de novo mais tarde; se continuar, avise quem cuida do site."]
+    else:
+        partes = ["O site tem o fundo, mas não criou a página deste arquiteto. Esperar um minuto não resolve: o site cria as páginas que faltam"
+                  " uma vez por hora. Tente de novo mais tarde; se continuar, avise quem cuida do site."]
+    if not pub:
+        partes.append("Este fundo ainda não tem projeto publicado: mesmo publicada, a página só aparece no site com o primeiro projeto publicado"
+                      " (e é publicada junto com ele).")
+    acoes = []
+    if not a:
+        acoes.append({"tipo": "vincular", "rotulo": "Vincular arquiteto"})
+    elif any(x["site"] for x in falta):
+        acoes.append({"tipo": "completar_arquiteto", "rotulo": "Completar os dados do arquiteto", "agente_id": a["id"]})
+    if not pub:
+        acoes.append({"tipo": "ver_projetos", "rotulo": "Ver os projetos"})
+    return {"erro": " ".join(partes), "acoes": acoes, "falta": falta, "projetos": total, "projetos_publicados": pub}
+
+
 def resumo_arquiteto(con, codigo: str) -> dict:
     """Uma frase e um botão: a página do arquiteto deste fundo está pública? o que falta? (fundo e arquiteto mostram o mesmo quadro)."""
     from .rotas_gestao import direitos_permitem_publicar
@@ -178,9 +233,13 @@ def resumo_arquiteto(con, codigo: str) -> dict:
         estado = "publica" if pub else "publica_vazia"
     else:
         estado = "rascunho" if pg["existe"] else "nao_existe"
+    total, _pub = _projetos(con, codigo)
+    f = con.execute("SELECT tainacan_term_id FROM fundo WHERE codigo=?", (codigo,)).fetchone()
     return {"fundo": codigo, "arquiteto": a["forma_autorizada"] if a else None, "agente_id": a["id"] if a else None,
             "estado": estado, "url": pg["url"], "projetos_publicados": pub, "direitos": direitos,
-            "pode_publicar": direitos is None and not pg["publica"], "falta_opcional": falta}
+            "pode_publicar": direitos is None and not pg["publica"], "falta_opcional": falta,
+            # UX-38: campo a campo (para abrir a edição do arquiteto já no que falta), quantos projetos há e se o fundo já chegou ao site
+            "falta": faltas_arquiteto(con, a), "projetos": total, "fundo_no_site": bool(f and f["tainacan_term_id"])}
 
 
 def estado(con, codigo: str) -> dict:

@@ -324,6 +324,10 @@ def publicar_arquiteto(codigo: str, u: dict = Depends(auth.exige("admin"))) -> d
     finally:
         con.close()
     r = fundo_site.mudar_pagina_arquiteto(codigo, True, u["email"])
+    if not r["ok"] and r.get("acoes") is not None:
+        # UX-38: o erro leva às ações que resolvem (completar os dados do arquiteto, ver os projetos), não só "espere"
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=409, content={"detail": r["erro"], "bloqueio": r.get("bloqueio"), "acoes": r["acoes"], "falta": r.get("falta") or []})
     if not r["ok"]:
         raise HTTPException(409 if r.get("bloqueio") else 502, r["erro"] or "O site não publicou a página do arquiteto")
     return {**r, "mensagem": "Página do arquiteto publicada no site" + (f". {r['aviso']}" if r.get("aviso") else "")}

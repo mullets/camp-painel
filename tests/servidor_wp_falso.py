@@ -81,6 +81,8 @@ class WPFalso:
 
     # 21/10: a página do arquiteto (a página do fundo no site). Acha uma por slug, sob /acervo/arquitetos/, e muda o status.
     def pagina_por_slug(self, slug):
+        if slug in (os.environ.get("WP_FALSO_SEM_PAGINA") or "").split(","):   # UX-38: o site ainda sem a página deste arquiteto
+            return []
         con = connect()
         try:
             r = con.execute("SELECT id, status FROM wp_pagina WHERE slug=? AND url LIKE '%/acervo/arquitetos/%'", (slug,)).fetchone()
