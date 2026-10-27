@@ -19,11 +19,14 @@ RE_CODIGO = re.compile(r"\bF(\d{3})(?:-P(\d{4}))?(?:-(\d{4}))?(?:-S(\d{2}))?(?:-
 
 # 27/10 (produção, F009-P0131): com o site respondendo em ~3,4 s e 5 folhas ao mesmo tempo, a criação do item passou dos 60 s de leitura
 # ("The read operation timed out") e a folha "NÃO subiu". Leitura/escrita: 90 s (margem para o site sobrecarregado sem esperar para sempre).
-# Conexão: 15 s (site sem resposta falha logo e entra na nova tentativa). O upload da imagem tem o próprio teto (300 s, em upload_media).
+# Conexão: 15 s (site sem resposta falha logo e entra na nova tentativa). O upload da imagem tem o próprio teto (TIMEOUT_UPLOAD).
 TIMEOUT_PADRAO = httpx.Timeout(90.0, connect=15.0)
 # 27/10 (investigação do site): mudar o status (publicar/despublicar) faz o site limpar o cache INTEIRO dentro da própria requisição;
 # passa fácil dos 60 s com o site lento. 120 s, e num tempo esgotado o painel RELÊ o item antes de dizer que falhou.
 TIMEOUT_STATUS = httpx.Timeout(120.0, connect=15.0)
+# 27/10 (publicação sem duplicar): o upload da imagem/anexo é a parte lenta do site (gera as miniaturas). Leitura longa (180 s),
+# conexão curta (15 s: site sem resposta falha logo). Antes era 300 s para tudo, inclusive a conexão.
+TIMEOUT_UPLOAD = httpx.Timeout(180.0, connect=15.0)
 _RE_STATUS_PASSAGEIRO = re.compile(r"(?:recusou|falhou)[^:]*:\s*\(?(?:429|502|503|504)\b|\((?:429|502|503|504)\)")
 _TEXTO_PASSAGEIRO = ("timed out", "timeout", "tempo esgotado", "connection reset", "connection refused", "connection aborted",
                      "server disconnected", "remoteprotocolerror", "connecterror", "readerror", "temporarily unavailable")
@@ -321,7 +324,7 @@ def _wp_upload_media(self, caminho: str, titulo: str = "", nome: str | None = No
     mime = mimetypes.guess_type(arquivo)[0] or "application/octet-stream"
     with p.open("rb") as fh:
         r = self.h.post("/wp-json/wp/v2/media", content=fh.read(),
-                        headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=300)
+                        headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=TIMEOUT_UPLOAD)
     if r.status_code >= 400:
         raise RuntimeError(f"WordPress recusou o upload de {arquivo}: {r.status_code} {r.text[:200]}")
     j = r.json()
@@ -342,7 +345,7 @@ def _wp_substituir_midia(self, media_id: int, caminho: str, nome: str | None = N
     mime = mimetypes.guess_type(arquivo)[0] or "image/jpeg"
     with p.open("rb") as fh:
         r = self.h.post(f"/wp-json/camp/v1/painel/midia/{int(media_id)}", content=fh.read(),
-                        headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=300)
+                        headers={"Content-Disposition": f'attachment; filename="{arquivo}"', "Content-Type": mime}, timeout=TIMEOUT_UPLOAD)
     if r.status_code == 404 and "rest_no_route" in r.text:
         raise RuntimeError("O site ainda não tem a rota para trocar a imagem de um anexo: avise quem cuida do site (plugin da CAMP, docs/site/painel-midia.php)")
     if r.status_code == 401:

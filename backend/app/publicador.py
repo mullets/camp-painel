@@ -820,15 +820,38 @@ def espelho_basta(con, codigo: str) -> bool:
     return bool(r)
 
 
+CAMPO_DUPLICATA = "pendente_duplicata_no_site"   # 'pendente_*': a sincronização não apaga; some quando alguém resolve
+
+
+def _avisar_duplicata(con, codigo: str, escolhido: int, ids: list, como: str) -> None:
+    """27/10 (F009-P0131: D00018 virou 97468 e 97943): mais de um item do site serve para a folha. O painel liga no `escolhido` e NÃO
+    cria outro; o aviso lista os IDs para o admin mandar o(s) extra(s) para a lixeira no site."""
+    extras = [str(x) for x in ids if int(x) != int(escolhido)]
+    if not extras:
+        return
+    _pendencia(con, "item", codigo, CAMPO_DUPLICATA,
+               f"Item duplicado no site ({como}): a folha foi ligada ao item {escolhido}; "
+               f"{'o item' if len(extras) == 1 else 'os itens'} {', '.join(extras)} {'sobrou' if len(extras) == 1 else 'sobraram'}"
+               f" — confira e mande para a lixeira no site.")
+
+
+def _ordem_preferida(st, iid):
+    """Entre itens do mesmo código: o publicado primeiro (não deixa a página pública órfã), depois o mais antigo (menor id)."""
+    return (st != "publish", int(iid))
+
+
 def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, projeto: str | None = None) -> dict | None:
     """Antes de criar a folha no Tainacan: já existe um item com este código? (um rascunho de envio anterior cuja ligação se perdeu).
     1) o espelho do site (wp_item.codigo_detectado); 2) o próprio site, pelo metadado "Código do documento" (8030).
-    Item já ligado a OUTRA folha do painel não serve. Devolve {"id", "status", "como"} ou None. Falha na busca do site não impede criar."""
+    Item já ligado a OUTRA folha do painel não serve. Mais de um: liga no publicado / mais antigo e abre o aviso de duplicata com os IDs.
+    Devolve {"id", "status", "como"} ou None. Falha na busca do site não impede criar."""
     ligados = "SELECT tainacan_item_id FROM item WHERE tainacan_item_id IS NOT NULL AND codigo<>?"
-    r = con.execute(f"""SELECT id, status FROM wp_item WHERE colecao_id=? AND upper(codigo_detectado)=upper(?) AND id NOT IN ({ligados})
-                        ORDER BY (status='publish') DESC, id LIMIT 1""", (COL_ACERVO, codigo, codigo)).fetchone()
-    if r:
-        return {"id": int(r["id"]), "status": r["status"], "como": "espelho do site"}
+    rows = con.execute(f"""SELECT id, status FROM wp_item WHERE colecao_id=? AND upper(codigo_detectado)=upper(?) AND id NOT IN ({ligados})""",
+                       (COL_ACERVO, codigo, codigo)).fetchall()
+    if rows:
+        rows = sorted(rows, key=lambda r: _ordem_preferida(r["status"], r["id"]))
+        _avisar_duplicata(con, codigo, rows[0]["id"], [r["id"] for r in rows], "mesmo código")
+        return {"id": int(rows[0]["id"]), "status": rows[0]["status"], "como": "espelho do site"}
     buscar = getattr(wp, "buscar_por_codigo", None)
     if not buscar or espelho_basta(con, codigo):
         return None
@@ -844,121 +867,103 @@ def item_existente_no_site(con, wp, codigo: str, fundo: str | None = None, proje
         return None
     ja = {x[0] for x in con.execute(ligados, (codigo,))}
     from .wp import detectar_codigo, metadados_texto
-    for it in sorted(achados, key=lambda x: (x.get("status") != "publish", int(x.get("id") or 0))):
+    bons = []
+    for it in achados:
         if not it.get("id") or int(it["id"]) in ja:
             continue
         md = metadados_texto(it)
         if detectar_codigo(it.get("title", ""), it.get("slug", ""), *md.values())[0] != codigo.upper():
             continue                                              # o site devolveu algo parecido, mas não é este código
+        bons.append((it, md))
+    if not bons:
+        return None
+    bons.sort(key=lambda x: _ordem_preferida(x[0].get("status"), x[0]["id"]))
+    for it, md in bons:
         con.execute("INSERT OR IGNORE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (int(it["id"]), COL_ACERVO, it.get("status"), it.get("title"), it.get("slug"), it.get("url"), codigo, fundo, projeto,
                      json.dumps(md, ensure_ascii=False), json.dumps(it, ensure_ascii=False)))
-        return {"id": int(it["id"]), "status": it.get("status"), "como": "busca no site pelo código"}
-    return None
+    it = bons[0][0]
+    _avisar_duplicata(con, codigo, it["id"], [x[0]["id"] for x in bons], "mesmo código")
+    return {"id": int(it["id"]), "status": it.get("status"), "como": "busca no site pelo código"}
 
 
-_TRAVA_ORFAO = _threading.Lock()   # 27/10: duas folhas de mesmo título tentando de novo ao mesmo tempo não ligam no mesmo item
+_TRAVAS_TITULO: dict = {}
+_TRAVAS_TITULO_GUARDA = _threading.Lock()
 
 
-FUSO_SITE = "America/Sao_Paulo"   # o Tainacan devolve a data de criação no horário do site, sem fuso
-MARGEM_RELOGIO_S = 120            # diferença aceitável entre o relógio do painel e o do site
-MOTIVO_TALVEZ_DUPLICADO = "item possivelmente duplicado no site — confira"
+def trava_do_titulo(titulo: str):
+    """27/10: folhas com o MESMO título (ex.: duas "Corte — P0131 — Casa") não procuram órfão e criam ao mesmo tempo: senão uma
+    poderia adotar, como "órfão", o item que a outra acabou de criar e cuja resposta ainda não chegou. Títulos diferentes seguem em paralelo."""
+    chave = " ".join(str(titulo).split()).casefold()
+    with _TRAVAS_TITULO_GUARDA:
+        return _TRAVAS_TITULO.setdefault(chave, _threading.Lock())
 
 
-class ItemTalvezDuplicado(RuntimeError):
-    """Mais de um item do site pode ser o que a tentativa anterior criou: não liga nenhum e não cria outro (fica pendente para alguém conferir)."""
-
-
-def _criado_em(it: dict):
-    """Quando o item foi criado no site: (datetime UTC sem fuso, True) com hora; (date no horário do site, False) quando o site só dá o dia
-    (o Tainacan pode formatar `creation_date` só com a data); (None, None) se não der para comparar.
-    `date_gmt` já vem em UTC; `creation_date`/`date` vêm no horário do site (FUSO_SITE) a menos que tragam o fuso."""
-    from datetime import datetime, timezone
-    from zoneinfo import ZoneInfo
-    for chave in ("date_gmt", "creation_date", "date"):
-        v = it.get(chave)
-        if isinstance(v, dict):
-            v = v.get("raw") or v.get("rendered")
-        if not v or not isinstance(v, str):
-            continue
-        txt = v.strip().replace("Z", "+00:00")
-        d, com_hora = None, True
-        try:
-            d = datetime.fromisoformat(txt); com_hora = len(txt) > 10
-        except ValueError:
-            for fmt, h in (("%d/%m/%Y %H:%M:%S", True), ("%d/%m/%Y %H:%M", True), ("%d/%m/%Y", False)):
-                try:
-                    d = datetime.strptime(txt, fmt); com_hora = h; break
-                except ValueError:
-                    pass
-        if d is None:
-            continue
-        if not com_hora:
-            return d.date(), False
-        if d.tzinfo is None:
-            d = d.replace(tzinfo=timezone.utc if chave == "date_gmt" else ZoneInfo(FUSO_SITE))
-        return d.astimezone(timezone.utc).replace(tzinfo=None), True
-    return None, None
+def _casca_vazia(it: dict, codigo_detectado: str | None = None) -> bool:
+    """O item é só a "casca" que o site cria quando o pedido de criar esgota o tempo: sem código de folha e sem documento (imagem/anexo).
+    Uma casca não tem nada de folha nenhuma, então ligar a folha nela não troca conteúdo: o envio grava metadados e imagem em seguida."""
+    from .wp import detectar_codigo, metadados_texto
+    achou = codigo_detectado or detectar_codigo(it.get("slug", ""), *metadados_texto(it).values())[0] or ""
+    if "-D" in str(achou).upper():
+        return False
+    doc = it.get("document")
+    if isinstance(doc, dict):
+        doc = doc.get("id") or doc.get("url")
+    return doc in (None, "", 0, "0", False)
 
 
 def item_orfao_no_site(con, wp, codigo: str, titulo: str) -> dict | None:
-    """27/10 (publicação paciente): a tentativa anterior desta folha deixou "pendente_criar_no_site" — por exemplo, o pedido de criar
-    o item esgotou o tempo DEPOIS de o WordPress criá-lo. Esse item ainda não tem o código gravado (os metadados vêm depois), então
-    item_existente_no_site não o acha. Procura no site um item com EXATAMENTE o título que o painel dá à folha, na coleção das folhas,
-    sem código de folha em nenhum metadado, que nenhuma outra folha do painel usa e CRIADO depois do início da 1ª tentativa que falhou
-    (detectada_em da pendência, com MARGEM_RELOGIO_S): títulos repetem ("Corte", "Planta"), um item antigo de mesmo título não é deste envio.
-    Um candidato: liga a folha nele (o envio segue gravando metadados e imagem nele). Mais de um (ou um sem data comparável): não liga
-    nenhum e NÃO cria — levanta ItemTalvezDuplicado (fica pendente para conferir). Se a busca falhar, levanta: criar sem conferir duplicaria."""
-    from datetime import datetime, timedelta
-    pend = con.execute("SELECT MIN(detectada_em) FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0",
+    """27/10 (F009-P0131: o pedido de criar a D00018 esgotou o tempo DEPOIS de o WordPress criar o item 97468; o Publicar seguinte criou
+    o 97943). Antes de criar QUALQUER folha que o painel ainda não tem no site: procura um item com EXATAMENTE o título que o painel dá à
+    folha, na coleção das folhas, que seja casca vazia (sem código de folha e sem documento) e que nenhuma outra folha use.
+    - Com espelho recente e sem tentativa anterior falha: procura no espelho (nenhum pedido a mais ao site).
+    - Senão: procura no site pelo título. Se a busca falhar, levanta (criar sem conferir poderia duplicar).
+    Um ou mais: liga a folha no MAIS ANTIGO (o envio segue gravando metadados e imagem nele) e, se havia mais de um, abre o aviso de
+    duplicata com os IDs. Nenhum: None (aí sim cria). Quem chama segura trava_do_titulo(titulo)."""
+    pend = con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0",
                        (codigo,)).fetchone()
-    if not pend or not pend[0]:
-        return None
-    buscar = getattr(wp, "buscar_por_titulo", None)
-    if not buscar:
-        return None
-    desde = datetime.strptime(pend[0][:19], "%Y-%m-%d %H:%M:%S") - timedelta(seconds=MARGEM_RELOGIO_S)
-    from datetime import timezone
-    from zoneinfo import ZoneInfo
-    dia_desde = desde.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(FUSO_SITE)).date()
-    try:
-        achados = buscar(COL_ACERVO, titulo) or []
-    except Exception as e:  # noqa: BLE001
-        raise RuntimeError(f"não consegui conferir no site se a tentativa anterior já criou a folha ({str(e)[:160]})") from e
-    from .wp import detectar_codigo, metadados_texto
-    with _TRAVA_ORFAO:
-        ligados = {x[0] for x in con.execute("SELECT tainacan_item_id FROM item WHERE tainacan_item_id IS NOT NULL AND codigo<>?", (codigo,))}
-        candidatos, incertos = [], []
-        for it in sorted(achados, key=lambda x: int(x.get("id") or 0)):
+    ligados = {x[0] for x in con.execute("SELECT tainacan_item_id FROM item WHERE tainacan_item_id IS NOT NULL AND codigo<>?", (codigo,))}
+    alvo = " ".join(str(titulo).split()).casefold()
+    cands = []
+    if not pend and espelho_basta(con, codigo):
+        for r in con.execute("SELECT id, status, titulo, codigo_detectado, documento_url, json FROM wp_item WHERE colecao_id=? AND titulo=?", (COL_ACERVO, titulo)):
+            try:
+                it = json.loads(r["json"] or "{}") or {}
+            except ValueError:
+                it = {}
+            it = {**it, "id": r["id"], "status": r["status"], "title": r["titulo"]}
+            if r["documento_url"]:
+                it["document"] = r["documento_url"]
+            if int(r["id"]) not in ligados and _casca_vazia(it, r["codigo_detectado"]):
+                cands.append(it)
+    else:
+        buscar = getattr(wp, "buscar_por_titulo", None)
+        if not buscar:
+            return None
+        try:
+            achados = buscar(COL_ACERVO, titulo) or []
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"não consegui conferir no site se já existe um item desta folha ({str(e)[:160]})") from e
+        for it in achados:
             if not it.get("id") or int(it["id"]) in ligados:
                 continue
             col = it.get("collection_id")
             if col not in (None, "") and str(col) != str(COL_ACERVO):          # outra coleção: não é folha
                 continue
-            achou = detectar_codigo(it.get("slug", ""), *metadados_texto(it).values())[0] or ""
-            if "-D" in achou.upper():                             # já é de alguma folha (tem código de folha): não é o órfão desta
+            if " ".join(str(it.get("title") or "").split()).casefold() != alvo:
                 continue
-            quando, com_hora = _criado_em(it)
-            if quando is None:
-                incertos.append(it)
-            elif com_hora and quando >= desde:
-                candidatos.append(it)
-            elif not com_hora and quando >= dia_desde:            # só o dia (sem hora): pode ser um item antigo do mesmo dia — não liga sozinho
-                incertos.append(it)
-        if len(candidatos) + len(incertos) > 1 or incertos:
-            ids = ", ".join(str(x["id"]) for x in candidatos + incertos)
-            con.execute("UPDATE divergencia_site SET valor_painel=? WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0",
-                        (f"{MOTIVO_TALVEZ_DUPLICADO} (itens {ids} com o mesmo título)"[:300], codigo))
-            raise ItemTalvezDuplicado(f"{MOTIVO_TALVEZ_DUPLICADO}: itens {ids} com o mesmo título, criados depois da tentativa que falhou")
-        if candidatos:
-            it = candidatos[0]
-            con.execute("UPDATE item SET tainacan_item_id=?, status_site=? WHERE codigo=? AND tainacan_item_id IS NULL",
-                        (int(it["id"]), STATUS_DO_SITE.get(it.get("status"), "rascunho"), codigo))
-            return it
-    return None
+            if _casca_vazia(it):
+                cands.append(it)
+    if not cands:
+        return None
+    cands.sort(key=lambda x: int(x["id"]))
+    it = cands[0]
+    con.execute("UPDATE item SET tainacan_item_id=?, status_site=? WHERE codigo=? AND tainacan_item_id IS NULL",
+                (int(it["id"]), STATUS_DO_SITE.get(it.get("status"), "rascunho"), codigo))
+    _avisar_duplicata(con, codigo, it["id"], [x["id"] for x in cands], "mesmo título, sem código: criado por um envio que esgotou o tempo")
+    return it
 
 
-@_nunca_convidado
 def atualizar_serie_no_site(codigo: str, ator: str) -> dict:
     """CAMP-139 (21/10): a folha mudou de série (tipo de material) e continua com o MESMO item no site (o endereço vem do título, não do
     código): grava no item os metadados que mudam — "Código do documento", "Série" e "Tipo de desenho". Falha vira pendência; nunca levanta."""
@@ -1058,7 +1063,17 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         wp = WP()
         p_num = codigo.split("-")[1]
         titulo = f"{(i['titulo'] or i['tipo_documento'] or i['serie_nome'])} — {p_num} — {i['projeto_titulo']}"
-        existente = item_existente_no_site(con, wp, codigo, i["fundo_codigo"], i["projeto_codigo"])
+        trava_t = trava_do_titulo(titulo)
+        trava_t.acquire()                                          # solta logo depois de ligar a folha ao item (ver trava_do_titulo)
+        try:
+            existente = item_existente_no_site(con, wp, codigo, i["fundo_codigo"], i["projeto_codigo"])
+            orfao = None if existente else item_orfao_no_site(con, wp, codigo, titulo)   # cobre o item que um envio anterior criou sem resposta
+            it = None
+            if not existente and not orfao:
+                it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
+                con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (int(it["id"]), codigo))
+        finally:
+            trava_t.release()
         if existente:                                             # já há um item com este código no site (rascunho de um envio anterior): liga, não cria outro
             iid = existente["id"]
             st = STATUS_DO_SITE.get(existente.get("status"), "rascunho")
@@ -1070,13 +1085,10 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 con.commit(); con.close()
                 return out
         else:
-            orfao = item_orfao_no_site(con, wp, codigo, titulo)     # 27/10: a tentativa anterior criou o item e a resposta não chegou?
             if orfao:
                 it = orfao
-                out["reaproveitado"] = {"item_id": int(orfao["id"]), "como": "item criado na tentativa anterior (a resposta do site não chegou)",
+                out["reaproveitado"] = {"item_id": int(orfao["id"]), "como": "item criado por um envio anterior (a resposta do site não chegou)",
                                         "status": orfao.get("status")}
-            else:
-                it = wp.criar_item(COL_ACERVO, titulo, "draft", descricao_folha(i))
             iid = int(it["id"])
             con.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (iid, codigo))
             _resolver_pendencia(con, "item", codigo, "pendente_criar_no_site")
@@ -1149,7 +1161,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         out["erro"] = str(e)[:300]; _pendencia(con, "item", codigo, "pendente_criar_no_site", out["erro"])
         con.execute("""UPDATE divergencia_site SET detectada_em=? WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site'
                        AND resolvida=0 AND detectada_em > ?""", (inicio, codigo, inicio))      # a pendência começa no INÍCIO da tentativa
-        out["passageiro"] = (isinstance(e, ItemTalvezDuplicado) or erro_passageiro(e)
+        out["passageiro"] = (erro_passageiro(e)
                              or (e.__cause__ is not None and erro_passageiro(e.__cause__)))   # 27/10: vale tentar de novo
     con.commit(); con.close()
     return out

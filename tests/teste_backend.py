@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10415,7 +10415,10 @@ def filho(modo):
         ver("folha 3 (503, 503, ok): 3 tentativas, nenhuma duplicada", site["chamadas"].get("Planta 3") == 3 and len(pc[D(3)]) == 1, str(site["chamadas"]))
         ver("erro 400 NÃO repete: o site foi chamado 1 vez para a folha 4 e ela fica pendente", site["chamadas"].get("Planta 4") == 1 and not ligado(4), str(site["chamadas"]))
         ver("a folha que esgota o tempo 3× fica pendente (3 tentativas, nenhum item no site)", site["chamadas"].get("Planta 5") == 3 and not ligado(5) and not pc[D(5)], str(site["chamadas"]))
-        ver("a tarefa termina 'falhou' com as 2 folhas e nada é tornado público", t1["estado"] == "falhou" and {f["codigo"] for f in t1["falhas"]} == {D(4), D(5)} and not site["status"], str(t1.get("falhas")))
+        _pub_ids = {w for w, st_ in site["status"] if st_ == "publish"}
+        ver("a tarefa termina 'falhou' com as 2 folhas; as 6 que subiram são publicadas (uma folha com erro não segura as outras)",
+            t1["estado"] == "falhou" and {f["codigo"] for f in t1["falhas"]} == {D(4), D(5)} and all(ligado(k) in _pub_ids for k in (1, 2, 3, 6, 7, 8))
+            and "6 folha(s) enviada(s), 2 com erro" in (r1.get("mensagem") or ""), str(t1.get("falhas")) + " " + str(r1.get("mensagem")))
         ver("o resumo conta: 4 folhas precisaram de nova tentativa (1, 2, 3, 5) e 2 falharam de vez", r1.get("novas_tentativas") == 4 and r1.get("falharam_de_vez") == 2, str({k_: r1.get(k_) for k_ in ("novas_tentativas", "falharam_de_vez", "mensagem")}))
         ver("a mensagem diz que o próximo Publicar envia só as que faltam, sem duplicar", "sem duplicar" in (r1.get("mensagem") or "") and "4 folha(s) precisaram de nova tentativa" in (r1.get("mensagem") or ""), r1.get("mensagem"))
         ver("o paralelo cai depois dos erros passageiros (4 → 2 → 1) e o acompanhamento avisa", "O site está lento: enviando 2 de cada vez" in txt and "O site está lento: enviando 1 de cada vez" in txt, txt[:400])
@@ -10449,20 +10452,166 @@ def filho(modo):
         efeitos.update({"Corte A": ["cria2_e_timeout"], "Corte B": ["timeout"]})
         r3 = _pg.executar(P2, {"email": "adm@camp.arq.br", "papel": "admin"})
         lig2 = lambda k: c.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (E(k),)).fetchone()[0]
-        ver("órfão ANTIGO com o mesmo título NÃO é ligado: a folha ganha um item novo e o antigo continua solto",
-            lig2(2) and lig2(2) != velho and site["chamadas"].get("Corte B") == 2 and not site["itens"][velho]["meta"], f"ligado={lig2(2)} velho={velho} {site['chamadas'].get('Corte B')}")
+        ver("órfão de um envio ANTERIOR (casca vazia, mesmo título, sem código): a folha é ligada nele e nada novo é criado",
+            lig2(2) == velho and not site["chamadas"].get("Corte B") and site["itens"][velho]["meta"].get(8030) == E(2), f"ligado={lig2(2)} velho={velho} {site['chamadas'].get('Corte B')}")
         doisA = [i["id"] for i in site["itens"].values() if i["title"].startswith("Corte A ")]
         pendA = c.execute("SELECT valor_painel FROM divergencia_site WHERE codigo=? AND campo='pendente_criar_no_site' AND resolvida=0", (E(1),)).fetchone()
-        ver("dois órfãos candidatos: não liga nenhum NEM cria outro; a folha fica pendente com 'item possivelmente duplicado no site — confira'",
-            not lig2(1) and len(doisA) == 2 and site["chamadas"].get("Corte A") == 1 and not any(site["itens"][x]["meta"] for x in doisA)
-            and pendA and "possivelmente duplicado" in pendA[0] and r3.get("ok") is False and any(f["codigo"] == E(1) and "possivelmente duplicado" in f["erro"] for f in r3.get("falhas") or []),
-            f"{lig2(1)} {doisA} {site['chamadas'].get('Corte A')} {pendA and pendA[0]} {r3.get('falhas')}")
-        cr = getattr(_pub, "_criado_em", None)
-        d1 = cr({"creation_date": "2026-10-27 13:02:00"}) if cr else None
-        d2 = cr({"creation_date": "27/10/2026"}) if cr else None
-        d3 = cr({"date_gmt": "2026-10-27T16:02:00"}) if cr else None
-        ver("data de criação do site: hora de São Paulo vira UTC (+3 h); só o dia é comparado por dia; date_gmt já é UTC",
-            d1 == (_dt(2026, 10, 27, 16, 2), True) and d2 == (_dt(2026, 10, 27).date(), False) and d3 == (_dt(2026, 10, 27, 16, 2), True), str((d1, d2, d3)))
+        avA = c.execute("SELECT valor_painel FROM divergencia_site WHERE codigo=? AND campo='pendente_duplicata_no_site' AND resolvida=0", (E(1),)).fetchone()
+        ver("dois órfãos do mesmo envio: liga no MAIS ANTIGO, não cria outro e avisa a duplicata com o ID que sobrou",
+            lig2(1) == min(doisA) and len(doisA) == 2 and site["chamadas"].get("Corte A") == 1 and site["itens"][min(doisA)]["meta"].get(8030) == E(1)
+            and avA and str(max(doisA)) in avA[0] and "lixeira" in avA[0] and r3.get("ok") is True,
+            f"{lig2(1)} {doisA} {site['chamadas'].get('Corte A')} {avA and avA[0]} {r3.get('mensagem')}")
+        c.close()
+        for l in res: print(l)
+    elif modo == "publicacao_sem_duplicar":
+        # 27/10 (produção, F009-P0131): a D00018 esgotou o tempo ao ser criada, o Tainacan criou o item 97468 mesmo assim; o Publicar
+        # seguinte criou o 97943 (duplicada) e, nas duas vezes, a falha parou a publicação: 25 folhas sem problema nunca foram enviadas.
+        # Site FALSO no nível do cliente (nenhuma chamada sai do processo). Prova: timeout com item criado não duplica; 1 folha com erro
+        # num lote de 10 não segura as outras 9; duplicata por código liga no mais antigo e avisa; a sincronização mantém o vínculo e
+        # adota pelo código; o caso real (D00018 com 2 cascas, a nova vai para a lixeira) termina sem nada duplicado.
+        init_db(); _aplicar_migracoes_real()
+        import threading as _th, time as _t, httpx as _hx
+        from app import auth, publicador as _pub, wp as _wpm, publicacao_guiada as _pg, sincronizador as _sz
+        import app.rotas_projetos as _rp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        tu = getattr(_wpm, "TIMEOUT_UPLOAD", None)
+        ver("upload de imagem/anexo: leitura longa (180 s) e conexão curta (15 s)", tu is not None and tu.read == 180 and tu.connect == 15, str(tu))
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F079','Fundo Sem Dup','SDP',1)")
+        c.execute("INSERT INTO direitos_fundo (fundo_codigo,situacao,titular,documento_autorizacao) VALUES ('F079','autorizado','Fam','Termo')")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.envio_paralelo','1','x',0)"); c.commit()
+        def projeto(n, folhas):
+            P = f"F079-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F079',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id) VALUES (?,'F079',?,'Casa',1975,1,?)", (P, n, 7000 + n))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft','Casa',?)", (7000 + n, P))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES ('Lote',?,'/x','revisao',datetime('now'),'adm@camp.arq.br')", (P,)).lastrowid
+            for k in range(1, folhas + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,lote_id) VALUES (?,?,'S03',?,?,'campvision','conferida','nao_publicado',?)",
+                          (f"{P}-1975-S03-D{k:05d}", P, k, f"Folha {k}", lid))
+            c.commit()
+            return P, (lambda k: f"{P}-1975-S03-D{k:05d}")
+        trava = _th.Lock()
+        site = {"itens": {}, "n": 97000, "chamadas": {}, "status": []}
+        efeitos = {}
+        def tainacan(it):
+            return {"id": it["id"], "title": it["title"], "status": it["status"], "slug": "", "collection_id": it["colecao"],
+                    "metadata": {f"s{m}": {"name": "Código do documento" if m == 8030 else f"m{m}", "value": v} for m, v in it["meta"].items()}}
+        def novo_item(titulo, meta=None, status="draft"):
+            with trava:
+                site["n"] += 1; it = {"id": site["n"], "title": titulo, "status": status, "meta": dict(meta or {}), "colecao": 8013}
+                site["itens"][it["id"]] = it
+                return it["id"]
+        class SiteFalso:
+            def __init__(self, *a, **k): pass
+            def criar_item(self, cid, titulo, status="draft", descricao=""):
+                chave = titulo.split(" — ")[0]
+                with trava:
+                    n = site["chamadas"][chave] = site["chamadas"].get(chave, 0) + 1
+                    ef = efeitos.get(chave) or []
+                    ef = ef[n - 1] if n <= len(ef) else "ok"
+                if ef == "400": raise RuntimeError("Tainacan recusou criar item: 400 campo inválido")
+                iid = novo_item(titulo, status=status)
+                if ef == "cria_e_timeout": raise _hx.ReadTimeout("The read operation timed out")
+                return {"id": iid, "slug": "s", "url": "u"}
+            def buscar_por_codigo(self, cid, mid, codigo):
+                with trava: return [tainacan(i) for i in site["itens"].values() if i["meta"].get(int(mid)) == codigo]
+            def buscar_por_titulo(self, cid, titulo):
+                with trava: return [tainacan(i) for i in site["itens"].values() if i["title"] == titulo]
+            def definir_metadado(self, wid, mid, valor):
+                with trava: site["itens"][int(wid)]["meta"][int(mid)] = valor
+                return {}
+            def gravar_metadados_lote(self, *a, **k): return None
+            def atualizar_status_item(self, cid, wid, st):
+                with trava:
+                    site["status"].append((wid, st))
+                    if int(wid) in site["itens"]: site["itens"][int(wid)]["status"] = st
+                return {"status": st}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        _pub.WP = SiteFalso; _wpm.WP = SiteFalso; _rp.WP = SiteFalso
+        _pg.ESPERAS_S = (0.01, 0.02)
+        auth.criar_usuario("A", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        U = {"email": "adm@camp.arq.br", "papel": "admin"}
+        def publicar_ate_o_fim(P):
+            for _ in range(50):
+                r = _pg.executar(P, U)
+                if not r.get("parcial"): return r
+            return r
+        com_codigo = lambda cod: [i["id"] for i in site["itens"].values() if i["meta"].get(8030) == cod]
+        lig = lambda cod: c.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (cod,)).fetchone()[0]
+        # 1) timeout na criação com o item criado no servidor, em DOIS Publicar seguidos: nunca duplica
+        P1, D1 = projeto(1, 2)
+        efeitos.update({"Folha 1": ["cria_e_timeout", "cria_e_timeout", "cria_e_timeout"]})
+        _pg.TENTATIVAS_POR_FOLHA = 1                 # cada Publicar tenta 1 vez: o 2º Publicar é o "18:55" do caso real
+        ra = publicar_ate_o_fim(P1)
+        rb = publicar_ate_o_fim(P1)
+        _pg.TENTATIVAS_POR_FOLHA = 3; efeitos.clear()
+        t1 = [i for i in site["itens"].values() if i["title"].startswith("Folha 1 ")]
+        ver("timeout com o item criado no site + novo Publicar: 1 só item da folha (o do 1º envio), ligado e com o código",
+            len(t1) == 1 and site["chamadas"].get("Folha 1") == 1 and lig(D1(1)) == t1[0]["id"] and com_codigo(D1(1)) == [t1[0]["id"]],
+            f"itens={[i['id'] for i in t1]} chamadas={site['chamadas'].get('Folha 1')} ra={ra.get('mensagem')} rb={rb.get('mensagem')}")
+        # 2) 1 folha falhando num lote de 10 (envio 1 de cada vez, fatias curtas): as outras 9 sobem e são publicadas
+        P2, D2 = projeto(2, 10)
+        efeitos.update({"Folha 3": ["400"] * 9})
+        orc = _pg.ORCAMENTO_S; _pg.ORCAMENTO_S = 0.0     # fatia mínima: cada chamada envia 1 folha (a tela repete enquanto for parcial)
+        r2 = publicar_ate_o_fim(P2)
+        _pg.ORCAMENTO_S = orc
+        subiram = [k for k in range(1, 11) if lig(D2(k))]
+        publicadas = {w for w, st_ in site["status"] if st_ == "publish"}
+        ver("1 folha com erro num lote de 10: as outras 9 sobem (antes: a publicação parava e as seguintes nunca iam)",
+            subiram == [1, 2, 4, 5, 6, 7, 8, 9, 10] and all(len(com_codigo(D2(k))) == 1 for k in subiram), f"{subiram} {r2.get('mensagem')}")
+        ver("no fim: 'X enviadas, Y com erro', a folha com erro listada, as 9 publicadas e a com erro não",
+            "9 folha(s) enviada(s), 1 com erro" in (r2.get("mensagem") or "") and [f["codigo"] for f in r2.get("falhas") or []] == [D2(3)]
+            and all(lig(D2(k)) in publicadas for k in subiram) and r2.get("ok") is False and r2.get("parcial") is False, str(r2.get("mensagem")))
+        efeitos.pop("Folha 3")
+        r2b = publicar_ate_o_fim(P2)
+        ver("o próximo Publicar envia só a que faltava (sem duplicar nenhuma)", r2b.get("ok") is True and r2b.get("folhas_criadas") == 1
+            and all(len(com_codigo(D2(k))) == 1 for k in range(1, 11)), str(r2b.get("mensagem")))
+        # 3) duplicata pelo código: liga no mais antigo, não cria outro, avisa com os IDs
+        P3, D3 = projeto(3, 1)
+        a_ = novo_item(f"Folha 1 — P0003 — Casa", {8030: D3(1)}); b_ = novo_item(f"Folha 1 — P0003 — Casa", {8030: D3(1)})
+        antes = len(site["itens"])
+        r3 = publicar_ate_o_fim(P3)
+        av = c.execute("SELECT valor_painel FROM divergencia_site WHERE codigo=? AND campo='pendente_duplicata_no_site' AND resolvida=0", (D3(1),)).fetchone()
+        ver("dois itens com o mesmo código: liga no mais antigo, não cria outro e abre o aviso de duplicata com o ID que sobrou",
+            lig(D3(1)) == a_ and len(site["itens"]) == antes and av and str(b_) in av[0] and "lixeira" in av[0], f"{lig(D3(1))} {a_} {b_} {av and av[0]} {r3.get('mensagem')}")
+        # 4) sincronização: casa folha ↔ item pelo código; mantém o vínculo atual; senão o mais antigo; lista a duplicata
+        c.execute("DELETE FROM wp_item WHERE colecao_id=8013")
+        P4, D4 = projeto(4, 3)
+        for wid, cod in ((501, D4(1)), (502, D4(1)), (503, D4(2)), (504, D4(2)), (505, D4(3))):
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','x',?)", (wid, cod))
+        c.execute("UPDATE item SET tainacan_item_id=502 WHERE codigo=?", (D4(1),)); c.commit()
+        dups = []
+        _sz._reconciliar_vinculos(c, "item", 8013, dups) if "duplicados" in _sz._reconciliar_vinculos.__code__.co_varnames else _sz._reconciliar_vinculos(c, "item", 8013)
+        c.commit()
+        ver("sincronizar: folha sem vínculo adota o item que já existe no site pelo código", lig(D4(3)) == 505, str(lig(D4(3))))
+        ver("sincronizar: vínculo atual (502) é mantido mesmo havendo outro item do código; sem vínculo, vai para o mais antigo (503, não 504)",
+            lig(D4(1)) == 502 and lig(D4(2)) == 503, f"{lig(D4(1))} {lig(D4(2))}")
+        ver("sincronizar: os códigos repetidos são listados como duplicados no site", sorted(dups) == [(D4(1), [501, 502]), (D4(2), [503, 504])], str(dups))
+        rot = __import__("app.rotas_hoje", fromlist=["x"])._rotulo
+        ver("a lista de divergências explica a duplicata (mandar para a lixeira)", "lixeira" in rot("duplicado_no_site")[1] and "lixeira" in rot("pendente_duplicata_no_site")[1])
+        # 5) o caso real: D00018 com duas cascas (97468 às 16:02, 97943 às 18:55), 25 folhas nunca enviadas
+        P5, D5 = projeto(131, 30)
+        tit18 = "Folha 18 — P0131 — Casa"
+        velho = novo_item(tit18); novo = novo_item(tit18)
+        c.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE projeto_codigo=? AND sequencial<=5", (None, P5))
+        for k in range(1, 6):                         # as 5 primeiras já tinham subido
+            w = novo_item(f"Folha {k} — P0131 — Casa", {8030: D5(k)})
+            c.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (w, D5(k)))
+        _pub._pendencia(c, "item", D5(18), "pendente_criar_no_site", "The read operation timed out"); c.commit()
+        with trava: del site["itens"][novo]          # o admin mandou o 97943 para a lixeira
+        antes = len(site["itens"])
+        r5 = publicar_ate_o_fim(P5)
+        ver("caso F009-P0131: depois de mandar o item novo para a lixeira, o Publicar liga a D00018 no item antigo e envia as que faltam",
+            lig(D5(18)) == velho and site["itens"][velho]["meta"].get(8030) == D5(18) and all(lig(D5(k)) for k in range(1, 31))
+            and len(site["itens"]) == antes + 24 and all(len(com_codigo(D5(k))) == 1 for k in range(1, 31)) and r5.get("ok") is True,
+            f"D18={lig(D5(18))} velho={velho} novos={len(site['itens']) - antes} {r5.get('mensagem')}")
+        # 6) duas folhas com o MESMO título não procuram/criam ao mesmo tempo
+        tt = getattr(_pub, "trava_do_titulo", None)
+        ver("mesmo título = mesma trava (folhas irmãs não adotam o item uma da outra); título diferente = outra trava",
+            tt is not None and tt("Corte — P1 — X") is tt("Corte  —  P1 — X") and tt("Corte — P1 — X") is not tt("Planta — P1 — X"))
         c.close()
         for l in res: print(l)
     elif modo == "ux17_clique_duplo":
@@ -14177,6 +14326,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Publicação paciente: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Publicação sem duplicar: timeout com item criado, 1 folha com erro não para as outras, duplicata pelo código, sincronização pelo código")
+rc, out = rodar("publicacao_sem_duplicar", f"{tmp}/publicacao_sem_duplicar.db")
+if rc != 0: ok(False, f"teste publicacao_sem_duplicar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Publicação sem duplicar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")

@@ -67,13 +67,23 @@ def _varre_o_que_sumiu(con, inicio: str, colecoes_com_metadados: list) -> None:
         con.execute(f"DELETE FROM wp_metadado WHERE visto_em < ? AND colecao_id IN ({marcas})", (inicio, *colecoes_com_metadados))
 
 
-def _reconciliar_vinculos(con, tabela: str, colecao_id: int) -> int:
-    """projeto/item.tainacan_item_id = o maior id do site com o mesmo código na coleção certa (ou NULL se o site não tem).
+def _reconciliar_vinculos(con, tabela: str, colecao_id: int, duplicados: list | None = None) -> int:
+    """projeto/item.tainacan_item_id = o item do site com o mesmo código na coleção certa (ou NULL se o site não tem).
+    27/10 (publicação sem duplicar): com mais de um item do mesmo código, o vínculo atual é MANTIDO se for um deles; senão vai para o
+    publicado e, entre iguais, o mais antigo (menor id) — antes era sempre o maior id, que trocava a folha para a cópia nova.
+    Os códigos repetidos entram em `duplicados` como (codigo, [ids]) para a lista de divergências.
     Só grava o que muda, em lotes de LOTE_ESCRITA (solta o banco entre um e outro). Devolve quantas linhas mudaram."""
-    mapa = dict(con.execute("SELECT codigo_detectado, MAX(id) FROM wp_item WHERE colecao_id=? AND codigo_detectado IS NOT NULL "
-                            "GROUP BY codigo_detectado", (colecao_id,)).fetchall())
-    mudar = [(mapa.get(cod), cod) for cod, atual in con.execute(f"SELECT codigo, tainacan_item_id FROM {tabela}").fetchall()
-             if mapa.get(cod) != atual]
+    por_codigo: dict = {}
+    for cod, iid, st in con.execute("SELECT codigo_detectado, id, status FROM wp_item WHERE colecao_id=? AND codigo_detectado IS NOT NULL", (colecao_id,)):
+        por_codigo.setdefault(cod, []).append((st != "publish", int(iid)))
+    mudar = []
+    for cod, atual in con.execute(f"SELECT codigo, tainacan_item_id FROM {tabela}").fetchall():
+        ids = sorted(por_codigo.get(cod) or [])
+        if len(ids) > 1 and duplicados is not None:
+            duplicados.append((cod, sorted(i for _, i in ids)))
+        novo = (atual if atual is not None and any(i == int(atual) for _, i in ids) else ids[0][1]) if ids else None
+        if novo != atual:
+            mudar.append((novo, cod))
     for k in range(0, len(mudar), LOTE_ESCRITA):
         if k:
             _respiro(con)
@@ -252,9 +262,13 @@ def _executar_impl(gravar_espelho: bool = True, log=print) -> dict:
             itens_cid = _colecao_config(con, "tainacan.itens_collection_id", 8013)
             # 27/10: antes eram 4 UPDATEs com subconsulta por linha; o SQLite escolhia o índice da coleção (idx_wp_item_colecao) e
             # varria a coleção inteira para CADA folha (6.000 × 6.000): ~20 s com a escrita presa. Agora: um mapa código -> id e só
-            # as linhas que mudam, em lotes curtos. Mesmo resultado: vínculo = o maior id do código na coleção certa, ou nenhum.
+            # as linhas que mudam, em lotes curtos (vínculo: ver _reconciliar_vinculos).
+            dups: list = []
             _reconciliar_vinculos(con, "projeto", projetos_cid)
-            _reconciliar_vinculos(con, "item", itens_cid)
+            _reconciliar_vinculos(con, "item", itens_cid, dups)
+            for cod, ids in dups:     # 27/10: o mesmo código em mais de um item do site (a folha fica ligada a um; os outros sobraram)
+                ligado = con.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (cod,)).fetchone()
+                div(con, "item", cod, "duplicado_no_site", f"ligada ao item {ligado[0] if ligado else '—'}", "itens " + ", ".join(map(str, ids)))
 
             for f, r in fundos.items():
                 if f not in fundos_vistos and r["ativo"]:

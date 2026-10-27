@@ -218,6 +218,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - No resultado: "**N folha(s) precisaram de nova tentativa (o site demorou)**". Falha de vez: "(o site não respondeu em 3 tentativas)" e
   "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas".
 
+## Publicação sem duplicar (27/10/2026)
+- Uma folha com erro não para a publicação: as demais seguem e o resultado diz "**N folha(s) enviada(s), N com erro**" (com a primeira
+  folha e o erro) e "**As enviadas foram publicadas.**". Durante: "Enviadas N folha(s); faltam N. N com erro até agora."
+- Em Divergências com o site: "**Item duplicado no site ao publicar**" (o painel ligou a folha no item mais antigo, ou no publicado, e
+  não criou outro; "mande os itens que sobraram para a lixeira no site") e "**Folha com mais de um item no site**" (achado na sincronização).
+
 ## Recorte automático das imagens públicas (UX-44, 27/10/2026)
 - Só a imagem que vai ao site (até 1.920 px) e o "**Ver como vai ao site**" são recortados na borda do papel e clareados (branco e contraste
   pelo papel). O TIF e a prévia do CAMP Vision não mudam. O recorte feito à mão ("Recortar e alinhar") sempre vence.

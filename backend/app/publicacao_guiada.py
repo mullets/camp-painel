@@ -266,6 +266,11 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         from .wp import erro_passageiro
         n = envio_paralelo()
         st = _ritmo(codigo, n)
+        # 27/10 (F009-P0131: a D00018 falhou e 25 folhas sem problema nunca foram enviadas): a folha que falhou de vez NESTA publicação
+        # sai da fila das fatias seguintes (o próximo Publicar tenta de novo) e as demais continuam; o resumo final soma tudo.
+        st.setdefault("falhas", []); st.setdefault("criadas", 0)
+        ja_falharam = {f["codigo"] for f in st["falhas"]}
+        pend = [c for c in pend if c not in ja_falharam]
         aguardando, em_voo, processadas = list(pend), {}, 0
         with ThreadPoolExecutor(max_workers=n) as ex:
             while aguardando or em_voo:
@@ -321,21 +326,24 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                     _p(evento="folha_falhou", codigo=c, erro=r["erro"], tentativas=feitas_c)
         novas = len(st["novas"])
         restam = len(pend) - criadas - len(falhas)
-        if falhas:
+        st["falhas"].extend(falhas); st["criadas"] += criadas
+        if restam > 0:                                  # ainda há folhas na fila: segue (uma folha com erro não para as outras)
+            manter_ritmo = True
+            return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam, "novas_tentativas": novas,
+                    "falhas": list(st["falhas"]),
+                    "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}." + (f" {len(st['falhas'])} com erro até agora." if st["falhas"] else "")}
+        falhas, criadas = list(st["falhas"]), st["criadas"]
+        if falhas:                                      # 27/10: as que subiram são publicadas; as com erro ficam para o próximo Publicar
             primeira = falhas[0]
             detalhe = f" {primeira['codigo']}: {str(primeira['erro'])[:150]}."
             de_vez = sum(1 for f in falhas if f["passageiro"])
-            return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "falhas": falhas,
-                    "novas_tentativas": novas, "falharam_de_vez": len(falhas),
-                    "mensagem": ("1 folha não subiu" if len(falhas) == 1 else f"{len(falhas)} folhas não subiram")
-                    + " ao site" + (f" (o site não respondeu em {TENTATIVAS_POR_FOLHA} tentativas)" if de_vez == len(falhas) else "") + "." + detalhe
-                    + " A publicação não foi concluída; " + ("tente de novo quando o site estiver mais rápido: " if de_vez == len(falhas) else "verifique esta folha e tente novamente: ")
-                    + "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas."
-                    + (f" {novas} folha(s) precisaram de nova tentativa." if novas else "")}
-        if restam > 0:
-            manter_ritmo = True
-            return {"ok": False, "parcial": True, "etapa": "folhas", "feitos": feitos, "folhas_criadas": criadas, "restam": restam, "novas_tentativas": novas,
-                    "mensagem": f"Enviadas {criadas} folha(s); faltam {restam}."}
+            msg_falhas = (f"{criadas} folha(s) enviada(s), {len(falhas)} com erro"
+                          + (f" (o site não respondeu em {TENTATIVAS_POR_FOLHA} tentativas)" if de_vez == len(falhas) else "") + "." + detalhe
+                          + " O próximo Publicar envia só as que faltam, sem duplicar as já enviadas."
+                          + (f" {novas} folha(s) precisaram de nova tentativa." if novas else ""))
+        if falhas and not criadas:                      # nenhuma subiu: não há o que publicar agora
+            return {"ok": False, "parcial": False, "etapa": "folhas", "feitos": feitos, "folhas_criadas": 0, "falhas": falhas,
+                    "novas_tentativas": novas, "falharam_de_vez": len(falhas), "mensagem": msg_falhas}
 
         _p(evento="autorizar")
         con = connect()                                                                     # 3) autorizar (os requisitos já foram checados no plano)
@@ -383,8 +391,10 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                 if arq.get("ok"):
                     feitos.append("arquiteto")
         out = {**res, "parcial": False, "etapa": "publicar", "feitos": feitos, "folhas_criadas": criadas, "publicados": res.get("alterados", 0), **resultado,
-               "novas_tentativas": novas, "falharam_de_vez": 0}
-        if novas and out.get("mensagem"):                       # 27/10: o resumo conta o que precisou de paciência
+               "novas_tentativas": novas, "falharam_de_vez": len(falhas)}
+        if falhas:                                      # publicou as que subiram; a publicação não terminou por causa das com erro
+            out.update({"ok": False, "falhas": falhas, "mensagem": msg_falhas + (" As enviadas foram publicadas." if res.get("ok") else "")})
+        if novas and out.get("mensagem") and not falhas:                       # 27/10: o resumo conta o que precisou de paciência
             out["mensagem"] = str(out["mensagem"]).rstrip(".") + f". {novas} folha(s) precisaram de nova tentativa (o site demorou)."
         if arq is not None:
             out["arquiteto"] = arq
