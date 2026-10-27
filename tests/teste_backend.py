@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -646,6 +646,164 @@ def filho(modo):
         c.execute("UPDATE lista_processamento SET etapa='revisao' WHERE id=?", (l1,)); c.commit()
         r = cli["op"].post(f"/api/filas/{l1}/dispensar", json={})
         ver("lote que não está com erro não é dispensado (400)", r.status_code == 400, r.status_code)
+        for l in res: print(l)
+    elif modo == "sync_uma_por_vez":
+        # 27/10 (Rafael: "a sincronização fica em loop"). Site FALSO (sincronizador.WP substituído): nenhuma chamada ao site de verdade.
+        init_db(); aplicar_migracoes()
+        import sqlite3 as _s, threading, time as _t
+        import app.sincronizador as sz
+        from app import auth, wp as _wp
+        from app.rotas_publicar_tudo import _THREADS
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        db = os.environ["CAMP_DB_PATH"]
+        N_IT, N_PG = 6000, 6000
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F099','Fundo de teste','FTS',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa',1970)")
+        c.executemany("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,'S01',?,?,'campvision')",
+                      [(f"F099-P0001-1970-S01-D{k:05d}", "F099-P0001", k, f"Planta {k}") for k in range(1, N_IT + 1)])
+        c.commit(); c.close()
+        cont = {"rodadas": 0, "ativas": 0, "max_ativas": 0}
+        trava_cont = threading.Lock()
+        class Fake:
+            lento = 0.0
+            def __init__(self, log=print): self.base = "https://fake"
+            def quem_sou(self):
+                with trava_cont:
+                    cont["rodadas"] += 1; cont["ativas"] += 1; cont["max_ativas"] = max(cont["max_ativas"], cont["ativas"])
+                return {"name": "teste", "roles": ["administrator"]}
+            def taxonomias(self): return [{"id": 77, "name": "Fundos", "slug": "fundos"}]
+            def termos(self, tid): return [{"id": k, "name": f"Termo {k}", "slug": f"termo-{k}"} for k in range(1, 1200)]
+            def colecoes(self): return [{"id": 8007, "name": "Projetos", "slug": "p", "url": "u"}, {"id": 8013, "name": "Acervo", "slug": "a", "url": "u"}]
+            def metadados_da_colecao(self, cid): return []
+            def itens(self, cid):
+                if cid == 8007:
+                    yield {"id": 100, "title": "P0001 — Casa", "slug": "p0001-casa", "url": "u", "status": "publish", "metadata": {"1": {"name": "Código de Catalogação", "value_as_string": "F099-P0001"}}}
+                    return
+                _t.sleep(Fake.lento)
+                for k in range(1, N_IT + 1):
+                    cod = f"F099-P0001-1970-S01-D{k:05d}"
+                    yield {"id": 1000 + k, "title": f"Planta {k}", "slug": f"planta-{k}", "url": f"https://fake/{k}/", "status": "publish", "modification_date": "2026-10-05",
+                           "document_type": "attachment", "document": str(50000 + k), "document_mimetype": "image/jpeg", "thumbnail": {},
+                           "description": "x" * 1500, "metadata": {str(m): {"name": f"Campo {m}", "value_as_string": cod if m == 1 else f"valor {m} " * 8} for m in range(1, 25)}}
+            def anexos(self, ids): return {i: {"url": f"https://fake/up/{i}.jpg", "mime": "image/jpeg", "large": f"https://fake/up/{i}-l.jpg", "medium": None} for i in ids}
+            def paginas(self):
+                for k in range(1, N_PG + 1):
+                    yield {"id": 90000 + k, "title": {"rendered": f"Página {k}"}, "slug": f"pagina-{k}", "link": f"https://fake/acervo/projetos/p{k}/", "status": "publish", "parent": 0}
+                with trava_cont:
+                    cont["ativas"] -= 1
+        sz.WP = Fake
+        for nome, papel in (("Rafael Teste", "admin"), ("Bia Admin", "admin")):
+            auth.criar_usuario(nome, nome.split()[0].lower() + "@camp.arq.br", "senha-longa-12345", papel, forcar_troca=False)
+        def cliente(email):
+            cl = TestClient(app, raise_server_exceptions=False); cl.post("/api/auth/login", json={"email": email, "senha": "senha-longa-12345"}); return cl
+        ra, bia = cliente("rafael@camp.arq.br"), cliente("bia@camp.arq.br")
+        def esperar_tarefa(tid):
+            t = {}
+            for _ in range(1200):
+                t = ra.get(f"/api/tarefas/{tid}").json()
+                if t.get("estado") != "rodando": return t
+                _t.sleep(0.1)
+            return t
+        k = connect(); k.execute("UPDATE configuracao SET valor='15' WHERE chave='sync.intervalo_min'"); k.commit()
+        passo = getattr(sz, "passo_automatico", None)
+        if passo is None:   # código antigo: não há passo do ciclo automático; a automática chamava executar() direto, fora das tarefas
+            def passo():
+                r = sz.executar(True, lambda *a, **kk: None); return {"acao": "rodou", "tarefa_id": None, "espera_s": 900, "resultado": r}
+
+        # ===== (a) uma por vez: dois cliques + a automática ao mesmo tempo = UMA rodada, todos com a MESMA tarefa =====
+        Fake.lento = 1.5
+        resp, ini = {}, threading.Barrier(3)
+        def clicar(nome, cl):
+            ini.wait(); r = cl.post("/api/site/sincronizar?tarefa=1"); resp[nome] = (r.status_code, r.json())
+        def automatica():
+            ini.wait(); _t.sleep(0.05); resp["auto"] = (0, passo())
+        th = [threading.Thread(target=clicar, args=("ra", ra)), threading.Thread(target=clicar, args=("bia", bia)), threading.Thread(target=automatica)]
+        [x.start() for x in th]; [x.join() for x in th]
+        tids = {resp["ra"][1].get("tarefa_id"), resp["bia"][1].get("tarefa_id"), resp["auto"][1].get("tarefa_id")}
+        ver("dois cliques + a automática ao mesmo tempo: UMA tarefa (os outros recebem a mesma, já rodando)", len(tids) == 1 and None not in tids, resp)
+        tarefas_ = [esperar_tarefa(x) for x in tids if x]
+        ver("…e UMA rodada no site (nunca duas sincronizações ao mesmo tempo)", cont["rodadas"] == 1 and cont["max_ativas"] == 1, cont)
+        ver("nenhuma tarefa termina com 'falhou' por causa da outra que estava rodando",
+            all(t.get("estado") == "ok" and "falhou" not in ((t.get("resultado") or {}).get("mensagem") or "") for t in tarefas_), [t.get("resultado") for t in tarefas_])
+        n_sinc = k.execute("SELECT COUNT(*) FROM sincronizacao").fetchone()[0]
+        ver("uma linha só em sincronizacao", n_sinc == 1, n_sinc)
+
+        # ===== (c) intervalo contado do FIM da última (manual ou automática); reiniciar não força rodada =====
+        r = passo()
+        ver("logo depois de uma sincronização (a manual), a automática NÃO começa outra: espera", r["acao"] == "esperar" and cont["rodadas"] == 1 and 0 < r["espera_s"] <= 300, (r, cont))
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-30 minutes'), terminada_em=datetime('now','-10 minutes')"); k.commit()
+        r = passo()
+        ver("começou há 30 min, terminou há 10 (intervalo 15): ainda espera — o intervalo conta do FIM", r["acao"] == "esperar" and cont["rodadas"] == 1, (r, cont))
+        k.execute("UPDATE configuracao SET valor='0' WHERE chave='sync.intervalo_min'"); k.commit()
+        r = passo() if cont["rodadas"] == 1 else {"acao": "?"}
+        ver("intervalo 0 desliga a automática", r["acao"] == "desligada", r)
+        k.execute("UPDATE configuracao SET valor='15' WHERE chave='sync.intervalo_min'")
+        k.execute("UPDATE sincronizacao SET terminada_em=datetime('now','-16 minutes')"); k.commit()
+
+        # ===== (b) publicação em andamento adia a automática =====
+        solta = threading.Event()
+        pub = threading.Thread(target=solta.wait, daemon=True); pub.start()
+        tid_pub = k.execute("INSERT INTO tarefa_publicacao (projeto_codigo, ator, estado, etapa, tipo) VALUES ('F099-P0001','rafael@camp.arq.br','rodando','folhas','publicar')").lastrowid; k.commit()
+        _THREADS[tid_pub] = pub
+        antes = cont["rodadas"]; r = passo()
+        ver("publicação em andamento: a automática é ADIADA (nada roda)", r["acao"] == "adiada" and "F099-P0001" in r.get("motivo", "") and cont["rodadas"] == antes and r["espera_s"] <= 300, r)
+        solta.set(); pub.join()
+        k.execute("UPDATE tarefa_publicacao SET estado='ok', terminada_em=datetime('now') WHERE id=?", (tid_pub,))
+        k.execute("UPDATE sincronizacao SET terminada_em=datetime('now','-16 minutes')"); k.commit()
+
+        # ===== (e) transações curtas: durante a sincronização, outra escrita espera no máximo ~2 s =====
+        Fake.lento = 0.0
+        esperas, parar = [], threading.Event()
+        def escritor():
+            w = _s.connect(db, timeout=60, isolation_level=None)
+            while not parar.is_set():
+                t0 = _t.monotonic()
+                w.execute("BEGIN IMMEDIATE"); w.execute("INSERT INTO evento (entidade,codigo,tipo,ator) VALUES ('x','x','heartbeat','estacao')"); w.execute("COMMIT")
+                esperas.append(_t.monotonic() - t0); _t.sleep(0.02)
+            w.close()
+        ew = threading.Thread(target=escritor); ew.start()
+        antes = cont["rodadas"]; t0 = _t.monotonic(); r = passo(); dur = _t.monotonic() - t0
+        parar.set(); ew.join()
+        ver("passado o intervalo e sem publicação: a automática roda", r["acao"] == "rodou" and cont["rodadas"] == antes + 1, r)
+        ver("durante a sincronização (6.000 folhas, 6.000 páginas) outra escrita espera ≤ 2 s", esperas and max(esperas) <= 2.0,
+            f"pior espera {max(esperas or [0]):.2f} s em {len(esperas)} escritas; rodada de {dur:.1f} s")
+        ver("vínculos reconciliados (folhas ligadas ao item do site)", k.execute("SELECT COUNT(*) FROM item WHERE tainacan_item_id IS NOT NULL").fetchone()[0] == N_IT)
+
+        # ===== (f) a automática é do painel: não aparece em "Suas tarefas" de ninguém nem no chip =====
+        tauto = k.execute("SELECT ator FROM tarefa_publicacao WHERE id=?", (r.get("tarefa_id"),)).fetchone()
+        ver("a tarefa automática tem como autor o painel (automático)", tauto and tauto[0] == getattr(sz, "ATOR_AUTOMATICO", "?"), tauto)
+        lst = ra.get("/api/tarefas").json()
+        ids = {x["id"] for x in lst["rodando"] + lst["terminadas"]}
+        ver("a automática não aparece nas tarefas do Rafael (nem em andamento, nem nas últimas 24 h)", r.get("tarefa_id") and r["tarefa_id"] not in ids, ids)
+        ver("a tarefa do Rafael vem com o NOME dele (não só o e-mail)", any(x.get("ator_nome") == "Rafael Teste" for x in lst["terminadas"]),
+            [(x["id"], x.get("ator"), x.get("ator_nome")) for x in lst["terminadas"]])
+        Fake.lento = 1.0
+        k.execute("UPDATE sincronizacao SET terminada_em=datetime('now','-16 minutes')"); k.commit()
+        antes = cont["rodadas"]
+        ta = threading.Thread(target=passo); ta.start(); _t.sleep(0.4)
+        rod = ra.get("/api/tarefas").json()["rodando"]
+        rr = ra.post("/api/site/sincronizar?tarefa=1").json()
+        ta.join(); Fake.lento = 0.0
+        if rr.get("tarefa_id"): esperar_tarefa(rr["tarefa_id"])
+        ver("com a automática rodando, o chip do topo não mostra nada (é do painel)", not rod, rod)
+        ver("'Sincronizar agora' com a automática rodando entra NELA (mesma tarefa, sem começar outra)", rr.get("ja_rodando") and cont["rodadas"] == antes + 1, (rr, cont))
+
+        # ===== custo: as páginas vêm só com os campos que o espelho guarda =====
+        pedido = {}
+        w = object.__new__(_wp.WP); w.log = None
+        class _R:
+            headers = {"X-WP-TotalPages": "1"}
+            def json(self): return [{"id": 1}]
+        def _get(path, **q): pedido.update(q, _path=path); return _R()
+        w._get = _get
+        list(w.paginas())
+        ver("páginas pedidas só com os campos usados (_fields), sem o conteúdo inteiro", "id" in str(pedido.get("_fields")) and "content" not in str(pedido.get("_fields")), pedido)
+        k.close()
         for l in res: print(l)
     elif modo == "ux40_enviar_fila":
         # UX-40 (Rafael, 27/10: "Sim" para "um botão 'Enviar as 78 agora' que manda uma rodada só, com o resultado de cada envio na tela,
@@ -13727,6 +13885,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-37: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
+rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")
+if rc != 0: ok(False, f"teste sync_uma_por_vez não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sincronização: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

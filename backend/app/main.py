@@ -289,28 +289,25 @@ async def _alertas_periodicos() -> None:
 
 
 async def _sincronizacao_periodica() -> None:
-    """Site -> painel a cada N minutos (configuracao 'sync.intervalo_min'; 0 desliga)."""
+    """Site -> painel a cada N minutos (configuracao 'sync.intervalo_min'; 0 desliga), contados do FIM da última sincronização
+    (automática ou manual). Uma por vez (a manual entra na que está rodando) e adiada durante publicação/envio ao site."""
     import asyncio
-    from .sincronizador import executar
+    from .sincronizador import passo_automatico
     await asyncio.sleep(60)
     while True:
         try:
-            con = connect()
-            r = con.execute("SELECT valor FROM configuracao WHERE chave='sync.intervalo_min'").fetchone()
-            con.close()
-            minutos = int(r[0]) if r and r[0] and str(r[0]).isdigit() else 15
-        except Exception:  # noqa: BLE001
-            minutos = 15
-        if minutos > 0:
-            try:
-                log_registrar(logging.INFO, "sync_start", "Sincronização automática iniciada", intervalo_min=minutos)
-                r_sync = await asyncio.to_thread(executar, True, lambda msg: log_registrar(logging.INFO, "sync_msg", str(msg)[:1000]))
-                log_registrar(logging.INFO if r_sync.get("ok") else logging.ERROR, "sync_end",
-                              "Sincronização automática concluída", resultado=r_sync)
-            except Exception as e:  # noqa: BLE001
-                log_registrar(logging.ERROR, "sync_exception", "Falha inesperada na sincronização automática",
-                              erro_tipo=type(e).__name__, exc_info=True)
-        await asyncio.sleep(max(1, minutos or 15) * 60)
+            r = await asyncio.to_thread(passo_automatico)
+            if r["acao"] == "adiada":
+                log_registrar(logging.INFO, "sync_adiada", "Sincronização automática adiada", motivo=r.get("motivo"))
+            elif r["acao"] == "rodou":
+                log_registrar(logging.INFO, "sync_end", "Sincronização automática concluída", tarefa_id=r.get("tarefa_id"),
+                              intervalo_min=r.get("intervalo_min"))
+            espera = float(r.get("espera_s") or 60)
+        except Exception as e:  # noqa: BLE001
+            log_registrar(logging.ERROR, "sync_exception", "Falha inesperada na sincronização automática",
+                          erro_tipo=type(e).__name__, exc_info=True)
+            espera = 300
+        await asyncio.sleep(max(1.0, espera))
 
 
 @app.middleware("http")

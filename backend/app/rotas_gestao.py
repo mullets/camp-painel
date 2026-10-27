@@ -716,6 +716,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         out["maquinas"].append(item)
 
 
+    from . import sincronizador as _sz
     s = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     out["site"] = {
         "ultima_sincronizacao": dict(s) if s else None,
@@ -725,7 +726,10 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "correcoes_fila": __import__("app.fila_correcao_site", fromlist=["contar"]).contar(con),
         "rascunhos_no_site": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='draft'").fetchone()[0],
         "publicados_sem_codigo": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND codigo_detectado IS NULL").fetchone()[0],
-        "intervalo_sync_min": _cfg(con, "sync.intervalo_min", "15"),
+        "intervalo_sync_min": str(_sz.intervalo_min(con)),
+        # 27/10: a conferência completa leva minutos; abaixo disso a tela recomenda (não muda a configuração de ninguém)
+        "intervalo_sync_recomendado_min": _sz.INTERVALO_RECOMENDADO_MIN,
+        "sincronizando": _sz._SYNC_LOCK.locked(),
     }
     out["site"]["http"] = _valor_sonda(f_site, ate)          # None = ainda não medido (a tela diz "Site sem medida")
     from .rede import negadas_por_token
