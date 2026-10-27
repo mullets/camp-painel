@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -1486,7 +1486,7 @@ def filho(modo):
         def proj(f, n, wid, aut=0, teste=0):
             cod = f"{f}-P000{n}"
             c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
-            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id,autorizado_site,lote_teste) VALUES (?,?,?,?,1970,?,?,?)", (cod, f, n, f"Casa {cod}", wid, aut, teste))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id,autorizado_site,lote_teste) VALUES (?,?,?,?,1970,?,?,?)", (cod, f, n, f"Casa {f} nº {n}", wid, aut, teste))
             if wid: c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft',?,?)", (wid, f"Dossiê {cod}", cod))
             return cod
         P1 = proj("F099", 1, 100); P2 = proj("F099", 2, 101); P3 = proj("F099", 3, 102, aut=1, teste=1); P4 = proj("F099", 4, None)
@@ -1910,7 +1910,7 @@ def filho(modo):
         for f in ("F091", "F092", "F093"): c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES (?,?,?,1)", (f, f"Fundo {f}", "T" + f[-2:]))
         def proj(f, n, aut=0, teste=0, wid=None, st="nao_publicado"):
             cod = f"{f}-P000{n}"; c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
-            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,lote_teste,tainacan_item_id,status_site) VALUES (?,?,?,?,1970,?,?,?,?)", (cod, f, n, f"Casa {cod}", aut, teste, wid, st)); return cod
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,lote_teste,tainacan_item_id,status_site) VALUES (?,?,?,?,1970,?,?,?,?)", (cod, f, n, f"Casa {f} nº {n}", aut, teste, wid, st)); return cod
         for n in (1, 2, 3): proj("F091", n)                       # F091: sem direitos, segura 3 projetos
         proj("F092", 1, aut=1, wid=700); proj("F092", 2)           # F092: direitos ok; P1 pronto, P2 sem autorização
         proj("F093", 1, aut=1, teste=1, wid=701)                   # F093: autorizado, mas é lote de teste -> NÃO está pronto
@@ -3522,7 +3522,9 @@ def filho(modo):
         # avisos do plano (não bloqueiam): prefixo de pasta no título, sem ano, sem cidade; textos em linguagem simples
         k4 = connect(); k4.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F092',9)"); k4.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F092-P0009','F092',9,'T102_Edifício Jockey Club São Paulo',0)"); k4.commit(); k4.close()
         pa = adm.get("/api/projetos/F092-P0009/publicar/plano").json(); av = {a_["id"]: a_["texto"] for a_ in pa["avisos"]}
-        ver("o plano avisa do prefixo de pasta no título (e mostra como ficaria) e dos campos vazios, sem bloquear", "Edifício Jockey Club São Paulo" in av.get("titulo", "") and "T102_" in av.get("titulo", "") and "sem ano e sem cidade" in av.get("vazios", "").lower() and not any(b_["id"] in ("titulo", "vazios") for b_ in pa["bloqueios"]), str(pa["avisos"]))
+        # UX-15: o prefixo de pasta T###_ passou de aviso a BLOQUEIO (título técnico não vai à página pública), com a sugestão de como ficaria
+        bt = [b_ for b_ in pa["bloqueios"] if b_["id"] == "titulo"]
+        ver("o plano BLOQUEIA o prefixo de pasta no título (e mostra como ficaria) e só avisa dos campos vazios", bool(bt) and "Edifício Jockey Club São Paulo" in (bt[0].get("detalhe") or "") and "T102_" in (bt[0].get("detalhe") or "") and "titulo" not in av and "sem ano e sem cidade" in av.get("vazios", "").lower() and not any(b_["id"] == "vazios" for b_ in pa["bloqueios"]), str(pa["avisos"]) + str(bt))
         ver("os passos do plano falam a língua de quem publica (página escondida → visível para todos)", [x_["texto"] for x_ in pa["passos"]][0].startswith("Criar a página do projeto no site (ainda escondida)") and any("visíveis para todos" in x_["texto"] for x_ in pa["passos"]) and any("Marcar o projeto como liberado" in x_["texto"] for x_ in pa["passos"]), str([x_["texto"] for x_ in pa["passos"]]))
         ver("título normal e com ano/cidade não gera aviso", adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"] == [] or all(a_["id"] in ("vazios", "pagina_arquiteto") for a_ in adm.get(f"/api/projetos/{PA}/publicar/plano").json()["avisos"]))
         ver("só admin inicia (operador 403, sem login 401); leitura consulta", op.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 403 and anon.post(f"/api/projetos/{PA}/publicar-tudo?tarefa=1").status_code == 401 and op.get(f"/api/tarefas/{tid}").status_code == 200 and adm.get("/api/tarefas/99999").status_code == 404)
@@ -9897,6 +9899,96 @@ def filho(modo):
         ver("depois de juntar e descartar, a lista fica só com os que faltam", {x["codigo"] for x in fim["itens"]} == {p237, p239}, str(fim)[:200])
         k.close()
         for l in res: print(l)
+    elif modo == "ux15_titulo_tecnico":
+        # UX-15: nome de pasta/código como título (T099_, "F000 - …", "01 - …", TIFF, P0012, "Projeto Não Identificado N") não é criado,
+        # importado, editado nem publicado; o aviso da tela Projetos lista TODOS; a sugestão de título nunca é aplicada sozinha; cidades agrupadas.
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from app.similaridade import titulo_tecnico, sugerir_titulo
+        from app.publicacao import condicoes_projeto
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        tecnicos = ["01 - Arquivo Arquivístico (TIFF)", "F000 - CNV - Convidado", "T099_Casa_Azul", "T100_Edificio Paulista", "Projeto Não Identificado 3",
+                    "Casa P0012", "F001-P0003", "Plantas TIFF", "P0060 - SESI — Marília"]
+        obras = ["Residência Tarumã", "Casa 2 - Reforma", "Edifício Zarvos", "Banco Safra D27", "SESI — Marília", "Fotografia aérea do Jockey"]
+        ver("reconhece os títulos técnicos", all(titulo_tecnico(t) for t in tecnicos), str([t for t in tecnicos if not titulo_tecnico(t)]))
+        ver("não confunde nome de obra com título técnico", not any(titulo_tecnico(t) for t in obras), str([t for t in obras if titulo_tecnico(t)]))
+        ver("sugere tirar o prefixo T###_ e F### -", sugerir_titulo("T099_Casa_Azul") == "Casa Azul" and sugerir_titulo("F000 - CNV - Convidado") == "CNV - Convidado",
+            f"{sugerir_titulo('T099_Casa_Azul')!r} {sugerir_titulo('F000 - CNV - Convidado')!r}")
+        ver("sem sugestão quando o que sobra ainda é técnico", sugerir_titulo("01 - Arquivo Arquivístico (TIFF)") is None and sugerir_titulo("Projeto Não Identificado 3") is None)
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Fundo 26','F26',1),('F009','Fundo 9','F09',1)")
+        def proj(f, n, t, cidade=None, site=None):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,cidade,tainacan_item_id) VALUES (?,?,?,?,?,?)", (f"{f}-P{n:04d}", f, n, t, cidade, site))
+            return f"{f}-P{n:04d}"
+        p235 = proj("F026", 235, "T099_Casa_Azul", "São Paulo, SP", site=901)
+        p236 = proj("F026", 236, "T100_Edificio Paulista", "São Paulo, SP")
+        pni = proj("F009", 1, "Projeto Não Identificado 2", "São Paulo, SP")
+        pcnv = proj("F009", 2, "F000 - CNV - Convidado", "São Paulo")
+        ptif = proj("F026", 9, "01 - Arquivo Arquivístico (TIFF)", "SAO PAULO")
+        pok = proj("F026", 10, "Residência Tarumã", "ALTO DE PINHEIROS")
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        # criar
+        n0 = sql("SELECT COUNT(*) FROM projeto")
+        r = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F026", "titulo": "T101_Casa Verde"})
+        ver("verificar recusa T###_ (422) e traz a sugestão", r.status_code == 422 and "Casa Verde" in r.text, r.text[:200])
+        r = adm.post("/api/projetos", json={"fundo_codigo": "F026", "titulo": "03 - Fotos da obra", "confirmar_novo": True})
+        ver("criar com '03 - …' é recusado (422) e nada é criado", r.status_code == 422 and sql("SELECT COUNT(*) FROM projeto") == n0, r.text[:200])
+        r = adm.post("/api/projetos", json={"fundo_codigo": "F026", "titulo": "Projeto Não Identificado 9", "confirmar_novo": True})
+        ver("criar 'Projeto Não Identificado N' é recusado (422)", r.status_code == 422 and sql("SELECT COUNT(*) FROM projeto") == n0, r.text[:200])
+        r = adm.post("/api/projetos", json={"fundo_codigo": "F026", "titulo": "Casa Verde", "confirmar_novo": True})
+        ver("nome de obra continua sendo criado", r.status_code == 200 and sql("SELECT COUNT(*) FROM projeto") == n0 + 1, r.text[:200])
+        # editar
+        r = adm.patch(f"/api/projetos/{pok}", json={"titulo": "T102_Residência Tarumã"})
+        ver("editar para título técnico é recusado (422)", r.status_code == 422 and sql("SELECT titulo FROM projeto WHERE codigo=?", pok) == "Residência Tarumã", r.text[:200])
+        r = adm.patch(f"/api/projetos/{pcnv}", json={"ano": 1970})
+        ver("projeto com título técnico continua editável nos outros campos", r.status_code == 200, r.text[:200])
+        # importar planilha
+        L = {"mapa": {"titulo": "Nome"}, "linhas": [{"Nome": "T100_Edificio Paulista"}, {"Nome": "Edifício Copan"}]}
+        a = adm.post("/api/planilha/analisar", json={"fundo": "F026", **L}).json()
+        l1 = (a.get("linhas") or [{}])[0]
+        ver("planilha: a linha com T###_ vira problema, com a sugestão", any("Edificio Paulista" in x for x in l1.get("problemas", [])) and not a["linhas"][1]["problemas"], str(a)[:300])
+        r = adm.post("/api/planilha/criar", json={"fundo": "F026", **L, "criar": [1, 2], "nome_arquivo": "x.csv"}).json()
+        ver("planilha: só a linha boa vira projeto", [x["titulo"] for x in r.get("criados", [])] == ["Edifício Copan"], str(r)[:300])
+        # publicar
+        def cond(cod):
+            return condicoes_projeto(k, k.execute("SELECT * FROM projeto WHERE codigo=?", (cod,)).fetchone())
+        ct = cond(p235); tit = [x for x in ct["condicoes"] if x["id"] == "titulo"]
+        ver("publicar: título técnico vira condição que BLOQUEIA, com a sugestão", bool(tit) and tit[0]["bloqueia"] and not tit[0]["ok"] and tit[0].get("sugestao") == "Casa Azul" and not ct["pode_publicar"], str(tit)[:300])
+        ver("publicar: nome de obra não ganha essa condição", not [x for x in cond(pok)["condicoes"] if x["id"] == "titulo"])
+        r = adm.post(f"/api/projetos/{pni}/publicar", json={"acao": "publicar"})
+        ver("botão Publicar recusa (400) dizendo o título", r.status_code == 400 and "Projeto Não Identificado" in r.text, r.text[:300])
+        r = adm.post(f"/api/projetos/{pni}/publicar-tudo", json={})
+        ver("Publicar (um passo) recusa (400) e o plano traz o bloqueio do título", r.status_code == 400 and any(b["id"] == "titulo" for b in (r.json().get("plano") or {}).get("bloqueios", [])), r.text[:300])
+        # o aviso da tela Projetos: todos os casos
+        j = adm.get("/api/projetos/nome-de-pasta").json(); por = {x["codigo"]: x for x in j.get("itens", [])}
+        ver("o aviso lista TODOS os títulos técnicos (antes: só a subpasta)", set(por) == {p235, p236, pni, pcnv, ptif} and j.get("total") == 5, str(sorted(por)))
+        ver("cada um diz o tipo, o motivo e o título sugerido (quando há)", por.get(p235, {}).get("titulo_sugerido") == "Casa Azul" and por[p235].get("tipo") == "titulo_tecnico"
+            and por.get(ptif, {}).get("tipo") == "subpasta" and por[ptif].get("titulo_sugerido") is None and por.get(pni, {}).get("titulo_sugerido") is None and bool(por[pni].get("motivo")), str(por.get(p235))[:300])
+        ver("o projeto publicado com T###_ aparece com 'tem registro no site'", por.get(p235, {}).get("tem_no_site") is True)
+        ver("nada é renomeado sozinho", sql("SELECT titulo FROM projeto WHERE codigo=?", p235) == "T099_Casa_Azul" and sql("SELECT COUNT(*) FROM evento WHERE tipo='editado' AND codigo=?", p235) == 0)
+        r = adm.patch(f"/api/projetos/{p236}", json={"titulo": (por.get(p236) or {}).get("titulo_sugerido") or "x"})
+        ver("aceitar a sugestão (uma pessoa, caso a caso) corrige o título e tira do aviso", r.status_code == 200 and sql("SELECT titulo FROM projeto WHERE codigo=?", p236) == "Edificio Paulista"
+            and p236 not in {x["codigo"] for x in adm.get("/api/projetos/nome-de-pasta").json()["itens"]}, r.text[:200])
+        # cidade
+        rc_ = adm.get("/api/projetos/cidades")
+        cid = {x["chave"]: x for x in (rc_.json().get("cidades", []) if rc_.status_code == 200 else [])}
+        sp = cid.get("sao paulo", {})
+        ver("cidades: 'São Paulo, SP' × 'São Paulo' × 'SAO PAULO' viram uma só, com a forma mais usada", sp.get("cidade") == "São Paulo, SP" and sp.get("projetos") == 5
+            and {v["cidade"] for v in sp.get("variantes", [])} == {"São Paulo", "SAO PAULO"}, str(sp) or rc_.text[:200])
+        ver("cidades: caixa alta sugerida sem caixa alta ('Alto de Pinheiros')", cid.get("alto de pinheiros", {}).get("cidade") == "Alto de Pinheiros", str(cid.get("alto de pinheiros")))
+        v = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F026", "titulo": "Casa Amarela", "cidade": "são paulo"}).json()
+        v2 = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F026", "titulo": "Casa Amarela", "cidade": "São Paulo, SP"}).json()
+        ver("verificar sugere a forma do acervo para a cidade digitada", v.get("cidade_sugerida") == "São Paulo, SP" and v2.get("cidade_sugerida") is None, f"{v.get('cidade_sugerida')!r} {v2.get('cidade_sugerida')!r}")
+        ver("nenhuma cidade é mudada no banco", sql("SELECT COUNT(*) FROM projeto WHERE cidade='SAO PAULO'") == 1 and sql("SELECT COUNT(*) FROM projeto WHERE cidade='São Paulo'") == 1)
+        k.close()
+        for l in res: print(l)
     elif modo == "duplicata_rascunhos":
         init_db(); _aplicar_migracoes_real()
         import json as _j
@@ -11278,6 +11370,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-15) Título que é nome de pasta ou código: criar, importar, editar e publicar recusam; o aviso lista todos; cidades")
+rc, out = rodar("ux15_titulo_tecnico", f"{tmp}/ux15.db")
+if rc != 0: ok(False, f"teste do UX-15 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-15: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("133) Folha com 'projeto divergente' (Clube Sírio, 19/10): salvar a revisão, mensagem de erro e 'É deste projeto'")
 rc, out = rodar("projeto_divergente", f"{tmp}/projeto_divergente.db")

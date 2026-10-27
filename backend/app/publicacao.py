@@ -61,6 +61,15 @@ def condicoes_projeto(con, p) -> dict:
     if not titulo_ok:
         conds.append({"id": "titulo", "bloqueia": True, "ok": False, "texto": "Projeto com título",
                       "detalhe": "Não dá para publicar porque o projeto está sem título", "acao": {"tipo": "editar_projeto", "rotulo": "Dar o título", "alvo": f"{codigo}:titulo"}})
+    else:                               # UX-15: título que é nome de pasta ou código (T099_, "01 - …", TIFF, P0012…) não vai à página pública
+        from .similaridade import sugerir_titulo, titulo_tecnico
+        motivo = titulo_tecnico(p["titulo"])
+        if motivo:
+            sug = sugerir_titulo(p["titulo"])
+            conds.append({"id": "titulo", "bloqueia": True, "ok": False, "texto": "Projeto com nome de obra (não de pasta)",
+                          "detalhe": f"Não dá para publicar porque o título “{p['titulo'].strip()}” {motivo}"
+                                     + (f". Sugestão: “{sug}”" if sug else ""),
+                          "sugestao": sug, "acao": {"tipo": "editar_projeto", "rotulo": "Corrigir o título", "alvo": f"{codigo}:titulo"}})
     fora_bloq = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND NOT ({SEM_BLOQUEIO_NA_FOLHA})", (codigo,)).fetchone()[0]
     if fora_bloq:                       # 21/10 (4.1): a folha com problema que bloqueia fica de fora; o resto publica
         conds.append({"id": "folhas_com_bloqueio", "bloqueia": False, "ok": False,

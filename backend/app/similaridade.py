@@ -121,6 +121,49 @@ def nome_de_subpasta(titulo: str | None) -> bool:
     return bool(_SUBPASTA.match(titulo or ""))
 
 
+# UX-15: título que é nome de pasta ou código do sistema, não o nome de uma obra. A mesma regra para criar, importar planilha,
+# editar, publicar e para o aviso da tela Projetos. Ordem: o primeiro motivo que casar é o que a tela mostra.
+_TECNICOS = (
+    (re.compile(r"^\s*T\d{3}_", re.I), "começa com o prefixo de pasta T###_"),
+    (re.compile(r"^\s*F\d{3}\s*[-–—_]", re.I), "começa com o código do fundo (F###-)"),
+    (re.compile(r"^\s*P\d{4}\s*[-–—_]", re.I), "começa com o número do projeto (P####-)"),
+    (re.compile(r"^\s*\d+\s*[-–—]\s", re.I), "começa com número de pasta (ex.: “01 - ”)"),
+    (re.compile(r"\bTIFF?\b", re.I), "tem “TIFF” (formato de arquivo)"),
+    (re.compile(r"\bP\d{4}\s*$", re.I), "termina com o número do projeto (P####)"),
+    (re.compile(r"^\s*projeto\s+n[aã]o\s+identificado\b", re.I), "é “Projeto Não Identificado”, não o nome de uma obra"),
+)
+_PREFIXOS_LIMPOS = re.compile(r"^\s*(?:T\d{3}_+|F\d{3}(?:-P\d{4})?\s*[-–—_]+\s*|P\d{4}\s*[-–—_]+\s*|\d+\s*[-–—]\s+)", re.I)
+
+
+def titulo_tecnico(titulo: str | None) -> str | None:
+    """O motivo (frase curta) quando o título é nome de pasta ou código do sistema; None quando é um nome de obra."""
+    t = (titulo or "").strip()
+    if not t:
+        return None
+    if nome_de_subpasta(t):
+        return "é nome de subpasta de arquivos (TIFF, JPG, fotografias…)"
+    for rx, motivo in _TECNICOS:
+        if rx.search(t):
+            return motivo
+    return None
+
+
+def sugerir_titulo(titulo: str | None) -> str | None:
+    """Como o título ficaria sem o prefixo de pasta ("T099_Casa_Azul" → "Casa Azul"). Só SUGERE: uma pessoa aceita caso a caso.
+    None quando o que sobra ainda é técnico ou vazio (ex.: "01 - Arquivo Arquivístico (TIFF)", "Projeto Não Identificado 3")."""
+    t = (titulo or "").strip()
+    for _ in range(4):                                   # "F026 - T099_Casa" tem mais de um prefixo
+        novo = _PREFIXOS_LIMPOS.sub("", t, count=1)
+        if novo == t:
+            break
+        t = novo
+    t = re.sub(r"\s*[-–—_]?\s*\(?\bP\d{4}\)?\s*$", "", t, flags=re.I)
+    t = " ".join(t.replace("_", " ").split()).strip(" -–—")
+    if not t or t == (titulo or "").strip() or titulo_tecnico(t) or len(t) < 3:
+        return None
+    return t
+
+
 def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int | None = 0, cidade: str | None = None, limite: int = 3) -> list[dict]:
     """Projeto com o MESMO nome em OUTRO fundo ("já existe 'Casa X' no fundo F012 — é o mesmo?"). Só o nível forte: nome
     praticamente igual. Não bloqueia nada: vira uma nota forte com link para a pessoa conferir."""
@@ -208,3 +251,57 @@ def buscar_fundos_parecidos(con, titulo: str, limite: int = 3) -> list[dict]:
                             "score": score, "nivel": n, "motivos": motivos})
     achados.sort(key=lambda x: (-x["score"], x["codigo"]))
     return achados[:limite]
+
+
+# UX-15 · cidade: a mesma cidade escrita de jeitos diferentes ("São Paulo, SP" × "São Paulo" × "SAO PAULO"). Só SUGERE a forma mais
+# usada no acervo (autocomplete na tela); o campo enviado ao site continua o mesmo texto livre (contrato com o site não muda).
+_UF_NO_FIM = re.compile(r"\s*[,/–—-]?\s*\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\s*$")
+_MINUSCULAS = {"de", "da", "do", "das", "dos", "e"}
+
+
+def chave_cidade(cidade: str | None) -> str:
+    """'São Paulo, SP', 'São Paulo - SP', 'SAO PAULO' → 'sao paulo'."""
+    t = (cidade or "").strip()
+    return normalizar(_UF_NO_FIM.sub("", t) if _UF_NO_FIM.sub("", t).strip() else t)
+
+
+def cidade_sem_caixa_alta(cidade: str | None) -> str | None:
+    """'ALTO DE PINHEIROS' → 'Alto de Pinheiros' (mantém a sigla do estado). None quando o texto não está todo em maiúsculas."""
+    t = " ".join((cidade or "").split())
+    letras = [c for c in t if c.isalpha()]
+    if len(letras) < 4 or not all(c.isupper() for c in letras):
+        return None
+    uf = _UF_NO_FIM.search(t)
+    base, fim = (t[:uf.start()], t[uf.start():]) if uf and t[:uf.start()].strip() else (t, "")
+    pal = [w.lower() if (i and w.lower() in _MINUSCULAS) else w.capitalize() for i, w in enumerate(base.split())]
+    return " ".join(pal) + fim
+
+
+def cidades_do_acervo(con) -> list[dict]:
+    """As cidades dos projetos agrupadas pela chave, com a forma mais usada como sugestão (empate: a que traz o estado)."""
+    grupos: dict[str, dict[str, int]] = {}
+    for cid, n in con.execute("""SELECT TRIM(cidade), COUNT(*) FROM projeto WHERE TRIM(COALESCE(cidade,''))<>''
+                                    AND mesclado_em IS NULL AND descartado_em IS NULL GROUP BY TRIM(cidade)"""):
+        k = chave_cidade(cid)
+        if k:
+            grupos.setdefault(k, {})[cid] = n
+    out = []
+    for k, formas in grupos.items():
+        boas = {f: n for f, n in formas.items() if not cidade_sem_caixa_alta(f)} or {cidade_sem_caixa_alta(f): n for f, n in formas.items()}
+        canon = max(boas, key=lambda f: (boas[f], bool(_UF_NO_FIM.search(f)), f))
+        out.append({"chave": k, "cidade": canon, "projetos": sum(formas.values()),
+                    "variantes": [{"cidade": f, "projetos": n} for f, n in sorted(formas.items(), key=lambda x: -x[1]) if f != canon]})
+    out.sort(key=lambda x: (-x["projetos"], x["cidade"]))
+    return out
+
+
+def sugerir_cidade(con, cidade: str | None) -> str | None:
+    """A forma do acervo para a cidade digitada, quando é diferente dela (ou a versão sem caixa alta). None quando já está boa."""
+    t = " ".join((cidade or "").split())
+    if not t:
+        return None
+    k = chave_cidade(t)
+    for g in cidades_do_acervo(con):
+        if g["chave"] == k:
+            return g["cidade"] if g["cidade"] != t else None
+    return cidade_sem_caixa_alta(t)

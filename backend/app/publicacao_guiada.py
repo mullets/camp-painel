@@ -130,7 +130,8 @@ def plano(con, p) -> dict:
     import re as _re
     avisos = []
     tit = (p["titulo"] or "").strip()
-    if _re.match(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+\S", tit):
+    from .similaridade import titulo_tecnico
+    if _re.match(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+\S", tit) and not titulo_tecnico(tit):   # UX-15: o técnico já é bloqueio (id "titulo")
         limpo = _re.sub(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+", "", tit).replace("_", " ").strip()
         avisos.append({"id": "titulo", "campo": "titulo", "texto": f"O título “{tit}” parece ter um prefixo de pasta. Como ficaria: “{limpo}”."})
     cidade = p["cidade"] if "cidade" in p.keys() else None

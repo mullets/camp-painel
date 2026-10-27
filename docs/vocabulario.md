@@ -76,3 +76,10 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
   confirmado; só vale se a pessoa aceitar (Tab) e salvar. Nunca chamar de "lido" ou "herdado" na tela.
 - **Mais tipos**: onde ficam os tipos documentais além dos 4 mais usados no projeto.
 - **Atalhos da conferência**: a lista que a tecla ? abre na revisão.
+
+## Título de projeto que é nome de pasta (UX-15)
+- **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
+  "Projeto Não Identificado 3"). Regra única em `similaridade.titulo_tecnico`: criar, importar planilha e editar recusam; **Publicar** bloqueia.
+- **Título sugerido**: o título sem o prefixo de pasta. Botão **Usar o título sugerido** (uma pessoa aceita, um projeto por vez; nada é renomeado sozinho)
+  e **Corrigir o título** (abre a edição).
+- Cidade: a tela sugere a **forma do acervo** (a mais usada: "São Paulo, SP" × "São Paulo") com o botão **Usar**; o campo continua texto livre.

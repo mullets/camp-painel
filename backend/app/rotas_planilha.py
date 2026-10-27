@@ -122,7 +122,7 @@ class Criacao(Analise):
 
 
 def _analisar(con, fundo: str, mapa: dict, linhas: list[dict]) -> list[dict]:
-    from .similaridade import buscar_parecidos
+    from .similaridade import buscar_parecidos, sugerir_titulo, titulo_tecnico
     if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (fundo,)).fetchone():
         raise HTTPException(404, "Fundo não existe")
     if not mapa.get("titulo"):
@@ -138,6 +138,9 @@ def _analisar(con, fundo: str, mapa: dict, linhas: list[dict]) -> list[dict]:
         problemas, avisos = [], []
         if not dados["titulo"]:
             problemas.append("sem nome do projeto")
+        elif titulo_tecnico(dados["titulo"]):           # UX-15: nome de pasta/código não vira projeto; a sugestão limpa vai junto
+            sug = sugerir_titulo(dados["titulo"])
+            problemas.append(f"nome do projeto é nome de pasta ou código ({titulo_tecnico(dados['titulo'])})" + (f": sugestão “{sug}”" if sug else ""))
         ano, av = _ano(dados["ano"]); dados["ano"] = ano
         if av:
             avisos.append(av)
