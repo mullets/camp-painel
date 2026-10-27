@@ -505,7 +505,8 @@ def filho(modo):
         from app.importador_lote import importar_lote, registrar_erros_cv
         from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
         from app.publicacao_guiada import plano
-        ver("CAMP-046: o painel implementa o contrato 2.4", ctr.CONTRATO_PAINEL == "2.4", ctr.CONTRATO_PAINEL)
+        _vcopia = (_P(__file__).parent / "contrato" / "VERSAO").read_text(encoding="utf-8").strip()
+        ver("UX-08: o painel implementa o contrato 2.5, a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.5" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
