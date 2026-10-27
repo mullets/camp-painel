@@ -5,10 +5,14 @@ sendo usado; o worker nunca cria, publica ou exclui uma folha por conta própria
 """
 from __future__ import annotations
 
+import threading
 import time
 from .db import connect
 
 ATOR = "painel (reenvio automático ao site)"
+LOTE_MAX = 50                       # teto de envios por rodada (o mesmo para o trabalhador e para o botão)
+# UX-40: uma rodada por vez (botão "Enviar as N agora" e trabalhador automático nunca andam juntos)
+_RODADA = threading.Lock()
 
 
 def reenvio_ativo() -> bool:
@@ -38,14 +42,41 @@ def _reclamar(con):
     return dict(row)
 
 
-def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0) -> dict:
-    """Executa correções já autorizadas, sem bloquear requisições do painel."""
+def contar(con) -> dict:
+    """UX-40: quantas correções esperam na fila e quantas já podem sair agora (as outras esperam a próxima tentativa)."""
+    try:
+        r = con.execute("""SELECT COUNT(*) AS total,
+                SUM(CASE WHEN (estado='pendente' AND proxima_em <= datetime('now'))
+                           OR (estado='executando' AND reservado_ate <= datetime('now')) THEN 1 ELSE 0 END) AS prontas,
+                MIN(CASE WHEN estado='pendente' AND proxima_em > datetime('now') THEN proxima_em END) AS proxima_em
+              FROM fila_correcao_site""").fetchone()
+    except Exception:  # noqa: BLE001 — banco antigo, sem a fila
+        return {"total": 0, "prontas": 0, "proxima_em": None}
+    return {"total": r[0] or 0, "prontas": r[1] or 0, "proxima_em": r[2]}
+
+
+def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0, forcar_manual: bool = False,
+                       ator: str | None = None, ao_terminar_item=None) -> dict:
+    """Executa correções já autorizadas, sem bloquear requisições do painel.
+
+    forcar_manual=True (UX-40, só o botão "Enviar as N agora" de um admin): faz esta UMA rodada mesmo com
+    `site.reenvio_persistente` desligado. Não liga a configuração: o trabalhador automático continua parado.
+    """
     from .alteracoes_site import enviar, enviar_sozinho
-    if not enviar_sozinho() or not reenvio_ativo():
+    if not enviar_sozinho() or not (forcar_manual or reenvio_ativo()):
         return {"desligado": True}
+    if not _RODADA.acquire(blocking=False):
+        return {"ocupado": True}
+    try:
+        return _rodada(enviar, limite, orcamento_s, ator or ATOR, ao_terminar_item)
+    finally:
+        _RODADA.release()
+
+
+def _rodada(enviar, limite, orcamento_s, ator, ao_terminar_item) -> dict:
     resumo = {"enviadas": [], "falhas": []}
     inicio = time.monotonic()
-    for _ in range(max(0, min(50, limite))):
+    for _ in range(max(0, min(LOTE_MAX, limite))):
         if time.monotonic() - inicio >= orcamento_s:
             break
         con = connect()
@@ -57,10 +88,16 @@ def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0) -> dict:
             break
         codigo, versao = item["item_codigo"], item["versao"]
         try:
-            r = enviar(codigo[:10], ATOR, [codigo])
+            r = enviar(codigo[:10], ator, [codigo])
             if not r.get("ok", False) or r.get("falhas") or codigo not in (r.get("enviadas") or []):
                 falhas = r.get("falhas") or []
-                detalhe = str(falhas[0].get("erro", "Falha ao enviar")) if falhas else "WordPress não confirmou a folha"
+                if falhas:
+                    detalhe = str(falhas[0].get("erro", "Falha ao enviar"))
+                elif r.get("total") == 0:
+                    # Nada diferente do site nesta folha: não reenvia o que já foi aplicado e não dá a folha por confirmada.
+                    detalhe = "Nada a enviar: o painel não vê diferença desta folha para o site"
+                else:
+                    detalhe = "WordPress não confirmou a folha"
                 raise RuntimeError(detalhe)
             sucesso, erro = True, None
         except Exception as e:
@@ -83,4 +120,9 @@ def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0) -> dict:
             con.commit()
         finally:
             con.close()
+        if ao_terminar_item:
+            try:
+                ao_terminar_item(codigo, sucesso, erro)
+            except Exception:  # noqa: BLE001 — o andamento na tela nunca derruba a rodada
+                pass
     return resumo

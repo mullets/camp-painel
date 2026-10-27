@@ -88,6 +88,27 @@ class FilaCorrecaoSiteTest(unittest.TestCase):
         self.assertEqual(c.execute("SELECT versao FROM fila_correcao_site").fetchone()[0], 2)
         c.close()
 
+    def test_ux40_manual_roda_com_flag_desligada_e_so_uma_rodada_por_vez(self):
+        self.patch_reenvio.stop()
+        try:
+            with patch.object(fila, "reenvio_ativo", return_value=False), \
+                 patch("app.alteracoes_site.enviar", return_value={"ok": True, "enviadas": ["F001-P0001-S01-D00001"], "total": 1}) as send:
+                self.assertEqual(fila.executar_pendentes(), {"desligado": True})      # automático: parado
+                send.assert_not_called()
+                fila._RODADA.acquire()
+                try:
+                    self.assertEqual(fila.executar_pendentes(forcar_manual=True), {"ocupado": True})
+                finally:
+                    fila._RODADA.release()
+                send.assert_not_called()
+                vistos = []
+                r = fila.executar_pendentes(forcar_manual=True, ator="adm@camp.arq.br", ao_terminar_item=lambda *a: vistos.append(a))
+                self.assertEqual(r["enviadas"], ["F001-P0001-S01-D00001"])
+                self.assertEqual(send.call_args[0][1], "adm@camp.arq.br")
+                self.assertEqual(vistos, [("F001-P0001-S01-D00001", True, None)])
+        finally:
+            self.patch_reenvio.start()
+
 
 if __name__ == "__main__":
     unittest.main()
