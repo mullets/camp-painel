@@ -24,6 +24,7 @@ TITULOS = {
     "importar_todas": "Importar os lotes da Fila",
     "bagit": "Gerar pacote BagIt",
     "enviar_correcoes": "Enviar correções ao site",
+    "reprocessar_recorte": "Reprocessar imagens públicas com recorte automático",
 }
 
 

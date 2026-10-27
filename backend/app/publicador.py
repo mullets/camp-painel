@@ -738,7 +738,9 @@ def imagem_pronta_para_o_site(con, i, giro: int | None = None, ajuste: tuple | N
     Sem imagem: (None, None). Sem Pillow: levanta RuntimeError (melhor não subir nada do que subir a imagem grande).
     `i` precisa ter pendencias, arquivo_jpg, fundo_codigo, giro_manual, espelhado e espelho_manual.
     19/10: com recorte/alinhamento (item.recorte/alinhamento, ou `ajuste` = (recorte, ângulo) que substitui o gravado), sobe o JPG
-    corrigido que o painel gera (ajuste_imagem.garantir), reduzido como sempre."""
+    corrigido que o painel gera (ajuste_imagem.garantir), reduzido como sempre.
+    UX-44: sem recorte manual, o derivado leva o recorte automático na borda do papel (se a detecção tiver confiança e a pessoa não
+    recusou) e o ajuste de branco/contraste pelo papel. Recorte manual vence (só o ajuste de cor)."""
     from .imagem_site import imagem_para_o_site, lado_publico
     caminho_img = imagem_para_o_site(con, i)
     if not caminho_img:
@@ -751,13 +753,22 @@ def imagem_pronta_para_o_site(con, i, giro: int | None = None, ajuste: tuple | N
     esp = espelho_efetivo(i)
     from . import ajuste_imagem
     rec, ang = ajuste if ajuste is not None else ajuste_imagem.ler(i)
+    from . import recorte_auto
     try:
+        from pathlib import Path
+        pl = recorte_auto.plano(con, i, Path(caminho_img), g, esp, rec, ang)     # UX-44: recorte automático na borda do papel + branco/contraste
         if ajuste_imagem.tem_ajuste(rec, ang):          # o JPG corrigido já vem espelhado/girado/endireitado/recortado
             caminho_img, g, esp = ajuste_imagem.garantir(i["codigo"], caminho_img, g, esp, ang, rec)[0], 0, False
-        derivado = derivado_publico(caminho_img, g, lado, esp)
+        derivado = derivado_publico(caminho_img, g, lado, esp, pl["recorte_auto"], pl["cor"])
     except OSError as e:
         raise RuntimeError(f"Não consegui preparar a imagem pública: {e}") from e
     return str(derivado), (lado_real(derivado) or lado)
+
+
+def _versao_recorte() -> str:
+    """UX-44: marca na folha que a imagem que subiu já passou pelo recorte automático/ajuste de cor (o reprocessamento pula essas)."""
+    from .recorte_auto import VERSAO
+    return VERSAO
 
 
 def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) -> dict:
@@ -784,7 +795,7 @@ def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) ->
     if int(m.get("id") or media) != int(media):
         raise RuntimeError(f"O site devolveu outro anexo ({m.get('id')}) em vez de trocar o arquivo do anexo {media}")
     try:
-        c2 = connect(); c2.execute("UPDATE item SET site_imagem_lado=? WHERE codigo=?", (lado_pub, codigo)); c2.commit(); c2.close()
+        c2 = connect(); c2.execute("UPDATE item SET site_imagem_lado=?, site_imagem_recorte=? WHERE codigo=?", (lado_pub, _versao_recorte(), codigo)); c2.commit(); c2.close()
     except Exception:  # noqa: BLE001  (só informativo)
         pass
     return {"media_id": media, "url": m.get("source_url"), "lado_px": lado_pub}
@@ -1001,7 +1012,7 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                 wp.definir_documento(COL_ACERVO, iid, m["id"])
                 con.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (m.get("source_url"), m.get("source_url"), iid))
                 out["imagem"] = m.get("source_url")
-                con.execute("UPDATE item SET site_media_id=?, site_imagem_lado=? WHERE codigo=?", (m["id"], lado, codigo))
+                con.execute("UPDATE item SET site_media_id=?, site_imagem_lado=?, site_imagem_recorte=? WHERE codigo=?", (m["id"], lado, _versao_recorte(), codigo))
                 if i["dossie_id"] and con.execute("SELECT 1 FROM projeto WHERE codigo=? AND capa_item=?", (i["projeto_codigo"], codigo)).fetchone():
                     wp.patch_item(COL_PROJETOS, i["dossie_id"], _thumbnail_id=m["id"])   # B12: a capa escolhida chegou ao site
                     out["capa"] = True
