@@ -29,7 +29,18 @@ def importado_sem_folhas(resultado) -> bool:
     return isinstance(imp, dict) and not imp.get("esperando_decisao")
 
 
-def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_em: str | None, resultado=None) -> str:
+# UX-36 (F026-P0030: "por que ele fica pedindo para publicar se já está publicado?"): um lote aprovado cujo projeto JÁ está no site e cujas
+# folhas publicáveis já estão todas lá não pede mais "Publicar". Só a publicação guiada marcava o lote como 'publicado'; publicar pela rota
+# direta, aprovar o lote depois de o projeto estar publicado, ou um projeto publicado antes de 21/10 deixavam o lote "aprovado" para sempre,
+# e a Fila, o chip do projeto e o Próximo passo diziam "Pronto para publicar". Conta-se pelo estado real (nada é gravado).
+# As duas colunas para o SELECT de lista_processamento com o apelido `l`:
+SQL_PROJETO_NO_AR = "(SELECT px.status_site='no_ar' FROM projeto px WHERE px.codigo=l.projeto_codigo)"
+SQL_FORA_DO_SITE = ("(SELECT COUNT(*) FROM item ix WHERE ix.lote_id=l.id AND ix.projeto_codigo=l.projeto_codigo AND COALESCE(ix.retida,0)=0"
+                    " AND ix.duplicata_de IS NULL AND COALESCE(ix.status_site,'nao_publicado') IN ('nao_publicado','rascunho'))")
+
+
+def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_em: str | None, resultado=None,
+                  projeto_no_ar=None, fora_do_site=None) -> str:
     if etapa == "erro":
         return "erro"
     if etapa == "publicado":
@@ -42,7 +53,10 @@ def fase_da_lista(etapa: str, itens_total: int, itens_pendentes: int, aprovado_e
         return "importar" if etapa == "revisao" else "publicar"
     if itens_pendentes > 0:
         return "conferir"
-    return "publicar" if aprovado_em else "aprovar"
+    if aprovado_em:
+        # UX-36: retida e duplicata não vão ao site; o lote está concluído quando o resto já está publicado
+        return "publicado" if projeto_no_ar and fora_do_site == 0 else "publicar"
+    return "aprovar"
 
 
 def _preferir_lote(atual: dict | None, candidato: dict) -> dict:
@@ -77,10 +91,10 @@ def lote_ativo_por_projeto(con) -> dict:
     """Para cada projeto com lista, a lista que ainda pede algo (a mais recente que não está publicada) ou, se todas estão publicadas, a mais recente.
     {projeto: {"fase", "itens_pendentes", "itens_total", "lote_id"}}. A MESMA regra do 'próximo passo' do projeto e da Fila."""
     por_projeto: dict = {}
-    for l in con.execute("""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em, l.resultado,
+    for l in con.execute(f"""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em, l.resultado, {SQL_PROJETO_NO_AR} AS no_ar, {SQL_FORA_DO_SITE} AS fora,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS it,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS pen
                             FROM lista_processamento l WHERE l.descartado_em IS NULL ORDER BY l.id DESC"""):
-        d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"], l["resultado"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
+        d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"], l["resultado"], l["no_ar"], l["fora"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
         por_projeto[l["pc"]] = _preferir_lote(por_projeto.get(l["pc"]), d)
     return por_projeto

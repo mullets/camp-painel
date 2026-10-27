@@ -61,6 +61,13 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 - O segundo clique não repete a ação: com a publicação rodando, a tela acompanha a mesma; logo depois de publicar, sem folha nova,
   "Este projeto acabou de ser publicado: **nada foi feito de novo**". Importar o mesmo lote ao mesmo tempo: "Este lote **já está sendo importado** agora".
 
+### Projeto publicado e em dia (UX-36, 27/10/2026)
+- Lote aprovado com o projeto **publicado** e as folhas que vão ao site já lá (retida e duplicata não contam) está na situação **No site**,
+  não em **Pronto para publicar** (Fila, Projetos, chip do projeto e Próximo passo).
+- No Próximo passo do projeto publicado: **Atualizar no site** só aparece quando há o que enviar, e diz o que muda antes do clique
+  ("ao atualizar, **N folhas ficam públicas** e **M correções vão ao site**"). Em dia, a frase é "publicado · qualquer visitante vê ·
+  **painel e site iguais**" e o botão azul é a 1ª pendência de "O que falta para fechar este projeto" (sem pendência, nenhum botão azul).
+
 ## Menu (UX-28; antes CAMP-154)
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
 topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);

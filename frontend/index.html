@@ -3898,7 +3898,7 @@ function pjFaltaHTML(d,L){const code=d.projeto.codigo,C=escHtml(code),men=pjAvis
   if(!L.length)return pub?`<p class="pj-falta-ok" data-pj-fechado><b>✔ Projeto fechado:</b> painel e site iguais.</p>${menores}`:'';
   return `<p class="pj-falta-tit"><b>O que falta para fechar este projeto</b> <span class="tag a">${qtd(L.length,'pendência','pendências')}</span></p><ol class="pj-falta-lista">${L.map((x,i)=>`<li data-pjp="${escHtml(x.chave)}"><span class="pj-falta-n">${i+1}.</span><span>${escHtml(x.texto)}</span><button type="button" class="btn sm" data-pjp-ir="${C}" data-pjp-i="${i}">${x.alvo.conferir?'Conferir':x.alvo.publicar?'Publicar':x.alvo.atualizar?'Atualizar a página pública':x.alvo.pp==='aprovar'?'Aprovar':'Ver'}</button></li>`).join('')}</ol>${menores}`}
 function desenharFalta(code){const box=document.getElementById('pj-falta'),d=window.PJ_D;if(!box||!d||!d.projeto||d.projeto.codigo!==code)return;
-  const L=pendenciasProjeto(d);if(!L){box.hidden=true;return}window.PJ_FALTA={code,L};
+  const L=pendenciasProjeto(d);if(!L){box.hidden=true;return}window.PJ_FALTA={code,L};if(d.projeto.status_site==='no_ar')pjStatusDesenhar(code);   /* UX-36: no projeto publicado, o botão azul do Próximo passo é a 1ª pendência */
   const html=pjFaltaHTML(d,L);box.innerHTML=html;box.hidden=!html;box.classList.toggle('ok',!L.length);passoNavAtualizar();
   const selo=document.getElementById('pj-selo'),st=situacaoTag(situacaoDoProjeto(code,d));if(selo)selo.innerHTML=L.length?`${st} · <span class="tag a">${qtd(L.length,'pendência','pendências')}</span>`:st;   /* STATUS já é HTML do painel (o chip) */
   if(!L.length&&d.projeto.status_site==='no_ar'){window.PJ_FECHADO_ENV=window.PJ_FECHADO_ENV||{};if(!window.PJ_FECHADO_ENV[code]){window.PJ_FECHADO_ENV[code]=1;API('/api/projetos/'+encodeURIComponent(code)+'/fechado',{method:'POST'}).catch(()=>{})}}}
@@ -4153,7 +4153,13 @@ function pjStatusHTML(code,d){d=d||window.PJ_D||{};const p=d.projeto||{},e=pjEst
     return bp?`<p class="pjs-razao">Para publicar, também falta resolver: ${escHtml(String(bp.detalhe||bp.texto||'').replace(/^Não dá para publicar porque /,''))}${bp.acao?` <button type="button" class="btn sm" onclick="acaoCondicao('${escHtml(bp.acao.tipo)}','${escHtml(bp.acao.alvo||'')}')">${escHtml(bp.acao.rotulo)}</button>`:''}</p>`:''}
   if(em){bt=`<button type="button" class="btn pri pjs-pub" aria-busy="true" disabled>${escHtml(em.texto||'Publicando…')}</button>`;estado='você pode sair desta tela: a publicação continua no servidor'}
   else if(pub){estado='<span class="tag g">publicado</span> qualquer visitante vê';
-    bt=(adm?`<button type="button" class="btn pri pjs-pub" data-pjs-atualizar="${escHtml(code)}">Atualizar no site</button>`:'')+(d.site_url?` <a class="btn" href="${escHtml(d.site_url)}" target="_blank" rel="noopener">Ver no site ↗</a>`:'')}
+    /* UX-36 (F026-P0030): "Atualizar no site" só quando há o que enviar (folha que o visitante ainda não vê ou correção não enviada), dizendo
+       o que muda (UX-17). Em dia, o botão azul é a 1ª pendência que falta para fechar o projeto; sem pendência, nenhum botão azul. */
+    const np=pjNoArPendente(code,d),F=window.PJ_FALTA&&window.PJ_FALTA.code===code?window.PJ_FALTA.L:[],pf=F.findIndex(x=>!['no_ar','alteracoes','publicar'].includes(x.chave)),C=escHtml(code);
+    if(np.total){bt=adm?`<button type="button" class="btn pri pjs-pub" data-pjs-atualizar="${C}">Atualizar no site</button>`:'';
+      estado+=` · ${adm?'ao atualizar, ':''}${[np.folhas?qtd(np.folhas,adm?'folha fica pública':'folha que o visitante ainda não vê',adm?'folhas ficam públicas':'folhas que o visitante ainda não vê'):'',np.alt?qtd(np.alt,adm?'correção vai ao site':'correção não enviada',adm?'correções vão ao site':'correções não enviadas'):''].filter(Boolean).join(' e ')}`}
+    else{estado+=' · painel e site iguais';if(pf>=0&&EU&&['operador','admin','master'].includes(EU.papel))bt=`<button type="button" class="btn pri pjs-pend" data-pjp-ir="${C}" data-pjp-i="${pf}">${escHtml(F[pf].texto)}</button>`}
+    bt+=(d.site_url?` <a class="btn" href="${escHtml(d.site_url)}" target="_blank" rel="noopener">Ver no site ↗</a>`:'')}
   else if(!adm){estado=n?`${qtd(n,'folha pronta','folhas prontas')}: um admin publica`:'nada pronto para publicar ainda'}
   else{const bl=pl&&!pl.pode_executar&&(pl.bloqueios||[])[0];
     const desl=!pl||bl||!n;bt=`<button type="button" class="btn${desl?'':' pri'} pjs-pub" data-pjs-publicar="${escHtml(code)}"${desl?' disabled':''}>${n?`Publicar ${qtd(n,'folha','folhas')}`:'Publicar'}</button>`;

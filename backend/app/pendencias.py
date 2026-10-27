@@ -143,7 +143,9 @@ def lotes(con) -> list[dict]:
     lendo = projetos_lendo_agora(con)
     from .dispensa_lote import validas
     dispensados = validas(con)                       # UX-35: lote com erro dispensado (para todos) enquanto o erro for o mesmo
-    for r in con.execute("""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
+    from .filas_fase import SQL_FORA_DO_SITE
+    for r in con.execute(f"""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
+                                   {SQL_FORA_DO_SITE} AS fora_do_site,
                                    COALESCE(l.etapa_desde, l.criado_em) AS parado_desde,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
@@ -153,7 +155,8 @@ def lotes(con) -> list[dict]:
         d = dict(r)
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04
         marcar_parado(d, lendo)                                                                                  # UX-09
-        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None))
+        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None),
+                                  d["status_site"] == "no_ar", d.pop("fora_do_site"))   # UX-36
         d["dispensado"] = dispensados.get(d["id"])                                                               # UX-35
         saida.append(d)
     return saida
