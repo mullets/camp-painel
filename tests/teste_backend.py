@@ -5054,6 +5054,26 @@ def filho(modo):
         for k, L in bons.items():
             ver(f"nome compatível ({k}): importa sem passo extra", filas[L].get("destino_suspeito") is False, str(filas[L].get("destino_motivo")))
         ver("lista aberta à mão (não veio do CAMP Vision): não é travada", filas[manual].get("destino_suspeito") is False)
+        # Home (27/10, Rafael: "sempre um erro pra resolver quando clico em importar"): o lote travado aparece com "Verificar destino", nunca "Importar"
+        from app import pendencias as _pd
+        _k = connect()
+        _tud = {x["acao"]["alvo"]: x for g_ in _pd.tarefas(_k, "operador", por_grupo=999) if g_["id"] == "conferir" for x in g_["itens"] if x.get("acao")}
+        _k.close()
+        ver("Home: cada lote suspeito tem a ação 'Verificar destino' (tipo destino), nenhum 'Importar'",
+            all((_tud.get(L) or {}).get("acao", {}).get("tipo") == "destino" and _tud[L]["acao"]["rotulo"] == "Verificar destino" for L in suspeitos.values()),
+            str({k: (_tud.get(L) or {}).get("acao") for k, L in suspeitos.items()}))
+        ver("Home: os compatíveis e a lista à mão continuam com 'Importar'", all((_tud.get(L) or {}).get("acao", {}).get("tipo") == "importar" for L in list(bons.values()) + [manual]))
+        ver("Home: a linha diz o motivo curto (a pasta “…” não parece deste projeto)", "a pasta “Edifício Residêncial com Garagem” não parece deste projeto" in (_tud.get(suspeitos["Garagem"]) or {}).get("detalhe", "")
+            and "só tem o código" in (_tud.get(suspeitos["P0001"]) or {}).get("detalhe", ""), str((_tud.get(suspeitos["Garagem"]) or {}).get("detalhe")))
+        pai_ = op.get("/api/painel").json()
+        vis_ = [x for g_ in pai_.get("tarefas") or [] if g_["id"] == "conferir" for x in g_["itens"]]
+        ver("/api/painel: nenhum item visível de Para conferir oferece 'Importar' para lote suspeito",
+            bool(vis_) and not any((x.get("acao") or {}).get("tipo") == "importar" and x["acao"]["alvo"] in suspeitos.values() for x in vis_), str([x.get("acao") for x in vis_]))
+        pp_ = pai_.get("pendencias") or {}
+        ver("contagens: os suspeitos não são 'para importar' (vão para 'verificar destino') e continuam pedindo você",
+            pp_.get("lotes_importar") == len(bons) + 1 and pp_.get("lotes_verificar_destino") == len(suspeitos) and pp_.get("material_novo") == len(bons) + 1 + len(suspeitos)
+            and sum(1 for x in filas.values() if x["fase"] == "importar" and not x.get("destino_suspeito")) == pp_.get("lotes_importar"),
+            str({k: pp_.get(k) for k in ("lotes_importar", "lotes_verificar_destino", "material_novo")}))
         dl = op.get(f"/api/lotes/{bons['nome + endereço (F009-P0092)']}/destino").json()
         ver("F009-P0092: o endereço sai do nome comparado e a nota passa", dl["suspeito"] is False and dl["nome_limpo"] == "RESIDENCIA LUIZ SALES" and (dl["nota"] or 0) >= 0.5, str({k: dl.get(k) for k in ("nome_limpo", "nota", "motivo")}))
         d = op.get(f"/api/lotes/{suspeitos['Marambaia']}/destino").json()
@@ -5194,6 +5214,17 @@ def filho(modo):
         filas = {x["id"]: x for x in op.get("/api/filas").json()}
         ver("a Fila mostra em cada lote o que o painel faria", (filas[L["Marambaia"]].get("destino_auto") or {}).get("para") == "F073-P0095"
             and (filas[L["Garagem"]].get("destino_auto") or {}).get("acao") == "criar", str(filas[L["Marambaia"]].get("destino_auto")))
+        def _home(k_):
+            t_ = op.get("/api/painel").json()
+            from app import pendencias as _pd
+            _k = connect()
+            try:
+                return {x["acao"]["alvo"]: x for g_ in _pd.tarefas(_k, "operador", por_grupo=999) if g_["id"] == "conferir" for x in g_["itens"] if x.get("acao")}.get(L[k_]) or {}
+            finally:
+                _k.close()
+        hm = _home("Marambaia")
+        ver("Home: o lote em Verificar destino diz o que o painel faria e o botão é 'Verificar destino'", "o painel faria: mover para F073-P0095" in (hm.get("detalhe") or "")
+            and (hm.get("acao") or {}).get("tipo") == "destino", str(hm))
         dv = op.get(f"/api/lotes/{L['Antioquina']}/destino").json()
         ver("Verificar destino mostra 'O painel faria' (painel_faria) e o modo", (dv.get("painel_faria") or {}).get("para") == "F073-P0168" and dv.get("modo_automatico") == "simular", str(dv.get("painel_faria")))
         # ---------------- quem pode ----------------
@@ -5218,6 +5249,12 @@ def filho(modo):
         ver("mover: o lote continua no projeto antigo (a pasta tem o código antigo) e fica 'movendo para F073-P0095'",
             c.execute("SELECT projeto_codigo FROM lista_processamento WHERE id=?", (L["Marambaia"],)).fetchone()[0] == "F073-P0010"
             and "movendo para F073-P0095" in (op.get(f"/api/lotes/{L['Marambaia']}/destino").json().get("motivo") or ""))
+        hm = _home("Marambaia")
+        ver("Home: o lote 'movendo' diz 'movendo para F073-P0095 (o CAMP Vision vai reorganizar a pasta)', sem 'Importar'",
+            "movendo para F073-P0095 (o CAMP Vision vai reorganizar a pasta)" in (hm.get("detalhe") or "") and (hm.get("acao") or {}).get("tipo") == "destino"
+            and "o painel faria" not in (hm.get("detalhe") or ""), str(hm))
+        pm = op.get("/api/pendencias").json()
+        ver("contagens: os 2 lotes movendo (Marambaia, Garagem) não são para importar (lotes_movendo_destino)", pm.get("lotes_movendo_destino") == 2 and pm.get("lotes_importar") == 1, str({k: pm.get(k) for k in ("lotes_importar", "lotes_verificar_destino", "lotes_movendo_destino")}))
         ri = op.post(f"/api/lotes/{L['Marambaia']}/importar")
         ver("o lote 'movendo' não importa no projeto antigo (409) e diz que o CAMP Vision vai reorganizar a pasta", ri.status_code == 409 and "CAMP Vision vai reorganizar" in ri.text, ri.text[:200])
         ver("enquanto 'movendo', 'É deste projeto' é recusado (desfaça antes)", op.post(f"/api/lotes/{L['Marambaia']}/destino", json={"acao": "confirmar", "justificativa": "conferi"}).status_code == 409)
@@ -10591,6 +10628,30 @@ def filho(modo):
         pend2 = x.get("/api/pendencias").json(); pai2 = x.get("/api/painel").json()
         mesmo("Precisa de você depois de esconder um problema (UX-03)", {"pendencias": pend2.get("precisa_de_voce"), "pedem_acao": g(pend2, "pedem_acao", "precisa_de_voce"),
                                                                           "painel.pendencias": g(pai2, "pendencias", "precisa_de_voce"), "painel.pedem_acao": g(pai2, "pendencias", "pedem_acao", "precisa_de_voce"), "esperado": 2})
+        # UX-01 (27/10, Home × Material novo): lote do CAMP Vision cuja pasta não parece do projeto ("Verificar destino") e um "movendo" (UX-43):
+        # não são "para importar" em nenhuma rota; pedem você (como na aba "Precisam de você" do Material novo); a Home não oferece "Importar".
+        import json as _j
+        p12, p13, p14 = proj(12), proj(13), proj(14)
+        ls_ = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Edifício Residêncial com Garagem',?,'/g','revisao',?)",
+                        (p12, _j.dumps({"origem": "campvision2"}))).lastrowid
+        lm_ = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Clube Atlético Ipê',?,'/m','revisao',?)",
+                        (p13, _j.dumps({"origem": "campvision2"}))).lastrowid
+        c.execute("INSERT INTO destino_auto (lote_id, acao, projeto_antigo, projeto_novo, nota, nome_pasta, pasta_qnap) VALUES (?,'mover',?,?,1.0,'Clube Atlético Ipê','/m')", (lm_, p13, p14))
+        c.commit()
+        pend3, pai3, filas3, est3 = x.get("/api/pendencias").json(), x.get("/api/painel").json(), x.get("/api/filas").json(), x.get("/api/estacoes").json()
+        vivos3 = [l for l in filas3 if not l.get("adiado")]
+        mesmo("lotes para importar (sem os de Verificar destino)", {"filas (linhas)": sum(1 for l in vivos3 if l["fase"] == "importar" and not l.get("destino_suspeito")),
+                                                                    "pendencias": pend3.get("lotes_importar"), "painel": g(pai3, "pendencias", "lotes_importar"),
+                                                                    "estacoes": g(est3, "contagens", "lotes_importar"), "caminho": next((p_["q"] for p_ in pai3.get("caminho") or [] if p_["id"] == "importar"), None), "esperado": 1})
+        mesmo("lotes em Verificar destino", {"filas (linhas)": sum(1 for l in vivos3 if l["fase"] == "importar" and l.get("destino_suspeito")),
+                                             "pendencias": pend3.get("lotes_verificar_destino"), "painel": g(pai3, "pendencias", "lotes_verificar_destino"), "esperado": 2})
+        mesmo("material novo com os de Verificar destino", {"pendencias": pend3.get("material_novo"), "estacoes.pipeline": g(est3, "pipeline", "aguardando_revisao"),
+                                                            "painel": g(pai3, "pendencias", "material_novo"), "painel.pedem_acao": g(pai3, "pendencias", "pedem_acao", "material_novo"), "esperado": 4})
+        mesmo("Precisa de você com os de Verificar destino", {"pendencias": pend3.get("precisa_de_voce"), "painel.pendencias": g(pai3, "pendencias", "precisa_de_voce"),
+                                                              "painel.contagens": g(pai3, "contagens", "precisa_de_voce"), "esperado": 4})
+        it3 = {i_["acao"]["alvo"]: i_ for g_ in pai3.get("tarefas") or [] if g_["id"] == "conferir" for i_ in g_["itens"] if i_.get("acao")}
+        ver("Home: os dois lotes travados têm 'Verificar destino' (não 'Importar')", all((it3.get(L_) or {}).get("acao", {}).get("tipo") == "destino" for L_ in (ls_, lm_))
+            and "movendo para " + p14 in (it3.get(lm_) or {}).get("detalhe", ""), str({L_: it3.get(L_) for L_ in (ls_, lm_)}))
         for l in res: print(l)
     elif modo == "ux07_alertas":
         # UX-07: "QNAP quase cheio" e "Site sem resposta" diziam "ainda não medido" com a tela mostrando QNAP 12% e site lento.

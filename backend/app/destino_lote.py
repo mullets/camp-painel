@@ -97,7 +97,7 @@ def avaliar(con, l, pacote: dict | None = None, completo: bool = True) -> dict:
     pasta = nome_da_pasta(l)
     out = {"aplica": aplica(con, l), "nome_pasta": pasta, "nome_limpo": limpar_nome_de_pasta(pasta),
            "projeto": {"codigo": l["projeto_codigo"], "titulo": p["titulo"] if p else None}, "nota": None, "so_codigo": False,
-           "suspeito": False, "liberado": True, "motivo": None, "sugestoes": [], "confirmado": None, "decisao": None, "amostra": [], "automatico": None}
+           "suspeito": False, "liberado": True, "motivo": None, "motivo_curto": None, "sugestoes": [], "confirmado": None, "decisao": None, "amostra": [], "automatico": None}
     if not out["aplica"] or not p:
         return out
     n = nota(pasta, p)
@@ -112,6 +112,9 @@ def avaliar(con, l, pacote: dict | None = None, completo: bool = True) -> dict:
     out["suspeito"] = bool(out["motivo"])
     if not out["suspeito"]:
         return out
+    nome = out["nome_limpo"] or pasta                 # UX-01 (Home): a frase curta da linha ("a pasta “X” não parece deste projeto")
+    out["motivo_curto"] = (f"a pasta “{pasta}” só tem o código, sem nome para comparar" if out["so_codigo"] else
+                           "o projeto não tem nome para comparar com a pasta" if n is None else f"a pasta “{nome}” não parece deste projeto")
     out["confirmado"] = confirmacao(con, l)
     out["decisao"] = decisao(con, l["id"])
     dec = out["decisao"] or {}
@@ -122,8 +125,13 @@ def avaliar(con, l, pacote: dict | None = None, completo: bool = True) -> dict:
         alvo = f"{auto['para']} (“{auto['para_titulo']}”{', projeto criado pelo painel' if auto['criado'] else ''})"
         out["motivo"] = (f"movendo para {alvo}: o CAMP Vision vai reorganizar a pasta" if auto["estado"] == "movendo" else
                          f"o painel moveu este lote para {alvo} e o CAMP Vision já reorganizou a pasta; se ainda sobrou material aqui, escolha “É deste projeto”")
+        out["motivo_curto"] = (f"movendo para {auto['para']} (o CAMP Vision vai reorganizar a pasta)" if auto["estado"] == "movendo" else
+                               f"o CAMP Vision já levou a pasta para {auto['para']}; se sobrou material aqui, escolha “É deste projeto”")
     if not out["liberado"] and not auto and dec.get("situacao") == "resolvida" and dec.get("escolha") == "outro_projeto":
         out["motivo"] += f"; decidido (decisão {dec['id']}): a pasta é de {dec.get('escolha_valor')}. O CAMP Vision precisa reidentificar a pasta antes"
+        out["motivo_curto"] += f" · decidido: é de {dec.get('escolha_valor')}; falta o CAMP Vision reidentificar a pasta"
+    elif not out["liberado"] and not auto and dec.get("situacao") == "pendente":
+        out["motivo_curto"] += f" · está em Decisões (decisão {dec['id']})"
     if completo:
         out["sugestoes"] = sugestoes(con, l, p["fundo_codigo"], pasta, n)
         docs = (pacote or {}).get("documentos") if isinstance((pacote or {}).get("documentos"), list) else (pacote or {}).get("itens")
