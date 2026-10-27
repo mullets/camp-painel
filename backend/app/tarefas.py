@@ -25,6 +25,7 @@ TITULOS = {
     "bagit": "Gerar pacote BagIt",
     "enviar_correcoes": "Enviar correções ao site",
     "reprocessar_recorte": "Reprocessar imagens públicas com recorte automático",
+    "destino_automatico": "Verificar destino pelo painel",
 }
 
 

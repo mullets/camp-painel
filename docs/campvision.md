@@ -163,6 +163,8 @@ Ao enviar a folha ao site (`publicador.imagem_pronta_para_o_site`, também usada
 ## Reidentificar pelo painel (CAMP-009)
 `POST /api/campvision/reidentificar` (rede local ou `X-Camp-Token`) deixa o CV2 usar as regras de mover/mesclar do painel sem login de admin. `simular: true` por padrão
 (plano sem gravar); aplicar exige `campvision.reidentificar_aplicar = 1` (nasce 0); tudo ou nada; idempotente (`ja_movidos`, `ja_mesclado`). Detalhes e exemplo em `docs/CONTRATO_UNICO.md` §5.1.
+UX-43: `GET /api/campvision/destinos` (só leitura) lista as pastas que o painel decidiu que são de outro projeto ("Verificar destino pelo painel"), com o
+`vigia.py --reidentificar <antigo>` a rodar; o lote fica "movendo" no projeto antigo até o material chegar ao novo. `docs/CONTRATO_UNICO.md` §5.2.
 
 ## Legado (CAMP-024)
 `legado.status_antigos`, `legado.nomes_de_teste` e `legado.fundos_json` (padrão 1) desligam, um a um, os status `campvision_concluido`/`pronto_campvision2`, o nome de pasta `asd`/`sei la` como teste e `GET /api/fundos.json`.

@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.2 (27/10/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
+Versão deste documento: **1.3 (27/10/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -112,6 +112,19 @@ As rotas administrativas de mover/mesclar exigem **login de admin**; o CV2 não 
 - Redirecionamentos antigo→novo entram na fila do site (CAMP-014) só ao aplicar. O `mapa` serve para o CV2 renomear/mover os arquivos no QNAP e refazer os pacotes.
 - **Ordem do CV2** (a implementar no campvision-new): (1) `vigia.py --reidentificar` SEM `--sim` mostra o plano local; (2) chamar o painel com `simular: true` e conferir o plano; (3) admin liga `campvision.reidentificar_aplicar`; (4) `--sim` move os arquivos e chama o painel com `simular: false`; (5) `aviso` por projeto afetado. Ordem de deploy: **painel antes do CV2**; o CV2 antigo não chama a rota nova, então nada quebra.
 - Aceite no F026 (precisa de máquina real e decisão do Rafa): folhas no QNAP e no painel batem, nada duplicado, redirecionamentos gravados.
+
+### 5.2 Pastas que o painel decidiu que são de outro projeto (UX-43, NOVO 1.3)
+
+`GET /api/campvision/destinos` (rede local ou `X-Camp-Token`; **só leitura**, rota nova e opcional: o CV2 antigo não chama e nada quebra) →
+```json
+{"destinos": [{"id": 3, "lote_id": 41, "pasta": "/mnt/qnap/.../F026-P0010 - Edifício Marambaia - 1970-1971", "nome_pasta": "Edifício Marambaia - 1970-1971",
+  "de": "F026-P0010", "para": "F026-P0095", "para_titulo": "Marambaia", "criado": false, "desde": "2026-10-27 22:10:00",
+  "comando": "vigia.py --reidentificar F026-P0010"}]}
+```
+- É a lista do "Verificar destino pelo painel" (`destino.automatico`, padrão `simular`: em simular a lista fica vazia). `criado: true` = o projeto de destino foi criado pelo painel (próximo P; já aparece em `/api/estacoes/contexto`).
+- O painel NÃO muda o lote de projeto nem mexe no QNAP: o lote fica "movendo" no projeto antigo e não importa. Quem reorganiza a pasta é o CV2, pelo caminho que já existe (`--reidentificar <de>`: plano sem `--sim`, depois `--sim`; aviso por projeto).
+- O item sai da lista sozinho quando o material chega ao projeto `para` (lote de outra pasta criado depois da decisão), quando o lote passa para `para` (`/api/campvision/reidentificar` com `lote_id`) ou quando uma pessoa usa Desfazer no painel.
+- Até o CV2 ler esta rota (a implementar no campvision-new), uma pessoa roda o `comando` no servidor do CAMP Vision.
 
 ## 6. Painel ↔ site
 

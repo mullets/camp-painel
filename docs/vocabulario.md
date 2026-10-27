@@ -34,6 +34,14 @@ Não é uma 6ª situação: a situação continua **Chegando** e ao lado vem o c
 O botão é **Verificar destino** (no lugar de "Importar folhas"); as escolhas são **É deste projeto**, **Mover para F0xx-P000x (sugerido)**
 e **Criar decisão**, sempre com justificativa (vai para o Histórico). "Importar todas" não importa esses lotes e diz quantos ficaram de fora.
 
+### Verificar destino pelo painel (UX-43, 27/10/2026)
+Quadro em Material novo e linha em cada lote em "Verificar destino". Modos (admin): **Desligado**, **Simular** (padrão: "o painel mostra o que faria e não
+muda nada") e **Aplicar sozinho**. Em cada lote: **O painel faria: mover para F0xx-P0yyy “Título”** / **criar F0xx-P0yyy “Título”** / **deixar para uma
+pessoa: <motivo>**. O botão do admin é **Aplicar estas N decisões**. Depois de aplicado, o lote fica com o chip `movendo` e a frase
+"movendo para F0xx-P0yyy (“Título”): o CAMP Vision vai reorganizar a pasta"; quando o material chega lá, `concluído`. **O que o painel fez (N)** lista as
+decisões com **Desfazer**; **Projetos criados pelo painel (N)** lista os projetos novos com `revise o título` / `título revisado`. No Histórico, o autor é
+"O painel (automático)".
+
 ### Possível duplicata de projeto (UX-29, 27/10/2026)
 Ao digitar o nome em **Novo projeto** ou **Editar**: "Já existe projeto parecido neste fundo" / "Com este nome, fica parecido com", cada um com
 **Abrir este** (e, ao editar, **Não é duplicata**). Em Problemas, o quadro **Possíveis projetos duplicados (N)**. "Não é duplicata" vale para o

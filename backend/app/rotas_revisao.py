@@ -163,6 +163,10 @@ def ver_destino(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
         a = avaliar(con, l, pacote)
         a["lote_id"] = lote_id
         a["pode_confirmar"] = u["papel"] in ("operador", "admin", "master")
+        a["pode_desfazer"] = u["papel"] in ("admin", "master")            # UX-43 (campos novos, opcionais)
+        from .destino_auto import modo as _modo_auto, planejar as _planejar_auto
+        a["modo_automatico"] = _modo_auto(con)
+        a["painel_faria"] = next((p for p in _planejar_auto(con) if p["lote_id"] == lote_id), None) if a["suspeito"] and a["modo_automatico"] != "desligado" else None
         return a
     finally:
         con.close()
@@ -189,6 +193,10 @@ def escolher_destino(lote_id: int, d: EscolhaDestino, u: dict = Depends(auth.exi
         a = avaliar(con, l, completo=False)
         if not a["suspeito"]:
             raise HTTPException(409, "Este lote não precisa verificar destino: o nome da pasta combina com o projeto.")
+        auto = a.get("automatico") or {}
+        if auto.get("estado") == "movendo":              # UX-43: o painel já mandou o lote para outro projeto; desfaça antes de escolher
+            raise HTTPException(409, f"O painel já decidiu: este lote vai para {auto.get('para')} (o CAMP Vision vai reorganizar a pasta). "
+                                     "Para escolher outro destino, um admin usa Desfazer em Material novo.")
         if d.acao == "confirmar":
             if a["confirmado"]:
                 raise HTTPException(409, "Uma pessoa já confirmou que esta pasta é deste projeto.")

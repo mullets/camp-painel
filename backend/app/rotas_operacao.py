@@ -613,6 +613,7 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     from .dispensa_lote import validas
     dispensados = validas(con)
     saida = []
+    plano_auto = None                                    # UX-43: a prévia do "Verificar destino pelo painel", calculada uma vez só
     for r in rows:
         d = dict(r)
         d["adiado"] = chave_adiar_lote(d["id"]) in fora   # UX-05: "Agora não" desta pessoa: fica na lista, sai das contagens dela
@@ -632,6 +633,12 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
             a = avaliar(con, r, completo=False)
             d["destino_suspeito"] = a["suspeito"] and not a["liberado"]
             d["destino_motivo"] = a["motivo"] if d["destino_suspeito"] else None
+            if d["destino_suspeito"]:                    # UX-43 (campos novos, opcionais): o que o painel faria / já fez com o lote
+                d["destino_movendo"] = a.get("automatico")
+                if plano_auto is None:
+                    from .destino_auto import modo as _modo_auto, planejar as _planejar_auto
+                    plano_auto = {p["lote_id"]: p for p in _planejar_auto(con)} if _modo_auto(con) != "desligado" else {}
+                d["destino_auto"] = plano_auto.get(d["id"])
         saida.append(d)
     con.close()
     return saida
