@@ -46,14 +46,39 @@ def _senha_temporaria() -> str:
     return secrets.token_urlsafe(12)
 
 
+# UX-13: conta genérica = nome de função/setor, não de pessoa ("Operador de digitalização", "Pesquisador convidado",
+# "Administração CAMP"). Heurística: alguma palavra do nome (ou o começo do e-mail) é de função/setor. Só AVISA na tela;
+# desativar é ação humana (nada é desativado sozinho).
+_PALAVRAS_GENERICAS = {
+    "operador", "operadora", "operacao", "digitalizacao", "digitalizador", "pesquisador", "pesquisadora", "convidado", "convidada",
+    "administracao", "administrador", "administradora", "admin", "administrativo", "estacao", "equipe", "setor", "geral", "suporte",
+    "teste", "testes", "qa", "visitante", "leitor", "leitora", "leitura", "usuario", "usuaria", "contato",
+    "secretaria", "recepcao", "estagiario", "estagiaria", "bolsista", "voluntario", "voluntaria", "compartilhada", "generica",
+}
+
+
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", t or "") if unicodedata.category(ch) != "Mn").lower()
+
+
+def conta_generica(nome: str, email: str) -> bool:
+    import re
+    palavras = set(re.findall(r"[a-z0-9]+", _sem_acento(nome)))
+    local = set(re.findall(r"[a-z0-9]+", _sem_acento((email or "").split("@")[0])))
+    return bool(palavras & _PALAVRAS_GENERICAS) or bool(local & _PALAVRAS_GENERICAS)
+
+
 @router.get("/usuarios")
 def listar(u: dict = Depends(auth.exige("admin"))) -> list[dict]:
     con = connect()
     rows = con.execute(
-        "SELECT id, nome, email, papel, ativo, ultimo_login, bloqueado_ate, precisa_trocar_senha, "
+        "SELECT id, nome, email, papel, ativo, ultimo_login, bloqueado_ate, precisa_trocar_senha, senha_temporaria_em, "
         "totp_secret IS NOT NULL AS totp, foto IS NOT NULL AS tem_foto FROM usuario ORDER BY papel DESC, nome").fetchall()
+    out = [{**dict(r), "tem_foto": bool(r["tem_foto"]), "senha_temporaria_vencida": auth.senha_temporaria_vencida(con, r),
+            "generica": conta_generica(r["nome"], r["email"])} for r in rows]
     con.close()
-    return [{**dict(r), "tem_foto": bool(r["tem_foto"])} for r in rows]
+    return out
 
 
 @router.post("/usuarios")
@@ -67,11 +92,14 @@ def criar(d: NovoUsuario, u: dict = Depends(auth.exige("admin"))) -> dict:
     senha = _senha_temporaria()
     uid = auth.criar_usuario(d.nome, d.email, senha, d.papel, forcar_troca=True)
     con = connect()
+    con.execute("UPDATE usuario SET senha_temporaria_em=datetime('now') WHERE id=?", (uid,))   # UX-13: vence em 72 h
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('usuario',?,'criado_por',?,?)",
                 (d.email.lower(), u["email"], f"papel={d.papel}"))
-    con.commit(); con.close()
-    # a senha temporária é mostrada UMA vez, para o admin repassar; o usuário troca no primeiro login
-    return {"id": uid, "email": d.email.lower(), "senha_temporaria": senha}
+    con.commit()
+    horas = auth.horas_senha_temporaria(con)
+    con.close()
+    # a senha temporária é mostrada UMA vez, para o admin repassar; o usuário troca no primeiro login (e ela vence em 72 h: UX-13)
+    return {"id": uid, "email": d.email.lower(), "senha_temporaria": senha, "vale_horas": horas}
 
 
 @router.patch("/usuarios/{uid}")
@@ -115,13 +143,15 @@ def redefinir(uid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close(); raise HTTPException(404, "Usuário não existe")
     _pode_gerir(u, alvo["papel"])
     senha = _senha_temporaria()
-    con.execute("UPDATE usuario SET senha_hash=?, precisa_trocar_senha=1, tentativas_falhas=0, bloqueado_ate=NULL, "
-                "totp_secret=NULL WHERE id=?", (auth.pwd.hash(senha), uid))
+    con.execute("UPDATE usuario SET senha_hash=?, precisa_trocar_senha=1, senha_temporaria_em=datetime('now'), tentativas_falhas=0, "
+                "bloqueado_ate=NULL, totp_secret=NULL WHERE id=?", (auth.pwd.hash(senha), uid))
     con.execute("UPDATE sessao SET revogada=1 WHERE usuario_id=?", (uid,))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator) VALUES ('usuario',?,'senha_redefinida',?)",
                 (alvo["email"], u["email"]))
-    con.commit(); con.close()
-    return {"senha_temporaria": senha}
+    con.commit()
+    horas = auth.horas_senha_temporaria(con)
+    con.close()
+    return {"senha_temporaria": senha, "vale_horas": horas}
 
 
 @router.post("/usuarios/{uid}/desbloquear")

@@ -1,5 +1,5 @@
 // Atalhos de teclado: o que o MENU anuncia tem que ser exatamente o que a tecla FAZ. Uso: bash tests/rodar_um.sh tests/auditoria_atalhos.js
-const {JSDOM}=require('jsdom'); const BASE='http://127.0.0.1:8765'; const problems=[]; const linhas=[];
+const {JSDOM}=require('jsdom'); const BASE=process.env.CAMP_BASE||'http://127.0.0.1:8765'; const problems=[]; const linhas=[];
 const c={}; const f=async(url,opt={})=>{ if(url.startsWith('/')) url=BASE+url; const h={...(opt.headers||{})}; if(Object.keys(c).length) h.cookie=Object.entries(c).map(([k,v])=>`${k}=${v}`).join('; ');
   if(opt.body&&!h['Content-Type']) h['Content-Type']='application/json'; const r=await fetch(url,{...opt,headers:h,redirect:'manual'}); const sc=r.headers.get('set-cookie'); if(sc){const m=sc.match(/^([^=]+)=([^;]+)/); if(m) c[m[1]]=m[2];} return r; };
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) problems.push(m); };
@@ -19,11 +19,16 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) pr
   for(const [view,k] of Object.entries(anunciado)){
     if(!k){ linhas.push(`ERRO menu "${view}" ficou SEM tecla`); chk(false,`menu: "${view}" não anuncia tecla`); continue }
     const ok=faz[k.toLowerCase()]===view; linhas.push(`${ok?'ok ':'ERRO'} menu "${view}" anuncia ${k} -> a tecla ${k} vai para "${faz[k.toLowerCase()]}"`); chk(ok,`menu: "${view}" anuncia a tecla ${k}, mas a tecla ${k} abre "${faz[k.toLowerCase()]}"`) }
-  // regra (CAMP-154): os dígitos são as PRIMEIRAS entradas, NA ORDEM do menu (hoje 1–5, os 5 destinos); letras depois
+  // regra (CAMP-154/UX-28): 1–5 são Precisa de você · Projetos · Fundos · Pedidos de alta resolução · Máquinas
   const nd=Object.values(JSON.parse(w.eval('JSON.stringify(NAV_ATALHOS)'))).filter(k=>/^\d$/.test(k)).length;
   chk(nd===5,'CAMP-154: os 5 destinos deveriam ter as teclas 1–5: '+nd);
-  ordem.slice(0,nd).forEach((v,i)=>chk(anunciado[v]===String(i+1),`ordem do menu: a ${i+1}ª entrada ("${v}") deveria anunciar ${i+1}, anuncia ${anunciado[v]}`));
-  ordem.slice(nd).forEach(v=>chk(/^[A-Z]$/.test(anunciado[v]||''),`ordem do menu: "${v}" (depois dos dígitos) deveria ter uma letra, tem ${anunciado[v]}`));
+  // UX-28: menu pela ordem do trabalho SEM mudar tecla: os dígitos crescem de cima para baixo e só ficam em item sempre à vista; letras entre eles
+  const dig=ordem.filter(v=>/^\d$/.test(anunciado[v]||''));
+  chk(dig.map(v=>anunciado[v]).join('')==='12345','ordem do menu: os dígitos deveriam aparecer 1,2,3,4,5 de cima para baixo: '+dig.map(v=>v+'='+anunciado[v]).join(','));
+  dig.forEach(v=>chk(!d.querySelector(`#nav button[data-v="${v}"]`).classList.contains('nav-sec'),`"${v}" tem dígito mas está no "Mais"`));
+  ordem.filter(v=>!dig.includes(v)).forEach(v=>chk(/^[A-Z]$/.test(anunciado[v]||''),`ordem do menu: "${v}" deveria ter uma letra, tem ${anunciado[v]}`));
+  { const ANTES={painel:'1',projetos:'2',fundos:'3',solicitacoes:'4',estacoes:'5',decisoes:'D',filas:'N',erros:'P',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',relatorios:'L',uso:'U',auditoria:'A',qualidade:'Q',config:'C',caminho:'M',glossario:'G'};   // UX-28: as teclas de antes da reorganização
+    Object.entries(ANTES).forEach(([v,k])=>chk(anunciado[v]===k,`UX-28: a tecla de "${v}" era ${k}, agora é ${anunciado[v]}`)); }
   chk(w.eval('JSON.stringify(NAV_ATALHOS)')===JSON.stringify(Object.fromEntries(ordem.map(v=>[v,anunciado[v]]))),'o menu mostra teclas diferentes da tabela NAV_ATALHOS');
   chk(!faz['0']&&!faz['z'],'teclas não anunciadas (0, z) não deveriam abrir nada: '+faz['0']+' / '+faz['z']);
   // minúscula/maiúscula e sem tecla acidental com Ctrl/⌘

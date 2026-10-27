@@ -37,9 +37,9 @@ if inline > 157:     # CAMP-155 (22/10/2026): o teto desce para o número de hoj
 
 # --- CAMP-155: só os tokens do padrão (docs/padroes.md). No CSS e na marcação da página, tamanho de fonte e raio crus não podem
 # crescer (o que é igual a um token já virou var(--fs-*) / var(--r*)), e o âmbar fora dos tokens não volta. O JS fica de fora: as
-# janelas de impressão (etiquetas, folha de contatos) têm CSS próprio, sem os tokens.
+# janelas de impressão (etiquetas, folha de contatos) têm CSS próprio, sem os tokens. UX-27 (27/10/2026): o teto da fonte crua desceu de 65 para 50.
 _pagina = text[text.index("<style>"):text.index("<script>")] if "<style>" in text and "<script>" in text else text
-for _nome, _pad, _teto in (("tamanho de fonte cru (px)", r"font-size:\d+(\.\d+)?px", 65), ("raio cru (px)", r"border-radius:\d+(\.\d+)?px", 39)):
+for _nome, _pad, _teto in (("tamanho de fonte cru (px)", r"font-size:\d+(\.\d+)?px", 50), ("raio cru (px)", r"border-radius:\d+(\.\d+)?px", 39)):
     _n = len(re.findall(_pad, _pagina))
     if _n > _teto:
         errors.append(f"tokens: {_nome} subiu para {_n} (teto {_teto}): use var(--fs-*) / var(--r-sm|--r|--r-md|--r-lg) — CAMP-155")
@@ -111,7 +111,7 @@ for arq in [HTML, *sorted((ROOT / "backend" / "app").glob("*.py"))]:
             linha = conteudo.count("\n", 0, m.start()) + 1
             errors.append(f"vocabulário: '{m.group(0)}' em {arq.relative_to(ROOT)}:{linha} — {dica}")
 
-# --- atalhos do menu: a tabela NAV_ATALHOS tem que seguir a ORDEM VISUAL do menu (dígitos 1-9 em sequência, depois letras) ---
+# --- atalhos do menu: a tabela NAV_ATALHOS segue a ORDEM VISUAL do menu (dígitos 1-9 em sequência; UX-28: letras podem vir entre eles) ---
 mapa = re.search(r"const NAV_ATALHOS=\{([^}]*)\}", text)
 menu = re.search(r'<nav class="nav" id="nav">(.*?)</nav>', text, re.S)
 if not mapa or not menu:
@@ -128,9 +128,12 @@ else:
     digitos = [teclas[v] for v in ordem if v in teclas and teclas[v].isdigit()]
     if digitos != [str(i) for i in range(1, len(digitos) + 1)] or len(digitos) > 9:
         errors.append(f"atalhos: os dígitos deveriam ser 1..N na ordem do menu, mas estão {digitos}")
-    primeiros = [v for v in ordem if v in teclas][: len(digitos)]
-    if [v for v in ordem if v in teclas and teclas[v].isdigit()] != primeiros:
-        errors.append("atalhos: os dígitos têm que ficar nas PRIMEIRAS entradas do menu; as letras vêm depois")
+    # UX-28: o menu segue a ordem do trabalho e as teclas NÃO mudaram (1 Precisa de você · 2 Projetos · 3 Fundos · 4 Pedidos
+    # de alta resolução · 5 Máquinas). Regra: dígitos crescentes na ordem do menu e só em item visível sem abrir o "Mais".
+    no_mais = set(re.findall(r'<button data-v="(\w+)"[^>]*class="nav-sec"', menu.group(1)))
+    for v in ordem:
+        if v in teclas and teclas[v].isdigit() and v in no_mais:
+            errors.append(f"atalhos: '{v}' tem o dígito {teclas[v]} mas fica escondido no \"Mais\" (dígito só em item sempre à vista)")
     todas = [k.lower() for k in teclas.values()]
     if len(set(todas)) != len(todas):
         errors.append("atalhos: há teclas repetidas em NAV_ATALHOS")

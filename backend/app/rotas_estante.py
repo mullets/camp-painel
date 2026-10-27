@@ -5,6 +5,7 @@
 - POST /api/localizacoes/{id}/conferencia/previa      classifica as leituras (conferido, faltando, de outro lugar) sem gravar
 - POST /api/localizacoes/{id}/conferencia             idem, e registra a conferência no histórico (operador+)
 Mover o que é de outro lugar usa a rota que já existe: POST /api/localizacoes/alocar.
+UX-25 (etiquetas impressas, guardar ao fim do lote, folhas publicadas sem lugar): no fim do arquivo.
 """
 from __future__ import annotations
 
@@ -221,3 +222,136 @@ def conferencia_registrar(lid: int, d: Leituras, u: dict = Depends(auth.exige("o
     if tot["de_outro_local"]:
         partes.append(f"{tot['de_outro_local']} de outro lugar")
     return {**r, "totais": tot, "mensagem": f"Conferência de {ident} registrada: " + ", ".join(partes)}
+
+
+# ---------------- UX-25 · etiquetar e guardar ao fim do lote ----------------
+# - POST /api/etiquetas/impressas   registra o que saiu no Imprimir (histórico "Impressas", para reimprimir igual)
+# - GET  /api/etiquetas/impressas   as últimas impressões, com quem imprimiu
+# - POST /api/etiquetas/guardar     guarda as folhas SEM lugar de um projeto numa caixa (cria a caixa se ainda não existe)
+# - GET  /api/etiquetas/sem-lugar   quantas folhas publicadas ainda não têm lugar (o contador discreto do Painel inicial)
+TIPOS_ETIQUETA = ("projeto", "documento", "caixa", "tubo", "fundo")
+RE_FORMATO = re.compile(r"^\d{2,3}x\d{2,3}$")
+RE_IDENT_LOCAL = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,29}$")
+PREFIXO_TIPO = (("CX-", "caixa"), ("GV-", "gaveta"), ("TB-", "tubo"), ("MAP-", "mapoteca"), ("EST-", "estante"))
+
+
+class Impressao(BaseModel):
+    tipo: str
+    codigo: str
+    quantidade: int = 1
+    formato_mm: str = "100x50"
+    papel: str | None = None
+    lote: str | None = None
+    config: dict | None = None
+
+
+@router.post("/etiquetas/impressas")
+def registrar_impressao(d: Impressao, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    cod = normalizar(d.codigo)
+    if d.tipo not in TIPOS_ETIQUETA:
+        raise HTTPException(400, "Tipo de etiqueta desconhecido")
+    if not cod or len(cod) > 80:
+        raise HTTPException(400, "Código da etiqueta inválido")
+    if not RE_FORMATO.match(d.formato_mm or ""):
+        raise HTTPException(400, "Formato inválido")
+    if d.papel not in (None, "rolo", "a4", "niimbot") or d.lote not in (None, "um", "folhas", "pastas", "material"):
+        raise HTTPException(400, "Papel ou lote inválido")
+    cfg = json.dumps(d.config, ensure_ascii=False) if d.config else None
+    if cfg and len(cfg) > 2000:
+        raise HTTPException(400, "Configuração longa demais")
+    con = connect()
+    try:
+        eid = con.execute("INSERT INTO etiqueta_impressao (tipo, codigo, quantidade, formato_mm, usuario_id, papel, lote, config) VALUES (?,?,?,?,?,?,?,?)",
+                          (d.tipo, cod, max(1, min(5000, int(d.quantidade or 1))), d.formato_mm, u.get("id"), d.papel, d.lote, cfg)).lastrowid
+        con.commit()
+    finally:
+        con.close()
+    return {"id": eid}
+
+
+@router.get("/etiquetas/impressas")
+def impressas(limite: int = 100, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    con = connect()
+    try:
+        rows = con.execute("""SELECT e.*, us.nome AS usuario, COALESCE(p.titulo, f.titulo) AS titulo
+                                FROM etiqueta_impressao e LEFT JOIN usuario us ON us.id=e.usuario_id
+                                LEFT JOIN projeto p ON p.codigo=substr(e.codigo,1,10) AND e.tipo IN ('projeto','tubo','documento') AND COALESCE(e.lote,'')<>'pastas'
+                                LEFT JOIN fundo f ON f.codigo=substr(e.codigo,1,4) AND (e.tipo IN ('fundo','caixa') OR e.lote='pastas')
+                               ORDER BY e.id DESC LIMIT ?""", (max(1, min(500, limite)),)).fetchall()
+    finally:
+        con.close()
+    out = []
+    for r in rows:
+        x = dict(r)
+        try:
+            x["config"] = json.loads(x.get("config") or "null")
+        except ValueError:
+            x["config"] = None
+        out.append(x)
+    return out
+
+
+class Guardar(BaseModel):
+    projeto_codigo: str
+    identificador: str
+
+
+@router.post("/etiquetas/guardar")
+def guardar(d: Guardar, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Guarda numa caixa só as folhas do projeto que ainda NÃO têm lugar: as que já têm continuam onde estão (nada muda de lugar sem querer).
+    A caixa é a do fundo do projeto (ou uma compartilhada com o mesmo identificador); se não existe, é criada no fundo do projeto."""
+    pc, ident = normalizar(d.projeto_codigo), normalizar(d.identificador)
+    if not RE_PROJETO.match(pc):
+        raise HTTPException(400, "Código de projeto inválido")
+    if not RE_IDENT_LOCAL.match(ident):
+        raise HTTPException(400, "Identificador inválido: use letras, números e hífen (ex.: CX-001)")
+    con = connect()
+    try:
+        p = con.execute("SELECT fundo_codigo, titulo FROM projeto WHERE codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL", (pc,)).fetchone()
+        if not p:
+            raise HTTPException(404, f"Projeto {pc} não existe")
+        loc = con.execute("""SELECT id, identificador, tipo FROM localizacao_fisica WHERE upper(identificador)=? AND (fundo_codigo=? OR fundo_codigo IS NULL)
+                              ORDER BY fundo_codigo IS NULL LIMIT 1""", (ident, p["fundo_codigo"])).fetchone()
+        criada = False
+        if loc:
+            lid, tipo = loc["id"], loc["tipo"]
+        else:
+            tipo = next((t for pre, t in PREFIXO_TIPO if ident.startswith(pre)), "caixa")
+            lid = con.execute("INSERT INTO localizacao_fisica (fundo_codigo, tipo, identificador) VALUES (?,?,?)", (p["fundo_codigo"], tipo, ident)).lastrowid
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('localizacao',?,'criada',?,?)",
+                        (str(lid), u["email"], json.dumps({"identificador": ident, "fundo": p["fundo_codigo"]}, ensure_ascii=False)))
+            criada = True
+        sem = [r[0] for r in con.execute("""SELECT codigo FROM item i WHERE projeto_codigo=?
+                                              AND NOT EXISTS (SELECT 1 FROM item_localizacao il WHERE il.item_codigo=i.codigo) ORDER BY codigo""", (pc,))]
+        total = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (pc,)).fetchone()[0]
+        for c in sem:
+            con.execute("INSERT INTO item_localizacao (item_codigo, localizacao_id) VALUES (?,?)", (c, lid))
+        if sem:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('localizacao',?,'alocacao',?,?)",
+                        (str(lid), u["email"], json.dumps({"itens": len(sem), "projeto": pc}, ensure_ascii=False)))
+        con.commit()
+    finally:
+        con.close()
+    ja, nome, nova = total - len(sem), p["titulo"] or pc, f" ({ident} foi criada)" if criada else ""
+    if sem:
+        msg = f"{_plural(len(sem), 'folha', 'folhas')} de {nome} guardada{'s' if len(sem) != 1 else ''} em {ident}{nova}"
+        if ja:
+            msg += f"; {_plural(ja, 'folha já tinha', 'folhas já tinham')} lugar e não mudou de lugar"
+    elif total:
+        msg = f"Todas as folhas de {nome} já tinham lugar: nada mudou{nova}"
+    else:
+        msg = f"{pc} ainda não tem folhas no painel{nova}"
+    return {"localizacao_id": lid, "identificador": ident, "tipo": tipo, "criada": criada, "guardadas": len(sem), "ja_tinham_lugar": ja, "mensagem": msg}
+
+
+@router.get("/etiquetas/sem-lugar")
+def publicadas_sem_lugar(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Folhas publicadas (qualquer visitante vê) que ainda não têm lugar físico cadastrado."""
+    con = connect()
+    try:
+        r = con.execute("""SELECT COUNT(*), COUNT(DISTINCT i.projeto_codigo) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
+                            WHERE i.status_site='no_ar' AND p.mesclado_em IS NULL AND p.descartado_em IS NULL
+                              AND NOT EXISTS (SELECT 1 FROM item_localizacao il WHERE il.item_codigo=i.codigo)""").fetchone()
+    finally:
+        con.close()
+    return {"folhas": r[0], "projetos": r[1]}

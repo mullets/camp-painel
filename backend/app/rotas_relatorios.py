@@ -3,7 +3,7 @@
 GET /api/relatorios?de=AAAA-MM-DD&ate=AAAA-MM-DD   — os números (JSON) para a tela #relatorios;
 GET /api/relatorios.xlsx?de=...&ate=...           — os mesmos números numa planilha, uma aba por seção.
 
-Seções: folhas digitalizadas/importadas (por mês e por fundo), folhas e projetos publicados, pedidos de material
+Seções: folhas digitalizadas no período e, SEPARADAS, as migradas/importadas do site (UX-14; por mês e por fundo), folhas e projetos publicados, pedidos de material
 (recebidos, atendidos e o tempo médio de entrega), problemas (abertos e resolvidos) e acessos ao site (só com o
 Google Analytics 4 direto configurado; sem ele a seção volta "sem dados" e o resto do relatório continua).
 Projetos de lote de teste não entram. Datas do banco são UTC ('AAAA-MM-DD HH:MM:SS'); o filtro é pelo dia.
@@ -95,9 +95,18 @@ def _folhas(con, de: str, ate: str, meses: list[str]) -> dict:
     pm = [{"mes": m, "rotulo": rotulo_mes(m), **v, "total": sum(v.values())} for m, v in sorted(por_mes.items())]
     pf = sorted(({**v, "total": sum(v[k] for k in ORIGEM)} for v in por_fundo.values()), key=lambda x: (-x["total"], x["fundo"]))
     total = sum(x["total"] for x in pm)
+    por_origem = {k: sum(x[k] for x in pm) for k in ORIGEM}
+    meses_imp = [x["rotulo"] for x in pm if x["importado"]]
     return {
         "total": total,
-        "por_origem": {k: sum(x[k] for x in pm) for k in ORIGEM},
+        # UX-14: o número principal da prestação de contas é o que foi DIGITALIZADO no período (CAMP Vision). O que veio do site
+        # (migração, evento único) e o que foi enviado à mão pelo painel ficam separados, para não inflar a produção.
+        "digitalizadas": por_origem["campvision"],
+        "importadas": por_origem["importado"],
+        "manuais": por_origem["manual"],
+        "meses_importacao": meses_imp,
+        "nota_importacao": nota_importacao(por_origem["importado"], meses_imp),
+        "por_origem": por_origem,
         "rotulos_origem": ORIGEM,
         "por_mes": pm,
         "por_fundo": pf,
@@ -105,6 +114,14 @@ def _folhas(con, de: str, ate: str, meses: list[str]) -> dict:
         "acervo_ao_fim": con.execute("""SELECT COUNT(*) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
                                          WHERE p.lote_teste=0 AND substr(i.criado_em,1,10) <= ?""", (ate,)).fetchone()[0],
     }
+
+
+def nota_importacao(n: int, meses: list[str]) -> str:
+    if not n:
+        return ""
+    quando = (" (" + ", ".join(meses) + ")") if meses else ""
+    return (f"Folhas que já estavam no site e entraram no painel pela migração{quando}: evento único, não é digitalização "
+            "feita no período. Por isso ficam fora do número de digitalizadas.")
 
 
 def _publicacoes(con, de: str, ate: str, meses: list[str]) -> dict:
@@ -130,9 +147,10 @@ def _publicacoes(con, de: str, ate: str, meses: list[str]) -> dict:
           FROM projeto p
          WHERE p.lote_teste=0 AND p.mesclado_em IS NULL AND p.descartado_em IS NULL AND substr(p.publicado_em,1,10) BETWEEN ? AND ?
          ORDER BY p.publicado_em, p.codigo""", (de, ate)).fetchall()]
-    hoje = con.execute("""SELECT
-        (SELECT COUNT(*) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE p.lote_teste=0 AND i.status_site='no_ar'),
-        (SELECT COUNT(*) FROM projeto WHERE lote_teste=0 AND mesclado_em IS NULL AND descartado_em IS NULL AND status_site='no_ar')""").fetchone()
+    # UX-05: "hoje estão publicados (sem contar projetos de teste)": a regra dos Relatórios, na fonte única (contagens)
+    from .contagens import no_site_sem_teste
+    ns = no_site_sem_teste(con)
+    hoje = (ns["folhas"], ns["projetos"])
     return {
         "folhas": sum(x["folhas"] for x in pm),
         "projetos": sum(x["projetos"] for x in pm),
@@ -170,6 +188,7 @@ def _pedidos(con, de: str, ate: str, meses: list[str]) -> dict:
 
 
 def _problemas(con, de: str, ate: str, meses: list[str]) -> dict:
+    from .contagens import erros_abertos
     vazio = lambda: {"abertos": 0, "resolvidos": 0}  # noqa: E731
     por_mes = {m: vazio() for m in meses}
     tipos: dict[str, dict] = {}
@@ -187,7 +206,7 @@ def _problemas(con, de: str, ate: str, meses: list[str]) -> dict:
     return {
         "abertos": sum(x["abertos"] for x in pm), "resolvidos": res[0], "descartados": desc,
         "ainda_abertos": ainda,
-        "em_aberto_hoje": con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0],
+        "em_aberto_hoje": erros_abertos(con),   # UX-05: a aba "Abertos" de Problemas
         "tempo_medio_dias": _dias(res[1]),
         "por_mes": pm,
         "por_tipo": sorted(tipos.values(), key=lambda x: (-x["abertos"], -x["resolvidos"], x["rotulo"])),
@@ -247,6 +266,8 @@ def calcular(de: str, ate: str, com_acessos: bool = True) -> dict:
             "pedidos": _pedidos(con, de, ate, meses),
             "problemas": _problemas(con, de, ate, meses),
         }
+        from .contagens import medir
+        out["contagens"] = medir(con)          # UX-05: os números de hoje, da mesma fonte das outras telas (com "medido_em")
     finally:
         con.close()
     out["acessos"] = _acessos(de, ate, meses) if com_acessos else {"disponivel": False, "motivo": SEM_GA4, "por_mes": [], "paginas": []}
@@ -311,21 +332,31 @@ def planilha(r: dict) -> bytes:
     texto(s, "Gerado em", r["gerado_em"])
     abas[s]["linha"] += 1
     tabela(s, "Números do período", ["Indicador", "Valor"], [
-        ["Folhas digitalizadas ou importadas", f["total"]],
+        ["Folhas digitalizadas no período (CAMP Vision)", f["digitalizadas"]],
+        ["Folhas migradas/importadas do site (evento único)", f["importadas"]],
+        ["Folhas enviadas pelo painel (cadastradas à mão)", f["manuais"]],
         ["Folhas no acervo ao fim do período", f["acervo_ao_fim"]],
-        ["Folhas publicadas", pb["folhas"]],
-        ["Projetos publicados", pb["projetos"]],
-        ["Pedidos do site recebidos", pd["recebidos"]],
-        ["Pedidos do site atendidos", pd["atendidos"]],
+        ["Folhas publicadas no período", pb["folhas"]],
+        ["Projetos publicados no período", pb["projetos"]],
+        ["Pedidos de alta resolução recebidos", pd["recebidos"]],
+        ["Pedidos de alta resolução atendidos", pd["atendidos"]],
         ["Tempo médio de entrega (dias)", nd(pd["tempo_medio_dias"])],
         ["Problemas abertos", pr["abertos"]],
         ["Problemas resolvidos", pr["resolvidos"]],
         ["Pessoas que visitaram o site", ac["total"]["pessoas"] if ac.get("disponivel") else "sem dados"],
         ["Visitas ao site", ac["total"]["visitas"] if ac.get("disponivel") else "sem dados"],
     ])
+    if f["nota_importacao"]:
+        texto(s, "Nota", f["nota_importacao"])
 
     s = aba("Folhas")
     ori = list(ORIGEM)
+    texto(s, "Digitalizadas no período (CAMP Vision)", f["digitalizadas"])
+    texto(s, "Migradas/importadas do site (evento único)", f["importadas"])
+    texto(s, "Enviadas pelo painel (cadastradas à mão)", f["manuais"])
+    if f["nota_importacao"]:
+        texto(s, "Nota", f["nota_importacao"])
+    abas[s]["linha"] += 1
     tabela(s, "Folhas por mês", ["Mês", *ORIGEM.values(), "Total"],
            [[m["rotulo"], *[m[k] for k in ori], m["total"]] for m in f["por_mes"]],
            ["Total", *[f["por_origem"][k] for k in ori], f["total"]])
@@ -348,7 +379,7 @@ def planilha(r: dict) -> bytes:
     texto(s, "Publicados hoje (situação atual)", f"{pb['publicados_hoje']['folhas']} folhas", f"{pb['publicados_hoje']['projetos']} projetos")
 
     s = aba("Pedidos")
-    tabela(s, "Pedidos do site por mês", ["Mês", "Recebidos", "Atendidos"],
+    tabela(s, "Pedidos de alta resolução por mês", ["Mês", "Recebidos", "Atendidos"],
            [[m["rotulo"], m["recebidos"], m["atendidos"]] for m in pd["por_mes"]], ["Total", pd["recebidos"], pd["atendidos"]])
     tabela(s, "Por finalidade", ["Finalidade", "Recebidos", "Atendidos"],
            [[x["rotulo"], x["recebidos"], x["atendidos"]] for x in pd["por_finalidade"]], ["Total", pd["recebidos"], pd["atendidos"]])

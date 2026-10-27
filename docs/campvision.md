@@ -4,7 +4,7 @@ Este documento é o contrato que o **CAMP Vision 2 (CV2)** segue para falar com 
 (`tests/teste_backend.py`, bloco "Contrato com o CAMP Vision 2"). O que ainda **não** existe está na seção 9.
 Repositório oficial do CV2: `github.com/mullets/campvision-new` (o `campvision2` é o app antigo, com YOLO/Tesseract: não usar).
 
-> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.4** (autoria divergente vira aviso; base 2.2 de 13/10/2026) (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
+> **Contrato com o CAMP Vision 2:** a fonte única é `campvision-new/docs/contrato-painel.md`. Este painel implementa o **Contrato 2.5** (2.5: avisos [Minor] do exiftool por arquivo e lista `exif_sem_conferir`; 2.4: autoria divergente vira aviso) (constante `CONTRATO_PAINEL` em `backend/app/contrato.py`; exemplos reais copiados em `tests/contrato/`, origem em `tests/contrato/ORIGEM.txt`). Se o CV2 mandar outra versão no heartbeat, a tela Estações avisa. Este arquivo descreve só o que o PAINEL faz com o que recebe.
 
 ## 1. Visão geral
 ```

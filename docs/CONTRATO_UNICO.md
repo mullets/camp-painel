@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.1 (22/10/2026)**. Contrato CV2 ↔ painel: **2.4** (`backend/app/contrato.py`).
+Versão deste documento: **1.1 (22/10/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -85,7 +85,7 @@ CV2 aceita `status` OU `etapa` ("enviado_windows"/"enviado_mac"), o manifesto e,
 
 ## 5. CV2 ↔ painel
 
-Fonte única do contrato: `campvision-new/docs/contrato-painel.md` (**2.4**); cópia literal e exemplos reais em `tests/contrato/` deste repositório (`ORIGEM.txt` diz de qual commit). Resumo: o CV2 grava `info_projeto.json`, `status.json`, `pacote_tainacan.json`, `catalogacao/erros.json` e o livro `_campvision/`; avisa o painel em `POST /api/campvision/aviso` (202; o painel relê só aquela pasta). `autoria_divergente` é AVISO (a folha sobe com "Autoria não confirmada").
+Fonte única do contrato: `campvision-new/docs/contrato-painel.md` (**2.5**); cópia literal e exemplos reais em `tests/contrato/` deste repositório (`ORIGEM.txt` diz de qual commit). Resumo: o CV2 grava `info_projeto.json`, `status.json`, `pacote_tainacan.json`, `catalogacao/erros.json` e o livro `_campvision/`; avisa o painel em `POST /api/campvision/aviso` (202; o painel relê só aquela pasta). `autoria_divergente` é AVISO (a folha sobe com "Autoria não confirmada").
 
 ### 5.1 Corrigir o que entrou no projeto errado (CAMP-009)
 

@@ -128,7 +128,126 @@ def curar_lotes(con, projeto: str | None = None) -> int:
     return n
 
 
+# UX-08: o resumo em UMA frase ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar.").
+# Agrupa pelo tipo do aviso: a mensagem crua do exiftool (msg) ou a frase já gravada na folha (descricao do problema).
+_GRUPO_MSG = ((re.compile(r"IPTC:By-line exceeds length limit", re.I), "autor"), (re.compile(r"IPTC:(\S+) exceeds length limit", re.I), "campo"),
+              (re.compile(r"Duplicate .* tag", re.I), "repetida"))
+_GRUPO_FRASE = ((re.compile(r"nome do autor era longo demais", re.I), "autor"), (re.compile(r"o campo IPTC (\S+) era longo demais", re.I), "campo"),
+                (re.compile(r"etiqueta de metadados veio repetida", re.I), "repetida"))
+
+
+def _grupo(texto: str, regras) -> tuple:
+    for rx, k in regras:
+        m = rx.search(texto or "")
+        if m:
+            return (k, m.group(1)) if k == "campo" else (k, None)
+    return ("outro", None)
+
+
+def _frase_grupo(chave: tuple, n: int) -> str:
+    tem = "imagem tem" if n == 1 else "imagens têm"
+    k, campo = chave
+    if k == "autor":
+        return f"{n} {tem} o nome do autor longo demais no EXIF; ele foi cortado"
+    if k == "campo":
+        return f"{n} {tem} o campo {campo} longo demais no EXIF; ele foi cortado"
+    if k == "repetida":
+        return f"{n} {tem} uma etiqueta de metadados repetida no EXIF"
+    return f"{n} {'aviso menor' if n == 1 else 'avisos menores'} do exiftool (o programa que grava os dados dentro do arquivo)"
+
+
+def _juntar(contagem: dict) -> str | None:
+    if not contagem:
+        return None
+    partes = [_frase_grupo(k, n) for k, n in contagem.items()]
+    t = "; ".join(partes)
+    return t[0].upper() + t[1:] + ". Não impede publicar."
+
+
+def resumo_avisos(avisos: list[dict] | None) -> str | None:
+    """UX-08: os avisos [Minor] (crus, de avisos_menores) numa frase só, contando as imagens por tipo de aviso."""
+    cont: dict = {}
+    for a in avisos or []:
+        k = _grupo(a.get("msg") or "", _GRUPO_MSG)
+        cont[k] = cont.get(k, 0) + 1
+    return _juntar(cont)
+
+
+def resumo_descricoes(descricoes: list[str] | None) -> str | None:
+    """UX-08: o mesmo resumo a partir dos problemas 'aviso' já gravados nas folhas (descricao de registrar)."""
+    cont: dict = {}
+    for d in descricoes or []:
+        k = _grupo(d or "", _GRUPO_FRASE)
+        cont[k] = cont.get(k, 0) + 1
+    return _juntar(cont)
+
+
+_EXIF_PARCIAL = re.compile(r"EXIF conferido em (\d+) de (\d+)", re.I)
+
+
+def _arquivos_em(fontes) -> list[dict]:
+    """Se o CAMP Vision mandou a lista dos arquivos (qualquer chave com "exif" no nome cujo valor é uma lista), devolve-a como
+    [{arquivo, motivo}]. O contrato não exige essa lista: sem ela, a tela diz que o CAMP Vision não informou quais faltaram."""
+    out = []
+    for f in fontes or []:
+        if not isinstance(f, dict):
+            continue
+        for k, v in f.items():
+            if "exif" not in str(k).lower() or not isinstance(v, list):
+                continue
+            for x in v[:500]:
+                if isinstance(x, dict):
+                    arq = str(x.get("arquivo") or x.get("nome") or x.get("codigo") or "").strip()
+                    mot = str(x.get("motivo") or x.get("erro") or x.get("mensagem") or "").strip()
+                else:
+                    arq, mot = str(x).strip(), ""
+                if arq:
+                    out.append({"arquivo": arq[:200], "motivo": mot[:300] or None})
+    return out
+
+
+def explicar_erro(texto, fontes=None) -> dict | None:
+    """UX-08: o erro que o CAMP Vision deixou, em linguagem de gente. Devolve {tipo, texto, o_que_fazer, detalhes, arquivos}
+    ou None (sem mensagem). tipo: 'aviso_menor' (só [Minor] do exiftool) | 'exif_parcial' ("EXIF conferido em 6 de 48") | 'erro' (o resto,
+    mostrado como veio). 'detalhes' é a mensagem técnica inteira, para "Ver detalhes técnicos". Só leitura: não muda o lote."""
+    t = str(texto or "").strip()
+    if not t:
+        return None
+    detalhes = t[:4000]
+    av = avisos_menores(t)
+    if av:
+        return {"tipo": "aviso_menor", "texto": resumo_avisos(av), "detalhes": detalhes, "arquivos": [],
+                "o_que_fazer": "O CAMP Vision ainda não entregou as folhas desta pasta. Peça para ler de novo esta pasta."}
+    m = _EXIF_PARCIAL.search(t)
+    if m:
+        feito, total = int(m.group(1)), int(m.group(2))
+        falta = max(total - feito, 0)
+        arqs = _arquivos_em(fontes)
+        return {"tipo": "exif_parcial", "detalhes": detalhes, "arquivos": arqs,
+                "texto": f"O CAMP Vision conferiu os dados gravados dentro dos arquivos (EXIF) de só {feito} de {total} arquivos; "
+                         f"{falta} {'ficou' if falta == 1 else 'ficaram'} sem conferir."
+                         + ("" if arqs else " Ele não informou quais arquivos nem o motivo."),
+                "o_que_fazer": "Peça para ler de novo esta pasta. Se o número não mudar, avise quem cuida do CAMP Vision."}
+    return {"tipo": "erro", "texto": " ".join(t.split())[:240], "detalhes": detalhes if len(t) > 240 else None, "arquivos": [],
+            "o_que_fazer": "Peça para ler de novo esta pasta. Se o erro voltar, avise quem cuida do CAMP Vision."}
+
+
 def avisos_abertos(con, projeto: str) -> list[dict]:
     """Os avisos menores do CAMP Vision ainda não vistos deste projeto (para a página: 'Marcar como visto')."""
     return [dict(r) for r in con.execute("""SELECT id, codigo, descricao FROM erro WHERE chave LIKE ? AND situacao IN ('aberto','em_correcao')
                                              AND (codigo=? OR codigo LIKE ?) ORDER BY id""", (CHAVE + "%", projeto, projeto + "-%"))]
+
+
+def resumo_avisos_cv(con, projeto: str, abertos: list[dict] | None = None) -> dict | None:
+    """UX-08 (campo novo, opcional, só da tela): {texto, detalhes} dos avisos menores ainda não vistos do projeto. 'texto' conta as imagens por
+    tipo; 'detalhes' são as linhas cruas do exiftool que o CAMP Vision deixou nos lotes do projeto (para "Ver detalhes técnicos")."""
+    abertos = avisos_abertos(con, projeto) if abertos is None else abertos
+    if not abertos:
+        return None
+    linhas = []
+    for (res,) in con.execute("SELECT resultado FROM lista_processamento WHERE projeto_codigo=? AND descartado_em IS NULL ORDER BY id DESC", (projeto,)):
+        for a in avisos_menores(motivo_completo(res)) or []:
+            ln = f"{a['arquivo']} Warning: [Minor] {a['msg']}".strip()
+            if ln not in linhas:
+                linhas.append(ln)
+    return {"texto": resumo_descricoes([a.get("descricao") or "" for a in abertos]), "detalhes": "\n".join(linhas[:200]) or None}

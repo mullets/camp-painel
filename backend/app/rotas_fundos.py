@@ -68,6 +68,7 @@ def _validar_anos(ini, fim):
 
 @router.get("/fundos/resumo")
 def resumo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+    from .importador_site import COL_ACERVO, COL_PROJETOS   # UX-23: página de projeto × folha no site
     con = connect()
     rows = con.execute("""
         SELECT f.codigo, f.sigla, f.titulo, f.data_inicio, f.data_fim, f.status_site, f.motivo_fora_do_ar, f.ativo,
@@ -75,24 +76,37 @@ def resumo(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                (SELECT COUNT(*) FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE p.fundo_codigo=f.codigo) AS itens,
                (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='publish') AS no_site,
                (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='draft') AS rascunhos_site,
+               -- UX-23 (campos novos, opcionais): o mesmo número separado por unidade (página de projeto × folha); no_site/rascunhos_site ficam
+               (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='publish' AND w.colecao_id=:cp) AS projetos_no_site,
+               (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='publish' AND w.colecao_id=:ca) AS folhas_no_site,
+               (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='draft' AND w.colecao_id=:cp) AS rascunhos_projetos_site,
+               (SELECT COUNT(*) FROM wp_item w WHERE w.fundo_detectado=f.codigo AND w.status='draft' AND w.colecao_id=:ca) AS rascunhos_folhas_site,
                (SELECT GROUP_CONCAT(a.forma_autorizada, ' · ') FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id
                  WHERE fa.fundo_codigo=f.codigo AND fa.papel='produtor') AS produtores,
                COALESCE((SELECT situacao FROM direitos_fundo d WHERE d.fundo_codigo=f.codigo),'nao_definida') AS direitos
-        FROM fundo f ORDER BY f.codigo""").fetchall()
+        FROM fundo f ORDER BY f.codigo""", {"cp": COL_PROJETOS, "ca": COL_ACERVO}).fetchall()
     out = [dict(r) for r in rows]
     from .pendencias import fundos_travados       # a mesma regra do número "travados por direitos" do painel inicial
     travados = {f["codigo"]: f for f in fundos_travados(con)}
     for f in out:
         t = travados.get(f["codigo"])
         f["travado"], f["travado_projetos"] = bool(t), (t["projetos"] if t else 0)
+        # UX-23 (campo novo, opcional): o que a aba "Com pendência" conta. "direitos ainda não registrados" entra (não impede publicar,
+        # padroes.md §12, mas é pendência: antes a aba dizia 0 com dezenas de fundos sem direitos registrados).
+        f["pendencias"] = ([("direitos_nao_registrados" if f["direitos"] == "nao_definida" else "direitos_restricao")] if f["direitos"] != "autorizado" else []) \
+            + (["sem_sigla"] if not f["sigla"] else []) + (["travado"] if f["travado"] else [])
     # termos que existem no site mas não têm código na tabela
     for r in con.execute("""SELECT x.id, x.nome, e.observacao FROM wp_termo x JOIN wp_taxonomia t ON t.id=x.taxonomia_id
                             LEFT JOIN fundo_termo_site e ON e.nome_site=x.nome WHERE t.nome='Fundos' AND (e.fundo_codigo IS NULL)"""):
         nome = r[1]
         pub = con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND json_extract(metadados,'$.Fundo')=?", (nome,)).fetchone()[0]
         rasc = con.execute("SELECT COUNT(*) FROM wp_item WHERE status='draft' AND json_extract(metadados,'$.Fundo')=?", (nome,)).fetchone()[0]
+        por_col = {(st, col): n for st, col, n in con.execute("""SELECT status, colecao_id, COUNT(*) FROM wp_item WHERE status IN ('publish','draft')
+                                                                  AND json_extract(metadados,'$.Fundo')=? GROUP BY status, colecao_id""", (nome,))}
         out.append({"codigo": None, "sigla": None, "titulo": nome, "data_inicio": None, "data_fim": None, "status_site": "no_ar" if pub else ("rascunho" if rasc else "nao_publicado"),
                     "motivo_fora_do_ar": None, "ativo": 1, "projetos": 0, "itens": 0, "no_site": pub, "rascunhos_site": rasc, "produtores": None,
+                    "projetos_no_site": por_col.get(("publish", COL_PROJETOS), 0), "folhas_no_site": por_col.get(("publish", COL_ACERVO), 0),
+                    "rascunhos_projetos_site": por_col.get(("draft", COL_PROJETOS), 0), "rascunhos_folhas_site": por_col.get(("draft", COL_ACERVO), 0),
                     "so_no_site": True, "termo_id": r[0], "observacao": r[2] or "existe no site, sem código na tabela de autoridade"})
     con.close()
     return out

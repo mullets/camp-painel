@@ -84,6 +84,34 @@ ORCAMENTO_S = 40.0             # tempo máximo de envio de folhas por chamada (a
 ANO_FOLHA_DIFERENTE = 5        # anos de diferença entre a folha e o projeto a partir dos quais o plano avisa
 _trava = threading.Lock()
 _em_andamento: set[str] = set()
+JANELA_REPETIDO_S = 60         # UX-17: Publicar de novo logo depois de publicar, sem nada novo, não publica 2×
+
+
+def publicacao_recente(con, codigo: str, janela_s: int = JANELA_REPETIDO_S) -> dict | None:
+    """A publicação guiada que deu certo neste projeto nos últimos `janela_s` segundos ({quando, detalhe}), ou None.
+    Vem do evento 'publicacao_guiada' (banco): vale para o caminho com tarefa e o direto, e para dois processos."""
+    r = con.execute("""SELECT quando, detalhe FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='publicacao_guiada'
+                         AND quando >= datetime('now', ?) ORDER BY id DESC LIMIT 1""", (codigo, f"-{int(janela_s)} seconds")).fetchone()
+    if not r:
+        return None
+    try:
+        det = json.loads(r["detalhe"] or "{}") or {}
+    except ValueError:
+        det = {}
+    return {"quando": r["quando"], "detalhe": det} if det.get("ok") else None
+
+
+def repetido_sem_novidade(con, p, pend: list) -> dict | None:
+    """UX-17: o segundo clique (ou a segunda aba) que chega quando a publicação já terminou: projeto público, nenhuma folha nova
+    para enviar e uma publicação guiada que deu certo há menos de 1 min. Devolve a resposta "nada foi feito de novo" (sem chamar o site)."""
+    if p["status_site"] != "no_ar" or pend:
+        return None
+    rec = publicacao_recente(con, p["codigo"])
+    if not rec:
+        return None
+    return {"ok": True, "parcial": False, "etapa": "publicar", "repetido": True, "feitos": [], "folhas_criadas": 0, "publicados": 0,
+            "publicado_em": rec["quando"], **resultado_publicacao(con, p["codigo"]),
+            "mensagem": "Este projeto acabou de ser publicado: nada foi feito de novo (clique repetido)."}
 
 
 def plano(con, p) -> dict:
@@ -130,7 +158,8 @@ def plano(con, p) -> dict:
     import re as _re
     avisos = []
     tit = (p["titulo"] or "").strip()
-    if _re.match(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+\S", tit):
+    from .similaridade import titulo_tecnico
+    if _re.match(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+\S", tit) and not titulo_tecnico(tit):   # UX-15: o técnico já é bloqueio (id "titulo")
         limpo = _re.sub(r"^[A-Za-z]{1,3}\d{1,5}[_ -]+", "", tit).replace("_", " ").strip()
         avisos.append({"id": "titulo", "campo": "titulo", "texto": f"O título “{tit}” parece ter um prefixo de pasta. Como ficaria: “{limpo}”."})
     cidade = p["cidade"] if "cidade" in p.keys() else None
@@ -184,8 +213,11 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
                 raise HTTPException(409, "Este projeto foi " + (f"mesclado em {p['mesclado_em']}" if p["mesclado_em"] else "descartado") + ": publique o projeto de destino.")
             pl = plano(con, p)
             pend = [r[0] for r in con.execute(f"SELECT codigo FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} ORDER BY sequencial", (codigo,))]
+            rep = repetido_sem_novidade(con, p, pend)
         finally:
             con.close()
+        if rep:
+            return rep
         if pl["bloqueios"]:
             raise HTTPException(400, "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]))
         feitos: list[str] = []

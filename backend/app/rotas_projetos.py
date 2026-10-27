@@ -660,6 +660,8 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
             con.close(); raise HTTPException(400, f"Não é possível autorizar: {bloqueios_humanos} bloqueio(s) humano(s) no projeto")
     if d.ano is not None and not (d.ano == 0 or 1800 <= d.ano <= 2100):
         con.close(); raise HTTPException(400, "Ano inválido (0000 para sem data)")
+    if d.titulo is not None and d.titulo.strip() != (p["titulo"] or "").strip() and mensagem_titulo_tecnico(d.titulo):   # UX-15: não troca para nome de pasta
+        con.close(); _recusar_titulo_tecnico(d.titulo)
     from .publicador import PAPEIS_PROJETO
     if d.papel_no_projeto and d.papel_no_projeto not in PAPEIS_PROJETO and d.papel_no_projeto != p["papel_no_projeto"]:
         con.close(); raise HTTPException(400, f"Papel no projeto inválido. Use: {', '.join(PAPEIS_PROJETO)}")
@@ -782,6 +784,23 @@ def registrar_autoria(codigo: str, d: RegistroAutoria, u: dict = Depends(auth.ex
     return {"ok": True, "folhas_liberadas": folhas, "erros_corrigidos": erros, "site": site, "mensagem": msg}
 
 
+def mensagem_titulo_tecnico(titulo: str | None) -> str | None:
+    """UX-15: a frase que recusa um título que é nome de pasta ou código do sistema (com a sugestão limpa, quando há)."""
+    from .similaridade import sugerir_titulo, titulo_tecnico
+    motivo = titulo_tecnico(titulo)
+    if not motivo:
+        return None
+    sug = sugerir_titulo(titulo)
+    return (f"“{(titulo or '').strip()}” não serve como nome do projeto: {motivo}. Use o nome da obra"
+            + (f" (sugestão: “{sug}”)." if sug else " (ex.: Residência Tarumã)."))
+
+
+def _recusar_titulo_tecnico(titulo: str | None) -> None:
+    msg = mensagem_titulo_tecnico(titulo)
+    if msg:
+        raise HTTPException(422, msg)
+
+
 class NovoProjeto(BaseModel):
     fundo_codigo: str
     titulo: str
@@ -795,16 +814,19 @@ class NovoProjeto(BaseModel):
 @router.post("/projetos/verificar")
 def verificar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Antes de criar: projetos PARECIDOS no mesmo fundo (nome, identificação, ano, cidade), com a nota e os motivos."""
-    from .similaridade import buscar_parecidos
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (d.fundo_codigo,)).fetchone():
             raise HTTPException(404, "Fundo não existe")
-        from .similaridade import buscar_em_outros_fundos
+        from .similaridade import buscar_em_outros_fundos, sugerir_cidade
         t = d.titulo.strip()
-        return {"parecidos": buscar_parecidos(con, d.fundo_codigo, t, d.ano, d.cidade, d.identificacao_original) if t else [],
+        _recusar_titulo_tecnico(t)                     # UX-15: nome de pasta/código não vira projeto (a tela mostra antes de criar)
+        from .projetos_duplicados import parecidos as _parecidos     # UX-29: com a miniatura de cada um (campo novo, opcional)
+        return {"parecidos": _parecidos(con, d.fundo_codigo, t, d.ano, d.cidade, d.identificacao_original) if t else [],
                 # "Mais inteligência" (3): o mesmo nome em OUTRO fundo vira nota forte com link ("já existe 'Casa X' no fundo F012: é o mesmo?")
                 "outros_fundos": buscar_em_outros_fundos(con, d.fundo_codigo, t, d.ano, d.cidade) if t else [],
+                # UX-15 (campo opcional): a forma da cidade usada no acervo ("São Paulo, SP"), quando a digitada é outra; só sugere
+                "cidade_sugerida": sugerir_cidade(con, d.cidade) if d.cidade else None,
                 # 19/10: o código que o projeto vai ganhar se for criado agora (o mover "criar projeto novo" mostra antes de confirmar; quem cria decide na hora)
                 "proximo_codigo": (lambda r: f"{d.fundo_codigo}-{r[0]}" if r and r[0] else None)(con.execute("SELECT proximo FROM v_proximo_p WHERE fundo_codigo=?", (d.fundo_codigo,)).fetchone())}
     finally:
@@ -818,6 +840,8 @@ def criar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))):
         con.close(); raise HTTPException(404, "Fundo não existe")
     if not d.titulo.strip():
         con.close(); raise HTTPException(400, "Nome do projeto é obrigatório")
+    if mensagem_titulo_tecnico(d.titulo):              # UX-15
+        con.close(); _recusar_titulo_tecnico(d.titulo)
     if not d.confirmar_novo:     # o painel não cria duplicado em silêncio: se há parecido no fundo, devolve a lista e espera a confirmação
         from fastapi.responses import JSONResponse
         from .similaridade import buscar_parecidos

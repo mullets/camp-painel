@@ -3,7 +3,7 @@
 // Duração: ~14 min sozinho (mais de 500 esperas fixas, ~12 min somadas); com outros testes em paralelo, mais. Não é travamento:
 // quem roda com limite de tempo use pelo menos 25 min (um limite de 10 min corta o teste no meio, rc=124).
 const {JSDOM}=require('jsdom');
-const BASE='http://127.0.0.1:8765'; const problems=[]; const okl=[];
+const BASE=process.env.CAMP_BASE||'http://127.0.0.1:8765'; const problems=[]; const okl=[];
 function jar(){ const c={}; return {c, async f(url,opt={}){ if(url.startsWith('/')) url=BASE+url;
   const h={...(opt.headers||{})}; if(Object.keys(c).length) h.cookie=Object.entries(c).map(([k,v])=>`${k}=${v}`).join('; ');
   if(opt.body&&!h['Content-Type']) h['Content-Type']='application/json';
@@ -249,8 +249,8 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- USO DO ACERVO (pedidos de download do formulário do site) ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('uso'); await sleep(2500);
   const R=(await J(adm,'/api/uso/resumo')).b, L=(await J(adm,'/api/uso')).b, linhas=()=>d.querySelectorAll('#us-body tr.us-row').length;
-  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Downloads do site" (Uso do acervo) com o atalho U');
-  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Acompanhamento','[H25] "Downloads do site" deveria ficar no grupo Acompanhamento do menu, está em "'+(el&&el.textContent.trim())+'"'); }
+  chk(!!d.querySelector('#nav [data-v="uso"]')&&txt('#nav [data-v="uso"] kbd')==='U','o menu deveria ter "Downloads" (Uso do acervo) com o atalho U');
+  { let el=d.querySelector('#nav [data-v="uso"]').previousElementSibling; while(el&&!el.classList.contains('grp'))el=el.previousElementSibling; chk(el&&el.textContent.trim()==='Público','[UX-28] "Downloads" deveria ficar no grupo Público do menu, está em "'+(el&&el.textContent.trim())+'"'); }
   chk(d.querySelectorAll('#us-kpis .hoje-kpi').length===4&&txt('#us-kpis').includes('pedidos de download')&&txt('#us-kpis').includes(String(R.total)),'os 4 números do uso deveriam bater com a API (total '+R.total+'): "'+txt('#us-kpis').slice(0,120)+'"');
   chk(R.total>0&&linhas()===Math.min(50,L.total),'a tabela deveria ter '+Math.min(50,L.total)+' linhas, tem '+linhas());
   const D0=(await J(adm,'/api/uso/'+L.itens[0].id)).b;
@@ -399,7 +399,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- FILAS: cada lista diz o que falta e tem UM botão para o próximo passo ----------
 { w.confirm=()=>true; w.route_to('filas'); await sleep(3000);
   const chips=[...d.querySelectorAll('#fila-chips [data-fila-filtro]')], lin=cod=>[...d.querySelectorAll('#filas-body tr')].find(t=>t.textContent.includes(cod));
-  chk(chips.length===4&&['gente','processando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, CAMP Vision lendo, Publicadas, Todas): '+chips.length);
+  chk(chips.length===4&&['gente','chegando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, Chegando, No site, Todas): '+chips.length);
   chk(chips.find(c=>c.getAttribute('aria-pressed')==='true').dataset.filaFiltro==='gente','o filtro padrão deveria ser "Precisam de você" quando há o que fazer');
   chk(/para conferir/.test(txt('#fila-resumo'))&&/chegando/.test(txt('#fila-resumo')),   // CAMP-146: as 5 situações
   'o resumo deveria dizer quantas listas estão em cada ponto: "'+txt('#fila-resumo')+'"');
@@ -420,17 +420,17 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/Lote aprovado/.test(l9001.textContent)&&!!l9001.querySelector('[data-fila-ir="publicar"]'),'depois de aprovar a lista deveria pedir "Publicar": "'+l9001.textContent.slice(0,120)+'"');
   const bPu=l9001&&l9001.querySelector('[data-fila-ir="publicar"]'); if(bPu){bPu.click(); await sleep(4500)}
   await sleep(1500); chk(/projeto\/F003-P9001/.test(w.location.hash)&&!d.getElementById('pub-go')&&!!d.getElementById('pj-status'),'"Publicar" deveria levar ao projeto e publicar ali mesmo, sem janela de plano (etapa 2): '+w.location.hash+' / '+txt('#pj-status').slice(0,80)); w.closeDrawer(true);
-  w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="processando"]').click(); await sleep(400);
-  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>t.dataset.fase==='processando'),'o filtro "CAMP Vision lendo" deveria mostrar só listas em leitura');
+  w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="chegando"]').click(); await sleep(400);
+  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>['processando','importar'].includes(t.dataset.fase)),'o filtro "Chegando" (UX-05: o mesmo número do resumo) deveria mostrar só listas em leitura ou com folhas para importar');
   d.querySelector('[data-fila-filtro="todas"]').click(); await sleep(300);
   chk(d.querySelectorAll('#filas-body tr[data-fase]').length===(await J(adm,'/api/filas')).b.length,'o filtro "Todas" deveria mostrar todas as listas do servidor');
   await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }
 // ---------- MENU POR TRABALHO e PRÓXIMO PASSO no topo do projeto ----------
 { w.confirm=()=>true;
-  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Trabalho do dia','Acervo','Acompanhamento','Ajuda']),'[H25/CAMP-154] os grupos do "Mais": Trabalho do dia, Acervo, Acompanhamento, Ajuda: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
+  chk(JSON.stringify([...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()))===JSON.stringify(['Acervo','Público','Acompanhamento','Administração','Ajuda']),'[UX-28] os grupos do menu: Acervo, Público, Acompanhamento, Administração, Ajuda: '+[...d.querySelectorAll('#nav .grp')].map(g=>g.textContent.trim()));
   const grupo=nome=>{const g=[...d.querySelectorAll('#nav .grp')].find(x=>x.textContent.trim()===nome),r=[];for(let e=g&&g.nextElementSibling;e&&!e.classList.contains('grp');e=e.nextElementSibling)if(e.dataset.v)r.push(e.dataset.v);return r.join(',')};
-  chk(grupo('Trabalho do dia')==='decisoes,filas,erros'&&grupo('Acervo')==='arquitetos,localizacao,estante,etiquetas,emprestimos'&&grupo('Acompanhamento')==='relatorios,uso,auditoria,qualidade,config'&&grupo('Ajuda')==='caminho,glossario','[H25/CAMP-154] cada grupo do "Mais" deveria ter os itens certos: '+['Trabalho do dia','Acervo','Acompanhamento','Ajuda'].map(grupo).join(' | '));
-  chk(txt('#nav [data-v="painel"] kbd')==='1'&&txt('#nav [data-v="projetos"] kbd')==='2'&&txt('#nav [data-v="decisoes"] kbd')==='D'&&txt('#nav [data-v="filas"] kbd')==='N'&&txt('#nav [data-v="etiquetas"] kbd')==='T','(CAMP-154) os atalhos deveriam seguir a ordem do menu (Precisa de você 1, Projetos 2, Decisões D, Material novo N, Etiquetas T)');
+  chk(grupo('Acervo')==='fundos,arquitetos,localizacao,estante,etiquetas,emprestimos'&&grupo('Público')==='solicitacoes,uso'&&grupo('Acompanhamento')==='relatorios,auditoria,qualidade'&&grupo('Administração')==='estacoes,config'&&grupo('Ajuda')==='caminho,glossario','[UX-28] cada grupo do menu deveria ter os itens certos: '+['Acervo','Público','Acompanhamento','Administração','Ajuda'].map(grupo).join(' | '));
+  chk(txt('#nav [data-v="painel"] kbd')==='1'&&txt('#nav [data-v="projetos"] kbd')==='2'&&txt('#nav [data-v="decisoes"] kbd')==='D'&&txt('#nav [data-v="filas"] kbd')==='N'&&txt('#nav [data-v="etiquetas"] kbd')==='T','(CAMP-154/UX-28) os atalhos não mudam (Precisa de você 1, Projetos 2, Decisões D, Material novo N, Etiquetas T)');
   w.route_to('projeto/F003-P9001'); await sleep(3600);
   chk(!d.querySelector('#pj-status .steps')&&!!d.querySelector('#pj-status #pj-proximo')&&/Próximo passo/.test(txt('#pj-status .pjs-tit')),'(CAMP-147) o topo do projeto é UM bloco "Próximo passo" (frase + botão), sem o caminho de 7 passos: "'+txt('#pj-status').slice(0,120)+'"');
   chk(/Faltam conferir/.test(txt('#pj-proximo'))&&!!d.querySelector('#pj-proximo [data-pp="conferir"]'),'em conferência o passo atual deveria mostrar o andamento e o botão "Começar a conferir": "'+txt('#pj-proximo')+'"');
@@ -842,7 +842,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- [Auditoria P1-15] contagens que batem ----------
 { w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
   const esp={decisoes:P.decisoes,'filas/conferir':P.lotes_conferir,'filas/admin':P.esperam_admin,'fundos/travados':P.travados_direitos};
-  chk(k.length===3&&k.every(([r,v])=>esp[r]===v),'[H6b/CAMP-146] os 3 números (saiu "travados por direitos") do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
+  chk(k.length===(P.decisoes?3:2)&&k.every(([r,v])=>esp[r]===v),'[H6b/CAMP-146/UX-18] os 3 números (saiu "travados por direitos"; o de decisões só com decisão pendente) do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
   chk(txt('#n-dec')===(P.decisoes?String(P.decisoes):'')&&txt('#n-filas')===(P.material_novo?String(P.material_novo):''),'[H6b] os contadores do menu deveriam vir da mesma fonte: decisões '+txt('#n-dec')+' / filas '+txt('#n-filas'));
   for(const [r,v] of k){ w.route_to(r); await sleep(2200); const sel={decisoes:'#dec-body tr[data-abrir]','filas/conferir':'#filas-body tr[data-fase]','filas/admin':'#filas-body tr[data-fase]','fundos/travados':'#fundos-body tr[data-nav]'}[r];
     chk(d.querySelectorAll(sel).length===v,`[H6b] clicar no número ${v} (${r}) deveria abrir uma lista com ${v} linha(s): ${d.querySelectorAll(sel).length}`) }
@@ -1322,11 +1322,11 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   chk(pedido&&/Ana/.test(pedido.titulo)&&pedido.botao==='Ir para Material novo'&&/Como funciona esta página/.test(pedido.html),'[H26] a boas-vindas do operador deveria levar a "Material novo": '+JSON.stringify(pedido&&pedido.botao));
   okl.push('H26: entrar com ajuda e olho na senha, força da senha, sessões em linguagem, boas-vindas por papel'); }
 // ---------- [H25] Navegação: menu por tarefa, "?" ao lado do título, menu do avatar, "Site conferido há…", faixa com o que fazer e "Fechar por hoje" ----------
-{ chk(txt('#nav [data-v="painel"]').startsWith('Precisa de você')&&txt('#nav [data-v="fundos"]').startsWith('Fundos e arquitetos')&&txt('#nav [data-v="filas"]').startsWith('Material novo')&&txt('#nav [data-v="erros"]').startsWith('Problemas')&&txt('#nav [data-v="solicitacoes"]').startsWith('Pedidos do site')&&txt('#nav [data-v="estacoes"]').startsWith('Máquinas')&&txt('#nav [data-v="auditoria"]').startsWith('Histórico de ações'),'[H25/CAMP-154] o menu deveria usar os nomes dos 5 destinos e do "Mais"');
-  chk([...d.querySelectorAll('#nav > button[data-v]:not(.nav-sec)')].map(b=>b.dataset.v).join(',')==='painel,projetos,fundos,solicitacoes,estacoes'&&!!d.getElementById('nav-mais-pc'),'[CAMP-154] o menu deveria ter 5 destinos e o "Mais"');
-  w.route_to('filas'); await sleep(1200); chk(/^Material novo/.test(txt('#v-filas h1'))&&/Material novo/.test(txt('#gcrumb'))&&/Trabalho do dia/.test(txt('#gcrumb')),'[H25] título e trilha deveriam acompanhar o nome do menu: "'+txt('#v-filas h1')+'" / "'+txt('#gcrumb')+'"');
+{ chk(txt('#nav [data-v="painel"]').startsWith('Precisa de você')&&txt('#nav [data-v="fundos"]').startsWith('Fundos')&&txt('#nav [data-v="arquitetos"]').startsWith('Arquitetos')&&txt('#nav [data-v="filas"]').startsWith('Material novo')&&txt('#nav [data-v="erros"]').startsWith('Problemas')&&txt('#nav [data-v="solicitacoes"]').startsWith('Pedidos de alta resolução')&&txt('#nav [data-v="estacoes"]').startsWith('Máquinas')&&txt('#nav [data-v="auditoria"]').startsWith('Histórico de ações'),'[H25/UX-28] o menu deveria usar os nomes das páginas');
+  chk([...d.querySelectorAll('#nav > button[data-v]:not(.nav-sec)')].map(b=>b.dataset.v).join(',')==='painel,filas,erros,decisoes,projetos,fundos,arquitetos,solicitacoes,estacoes'&&!!d.getElementById('nav-mais-pc'),'[UX-28] o menu deveria ter as filas do dia à vista, pela ordem do trabalho, e o "Mais"');
+  w.route_to('filas'); await sleep(1200); chk(/^Material novo/.test(txt('#v-filas h1'))&&/Material novo/.test(txt('#gcrumb')),'[H25] título e trilha deveriam acompanhar o nome do menu: "'+txt('#v-filas h1')+'" / "'+txt('#gcrumb')+'"');
   chk(!!d.querySelector('#v-filas .hdr .help-h1')&&!d.querySelector('.top .help-top'),'[H25] o "?" deveria ficar ao lado do título da página, e não perdido no topo');
-  chk(d.getElementById('q').placeholder==='Buscar projeto, fundo, arquiteto ou código','[H25] a busca deveria dizer o que procura: '+d.getElementById('q').placeholder);
+  chk(d.getElementById('q').placeholder==='Buscar projeto, fundo, arquiteto ou código (F0xx-P000x)','[H25] a busca deveria dizer o que procura: '+d.getElementById('q').placeholder);
   d.querySelector('.who').click(); await sleep(100); const wm=d.getElementById('who-menu');
   chk(!wm.hidden&&/Meu perfil/.test(wm.textContent)&&/Atalhos/.test(wm.textContent)&&/Mostrar de novo as explicações/.test(wm.textContent)&&/Sair/.test(wm.textContent),'[H25] o avatar deveria abrir o menu (Meu perfil · Atalhos · Mostrar de novo as explicações · Sair)');
   d.body.click(); await sleep(50); chk(wm.hidden,'[H25] clicar fora deveria fechar o menu do avatar');

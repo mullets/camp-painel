@@ -5,6 +5,7 @@ Cartão "Notificações": cada assunto liga/desliga em 'avisos.<assunto>.ligado'
 'avisos.<assunto>.email' (vazia = avisos.email). Assuntos novos: lote parado na Fila (fila_travada, um aviso para a Fila),
 problema que impede publicar (bloqueio, um aviso por problema) e pedido registrado à mão no painel (pedido_painel)."""
 from __future__ import annotations
+from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 
 from datetime import datetime, timedelta
 
@@ -79,7 +80,7 @@ def _mandar(con, smtp, enviar, destinos, assunto, tipo, titulo, corpo, chave=Non
     for para in destinos:
         ok, erro = False, None
         if not email_envio.configurado(smtp):
-            erro = "SMTP não configurado (Configurações → smtp.*)"
+            erro = "SMTP não configurado (Configurações → E-mail e avisos)"
         else:
             try:
                 res = enviar(smtp, para, titulo, corpo, responder_para=responder_para) if responder_para else enviar(smtp, para, titulo, corpo)
@@ -92,14 +93,46 @@ def _mandar(con, smtp, enviar, destinos, assunto, tipo, titulo, corpo, chave=Non
     return feitos
 
 
+NIVEIS = ("ok", "atencao", "critico", "nao_medido")
+
+
+def _nao_medido(motivo: str) -> dict:
+    """UX-07: "não medido" só quando a medição falha, e sempre com o porquê."""
+    return {"critico": False, "nivel": "nao_medido", "motivo": motivo, "texto": f"Não medido: {motivo}."}
+
+
+def _medir_site_igual_tela(url: str) -> dict:
+    """A MESMA sonda da tela Máquinas (rotas_gestao._sonda, fresca): o que o alerta mede vira a medição que a tela mostra."""
+    from .rotas_gestao import _medir_site, _sonda, _valor_sonda
+    return _valor_sonda(_sonda(("http", url), lambda: _medir_site(url), True), None)   # UX-12: _sonda devolve a medição em curso; aqui esperamos por ela
+
+
 def avaliar(con, medir_site=None, estado_backup=None) -> dict:
-    """{assunto: {'critico': bool, 'texto': frase para leigo}}. Assunto sem medida (ex.: CAMP Vision que nunca mandou heartbeat) fica de fora."""
+    """{assunto: {'critico': bool, 'nivel': ok|atencao|critico|nao_medido, 'texto': frase para leigo, 'motivo'?}}.
+    UX-07: os assuntos de máquina estão SEMPRE aqui, ligados às mesmas medições da tela (coleta do QNAP, sonda do site, sentinela da
+    réplica, heartbeat do CAMP Vision, backup). 'nao_medido' só quando a medição falhou ou não existe, com o motivo.
+    QNAP: a regra única de qnap_coletor.nivel_espaco (< 15% livre = atenção). Site: lento (> 3 s) ou uma falha = atenção, sem
+    resposta em duas verificações seguidas = crítico. Só 'critico' manda e-mail (atenção aparece na tela e no topo)."""
     from . import qnap_coletor as qc
     out = {}
     snap = qc.ultima(con)
-    if snap and snap.get("total_gb"):
+    if not snap:
+        out["qnap"] = _nao_medido("o painel ainda não leu o QNAP (a leitura roda sozinha a cada poucos minutos)")
+    elif snap.get("erro"):
+        out["qnap"] = _nao_medido(f"a última leitura do QNAP falhou ({snap['erro']})")
+    elif not snap.get("total_gb"):
+        out["qnap"] = _nao_medido("o QNAP não está conectado a este servidor" if not snap.get("montado") else "a última leitura do QNAP não trouxe o espaço livre")
+    else:
         nivel, pct = qc.nivel_espaco(con, snap["total_gb"], snap["livre_gb"])
-        out["qnap"] = {"critico": nivel == "critico", "texto": f"O QNAP está com {pct}% livre ({round(snap['livre_gb'] or 0)} GB). Libere espaço ou amplie o armazenamento antes que a digitalização pare."}
+        _, dias = qc._tendencia(con, snap["livre_gb"])
+        enche = f" No ritmo desta semana, enche em cerca de {dias} {'dia' if dias == 1 else 'dias'}." if dias else ""
+        d_av, d_cr = qc._num(con, "qnap.dias_aviso", 30), qc._num(con, "qnap.dias_critico", 10)
+        if dias is not None and dias < d_av:              # UX-02: o alerta também vale por dias até encher (< 30 atenção, < 10 crítico)
+            enche += f" Menos de {d_av:g} dias para encher já é atenção; menos de {d_cr:g}, crítico."
+        n_ = {"ok": "ok", "aviso": "atencao", "critico": "critico"}[nivel]
+        base = f"O QNAP está com {('%g' % pct).replace('.', ',')}% livre ({num_br(round(snap['livre_gb'] or 0), 0)} GB).{enche}"
+        out["qnap"] = {"critico": nivel == "critico", "nivel": n_, "livre_pct": pct, "dias_ate_encher": dias, "medido_em": snap.get("coletado_em"),
+                       "texto": base + (" Libere espaço ou amplie o armazenamento antes que a digitalização pare." if n_ != "ok" else "")}
     hb = con.execute("""SELECT estacao_id, CAST((julianday('now') - julianday(atualizado_em)) * 86400 AS INTEGER) AS idade
                           FROM estacao_heartbeat WHERE app LIKE 'campvision%' OR tipo_estacao='processamento' ORDER BY atualizado_em DESC LIMIT 1""").fetchone()
     erros = con.execute("SELECT COUNT(*) FROM lista_processamento WHERE etapa='erro' AND descartado_em IS NULL").fetchone()[0]
@@ -110,26 +143,53 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
             partes.append(f"O CAMP Vision não dá sinal há {hb['idade'] // 3600} h {hb['idade'] % 3600 // 60} min: confira se o computador dele está ligado.")
         if erros:
             partes.append(f"{erros} lote(s) parado(s) com erro na Fila: abra a Fila para ver o motivo.")
-        out["campvision"] = {"critico": bool(parado or erros), "texto": " ".join(partes) or "O CAMP Vision está funcionando.",
+        out["campvision"] = {"critico": bool(parado or erros), "nivel": "critico" if (parado or erros) else "ok", "texto": " ".join(partes) or "O CAMP Vision está funcionando.",
                              "parado": parado, "parado_h": (hb["idade"] // 3600) if parado else None, "lotes_erro": erros}
+    else:
+        out["campvision"] = _nao_medido("o CAMP Vision ainda não deu sinal ao painel")
     if estado_backup is None:
         from . import backup as bk
         estado_backup = bk.estado
-    b = estado_backup()
-    if b.get("existe"):
+    try:
+        b = estado_backup()
+    except Exception as e:  # noqa: BLE001
+        b = {"erro_leitura": str(e)[:160]}
+    if b.get("erro_leitura"):
+        out["backup"] = _nao_medido(f"não consegui ler a pasta das cópias ({b['erro_leitura']})")
+    elif b.get("existe"):
         atrasado = (b.get("idade_horas") or 0) > 36
         falhou = b.get("ok") is False
-        out["backup"] = {"critico": bool(atrasado or falhou), "texto": ("A última cópia de segurança do banco do painel falhou: " + (b.get("erro") or "sem detalhe") + ".") if falhou else f"A última cópia de segurança do banco do painel tem {b.get('idade_horas')} h (o limite é 36 h)."}
+        out["backup"] = {"critico": bool(atrasado or falhou), "nivel": "critico" if (atrasado or falhou) else "ok",
+                         "texto": ("A última cópia de segurança do banco do painel falhou: " + (b.get("erro") or "sem detalhe") + ".") if falhou else f"A última cópia de segurança do banco do painel tem {b.get('idade_horas')} h (o limite é 36 h)."}
+    else:
+        out["backup"] = {"critico": False, "nivel": "atencao", "texto": "Ainda não há cópia de segurança do banco do painel: peça a um admin \"Fazer backup agora\" em Máquinas."}
     from . import replica
     rp = replica.estado(con)
     if rp["configurada"]:
-        out["replica"] = {"critico": rp["nivel"] == "critico", "texto": rp["texto"]}
+        out["replica"] = {"critico": rp["nivel"] == "critico", "nivel": {"ok": "ok", "aviso": "atencao"}.get(rp["nivel"], "critico"), "texto": rp["texto"]}
+    else:
+        out["replica"] = _nao_medido("a cópia do acervo ainda não tem destino configurado (Configurações → replica.raiz)")
     url = _cfg(con, "wp.url")
-    if url:
-        if medir_site is None:
-            from .rotas_gestao import _medir_site as medir_site
-        r = medir_site(url)
-        out["site"] = {"critico": bool(r.get("alerta")), "texto": "O site não respondeu em duas verificações seguidas. Confira se camp.arq.br abre; se não abrir, avise a hospedagem."}
+    if not url:
+        out["site"] = _nao_medido("o endereço do site não está configurado (Configurações → wp.url)")
+    else:
+        try:
+            r = (medir_site or _medir_site_igual_tela)(url) or {}
+        except Exception as e:  # noqa: BLE001
+            r = {"falha_medicao": str(e)[:160]}
+        from .contagens import nivel_site
+        if r.get("nao_medido"):
+            out["site"] = _nao_medido(r["nao_medido"])
+        elif r.get("falha_medicao") or not r.get("estado"):
+            out["site"] = _nao_medido(f"a verificação do site não rodou ({r.get('falha_medicao') or 'sem resposta da sonda'})")
+        else:
+            n_, _ = nivel_site(r)
+            seg = f"{r['ms'] / 1000:.1f}".replace(".", ",") + " s" if r.get("ms") is not None else None
+            texto = {"critico": "O site não respondeu em duas verificações seguidas. Confira se camp.arq.br abre; se não abrir, avise a hospedagem.",
+                     "atencao": (f"O site está lento: respondeu em {seg} (o normal é menos de 3 s)." if r.get("estado") == "lento"
+                                 else "O site não respondeu uma vez; só vira crítico se a próxima verificação também falhar."),
+                     "ok": f"O site está respondendo{' em ' + seg if seg else ''}."}[n_]
+            out["site"] = {"critico": n_ == "critico", "nivel": n_, "texto": texto, "ms": r.get("ms"), "medido_em": r.get("medido_em")}
     return out
 
 
@@ -148,12 +208,17 @@ def avaliar_extras(con, agora: datetime | None = None) -> dict:
                                 WHERE descartado_em IS NULL AND etapa IN ('enviado','processando','revisao')
                                   AND COALESCE(etapa_desde, criado_em) < ? ORDER BY desde""", (limite,)).fetchall()
         partes = []
+        from .pendencias import projetos_lendo_agora, LEITURA_SEM_SINAL_H
+        lendo, sem_projeto = projetos_lendo_agora(con)
         for l in lotes[:10]:
             try:
                 h = int((agora - datetime.fromisoformat(l["desde"])).total_seconds() // 3600)
             except (TypeError, ValueError):
                 h = horas
-            partes.append(f"- {l['nome']} ({l['projeto_codigo']}): {ETAPA_TXT.get(l['etapa'], l['etapa'])} há {h} h")
+            etapa_txt = ETAPA_TXT.get(l["etapa"], l["etapa"])
+            if l["etapa"] == "processando" and h > LEITURA_SEM_SINAL_H and str(l["projeto_codigo"] or "").upper() not in lendo and not sem_projeto:
+                etapa_txt = "leitura interrompida (o CAMP Vision não dá sinal deste lote; use Ler de novo na Fila)"   # UX-09: "sendo lido há 177 h" não existe
+            partes.append(f"- {l['nome']} ({l['projeto_codigo']}): {etapa_txt} há {h} h")
         if len(lotes) > 10:
             partes.append(f"- e mais {len(lotes) - 10} lote(s)")
         texto = (f"{len(lotes)} lote(s) parado(s) na mesma etapa da Fila há mais de {horas} h:\n" + "\n".join(partes)
@@ -194,9 +259,16 @@ def verificar(con, agora: datetime | None = None, enviar=None, medir_site=None, 
         tela = r.get("tela") or ASSUNTOS[assunto][1]
         e = con.execute("SELECT * FROM alerta_estado WHERE assunto=?", (chave,)).fetchone()
         antes = bool(e["critico"]) if e else False
+        nivel = r.get("nivel") or ("critico" if r["critico"] else "ok")
+        if nivel == "nao_medido":                       # UX-07: a medição falhou: guarda o porquê, sem e-mail e sem "resolvido"
+            con.execute("""INSERT INTO alerta_estado (assunto, critico, desde, texto, critico_avisado, nivel, motivo) VALUES (?,0,?,?,0,'nao_medido',?)
+                           ON CONFLICT(assunto) DO UPDATE SET texto=excluded.texto, nivel='nao_medido', motivo=excluded.motivo, atualizado_em=datetime('now')""",
+                        (chave, agora.strftime("%Y-%m-%d %H:%M:%S"), r["texto"], r.get("motivo")))
+            continue
         if r["critico"] == antes:
-            if e:
-                con.execute("UPDATE alerta_estado SET texto=?, atualizado_em=datetime('now') WHERE assunto=?", (r["texto"], chave))
+            con.execute("""INSERT INTO alerta_estado (assunto, critico, desde, texto, critico_avisado, nivel, motivo) VALUES (?,?,?,?,0,?,NULL)
+                           ON CONFLICT(assunto) DO UPDATE SET texto=excluded.texto, nivel=excluded.nivel, motivo=NULL, atualizado_em=datetime('now')""",
+                        (chave, int(r["critico"]), agora.strftime("%Y-%m-%d %H:%M:%S"), r["texto"], nivel))   # UX-07: antes, sem linha = "ainda não medido" para sempre
             continue
         tipo, titulo = None, None
         if r["critico"]:
@@ -207,9 +279,9 @@ def verificar(con, agora: datetime | None = None, enviar=None, medir_site=None, 
                 tipo, titulo = "critico", f"[CAMP Painel] {titulo_base}"
         elif e and e["critico_avisado"] and assunto not in SEM_RESOLVIDO:
             tipo, titulo = "resolvido", f"[CAMP Painel] Resolvido: {_minusc(titulo_base)}"
-        con.execute("""INSERT INTO alerta_estado (assunto, critico, desde, texto, critico_avisado, ultimo_critico_em) VALUES (?,?,?,?,0,NULL)
-                       ON CONFLICT(assunto) DO UPDATE SET critico=excluded.critico, desde=excluded.desde, texto=excluded.texto, atualizado_em=datetime('now')""",
-                    (chave, int(r["critico"]), agora.strftime("%Y-%m-%d %H:%M:%S"), r["texto"]))
+        con.execute("""INSERT INTO alerta_estado (assunto, critico, desde, texto, critico_avisado, ultimo_critico_em, nivel, motivo) VALUES (?,?,?,?,0,NULL,?,NULL)
+                       ON CONFLICT(assunto) DO UPDATE SET critico=excluded.critico, desde=excluded.desde, texto=excluded.texto, nivel=excluded.nivel, motivo=NULL, atualizado_em=datetime('now')""",
+                    (chave, int(r["critico"]), agora.strftime("%Y-%m-%d %H:%M:%S"), r["texto"], nivel))
         if tipo == "suprimido":
             con.execute("INSERT INTO alerta_envio (assunto, tipo, ok, erro, chave) VALUES (?, 'suprimido', 1, 'já avisado há menos de 6 h', ?)", (assunto, chave))
             feitos.append({"assunto": assunto, "tipo": "suprimido", **({"chave": chave} if chave != assunto else {})})
@@ -316,6 +388,16 @@ def salvar_preferencias(con, dados: dict, ator: str) -> dict:
             mud[p["ligado"]] = "1" if a["ligado"] else "0"
         if "emails" in a:
             mud[f"avisos.{p['assunto']}.email"] = emails(a["emails"], p["nome"])
+    # UX-24: o resumo do dia vira um interruptor com rótulo na aba Alertas (antes a tela mandava "mudar alertas.resumo_diario para 1").
+    if isinstance(dados.get("resumo"), dict):
+        rz = dados["resumo"]
+        if "ligado" in rz:
+            mud["alertas.resumo_diario"] = "1" if rz["ligado"] else "0"
+        if "email" in rz:
+            e_ = emails(rz["email"], "Quem recebe o resumo do dia")
+            if "," in e_:
+                raise ValueError("Quem recebe o resumo do dia: escreva um e-mail só (vazio: o primeiro da lista geral).")
+            mud["alertas.resumo_email"] = e_
     for chave, valor in mud.items():
         atual = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
         if atual is None:
@@ -372,7 +454,7 @@ def texto_resumo(n: dict, dia: str, base: str) -> tuple[str, str]:
         "",
         f"Ver no painel: {base}/#painel",
         "",
-        "— CAMP Painel (resumo automático; para não receber mais, mude alertas.resumo_diario para 0 nas Configurações)",
+        "— CAMP Painel (resumo automático; para não receber mais, desligue o Resumo do dia em Máquinas → Alertas)",
     ]
     return f"[CAMP Painel] Resumo do dia {d}", "\n".join(linhas)
 
@@ -384,7 +466,7 @@ def resumo_estado(con) -> dict:
         ult = con.execute("SELECT dia, para, ok, erro, enviado_em FROM resumo_diario_envio ORDER BY dia DESC LIMIT 1").fetchone()
     except Exception:  # noqa: BLE001
         ult = None
-    return {"ligado": ligado, "para": para, "hora": HORA_RESUMO, "ultimo": dict(ult) if ult else None}
+    return {"ligado": ligado, "para": para, "email": _cfg(con, "alertas.resumo_email").strip(), "hora": HORA_RESUMO, "ultimo": dict(ult) if ult else None}
 
 
 def resumo_diario(con, agora: datetime | None = None, enviar=None, forcar: bool = False) -> dict:
@@ -407,9 +489,9 @@ def resumo_diario(con, agora: datetime | None = None, enviar=None, forcar: bool 
     smtp = email_envio.configuracao(con)
     ok, erro = False, None
     if not para:
-        erro = "Sem destinatário (Configurações → alertas.resumo_email)"
+        erro = "Sem destinatário: escolha quem recebe em Máquinas → Alertas → Resumo do dia"
     elif not email_envio.configurado(smtp):
-        erro = "SMTP não configurado (Configurações → smtp.*)"
+        erro = "SMTP não configurado (Configurações → E-mail e avisos)"
     else:
         try:
             res = (enviar or email_envio.enviar)(smtp, para, titulo, corpo)

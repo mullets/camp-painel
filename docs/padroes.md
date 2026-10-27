@@ -16,16 +16,17 @@ Este é o registro único do que já foi decidido. Antes de mexer em algo daqui,
 Não publicado · Rascunho · Publicado · Despublicado; ações Publicar · Voltar para rascunho · Despublicar. Lint em `scripts/check_ui.py` e auditoria do texto visível.
 
 ## 3. Atalhos de teclado (UMA tabela: `NAV_ATALHOS` no `index.html`)
-Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: os dígitos são as primeiras entradas do menu, NA ORDEM em que aparecem; depois, letras.** Desde o CAMP-154 (22/10/2026), 1–5 são os 5 destinos e o resto (no "Mais") vai por letra.
+Ela gera as teclas, os rótulos do menu, a ajuda e a dica do painel. **Regra: os dígitos seguem a ordem do menu (1, 2, 3… de cima para baixo) e só ficam em item sempre à vista; o resto vai por letra.** Desde o UX-28 (27/10/2026) o menu segue a ordem do trabalho e as letras ficam entre os dígitos, mas **nenhuma tecla mudou** (antes, CAMP-154: os dígitos eram as 5 primeiras entradas).
 | Tecla | Tela | Tecla | Tela |
 |---|---|---|---|
-| 1 | Precisa de você (o Painel inicial) | D · N · P | Decisões · Material novo · Problemas |
-| 2 | Projetos | I · W | Arquitetos · Onde está guardado |
-| 3 | Fundos e arquitetos | X · T · O | Ler etiqueta · Etiquetas · Empréstimos |
-| 4 | Pedidos do site | L · U · A | Relatórios · Downloads do site (admin) · Histórico de ações (admin) |
+| 1 | Precisa de você (o Painel inicial) | N · P · D | Material novo · Problemas · Decisões |
+| 2 | Projetos | I · W · X | Arquitetos · Onde está guardado · Ler etiqueta |
+| 3 | Fundos | T · O | Etiquetas · Empréstimos |
+| 4 | Pedidos de alta resolução | U · L · A | Downloads (admin) · Relatórios · Histórico de ações (admin) |
 | 5 | Máquinas (admin) | Q · C · M · G | Qualidade do CAMP Vision · Configurações (admin) · Como o material anda · Glossário |
 A tecla de um item do "Mais" funciona com o "Mais" fechado; só o papel esconde de verdade. Conferindo uma folha, as letras do menu não valem
 (R gira, K recorta, Enter confere): por isso Arquitetos é I, não R.
+Nas listas do Precisa de você e de Problemas (UX-32): `J`/`K` descem/sobem, `Enter` abre e `I` ignora o item escolhido (esconder por 7 dias); sem item escolhido com J/K, o `I` continua sendo Arquitetos.
 Fixas: `⌘/Ctrl+K` busca · `⌘/Ctrl+B` barra lateral · `F` foca o filtro da tela · `?` ajuda · `Esc` fecha. Item novo no menu = nova linha na tabela (o `check_ui` reprova se esquecer ou fora de ordem, e `tests/auditoria_atalhos.js` aperta TODAS as teclas da tabela).
 
 ## 4. Listas e paginação
@@ -52,15 +53,24 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 - **Nunca decide sozinho** que dois projetos são o mesmo. Mostra a **nota e os motivos** (nome, identificação original, ano, cidade) e os dois caminhos: "é o mesmo: adicionar a este" ou "é outro: criar novo". Decisão resolvida fica só para leitura.
 - **Idempotente:** a mesma `chave_reserva` volta sempre à mesma decisão; depois de decidida, devolve sempre o mesmo projeto.
 - **Hoje:** `projeto_parecido` (reserva da estação e "Novo projeto" à mão). Motor em `similaridade.py` (puro e testado: palavras genéricas, nome contido, erro de OCR; número ou letra de designação distingue projetos). Novas verificações entram na mesma fila (ver o cartão "Mais inteligência").
+- **Lote que chegou na pasta errada (UX-01):** antes de importar, nome da pasta × título do projeto (`similaridade.compatibilidade_pasta`, `destino_lote.py`); abaixo de 0,5 ou pasta só com código = "Verificar destino": não importa (botão, "Importar todas", automática) até uma pessoa dizer "É deste projeto" (com justificativa, no Histórico) ou abrir a decisão `lote_destino`. O painel não move a pasta sozinho (o pacote tem o código antigo: o CAMP Vision reidentifica).
 - **Teste:** toda verificação nova precisa de caso que DEVE pedir decisão e caso parecido que NÃO deve (falso alarme também é defeito).
 
-## 10. Menu: 5 destinos + "Mais" (CAMP-154, 22/10/2026; antes: menu por trabalho, 09/10/2026)
-- **Precisa de você** (1) — o Painel inicial: junta Decisões, Material novo e Problemas que bloqueiam (o número ao lado soma os três). É o CAMP-059.
-- **Projetos** (2) · **Fundos e arquitetos** (3) · **Pedidos do site** (4) · **Máquinas** (5, só admin).
-- **Mais**: Decisões (D), Material novo (N), Problemas (P), Arquitetos (I), Onde está guardado (W), Ler etiqueta (X), Etiquetas (T), Empréstimos (O),
-  Relatórios (L), Downloads do site (U), Histórico de ações (A), Qualidade do CAMP Vision (Q), Configurações (C), Como o material anda (M), Glossário (G).
-- No computador o "Mais" abre e fecha (e o navegador lembra); abre sozinho quando a tela atual é um item dele. No celular, como antes: barra de baixo
-  com os destinos do papel + "Mais" (o menu inteiro numa folha).
+## 10. Menu pela ordem do trabalho (UX-28, 27/10/2026; antes: 5 destinos + "Mais", CAMP-154, 22/10/2026; menu por trabalho, 09/10/2026)
+- **Topo, sempre à vista** (as filas do dia nunca ficam no "Mais"): **Precisa de você** (1, o Painel inicial: junta Decisões, Material novo e Problemas
+  que bloqueiam; é o CAMP-059) · **Material novo** (N) · **Problemas** (P) · **Decisões** (D) · **Projetos** (2) · **Busca** (a mesma do ⌘/Ctrl+K).
+  O nome da Home continua **Precisa de você** (decisão do CAMP-154/CAMP-059; o card UX-28 sugeria "Hoje" — não renomeado, cabe ao Rafael).
+- **Números do menu (UX-19, 27/10/2026): uma regra só, "itens que pedem ação de você"**, todos de `pendencias.pedem_acao` no servidor. Problemas conta só o que bloqueia ou pede correção; os avisos ficam na aba **Avisos** da tela Problemas e não entram no número.
+- **Acervo**: Fundos (3) · Arquitetos (I) · Onde está guardado (W) · Ler etiqueta (X) · Etiquetas (T) · Empréstimos (O).
+- **Público**: Pedidos de alta resolução (4) · Downloads (U, só admin).
+- **Acompanhamento**: Relatórios (L) · Histórico de ações (A, só admin) · Qualidade do CAMP Vision (Q, só admin).
+- **Administração** (só admin; o título do grupo some para os outros): Máquinas (5) · Configurações (C).
+- **Ajuda**: Como o material anda (M) · Glossário (G).
+- Sempre à vista no computador: o Topo, Fundos, Arquitetos, Pedidos de alta resolução e Máquinas; o resto aparece ao abrir o **"Mais"** (que abre e
+  fecha, o navegador lembra, e abre sozinho quando a tela atual é um item dele). No celular, como antes: barra de baixo com os destinos do papel + "Mais".
+- **Nome do menu = título da página** (h1, aba do navegador, trilha). Fundos e Arquitetos são itens separados, cada um com a sua página.
+- **Trilha do projeto** (e da folha, Conferir folhas, Duplicatas) respeita por onde se entrou: veio de Projetos → "Projetos / projeto"; veio de
+  Fundos (ou link direto) → "Fundos / fundo / projeto". As outras telas mostram o grupo do menu ("Acervo / Arquitetos").
 
 **Todo projeto mostra o PRÓXIMO PASSO no topo** (`GET /api/projetos/{c}/proximo-passo`, a mesma fase da Fila): Importar, Conferir, Aprovar, Publicar, com UM botão para o passo atual. A Fila e o projeto dizem a mesma coisa porque usam `filas_fase.py`.
 Princípio: cada tela diz **o que falta** e oferece **um** botão principal que faz o passo de verdade; nada de rótulo que só troca de lugar. Texto de interface em português de gente ("37 folhas no painel · 0 no site"), nunca o nome interno.

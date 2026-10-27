@@ -772,15 +772,17 @@ def _sugerir_destino(con, p, pastas: list[str]) -> dict | None:
 
 def _projetos_nome_de_pasta(con) -> list[dict]:
     from .rotas_decisoes import _resumo_projetos
-    from .similaridade import nome_de_subpasta
+    from .similaridade import nome_de_subpasta, sugerir_titulo, titulo_tecnico
     out = []
     for p in con.execute("""SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo_titulo, p.pasta_qnap, p.status_site, p.tainacan_item_id, p.wp_page_id,
                                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
                                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo AND i.tainacan_item_id IS NOT NULL) AS folhas_no_site
                               FROM projeto p LEFT JOIN fundo f ON f.codigo=p.fundo_codigo
                              WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL ORDER BY p.fundo_codigo, p.codigo""").fetchall():
-        if not nome_de_subpasta(p["titulo"]):
+        motivo = titulo_tecnico(p["titulo"])            # UX-15: todos os títulos técnicos (antes só a subpasta: "1 projeto" no banner)
+        if not motivo:
             continue
+        subpasta = nome_de_subpasta(p["titulo"])
         lotes = [dict(l) for l in con.execute("""SELECT id, nome, pasta_qnap, etapa, descartado_em FROM lista_processamento
                                                   WHERE projeto_codigo=? ORDER BY id""", (p["codigo"],))]
         pastas = [l["pasta_qnap"] for l in lotes if l["pasta_qnap"]] + ([p["pasta_qnap"]] if p["pasta_qnap"] else [])
@@ -789,8 +791,11 @@ def _projetos_nome_de_pasta(con) -> list[dict]:
         out.append({"codigo": p["codigo"], "titulo": p["titulo"], "fundo_codigo": p["fundo_codigo"], "fundo_titulo": p["fundo_titulo"],
                     "folhas": p["folhas"], "lotes": lotes, "tem_no_site": tem_site, "status_site": p["status_site"],
                     "pasta_qnap": pastas[0] if pastas else None, "capa": capa,
-                    "sugestao": _sugerir_destino(con, p, pastas),
-                    "pode_descartar": not p["folhas"] and not tem_site})
+                    "sugestao": _sugerir_destino(con, p, pastas) if subpasta else None,
+                    "pode_descartar": not p["folhas"] and not tem_site,
+                    # UX-15 (campos novos, opcionais): o tipo, o motivo e o título limpo que uma pessoa aceita caso a caso (nada é renomeado sozinho)
+                    "tipo": "subpasta" if subpasta else "titulo_tecnico", "motivo": motivo,
+                    "titulo_sugerido": None if subpasta else sugerir_titulo(p["titulo"])})
     return out
 
 
@@ -801,6 +806,18 @@ def projetos_nome_de_pasta(u: dict = Depends(auth.exige("admin"))) -> dict:
     try:
         itens = _projetos_nome_de_pasta(con)
         return {"total": len(itens), "itens": itens}
+    finally:
+        con.close()
+
+
+@router.get("/projetos/cidades")
+def projetos_cidades(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-15: as cidades do acervo (a forma mais usada de cada uma e as variantes) para o autocomplete e a sugestão da tela.
+    Só lê; não muda nenhuma cidade."""
+    from .similaridade import cidades_do_acervo
+    con = connect()
+    try:
+        return {"cidades": cidades_do_acervo(con)}
     finally:
         con.close()
 

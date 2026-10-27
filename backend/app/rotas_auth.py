@@ -99,8 +99,10 @@ def rever_explicacoes(u: dict = Depends(auth.usuario_atual)) -> dict:
 def gravar_preferencia(d: Preferencia, u: dict = Depends(auth.usuario_atual)) -> dict:
     import re
     from .db import connect
-    if not re.fullmatch(r"ajuda\.[a-z_]{1,40}|tarefas\.vista", d.chave or ""):   # tarefas.vista (H4): até quando a pessoa já viu os avisos de conclusão
+    if not re.fullmatch(r"ajuda\.[a-z_]{1,40}|tarefas\.vista|etiqueta\.(?:formato|papel)", d.chave or ""):   # tarefas.vista (H4): até quando a pessoa já viu os avisos de conclusão
         raise HTTPException(400, "Preferência desconhecida")
+    if d.valor is not None and ((d.chave == "etiqueta.formato" and not re.fullmatch(r"\d{2,3}x\d{2,3}", d.valor)) or (d.chave == "etiqueta.papel" and d.valor not in ("rolo", "a4"))):
+        raise HTTPException(400, "Valor inválido")   # UX-25: o último formato e papel de etiqueta valem para a pessoa em qualquer computador
     if d.valor is not None and len(d.valor) > 40:
         raise HTTPException(400, "Valor longo demais")
     con = connect()

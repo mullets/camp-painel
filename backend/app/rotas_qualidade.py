@@ -74,7 +74,12 @@ def alertas_estado(u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         from . import alertas as al
-        return {"estado": [dict(r) for r in con.execute("SELECT * FROM alerta_estado ORDER BY assunto")],
+        from .rotas_gestao import site_em_cache
+        # UX-07: o estado de AGORA, das mesmas medições da tela Máquinas (o site pela última sonda, sem esperar a rede);
+        # "Verificar agora" mede o site de novo e grava o estado (o e-mail sai pela mesma regra)
+        agora_ = {k: {**v, "assunto": k, "ligado": al.ligado(con, k)} for k, v in al.avaliar(con, medir_site=lambda url: site_em_cache(url) or {"nao_medido": "o site ainda não foi verificado desde que o painel ligou; use Verificar agora"}).items()}
+        return {"agora": agora_,
+                "estado": [dict(r) for r in con.execute("SELECT * FROM alerta_estado ORDER BY assunto")],
                 "envios": [dict(r) for r in con.execute("SELECT * FROM alerta_envio ORDER BY id DESC LIMIT 50")],
                 "resumo": al.resumo_estado(con)}
     finally:
@@ -133,6 +138,9 @@ def replica_estado(u: dict = Depends(auth.exige("leitura"))) -> dict:
     from . import replica
     con = connect()
     try:
-        return replica.estado(con)
+        est = replica.estado(con)
+        replica.registrar_marca(con, est)          # UX-02: guarda a última cópia válida vista
+        con.commit()
+        return {**est, "ultima_valida": replica.ultima_valida(con), "preservacao": replica.preservacao(con, est)}
     finally:
         con.close()

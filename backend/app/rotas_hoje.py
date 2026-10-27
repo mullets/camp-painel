@@ -3,7 +3,9 @@
 Usa as mesmas regras do resto do painel (publicacao.condicoes_projeto, direitos_permitem_publicar, qnap_coletor.nivel_espaco):
 nenhuma regra nova é inventada aqui, para os números nunca divergirem das telas.
 """
+from .formato import num_br   # UX-33: "11.880 GB", nunca "11880 GB"
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -117,7 +119,7 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
         if nivel in ("critico", "aviso") and snap:
             acoes.append({"id": "qnap_espaco", "prioridade": 100 if nivel == "critico" else 60, "impacto": 0, "rota": "estacoes",
                           "titulo": "QNAP quase cheio" if nivel == "critico" else "QNAP com pouco espaço",
-                          "detalhe": f"{round(snap['livre_gb'])} GB livres ({str(livre_pct).replace('.', ',')}%)"})
+                          "detalhe": f"{num_br(round(snap['livre_gb']), 0)} GB livres ({str(livre_pct).replace('.', ',')}%)"})
         for pb in con.execute("""SELECT p.codigo, p.titulo FROM projeto p WHERE p.status_site='no_ar' AND EXISTS (SELECT 1 FROM erro e WHERE e.gravidade='bloqueia'
                                  AND e.situacao IN ('aberto','em_correcao') AND (e.codigo=p.codigo OR e.codigo LIKE p.codigo||'-%')) ORDER BY p.codigo LIMIT 5"""):
             acoes.append({"id": "pub_bloq_" + pb["codigo"], "prioridade": 98, "impacto": 1, "rota": "projeto/" + pb["codigo"],
@@ -162,16 +164,58 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close()
 
 
+class AgoraNao(BaseModel):
+    titulo: str | None = None          # UX-03 (opcional): o que estava escrito no item, para a lista "Ignorados" em Problemas
+
+
+def _evento_tarefa(con, tarefa_id: str, tipo: str, ator: str, detalhe: dict) -> None:
+    """UX-03: esconder/mostrar de novo fica no Histórico de ações (problema: no histórico do problema)."""
+    ent, cod = ("erro", tarefa_id.split(":", 1)[1]) if tarefa_id.startswith("erro:") else ("tarefa", tarefa_id)
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES (?,?,?,?,?)",
+                (ent, cod, tipo, ator, json.dumps(detalhe, ensure_ascii=False)))
+
+
+def _chaves_da_tarefa(tarefa_id: str) -> list[str]:
+    """"lote:12,13" (linha com os lotes do mesmo projeto, UX-04) → ["lote:12", "lote:13"]; qualquer outra chave fica como veio."""
+    m = re.fullmatch(r"lote:(\d+(?:,\d+)+)", tarefa_id or "")
+    return [f"lote:{x}" for x in m.group(1).split(",")] if m else [tarefa_id]
+
+
 @router.post("/hoje/tarefas/{tarefa_id}/agora-nao")
-def agora_nao(tarefa_id: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+def agora_nao(tarefa_id: str, d: AgoraNao | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Esconde esta tarefa só para quem clicou, por 7 dias. Depois ela volta sozinha (se ainda existir)."""
     if not tarefa_id or len(tarefa_id) > 120:
         raise HTTPException(400, "Tarefa inválida")
     con = connect()
     try:
-        ate = qb.adiar(con, u["id"], tarefa_id)
+        titulo = ((d.titulo if d else None) or "").strip()[:300] or None
+        for tid in _chaves_da_tarefa(tarefa_id):            # UX-04: a linha que junta lotes do mesmo projeto ("lote:1,2") esconde cada um
+            ate = qb.adiar(con, u["id"], tid)
+            if titulo:
+                try:
+                    con.execute("UPDATE tarefa_adiada SET titulo=? WHERE usuario_id=? AND tarefa_id=?", (titulo, u["id"], tid))
+                except Exception:  # noqa: BLE001  (banco sem a migração 166: guarda sem o título)
+                    pass
+            _evento_tarefa(con, tid, "escondido_7_dias", u["email"], {"ate": ate, "titulo": titulo})
         con.commit()
         return {"ok": True, "ate": ate, "mensagem": f"Escondida por {qb.DIAS_ADIAR} dias. Depois ela volta, se ainda precisar."}
+    finally:
+        con.close()
+
+
+@router.delete("/hoje/tarefas/{tarefa_id}/agora-nao")
+def mostrar_de_novo(tarefa_id: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-03: o Desfazer do "Esconder por 7 dias" e o "Mostrar de novo" de Problemas › Ignorados (só o da própria pessoa)."""
+    con = connect()
+    try:
+        n = 0
+        for tid in _chaves_da_tarefa(tarefa_id):
+            k = con.execute("DELETE FROM tarefa_adiada WHERE usuario_id=? AND tarefa_id=?", (u["id"], tid)).rowcount
+            if k:
+                _evento_tarefa(con, tid, "mostrado_de_novo", u["email"], {})
+            n += k
+        con.commit()
+        return {"ok": True, "voltou": bool(n)}
     finally:
         con.close()
 

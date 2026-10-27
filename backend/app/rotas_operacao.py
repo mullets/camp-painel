@@ -42,26 +42,29 @@ def _qnap_prontos_raiz() -> Path:
 
 # ---------------- painel inicial ----------------
 @router.get("/painel")
-def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
+def painel(ordem: str = "padrao", u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     q = lambda sql, *p: con.execute(sql, p).fetchone()[0]  # noqa: E731
+    # UX-05: os números vêm da fonte única (contagens.py); os campos antigos continuam, com os MESMOS valores das outras telas
+    from . import contagens as cg
+    from . import pendencias as pd
+    n = pd.contar_pendencias(con, com_listas=True, usuario_id=u["id"])
+    cont = cg.medir(con, n=n)
+    et, ns = cont["lotes_etapa"], cg.no_site(con)
     d = {
-        "filas": {"total": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa NOT IN ('publicado')"),
-                  "processando": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='processando'"),
-                  "revisao": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao'"),
-                  "erro": q("SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='erro'")},
-        "solicitacoes": {"abertas": q("SELECT COUNT(*) FROM solicitacao WHERE situacao NOT IN ('entregue','recusada')"),
-                         "aguardam": q("SELECT COUNT(*) FROM solicitacao WHERE situacao IN ('aguarda_resposta','aguarda_orcamento')")},
-        "erros": {"abertos": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')"),
-                  "bloqueantes": q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='bloqueia'")},
-        "fundos": {"total": q("SELECT COUNT(*) FROM fundo WHERE ativo=1"), "no_ar": q("SELECT COUNT(*) FROM fundo WHERE status_site='no_ar'"),
+        "filas": {"total": sum(v for k, v in et.items() if k != "publicado"), "processando": et["processando"], "revisao": et["revisao"], "erro": et["erro"]},
+        "solicitacoes": {"abertas": cont["pedidos_abertos"], "aguardam": cont["pedidos_aguardando"]},
+        "erros": {"abertos": cont["erros_abertos"], "bloqueantes": cont["erros_bloqueantes"]},
+        "fundos": {"total": ns["fundos"]["total"], "no_ar": ns["fundos"]["no_ar"],
                    "proximo": q("SELECT codigo FROM v_proximo_fundo"), "sem_sigla": q("SELECT COUNT(*) FROM fundo WHERE sigla IS NULL AND ativo=1")},
-        "projetos": {"total": q("SELECT COUNT(*) FROM projeto"), "no_ar": q("SELECT COUNT(*) FROM projeto WHERE status_site='no_ar'"),
-                     "rascunho": q("SELECT COUNT(*) FROM projeto WHERE status_site='rascunho'"), "bloqueados": q("SELECT COUNT(*) FROM projeto WHERE status_site='bloqueado'")},
-        "itens": {"total": q("SELECT COUNT(*) FROM item"), "no_ar": q("SELECT COUNT(*) FROM item WHERE status_site='no_ar'"),
+        "projetos": {"total": ns["projetos"]["total"], "no_ar": ns["projetos"]["no_ar"],
+                     "rascunho": q(f"SELECT COUNT(*) FROM projeto WHERE status_site='rascunho' AND {cg.PROJETO_VIVO}"),
+                     "bloqueados": q(f"SELECT COUNT(*) FROM projeto WHERE status_site='bloqueado' AND {cg.PROJETO_VIVO}")},
+        "itens": {"total": ns["folhas"]["total"], "no_ar": ns["folhas"]["no_ar"],
                   "rascunho": q("SELECT COUNT(*) FROM item WHERE status_site='rascunho'"), "autoria_divergente": q("SELECT COUNT(*) FROM item WHERE autoria_divergente=1")},
-        "site": {"divergencias": q("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0")},
-        "decisoes": {"pendentes": q("SELECT COUNT(*) FROM decisao WHERE situacao='pendente'")},
+        "site": {"divergencias": cont["site_divergencias"]},
+        "decisoes": {"pendentes": cont["decisoes"]},
+        "contagens": cont,
     }
     s = con.execute("SELECT iniciada_em, terminada_em, ok, itens FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     d["site"]["ultima_sincronizacao"] = dict(s) if s else None
@@ -84,14 +87,13 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
         WHERE i.criado_em >= date('now','-30 days') GROUP BY 1 ORDER BY 3 DESC LIMIT 6""")]
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
     # H6b: o que fazer agora, o caminho do material, o quanto está no site e as frases do dia, TODOS da fonte única (pendencias)
-    from . import pendencias as pd
-    n = pd.contar_pendencias(con, com_listas=True, usuario_id=u["id"])
-    d["pendencias"] = {k: v for k, v in n.items() if not k.startswith("_")}
-    d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"])
+    d["pendencias"] = dict(cont)          # UX-05: exatamente o que /api/pendencias devolve (a mesma função, contagens.medir)
+    d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
     d["caminho"] = pd.caminho(con, n)
     d["no_site"] = pd.no_site(con)
     d["hoje_frases"] = pd.atividade_hoje(con)
     d["alertas"] = pd.alertas_criticos(con) if u["papel"] != "leitura" else []
+    d["analytics_ligado"] = analytics_ligado(con)          # UX-12: desligado, a tela nem chama /api/analytics
     con.close()
     return d
 
@@ -100,10 +102,10 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
 @router.get("/pendencias")
 def pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Só os números (contadores do menu, Filas e painel): a MESMA função do painel inicial."""
-    from .pendencias import contar_pendencias
+    from .contagens import medir
     con = connect()
     try:
-        return contar_pendencias(con, usuario_id=u.get("id"))   # 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa
+        return medir(con, usuario_id=u.get("id"))   # 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa; UX-05: + no site, etapas, medido_em
     finally:
         con.close()
 
@@ -253,10 +255,33 @@ def _top_rows(report: dict) -> list[dict]:
 _ANALYTICS_CACHE: dict = {"t": 0.0, "v": None}
 
 
+def analytics_ligado(con) -> bool:
+    """UX-12: o Google Analytics está ligado ao painel? GA4 direto (as duas chaves preenchidas) ou o Site Kit pedido (analytics.site_kit=1).
+    Só lê a configuração: nada de rede."""
+    v = {r[0]: (r[1] or "").strip() for r in con.execute(
+        "SELECT chave, valor FROM configuracao WHERE chave IN ('ga4.propriedade','ga4.conta_servico','analytics.site_kit')")}
+    return bool(v.get("ga4.propriedade") and v.get("ga4.conta_servico")) or v.get("analytics.site_kit") == "1"
+
+
+def _analytics_desligado() -> dict:
+    return {"disponivel": False, "desligado": True, "origem": "Google Site Kit / GA4",
+            "agora": {"disponivel": False, "usuarios": None, "janela_min": 30}, "periodos": {},
+            "top_fundos": [], "top_projetos": [], "top_paginas": [], "erro": None,
+            "acao": "Para ver as visitas, preencha ga4.propriedade e ga4.conta_servico em Configurações (ou analytics.site_kit = 1)."}
+
+
 @router.get("/analytics")
 def analytics(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """Audiência (cache de 10 min quando deu certo, 60 s quando deu erro: a consulta ao Site Kit leva segundos e antes rodava a cada abertura do painel)."""
+    """Audiência (cache de 10 min quando deu certo, 60 s quando deu erro: a consulta ao Site Kit leva segundos e antes rodava a cada abertura do painel).
+    UX-12: com o GA desligado responde na hora, sem ir ao site nem ao Google."""
     import time as _t
+    con = connect()
+    try:
+        ligado = analytics_ligado(con)
+    finally:
+        con.close()
+    if not ligado:
+        return _analytics_desligado()
     c = _ANALYTICS_CACHE
     if not fresco and c["v"] is not None and _t.monotonic() - c["t"] < (600 if c["v"].get("disponivel") else 60):
         return c["v"]
@@ -532,9 +557,10 @@ class NovaLista(BaseModel):
     autorizar_site: bool = False
 
 
-def _erro_do_cv(d: dict) -> str | None:
-    """Mensagem de erro que o CAMP Vision deixou no status.json (ou no resultado) da pasta, em uma linha."""
+def _erro_cv_bruto(d: dict) -> tuple[str | None, list]:
+    """(mensagem inteira que o CAMP Vision deixou no status.json ou no resultado, os dicionários onde procurou)."""
     import json as _json
+    todas = []
     for campo in ("status_json", "resultado"):
         try:
             j = _json.loads(d.get(campo) or "{}")
@@ -543,13 +569,27 @@ def _erro_do_cv(d: dict) -> str | None:
         if not isinstance(j, dict):
             continue
         fontes = [j] + ([j["status"]] if isinstance(j.get("status"), dict) else [])     # contrato 2.2: resultado.status.motivo
+        todas += fontes
         for fonte, k in ((f_, k_) for f_ in fontes for k_ in ("erro", "mensagem_erro", "motivo", "mensagem", "detalhe", "error", "message")):
             v = fonte.get(k)
             if isinstance(v, dict):
                 v = v.get("mensagem") or v.get("message") or v.get("detalhe")
             if isinstance(v, str) and v.strip():
-                return " ".join(v.split())[:240]
-    return None
+                return v.strip(), todas
+    return None, todas
+
+
+def _erro_do_cv(d: dict) -> str | None:
+    """Mensagem de erro que o CAMP Vision deixou no status.json (ou no resultado) da pasta, em uma linha."""
+    t, _ = _erro_cv_bruto(d)
+    return " ".join(t.split())[:240] if t else None
+
+
+def _erro_do_cv_explicado(d: dict) -> dict | None:
+    """UX-08 (campo novo, opcional, só da tela): o mesmo erro em linguagem de gente + a mensagem técnica inteira (avisos_cv.explicar_erro)."""
+    from .avisos_cv import explicar_erro
+    t, fontes = _erro_cv_bruto(d)
+    return explicar_erro(t, fontes)
 
 
 @router.get("/filas")
@@ -560,17 +600,34 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
-                          WHERE l.descartado_em IS NULL
+                          WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL   -- UX-05: os mesmos lotes das contagens
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()
-    con.close()
+    from .qualidade_base import adiadas
+    from .pendencias import chave_adiar_lote
+    fora = adiadas(con, u["id"]) if u.get("id") else set()
     from .filas_fase import fase_da_lista
+    from .pendencias import projetos_lendo_agora, releituras_abertas
+    lendo, pedidos = projetos_lendo_agora(con), releituras_abertas(con)
     saida = []
     for r in rows:
         d = dict(r)
+        d["adiado"] = chave_adiar_lote(d["id"]) in fora   # UX-05: "Agora não" desta pessoa: fica na lista, sai das contagens dela
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
+        from .pendencias import identificador_lote, _e_complemento, marcar_parado
+        marcar_parado(d, lendo)                          # UX-09 (campos novos, opcionais): parado_h, parado, leitura_interrompida
+        d["releitura_pedida_em"] = pedidos.get(d["projeto_codigo"]) if d["leitura_interrompida"] else None
+        d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04 (campo novo, opcional)
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
+        d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08: em linguagem de gente (campo novo, opcional)
+        d["destino_suspeito"] = False                    # UX-01 (campo novo, opcional): a pasta não parece deste projeto → "Verificar destino"
+        if d["fase"] == "importar":
+            from .destino_lote import avaliar
+            a = avaliar(con, r, completo=False)
+            d["destino_suspeito"] = a["suspeito"] and not a["liberado"]
+            d["destino_motivo"] = a["motivo"] if d["destino_suspeito"] else None
         saida.append(d)
+    con.close()
     return saida
 
 
@@ -913,7 +970,9 @@ def _criar_lote_complemento(con, pasta: Path, cod: str, nome: str, ex, novos: li
     """Cria o lote NOVO (em revisão) do material que chegou a um projeto cujo lote já está fechado. Mesma pasta, mesmo projeto."""
     from datetime import date
     quando = date.today().strftime("%d/%m")
-    nome_c = f"{nome} — complemento de {quando} ({len(novos)} folha{'s' if len(novos) != 1 else ''})"
+    # UX-04: o nome não leva mais "(N folhas)": era o número do pacote no dia (documentos que o painel não tinha), nunca atualizado, e brigava
+    # com a contagem real do lote na tela ("complemento de 19/10 (19 folhas)" com 12 de 12). A contagem do lote é a das folhas (item.lote_id).
+    nome_c = f"{nome} — complemento de {quando}"
     lote_cv = status.get("lote_atual") if isinstance(status, dict) else None
     ctx = {**contexto, "complemento": True, "lote_cv": lote_cv, "lote_origem": ex["id"], "novos": len(novos)}
     lid = con.execute(
@@ -1213,10 +1272,22 @@ class ErrosEmLote(BaseModel):
     resolucao: str | None = None
 
 
-def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q) -> tuple[str, list]:
+def _escondidos(con, usuario_id) -> list[int]:
+    """UX-03: problemas que ESTA pessoa escondeu por 7 dias no Precisa de você (ficam em Problemas › Ignorados, não em Abertos/Avisos)."""
+    from .qualidade_base import adiadas
+    return [int(k[5:]) for k in adiadas(con, usuario_id) if k.startswith("erro:") and k[5:].isdigit()]
+
+
+def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, escondidos=None) -> tuple[str, list]:
     """A mesma regra para a lista e para a contagem das abas: situação, gravidade, tipo (categoria), origem, projeto (ou fundo) e busca."""
     w, p = [], []
-    if situacao == "abertos": w.append("situacao IN ('aberto','em_correcao')")
+    from .contagens import ERROS_ABERTOS, ERROS_PEDEM_ACAO, ERROS_AVISOS
+    if escondidos and situacao in ("pedem_acao", "avisos"):
+        w.append(f"id NOT IN ({','.join('?' * len(escondidos))})"); p += list(escondidos)
+    if situacao == "abertos": w.append(ERROS_ABERTOS)          # UX-05: a mesma regra do menu e da Home
+    # UX-19: avisos em aba própria. "pedem_acao" = abertos que bloqueiam ou pedem correção; "avisos" = abertos só de aviso (regra em contagens.py).
+    elif situacao == "pedem_acao": w.append(ERROS_PEDEM_ACAO)
+    elif situacao == "avisos": w.append(ERROS_AVISOS)
     elif situacao == "corrigido": w.append("situacao IN ('corrigido','fechado')")
     elif situacao and situacao != "todos": w.append("situacao=?"); p.append(situacao)
     for col, v, ok_ in (("gravidade", gravidade, GRAV), ("categoria", categoria, CATS), ("origem", origem, ("campvision",) + ORIGENS_MANUAIS)):
@@ -1261,12 +1332,78 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
     try:
         _fechar_sozinhos(con)
         out = {}
-        for k in ("abertos", "em_correcao", "corrigido", "ignorado", "todos"):
-            w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q)
+        esc = _escondidos(con, u.get("id"))
+        for k in ("abertos", "pedem_acao", "avisos", "em_correcao", "corrigido", "ignorado", "todos"):   # UX-19: pedem_acao e avisos (campos novos)
+            w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q, esc)
             out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
+        from .contagens import agora_iso
+        out["medido_em"] = agora_iso()        # UX-05
         w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
         out["talvez"] = sum(1 for x in problemas.enriquecer(con, con.execute("SELECT * FROM erro" + w, p).fetchall()) if x["resolvido_sozinho"])
+        # UX-06: com filtro, quantos existem SEM ele (campo novo, opcional). A tela usa para dizer "sem estes filtros há 574 abertos"
+        # em vez de abas e lista zeradas sem explicação.
+        if any(x and str(x).strip() for x in (gravidade, categoria, origem, projeto, q)):
+            out["sem_filtro"] = {k: con.execute("SELECT COUNT(*) FROM erro" + _filtro_erros(k, None, None, None, None, None)[0],
+                                                _filtro_erros(k, None, None, None, None, None)[1]).fetchone()[0] for k in ("abertos", "pedem_acao", "avisos", "todos")}
         return out
+    finally:
+        con.close()
+
+
+@router.get("/erros/ignorados")
+def erros_ignorados(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-03: Problemas › Ignorados. O que VOCÊ escondeu por 7 dias no Precisa de você (volta sozinho) e o que alguém fechou como
+    "não era problema" pelo Ignorar nos últimos 30 dias (quem, quando e por quê)."""
+    from .qualidade_base import adiadas, agora, _iso
+    con = connect()
+    try:
+        escondidos = []
+        if adiadas(con, u.get("id")):
+            try:
+                rows = con.execute("SELECT tarefa_id, ate, titulo FROM tarefa_adiada WHERE usuario_id=? AND ate>? ORDER BY ate", (u["id"], _iso(agora()))).fetchall()
+            except Exception:  # noqa: BLE001  (sem a migração 166)
+                rows = con.execute("SELECT tarefa_id, ate, NULL AS titulo FROM tarefa_adiada WHERE usuario_id=? AND ate>? ORDER BY ate", (u["id"], _iso(agora()))).fetchall()
+            for r in rows:
+                x = {"tarefa_id": r["tarefa_id"], "ate": r["ate"], "titulo": r["titulo"]}
+                if r["tarefa_id"].startswith("erro:") and r["tarefa_id"][5:].isdigit():
+                    e = con.execute("SELECT id, codigo, descricao, gravidade, situacao FROM erro WHERE id=?", (int(r["tarefa_id"][5:]),)).fetchone()
+                    if e:
+                        x.update({"erro": dict(e), "titulo": x["titulo"] or e["descricao"]})
+                escondidos.append(x)
+        nao_era = [dict(r) for r in con.execute("""SELECT e.id, e.codigo, e.descricao, e.gravidade, e.resolucao, e.resolvido_em, e.fechado_por FROM erro e
+                                                   WHERE e.situacao='ignorado' AND e.resolvido_em >= datetime('now','-30 days')
+                                                     AND EXISTS (SELECT 1 FROM evento v WHERE v.entidade='erro' AND v.codigo=CAST(e.id AS TEXT) AND v.tipo='ignorado')
+                                                   ORDER BY e.resolvido_em DESC LIMIT 200""")]
+        return {"escondidos": escondidos, "nao_era": nao_era, "total": len(escondidos) + len(nao_era)}
+    finally:
+        con.close()
+
+
+class IgnorarErro(BaseModel):
+    justificativa: str | None = None
+
+
+@router.post("/erros/{eid}/ignorar")
+def ignorar_erro(eid: int, d: IgnorarErro, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-03: "Não mostrar mais (não era problema)" do Precisa de você. Muda o problema para "Não era problema" com autor, data e
+    justificativa; o que bloqueia a publicação exige a justificativa. Devolve o token do Desfazer (o mesmo das ações em massa)."""
+    con = connect()
+    try:
+        e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Este problema não existe")
+        if e["situacao"] not in ("aberto", "em_correcao"):
+            raise HTTPException(409, "Este problema já está fechado")
+        just = (d.justificativa or "").strip()[:300]
+        if e["gravidade"] == "bloqueia" and len(just) < 3:
+            raise HTTPException(400, "Este problema bloqueia a publicação: diga em uma frase por que não era problema")
+        antes = [{"id": e["id"], "situacao": e["situacao"], "resolucao": e["resolucao"], "resolvido_em": e["resolvido_em"]}]
+        con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=?, fechado_por=? WHERE id=?",
+                    (just or "Não era problema (ignorado no Precisa de você).", u["email"], eid))
+        _evento(con, "erro", eid, "ignorado", u["email"], {"codigo": e["codigo"], "justificativa": just or None, "onde": "precisa_de_voce"})
+        tok = _guardar_desfazer(con, u["email"], "ignorar", "ignorado", antes)
+        con.commit()
+        return {"ok": True, "desfazer": tok}
     finally:
         con.close()
 
@@ -1328,7 +1465,7 @@ def listar_erros(situacao: str | None = "abertos", gravidade: str | None = None,
     con = connect()
     try:
         _fechar_sozinhos(con)
-        w, p = _filtro_erros(situacao, gravidade, categoria, origem, projeto, q)
+        w, p = _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, _escondidos(con, u.get("id")))
         rows = con.execute("SELECT * FROM erro" + w + " ORDER BY CASE gravidade WHEN 'bloqueia' THEN 0 WHEN 'corrigir' THEN 1 ELSE 2 END, criado_em DESC, id DESC", p).fetchall()
         return problemas.enriquecer(con, rows)
     finally:
@@ -1393,6 +1530,7 @@ def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
         if d.situacao in ("corrigido", "fechado", "ignorado") and not ((d.resolucao or "").strip() or e["resolucao"]):
             raise HTTPException(400, "Descreva a resolução antes de fechar")
         campos.append("situacao=?"); vals.append(d.situacao)
+        campos.append("fechado_por=?"); vals.append(ator if d.situacao in ("corrigido", "fechado", "ignorado") else None)   # UX-03: quem fechou
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
@@ -1440,8 +1578,107 @@ def editar_erros_em_lote(d: ErrosEmLote, u: dict = Depends(auth.exige("operador"
         if len(rows) != len(ids):
             raise HTTPException(404, f"{len(ids) - len(rows)} dos problemas escolhidos não existem mais: atualize a lista")
         ed = EdicaoErro(situacao=d.situacao, resolucao=(d.resolucao or "").strip() or None)
+        antes = [{"id": e["id"], "situacao": e["situacao"], "resolucao": e["resolucao"], "resolvido_em": e["resolvido_em"]} for e in rows]
         n = sum(1 for e in rows if _mudar_erro(con, e, ed, u["email"]))
+        desfazer = _guardar_desfazer(con, u["email"], "lote", d.situacao, antes)
         con.commit()
-        return {"ok": True, "atualizados": n, "ids": ids}
+        return {"ok": True, "atualizados": n, "ids": ids, "desfazer": desfazer}
+    finally:
+        con.close()
+
+
+# ---------------- UX-20: desfazer de verdade e mesclar mensagens repetidas ----------------
+DESFAZER_MINUTOS = 30
+
+
+def _guardar_desfazer(con, ator: str, acao: str, situacao: str, antes: list[dict]) -> int | None:
+    """Guarda como os problemas estavam antes de uma ação em massa. Banco sem a migração 165: sem Desfazer (a ação vale igual)."""
+    try:
+        return con.execute("INSERT INTO erro_desfazer (ator, acao, situacao, antes) VALUES (?,?,?,?)",
+                           (ator, acao, situacao, json.dumps(antes, ensure_ascii=False))).lastrowid
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@router.post("/erros/desfazer/{token}")
+def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Volta cada problema da ação em massa ao que era antes (situação, resolução e data). Só quem fez (ou um admin), uma vez,
+    até 30 min depois; quem já foi mexido por alguém depois da ação fica como está (e a resposta diz quantos)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT * FROM erro_desfazer WHERE id=?", (token,)).fetchone()
+        if not r:
+            raise HTTPException(404, "Não há o que desfazer")
+        if r["ator"] != u["email"] and u["papel"] not in ("admin", "master"):
+            raise HTTPException(403, "Só quem fez (ou um admin) pode desfazer")
+        if r["desfeito_em"]:
+            raise HTTPException(409, "Já foi desfeito")
+        if con.execute("SELECT datetime(?, ?) < datetime('now')", (r["criado_em"], f"+{DESFAZER_MINUTOS} minutes")).fetchone()[0]:
+            raise HTTPException(409, f"Passou o prazo de {DESFAZER_MINUTOS} minutos para desfazer: reabra um a um")
+        voltaram, ficaram = 0, 0
+        for a in json.loads(r["antes"] or "[]"):
+            n = con.execute("""UPDATE erro SET situacao=?, resolucao=?, resolvido_em=?,
+                               fechado_por=CASE WHEN ? IN ('aberto','em_correcao') THEN NULL ELSE fechado_por END WHERE id=? AND situacao=?""",
+                            (a["situacao"], a["resolucao"], a["resolvido_em"], a["situacao"], a["id"], r["situacao"])).rowcount
+            if n:
+                voltaram += 1
+                _evento(con, "erro", a["id"], "desfeito", u["email"], {"situacao": a["situacao"], "acao": r["acao"]})
+            else:
+                ficaram += 1
+        con.execute("UPDATE erro_desfazer SET desfeito_em=datetime('now') WHERE id=?", (token,))
+        con.commit()
+        return {"ok": True, "voltaram": voltaram, "ficaram": ficaram}
+    finally:
+        con.close()
+
+
+class MesclarRepetidos(BaseModel):
+    simular: bool = True
+    codigo: str | None = None          # só os repetidos deste código (o "Mesclar" de um grupo); vazio = todos
+
+
+def _grupos_repetidos(con, codigo: str | None) -> list[dict]:
+    """Abertos com a MESMA origem, código e mensagem: fica o mais antigo, os outros fecham como repetidos."""
+    w, p = "situacao IN ('aberto','em_correcao')", []
+    if codigo and codigo.strip():
+        w += " AND codigo=?"; p.append(codigo.strip().upper())
+    out = []
+    for g in con.execute(f"""SELECT origem, codigo, descricao, gravidade, COUNT(*) AS n, MIN(id) AS fica FROM erro WHERE {w}
+                             GROUP BY origem, codigo, descricao HAVING COUNT(*)>1 ORDER BY n DESC, codigo""", p):
+        ids = [r[0] for r in con.execute(f"SELECT id FROM erro WHERE {w} AND origem=? AND descricao=? AND id<>? AND codigo=? ORDER BY id",
+                                         (*p, g["origem"], g["descricao"], g["fica"], g["codigo"]))]
+        out.append({"codigo": g["codigo"], "descricao": g["descricao"], "origem": g["origem"], "gravidade": g["gravidade"],
+                    "quantidade": g["n"], "fica": g["fica"], "fecham": ids})
+    return out
+
+
+@router.post("/erros/mesclar-repetidos")
+def mesclar_repetidos(d: MesclarRepetidos, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """UX-20: o aviso "há mensagens repetidas" ganha Ver → Mesclar. Prévia é o padrão (simular); mesclar fecha as cópias
+    como "Não era problema" com a resolução apontando o que ficou aberto, guarda o Desfazer e registra no histórico."""
+    con = connect()
+    try:
+        if not d.simular:
+            con.execute("BEGIN IMMEDIATE")
+        grupos = _grupos_repetidos(con, d.codigo)
+        out = {"simulado": d.simular, "grupos": grupos[:200], "fecham": sum(len(g["fecham"]) for g in grupos)}
+        if d.simular or not grupos:
+            if not d.simular:
+                con.rollback()
+            return out
+        antes = []
+        for g in grupos:
+            for i in g["fecham"]:
+                e = con.execute("SELECT id, situacao, resolucao, resolvido_em FROM erro WHERE id=?", (i,)).fetchone()
+                antes.append(dict(e))
+                con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=? WHERE id=?",
+                            (f"Mensagem repetida: o mesmo problema continua aberto no nº {g['fica']}.", i))
+                _evento(con, "erro", i, "mesclado", u["email"], {"codigo": g["codigo"], "fica": g["fica"]})
+        out["desfazer"] = _guardar_desfazer(con, u["email"], "mesclar", "ignorado", antes)
+        con.commit()
+        return out
+    except Exception:
+        con.rollback()
+        raise
     finally:
         con.close()

@@ -1,6 +1,7 @@
 """Revisão pós-CAMP Vision: importar as folhas do lote, conferir/corrigir, e o admin aprovar. Ler: leitura; revisar: operador; aprovar: admin."""
 import json
 import re
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -60,6 +61,10 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
         if pacote.get("retirados"):
             return False, "O CAMP Vision retirou as folhas deste lote. Um admin pode trazê-las para conferência, sem aceitar a exclusão da máquina."
         return False, "O pacote não contém folhas para importar. Confira o lote no QNAP; não precisa reimportar as folhas de outros lotes."
+    from .destino_lote import bloqueio as _bloqueio_destino
+    motivo_destino = _bloqueio_destino(con, l)            # UX-01: a pasta não parece deste projeto
+    if motivo_destino:
+        return False, motivo_destino
     return True, None
 
 
@@ -67,12 +72,12 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
 def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
     from .filas_fase import fase_da_lista, escolher_lote_ativo
-    from .rotas_operacao import _erro_do_cv
+    from .rotas_operacao import _erro_do_cv, _erro_do_cv_explicado
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
             raise HTTPException(404, "Projeto não existe")
-        from .avisos_cv import avisos_abertos, curar_lotes
+        from .avisos_cv import avisos_abertos, curar_lotes, resumo_avisos_cv
         if curar_lotes(con, codigo):                     # CAMP-122 (P1): "erro" que é só aviso [Minor] não para o lote
             con.commit()
         lotes = []
@@ -86,19 +91,44 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"], d.get("resultado"))
             # 19/10 (F026-P0009): lote parado por erro do CAMP Vision: o motivo vai junto (campo novo, opcional), para a Situação do lote dizer o porquê
             d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
+            d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08 (campo novo, opcional)
             d.pop("status_json", None); d.pop("resultado", None)
             lotes.append(d)
         lote = escolher_lote_ativo(lotes)
         if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
             pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
             lote["importar_motivo"] = None if pode else motivo
-        return {"lote": lote, "lotes": len(lotes), "avisos_cv": avisos_abertos(con, codigo), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
+            from .destino_lote import avaliar as _avaliar_destino   # UX-01: campo novo, opcional
+            dl = _avaliar_destino(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone(), completo=False)
+            lote["destino_suspeito"] = dl["suspeito"] and not dl["liberado"]
+        if lote and lote["fase"] == "conferir":       # UX-11: campo novo, opcional — as folhas a conferir SEM nenhum aviso (o número do botão)
+            lote["itens_sem_aviso"] = contar_sem_aviso(con, lote["id"])
+        av = avisos_abertos(con, codigo)
+        return {"lote": lote, "lotes": len(lotes), "avisos_cv": av, "avisos_cv_resumo": resumo_avisos_cv(con, codigo, av), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
     finally:
         con.close()
 
 
+_trava_importar = threading.Lock()
+_importando: set[int] = set()
+
+
 @router.post("/lotes/{lote_id}/importar")
 def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-17: dois cliques (ou "Importar todas" e o botão do lote) ao mesmo tempo: o segundo recebe 409 na hora, em vez de esperar o
+    primeiro na trava do banco e importar o mesmo pacote de novo."""
+    with _trava_importar:
+        if lote_id in _importando:
+            raise HTTPException(409, "Este lote já está sendo importado agora (outro clique ou outra pessoa). Aguarde terminar.")
+        _importando.add(lote_id)
+    try:
+        return _importar(lote_id, u)
+    finally:
+        with _trava_importar:
+            _importando.discard(lote_id)
+
+
+def _importar(lote_id: int, u: dict) -> dict:
     con = connect()
     try:
         con.execute("BEGIN IMMEDIATE")
@@ -109,6 +139,74 @@ def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
         con.commit()
         return r
     except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+# ---------------- UX-01 · Verificar destino: a pasta não parece deste projeto ----------------
+@router.get("/lotes/{lote_id}/destino")
+def ver_destino(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """A comparação lado a lado (pasta × projeto), as sugestões do mesmo fundo e 3 folhas da pasta (códigos do pacote: a prévia
+    vem de /api/itens/{c}/previa, que acha o JPG na pasta do lote)."""
+    from .destino_lote import avaliar
+    con = connect()
+    try:
+        l = _lote(con, lote_id)
+        try:
+            pacote = ler_pacote(Path(l["pasta_qnap"] or "")) if Path(l["pasta_qnap"] or "").is_dir() else None
+        except HTTPException:
+            pacote = None
+        a = avaliar(con, l, pacote)
+        a["lote_id"] = lote_id
+        a["pode_confirmar"] = u["papel"] in ("operador", "admin", "master")
+        return a
+    finally:
+        con.close()
+
+
+class EscolhaDestino(BaseModel):
+    acao: str                          # confirmar ("É deste projeto") | decisao ("Mover para…" com destino, ou "Criar decisão")
+    justificativa: str = ""
+    destino: str | None = None
+
+
+@router.post("/lotes/{lote_id}/destino")
+def escolher_destino(lote_id: int, d: EscolhaDestino, u: dict = Depends(auth.exige("operador"))) -> dict:
+    from .destino_lote import abrir_decisao, avaliar, confirmar
+    just = " ".join((d.justificativa or "").split())[:500]
+    if len(just) < 3:
+        raise HTTPException(400, "Escreva a justificativa (por que esta pasta é, ou não é, deste projeto). Ela fica no Histórico.")
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["descartado_em"] or l["aprovado_em"]:
+            raise HTTPException(409, "Este lote já foi encerrado.")
+        a = avaliar(con, l, completo=False)
+        if not a["suspeito"]:
+            raise HTTPException(409, "Este lote não precisa verificar destino: o nome da pasta combina com o projeto.")
+        if d.acao == "confirmar":
+            if a["confirmado"]:
+                raise HTTPException(409, "Uma pessoa já confirmou que esta pasta é deste projeto.")
+            confirmar(con, l, u["email"], just)
+            r = {"ok": True, "acao": "confirmar", "mensagem": f"Anotado no Histórico: a pasta é de {l['projeto_codigo']}. Já dá para importar."}
+        elif d.acao == "decisao":
+            destino = (d.destino or "").strip().upper() or None
+            if destino:
+                fundo = con.execute("SELECT fundo_codigo FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()[0]
+                if destino == l["projeto_codigo"] or not con.execute("SELECT 1 FROM projeto WHERE codigo=? AND fundo_codigo=?", (destino, fundo)).fetchone():
+                    raise HTTPException(400, "O projeto sugerido não existe neste fundo")
+            did = abrir_decisao(con, l, u["email"], just, destino)
+            r = {"ok": True, "acao": "decisao", "decisao_id": did,
+                 "mensagem": f"Pergunta aberta em Decisões (decisão {did}). O lote não importa até um admin decidir."
+                             + (" Mudar a pasta de projeto depende de o CAMP Vision reidentificar os arquivos." if destino else "")}
+        else:
+            raise HTTPException(400, "acao deve ser 'confirmar' ou 'decisao'")
+        con.commit()
+        return r
+    except Exception:
         con.rollback()
         raise
     finally:
@@ -194,11 +292,20 @@ def importar_todas(u: dict = Depends(auth.exige("operador"))):
     from . import pendencias, tarefas
     con = connect()
     try:
-        alvo = [(l["id"], l["projeto_codigo"]) for l in pendencias.lotes(con) if l["fase"] == "importar"]
+        from .destino_lote import bloqueio as _bloqueio_destino
+        alvo, fora = [], []                                  # UX-01: "Verificar destino" fica de fora (e a mensagem diz quantos)
+        for l in pendencias.lotes(con):
+            if l["fase"] != "importar":
+                continue
+            lr = con.execute("SELECT * FROM lista_processamento WHERE id=?", (l["id"],)).fetchone()
+            (fora if _bloqueio_destino(con, lr) else alvo).append((l["id"], l["projeto_codigo"]))
     finally:
         con.close()
     if not alvo:
+        if fora:
+            raise HTTPException(400, f"Nenhum lote para importar: {len(fora)} {'espera' if len(fora) == 1 else 'esperam'} Verificar destino (a pasta não parece do projeto).")
         raise HTTPException(400, "Nenhum lote esperando importação")
+    nota_fora = f" {len(fora)} lote(s) ficaram de fora: Verificar destino ({', '.join(pj for _, pj in fora)})." if fora else ""
 
     def rodar(p) -> dict:
         p.total(len(alvo))
@@ -212,8 +319,8 @@ def importar_todas(u: dict = Depends(auth.exige("operador"))):
             except HTTPException as e:
                 falhas.append({"codigo": pj, "erro": str(e.detail)}); p.log(f"{pj} NÃO importou: {e.detail}")
         ok = len(alvo) - len(falhas)
-        return {"ok": not falhas, "falhas": falhas, "lotes": ok, "folhas": folhas,
-                "mensagem": f"{ok} de {len(alvo)} lote(s) importado(s), {folhas} folha(s) no painel" + (f"; {len(falhas)} não {'importou' if len(falhas) == 1 else 'importaram'}" if falhas else "") + ". Próximo passo: conferir."}
+        return {"ok": not falhas, "falhas": falhas, "lotes": ok, "folhas": folhas, "fora": [{"lote_id": i, "codigo": pj} for i, pj in fora],
+                "mensagem": f"{ok} de {len(alvo)} lote(s) importado(s), {folhas} folha(s) no painel" + (f"; {len(falhas)} não {'importou' if len(falhas) == 1 else 'importaram'}" if falhas else "") + ". Próximo passo: conferir." + nota_fora}
     return tarefas.iniciar("importar_todas", "filas", u, rodar, titulo=f"Importar {len(alvo)} lote(s) da Fila")
 
 
@@ -274,9 +381,11 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 importacao = json.loads(l["resultado"] or "{}").get("importacao")
             except ValueError:
                 importacao = None
-            lotes.append({"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
+            from .pendencias import identificador_lote, _e_complemento
+            lotes.append({"id": l["id"], "nome": l["nome"], "identificador": identificador_lote(l["nome"], l["criado_em"], _e_complemento(l["resultado"])), "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
                           "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo,
-                          "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo})   # CAMP-067: campos novos, opcionais
+                          "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo,
+                          "destino_suspeito": bool(imp_motivo and imp_motivo.startswith("Verificar destino"))})   # CAMP-067: campos novos, opcionais
         return {"lotes": lotes}
     finally:
         con.close()
@@ -969,6 +1078,8 @@ def _aviso_da_folha(con, i) -> str | None:
         return motivo
     if con.execute("SELECT 1 FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') LIMIT 1", (i["codigo"],)).fetchone():
         return "problema aberto"
+    if "retida" in i.keys() and i["retida"]:      # UX-11: folha retida conta em "Com problema" na tela; em massa não se confere
+        return "retida"
     return None
 
 AUTOMATICO = "painel (sem aviso: conferida sozinha)"
@@ -984,14 +1095,26 @@ def conferir_so_avisos() -> bool:
     return bool(r) and str(r[0]).strip() == "1"
 
 
-def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False) -> dict:
+def _pendentes_do_lote(con, lote_id: int):
+    return con.execute(f"""SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual, retida FROM item
+                           WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall()
+
+
+def contar_sem_aviso(con, lote_id: int) -> int:
+    """UX-11: quantas folhas a conferir do lote NÃO têm nenhum aviso (o número do botão "Conferir só sem avisos"). Mesma regra de conferir_sem_aviso."""
+    return sum(1 for i in _pendentes_do_lote(con, lote_id) if not _aviso_da_folha(con, i))
+
+
+def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False, pular=None) -> dict:
     """Marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver (regra do CAMP-094). Não faz commit.
-    automatico=True (CAMP-150, ao importar): o histórico diz "conferida automaticamente" e lista as folhas."""
+    automatico=True (CAMP-150, ao importar): o histórico diz "conferida automaticamente" e lista as folhas.
+    pular (UX-11): códigos que a tela mostra com aviso (ex.: orientação incerta da lista orientacao.txt do CAMP Vision, que o servidor
+    não lê numa requisição): ficam para revisão manual mesmo que a regra do servidor não veja aviso. Só soma cautela, nunca tira."""
     l = _lote(con, lote_id)
+    pular = {str(x) for x in (pular or [])}
     marcadas, ficaram, conferidas = 0, [], []
-    for i in con.execute(f"""SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
-                             WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall():
-        motivo = _aviso_da_folha(con, i)
+    for i in _pendentes_do_lote(con, lote_id):
+        motivo = _aviso_da_folha(con, i) or ("aviso na tela" if i["codigo"] in pular else None)
         if motivo:
             ficaram.append({"codigo": i["codigo"], "motivo": motivo})
             continue
@@ -1005,11 +1128,19 @@ def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False) -
     else:
         _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", ator, {"lote_id": lote_id, "todas": True, "conferidas": marcadas,
                                                                               "ficaram_para_conferir": [x["codigo"] for x in ficaram]})
-    return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam}
+    return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam, "codigos": conferidas}   # 'codigos': campo novo, opcional (UX-11: Desfazer)
+
+
+class ConferirTodas(BaseModel):
+    pular: list[str] = []
+
+
+class DesfazerConferirTodas(BaseModel):
+    codigos: list[str]
 
 
 @router.post("/lotes/{lote_id}/conferir-todas")
-def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+def conferir_todas(lote_id: int, d: ConferirTodas | None = None, u: dict = Depends(auth.exige("operador"))) -> dict:
     """"Aprovar todas": marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver.
     CAMP-094 (decisão de 20/10): não fecha aviso que ninguém viu. A folha com aviso ou problema aberto (bloqueio, duplicata, autoria, espelho a
     confirmar, sinal do CAMP Vision, problema na lista) fica "a conferir" e volta em `ficaram` (código e motivo), para conferir uma a uma.
@@ -1020,9 +1151,40 @@ def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> d
         l = _lote(con, lote_id)
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
-        r = conferir_sem_aviso(con, lote_id, u["email"])
+        r = conferir_sem_aviso(con, lote_id, u["email"], pular=(d.pular if d else None))
         con.commit()
         return r
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+@router.post("/lotes/{lote_id}/conferir-todas/desfazer")
+def desfazer_conferir_todas(lote_id: int, d: DesfazerConferirTodas, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-11: "Desfazer" do "Conferir só sem avisos". Volta para "a conferir" só as folhas da lista que ainda estão como esta pessoa
+    as deixou (conferida por ela, no lote, fora do site). A folha que alguém mexeu depois fica como está. Lote aprovado: recusa."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["aprovado_em"]:
+            raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
+        voltaram, ficaram = [], []
+        for cod in dict.fromkeys(str(x) for x in d.codigos):
+            i = con.execute(f"SELECT codigo FROM item WHERE codigo=? AND {_DO_LOTE} AND revisao='conferida' AND revisado_por=? AND status_site NOT IN ('rascunho','no_ar')",
+                            (cod, lote_id, u["email"])).fetchone()
+            if not i:
+                ficaram.append(cod)
+                continue
+            con.execute("UPDATE item SET revisao='pendente', revisado_por=NULL, revisado_em=NULL, atualizado_em=datetime('now') WHERE codigo=?", (cod,))
+            voltaram.append(cod)
+        if voltaram:
+            _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote_desfeita", u["email"], {"lote_id": lote_id, "voltaram": voltaram})
+        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+        con.commit()
+        return {"voltaram": len(voltaram), "ficaram": ficaram, "restam": restam}
     except HTTPException:
         con.rollback()
         raise

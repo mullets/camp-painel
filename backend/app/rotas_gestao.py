@@ -489,25 +489,72 @@ def _estado_qnap(raiz: Path) -> tuple[bool, str | None]:
         return False, "nao_existe"
 
 
-# ---- sondas de rede (ping, porta, site): em PARALELO e com cache de 30 s; ?fresco=1 (botão "Atualizar agora") ignora o cache ----
+# ---- sondas de rede (ping, porta, site, estado do QNAP): em PARALELO, em SEGUNDO PLANO e servidas do cache ----
+# UX-12 (26/10, logs: /api/estacoes alternava 20 ms e 3–10 s): o cache de 30 s já existia, mas quando vencia a requisição ESPERAVA
+# o ping às estações desligadas (~2 s cada), a porta e o site (até 15 s). Agora a tela recebe na hora a última medição e, se ela
+# venceu, uma nova roda em segundo plano (stale-while-revalidate). Só a primeira vez (nada medido ainda) espera um pouco
+# (PRAZO_PRIMEIRA_S); o que não ficou pronto volta como "não medido" (None). ?fresco=1 (botão "Atualizar agora") mede e espera.
 import concurrent.futures as _cf
 import threading as _th
 _SONDAS: dict = {}
 _SONDAS_LOCK = _th.Lock()
+_EM_CURSO: dict = {}
 TTL_SONDA_S = 30.0
+PRAZO_PRIMEIRA_S = 1.5
 _SITE_ESTADOS: list = []
+_POOL_SONDAS = _cf.ThreadPoolExecutor(max_workers=12, thread_name_prefix="sonda")
+
+
+def _rodar_sonda(chave, fn):
+    try:
+        r = fn()
+        with _SONDAS_LOCK:
+            _SONDAS[chave] = (time.monotonic(), r)
+        return r
+    finally:
+        with _SONDAS_LOCK:
+            _EM_CURSO.pop(chave, None)
+
+
+def _agendar_sonda(chave, fn):
+    """Uma medição por chave de cada vez: se já há uma rodando, devolve a mesma (nada de 10 pings iguais em fila)."""
+    with _SONDAS_LOCK:
+        f = _EM_CURSO.get(chave)
+        if f is None:
+            f = _EM_CURSO[chave] = _POOL_SONDAS.submit(_rodar_sonda, chave, fn)
+    return f
 
 
 def _sonda(chave, fn, fresco: bool = False):
-    if not fresco:
-        with _SONDAS_LOCK:
-            v = _SONDAS.get(chave)
-        if v and time.monotonic() - v[0] < TTL_SONDA_S:
-            return v[1]
-    r = fn()
+    """O valor em cache (vencido ou não) ou, quando não há nenhum (ou fresco), o Future da medição."""
     with _SONDAS_LOCK:
-        _SONDAS[chave] = (time.monotonic(), r)
-    return r
+        v = _SONDAS.get(chave)
+    if fresco or v is None:
+        return _agendar_sonda(chave, fn)
+    if time.monotonic() - v[0] >= TTL_SONDA_S:
+        _agendar_sonda(chave, fn)          # renova em segundo plano; a tela fica com a última medição
+    return v[1]
+
+
+def _valor_sonda(x, ate: float | None, padrao=None):
+    """Valor de _sonda: o próprio valor, ou espera o Future até o instante `ate` (None = o quanto precisar)."""
+    if not isinstance(x, _cf.Future):
+        return x
+    try:
+        return x.result(timeout=None if ate is None else max(0.0, ate - time.monotonic()))
+    except _cf.TimeoutError:
+        return padrao
+
+
+def _qnap_estado_completo(raiz: Path, entrada: Path | None, prontos: Path) -> dict:
+    """O que a tela mostra das pastas do QNAP. Mexe no SMB (montagem presa trava): por isso também é uma sonda em segundo plano."""
+    montado, motivo = _estado_qnap(raiz)
+    def existe(x: Path) -> bool:
+        try:
+            return x.exists()
+        except OSError:
+            return False
+    return {"montado": montado, "motivo": motivo, "entrada_montada": existe(entrada) if entrada else None, "prontos_montada": existe(prontos)}
 
 
 def _medir_site(url: str) -> dict:
@@ -522,6 +569,8 @@ def _medir_site(url: str) -> dict:
         res = {"status": r.status_code, "ms": ms, "ok": r.status_code == 200, "estado": estado}
     except Exception as e:  # noqa: BLE001
         res = {"status": None, "ok": False, "erro": str(e)[:120], "estado": "sem_resposta"}
+    from .contagens import agora_iso
+    res["medido_em"] = agora_iso()                       # UX-05: a tela diz "medido há X" (Home e Máquinas mostram a MESMA medição)
     with _SONDAS_LOCK:
         _SITE_ESTADOS.append(res["estado"]); del _SITE_ESTADOS[:-2]
         res["alerta"] = len(_SITE_ESTADOS) == 2 and all(x == "sem_resposta" for x in _SITE_ESTADOS)
@@ -545,15 +594,18 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     entrada = Path(entrada_txt) if entrada_txt else None
     prontos = Path(prontos_txt) if prontos_txt else raiz
 
+    fr = bool(fresco)
+    ate = None if fr else time.monotonic() + PRAZO_PRIMEIRA_S
+    f_qnap = _sonda(("qnap", str(raiz), entrada_txt, str(prontos)), lambda: _qnap_estado_completo(raiz, entrada, prontos), fr)
     out = {
         "qnap": {
             "raiz": str(raiz),
-            "montado": _estado_qnap(raiz)[0],
-            "motivo": _estado_qnap(raiz)[1],
+            "montado": None,
+            "motivo": None,
             "entrada_captura": str(entrada) if entrada else None,
-            "entrada_montada": entrada.exists() if entrada else None,
+            "entrada_montada": None,
             "prontos_raiz": str(prontos),
-            "prontos_montada": prontos.exists(),
+            "prontos_montada": None,
         },
         "maquinas": [],
         "pipeline": {
@@ -581,9 +633,11 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     else:
         out["qnap"]["coletando"] = True
 
-    out["pipeline"]["aguardando_revisao"] = con.execute(
-        "SELECT COUNT(*) FROM lista_processamento WHERE descartado_em IS NULL AND etapa='revisao'"
-    ).fetchone()[0]
+    # UX-05: "lotes lidos esperando importar e conferir" = o material novo das contagens (o mesmo número do menu e da Home)
+    from . import contagens as cg
+    cont = cg.medir(con, usuario_id=u.get("id"))
+    out["pipeline"]["aguardando_revisao"] = cont["material_novo"]
+    out["contagens"] = cont
 
     heartbeats = {r["estacao_id"]: dict(r) for r in con.execute("""
         SELECT *,
@@ -609,18 +663,17 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
          "Entrada bruta e acervo final", 445),
     ]
     url = _cfg(con, "wp.url", settings.WP_BASE_URL)
-    ex = _cf.ThreadPoolExecutor(max_workers=12)
-    fr = bool(fresco)
-    f_site = ex.submit(_sonda, ("http", url), lambda: _medir_site(url), fr)
+    f_site = _sonda(("http", url), lambda: _medir_site(url), fr)
     sondas: dict = {}
     for _eid, _n, _ch, _t, _f, _porta_s in estacoes_cfg:
         _ip = _cfg(con, _ch)
         if _ip:
-            sondas[_ch] = (ex.submit(_sonda, ("ping", _ip), lambda ip=_ip: _ping(ip), fr),
-                           ex.submit(_sonda, ("porta", _ip, _porta_s), lambda ip=_ip, p=_porta_s: _porta(ip, p), fr) if _porta_s else None)
+            sondas[_ch] = (_sonda(("ping", _ip), lambda ip=_ip: _ping(ip), fr),
+                           _sonda(("porta", _ip, _porta_s), lambda ip=_ip, p=_porta_s: _porta(ip, p), fr) if _porta_s else None)
+    out["qnap"].update(_valor_sonda(f_qnap, ate) or {})
     for estacao_id, nome, chave, tipo, funcao, porta_servico in estacoes_cfg:
         ip = _cfg(con, chave)
-        online = sondas[chave][0].result() if ip else None
+        online = _valor_sonda(sondas[chave][0], ate) if ip else None
         hb = heartbeats.get(estacao_id) if estacao_id else None
         app_online = bool(hb and hb["idade_segundos"] is not None and hb["idade_segundos"] <= 75)
         try:                                              # detalhe antigo ou quebrado nunca derruba a tela
@@ -657,7 +710,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         if ip and porta_servico:
             item["servico"] = {
                 "porta": porta_servico,
-                "online": sondas[chave][1].result() if sondas.get(chave) and sondas[chave][1] else _porta(ip, porta_servico),
+                "online": _valor_sonda(sondas[chave][1], ate) if sondas.get(chave) and sondas[chave][1] else None,
                 "nome": "SSH" if porta_servico == 22 else "SMB",
             }
         out["maquinas"].append(item)
@@ -666,22 +719,39 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     s = con.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone()
     out["site"] = {
         "ultima_sincronizacao": dict(s) if s else None,
-        "divergencias": con.execute("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0").fetchone()[0],
+        "divergencias": cont["site_divergencias"],
         "escritas_pendentes": con.execute("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0 AND campo LIKE 'pendente%'").fetchone()[0],
         "rascunhos_no_site": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='draft'").fetchone()[0],
         "publicados_sem_codigo": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND codigo_detectado IS NULL").fetchone()[0],
         "intervalo_sync_min": _cfg(con, "sync.intervalo_min", "15"),
     }
-    out["site"]["http"] = f_site.result()
+    out["site"]["http"] = _valor_sonda(f_site, ate)          # None = ainda não medido (a tela diz "Site sem medida")
     from .rede import negadas_por_token
     admin_ = u.get("papel") in ("admin", "master")
     out["estacoes_negadas"] = [{**n, "ip": n["ip"] if admin_ else None} for n in negadas_por_token(con)]   # IP só para admin
-    ex.shutdown(wait=False)
-    con.close()
     try:
         out["backup"] = bk.estado_publico()
     except Exception as e:  # noqa: BLE001  (o painel nunca cai por causa do indicador de backup)
         out["backup"] = {"existe": False, "erro": str(e)[:120]}
+    # UX-05: o resumo das estações e o estado do topo (o PIOR entre QNAP, site, CAMP Vision, cópias) saem daqui, uma regra só
+    out["estacoes_resumo"] = cg.estacoes_ligadas(out["maquinas"])
+    try:
+        # a sentinela da réplica fica no QNAP (SMB): também é uma sonda em segundo plano (UX-12), nunca lida dentro da requisição
+        from . import replica as _rp
+        raiz_rp = _cfg(con, "replica.raiz", "")
+        rp = (_valor_sonda(_sonda(("replica", raiz_rp), lambda: _rp.medir(raiz_rp), fr), ate, {"configurada": True, "nivel": None})
+              if raiz_rp.strip() else _rp.estado_de(""))
+        out["estado_geral"] = cg.estado_geral(con, qnap_montado=out["qnap"].get("montado"), site_http=out["site"]["http"], backup=out.get("backup"),
+                                              maquinas=out["maquinas"], replica_estado=rp)
+        # UX-02: o bloco "Preservação" (quantas cópias as imagens têm) e a data da última cópia válida (da mesma sonda)
+        _rp.registrar_marca(con, rp)
+        con.commit()
+        out["preservacao"] = _rp.preservacao(con, {**rp, "destino_livre_pct": rp.get("destino_livre_pct")})
+        q_ = (out["preservacao"].get("qnap") or {})
+        if out.get("qnap", {}).get("total_gb") is not None:
+            out["qnap"]["dias_ate_encher"] = q_.get("dias_ate_encher")
+    finally:
+        con.close()
     return out
 
 
@@ -702,7 +772,8 @@ def backup_agora(tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
         r = _backup_agora(u)
         extra = r.get("extra")
         b = r["tamanho_bytes"]
-        tam = f"{b / 1048576:.1f} MB" if b >= 1048576 else f"{max(1, round(b / 1024))} KB"
+        from .formato import tamanho_br
+        tam = tamanho_br(b / 1048576, "MB") if b >= 1048576 else f"{max(1, round(b / 1024))} KB"   # UX-33: "1.548,1 MB"
         return {**r, "mensagem": f"Backup feito: {tam}" + (" · a cópia extra FALHOU" if extra and not extra.get("ok") else "") + "."}
     return tarefas.iniciar("backup", "backup", u, rodar)
 
@@ -751,7 +822,7 @@ _GRUPOS_EVENTO = {
 @router.get("/eventos")
 def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | None = None, q: str | None = None,
             desde: str | None = None, limite: int = 200, pagina: int = 1, por_pagina: int | None = None, grupo: str | None = None,
-            incluir_reimportacoes_sem_novidade: bool = False,
+            incluir_reimportacoes_sem_novidade: bool = False, quem: str | None = None,
             u: dict = Depends(auth.exige("admin"))) -> dict:
     # paginação: pagina/por_pagina (máx. 1000). Sem por_pagina vale o antigo "limite" (compatibilidade).
     por = max(1, min(por_pagina if por_pagina else limite, 1000)); pagina = max(1, pagina)
@@ -762,6 +833,12 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
         sql += " AND " + SQL_EVENTOS_COM_ATIVIDADE
     if entidade: sql += " AND entidade=?"; p.append(entidade)
     if ator: sql += " AND ator LIKE ?"; p.append(f"%{ator}%")
+    # UX-34: "quem" agrupado (Pessoas · Máquinas · Sistema) com nomes legíveis; a chave vira a lista de atores crus
+    from . import quem_historico
+    grupos_quem, mapa_quem = quem_historico.facetas(con)
+    if quem:
+        atores_q = mapa_quem.get(quem, [])
+        sql += " AND ator IN (" + (",".join("?" * len(atores_q)) or "NULL") + ")"; p += atores_q
     if tipo: sql += " AND tipo LIKE ?"; p.append(f"%{tipo}%")
     if q: sql += " AND (codigo LIKE ? OR detalhe LIKE ?)"; p += [f"%{q}%", f"%{q}%"]
     if desde: sql += " AND quando >= ?"; p.append(desde)
@@ -770,6 +847,7 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
     rows = con.execute(sql + " ORDER BY id DESC LIMIT ? OFFSET ?", [*p, por, (pagina - 1) * por]).fetchall()
     facetas = {"entidades": [r[0] for r in con.execute("SELECT DISTINCT entidade FROM evento ORDER BY 1")],
                "atores": [r[0] for r in con.execute("SELECT ator FROM evento GROUP BY ator ORDER BY COUNT(*) DESC LIMIT 20")],
-               "tipos": [r[0] for r in con.execute("SELECT tipo FROM evento GROUP BY tipo ORDER BY COUNT(*) DESC LIMIT 40")]}
+               "tipos": [r[0] for r in con.execute("SELECT tipo FROM evento GROUP BY tipo ORDER BY COUNT(*) DESC LIMIT 40")],
+               "quem": grupos_quem}
     con.close()
     return {"total": total, "pagina": pagina, "por_pagina": por, "eventos": [dict(r) for r in rows], "facetas": facetas}

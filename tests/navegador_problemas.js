@@ -71,10 +71,10 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
     chk(!(await page.$('#v-erros thead th.sortable')), 'a tabela agrupada não tem colunas de ordenar (quebrariam os grupos)');
 
     // ---- filtros e busca ----
-    await page.selectOption('#err-orig', 'site'); await recarregou();
+    await page.selectOption('#err-orig', 'site'); await page.click('#err-abas [data-err-sit="avisos"]'); await recarregou();   // UX-19: o do visitante é um aviso (aba Avisos)
     chk((await page.locator('#err-body tr[data-err-linha]').count()) === 1 && /fotógrafa/.test(await page.textContent('#err-body')), 'filtro de origem "Visitante do site": só o problema do visitante');
     chk(!(await page.isHidden('#err-limpar')), '"Limpar filtros" aparece quando há filtro');
-    await page.selectOption('#err-orig', ''); await page.selectOption('#err-grav', 'bloqueia'); await recarregou();
+    await page.selectOption('#err-orig', ''); await page.selectOption('#err-grav', 'bloqueia'); await recarregou();   // UX-19: "Bloqueia" volta sozinho para a aba Abertos
     chk((await page.locator('#err-body tr[data-err-linha]').count()) === 2, 'filtro de gravidade "Bloqueia": os 2 que bloqueiam');
     await page.click('#err-limpar'); await recarregou();
     await page.fill('#err-q', 'riviera'); await page.waitForTimeout(700); await recarregou();
@@ -111,6 +111,7 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
     chk(/Escreva em uma frase/.test(await page.textContent('#err-bulk-err')), 'em lote, "Marcar como corrigido" sem a frase pede a explicação');
     await page.fill('#err-bulk-res', 'retiradas conferidas: estavam certas');
     await page.click('#err-bulk [data-err-lote="corrigido"]');
+    await page.waitForSelector('#conf-ov', { timeout: 5000 }); await page.click('#conf-ov [data-conf="sim"]');   // UX-20: a prévia antes de fechar vários
     await page.waitForFunction(() => /7 problemas marcados como corrigidos/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await recarregou();
     chk(!(await page.$(grupo('F003-P9001'))) && !(await page.isVisible('#err-bulk')), 'os 7 fecham de uma vez e o grupo some dos abertos');
     const fechados = (await api('/api/erros?situacao=corrigido&projeto=F003-P9001')).json.filter(x => x.resolucao === 'retiradas conferidas: estavam certas');

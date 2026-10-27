@@ -28,9 +28,51 @@ As MESMAS 5 em todo o painel: Fila, Projetos, página do projeto, Painel inicial
 - Direitos "não definida" NÃO impede publicar (padroes.md §12): a tela diz "não impede publicar; registre o termo quando tiver".
   O número "fundos travados por direitos" saiu do Painel inicial.
 
-## Menu (CAMP-154)
-Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador, ajuda): **Precisa de você** (o Painel inicial),
-**Projetos**, **Fundos e arquitetos**, **Pedidos do site** (antes "Pedidos de material") e **Máquinas** (antes "Máquinas e site"). O resto fica em **Mais**.
+### Verificar destino (UX-01, 27/10/2026)
+Lote que **chegou** (situação Chegando) cuja pasta não parece do projeto (nome × título abaixo de 50% ou pasta só com o código, ex. "P0001").
+Não é uma 6ª situação: a situação continua **Chegando** e ao lado vem o chip `verificar destino` (âmbar) com a frase do porquê.
+O botão é **Verificar destino** (no lugar de "Importar folhas"); as escolhas são **É deste projeto**, **Mover para F0xx-P000x (sugerido)**
+e **Criar decisão**, sempre com justificativa (vai para o Histórico). "Importar todas" não importa esses lotes e diz quantos ficaram de fora.
+
+### Possível duplicata de projeto (UX-29, 27/10/2026)
+Ao digitar o nome em **Novo projeto** ou **Editar**: "Já existe projeto parecido neste fundo" / "Com este nome, fica parecido com", cada um com
+**Abrir este** (e, ao editar, **Não é duplicata**). Em Problemas, o quadro **Possíveis projetos duplicados (N)**. "Não é duplicata" vale para o
+par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
+
+### Lotes do mesmo projeto (UX-04, 27/10/2026)
+- **Identificador do lote**: o que distingue um lote dos outros do mesmo projeto, sempre abaixo do título (Precisa de você, Material novo,
+  página do projeto): **complemento de 19/10** (material novo que chegou a um projeto com lote fechado) ou **lote de 14/10** (a data em que chegou).
+  A contagem ao lado é a das folhas REAIS do lote ("12 folhas"); o nome do lote não leva mais "(N folhas)".
+- **N lotes prontos**: lotes do mesmo projeto prontos para publicar ficam numa linha só, com o botão **Publicar projeto** (publicar é do projeto:
+  o mesmo clique leva os lotes juntos).
+- No **Hoje**, a mesma ação da mesma pessoa no mesmo projeto em até 10 min é UMA frase, com **(2×)** quando ela repetiu de verdade.
+
+### Estados travados e idade do lote (UX-09, 27/10/2026)
+- **Leitura interrompida**: lote em "sendo lido" (situação Chegando) há mais de 2 h sem o CAMP Vision dizer, no sinal dele, que lê este projeto.
+  Não é uma 6ª situação: é o chip `leitura interrompida` (vermelho) ao lado de **Chegando**. O botão é **Ler de novo** (1 clique: o mesmo pedido de
+  releitura do projeto; clicar de novo não cria outro). Depois do clique a linha diz **releitura pedida agora** e o botão vira **Ver na Fila**.
+- **parado há 16 dias** / **parado há 5 h**: tempo do lote na MESMA etapa (não "esperando há", que media a última leitura da pasta).
+  Em Material novo a coluna se chama **Parado há** e o clique no título ordena pelo mais parado; na Home, **mais parado primeiro**.
+
+### Clique duplo em Publicar e Importar (UX-17, 27/10/2026)
+- Enquanto trabalha, o botão fica apagado e diz **Publicando…** / **Importando…** (o andamento aparece no próprio bloco).
+- Antes do clique, o Próximo passo diz o que muda: "ao publicar, **N folhas ficam públicas na hora** (M vão ao site agora)". Depois:
+  **Publicado ✓ · N folhas públicas** com **Desfazer** (volta para rascunho; o mesmo de antes, CAMP-148).
+- O segundo clique não repete a ação: com a publicação rodando, a tela acompanha a mesma; logo depois de publicar, sem folha nova,
+  "Este projeto acabou de ser publicado: **nada foi feito de novo**". Importar o mesmo lote ao mesmo tempo: "Este lote **já está sendo importado** agora".
+
+## Menu (UX-28; antes CAMP-154)
+Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
+topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);
+**Público** (**Pedidos de alta resolução**, antes "Pedidos do site" e "Pedidos de material"; **Downloads**, antes "Downloads do site");
+**Acompanhamento**; **Administração** (**Máquinas**, antes "Máquinas e site"; **Configurações**); **Ajuda**. O resto fica em **Mais**.
+"Fundos e arquitetos" deixou de existir: são dois itens, cada um com a sua página.
+
+## Avisos (UX-22)
+- Todo aviso rápido (toast) some sozinho em no máximo 8 s; o aviso de tarefa concluída no topo some em 8 s quando deu certo
+  (o que falhou fica até a pessoa fechar). Tudo fica em **Tarefas e avisos recentes** (menu do avatar), com a seção
+  **Avisos desta sessão**.
+- Número que ainda está carregando aparece como esqueleto (barra cinza animada), nunca como "0".
 
 ## Ações (o que o usuário FAZ)
 | Botão | Efeito | Observação |
@@ -39,8 +81,27 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 | **Voltar para rascunho** | vai para `rascunho` | continua salvo para revisão; se estava publicado, exige admin master (tira do público, como despublicar) |
 | **Despublicar** | vai para `fora_do_ar` | exige admin master quando já estava publicado; fundo pede o motivo |
 | **Autorizar publicação** | marca o projeto como autorizado | não publica sozinho |
+| **Ler de novo esta pasta** | pede ao CAMP Vision a releitura da pasta do lote (UX-08) | é o botão principal de um lote parado com erro; antes de confirmar mostra o que muda e o que fica |
+| **Tentar de novo** (lote parado) | devolve a pasta ao CAMP Vision como está, sem releitura | secundário; o tooltip diz: use só quando o erro foi passageiro |
+
+## Ignorar um item (UX-03, 27/10/2026)
+| Texto | Efeito |
+|---|---|
+| **Ignorar ▾** | menu em todo item do Precisa de você (quem só lê não vê) |
+| **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s |
+| **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
+| **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
+
+## Etiquetas e lugar físico (UX-25)
+| Termo | Onde | O que significa |
+|---|---|---|
+| **Etiquetar e guardar** | Próximo passo do projeto aprovado ou publicado | abre Etiquetas já preenchida, com o passo "Onde guardar" |
+| **Onde guardar** / **Guardar nesta caixa** | Etiquetas, aba Pasta de projeto | põe numa caixa só as folhas do projeto que ainda não têm lugar |
+| **Impressas** / **Reimprimir** | Etiquetas | histórico do que saiu no Imprimir; reimprimir volta a etiqueta como saiu |
+| **sem lugar** | Painel inicial, Onde está guardado | folha sem caixa, gaveta, tubo, mapoteca ou estante cadastrada |
 
 ## Regras de texto
+- Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
 - **Nunca** usar: "no ar", "fora do ar", "colocar no ar", "tirar do ar", "retirar da publicação", "não pública".
 - **Nunca** mandar a pessoa ao WordPress ("wp-admin", "corrija no WordPress"): quem usa o painel não entra no site. A ação é um botão do painel; o que só se resolve no site é "avise quem cuida do site" (padroes.md §15).
@@ -52,3 +113,45 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 - Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
 - A tela "Máquinas e site" e o resumo de máquinas do topo são só para admin.
 - Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).
+
+## Conferência (UX-10, 27/10/2026)
+- **Tela cheia** / **Sair da tela cheia**: o botão (e a tecla F) da gaveta "Revisar folha". "Começar a conferir" já abre em tela cheia.
+- **sugerido do projeto**: valor do projeto (ano, cidade, cliente) mostrado em cinza num campo vazio da folha. Não é dado lido nem
+  confirmado; só vale se a pessoa aceitar (Tab) e salvar. Nunca chamar de "lido" ou "herdado" na tela.
+- **Mais tipos**: onde ficam os tipos documentais além dos 4 mais usados no projeto.
+- **Atalhos da conferência**: a lista que a tecla ? abre na revisão.
+
+## Título de projeto que é nome de pasta (UX-15)
+- **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
+  "Projeto Não Identificado 3"). Regra única em `similaridade.titulo_tecnico`: criar, importar planilha e editar recusam; **Publicar** bloqueia.
+- **Título sugerido**: o título sem o prefixo de pasta. Botão **Usar o título sugerido** (uma pessoa aceita, um projeto por vez; nada é renomeado sozinho)
+  e **Corrigir o título** (abre a edição).
+- Cidade: a tela sugere a **forma do acervo** (a mais usada: "São Paulo, SP" × "São Paulo") com o botão **Usar**; o campo continua texto livre.
+
+## Números e estado do topo (UX-05, 27/10/2026)
+- Todo número de contagem vem de `backend/app/contagens.py` (a mesma regra em Home, Material novo, Máquinas, Relatórios e menu).
+  Ao lado dele: "atualizado agora" / "atualizado há X" (nunca a hora solta).
+- O topo diz "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
+  "QNAP ok" · "QNAP em atenção" · "QNAP quase cheio" · "QNAP desconectado"; "site ok" · "site lento" · "site não respondeu uma vez" · "site sem resposta".
+- Em Material novo o filtro "Chegando" conta o mesmo que o resumo ("N chegando"): o CAMP Vision lendo + folhas que faltam importar.
+- Alertas (UX-07): cada assunto mostra **normal**, **atenção**, **crítico** ou **não medido** (minúsculas, como chip). "Não medido" só
+  quando a medição falhou ou não existe, e sempre com o porquê na frase ("Não medido: o endereço do site não está configurado…").
+- Preservação (UX-02): o bloco do topo de Máquinas diz quantas cópias as imagens têm, em frase simples: "Suas imagens têm duas cópias"
+  (verde), "A segunda cópia das imagens está atrasada" (âmbar), "Suas imagens têm só uma cópia" (vermelho). Chip: "duas cópias" ·
+  "cópia atrasada" · "só uma cópia". Espaço: "enche em ~N dias" (menos de 30 = atenção; menos de 10 = crítico).
+
+## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
+- Na frente da Home (**Precisa de você**) só ficam **O que fazer agora** (com **O caminho do material**), **Está tudo funcionando?** e **Hoje**.
+- **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar), e não no bloco recolhido.
+- **Números do acervo**: bloco recolhido no fim da Home com Qualidade da base, Ritmo das últimas 2 semanas, Quanto do acervo já está no site,
+  Melhorias de hoje e, com o Google Analytics ligado, Visitas ao site. Abre num clique e fica lembrado neste navegador.
+- **Visitas ao site** com o Google Analytics desligado mora em **Configurações** (com "Ver como ligar"), não na Home.
+- Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
+- O número de decisões só aparece com decisão pendente (nunca "0 decisões").
+
+## Máquinas em abas (UX-24, 27/10/2026)
+- Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);
+  "Alertas" (admin) e "Logs" (admin/master) somem para o operador, e o servidor recusa esses dados a ele (403).
+- O que está desligado fora do horário de trabalho fica recolhido em "**N desligadas (normal)**".
+- Nenhuma frase manda editar chave: o resumo do dia é o interruptor "**Mandar todo dia às 18h um e-mail com o resumo do dia**"
+  e o campo "Quem recebe o resumo"; o e-mail diz "desligue o Resumo do dia em Máquinas → Alertas".

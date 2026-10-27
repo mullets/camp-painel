@@ -10,6 +10,8 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
 (async () => {
   const browser = await chromium.launch({executablePath: process.env.CHROMIUM || undefined});
   const ctx = await browser.newContext({viewport: {width: 1366, height: 900}});
+  // UX-30: qualidade da base e melhorias moram no bloco recolhido "Números do acervo"; este teste abre o bloco (o estado fica lembrado)
+  await ctx.addInitScript(() => { try { localStorage.setItem('camp.ini.numeros', '1') } catch (_) {} });
   const page = await ctx.newPage();
   const erros = [];
   // conhecidos e fora deste cartão: o 401 de /api/auth/eu ANTES do login (é assim que a tela descobre que precisa entrar) e o /favicon.ico que o painel não tem
@@ -32,6 +34,7 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
   const adiar = grupo.locator('[data-ini-adiar]').first();
   const id = await adiar.getAttribute('data-ini-adiar');
   ok(!!id, 'cada tarefa da base tem o botão "Agora não" (' + id + ')');
+  await adiar.locator('xpath=ancestor::details[1]/summary').click();   // UX-03: o "Agora não" mora no menu "Ignorar ▾"
   await adiar.click();
   await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent), null, {timeout: 8000});
   await page.waitForFunction(i => !document.querySelector(`[data-ini-adiar="${i}"]`) && document.querySelector('#ini-qualidade .qb-geral'), id, {timeout: 8000});
