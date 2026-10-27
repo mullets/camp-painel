@@ -915,11 +915,6 @@ body.na-painel #system-banner{display:none!important}
 .ini-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
 .ini-col{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
 .ini-col>.panel{margin:0}
-/* UX-30: as métricas saem da frente da Home para um bloco recolhido (abre num clique; o estado fica lembrado neste navegador) */
-.ini-numeros{margin-top:16px}.ini-numeros>summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:12px 16px}.ini-numeros>summary::-webkit-details-marker{display:none}
-.ini-numeros>summary h2{margin:0;font-size:var(--fs-lg)}.ini-numeros>summary::before{content:'▸';color:var(--ink3)}.ini-numeros[open]>summary::before{content:'▾'}.ini-numeros>summary .ini-nota{margin:0}
-.ini-numeros-grade{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:0 16px 16px}.ini-numeros-grade>.panel{margin:0}
-@media (max-width:900px){.ini-numeros-grade{grid-template-columns:minmax(0,1fr)}}
 .ini-kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:1px;background:var(--line2);border-bottom:1px solid var(--line2);border-radius:var(--r) var(--r) 0 0;overflow:hidden}
 .ini-kpi{background:var(--surface);padding:12px 16px;display:grid;gap:2px;align-content:start;text-align:left;border:0;font:inherit;color:inherit;cursor:pointer}
 .ini-kpi:hover{background:var(--surface2)}.ini-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
@@ -5768,9 +5763,6 @@ async function atualizarQnapAgora(){
   await recarregarCartaoQnap()}
 // ---------- H6b · painel inicial. Os números e as tarefas vêm PRONTOS do servidor (pendencias.py): a tela só desenha, nunca recalcula ----------
 let PAINEL_ACOES=[],PAINEL_EST=null,PAINEL_QI=null,PAINEL_D=null,PAINEL_REP=null;
-/* UX-30: o bloco "Números do acervo" (qualidade, ritmo, % no site, melhorias e, com o GA ligado, visitas) começa recolhido; quem abre, encontra aberto de novo */
-let INI_NUMEROS_ABERTO=(()=>{try{return localStorage.getItem('camp.ini.numeros')==='1'}catch(_){return false}})();
-document.addEventListener('toggle',e=>{const t=e.target;if(!t||t.id!=='ini-numeros')return;INI_NUMEROS_ABERTO=t.open;try{localStorage.setItem('camp.ini.numeros',t.open?'1':'0')}catch(_){}},true);
 const INI_EXPLICA={decisoes:'Perguntas que esperam um admin: projeto parecido, lote com números repetidos, dado diferente do cadastro. Se é projeto parecido, o CAMP Vision fica parado naquela pasta.',conferir:'Lotes com folhas que ninguém olhou ainda: está de pé? o tipo e o título estão certos?',admin:'Lotes conferidos esperando a aprovação e lotes aprovados esperando a publicação. Só um admin faz.',travados:'Fundos que não podem ir ao site porque a autorização de direitos ainda não foi registrada. Clique para ver quais são.'};
 const INI_QUEM={admin:'admin',operador:'operador','qualquer':'qualquer pessoa'};
 /* UX-21: a fila é de quem? 'admin' pede admin ou master; 'operador' pede operador ou mais; 'qualquer', qualquer um que edita.
@@ -5915,7 +5907,8 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   PAINEL_D=d;atualizarContadoresMenu(d.pendencias);limparStale('painel');
   /* UX-12: com o Google Analytics desligado (d.analytics_ligado===false) a tela nem pergunta: antes a consulta levava 5–16 s à toa */
   const pa=!admin?Promise.resolve(null):d.analytics_ligado===false?Promise.resolve({disponivel:false,desligado:true}):API('/api/analytics').catch(err=>({disponivel:false,erro:err.message}));
-  const verVisitas=admin&&d.analytics_ligado!==false;   /* UX-30: "Visitas ao site — desligado" saiu da Home: o aviso e o "Ver como ligar" ficam em Configurações */
+  /* pedido do Rafael (27/10/2026): qualidade, melhorias, % no site e visitas voltam à coluna da direita abaixo de "Hoje", e o ritmo à esquerda,
+     sempre abertos (desfaz o bloco recolhido "Números do acervo" do UX-30). Visitas com o GA desligado mostra "desligado" sem pedir /api/analytics (UX-12). */
   const [t1,t2]=saudacaoPainel(d,hj),p=d.pendencias;
   sec.innerHTML=`<div class="hdr ini-hello"><div><h1 id="ini-saud">${escHtml(t1)}</h1><p class="sub">${escHtml(t2)}</p></div><button type="button" class="ini-q" onclick="reabrirAjuda()" title="Como funciona esta página (tecla ?)" aria-label="Como funciona esta página">?</button></div>
   <div id="ini-alertas">${iniAlertasHTML(d.alertas)}</div>
@@ -5923,23 +5916,19 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
     <div class="ini-col">
       <section class="panel" aria-labelledby="ini-t-fazer">${iniKpisHTML(p)}<div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">mais urgente primeiro${atualizadoHa(d.contagens&&d.contagens.medido_em)}</span></div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
       <section class="panel" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2><button type="button" class="ini-link" onclick="nav('caminho')">o que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
+      <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Ritmo das últimas 2 semanas</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">folhas conferidas por dia</span></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
     </div>
     <div class="ini-col">
       <section class="panel" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2></div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
       <section class="panel ini-feed" aria-labelledby="ini-t-hoje"><div class="ph"><h2 id="ini-t-hoje">Hoje</h2>${admin?'<button type="button" class="ini-link" onclick="nav(\'auditoria\')">histórico completo</button>':''}</div>${iniHojeHTML(d.hoje_frases)}</section>
-    </div>
-  </div>
-  <details class="panel ini-numeros" id="ini-numeros"${INI_NUMEROS_ABERTO||rotaAtual()==='painel/qualidade'?' open':''}><summary><h2>Números do acervo</h2><span class="ini-nota">qualidade da base, ritmo, quanto já está no site e melhorias por pessoa${verVisitas?', visitas ao site':''}</span></summary>
-    <div class="ini-numeros-grade">
       <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">frente à semana passada</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
-      <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Ritmo das últimas 2 semanas</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">folhas conferidas por dia</span></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
-      <section class="panel" aria-labelledby="ini-t-site"><div class="ph"><h2 id="ini-t-site">Quanto do acervo já está no site</h2></div><div class="pb ini-prog">${iniNoSiteHTML(d.no_site)}</div></section>
       <section class="panel" id="ini-melhorias" aria-labelledby="ini-t-mh"><div class="ph"><h2 id="ini-t-mh">Melhorias de hoje</h2><span class="hint ini-nota">correções feitas por pessoa</span></div>${iniMelhoriasHTML(hj&&hj.melhorias)}</section>
-      ${verVisitas?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div id="ini-visitas">${iniVisitasHTML(null)}</div></section>`:''}
+      <section class="panel" aria-labelledby="ini-t-site"><div class="ph"><h2 id="ini-t-site">Quanto do acervo já está no site</h2></div><div class="pb ini-prog">${iniNoSiteHTML(d.no_site)}</div></section>
+      ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div id="ini-visitas">${iniVisitasHTML(null)}</div></section>`:''}
     </div>
-  </details>`;
+  </div>`;
   garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();iniSemLugar();
-  if(rotaAtual()==='painel/qualidade'){const q=document.getElementById('ini-qualidade');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'})}   /* UX-30: a rota abre o bloco recolhido (open acima) */
+  if(rotaAtual()==='painel/qualidade'){const q=document.getElementById('ini-qualidade');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'})}
   pr.then(r=>{const el=document.getElementById('ini-ritmo');if(el)el.innerHTML=iniRitmoHTML(r,p)});
   Promise.all([pe,pq,prp]).then(([e,qi,rp])=>{PAINEL_EST=e;PAINEL_QI=qi;PAINEL_REP=rp;if(e)iniSaudeAtualizar();else{const el=document.getElementById('ini-saude');if(el)el.innerHTML='<div class="pb state-row"><b>Não consegui verificar as máquinas agora.</b><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div>'}});
   pa.then(a=>{window._analyticsAtual=a;const el=document.getElementById('ini-visitas');if(el&&a){el.innerHTML=iniVisitasHTML(a);const t=document.getElementById('ini-vis-tag');if(t)t.innerHTML=a.disponivel?'':'<span class="tag a">desligado</span>';aplicarPermissoes&&aplicarPermissoes()}});

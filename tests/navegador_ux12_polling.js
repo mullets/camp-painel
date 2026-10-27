@@ -37,10 +37,11 @@ const PERIODICAS = /\/api\/(tarefas(\?|$)|estacoes(\?|$)|novidades|projetos\/[^/
     await page.fill('#lg-email', 'rafael@camp.arq.br'); await page.fill('#lg-senha', 'senha-bem-longa-123'); await page.press('#lg-senha', 'Enter');
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
     await page.evaluate(() => nav('painel'));
-    await page.waitForSelector('#ini-saude', { timeout: 15000 }); await page.waitForTimeout(4000);   // UX-30: com o GA desligado o cartão de visitas não está mais na Home
+    await page.waitForSelector('#ini-visitas', { timeout: 15000 }); await page.waitForTimeout(4000);   // o cartão de visitas voltou à Home (pedido do Rafael, 27/10/2026)
     const an = contar(0, /\/api\/analytics(\?|$)/);
     chk(an.length === 0, `Painel com o GA desligado: /api/analytics não é chamado (${an.length} chamada(s))`);
-    chk(!(await page.$('#ini-visitas')), 'UX-30: com o GA desligado a Home não tem o cartão de visitas (o aviso fica em Configurações)');
+    const visH = await page.evaluate(() => ({ t: (document.getElementById('ini-visitas') || {}).textContent || '', tag: (document.getElementById('ini-vis-tag') || {}).textContent || '' }));
+    chk(/não está ligado/.test(visH.t) && visH.tag === 'desligado', 'Home: o cartão de visitas diz "desligado" sem perguntar ao GA: ' + JSON.stringify(visH).slice(0, 120));
     const nos = await page.evaluate(() => document.getElementsByTagName('*').length);
     linhas.push(`info  nós no DOM com o Painel aberto: ${nos}`);
 

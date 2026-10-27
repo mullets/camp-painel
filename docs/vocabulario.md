@@ -162,11 +162,13 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
   "cópia atrasada" · "só uma cópia". Espaço: "enche em ~N dias" (menos de 30 = atenção; menos de 10 = crítico).
 
 ## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
-- Na frente da Home (**Precisa de você**) só ficam **O que fazer agora** (com **O caminho do material**), **Está tudo funcionando?** e **Hoje**.
-- **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar), e não no bloco recolhido.
-- **Números do acervo**: bloco recolhido no fim da Home com Qualidade da base, Ritmo das últimas 2 semanas, Quanto do acervo já está no site,
-  Melhorias de hoje e, com o Google Analytics ligado, Visitas ao site. Abre num clique e fica lembrado neste navegador.
-- **Visitas ao site** com o Google Analytics desligado mora em **Configurações** (com "Ver como ligar"), não na Home.
+- Coluna da esquerda: **O que fazer agora**, **O caminho do material** e **Ritmo das últimas 2 semanas**.
+- Coluna da direita, completa: **Está tudo funcionando?**, **Hoje** e, abaixo, **Qualidade da base**, **Melhorias de hoje**,
+  **Quanto do acervo já está no site** e (admin) **Visitas ao site**. Tudo sempre aberto: nada de bloco recolhido.
+  Pedido do Rafael em 27/10/2026 ("eu gostava dessa barra completa"): desfaz o bloco recolhido **Números do acervo** do UX-30.
+- **Visitas ao site** com o Google Analytics desligado mostra **desligado** na Home sem perguntar ao Google (UX-12) e também aparece em
+  **Configurações** (com "Ver como ligar").
+- **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar).
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").
 

@@ -10468,7 +10468,7 @@ def filho(modo):
         ver("Material novo começa com 'Carregando…' (não lista vazia = '0 registros')", '<tbody id="filas-body"><tr><td colspan="4" class="empty">Carregando…</td></tr></tbody>' in html)
         for l in res: print(l)
     elif modo == "ux_home":
-        # UX-18/21/30 (Home enxuta). O comportamento é provado no navegador (tests/navegador_ux_home.js); aqui, a guarda rápida
+        # UX-18/21 (Home enxuta) e UX-30 desfeito a pedido do Rafael (métricas de volta, abertas). O comportamento é provado no navegador (tests/navegador_ux_home.js); aqui, a guarda rápida
         # de que as peças continuam na tela (roda no atualizar.sh).
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
@@ -10478,14 +10478,22 @@ def filho(modo):
         ver("UX-21: filas pelo papel: as de outro papel esmaecidas (ini-outro) e no fim, sem esconder; quem só lê não tem nada esmaecido",
             "function iniGrupoMeu(quem)" in html and "gs=[...g0.filter(g=>iniGrupoMeu(g.quem)),...g0.filter(g=>!iniGrupoMeu(g.quem))]" in html
             and ".ini-tg.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
-        i0 = html.find('<div class="ini-grid">'); i1 = html.find('<details class="panel ini-numeros" id="ini-numeros"'); i2 = html.find('</details>', i1)
-        grade, bloco = html[i0:i1], html[i1:i2]
-        ver("UX-30: a frente da Home tem só o que fazer agora, o caminho, a saúde e Hoje",
-            i0 > 0 and i1 > i0 and all(x in grade for x in ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-saude"', 'id="ini-t-hoje"'))
-            and not any(x in grade for x in ('id="ini-qualidade"', 'id="ini-ritmo"', 'id="ini-melhorias"', 'id="ini-t-site"', 'id="ini-visitas"')))
-        ver("UX-30: qualidade, ritmo, % no site, melhorias (e visitas com o GA ligado) no bloco recolhido 'Números do acervo', nada apagado",
-            all(x in bloco for x in ('id="ini-qualidade"', 'id="ini-ritmo"', 'id="ini-melhorias"', 'id="ini-t-site"', '${verVisitas?`<section', 'id="ini-visitas"'))
-            and "const verVisitas=admin&&d.analytics_ligado!==false;" in html and "localStorage.setItem('camp.ini.numeros'" in html)
+        # Pedido do Rafael (27/10/2026): o bloco recolhido "Números do acervo" do UX-30 saiu; as métricas voltaram à grade,
+        # sempre abertas: ritmo na coluna da esquerda (depois do caminho), qualidade, melhorias, % no site e visitas na da direita
+        # (depois de "Hoje"). Nenhum <details> nem localStorage para recolher.
+        i0 = html.find('<div class="ini-grid">'); i1 = html.find('id="ini-tarefas"', i0); i2 = html.find('id="ini-saude"', i1)
+        i3 = html.find('</div>\n  </div>`;', i2)
+        esq, dir_ = html[i0:i2], html[i2:i3]
+        def ordem(trecho, ids): pos = [trecho.find(x) for x in ids]; return all(q >= 0 for q in pos) and pos == sorted(pos)
+        ver("UX-30 (desfeito a pedido do Rafael): ritmo na coluna da esquerda, depois do caminho do material",
+            i0 > 0 and i1 > i0 and i2 > i1 and ordem(esq, ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-ritmo"')))
+        ver("UX-30 (desfeito): coluna da direita completa: saúde, Hoje, qualidade, melhorias, % no site e visitas (admin), nessa ordem",
+            i3 > i2 and ordem(dir_, ('id="ini-saude"', 'id="ini-t-hoje"', 'id="ini-qualidade"', 'id="ini-melhorias"', 'id="ini-t-site"', 'id="ini-visitas"'))
+            and "${admin?`<section class=\"panel\" aria-labelledby=\"ini-t-vis\">" in dir_)
+        ver("UX-30 (desfeito): nenhuma métrica recolhida nem escondida na Home (sem <details> 'Números do acervo', sem estado lembrado)",
+            'id="ini-numeros"' not in html and "camp.ini.numeros" not in html and "verVisitas" not in html)
+        ver("UX-12: com o GA desligado a Home não pede /api/analytics (usa analytics_ligado de /api/painel)",
+            "d.analytics_ligado===false?Promise.resolve({disponivel:false,desligado:true}):API('/api/analytics')" in html)
         ver("UX-30: Configurações tem 'Visitas ao site' (desligado / Ver como ligar)",
             '<div class="panel" id="cfg-visitas-painel"><div class="ph"><h2>Visitas ao site</h2>' in html and "async function carregarVisitasConfig()" in html and "if(v==='config')carregarVisitasConfig();" in html)
         for l in res: print(l)
