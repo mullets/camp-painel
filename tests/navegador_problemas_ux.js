@@ -4,6 +4,7 @@
 // UX-20: "todos deste tipo/projeto", prévia antes de fechar vários e Desfazer; "mensagens repetidas" → Ver → Mesclar (com Desfazer).
 // UX-03: "Ignorar ▾" em todo item do Precisa de você: "Agora não" (7 dias, por pessoa, Desfazer 8 s, tooltip com a data da volta) e
 //        "Não mostrar mais (não era problema)" com justificativa obrigatória no bloqueio; "Ignorados (n)" recolhido em Problemas; leitura sem botão.
+// UX-32: J/K navegam, Enter abre, I ignora (Precisa de você e Problemas), sem quebrar o I = Arquitetos quando não há item escolhido.
 // UX-19: avisos em aba própria ("Abertos" = bloqueia + corrigir); os números do menu seguem "itens que pedem ação de você".
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/x/ux.db python3 tests/semear_banco_teste.py
@@ -193,6 +194,37 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Abertos" é o que bloqueia ou
     await pl.waitForSelector('#v-painel .ini-task', { timeout: 15000 }); await pl.waitForTimeout(400);
     chk(await pl.locator('#v-painel .ini-ignorar').count() === 0, 'UX-03: usuário só-leitura não vê "Ignorar"');
     await ctxL.close();
+
+    // ================= UX-32 =================
+    await homeIr(); await page.evaluate(() => { document.activeElement && document.activeElement.blur(); });
+    const marcado = () => page.evaluate(() => { const L = [...document.querySelectorAll('#v-painel .ini-task, #err-body tr[data-err-linha]')].filter(x => x.offsetParent !== null); return L.findIndex(x => x.classList.contains('kb-atual')); });
+    await page.keyboard.press('j'); const a1 = await marcado(); await page.keyboard.press('j'); const a2 = await marcado(); await page.keyboard.press('k'); const a3 = await marcado();
+    chk(a1 === 0 && a2 === 1 && a3 === 0 && (await page.evaluate(() => rotaAtual())) === 'painel', `UX-32: na Home, J desce e K sobe na lista (${a1}, ${a2}, ${a3}) sem trocar de tela`);
+    const kH = await page.evaluate(() => (document.querySelector('.kb-atual [data-ini-adiar]') || {}).dataset?.iniAdiar);
+    await page.keyboard.press('i');
+    await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent), null, { timeout: 8000 });
+    await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), kH, { timeout: 8000 });
+    chk((await page.evaluate(() => rotaAtual())) === 'painel', 'UX-32: I na Home ignora o item escolhido (esconde por 7 dias), sem abrir Arquitetos');
+    await page.click('#toast .toast-acao'); await page.waitForFunction(k => !!document.querySelector(`[data-ini-adiar="${k}"]`), kH, { timeout: 8000 });
+    await page.waitForTimeout(1200);   // depois do I o cursor passa sozinho para o item seguinte (0,9 s)
+    await page.evaluate(() => { nav('painel'); KB_ATUAL = null; document.querySelectorAll('.kb-atual').forEach(x => x.classList.remove('kb-atual')); document.activeElement && document.activeElement.blur(); }); await page.waitForTimeout(800);
+    await page.keyboard.press('i'); await page.waitForTimeout(600);
+    chk((await page.evaluate(() => rotaAtual())).split('/')[0] === 'arquitetos', 'UX-32: sem item escolhido, I continua abrindo Arquitetos (atalho do menu)');
+    await page.evaluate(() => nav('erros')); await pronto(); await page.click('#err-abas [data-err-sit="pedem_acao"]'); await pronto();
+    await page.evaluate(() => { document.activeElement && document.activeElement.blur(); });
+    await page.keyboard.press('j'); await page.keyboard.press('j');
+    const idSel = await page.evaluate(() => +document.querySelector('#err-body tr.kb-atual').dataset.errLinha);
+    chk(await marcado() === 1, 'UX-32: em Problemas, J desce na lista');
+    await page.keyboard.press('Enter'); await page.waitForFunction(() => window.ERR_ATUAL && mainEl.classList.contains('with-drawer'), null, { timeout: 8000 });
+    chk(await page.evaluate(() => window.ERR_ATUAL.id) === idSel, 'UX-32: Enter abre o problema escolhido');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+    const n0 = await aba('pedem_acao');
+    await page.evaluate(id => { const r = document.querySelector(`#err-body tr[data-err-linha="${id}"]`); kbMarcar(r); }, idSel);
+    await page.keyboard.press('i'); await page.waitForFunction(() => /Escondido por 7 dias/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await pronto();
+    chk(await aba('pedem_acao') === n0 - 1 && !(await page.$(`#err-body tr[data-err-linha="${idSel}"]`)) && /Ignorados/.test(await page.textContent('#err-ignorados summary')), 'UX-32: I em Problemas esconde o escolhido (sai de Abertos e vai para Ignorados)');
+    await page.click('#toast .toast-acao'); await page.waitForTimeout(500); await pronto();
+    chk(await aba('pedem_acao') === n0, 'UX-32: ...com Desfazer');
+    chk(/J · K · Enter · I/.test(await page.evaluate(() => JSON.stringify(AJUDA_ATALHOS))), 'UX-32: a ajuda (?) lista os atalhos J/K/Enter/I');
   } catch (e) { chk(false, 'exceção: ' + e.message.split('\n')[0]); }
   chk(!erros.length, 'nenhum erro no console' + (erros.length ? ': ' + erros.slice(0, 5).join(' | ') : ''));
   chk(!falhas.length, 'nenhuma resposta de erro do painel' + (falhas.length ? ': ' + falhas.slice(0, 5).join(' | ') : ''));

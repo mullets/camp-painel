@@ -822,7 +822,7 @@ body:not(.admin):not(.master) #machine-status,body:not(.admin):not(.master) [dat
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
 .bulkbar{display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--blue-soft)}
 .bulkbar.on{display:flex}
-.err-bulk-mais{display:inline-flex;flex-wrap:wrap;gap:6px}.err-bulk-mais:empty{display:none}
+.kb-atual{outline:2px solid var(--blue);outline-offset:-2px}.err-bulk-mais{display:inline-flex;flex-wrap:wrap;gap:6px}.err-bulk-mais:empty{display:none}
 .err-ignorados{border-top:1px solid var(--line);padding:10px 12px}.err-ignorados>summary{cursor:pointer;font-weight:600}.err-ignorados[hidden]{display:none}.err-ign-lista{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}.err-ign-lista li{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}.err-ign-lista h3{margin:8px 0 0;font-size:var(--fs-sm2)}
 /* Problemas (19/10): agrupados por projeto, com o que fazer e o botão que resolve; resolver vários de uma vez */
 .err-filtros select{max-width:190px}.err-filtros input[type="search"]{flex:1 1 260px;min-width:200px}
@@ -2269,7 +2269,7 @@ const AJUDA_TELAS={
   conferir:{titulo:'Conferir folhas',intro:'Modo de trabalho para conferir um projeto inteiro: a lista das folhas à esquerda, a folha aberta à direita.',passos:[['Escolha a folha','Clique na lista ou use ↑ e ↓. Os filtros mostram só as que faltam, as com problema ou as sem imagem.'],['Leia os avisos da folha','Autoria, duplicata e orientação incerta aparecem no alto, com o botão para resolver.'],['Confira e siga','Enter (Está certo) passa para a próxima; corrija o campo e use Salvar correção. R gira, K recorta e alinha.']]},
   config:{titulo:'Configurações',intro:'Infraestrutura, usuários e preferências administrativas.',passos:[['Altere somente o necessário','Configurações de integração podem afetar toda a operação.'],['Salve campo a campo','O painel avisa quando existem alterações não salvas.'],['Use usuários e papéis','Dê somente as permissões necessárias para cada função.']]}
 };
-const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–5','Precisa de você · Projetos · Fundos e arquitetos · Pedidos do site · Máquinas'],['D · N · P','Decisões · Material novo · Problemas'],['I · W','Arquitetos · Onde está guardado'],['T · L · U','Etiquetas · Relatórios · Downloads do site'],['X · O','Ler etiqueta · Empréstimos'],['A · C','Histórico de ações · Configurações'],['Q','Qualidade do CAMP Vision'],['M · G','Como o material anda · Glossário'],['F','Focar filtro da tela'],['↑ ↓ · Enter · R · K','Conferir folhas: mudar de folha · está certo e próxima · girar · recortar e alinhar'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
+const AJUDA_ATALHOS=[['⌘/Ctrl + K','Buscar'],['⌘/Ctrl + B','Recolher/abrir barra lateral'],['1–5','Precisa de você · Projetos · Fundos e arquitetos · Pedidos do site · Máquinas'],['D · N · P','Decisões · Material novo · Problemas'],['I · W','Arquitetos · Onde está guardado'],['T · L · U','Etiquetas · Relatórios · Downloads do site'],['X · O','Ler etiqueta · Empréstimos'],['A · C','Histórico de ações · Configurações'],['Q','Qualidade do CAMP Vision'],['M · G','Como o material anda · Glossário'],['F','Focar filtro da tela'],['↑ ↓ · Enter · R · K','Conferir folhas: mudar de folha · está certo e próxima · girar · recortar e alinhar'],['J · K · Enter · I','Precisa de você e Problemas: descer · subir na lista · abrir o item · ignorar (esconder por 7 dias). Sem item escolhido, I abre Arquitetos'],['?','Ajuda da tela'],['Esc','Fechar modal/drawer']];
 function ajudaDaRota(){const v=rotaAtual().split('/')[0];return AJUDA_TELAS[v]||AJUDA_TELAS.painel}
 // ---------- Como funciona esta página (H1): uma caixa curta no topo de cada tela; "Entendi" fecha, o "?" traz de volta ----------
 // v = versão do texto: se mudar, a caixa volta a aparecer uma vez para quem já tinha fechado, com a etiqueta "Novo".
@@ -5969,6 +5969,25 @@ async function errVerRepetidos(){let s;try{s=await API('/api/erros/mesclar-repet
   const r=await confirmar({titulo:`Mesclar ${qtd(s.fecham,'mensagem repetida','mensagens repetidas')}?`,html:`<p>Mesma origem, mesmo código e mesma mensagem. Em cada grupo fica aberto o mais antigo; as cópias fecham como "não era problema", com a resolução dizendo qual ficou. Fica no histórico e dá para desfazer logo depois.</p><ul class="conf-lista">${lista}</ul>`,
     botao:`Mesclar ${fmtN(s.fecham)}`,botaoOcupado:'Mesclando…',acao:()=>API('/api/erros/mesclar-repetidos',{method:'POST',body:JSON.stringify({simular:false})})});
   if(!r)return;const x=r.resultado||{};toast(`${qtd(x.fecham||0,'cópia mesclada','cópias mescladas')}`,x.desfazer?{acao:{rotulo:'Desfazer',fn:async()=>{try{await errDesfazer(x.desfazer);carregarErros()}catch(err){toast(err.message)}}}}:{});carregarErros();atualizarPendencias()}
+/* UX-32: J/K/Enter/I nas listas do Precisa de você e de Problemas. Roda ANTES do atalho do menu (captura) e só consome a tecla na
+   lista: J desce, K sobe, Enter abre o item escolhido, I ignora o item escolhido (esconder por 7 dias, com Desfazer). Sem item
+   escolhido com J/K, o I continua abrindo Arquitetos; conferindo uma folha (outra tela) R/K/Enter seguem sendo da revisão. */
+let KB_ATUAL=null;
+function kbLinhas(v){return [...document.querySelectorAll(v==='painel'?'#v-painel .ini-task':'#err-body tr[data-err-linha]')].filter(x=>!x.hidden&&x.offsetParent!==null)}
+function kbMarcar(el){document.querySelectorAll('.kb-atual').forEach(x=>{if(x!==el)x.classList.remove('kb-atual')});KB_ATUAL=el;if(!el)return;el.classList.add('kb-atual');if(!el.hasAttribute('tabindex'))el.tabIndex=-1;el.focus({preventScroll:true});el.scrollIntoView({block:'nearest'})}
+async function kbIgnorar(v,el){if(v==='painel'){const b=el.querySelector('[data-ini-adiar]');if(b)b.click();else toast('Este item não tem "Ignorar"');return}
+  const id=+el.dataset.errLinha,e=ERR_LISTA.find(x=>x.id===id);if(!e)return;if(!ERR_ABERTO(e)){toast('Este problema já está fechado');return}
+  const url=`/api/hoje/tarefas/${encodeURIComponent('erro:'+id)}/agora-nao`;
+  try{await API(url,{method:'POST',body:JSON.stringify({titulo:[e.descricao,e.codigo].filter(Boolean).join(' · ')})});
+    toast(`Escondido por 7 dias: volta sozinho em ${iniVoltaEm()}. Está em "Ignorados".`,{acao:{rotulo:'Desfazer',fn:async()=>{try{await API(url,{method:'DELETE'});toast('Voltou para a lista');carregarErros()}catch(err){toast(err.message)}}}});carregarErros();atualizarPendencias()}catch(err){toast(err.message)}}
+document.addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName||''))return;
+  if(document.getElementById('conf-ov')||document.querySelector('.modal.on')||(mainEl&&mainEl.classList.contains('with-drawer')))return;
+  const v=rotaAtual().split('/')[0];if(v!=='painel'&&v!=='erros')return;const k=e.key.length===1?e.key.toLowerCase():e.key;if(!['j','k','i','Enter'].includes(k))return;
+  const L=kbLinhas(v),atual=KB_ATUAL&&L.includes(KB_ATUAL)?KB_ATUAL:null;
+  if(k==='j'||k==='k'){if(!L.length)return;e.preventDefault();e.stopPropagation();const i=atual?L.indexOf(atual):-1;kbMarcar(L[k==='j'?Math.min(L.length-1,i+1):Math.max(0,i<0?0:i-1)]);return}
+  if(!atual)return;   /* Enter/I sem item escolhido: o comportamento de sempre */
+  if(k==='Enter'){if(e.target!==atual&&e.target!==document.body)return;e.preventDefault();e.stopPropagation();if(v==='erros')abrirErro(+atual.dataset.errLinha);else{const b=atual.querySelector('[data-ini-acao]')||atual;b.click()}return}
+  if(k==='i'){e.preventDefault();e.stopPropagation();if(EU&&EU.papel==='leitura'){toast('Quem só vê não ignora itens');return}const prox=L[L.indexOf(atual)+1]||L[L.indexOf(atual)-1]||null;kbIgnorar(v,atual);KB_ATUAL=null;setTimeout(()=>{const L2=kbLinhas(v);if(L2.length)kbMarcar(prox&&L2.includes(prox)?prox:L2[Math.min(L2.length-1,Math.max(0,L.indexOf(atual)))])},900)}},true);
 /* UX-03: Problemas › Ignorados (n): o que você escondeu por 7 dias (volta sozinho; "Mostrar de novo") e o que foi fechado como
    "não era problema" pelo Ignorar nos últimos 30 dias (quem, quando e por quê; "Reabrir"). Recolhido. */
 async function errCarregarIgnorados(){const el=document.getElementById('err-ignorados');if(!el)return;let d;try{d=await API('/api/erros/ignorados')}catch(_){el.hidden=true;return}
