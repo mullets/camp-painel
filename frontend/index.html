@@ -1800,13 +1800,13 @@ function confirmar(o={}){return new Promise(resolve=>{
   async function confirmarAgora(){if(sim.disabled)return;const r={motivo:mot?mot.value.trim():undefined,valor:valor()};
     if(!o.acao)return fim(r);
     ov.dataset.ocupado='1';sim.disabled=true;const txt0=sim.textContent;sim.textContent=o.botaoOcupado||'Trabalhando…';sim.classList.add('busy');sim.setAttribute('aria-busy','true');err.textContent='';ov.querySelector('[data-conf="nao"]')?.setAttribute('disabled','');
-    try{r.resultado=await o.acao(r);fim(r)}catch(e){ov.dataset.ocupado='';sim.textContent=txt0;sim.classList.remove('busy');sim.removeAttribute('aria-busy');ov.querySelector('[data-conf="nao"]')?.removeAttribute('disabled');err.textContent=e.message||String(e);pronto()}}
+    try{r.resultado=await o.acao(r);fim(r)}catch(e){ov.dataset.ocupado='';sim.textContent=txt0;sim.classList.remove('busy');sim.removeAttribute('aria-busy');ov.querySelector('[data-conf="nao"]')?.removeAttribute('disabled');err.textContent=e.message||String(e);if(o.erroHtml){const h=o.erroHtml(e);if(h)err.insertAdjacentHTML('beforeend',h)}pronto()}}
   const tecla=e=>{if(!document.body.contains(ov))return;if(e.key==='Escape'&&ov.dataset.ocupado!=='1'&&(!o.soOk||o.escFecha)){e.preventDefault();e.stopPropagation();fim(false)}
     else if(e.key==='Enter'&&e.target.tagName!=='TEXTAREA'&&ov.contains(e.target)&&!e.target.matches('button')){e.preventDefault();confirmarAgora()}
     else if(e.key==='Tab'){const f=[...ov.querySelectorAll('button:not([disabled]),input,textarea')];if(!f.length)return;const i=f.indexOf(document.activeElement);if(e.shiftKey&&i<=0){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus()}}};
   document.addEventListener('keydown',tecla,true);
   ov.addEventListener('input',pronto);ov.addEventListener('change',pronto);
-  ov.addEventListener('click',e=>{if(e.target===ov&&!o.soOk&&ov.dataset.ocupado!=='1'){fim(false);return}const b=e.target.closest('[data-conf]');if(!b||b.disabled)return;if(b.dataset.conf==='nao')fim(false);else confirmarAgora()});
+  ov.addEventListener('click',e=>{if(e.target===ov&&!o.soOk&&ov.dataset.ocupado!=='1'){fim(false);return}if(e.target.closest('[data-conf-fechar]')&&ov.dataset.ocupado!=='1'){fim(false);return}const b=e.target.closest('[data-conf]');if(!b||b.disabled)return;if(b.dataset.conf==='nao')fim(false);else confirmarAgora()});
   pronto();setTimeout(()=>{(cmp||dig||mot||(o.perigo?ov.querySelector('[data-conf="nao"]'):sim)||sim).focus()},0)})}
 function confirmarDescarte(){return confirmar({titulo:'Sair sem salvar?',texto:'Há alterações não salvas nesta tela. Se sair agora, elas se perdem.',botao:'Sair sem salvar',cancelar:'Continuar editando',perigo:true})}
 // ---------- #94 · cabeçalho: UMA ação principal; as demais no menu "Mais ⋯" (as que apagam ou despublicam em vermelho, separadas, sempre com confirmação) ----------
@@ -5500,25 +5500,52 @@ async function carregarGuiaFundo(code){
   let arq=document.getElementById('fd-arq');if(!arq){arq=document.createElement('div');arq.className='panel arq-site';arq.id='fd-arq';box.before(arq)}carregarArqSite(code,arq)}
 /* 21/10 (Rafa: "muito confuso publicar um arquiteto, ou deixar um público"): um quadro só, igual no fundo e no arquiteto. No site, sem a página
    do arquiteto publicada NADA do fundo aparece (nem projeto publicado); antes isso era feito fora do painel. Agora: um botão. */
-async function carregarArqSite(fundo,host){let e;try{e=await API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site`)}catch(err){host.innerHTML='';return}if(host.isConnected)host.innerHTML=arqSiteHTML(e)}
-function arqSiteHTML(e){const nome=e.arquiteto||'o arquiteto',pub=e.estado==='publica'||e.estado==='publica_vazia';
+async function carregarArqSite(fundo,host){let e;try{e=await API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site`)}catch(err){host.innerHTML='';return}if(host.isConnected)host.innerHTML=arqSiteHTML(e,host)}
+function arqSiteHTML(e,host){const nome=e.arquiteto||'o arquiteto',pub=e.estado==='publica'||e.estado==='publica_vazia';
   const linha=pub?`<span class="tag g">publicada</span> A página de <b>${escHtml(nome)}</b> está pública no site.${e.url?` <a href="${escHtml(e.url)}" target="_blank" rel="noopener">Ver a página ↗</a>`:''}`
+    :e.projetos_publicados===0?`<span class="tag r">não publicada</span> A página de <b>${escHtml(nome)}</b> ainda não aparece no site.`
     :`<span class="tag r">não publicada</span> A página de <b>${escHtml(nome)}</b> não está pública: <b>nada do fundo ${escHtml(e.fundo)} aparece no site</b>, nem os projetos já publicados.`;
   const vazia=e.estado==='publica_vazia'?'<p class="help">Ainda nenhum projeto publicado: a página fica vazia e o arquiteto não entra na lista de arquitetos do site. Publique um projeto do fundo.</p>':'';
-  const bt=pub?'':!e.pode_agir?'<p class="help">Um admin publica a página do arquiteto.</p>':e.direitos?`<p class="help">Não dá para publicar ainda: ${escHtml(e.direitos)}. <button class="btn sm" type="button" onclick="acaoCondicao('direitos','${escHtml(e.fundo)}')">Definir direitos do fundo</button></p>`
-    :`<div class="act"><button class="btn pri" type="button" data-arq-publicar="${escHtml(e.fundo)}">Publicar a página do arquiteto</button></div><p class="help">Ela também é publicada junto quando você publica um projeto deste fundo.</p>`;
-  const opc=(e.falta_opcional||[]).length?`<p class="help">Pode melhorar a página: ${escHtml(e.falta_opcional.join(', '))}${e.agente_id&&e.pode_agir?` · <button class="lnk" type="button" onclick="editarAgente(${+e.agente_id})">Editar o arquiteto</button>`:''}.</p>`:'';
+  /* UX-38 (Rafa: "já devia me jogar na página dele para pôr o que falta de dados"): faltando dado do arquiteto, a ação principal é
+     "Completar os dados do arquiteto" (abre a edição já no que falta); "Publicar" continua permitido, mas não é mais o botão azul. */
+  const noAg=!!host&&!!host.closest&&!!host.closest('#d-body'),F=escHtml(e.fundo),falta=e.falta||[],fSite=falta.filter(x=>x.site),semArq=!e.agente_id;
+  const completar=(cls)=>semArq?`<button class="btn ${cls}" type="button" onclick="acaoCondicao('vincular','${F}')">Vincular arquiteto</button>`
+    :`<button class="btn ${cls}" type="button" data-arq-completar="${+e.agente_id}" data-fundo="${F}">Completar os dados do arquiteto</button>`;
+  const semPub=!pub&&e.projetos_publicados===0?`<p class="help arq-sem-proj">Este fundo ainda não tem projeto publicado: mesmo publicada, a página só aparece no site com o primeiro projeto publicado (e é publicada junto com ele).</p>`:'';
+  const bt=pub?'':!e.pode_agir?'<p class="help">Um admin publica a página do arquiteto.</p>':e.direitos?`<p class="help">Não dá para publicar ainda: ${escHtml(e.direitos)}. <button class="btn sm" type="button" onclick="acaoCondicao('direitos','${F}')">Definir direitos do fundo</button></p>`
+    :fSite.length&&!noAg?`<div class="act">${completar('pri')}<button class="btn" type="button" data-arq-publicar="${F}">Publicar a página do arquiteto</button></div><p class="help">Falta para a página ficar boa: ${escHtml(fSite.map(x=>x.rotulo).join(', '))}. Publicar sem isso é permitido; a página vai com o que houver.</p>${semPub}`
+    :`<div class="act"><button class="btn ${noAg&&fSite.length?'':'pri'}" type="button" data-arq-publicar="${F}">Publicar a página do arquiteto</button></div><p class="help">Ela também é publicada junto quando você publica um projeto deste fundo.</p>${semPub}`;
+  /* UX-38: na página do arquiteto, o bloco "O que falta para a página no site" (cada item leva ao campo) e o caminho de volta ao fundo */
+  const blocoFalta=noAg&&falta.length?`<div class="arq-falta"><h3 class="sub-h">O que falta para a página no site</h3><ul class="list">${falta.map(x=>`<li><button class="lnk" type="button" data-arq-campo="${escHtml(x.campo)}">${escHtml(x.rotulo.charAt(0).toUpperCase()+x.rotulo.slice(1))}</button>${x.site?'':' <small class="help">(fica só no painel; o site não recebe)</small>'}</li>`).join('')}</ul><p class="help"><button class="lnk" type="button" data-arq-voltar="${F}">Voltar ao fundo ${F}</button></p></div>`:'';
+  const opc=noAg||(!pub&&fSite.length&&e.pode_agir&&!e.direitos)?'':(e.falta_opcional||[]).length?`<p class="help">Pode melhorar a página: ${escHtml(e.falta_opcional.join(', '))}${e.agente_id&&e.pode_agir?` · <button class="lnk" type="button" data-arq-completar="${+e.agente_id}" data-fundo="${F}">Completar os dados do arquiteto</button>`:''}.</p>`:'';
   const tirar=pub&&e.pode_tirar?`<p class="help"><button class="lnk" type="button" data-arq-tirar="${escHtml(e.fundo)}">Tirar a página do arquiteto do site…</button></p>`:'';
-  return `<div class="ph"><h2>Página do arquiteto no site</h2></div><div class="pb"><p class="arq-linha">${linha}</p>${vazia}${bt}${opc}${tirar}</div>`}
+  return `<div class="ph"><h2>Página do arquiteto no site</h2></div><div class="pb"><p class="arq-linha">${linha}</p>${vazia}${bt}${opc}${blocoFalta}${tirar}</div>`}
 async function publicarArquiteto(fundo){const r=await confirmar({titulo:'Publicar a página do arquiteto?',alvo:fundo,
     texto:'A página vai para o site com a biografia e o retrato que estiverem no painel. Os projetos já publicados deste fundo passam a aparecer.',
-    botao:'Publicar',botaoOcupado:'Publicando…',acao:()=>API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site/publicar`,{method:'POST'})});
+    botao:'Publicar',botaoOcupado:'Publicando…',acao:()=>API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site/publicar`,{method:'POST'}),
+    erroHtml:e=>arqAcoesErroHTML(fundo,(e.dados||{}).acoes)});
   if(!r)return;toast((r.resultado||{}).mensagem||'Página do arquiteto publicada');depoisArqSite(fundo)}
 async function tirarArquiteto(fundo){const r=await confirmar({titulo:'Tirar a página do arquiteto do site?',alvo:fundo,perigo:true,
     texto:'A página volta a rascunho e, com ela, todos os projetos e folhas deste fundo deixam de aparecer no site. Nada é apagado; dá para publicar de novo.',
     motivo:'obrigatorio',botao:'Tirar do site',botaoOcupado:'Tirando…',
     acao:x=>API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site/tirar`,{method:'POST',body:JSON.stringify({motivo:x.motivo})})});
   if(!r)return;toast((r.resultado||{}).mensagem||'A página do arquiteto saiu do site');depoisArqSite(fundo)}
+/* UX-38: o erro "o site não tem a página" vem com o botão do que resolve (data-conf-fechar fecha a confirmação antes de seguir) */
+function arqAcoesErroHTML(fundo,acoes){const F=escHtml(fundo);const L=(acoes||[]).map(a=>a.tipo==='completar_arquiteto'?`<button class="btn sm pri" type="button" data-conf-fechar data-arq-completar="${+a.agente_id}" data-fundo="${F}">${escHtml(a.rotulo)}</button>`
+    :a.tipo==='ver_projetos'?`<button class="btn sm" type="button" data-conf-fechar onclick="acaoCondicao('projetos','${F}')">${escHtml(a.rotulo)}</button>`
+    :a.tipo==='vincular'?`<button class="btn sm" type="button" data-conf-fechar onclick="acaoCondicao('vincular','${F}')">${escHtml(a.rotulo)}</button>`:'').join('');
+  return L?`<div class="act conf-err-acoes">${L}</div>`:''}
+/* UX-38: abre a edição do arquiteto já no que falta: os campos que faltam ficam destacados e o primeiro vem para a vista, com o cursor nele */
+const ARQ_CAMPO_EL={datas:'#ea-ini,#ea-fim',historia:'#ea-hist',fonte_historia:'#ea-fonte',retrato:'.ea-retrato'};
+function arqRealcarCampos(campos,focar){const d=document.getElementById('d-body');if(!d)return null;let primeiro=null;
+  (campos||[]).forEach(c=>{d.querySelectorAll(ARQ_CAMPO_EL[c]||'#__nada').forEach(el=>{const box=el.closest('.field')||el;box.classList.add('realce');box.dataset.falta=c;if(!primeiro)primeiro=el})});
+  if(primeiro&&focar!==false){(primeiro.closest('.field')||primeiro).scrollIntoView({block:'center'});const alvo=primeiro.matches('input,textarea')?primeiro:primeiro.querySelector('label.btn');try{(alvo||primeiro).focus({preventScroll:true})}catch(_){}}
+  return primeiro}
+async function completarArquiteto(id,fundo){if(!closeDrawer())return;let campos=[];try{const e=await API(`/api/fundos/${encodeURIComponent(fundo)}/arquiteto-site`);campos=(e.falta||[]).map(x=>x.campo)}catch(_){}
+  await _editarAgenteGuia(id);await carregarGuiaAgente(id);arqRealcarCampos(campos)}
+document.addEventListener('click',e=>{const c=e.target.closest('[data-arq-completar]');if(c){completarArquiteto(+c.dataset.arqCompletar,c.dataset.fundo);return}
+  const k=e.target.closest('[data-arq-campo]');if(k){arqRealcarCampos([k.dataset.arqCampo]);return}
+  const v=e.target.closest('[data-arq-voltar]');if(v&&closeDrawer())nav('fundo/'+v.dataset.arqVoltar)});
 function depoisArqSite(fundo){document.querySelectorAll('.arq-site').forEach(h=>carregarArqSite(h.dataset.fundo||fundo,h));if(document.getElementById('fd-guia'))carregarGuiaFundo(fundo);const ag=document.getElementById('ag-guia');if(ag&&ag.dataset.agente)carregarGuiaAgente(+ag.dataset.agente)}
 document.addEventListener('click',e=>{const p=e.target.closest('[data-arq-publicar]');if(p){publicarArquiteto(p.dataset.arqPublicar);return}const t=e.target.closest('[data-arq-tirar]');if(t)tirarArquiteto(t.dataset.arqTirar)});
 async function carregarGuiaAgente(id){
@@ -5526,7 +5553,7 @@ async function carregarGuiaAgente(id){
   if(!host.isConnected)return;const velho=document.getElementById('ag-guia');if(velho)velho.remove();
   host.querySelectorAll('.arq-site').forEach(x=>x.remove());
   const box=document.createElement('div');box.className='panel';box.id='ag-guia';box.dataset.agente=id;box.innerHTML=`<details class="guia-ag"><summary><b>Checklist do arquiteto</b> · ${escHtml(g.proximo_passo)}</summary>${renderGuia(g,GUIA_ARQUITETO,GUIA_NOTA_ARQ)}</details>`;host.prepend(box);
-  for(const f of [...(g.fundos||[])].reverse()){const a=document.createElement('div');a.className='panel arq-site';a.dataset.fundo=f;host.prepend(a);carregarArqSite(f,a)}}
+  const ps=[];for(const f of [...(g.fundos||[])].reverse()){const a=document.createElement('div');a.className='panel arq-site';a.dataset.fundo=f;host.prepend(a);ps.push(carregarArqSite(f,a))}await Promise.all(ps)}
 const _showFundoGuia=showFundo;
 showFundo=async function(code,tab){const r=await _showFundoGuia(code,tab);carregarGuiaFundo(code);return r};
 const _editarAgenteGuia=editarAgente;
@@ -7054,7 +7081,7 @@ const API=async(path,opt={})=>{
     const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opt,signal:opt.signal||ctrl.signal});
     const j=await r.json().catch(()=>({}));
     if(r.status===401&&EU&&!/^\/api\/auth\/(login|eu)\b/.test(path))pedirLoginDeNovo();   // CAMP-121: sessão caiu no meio do trabalho → pede login por cima, sem sair da tela
-    if(!r.ok)throw Object.assign(new Error(mensagemErroAPI(r.status,j.erro||(typeof j.detail==='string'?j.detail:'')||r.statusText)),{status:r.status});
+    if(!r.ok)throw Object.assign(new Error(mensagemErroAPI(r.status,j.erro||(typeof j.detail==='string'?j.detail:'')||r.statusText)),{status:r.status,dados:j});
     if(escrita&&!/^\/api\/auth\//.test(path)){try{MARCA.escritas++}catch(_){}setTimeout(()=>vigiarMarca(true),400)}   // CAMP-120: o que a própria pessoa fez não vira "o projeto mudou" (a marca é relida e vira a nova base)
     return j;
   }catch(e){if(e.name==='AbortError')throw Object.assign(new Error('A operação demorou demais. Tente novamente.'),{status:408});if(e instanceof TypeError&&!e.status)throw Object.assign(new Error('Sem resposta do painel: a rede caiu ou o servidor está fora. Tente de novo em instantes.'),{status:0});throw e}

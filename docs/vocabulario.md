@@ -109,6 +109,18 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 | **Impressas** / **Reimprimir** | Etiquetas | histórico do que saiu no Imprimir; reimprimir volta a etiqueta como saiu |
 | **sem lugar** | Painel inicial, Onde está guardado | folha sem caixa, gaveta, tubo, mapoteca ou estante cadastrada |
 
+### Página do arquiteto incompleta (UX-38, 27/10/2026)
+- Quadro **Página do arquiteto no site** (fundo e arquiteto): faltando biografia, fonte da biografia ou retrato, a ação principal é
+  **Completar os dados do arquiteto** (abre a edição do arquiteto com os campos que faltam destacados e o cursor no primeiro).
+  **Publicar a página do arquiteto** continua permitido, mas não é o botão azul. Sem arquiteto, a ação é **Vincular arquiteto**.
+- Frase do que falta: "Falta para a página ficar boa: biografia, fonte da biografia, retrato." Fundo sem projeto publicado: "Este fundo
+  ainda não tem projeto publicado: mesmo publicada, a página só aparece no site com o primeiro projeto publicado (e é publicada junto com ele)."
+- Na edição do arquiteto, o bloco **O que falta para a página no site** (cada item leva ao campo; **datas de nascimento e morte** dizem
+  "fica só no painel; o site não recebe") e **Voltar ao fundo F0xx**.
+- O site sem a página do arquiteto: nunca "espere um minuto". O erro diz o que houve ("O fundo não chegou ao site…" ou "O site tem o fundo,
+  mas não criou a página deste arquiteto… o site cria as páginas que faltam uma vez por hora") e vem com os botões que resolvem
+  (**Completar os dados do arquiteto**, **Ver os projetos**, **Vincular arquiteto**).
+
 ## Regras de texto
 - Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
