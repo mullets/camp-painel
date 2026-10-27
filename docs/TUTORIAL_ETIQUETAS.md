@@ -47,6 +47,9 @@ Todas levam também, **sempre**: o nome do projeto, o **arquiteto** (a autoria c
 
 O código de barras é **Code 39**. Qualquer leitor comum lê.
 
+**Formatos pequenos (UX-26):** o Code 39 é pouco denso. O painel calcula, para cada etiqueta, a largura da barra mais fina; abaixo de **0,19 mm** o leitor não lê com segurança e a etiqueta sai com um **QR** no lugar das barras, com o código **escrito** do lado. Com o código de folha mais longo (26 caracteres, ex. `F009-P0015-1973-S01-D00001`) isso acontece em **70 × 35** e na **lombada 20 × 140** (o seletor mostra "folha sai com QR"); em 100 × 50 a barra fica em ~0,22 mm e continua Code 39. Códigos curtos (projeto, caixa, fundo) continuam em Code 39 nesses formatos. A NIIMBOT já usava QR. O celular (**Ler etiqueta**) lê os dois. **Leitor só de código de barras (1D) não lê QR**: para ele, use um formato maior.
+> Ainda não foi feita a prova física: imprimir cada formato e ler 3 vezes com o leitor da CAMP e com o celular.
+
 ---
 
 ## 4. Passo a passo — gerar e imprimir

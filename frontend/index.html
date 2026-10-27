@@ -182,6 +182,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 #v-etiquetas [hidden]{display:none!important}
 #v-etiquetas .lab-impressas .hint{margin-left:auto;color:var(--ink3);font-size:var(--fs-sm)}
 #l-guardar-res .al-res{margin-top:8px}
+/* UX-26: QR no lugar do Code 39 quando as barras ficariam finas demais (o código continua escrito) */
+.lab-std .ls-barras.ls-qr{display:flex;align-items:center;gap:6px}.lab-std .ls-qr svg.qr{flex:none;width:52px;height:52px}.lab-std.peq .ls-qr svg.qr{width:40px;height:40px}
+.lab-std .ls-qr div{text-align:left;letter-spacing:.4px;white-space:normal;word-break:break-all;min-width:0}
+.lab-tubo .lt-barras.lt-qr{width:100%;justify-content:center}.lab-tubo .lt-qr svg.qr{width:100%;max-width:62px;height:auto}
 .ini-semlugar{margin:0;padding:0 16px 14px;font-size:var(--fs-sm);color:var(--ink3)}
 .lab-wrap{display:grid;grid-template-columns:minmax(380px,460px) minmax(420px,1fr);gap:20px;align-items:start}
 .lab-form{min-width:0;overflow:hidden}
@@ -1897,6 +1901,23 @@ try{const t=localStorage.getItem('camp.theme');if(t){th.value=t;document.documen
 const C39={'0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn','A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn','K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn','U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','*':'nwnnwnwnn'};
 function barcode(text,h,w){const t=('*'+text.toUpperCase().replace(/[^0-9A-Z\-\. ]/g,'-')+'*');let x=0,rects='';const N=1,W=2.6;for(const ch of t){const p=C39[ch]||C39['-'];for(let i=0;i<9;i++){const bw=p[i]==='w'?W:N;if(i%2===0)rects+=`<rect x="${x.toFixed(1)}" y="0" width="${bw}" height="${h}"/>`;x+=bw}x+=N}
   return `<svg viewBox="0 0 ${x.toFixed(1)} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" fill="#111">${rects}</svg>`}
+/* UX-26 · densidade do Code 39: barra estreita = comprimento das barras ÷ ((caracteres + 2) × 14,8 unidades). Abaixo de 0,19 mm o leitor
+   comum não lê com segurança; nesse caso a etiqueta sai com QR (o celular e leitores 2D leem) e o código continua escrito.
+   Comprimento das barras (mm) medido na impressão em tamanho real, por desenho e formato; tests/navegador_etiqueta_densidade.js confere
+   que esta tabela continua batendo com o que sai impresso. A prova física (imprimir e ler com o leitor da CAMP) é de uma pessoa. */
+const LAB_MODULO_MIN=0.19,LAB_C39_UNID=14.8,LAB_COD_MAIS_LONGO='F009-P0015-1973-S01-D00001';
+const LAB_BARRA_MM={std:{'100x50':89.4,'150x100':139.4,'70x35':61},d:{'100x50':73,'150x100':85},tubo:{'20x140':45.3},capa:{'200x287':172}};
+function labModuloC39(mm,code){return mm/((String(code).length+2)*LAB_C39_UNID)}
+function labUsaQR(desenho,fmt,code){const mm=(LAB_BARRA_MM[desenho]||{})[fmt];return !!mm&&labModuloC39(mm,code)<LAB_MODULO_MIN}
+function labModulo128(largMm,code){const x=11*(String(code).length+2)+13,ponto=25.4/300,d=Math.max(2,Math.min(5,Math.floor(largMm/x/ponto)));return {modulo:d*ponto,cabe:x*d*ponto<=largMm+0.01}}
+/* para cada formato: a barra estreita com o código de folha mais longo (26 caracteres) e se cabe legível */
+function labDensidade(code){code=code||LAB_COD_MAIS_LONGO;return [...document.querySelectorAll('#l-fmt option')].map(o=>{const f=o.value;
+  if(NIIM_FMT[f])return {formato:f,simbolo:'qr',modulo_mm:null,cabe:false};
+  if(f==='90x29'){const m=labModulo128(+f.split('x')[0]-7.6,code);return {formato:f,simbolo:'code128',modulo_mm:+m.modulo.toFixed(3),cabe:m.cabe&&m.modulo>=LAB_MODULO_MIN}}
+  const des=f==='20x140'?'tubo':f==='200x287'?'capa':'std',mm=(LAB_BARRA_MM[des]||{})[f];if(!mm)return {formato:f,simbolo:'code39',modulo_mm:null,cabe:null};
+  const m=labModuloC39(mm,code);return {formato:f,simbolo:m<LAB_MODULO_MIN?'qr':'code39',modulo_mm:+m.toFixed(3),cabe:m>=LAB_MODULO_MIN}})}
+function qrSVG(texto){const m=qrMatriz(texto),N=m.length,Q=4;let d='';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(m[y][x])d+=`M${x+Q} ${y+Q}h1v1h-1z`;
+  return `<svg class="qr" viewBox="0 0 ${N+2*Q} ${N+2*Q}" shape-rendering="crispEdges" role="img" aria-label="QR ${escHtml(texto)}"><rect width="100%" height="100%" fill="#fff"/><path fill="#000" d="${d}"/></svg>`}
 /* logo da CAMP (pedido de 15/10), redesenhado em vetor a partir do PNG para sair nítido na impressão */
 const LOGO_CAMP='<svg class="logo" viewBox="6 6 195 177" role="img" aria-label="CAMP" shape-rendering="crispEdges"><path fill="#111" d="M8 181V27L55 8V181ZM55 8L80 28V38L55 19ZM80 181V27L127 8V181ZM127 8L152 28V38L127 19ZM152 181V27L199 8V181Z"/></svg>';
 /* Code 128 (conjunto B): mais compacto que o Code 39, para caber o código inteiro da folha na faixa de 90 mm.
@@ -2019,6 +2040,8 @@ document.getElementById('f-lote').addEventListener('change',()=>{if(labLote()!==
 document.getElementById('l-papel').addEventListener('change',renderLabel);
 document.getElementById('l-obs').addEventListener('input',e=>{const c=document.getElementById('l-obs-cont');if(c)c.textContent=`${e.target.value.length}/30`});
 labAjustarCampos();
+/* UX-26: no seletor, avisa os formatos em que o código de folha mais longo não cabe legível em Code 39 (sai QR) */
+(function labMarcarFormatos(){try{labDensidade().forEach(d=>{const o=document.querySelector(`#l-fmt option[value="${d.formato}"]`);if(o&&d.simbolo==='qr'&&!NIIM_FMT[d.formato]&&!/QR/.test(o.textContent))o.textContent+=' · folha sai com QR'})}catch(_){}})();
 document.getElementById('l-material').addEventListener('change',()=>{labAjustarCampos();renderLabel()});
 ['l-fundo','l-proj','l-volume','l-material','l-serie','l-doc','l-caixa','l-cont','l-fmt','l-qty','l-obs'].forEach(id=>document.getElementById(id)?.addEventListener('input',renderLabel));
 document.getElementById('l-fundo').addEventListener('change',carregarProjetosEtiqueta);
@@ -2145,7 +2168,7 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     const alt=mw*S*0.92;
     return `<div class="label lab-tubo" style="width:${mw*S}px;height:${mh*S}px">${LOGO_CAMP}
       <div class="lt-txt"><span class="lt-big">${escHtml(big)}</span>${comNome?`<span class="lt-nome">${escHtml(pn)}</span><span>${escHtml(arq)}</span><span>${escHtml(cidAno)}${mat?' · '+escHtml(mat.texto):''}</span>`:`<span class="lt-nome">${escHtml(labType==='fundo'?nome:sig)}</span>`}</div>
-      <div class="lt-barras" style="height:${mh*S*0.34}px;width:100%"><div style="width:${mh*S*0.34}px;height:${alt*0.7}px">${barcode(code,Math.round(alt*0.7),'100%')}</div></div></div>`}
+      ${labUsaQR('tubo',`${mw}x${mh}`,code)?`<div class="lt-barras lt-qr">${qrSVG(code)}</div>`:`<div class="lt-barras" style="height:${mh*S*0.34}px;width:100%"><div style="width:${mh*S*0.34}px;height:${alt*0.7}px">${barcode(code,Math.round(alt*0.7),'100%')}</div></div>`}</div>`}
   if(labType==='projeto'&&mw>=90&&mh>=45){   /* padrão novo da pasta (19/10, layout D escolhido): faixa de 2 cm para reconhecer de longe — logo, acervo, NÚMERO DO PROJETO gigante, código, nº de folhas, cidade, ano e volume */
     const num=codigoProjetoEtiqueta(pc).replace(/^P/,''),pcod=projeto.codigo||document.getElementById('l-proj').value||'',
       nf=alvo?(alvo.folhas??null):(mat?mat.n:(window.LABEL_CATEG||[]).reduce((a,c)=>a+(c.itens||0),0)),
@@ -2157,7 +2180,7 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
       <div class="ld-corpo"><div class="ld-nome">${escHtml(pn)}</div><div class="ld-arq">${escHtml(arq)}</div><div class="ld-kv">${kv.map(([a,b,largo])=>`<span${largo?' class="ld-largo"':''}><b>${escHtml(a)}</b>${escHtml(String(b??''))}</span>`).join('')}</div>
       ${obs?`<div class="ld-obs">${escHtml(obs)}</div>`:''}<div class="ld-barras">${barcode(code,30,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
   /* 100 × 50 e 70 × 35: coluna fixa (topo, código, nome, campos, código de barras); só entram os campos que cabem, cada um numa linha com … */
-  const peq=mw<90,cols=peq?2:3,linhasCabem=peq?2:3;
+  const peq=mw<90,qr=labUsaQR('std',`${mw}x${mh}`,code),cols=peq?2:3,linhasCabem=peq?(qr?1:2):3;   /* UX-26: com QR, uma linha de campos a menos na pequena */
   const campos=lines.filter(([a])=>!(comNome&&a==='Projeto')).slice(0,cols*linhasCabem);
   return `<div class="label lab-std${peq?' peq':''}" style="width:${mw*S}px;height:${mh*S}px"><div class="sidebar"><span>ACERVO ${escHtml(sig)}</span></div><div class="ls-corpo">
     <div class="ls-topo">${LOGO_CAMP}${peq?'':'<span>Casa da Arquitetura Moderna Paulista</span>'}</div>
@@ -2165,7 +2188,7 @@ function labelHTML(k,alvo){const labType=(alvo&&alvo._tipo)||labTipoAtual();   /
     ${comNome?`<div class="ls-nome">${escHtml(pn)}</div>`:''}
     <div class="ls-campos" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${campos.map(([a,b])=>`<div><b>${escHtml(a)}</b><span>${escHtml(String(b??''))}</span></div>`).join('')}</div>
     ${obs?`<div class="ls-obs">${escHtml(obs)}</div>`:''}
-    <div class="ls-barras">${barcode(code,peq?16:20,'100%')}<div>${escHtml(code)}</div></div></div></div>`}
+    ${qr?`<div class="ls-barras ls-qr">${qrSVG(code)}<div>${escHtml(code)}</div></div>`:`<div class="ls-barras">${barcode(code,peq?16:20,'100%')}<div>${escHtml(code)}</div></div>`}</div></div>`}
 /* UX-25 · histórico "Impressas": cada Imprimir registra o que saiu (tipo, código, formato, papel e o que é preciso para sair igual de novo) */
 function labCodigoAtual(lote){const v=id=>(document.getElementById(id)||{}).value||'',fc=v('l-fundo'),pc=v('l-proj');
   if(lote==='pastas'||labType==='fundo')return fc;
@@ -2242,6 +2265,7 @@ function renderLabel(){const fcod=document.getElementById('l-fundo').value,orig=
   let st=document.getElementById('lab-page');if(!st){st=document.createElement('style');st.id='lab-page';document.head.appendChild(st)}
   {const pp=document.getElementById('l-papel');if(pp&&pp.closest('label'))pp.closest('label').style.display=w==='200'?'none':''}   /* a capa sai sempre numa A4 */
   const av=document.getElementById('lab-aviso');if(av)av.innerHTML=niim?'NIIMBOT D110: <b>Imprimir na NIIMBOT</b> manda as etiquetas para o servidor de impressão deste computador (niimblue-node, instalado uma vez com <code>scripts/niimbot_mac.sh</code>), que fala com a D110 pelo cabo USB-C ou Bluetooth. Sem o servidor: <b>Baixar imagens</b> e imprimir pelo niim.blue no Chrome.':w==='200'?'Capa da pasta: imprima em <b>folha A4 comum</b>, escala <b>100%</b> (desmarque "ajustar à página"), e recorte na linha tracejada: fica com 200 × 287 mm, um pouco menor que a A4, para caber na pasta.':(w==='90'&&h==='29')?'Brother QL-700 com rolo <b>DK-1201 (29 × 90 mm)</b>: na janela de impressão escolha a Brother, papel <b>29 mm × 90 mm</b>, orientação <b>paisagem</b>, margens <b>nenhuma</b> e escala <b>100%</b> (desmarque "ajustar à página"). Uma etiqueta por cópia.':'Na janela da impressora: escolha a impressora de etiquetas e <b>tamanho real (100%)</b>. Se sair cortada, desmarque <b>"ajustar à página"</b>.';
+  if(av&&!niim&&pv.querySelector('svg.qr'))av.innerHTML+=` <span class="lab-aviso-qr">Neste formato o código de barras ficaria fino demais para ler (barra estreita abaixo de 0,19 mm): sai um <b>QR</b>, que o celular ("Ler etiqueta") e leitores 2D leem; o código continua escrito. Leitor só de código de barras não lê QR: para ele, use um formato maior.</span>`;   // UX-26
   const aj=lajLer(w+'x'+h),rolo=document.getElementById('l-papel').value!=='a4',girada=rolo&&+w>+h&&+w>=140,   /* deitada: a página é o rolo (100 × 150) e o desenho sai girado */
     tr=aj.escala!==100||aj.x||aj.y?`translate(${aj.x}mm,${aj.y}mm) scale(${aj.escala/100})`:'',
     ajCss=girada?`@media print{.printgrid .giro-pag{width:${h}mm;height:${w}mm;position:relative;overflow:hidden;break-after:page;page-break-after:always${tr?`;transform:${tr};transform-origin:0 0`:''}}.printgrid .giro-pag:last-child{break-after:auto;page-break-after:auto}.printgrid .giro-pag .label{position:absolute;left:0;top:0;transform:translateX(${h}mm) rotate(90deg);transform-origin:0 0;break-after:auto!important;page-break-after:auto!important}}`
