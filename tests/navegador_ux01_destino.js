@@ -2,7 +2,7 @@
 // Prova: na Fila o lote suspeito não tem "Importar folhas" e sim "Verificar destino" (etiqueta âmbar com o porquê); "Importar todas (N)"
 // não conta os suspeitos e diz quantos ficaram para verificar; a tela mostra Pasta | Projeto lado a lado e a sugestão do mesmo fundo;
 // o botão principal só acende depois da escolha; sem justificativa não grava; "É deste projeto" grava no Histórico e o lote volta a ter
-// "Importar folhas"; no projeto, o Próximo passo também mostra "Verificar destino"; no celular não há rolagem lateral; nenhum erro no console.
+// "Importar folhas"; na Home o lote travado tem "Verificar destino" (abre a mesma gaveta, sem toast de erro); no projeto, o Próximo passo também mostra "Verificar destino"; no celular não há rolagem lateral; nenhum erro no console.
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/ux01.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/ux01.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8941)
@@ -58,6 +58,26 @@ const idDe = P => +py(`print(con.execute("SELECT id FROM lista_processamento WHE
     const resumo = await page.textContent('#fila-resumo');
     const nImp = await page.evaluate(() => FILAS_SRV.filter(l => l.fase === 'importar' && !l.destino_suspeito).length);
     chk(new RegExp(`Importar todas \\(${nImp}\\)`).test(resumo) && /2 lotes para verificar destino/.test(resumo), `"Importar todas (N)" não conta os suspeitos e diz quantos ficaram para verificar: "${resumo.replace(/\s+/g, ' ').trim()}"`);
+
+    // ---- Home (27/10, Rafael: "sempre um erro pra resolver quando clico em importar"): "Verificar destino" no lugar de "Importar" ----
+    py(`con.execute("UPDATE lista_processamento SET atualizado_em=CASE WHEN projeto_codigo IN ('F071-P0010','F071-P0030') THEN '2000-01-01 00:00:00' ELSE '2000-01-02 00:00:00' END WHERE projeto_codigo LIKE 'F071-%'")`);   // os mais antigos aparecem primeiro
+    await page.evaluate(() => { window.__toasts = []; const t0 = window.toast; window.toast = (m, o) => { window.__toasts.push(String(m)); return t0(m, o); }; nav('painel'); });
+    await page.waitForSelector('#ini-tarefas [data-ini-grupo="conferir"] .ini-task', { timeout: 15000 });
+    const tarefa = P => page.locator('#ini-tarefas [data-ini-grupo="conferir"] .ini-task').filter({ hasText: P });
+    const th = tarefa('F071-P0030');
+    await th.first().waitFor({ timeout: 15000 }).catch(() => {});
+    const thb = (await th.locator('[data-ini-acao]').allTextContents()).map(x => x.trim());
+    chk((await th.count()) === 1 && thb.join() === 'Verificar destino', 'Home: o lote travado tem o botão "Verificar destino" (não "Importar"): ' + JSON.stringify(thb) + ' em ' + (await th.count()) + ' linha(s)');
+    chk(/só tem o código/.test(await th.textContent()) && !/falta trazer as folhas/.test(await th.textContent()), 'Home: a linha diz o porquê, não "falta trazer as folhas"');
+    chk((await tarefa('F071-P0010').locator('[data-ini-acao]').textContent()).trim() === 'Verificar destino' && /não parece deste projeto/.test(await tarefa('F071-P0010').textContent()), 'Home: Marambaia em Cia. Sto Amaro: "a pasta … não parece deste projeto" e "Verificar destino"');
+    await th.locator('[data-ini-acao]').click();
+    await page.waitForSelector('#d-body .dec-cartoes', { timeout: 10000 }); await page.waitForTimeout(300);
+    chk(/P0001/.test(await page.textContent('#d-body')) && /Casa X/.test(await page.textContent('#d-body')), 'Home: o clique abre a mesma gaveta do Material novo (Pasta | Projeto)');
+    const ts = await page.evaluate(() => window.__toasts);
+    chk(!ts.some(m => /Verificar destino:|não parece/.test(m)) && !falhas.some(f => /\/importar$/.test(f)), 'Home: nenhum toast de erro e nenhuma tentativa de importar: ' + JSON.stringify(ts));
+    await page.evaluate(() => closeDrawer(true)); await page.waitForTimeout(200);
+    await page.evaluate(() => { FILA_FILTRO = 'todas'; nav('filas'); });
+    await page.waitForSelector('#filas-body tr[data-fase="importar"]', { timeout: 15000 }); await page.evaluate(() => { FILA_FILTRO = 'todas'; desenharFilas(); }); await page.waitForTimeout(300);
 
     // ---- a tela Verificar destino ----
     await lm.locator('[data-destino-lote]').click();

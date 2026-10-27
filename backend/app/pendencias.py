@@ -136,6 +136,20 @@ def releituras_abertas(con) -> dict:
         return {}
 
 
+def marcar_destino(con, d: dict, resultado=None) -> dict:
+    """UX-01 (Home = Material novo): o lote em "importar" cuja pasta não parece deste projeto (destino_lote.avaliar: suspeito e não
+    liberado) NÃO é "para importar": é "Verificar destino" (ou "movendo para…", UX-43). A MESMA regra de /api/filas (destino_suspeito)
+    e do botão Importar (destino_lote.bloqueio). Campos: destino_suspeito, destino_motivo (frase curta), destino_movendo (UX-43)."""
+    d["destino_suspeito"], d["destino_motivo"], d["destino_movendo"] = False, None, None
+    if d.get("fase") != "importar":
+        return d
+    from .destino_lote import avaliar
+    a = avaliar(con, {**d, "resultado": resultado}, completo=False)
+    if a["suspeito"] and not a["liberado"]:
+        d["destino_suspeito"], d["destino_motivo"], d["destino_movendo"] = True, a["motivo_curto"] or a["motivo"], a.get("automatico")
+    return d
+
+
 def lotes(con) -> list[dict]:
     """Os lotes da Fila (os mesmos de /api/filas), cada um com a fase. UX-05: folhas do lote = as que ainda estão no projeto do lote
     (a mesma conta de /api/filas; uma folha que foi para outro projeto não conta mais neste lote)."""
@@ -144,7 +158,7 @@ def lotes(con) -> list[dict]:
     from .dispensa_lote import validas
     dispensados = validas(con)                       # UX-35: lote com erro dispensado (para todos) enquanto o erro for o mesmo
     from .filas_fase import SQL_FORA_DO_SITE
-    for r in con.execute(f"""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
+    for r in con.execute(f"""SELECT l.id, l.nome, l.pasta_qnap, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
                                    {SQL_FORA_DO_SITE} AS fora_do_site,
                                    COALESCE(l.etapa_desde, l.criado_em) AS parado_desde,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
@@ -155,9 +169,12 @@ def lotes(con) -> list[dict]:
         d = dict(r)
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04
         marcar_parado(d, lendo)                                                                                  # UX-09
-        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.pop("resultado", None),
+        res = d.pop("resultado", None)
+        d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), res,
                                   d["status_site"] == "no_ar", d.pop("fora_do_site"))   # UX-36
         d["dispensado"] = dispensados.get(d["id"])                                                               # UX-35
+        marcar_destino(con, d, res)                                                                              # UX-01
+        d.pop("pasta_qnap", None)
         saida.append(d)
     return saida
 
@@ -246,7 +263,9 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
         "decisoes": len(dec),
         "decisoes_pastas": sum(d["vezes"] for d in dec),
         "decisoes_estacao": sum(1 for d in dec if d["origem"] == "estacao"),
-        "lotes_importar": len(por.get("importar", [])),
+        "lotes_importar": sum(1 for l in por.get("importar", []) if not l["destino_suspeito"]),   # UX-01: "Verificar destino" não é "para importar"
+        "lotes_verificar_destino": sum(1 for l in por.get("importar", []) if l["destino_suspeito"]),
+        "lotes_movendo_destino": sum(1 for l in por.get("importar", []) if l["destino_suspeito"] and (l["destino_movendo"] or {}).get("estado") == "movendo"),
         "lotes_conferir": len(por.get("conferir", [])),
         "folhas_conferir": sum(l["itens_pendentes"] for l in por.get("conferir", [])),
         "lotes_aprovar": len(por.get("aprovar", [])),
@@ -269,7 +288,8 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     }
     from .rotas_emprestimos import contar_atrasados
     n["emprestimos_atrasados"] = contar_atrasados(con)                       # originais fora com o prazo vencido (tela Empréstimos)
-    n["material_novo"] = n["lotes_importar"] + n["lotes_conferir"] + n["leituras_interrompidas"]   # contador do menu: o que é de operador (UX-09: + "Ler de novo")
+    # contador do menu: o que é de operador (UX-09: + "Ler de novo"; UX-01: + "Verificar destino", como na aba "Precisam de você" do Material novo)
+    n["material_novo"] = n["lotes_importar"] + n["lotes_verificar_destino"] + n["lotes_conferir"] + n["leituras_interrompidas"]
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
     # UX-19 + UX-03 + UX-05: "itens que pedem ação de você" (os números do menu, a saudação e a Home), com o que esta pessoa
     # escondeu por 7 dias fora da conta dela: UMA regra, em contagens.pedem_acao
@@ -317,6 +337,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
                   key=lambda l: (0 if l["fase"] == "importar" else 1, -(l["itens_pendentes"] or 0), str(l["atualizado_em"] or "")))
     maior = max((l["itens_pendentes"] or 0 for l in conf if l["fase"] == "conferir"), default=0)
     marcou_maior = False                            # 23/10: com empate, "o maior lote da fila" aparecia em todos (1 de 1, 1 de 4…)
+    faria = None                                    # UX-43: a prévia do painel, calculada uma vez só (e só se houver lote em "Verificar destino")
     linhas = []
     for l in conf:
         parado = l["parado"] if (l.get("parado_h") or 0) >= 24 else None      # UX-09: idade na etapa (etapa_desde), não o atualizado_em que a varredura regrava
@@ -327,6 +348,15 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
                    parado]
             linhas.append({"sev": "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": " · ".join(p for p in det if p),
                            "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
+        elif l.get("destino_suspeito"):              # UX-01: a pasta não parece deste projeto: "Verificar destino" (a gaveta do Material novo), nunca "Importar"
+            mov = l.get("destino_movendo") or {}
+            if not mov and faria is None:
+                faria = _painel_faria(con)
+            pf = None if mov else faria.get(l["id"])
+            det = [l["destino_motivo"], f"o painel faria: {_texto_faria(pf)}" if pf else None, parado]
+            linhas.append({"sev": "b" if mov.get("estado") == "movendo" else "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
+                           "detalhe": " · ".join(p for p in det if p), "destino": True,
+                           "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Verificar destino", "destino", l["id"])})
         else:
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {parado}" if parado else ""),
@@ -334,7 +364,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     linhas = _por_idade(vis(linhas), ordem)
     if linhas:
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
-                       "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"}})
+                       "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"},
+                       "destino": sum(1 for x in linhas if x.get("destino"))})   # UX-01 (campo novo, opcional): quantos estão em "Verificar destino"
 
     # 3) aprovar e publicar (admin; CAMP-148: com publicacao.publicar_um_passo, o operador também, e "aprovar" já é publicar)
     from .publicacao_guiada import publicar_um_passo
@@ -463,6 +494,22 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     return grupos
 
 
+def _painel_faria(con) -> dict:
+    """{lote_id: plano} do "O painel faria" (UX-43), como na Fila; vazio com o destino automático desligado."""
+    from .destino_auto import modo, planejar
+    return {p["lote_id"]: p for p in planejar(con)} if modo(con) != "desligado" else {}
+
+
+def _texto_faria(p: dict) -> str:
+    """O mesmo texto do Material novo (daFaria)."""
+    if p.get("acao") == "mover":
+        return f"mover para {p.get('para')} “{p.get('para_titulo') or ''}”" + (" (o projeto que o painel vai criar)" if p.get("para_previsto") else "")
+    if p.get("acao") == "criar":
+        anos = f" ({p['ano']}{'–' + str(p['ano_fim']) if p.get('ano_fim') else ''})" if p.get("ano") else ""
+        return f"criar {p.get('para')} “{p.get('titulo') or ''}”{anos}"
+    return f"deixar para uma pessoa: {p.get('motivo') or ''}"
+
+
 def _juntar_lotes_do_projeto(linhas: list[dict]) -> list[dict]:
     """UX-04: dois lotes do MESMO projeto prontos para publicar apareciam como duas linhas iguais (parecia duplicata). Publicar é do
     projeto (o mesmo clique leva os lotes juntos), então eles viram UMA linha: "2 lotes prontos · complemento de 19/10 · …" e o botão
@@ -518,7 +565,9 @@ def caminho(con, n: dict) -> list[dict]:
         {"id": "digitalizar", "nome": "Digitalizar", "q": None, "detalhe": "estações de captura", "rota": "estacoes"},
         {"id": "qnap", "nome": "No QNAP", "q": entrada, "detalhe": "pastas na entrada" if entrada is not None else "sem leitura do QNAP", "rota": "estacoes"},
         {"id": "campvision", "nome": "CAMP Vision", "q": cv, "detalhe": " · ".join(p for p in cv_partes if p) or "nada em leitura", "rota": "filas/processando"},
-        {"id": "importar", "nome": "Importar", "q": n["lotes_importar"], "detalhe": "lote para trazer" if n["lotes_importar"] == 1 else "lotes para trazer", "rota": "filas/importar"},
+        {"id": "importar", "nome": "Importar", "q": n["lotes_importar"], "rota": "filas/importar",
+         "detalhe": ("lote para trazer" if n["lotes_importar"] == 1 else "lotes para trazer")
+                    + (f" · {n['lotes_verificar_destino']} para verificar destino" if n.get("lotes_verificar_destino") else "")},
         {"id": "conferir", "nome": "Conferir", "q": n["lotes_conferir"], "detalhe": f"{'lote' if n['lotes_conferir'] == 1 else 'lotes'} · {n['folhas_conferir']} folhas", "rota": "filas/conferir"},
         {"id": "aprovar", "nome": "Aprovar", "q": n["lotes_aprovar"], "detalhe": "lote conferido" if n["lotes_aprovar"] == 1 else "lotes conferidos", "rota": "filas/aprovar"},
         {"id": "publicar", "nome": "Publicar", "q": n["lotes_publicar"],
