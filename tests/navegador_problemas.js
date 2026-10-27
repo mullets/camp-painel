@@ -111,6 +111,7 @@ erro('aviso', 'outro', 'revisao', 'F026-P0001-1968-S01-D00077', 'Folha com manch
     chk(/Escreva em uma frase/.test(await page.textContent('#err-bulk-err')), 'em lote, "Marcar como corrigido" sem a frase pede a explicação');
     await page.fill('#err-bulk-res', 'retiradas conferidas: estavam certas');
     await page.click('#err-bulk [data-err-lote="corrigido"]');
+    await page.waitForSelector('#conf-ov', { timeout: 5000 }); await page.click('#conf-ov [data-conf="sim"]');   // UX-20: a prévia antes de fechar vários
     await page.waitForFunction(() => /7 problemas marcados como corrigidos/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await recarregou();
     chk(!(await page.$(grupo('F003-P9001'))) && !(await page.isVisible('#err-bulk')), 'os 7 fecham de uma vez e o grupo some dos abertos');
     const fechados = (await api('/api/erros?situacao=corrigido&projeto=F003-P9001')).json.filter(x => x.resolucao === 'retiradas conferidas: estavam certas');

@@ -1478,8 +1478,106 @@ def editar_erros_em_lote(d: ErrosEmLote, u: dict = Depends(auth.exige("operador"
         if len(rows) != len(ids):
             raise HTTPException(404, f"{len(ids) - len(rows)} dos problemas escolhidos não existem mais: atualize a lista")
         ed = EdicaoErro(situacao=d.situacao, resolucao=(d.resolucao or "").strip() or None)
+        antes = [{"id": e["id"], "situacao": e["situacao"], "resolucao": e["resolucao"], "resolvido_em": e["resolvido_em"]} for e in rows]
         n = sum(1 for e in rows if _mudar_erro(con, e, ed, u["email"]))
+        desfazer = _guardar_desfazer(con, u["email"], "lote", d.situacao, antes)
         con.commit()
-        return {"ok": True, "atualizados": n, "ids": ids}
+        return {"ok": True, "atualizados": n, "ids": ids, "desfazer": desfazer}
+    finally:
+        con.close()
+
+
+# ---------------- UX-20: desfazer de verdade e mesclar mensagens repetidas ----------------
+DESFAZER_MINUTOS = 30
+
+
+def _guardar_desfazer(con, ator: str, acao: str, situacao: str, antes: list[dict]) -> int | None:
+    """Guarda como os problemas estavam antes de uma ação em massa. Banco sem a migração 165: sem Desfazer (a ação vale igual)."""
+    try:
+        return con.execute("INSERT INTO erro_desfazer (ator, acao, situacao, antes) VALUES (?,?,?,?)",
+                           (ator, acao, situacao, json.dumps(antes, ensure_ascii=False))).lastrowid
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@router.post("/erros/desfazer/{token}")
+def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Volta cada problema da ação em massa ao que era antes (situação, resolução e data). Só quem fez (ou um admin), uma vez,
+    até 30 min depois; quem já foi mexido por alguém depois da ação fica como está (e a resposta diz quantos)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT * FROM erro_desfazer WHERE id=?", (token,)).fetchone()
+        if not r:
+            raise HTTPException(404, "Não há o que desfazer")
+        if r["ator"] != u["email"] and u["papel"] not in ("admin", "master"):
+            raise HTTPException(403, "Só quem fez (ou um admin) pode desfazer")
+        if r["desfeito_em"]:
+            raise HTTPException(409, "Já foi desfeito")
+        if con.execute("SELECT datetime(?, ?) < datetime('now')", (r["criado_em"], f"+{DESFAZER_MINUTOS} minutes")).fetchone()[0]:
+            raise HTTPException(409, f"Passou o prazo de {DESFAZER_MINUTOS} minutos para desfazer: reabra um a um")
+        voltaram, ficaram = 0, 0
+        for a in json.loads(r["antes"] or "[]"):
+            n = con.execute("UPDATE erro SET situacao=?, resolucao=?, resolvido_em=? WHERE id=? AND situacao=?",
+                            (a["situacao"], a["resolucao"], a["resolvido_em"], a["id"], r["situacao"])).rowcount
+            if n:
+                voltaram += 1
+                _evento(con, "erro", a["id"], "desfeito", u["email"], {"situacao": a["situacao"], "acao": r["acao"]})
+            else:
+                ficaram += 1
+        con.execute("UPDATE erro_desfazer SET desfeito_em=datetime('now') WHERE id=?", (token,))
+        con.commit()
+        return {"ok": True, "voltaram": voltaram, "ficaram": ficaram}
+    finally:
+        con.close()
+
+
+class MesclarRepetidos(BaseModel):
+    simular: bool = True
+    codigo: str | None = None          # só os repetidos deste código (o "Mesclar" de um grupo); vazio = todos
+
+
+def _grupos_repetidos(con, codigo: str | None) -> list[dict]:
+    """Abertos com a MESMA origem, código e mensagem: fica o mais antigo, os outros fecham como repetidos."""
+    w, p = "situacao IN ('aberto','em_correcao')", []
+    if codigo and codigo.strip():
+        w += " AND codigo=?"; p.append(codigo.strip().upper())
+    out = []
+    for g in con.execute(f"""SELECT origem, codigo, descricao, gravidade, COUNT(*) AS n, MIN(id) AS fica FROM erro WHERE {w}
+                             GROUP BY origem, codigo, descricao HAVING COUNT(*)>1 ORDER BY n DESC, codigo""", p):
+        ids = [r[0] for r in con.execute(f"SELECT id FROM erro WHERE {w} AND origem=? AND descricao=? AND id<>? AND codigo=? ORDER BY id",
+                                         (*p, g["origem"], g["descricao"], g["fica"], g["codigo"]))]
+        out.append({"codigo": g["codigo"], "descricao": g["descricao"], "origem": g["origem"], "gravidade": g["gravidade"],
+                    "quantidade": g["n"], "fica": g["fica"], "fecham": ids})
+    return out
+
+
+@router.post("/erros/mesclar-repetidos")
+def mesclar_repetidos(d: MesclarRepetidos, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """UX-20: o aviso "há mensagens repetidas" ganha Ver → Mesclar. Prévia é o padrão (simular); mesclar fecha as cópias
+    como "Não era problema" com a resolução apontando o que ficou aberto, guarda o Desfazer e registra no histórico."""
+    con = connect()
+    try:
+        if not d.simular:
+            con.execute("BEGIN IMMEDIATE")
+        grupos = _grupos_repetidos(con, d.codigo)
+        out = {"simulado": d.simular, "grupos": grupos[:200], "fecham": sum(len(g["fecham"]) for g in grupos)}
+        if d.simular or not grupos:
+            if not d.simular:
+                con.rollback()
+            return out
+        antes = []
+        for g in grupos:
+            for i in g["fecham"]:
+                e = con.execute("SELECT id, situacao, resolucao, resolvido_em FROM erro WHERE id=?", (i,)).fetchone()
+                antes.append(dict(e))
+                con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=? WHERE id=?",
+                            (f"Mensagem repetida: o mesmo problema continua aberto no nº {g['fica']}.", i))
+                _evento(con, "erro", i, "mesclado", u["email"], {"codigo": g["codigo"], "fica": g["fica"]})
+        out["desfazer"] = _guardar_desfazer(con, u["email"], "mesclar", "ignorado", antes)
+        con.commit()
+        return out
+    except Exception:
+        con.rollback()
+        raise
     finally:
         con.close()

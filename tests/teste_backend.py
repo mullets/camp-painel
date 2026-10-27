@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9127,6 +9127,52 @@ def filho(modo):
         ver("pendencias.pedem_acao: Problemas = 5 (sem os avisos); erros_abertos continua 12", pa.get("problemas") == 5 and p_.get("erros_abertos") == 12 and p_.get("erros_avisos") == 7, str(pa))
         ver("Precisa de você = decisões + material novo + bloqueios (a mesma soma da tela)", pa.get("precisa_de_voce") == p_["decisoes"] + p_["material_novo"] + p_["erros_bloqueantes"], str(pa))
         for l in res: print(l)
+    elif modo == "ux20_massa":
+        # UX-20: ações em massa com Desfazer de verdade (volta situação E resolução; quem foi mexido depois fica) e "mensagens
+        # repetidas" → Ver (prévia, nada muda) → Mesclar (fica o mais antigo; cópias fecham com a resolução dizendo qual ficou).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Projeto 1',1970)")
+        ids = [c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,resolucao) VALUES ('corrigir','outro','operador','F099-P0001',?,?)",
+                         (f"p{n}", "anotação antiga" if n == 0 else None)).lastrowid for n in range(4)]
+        rep = [c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','outro','campvision','F099-P0001','Aviso menor do exiftool: tag duplicada')").lastrowid for _ in range(3)]
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Op2", "op2@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        def cli(em, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s_}); return x
+        op, op2, ad = cli("op@camp.arq.br", "senha-operador-123"), cli("op2@camp.arq.br", "senha-operador-123"), cli("ad@camp.arq.br", "senha-admin-12345")
+        r = op.post("/api/erros/lote", json={"ids": ids, "situacao": "corrigido", "resolucao": "corrigido em massa"}).json()
+        ver("resolver vários devolve o token do Desfazer", bool(r.get("desfazer")) and r.get("atualizados") == 4, str(r))
+        op.patch(f"/api/erros/{ids[3]}", json={"situacao": "aberto"})                 # alguém mexeu depois: este fica como está
+        ver("outra pessoa (não admin) não desfaz o que você fez", op2.post(f"/api/erros/desfazer/{r.get('desfazer')}").status_code == 403)
+        d_ = op.post(f"/api/erros/desfazer/{r.get('desfazer')}").json()
+        ver("Desfazer volta 3 e diz que 1 foi mexido depois", d_.get("voltaram") == 3 and d_.get("ficaram") == 1, str(d_))
+        e0 = c.execute("SELECT situacao, resolucao, resolvido_em FROM erro WHERE id=?", (ids[0],)).fetchone()
+        ver("o desfeito volta com a resolução de antes (não fica 'corrigido em massa')", e0["situacao"] == "aberto" and e0["resolucao"] == "anotação antiga" and e0["resolvido_em"] is None, str(dict(e0)))
+        ver("desfazer duas vezes não vale", op.post(f"/api/erros/desfazer/{r.get('desfazer')}").status_code == 409)
+        ver("o desfazer fica no histórico", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='desfeito'").fetchone()[0] == 3)
+        ver("mesclar repetidos é só de admin", op.post("/api/erros/mesclar-repetidos", json={"simular": True}).status_code == 403)
+        s_ = ad.post("/api/erros/mesclar-repetidos", json={}).json()
+        abertos = lambda: c.execute("SELECT COUNT(*) FROM erro WHERE situacao='aberto'").fetchone()[0]
+        n0 = abertos()
+        ver("Ver (padrão = prévia): 1 grupo, fica o mais antigo, 2 cópias fecham, nada muda", s_.get("simulado") and len(s_["grupos"]) == 1 and s_["grupos"][0]["fica"] == rep[0] and s_["grupos"][0]["fecham"] == rep[1:] and abertos() == n0, str(s_)[:200])
+        m = ad.post("/api/erros/mesclar-repetidos", json={"simular": False}).json()
+        x = c.execute("SELECT situacao, resolucao FROM erro WHERE id=?", (rep[1],)).fetchone()
+        ver("Mesclar fecha as 2 cópias dizendo qual ficou; o mais antigo continua aberto", abertos() == n0 - 2 and x["situacao"] == "ignorado" and f"nº {rep[0]}" in (x["resolucao"] or "")
+            and c.execute("SELECT situacao FROM erro WHERE id=?", (rep[0],)).fetchone()[0] == "aberto", str(dict(x)))
+        ver("...e registra no histórico", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='mesclado'").fetchone()[0] == 2)
+        d2 = ad.post(f"/api/erros/desfazer/{m.get('desfazer')}").json()
+        ver("Desfazer do mesclar reabre as cópias", d2.get("voltaram") == 2 and abertos() == n0, str(d2))
+        for l in res: print(l)
     elif modo == "agora_nao_lote":
         # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
         # SÓ de quem clicou, por 7 dias. E "o maior lote da fila" aparecia em todos os lotes com o mesmo tamanho.
@@ -11796,6 +11842,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-19: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-20: ações em massa com Desfazer de verdade e mesclar mensagens repetidas")
+rc, out = rodar("ux20_massa", f"{tmp}/ux20_massa.db")
+if rc != 0: ok(False, f"teste ux20_massa não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-20: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

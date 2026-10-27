@@ -822,6 +822,7 @@ body:not(.admin):not(.master) #machine-status,body:not(.admin):not(.master) [dat
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
 .bulkbar{display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--blue-soft)}
 .bulkbar.on{display:flex}
+.err-bulk-mais{display:inline-flex;flex-wrap:wrap;gap:6px}.err-bulk-mais:empty{display:none}
 /* Problemas (19/10): agrupados por projeto, com o que fazer e o botão que resolve; resolver vários de uma vez */
 .err-filtros select{max-width:190px}.err-filtros input[type="search"]{flex:1 1 260px;min-width:200px}
 .err-proj-filtro{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-sm2)}
@@ -1200,7 +1201,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
       <thead><tr><th class="err-sel-col"><input type="checkbox" id="err-sel-todos" title="Selecionar todos os abertos da lista" aria-label="Selecionar todos os abertos da lista"></th><th>Gravidade</th><th>Onde</th><th>O que aconteceu e o que fazer</th><th>Origem</th><th>Situação</th></tr></thead>
       <tbody id="err-body"></tbody>
     </table></div><div class="pg-ctl" id="err-mais" hidden></div>
-      <div class="bulkbar bulk-rodape" id="err-bulk" role="region" aria-label="Problemas selecionados"><span class="count" id="err-bulk-n">0 selecionados</span><input id="err-bulk-res" maxlength="300" placeholder="O que foi feito (ou por que não era problema)" aria-label="O que foi feito"><button class="btn sm pri" data-err-lote="corrigido">Marcar como corrigido</button><button class="btn sm" data-err-lote="ignorado">Não era problema</button><button class="btn sm" data-err-lote="em_correcao">Estou corrigindo</button><span class="spacer"></span><button class="btn sm lnk" data-err-lote="limpar">Limpar seleção</button><small class="erro-txt" id="err-bulk-err" role="alert"></small></div>
+      <div class="bulkbar bulk-rodape" id="err-bulk" role="region" aria-label="Problemas selecionados"><span class="count" id="err-bulk-n">0 selecionados</span><span class="err-bulk-mais" id="err-bulk-mais"></span><input id="err-bulk-res" maxlength="300" placeholder="O que foi feito (ou por que não era problema)" aria-label="O que foi feito"><button class="btn sm pri" data-err-lote="corrigido">Marcar como corrigido</button><button class="btn sm" data-err-lote="ignorado">Não era problema</button><button class="btn sm" data-err-lote="em_correcao">Estou corrigindo</button><span class="spacer"></span><button class="btn sm lnk" data-err-lote="limpar">Limpar seleção</button><small class="erro-txt" id="err-bulk-err" role="alert"></small></div>
     </div>
   </section>
 
@@ -5879,7 +5880,10 @@ function errTemFiltro(){return ['q','gravidade','categoria','origem','projeto'].
 /* UX-06: os filtros ativos, em palavras ("Tipo: Duplicata · Busca: riviera"), para o aviso acima da lista e para o estado vazio */
 function errFiltrosTexto(){const op=(id,v)=>{const o=[...(document.getElementById(id)?.options||[])].find(x=>x.value===v);return o?o.textContent:v};
   return [ERR_F.projeto?'Projeto: '+ERR_F.projeto:'',ERR_F.gravidade?'Gravidade: '+op('err-grav',ERR_F.gravidade):'',ERR_F.categoria?'Tipo: '+op('err-cat',ERR_F.categoria):'',ERR_F.origem?'Origem: '+op('err-orig',ERR_F.origem):'',ERR_F.q?`Busca: "${ERR_F.q}"`:''].filter(Boolean)}
-let ERR_SEM_FILTRO=null,ERR_N=null;
+let ERR_SEM_FILTRO=null,ERR_N=null,ERR_SEL_ULT=null;
+/* UX-20: "selecionar todos deste tipo/projeto" a partir do último problema escolhido */
+const errTipoChave=e=>rotuloErro(e)+'|'+e.gravidade,errProjChave=e=>e.projeto_codigo||e.fundo_codigo||e.codigo;
+function errMesmos(qual,x){const f=qual==='tipo'?errTipoChave:errProjChave,k=f(x);return ERR_LISTA.filter(e=>ERR_ABERTO(e)&&f(e)===k)}
 function errSincronizarFiltros(){const v=(id,x)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=x||''};v('err-q',ERR_F.q);v('err-grav',ERR_F.gravidade);v('err-cat',ERR_F.categoria);v('err-orig',ERR_F.origem);
   const pf=document.getElementById('err-proj-filtro');if(pf){pf.hidden=!ERR_F.projeto;pf.innerHTML=ERR_F.projeto?`Só <span class="code">${escHtml(ERR_F.projeto)}</span> <button type="button" class="btn sm lnk" data-err-tirar-proj>ver todos os projetos</button>`:''}
   const l=document.getElementById('err-limpar');if(l)l.hidden=!errTemFiltro();
@@ -5923,7 +5927,9 @@ function errRender(){const tb=document.getElementById('err-body');if(!tb)return;
   const m=document.getElementById('err-mais');if(m){m.hidden=chaves.length<=ERR_GR_LIMITE;m.innerHTML=m.hidden?'':`<span class="pg-info">Mostrando ${fmtN(vis.length)} de ${fmtN(chaves.length)} grupos</span><span class="pg-nav"><button class="btn sm" data-err-mais-grupos>Mostrar mais ${fmtN(Math.min(25,chaves.length-vis.length))}</button></span>`}
   errAtualizarSelecao()}
 function errAtualizarSelecao(){const ids=new Set(ERR_LISTA.filter(ERR_ABERTO).map(e=>e.id));[...ERR_SEL].forEach(i=>{if(!ids.has(i))ERR_SEL.delete(i)});
-  const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);const c=document.getElementById('err-bulk-n');if(c)c.textContent=qtd(n,'selecionado','selecionados');
+  const b=document.getElementById('err-bulk'),n=ERR_SEL.size;if(b)b.classList.toggle('on',n>0);
+  {const bm=document.getElementById('err-bulk-mais'),x=n&&ERR_SEL.has(ERR_SEL_ULT)?ERR_LISTA.find(e=>e.id===ERR_SEL_ULT):null;if(bm){const t=x?errMesmos('tipo',x):[],pj=x?errMesmos('projeto',x):[];
+    bm.innerHTML=x?`${t.length>1&&!t.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="tipo" title="${escHtml(rotuloErro(x)+' · '+x.gravidade)}">Todos deste tipo (${fmtN(t.length)})</button>`:''}${pj.length>1&&!pj.every(e=>ERR_SEL.has(e.id))?`<button type="button" class="btn sm" data-err-sel-mesmo="projeto" title="${escHtml(errProjChave(x))}">Todos deste projeto (${fmtN(pj.length)})</button>`:''}`:''}}const c=document.getElementById('err-bulk-n');if(c)c.textContent=qtd(n,'selecionado','selecionados');
   const t=document.getElementById('err-sel-todos');if(t){t.disabled=!ids.size||!pode('problema.resolver');t.checked=ids.size>0&&n===ids.size;t.indeterminate=n>0&&n<ids.size}
   document.querySelectorAll('#err-body [data-err-sel-grupo]').forEach(g=>{const L=ERR_LISTA.filter(e=>ERR_ABERTO(e)&&errGrupoChave(e)===g.dataset.errSelGrupo),k=L.filter(e=>ERR_SEL.has(e.id)).length;g.checked=k>0&&k===L.length;g.indeterminate=k>0&&k<L.length})}
 function errRenderAbas(n){const ab=document.getElementById('err-abas');if(!ab)return;const T=[['pedem_acao','Abertos'],['avisos','Avisos'],['em_correcao','Em correção'],['corrigido','Resolvidos'],['ignorado','Não era problema'],['todos','Todos']];   /* UX-19: avisos em aba própria */
@@ -5939,6 +5945,15 @@ async function limpezaGeral(){let s;try{s=await API('/api/erros/limpeza-geral',{
   if(!r)return;toast(`${fmtN((r.resultado||{}).fechados||0)} avisos automáticos fechados`);carregarErros()}
 document.addEventListener('click',e=>{if(e.target.closest('#err-limpeza'))limpezaGeral()});
 
+/* UX-20: desfazer pelo servidor (volta situação, resolução e data de cada um; quem foi mexido depois fica como está) */
+async function errDesfazer(token){const r=await API('/api/erros/desfazer/'+encodeURIComponent(token),{method:'POST'});toast(r.ficaram?`Desfeito: ${qtd(r.voltaram,'problema voltou','problemas voltaram')}; ${qtd(r.ficaram,'foi mexido','foram mexidos')} depois e ${r.ficaram===1?'ficou':'ficaram'} como está`:`Desfeito: ${qtd(r.voltaram,'problema voltou','problemas voltaram')} ao que ${r.voltaram===1?'era':'eram'}`);return r}
+/* UX-20: "mensagens repetidas" → Ver (prévia: cada grupo, quantas cópias, qual fica) → Mesclar (fecha as cópias, com Desfazer) */
+async function errVerRepetidos(){let s;try{s=await API('/api/erros/mesclar-repetidos',{method:'POST',body:JSON.stringify({simular:true})})}catch(e){toast(e.message);return}
+  if(!s.fecham){toast('Nenhuma mensagem repetida entre os abertos.');return}
+  const lista=s.grupos.slice(0,30).map(g=>`<li><span class="code">${escHtml(g.codigo)}</span> · ${escHtml(g.descricao)} <small class="help">${fmtN(g.quantidade)} iguais: fica o nº ${escHtml(g.fica)}, ${qtd(g.fecham.length,'cópia fecha','cópias fecham')}</small></li>`).join('')+(s.grupos.length>30?`<li>e mais ${qtd(s.grupos.length-30,'grupo','grupos')}</li>`:'');
+  const r=await confirmar({titulo:`Mesclar ${qtd(s.fecham,'mensagem repetida','mensagens repetidas')}?`,html:`<p>Mesma origem, mesmo código e mesma mensagem. Em cada grupo fica aberto o mais antigo; as cópias fecham como "não era problema", com a resolução dizendo qual ficou. Fica no histórico e dá para desfazer logo depois.</p><ul class="conf-lista">${lista}</ul>`,
+    botao:`Mesclar ${fmtN(s.fecham)}`,botaoOcupado:'Mesclando…',acao:()=>API('/api/erros/mesclar-repetidos',{method:'POST',body:JSON.stringify({simular:false})})});
+  if(!r)return;const x=r.resultado||{};toast(`${qtd(x.fecham||0,'cópia mesclada','cópias mescladas')}`,x.desfazer?{acao:{rotulo:'Desfazer',fn:async()=>{try{await errDesfazer(x.desfazer);carregarErros()}catch(err){toast(err.message)}}}}:{});carregarErros();atualizarPendencias()}
 async function errCarregarDiagnostico(){
   const el=document.getElementById('err-diagnostico');
   if(!el)return;
@@ -5955,7 +5970,7 @@ async function errCarregarDiagnostico(){
           <button type="button" class="btn sm" data-err-diag-grav="aviso">Ver avisos (${fmtN(d.avisos)})</button>
         </div>
         ${principais.length?`<p class="help">Projetos com mais ocorrências: ${principais.map(x=>`<button type="button" class="btn sm" data-err-diag-proj="${escHtml(x.projeto)}">${escHtml(x.projeto)} · ${fmtN(x.quantidade)}</button>`).join(' ')}</p>`:''}
-        ${(d.repeticoes_exatas||[]).length?`<small class="help">Há mensagens repetidas registradas. Não serão apagadas automaticamente; veja os casos antes de resolver.</small>`:''}
+        ${(d.repeticoes_exatas||[]).length?`<p class="help">Há mensagens repetidas registradas. Nada é apagado: veja os casos e mescle (fica o mais antigo aberto). <button type="button" class="btn sm" data-err-repetidos>Ver</button></p>`:''}
       </div>`;
     el.hidden=false;
   }catch(_){el.hidden=true}
@@ -5981,7 +5996,7 @@ async function carregarErros(f){if(!f)carregarDupProjetos();{const bl=document.g
   const noLugar=sec.classList.contains('on'),volta=noLugar?mainEl.scrollTop:(ERR_VOLTAR&&ERR_VOLTAR.ate>Date.now()?ERR_VOLTAR.pos:0);if(!noLugar)ERR_VOLTAR=null;sec.style.minHeight=noLugar?sec.offsetHeight+'px':'';   /* 19/10: a linha resolvida some; sem isto o fim da página encurta e o navegador puxa a lista para cima */
   sec.querySelector('.aviso-exemplo')?.remove();errSincronizarFiltros();const seq=++ERR_SEQ;if(!tb.querySelector('tr[data-abrir],tr.err-gr'))tabelaCarregando('#err-body','Carregando problemas…');
   try{const p=errParams();p.set('situacao',errFiltro);const [es,n]=await Promise.all([API('/api/erros?'+p),API('/api/erros/contagem?'+errParams()).catch(()=>null)]);if(seq!==ERR_SEQ)return;
-    ERR_LISTA=es;ERR_N=n;ERR_SEM_FILTRO=(n&&n.sem_filtro)||null;errSincronizarFiltros();errRenderAbas(n);errRender();atualizarPendencias();errCarregarDiagnostico();
+    ERR_LISTA=es;ERR_N=n;ERR_SEM_FILTRO=(n&&n.sem_filtro)||null;errSincronizarFiltros();errRenderAbas(n);errRender();atualizarPendencias();await errCarregarDiagnostico();if(seq!==ERR_SEQ)return;   /* o resumo (acima da lista) muda de altura: volta a rolagem só depois dele */
     if(volta)requestAnimationFrame(()=>{mainEl.scrollTop=volta})}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#err-body','Não consegui carregar os problemas: '+e.message,'carregarErros()')}errRenderAbas(null)}}
 function errMudouFiltro(){LISTA_MEM.set('erros.filtros',{q:ERR_F.q,gravidade:ERR_F.gravidade,categoria:ERR_F.categoria,origem:ERR_F.origem});LISTA_MEM.set('erros.filtros_em',Date.now());ERR_GR_LIMITE=25;carregarErros()}
@@ -5991,7 +6006,7 @@ document.addEventListener('change',e=>{const m={'err-grav':'gravidade','err-cat'
     errMudouFiltro();return}
   if(e.target.id==='err-sel-todos'){ERR_LISTA.filter(ERR_ABERTO).forEach(x=>e.target.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=e.target.checked);errAtualizarSelecao();return}
   const g=e.target.closest&&e.target.closest('[data-err-sel-grupo]');if(g){ERR_LISTA.filter(x=>ERR_ABERTO(x)&&errGrupoChave(x)===g.dataset.errSelGrupo).forEach(x=>g.checked?ERR_SEL.add(x.id):ERR_SEL.delete(x.id));document.querySelectorAll(`#err-body tr[data-err-grupo="${CSS.escape(g.dataset.errSelGrupo)}"] .err-sel`).forEach(c=>c.checked=g.checked);errAtualizarSelecao();return}
-  const s=e.target.closest&&e.target.closest('#err-body .err-sel');if(s){s.checked?ERR_SEL.add(+s.value):ERR_SEL.delete(+s.value);errAtualizarSelecao()}});
+  const s=e.target.closest&&e.target.closest('#err-body .err-sel');if(s){s.checked?ERR_SEL.add(+s.value):ERR_SEL.delete(+s.value);if(s.checked)ERR_SEL_ULT=+s.value;errAtualizarSelecao()}});
 document.addEventListener('click',async e=>{const t=e.target;
   if(t.closest('#err-limpar,[data-err-limpar-tudo]')){Object.assign(ERR_F,{q:'',gravidade:'',categoria:'',origem:''});['err-q','err-grav','err-cat','err-orig'].forEach(i=>{const el=document.getElementById(i);if(el)el.value=''});LISTA_MEM.set('erros.filtros',{});if(ERR_F.projeto){ERR_F.projeto='';ERR_SEM_FILTRO=null;nav('erros')}else errMudouFiltro();return}   /* UX-06: antes, com "Só este projeto", o Limpar não apagava o filtro guardado e ele voltava no F5 */
   if(t.closest('[data-err-tirar-proj]')){nav('erros');return}
@@ -6000,6 +6015,8 @@ document.addEventListener('click',async e=>{const t=e.target;
   const tog=t.closest('[data-err-tog]');if(tog){const k=tog.dataset.errTog,fech=!ERR_GR_FECHADOS.has(k);fech?ERR_GR_FECHADOS.add(k):ERR_GR_FECHADOS.delete(k);LISTA_MEM.set('erros.grupos_fechados',[...ERR_GR_FECHADOS].slice(-200));
     document.querySelectorAll(`#err-body tr[data-err-grupo="${CSS.escape(k)}"]`).forEach(r=>r.hidden=fech);tog.textContent=fech?'▸':'▾';tog.setAttribute('aria-expanded',String(!fech));tog.title=(fech?'Mostrar':'Esconder')+' os problemas deste grupo';return}
   if(t.closest('[data-err-mais-grupos]')){ERR_GR_LIMITE+=25;errRender();return}
+  const sm=t.closest('[data-err-sel-mesmo]');if(sm){const x=ERR_LISTA.find(e=>e.id===ERR_SEL_ULT);if(x){errMesmos(sm.dataset.errSelMesmo,x).forEach(e=>ERR_SEL.add(e.id));document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=ERR_SEL.has(+c.value));errAtualizarSelecao()}return}
+  if(t.closest('[data-err-repetidos]')){errVerRepetidos();return}
   const ac=t.closest('[data-err-acao]');if(ac){e.stopPropagation();const x=ERR_LISTA.find(y=>y.id===+ac.dataset.errId)||(window.ERR_ATUAL&&window.ERR_ATUAL.id===+ac.dataset.errId?window.ERR_ATUAL:null);if(x)errExecutar(ac.dataset.errAcao,x);return}
   const ir=t.closest('[data-err-ir]');if(ir){abrirErro(+ir.dataset.errIr);return}
   const lt=t.closest('[data-err-lote]');if(lt)errEmLote(lt.dataset.errLote,lt);
@@ -6028,11 +6045,19 @@ async function errEmLote(acao,b){const er=document.getElementById('err-bulk-err'
   if(acao==='limpar'){ERR_SEL.clear();document.querySelectorAll('#err-body .err-sel').forEach(c=>c.checked=false);errAtualizarSelecao();return}
   const ids=[...ERR_SEL],txt=(res&&res.value||'').trim();if(!ids.length)return;
   if(['corrigido','ignorado'].includes(acao)&&txt.length<3){if(er)er.textContent=acao==='corrigido'?'Escreva em uma frase o que foi feito (vale para todos os escolhidos).':'Escreva por que não era problema (vale para todos os escolhidos).';if(res)res.focus();return}
-  const antes={};ERR_LISTA.filter(x=>ERR_SEL.has(x.id)).forEach(x=>{(antes[x.situacao]=antes[x.situacao]||[]).push(x.id)});
+  const antes={},escolhidos=ERR_LISTA.filter(x=>ERR_SEL.has(x.id));escolhidos.forEach(x=>{(antes[x.situacao]=antes[x.situacao]||[]).push(x.id)});
+  /* UX-20: prévia antes de fechar vários: quantos, de que tipo, de que projetos, quantos bloqueiam, com a frase que vai para todos */
+  if(['corrigido','ignorado'].includes(acao)){const conta=f=>{const m=new Map();escolhidos.forEach(x=>{const k=f(x);m.set(k,(m.get(k)||0)+1)});return [...m.entries()].sort((a,b)=>b[1]-a[1])};
+    const tipos=conta(x=>rotuloErro(x)),projs=conta(errProjChave),bloq=escolhidos.filter(x=>x.gravidade==='bloqueia').length;
+    const li=(L,max)=>L.slice(0,max).map(([k,n])=>`<li>${fmtN(n)} · ${escHtml(k)}</li>`).join('')+(L.length>max?`<li>e mais ${fmtN(L.length-max)}</li>`:'');
+    const ok_=await confirmar({titulo:acao==='corrigido'?`Marcar ${qtd(ids.length,'problema','problemas')} como ${ids.length===1?'corrigido':'corrigidos'}?`:`Fechar ${qtd(ids.length,'problema','problemas')}: não era problema?`,
+      html:`<p>Resolução para todos: <b>${escHtml(txt)}</b></p>${bloq?`<p>${qtd(bloq,'deles bloqueia','deles bloqueiam')} a publicação.</p>`:''}<p>Por tipo:</p><ul class="conf-lista">${li(tipos,8)}</ul><p>Por projeto:</p><ul class="conf-lista">${li(projs,6)}</ul><p class="help">Depois dá para desfazer pelo aviso que aparece embaixo (8 s).</p>`,
+      botao:acao==='corrigido'?`Marcar ${fmtN(ids.length)} como corrigidos`:`Fechar ${fmtN(ids.length)}`});
+    if(!ok_)return}
   b.disabled=true;try{const r=await API('/api/erros/lote',{method:'POST',body:JSON.stringify({ids,situacao:acao,resolucao:txt||null})});ERR_SEL.clear();if(res)res.value='';
     const vb={corrigido:['marcado como corrigido','marcados como corrigidos'],ignorado:['fechado: não era problema','fechados: não eram problema'],em_correcao:['marcado como em correção','marcados como em correção']}[acao];
     toast(`${qtd(r.atualizados,'problema','problemas')} ${r.atualizados===1?vb[0]:vb[1]}`,
-      {acao:{rotulo:'Desfazer',fn:async()=>{try{for(const [sit,lista] of Object.entries(antes))await API('/api/erros/lote',{method:'POST',body:JSON.stringify({ids:lista,situacao:sit})});toast('Desfeito');carregarErros()}catch(err){toast(err.message)}}}});
+      {acao:{rotulo:'Desfazer',fn:async()=>{try{if(r.desfazer)await errDesfazer(r.desfazer);else{for(const [sit,lista] of Object.entries(antes))await API('/api/erros/lote',{method:'POST',body:JSON.stringify({ids:lista,situacao:sit})});toast('Desfeito')}carregarErros();carregarPainel()}catch(err){toast(err.message)}}}});
     carregarErros();carregarPainel()}catch(err){if(er)er.textContent=err.message}finally{b.disabled=false}}
 async function abrirErro(id,o={}){let e;try{e=await API('/api/erros/'+id)}catch(err){toast(err.message);return}window.ERR_ATUAL=e;
   const ab=ERR_ABERTO(e),res=pode('problema.resolver'),adm=EU&&['admin','master'].includes(EU.papel),acao=ab&&res?errAcaoBotao(e,true):'';

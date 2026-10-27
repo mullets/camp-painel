@@ -1,6 +1,7 @@
 // Problemas e Precisa de você no navegador de verdade (Playwright + Chromium), cards UX do board "CAMP Acervos — UX do painel".
 // UX-06: com centenas de problemas abertos, a tela abre com as abas e a lista certas (direto pela URL, voltando de um projeto,
 //        com um filtro guardado de outro dia); com filtro, o estado vazio diz QUAL filtro está ativo e tem "Limpar".
+// UX-20: "todos deste tipo/projeto", prévia antes de fechar vários e Desfazer; "mensagens repetidas" → Ver → Mesclar (com Desfazer).
 // UX-19: avisos em aba própria ("Abertos" = bloqueia + corrigir); os números do menu seguem "itens que pedem ação de você".
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/x/ux.db python3 tests/semear_banco_teste.py
@@ -27,6 +28,8 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE 'Problema sintético
         cod = random.choice(itens) if n % 3 else random.choice(projs)
         con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,criado_em) VALUES (?,?,?,?,?,?,datetime('now',?))",
                     (g, random.choice(['orientacao','espelhado','metadado','credito','outro']), 'campvision' if n % 2 else 'revisao', cod, 'Problema sintético %d' % n, 'CAMP Vision', '-%d days' % (n % 30)))
+    for _ in range(3):   # UX-20: a mesma mensagem 3 vezes (o CAMP Vision registrou de novo a cada leitura)
+        con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('aviso','outro','campvision',?,'Aviso menor do exiftool: tag duplicada','CAMP Vision')", (projs[0],))
 `);
 const ABERTOS = +py(`print(con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0])`);
 const AVISOS = +py(`print(con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='aviso'").fetchone()[0])`);
@@ -111,6 +114,37 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Abertos" é o que bloqueia ou
     const badge = id => page.evaluate(i => { const el = document.getElementById(i); return el && !el.hidden ? +el.textContent.replace(/\D/g, '') : 0; }, id);
     chk(pend.pedem_acao && pend.pedem_acao.problemas === PEDEM && await badge('n-err') === PEDEM, `UX-19: o número de Problemas no menu é o que pede ação (${await badge('n-err')}, esperado ${PEDEM}; antes ${ABERTOS} com os avisos)`);
     chk(pend.pedem_acao && await badge('n-gente') === pend.pedem_acao.precisa_de_voce && await badge('n-filas') === pend.pedem_acao.material_novo && await badge('n-dec') === pend.pedem_acao.decisoes, 'UX-19: os outros números do menu vêm da mesma regra (pedem_acao)');
+
+    // ================= UX-20 =================
+    await page.click('#err-abas [data-err-sit="pedem_acao"]'); await pronto();
+    await page.locator('#err-body tr[data-err-linha] .err-sel').first().check(); await page.waitForTimeout(200);
+    chk(await page.isVisible('#err-bulk [data-err-sel-mesmo="tipo"]') && await page.isVisible('#err-bulk [data-err-sel-mesmo="projeto"]'), 'UX-20: escolhido um problema, a barra oferece "Todos deste tipo" e "Todos deste projeto"');
+    const esperadoTipo = await page.evaluate(() => errMesmos('tipo', ERR_LISTA.find(e => e.id === ERR_SEL_ULT)).length);
+    await page.click('#err-bulk [data-err-sel-mesmo="tipo"]'); await page.waitForTimeout(200);
+    const nSel = await page.evaluate(() => ERR_SEL.size);
+    chk(nSel === esperadoTipo && nSel > 1 && /selecionados/.test(await page.textContent('#err-bulk-n')), `UX-20: "Todos deste tipo" escolhe os ${esperadoTipo} do mesmo tipo (escolheu ${nSel})`);
+    await page.fill('#err-bulk-res', 'conferido em massa no teste');
+    await page.click('#err-bulk [data-err-lote="ignorado"]'); await page.waitForSelector('#conf-ov', { timeout: 5000 });
+    const prev = (await page.textContent('#conf-ov')).replace(/\s+/g, ' ');
+    chk(new RegExp('Fechar ' + nSel + ' problemas').test(prev) && /Por tipo/.test(prev) && /Por projeto/.test(prev) && /conferido em massa no teste/.test(prev), 'UX-20: antes de fechar, a prévia diz quantos, por tipo, por projeto e a frase: "' + prev.slice(0, 140) + '"');
+    chk(await aba('pedem_acao') === PEDEM, 'UX-20: ...e na prévia nada mudou ainda');
+    await page.click('#conf-ov [data-conf="sim"]'); await page.waitForFunction(() => document.querySelector('#toast.on .toast-acao'), null, { timeout: 8000 }); await pronto();
+    chk(await aba('pedem_acao') === PEDEM - nSel, `UX-20: confirmado, ${nSel} saem de Abertos (${await aba('pedem_acao')})`);
+    await page.click('#toast .toast-acao'); await page.waitForFunction(() => /Desfeito/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await pronto();
+    chk(await aba('pedem_acao') === PEDEM, `UX-20: Desfazer volta todos (${await aba('pedem_acao')})`);
+    const resVolta = py(`print(con.execute("SELECT COUNT(*) FROM erro WHERE resolucao='conferido em massa no teste'").fetchone()[0])`);
+    chk(resVolta === '0', 'UX-20: ...com a resolução de antes (a frase da ação em massa não fica gravada)');
+    // mensagens repetidas
+    await page.click('#err-abas [data-err-sit="avisos"]'); await pronto();
+    const av0 = await aba('avisos');
+    chk(await page.isVisible('[data-err-repetidos]'), 'UX-20: o aviso "mensagens repetidas" tem o botão Ver');
+    await page.click('[data-err-repetidos]'); await page.waitForSelector('#conf-ov', { timeout: 5000 });
+    const mtxt = (await page.textContent('#conf-ov')).replace(/\s+/g, ' ');
+    chk(/Mesclar 2/.test(mtxt) && /exiftool: tag duplicada/.test(mtxt) && /fica o nº/.test(mtxt), 'UX-20: Ver mostra os grupos repetidos, qual fica e quantas cópias fecham: "' + mtxt.slice(0, 160) + '"');
+    await page.click('#conf-ov [data-conf="sim"]'); await page.waitForFunction(() => document.querySelector('#toast.on .toast-acao'), null, { timeout: 8000 }); await pronto();
+    chk(await aba('avisos') === av0 - 2, `UX-20: Mesclar fecha as 2 cópias (${av0} -> ${await aba('avisos')})`);
+    await page.click('#toast .toast-acao'); await page.waitForFunction(() => /Desfeito/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await pronto();
+    chk(await aba('avisos') === av0, 'UX-20: Desfazer do Mesclar reabre as cópias');
   } catch (e) { chk(false, 'exceção: ' + e.message.split('\n')[0]); }
   chk(!erros.length, 'nenhum erro no console' + (erros.length ? ': ' + erros.slice(0, 5).join(' | ') : ''));
   chk(!falhas.length, 'nenhuma resposta de erro do painel' + (falhas.length ? ': ' + falhas.slice(0, 5).join(' | ') : ''));
