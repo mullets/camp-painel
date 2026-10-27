@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
+MODOS_RAPIDOS = {"ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -7257,7 +7257,7 @@ def filho(modo):
         if abriu:
             ver("planilha abre no openpyxl, uma aba por seção", wb.sheetnames == ["Resumo", "Folhas", "Publicações", "Pedidos", "Problemas", "Acessos ao site"], wb.sheetnames)
             vals = {r_[0]: r_[1] for r_ in wb["Resumo"].iter_rows(values_only=True) if r_ and r_[0]}
-            ver("Resumo da planilha bate com a tela", vals.get("Folhas digitalizadas ou importadas") == 9 and vals.get("Projetos publicados") == 1 and vals.get("Pedidos do site atendidos") == 2
+            ver("Resumo da planilha bate com a tela", vals.get("Folhas digitalizadas no período (CAMP Vision)") == 3 and vals.get("Folhas migradas/importadas do site (evento único)") == 2 and vals.get("Projetos publicados no período") == 1 and vals.get("Pedidos do site atendidos") == 2
                 and vals.get("Tempo médio de entrega (dias)") == 12.5 and vals.get("Problemas resolvidos") == 2 and vals.get("Pessoas que visitaram o site") == 50, vals)
             fol = [tuple(x for x in r_ if x is not None) for r_ in wb["Folhas"].iter_rows(values_only=True)]
             ver("aba Folhas: total por mês e o cruzamento mês x fundo", ("Total", 3, 2, 4, 9) in fol and ("mar/2025", 0, 4, 4) in fol, fol[:14])
@@ -8503,6 +8503,49 @@ def filho(modo):
         _, r = cli("convidado@camp.arq.br", "Uma-Senha-Nova-Boa-9")
         ver("configuração 0 = não vence", r.status_code == 200, f"HTTP {r.status_code}")
         c.close()
+        for l in res: print(l)
+    elif modo == "ux14_relatorios":
+        # UX-14: prestação de contas não soma a migração do site como digitalização; publicadas = só as do período
+        init_db(); _aplicar_migracoes_real()
+        import io as _io, openpyxl
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F023','Fundo Migrado','FMI',1),('F026','Fundo Digitalizado','FDI',1)")
+        for pc, f_, n in (("F023-P0001", "F023", 1), ("F026-P0001", "F026", 1)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f_, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (pc, f_, n, f"Projeto {pc}"))
+        seq = {}
+        def folha(pc, quando, origem, publicado=None):
+            seq[pc] = seq.get(pc, 0) + 1
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,criado_em,status_site,publicado_em) VALUES (?,?,?,?,?,?,?,?)",
+                      (f"{pc}-1970-S01-D{seq[pc]:05d}", pc, "S01", seq[pc], origem, quando, "no_ar" if publicado else "nao_publicado", publicado))
+        for _ in range(12): folha("F023-P0001", "2026-09-15 10:00:00", "importado", "2025-06-01 10:00:00")   # migração: já publicadas ANTES do período
+        for _ in range(3): folha("F026-P0001", "2026-03-10 10:00:00", "campvision", "2026-04-01 10:00:00")
+        folha("F026-P0001", "2026-05-10 10:00:00", "campvision"); folha("F026-P0001", "2026-05-11 10:00:00", "manual")
+        c.commit(); c.close()
+        auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        lei = TestClient(app, raise_server_exceptions=False); lei.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
+        j = lei.get("/api/relatorios?de=2026-01-01&ate=2026-10-27").json()
+        f, p_ = j["folhas"], j["publicacoes"]
+        ver("número principal = digitalizadas no período (4 pelo CAMP Vision), sem somar as 12 da migração", f.get("digitalizadas") == 4 and f.get("total") == 17, (f.get("digitalizadas"), f.get("total")))
+        ver("migradas/importadas separadas (12), enviadas pelo painel separadas (1)", f.get("importadas") == 12 and f.get("manuais") == 1, (f.get("importadas"), f.get("manuais")))
+        ver("nota explica a migração como evento único e diz o mês (set/2026)", "migração" in (f.get("nota_importacao") or "") and "evento único" in f["nota_importacao"] and f.get("meses_importacao") == ["set/2026"], f.get("nota_importacao"))
+        ver("publicadas no período: só as 3 publicadas em abr/2026 (as migradas, publicadas antes, não entram)", p_.get("folhas") == 3, p_.get("folhas"))
+        j0 = lei.get("/api/relatorios?de=2026-01-01&ate=2026-06-30").json()["folhas"]
+        ver("período sem migração: sem nota nem cartão de migradas", j0.get("importadas") == 0 and j0.get("nota_importacao") == "" and j0.get("digitalizadas") == 4, j0.get("nota_importacao"))
+        xa = lei.get("/api/relatorios.xlsx?de=2026-01-01&ate=2026-10-27")
+        wb = openpyxl.load_workbook(_io.BytesIO(xa.content))
+        vals = {r_[0]: r_[1] for r_ in wb["Resumo"].iter_rows(values_only=True) if r_ and r_[0]}
+        ver("Excel (Resumo) com a mesma separação: digitalizadas 4, migradas 12, enviadas pelo painel 1, publicadas no período 3",
+            vals.get("Folhas digitalizadas no período (CAMP Vision)") == 4 and vals.get("Folhas migradas/importadas do site (evento único)") == 12
+            and vals.get("Folhas enviadas pelo painel (cadastradas à mão)") == 1 and vals.get("Folhas publicadas no período") == 3
+            and "Folhas digitalizadas ou importadas" not in vals and "migração" in str(vals.get("Nota", "")), vals)
+        fol = {r_[0]: r_[1] for r_ in wb["Folhas"].iter_rows(values_only=True) if r_ and r_[0]}
+        ver("Excel (aba Folhas): digitalizadas e migradas separadas, com a nota", fol.get("Digitalizadas no período (CAMP Vision)") == 4 and fol.get("Migradas/importadas do site (evento único)") == 12 and "evento único" in str(fol.get("Nota", "")), list(fol.items())[:6])
         for l in res: print(l)
     elif modo == "parecido_desligado":
         # 26/10 (Rafael): "o sistema responde que um projeto com nome semelhante é o mesmo projeto, mas não é: tira isso" — no F9 da estação.
@@ -11434,6 +11477,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"usuários: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("164) UX-14: prestação de contas separa digitalizadas no período das migradas/importadas (tela e Excel)")
+rc, out = rodar("ux14_relatorios", f"{tmp}/ux14_relatorios.db")
+if rc != 0: ok(False, f"teste ux14_relatorios não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"relatórios: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
