@@ -9941,6 +9941,16 @@ def filho(modo):
         ver("UX-21: filas pelo papel: as de outro papel esmaecidas (ini-outro) e no fim, sem esconder; quem só lê não tem nada esmaecido",
             "function iniGrupoMeu(quem)" in html and "gs=[...g0.filter(g=>iniGrupoMeu(g.quem)),...g0.filter(g=>!iniGrupoMeu(g.quem))]" in html
             and ".ini-tg.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
+        i0 = html.find('<div class="ini-grid">'); i1 = html.find('<details class="panel ini-numeros" id="ini-numeros"'); i2 = html.find('</details>', i1)
+        grade, bloco = html[i0:i1], html[i1:i2]
+        ver("UX-30: a frente da Home tem só o que fazer agora, o caminho, a saúde e Hoje",
+            i0 > 0 and i1 > i0 and all(x in grade for x in ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-saude"', 'id="ini-t-hoje"'))
+            and not any(x in grade for x in ('id="ini-qualidade"', 'id="ini-ritmo"', 'id="ini-melhorias"', 'id="ini-t-site"', 'id="ini-visitas"')))
+        ver("UX-30: qualidade, ritmo, % no site, melhorias (e visitas com o GA ligado) no bloco recolhido 'Números do acervo', nada apagado",
+            all(x in bloco for x in ('id="ini-qualidade"', 'id="ini-ritmo"', 'id="ini-melhorias"', 'id="ini-t-site"', '${verVisitas?`<section', 'id="ini-visitas"'))
+            and "const verVisitas=admin&&d.analytics_ligado!==false;" in html and "localStorage.setItem('camp.ini.numeros'" in html)
+        ver("UX-30: Configurações tem 'Visitas ao site' (desligado / Ver como ligar)",
+            '<div class="panel" id="cfg-visitas-painel"><div class="ph"><h2>Visitas ao site</h2>' in html and "async function carregarVisitasConfig()" in html and "if(v==='config')carregarVisitasConfig();" in html)
         for l in res: print(l)
     elif modo == "ux12_desempenho":
         # UX-12 (26/10, logs técnicos): /api/estacoes alternava 20 ms e 3–10 s (ping às estações desligadas DENTRO da requisição quando

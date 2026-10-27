@@ -114,3 +114,11 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 - Preservação (UX-02): o bloco do topo de Máquinas diz quantas cópias as imagens têm, em frase simples: "Suas imagens têm duas cópias"
   (verde), "A segunda cópia das imagens está atrasada" (âmbar), "Suas imagens têm só uma cópia" (vermelho). Chip: "duas cópias" ·
   "cópia atrasada" · "só uma cópia". Espaço: "enche em ~N dias" (menos de 30 = atenção; menos de 10 = crítico).
+
+## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
+- Na frente da Home (**Precisa de você**) só ficam **O que fazer agora** (com **O caminho do material**), **Está tudo funcionando?** e **Hoje**.
+- **Números do acervo**: bloco recolhido no fim da Home com Qualidade da base, Ritmo das últimas 2 semanas, Quanto do acervo já está no site,
+  Melhorias de hoje e, com o Google Analytics ligado, Visitas ao site. Abre num clique e fica lembrado neste navegador.
+- **Visitas ao site** com o Google Analytics desligado mora em **Configurações** (com "Ver como ligar"), não na Home.
+- Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
+- O número de decisões só aparece com decisão pendente (nunca "0 decisões").

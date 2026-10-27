@@ -2,6 +2,9 @@
 //  - UX-18: o cartão "decisões" só aparece quando há decisão pendente (nunca "0 decisões — nenhuma esperando").
 //  - UX-21: filas pelo papel: o operador vê "Decidir" (de admin) esmaecida e no fim, sem perder os dados; o admin e quem só lê
 //    não têm nada esmaecido.
+//  - UX-30: a Home mostra só "O que fazer agora" (com o caminho do material), "Está tudo funcionando?" e "Hoje"; qualidade, ritmo,
+//    % no site e melhorias por pessoa ficam no bloco recolhido "Números do acervo" (abre num clique, lembra o estado, a rota
+//    painel/qualidade abre); "Visitas ao site — desligado" saiu da Home e aparece em Configurações.
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/ag_k/home.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/ag_k/home.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8951)
@@ -76,6 +79,36 @@ async function abrirHome(page) {
     const gL = await grupos(le.page);
     chk(gL.length >= 1 && gL.every(g => !g.outro), `UX-21: quem só lê não executa nenhuma fila: nada esmaecido, vê tudo (${gL.map(g => g.id).join(', ')})`);
     await le.ctx.close();
+
+    // ---------- UX-30 ----------
+    py(`con.execute("UPDATE configuracao SET valor='' WHERE chave IN ('ga4.propriedade','ga4.conta_servico')"); con.execute("UPDATE configuracao SET valor='0' WHERE chave='analytics.site_kit'")`);
+    await P.evaluate(() => { try { localStorage.removeItem('camp.ini.numeros') } catch (_) {} });
+    await abrirHome(P);
+    const vis = sel => P.locator(sel).first().isVisible();
+    const naGrade = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid h2')].map(h => h.textContent.trim()));
+    chk(JSON.stringify(naGrade) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Está tudo funcionando?', 'Hoje']), `UX-30: na frente da Home só o que fazer agora e a saúde do sistema: ${naGrade.join(' · ')}`);
+    const fechado = await P.evaluate(() => { const d = document.getElementById('ini-numeros'); return d && d.tagName === 'DETAILS' && !d.open; });
+    chk(fechado && !(await vis('#ini-qualidade')) && !(await vis('#ini-ritmo')) && !(await vis('#ini-melhorias')) && !(await vis('#ini-t-site')), 'UX-30: qualidade, ritmo, % no site e melhorias estão no bloco "Números do acervo", recolhido');
+    const tela = await P.locator('#v-painel').innerText();
+    chk(!/Visitas ao site/.test(tela) && !(await P.$('#ini-visitas')) && !/desligado/.test(tela), 'UX-30: "Visitas ao site — desligado" saiu da Home (GA desligado)');
+    await P.click('#ini-numeros > summary');
+    await P.waitForSelector('#ini-qualidade .qb-geral', { timeout: 8000 });
+    chk(await vis('#ini-ritmo svg') && await vis('#ini-melhorias') && /Folhas/.test(await P.locator('#ini-numeros .ini-prog').innerText()), 'UX-30: um clique abre o bloco e as métricas estão todas lá (nada apagado)');
+    await abrirHome(P);
+    chk(await P.evaluate(() => document.getElementById('ini-numeros').open), 'UX-30: quem abriu o bloco encontra aberto de novo ao voltar à Home');
+    await P.click('#ini-numeros > summary'); await P.waitForTimeout(200);
+    await abrirHome(P);
+    chk(await P.evaluate(() => !document.getElementById('ini-numeros').open), 'UX-30: fechou, fica fechado');
+    await P.evaluate(() => nav('painel/qualidade')); await P.waitForTimeout(1500);
+    chk(await P.evaluate(() => document.getElementById('ini-numeros').open) && await vis('#ini-qualidade .qb-geral'), 'UX-30: "Ver quanto falta em cada fundo" (rota painel/qualidade) abre o bloco na qualidade da base');
+    py(`con.execute("UPDATE configuracao SET valor='1' WHERE chave='analytics.site_kit'")`);   // GA "ligado": as visitas são métrica e vão para o bloco
+    await abrirHome(P);
+    chk(await P.evaluate(() => !!document.querySelector('#ini-numeros #ini-visitas') && !document.querySelector('.ini-grid #ini-visitas')), 'UX-30: com o GA ligado, as visitas ficam no bloco "Números do acervo", não na frente');
+    py(`con.execute("UPDATE configuracao SET valor='0' WHERE chave='analytics.site_kit'")`);
+    await P.evaluate(() => nav('config'));
+    await P.waitForFunction(() => /não está ligado/.test((document.getElementById('cfg-visitas') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+    const cfg = await P.evaluate(() => ({ t: (document.getElementById('cfg-visitas') || {}).textContent || '', tag: (document.getElementById('cfg-vis-tag') || {}).textContent || '', bt: !!document.querySelector('#cfg-visitas [onclick^="diagnosticarAnalytics"]:not([hidden])') }));
+    chk(/não está ligado/.test(cfg.t) && cfg.tag === 'desligado' && cfg.bt, `UX-30: Configurações tem "Visitas ao site" com "desligado" e "Ver como ligar": ${JSON.stringify(cfg).slice(0, 160)}`);
     await adm.ctx.close();
   } catch (e) { problemas.push('exceção: ' + (e && e.stack || e)); }
   finally { await browser.close(); }

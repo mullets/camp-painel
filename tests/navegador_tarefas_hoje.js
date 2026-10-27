@@ -10,6 +10,8 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
 (async () => {
   const browser = await chromium.launch({executablePath: process.env.CHROMIUM || undefined});
   const ctx = await browser.newContext({viewport: {width: 1366, height: 900}});
+  // UX-30: qualidade da base e melhorias moram no bloco recolhido "Números do acervo"; este teste abre o bloco (o estado fica lembrado)
+  await ctx.addInitScript(() => { try { localStorage.setItem('camp.ini.numeros', '1') } catch (_) {} });
   const page = await ctx.newPage();
   const erros = [];
   // conhecidos e fora deste cartão: o 401 de /api/auth/eu ANTES do login (é assim que a tela descobre que precisa entrar) e o /favicon.ico que o painel não tem
