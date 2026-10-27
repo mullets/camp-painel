@@ -181,6 +181,24 @@ def tarefas(u: dict = Depends(auth.exige("leitura"))) -> dict:
             "terminadas": [curta(t) for t in map(_ler, ter) if t] + [curta(t) for t in lidas if t["estado"] != "rodando" and t["ator"] == u["email"]]}
 
 
+@router.get("/novidades")
+def novidades(projeto: str | None = None, estacoes: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-12 · a ÚNICA consulta periódica da tela (a cada 30 s), no lugar de três: o chip de tarefas (era /api/tarefas a cada 20 s),
+    as máquinas do topo (?estacoes=1; era /api/estacoes a cada 30 s, agora servido do cache das sondas) e a marca do projeto aberto
+    (?projeto=F…; era /api/projetos/{p}/marca a cada 12 s). Cada parte tem o mesmo formato da rota de origem. Só a tela usa."""
+    out: dict = {"tarefas": tarefas(u)}
+    if estacoes:
+        from .rotas_gestao import estacoes as _estacoes
+        out["estacoes"] = _estacoes(0, u)
+    if projeto:
+        from .rotas_projetos import marca_do_projeto
+        try:
+            out["marca"] = marca_do_projeto(projeto, u)["marca"]
+        except HTTPException:
+            out["marca"] = None
+    return out
+
+
 @router.get("/tarefas/{tid}")
 def tarefa(tid: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
     t = _ler(tid)

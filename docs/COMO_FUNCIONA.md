@@ -2926,6 +2926,7 @@ Passo a passo de `tarefas.iniciar(tipo, alvo, u, fn, titulo)`:
 Rotas de acompanhamento (papel leitura):
 
 - `GET /api/tarefas` — o chip: `rodando` (até 20, de qualquer pessoa) e `terminadas` (até 10 desta pessoa nas últimas 24 h), com as últimas 8 linhas de log;
+- `GET /api/novidades?estacoes=1&projeto=F…` — (UX-12) a ÚNICA consulta periódica da tela, a cada 30 s (60 s com a aba escondida): `tarefas` (o mesmo de `/api/tarefas`), `estacoes` (o mesmo de `/api/estacoes`, servido do cache das sondas) e `marca` do projeto aberto. Só com tarefa rodando o chip pergunta `/api/tarefas` a cada 3 s;
 - `GET /api/tarefas/{id}` — uma tarefa completa (404 se não existe);
 - `GET /api/projetos/{codigo}/tarefa` — a publicação mais recente do projeto, rodando ou terminada há menos de 10 minutos (a página do projeto usa para retomar o acompanhamento).
 

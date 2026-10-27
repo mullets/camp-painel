@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux01_destino", "ux29_duplicata", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"ux01_destino", "ux29_duplicata", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux12_desempenho"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -3241,8 +3241,8 @@ def filho(modo):
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         c = connect()
-        for chave in ("estacao.foto1.ip", "estacao.foto2.ip", "estacao.contex1.ip", "estacao.contex2.ip", "estacao.universal1.ip", "estacao.universal2.ip", "campvision2.ip", "qnap.ip"):
-            c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES (?, '192.0.2.7', '', 0)", (chave,))
+        for n_, chave in enumerate(("estacao.foto1.ip", "estacao.foto2.ip", "estacao.contex1.ip", "estacao.contex2.ip", "estacao.universal1.ip", "estacao.universal2.ip", "campvision2.ip", "qnap.ip"), 1):
+            c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES (?, ?, '', 0)", (chave, f"192.0.2.{n_}"))   # UX-12: IPs distintos (o mesmo IP agora é medido 1 vez só)
         c.commit(); c.close()
         auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
         adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
@@ -3280,6 +3280,7 @@ def filho(modo):
         chamadas = {"n": 0}
         def calc(): chamadas["n"] += 1; return {"disponivel": True, "periodos": {}}
         ro._analytics_calcular = calc; ro._ANALYTICS_CACHE.update(t=0.0, v=None)
+        _c = connect(); _c.execute("UPDATE configuracao SET valor='1' WHERE chave='analytics.site_kit'"); _c.commit(); _c.close()   # UX-12: com o GA desligado nem calcula
         adm.get("/api/analytics"); adm.get("/api/analytics"); n2 = chamadas["n"]; adm.get("/api/analytics?fresco=1")
         ver("analytics: a segunda abertura usa o cache (a consulta ao Site Kit roda 1 vez) e ?fresco=1 consulta de novo", n2 == 1 and chamadas["n"] == 2, str(chamadas))
         for l in res: print(l)
@@ -9224,6 +9225,106 @@ def filho(modo):
         ver("tela: vigia a marca e mostra 'Este projeto mudou' com 'Atualizar' (data-pj-mudou)", "/marca')" in html and "[data-pj-mudou]" in html and "dataset.pjMudou" in html)
         c.close()
         for l in res: print(l)
+    elif modo == "ux12_desempenho":
+        # UX-12 (26/10, logs técnicos): /api/estacoes alternava 20 ms e 3–10 s (ping às estações desligadas DENTRO da requisição quando
+        # o cache vencia), /api/analytics levava 5–16 s com o GA desligado, /api/estacoes/pedidos-releitura 10,9 s (esperava a vez de
+        # gravar "consultou agora"), e a tela consultava /api/tarefas a cada 20 s + /api/estacoes a cada 30 s + a marca a cada 12 s.
+        init_db(); _aplicar_migracoes_real()
+        import time as _tm
+        from app import auth, rotas_gestao as rg
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for chave, ip in (("estacao.foto1.ip", "192.0.2.11"), ("campvision2.ip", "192.0.2.12")):
+            c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES (?, ?, '', 0)", (chave, ip))
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F097','Fundo UX12')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F097',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F097-P0001','F097',1,'Casa Rápida',1970)")
+        c.commit()
+        auth.criar_usuario("Adm", "adm12@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm12@camp.arq.br", "senha": "senha-longa-12345"})
+        # ---- /api/estacoes: estação desligada simulada (cada ping/porta/site leva 3 s, como o timeout real) ----
+        cont = {"ping": 0, "porta": 0, "site": 0}; por_ip = {}
+        def ping_morto(ip, timeout=1.2): cont["ping"] += 1; por_ip[ip] = por_ip.get(ip, 0) + 1; _tm.sleep(3); return False
+        def porta_morta(ip, porta, timeout=0.8): cont["porta"] += 1; _tm.sleep(3); return False
+        def site_morto(url): cont["site"] += 1; _tm.sleep(3); return {"status": None, "ok": False, "estado": "sem_resposta", "alerta": False}
+        rg._ping, rg._porta, rg._medir_site = ping_morto, porta_morta, site_morto
+        rg.TTL_SONDA_S = 0.5
+        def tempo(url, cli=None):
+            t0 = _tm.monotonic(); r = (cli or adm).get(url); return _tm.monotonic() - t0, r
+        dt, r = tempo("/api/estacoes")
+        foto = lambda j: next(m for m in j["maquinas"] if m["config_chave"] == "estacao.foto1.ip")
+        ver("1ª abertura (nada medido ainda) com estação inalcançável: responde em menos de 2 s, sem esperar o ping de 3 s; a estação vem 'não testada' (online null) e o site 'sem medida' (null)",
+            r.status_code == 200 and dt < 2.0 and foto(r.json())["online"] is None and r.json()["site"]["http"] is None, f"{dt:.2f}s {r.status_code}")
+        _tm.sleep(3.3)
+        dt, r = tempo("/api/estacoes")
+        ver("medida em segundo plano: a abertura seguinte já mostra a estação desligada (online false) e responde na hora (< 300 ms)", dt < 0.3 and foto(r.json())["online"] is False, f"{dt:.2f}s")
+        _tm.sleep(3.3); _tm.sleep(0.6)   # a renovação daquela abertura terminou e a medição venceu de novo (TTL de teste 0,5 s)
+        n_antes = por_ip.get("192.0.2.11", 0)
+        dt, r = tempo("/api/estacoes")
+        ver("medição vencida: a tela recebe a última medição NA HORA (< 300 ms) e uma nova roda em segundo plano (antes esperava 3 s)",
+            dt < 0.3 and foto(r.json())["online"] is False, f"{dt:.2f}s")
+        _tm.sleep(0.2)
+        ver("a nova medição de fato começou em segundo plano", por_ip.get("192.0.2.11", 0) == n_antes + 1, str(por_ip))
+        tempos = []
+        for _ in range(20):
+            tempos.append(tempo("/api/estacoes")[0]); _tm.sleep(0.05)
+        p95 = sorted(tempos)[int(0.95 * len(tempos)) - 1]
+        ver("p95 de 20 aberturas seguidas (com medições vencendo no meio) < 300 ms", p95 < 0.3, f"p95={p95 * 1000:.0f} ms")
+        ver("uma medição por máquina de cada vez: 20 aberturas durante a medição não enfileiram 20 pings da mesma estação", por_ip.get("192.0.2.11", 0) == n_antes + 1, str(por_ip))
+        _tm.sleep(3.3)
+        dt, r = tempo("/api/estacoes?fresco=1")
+        ver("?fresco=1 (botão 'Atualizar agora') continua medindo de verdade e espera o resultado", dt >= 2.9 and foto(r.json())["online"] is False, f"{dt:.2f}s")
+        # ---- /api/analytics com o GA desligado ----
+        from app import wp as _wp
+        wpc = {"n": 0}
+        class WPContado:
+            def __init__(self, *a, **k): wpc["n"] += 1; _tm.sleep(1); raise RuntimeError("site fora do ar")
+        _wp.WP = WPContado
+        dt, r = tempo("/api/analytics")
+        ver("GA desligado (sem ga4.propriedade/ga4.conta_servico e analytics.site_kit=0): /api/analytics responde na hora 'desligado' SEM ir ao site", r.status_code == 200 and r.json().get("desligado") is True and r.json()["disponivel"] is False and wpc["n"] == 0 and dt < 0.3, f"{dt:.2f}s wp={wpc['n']} {r.text[:120]}")
+        p = adm.get("/api/painel").json()
+        ver("/api/painel diz analytics_ligado=false (a tela nem chama /api/analytics)", p.get("analytics_ligado") is False, str(p.get("analytics_ligado")))
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='analytics.site_kit'"); c.commit()
+        r = adm.get("/api/analytics")
+        ver("com analytics.site_kit=1 volta a consultar o Site Kit (e ligado aparece no /api/painel)", wpc["n"] >= 1 and adm.get("/api/painel").json().get("analytics_ligado") is True, f"wp={wpc['n']}")
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='analytics.site_kit'"); c.execute("UPDATE configuracao SET valor='123' WHERE chave='ga4.propriedade'"); c.execute("UPDATE configuracao SET valor='{}' WHERE chave='ga4.conta_servico'"); c.commit()
+        ver("GA4 direto preenchido também conta como ligado", adm.get("/api/painel").json().get("analytics_ligado") is True)
+        # ---- /api/estacoes/pedidos-releitura com o banco ocupado por outra escrita ----
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        lan = com_ip("192.168.15.43")
+        trava = sqlite3.connect(os.environ["CAMP_DB_PATH"], timeout=1); trava.execute("BEGIN IMMEDIATE")
+        trava.execute("UPDATE configuracao SET valor=valor WHERE chave='wp.url'")
+        dt, r = tempo("/api/estacoes/pedidos-releitura?estacao=campvision2", lan)
+        ver("CAMP Vision consulta pedidos com outra escrita longa em curso: responde em < 2 s (antes esperava até 30 s a vez de gravar 'consultou agora')", r.status_code == 200 and "pedidos" in r.json() and dt < 2.0, f"{dt:.2f}s HTTP {r.status_code}")
+        trava.rollback(); trava.close()
+        lan.get("/api/estacoes/pedidos-releitura?estacao=campvision2")
+        k = connect(); row = k.execute("SELECT estacao FROM releitura_consulta WHERE id=1").fetchone()
+        ver("com o banco livre, a consulta é registrada (a tela segue sabendo que o CAMP Vision atende)", row is not None and row[0] == "campvision2", str(row and tuple(row)))
+        k.execute("UPDATE releitura_consulta SET consultado_em='2000-01-01 00:00:00' WHERE id=1"); k.commit()
+        lan.get("/api/estacoes/pedidos-releitura?estacao=campvision2")
+        ver("e grava no máximo 1 vez por minuto (a consulta seguinte, da mesma estação, não escreve no banco)", k.execute("SELECT consultado_em FROM releitura_consulta WHERE id=1").fetchone()[0] == "2000-01-01 00:00:00")
+        lan.get("/api/estacoes/pedidos-releitura?estacao=outra")
+        ver("estação diferente grava na hora", k.execute("SELECT estacao FROM releitura_consulta WHERE id=1").fetchone()[0] == "outra")
+        k.close()
+        # ---- /api/novidades: a consulta periódica única ----
+        n = adm.get("/api/novidades?estacoes=1&projeto=F097-P0001")
+        j = n.json() if n.status_code == 200 else {}
+        ver("/api/novidades junta tarefas (formato de /api/tarefas), estações (formato de /api/estacoes) e a marca do projeto", n.status_code == 200 and set(j.get("tarefas", {})) == {"rodando", "terminadas"} and "maquinas" in (j.get("estacoes") or {}) and j.get("marca") == adm.get("/api/projetos/F097-P0001/marca").json()["marca"], n.text[:200])
+        j2 = adm.get("/api/novidades").json()
+        ver("sem parâmetros só as tarefas (nada de sondar máquinas); projeto que não existe: marca null", "estacoes" not in j2 and "marca" not in j2 and adm.get("/api/novidades?projeto=F097-P9999").json().get("marca", 1) is None, str(j2)[:120])
+        ver("sem login: 401", TestClient(app, raise_server_exceptions=False).get("/api/novidades").status_code == 401)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: uma consulta periódica (/api/novidades a cada 30 s); sem os timers antigos de /api/estacoes (30 s) e da marca (12 s)",
+            "API('/api/novidades?'" in html and "setInterval(atualizarTopoEstacoes" not in html and "setInterval(()=>vigiarMarca()" not in html and "document.hidden?60000:30000" in html)
+        ver("tela: com analytics_ligado===false o Painel nem chama /api/analytics", "d.analytics_ligado===false?Promise.resolve(" in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "olhe_a_folha":
         # 20/10 (print da F026-P0009: "se eu resolvo um problema ele tem que sair da lista, pelo amor de deus isso é básico!"): o aviso do CAMP Vision
         # "série incerta na triagem … conferir na folha de contatos" vinha com categoria fora da lista ('outro') e não fechava ao conferir.
@@ -11109,6 +11210,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"camp120: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-12) desempenho: /api/estacoes do cache (estação inalcançável não trava), analytics desligado sem trabalho, pedidos de releitura sem esperar o banco, polling único")
+rc, out = rodar("ux12_desempenho", f"{tmp}/ux12.db")
+if rc != 0: ok(False, f"teste ux12_desempenho não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"ux12: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("150) 20/10: aviso 'olhe a folha' do CAMP Vision ('série incerta') fecha ao conferir; migração 140 nas já conferidas")
 rc, out = rodar("olhe_a_folha", f"{tmp}/olhe_a_folha.db")

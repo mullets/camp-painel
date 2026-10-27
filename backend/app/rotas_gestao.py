@@ -489,25 +489,72 @@ def _estado_qnap(raiz: Path) -> tuple[bool, str | None]:
         return False, "nao_existe"
 
 
-# ---- sondas de rede (ping, porta, site): em PARALELO e com cache de 30 s; ?fresco=1 (botão "Atualizar agora") ignora o cache ----
+# ---- sondas de rede (ping, porta, site, estado do QNAP): em PARALELO, em SEGUNDO PLANO e servidas do cache ----
+# UX-12 (26/10, logs: /api/estacoes alternava 20 ms e 3–10 s): o cache de 30 s já existia, mas quando vencia a requisição ESPERAVA
+# o ping às estações desligadas (~2 s cada), a porta e o site (até 15 s). Agora a tela recebe na hora a última medição e, se ela
+# venceu, uma nova roda em segundo plano (stale-while-revalidate). Só a primeira vez (nada medido ainda) espera um pouco
+# (PRAZO_PRIMEIRA_S); o que não ficou pronto volta como "não medido" (None). ?fresco=1 (botão "Atualizar agora") mede e espera.
 import concurrent.futures as _cf
 import threading as _th
 _SONDAS: dict = {}
 _SONDAS_LOCK = _th.Lock()
+_EM_CURSO: dict = {}
 TTL_SONDA_S = 30.0
+PRAZO_PRIMEIRA_S = 1.5
 _SITE_ESTADOS: list = []
+_POOL_SONDAS = _cf.ThreadPoolExecutor(max_workers=12, thread_name_prefix="sonda")
+
+
+def _rodar_sonda(chave, fn):
+    try:
+        r = fn()
+        with _SONDAS_LOCK:
+            _SONDAS[chave] = (time.monotonic(), r)
+        return r
+    finally:
+        with _SONDAS_LOCK:
+            _EM_CURSO.pop(chave, None)
+
+
+def _agendar_sonda(chave, fn):
+    """Uma medição por chave de cada vez: se já há uma rodando, devolve a mesma (nada de 10 pings iguais em fila)."""
+    with _SONDAS_LOCK:
+        f = _EM_CURSO.get(chave)
+        if f is None:
+            f = _EM_CURSO[chave] = _POOL_SONDAS.submit(_rodar_sonda, chave, fn)
+    return f
 
 
 def _sonda(chave, fn, fresco: bool = False):
-    if not fresco:
-        with _SONDAS_LOCK:
-            v = _SONDAS.get(chave)
-        if v and time.monotonic() - v[0] < TTL_SONDA_S:
-            return v[1]
-    r = fn()
+    """O valor em cache (vencido ou não) ou, quando não há nenhum (ou fresco), o Future da medição."""
     with _SONDAS_LOCK:
-        _SONDAS[chave] = (time.monotonic(), r)
-    return r
+        v = _SONDAS.get(chave)
+    if fresco or v is None:
+        return _agendar_sonda(chave, fn)
+    if time.monotonic() - v[0] >= TTL_SONDA_S:
+        _agendar_sonda(chave, fn)          # renova em segundo plano; a tela fica com a última medição
+    return v[1]
+
+
+def _valor_sonda(x, ate: float | None, padrao=None):
+    """Valor de _sonda: o próprio valor, ou espera o Future até o instante `ate` (None = o quanto precisar)."""
+    if not isinstance(x, _cf.Future):
+        return x
+    try:
+        return x.result(timeout=None if ate is None else max(0.0, ate - time.monotonic()))
+    except _cf.TimeoutError:
+        return padrao
+
+
+def _qnap_estado_completo(raiz: Path, entrada: Path | None, prontos: Path) -> dict:
+    """O que a tela mostra das pastas do QNAP. Mexe no SMB (montagem presa trava): por isso também é uma sonda em segundo plano."""
+    montado, motivo = _estado_qnap(raiz)
+    def existe(x: Path) -> bool:
+        try:
+            return x.exists()
+        except OSError:
+            return False
+    return {"montado": montado, "motivo": motivo, "entrada_montada": existe(entrada) if entrada else None, "prontos_montada": existe(prontos)}
 
 
 def _medir_site(url: str) -> dict:
@@ -545,15 +592,18 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
     entrada = Path(entrada_txt) if entrada_txt else None
     prontos = Path(prontos_txt) if prontos_txt else raiz
 
+    fr = bool(fresco)
+    ate = None if fr else time.monotonic() + PRAZO_PRIMEIRA_S
+    f_qnap = _sonda(("qnap", str(raiz), entrada_txt, str(prontos)), lambda: _qnap_estado_completo(raiz, entrada, prontos), fr)
     out = {
         "qnap": {
             "raiz": str(raiz),
-            "montado": _estado_qnap(raiz)[0],
-            "motivo": _estado_qnap(raiz)[1],
+            "montado": None,
+            "motivo": None,
             "entrada_captura": str(entrada) if entrada else None,
-            "entrada_montada": entrada.exists() if entrada else None,
+            "entrada_montada": None,
             "prontos_raiz": str(prontos),
-            "prontos_montada": prontos.exists(),
+            "prontos_montada": None,
         },
         "maquinas": [],
         "pipeline": {
@@ -609,18 +659,17 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
          "Entrada bruta e acervo final", 445),
     ]
     url = _cfg(con, "wp.url", settings.WP_BASE_URL)
-    ex = _cf.ThreadPoolExecutor(max_workers=12)
-    fr = bool(fresco)
-    f_site = ex.submit(_sonda, ("http", url), lambda: _medir_site(url), fr)
+    f_site = _sonda(("http", url), lambda: _medir_site(url), fr)
     sondas: dict = {}
     for _eid, _n, _ch, _t, _f, _porta_s in estacoes_cfg:
         _ip = _cfg(con, _ch)
         if _ip:
-            sondas[_ch] = (ex.submit(_sonda, ("ping", _ip), lambda ip=_ip: _ping(ip), fr),
-                           ex.submit(_sonda, ("porta", _ip, _porta_s), lambda ip=_ip, p=_porta_s: _porta(ip, p), fr) if _porta_s else None)
+            sondas[_ch] = (_sonda(("ping", _ip), lambda ip=_ip: _ping(ip), fr),
+                           _sonda(("porta", _ip, _porta_s), lambda ip=_ip, p=_porta_s: _porta(ip, p), fr) if _porta_s else None)
+    out["qnap"].update(_valor_sonda(f_qnap, ate) or {})
     for estacao_id, nome, chave, tipo, funcao, porta_servico in estacoes_cfg:
         ip = _cfg(con, chave)
-        online = sondas[chave][0].result() if ip else None
+        online = _valor_sonda(sondas[chave][0], ate) if ip else None
         hb = heartbeats.get(estacao_id) if estacao_id else None
         app_online = bool(hb and hb["idade_segundos"] is not None and hb["idade_segundos"] <= 75)
         try:                                              # detalhe antigo ou quebrado nunca derruba a tela
@@ -657,7 +706,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         if ip and porta_servico:
             item["servico"] = {
                 "porta": porta_servico,
-                "online": sondas[chave][1].result() if sondas.get(chave) and sondas[chave][1] else _porta(ip, porta_servico),
+                "online": _valor_sonda(sondas[chave][1], ate) if sondas.get(chave) and sondas[chave][1] else None,
                 "nome": "SSH" if porta_servico == 22 else "SMB",
             }
         out["maquinas"].append(item)
@@ -672,11 +721,10 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "publicados_sem_codigo": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND codigo_detectado IS NULL").fetchone()[0],
         "intervalo_sync_min": _cfg(con, "sync.intervalo_min", "15"),
     }
-    out["site"]["http"] = f_site.result()
+    out["site"]["http"] = _valor_sonda(f_site, ate)          # None = ainda não medido (a tela diz "Site sem medida")
     from .rede import negadas_por_token
     admin_ = u.get("papel") in ("admin", "master")
     out["estacoes_negadas"] = [{**n, "ip": n["ip"] if admin_ else None} for n in negadas_por_token(con)]   # IP só para admin
-    ex.shutdown(wait=False)
     con.close()
     try:
         out["backup"] = bk.estado_publico()

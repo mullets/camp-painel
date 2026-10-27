@@ -116,6 +116,19 @@ async def _startup() -> None:
     asyncio.create_task(_fila_correcao_site_periodica())
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
+    asyncio.create_task(_aquecer_sondas())                # UX-12: a 1ª abertura de Máquinas já encontra as estações medidas
+
+
+async def _aquecer_sondas() -> None:
+    """UX-12: mede estações, QNAP e site uma vez logo depois de subir (em segundo plano); dali em diante /api/estacoes
+    serve do cache e renova sozinho quando a medição vence."""
+    import asyncio
+    await asyncio.sleep(3)
+    try:
+        from .rotas_gestao import estacoes
+        await asyncio.to_thread(estacoes, 0, {"papel": "leitura", "email": "sistema"})
+    except Exception:  # noqa: BLE001  (nunca impede o painel de subir)
+        pass
 
 
 async def _fila_correcao_site_periodica() -> None:

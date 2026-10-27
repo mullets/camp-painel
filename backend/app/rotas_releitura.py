@@ -190,24 +190,57 @@ def _codigo_de_origem(con, item_codigo: str) -> str | None:
     return None
 
 
+# UX-12 (26/10, logs: esta rota levou 10,9 s, o normal é ~25 ms): cada consulta do CAMP Vision GRAVAVA "consultou agora" e esperava
+# a vez de escrever no banco (até 30 s) quando outra escrita longa estava em curso. A tela só usa esse registro para dizer
+# "consultou há mais de 10 min", então: grava no máximo 1 vez por minuto (ou quando muda a estação/IP) e, com o banco ocupado,
+# desiste em 0,5 s e tenta na próxima consulta. A resposta ao CAMP Vision é a mesma (contrato inalterado).
+_CONSULTA_GRAVADA: dict = {"t": -1e9, "quem": None}
+CONSULTA_GRAVAR_S = 60.0
+
+
+def _registrar_consulta(con, estacao: str | None, ip: str) -> None:
+    import sqlite3
+    import time
+    if time.monotonic() - _CONSULTA_GRAVADA["t"] < CONSULTA_GRAVAR_S and _CONSULTA_GRAVADA["quem"] == (estacao, ip):
+        return
+    try:
+        con.execute("PRAGMA busy_timeout = 500")
+        con.execute("INSERT INTO releitura_consulta (id, consultado_em, estacao, ip) VALUES (1, datetime('now'), ?, ?) ON CONFLICT(id) DO UPDATE SET consultado_em=excluded.consultado_em, estacao=excluded.estacao, ip=excluded.ip",
+                    (estacao, ip))
+        con.commit()
+        _CONSULTA_GRAVADA.update(t=time.monotonic(), quem=(estacao, ip))
+    except sqlite3.OperationalError:          # banco ocupado: fica para a próxima consulta (o CAMP Vision não espera por isso)
+        con.rollback()
+    finally:
+        con.execute("PRAGMA busy_timeout = 30000")
+
+
+def _relativa(pasta: str, raiz: Path) -> str | None:
+    """Caminho da pasta do lote relativo à raiz do acervo. Primeiro só com texto (sem tocar no SMB); resolve() só se precisar (link simbólico)."""
+    import os
+    try:
+        return str(Path(os.path.normpath(os.path.abspath(pasta))).relative_to(os.path.normpath(os.path.abspath(str(raiz)))))
+    except ValueError:
+        pass
+    try:
+        return str(Path(pasta).resolve().relative_to(raiz.resolve()))
+    except (ValueError, OSError):
+        return None
+
+
 @router.get("/estacoes/pedidos-releitura")
 def pedidos_para_o_cv2(request: Request, estacao: str = "") -> dict:
     ip = exigir_estacao(request)
     con = connect()
     try:
-        con.execute("INSERT INTO releitura_consulta (id, consultado_em, estacao, ip) VALUES (1, datetime('now'), ?, ?) ON CONFLICT(id) DO UPDATE SET consultado_em=excluded.consultado_em, estacao=excluded.estacao, ip=excluded.ip",
-                    (estacao.strip().lower()[:64] or None, ip))
-        con.commit()
+        _registrar_consulta(con, estacao.strip().lower()[:64] or None, ip)
         raiz = _qnap_prontos_raiz()
         saida = []
         for p in con.execute("SELECT * FROM pedido_releitura WHERE estado='pedido' OR (estado='em_andamento' AND (estacao IS ? OR ? = '')) ORDER BY id LIMIT 50", (estacao.strip().lower() or None, estacao.strip())).fetchall():
             l = con.execute("SELECT pasta_qnap FROM lista_processamento WHERE projeto_codigo=? ORDER BY id DESC LIMIT 1", (p["projeto_codigo"],)).fetchone()
             rel = None
             if l and l["pasta_qnap"]:
-                try:
-                    rel = str(Path(l["pasta_qnap"]).resolve().relative_to(raiz.resolve()))
-                except ValueError:
-                    rel = None
+                rel = _relativa(l["pasta_qnap"], raiz)
             pedido = {"id": p["id"], "escopo": "folha" if p["item_codigo"] else "projeto", "projeto_codigo": p["projeto_codigo"], "item_codigo": p["item_codigo"],
                       "motivo": p["motivo"], "pedido_em": p["pedido_em"], "estado": p["estado"], "pasta_relativa": rel}
             origem = _codigo_de_origem(con, p["item_codigo"]) if p["item_codigo"] else None

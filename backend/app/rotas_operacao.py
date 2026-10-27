@@ -92,6 +92,7 @@ def painel(u: dict = Depends(auth.exige("leitura"))) -> dict:
     d["no_site"] = pd.no_site(con)
     d["hoje_frases"] = pd.atividade_hoje(con)
     d["alertas"] = pd.alertas_criticos(con) if u["papel"] != "leitura" else []
+    d["analytics_ligado"] = analytics_ligado(con)          # UX-12: desligado, a tela nem chama /api/analytics
     con.close()
     return d
 
@@ -253,10 +254,33 @@ def _top_rows(report: dict) -> list[dict]:
 _ANALYTICS_CACHE: dict = {"t": 0.0, "v": None}
 
 
+def analytics_ligado(con) -> bool:
+    """UX-12: o Google Analytics está ligado ao painel? GA4 direto (as duas chaves preenchidas) ou o Site Kit pedido (analytics.site_kit=1).
+    Só lê a configuração: nada de rede."""
+    v = {r[0]: (r[1] or "").strip() for r in con.execute(
+        "SELECT chave, valor FROM configuracao WHERE chave IN ('ga4.propriedade','ga4.conta_servico','analytics.site_kit')")}
+    return bool(v.get("ga4.propriedade") and v.get("ga4.conta_servico")) or v.get("analytics.site_kit") == "1"
+
+
+def _analytics_desligado() -> dict:
+    return {"disponivel": False, "desligado": True, "origem": "Google Site Kit / GA4",
+            "agora": {"disponivel": False, "usuarios": None, "janela_min": 30}, "periodos": {},
+            "top_fundos": [], "top_projetos": [], "top_paginas": [], "erro": None,
+            "acao": "Para ver as visitas, preencha ga4.propriedade e ga4.conta_servico em Configurações (ou analytics.site_kit = 1)."}
+
+
 @router.get("/analytics")
 def analytics(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """Audiência (cache de 10 min quando deu certo, 60 s quando deu erro: a consulta ao Site Kit leva segundos e antes rodava a cada abertura do painel)."""
+    """Audiência (cache de 10 min quando deu certo, 60 s quando deu erro: a consulta ao Site Kit leva segundos e antes rodava a cada abertura do painel).
+    UX-12: com o GA desligado responde na hora, sem ir ao site nem ao Google."""
     import time as _t
+    con = connect()
+    try:
+        ligado = analytics_ligado(con)
+    finally:
+        con.close()
+    if not ligado:
+        return _analytics_desligado()
     c = _ANALYTICS_CACHE
     if not fresco and c["v"] is not None and _t.monotonic() - c["t"] < (600 if c["v"].get("disponivel") else 60):
         return c["v"]
