@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
+MODOS_RAPIDOS = {"ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -377,6 +377,67 @@ def filho(modo):
         (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00001.pdf").write_bytes(b"%PDF-1.4"); (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00002.pdf").write_bytes(b"%PDF-1.4")
         (pasta / "02 - Documentos textuais" / "F026-P0001-1972-S02-D00002.tif").write_bytes(b"II*\0"); (pasta / "02 - Documentos textuais" / "leiame.txt").write_text("x")
         ver("PDF conta como folha (2 documentos; o TIF do mesmo código não conta de novo; .txt não conta)", contar_documentos(pasta)[0] == 2, str(contar_documentos(pasta)))
+        for l in res: print(l)
+    elif modo == "ux08_aviso_exif":
+        # UX-08: aviso [Minor] do exiftool não trava o lote e o erro do CAMP Vision vem em linguagem de gente (com "Ver detalhes técnicos")
+        init_db(); aplicar_migracoes()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.importador_lote import registrar_erros_cv
+        from app.saidas_cv import itens_aceite
+        from app.pendencias import tarefas
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        MINOR = "; ".join(f"F026-P0009-1978-S01-D0003{i}.tif Warning: [Minor] IPTC:By-line exceeds length limit (truncated)" for i in range(1, 5))
+        FRASE = "4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F016','Outro','OUT',1)")
+        for f, n, t in (("F026", 9, "CRASA"), ("F016", 24, "Casa EXIF")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1978)", (f"{f}-P{n:04d}", f, n, t))
+        vazio = _P(tempfile.mkdtemp())
+        l1 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('L1','F026-P0009',?,'erro',?)",
+                       (str(vazio / "a"), _j.dumps({"erro": MINOR}))).lastrowid
+        l2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, status_json) VALUES ('L2','F016-P0024',?,'erro',?)",
+                       (str(vazio / "b"), _j.dumps({"status": "erro", "mensagem": "Aceite reprovado: EXIF conferido em 6 de 48 arquivos"}))).lastrowid
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        F = {x["id"]: x for x in adm.get("/api/filas").json()}
+        x1, x2 = F[l1].get("erro_cv_explicado") or {}, F[l2].get("erro_cv_explicado") or {}
+        ver("Fila: só aviso [Minor] (sem folhas nem pacote) vem explicado numa frase que conta as imagens", x1.get("tipo") == "aviso_menor" and x1.get("texto") == FRASE, x1)
+        ver("Fila: a mensagem crua do exiftool fica em 'detalhes' (Ver detalhes técnicos) e há o que fazer", "IPTC:By-line" in (x1.get("detalhes") or "") and "ler de novo esta pasta" in (x1.get("o_que_fazer") or ""), x1)
+        ver("Fila: 'EXIF conferido em 6 de 48' vira frase com quantos faltaram e diz que o CAMP Vision não mandou a lista",
+            x2.get("tipo") == "exif_parcial" and "6 de 48" in x2.get("texto", "") and "42 ficaram" in x2.get("texto", "") and "não informou quais" in x2.get("texto", "") and x2.get("arquivos") == [], x2)
+        c.execute("UPDATE lista_processamento SET status_json=? WHERE id=?", (_j.dumps({"status": "erro", "mensagem": "EXIF conferido em 46 de 48 arquivos",
+                  "exif_faltando": [{"arquivo": "F016-P0024-1978-S01-D00007.tif", "motivo": "arquivo travado pela estação"}, "F016-P0024-1978-S01-D00009.tif"]}), l2)); c.commit()
+        x2 = next(x for x in adm.get("/api/filas").json() if x["id"] == l2).get("erro_cv_explicado") or {}
+        ver("Fila: se o CAMP Vision manda a lista, os arquivos que faltaram vêm com o motivo",
+            [a["arquivo"] for a in x2.get("arquivos", [])] == ["F016-P0024-1978-S01-D00007.tif", "F016-P0024-1978-S01-D00009.tif"] and x2["arquivos"][0]["motivo"] == "arquivo travado pela estação" and "não informou" not in x2.get("texto", ""), x2)
+        t = [i for g in tarefas(c, "admin") for i in g.get("itens", []) if (i.get("acao") or {}).get("tipo") == "fila_erro" and i.get("codigo") == "F026-P0009"]
+        ver("Precisa de você: o lote parado diz o que aconteceu em linguagem de gente", t and t[0]["detalhe"].startswith(FRASE[:40]), t)
+        # o lote ganha folhas: o aviso [Minor] não o deixa parado; vira aviso na folha e o resumo conta as imagens
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, lote_id, revisao, origem)
+                     VALUES ('F026-P0009-1978-S01-D00031','F026-P0009','S01',31,'x',?, 'pendente', 'importado')""", (l1,)); c.commit()
+        r = adm.get("/api/projetos/F026-P0009/proximo-passo").json()
+        ver("com folhas, o lote só com aviso [Minor] sai de 'erro'", c.execute("SELECT etapa FROM lista_processamento WHERE id=?", (l1,)).fetchone()[0] != "erro", r.get("lote"))
+        rs = r.get("avisos_cv_resumo") or {}
+        ver("página do projeto: avisos_cv_resumo conta as 4 imagens numa frase e traz as linhas técnicas", rs.get("texto") == FRASE and (rs.get("detalhes") or "").count("IPTC:By-line") == 4, rs)
+        # erros.json: aviso [Minor] marcado 'bloqueia' pelo CAMP Vision vira 'aviso' (não trava a publicação)
+        pasta = _P(tempfile.mkdtemp()); (pasta / "catalogacao").mkdir()
+        (pasta / "catalogacao" / "erros.json").write_text(_j.dumps([{"arquivo": "F026-P0009-1978-S01-D00031", "categoria": "exif", "gravidade": "bloqueia",
+            "detalhe": "F026-P0009-1978-S01-D00031.tif Warning: [Minor] IPTC:By-line exceeds length limit (truncated)"}]), encoding="utf-8")
+        registrar_erros_cv(c, "F026-P0009", pasta); c.commit()
+        e = c.execute("SELECT gravidade, descricao FROM erro WHERE chave LIKE 'campvision:erros:%' AND codigo='F026-P0009-1978-S01-D00031'").fetchone()
+        ver("erros.json: [Minor] do exiftool vira 'aviso' (não 'bloqueia') com texto para gente e o técnico depois",
+            e and e["gravidade"] == "aviso" and e["descricao"].startswith("1 arquivo (D00031): o nome do autor") and "Detalhe técnico:" in e["descricao"], dict(e) if e else None)
+        it = itens_aceite({"exif_conferido": {"ok": False, "contagem": 2, "faltam": [{"arquivo": "a.tif", "motivo": "sem permissão"}, "b.tif"]}, "publicavel": False})
+        ver("aceite: exif_conferido com a lista dos arquivos traz arquivo e motivo para a tela", it and it[0].get("arquivos") == [{"arquivo": "a.tif", "motivo": "sem permissão"}, {"arquivo": "b.tif", "motivo": None}], it)
+        ver("aceite: sem lista, o item fica como antes (sem 'arquivos')", "arquivos" not in itens_aceite({"exif_conferido": {"ok": False, "contagem": 2}})[0])
         for l in res: print(l)
     elif modo == "cp42":
         init_db(); aplicar_migracoes()
@@ -11704,6 +11765,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117b) UX-08: aviso [Minor] do exiftool não trava o lote; erro do CAMP Vision em linguagem de gente; EXIF conferido em N de M")
+rc, out = rodar("ux08_aviso_exif", f"{tmp}/ux08.db")
+if rc != 0: ok(False, f"teste ux08_aviso_exif não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-08: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("118) Migrações em transação por arquivo, IP real atrás do túnel e serviço com proxy-headers (CAMP-042)")
 rc, out = rodar("cp42", f"{tmp}/cp42.db")

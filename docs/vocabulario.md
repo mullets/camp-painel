@@ -56,6 +56,8 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 | **Voltar para rascunho** | vai para `rascunho` | continua salvo para revisão; se estava publicado, exige admin master (tira do público, como despublicar) |
 | **Despublicar** | vai para `fora_do_ar` | exige admin master quando já estava publicado; fundo pede o motivo |
 | **Autorizar publicação** | marca o projeto como autorizado | não publica sozinho |
+| **Ler de novo esta pasta** | pede ao CAMP Vision a releitura da pasta do lote (UX-08) | é o botão principal de um lote parado com erro; antes de confirmar mostra o que muda e o que fica |
+| **Tentar de novo** (lote parado) | devolve a pasta ao CAMP Vision como está, sem releitura | secundário; o tooltip diz: use só quando o erro foi passageiro |
 
 ## Ignorar um item (UX-03, 27/10/2026)
 | Texto | Efeito |
@@ -66,6 +68,7 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
 
 ## Regras de texto
+- Erro do CAMP Vision: primeiro o que aconteceu em linguagem de gente ("4 imagens têm o nome do autor longo demais no EXIF; ele foi cortado. Não impede publicar."), depois o que fazer; a mensagem técnica fica em **Ver detalhes técnicos** (fechado). UX-08.
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
 - **Nunca** usar: "no ar", "fora do ar", "colocar no ar", "tirar do ar", "retirar da publicação", "não pública".
 - **Nunca** mandar a pessoa ao WordPress ("wp-admin", "corrija no WordPress"): quem usa o painel não entra no site. A ação é um botão do painel; o que só se resolve no site é "avise quem cuida do site" (padroes.md §15).

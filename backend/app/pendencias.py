@@ -270,8 +270,15 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
                        "adiar": f"erro:{e['id']}", "ignorar": {"erro": e["id"], "bloqueia": True},   # UX-03: bloqueio pede justificativa
                        "acao": _acao("Ver o problema", "erro", e["id"])})
     for l in [l for l in L if l["fase"] == "erro"]:
+        try:     # UX-08: o que aconteceu, em linguagem de gente, antes do tempo de espera
+            from .rotas_operacao import _erro_do_cv_explicado
+            bruto = con.execute("SELECT status_json, resultado FROM lista_processamento WHERE id=?", (l["id"],)).fetchone()
+            exp = _erro_do_cv_explicado(dict(bruto)) if bruto else None
+        except Exception:  # noqa: BLE001
+            exp = None
+        o_que = exp["texto"][:160] if exp and exp.get("tipo") != "erro" and exp.get("texto") else None
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
-                       "detalhe": texto_espera(_horas_desde(l["atualizado_em"])), "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
+                       "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
     for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
                             WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
         try:

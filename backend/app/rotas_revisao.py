@@ -71,12 +71,12 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
 def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Em que ponto está o trabalho deste projeto e qual é o próximo passo (a MESMA fase da Fila: filas_fase). Escolhe a lista mais recente que ainda não foi publicada."""
     from .filas_fase import fase_da_lista, escolher_lote_ativo
-    from .rotas_operacao import _erro_do_cv
+    from .rotas_operacao import _erro_do_cv, _erro_do_cv_explicado
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
             raise HTTPException(404, "Projeto não existe")
-        from .avisos_cv import avisos_abertos, curar_lotes
+        from .avisos_cv import avisos_abertos, curar_lotes, resumo_avisos_cv
         if curar_lotes(con, codigo):                     # CAMP-122 (P1): "erro" que é só aviso [Minor] não para o lote
             con.commit()
         lotes = []
@@ -90,6 +90,7 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d["aprovado_em"], d.get("resultado"))
             # 19/10 (F026-P0009): lote parado por erro do CAMP Vision: o motivo vai junto (campo novo, opcional), para a Situação do lote dizer o porquê
             d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None
+            d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08 (campo novo, opcional)
             d.pop("status_json", None); d.pop("resultado", None)
             lotes.append(d)
         lote = escolher_lote_ativo(lotes)
@@ -101,7 +102,8 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
             lote["destino_suspeito"] = dl["suspeito"] and not dl["liberado"]
         if lote and lote["fase"] == "conferir":       # UX-11: campo novo, opcional — as folhas a conferir SEM nenhum aviso (o número do botão)
             lote["itens_sem_aviso"] = contar_sem_aviso(con, lote["id"])
-        return {"lote": lote, "lotes": len(lotes), "avisos_cv": avisos_abertos(con, codigo), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
+        av = avisos_abertos(con, codigo)
+        return {"lote": lote, "lotes": len(lotes), "avisos_cv": av, "avisos_cv_resumo": resumo_avisos_cv(con, codigo, av), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
     finally:
         con.close()
 

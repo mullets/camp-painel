@@ -557,9 +557,10 @@ class NovaLista(BaseModel):
     autorizar_site: bool = False
 
 
-def _erro_do_cv(d: dict) -> str | None:
-    """Mensagem de erro que o CAMP Vision deixou no status.json (ou no resultado) da pasta, em uma linha."""
+def _erro_cv_bruto(d: dict) -> tuple[str | None, list]:
+    """(mensagem inteira que o CAMP Vision deixou no status.json ou no resultado, os dicionários onde procurou)."""
     import json as _json
+    todas = []
     for campo in ("status_json", "resultado"):
         try:
             j = _json.loads(d.get(campo) or "{}")
@@ -568,13 +569,27 @@ def _erro_do_cv(d: dict) -> str | None:
         if not isinstance(j, dict):
             continue
         fontes = [j] + ([j["status"]] if isinstance(j.get("status"), dict) else [])     # contrato 2.2: resultado.status.motivo
+        todas += fontes
         for fonte, k in ((f_, k_) for f_ in fontes for k_ in ("erro", "mensagem_erro", "motivo", "mensagem", "detalhe", "error", "message")):
             v = fonte.get(k)
             if isinstance(v, dict):
                 v = v.get("mensagem") or v.get("message") or v.get("detalhe")
             if isinstance(v, str) and v.strip():
-                return " ".join(v.split())[:240]
-    return None
+                return v.strip(), todas
+    return None, todas
+
+
+def _erro_do_cv(d: dict) -> str | None:
+    """Mensagem de erro que o CAMP Vision deixou no status.json (ou no resultado) da pasta, em uma linha."""
+    t, _ = _erro_cv_bruto(d)
+    return " ".join(t.split())[:240] if t else None
+
+
+def _erro_do_cv_explicado(d: dict) -> dict | None:
+    """UX-08 (campo novo, opcional, só da tela): o mesmo erro em linguagem de gente + a mensagem técnica inteira (avisos_cv.explicar_erro)."""
+    from .avisos_cv import explicar_erro
+    t, fontes = _erro_cv_bruto(d)
+    return explicar_erro(t, fontes)
 
 
 @router.get("/filas")
@@ -598,6 +613,7 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
+        d["erro_cv_explicado"] = _erro_do_cv_explicado(d) if d["etapa"] == "erro" else None   # UX-08: em linguagem de gente (campo novo, opcional)
         d["destino_suspeito"] = False                    # UX-01 (campo novo, opcional): a pasta não parece deste projeto → "Verificar destino"
         if d["fase"] == "importar":
             from .destino_lote import avaliar

@@ -94,7 +94,13 @@ def itens_aceite(aceite: dict | None) -> list[dict]:
             continue
         ok = v.get("ok") if isinstance(v, dict) else v if isinstance(v, bool) else None
         det = (v.get("contagem") if isinstance(v, dict) else v if isinstance(v, int) and not isinstance(v, bool) else None)   # CV2 2.4: chave só com a contagem
-        out.append({"chave": k, "rotulo": ROTULO_ACEITE.get(k, k.replace("_", " ").capitalize()), "ok": ok, "detalhe": det})
+        it = {"chave": k, "rotulo": ROTULO_ACEITE.get(k, k.replace("_", " ").capitalize()), "ok": ok, "detalhe": det}
+        if isinstance(v, dict) and ok is not True:   # UX-08: se o CAMP Vision mandou a lista (ex.: os arquivos sem EXIF conferido), a tela mostra arquivo e motivo
+            from .avisos_cv import _arquivos_em
+            arqs = _arquivos_em([{"exif_" + str(kk): vv for kk, vv in v.items()}])
+            if arqs:
+                it["arquivos"] = arqs
+        out.append(it)
     return out
 
 
