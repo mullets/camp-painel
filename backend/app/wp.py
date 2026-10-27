@@ -235,7 +235,9 @@ class WP:
         return r.json()
 
     def paginas(self) -> Iterator[dict]:
-        yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None)
+        # 27/10: só os campos que o espelho guarda (antes vinha o conteúdo inteiro de ~5.200 páginas a cada rodada)
+        yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None,
+                                  _fields="id,title,slug,link,status,parent,modified")
 
     def quem_sou(self) -> dict:
         return self._get("/wp-json/wp/v2/users/me", context="edit").json()

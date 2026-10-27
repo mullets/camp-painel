@@ -66,7 +66,7 @@ def radical(url: str | None) -> str:
     return stem
 
 
-def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print, info: dict | None = None) -> dict:
+def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print, info: dict | None = None, respiro=None, lote: int = 250) -> dict:
     """Passo da sincronização: troca o ID do anexo pela URL real do arquivo, completa a miniatura que falta
     com o próprio documento (quando for imagem) e aponta miniaturas que não são do arquivo do item."""
     out = {"itens": 0, "com_miniatura": 0, "via_documento": 0, "sem_imagem": 0, "divergentes": 0, "anexos": 0}
@@ -89,7 +89,9 @@ def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print, info:
             except Exception as e:  # noqa: BLE001  (sem resolver: segue com o que veio no próprio item)
                 log(f"  (anexos da coleção {colecao_id}: {e})")
     out["anexos"] = len(info)
-    for r, it, url, anexo in dados:
+    for k_, (r, it, url, anexo) in enumerate(dados):
+        if respiro and k_ and k_ % lote == 0:   # sincronização: solta o banco a cada lote (milhares de UPDATEs numa transação prendiam a escrita)
+            respiro(con)
         a = info.get(anexo) if anexo else None
         documento = (a or {}).get("url") or url
         mime = (a or {}).get("mime") or it.get("document_mimetype")
