@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9341,6 +9341,10 @@ def filho(modo):
             from app import contagens as cg
         except ImportError:
             cg = None
+        import datetime as _dtm
+        rep_ = raiz_q / "replica"; (rep_ / "_campvision").mkdir(parents=True)                      # UX-02: sem réplica o topo é vermelho; aqui ela está em dia
+        (rep_ / "_campvision" / "sentinela.json").write_text('{"gravado_em": "%s"}' % _dtm.datetime.now(_dtm.timezone.utc).isoformat(timespec="seconds"), encoding="utf-8")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='replica.raiz'", (str(rep_),)); c.commit()
         def eg_(http, pct):
             c.execute("DELETE FROM qnap_snapshot"); c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb) VALUES (1, 1000, ?)", (pct * 10,)); c.commit()
             return cg.estado_geral(c, qnap_montado=True, site_http=http, backup={"existe": True, "ok": True, "idade_horas": 2})["nivel"] if cg else None
@@ -9434,6 +9438,78 @@ def filho(modo):
         ver("'Verificar agora' 2× com o site fora do ar: o estado do site vira crítico (e sai o e-mail)", v1.status_code == 200 and v2.status_code == 200 and (es.get("site") or {}).get("nivel") == "critico"
             and any(x_["assunto"] == "site" and x_["tipo"] == "critico" for x_ in v2.json().get("envios", [])), str((es.get("site"), v2.json())))
         ver("...e a tela mostra a MESMA medição (a última sonda do site)", nivel(g2.get("agora") or {}, "site") == "critico", str((g2.get("agora") or {}).get("site")))
+        for l in res: print(l)
+    elif modo == "ux02_preservacao":
+        # UX-02 (parte de código; o destino da réplica e o hardware são decisão do Rafael — nada aqui configura replica.raiz de verdade):
+        # bloco "Preservação" (verde/âmbar/vermelho, "Suas imagens têm só uma cópia"), topo vermelho sem réplica, a data da última cópia
+        # válida, e o alerta de espaço por dias até encher (< 30 atenção, < 10 crítico). Destino indisponível, cópia parada e disco cheio.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile as _tf, shutil as _sh, collections as _co
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        from app import alertas, auth, replica, contagens as cg
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        raiz_q = _pl.Path(_tf.mkdtemp()); (raiz_q / "ACERVOS_CAMP").mkdir()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (str(raiz_q),)); c.execute("UPDATE configuracao SET valor='' WHERE chave='wp.url'")
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='replica.raiz'")
+        c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb) VALUES (1, 1000, 600)"); c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        est = x.get("/api/estacoes?fresco=1").json(); pv = est.get("preservacao") or {}
+        ver("sem réplica: Preservação VERMELHA, 'Suas imagens têm só uma cópia'", pv.get("nivel") == "critico" and pv.get("titulo") == "Suas imagens têm só uma cópia" and "replica.raiz" in (pv.get("texto") or ""), str(pv)[:240])
+        partes = {p_["id"]: p_ for p_ in (est.get("estado_geral") or {}).get("partes", [])}
+        ver("sem réplica: o topo fica vermelho (crítico), mesmo com o resto ok", (est.get("estado_geral") or {}).get("nivel") == "critico" and (partes.get("replica") or {}).get("nivel") == "critico", str(est.get("estado_geral"))[:300])
+        ver("sem réplica: nenhum e-mail de 'Cópia do acervo parada' (não medido, com o motivo)", (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("replica") or {}).get("nivel") == "nao_medido")
+        destino = _pl.Path(_tf.mkdtemp()) / "replica" / "ACERVOS_CAMP"                                  # destino que NÃO existe (indisponível)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='replica.raiz'", (str(destino),)); c.commit()
+        pv = x.get("/api/estacoes?fresco=1").json().get("preservacao") or {}
+        ver("destino indisponível: vermelho, 'não encontrei a marca'", pv.get("nivel") == "critico" and "Não encontrei a marca" in (pv.get("texto") or "") and not pv.get("ultima_copia"), str(pv)[:240])
+        (destino / "_campvision").mkdir(parents=True)
+        sent = destino / "_campvision" / "sentinela.json"
+        def grava(horas): sent.write_text(_j.dumps({"gravado_em": (_dt.now(_tz.utc) - _td(hours=horas)).isoformat(timespec="seconds"), "versao": "t"}), encoding="utf-8")
+        grava(5)
+        r = x.get("/api/replica").json(); pv = r.get("preservacao") or {}
+        ver("cópia em dia (5 h): verde, 'Suas imagens têm duas cópias', com a data da última cópia", pv.get("nivel") == "ok" and pv.get("titulo") == "Suas imagens têm duas cópias" and pv.get("ultima_copia"), str(pv)[:240])
+        ver("a última cópia válida fica guardada", (r.get("ultima_valida") or {}).get("gravado_em") == r.get("gravado_em"), str(r.get("ultima_valida")))
+        guardada = r.get("gravado_em")
+        grava(50); pv = x.get("/api/estacoes?fresco=1").json().get("preservacao") or {}
+        ver("cópia atrasada (50 h): âmbar", pv.get("nivel") == "atencao", str(pv)[:200])
+        sent.unlink()                                                                                     # a cópia parou no meio / a marca sumiu
+        pv = x.get("/api/estacoes?fresco=1").json().get("preservacao") or {}
+        ver("cópia parada (marca sumiu): vermelho, e a tela ainda diz a data da última cópia VÁLIDA", pv.get("nivel") == "critico" and pv.get("ultima_copia") and (pv.get("ultima_valida") or {}).get("gravado_em"), str(pv)[:260])
+        grava(1)
+        real = _sh.disk_usage
+        _sh.disk_usage = lambda p_: _co.namedtuple("du", "total used free")(1000, 970, 30)              # destino com 3% livre
+        try:
+            pv = replica.preservacao(c) if hasattr(replica, "preservacao") else {}
+        finally:
+            _sh.disk_usage = real
+        pv0 = replica.preservacao(c, {"configurada": True, "nivel": None}) if hasattr(replica, "preservacao") else {}
+        ver("leitura da réplica ainda em curso (sonda em segundo plano): nem verde nem vermelho", pv0.get("nivel") is None and "Medindo" in (pv0.get("titulo") or ""), str(pv0)[:160])
+        ver("disco cheio no destino (3% livre): vermelho, 'O disco da segunda cópia está quase cheio'", pv.get("nivel") == "critico" and "quase cheio" in pv.get("titulo", "") and pv.get("destino_livre_pct") == 3, str(pv)[:240])
+        # espaço por dias até encher: uma série de leituras do QNAP na última semana
+        def serie(livres):
+            c.execute("DELETE FROM qnap_snapshot")
+            for i_, l_ in enumerate(livres):
+                c.execute("INSERT INTO qnap_snapshot (coletado_em, montado, total_gb, livre_gb) VALUES (datetime('now', ?), 1, 1000, ?)", (f"-{len(livres) - 1 - i_} days", l_))
+            c.commit()
+        cfg_ = dict(c.execute("SELECT chave, valor FROM configuracao WHERE chave IN ('qnap.dias_aviso','qnap.dias_critico')").fetchall())
+        ver("migração: qnap.dias_aviso = 30 e qnap.dias_critico = 10", cfg_.get("qnap.dias_aviso") == "30" and cfg_.get("qnap.dias_critico") == "10", str(cfg_))
+        c.execute("DELETE FROM configuracao WHERE chave IN ('qnap.dias_aviso','qnap.dias_critico')"); c.commit()   # o padrão do código (banco sem as chaves)
+        serie([460, 440, 420, 400])                                                                     # 40% livre, 20 GB/dia: enche em ~20 dias
+        a = alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("qnap") or {}
+        ver("enche em ~20 dias (< 30) com 40% livre: atenção, e a frase diz os dias", a.get("nivel") == "atencao" and a.get("dias_ate_encher") == 20 and "20 dias" in a.get("texto", "") and "Menos de 30 dias" in a.get("texto", ""), str(a)[:260])
+        serie([550, 500, 450, 400])                                                                     # 50 GB/dia: enche em ~8 dias
+        a = alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("qnap") or {}
+        ver("enche em ~8 dias (< 10): crítico (sai e-mail)", a.get("nivel") == "critico" and a.get("critico") is True and a.get("dias_ate_encher") == 8, str(a)[:260])
+        pv = x.get("/api/estacoes?fresco=1").json().get("preservacao") or {}
+        ver("Preservação mostra quando o QNAP enche", (pv.get("qnap") or {}).get("dias_ate_encher") == 8, str(pv.get("qnap")))
+        serie([700, 699, 698, 697])                                                                     # quase parado: sem alerta por dias
+        a = alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("qnap") or {}
+        ver("espaço estável (70% livre): normal", a.get("nivel") == "ok", str(a)[:200])
         for l in res: print(l)
     elif modo == "agora_nao_lote":
         # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
@@ -12136,6 +12212,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-07: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("165) UX-02: Preservação (cópias das imagens), topo vermelho sem réplica, espaço por dias até encher")
+rc, out = rodar("ux02_preservacao", f"{tmp}/ux02_preservacao.db")
+if rc != 0: ok(False, f"teste ux02_preservacao não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-02: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

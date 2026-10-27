@@ -58,7 +58,7 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 .top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:12px;padding:14px 26px 10px;flex-wrap:wrap}
 .machine-status{display:flex;align-items:center;gap:5px;margin-left:auto}
 .ms-resumo{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.ms-resumo .ms-txt b{font-weight:600}
-.ms-ponto{width:8px;height:8px;border-radius:50%;background:var(--green)}.ms-ponto.off{background:var(--amber)}.ms-ponto.crit{background:var(--red)}
+.ms-ponto{width:8px;height:8px;border-radius:50%;background:var(--green)}.ms-ponto.off{background:var(--amber)}.ms-ponto.crit{background:var(--red)}.preservacao{border-left:4px solid var(--line)}.preservacao.g{border-left-color:var(--green)}.preservacao.a{border-left-color:var(--amber)}.preservacao.r{border-left-color:var(--red)}.preserv-titulo{margin:0 0 4px;font-size:var(--fs-lg)}.preservacao .ph .tag{margin-left:auto}
 .ms-lista{min-width:300px;max-height:70vh;overflow:auto}.ms-linha{display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:var(--r);cursor:pointer;color:var(--ink);font:inherit}
 .ms-linha:hover{background:var(--surface2)}.ms-linha b{display:block;font-size:var(--fs-md);font-weight:500}.ms-linha small{display:block;font-size:var(--fs-xs);color:var(--ink3)}
 @media(max-width:850px){.ms-resumo .ms-extra{display:none}}
@@ -5642,7 +5642,8 @@ function iniSaudeHTML(e,qi,p){
   if(!est.total)row('','Nenhuma estação de captura cadastrada','Os endereços ficam em Configurações.');
   else if(!est.ligadas)row('',`Estações de captura desligadas`,escHtml(`${est.total} de ${est.total}.${fora?' É normal fora do expediente.':''}`));
   else row('g',`${est.ligadas} de ${est.total} estações ligadas`,escHtml(est.nomes.join(', ')));
-  const rp=PAINEL_REP;if(rp&&rp.configurada)row(rp.nivel==='critico'?'r':rp.nivel==='aviso'?'a':'g',rp.nivel==='critico'?'A cópia do acervo parou':rp.nivel==='aviso'?'Cópia do acervo atrasada':'Cópia do acervo em dia',escHtml(rp.gravado_em?`Última cópia ${fmtDataHora(rp.gravado_em)}.${rp.nivel==='ok'?'':' '+rp.texto}`:rp.texto));
+  const rp=PAINEL_REP;if(rp&&!rp.configurada&&admin)row('r','Suas imagens têm só uma cópia','As digitalizações estão só no QNAP. Veja Preservação em Máquinas.');   /* UX-02 */
+  if(rp&&rp.configurada)row(rp.nivel==='critico'?'r':rp.nivel==='aviso'?'a':'g',rp.nivel==='critico'?'A cópia do acervo parou':rp.nivel==='aviso'?'Cópia do acervo atrasada':'Cópia do acervo em dia',escHtml(rp.gravado_em?`Última cópia ${fmtDataHora(rp.gravado_em)}.${rp.nivel==='ok'?'':' '+rp.texto}`:rp.texto));
   if(admin){const b=e.backup;
     if(!b||!b.existe)row('r','Sem cópia de segurança do painel','Nenhuma cópia do banco foi feita. Veja em Máquinas.');
     else if(b.ok===false)row('r','A última cópia de segurança falhou',escHtml(b.erro||'Veja o motivo em Máquinas.'));
@@ -6496,6 +6497,17 @@ const ROT_ENVIO={pedido:'Pedido de material pelo site',pedido_painel:'Pedido de 
 // ---------- #149: cópia do acervo (réplica) e quarentena de 100 - Scanners ----------
 function quarentenaHTML(q){if(!q||typeof q!=='object')return '';const n=q.arquivos??q.qtd??null,gb=q.gb??q.tamanho_gb??null;
   return `<small>Quarentena de 100 - Scanners: ${n==null?'—':escHtml(n)+' arquivo(s)'}${gb==null?'':' · '+escHtml(gb)+' GB'}${q.aviso?` · <span class="tag a">${escHtml(q.aviso)}</span>`:''}</small>`}
+/* UX-02: "Preservação" no topo de Máquinas: quantas cópias as imagens têm (verde · âmbar · vermelho), a última cópia válida e quando
+   o QNAP enche. Configurar o destino da cópia é decisão do Rafael; aqui só se mostra o estado. */
+function preservacaoHTML(pv,maq){if(!pv)return '';const cor={ok:'g',atencao:'a',critico:'r'}[pv.nivel]||'',rot={ok:'duas cópias',atencao:'cópia atrasada',critico:'só uma cópia'}[pv.nivel]||'';
+  const ult=pv.ultima_copia?`${escHtml(fmtDataHora(pv.ultima_copia))}${pv.ultima_copia_horas!=null?` (há ${escHtml(String(pv.ultima_copia_horas).replace('.',','))} h)`:''}`:'nenhuma registrada';
+  const q=pv.qnap||{},d=q.dias_ate_encher,qc=q.nivel==='critico'?'r':q.nivel==='aviso'?'a':'g';
+  const enche=d?`<span class="tag ${d<10?'r':d<30?'a':qc}">enche em ~${qtd(d,'dia','dias')}</span>`:'<span class="help">sem previsão (reunindo o ritmo da semana)</span>';
+  const cv=(maq||[]).find(m=>m.tipo==='processamento'),qr=cv&&cv.app_detalhe&&cv.app_detalhe.quarentena;
+  return `<div class="panel preservacao ${cor}" id="preservacao" data-nivel="${escHtml(pv.nivel)}"><div class="ph"><h2>Preservação</h2><span class="tag ${cor}">${rot}</span></div><div class="pb">
+    <p class="preserv-titulo"><b>${escHtml(pv.titulo)}</b></p><p class="help">${escHtml(pv.texto||'')}</p>
+    <dl class="kv"><dt>Última cópia válida</dt><dd>${ult}</dd><dt>Espaço no QNAP</dt><dd>${q.livre_pct!=null?escHtml(String(q.livre_pct).replace('.',','))+'% livre · ':''}${enche}</dd>${pv.destino_livre_pct!=null?`<dt>Espaço no destino da cópia</dt><dd>${escHtml(String(pv.destino_livre_pct).replace('.',','))}% livre</dd>`:''}</dl>${qr?quarentenaHTML(qr):''}
+    <p class="help">Verde: duas cópias, a última há menos de 36 h · âmbar: cópia atrasada · vermelho: só uma cópia (sem cópia configurada ou parada). Espaço: menos de 30 dias para encher é atenção; menos de 10, crítico.</p></div></div>`}
 function replicaHTML(r){if(!r)return '';const tag=r.nivel==='ok'?'<span class="tag g">em dia</span>':r.nivel==='aviso'?'<span class="tag a">atrasada</span>':r.nivel==='critico'?'<span class="tag r">parada</span>':'<span class="tag">não configurada</span>';
   return `<div class="ph"><h2>Cópia do acervo</h2></div><div class="pb"><dl class="kv"><dt>Situação</dt><dd>${tag}</dd><dt>Última cópia</dt><dd>${r.gravado_em?escHtml(fmtDataHora(r.gravado_em))+` (há ${escHtml(r.idade_horas)} h)`:'—'}</dd></dl><p class="help">${escHtml(r.texto||'')}</p><p class="help">Verde: menos de 36 h · amarelo: até 72 h · vermelho: mais que isso ou sem a marca da cópia.</p></div>`}
 async function carregarReplica(){const body=document.getElementById('est-body');if(!body)return;let p=document.getElementById('replica-painel');
@@ -6529,7 +6541,7 @@ async function carregarPrefAvisos(){if(!(EU&&['admin','master'].includes(EU.pape
   catch(e){p.innerHTML=`<div class="ph"><h2>Quem recebe cada aviso</h2></div><div class="pb"><p class="help"><span class="tag r">não consegui carregar</span> ${escHtml(e.message)}</p></div>`}}
 async function carregarEstacoes(fresco){const el=document.getElementById('est-body'),tinha=!!el.querySelector('.panel');if(!tinha){const sk=n=>Array.from({length:n},()=>'<span class="skeleton-line"></span>').join('');el.innerHTML=`<p class="help" role="status">Verificando estações e integrações…</p><div class="grid g2 est-esqueleto"><div class="panel"><div class="ph"><h2>Captura</h2></div><div class="pb">${sk(4)}</div></div><div class="panel"><div class="ph"><h2>Processamento</h2></div><div class="pb">${sk(3)}</div></div></div><div class="panel est-esqueleto"><div class="ph"><h2>Página pública e sincronização</h2></div><div class="pb">${sk(2)}</div></div>`}   /* #97: a estrutura aparece na hora */try{const [d,qi]=await Promise.all([API('/api/estacoes'+(fresco===true?'?fresco=1':'')),API('/api/qnap').catch(()=>null)]);limparStale('estacoes');const s=d.site,p=d.pipeline,q=d.qnap;window.EST_DADOS=d;const admin=EU&&['admin','master'].includes(EU.papel),itens=estItens(d);window.EST_ITENS=itens;
   const ipHTML=m=>admin&&m.ip?`<small class="mono">${escHtml(m.ip)}</small>`:'';
-  el.innerHTML=`${estNegadasHTML(d.estacoes_negadas)}${estHojeHTML(itens)}
+  el.innerHTML=`${preservacaoHTML(d.preservacao,d.maquinas)}${estNegadasHTML(d.estacoes_negadas)}${estHojeHTML(itens)}
   <div class="panel qnap-card" id="qnap-card" style="margin-top:16px">${qnapInnerHTML(q,qi)}</div>
   <div class="grid g2" style="margin-top:16px">
     <div class="panel"><div class="ph"><h2>Processamento (CAMP Vision)</h2></div><div class="pb"><ul class="list">${d.maquinas.filter(m=>m.tipo==='processamento').map(m=>`<li><div class="t"><b>${escHtml(m.nome)}</b><small>${escHtml(m.funcao||'')}</small>${m.aviso_contrato?`<small><span class="tag a">contrato</span> ${escHtml(m.aviso_contrato)}</small>`:''}${m.app_situacao&&m.app_online?`<small>${escHtml(m.app_situacao)}</small>`:''}${m.app_alerta?`<small><span class="tag r">alerta</span> ${escHtml(m.app_alerta)}</small>`:''}${quarentenaHTML(m.app_detalhe&&m.app_detalhe.quarentena)}${ipHTML(m)}</div>${m.online===null?'<span class="tag">—</span>':m.online?'<span class="tag g">ligado</span>':'<span class="tag r">não responde</span>'}</li>`).join('')}</ul><dl class="kv" style="margin-top:12px"><dt>Esperando leitura</dt><dd>${escHtml(p.entrada_bruta)} pasta${p.entrada_bruta===1?'':'s'} na entrada do QNAP</dd><dt>Prontos para conferir</dt><dd>${escHtml(p.aguardando_revisao)} lote${p.aguardando_revisao===1?'':'s'}</dd><dt>Na pasta final</dt><dd>${escHtml(p.prontos)} lote${p.prontos===1?'':'s'}</dd></dl></div></div>

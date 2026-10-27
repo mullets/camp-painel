@@ -224,13 +224,13 @@ def _num(con, chave: str, padrao: float) -> float:
 
 
 def nivel_espaco(con, total_gb: float | None, livre_gb: float | None) -> tuple[str | None, float | None]:
-    """('ok' | 'aviso' | 'critico' | None, % livre). Crítico: < qnap.espaco_critico_pct % OU < qnap.espaco_critico_gb GB OU enchendo em < qnap.dias_critico (7) dias;
+    """('ok' | 'aviso' | 'critico' | None, % livre). Crítico: < qnap.espaco_critico_pct % OU < qnap.espaco_critico_gb GB OU enchendo em < qnap.dias_critico (10, UX-02) dias;
     aviso: < qnap.espaco_aviso_pct % OU enchendo em < qnap.dias_aviso (30) dias. Sem medida: (None, None). É a ÚNICA regra: selo, banner, cartão e ações usam esta."""
     if not total_gb or livre_gb is None:
         return None, None
     pct = 100 * livre_gb / total_gb
     _, dias = _tendencia(con, livre_gb)                  # a tendência também conta: enchendo em poucos dias é crítico mesmo com bastante espaço livre hoje
-    if pct < _num(con, "qnap.espaco_critico_pct", 5) or livre_gb < _num(con, "qnap.espaco_critico_gb", 50) or (dias is not None and dias < _num(con, "qnap.dias_critico", 7)):
+    if pct < _num(con, "qnap.espaco_critico_pct", 5) or livre_gb < _num(con, "qnap.espaco_critico_gb", 50) or (dias is not None and dias < _num(con, "qnap.dias_critico", 10)):
         return "critico", round(pct, 1)
     if pct < _num(con, "qnap.espaco_aviso_pct", 15) or (dias is not None and dias < _num(con, "qnap.dias_aviso", 30)):
         return "aviso", round(pct, 1)

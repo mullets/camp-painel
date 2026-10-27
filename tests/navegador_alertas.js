@@ -15,6 +15,7 @@ const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!o
 if (!DB) { console.error('informe CAMP_DB_PATH (o mesmo banco do servidor)'); process.exit(2); }
 const py = (codigo) => execFileSync('python3', ['-c', 'import sqlite3,sys,json\ncon=sqlite3.connect(sys.argv[1])\n' + codigo + '\ncon.commit()', DB], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
 py(`
+con.execute("DELETE FROM qnap_snapshot")   # sem a série da semana: o nível vem só dos 12% (UX-02: o ritmo também conta)
 con.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb, entrada_bruta, prontos) VALUES (1, 1000, 120, 3, 4)")
 con.execute("UPDATE configuracao SET valor='http://127.0.0.1:9' WHERE chave='wp.url'")
 con.execute("UPDATE configuracao SET valor='' WHERE chave='smtp.host'")

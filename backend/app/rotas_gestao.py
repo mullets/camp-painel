@@ -739,10 +739,17 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         # a sentinela da réplica fica no QNAP (SMB): também é uma sonda em segundo plano (UX-12), nunca lida dentro da requisição
         from . import replica as _rp
         raiz_rp = _cfg(con, "replica.raiz", "")
-        rp = (_valor_sonda(_sonda(("replica", raiz_rp), lambda: _rp.estado_de(raiz_rp), fr), ate, {"configurada": True, "nivel": None})
+        rp = (_valor_sonda(_sonda(("replica", raiz_rp), lambda: _rp.medir(raiz_rp), fr), ate, {"configurada": True, "nivel": None})
               if raiz_rp.strip() else _rp.estado_de(""))
         out["estado_geral"] = cg.estado_geral(con, qnap_montado=out["qnap"].get("montado"), site_http=out["site"]["http"], backup=out.get("backup"),
                                               maquinas=out["maquinas"], replica_estado=rp)
+        # UX-02: o bloco "Preservação" (quantas cópias as imagens têm) e a data da última cópia válida (da mesma sonda)
+        _rp.registrar_marca(con, rp)
+        con.commit()
+        out["preservacao"] = _rp.preservacao(con, {**rp, "destino_livre_pct": rp.get("destino_livre_pct")})
+        q_ = (out["preservacao"].get("qnap") or {})
+        if out.get("qnap", {}).get("total_gb") is not None:
+            out["qnap"]["dias_ate_encher"] = q_.get("dias_ate_encher")
     finally:
         con.close()
     return out

@@ -21,6 +21,7 @@ py(`
 import tempfile, os
 raiz = tempfile.mkdtemp(); os.mkdir(os.path.join(raiz, "ACERVOS_CAMP"))     # QNAP "conectado" (pasta com conteúdo)
 con.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.raiz'", (raiz,))
+con.execute("DELETE FROM qnap_snapshot")   # sem a série da semana: o nível vem só dos 12% (UX-02: o ritmo também conta)
 con.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb, entrada_bruta, prontos) VALUES (1, 1000, 120, 3, 4)")
 f = con.execute("SELECT codigo FROM fundo ORDER BY codigo LIMIT 1").fetchone()[0]
 n = con.execute("SELECT COALESCE(MAX(numero),0)+1 FROM numero_p WHERE fundo_codigo=?", (f,)).fetchone()[0]

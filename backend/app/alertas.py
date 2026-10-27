@@ -125,6 +125,9 @@ def avaliar(con, medir_site=None, estado_backup=None) -> dict:
         nivel, pct = qc.nivel_espaco(con, snap["total_gb"], snap["livre_gb"])
         _, dias = qc._tendencia(con, snap["livre_gb"])
         enche = f" No ritmo desta semana, enche em cerca de {dias} {'dia' if dias == 1 else 'dias'}." if dias else ""
+        d_av, d_cr = qc._num(con, "qnap.dias_aviso", 30), qc._num(con, "qnap.dias_critico", 10)
+        if dias is not None and dias < d_av:              # UX-02: o alerta também vale por dias até encher (< 30 atenção, < 10 crítico)
+            enche += f" Menos de {d_av:g} dias para encher já é atenção; menos de {d_cr:g}, crítico."
         n_ = {"ok": "ok", "aviso": "atencao", "critico": "critico"}[nivel]
         base = f"O QNAP está com {('%g' % pct).replace('.', ',')}% livre ({round(snap['livre_gb'] or 0)} GB).{enche}"
         out["qnap"] = {"critico": nivel == "critico", "nivel": n_, "livre_pct": pct, "dias_ate_encher": dias, "medido_em": snap.get("coletado_em"),

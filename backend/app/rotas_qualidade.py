@@ -138,6 +138,9 @@ def replica_estado(u: dict = Depends(auth.exige("leitura"))) -> dict:
     from . import replica
     con = connect()
     try:
-        return replica.estado(con)
+        est = replica.estado(con)
+        replica.registrar_marca(con, est)          # UX-02: guarda a última cópia válida vista
+        con.commit()
+        return {**est, "ultima_valida": replica.ultima_valida(con), "preservacao": replica.preservacao(con, est)}
     finally:
         con.close()
