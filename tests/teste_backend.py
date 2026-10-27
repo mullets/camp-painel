@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux01_destino", "ux29_duplicata", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux12_desempenho", "ux22_avisos"}
+MODOS_RAPIDOS = {"ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -8452,6 +8452,58 @@ def filho(modo):
         ver("rodar --aplicar de novo não soma o giro outra vez", g(D(2)) == 90 and g(f"{P}-0000-S03-D00007") == 0 and nev(D(2), "giro_marcado") == 1)
         for l in res: print(l)
         c.close()
+    elif modo == "ux13_usuarios":
+        # UX-13: senha temporária vence em 72 h (só a gerada a partir desta versão, com data); contas genéricas avisadas, nunca desativadas sozinhas
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        auth.criar_usuario("Rafael Teixeira", "rafa@camp.arq.br", "senha-admin-12345", "master", forcar_troca=False)
+        auth.criar_usuario("Administração CAMP", "adm@camp.arq.br", "senha-generica-123", "admin", forcar_troca=True)     # legado: temporária SEM data
+        auth.criar_usuario("Operador de digitalização", "digitalizacao@camp.arq.br", "senha-generica-456", "operador", forcar_troca=False)
+        def cli(email, senha):
+            x = TestClient(app, raise_server_exceptions=False); r_ = x.post("/api/auth/login", json={"email": email, "senha": senha}); return x, r_
+        adm, _ = cli("rafa@camp.arq.br", "senha-admin-12345")
+        c = connect()
+        q = lambda s_, *a: c.execute(s_, a).fetchone()[0]
+        _, r = cli("adm@camp.arq.br", "senha-generica-123")
+        ver("conta que já tinha senha temporária SEM data (antes desta versão) continua entrando: não tranca o admin de produção", r.status_code == 200, f"HTTP {r.status_code} {r.text[:120]}")
+        r = adm.post("/api/usuarios", json={"nome": "Pesquisador convidado", "email": "convidado@camp.arq.br", "papel": "leitura"})
+        senha = r.json().get("senha_temporaria", "")
+        ver("Novo usuário: a senha temporária ganha data e a resposta diz que vale 72 h", r.status_code == 200 and r.json().get("vale_horas") == 72
+            and q("SELECT senha_temporaria_em IS NOT NULL FROM usuario WHERE email='convidado@camp.arq.br'") == 1, r.text[:160])
+        conv, r = cli("convidado@camp.arq.br", senha)
+        ver("dentro das 72 h entra (e o painel pede a troca)", r.status_code == 200 and r.json().get("precisa_trocar_senha") is True, r.text[:160])
+        c.execute("UPDATE usuario SET senha_temporaria_em=datetime('now','-73 hours') WHERE email='convidado@camp.arq.br'"); c.commit()
+        _, r = cli("convidado@camp.arq.br", senha)
+        ver("passadas 72 h: login recusado com mensagem clara (403, 'venceu', pedir nova senha)", r.status_code == 403 and "venceu" in r.text and "Nova senha" in r.text, f"HTTP {r.status_code} {r.text[:160]}")
+        ver("a recusa fica no histórico (login_recusado)", q("SELECT COUNT(*) FROM evento WHERE entidade='usuario' AND codigo='convidado@camp.arq.br' AND tipo='login_recusado'") == 1)
+        r = conv.post("/api/auth/trocar-senha", json={"senha_atual": senha, "senha_nova": "Uma-Senha-Nova-Boa-9"})
+        ver("a sessão aberta antes de vencer não serve para trocar a senha depois que venceu", r.status_code == 403, f"HTTP {r.status_code} {r.text[:120]}")
+        lst = {x["email"]: x for x in adm.get("/api/usuarios").json()}
+        ver("lista de usuários marca a senha temporária vencida", lst["convidado@camp.arq.br"]["senha_temporaria_vencida"] is True and lst["adm@camp.arq.br"]["senha_temporaria_vencida"] is False)
+        ver("contas genéricas detectadas pelo nome/e-mail (Administração CAMP, Operador de digitalização, Pesquisador convidado); a pessoa não",
+            all(lst[e]["generica"] for e in ("adm@camp.arq.br", "digitalizacao@camp.arq.br", "convidado@camp.arq.br")) and lst["rafa@camp.arq.br"]["generica"] is False,
+            str({e: x["generica"] for e, x in lst.items()}))
+        ver("nenhuma conta foi desativada sozinha (desativar é ação humana na tela)", q("SELECT COUNT(*) FROM usuario WHERE ativo=0") == 0)
+        uid = q("SELECT id FROM usuario WHERE email='convidado@camp.arq.br'")
+        r = adm.post(f"/api/usuarios/{uid}/redefinir-senha")
+        nova = r.json().get("senha_temporaria", "")
+        conv2, r2 = cli("convidado@camp.arq.br", nova)
+        ver("o admin gera nova senha (Nova senha) e a pessoa volta a entrar", r.status_code == 200 and r.json().get("vale_horas") == 72 and r2.status_code == 200, f"{r.text[:100]} / {r2.text[:100]}")
+        r = conv2.post("/api/auth/trocar-senha", json={"senha_atual": nova, "senha_nova": "Uma-Senha-Nova-Boa-9"})
+        ver("trocou dentro do prazo: a marca de temporária some (não vence mais)", r.status_code == 200 and q("SELECT senha_temporaria_em IS NULL AND precisa_trocar_senha=0 FROM usuario WHERE id=?", uid) == 1, r.text[:120])
+        c.execute("UPDATE usuario SET senha_temporaria_em=datetime('now','-500 hours') WHERE id=?", (uid,)); c.commit()
+        _, r = cli("convidado@camp.arq.br", "Uma-Senha-Nova-Boa-9")
+        ver("senha definitiva (já trocada) não vence, mesmo com data antiga", r.status_code == 200, f"HTTP {r.status_code}")
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='usuarios.senha_temporaria_horas'")
+        c.execute("UPDATE usuario SET precisa_trocar_senha=1, senha_temporaria_em=datetime('now','-500 hours') WHERE id=?", (uid,)); c.commit()
+        _, r = cli("convidado@camp.arq.br", "Uma-Senha-Nova-Boa-9")
+        ver("configuração 0 = não vence", r.status_code == 200, f"HTTP {r.status_code}")
+        c.close()
+        for l in res: print(l)
     elif modo == "parecido_desligado":
         # 26/10 (Rafael): "o sistema responde que um projeto com nome semelhante é o mesmo projeto, mas não é: tira isso" — no F9 da estação.
         # Padrão: não pergunta (cria direto); a pista do número P ainda pergunta; a configuração liga de volta.
@@ -11374,6 +11426,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"possível duplicata: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("163) UX-13: senha temporária vence em 72 h; contas genéricas avisadas (nunca desativadas sozinhas)")
+rc, out = rodar("ux13_usuarios", f"{tmp}/ux13_usuarios.db")
+if rc != 0: ok(False, f"teste ux13_usuarios não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"usuários: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -109,6 +109,35 @@ def criar_usuario(nome: str, email: str, senha: str, papel: str, forcar_troca: b
     return uid
 
 
+SENHA_TEMPORARIA_HORAS = 72      # UX-13: padrão; a configuração usuarios.senha_temporaria_horas manda
+
+
+def horas_senha_temporaria(con: sqlite3.Connection) -> int:
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='usuarios.senha_temporaria_horas'").fetchone()
+        return int(r[0]) if r and str(r[0]).strip() != "" else SENHA_TEMPORARIA_HORAS
+    except (sqlite3.Error, ValueError):
+        return SENHA_TEMPORARIA_HORAS
+
+
+def senha_temporaria_vencida(con: sqlite3.Connection, u) -> bool:
+    """UX-13: a senha temporária gerada pelo administrador vale 72 h. Só vence a que tem DATA conhecida (senha_temporaria_em,
+    gravada a partir desta versão ao criar a conta ou em "Nova senha"); a que já existia (NULL) não vence por esta regra,
+    para não trancar quem hoje entra com ela (inclusive o admin de produção)."""
+    if not u["precisa_trocar_senha"]:
+        return False
+    em = u["senha_temporaria_em"] if "senha_temporaria_em" in u.keys() else None
+    horas = horas_senha_temporaria(con)
+    if not em or horas <= 0:
+        return False
+    return em < _iso(_agora() - timedelta(hours=horas))
+
+
+def _erro_senha_vencida(horas: int) -> HTTPException:
+    return HTTPException(status.HTTP_403_FORBIDDEN, f"Esta senha temporária venceu (vale {horas} h). "
+                         "Peça ao administrador uma nova senha (Usuários › Nova senha).")
+
+
 def autenticar(request: Request, response: Response, email: str, senha: str, lembrar: bool = False,
                codigo_totp: str | None = None) -> dict:
     from .rede import ip_do_cliente
@@ -142,6 +171,12 @@ def autenticar(request: Request, response: Response, email: str, senha: str, lem
         _evento(con, email, "login_falhou", ip, f"falha {falhas}")
         con.commit(); con.close()
         raise erro
+
+    if senha_temporaria_vencida(con, u):
+        horas = horas_senha_temporaria(con)
+        _evento(con, email, "login_recusado", ip, "senha temporária vencida")
+        con.commit(); con.close()
+        raise _erro_senha_vencida(horas)
 
     if u["totp_secret"] and not u["totp_secret"].startswith("PENDENTE:"):
         if not codigo_totp or not _totp_ok(u["totp_secret"], codigo_totp):
@@ -203,11 +238,15 @@ def trocar_senha(u: dict, senha_atual: str, senha_nova: str, token_atual: str | 
     verificar_senha_forte(senha_nova)
     verificar_senha_da_troca(senha_nova, senha_atual)
     con = connect()
-    row = con.execute("SELECT senha_hash FROM usuario WHERE id=?", (u["id"],)).fetchone()
+    row = con.execute("SELECT * FROM usuario WHERE id=?", (u["id"],)).fetchone()
     if not pwd.verify(senha_atual, row["senha_hash"]):
         con.close()
         raise HTTPException(400, "Senha atual incorreta")
-    con.execute("UPDATE usuario SET senha_hash=?, precisa_trocar_senha=0 WHERE id=?", (pwd.hash(senha_nova), u["id"]))
+    if senha_temporaria_vencida(con, row):      # UX-13: sessão aberta antes de vencer não serve para trocar depois
+        horas = horas_senha_temporaria(con)
+        con.close()
+        raise _erro_senha_vencida(horas)
+    con.execute("UPDATE usuario SET senha_hash=?, precisa_trocar_senha=0, senha_temporaria_em=NULL WHERE id=?", (pwd.hash(senha_nova), u["id"]))
     con.execute("UPDATE sessao SET revogada=1 WHERE usuario_id=? AND id<>?", (u["id"], _hash_token(token_atual or "")))   # derruba só as OUTRAS sessões
     _evento(con, u["email"], "senha_trocada", u["email"])
     con.commit(); con.close()
