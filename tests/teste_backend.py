@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -8589,6 +8589,45 @@ def filho(modo):
         ver("a lista de e-mails de teste vem da configuração uso.emails_teste", adm.get("/api/uso/resumo").json()["testes_ocultos"] == 19, adm.get("/api/uso/resumo").json()["testes_ocultos"])
         c.close()
         for l in res: print(l)
+    elif modo == "ux34_historico":
+        # UX-34: filtro "quem" do Histórico agrupado em Pessoas · Máquinas · Sistema, sem IP nem nome de script
+        init_db(); _aplicar_migracoes_real()
+        import re as _re
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        auth.criar_usuario("Rafael Teixeira", "rafa@camp.arq.br", "senha-longa-12345", "master", forcar_troca=False)
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='192.168.15.43' WHERE chave='estacao.contex1.ip'")   # como na produção
+        ev = [("projeto", "rafa@camp.arq.br"), ("projeto", "rafa@camp.arq.br"), ("item", "estacao@192.168.15.43"), ("projeto", "Rafael Teixeira (estacao@192.168.15.43)"),
+              ("usuario", "192.168.15.99"), ("usuario", "8.8.8.8"), ("sistema", "migração 140"), ("item", "script marcar_giro_publicado"),
+              ("lista", "importacao"), ("lgpd", "sistema"), ("decisao", "sistema"), ("item", "site")]
+        for ent, ator in ev:
+            c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES (?,?,?,?, '{}')", (ent, "F001-P0001", "editado", ator))
+        c.commit()
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "rafa@camp.arq.br", "senha": "senha-longa-12345"})
+        d = adm.get("/api/eventos?por_pagina=200&incluir_reimportacoes_sem_novidade=true").json()
+        quem = d.get("facetas", {}).get("quem") or []
+        grupos = [g["rotulo"] for g in quem]
+        rot = {g["grupo"]: [x["rotulo"] for x in g["itens"]] for g in quem}
+        todos = [x["rotulo"] for g in quem for x in g["itens"]]
+        ver("três grupos, nesta ordem: Pessoas · Máquinas · Sistema", grupos == ["Pessoas", "Máquinas", "Sistema"], grupos)
+        ver("nenhum IP nem nome de script nem 'migração 140' nos rótulos", not any(_re.search(r"\d+\.\d+\.\d+\.\d+|script|marcar_giro|migração \d|estacao@", t) for t in todos), todos)
+        ver("Pessoas pelo nome (Rafael Teixeira, não o e-mail)", rot.get("pessoas") == ["Rafael Teixeira"], rot.get("pessoas"))
+        ver("Máquinas pelo nome da estação (configuração estacao.contex1.ip), CAMP Vision, IP desconhecido sem número",
+            set(rot.get("maquinas", [])) == {"Estação Contex 1", "CAMP Vision", "Máquina da rede não identificada", "Acesso de fora da rede"}, rot.get("maquinas"))
+        ver("Sistema: rotinas, migrações, scripts, site", set(rot.get("sistema", [])) == {"Rotinas automáticas", "Migrações do banco", "Scripts de manutenção", "Sincronização com o site"}, rot.get("sistema"))
+        val = {x["rotulo"]: x["valor"] for g in quem for x in g["itens"]}
+        atores = lambda chave: sorted(e["ator"] for e in adm.get(f"/api/eventos?por_pagina=200&incluir_reimportacoes_sem_novidade=true&quem={chave}").json()["eventos"])
+        ver("filtrar pela pessoa traz o que ela fez no painel E como operadora na estação (3)", atores(val.get("Rafael Teixeira", "x")) == ["Rafael Teixeira (estacao@192.168.15.43)", "rafa@camp.arq.br", "rafa@camp.arq.br"], atores(val.get("Rafael Teixeira", "x")))
+        ver("filtrar pela Estação Contex 1 traz os 2 eventos dela", atores(val.get("Estação Contex 1", "x")) == ["Rafael Teixeira (estacao@192.168.15.43)", "estacao@192.168.15.43"], atores(val.get("Estação Contex 1", "x")))
+        ver("filtrar por Migrações do banco traz 'migração 140'", atores(val.get("Migrações do banco", "x")) == ["migração 140"])
+        ver("chave desconhecida não traz nada (e não quebra)", adm.get("/api/eventos?quem=p:ninguem").json()["total"] == 0)
+        ver("o filtro antigo 'ator' continua funcionando (compatibilidade)", adm.get("/api/eventos?ator=script&incluir_reimportacoes_sem_novidade=true").json()["total"] == 1)
+        c.close()
+        for l in res: print(l)
     elif modo == "parecido_desligado":
         # 26/10 (Rafael): "o sistema responde que um projeto com nome semelhante é o mesmo projeto, mas não é: tira isso" — no F9 da estação.
         # Padrão: não pergunta (cria direto); a pista do número P ainda pergunta; a configuração liga de volta.
@@ -11535,6 +11574,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"downloads: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("166) UX-34: Histórico com 'quem' agrupado (Pessoas · Máquinas · Sistema), sem IP nem nome de script")
+rc, out = rodar("ux34_historico", f"{tmp}/ux34_historico.db")
+if rc != 0: ok(False, f"teste ux34_historico não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"histórico: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

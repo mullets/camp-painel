@@ -799,7 +799,7 @@ _GRUPOS_EVENTO = {
 @router.get("/eventos")
 def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | None = None, q: str | None = None,
             desde: str | None = None, limite: int = 200, pagina: int = 1, por_pagina: int | None = None, grupo: str | None = None,
-            incluir_reimportacoes_sem_novidade: bool = False,
+            incluir_reimportacoes_sem_novidade: bool = False, quem: str | None = None,
             u: dict = Depends(auth.exige("admin"))) -> dict:
     # paginação: pagina/por_pagina (máx. 1000). Sem por_pagina vale o antigo "limite" (compatibilidade).
     por = max(1, min(por_pagina if por_pagina else limite, 1000)); pagina = max(1, pagina)
@@ -810,6 +810,12 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
         sql += " AND " + SQL_EVENTOS_COM_ATIVIDADE
     if entidade: sql += " AND entidade=?"; p.append(entidade)
     if ator: sql += " AND ator LIKE ?"; p.append(f"%{ator}%")
+    # UX-34: "quem" agrupado (Pessoas · Máquinas · Sistema) com nomes legíveis; a chave vira a lista de atores crus
+    from . import quem_historico
+    grupos_quem, mapa_quem = quem_historico.facetas(con)
+    if quem:
+        atores_q = mapa_quem.get(quem, [])
+        sql += " AND ator IN (" + (",".join("?" * len(atores_q)) or "NULL") + ")"; p += atores_q
     if tipo: sql += " AND tipo LIKE ?"; p.append(f"%{tipo}%")
     if q: sql += " AND (codigo LIKE ? OR detalhe LIKE ?)"; p += [f"%{q}%", f"%{q}%"]
     if desde: sql += " AND quando >= ?"; p.append(desde)
@@ -818,6 +824,7 @@ def eventos(entidade: str | None = None, ator: str | None = None, tipo: str | No
     rows = con.execute(sql + " ORDER BY id DESC LIMIT ? OFFSET ?", [*p, por, (pagina - 1) * por]).fetchall()
     facetas = {"entidades": [r[0] for r in con.execute("SELECT DISTINCT entidade FROM evento ORDER BY 1")],
                "atores": [r[0] for r in con.execute("SELECT ator FROM evento GROUP BY ator ORDER BY COUNT(*) DESC LIMIT 20")],
-               "tipos": [r[0] for r in con.execute("SELECT tipo FROM evento GROUP BY tipo ORDER BY COUNT(*) DESC LIMIT 40")]}
+               "tipos": [r[0] for r in con.execute("SELECT tipo FROM evento GROUP BY tipo ORDER BY COUNT(*) DESC LIMIT 40")],
+               "quem": grupos_quem}
     con.close()
     return {"total": total, "pagina": pagina, "por_pagina": por, "eventos": [dict(r) for r in rows], "facetas": facetas}
