@@ -34,6 +34,11 @@ Não é uma 6ª situação: a situação continua **Chegando** e ao lado vem o c
 O botão é **Verificar destino** (no lugar de "Importar folhas"); as escolhas são **É deste projeto**, **Mover para F0xx-P000x (sugerido)**
 e **Criar decisão**, sempre com justificativa (vai para o Histórico). "Importar todas" não importa esses lotes e diz quantos ficaram de fora.
 
+### Possível duplicata de projeto (UX-29, 27/10/2026)
+Ao digitar o nome em **Novo projeto** ou **Editar**: "Já existe projeto parecido neste fundo" / "Com este nome, fica parecido com", cada um com
+**Abrir este** (e, ao editar, **Não é duplicata**). Em Problemas, o quadro **Possíveis projetos duplicados (N)**. "Não é duplicata" vale para o
+par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
+
 ## Menu (CAMP-154)
 Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador, ajuda): **Precisa de você** (o Painel inicial),
 **Projetos**, **Fundos e arquitetos**, **Pedidos do site** (antes "Pedidos de material") e **Máquinas** (antes "Máquinas e site"). O resto fica em **Mais**.

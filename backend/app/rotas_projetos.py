@@ -795,14 +795,14 @@ class NovoProjeto(BaseModel):
 @router.post("/projetos/verificar")
 def verificar(d: NovoProjeto, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Antes de criar: projetos PARECIDOS no mesmo fundo (nome, identificação, ano, cidade), com a nota e os motivos."""
-    from .similaridade import buscar_parecidos
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (d.fundo_codigo,)).fetchone():
             raise HTTPException(404, "Fundo não existe")
         from .similaridade import buscar_em_outros_fundos
         t = d.titulo.strip()
-        return {"parecidos": buscar_parecidos(con, d.fundo_codigo, t, d.ano, d.cidade, d.identificacao_original) if t else [],
+        from .projetos_duplicados import parecidos as _parecidos     # UX-29: com a miniatura de cada um (campo novo, opcional)
+        return {"parecidos": _parecidos(con, d.fundo_codigo, t, d.ano, d.cidade, d.identificacao_original) if t else [],
                 # "Mais inteligência" (3): o mesmo nome em OUTRO fundo vira nota forte com link ("já existe 'Casa X' no fundo F012: é o mesmo?")
                 "outros_fundos": buscar_em_outros_fundos(con, d.fundo_codigo, t, d.ano, d.cidade) if t else [],
                 # 19/10: o código que o projeto vai ganhar se for criado agora (o mover "criar projeto novo" mostra antes de confirmar; quem cria decide na hora)

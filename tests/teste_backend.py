@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux01_destino", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"ux01_destino", "ux29_duplicata", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4461,6 +4461,55 @@ def filho(modo):
         ver("'Criar decisão' e o admin diz 'é deste projeto': o lote importa", r2.status_code == 200 and op.post(f"/api/lotes/{G}/importar").status_code == 200 and folhas(G) == 3, r2.text[:200])
         shutil.rmtree(raiz, ignore_errors=True)
         c.close()
+        for l in res: print(l)
+    elif modo == "ux29_duplicata":
+        # UX-29 (27/10): possível duplicata ao criar ou editar projeto (antes de salvar) e o relatório em Problemas; "Não é duplicata" silencia o par.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F072','Fundo Duplicatas','FDU',1)")
+        projs = {92: "Jockey Club", 233: "Edifício Jockey Club São Paulo", 1: "Residência James Francis King", 2: "Residência James Franics King - SP",
+                 3: "Casa 1", 4: "Casa 2", 5: "Clube Ipê", 6: "Clube Ipê (cópia mesclada)"}
+        for n, t in projs.items():
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F072',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES (?,'F072',?,?,1960,'São Paulo')", (f"F072-P{n:04d}", n, t))
+        c.execute("UPDATE projeto SET mesclado_em=datetime('now') WHERE codigo='F072-P0006'")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        v = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F072", "titulo": "Jockey Club SP"}).json()
+        cods = [p["codigo"] for p in v.get("parecidos") or []]
+        ver("Novo projeto, antes de salvar: 'Jockey Club SP' sugere F072-P0092 e F072-P0233, com miniatura", "F072-P0092" in cods and "F072-P0233" in cods and all("capa" in p for p in v["parecidos"]), str(cods))
+        v2 = adm.post("/api/projetos/verificar", json={"fundo_codigo": "F072", "titulo": "Clube Ipê"}).json()
+        ver("projeto mesclado não é sugerido", "F072-P0006" not in [p["codigo"] for p in v2.get("parecidos") or []] and "F072-P0005" in [p["codigo"] for p in v2.get("parecidos") or []], str(v2.get("parecidos")))
+        e = le.get("/api/projetos/F072-P0002/parecidos", params={"titulo": "Residência James Franics King - SP"}).json()
+        ecods = [p["codigo"] for p in e.get("parecidos") or []]
+        ver("Editar: o nome com erro de grafia aponta F072-P0001 (e não o próprio projeto)", "F072-P0001" in ecods and "F072-P0002" not in ecods, str(e))
+        ver("Editar: 'Casa 2' não é parecido com 'Casa 1' (número distingue)", "F072-P0003" not in [p["codigo"] for p in le.get("/api/projetos/F072-P0004/parecidos").json().get("parecidos") or []])
+        r = le.get("/api/duplicados/projetos").json()
+        pares = {(x["a"]["codigo"], x["b"]["codigo"]) for x in r.get("pares") or []}
+        ver("Problemas: o relatório traz Jockey Club × Edifício Jockey Club São Paulo", ("F072-P0092", "F072-P0233") in pares, str(pares))
+        ver("Problemas: e James Francis King × James Franics King - SP", ("F072-P0001", "F072-P0002") in pares, str(pares))
+        ver("Problemas: Casa 1 × Casa 2 não entra (falso alarme também é defeito)", ("F072-P0003", "F072-P0004") not in pares)
+        ver("Problemas: cada lado tem miniatura (campo capa) e o par diz o fundo", all("capa" in x["a"] and x.get("fundo") == "F072" for x in r.get("pares") or []))
+        ver("quem só lê não marca 'Não é duplicata' (403)", le.post("/api/fundos/F072/duplicados/nao-sao", json={"a": "F072-P0002", "b": "F072-P0001"}).status_code == 403)
+        n = op.post("/api/fundos/F072/duplicados/nao-sao", json={"a": "F072-P0002", "b": "F072-P0001"})
+        r2 = le.get("/api/duplicados/projetos").json()
+        pares2 = {(x["a"]["codigo"], x["b"]["codigo"]) for x in r2.get("pares") or []}
+        ver("'Não é duplicata' silencia o par no relatório (e o total diminui)", n.status_code == 200 and ("F072-P0001", "F072-P0002") not in pares2 and r2.get("total") == (r.get("total") or 0) - 1, str(pares2))
+        e2 = le.get("/api/projetos/F072-P0002/parecidos", params={"titulo": "Residência James Franics King - SP"}).json()
+        ver("... e ao editar o mesmo projeto o par não volta como aviso", "F072-P0001" not in [p["codigo"] for p in e2.get("parecidos") or []], str(e2))
+        c = connect(); c.execute("UPDATE projeto SET titulo='Casa Um' WHERE codigo='F072-P0003'"); c.execute("UPDATE projeto SET titulo='Casa Um' WHERE codigo='F072-P0004'"); c.commit(); c.close()
+        r3 = le.get("/api/duplicados/projetos").json()
+        ver("o relatório se refaz quando um nome muda (não fica preso no guardado)", ("F072-P0003", "F072-P0004") in {(x["a"]["codigo"], x["b"]["codigo"]) for x in r3.get("pares") or []})
+        ver("projeto que não existe: 404", le.get("/api/projetos/F072-P0999/parecidos").status_code == 404)
         for l in res: print(l)
     elif modo == "importar_sozinho":
         # CAMP-151 (22/10, decidido pelo Rafa): importar sozinho quando o CAMP Vision termina o lote, pelo coletor em segundo plano
@@ -11188,6 +11237,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"verificar destino: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-29: possível duplicata ao criar/editar projeto e o relatório em Problemas")
+rc, out = rodar("ux29_duplicata", f"{tmp}/ux29_duplicata.db")
+if rc != 0: ok(False, f"teste ux29_duplicata não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"possível duplicata: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

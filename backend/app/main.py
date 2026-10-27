@@ -85,6 +85,8 @@ from .parceiros import router as rotas_parceiros
 app.include_router(rotas_parceiros)
 from .duplicatas import router as rotas_duplicatas
 app.include_router(rotas_duplicatas)
+from .projetos_duplicados import router as rotas_projetos_duplicados   # UX-29
+app.include_router(rotas_projetos_duplicados)
 from .dados_foto import router as rotas_dados_foto
 app.include_router(rotas_dados_foto)
 from .folhas_enviadas import router as rotas_folhas_enviadas
