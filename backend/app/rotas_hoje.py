@@ -162,16 +162,48 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close()
 
 
+class AgoraNao(BaseModel):
+    titulo: str | None = None          # UX-03 (opcional): o que estava escrito no item, para a lista "Ignorados" em Problemas
+
+
+def _evento_tarefa(con, tarefa_id: str, tipo: str, ator: str, detalhe: dict) -> None:
+    """UX-03: esconder/mostrar de novo fica no Histórico de ações (problema: no histórico do problema)."""
+    ent, cod = ("erro", tarefa_id.split(":", 1)[1]) if tarefa_id.startswith("erro:") else ("tarefa", tarefa_id)
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES (?,?,?,?,?)",
+                (ent, cod, tipo, ator, json.dumps(detalhe, ensure_ascii=False)))
+
+
 @router.post("/hoje/tarefas/{tarefa_id}/agora-nao")
-def agora_nao(tarefa_id: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+def agora_nao(tarefa_id: str, d: AgoraNao | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """Esconde esta tarefa só para quem clicou, por 7 dias. Depois ela volta sozinha (se ainda existir)."""
     if not tarefa_id or len(tarefa_id) > 120:
         raise HTTPException(400, "Tarefa inválida")
     con = connect()
     try:
         ate = qb.adiar(con, u["id"], tarefa_id)
+        titulo = ((d.titulo if d else None) or "").strip()[:300] or None
+        if titulo:
+            try:
+                con.execute("UPDATE tarefa_adiada SET titulo=? WHERE usuario_id=? AND tarefa_id=?", (titulo, u["id"], tarefa_id))
+            except Exception:  # noqa: BLE001  (banco sem a migração 166: guarda sem o título)
+                pass
+        _evento_tarefa(con, tarefa_id, "escondido_7_dias", u["email"], {"ate": ate, "titulo": titulo})
         con.commit()
         return {"ok": True, "ate": ate, "mensagem": f"Escondida por {qb.DIAS_ADIAR} dias. Depois ela volta, se ainda precisar."}
+    finally:
+        con.close()
+
+
+@router.delete("/hoje/tarefas/{tarefa_id}/agora-nao")
+def mostrar_de_novo(tarefa_id: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-03: o Desfazer do "Esconder por 7 dias" e o "Mostrar de novo" de Problemas › Ignorados (só o da própria pessoa)."""
+    con = connect()
+    try:
+        n = con.execute("DELETE FROM tarefa_adiada WHERE usuario_id=? AND tarefa_id=?", (u["id"], tarefa_id)).rowcount
+        if n:
+            _evento_tarefa(con, tarefa_id, "mostrado_de_novo", u["email"], {})
+        con.commit()
+        return {"ok": True, "voltou": bool(n)}
     finally:
         con.close()
 

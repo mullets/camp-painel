@@ -57,6 +57,14 @@ Os 5 destinos têm estes nomes em todo o painel (menu, trilha, aba do navegador,
 | **Despublicar** | vai para `fora_do_ar` | exige admin master quando já estava publicado; fundo pede o motivo |
 | **Autorizar publicação** | marca o projeto como autorizado | não publica sozinho |
 
+## Ignorar um item (UX-03, 27/10/2026)
+| Texto | Efeito |
+|---|---|
+| **Ignorar ▾** | menu em todo item do Precisa de você (quem só lê não vê) |
+| **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s |
+| **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
+| **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
+
 ## Regras de texto
 - Chips de estado em minúsculas; botões, filtros e títulos com inicial maiúscula.
 - **Nunca** usar: "no ar", "fora do ar", "colocar no ar", "tirar do ar", "retirar da publicação", "não pública".

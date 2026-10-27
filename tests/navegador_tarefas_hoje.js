@@ -32,6 +32,7 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
   const adiar = grupo.locator('[data-ini-adiar]').first();
   const id = await adiar.getAttribute('data-ini-adiar');
   ok(!!id, 'cada tarefa da base tem o botão "Agora não" (' + id + ')');
+  await adiar.locator('xpath=ancestor::details[1]/summary').click();   // UX-03: o "Agora não" mora no menu "Ignorar ▾"
   await adiar.click();
   await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent), null, {timeout: 8000});
   await page.waitForFunction(i => !document.querySelector(`[data-ini-adiar="${i}"]`) && document.querySelector('#ini-qualidade .qb-geral'), id, {timeout: 8000});

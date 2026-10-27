@@ -171,8 +171,20 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     # Problemas: só o que bloqueia ou pede correção (os avisos têm aba própria e não pedem ação); o resto é o que a lista mostra.
     n["erros_pedem_acao"] = q("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'")
     n["erros_avisos"] = n["erros_abertos"] - n["erros_pedem_acao"]
-    n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] + n["material_novo"] + n["erros_bloqueantes"], "decisoes": n["decisoes"],
-                       "material_novo": n["material_novo"], "problemas": n["erros_pedem_acao"], "pedidos": n["pedidos_abertos"],
+    # UX-03: o que ESTA pessoa escondeu ("Esconder por 7 dias") também sai dos números dela (os lotes já saíram acima)
+    esc_dec, esc_bloq, esc_prob = 0, 0, 0
+    if usuario_id:
+        from .qualidade_base import adiadas
+        fora_ = adiadas(con, usuario_id)
+        ids_dec = {int(k[8:]) for k in fora_ if k.startswith("decisao:") and k[8:].isdigit()}
+        ids_err = [int(k[5:]) for k in fora_ if k.startswith("erro:") and k[5:].isdigit()]
+        esc_dec = sum(1 for d in dec if d["id"] in ids_dec)
+        if ids_err:
+            marc = ",".join("?" * len(ids_err))
+            esc_bloq = con.execute(f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND situacao IN ('aberto','em_correcao') AND {TRAVA_SQL}", ids_err).fetchone()[0]
+            esc_prob = con.execute(f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'", ids_err).fetchone()[0]
+    n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] - esc_dec + n["material_novo"] + n["erros_bloqueantes"] - esc_bloq, "decisoes": n["decisoes"],
+                       "material_novo": n["material_novo"], "problemas": n["erros_pedem_acao"] - esc_prob, "pedidos": n["pedidos_abertos"],
                        "emprestimos": n["emprestimos_atrasados"]}
     if com_listas:
         n["_lotes"], n["_decisoes"], n["_travados"] = L, dec, trav
@@ -194,6 +206,9 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     leitura = papel == "leitura"
     L, dec = n["_lotes"], n["_decisoes"]
     grupos: list[dict] = []
+    from .qualidade_base import adiadas
+    fora = adiadas(con, usuario_id)                 # UX-03: o que esta pessoa escondeu por 7 dias (todo item tem a chave em "adiar")
+    vis = lambda linhas: [x for x in linhas if x.get("adiar") not in fora]  # noqa: E731
 
     # 1) decidir: o CAMP Vision pode estar parado esperando
     linhas = []
@@ -203,7 +218,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         partes = [f"chegou {d['vezes']} vezes" if d["vezes"] > 1 else None, texto_espera(_horas_desde(d["criada_em"])),
                   "o CAMP Vision está parado nesta pasta" if d["origem"] == "estacao" else None]
         linhas.append({"sev": "r" if d["origem"] == "estacao" else "a", "titulo": tit, "codigo": c.get("codigo") or d["fundo"],
-                       "detalhe": " · ".join(p for p in partes if p), "acao": _acao("Decidir" if admin else "Ver", "decisao", d["id"])})
+                       "detalhe": " · ".join(p for p in partes if p), "adiar": f"decisao:{d['id']}", "acao": _acao("Decidir" if admin else "Ver", "decisao", d["id"])})
+    linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "decidir", "titulo": "Decidir", "quem": "admin", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver as {len(linhas)} decisões", "rota": "decisoes"}})
@@ -227,6 +243,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {texto_espera(h)}" if h and h > 48 else ""),
                            "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
+    linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes para importar e conferir", "rota": "filas/operador"}})
@@ -238,6 +255,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
     for l in sorted([l for l in L if l["fase"] == "aprovar"], key=lambda l: str(l["atualizado_em"] or "")):
         linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                        "detalhe": f"as {l['itens_total']} folhas já foram conferidas · " + ("pronto para publicar (o clique aprova o lote junto)" if um_passo else "falta aprovar o lote"),
+                       "adiar": chave_adiar_lote(l["id"]),
                        "acao": _acao("Publicar", "publicar", l["projeto_codigo"]) if um_passo else _acao("Aprovar", "aprovar", l["id"])})
     ordem = {"parcial": 0, "pronto": 1, "travado": 2}
     for l in sorted([l for l in L if l["fase"] == "publicar"], key=lambda l: (ordem[l["publicar"]["estado"]], str(l["atualizado_em"] or ""))):
@@ -248,8 +266,9 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             det, rot, sev = f"{s['total']} folhas prontas · nada impede publicar", "Publicar", "b"
         else:
             det, rot, sev = f"travado: {s['falta']}", "Ver o que falta", "a"
-        linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det,
+        linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det, "adiar": chave_adiar_lote(l["id"]),
                        "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
+    linhas = vis(linhas)
     if linhas and (admin or (um_passo and papel == "operador")):
         grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "operador" if um_passo else "admin", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} lotes que esperam um admin", "rota": "filas/admin"}})
@@ -261,10 +280,11 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         no_ar = con.execute("SELECT 1 FROM projeto WHERE status_site='no_ar' AND (?=codigo OR ? LIKE codigo||'-%')", (e["codigo"], e["codigo"])).fetchone()
         linhas.append({"sev": "r", "titulo": e["descricao"], "codigo": e["codigo"],
                        "detalhe": " · ".join(p for p in ("o projeto está no site com este problema" if no_ar else "impede publicar", texto_espera(_horas_desde(e["criado_em"]))) if p),
+                       "adiar": f"erro:{e['id']}", "ignorar": {"erro": e["id"], "bloqueia": True},   # UX-03: bloqueio pede justificativa
                        "acao": _acao("Ver o problema", "erro", e["id"])})
     for l in [l for l in L if l["fase"] == "erro"]:
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
-                       "detalhe": texto_espera(_horas_desde(l["atualizado_em"])), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
+                       "detalhe": texto_espera(_horas_desde(l["atualizado_em"])), "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Ver o erro", "fila_erro", l["id"])})
     for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
                             WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
         try:
@@ -272,14 +292,17 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         except (ValueError, TypeError):
             alerta = None
         if isinstance(alerta, str) and alerta.strip():     # CAMP-046/CV2 2.4: o CV2 avisa lote incompleto pelo heartbeat (o /aviso exige código de projeto)
-            linhas.append({"sev": "r", "titulo": "O CAMP Vision avisou: " + alerta.strip()[:200], "codigo": None, "detalhe": f"estação {h['estacao_id']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
+            linhas.append({"sev": "r", "titulo": "O CAMP Vision avisou: " + alerta.strip()[:200], "codigo": None, "detalhe": f"estação {h['estacao_id']}",
+                           "adiar": f"alerta:{h['estacao_id']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
     try:     # CAMP-017: lote que a estação enviou há mais de 1 h e o CAMP Vision não processou
         from .estacao_eventos import sem_processar
         for e in sem_processar(con):
             linhas.append({"sev": "a", "titulo": f"Lote enviado pela estação e sem processar: {titulo_limpo(e['projeto_titulo'] or e['projeto_codigo'])}", "codigo": e["projeto_codigo"],
-                           "detalhe": f"enviado há {round(e['horas'])} h" + (f" por {e['operador']}" if e["operador"] else ""), "acao": _acao("Ver a Fila", "fila_erro", None)})
+                           "detalhe": f"enviado há {round(e['horas'])} h" + (f" por {e['operador']}" if e["operador"] else ""),
+                           "adiar": f"sem_processar:{e['projeto_codigo']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
     except Exception:  # noqa: BLE001
         pass
+    linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "problemas", "titulo": "Com problema", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} problemas", "rota": "erros"}})
@@ -291,7 +314,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "a", "titulo": f"{s['solicitante']} pediu material" + (f" para {fin}" if fin else ""), "codigo": None,
                        "detalhe": " · ".join(p for p in ("aguarda a sua resposta" if s["situacao"] == "aguarda_resposta" else "aguarda o orçamento",
                                                          texto_espera(_horas_desde(s["recebida_em"]))) if p),
-                       "acao": _acao("Responder", "pedido", s["id"])})
+                       "adiar": f"pedido:{s['id']}", "acao": _acao("Responder", "pedido", s["id"])})
+    linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "pedidos", "titulo": "Pedidos esperando resposta", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} pedidos", "rota": "solicitacoes"}})
@@ -305,7 +329,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "a" if dias < 7 else "r", "titulo": f"{e['nome']} está com originais da CAMP e o prazo venceu", "codigo": None,
                        "detalhe": " · ".join(p for p in (f"devia ter devolvido em {e['prazo'][8:10]}/{e['prazo'][5:7]}",
                                                          f"{dias} {'dia' if dias == 1 else 'dias'} de atraso", o_que) if p),
-                       "acao": _acao("Ver", "emprestimo", e["id"])})
+                       "adiar": f"emprestimo:{e['id']}", "acao": _acao("Ver", "emprestimo", e["id"])})
+    linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "emprestimos", "titulo": "Originais com prazo vencido", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
                        "ver_todos": {"rotulo": f"Ver os {len(linhas)} empréstimos atrasados", "rota": "emprestimos/atrasado"}})

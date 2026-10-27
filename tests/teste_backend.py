@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9173,6 +9173,65 @@ def filho(modo):
         d2 = ad.post(f"/api/erros/desfazer/{m.get('desfazer')}").json()
         ver("Desfazer do mesclar reabre as cópias", d2.get("voltaram") == 2 and abertos() == n0, str(d2))
         for l in res: print(l)
+    elif modo == "ux03_ignorar":
+        # UX-03: "Ignorar ▾" em todo item do Precisa de você. "Agora não" esconde só para quem clicou por 7 dias (some da lista, dos
+        # números e de Abertos em Problemas; aparece em Problemas › Ignorados; Desfazer/Mostrar de novo); "Não mostrar mais" muda o
+        # problema para "Não era problema" com autor/data/justificativa (bloqueio exige); tudo no histórico; quem só lê não ignora.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P000{n}", "F099", n, f"Projeto {n}"))
+        eb = [c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','outro','operador',?,?)", (f"F099-P000{n}", f"Bloqueio {n}")).lastrowid for n in (1, 2)]
+        did = c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem, situacao) VALUES ('projeto_parecido','k1','F099','Projeto parecido','{}','painel','pendente')").lastrowid
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-1234", "leitura", forcar_troca=False)
+        def cli(em, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s_}); return x
+        op, ad, le = cli("op@camp.arq.br", "senha-operador-123"), cli("ad@camp.arq.br", "senha-admin-12345"), cli("le@camp.arq.br", "senha-leitura-1234")
+        def itens(x):
+            return [i for g in x.get("/api/painel").json().get("tarefas", []) for i in g["itens"]]
+        I = itens(ad)
+        ver("todo item do Precisa de você tem a chave do Ignorar", I and all(i.get("adiar") for i in I), str([(i["titulo"], i.get("adiar")) for i in I])[:200])
+        ver("o problema que bloqueia oferece 'Não mostrar mais' (ignorar.erro)", any((i.get("ignorar") or {}).get("erro") == eb[0] for i in I))
+        p0 = op.get("/api/pendencias").json()["pedem_acao"]
+        r = op.post(f"/api/hoje/tarefas/erro:{eb[0]}/agora-nao", json={"titulo": "Bloqueio 1 · F099-P0001"})
+        ver("Agora não (esconder 7 dias) num problema responde ok", r.status_code == 200, r.text[:120])
+        ver("...some da lista de quem clicou", not any(i.get("adiar") == f"erro:{eb[0]}" for i in itens(op)))
+        p1 = op.get("/api/pendencias").json()["pedem_acao"]
+        ver("...e dos números dela (Precisa de você e Problemas -1)", p1["precisa_de_voce"] == p0["precisa_de_voce"] - 1 and p1["problemas"] == p0["problemas"] - 1, f"{p0} -> {p1}")
+        ver("...e de Abertos em Problemas, só para ela", eb[0] not in [e["id"] for e in op.get("/api/erros?situacao=pedem_acao").json()]
+            and eb[0] in [e["id"] for e in ad.get("/api/erros?situacao=pedem_acao").json()] and op.get("/api/erros/contagem").json()["pedem_acao"] == 1)
+        ig = op.get("/api/erros/ignorados").json()
+        ver("Problemas › Ignorados mostra o escondido, com o título e quando volta", ig["total"] == 1 and ig["escondidos"][0]["titulo"] == "Bloqueio 1 · F099-P0001" and ig["escondidos"][0]["ate"], str(ig)[:200])
+        ver("para outra pessoa continua na lista", any(i.get("adiar") == f"erro:{eb[0]}" for i in itens(ad)))
+        ver("esconder fica no histórico do problema", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo=? AND tipo='escondido_7_dias'", (str(eb[0]),)).fetchone()[0] == 1)
+        op.delete(f"/api/hoje/tarefas/erro:{eb[0]}/agora-nao")
+        ver("Desfazer / Mostrar de novo: volta para a lista", any(i.get("adiar") == f"erro:{eb[0]}" for i in itens(op)) and op.get("/api/erros/ignorados").json()["total"] == 0)
+        op.post(f"/api/hoje/tarefas/decisao:{did}/agora-nao")
+        ver("decisão também se esconde (decisao:N)", not any(i.get("adiar") == f"decisao:{did}" for i in itens(op)) and op.get("/api/pendencias").json()["pedem_acao"]["precisa_de_voce"] == p0["precisa_de_voce"] - 1)
+        r = op.post(f"/api/erros/{eb[1]}/ignorar", json={})
+        ver("Não mostrar mais num bloqueio sem justificativa: pede a justificativa (400)", r.status_code == 400, r.text[:120])
+        ver("quem só lê não ignora (403)", le.post(f"/api/erros/{eb[1]}/ignorar", json={"justificativa": "x y z"}).status_code == 403)
+        ver("quem só lê não vê botão: os itens dele vêm sem ação", all(i.get("acao") is None for i in itens(le)))
+        r = op.post(f"/api/erros/{eb[1]}/ignorar", json={"justificativa": "era a folha de rosto"}).json()
+        e = c.execute("SELECT situacao, resolucao, fechado_por, resolvido_em FROM erro WHERE id=?", (eb[1],)).fetchone()
+        ver("com justificativa: vira 'Não era problema' com autor, data e justificativa", e["situacao"] == "ignorado" and e["resolucao"] == "era a folha de rosto" and e["fechado_por"] == "op@camp.arq.br" and e["resolvido_em"], str(dict(e)))
+        ver("...registrado no histórico", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo=? AND tipo='ignorado'", (str(eb[1]),)).fetchone()[0] == 1)
+        ver("...sai do Precisa de você de todos", not any(i.get("adiar") == f"erro:{eb[1]}" for i in itens(ad)))
+        ver("...e aparece em Problemas › Ignorados (não era problema)", [x["id"] for x in ad.get("/api/erros/ignorados").json()["nao_era"]] == [eb[1]])
+        d_ = op.post(f"/api/erros/desfazer/{r.get('desfazer')}").json()
+        e = c.execute("SELECT situacao, resolucao, fechado_por FROM erro WHERE id=?", (eb[1],)).fetchone()
+        ver("Desfazer reabre como estava (sem autor de fechamento)", d_.get("voltaram") == 1 and e["situacao"] == "aberto" and e["resolucao"] is None and e["fechado_por"] is None, str(dict(e)))
+        for l in res: print(l)
     elif modo == "agora_nao_lote":
         # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
         # SÓ de quem clicou, por 7 dias. E "o maior lote da fila" aparecia em todos os lotes com o mesmo tamanho.
@@ -11850,6 +11909,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-20: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-03: Ignorar no Precisa de você (esconder 7 dias / não era problema), Ignorados em Problemas, histórico")
+rc, out = rodar("ux03_ignorar", f"{tmp}/ux03_ignorar.db")
+if rc != 0: ok(False, f"teste ux03_ignorar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-03: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

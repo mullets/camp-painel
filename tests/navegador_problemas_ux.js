@@ -2,6 +2,8 @@
 // UX-06: com centenas de problemas abertos, a tela abre com as abas e a lista certas (direto pela URL, voltando de um projeto,
 //        com um filtro guardado de outro dia); com filtro, o estado vazio diz QUAL filtro está ativo e tem "Limpar".
 // UX-20: "todos deste tipo/projeto", prévia antes de fechar vários e Desfazer; "mensagens repetidas" → Ver → Mesclar (com Desfazer).
+// UX-03: "Ignorar ▾" em todo item do Precisa de você: "Agora não" (7 dias, por pessoa, Desfazer 8 s, tooltip com a data da volta) e
+//        "Não mostrar mais (não era problema)" com justificativa obrigatória no bloqueio; "Ignorados (n)" recolhido em Problemas; leitura sem botão.
 // UX-19: avisos em aba própria ("Abertos" = bloqueia + corrigir); os números do menu seguem "itens que pedem ação de você".
 // Uso (servidor PRÓPRIO numa porta 89xx, nunca a 8765 compartilhada):
 //   CAMP_DB_PATH=/tmp/x/ux.db python3 tests/semear_banco_teste.py
@@ -145,6 +147,52 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Abertos" é o que bloqueia ou
     chk(await aba('avisos') === av0 - 2, `UX-20: Mesclar fecha as 2 cópias (${av0} -> ${await aba('avisos')})`);
     await page.click('#toast .toast-acao'); await page.waitForFunction(() => /Desfeito/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await pronto();
     chk(await aba('avisos') === av0, 'UX-20: Desfazer do Mesclar reabre as cópias');
+
+    // ================= UX-03 =================
+    const grp = '[data-ini-grupo="problemas"]';
+    const homeIr = async () => { await page.evaluate(() => nav('painel')); await page.waitForSelector(grp + ' .ini-task', { timeout: 15000 }); await page.waitForTimeout(400); };
+    await homeIr();
+    const nTasks = await page.locator('#v-painel .ini-task:has([data-ini-acao])').count(), nIgn = await page.locator('#v-painel .ini-task:has([data-ini-acao]) .ini-ignorar').count();
+    chk(nTasks > 0 && nTasks === nIgn, `UX-03: todo item da Home com ação tem "Ignorar ▾" (${nIgn} de ${nTasks})`);
+    const t1 = page.locator(grp + ' .ini-task').first(), tit1 = (await t1.locator('.t b').textContent()).trim();
+    await t1.locator('.ini-ignorar summary').click();
+    const tip = await t1.locator('[data-ini-adiar]').getAttribute('title');
+    chk(/volta sozinho em \d\d\/\d\d/.test(tip || ''), 'UX-03/UX-32: o "Agora não" diz quando o item volta: "' + tip + '"');
+    chk(await t1.locator('[data-ini-naoera]').count() === 1, 'UX-03: problema tem também "Não mostrar mais (não era problema)"');
+    const k1 = await t1.locator('[data-ini-adiar]').getAttribute('data-ini-adiar');
+    await t1.locator('[data-ini-adiar]').click();
+    await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent) && document.querySelector('#toast .toast-acao'), null, { timeout: 8000 });
+    await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
+    chk(true, 'UX-03: "Agora não": aviso com Desfazer e o item some');
+    await page.click('#toast .toast-acao'); await page.waitForFunction(k => !!document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
+    chk(true, 'UX-03: Desfazer (dentro dos 8 s) traz o item de volta');
+    await page.locator(`[data-ini-adiar="${k1}"]`).locator('xpath=ancestor::details[1]/summary').click();
+    await page.click(`[data-ini-adiar="${k1}"]`); await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
+    await page.evaluate(() => nav('erros')); await pronto(); await page.waitForTimeout(600);
+    chk(await page.isVisible('#err-ignorados') && !(await page.getAttribute('#err-ignorados', 'open')) && /Ignorados \(1\)/.test(await page.textContent('#err-ignorados summary')), 'UX-03: em Problemas, "Ignorados (1)" recolhido');
+    await page.click('#err-ignorados summary');
+    chk((await page.textContent('#err-ign-corpo')).includes(tit1) && await page.isVisible('[data-err-ign-mostrar]'), 'UX-03: ...com o item escondido, quando volta e "Mostrar de novo"');
+    // "Não mostrar mais": bloqueio exige justificativa
+    await homeIr();
+    const t2 = page.locator(grp + ' .ini-task:has([data-ini-naoera])').first(), k2 = await t2.locator('[data-ini-adiar]').getAttribute('data-ini-adiar');
+    await t2.locator('.ini-ignorar summary').click(); await t2.locator('[data-ini-naoera]').click();
+    await page.waitForSelector('#conf-ov', { timeout: 5000 });
+    chk(await page.isDisabled('#conf-ov [data-conf="sim"]'), 'UX-03: bloqueio sem justificativa: "Não mostrar mais" fica travado');
+    await page.fill('#conf-motivo', 'era a folha de rosto, não planta'); await page.click('#conf-ov [data-conf="sim"]');
+    await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`) && document.querySelector('#toast .toast-acao'), k2, { timeout: 8000 });
+    const idE = +k2.slice(5), linhaE = py(`r=con.execute("SELECT situacao, resolucao, fechado_por FROM erro WHERE id=${idE}").fetchone();print('|'.join(map(str,r)))`);
+    chk(linhaE === 'ignorado|era a folha de rosto, não planta|rafael@camp.arq.br', 'UX-03: virou "Não era problema" com a justificativa e o autor: ' + linhaE);
+    const hist = py(`print(con.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND codigo='${idE}' AND tipo='ignorado'").fetchone()[0])`);
+    chk(hist === '1', 'UX-03: registrado no Histórico de ações');
+    await page.click('#toast .toast-acao'); await page.waitForFunction(k => !!document.querySelector(`[data-ini-adiar="${k}"]`), k2, { timeout: 8000 });
+    chk(py(`print(con.execute("SELECT situacao FROM erro WHERE id=${idE}").fetchone()[0])`) === 'aberto', 'UX-03: Desfazer reabre o problema');
+    // quem só lê: sem botão
+    const ctxL = await browser.newContext({ viewport: { width: 1366, height: 900 } }), pl = await ctxL.newPage();
+    await pl.goto(BASE + '/'); await pl.fill('#lg-email', 'leitor@camp.arq.br'); await pl.fill('#lg-senha', 'senha-leitor-1234'); await pl.press('#lg-senha', 'Enter');
+    await pl.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 }); await pl.evaluate(() => nav('painel'));
+    await pl.waitForSelector('#v-painel .ini-task', { timeout: 15000 }); await pl.waitForTimeout(400);
+    chk(await pl.locator('#v-painel .ini-ignorar').count() === 0, 'UX-03: usuário só-leitura não vê "Ignorar"');
+    await ctxL.close();
   } catch (e) { chk(false, 'exceção: ' + e.message.split('\n')[0]); }
   chk(!erros.length, 'nenhum erro no console' + (erros.length ? ': ' + erros.slice(0, 5).join(' | ') : ''));
   chk(!falhas.length, 'nenhuma resposta de erro do painel' + (falhas.length ? ': ' + falhas.slice(0, 5).join(' | ') : ''));

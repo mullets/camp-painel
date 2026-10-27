@@ -1243,9 +1243,17 @@ class ErrosEmLote(BaseModel):
     resolucao: str | None = None
 
 
-def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q) -> tuple[str, list]:
+def _escondidos(con, usuario_id) -> list[int]:
+    """UX-03: problemas que ESTA pessoa escondeu por 7 dias no Precisa de você (ficam em Problemas › Ignorados, não em Abertos/Avisos)."""
+    from .qualidade_base import adiadas
+    return [int(k[5:]) for k in adiadas(con, usuario_id) if k.startswith("erro:") and k[5:].isdigit()]
+
+
+def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, escondidos=None) -> tuple[str, list]:
     """A mesma regra para a lista e para a contagem das abas: situação, gravidade, tipo (categoria), origem, projeto (ou fundo) e busca."""
     w, p = [], []
+    if escondidos and situacao in ("pedem_acao", "avisos"):
+        w.append(f"id NOT IN ({','.join('?' * len(escondidos))})"); p += list(escondidos)
     if situacao == "abertos": w.append("situacao IN ('aberto','em_correcao')")
     # UX-19: avisos em aba própria. "pedem_acao" = abertos que bloqueiam ou pedem correção; "avisos" = abertos só de aviso.
     elif situacao == "pedem_acao": w.append("situacao IN ('aberto','em_correcao') AND gravidade<>'aviso'")
@@ -1294,8 +1302,9 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
     try:
         _fechar_sozinhos(con)
         out = {}
+        esc = _escondidos(con, u.get("id"))
         for k in ("abertos", "pedem_acao", "avisos", "em_correcao", "corrigido", "ignorado", "todos"):   # UX-19: pedem_acao e avisos (campos novos)
-            w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q)
+            w, p = _filtro_erros(k, gravidade, categoria, origem, projeto, q, esc)
             out[k] = con.execute("SELECT COUNT(*) FROM erro" + w, p).fetchone()[0]
         w, p = _filtro_erros("abertos", gravidade, categoria, origem, projeto, q)
         out["talvez"] = sum(1 for x in problemas.enriquecer(con, con.execute("SELECT * FROM erro" + w, p).fetchall()) if x["resolvido_sozinho"])
@@ -1305,6 +1314,64 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
             out["sem_filtro"] = {k: con.execute("SELECT COUNT(*) FROM erro" + _filtro_erros(k, None, None, None, None, None)[0],
                                                 _filtro_erros(k, None, None, None, None, None)[1]).fetchone()[0] for k in ("abertos", "pedem_acao", "avisos", "todos")}
         return out
+    finally:
+        con.close()
+
+
+@router.get("/erros/ignorados")
+def erros_ignorados(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-03: Problemas › Ignorados. O que VOCÊ escondeu por 7 dias no Precisa de você (volta sozinho) e o que alguém fechou como
+    "não era problema" pelo Ignorar nos últimos 30 dias (quem, quando e por quê)."""
+    from .qualidade_base import adiadas, agora, _iso
+    con = connect()
+    try:
+        escondidos = []
+        if adiadas(con, u.get("id")):
+            try:
+                rows = con.execute("SELECT tarefa_id, ate, titulo FROM tarefa_adiada WHERE usuario_id=? AND ate>? ORDER BY ate", (u["id"], _iso(agora()))).fetchall()
+            except Exception:  # noqa: BLE001  (sem a migração 166)
+                rows = con.execute("SELECT tarefa_id, ate, NULL AS titulo FROM tarefa_adiada WHERE usuario_id=? AND ate>? ORDER BY ate", (u["id"], _iso(agora()))).fetchall()
+            for r in rows:
+                x = {"tarefa_id": r["tarefa_id"], "ate": r["ate"], "titulo": r["titulo"]}
+                if r["tarefa_id"].startswith("erro:") and r["tarefa_id"][5:].isdigit():
+                    e = con.execute("SELECT id, codigo, descricao, gravidade, situacao FROM erro WHERE id=?", (int(r["tarefa_id"][5:]),)).fetchone()
+                    if e:
+                        x.update({"erro": dict(e), "titulo": x["titulo"] or e["descricao"]})
+                escondidos.append(x)
+        nao_era = [dict(r) for r in con.execute("""SELECT e.id, e.codigo, e.descricao, e.gravidade, e.resolucao, e.resolvido_em, e.fechado_por FROM erro e
+                                                   WHERE e.situacao='ignorado' AND e.resolvido_em >= datetime('now','-30 days')
+                                                     AND EXISTS (SELECT 1 FROM evento v WHERE v.entidade='erro' AND v.codigo=CAST(e.id AS TEXT) AND v.tipo='ignorado')
+                                                   ORDER BY e.resolvido_em DESC LIMIT 200""")]
+        return {"escondidos": escondidos, "nao_era": nao_era, "total": len(escondidos) + len(nao_era)}
+    finally:
+        con.close()
+
+
+class IgnorarErro(BaseModel):
+    justificativa: str | None = None
+
+
+@router.post("/erros/{eid}/ignorar")
+def ignorar_erro(eid: int, d: IgnorarErro, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-03: "Não mostrar mais (não era problema)" do Precisa de você. Muda o problema para "Não era problema" com autor, data e
+    justificativa; o que bloqueia a publicação exige a justificativa. Devolve o token do Desfazer (o mesmo das ações em massa)."""
+    con = connect()
+    try:
+        e = con.execute("SELECT * FROM erro WHERE id=?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(404, "Este problema não existe")
+        if e["situacao"] not in ("aberto", "em_correcao"):
+            raise HTTPException(409, "Este problema já está fechado")
+        just = (d.justificativa or "").strip()[:300]
+        if e["gravidade"] == "bloqueia" and len(just) < 3:
+            raise HTTPException(400, "Este problema bloqueia a publicação: diga em uma frase por que não era problema")
+        antes = [{"id": e["id"], "situacao": e["situacao"], "resolucao": e["resolucao"], "resolvido_em": e["resolvido_em"]}]
+        con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=?, fechado_por=? WHERE id=?",
+                    (just or "Não era problema (ignorado no Precisa de você).", u["email"], eid))
+        _evento(con, "erro", eid, "ignorado", u["email"], {"codigo": e["codigo"], "justificativa": just or None, "onde": "precisa_de_voce"})
+        tok = _guardar_desfazer(con, u["email"], "ignorar", "ignorado", antes)
+        con.commit()
+        return {"ok": True, "desfazer": tok}
     finally:
         con.close()
 
@@ -1366,7 +1433,7 @@ def listar_erros(situacao: str | None = "abertos", gravidade: str | None = None,
     con = connect()
     try:
         _fechar_sozinhos(con)
-        w, p = _filtro_erros(situacao, gravidade, categoria, origem, projeto, q)
+        w, p = _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, _escondidos(con, u.get("id")))
         rows = con.execute("SELECT * FROM erro" + w + " ORDER BY CASE gravidade WHEN 'bloqueia' THEN 0 WHEN 'corrigir' THEN 1 ELSE 2 END, criado_em DESC, id DESC", p).fetchall()
         return problemas.enriquecer(con, rows)
     finally:
@@ -1431,6 +1498,7 @@ def _mudar_erro(con, e, d: EdicaoErro, ator: str) -> bool:
         if d.situacao in ("corrigido", "fechado", "ignorado") and not ((d.resolucao or "").strip() or e["resolucao"]):
             raise HTTPException(400, "Descreva a resolução antes de fechar")
         campos.append("situacao=?"); vals.append(d.situacao)
+        campos.append("fechado_por=?"); vals.append(ator if d.situacao in ("corrigido", "fechado", "ignorado") else None)   # UX-03: quem fechou
         if d.situacao in ("corrigido", "fechado", "ignorado"):
             campos.append("resolvido_em=datetime('now')")
             if e["categoria"] == "autoria_divergente" and d.situacao != "ignorado":
@@ -1517,8 +1585,9 @@ def desfazer_erros(token: int, u: dict = Depends(auth.exige("operador"))) -> dic
             raise HTTPException(409, f"Passou o prazo de {DESFAZER_MINUTOS} minutos para desfazer: reabra um a um")
         voltaram, ficaram = 0, 0
         for a in json.loads(r["antes"] or "[]"):
-            n = con.execute("UPDATE erro SET situacao=?, resolucao=?, resolvido_em=? WHERE id=? AND situacao=?",
-                            (a["situacao"], a["resolucao"], a["resolvido_em"], a["id"], r["situacao"])).rowcount
+            n = con.execute("""UPDATE erro SET situacao=?, resolucao=?, resolvido_em=?,
+                               fechado_por=CASE WHEN ? IN ('aberto','em_correcao') THEN NULL ELSE fechado_por END WHERE id=? AND situacao=?""",
+                            (a["situacao"], a["resolucao"], a["resolvido_em"], a["situacao"], a["id"], r["situacao"])).rowcount
             if n:
                 voltaram += 1
                 _evento(con, "erro", a["id"], "desfeito", u["email"], {"situacao": a["situacao"], "acao": r["acao"]})
