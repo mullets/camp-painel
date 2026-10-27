@@ -393,6 +393,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
                f"releitura pedida {_ha(_horas_desde(ped))}: esperando o CAMP Vision" if ped else None]
         linhas.append({"sev": "a", "titulo": f"Leitura interrompida: {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
                        "detalhe": " · ".join(p for p in det if p), "lote": l["identificador"], "parado_h": l.get("parado_h"), "adiar": chave_adiar_lote(l["id"]),
+                       "dispensar": l["id"],                     # UX-39 (campo novo, opcional): "Dispensar este lote (para todos)" também aqui
                        "acao": _acao("Ver na Fila", "rota", "filas/gente") if ped else _acao("Ler de novo", "reler", l["projeto_codigo"])})
     for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
                             WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
