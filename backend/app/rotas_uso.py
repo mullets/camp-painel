@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,7 +15,7 @@ from .db import connect
 
 router = APIRouter(prefix="/api", tags=["uso"])
 JUNCAO = "LEFT JOIN item i ON i.codigo=u.material_codigo LEFT JOIN projeto p ON p.codigo=u.projeto_codigo"
-FILTROS = ("q", "de", "ate", "uso", "fundo", "material")
+FILTROS = ("q", "de", "ate", "uso", "fundo", "material", "testes")
 LIMITE_EMAILS_POR_HORA = 30
 
 
@@ -55,9 +56,48 @@ CAT_USO = f"""CASE WHEN {_L} LIKE '%pesquis%' OR {_L} LIKE '%acad%' OR {_L} LIKE
   ELSE 'outro' END"""
 CATS_USO = {"pesquisa": "pesquisa acadêmica", "publicacao": "publicação", "exposicao": "exposição", "pessoal": "uso pessoal ou de família", "outro": "outro"}
 
+# UX-16: registros de TESTE (QA automatizado, "Pesquisa acadêmica (TESTE)", e-mails de QA) não entram nas métricas nem nas listas.
+# É uma REGRA de leitura (nada é apagado nem alterado no banco): finalidade com a palavra teste/testes/test/qa, ou e-mail que
+# contém um dos trechos da configuração uso.emails_teste. A tela diz quantos ficaram ocultos e deixa ver só eles.
+EMAILS_TESTE_PADRAO = "qa@,qa+,+qa@,+teste@,+test@,teste@,test@,testes@,@example.,@teste.,@test."
+_PALAVRAS_TESTE = ("teste", "testes", "test", "qa")
 
-def _filtro(q, de, ate, uso, fundo, material, ids: list[int] | None = None) -> tuple[str, list]:
+
+def _uso_limpo() -> str:
+    t = "lower(COALESCE(u.uso,''))"
+    for ch in "().,;:-_/!?[]\"'":
+        t = f"replace({t},'{ch if ch != chr(39) else chr(39) * 2}',' ')"
+    return "(' ' || " + t + " || ' ')"
+
+
+def emails_teste(con=None) -> list[str]:
+    fechar = con is None
+    con = con or connect()
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='uso.emails_teste'").fetchone()
+    finally:
+        if fechar:
+            con.close()
+    bruto = r[0] if r and r[0] is not None else EMAILS_TESTE_PADRAO
+    # só caracteres de e-mail: o trecho entra direto no SQL (sem aspas nem curingas vindos da configuração)
+    return [x for x in (re.sub(r"[^a-z0-9@.+_-]", "", y.strip().lower()) for y in bruto.split(",")) if len(x) >= 3]
+
+
+def sql_teste(con=None) -> str:
+    """Expressão SQL (tabela com alias u) verdadeira para registro de teste."""
+    limpo = _uso_limpo()
+    partes = [f"{limpo} LIKE '% {w} %'" for w in _PALAVRAS_TESTE]
+    partes += [f"lower(COALESCE(u.email,'')) LIKE '%{e}%'" for e in emails_teste(con)]
+    return "(" + " OR ".join(partes) + ")"
+
+
+def _filtro(q, de, ate, uso, fundo, material, testes: str | None = None, ids: list[int] | None = None) -> tuple[str, list]:
     w, p = ["u.apagada=0"], []          # entradas APAGADAS nunca aparecem em nada
+    # UX-16: testes ocultos por padrão; testes=so mostra só eles; testes=incluir mostra tudo
+    if testes == "so":
+        w.append(sql_teste())
+    elif testes != "incluir":
+        w.append("NOT " + sql_teste())
     if q:
         like = f"%{q.strip()}%"
         w.append("(u.nome LIKE ? OR u.email LIKE ? OR u.instituicao LIKE ? OR u.material_codigo LIKE ? OR u.uso LIKE ? OR COALESCE(i.titulo,p.titulo) LIKE ?)")
@@ -114,10 +154,10 @@ def _pagina(con, sql_base: str, params: list, pagina: int, por: int, ordem: str)
     return linhas, total, pagina, por
 
 
-def _lista(sql, ordem, pagina, por_pagina, q, de, ate, uso, fundo, material) -> dict:
+def _lista(sql, ordem, pagina, por_pagina, q, de, ate, uso, fundo, material, testes=None) -> dict:
     con = connect()
     try:
-        w, p = _filtro(q, de, ate, uso, fundo, material)
+        w, p = _filtro(q, de, ate, uso, fundo, material, testes)
         itens, total, pagina, por = _pagina(con, sql(w), p, pagina, por_pagina, ordem)
         return {"itens": itens, "total": total, "pagina": pagina, "por_pagina": por}
     finally:
@@ -126,24 +166,27 @@ def _lista(sql, ordem, pagina, por_pagina, q, de, ate, uso, fundo, material) -> 
 
 @router.get("/uso")
 def listar(pagina: int = 1, por_pagina: int = 50, q: str | None = Query(None), de: str | None = Query(None), ate: str | None = Query(None),
-           uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), u: dict = Depends(auth.exige("admin"))) -> dict:
-    return _lista(_sql_pedidos, "ORDER BY u.recebida_em DESC, u.id DESC", pagina, por_pagina, q, de, ate, uso, fundo, material)
+           uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), testes: str | None = Query(None),
+           u: dict = Depends(auth.exige("admin"))) -> dict:
+    return _lista(_sql_pedidos, "ORDER BY u.recebida_em DESC, u.id DESC", pagina, por_pagina, q, de, ate, uso, fundo, material, testes)
 
 
 @router.get("/uso/pessoas")
 def pessoas(pagina: int = 1, por_pagina: int = 50, q: str | None = Query(None), de: str | None = Query(None), ate: str | None = Query(None),
-            uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), u: dict = Depends(auth.exige("admin"))) -> dict:
-    return _lista(_sql_pessoas, "ORDER BY ultima DESC, downloads DESC", pagina, por_pagina, q, de, ate, uso, fundo, material)
+            uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), testes: str | None = Query(None),
+           u: dict = Depends(auth.exige("admin"))) -> dict:
+    return _lista(_sql_pessoas, "ORDER BY ultima DESC, downloads DESC", pagina, por_pagina, q, de, ate, uso, fundo, material, testes)
 
 
 @router.get("/uso/materiais")
 def materiais(pagina: int = 1, por_pagina: int = 50, q: str | None = Query(None), de: str | None = Query(None), ate: str | None = Query(None),
-              uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), u: dict = Depends(auth.exige("admin"))) -> dict:
-    return _lista(_sql_materiais, "ORDER BY downloads DESC, ultima DESC", pagina, por_pagina, q, de, ate, uso, fundo, material)
+              uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), testes: str | None = Query(None),
+           u: dict = Depends(auth.exige("admin"))) -> dict:
+    return _lista(_sql_materiais, "ORDER BY downloads DESC, ultima DESC", pagina, por_pagina, q, de, ate, uso, fundo, material, testes)
 
 
-def _top_material(con) -> dict | None:
-    r = con.execute("SELECT material_codigo, COUNT(*) FROM uso_download WHERE apagada=0 AND material_codigo IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
+def _top_material(con, sem_teste: str) -> dict | None:
+    r = con.execute(f"SELECT u.material_codigo, COUNT(*) FROM uso_download u WHERE u.apagada=0 AND u.material_codigo IS NOT NULL AND {sem_teste} GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
     if not r:
         return None
     t = con.execute("SELECT titulo FROM projeto WHERE codigo=? UNION ALL SELECT titulo FROM item WHERE codigo=? LIMIT 1", (r[0], r[0])).fetchone()
@@ -156,18 +199,21 @@ def resumo(u: dict = Depends(auth.exige("admin"))) -> dict:
     try:
         um = lambda sql: con.execute(sql).fetchone()[0]
         coleta = con.execute("SELECT quando, form_id, endpoint, lidas, novas, completo, erro FROM uso_coleta ORDER BY id DESC LIMIT 1").fetchone()
+        teste = sql_teste(con)
+        st = "NOT " + teste          # UX-16: registro de teste fora de TODAS as métricas
         return {
-            "total": um("SELECT COUNT(*) FROM uso_download WHERE apagada=0"),
-            "ultimos_30_dias": um("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND date(recebida_em) >= date('now','-30 days')"),
-            "pessoas": um("SELECT COUNT(DISTINCT email) FROM uso_download WHERE apagada=0 AND email IS NOT NULL"),
-            "materiais": um("SELECT COUNT(DISTINCT material_codigo) FROM uso_download WHERE apagada=0 AND material_codigo IS NOT NULL"),
-            "sem_material": um("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND material_codigo IS NULL"),
-            "anonimizadas": um("SELECT COUNT(*) FROM uso_download WHERE apagada=0 AND anonimizada=1"),
+            "total": um(f"SELECT COUNT(*) FROM uso_download u WHERE u.apagada=0 AND {st}"),
+            "ultimos_30_dias": um(f"SELECT COUNT(*) FROM uso_download u WHERE u.apagada=0 AND {st} AND date(u.recebida_em) >= date('now','-30 days')"),
+            "pessoas": um(f"SELECT COUNT(DISTINCT u.email) FROM uso_download u WHERE u.apagada=0 AND {st} AND u.email IS NOT NULL"),
+            "materiais": um(f"SELECT COUNT(DISTINCT u.material_codigo) FROM uso_download u WHERE u.apagada=0 AND {st} AND u.material_codigo IS NOT NULL"),
+            "sem_material": um(f"SELECT COUNT(*) FROM uso_download u WHERE u.apagada=0 AND {st} AND u.material_codigo IS NULL"),
+            "anonimizadas": um(f"SELECT COUNT(*) FROM uso_download u WHERE u.apagada=0 AND {st} AND u.anonimizada=1"),
             "apagadas": um("SELECT COUNT(*) FROM uso_download WHERE apagada=1"),
-            "usos": [dict(r) for r in con.execute("SELECT uso, COUNT(*) AS n FROM uso_download WHERE apagada=0 AND uso IS NOT NULL GROUP BY uso ORDER BY n DESC LIMIT 20")],
+            "testes_ocultos": um(f"SELECT COUNT(*) FROM uso_download u WHERE u.apagada=0 AND {teste}"),
+            "usos": [dict(r) for r in con.execute(f"SELECT u.uso, COUNT(*) AS n FROM uso_download u WHERE u.apagada=0 AND {st} AND u.uso IS NOT NULL GROUP BY u.uso ORDER BY n DESC LIMIT 20")],
             "categorias": [{"categoria": r[0], "rotulo": CATS_USO.get(r[0], r[0]), "n": r[1]} for r in
-                           con.execute(f"SELECT {CAT_USO} AS c, COUNT(*) FROM uso_download u WHERE u.apagada=0 GROUP BY c ORDER BY COUNT(*) DESC")],
-            "top_material": _top_material(con),
+                           con.execute(f"SELECT {CAT_USO} AS c, COUNT(*) FROM uso_download u WHERE u.apagada=0 AND {st} GROUP BY c ORDER BY COUNT(*) DESC")],
+            "top_material": _top_material(con, st),
             "ultima_coleta": dict(coleta) if coleta else None,
         }
     finally:
@@ -176,7 +222,8 @@ def resumo(u: dict = Depends(auth.exige("admin"))) -> dict:
 
 @router.get("/uso/exportar.csv")
 def exportar(visao: str = Query("pedidos"), ids: str | None = Query(None), q: str | None = Query(None), de: str | None = Query(None), ate: str | None = Query(None),
-             uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), u: dict = Depends(auth.exige("admin"))) -> Response:
+             uso: str | None = Query(None), fundo: str | None = Query(None), material: str | None = Query(None), testes: str | None = Query(None),
+             u: dict = Depends(auth.exige("admin"))) -> Response:
     """Todas as linhas do filtro (não só a página), na visão da aba (pedidos | pessoas | materiais). `ids` exporta só os pedidos escolhidos.
     Inclui telefone nos pedidos. Fica na auditoria (sem os dados das pessoas)."""
     if visao not in ("pedidos", "pessoas", "materiais"):
@@ -186,7 +233,7 @@ def exportar(visao: str = Query("pedidos"), ids: str | None = Query(None), q: st
         raise HTTPException(400, "Escolher pedidos só vale na visão 'pedidos'")
     con = connect()
     try:
-        w, p = _filtro(q, de, ate, uso, fundo, material, idl)
+        w, p = _filtro(q, de, ate, uso, fundo, material, testes if not idl else "incluir", ids=idl)   # escolhidos um a um: vão como estão
         buf = io.StringIO()
         cw = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_ALL)
         if visao == "pedidos":
@@ -203,7 +250,7 @@ def exportar(visao: str = Query("pedidos"), ids: str | None = Query(None), q: st
         for r in linhas:
             cw.writerow([("" if v is None else v) for v in tuple(r)])
         _evento(con, "uso_exportado", u["email"], {"visao": visao, "linhas": len(linhas), "escolhidos": len(idl),
-                                                   "filtro": {k: v for k, v in dict(q=q, de=de, ate=ate, uso=uso, fundo=fundo, material=material).items() if v}})
+                                                   "filtro": {k: v for k, v in dict(q=q, de=de, ate=ate, uso=uso, fundo=fundo, material=material, testes=testes).items() if v}})
         con.commit()
         return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="camp-uso-{visao}-{date.today().isoformat()}.csv"'})
@@ -332,7 +379,7 @@ def apagar(d: Apagar, u: dict = Depends(auth.exige("admin"))) -> dict:
             detalhe = {"modo": "email", "email_hash": _hash(d.email)}
         else:
             f = {k: (str(v).strip() if v is not None else "") for k, v in d.filtro.items() if k in FILTROS}
-            if not any(f.values()):
+            if not any(v for k, v in f.items() if k != "testes") and f.get("testes") != "so":   # UX-16: "incluir testes" sozinho não é filtro
                 raise HTTPException(400, "Para apagar por filtro, preencha ao menos um filtro (não dá para apagar tudo de uma vez)")
             w, p = _filtro(*(f.get(k) or None for k in FILTROS))
             ids = [r[0] for r in con.execute(f"SELECT u.id FROM uso_download u {JUNCAO} WHERE {w}", p)]

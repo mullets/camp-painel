@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
+MODOS_RAPIDOS = {"ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -8547,6 +8547,48 @@ def filho(modo):
         fol = {r_[0]: r_[1] for r_ in wb["Folhas"].iter_rows(values_only=True) if r_ and r_[0]}
         ver("Excel (aba Folhas): digitalizadas e migradas separadas, com a nota", fol.get("Digitalizadas no período (CAMP Vision)") == 4 and fol.get("Migradas/importadas do site (evento único)") == 12 and "evento único" in str(fol.get("Nota", "")), list(fol.items())[:6])
         for l in res: print(l)
+    elif modo == "ux16_downloads":
+        # UX-16: registros de teste fora das métricas de Downloads do site; finalidade livre agrupada em categorias
+        init_db(); _aplicar_migracoes_real()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        linhas = [("Ana", "ana@usp.br", "pesquisa acadêmica"), ("Bia", "bia@gmail.com", "Academico"), ("Caio", "caio@x.com", "Pesquisa."),
+                  ("Duda", "duda@x.com", "Publicação em livro"), ("Edu", "edu@x.com", "Exposição no museu"), ("Fê", "fe@x.com", "Família"),
+                  ("Gil", "gil@x.com", "Dormir"), ("Hugo", "hugo@contestado.com.br", "Contestação de autoria")]
+        for k in range(17): linhas.append(("Robô QA", f"robo{k}@x.com", "Teste QA automatizado"))
+        linhas += [("Iris", "iris@x.com", "Pesquisa academica (TESTE)"), ("Juca", "qa+download@camp.arq.br", "pesquisa acadêmica"), ("Kátia", "katia@example.com", "Publicação")]
+        for i, (n, e, uso) in enumerate(linhas, 1):
+            c.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,uso,material_codigo) VALUES (1,?,datetime('now','-1 day'),?,?,?,?)",
+                      (i, n, e, uso, "F001-P0001" if "QA" in uso else "F002-P0002"))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = adm.get("/api/uso/resumo").json()
+        ver("métricas sem os 20 de teste: 8 pedidos reais, 20 ocultos", r.get("total") == 8 and r.get("testes_ocultos") == 20, (r.get("total"), r.get("testes_ocultos")))
+        ver("'Teste QA automatizado' não é mais o uso mais declarado (não aparece nos usos)", all("teste" not in (u_["uso"] or "").lower() for u_ in r.get("usos", [])), r.get("usos"))
+        ver("material mais baixado sem os testes (F002-P0002, não o do robô)", (r.get("top_material") or {}).get("codigo") == "F002-P0002", r.get("top_material"))
+        cats = {x["categoria"]: x["n"] for x in r.get("categorias", [])}
+        ver("variações agrupadas: pesquisa acadêmica 3 (pesquisa acadêmica, Academico, Pesquisa.), publicação 1, exposição 1, pessoal/família 1, outro 2 (Dormir; 'Contestação' não é teste)",
+            cats == {"pesquisa": 3, "publicacao": 1, "exposicao": 1, "pessoal": 1, "outro": 2}, cats)
+        L = adm.get("/api/uso?por_pagina=200").json()
+        ver("lista de pedidos sem os de teste (8)", L["total"] == 8 and not any("teste" in (x["uso"] or "").lower() or "qa+" in (x["email"] or "") for x in L["itens"]), L["total"])
+        T = adm.get("/api/uso?testes=so&por_pagina=200").json()
+        ver("'Ver' (testes=so) mostra só os 20 de teste, inclusive e-mail de QA e @example", T["total"] == 20 and {"qa+download@camp.arq.br", "katia@example.com"} <= {x["email"] for x in T["itens"]}, T["total"])
+        ver("testes=incluir mostra tudo (28)", adm.get("/api/uso?testes=incluir").json()["total"] == 28)
+        ver("pessoas e materiais também sem testes", adm.get("/api/uso/pessoas").json()["total"] == 8 and [m["codigo"] for m in adm.get("/api/uso/materiais").json()["itens"]] == ["F002-P0002"])
+        csv_ = adm.get("/api/uso/exportar.csv").text
+        ver("CSV do filtro padrão sem testes", "Teste QA" not in csv_ and "Dormir" in csv_)
+        ver("nada foi apagado nem alterado no banco (regra só de leitura)", c.execute("SELECT COUNT(*) FROM uso_download WHERE apagada=0").fetchone()[0] == 28)
+        rr = adm.post("/api/uso/apagar", json={"filtro": {"testes": "incluir"}})
+        ver("'incluir testes' sozinho não vale como filtro para apagar tudo (400)", rr.status_code == 400, rr.text[:120])
+        c.execute("UPDATE configuracao SET valor='@usp.br' WHERE chave='uso.emails_teste'"); c.commit()
+        ver("a lista de e-mails de teste vem da configuração uso.emails_teste", adm.get("/api/uso/resumo").json()["testes_ocultos"] == 19, adm.get("/api/uso/resumo").json()["testes_ocultos"])
+        c.close()
+        for l in res: print(l)
     elif modo == "parecido_desligado":
         # 26/10 (Rafael): "o sistema responde que um projeto com nome semelhante é o mesmo projeto, mas não é: tira isso" — no F9 da estação.
         # Padrão: não pergunta (cria direto); a pista do número P ainda pergunta; a configuração liga de volta.
@@ -11485,6 +11527,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"relatórios: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("165) UX-16: Downloads do site sem registros de teste nas métricas; finalidade agrupada em categorias")
+rc, out = rodar("ux16_downloads", f"{tmp}/ux16_downloads.db")
+if rc != 0: ok(False, f"teste ux16_downloads não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"downloads: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
