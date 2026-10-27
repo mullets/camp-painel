@@ -562,7 +562,6 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                           WHERE l.descartado_em IS NULL
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()
-    con.close()
     from .filas_fase import fase_da_lista
     saida = []
     for r in rows:
@@ -570,7 +569,14 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         d["itens_conferidos"] = d["itens_total"] - d["itens_pendentes"]
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"))
         d["erro_cv"] = _erro_do_cv(d) if d["etapa"] == "erro" else None   # H7: o motivo que o CAMP Vision deixou, na própria linha
+        d["destino_suspeito"] = False                    # UX-01 (campo novo, opcional): a pasta não parece deste projeto → "Verificar destino"
+        if d["fase"] == "importar":
+            from .destino_lote import avaliar
+            a = avaliar(con, r, completo=False)
+            d["destino_suspeito"] = a["suspeito"] and not a["liberado"]
+            d["destino_motivo"] = a["motivo"] if d["destino_suspeito"] else None
         saida.append(d)
+    con.close()
     return saida
 
 

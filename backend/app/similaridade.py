@@ -140,6 +140,52 @@ def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int
     return achados[:limite]
 
 
+# ---------------- UX-01 · a pasta que chegou combina com o projeto de destino? ----------------
+# O nome da PASTA (o que a estação/CAMP Vision gravou) traz sujeira que não diz qual é a obra: o código do projeto, o número local
+# ("P0001 - …"), o ano ("1970-1971"), a contagem ("(37 folhas)") e o "— complemento de 26/10 (3 folhas)" do lote de complemento.
+LIMIAR_PASTA = 0.5
+_GENERICAS_PASTA = {"lote", "pasta", "scan", "scans", "digitalizacao", "material", "folhas", "folha", "novo", "nova"}
+_LIMPA_PASTA = (
+    (re.compile(r"\s+[—–-]\s+complemento\s+de\s+.*$", re.I), ""),
+    (re.compile(r"\bF\d{3}[-_ ]?P\d{4}\b", re.I), " "),
+    (re.compile(r"\bP\d{4}\b", re.I), " "),
+    (re.compile(r"\(\s*\d+\s*(folhas?|arquivos?|imagens?|documentos?|docs?)\s*\)", re.I), " "),
+    (re.compile(r"\b(1[6-9]|20)\d{2}\b"), " "),
+)
+
+
+def limpar_nome_de_pasta(nome: str | None) -> str:
+    t = str(nome or "").replace("_", " ")
+    for rx, novo in _LIMPA_PASTA:
+        t = rx.sub(novo, t)
+    return " ".join(t.split()).strip(" -–—.")
+
+
+def tokens_de_pasta(nome: str | None) -> list[str]:
+    """Palavras que dizem qual é a obra. Vazio = a pasta só tem código/número/ano ("P0001", "F026-P0030")."""
+    ts = [w for w in tokens_distintivos(limpar_nome_de_pasta(nome)) if not (w.isdigit() and len(w) > 3)]
+    return [w for w in dict.fromkeys(ts) if w not in _GENERICAS_PASTA]
+
+
+def _mesma_palavra(a: str, b: str) -> bool:
+    """Igual, ou erro de OCR/digitação em palavra de 4+ letras ("Franics" x "Francis")."""
+    return a == b or (min(len(a), len(b)) >= 4 and SequenceMatcher(None, a, b).ratio() >= 0.8)
+
+
+def compatibilidade_pasta(pasta: str | None, titulo: str | None) -> float | None:
+    """0..1: o nome da pasta combina com o título do projeto? None = um dos dois não tem palavra para comparar.
+    1.0 quando todas as palavras do nome MENOR estão no outro ("Banco Cidade" em "Residência Banco Cidade - Agência Matriz";
+    "Jockey Club" em "Edifício Jockey Club São Paulo"); senão a fração de palavras em comum (Jaccard): "Clube Sírio" x "Clube Ipê" = 0,33.
+    Número de designação conta como palavra ("Casa 2" x "Casa 1" = 0)."""
+    a, b = tokens_de_pasta(pasta), tokens_de_pasta(titulo)
+    if not a or not b:
+        return None
+    comuns = sum(1 for x in a if any(_mesma_palavra(x, y) for y in b))
+    if comuns >= min(len(a), len(b)):
+        return 1.0
+    return round(comuns / (len(a) + len(b) - comuns), 3)
+
+
 # palavras que todo nome de fundo pode ter e que não distinguem um do outro
 _GENERICAS_FUNDO = {"acervo", "fundo", "arquiteto", "arquitetos", "arquitetura", "associados", "escritorio", "ltda", "familia", "colecao"}
 

@@ -60,6 +60,10 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
         if pacote.get("retirados"):
             return False, "O CAMP Vision retirou as folhas deste lote. Um admin pode trazê-las para conferência, sem aceitar a exclusão da máquina."
         return False, "O pacote não contém folhas para importar. Confira o lote no QNAP; não precisa reimportar as folhas de outros lotes."
+    from .destino_lote import bloqueio as _bloqueio_destino
+    motivo_destino = _bloqueio_destino(con, l)            # UX-01: a pasta não parece deste projeto
+    if motivo_destino:
+        return False, motivo_destino
     return True, None
 
 
@@ -92,6 +96,9 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
             pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
             lote["importar_motivo"] = None if pode else motivo
+            from .destino_lote import avaliar as _avaliar_destino   # UX-01: campo novo, opcional
+            dl = _avaliar_destino(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone(), completo=False)
+            lote["destino_suspeito"] = dl["suspeito"] and not dl["liberado"]
         if lote and lote["fase"] == "conferir":       # UX-11: campo novo, opcional — as folhas a conferir SEM nenhum aviso (o número do botão)
             lote["itens_sem_aviso"] = contar_sem_aviso(con, lote["id"])
         return {"lote": lote, "lotes": len(lotes), "avisos_cv": avisos_abertos(con, codigo), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
@@ -111,6 +118,74 @@ def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
         con.commit()
         return r
     except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+# ---------------- UX-01 · Verificar destino: a pasta não parece deste projeto ----------------
+@router.get("/lotes/{lote_id}/destino")
+def ver_destino(lote_id: int, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """A comparação lado a lado (pasta × projeto), as sugestões do mesmo fundo e 3 folhas da pasta (códigos do pacote: a prévia
+    vem de /api/itens/{c}/previa, que acha o JPG na pasta do lote)."""
+    from .destino_lote import avaliar
+    con = connect()
+    try:
+        l = _lote(con, lote_id)
+        try:
+            pacote = ler_pacote(Path(l["pasta_qnap"] or "")) if Path(l["pasta_qnap"] or "").is_dir() else None
+        except HTTPException:
+            pacote = None
+        a = avaliar(con, l, pacote)
+        a["lote_id"] = lote_id
+        a["pode_confirmar"] = u["papel"] in ("operador", "admin", "master")
+        return a
+    finally:
+        con.close()
+
+
+class EscolhaDestino(BaseModel):
+    acao: str                          # confirmar ("É deste projeto") | decisao ("Mover para…" com destino, ou "Criar decisão")
+    justificativa: str = ""
+    destino: str | None = None
+
+
+@router.post("/lotes/{lote_id}/destino")
+def escolher_destino(lote_id: int, d: EscolhaDestino, u: dict = Depends(auth.exige("operador"))) -> dict:
+    from .destino_lote import abrir_decisao, avaliar, confirmar
+    just = " ".join((d.justificativa or "").split())[:500]
+    if len(just) < 3:
+        raise HTTPException(400, "Escreva a justificativa (por que esta pasta é, ou não é, deste projeto). Ela fica no Histórico.")
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["descartado_em"] or l["aprovado_em"]:
+            raise HTTPException(409, "Este lote já foi encerrado.")
+        a = avaliar(con, l, completo=False)
+        if not a["suspeito"]:
+            raise HTTPException(409, "Este lote não precisa verificar destino: o nome da pasta combina com o projeto.")
+        if d.acao == "confirmar":
+            if a["confirmado"]:
+                raise HTTPException(409, "Uma pessoa já confirmou que esta pasta é deste projeto.")
+            confirmar(con, l, u["email"], just)
+            r = {"ok": True, "acao": "confirmar", "mensagem": f"Anotado no Histórico: a pasta é de {l['projeto_codigo']}. Já dá para importar."}
+        elif d.acao == "decisao":
+            destino = (d.destino or "").strip().upper() or None
+            if destino:
+                fundo = con.execute("SELECT fundo_codigo FROM projeto WHERE codigo=?", (l["projeto_codigo"],)).fetchone()[0]
+                if destino == l["projeto_codigo"] or not con.execute("SELECT 1 FROM projeto WHERE codigo=? AND fundo_codigo=?", (destino, fundo)).fetchone():
+                    raise HTTPException(400, "O projeto sugerido não existe neste fundo")
+            did = abrir_decisao(con, l, u["email"], just, destino)
+            r = {"ok": True, "acao": "decisao", "decisao_id": did,
+                 "mensagem": f"Pergunta aberta em Decisões (decisão {did}). O lote não importa até um admin decidir."
+                             + (" Mudar a pasta de projeto depende de o CAMP Vision reidentificar os arquivos." if destino else "")}
+        else:
+            raise HTTPException(400, "acao deve ser 'confirmar' ou 'decisao'")
+        con.commit()
+        return r
+    except Exception:
         con.rollback()
         raise
     finally:
@@ -196,11 +271,20 @@ def importar_todas(u: dict = Depends(auth.exige("operador"))):
     from . import pendencias, tarefas
     con = connect()
     try:
-        alvo = [(l["id"], l["projeto_codigo"]) for l in pendencias.lotes(con) if l["fase"] == "importar"]
+        from .destino_lote import bloqueio as _bloqueio_destino
+        alvo, fora = [], []                                  # UX-01: "Verificar destino" fica de fora (e a mensagem diz quantos)
+        for l in pendencias.lotes(con):
+            if l["fase"] != "importar":
+                continue
+            lr = con.execute("SELECT * FROM lista_processamento WHERE id=?", (l["id"],)).fetchone()
+            (fora if _bloqueio_destino(con, lr) else alvo).append((l["id"], l["projeto_codigo"]))
     finally:
         con.close()
     if not alvo:
+        if fora:
+            raise HTTPException(400, f"Nenhum lote para importar: {len(fora)} {'espera' if len(fora) == 1 else 'esperam'} Verificar destino (a pasta não parece do projeto).")
         raise HTTPException(400, "Nenhum lote esperando importação")
+    nota_fora = f" {len(fora)} lote(s) ficaram de fora: Verificar destino ({', '.join(pj for _, pj in fora)})." if fora else ""
 
     def rodar(p) -> dict:
         p.total(len(alvo))
@@ -214,8 +298,8 @@ def importar_todas(u: dict = Depends(auth.exige("operador"))):
             except HTTPException as e:
                 falhas.append({"codigo": pj, "erro": str(e.detail)}); p.log(f"{pj} NÃO importou: {e.detail}")
         ok = len(alvo) - len(falhas)
-        return {"ok": not falhas, "falhas": falhas, "lotes": ok, "folhas": folhas,
-                "mensagem": f"{ok} de {len(alvo)} lote(s) importado(s), {folhas} folha(s) no painel" + (f"; {len(falhas)} não {'importou' if len(falhas) == 1 else 'importaram'}" if falhas else "") + ". Próximo passo: conferir."}
+        return {"ok": not falhas, "falhas": falhas, "lotes": ok, "folhas": folhas, "fora": [{"lote_id": i, "codigo": pj} for i, pj in fora],
+                "mensagem": f"{ok} de {len(alvo)} lote(s) importado(s), {folhas} folha(s) no painel" + (f"; {len(falhas)} não {'importou' if len(falhas) == 1 else 'importaram'}" if falhas else "") + ". Próximo passo: conferir." + nota_fora}
     return tarefas.iniciar("importar_todas", "filas", u, rodar, titulo=f"Importar {len(alvo)} lote(s) da Fila")
 
 
@@ -278,7 +362,8 @@ def resumo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 importacao = None
             lotes.append({"id": l["id"], "nome": l["nome"], "etapa": l["etapa"], "aprovado_por": l["aprovado_por"], "aprovado_em": l["aprovado_em"], "criado_em": l["criado_em"], "pacote": pacote,
                           "itens": c, "importacao": importacao, "pode_aprovar": motivo is None, "motivo": motivo,
-                          "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo})   # CAMP-067: campos novos, opcionais
+                          "descartado": bool(l["descartado_em"]), "pode_importar": imp_ok, "importar_motivo": imp_motivo,
+                          "destino_suspeito": bool(imp_motivo and imp_motivo.startswith("Verificar destino"))})   # CAMP-067: campos novos, opcionais
         return {"lotes": lotes}
     finally:
         con.close()

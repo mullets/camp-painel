@@ -292,6 +292,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
     if not lote:
         raise HTTPException(404, "Lote não existe")
+    from .destino_lote import bloqueio as _bloqueio_destino
+    motivo_destino = _bloqueio_destino(con, lote)          # UX-01: pasta que não parece deste projeto não importa até uma pessoa escolher
+    if motivo_destino:
+        raise HTTPException(409, motivo_destino)
     pasta = Path(lote["pasta_qnap"] or "")
     if not pasta.is_dir():
         raise HTTPException(400, "A pasta do lote não está acessível (o QNAP está montado?)")

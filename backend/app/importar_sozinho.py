@@ -4,7 +4,8 @@
 - Quem roda é o laço do coletor do QNAP (main._coleta_qnap_periodica), em segundo plano: NUNCA dentro de uma requisição (CLAUDE.md).
 - Importa o lote que espera importação (etapa revisao, sem folhas, não aprovado, não descartado) pelo MESMO importador do botão
   (importador_lote.importar_lote), com as mesmas condições (rotas_revisao._pode_importar).
-- Não importa: o CAMP Vision ainda lendo (sem pacote), lote com decisão pendente (números que colidem).
+- Não importa: o CAMP Vision ainda lendo (sem pacote), lote com decisão pendente (números que colidem), pasta que não parece do projeto
+  ("Verificar destino", UX-01: espera uma pessoa, sem virar problema).
 - Não deu (QNAP fora, pacote de outro projeto, pacote quebrado...): vira um problema do projeto com o motivo, um só por lote (chave),
   que fecha sozinho quando a importação der certo.
 """
@@ -16,6 +17,7 @@ import time
 from fastapi import HTTPException
 
 from .db import connect
+from .destino_lote import PREFIXO_MOTIVO as PREFIXO_DESTINO
 
 ATOR = "painel (importação automática)"
 
@@ -73,6 +75,8 @@ def importar_prontos(orcamento_s: float = 20.0) -> dict:
             if con.execute("SELECT 1 FROM decisao WHERE situacao='pendente' AND tipo='lote_colide' AND chave LIKE ? LIMIT 1", (f"lote_colide:{l['id']}:%",)).fetchone():
                 out["esperando"].append({"lote_id": l["id"], "projeto": l["projeto_codigo"], "motivo": "decisão pendente"}); continue
             pode, motivo = _pode_importar(con, l)
+            if not pode and (motivo or "").startswith(PREFIXO_DESTINO):   # UX-01: espera uma pessoa conferir o destino (não é problema)
+                out["esperando"].append({"lote_id": l["id"], "projeto": l["projeto_codigo"], "motivo": motivo}); continue
             if not pode:
                 if any(x in (motivo or "") for x in _AINDA_NAO) and "Peça a releitura" not in (motivo or ""):
                     out["esperando"].append({"lote_id": l["id"], "projeto": l["projeto_codigo"], "motivo": motivo}); continue

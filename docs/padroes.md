@@ -52,6 +52,7 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 - **Nunca decide sozinho** que dois projetos são o mesmo. Mostra a **nota e os motivos** (nome, identificação original, ano, cidade) e os dois caminhos: "é o mesmo: adicionar a este" ou "é outro: criar novo". Decisão resolvida fica só para leitura.
 - **Idempotente:** a mesma `chave_reserva` volta sempre à mesma decisão; depois de decidida, devolve sempre o mesmo projeto.
 - **Hoje:** `projeto_parecido` (reserva da estação e "Novo projeto" à mão). Motor em `similaridade.py` (puro e testado: palavras genéricas, nome contido, erro de OCR; número ou letra de designação distingue projetos). Novas verificações entram na mesma fila (ver o cartão "Mais inteligência").
+- **Lote que chegou na pasta errada (UX-01):** antes de importar, nome da pasta × título do projeto (`similaridade.compatibilidade_pasta`, `destino_lote.py`); abaixo de 0,5 ou pasta só com código = "Verificar destino": não importa (botão, "Importar todas", automática) até uma pessoa dizer "É deste projeto" (com justificativa, no Histórico) ou abrir a decisão `lote_destino`. O painel não move a pasta sozinho (o pacote tem o código antigo: o CAMP Vision reidentifica).
 - **Teste:** toda verificação nova precisa de caso que DEVE pedir decisão e caso parecido que NÃO deve (falso alarme também é defeito).
 
 ## 10. Menu: 5 destinos + "Mais" (CAMP-154, 22/10/2026; antes: menu por trabalho, 09/10/2026)

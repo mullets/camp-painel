@@ -5,6 +5,7 @@ Tipos (cada um com a sua pergunta e as suas opções; ver TIPOS):
 - lote_colide: o lote traz folhas com números que o projeto já usa           (adicionar_ao_fim | ignorar | substituir)
 - divergencia: o CAMP Vision leu ano/cidade/cliente diferente do cadastro   (escolher, com o valor escolhido)
 - projeto_outro_fundo: há projeto com o mesmo nome em OUTRO fundo            (mesmo | diferente)
+- lote_destino: a pasta do lote não parece ser do projeto (UX-01)           (deste_projeto | outro_projeto, com o código)
 """
 from __future__ import annotations
 
@@ -113,6 +114,7 @@ TIPOS = {
     "lote_colide": {"rotulo": "Lote com números repetidos", "opcoes": ("adicionar_ao_fim", "ignorar", "substituir")},
     "divergencia": {"rotulo": "Dado diferente do cadastro", "opcoes": ("escolher",)},
     "projeto_outro_fundo": {"rotulo": "Mesmo nome em outro fundo", "opcoes": ("mesmo", "diferente")},
+    "lote_destino": {"rotulo": "Verificar destino do lote", "opcoes": ("deste_projeto", "outro_projeto")},
 }
 CAMPOS_DIVERGENCIA = {"ano": "ano", "cidade": "cidade", "cliente": "cliente"}
 ROTULO_CAMPO = {"ano": "o ano", "cidade": "a cidade", "cliente": "o cliente"}
@@ -137,6 +139,8 @@ def pergunta(d, ctx: dict | None = None) -> str:
     if tipo == "projeto_outro_fundo":
         o = ctx.get("outro") or {}
         return f"Já existe “{o.get('titulo')}” no fundo {o.get('fundo_codigo')} ({o.get('codigo')}). É o mesmo que {ctx.get('projeto_codigo')}?"
+    if tipo == "lote_destino":
+        return f"A pasta “{ctx.get('lote_nome') or d['titulo']}” é mesmo do projeto {ctx.get('projeto_codigo')} (“{ctx.get('projeto_titulo') or ''}”)?"
     c = (ctx.get("candidatos") or [{}])[0]
     return f"“{d['titulo']}” é o mesmo projeto que “{c.get('titulo')}”?" if c.get("titulo") else f"“{d['titulo']}”: projeto novo ou um que já existe?"
 
@@ -170,6 +174,10 @@ def _resolver_generico(con, d, acao: str, valor: str | None, ator: str) -> dict:
                 _evento(con, "projeto", a, "mesmo_projeto_em_outro_fundo" if acao == "mesmo" else "projeto_diferente_em_outro_fundo", ator,
                         {"decisao_id": did, "outro": b})
         resultado = {"mensagem": f"Anotado: {proj} e {outro} são {'o mesmo projeto' if acao == 'mesmo' else 'projetos diferentes'}."}
+    elif tipo == "lote_destino":
+        from .destino_lote import resolver_decisao
+        resultado = resolver_decisao(con, d, ctx, acao, valor, ator)
+        ctx["resultado"] = resultado
     con.execute("""UPDATE decisao SET situacao='resolvida', escolha=?, escolha_valor=?, projeto_codigo=?, contexto=?,
                    resolvida_em=datetime('now'), resolvida_por=? WHERE id=?""",
                 (acao, valor, proj, json.dumps(ctx, ensure_ascii=False), ator, did))

@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
+MODOS_RAPIDOS = {"ux01_destino", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4363,6 +4363,103 @@ def filho(modo):
         ver("UX-11: o Desfazer fica no histórico", bool(c.execute("SELECT 1 FROM evento WHERE tipo='revisao_em_lote_desfeita' AND codigo=?", (P1,)).fetchone()))
         c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (L1,)); c.commit()
         ver("UX-11: Desfazer em lote aprovado é recusado", op.post(f"/api/lotes/{L1}/conferir-todas/desfazer", json={"codigos": [outro]}).status_code == 409)
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux01_destino":
+        # UX-01 (26/10, P0): "Importar folhas" trazia o lote sem comparar o nome da pasta com o projeto (Marambaia caiu em Cia. Sto Amaro, "P0001" em
+        # dois projetos). Agora: nota < 0,5 ou pasta só com código = "Verificar destino"; não importa (botão, Importar todas, sozinho) até uma pessoa escolher.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile, shutil, time
+        from pathlib import Path
+        from app import auth, importar_sozinho as _is
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F071','Fundo Destino','FDE',1)")
+        projs = {10: "Cia. Sto Amaro", 95: "Edifício Marambaia", 4: "Clube Sírio (S. Festas)", 168: "Sociedade Antioquina do Brasil", 6: "Clube Ipê",
+                 7: "IAMSPE", 1: "Concurso Bairro Novo", 30: "Casa X", 2: "Residência Tarumã", 3: "Edifício São Luís", 5: "Jockey Club", 8: "Residência James Francis King"}
+        for n, t in projs.items():
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F071',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F071',?,?,1972)", (f"F071-P{n:04d}", n, t))
+        raiz = Path(tempfile.mkdtemp(prefix="ux01_"))
+        fix = (Path(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json").read_text(encoding="utf-8")
+        def lote(n, nome, origem="campvision2"):
+            P = f"F071-P{n:04d}"
+            d = raiz / f"{P} - {n}"; (d / "catalogacao").mkdir(parents=True, exist_ok=True)
+            (d / "catalogacao" / "pacote_tainacan.json").write_text(fix.replace("F026-P0001", P).replace("F026", "F071"), encoding="utf-8")
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES (?,?,?,'revisao',?)",
+                             (nome, P, str(d), _j.dumps({"origem": origem} if origem else {}))).lastrowid
+        suspeitos = {"Marambaia": lote(10, "Edifício Marambaia - 1970-1971 (37 folhas)"), "Antioquina": lote(4, "Sociedade Antioquina do Brasil (26 folhas)"),
+                     "Garagem": lote(6, "Edifício Residêncial com Garagem"), "Apartamentos": lote(7, "Prédio de Apartamentos com Garagem"),
+                     "Correios": lote(1, "ECT - Correios"), "P0001": lote(30, "P0001")}
+        bons = {"caixa e acento": lote(2, "RESIDENCIA TARUMA - 1972 (3 folhas)"), "idêntico": lote(3, "Edifício São Luís"),
+                "nome contido": lote(5, "F071-P0005 - Edifício Jockey Club São Paulo"), "erro de digitação": lote(8, "Residência James Franics King - SP")}
+        manual = lote(95, "Lote qualquer", origem=None)          # "Nova lista" à mão: uma pessoa escolheu o projeto
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        folhas = lambda L: c.execute("SELECT COUNT(*) FROM item WHERE lote_id=?", (L,)).fetchone()[0]
+        filas = {x["id"]: x for x in op.get("/api/filas").json()}
+        for k, L in suspeitos.items():
+            ver(f"'{k}' aparece como Verificar destino na Fila (destino_suspeito)", filas[L]["fase"] == "importar" and filas[L].get("destino_suspeito") is True, str({x: filas[L].get(x) for x in ("fase", "destino_suspeito", "destino_motivo")}))
+        for k, L in bons.items():
+            ver(f"nome compatível ({k}): importa sem passo extra", filas[L].get("destino_suspeito") is False, str(filas[L].get("destino_motivo")))
+        ver("lista aberta à mão (não veio do CAMP Vision): não é travada", filas[manual].get("destino_suspeito") is False)
+        d = op.get(f"/api/lotes/{suspeitos['Marambaia']}/destino").json()
+        ver("Marambaia: pasta × projeto lado a lado, e a sugestão é F071-P0095 (Edifício Marambaia)", d["suspeito"] and d["projeto"]["codigo"] == "F071-P0010" and [s["codigo"] for s in d["sugestoes"]][:1] == ["F071-P0095"] and len(d["amostra"]) == 3, str({k: d.get(k) for k in ("motivo", "sugestoes", "amostra")}))
+        ver("Antioquina: sugere F071-P0168", [s["codigo"] for s in op.get(f"/api/lotes/{suspeitos['Antioquina']}/destino").json()["sugestoes"]][:1] == ["F071-P0168"])
+        d1 = op.get(f"/api/lotes/{suspeitos['P0001']}/destino").json()
+        ver("pasta só com o código ('P0001'): conta como divergente", d1["suspeito"] and d1["so_codigo"] and "só tem o código" in (d1["motivo"] or ""), str(d1.get("motivo")))
+        r = op.post(f"/api/lotes/{suspeitos['Marambaia']}/importar")
+        ver("o botão Importar recusa o lote suspeito (409, 'Verificar destino')", r.status_code == 409 and "Verificar destino" in r.text and folhas(suspeitos["Marambaia"]) == 0, r.text[:200])
+        pp = op.get("/api/projetos/F071-P0010/proximo-passo").json()
+        ver("próximo passo do projeto: sem botão Importar, com destino_suspeito e o motivo", (pp.get("lote") or {}).get("destino_suspeito") is True and ((pp.get("lote") or {}).get("importar_motivo") or "").startswith("Verificar destino"), str(pp.get("lote")))
+        r = op.post("/api/filas/importar-todas?tarefa=1")
+        t = {}
+        if r.status_code == 202:
+            fim = time.time() + 30
+            while time.time() < fim:
+                t = op.get(f"/api/tarefas/{r.json()['tarefa_id']}").json()
+                if t["estado"] != "rodando": break
+                time.sleep(0.1)
+        msg = (t.get("resultado") or {}).get("mensagem") or ""
+        ver("Importar todas: não importa nenhum lote suspeito", r.status_code == 202 and all(folhas(L) == 0 for L in suspeitos.values()), str([folhas(L) for L in suspeitos.values()]))
+        ver("Importar todas: importa os compatíveis e a lista à mão", all(folhas(L) == 3 for L in list(bons.values()) + [manual]), str([folhas(L) for L in bons.values()]))
+        ver("Importar todas: diz quantos ficaram de fora", "6 lote(s) ficaram de fora: Verificar destino" in msg, msg)
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='importacao.automatica'"); c.commit()
+        r1 = _is.importar_prontos()
+        ver("importação automática: o suspeito espera (não importa nem vira problema)", folhas(suspeitos["Correios"]) == 0 and any(x["lote_id"] == suspeitos["Correios"] for x in r1["esperando"])
+            and not c.execute("SELECT 1 FROM erro WHERE chave=?", (f"importar_sozinho:{suspeitos['Correios']}",)).fetchone(), str(r1))
+        L = suspeitos["Antioquina"]
+        ver("leitura não escolhe o destino (403)", le.post(f"/api/lotes/{L}/destino", json={"acao": "confirmar", "justificativa": "conferi"}).status_code == 403)
+        ver("sem justificativa: 400", op.post(f"/api/lotes/{L}/destino", json={"acao": "confirmar", "justificativa": " "}).status_code == 400)
+        rc_ = op.post(f"/api/lotes/{L}/destino", json={"acao": "confirmar", "justificativa": "o carimbo das pranchas diz Clube Sírio"})
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='projeto' AND codigo='F071-P0004' AND tipo='destino_confirmado'").fetchone()
+        ver("'É deste projeto' fica no Histórico do projeto com autor e justificativa", rc_.status_code == 200 and bool(ev) and ev["ator"] == "op@camp.arq.br" and "carimbo" in _j.loads(ev["detalhe"])["justificativa"], rc_.text[:200])
+        ver("o Histórico do projeto (GET /projetos) mostra a confirmação", any(e["tipo"] == "destino_confirmado" for e in op.get("/api/projetos/F071-P0004/detalhe").json().get("eventos", [])))
+        ri = op.post(f"/api/lotes/{L}/importar")
+        ver("depois da confirmação o lote importa", ri.status_code == 200 and folhas(L) == 3, ri.text[:200])
+        M = suspeitos["Marambaia"]
+        rd = op.post(f"/api/lotes/{M}/destino", json={"acao": "decisao", "destino": "F071-P0095", "justificativa": "é o Marambaia"})
+        did = rd.json().get("decisao_id")
+        dd = c.execute("SELECT tipo, situacao, contexto FROM decisao WHERE id=?", (did,)).fetchone() if did else None
+        ver("'Mover para F071-P0095 (sugerido)': abre a decisão lote_destino com o destino", rd.status_code == 200 and dd and dd["tipo"] == "lote_destino" and _j.loads(dd["contexto"])["outro"]["codigo"] == "F071-P0095", rd.text[:200])
+        ver("o lote em Decisões continua sem importar", op.post(f"/api/lotes/{M}/importar").status_code == 409 and folhas(M) == 0)
+        ver("o operador não resolve a decisão (só admin)", op.post(f"/api/decisoes/{did}/resolver", json={"acao": "outro_projeto", "valor": "F071-P0095"}).status_code == 403)
+        rr = adm.post(f"/api/decisoes/{did}/resolver", json={"acao": "outro_projeto", "valor": "F071-P0095"})
+        ver("admin decide 'é de outro projeto': fica anotado nos dois projetos e o lote NÃO importa nem é movido sozinho", rr.status_code == 200 and op.post(f"/api/lotes/{M}/importar").status_code == 409
+            and c.execute("SELECT projeto_codigo FROM lista_processamento WHERE id=?", (M,)).fetchone()[0] == "F071-P0010"
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='destino_outro_projeto' AND entidade='projeto' AND codigo IN ('F071-P0010','F071-P0095')").fetchone()[0] == 2, rr.text[:200])
+        G = suspeitos["Garagem"]
+        did2 = op.post(f"/api/lotes/{G}/destino", json={"acao": "decisao", "justificativa": "não sei"}).json().get("decisao_id")
+        r2 = adm.post(f"/api/decisoes/{did2}/resolver", json={"acao": "deste_projeto"})
+        ver("'Criar decisão' e o admin diz 'é deste projeto': o lote importa", r2.status_code == 200 and op.post(f"/api/lotes/{G}/importar").status_code == 200 and folhas(G) == 3, r2.text[:200])
+        shutil.rmtree(raiz, ignore_errors=True)
         c.close()
         for l in res: print(l)
     elif modo == "importar_sozinho":
@@ -11083,6 +11180,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"importar sozinho: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-01: lote cuja pasta não parece do projeto fica em Verificar destino e não importa")
+rc, out = rodar("ux01_destino", f"{tmp}/ux01_destino.db")
+if rc != 0: ok(False, f"teste ux01_destino não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"verificar destino: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
