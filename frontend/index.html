@@ -5704,7 +5704,8 @@ function saudacaoPainel(d,hj){
 function iniAlertasHTML(al){return (al||[]).map(a=>`<div class="ini-alerta" role="alert"><span class="ini-dot r" aria-hidden="true" style="margin:0"></span><p><b>${escHtml(a.titulo)}</b> ${escHtml(a.texto)}</p>${a.acao?`<button type="button" class="btn sm" data-ini-rota="${escHtml(a.acao.rota)}">${escHtml(a.acao.rotulo)}</button>`:''}</div>`).join('')}
 function iniKpisHTML(p){const admin=EU&&['admin','master'].includes(EU.papel);
   const k=(cls,v,l,dd,rota,ex)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" title="${escHtml(ex)}"><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span></button>`;
-  const ks=[k(p.decisoes?'warn':'',p.decisoes,p.decisoes===1?'decisão':'decisões',p.decisoes_estacao?'CAMP Vision parado esperando':p.decisoes?'esperando resposta':'nenhuma esperando','decisoes',INI_EXPLICA.decisoes),
+  /* UX-18: "0 decisões — nenhuma esperando" ocupava o lugar mais nobre da Home: com zero, o cartão nem aparece (Decisões continua no menu) */
+  const ks=[...(+p.decisoes?[k('warn',p.decisoes,p.decisoes===1?'decisão':'decisões',p.decisoes_estacao?'CAMP Vision parado esperando':'esperando resposta','decisoes',INI_EXPLICA.decisoes)]:[]),
     k('',p.lotes_conferir,p.lotes_conferir===1?'lote para conferir':'lotes para conferir',`${qtd(p.folhas_conferir,'folha','folhas')} no total`,'filas/conferir',INI_EXPLICA.conferir),
     ...(admin?[k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'espera um admin':'esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin)]:[])];   // CAMP-146: saiu o número de fundos travados (pelos direitos: direito não definido não trava; restrição registrada aparece no fundo)
   return `<div class="ini-kpis" style="--n:${ks.length}">${ks.join('')}</div>`}

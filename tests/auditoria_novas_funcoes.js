@@ -842,7 +842,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- [Auditoria P1-15] contagens que batem ----------
 { w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
   const esp={decisoes:P.decisoes,'filas/conferir':P.lotes_conferir,'filas/admin':P.esperam_admin,'fundos/travados':P.travados_direitos};
-  chk(k.length===3&&k.every(([r,v])=>esp[r]===v),'[H6b/CAMP-146] os 3 números (saiu "travados por direitos") do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
+  chk(k.length===(P.decisoes?3:2)&&k.every(([r,v])=>esp[r]===v),'[H6b/CAMP-146/UX-18] os 3 números (saiu "travados por direitos"; o de decisões só com decisão pendente) do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
   chk(txt('#n-dec')===(P.decisoes?String(P.decisoes):'')&&txt('#n-filas')===(P.material_novo?String(P.material_novo):''),'[H6b] os contadores do menu deveriam vir da mesma fonte: decisões '+txt('#n-dec')+' / filas '+txt('#n-filas'));
   for(const [r,v] of k){ w.route_to(r); await sleep(2200); const sel={decisoes:'#dec-body tr[data-abrir]','filas/conferir':'#filas-body tr[data-fase]','filas/admin':'#filas-body tr[data-fase]','fundos/travados':'#fundos-body tr[data-nav]'}[r];
     chk(d.querySelectorAll(sel).length===v,`[H6b] clicar no número ${v} (${r}) deveria abrir uma lista com ${v} linha(s): ${d.querySelectorAll(sel).length}`) }
