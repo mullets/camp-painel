@@ -190,11 +190,13 @@ def estado_geral(con, *, qnap_montado: bool | None, site_http: dict | None, back
     elif rp.get("configurada"):
         partes.append({"id": "replica", "nivel": {"ok": "ok", "aviso": "atencao", "critico": "critico"}.get(rp.get("nivel")),
                        "texto": {"ok": "cópia do acervo em dia", "aviso": "cópia do acervo atrasada"}.get(rp.get("nivel"), "cópia do acervo parada")})
-    if backup is not None:
-        if not backup.get("existe") or backup.get("ok") is False:
-            partes.append({"id": "backup", "nivel": "critico", "texto": "sem cópia de segurança" if not backup.get("existe") else "cópia de segurança falhou"})
+    if backup is not None:                               # a mesma regra do alerta "Cópia de segurança atrasada" (alertas.avaliar)
+        if not backup.get("existe"):
+            partes.append({"id": "backup", "nivel": "atencao", "texto": "sem cópia de segurança"})
+        elif backup.get("ok") is False:
+            partes.append({"id": "backup", "nivel": "critico", "texto": "cópia de segurança falhou"})
         elif (backup.get("idade_horas") or 0) > 36:
-            partes.append({"id": "backup", "nivel": "atencao", "texto": "cópia de segurança atrasada"})
+            partes.append({"id": "backup", "nivel": "critico", "texto": "cópia de segurança atrasada"})
         else:
             partes.append({"id": "backup", "nivel": "ok", "texto": "cópia de segurança em dia"})
     nivel = _pior(*(p["nivel"] for p in partes))

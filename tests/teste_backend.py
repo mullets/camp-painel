@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens"}
+MODOS_RAPIDOS = {"ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5114,7 +5114,8 @@ def filho(modo):
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
         c = connect()
-        ver("sem réplica configurada: nada a medir (não vira alerta)", replica.estado(c)["configurada"] is False and "replica" not in alertas.avaliar(c, estado_backup=lambda: {"existe": False}))
+        _av0 = alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("replica") or {}   # UX-07: aparece como "não medido", com o motivo
+        ver("sem réplica configurada: não vira alerta (fica 'não medido', com o motivo)", replica.estado(c)["configurada"] is False and _av0.get("critico") is False and _av0.get("nivel") == "nao_medido" and "replica.raiz" in (_av0.get("motivo") or ""), str(_av0))
         raiz = _pl.Path(tempfile.mkdtemp()) / "ACERVOS_CAMP"; (raiz / "_campvision").mkdir(parents=True)
         sent = raiz / "_campvision" / "sentinela.json"
         def grava(horas): sent.write_text(_j.dumps({"gravado_em": (_dt.now(_tz.utc) - _td(hours=horas)).astimezone(_tz(_td(hours=-3))).isoformat(timespec="seconds"), "versao": "2026-10-10-02"}), encoding="utf-8")
@@ -9357,6 +9358,83 @@ def filho(modo):
         mesmo("Precisa de você depois de esconder um problema (UX-03)", {"pendencias": pend2.get("precisa_de_voce"), "pedem_acao": g(pend2, "pedem_acao", "precisa_de_voce"),
                                                                           "painel.pendencias": g(pai2, "pendencias", "precisa_de_voce"), "painel.pedem_acao": g(pai2, "pendencias", "pedem_acao", "precisa_de_voce"), "esperado": 2})
         for l in res: print(l)
+    elif modo == "ux07_alertas":
+        # UX-07: "QNAP quase cheio" e "Site sem resposta" diziam "ainda não medido" com a tela mostrando QNAP 12% e site lento.
+        # Os alertas usam as MESMAS medições da tela; "não medido" só quando a medição falha, com o motivo; QNAP < 15% = atenção;
+        # site > 3 s = atenção, sem resposta 2 vezes = crítico; "Verificar agora" grava o estado.
+        init_db(); _aplicar_migracoes_real()
+        from datetime import datetime as _dt, timedelta as _td
+        from app import alertas, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for k_, v_ in (("smtp.host", "smtp.teste"), ("smtp.usuario", "painel@camp.arq.br"), ("smtp.senha", "x"), ("avisos.email", "rafael@camp.arq.br"), ("wp.url", "")):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        c.commit()
+        bk_ok = lambda: {"existe": True, "idade_horas": 2, "ok": True}  # noqa: E731
+        enviados = []
+        def falso(smtp, para, titulo, corpo, **kw): enviados.append({"para": para, "titulo": titulo})
+        nivel = lambda a, k: (a.get(k) or {}).get("nivel")  # noqa: E731
+        def av(**kw):
+            try:
+                return alertas.avaliar(c, **kw)
+            except Exception as e_:  # noqa: BLE001  (antes: uma sonda que quebra derrubava a avaliação inteira)
+                return {"_erro": str(e_)}
+        a0 = av(estado_backup=bk_ok)
+        ver("sem leitura do QNAP: 'não medido' COM o motivo", nivel(a0, "qnap") == "nao_medido" and "ainda não leu o QNAP" in (a0["qnap"].get("motivo") or ""), str(a0.get("qnap")))
+        ver("sem endereço do site: 'não medido' com o motivo (wp.url)", nivel(a0, "site") == "nao_medido" and "wp.url" in (a0["site"].get("motivo") or ""), str(a0.get("site")))
+        ver("sem réplica configurada: 'não medido' com o motivo (replica.raiz)", nivel(a0, "replica") == "nao_medido" and "replica.raiz" in (a0["replica"].get("motivo") or ""), str(a0.get("replica")))
+        ver("CAMP Vision que nunca deu sinal: 'não medido' com o motivo", nivel(a0, "campvision") == "nao_medido" and a0["campvision"].get("motivo"), str(a0.get("campvision")))
+        c.execute("INSERT INTO qnap_snapshot (montado, erro) VALUES (0, 'tempo esgotado (60s): o QNAP não respondeu a tempo')"); c.commit()
+        a1 = av(estado_backup=bk_ok)
+        ver("leitura do QNAP que falhou: 'não medido' com o erro da leitura", nivel(a1, "qnap") == "nao_medido" and "tempo esgotado" in (a1["qnap"].get("motivo") or ""), str(a1.get("qnap")))
+        c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb) VALUES (1, 1000, 120)"); c.commit()   # 12% livre: a mesma leitura que a tela mostra
+        a2 = av(estado_backup=bk_ok)
+        ver("QNAP com 12% livre (< 15%): alerta em ATENÇÃO (não 'não medido', não crítico)", nivel(a2, "qnap") == "atencao" and a2["qnap"]["critico"] is False and "12" in a2["qnap"]["texto"], str(a2.get("qnap")))
+        t0 = _dt.utcnow()
+        f1 = alertas.verificar(c, agora=t0, enviar=falso, estado_backup=bk_ok)
+        e_q = c.execute("SELECT nivel, texto FROM alerta_estado WHERE assunto='qnap'").fetchone()
+        ver("depois de verificar, o estado do QNAP fica gravado como atenção (antes: nenhuma linha = 'ainda não medido')", e_q is not None and e_q["nivel"] == "atencao", str(dict(e_q) if e_q else None))
+        ver("atenção não manda e-mail (só crítico manda)", not any(x_["assunto"] == "qnap" for x_ in f1) and not enviados, str(f1))
+        e_r = c.execute("SELECT nivel, motivo FROM alerta_estado WHERE assunto='replica'").fetchone()
+        ver("o 'não medido' fica gravado com o motivo", e_r is not None and e_r["nivel"] == "nao_medido" and "replica.raiz" in (e_r["motivo"] or ""), str(dict(e_r) if e_r else None))
+        c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb) VALUES (1, 1000, 30)"); c.commit()    # 3%: crítico
+        f2 = alertas.verificar(c, agora=t0 + _td(minutes=5), enviar=falso, estado_backup=bk_ok)
+        ver("QNAP com 3% livre: crítico e sai o e-mail", any(x_["assunto"] == "qnap" and x_["tipo"] == "critico" for x_ in f2) and c.execute("SELECT nivel FROM alerta_estado WHERE assunto='qnap'").fetchone()[0] == "critico", str(f2))
+        c.execute("INSERT INTO qnap_snapshot (montado, erro) VALUES (0, 'falha ao medir: permissão negada')"); c.commit()
+        f3 = alertas.verificar(c, agora=t0 + _td(minutes=10), enviar=falso, estado_backup=bk_ok)
+        e_q = c.execute("SELECT critico, nivel, motivo FROM alerta_estado WHERE assunto='qnap'").fetchone()
+        ver("medição que falha depois de um crítico: NÃO manda 'resolvido' e o crítico continua guardado", not any(x_["assunto"] == "qnap" for x_ in f3) and e_q["critico"] == 1 and e_q["nivel"] == "nao_medido" and "permissão negada" in e_q["motivo"], str((f3, dict(e_q))))
+        c.execute("UPDATE configuracao SET valor='https://camp.arq.br' WHERE chave='wp.url'"); c.commit()
+        lento = av(estado_backup=bk_ok, medir_site=lambda u: {"estado": "lento", "ms": 5200, "ok": True, "alerta": False})
+        ver("site respondendo em 5,2 s (> 3 s): atenção, com o tempo na frase", nivel(lento, "site") == "atencao" and "5,2 s" in lento["site"]["texto"], str(lento.get("site")))
+        um = av(estado_backup=bk_ok, medir_site=lambda u: {"estado": "sem_resposta", "alerta": False})
+        ver("site sem resposta uma vez: atenção", nivel(um, "site") == "atencao", str(um.get("site")))
+        dois = av(estado_backup=bk_ok, medir_site=lambda u: {"estado": "sem_resposta", "alerta": True})
+        ver("site sem resposta duas vezes seguidas: crítico", nivel(dois, "site") == "critico" and dois["site"]["critico"] is True, str(dois.get("site")))
+        def quebra(u): raise RuntimeError("sonda quebrou")
+        qb = av(estado_backup=bk_ok, medir_site=quebra)
+        ver("verificação do site que quebra: 'não medido' com o motivo", nivel(qb, "site") == "nao_medido" and "sonda quebrou" in qb["site"]["motivo"], str(qb.get("site")))
+        ok_ = av(estado_backup=bk_ok, medir_site=lambda u: {"estado": "online", "ms": 400, "ok": True})
+        ver("site respondendo em 0,4 s: normal", nivel(ok_, "site") == "ok", str(ok_.get("site")))
+        # a tela: GET /api/alertas traz o estado de AGORA; "Verificar agora" mede o site de verdade (sem resposta 2× = crítico)
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='smtp.host'"); c.execute("UPDATE configuracao SET valor='http://127.0.0.1:9' WHERE chave='wp.url'"); c.execute("INSERT INTO qnap_snapshot (montado, total_gb, livre_gb) VALUES (1, 1000, 120)"); c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        g = adm.get("/api/alertas").json()
+        ag = g.get("agora") or {}
+        ver("a tela recebe o nível de AGORA de cada alerta (qnap, site, campvision, backup, replica)", all(k in ag and ag[k].get("nivel") in alertas.NIVEIS for k in ("qnap", "site", "campvision", "backup", "replica")) if hasattr(alertas, "NIVEIS") else False, str({k: (v or {}).get("nivel") for k, v in ag.items()}))
+        ver("na tela, o QNAP com 12% aparece em atenção (o mesmo número da tela Máquinas)", nivel(ag, "qnap") == "atencao", str(ag.get("qnap")))
+        ver("site ainda não verificado desde que o painel ligou: 'não medido' com o motivo", nivel(ag, "site") == "nao_medido" and "Verificar agora" in (ag.get("site") or {}).get("motivo", ""), str(ag.get("site")))
+        v1 = adm.post("/api/alertas/verificar"); v2 = adm.post("/api/alertas/verificar")
+        g2 = adm.get("/api/alertas").json()
+        es = {e_["assunto"]: e_ for e_ in g2.get("estado", [])}
+        ver("'Verificar agora' 2× com o site fora do ar: o estado do site vira crítico (e sai o e-mail)", v1.status_code == 200 and v2.status_code == 200 and (es.get("site") or {}).get("nivel") == "critico"
+            and any(x_["assunto"] == "site" and x_["tipo"] == "critico" for x_ in v2.json().get("envios", [])), str((es.get("site"), v2.json())))
+        ver("...e a tela mostra a MESMA medição (a última sonda do site)", nivel(g2.get("agora") or {}, "site") == "critico", str((g2.get("agora") or {}).get("site")))
+        for l in res: print(l)
     elif modo == "agora_nao_lote":
         # 23/10: "quero poder clicar para ignorar e sair da contagem" (Para conferir). "Agora não" num lote: some da lista e das contagens
         # SÓ de quem clicou, por 7 dias. E "o maior lote da fila" aparecia em todos os lotes com o mesmo tamanho.
@@ -12050,6 +12128,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-05: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("164) UX-07: alertas QNAP/site/cópia ligados às mesmas medições da tela; não medido só com motivo")
+rc, out = rodar("ux07_alertas", f"{tmp}/ux07_alertas.db")
+if rc != 0: ok(False, f"teste ux07_alertas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-07: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
