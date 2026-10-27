@@ -92,6 +92,8 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         if lote and lote["fase"] == "importar":       # CAMP-067: campo novo, opcional
             pode, motivo = _pode_importar(con, con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote["id"],)).fetchone())
             lote["importar_motivo"] = None if pode else motivo
+        if lote and lote["fase"] == "conferir":       # UX-11: campo novo, opcional — as folhas a conferir SEM nenhum aviso (o número do botão)
+            lote["itens_sem_aviso"] = contar_sem_aviso(con, lote["id"])
         return {"lote": lote, "lotes": len(lotes), "avisos_cv": avisos_abertos(con, codigo), "pode_operar": u["papel"] in ("operador", "admin", "master"), "pode_agir": u["papel"] in ("admin", "master")}
     finally:
         con.close()
@@ -969,6 +971,8 @@ def _aviso_da_folha(con, i) -> str | None:
         return motivo
     if con.execute("SELECT 1 FROM erro WHERE codigo=? AND situacao IN ('aberto','em_correcao') LIMIT 1", (i["codigo"],)).fetchone():
         return "problema aberto"
+    if "retida" in i.keys() and i["retida"]:      # UX-11: folha retida conta em "Com problema" na tela; em massa não se confere
+        return "retida"
     return None
 
 AUTOMATICO = "painel (sem aviso: conferida sozinha)"
@@ -984,14 +988,26 @@ def conferir_so_avisos() -> bool:
     return bool(r) and str(r[0]).strip() == "1"
 
 
-def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False) -> dict:
+def _pendentes_do_lote(con, lote_id: int):
+    return con.execute(f"""SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual, retida FROM item
+                           WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall()
+
+
+def contar_sem_aviso(con, lote_id: int) -> int:
+    """UX-11: quantas folhas a conferir do lote NÃO têm nenhum aviso (o número do botão "Conferir só sem avisos"). Mesma regra de conferir_sem_aviso."""
+    return sum(1 for i in _pendentes_do_lote(con, lote_id) if not _aviso_da_folha(con, i))
+
+
+def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False, pular=None) -> dict:
     """Marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver (regra do CAMP-094). Não faz commit.
-    automatico=True (CAMP-150, ao importar): o histórico diz "conferida automaticamente" e lista as folhas."""
+    automatico=True (CAMP-150, ao importar): o histórico diz "conferida automaticamente" e lista as folhas.
+    pular (UX-11): códigos que a tela mostra com aviso (ex.: orientação incerta da lista orientacao.txt do CAMP Vision, que o servidor
+    não lê numa requisição): ficam para revisão manual mesmo que a regra do servidor não veja aviso. Só soma cautela, nunca tira."""
     l = _lote(con, lote_id)
+    pular = {str(x) for x in (pular or [])}
     marcadas, ficaram, conferidas = 0, [], []
-    for i in con.execute(f"""SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual FROM item
-                             WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall():
-        motivo = _aviso_da_folha(con, i)
+    for i in _pendentes_do_lote(con, lote_id):
+        motivo = _aviso_da_folha(con, i) or ("aviso na tela" if i["codigo"] in pular else None)
         if motivo:
             ficaram.append({"codigo": i["codigo"], "motivo": motivo})
             continue
@@ -1005,11 +1021,19 @@ def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False) -
     else:
         _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", ator, {"lote_id": lote_id, "todas": True, "conferidas": marcadas,
                                                                               "ficaram_para_conferir": [x["codigo"] for x in ficaram]})
-    return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam}
+    return {"conferidas": marcadas, "com_pendencia": len(ficaram), "ficaram": ficaram, "restam": restam, "codigos": conferidas}   # 'codigos': campo novo, opcional (UX-11: Desfazer)
+
+
+class ConferirTodas(BaseModel):
+    pular: list[str] = []
+
+
+class DesfazerConferirTodas(BaseModel):
+    codigos: list[str]
 
 
 @router.post("/lotes/{lote_id}/conferir-todas")
-def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+def conferir_todas(lote_id: int, d: ConferirTodas | None = None, u: dict = Depends(auth.exige("operador"))) -> dict:
     """"Aprovar todas": marca como conferidas as folhas pendentes do lote que NÃO têm nada para ver.
     CAMP-094 (decisão de 20/10): não fecha aviso que ninguém viu. A folha com aviso ou problema aberto (bloqueio, duplicata, autoria, espelho a
     confirmar, sinal do CAMP Vision, problema na lista) fica "a conferir" e volta em `ficaram` (código e motivo), para conferir uma a uma.
@@ -1020,9 +1044,40 @@ def conferir_todas(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> d
         l = _lote(con, lote_id)
         if l["aprovado_em"]:
             raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
-        r = conferir_sem_aviso(con, lote_id, u["email"])
+        r = conferir_sem_aviso(con, lote_id, u["email"], pular=(d.pular if d else None))
         con.commit()
         return r
+    except HTTPException:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+@router.post("/lotes/{lote_id}/conferir-todas/desfazer")
+def desfazer_conferir_todas(lote_id: int, d: DesfazerConferirTodas, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-11: "Desfazer" do "Conferir só sem avisos". Volta para "a conferir" só as folhas da lista que ainda estão como esta pessoa
+    as deixou (conferida por ela, no lote, fora do site). A folha que alguém mexeu depois fica como está. Lote aprovado: recusa."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        l = _lote(con, lote_id)
+        if l["aprovado_em"]:
+            raise HTTPException(409, "O lote já foi aprovado: reabra a revisão para mudar")
+        voltaram, ficaram = [], []
+        for cod in dict.fromkeys(str(x) for x in d.codigos):
+            i = con.execute(f"SELECT codigo FROM item WHERE codigo=? AND {_DO_LOTE} AND revisao='conferida' AND revisado_por=? AND status_site NOT IN ('rascunho','no_ar')",
+                            (cod, lote_id, u["email"])).fetchone()
+            if not i:
+                ficaram.append(cod)
+                continue
+            con.execute("UPDATE item SET revisao='pendente', revisado_por=NULL, revisado_em=NULL, atualizado_em=datetime('now') WHERE codigo=?", (cod,))
+            voltaram.append(cod)
+        if voltaram:
+            _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote_desfeita", u["email"], {"lote_id": lote_id, "voltaram": voltaram})
+        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+        con.commit()
+        return {"voltaram": len(voltaram), "ficaram": ficaram, "restam": restam}
     except HTTPException:
         con.rollback()
         raise

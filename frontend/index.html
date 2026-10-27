@@ -1811,7 +1811,8 @@ function avisoResultadoLote(acao,r,projeto){const pode=EU&&['admin','master'].in
      +`<p>Próximo passo: conferir.</p>`;    const quadro=[...document.querySelectorAll('#pd .panel')].find(x=>/Revisão do lote/.test(x.textContent||'')&&x.checkVisibility&&x.checkVisibility());   // a Revisão do lote fica na gaveta (fechada): o aviso vai para o lugar visível
     const a=avisoNoLugar(h+`<div class="act"><button class="btn sm pri" data-pp="conferir" data-projeto="${pj}">Começar a conferir</button></div>`,{tipo:pb.length?'erro':'ok',antes:quadro||document.getElementById('pj-proximo')||'#pd',id:'lote',ms:0});if(a&&a.scrollIntoView)a.scrollIntoView({block:'center',behavior:'smooth'});return}
   else if(acao==='conferir')h=`<b>✔ ${qtd(r.conferidas||0,'folha conferida','folhas conferidas')} sozinha${r.conferidas===1?'':'s'} (nada apontado pelo CAMP Vision).</b> ${r.restam?`${qtd(r.restam,'precisa','precisam')} de olho humano.<div class="act"><button class="btn sm pri" data-pp="conferir" data-projeto="${pj}">Conferir as que faltam</button></div>`:'Próximo passo: aprovar o lote.'}`;
-  else if(acao==='todas'){const f=(r.ficaram||[]).length;h=`<b>✔ ${qtd(r.conferidas||0,'folha marcada','folhas marcadas')} como conferida${r.conferidas===1?'':'s'}.</b> ${f?`${qtd(f,'folha com aviso ficou','folhas com aviso ficaram')} para conferir uma a uma.`:'Próximo passo: aprovar o lote.'}`}
+  else if(acao==='todas'){const f=(r.ficaram||[]).length;h=`<b>✔ ${qtd(r.conferidas||0,'folha marcada','folhas marcadas')} como conferida${r.conferidas===1?'':'s'}.</b> ${f?`${qtd(f,'folha com aviso ficou','folhas com aviso ficaram')} para revisão manual.`:'Próximo passo: aprovar o lote.'}`
+    +((r.codigos||[]).length?`<div class="act"><button class="btn sm" data-desfazer-todas="1">Desfazer</button></div>`:'')}   /* UX-11: os códigos ficam em ULTIMO_LOTE (nunca no HTML) */
   else if(acao==='aprovar')h=`<b>✔ Lote aprovado.</b> ${pode?`Próximo passo: publicar.<div class="act"><button class="btn sm pri" data-pp="publicar" data-projeto="${pj}">Publicar</button></div>`:'Próximo passo: um administrador publica.'}`;
   else if(acao==='reabrir')h='<b>✔ Revisão reaberta:</b> as folhas voltam a poder ser editadas.';
   if(h)avisoNoLugar(h,{antes:document.getElementById('pj-proximo')||'#pd',id:'lote'})}
@@ -4045,7 +4046,7 @@ function proximoPassoHTML(r,code,pagina){   // pagina=true: dentro do bloco Pró
   const bt=(txt,acao)=>`<button class="btn pri" data-pp="${acao}" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">${txt}</button>`;
   const T={importar:l.importar_motivo?[`Ainda não dá para importar as folhas: ${escHtml(l.importar_motivo)}`,'']:['Falta trazer as folhas do CAMP Vision para o painel.',op?bt('Importar folhas','importar'):''],   // CAMP-067
     conferir:soAvisos()?[`Faltam conferir ${escHtml(l.itens_pendentes)} ${+l.itens_pendentes===1?'folha com aviso':'folhas com aviso'} (as sem aviso já entraram conferidas). Cada uma diz por que precisa de você.`,op?bt('Começar a conferir','conferir'):'']   // CAMP-150
-      :[`Faltam conferir ${escHtml(l.itens_pendentes)} de ${escHtml(l.itens_total)} folha(s). Clique numa folha para ver, virar e conferir, ou aprove todas de uma vez.`,op?bt('Começar a conferir','conferir')+` <button class="btn" data-rev-lote="todas" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}">Conferir só sem avisos (${escHtml(l.itens_pendentes)})</button>`:''],
+      :[`Faltam conferir ${escHtml(l.itens_pendentes)} de ${escHtml(l.itens_total)} folha(s). Clique numa folha para ver, virar e conferir, ou aprove todas de uma vez.`,op?bt('Começar a conferir','conferir')+(()=>{const n=semAvisoNoLote(l);return ` <button class="btn" data-rev-lote="todas" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}" title="Só as folhas sem nenhum aviso; as com aviso ficam para conferir uma a uma">Conferir só sem avisos${n==null?'':` (${fmtN(n)})`}</button>`})():''],   /* UX-11: o número é das folhas SEM aviso, não o total a conferir */
     aprovar:umPasso()?['Todas as folhas foram conferidas. Pronto para publicar: o mesmo clique aprova o lote.',op||ad?bt('Publicar no site','publicar'):'<small class="help">Um operador ou admin publica.</small>']   // CAMP-148
       :['Todas as folhas foram conferidas. Falta aprovar o lote.',ad?bt('Aprovar o lote','aprovar'):'<small class="help">Falta um admin aprovar.</small>'],
     publicar:(()=>{const g=(window.PUB_G||{})[code],hum=g&&(g.condicoes||[]).find(c=>c.bloqueia&&!c.ok&&['direitos','bloqueios','teste','aceite_cv'].includes(c.id));   // 19/10: o aceite do CAMP Vision é a MESMA regra do quadro "O que o CAMP Vision entregou"
@@ -4409,6 +4410,12 @@ function confProblemas(it){const p=it.pendencias||{},o=[];
 /* CAMP-094: o que a pessoa precisa ver na folha antes de dizer que está certa (a mesma regra do servidor em "Aprovar todas"); '' = nada */
 /* os problemas abertos do projeto DESTA folha: o CONF.d de um conferir anterior pode ser de outro projeto */
 function errosDoProjeto(code){const d=[window.PJ_D,CONF.d].find(x=>x&&x.projeto&&x.projeto.codigo===code);return (d&&d.erros)||[]}
+/* UX-11: por que a folha NÃO entra no "Conferir só sem avisos": o aviso do servidor (avisoParaConferir) ou qualquer tipo de "Com problema" da tela
+   (inclui a orientação incerta da lista do CAMP Vision e a folha retida) ou o título vazio. '' = sem aviso. */
+function motivoSemMassa(i){return avisoParaConferir(i)||((tiposProblemaFolha(i)[0]||{}).t)||(!String(i.titulo||'').trim()?'sem título':'')}
+function pendentesComAviso(lote){const L=(window.ITENS_PJ||[]).filter(x=>String(x.lote_id)===String(lote)&&x.revisao==='pendente'&&!['rascunho','no_ar'].includes(x.status_site));return {L,com:L.filter(i=>motivoSemMassa(i))}}
+/* o número do botão: a conta da tela (se as folhas do lote já vieram) e a do servidor (itens_sem_aviso); havendo as duas, a menor (a mais cautelosa) */
+function semAvisoNoLote(l){const {L,com}=pendentesComAviso(l.id),cs=[];if(L.length)cs.push(L.length-com.length);if(l.itens_sem_aviso!=null)cs.push(+l.itens_sem_aviso);return cs.length?Math.min(...cs):null}
 function avisoParaConferir(i){const p=i.pendencias||{},er=errosDoProjeto(String(i.codigo).slice(0,10));
   return i.status_site==='bloqueado'||(p.bloqueios||[]).length?'bloqueada':i.duplicata_de?'duplicata':i.autoria_divergente?'autoria':espelhadaAConferir(i)?'espelhada?':((p.sinais||[]).length||(p.ressalvas||[]).length)?'aviso do CAMP Vision':er.some(e=>e.codigo===i.codigo&&['aberto','em_correcao'].includes(e.situacao||'aberto'))?'problema aberto':''}
 function espelhadaAConferir(it){return !!(it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it))}
@@ -4865,18 +4872,28 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-rev-
 async function acaoRevisaoLote(acao,lote,projeto,btn){
   if(acao==='releitura'){pedirReleitura('projeto',projeto);return}
   const rotas={importar:'importar',conferir:'conferir-sem-pendencia',todas:'conferir-todas',aprovar:'aprovar',reabrir:'reabrir'};
-  if(acao==='todas'){const L=(window.ITENS_PJ||[]).filter(x=>String(x.lote_id)===String(lote)&&x.revisao==='pendente'&&!['rascunho','no_ar'].includes(x.status_site)),com=L.filter(i=>avisoParaConferir(i)),sem=L.length-com.length;
-    /* CAMP-094 (decisão de 20/10): "Aprovar todas" não fecha aviso que ninguém viu: as folhas com aviso ficam para conferir uma a uma */
+  let corpo;
+  if(acao==='todas'){const {L,com}=pendentesComAviso(lote),sem=L.length-com.length;
+    /* CAMP-094 (decisão de 20/10): "Aprovar todas" não fecha aviso que ninguém viu: as folhas com aviso ficam para conferir uma a uma.
+       UX-11: o aviso é o MESMO da tela ("Com problema", orientação incerta da lista do CAMP Vision, retida, sem título); os códigos vão em `pular`
+       para o servidor deixá-las também (ele soma a regra dele). Antes de marcar, o resumo "X serão marcadas; Y ficam para revisão manual". */
     if(!sem){toast(`${qtd(com.length,'folha pendente tem','folhas pendentes têm')} aviso: confira uma a uma.`);return}
-    const lista=com.slice(0,12).map(i=>`<li><b>${escHtml(String(i.codigo).slice(-6))}</b> · ${escHtml(avisoParaConferir(i))}</li>`).join('')+(com.length>12?`<li>e mais ${fmtN(com.length-12)}</li>`:'');
+    const lista=com.slice(0,12).map(i=>`<li><b>${escHtml(String(i.codigo).slice(-6))}</b> · ${escHtml(motivoSemMassa(i))}</li>`).join('')+(com.length>12?`<li>e mais ${fmtN(com.length-12)}</li>`:'');
     if(!await confirmar({titulo:`Marcar ${sem===1?'a folha sem aviso':`as ${fmtN(sem)} folhas sem aviso`} como conferida${sem===1?'':'s'}?`,
-      html:com.length?`<p>${qtd(com.length,'folha tem','folhas têm')} aviso e ${com.length===1?'fica':'ficam'} para conferir uma a uma:</p><ul class="conf-lista">${lista}</ul>`:'<p>Use só se você já olhou todas.</p>',botao:`Marcar ${fmtN(sem)}`}))return}
+      html:`<p class="conf-resumo"><b>${qtd(sem,'folha será marcada como conferida','folhas serão marcadas como conferidas')}</b>; <b>${qtd(com.length,'fica','ficam')} para revisão manual</b>.</p>`+(com.length?`<p>${com.length===1?'Esta tem':'Estas têm'} aviso:</p><ul class="conf-lista">${lista}</ul>`:'<p>Use só se você já olhou todas.</p>')+'<p class="help">Dá para desfazer logo depois.</p>',botao:`Marcar ${fmtN(sem)}`}))return;
+    corpo={pular:com.map(i=>i.codigo)}}
   if(acao==='aprovar'&&!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;
   const quadro=btn&&btn.closest('.panel');window.QUADRO_LOTE_PERTO=!!quadro;
   if(acao==='importar'){if(btn)btn.disabled=true;const a=avisoNoLugar('<b>Importando a leitura do CAMP Vision…</b> O painel está lendo o pacote que o CAMP Vision deixou no QNAP (o CAMP Vision não roda de novo; o log dele não muda). Leva alguns segundos.',{tipo:'rodando',antes:quadro||document.getElementById('pj-proximo')||'#pd',id:'lote'});if(a&&a.scrollIntoView)a.scrollIntoView({block:'center',behavior:'smooth'})}
-  try{const r=await API('/api/lotes/'+encodeURIComponent(lote)+'/'+rotas[acao],{method:'POST'});window.ULTIMO_LOTE={acao,r,projeto};
+  try{const r=await API('/api/lotes/'+encodeURIComponent(lote)+'/'+rotas[acao],corpo?{method:'POST',body:JSON.stringify(corpo)}:{method:'POST'});window.ULTIMO_LOTE={acao,r,projeto,lote};
     toast(acao==='importar'?`${r.criadas} folha(s) importada(s)${r.atualizadas?`, ${r.atualizadas} atualizada(s)`:''}${r.ignoradas_ja_revisadas?`, ${r.ignoradas_ja_revisadas} já revisada(s) mantida(s)`:''}`:acao==='conferir'?`${r.conferidas} folha(s) conferida(s); ${r.restam} precisam de olho humano`:acao==='todas'?`${r.conferidas} folha(s) sem aviso conferida(s)`:acao==='aprovar'?'Revisão aprovada':'Revisão reaberta');
     await showProjeto(projeto);avisoResultadoLote(acao,r,projeto)}catch(e){toast(e.message);const a=avisoNoLugar(`<b>✖ Não deu:</b> ${escHtml(e.message)}`,{tipo:'erro',antes:(quadro&&quadro.isConnected?quadro:null)||document.getElementById('pj-proximo')||'#pd',id:'lote'});if(a&&a.scrollIntoView)a.scrollIntoView({block:'center',behavior:'smooth'})}finally{if(btn&&btn.isConnected)btn.disabled=false}}
+/* UX-11: "Desfazer" do "Conferir só sem avisos": volta para "a conferir" só as folhas que esta conferência em massa marcou */
+async function desfazerConferirTodas(btn){const u=window.ULTIMO_LOTE;if(!u||u.acao!=='todas'||!(u.r&&(u.r.codigos||[]).length))return;if(btn)btn.disabled=true;
+  try{const r=await API('/api/lotes/'+encodeURIComponent(u.lote)+'/conferir-todas/desfazer',{method:'POST',body:JSON.stringify({codigos:u.r.codigos})});window.ULTIMO_LOTE=null;
+    toast(`${qtd(r.voltaram||0,'folha voltou','folhas voltaram')} para a conferir${(r.ficaram||[]).length?`; ${qtd(r.ficaram.length,'já tinha mudado e ficou','já tinham mudado e ficaram')} como estava`:''}`);
+    await showProjeto(u.projeto)}catch(e){toast(e.message);if(btn&&btn.isConnected)btn.disabled=false}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-desfazer-todas]');if(!b||b.disabled)return;e.preventDefault();e.stopPropagation();desfazerConferirTodas(b)},true);
 document.addEventListener('click',e=>{const b=e.target.closest('[data-rev-abrir],[data-rev-item],[data-rev-lote],[data-rev-girar],[data-rev-espelhar],[data-rev-pagina]');if(!b||b.disabled)return;   // códigos só em data-*, nunca dentro de onclick
   if(b.dataset.revAbrir){const dentro=e.target.closest('button,a,input,label,select,textarea');if(dentro&&dentro!==b&&b.contains(dentro))return}   // botão DENTRO do cartão (ex.: "Pedir releitura" do "Sem imagem") faz só a ação dele, sem abrir a revisão por baixo da confirmação
   e.stopPropagation();e.preventDefault();

@@ -4304,6 +4304,7 @@ def filho(modo):
                 if k == 7: d["bloqueios"] = ["carimbo de outra obra"]
                 if k == 21: d["ressalvas"] = ["escala ilegível"]
                 if k == 40: d["bloqueios"] = ["folha cortada"]
+                if k == 12 and nome == "desligado": d["orientacao_incerta"] = True     # UX-11: orientação incerta (só no lote 1)
                 docs.append(d)
             pk = {**base, "projeto_codigo": P, "fundo_codigo": "F098", "documentos": docs, "itens": docs, "retirados": []}
             pasta = raiz / nome; (pasta / "catalogacao").mkdir(parents=True)
@@ -4338,6 +4339,30 @@ def filho(modo):
         ver("quem quiser ainda abre e volta qualquer folha (a conferida sozinha volta para 'a conferir')",
             op.post("/api/itens/F098-P0002-1972-S01-D00001/revisao", json={"estado": "pendente"}).status_code == 200 and pend("F098-P0002") == 1)
         ver("desligado de novo: o lote 1 continua com as 48 a conferir (nada mexeu nele)", pend("F098-P0001") == 48)
+        # UX-11 (27/10, F009-P0015: "Conferir só sem avisos (71)" = total a conferir, com 21 orientação incerta e 8 metadado errado).
+        # Lote 1: 48 a conferir; com aviso: D7/D40 bloqueio, D21 ressalva, D12 orientação incerta, D10 metadado errado (problema aberto), D15 retida.
+        P1 = "F098-P0001"; cd = lambda k: f"{P1}-1972-S01-D{k:05d}"
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','metadado','campvision',?,'ano lido diverge')", (cd(10),))
+        c.execute("UPDATE item SET retida=1, retida_motivo='teste' WHERE codigo=?", (cd(15),)); c.commit()
+        pp = op.get(f"/api/projetos/{P1}/proximo-passo").json().get("lote") or {}
+        ver("UX-11: o número do botão (itens_sem_aviso) exclui as 6 folhas com aviso: 42, não 48", pp.get("itens_sem_aviso") == 42 and pp.get("itens_pendentes") == 48, str({k: pp.get(k) for k in ("itens_sem_aviso", "itens_pendentes", "fase")}))
+        rt = op.post(f"/api/lotes/{L1}/conferir-todas", json={"pular": [cd(20)]})
+        jt = rt.json() if rt.status_code == 200 else {}
+        ver("UX-11: 'Conferir só sem avisos' marca 41 (42 menos a que a tela mandou pular) e devolve os códigos", rt.status_code == 200 and jt.get("conferidas") == 41 and len(jt.get("codigos") or []) == 41, rt.text[:200])
+        com_aviso = {cd(k) for k in (7, 10, 12, 15, 20, 21, 40)}
+        ainda = {r[0] for r in c.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND revisao='pendente'", (P1,))}
+        ver("UX-11: nenhuma folha com aviso (orientação incerta, metadado errado, retida, bloqueio, ressalva, a pulada) foi marcada", ainda == com_aviso, str(sorted(x[-6:] for x in ainda)))
+        ver("UX-11: o resumo diz quantas ficam para revisão manual (7)", jt.get("com_pendencia") == 7 and {x["codigo"] for x in jt.get("ficaram") or []} == com_aviso, str(jt.get("ficaram"))[:300])
+        sem_body = op.post(f"/api/lotes/{L2}/conferir-todas")
+        ver("UX-11: sem corpo (tela antiga) continua aceito", sem_body.status_code == 200, sem_body.text[:200])
+        outro = cd(1); op.post(f"/api/itens/{cd(2)}/revisao", json={"estado": "corrigida"})      # alguém mexeu numa delas depois
+        rd = op.post(f"/api/lotes/{L1}/conferir-todas/desfazer", json={"codigos": jt.get("codigos", []) + ["F098-P0002-1972-S01-D00001"]})
+        jd = rd.json() if rd.status_code == 200 else {}
+        ver("UX-11: Desfazer volta para 'a conferir' as que ela marcou (40) e deixa a que mudou depois e a de outro lote", rd.status_code == 200 and jd.get("voltaram") == 40 and set(jd.get("ficaram") or []) == {cd(2), "F098-P0002-1972-S01-D00001"} and pend(P1) == 47, rd.text[:300])
+        ver("UX-11: a de outro lote não mudou (continua conferida)", c.execute("SELECT revisao FROM item WHERE codigo='F098-P0002-1972-S01-D00001'").fetchone()[0] == "conferida")
+        ver("UX-11: o Desfazer fica no histórico", bool(c.execute("SELECT 1 FROM evento WHERE tipo='revisao_em_lote_desfeita' AND codigo=?", (P1,)).fetchone()))
+        c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (L1,)); c.commit()
+        ver("UX-11: Desfazer em lote aprovado é recusado", op.post(f"/api/lotes/{L1}/conferir-todas/desfazer", json={"codigos": [outro]}).status_code == 409)
         c.close()
         for l in res: print(l)
     elif modo == "importar_sozinho":
