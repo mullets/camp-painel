@@ -5,6 +5,7 @@ Cache por (arquivo, data, tamanho, giro, lado máximo): girar de novo ou trocar 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -48,21 +49,28 @@ def lado_real(caminho: Path | str) -> int | None:
         return None
 
 
-def derivado_publico(origem: Path | str, giro: int = 0, lado_max: int = LADO_PUBLICO, espelhar: bool = False) -> Path:
+def derivado_publico(origem: Path | str, giro: int = 0, lado_max: int = LADO_PUBLICO, espelhar: bool = False, rec: dict | None = None,
+                     cor: bool = False) -> Path:
     """CAMP-048 · O derivado que vai ao SITE: JPEG q85, sRGB, lado maior <= lado_max (padrão 1920), a partir da prévia do CAMP Vision (já girada/desespelhada),
     com o giro/espelho que a pessoa pediu por cima. Cache em disco por arquivo+data+tamanho+giro+espelho+lado; escrita atômica. Sempre reprocessa
-    (mesmo a prévia pequena), para o que sobe ter sempre o mesmo formato. Precisa do Pillow."""
+    (mesmo a prévia pequena), para o que sobe ter sempre o mesmo formato. Precisa do Pillow.
+    UX-44: `rec` = recorte automático na borda do papel (frações, depois do giro/espelho; ver recorte_auto) e `cor` = branco/contraste pelo
+    papel. Só aqui, no derivado: a origem (prévia do CAMP Vision) e o TIF não mudam."""
     origem = Path(origem)
     lado_max = min(int(lado_max or LADO_PUBLICO), LADO_PUBLICO)
     giro %= 360
     st = origem.stat()
     chave = f"pub|{origem}|{st.st_mtime_ns}|{st.st_size}|{giro}|{lado_max}|q{QUALIDADE_PUBLICA}" + ("|espelho" if espelhar else "")
+    if rec or cor:
+        from .recorte_auto import VERSAO
+        chave += f"|auto{VERSAO}|{json.dumps(rec, sort_keys=True) if rec else ''}|{'cor' if cor else ''}"
     alvo = pasta_cache() / ("pub-" + hashlib.sha1(chave.encode()).hexdigest() + ".jpg")
     if alvo.is_file():
         return alvo
     from PIL import Image
     with Image.open(origem) as im:
-        im.draft("RGB", (lado_max, lado_max))
+        if not rec:                                    # com recorte, decodifica inteiro: o pedaço recortado é que tem de chegar a lado_max
+            im.draft("RGB", (lado_max, lado_max))
         perfil = im.info.get("icc_profile")
         im = im.convert("RGB") if not perfil else im
         if perfil:                                     # perfil de cor embutido (AdobeRGB, ProPhoto...): converte para sRGB de verdade
@@ -77,6 +85,12 @@ def derivado_publico(origem: Path | str, giro: int = 0, lado_max: int = LADO_PUB
             im = im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         if giro:
             im = im.transpose({90: Image.Transpose.ROTATE_270, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_90}[giro])
+        if rec:
+            from .ajuste_imagem import aplicar
+            im = aplicar(im, 0.0, rec)
+        if cor:
+            from .recorte_auto import ajustar_cor
+            im = ajustar_cor(im)
         im.thumbnail((lado_max, lado_max), Image.Resampling.LANCZOS)
         tmp = alvo.with_name(f"{alvo.name}.{os.getpid()}.tmp")
         im.save(tmp, "JPEG", quality=QUALIDADE_PUBLICA, optimize=True)          # sem EXIF e sem perfil: a imagem já está em sRGB

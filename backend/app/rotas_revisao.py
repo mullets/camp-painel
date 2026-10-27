@@ -1404,7 +1404,7 @@ def previa(codigo: str, t: int = 0, o: int = 0, u: dict = Depends(auth.exige("le
 
 
 # ---------------- 19/10 · recorte e alinhamento manual ----------------
-_COLS_AJUSTE = ("i.codigo, i.pendencias, i.giro_manual, i.arquivo_jpg, i.espelhado, i.espelho_manual, i.recorte, i.alinhamento, i.imagem_corrigida")
+_COLS_AJUSTE = ("i.codigo, i.pendencias, i.giro_manual, i.arquivo_jpg, i.espelhado, i.espelho_manual, i.recorte, i.alinhamento, i.imagem_corrigida, i.sem_recorte_auto")
 
 
 def _regravar_ajuste(con, i, giro: int, esp: bool, rec, ang) -> str | None:
@@ -1421,6 +1421,7 @@ def _regravar_ajuste(con, i, giro: int, esp: bool, rec, ang) -> str | None:
 class Ajuste(BaseModel):
     recorte: dict | None = None     # {"x","y","w","h"} em frações (0–1); None = a imagem inteira
     angulo: float = 0               # -10 a +10, positivo = horário
+    sem_recorte_auto: bool | None = None   # UX-44: True = "Usar recorte inteiro (sem recorte)"; False = volta ao recorte automático; None = não mexe
 
 
 @router.post("/itens/{codigo}/ajuste")
@@ -1443,9 +1444,11 @@ def ajustar(codigo: str, d: Ajuste, tarefas: BackgroundTasks, u: dict = Depends(
         no_site = i["status_site"] in ("rascunho", "no_ar")
         so_painel = no_site and u["papel"] not in ("admin", "master")   # 19/10: operador ajusta no painel; o site fica pendente
         antes = ajuste.ler(i)
+        sem_auto_antes = bool(i["sem_recorte_auto"])
+        sem_auto = sem_auto_antes if d.sem_recorte_auto is None else bool(d.sem_recorte_auto)
         reenviar = no_site and con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (codigo,)).fetchone()
-        if (rec, ang) == antes and not reenviar:      # nada mudou (com pendência no site, aplicar de novo reenvia)
-            return {"recorte": rec, "angulo": ang, "imagem_corrigida": bool(i["imagem_corrigida"]), "no_site": False, "mudou": False}
+        if (rec, ang) == antes and sem_auto == sem_auto_antes and not reenviar:      # nada mudou (com pendência no site, aplicar de novo reenvia)
+            return {"recorte": rec, "angulo": ang, "sem_recorte_auto": sem_auto, "imagem_corrigida": bool(i["imagem_corrigida"]), "no_site": False, "mudou": False}
         giro, esp = i["giro_manual"] or 0, imagens.espelho_efetivo(i)
         if ajuste.tem_ajuste(rec, ang):
             origem = ajuste.origem_da_folha(_qnap_prontos_raiz(), i)
@@ -1455,6 +1458,8 @@ def ajustar(codigo: str, d: Ajuste, tarefas: BackgroundTasks, u: dict = Depends(
                 ajuste.garantir(codigo, origem, giro, esp, ang, rec)
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(500, f"Não consegui gerar a imagem recortada: {str(e)[:160]}")
+        if sem_auto != sem_auto_antes:                # UX-44: grava antes de gerar a imagem do site (ela lê a escolha da folha)
+            con.execute("UPDATE item SET sem_recorte_auto=? WHERE codigo=?", (int(sem_auto), codigo)); con.commit()
         site, pendencia = None, None
         if so_painel:
             _imagem_site_pendente(con, codigo)
@@ -1472,15 +1477,20 @@ def ajustar(codigo: str, d: Ajuste, tarefas: BackgroundTasks, u: dict = Depends(
         if site:
             con.execute("UPDATE divergencia_site SET resolvida=1 WHERE entidade='item' AND codigo=? AND campo='pendente_imagem_ajustada' AND resolvida=0", (codigo,))
         det = {"de": {"recorte": antes[0], "angulo": antes[1]}, "para": {"recorte": rec, "angulo": ang}}
+        if sem_auto != sem_auto_antes:
+            det["de"]["sem_recorte_auto"], det["para"]["sem_recorte_auto"] = sem_auto_antes, sem_auto
         if rel:
             det["arquivo"] = rel
         if site:
             det["anexo"] = site["media_id"]
         if pendencia:
             det["site"] = pendencia
-        _evento(con, "item", codigo, "ajuste_imagem" if ajuste.tem_ajuste(rec, ang) else "ajuste_desfeito", u["email"], det)
+        tipo_ev = "ajuste_imagem" if ajuste.tem_ajuste(rec, ang) else "ajuste_desfeito"
+        if (rec, ang) == antes and sem_auto != sem_auto_antes:
+            tipo_ev = "recorte_auto_recusado" if sem_auto else "recorte_auto_aceito"
+        _evento(con, "item", codigo, tipo_ev, u["email"], det)
         con.commit()
-        return {"recorte": rec, "angulo": ang, "imagem_corrigida": bool(rel), "no_site": bool(site), "pendencia": pendencia, "mudou": True}
+        return {"recorte": rec, "angulo": ang, "sem_recorte_auto": sem_auto, "imagem_corrigida": bool(rel), "no_site": bool(site), "pendencia": pendencia, "mudou": True}
     finally:
         con.close()
 
@@ -1548,7 +1558,86 @@ def ver_ajuste(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     if not i:
         raise HTTPException(404, "Folha não existe")
     rec, ang = ajuste.ler(i)
-    return {"recorte": rec, "angulo": ang, "giro_manual": i["giro_manual"] or 0, "espelhar": imagens.espelho_efetivo(i), "imagem_corrigida": bool(i["imagem_corrigida"])}
+    return {"recorte": rec, "angulo": ang, "giro_manual": i["giro_manual"] or 0, "espelhar": imagens.espelho_efetivo(i), "imagem_corrigida": bool(i["imagem_corrigida"]),
+            "sem_recorte_auto": bool(i["sem_recorte_auto"])}
+
+
+@router.get("/itens/{codigo}/recorte-automatico")
+def ver_recorte_automatico(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """UX-44 · O recorte automático proposto para a folha (no mesmo formato e referencial do recorte manual), para a conferência
+    desenhar o retângulo tracejado e o selo. Não grava nada. situacao: ok | incerto | sem_fundo | manual (o recorte manual vence) |
+    desligado | sem_imagem. `aplicado`: se a imagem pública vai mesmo com este recorte (não recusado na conferência e ligado na configuração)."""
+    from . import recorte_auto
+    con = connect()
+    try:
+        i = con.execute(f"SELECT {_COLS_AJUSTE} FROM item i WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        ligado = recorte_auto.recorte_ligado(con)
+    finally:
+        con.close()
+    rec, ang = ajuste.ler(i)
+    base = {"sem_recorte_auto": bool(i["sem_recorte_auto"]), "ligado": ligado, "recorte": None, "motivo": "", "aplicado": False}
+    if rec:
+        return {**base, "situacao": "manual"}
+    if not imagens.disponivel():
+        return {**base, "situacao": "desligado", "motivo": "sem a biblioteca de imagens (Pillow)"}
+    origem = ajuste.origem_da_folha(_qnap_prontos_raiz(), i)
+    if origem is None:                                 # a conferência chama isto em toda folha: sem imagem não é erro, só não há proposta
+        return {**base, "situacao": "sem_imagem", "motivo": "a imagem desta folha não está no QNAP"}
+    try:
+        p = recorte_auto.proposta(origem, i["giro_manual"] or 0, imagens.espelho_efetivo(i), ang)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Não consegui analisar a imagem: {str(e)[:120]}")
+    return {**base, "situacao": p["situacao"], "recorte": p.get("recorte"), "motivo": p.get("motivo") or "", "confianca": p.get("confianca"),
+            "aplicado": p["situacao"] == "ok" and ligado and not i["sem_recorte_auto"]}
+
+
+@router.get("/itens/{codigo}/imagem-publica")
+def ver_imagem_publica(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+    """UX-44 · "Ver como vai ao site": a imagem pública da folha (até 1.920 px, com o recorte e o ajuste de cor), gerada aqui no painel.
+    Não envia nada ao site."""
+    from . import publicador
+    con = connect()
+    try:
+        i = con.execute("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (codigo,)).fetchone()
+        if not i:
+            raise HTTPException(404, "Folha não existe")
+        try:
+            caminho, _ = publicador.imagem_pronta_para_o_site(con, i)
+        except RuntimeError as e:
+            raise HTTPException(503, str(e))
+    finally:
+        con.close()
+    if not caminho:
+        raise HTTPException(404, "A imagem desta folha não está no QNAP")
+    return FileResponse(caminho, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+
+
+class ReprocessarRecorte(BaseModel):
+    aplicar: bool = False           # padrão: SIMULAR (só conta e lista)
+    confirmar: str = ""             # aplicar exige confirmar == "REPROCESSAR"
+    limite: int = 0                 # no máximo N folhas por vez (0 = todas)
+    incluir_cor: bool = False       # também as que só mudam de cor (sem recorte)
+    fundo: str | None = None
+    projeto: str | None = None
+
+
+@router.post("/imagens-publicas/recorte-automatico")
+def reprocessar_recorte_automatico(d: ReprocessarRecorte, u: dict = Depends(auth.exige("admin"))):
+    """UX-44 · "Reprocessar imagens públicas com recorte automático" (admin). Em segundo plano (lê as imagens do QNAP): SIMULA por padrão
+    — conta quantas folhas no site mudariam (recorte e/ou cor) e lista os códigos. Só reenvia com aplicar=true E confirmar="REPROCESSAR";
+    o reenvio troca o arquivo do anexo no site (mesmo ID). Folhas já reenviadas com esta versão ficam de fora."""
+    from . import reprocessar_imagens as rp, tarefas
+    if d.aplicar and d.confirmar != "REPROCESSAR":
+        raise HTTPException(400, 'Para reenviar ao site, confirme com "REPROCESSAR" (sem isso, só simula)')
+    alvo = "|".join(x for x in (d.fundo, d.projeto) if x) or "todas"
+
+    def rodar(prog):
+        return rp.recorte_automatico(aplicar=d.aplicar, limite=d.limite, incluir_cor=d.incluir_cor, fundo=d.fundo, projeto=d.projeto,
+                                     ator=u["email"], prog=prog)
+    return tarefas.iniciar("reprocessar_recorte", alvo, u, rodar,
+                           titulo=("Reprocessar imagens públicas com recorte automático" if d.aplicar else "Simular recorte automático nas imagens públicas"))
 
 
 @router.get("/itens/{codigo}/ajuste/sugerir")

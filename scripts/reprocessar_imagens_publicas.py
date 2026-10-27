@@ -4,7 +4,11 @@ ou subiu antes do limite (tamanho desconhecido). O reenvio troca o arquivo do an
 feito da prévia do CAMP Vision. O TIF e a prévia de 3000 px nunca vão ao site.
 
 PADRÃO: só LISTA (--simular / --sim). Reenviar: --aplicar [--limite N] [--fundo F026] [--projeto F026-P0001].
-Uso: python scripts/reprocessar_imagens_publicas.py [--simular | --aplicar] [--limite N] [--fundo F] [--projeto P]"""
+Uso: python scripts/reprocessar_imagens_publicas.py [--simular | --aplicar] [--limite N] [--fundo F] [--projeto P]
+
+UX-44 · --recorte-automatico: em vez do limite de 1920 px, lista as folhas no site cuja imagem mudaria com o recorte automático na borda
+do papel (e o ajuste de branco/contraste), contando por grupo. Padrão: SIMULA. --aplicar reenvia as do grupo "recorte" (mais as de
+"cor" com --incluir-cor). A mesma rotina existe no painel (admin): POST /api/imagens-publicas/recorte-automatico."""
 import argparse
 import pathlib
 import sys
@@ -20,10 +24,19 @@ def main(argv=None) -> int:
     ap.add_argument("--fundo")
     ap.add_argument("--projeto")
     ap.add_argument("--ator", default="script:reprocessar_imagens_publicas")
+    ap.add_argument("--recorte-automatico", action="store_true", help="UX-44: recorte automático na borda do papel + branco/contraste")
+    ap.add_argument("--incluir-cor", action="store_true", help="com --recorte-automatico --aplicar: reenvia também as que só mudam de cor")
     a = ap.parse_args(argv)
     from app.db import connect, init_db, aplicar_migracoes
     from app import reprocessar_imagens as rp
     init_db(); aplicar_migracoes()
+    if a.recorte_automatico:
+        aplicar = a.aplicar and not a.simular
+        r = rp.recorte_automatico(aplicar=aplicar, limite=a.limite, incluir_cor=a.incluir_cor, fundo=a.fundo, projeto=a.projeto, ator=a.ator)
+        for grupo, cods in r["codigos"].items():
+            print(f"{grupo}: {r['contagem'][grupo]}" + (f"  ({', '.join(cods[:20])}{' …' if len(cods) > 20 else ''})" if cods else ""))
+        print(r["mensagem"] + ("" if aplicar else " Para reenviar: --recorte-automatico --aplicar (use --limite para ir aos poucos)."))
+        return 1 if r.get("falhas") else 0
     con = connect()
     cand = rp.candidatos(con, a.fundo, a.projeto)
     con.close()

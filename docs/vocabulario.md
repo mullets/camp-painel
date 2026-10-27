@@ -191,3 +191,12 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 - "Escritas pendentes" conta toda gravação no site que falhou (fundo, projeto, arquiteto, folha); o botão só manda as correções de folhas.
 - Ao lado de **Sincronizar agora**: "Só lê o site e atualiza as diferenças: não envia nada."
 - No Histórico de ações: "{quem} mandou ao site as correções de folhas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
+
+## Recorte automático das imagens públicas (UX-44, 27/10/2026)
+- Só a imagem que vai ao site (até 1.920 px) e o "**Ver como vai ao site**" são recortados na borda do papel e clareados (branco e contraste
+  pelo papel). O TIF e a prévia do CAMP Vision não mudam. O recorte feito à mão ("Recortar e alinhar") sempre vence.
+- Na conferência, sobre a prévia: o retângulo tracejado e o selo **recorte automático** (com "o tracejado é o que vai ao site; o original
+  não muda") ou **recorte automático incerto** (com o motivo: "Vai inteira ao site; se precisar, use “Recortar e alinhar” (K).").
+- Botões: **Usar recorte inteiro (sem recorte)** e, depois dele, **Usar recorte automático**; o selo da escolha é
+  **sem recorte (escolhido na conferência)**.
+- Rotina de admin: **Reprocessar imagens públicas com recorte automático** (simula por padrão; só reenvia confirmando "REPROCESSAR").

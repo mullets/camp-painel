@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada"}
+MODOS_RAPIDOS = {"ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11836,6 +11836,149 @@ def filho(modo):
         ver("depois de tudo, a prévia do CAMP Vision continua intacta", hashlib.sha1(orig1.read_bytes()).hexdigest() == hash_orig)
         for l in res: print(l)
         c.close()
+    elif modo == "ux44_recorte_auto":
+        # UX-44 (Rafael, print do site F009-P0015 "Corte"): a planta ocupava uma faixa do meio e o resto era o fundo lilás do scanner.
+        # Recorte automático na borda do papel + branco/contraste SÓ no derivado público; o original não muda; recorte manual vence.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, shutil, io, hashlib, time as _tm
+        from pathlib import Path as _P
+        sys.path.insert(0, str(RAIZ / "tests"))
+        import fixtures_recorte as fx
+        from app import auth, publicador, recorte_auto
+        from PIL import Image, ImageStat
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = _P(os.environ["CAMP_DB_PATH"]).parent
+        prontos = base / "prontos_ux44"; shutil.rmtree(prontos, ignore_errors=True)
+        os.environ["CAMP_CACHE_DIR"] = str(prontos / "cache")
+        os.environ["CAMP_IMAGENS_CORRIGIDAS_DIR"] = str(base / "corrigidas_ux44")
+        W, H, CAIXA = 3000, 2000, (600, 650, 2400, 1300)
+        VERDADE = (CAIXA[0], CAIXA[1], CAIXA[2] + 1, CAIXA[3] + 1)
+        # ---------- 1) detecção pura ----------
+        r_pl = recorte_auto.detectar(fx.planta())
+        iou_pl = fx.iou(fx.caixa_px(r_pl["recorte"], W, H), VERDADE) if r_pl["recorte"] else 0
+        ver("planta clara no fundo lilás com listras: recorte 'ok' acerta a borda do papel (IoU >= 0,9)", r_pl["situacao"] == "ok" and iou_pl >= 0.9, f"{r_pl} IoU {iou_pl:.3f}")
+        enc = fx.planta(caixa=(700, 0, 2300, H - 1))
+        r_enc = recorte_auto.detectar(enc)
+        ver("papel que encosta em cima e embaixo (rolo): recorta só as laterais (IoU >= 0,9)",
+            r_enc["situacao"] == "ok" and fx.iou(fx.caixa_px(r_enc["recorte"], W, H), (700, 0, 2301, H)) >= 0.9, str(r_enc))
+        r_ve = recorte_auto.detectar(fx.vegetal())
+        ver("papel vegetal quase da cor do fundo: 'incerto', SEM recorte, com o motivo", r_ve["situacao"] == "incerto" and r_ve["recorte"] is None and r_ve["motivo"], str(r_ve))
+        r_sf = recorte_auto.detectar(fx.sem_fundo())
+        ver("papel até a borda (sem fundo do scanner): sem recorte", r_sf["situacao"] == "sem_fundo" and r_sf["recorte"] is None, str(r_sf))
+        mini = recorte_auto.detectar(fx.planta(W, H, caixa=(1400, 900, 1700, 1100)))
+        ver("papel minúsculo (< 10% da imagem): 'incerto', sem recorte", mini["situacao"] == "incerto" and mini["recorte"] is None, str(mini))
+        # ---------- 2) cor ----------
+        pap = fx.planta(jpeg=False).crop((700, 750, 2300, 1200))
+        aj = recorte_auto.ajustar_cor(pap)
+        m0, m1 = ImageStat.Stat(pap).median, ImageStat.Stat(aj).median
+        ver("ajuste de cor: o papel amarelado/lavado vira quase branco e neutro (mediana >= 244 nos 3 canais)", min(m1) >= 244 and max(m1) - min(m1) <= 4, f"{m0} -> {m1}")
+        ln0, ln1 = pap.convert("L").getextrema()[0], aj.convert("L").getextrema()[0]
+        hist_l = aj.convert("L").histogram(); escuros = sum(hist_l[:3]) / sum(hist_l)
+        ver("ajuste de cor suave: as linhas ficam mais escuras, mas nenhuma vira preto chapado (< 1% dos pixels <= 2)", 0 < ln1 < ln0 and escuros < 0.01, f"linha {ln0}->{ln1}, pretos {escuros:.4f}")
+        azul = Image.new("RGB", (400, 300), (30, 60, 140))
+        ver("cópia azul (papel escuro): o ajuste de cor não mexe", recorte_auto.ajustar_cor(azul).tobytes() == azul.tobytes())
+        # ---------- 3) folhas no painel ----------
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F009','Euclides Oliveira','EOL',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F009',15)")
+        P = "F009-P0015"; D = lambda n: f"{P}-1960-S01-D{n:05d}"
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?,'F009',15,'SESI Ribeirão Preto',1960,9300)", (P,))
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote 1',?,'/nao/existe','revisao')", (P,)).lastrowid
+        def folha(n, im, tid=None, media=None):
+            rel = f"_campvision/preview/{P}/{D(n)}.jpg"; (prontos / rel).parent.mkdir(parents=True, exist_ok=True); im.save(prontos / rel, "JPEG", quality=92)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id,site_media_id,lote_id,revisao,pendencias) VALUES (?,?,?,?,?,'campvision',?,?,?,?,'pendente',?)",
+                      (D(n), P, "S01", n, "Corte", "no_ar" if tid else "nao_publicado", tid, media, lote, _j.dumps({"previa": rel})))
+            return prontos / rel
+        o1 = folha(1, fx.planta()); folha(2, fx.vegetal()); folha(3, fx.sem_fundo()); folha(4, fx.planta()); folha(5, fx.planta(), 7005, 5505)
+        c.commit()
+        h1 = hashlib.sha1(o1.read_bytes()).hexdigest()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op, le = cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        def publica(cod):
+            k = connect(); i = k.execute("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (cod,)).fetchone()
+            cam, lado = publicador.imagem_pronta_para_o_site(k, i); k.close(); return Image.open(cam).convert("RGB"), lado
+        def largura_util(im):
+            # fração das colunas da linha do meio que NÃO são o fundo lilás
+            y = im.size[1] // 2; px = [im.getpixel((x, y)) for x in range(im.size[0])]
+            return sum(1 for p in px if max(abs(p[i] - fx.LILAS[i]) for i in range(3)) > 30) / len(px)
+        # antes (o que ia ao site): a imagem inteira, com o fundo
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave IN ('imagem.recorte_automatico','imagem.ajuste_cor')"); c.commit()
+        des, _ = publica(D(1))
+        ver("desligado (configuração 0): o derivado é a imagem inteira, como antes (1920x1280, planta em ~60% da largura)", des.size == (1920, 1280) and largura_util(des) < 0.7, f"{des.size} {largura_util(des):.2f}")
+        des.save(base / "ux44_antes.png")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave IN ('imagem.recorte_automatico','imagem.ajuste_cor')"); c.commit()
+        r = le.get(f"/api/itens/{D(1)}/recorte-automatico")
+        ver("GET recorte-automatico (leitura): proposta 'ok' no formato do recorte manual (frações x,y,w,h), aplicada", r.status_code == 200 and r.json()["situacao"] == "ok" and r.json()["aplicado"] is True and set(r.json()["recorte"]) == {"x", "y", "w", "h"}, r.text)
+        pub, lado = publica(D(1))
+        ver("derivado público: recortado na borda do papel, lado <= 1920, a planta ocupa >= 90% da largura útil", max(pub.size) <= 1920 and lado == max(pub.size) and largura_util(pub) >= 0.9, f"{pub.size} {largura_util(pub):.2f}")
+        ver("a planta chega ao site com MAIS pixels que antes (largura do papel no derivado > 1,4x)", pub.size[0] * largura_util(pub) > 1.4 * 1920 * largura_util(des), f"{pub.size[0] * largura_util(pub):.0f} vs {1920 * largura_util(des):.0f}")
+        pm = ImageStat.Stat(pub.crop((pub.size[0] // 4, pub.size[1] // 4, pub.size[0] * 3 // 4, pub.size[1] * 3 // 4))).median
+        ver("derivado público: o papel ficou quase branco (branco/contraste pelo papel)", min(pm) >= 240, str(pm))
+        pub.save(base / "ux44_depois.png")
+        ver("a prévia do CAMP Vision (o original) NÃO foi tocada", hashlib.sha1(o1.read_bytes()).hexdigest() == h1)
+        rp_ = le.get(f"/api/itens/{D(1)}/previa")
+        ver("a prévia da conferência continua a imagem inteira (3000x2000): o retângulo é só proposto", Image.open(io.BytesIO(rp_.content)).size == (3000, 2000))
+        vi = le.get(f"/api/itens/{D(1)}/imagem-publica")
+        ver("'Ver como vai ao site' (leitura): devolve o derivado recortado (o mesmo tamanho), sem enviar nada", vi.status_code == 200 and Image.open(io.BytesIO(vi.content)).size == pub.size, str(vi.status_code))
+        # vegetal e sem fundo
+        r2 = le.get(f"/api/itens/{D(2)}/recorte-automatico").json()
+        v2, _ = publica(D(2))
+        ver("papel vegetal: 'incerto' (selo para revisar), não aplicado, derivado inteiro (1920x1280)", r2["situacao"] == "incerto" and not r2["aplicado"] and v2.size == (1920, 1280), f"{r2} {v2.size}")
+        r3 = le.get(f"/api/itens/{D(3)}/recorte-automatico").json()
+        v3, _ = publica(D(3))
+        ver("papel até a borda: sem recorte (1920x1280) e o papel clareado", r3["situacao"] == "sem_fundo" and v3.size == (1920, 1280) and min(ImageStat.Stat(v3).median) >= 240, f"{r3} {v3.size} {ImageStat.Stat(v3).median}")
+        # recorte manual vence
+        MAN = {"x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5}
+        rm = op.post(f"/api/itens/{D(4)}/ajuste", json={"recorte": MAN, "angulo": 0})
+        v4, _ = publica(D(4))
+        r4 = le.get(f"/api/itens/{D(4)}/recorte-automatico").json()
+        ver("recorte manual vence: o derivado é o recorte da pessoa (1500x1000), não o automático; a proposta diz 'manual'", rm.status_code == 200 and v4.size == (1500, 1000) and r4["situacao"] == "manual", f"{v4.size} {r4}")
+        # "Usar recorte inteiro (sem recorte)"
+        ri = op.post(f"/api/itens/{D(1)}/ajuste", json={"recorte": None, "angulo": 0, "sem_recorte_auto": True})
+        v1b, _ = publica(D(1))
+        ev = c.execute("SELECT ator FROM evento WHERE codigo=? AND tipo='recorte_auto_recusado'", (D(1),)).fetchall()
+        ver("'Usar recorte inteiro (sem recorte)': grava na folha, o derivado volta inteiro (1920x1280) e fica no histórico",
+            ri.status_code == 200 and ri.json()["mudou"] and ri.json()["sem_recorte_auto"] is True and v1b.size == (1920, 1280)
+            and le.get(f"/api/itens/{D(1)}/recorte-automatico").json()["aplicado"] is False and len(ev) == 1 and ev[0][0] == "op@camp.arq.br", f"{ri.text} {v1b.size} {ev}")
+        ver("leitura não recusa o recorte (403)", le.post(f"/api/itens/{D(1)}/ajuste", json={"sem_recorte_auto": True}).status_code == 403)
+        ra_ = op.post(f"/api/itens/{D(1)}/ajuste", json={"recorte": None, "angulo": 0, "sem_recorte_auto": False})
+        v1c, _ = publica(D(1))
+        ver("'Usar recorte automático' desfaz a recusa: volta a recortar", ra_.status_code == 200 and v1c.size == pub.size and c.execute("SELECT sem_recorte_auto FROM item WHERE codigo=?", (D(1),)).fetchone()[0] == 0, f"{v1c.size}")
+        # ---------- 4) reprocessar o que já está no site: SIMULAR por padrão ----------
+        class Fake:
+            chamadas = []
+            def __init__(self, *a, **k): pass
+            def substituir_midia(self, media_id, caminho, nome=None):
+                Fake.chamadas.append((media_id, Image.open(caminho).size)); return {"id": media_id, "source_url": "http://site-falso.invalid/f.jpg"}
+        publicador.WP = Fake
+        def esperar(rr, ate=40):
+            tid = rr.json().get("tarefa_id"); t0 = _tm.monotonic()
+            while _tm.monotonic() - t0 < ate:
+                t = adm.get(f"/api/tarefas/{tid}").json()
+                if t["estado"] != "rodando": break
+                _tm.sleep(0.2)
+            resu = t.get("resultado"); return t, (_j.loads(resu) if isinstance(resu, str) else resu or {})
+        ver("reprocessar: operador não pode (403)", op.post("/api/imagens-publicas/recorte-automatico", json={}).status_code == 403)
+        rs = adm.post("/api/imagens-publicas/recorte-automatico", json={})
+        t, out = esperar(rs)
+        ver("reprocessar (admin) SIMULA por padrão: 202 + tarefa; conta 1 folha no site que mudaria (recorte) e NÃO envia nada",
+            rs.status_code == 202 and t["estado"] == "ok" and out.get("simulacao") is True and out["contagem"]["recorte"] == 1 and out["codigos"]["recorte"] == [D(5)] and Fake.chamadas == [], f"{rs.status_code} {t.get('estado')} {out}")
+        r400 = adm.post("/api/imagens-publicas/recorte-automatico", json={"aplicar": True})
+        ver("aplicar sem confirmar = 400 com frase, nada enviado", r400.status_code == 400 and "REPROCESSAR" in r400.text and Fake.chamadas == [], r400.text)
+        t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={"aplicar": True, "confirmar": "REPROCESSAR"}))
+        ver("aplicar confirmado (site falso): troca o arquivo do MESMO anexo (5505) pela imagem recortada e marca a versão na folha",
+            t["estado"] == "ok" and out.get("reenviadas") == 1 and len(Fake.chamadas) == 1 and Fake.chamadas[0][0] == 5505 and Fake.chamadas[0][1] == pub.size
+            and c.execute("SELECT site_imagem_recorte FROM item WHERE codigo=?", (D(5),)).fetchone()[0] == recorte_auto.VERSAO, f"{out} {Fake.chamadas}")
+        t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={}))
+        ver("simular de novo: a folha já reprocessada fica de fora (0 analisadas)", out.get("analisadas") == 0, str(out))
+        for l in res: print(l)
+        c.close()
     return 0
 
 if "--filho" in sys.argv:
@@ -12946,6 +13089,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"projeto divergente: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-44) Recorte automático na borda do papel + branco/contraste só no derivado público; original intacto; manual vence; reprocessar simula")
+rc, out = rodar("ux44_recorte_auto", f"{tmp}/ux44_recorte_auto.db")
+if rc != 0 or "|" not in out: ok(False, f"teste do recorte automático não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-44: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("133) Recortar e alinhar a folha na revisão (19/10): JPG corrigido no painel, prévia/miniatura/site/pedido, regras e desfazer")
 rc, out = rodar("recorte_alinhamento", f"{tmp}/recorte.db")
