@@ -15,7 +15,7 @@
 //  8) consenso conta FOLHAS distintas e separa "sem valor" e grafia/abreviação de diferença de verdade;
 //  9) por campo, uma linha e UM botão "Usar 1978 nas 28"; só a folha que diz outra coisa vira chip; "ver quais" mostra as sem valor;
 // 10) lote parado por erro: o cartão Folhas fica vermelho com o erro e "Pedir releitura" (sem "CAMP Vision ✔");
-// 11) lote inteiro a conferir: o selo "a conferir" não se repete em cada cartão; "orientação incerta" fica pequeno.
+// 11) lote inteiro a conferir: o selo "a conferir" não se repete em cada cartão; "orientação incerta" fica pequeno (UX-27: no mínimo de 12 px).
 // Uso:
 //   CAMP_DB_PATH=/tmp/pj2.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/pj2.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8991)
@@ -187,9 +187,11 @@ for n in range(1, 35):
     await page.waitForFunction(() => !document.querySelector('#pj-consenso [data-cs-todas="ano"]'), null, { timeout: 10000 }).catch(() => {});
     chk(py(`print(con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='${B}' AND ano_folha=1978").fetchone()[0])`) === '34', '(9) "Usar 1978 nas 28" grava 1978 nas 28 folhas (34 com 1978)');
     // (11) lote inteiro a conferir
-    const tags = await page.evaluate(() => { const cs = [...document.querySelectorAll('#pd .thumb')]; return { n: cs.length, aConf: cs.filter(t => { const r = t.querySelector('.rev-tag'); return r && getComputedStyle(r).display !== 'none' }).length, or: cs.filter(t => t.querySelector('.or-inc')).length, fs: cs[0] && cs[0].querySelector('.or-inc') ? parseFloat(getComputedStyle(cs[0].querySelector('.or-inc')).fontSize) : 99 } });
+    const tags = await page.evaluate(() => { const cs = [...document.querySelectorAll('#pd .thumb')]; return { n: cs.length, aConf: cs.filter(t => { const r = t.querySelector('.rev-tag'); return r && getComputedStyle(r).display !== 'none' }).length, or: cs.filter(t => t.querySelector('.or-inc')).length, fs: cs[0] && cs[0].querySelector('.or-inc') ? parseFloat(getComputedStyle(cs[0].querySelector('.or-inc')).fontSize) : 99,
+      capFs: cs[0] && cs[0].querySelector('.cap') ? parseFloat(getComputedStyle(cs[0].querySelector('.cap')).fontSize) : 0 } });
     chk(tags.n === 34 && tags.aConf === 0 && /A conferir \(34\)/.test(await txt('.folhas-bar')), '(11) lote inteiro a conferir: o selo "a conferir" não se repete nos 34 cartões (a barra diz "A conferir (34)"): ' + JSON.stringify(tags));
-    chk(tags.or === 34 && tags.fs <= 9.5, '(11) "orientação incerta" continua, pequeno (' + tags.fs + 'px)');
+    // UX-27 (WCAG): nada na tela abaixo de 12 px. "Pequeno" agora = no mínimo de 12 px e nunca maior que o texto do cartão (antes ≤ 9,5 px).
+    chk(tags.or === 34 && tags.fs >= 12 && tags.fs <= 12 && tags.fs <= tags.capFs, '(11) "orientação incerta" continua, pequeno (' + tags.fs + 'px, no mínimo de 12 px e não maior que o texto do cartão, ' + tags.capFs + 'px)');
     py(`con.execute("UPDATE item SET revisao='conferida' WHERE codigo='${B}-1978-S01-D00001'")`);
     await abrir(B, 'consenso');
     const t2 = await page.evaluate(() => [...document.querySelectorAll('#pd .thumb .rev-tag')].filter(r => getComputedStyle(r).display !== 'none').length);
