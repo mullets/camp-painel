@@ -941,8 +941,10 @@ def item_orfao_no_site(con, wp, codigo: str, titulo: str) -> dict | None:
             quando, com_hora = _criado_em(it)
             if quando is None:
                 incertos.append(it)
-            elif (quando >= desde) if com_hora else (quando >= dia_desde):    # só o dia: vale o mesmo dia ou depois (no horário do site)
+            elif com_hora and quando >= desde:
                 candidatos.append(it)
+            elif not com_hora and quando >= dia_desde:            # só o dia (sem hora): pode ser um item antigo do mesmo dia — não liga sozinho
+                incertos.append(it)
         if len(candidatos) + len(incertos) > 1 or incertos:
             ids = ", ".join(str(x["id"]) for x in candidatos + incertos)
             con.execute("UPDATE divergencia_site SET valor_painel=? WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0",
