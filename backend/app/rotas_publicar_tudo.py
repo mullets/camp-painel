@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
+from .publicacao import ELEGIVEL_LOCAL
 from . import auth, publicacao_guiada
 from .db import connect
 
@@ -149,6 +150,14 @@ def _iniciar_tarefa_travada(codigo: str, u: dict):
         ativa = con.execute("SELECT id FROM tarefa_publicacao WHERE projeto_codigo=? AND tipo='publicar' AND estado='rodando' ORDER BY id DESC LIMIT 1", (codigo,)).fetchone()
         if ativa and _THREADS.get(ativa[0]) and _THREADS[ativa[0]].is_alive():
             return JSONResponse(status_code=200, content={"tarefa_id": ativa[0], "ja_rodando": True})
+        # UX-17: a publicação ACABOU de terminar (há menos de 1 min, deu certo) e não há folha nova: o 2º clique devolve a MESMA tarefa
+        # (a tela mostra o resultado dela) em vez de publicar de novo — antes viravam duas publicações e duas frases no Hoje.
+        if p["status_site"] == "no_ar" and publicacao_guiada.publicacao_recente(con, codigo):
+            fim = con.execute(f"""SELECT id FROM tarefa_publicacao WHERE projeto_codigo=? AND tipo='publicar' AND estado='ok'
+                                  AND terminada_em >= datetime('now', '-{publicacao_guiada.JANELA_REPETIDO_S} seconds') ORDER BY id DESC LIMIT 1""", (codigo,)).fetchone()
+            sem_novas = not con.execute(f"SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NULL AND {ELEGIVEL_LOCAL} LIMIT 1", (codigo,)).fetchone()
+            if fim and sem_novas:
+                return JSONResponse(status_code=200, content={"tarefa_id": fim[0], "ja_feito": True})
         pl = publicacao_guiada.plano(con, p)
         if pl["bloqueios"]:                                       # algo que só uma pessoa resolve: nem começa
             return JSONResponse(status_code=400, content={"detail": "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]), "plano": pl})

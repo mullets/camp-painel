@@ -4142,10 +4142,11 @@ function pjStatusHTML(code,d){d=d||window.PJ_D||{};const p=d.projeto||{},e=pjEst
     const desl=!pl||bl||!n;bt=`<button type="button" class="btn${desl?'':' pri'} pjs-pub" data-pjs-publicar="${escHtml(code)}"${desl?' disabled':''}>${n?`Publicar ${qtd(n,'folha','folhas')}`:'Publicar'}</button>`;
     estado=p.status_site==='rascunho'?'no site só a equipe vê (rascunho)':'não está no site ainda';
     if(pl&&(pl.lotes_a_aprovar||[]).length&&!bl)estado+=' · o lote conferido é aprovado junto';   // CAMP-148
+    if(pl&&pl.pode_executar&&n)estado+=` · ao publicar, ${qtd(n,'folha fica pública','folhas ficam públicas')} na hora${pl.folhas_a_enviar?` (${qtd(pl.folhas_a_enviar,'vai','vão')} ao site agora)`:''}`;   // UX-17: o que muda, antes do clique
     if(!pl)razao='verificando…';
     else if(bl)razao=`Não dá para publicar porque ${escHtml(String(bl.detalhe||bl.texto||'').replace(/^Não dá para publicar porque /,''))}${bl.acao?` <button type="button" class="btn sm pri" onclick="acaoCondicao('${escHtml(bl.acao.tipo)}','${escHtml(bl.acao.alvo||'')}')">${escHtml(bl.acao.rotulo)}</button>`:''}`;
     else if(!n)razao=e.conferir?`Nenhuma folha pronta: ${qtd(e.conferir,'folha espera','folhas esperam')} conferência. <button type="button" class="btn sm pri" data-pjc-conferir="${escHtml(code)}">Conferir as folhas</button>`:'Nenhuma folha pronta para publicar.'}
-  const res=fim?(fim.ok?`<p class="pjs-res ok" role="status"><b>Publicado ✓</b>${fim.url?` · <a href="${escHtml(fim.url)}" target="_blank" rel="noopener">Ver no site ↗</a>`:''}${fim.fora?` · ${qtd(fim.fora,'folha ficou fora','folhas ficaram fora')} (veja em Problemas)`:''}${fim.desfazer&&Date.now()-fim.em<10e3?` · <button type="button" class="btn sm" data-pjs-desfazer="${escHtml(code)}">Desfazer</button>`:''}</p>`
+  const res=fim?(fim.ok?`<p class="pjs-res ok" role="status"><b>Publicado ✓</b>${fim.publicas?` · ${qtd(fim.publicas,'folha pública','folhas públicas')}`:''}${fim.url?` · <a href="${escHtml(fim.url)}" target="_blank" rel="noopener">Ver no site ↗</a>`:''}${fim.fora?` · ${qtd(fim.fora,'folha ficou fora','folhas ficaram fora')} (veja em Problemas)`:''}${fim.desfazer&&Date.now()-fim.em<10e3?` · <button type="button" class="btn sm" data-pjs-desfazer="${escHtml(code)}">Desfazer</button>`:''}</p>`
     :`<p class="pjs-res erro" role="alert"><b>Não terminou:</b> ${escHtml(fim.msg||'')}</p>`):'';
   const avs=!pub&&!em&&adm&&pl&&pl.pode_executar&&umPasso()?(pl.avisos||[]).map(a=>`<li>${escHtml(a.texto)}</li>`).join(''):'';   // CAMP-148: avisos que não bloqueiam, no próprio bloco
   if(pub||['publicar','publicado'].includes(pjFaseLote(code)))bt+=` <a class="btn" href="#etiquetas/guardar/${escHtml(code)}" data-pjs-etiquetar>Etiquetar e guardar</a>`;   // UX-25: depois de aprovar ou publicar, etiqueta e caixa em 2 cliques
@@ -4163,10 +4164,16 @@ async function seguirPublicacao(code,tid){PUB_EM[code]={texto:'Publicando…'};p
       PUB_EM[code].texto=textoProgressoPub(t);pjStatusDesenhar(code);if(t.estado!=='rodando')break;await new Promise(r=>setTimeout(r,1500))}}
   finally{delete PUB_EM[code]}
   const r=(t&&t.resultado)||{},g=(window.PUB_G||{})[code]||{};
-  PUB_FIM[code]=t&&t.estado==='ok'?{ok:true,em:Date.now(),url:r.url_publica,fora:+r.folhas_fora||0,desfazer:!!g.pode_despublicar}:{ok:false,em:Date.now(),msg:(r.mensagem||(t&&t.erro)||'a publicação parou')};
+  PUB_FIM[code]=t&&t.estado==='ok'?{ok:true,em:Date.now(),url:r.url_publica,fora:+r.folhas_fora||0,publicas:+r.folhas_publicadas||0,desfazer:!!g.pode_despublicar}:{ok:false,em:Date.now(),msg:(r.mensagem||(t&&t.erro)||'a publicação parou')};
   toast(PUB_FIM[code].ok?'Publicado':'A publicação não terminou');vigiarTarefas();if(typeof carregarFundosAPI==='function')carregarFundosAPI();
   if(window.PROJETO_PJ===code)await showProjeto(code);if(PUB_FIM[code].ok&&PUB_FIM[code].desfazer)setTimeout(()=>pjStatusDesenhar(code),10500)}
-async function publicarDireto(code){
+/* UX-17: o clique trava NA HORA (antes das consultas): dois cliques rápidos não começam duas publicações. O servidor também recusa
+   repetir: com uma publicação rodando devolve a mesma tarefa, e logo depois de publicar (sem folha nova) devolve a que acabou de terminar. */
+const PUB_CLIQUE={};
+async function publicarDireto(code){if(PUB_CLIQUE[code]||PUB_EM[code])return;PUB_CLIQUE[code]=1;
+  document.querySelectorAll(`[data-pjs-publicar="${CSS.escape(code)}"]`).forEach(b=>{b.disabled=true;b.setAttribute('aria-busy','true');b.textContent='Publicando…'});
+  try{await publicarDiretoAgora(code)}finally{delete PUB_CLIQUE[code];if(!PUB_EM[code])pjStatusDesenhar(code)}}
+async function publicarDiretoAgora(code){
   if(!pjStatusEl(code)){nav('projeto/'+code);for(let i=0;i<40&&!pjStatusEl(code);i++)await new Promise(r=>setTimeout(r,150))}
   if(PUB_EM[code])return;
   try{const at=await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa');if(at.tarefa&&at.tarefa.estado==='rodando'){seguirPublicacao(code,at.tarefa.id);return}}catch(_){}
@@ -4176,6 +4183,7 @@ async function publicarDireto(code){
   if(!pl.pode_executar){pjStatusDesenhar(code);if(el&&el.scrollIntoView)el.scrollIntoView({block:'center'});toast('Não dá para publicar ainda: veja o motivo no topo do projeto');return}
   PUB_EM[code]={texto:'Publicando…'};delete PUB_FIM[code];pjStatusDesenhar(code);if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
   let r;try{r=await API('/api/projetos/'+encodeURIComponent(code)+'/publicar-tudo?tarefa=1',{method:'POST'})}catch(e){delete PUB_EM[code];PUB_FIM[code]={ok:false,em:Date.now(),msg:e.message};pjStatusDesenhar(code);return}
+  if(r&&r.ja_feito)toast('Este projeto acabou de ser publicado: nada foi feito de novo.');
   vigiarTarefas();await seguirPublicacao(code,r.tarefa_id)}
 document.addEventListener('click',async e=>{const p=e.target.closest('[data-pjs-publicar]');if(p&&!p.disabled){publicarDireto(p.dataset.pjsPublicar);return}
   const a=e.target.closest('[data-pjs-atualizar]');if(a){atualizarNoAr(a.dataset.pjsAtualizar);return}
@@ -5843,7 +5851,7 @@ async function lerDeNovo(codigo,btn){if(btn){if(btn.disabled)return;btn.disabled
 document.addEventListener('click',e=>{const b=e.target.closest('[data-ler-de-novo]');if(!b)return;e.stopPropagation();e.preventDefault();lerDeNovo(b.dataset.lerDeNovo,b)},true);   // o código só em data-*
 function iniExecutar(i,btn){const a=i&&i.acao;if(!a)return;const t=a.tipo,v=a.alvo;if(t==='reler')return lerDeNovo(v,btn);
   if(t==='decisao')abrirDecisao(v);else if(t==='conferir')irDaFila('revisao',v);else if(t==='publicar')irDaFila('publicar',v);else if(t==='projeto')nav('projeto/'+v);
-  else if(t==='importar'||t==='aprovar')acaoFila(t,v);else if(t==='erro')abrirErro(v);else if(t==='fila_erro')nav('filas/erro');else if(t==='pedido')abrirSolicitacao(v);else if(t==='emprestimo')abrirEmprestimo(v);else if(t==='rota')nav(v)}
+  else if(t==='importar'||t==='aprovar')acaoFila(t,v,btn)/* UX-17: o botão da Home também apaga e diz "Importando…" */;else if(t==='erro')abrirErro(v);else if(t==='fila_erro')nav('filas/erro');else if(t==='pedido')abrirSolicitacao(v);else if(t==='emprestimo')abrirEmprestimo(v);else if(t==='rota')nav(v)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-acao],[data-ini-rota],[data-ini-linha],[data-ini-div]');if(!b||b.disabled)return;
   if(b.dataset.iniAcao!=null)iniExecutar(PAINEL_ACOES[+b.dataset.iniAcao],b);else if(b.dataset.iniRota){const v0=b.dataset.iniRota.split('/')[0];if(!pode('rota.'+v0)){toast('Essa tela é só para administradores.');return}nav(b.dataset.iniRota)}else if(b.hasAttribute('data-ini-div'))abrirDivergencias();
   else{const i=PAINEL_ACOES[+b.dataset.iniLinha],c=i&&i.codigo;if(c&&/^F\d{3}-P\d{4}$/.test(c))nav('projeto/'+c);else if(c&&/^F\d{3}$/.test(c))nav('fundo/'+c)}});

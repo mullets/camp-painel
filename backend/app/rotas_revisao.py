@@ -1,6 +1,7 @@
 """Revisão pós-CAMP Vision: importar as folhas do lote, conferir/corrigir, e o admin aprovar. Ler: leitura; revisar: operador; aprovar: admin."""
 import json
 import re
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -108,8 +109,26 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         con.close()
 
 
+_trava_importar = threading.Lock()
+_importando: set[int] = set()
+
+
 @router.post("/lotes/{lote_id}/importar")
 def importar(lote_id: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """UX-17: dois cliques (ou "Importar todas" e o botão do lote) ao mesmo tempo: o segundo recebe 409 na hora, em vez de esperar o
+    primeiro na trava do banco e importar o mesmo pacote de novo."""
+    with _trava_importar:
+        if lote_id in _importando:
+            raise HTTPException(409, "Este lote já está sendo importado agora (outro clique ou outra pessoa). Aguarde terminar.")
+        _importando.add(lote_id)
+    try:
+        return _importar(lote_id, u)
+    finally:
+        with _trava_importar:
+            _importando.discard(lote_id)
+
+
+def _importar(lote_id: int, u: dict) -> dict:
     con = connect()
     try:
         con.execute("BEGIN IMMEDIATE")

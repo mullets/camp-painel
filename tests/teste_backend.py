@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados"}
+MODOS_RAPIDOS = {"ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -9400,6 +9400,110 @@ def filho(modo):
         hb("cv-3", None, 1); c.commit()
         ver("conservador: uma máquina diz que lê sem dizer o projeto → ninguém é marcado interrompido", not any(l.get("leitura_interrompida") for l in op.get("/api/filas").json()))
         for l in res: print(l)
+    elif modo == "ux17_clique_duplo":
+        # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
+        # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
+        # continua em 1 clique. Tudo com o site FALSO (nenhuma chamada sai do processo).
+        init_db(); _aplicar_migracoes_real()
+        import threading as _th, time as _t
+        from app import auth, publicador as _pub, wp as _wpm, rotas_revisao as _rr
+        import app.rotas_projetos as _rp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F078','Fundo Clique','CLQ',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        lotes = {}
+        def projeto(n, sem_site=0):
+            P = f"F078-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F078',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id) VALUES (?,'F078',?,'Casa',1975,1,?)", (P, n, 600 + n * 10))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft','Casa',?)", (600 + n * 10, P))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em, aprovado_por) VALUES ('Lote',?,'/x','revisao',datetime('now'),'adm@camp.arq.br')", (P,)).lastrowid
+            lotes[P] = lid
+            for k in range(1, 4):
+                cod, wid = f"{P}-1975-S01-D{k:05d}", 600 + n * 10 + k
+                tem = k > sem_site
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id,lote_id) VALUES (?,?,'S01',?,?,'campvision','conferida',?,?,?)",
+                          (cod, P, k, f"Planta {k}", "rascunho" if tem else "nao_publicado", wid if tem else None, lid))
+                if tem:
+                    c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, cod))
+            return P
+        P1, P2, P3 = projeto(1), projeto(2), projeto(3, sem_site=3)
+        c.commit()
+        status, folhas = [], []
+        class WPF:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st): status.append((wid, st)); return {"status": st}
+            def gravar_metadados_lote(self, *a, **k): return {"ok": True, "gravados": []}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        def folha_lenta(codigo, ator, enviar_imagem=True):
+            _t.sleep(0.4); folhas.append(codigo); cc = connect(); wid = 6900 + len(folhas)
+            cc.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, codigo))
+            cc.execute("UPDATE item SET tainacan_item_id=?, status_site='rascunho' WHERE codigo=?", (wid, codigo)); cc.commit(); cc.close()
+            return {"item_id": wid, "metadados": [], "imagem": None, "erro": None}
+        _pub.WP = WPF; _wpm.WP = WPF; _rp.WP = WPF; _pub.criar_folha_no_site = folha_lenta
+        for em, nome, papel in (("ms@camp.arq.br", "M", "master"), ("adm@camp.arq.br", "A", "admin"), ("op@camp.arq.br", "O", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        ms, adm, adm2, op, op2 = cli("ms@camp.arq.br"), cli("adm@camp.arq.br"), cli("adm@camp.arq.br"), cli("op@camp.arq.br"), cli("op@camp.arq.br")
+        nev = lambda P_, tipo: c.execute("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo=?", (P_, tipo)).fetchone()[0]
+        st_proj = lambda P_: c.execute("SELECT status_site FROM projeto WHERE codigo=?", (P_,)).fetchone()[0]
+        def juntos(*fs):
+            out = [None] * len(fs)
+            def um(i):
+                out[i] = fs[i]()
+            ts = [_th.Thread(target=um, args=(i,)) for i in range(len(fs))]
+            [t.start() for t in ts]; [t.join(60) for t in ts]
+            return out
+        # 1) caminho direto: publica; o 2º clique logo depois (sem folha nova) não publica de novo
+        r1 = adm.post(f"/api/projetos/{P1}/publicar-tudo")
+        n_st = len(status)
+        ver("1º Publicar: publica (site_publicar 1×) e devolve o resumo (folhas públicas)", r1.status_code == 200 and st_proj(P1) == "no_ar" and nev(P1, "site_publicar") == 1
+            and r1.json().get("folhas_publicadas") == 3, r1.text[:200])
+        r2 = adm.post(f"/api/projetos/{P1}/publicar-tudo")
+        ver("2º Publicar logo depois: 200 'nada foi feito de novo' (repetido), sem chamar o site nem gravar outra publicação",
+            r2.status_code == 200 and r2.json().get("repetido") is True and len(status) == n_st and nev(P1, "site_publicar") == 1 and nev(P1, "publicacao_guiada") == 1, r2.text[:200])
+        c.execute("UPDATE evento SET quando=datetime('now','-5 minutes') WHERE codigo=? AND tipo='publicacao_guiada'", (P1,)); c.commit()
+        r3 = adm.post(f"/api/projetos/{P1}/publicar-tudo")
+        ver("passado 1 min, Publicar de novo funciona (a trava é só para o clique repetido)", r3.status_code == 200 and not r3.json().get("repetido") and nev(P1, "site_publicar") == 2, r3.text[:200])
+        # 2) com tarefa (o caminho da tela): dois cliques ao mesmo tempo = UMA tarefa; o clique que chega depois de terminar = a mesma tarefa
+        a, b = juntos(lambda: adm.post(f"/api/projetos/{P2}/publicar-tudo?tarefa=1"), lambda: adm2.post(f"/api/projetos/{P2}/publicar-tudo?tarefa=1"))
+        ids = {a.json().get("tarefa_id"), b.json().get("tarefa_id")}
+        ver("dois cliques juntos (tarefa): a MESMA tarefa para os dois", len(ids) == 1 and None not in ids, f"{a.status_code} {a.text[:80]} | {b.status_code} {b.text[:80]}")
+        tid = ids.pop() if len(ids) == 1 else None
+        for _ in range(100):
+            if adm.get(f"/api/tarefas/{tid}").json().get("estado") != "rodando":
+                break
+            _t.sleep(0.1)
+        r = adm.post(f"/api/projetos/{P2}/publicar-tudo?tarefa=1").json()
+        ver("clique logo depois de terminar (tarefa): devolve a tarefa que acabou (ja_feito), sem outra publicação",
+            r.get("tarefa_id") == tid and r.get("ja_feito") is True and nev(P2, "site_publicar") == 1
+            and c.execute("SELECT COUNT(*) FROM tarefa_publicacao WHERE projeto_codigo=?", (P2,)).fetchone()[0] == 1, str(r))
+        # 3) caminho direto com folhas a enviar (lento): dois cliques juntos, só um publica
+        a, b = juntos(lambda: adm.post(f"/api/projetos/{P3}/publicar-tudo"), lambda: adm2.post(f"/api/projetos/{P3}/publicar-tudo"))
+        ver("dois cliques juntos (direto, folhas lentas): um publica, o outro recebe 409; cada folha sobe uma vez",
+            sorted([a.status_code, b.status_code]) == [200, 409] and len(folhas) == 3 and len(set(folhas)) == 3 and nev(P3, "site_publicar") == 1, f"{a.status_code} {b.status_code} {folhas}")
+        # 4) Desfazer em 1 clique (rota que já existe: voltar para rascunho)
+        d = ms.post(f"/api/projetos/{P3}/publicar", json={"acao": "rascunho"})
+        ver("Desfazer (voltar para rascunho) em 1 clique continua", d.status_code == 200 and st_proj(P3) == "rascunho", d.text[:150])
+        # 5) Importar: dois cliques juntos = uma importação
+        chamadas = []
+        def importar_lento(con_, lote_id, ator):
+            chamadas.append(lote_id); _t.sleep(0.5); return {"criadas": 0, "atualizadas": 0}
+        _orig = _rr.importar_lote; _rr.importar_lote = importar_lento
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Novo',?,'/x','revisao')", (P2,)).lastrowid; c.commit()
+        a, b = juntos(lambda: op.post(f"/api/lotes/{lid}/importar"), lambda: op2.post(f"/api/lotes/{lid}/importar"))
+        ver("Importar: dois cliques juntos = UMA importação; o 2º recebe 409 'já está sendo importado'",
+            sorted([a.status_code, b.status_code]) == [200, 409] and chamadas == [lid] and "já está sendo importado" in (a.text + b.text), f"{a.status_code} {b.status_code} {chamadas}")
+        r = op.post(f"/api/lotes/{lid}/importar")
+        ver("...e depois de terminar, importar de novo funciona (a trava sai)", r.status_code == 200 and chamadas == [lid, lid], r.text[:120])
+        _rr.importar_lote = _orig
+        c.close()
+        for l in res: print(l)
     elif modo == "ux03_ignorar":
         # UX-03: "Ignorar ▾" em todo item do Precisa de você. "Agora não" esconde só para quem clicou por 7 dias (some da lista, dos
         # números e de Abertos em Problemas; aparece em Problemas › Ignorados; Desfazer/Mostrar de novo); "Não mostrar mais" muda o
@@ -12641,6 +12745,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-09: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-17: clique duplo em Publicar/Importar não publica nem importa 2×; Desfazer em 1 clique")
+rc, out = rodar("ux17_clique_duplo", f"{tmp}/ux17_clique_duplo.db")
+if rc != 0: ok(False, f"teste ux17_clique_duplo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-17: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

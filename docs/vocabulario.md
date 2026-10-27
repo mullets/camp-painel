@@ -54,6 +54,13 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 - **parado há 16 dias** / **parado há 5 h**: tempo do lote na MESMA etapa (não "esperando há", que media a última leitura da pasta).
   Em Material novo a coluna se chama **Parado há** e o clique no título ordena pelo mais parado; na Home, **mais parado primeiro**.
 
+### Clique duplo em Publicar e Importar (UX-17, 27/10/2026)
+- Enquanto trabalha, o botão fica apagado e diz **Publicando…** / **Importando…** (o andamento aparece no próprio bloco).
+- Antes do clique, o Próximo passo diz o que muda: "ao publicar, **N folhas ficam públicas na hora** (M vão ao site agora)". Depois:
+  **Publicado ✓ · N folhas públicas** com **Desfazer** (volta para rascunho; o mesmo de antes, CAMP-148).
+- O segundo clique não repete a ação: com a publicação rodando, a tela acompanha a mesma; logo depois de publicar, sem folha nova,
+  "Este projeto acabou de ser publicado: **nada foi feito de novo**". Importar o mesmo lote ao mesmo tempo: "Este lote **já está sendo importado** agora".
+
 ## Menu (UX-28; antes CAMP-154)
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
 topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);
