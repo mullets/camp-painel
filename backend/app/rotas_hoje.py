@@ -25,6 +25,10 @@ DIVERGENCIAS = {
                                       "A folha continua visível no site embora o fundo tenha sido despublicado aqui. Despublique a folha ou publique o fundo de novo."),
     "fundo_trocado": ("No site, o item está no fundo errado",
                       "O código da folha diz um fundo (no painel) e o campo Fundo do item no site diz outro (no site). “Corrigir no site” grava o fundo do código: o código é que vale."),
+    "duplicado_no_site": ("Folha com mais de um item no site",
+                          "O mesmo código está em mais de um item do site (em geral um envio que esgotou o tempo e foi repetido). A folha fica ligada a um deles; mande os outros para a lixeira no site."),
+    "pendente_duplicata_no_site": ("Item duplicado no site ao publicar",
+                                   "Ao enviar a folha, o painel achou mais de um item dela no site: ligou no mais antigo (ou no publicado) e não criou outro. Mande os itens que sobraram para a lixeira no site."),
     "sem_itens_no_site": ("Fundo sem nenhuma folha no site",
                           "Normal para fundos ainda não publicados. Só exige ação se o fundo deveria estar no site."),
 }
