@@ -130,13 +130,13 @@ _TECNICOS = (
     (re.compile(r"^\s*\d+\s*[-–—]\s", re.I), "começa com número de pasta (ex.: “01 - ”)"),
     (re.compile(r"\bTIFF?\b", re.I), "tem “TIFF” (formato de arquivo)"),
     (re.compile(r"\bP\d{4}\s*$", re.I), "termina com o número do projeto (P####)"),
-    (re.compile(r"^\s*projeto\s+n[aã]o\s+identificado\b", re.I), "é “Projeto Não Identificado”, não o nome de uma obra"),
 )
 _PREFIXOS_LIMPOS = re.compile(r"^\s*(?:T\d{3}_+|F\d{3}(?:-P\d{4})?\s*[-–—_]+\s*|P\d{4}\s*[-–—_]+\s*|\d+\s*[-–—]\s+)", re.I)
 
 
 def titulo_tecnico(titulo: str | None) -> str | None:
-    """O motivo (frase curta) quando o título é nome de pasta ou código do sistema; None quando é um nome de obra."""
+    """O motivo (frase curta) quando o título é nome de pasta ou código do sistema; None quando é um nome de obra.
+    28/10 (Rafael): "Projeto Não Identificado" NÃO é técnico: quando ninguém sabe que projeto é, ele vai com esse nome mesmo."""
     t = (titulo or "").strip()
     if not t:
         return None
@@ -150,7 +150,7 @@ def titulo_tecnico(titulo: str | None) -> str | None:
 
 def sugerir_titulo(titulo: str | None) -> str | None:
     """Como o título ficaria sem o prefixo de pasta ("T099_Casa_Azul" → "Casa Azul"). Só SUGERE: uma pessoa aceita caso a caso.
-    None quando o que sobra ainda é técnico ou vazio (ex.: "01 - Arquivo Arquivístico (TIFF)", "Projeto Não Identificado 3")."""
+    None quando o que sobra ainda é técnico ou vazio (ex.: "01 - Arquivo Arquivístico (TIFF)")."""
     t = (titulo or "").strip()
     for _ in range(4):                                   # "F026 - T099_Casa" tem mais de um prefixo
         novo = _PREFIXOS_LIMPOS.sub("", t, count=1)

@@ -12163,14 +12163,14 @@ def filho(modo):
         from app.main import app
         res = []
         def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
-        tecnicos = ["01 - Arquivo Arquivístico (TIFF)", "F000 - CNV - Convidado", "T099_Casa_Azul", "T100_Edificio Paulista", "Projeto Não Identificado 3",
+        tecnicos = ["01 - Arquivo Arquivístico (TIFF)", "F000 - CNV - Convidado", "T099_Casa_Azul", "T100_Edificio Paulista",
                     "Casa P0012", "F001-P0003", "Plantas TIFF", "P0060 - SESI — Marília"]
-        obras = ["Residência Tarumã", "Casa 2 - Reforma", "Edifício Zarvos", "Banco Safra D27", "SESI — Marília", "Fotografia aérea do Jockey"]
+        obras = ["Residência Tarumã", "Casa 2 - Reforma", "Edifício Zarvos", "Banco Safra D27", "SESI — Marília", "Fotografia aérea do Jockey", "Projeto Não Identificado 3", "Projeto não identificado"]
         ver("reconhece os títulos técnicos", all(titulo_tecnico(t) for t in tecnicos), str([t for t in tecnicos if not titulo_tecnico(t)]))
         ver("não confunde nome de obra com título técnico", not any(titulo_tecnico(t) for t in obras), str([t for t in obras if titulo_tecnico(t)]))
         ver("sugere tirar o prefixo T###_ e F### -", sugerir_titulo("T099_Casa_Azul") == "Casa Azul" and sugerir_titulo("F000 - CNV - Convidado") == "CNV - Convidado",
             f"{sugerir_titulo('T099_Casa_Azul')!r} {sugerir_titulo('F000 - CNV - Convidado')!r}")
-        ver("sem sugestão quando o que sobra ainda é técnico", sugerir_titulo("01 - Arquivo Arquivístico (TIFF)") is None and sugerir_titulo("Projeto Não Identificado 3") is None)
+        ver("sem sugestão quando o que sobra ainda é técnico", sugerir_titulo("01 - Arquivo Arquivístico (TIFF)") is None)
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Fundo 26','F26',1),('F009','Fundo 9','F09',1)")
         def proj(f, n, t, cidade=None, site=None):
@@ -12194,9 +12194,12 @@ def filho(modo):
         r = adm.post("/api/projetos", json={"fundo_codigo": "F026", "titulo": "03 - Fotos da obra", "confirmar_novo": True})
         ver("criar com '03 - …' é recusado (422) e nada é criado", r.status_code == 422 and sql("SELECT COUNT(*) FROM projeto") == n0, r.text[:200])
         r = adm.post("/api/projetos", json={"fundo_codigo": "F026", "titulo": "Projeto Não Identificado 9", "confirmar_novo": True})
-        ver("criar 'Projeto Não Identificado N' é recusado (422)", r.status_code == 422 and sql("SELECT COUNT(*) FROM projeto") == n0, r.text[:200])
+        ver("28/10: criar 'Projeto Não Identificado N' é aceito (não se sabe que projeto é: vai com esse nome)", r.status_code == 200 and sql("SELECT COUNT(*) FROM projeto") == n0 + 1, r.text[:200])
         r = adm.post("/api/projetos", json={"fundo_codigo": "F026", "titulo": "Casa Verde", "confirmar_novo": True})
-        ver("nome de obra continua sendo criado", r.status_code == 200 and sql("SELECT COUNT(*) FROM projeto") == n0 + 1, r.text[:200])
+        ver("nome de obra continua sendo criado", r.status_code == 200 and sql("SELECT COUNT(*) FROM projeto") == n0 + 2, r.text[:200])
+        r = adm.patch(f"/api/projetos/{pok}", json={"titulo": "Projeto Não Identificado"})
+        ver("28/10: editar e salvar com o título 'Projeto Não Identificado' é aceito", r.status_code == 200 and sql("SELECT titulo FROM projeto WHERE codigo=?", pok) == "Projeto Não Identificado", r.text[:200])
+        k.execute("UPDATE projeto SET titulo='Residência Tarumã' WHERE codigo=?", (pok,)); k.commit()
         # editar
         r = adm.patch(f"/api/projetos/{pok}", json={"titulo": "T102_Residência Tarumã"})
         ver("editar para título técnico é recusado (422)", r.status_code == 422 and sql("SELECT titulo FROM projeto WHERE codigo=?", pok) == "Residência Tarumã", r.text[:200])
@@ -12215,15 +12218,16 @@ def filho(modo):
         ct = cond(p235); tit = [x for x in ct["condicoes"] if x["id"] == "titulo"]
         ver("publicar: título técnico vira condição que BLOQUEIA, com a sugestão", bool(tit) and tit[0]["bloqueia"] and not tit[0]["ok"] and tit[0].get("sugestao") == "Casa Azul" and not ct["pode_publicar"], str(tit)[:300])
         ver("publicar: nome de obra não ganha essa condição", not [x for x in cond(pok)["condicoes"] if x["id"] == "titulo"])
-        r = adm.post(f"/api/projetos/{pni}/publicar", json={"acao": "publicar"})
-        ver("botão Publicar recusa (400) dizendo o título", r.status_code == 400 and "Projeto Não Identificado" in r.text, r.text[:300])
-        r = adm.post(f"/api/projetos/{pni}/publicar-tudo", json={})
+        ver("28/10: 'Projeto Não Identificado' não ganha a condição do título técnico ao publicar", not [x for x in cond(pni)["condicoes"] if x["id"] == "titulo"])
+        r = adm.post(f"/api/projetos/{p236}/publicar", json={"acao": "publicar"})
+        ver("botão Publicar recusa (400) dizendo o título", r.status_code == 400 and "T100_Edificio Paulista" in r.text, r.text[:300])
+        r = adm.post(f"/api/projetos/{p236}/publicar-tudo", json={})
         ver("Publicar (um passo) recusa (400) e o plano traz o bloqueio do título", r.status_code == 400 and any(b["id"] == "titulo" for b in (r.json().get("plano") or {}).get("bloqueios", [])), r.text[:300])
         # o aviso da tela Projetos: todos os casos
         j = adm.get("/api/projetos/nome-de-pasta").json(); por = {x["codigo"]: x for x in j.get("itens", [])}
-        ver("o aviso lista TODOS os títulos técnicos (antes: só a subpasta)", set(por) == {p235, p236, pni, pcnv, ptif} and j.get("total") == 5, str(sorted(por)))
+        ver("o aviso lista TODOS os títulos técnicos (antes: só a subpasta)", set(por) == {p235, p236, pcnv, ptif} and j.get("total") == 4, str(sorted(por)))
         ver("cada um diz o tipo, o motivo e o título sugerido (quando há)", por.get(p235, {}).get("titulo_sugerido") == "Casa Azul" and por[p235].get("tipo") == "titulo_tecnico"
-            and por.get(ptif, {}).get("tipo") == "subpasta" and por[ptif].get("titulo_sugerido") is None and por.get(pni, {}).get("titulo_sugerido") is None and bool(por[pni].get("motivo")), str(por.get(p235))[:300])
+            and por.get(ptif, {}).get("tipo") == "subpasta" and por[ptif].get("titulo_sugerido") is None and bool(por[ptif].get("motivo")), str(por.get(p235))[:300])
         ver("o projeto publicado com T###_ aparece com 'tem registro no site'", por.get(p235, {}).get("tem_no_site") is True)
         ver("nada é renomeado sozinho", sql("SELECT titulo FROM projeto WHERE codigo=?", p235) == "T099_Casa_Azul" and sql("SELECT COUNT(*) FROM evento WHERE tipo='editado' AND codigo=?", p235) == 0)
         r = adm.patch(f"/api/projetos/{p236}", json={"titulo": (por.get(p236) or {}).get("titulo_sugerido") or "x"})
