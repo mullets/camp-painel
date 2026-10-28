@@ -71,6 +71,11 @@ def _criar(projeto: str, item: str | None, motivo: str | None, u: dict) -> dict:
         if item and not con.execute("SELECT 1 FROM item WHERE codigo=? AND projeto_codigo=?", (item, projeto)).fetchone():
             raise HTTPException(404, "Folha não existe")
         ja = _aberto(con, projeto, item)
+        substituido = None
+        if ja and _travado(con, ja):          # 28/10: o CAMP Vision pegou e não respondeu: o clique não pode devolver o mesmo pedido para sempre
+            con.execute("UPDATE pedido_releitura SET estado='falhou', concluido_em=datetime('now'), mensagem=? WHERE id=? AND estado IN ('pedido','em_andamento')",
+                        (MSG_SUBSTITUIDO, ja["id"]))
+            substituido, ja = ja["id"], None
         repetido = ja is not None
         if not ja:
             try:
@@ -82,9 +87,23 @@ def _criar(projeto: str, item: str | None, motivo: str | None, u: dict) -> dict:
             except sqlite3.IntegrityError:                    # dois cliques ao mesmo tempo: vale o que o outro criou
                 con.rollback()
                 ja, repetido = _aberto(con, projeto, item), True
-        return {**_dict(con, ja), "repetido": repetido, "cv2": _cv2(con)}
+        return {**_dict(con, ja), "repetido": repetido, "cv2": _cv2(con), **({"substituiu": substituido} if substituido else {})}
     finally:
         con.close()
+
+
+MSG_SUBSTITUIDO = "Sem resposta do CAMP Vision: substituído por um pedido novo"
+
+
+def _travado(con, p) -> bool:
+    """O pedido aberto já não vai andar: 'em_andamento' há mais de DEMORANDO_S desde que o CAMP Vision disse "comecei" (ele parou no meio:
+    reiniciou, atualizou ou caiu) ou 'pedido' há mais de SEM_RESPOSTA_S enquanto o CAMP Vision continua consultando (ele não o atende)."""
+    desde = p["iniciado_em"] if p["estado"] == "em_andamento" else p["pedido_em"]
+    idade = con.execute("SELECT CAST(strftime('%s','now') AS INTEGER) - CAST(strftime('%s', ?) AS INTEGER)", (desde or p["pedido_em"],)).fetchone()[0] or 0
+    if p["estado"] == "em_andamento":
+        return idade > DEMORANDO_S
+    cv = _cv2(con)
+    return idade > SEM_RESPOSTA_S and cv["ultima_consulta_s"] is not None and cv["ultima_consulta_s"] < 3600
 
 
 @router.post("/itens/{codigo}/releitura")
@@ -300,6 +319,9 @@ def concluido(pid: int, d: Concluido, request: Request) -> dict:
         resultado: dict = {}
         if d.ok:
             resultado = _importar_de_novo(con, p["projeto_codigo"])
+            destravados = _destravar_lotes(con, p["projeto_codigo"])
+            if destravados:
+                resultado["lotes_destravados"] = destravados
         cv = {k: v for k, v in (("relidos", d.relidos), ("com_mudanca", d.com_mudanca), ("campos_preenchidos", d.campos_preenchidos), ("regravados", d.regravados),
                                 ("custo_usd", d.custo_usd), ("escopo", d.escopo), ("falhas", (d.falhas or [])[:20] or None)) if v is not None}
         if cv:
@@ -316,6 +338,27 @@ def concluido(pid: int, d: Concluido, request: Request) -> dict:
         raise
     finally:
         con.close()
+
+
+def _destravar_lotes(con, projeto: str) -> list:
+    """28/10 ("Ler de novo" e nada muda: F009-P0092, F026-P0009, F016-P0024): o lote fica em 'processando' porque o painel só muda a etapa
+    quando lê o status.json da pasta DO LOTE, e o CAMP Vision, ao reler, acerta o status.json da pasta DO PROJETO (às vezes outra pasta).
+    A releitura do projeto terminou bem: lote deste projeto ainda em 'processando' COM o pacote do CAMP Vision na pasta vai para 'revisao'
+    (ou 'publicado', se já aprovado e com o projeto publicado), como o fluxo normal faria. Sem pacote: continua como está. Lê 1 arquivo por lote."""
+    feitos = []
+    for l in con.execute("""SELECT l.id, l.pasta_qnap, l.aprovado_em, p.status_site FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo
+                            WHERE l.projeto_codigo=? AND l.etapa='processando' AND l.descartado_em IS NULL""", (projeto,)).fetchall():
+        try:
+            if not l["pasta_qnap"] or ler_pacote(Path(l["pasta_qnap"])) is None:
+                continue
+        except (HTTPException, OSError):
+            continue
+        nova = "publicado" if (l["aprovado_em"] and l["status_site"] == "no_ar") else "revisao"
+        con.execute("UPDATE lista_processamento SET etapa=?, etapa_desde=datetime('now'), atualizado_em=datetime('now') WHERE id=? AND etapa='processando'", (nova, l["id"]))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('lista', ?, 'lote_destravado_pela_releitura', 'painel', ?)",
+                    (str(l["id"]), json.dumps({"projeto": projeto, "etapa": nova}, ensure_ascii=False)))
+        feitos.append({"lote_id": l["id"], "etapa": nova})
+    return feitos
 
 
 def _importar_de_novo(con, projeto: str) -> dict:

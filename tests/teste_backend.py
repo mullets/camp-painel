@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "ler_de_novo_destrava"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10614,6 +10614,81 @@ def filho(modo):
             tt is not None and tt("Corte — P1 — X") is tt("Corte  —  P1 — X") and tt("Corte — P1 — X") is not tt("Planta — P1 — X"))
         c.close()
         for l in res: print(l)
+    elif modo == "ler_de_novo_destrava":
+        # 28/10 (produção: F009-P0092, F026-P0009, F016-P0024 — "clico em Ler de novo e nada faz"): (1) a releitura do projeto termina e o
+        # lote continua em 'processando' (o painel só muda a etapa pelo status.json da pasta DO LOTE; o CAMP Vision acerta o da pasta DO PROJETO);
+        # (2) pedido que o CAMP Vision pegou e largou fica 'em_andamento' para sempre e cada clique devolve o MESMO pedido; (3) a tela não diz nada.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, shutil, tempfile
+        from pathlib import Path as _P
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _P(tempfile.mkdtemp(prefix="lerdenovo_"))
+        fix = (_P(__file__).parent / "fixtures" / "campvision" / "lote_normal" / "catalogacao" / "pacote_tainacan.json").read_text(encoding="utf-8")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='segredo-cv' WHERE chave='estacao.token'")
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        lotes = {}
+        for n, com_pacote in ((1, True), (2, False)):
+            P = f"F026-P000{n}"
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,))
+            c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1972)", (P, "F026", n, f"Projeto {n}"))
+            d = raiz / f"lote{n}"; (d / "catalogacao").mkdir(parents=True)
+            if com_pacote: (d / "catalogacao" / "pacote_tainacan.json").write_text(fix.replace("F026-P0001", P), encoding="utf-8")
+            lotes[P] = c.execute("""INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, etapa_desde, criado_em)
+                                    VALUES (?,?,?,'processando',datetime('now','-5 hours'),datetime('now','-5 hours'))""", (f"Lote {n}", P, str(d))).lastrowid
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        def com_ip(ip):
+            async def asgi(scope, receive, send):
+                if scope["type"] == "http": scope = {**scope, "client": (ip, 50000)}
+                await app(scope, receive, send)
+            return TestClient(asgi, raise_server_exceptions=False)
+        op, lan, T_ = cli("op@camp.arq.br"), com_ip("192.168.15.40"), {"X-Camp-Token": "segredo-cv"}
+        k = connect(); um = lambda q, *a: k.execute(q, a).fetchone()
+        etapa = lambda P: um("SELECT etapa FROM lista_processamento WHERE id=?", lotes[P])[0]
+        fila = lambda P: next((l for l in op.get("/api/filas").json() if l.get("projeto_codigo") == P), {})
+        # 1) a tela, antes de pedir: lote em leitura interrompida, botão Ler de novo
+        l0 = fila("F026-P0001")
+        ver("lote 'sendo lido' há 5 h sem sinal: leitura interrompida, sem pedido", l0.get("leitura_interrompida") is True and not l0.get("releitura_pedida_em"), str({k_: l0.get(k_) for k_ in ("etapa", "leitura_interrompida", "releitura_pedida_em")}))
+        # 2) pede; o aviso diz que o CAMP Vision nunca consultou
+        r1 = op.post("/api/projetos/F026-P0001/releitura", json={}).json()
+        ver("pedir: registra; a resposta traz a situação do CAMP Vision (nunca consultou) para o aviso dizer", r1.get("estado") == "pedido" and r1["cv2"]["ultima_consulta_s"] is None, str(r1)[:200])
+        # 3) o CAMP Vision pega, larga (reiniciou) e some: 3 h depois o clique troca o pedido parado por um novo
+        lan.get("/api/estacoes/pedidos-releitura?estacao=campvision2", headers=T_)
+        lan.post(f"/api/estacoes/pedidos-releitura/{r1['id']}/iniciado", json={"estacao": "campvision2"}, headers=T_)
+        r1b = op.post("/api/projetos/F026-P0001/releitura", json={}).json()
+        ver("pedido em andamento há pouco: clicar de novo devolve o mesmo (não duplica trabalho do CAMP Vision)", r1b.get("id") == r1["id"] and r1b.get("repetido") is True)
+        k.execute("UPDATE pedido_releitura SET iniciado_em=datetime('now','-3 hours'), pedido_em=datetime('now','-3 hours') WHERE id=?", (r1["id"],)); k.commit()
+        lp = fila("F026-P0001")
+        ver("na Fila, pedido parado há mais de 2 h: o botão volta ('Pedir de novo')", lp.get("releitura_pedir_de_novo") is True, str(lp.get("releitura_pedir_de_novo")))
+        r2 = op.post("/api/projetos/F026-P0001/releitura", json={}).json()
+        velho = um("SELECT estado, mensagem FROM pedido_releitura WHERE id=?", r1["id"])
+        ver("pedido em andamento há 3 h: o clique cria um pedido NOVO e o velho fica 'falhou: sem resposta do CAMP Vision, substituído'",
+            r2.get("id") != r1["id"] and r2.get("repetido") is False and r2.get("substituiu") == r1["id"] and velho[0] == "falhou" and "substituído" in (velho[1] or ""), f"{r2.get('id')} {r2.get('substituiu')} {tuple(velho)}")
+        # 4) o CAMP Vision relê e conclui: o lote com pacote sai de 'processando'
+        lan.post(f"/api/estacoes/pedidos-releitura/{r2['id']}/iniciado", json={"estacao": "campvision2"}, headers=T_)
+        cc = lan.post(f"/api/estacoes/pedidos-releitura/{r2['id']}/concluido", json={"ok": True, "mensagem": "3 folha(s) relida(s)"}, headers=T_).json()
+        ver("releitura do projeto concluída com o pacote na pasta do lote: o lote sai de 'processando' (vai para revisão) e fica registrado",
+            etapa("F026-P0001") == "revisao" and (cc.get("resultado") or {}).get("lotes_destravados") == [{"lote_id": lotes["F026-P0001"], "etapa": "revisao"}]
+            and um("SELECT COUNT(*) FROM evento WHERE tipo='lote_destravado_pela_releitura' AND codigo=?", str(lotes["F026-P0001"]))[0] == 1, f"{etapa('F026-P0001')} {cc}")
+        # 5) sem pacote na pasta do lote: continua como está, e a linha diz o resultado da última releitura
+        r3 = op.post("/api/projetos/F026-P0002/releitura", json={}).json()
+        lan.post(f"/api/estacoes/pedidos-releitura/{r3['id']}/iniciado", json={"estacao": "campvision2"}, headers=T_)
+        lan.post(f"/api/estacoes/pedidos-releitura/{r3['id']}/concluido", json={"ok": False, "mensagem": "projeto F026-P0002 não encontrado no acervo"}, headers=T_)
+        l2 = fila("F026-P0002")
+        ver("releitura que falhou: o lote sem pacote fica como está e a linha da Fila traz o resultado (estado e mensagem do CAMP Vision)",
+            etapa("F026-P0002") == "processando" and (l2.get("releitura_ultima") or {}).get("estado") == "falhou" and "não encontrado" in ((l2.get("releitura_ultima") or {}).get("mensagem") or ""), str(l2.get("releitura_ultima")))
+        html = (_P(__file__).parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: o aviso do clique fala do CAMP Vision parado; a linha mostra a última releitura; o botão 'Pedir de novo' existe",
+            "function releituraAvisoTxt" in html and "o CAMP Vision não consulta os pedidos há" in html and "A última releitura falhou" in html and "'Pedir de novo'" in html)
+        k.close(); shutil.rmtree(raiz, ignore_errors=True)
+        for l in res: print(l)
     elif modo == "ux17_clique_duplo":
         # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
         # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
@@ -14334,6 +14409,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Publicação sem duplicar: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Ler de novo de verdade: pedido parado é trocado, a releitura concluída destrava o lote, a tela diz o que houve")
+rc, out = rodar("ler_de_novo_destrava", f"{tmp}/ler_de_novo_destrava.db")
+if rc != 0: ok(False, f"teste ler_de_novo_destrava não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ler de novo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")
