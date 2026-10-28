@@ -233,6 +233,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - No resultado: "**N folha(s) precisaram de nova tentativa (o site demorou)**". Falha de vez: "(o site não respondeu em 3 tentativas)" e
   "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas".
 
+## Apagar lote sem folhas (28/10/2026)
+- Lote em Importar/Verificar destino SEM nenhuma folha no painel: no Ignorar ▾ da Home, **Apagar este lote (sem folhas)**; no Material novo,
+  **Apagar lote** (só admin). Confirmação: "O lote não tem nenhuma folha no painel: sai de todas as listas e contagens, para todos. Os arquivos
+  no QNAP não são tocados. Dá para desfazer logo depois." (+ "Atenção: o CAMP Vision achou N arquivos na pasta deste lote, que ainda não
+  viraram folhas no painel." quando houver). Aviso: "**Lote apagado: saiu das listas e das contagens.**" com **Desfazer**.
+
 ## Mover e reter folha publicada (28/10/2026)
 - Mover: a folha publicada pode ser marcada; ao lado dela, "**publicada: ao mover, sai do público no site (fica privada, nada é apagado)**".
 - Reter ("Não publicar esta folha"): "Se ela já está publicada, sai do público no site (fica privada, nada é apagado)." Aviso depois de reter:
