@@ -622,6 +622,13 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
         from .pendencias import identificador_lote, _e_complemento, marcar_parado
         marcar_parado(d, lendo)                          # UX-09 (campos novos, opcionais): parado_h, parado, leitura_interrompida
         d["releitura_pedida_em"] = pedidos.get(d["projeto_codigo"]) if d["leitura_interrompida"] else None
+        if d["leitura_interrompida"]:                    # 28/10 (campo novo, opcional): a última releitura deste projeto que terminou, para a linha dizer o que houve
+            ult = con.execute("""SELECT estado, mensagem, concluido_em FROM pedido_releitura WHERE projeto_codigo=? AND item_codigo IS NULL
+                                 AND estado IN ('concluido','falhou') ORDER BY id DESC LIMIT 1""", (d["projeto_codigo"],)).fetchone()
+            d["releitura_ultima"] = dict(ult) if ult else None
+            from .pendencias import _horas_desde
+            h_ped = _horas_desde(d["releitura_pedida_em"]) if d["releitura_pedida_em"] else None
+            d["releitura_pedir_de_novo"] = bool(h_ped is not None and h_ped > 2)   # o pedido não andou em 2 h: o botão volta ("Pedir de novo")
         d["identificador"] = identificador_lote(d["nome"], d["criado_em"], _e_complemento(d.get("resultado")))   # UX-04 (campo novo, opcional)
         d["fase"] = fase_da_lista(d["etapa"], d["itens_total"], d["itens_pendentes"], d.get("aprovado_em"), d.get("resultado"),
                                   d.get("projeto_status_site") == "no_ar", d.get("fora_do_site"))   # UX-36 (campos novos, opcionais)

@@ -59,6 +59,9 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 - **Leitura interrompida**: lote em "sendo lido" (situação Chegando) há mais de 2 h sem o CAMP Vision dizer, no sinal dele, que lê este projeto.
   Não é uma 6ª situação: é o chip `leitura interrompida` (vermelho) ao lado de **Chegando**. O botão é **Ler de novo** (1 clique: o mesmo pedido de
   releitura do projeto; clicar de novo não cria outro). Depois do clique a linha diz **releitura pedida agora** e o botão vira **Ver na Fila**. Se nada mudar, **Dispensar este lote** (UX-39) tira o lote das listas para todos.
+  28/10: pedido parado há mais de 2 h → o botão volta como **Pedir de novo** (o pedido velho fica "Sem resposta do CAMP Vision: substituído por um
+  pedido novo"). Depois que uma releitura termina, a linha diz "**A última releitura terminou (…)**" ou "**A última releitura falhou (…)**". O aviso do clique
+  acrescenta "**Atenção: o CAMP Vision não consulta os pedidos há N min: ele pode estar parado.**" (ou "nunca consultou") quando for o caso.
 - **parado há 16 dias** / **parado há 5 h**: tempo do lote na MESMA etapa (não "esperando há", que media a última leitura da pasta).
   Em Material novo a coluna se chama **Parado há** e o clique no título ordena pelo mais parado; na Home, **mais parado primeiro**.
 
