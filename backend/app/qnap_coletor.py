@@ -162,6 +162,11 @@ def coletar() -> dict:
                 saida.update(_medir(raiz, entrada, prontos, dias_parado, t0 + max(1, ORCAMENTO_S - 3)))
             except Exception as e:  # noqa: BLE001
                 saida["erro"] = f"falha ao medir: {str(e)[:160]}"
+            try:                                    # 28/10: fotos enviadas pelo painel que ainda não chegaram ao QNAP (o QNAP estava fora): tenta de novo
+                from .fotos_qnap import enviar_pendentes
+                enviar_pendentes()
+            except Exception:  # noqa: BLE001
+                pass
             try:                                    # livro de registro do CV2 → Histórico do projeto (incremental, em segundo plano)
                 from .livro_cv import ler_incremental
                 c_ = connect()

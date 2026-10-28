@@ -9,9 +9,9 @@ Pedido (Rafa): "e se eu quiser subir algo direto pelo admin na pagina de projeto
   o original fica guardado (item.arquivo_tif).
 - Código: o painel é a fonte dos códigos. As folhas enviadas usam a faixa D90001+ do projeto, que o CAMP Vision não usa: nunca colidem
   com o que chega pelas estações. Ano no código = o do projeto (0000 sem ano), como em mover folha.
-- A folha entra como conferida por quem enviou (é ela que escolheu o arquivo), origem 'manual', e segue o caminho de sempre
-  (revisão, publicação). A mesma imagem (md5) duas vezes no projeto: recusa (409).
-- ATENÇÃO: o backup do painel copia só o banco. Estes arquivos ficam só nesta pasta; vale guardar o original também no QNAP.
+- 28/10: a folha entra PARA CONFERIR (origem 'manual'); logo depois o painel a grava no QNAP e pede ao CAMP Vision para lê-la e
+  legendá-la como as outras (fotos_qnap.py). Antes entrava conferida por quem enviou e ficava só nesta pasta. A mesma imagem (md5) duas vezes no projeto: recusa (409).
+- O original fica também nesta pasta do painel (é o que a prévia usa); a cópia de guarda é a do QNAP (fotos_qnap.py).
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from . import auth
 from .config import settings
@@ -82,7 +82,7 @@ def _jpg_de(original: Path, destino: Path) -> None:
 
 
 @router.post("/projetos/{codigo}/folhas/enviar")
-async def enviar_folha(codigo: str, request: Request, serie: str, nome: str = "", titulo: str | None = None, ano: int | None = None,
+async def enviar_folha(codigo: str, request: Request, tarefas: BackgroundTasks, serie: str, nome: str = "", titulo: str | None = None, ano: int | None = None,
                        u: dict = Depends(auth.exige("admin"))) -> dict:
     dados = await request.body()
     if not dados:
@@ -132,15 +132,17 @@ async def enviar_folha(codigo: str, request: Request, serie: str, nome: str = ""
         pend = {"previa": "@jpg", "enviada_pelo_painel": {"arquivo": os.path.basename(nome or "")[:200], "bytes": len(dados), "por": u["email"]}}
         con.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, tipo_documento, ano_folha, arquivo_jpg, arquivo_tif,
                                          md5, origem, revisao, revisado_por, revisado_em, pendencias)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,'manual','conferida',?,datetime('now'),?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,'manual','pendente',NULL,NULL,?)""",
                     (cod, codigo, serie, seq, tit, TIPO_DA_SERIE.get(serie), ano or None, str(jpg),
-                     str(original) if original != jpg else None, md5, u["email"], json.dumps(pend, ensure_ascii=False)))
+                     str(original) if original != jpg else None, md5, json.dumps(pend, ensure_ascii=False)))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'folha_enviada_pelo_painel',?,?)",
                     (cod, u["email"], json.dumps({"arquivo": os.path.basename(nome or ""), "bytes": len(dados), "tipo": tipo, "md5": md5}, ensure_ascii=False)))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folha_enviada_pelo_painel',?,?)",
                     (codigo, u["email"], json.dumps({"folha": cod}, ensure_ascii=False)))
         con.commit()
-        return {"ok": True, "codigo": cod, "titulo": tit, "serie": serie, "bytes": len(dados)}
+        from .fotos_qnap import enviar as _enviar_qnap      # 28/10: na hora, em segundo plano: grava no QNAP e pede ao CAMP Vision para ler e legendar
+        tarefas.add_task(_enviar_qnap, cod, u["email"])
+        return {"ok": True, "codigo": cod, "titulo": tit, "serie": serie, "bytes": len(dados), "qnap": "enviando"}
     except HTTPException:
         con.rollback()
         raise
