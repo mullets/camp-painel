@@ -233,6 +233,11 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - No resultado: "**N folha(s) precisaram de nova tentativa (o site demorou)**". Falha de vez: "(o site não respondeu em 3 tentativas)" e
   "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas".
 
+## Fotos enviadas pelo painel vão ao QNAP e são lidas (28/10/2026)
+- "+ Adicionar folhas (enviar imagens)": a folha entra **para conferir**. Logo depois o painel grava a foto na pasta do projeto no QNAP
+  (<série>/<FORMATO>/) e pede ao CAMP Vision para ler e legendar (no Histórico: "folha gravada no QNAP", "releitura pedida" com o motivo
+  "foto enviada pelo painel: ler e legendar", e "foto lida pelo CAMP Vision"). QNAP fora: tenta de novo sozinho.
+
 ## Mudar de fundo (28/10/2026)
 - No "Mais ⋯" do projeto (admin): **Mudar de fundo** — "Para o projeto cadastrado no fundo errado (ex.: digitalizado como Convidado e é de
   um arquiteto)…". Escolhe o **Fundo certo**; a prévia diz "Vai virar F0xx-P00NN (N folhas)". Botão **Mudar de fundo**; aviso "Projeto mudou de

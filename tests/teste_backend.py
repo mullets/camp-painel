@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -4864,8 +4864,8 @@ def filho(modo):
         ver("projeto mesclado: 409", adm.post("/api/projetos/F083-P0002/folhas/enviar", params={"serie": "S03", "nome": "a.jpg"}, content=jpg1).status_code == 409)
         r = adm.post(url, params={"serie": "S03", "nome": "IMG_0042-fachada_sul.JPG"}, content=jpg1); j = r.json(); c1 = j.get("codigo")
         ver("JPEG: vira a folha F083-P0001-1990-S03-D90001 (faixa do painel, não colide com o CAMP Vision)", r.status_code == 200 and c1 == "F083-P0001-1990-S03-D90001", r.text[:200])
-        ver("título do nome do arquivo, tipo Fotografia, conferida por quem enviou, origem manual",
-            sql("SELECT titulo||'|'||tipo_documento||'|'||revisao||'|'||revisado_por||'|'||origem FROM item WHERE codigo=?", c1) == "IMG 0042 fachada sul|Fotografia|conferida|adm@camp.arq.br|manual")
+        ver("título do nome do arquivo, tipo Fotografia, PARA CONFERIR (28/10: o CAMP Vision lê e legenda antes), origem manual",
+            sql("SELECT titulo||'|'||tipo_documento||'|'||revisao||'|'||COALESCE(revisado_por,'-')||'|'||origem FROM item WHERE codigo=?", c1) == "IMG 0042 fachada sul|Fotografia|pendente|-|manual")
         cam = sql("SELECT arquivo_jpg FROM item WHERE codigo=?", c1) or ""
         ver("o arquivo fica na pasta do painel (não no QNAP) e é o mesmo que foi enviado", cam.startswith(pasta_env) and os.path.isfile(cam) and open(cam, "rb").read() == jpg1, cam)
         ver("a mesma imagem de novo no projeto: 409 dizendo qual folha já é", adm.post(url, params={"serie": "S03", "nome": "outra.jpg"}, content=jpg1).status_code == 409)
@@ -11254,6 +11254,82 @@ def filho(modo):
         ver("tela: botão 'Voltar à cor do original…' (Máquinas), que confere antes e reenvia só essas", "Voltar à cor do original…" in html and "so_cor_original:true,aplicar:true" in html)
         k.close(); c.close()
         for l in res: print(l)
+    elif modo == "fotos_qnap":
+        # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
+        # mandar ler elas e já legendar como faz com todas"): a foto enviada pelo painel é gravada na pasta do projeto no acervo, no padrão do
+        # CAMP Vision, e o painel pede a releitura da folha; a leitura que volta preenche a folha (só se ainda para conferir).
+        init_db(); _aplicar_migracoes_real()
+        import io, json as _j, shutil, tempfile
+        from pathlib import Path as _P
+        from PIL import Image
+        from app import auth, fotos_qnap
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = _P(tempfile.mkdtemp(prefix="fotosqnap_"))
+        os.environ["CAMP_FOLHAS_ENVIADAS_DIR"] = str(base / "painel")
+        acervo = base / "ACERVOS_CAMP"
+        pj_dir = acervo / "F084 - EDA Eduardo de Almeida" / "01 - Projetos" / "F084-P0001 - Residência Max Define"
+        pj_dir.mkdir(parents=True)
+        (acervo / "F084 - EDA Eduardo de Almeida" / "01 - Projetos" / "F084-P0011 - Outro").mkdir()
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(base / "NAO_MONTADO"),))
+        c.execute("UPDATE configuracao SET valor='segredo-cv' WHERE chave='estacao.token'")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F084','Eduardo de Almeida','EDA',1)")
+        for n, t in ((1, "Residência Max Define"), (2, "Casa Dois")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F084',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1976)", (f"F084-P000{n}", "F084", n, t))
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        async def _asgi(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("192.168.15.40", 50000)}
+            await app(scope, receive, send)
+        lan, T_ = TestClient(_asgi, raise_server_exceptions=False), {"X-Camp-Token": "segredo-cv"}
+        def img(fmt, cor):
+            b = io.BytesIO(); Image.new("RGB", (800, 600), cor).save(b, fmt); return b.getvalue()
+        k = connect(); um = lambda q, *a: (lambda r: tuple(r) if r else None)(k.execute(q, a).fetchone())
+        # 1) QNAP fora: a folha fica pendente para o QNAP; nada se perde
+        r = adm.post("/api/projetos/F084-P0001/folhas/enviar", params={"serie": "S03", "nome": "fachada.jpg"}, content=img("JPEG", (200, 150, 100)))
+        c1 = r.json().get("codigo")
+        p1 = _j.loads(um("SELECT pendencias FROM item WHERE codigo=?", c1)[0])
+        ver("QNAP fora do ar: a folha entra no painel (para conferir) e fica marcada 'qnap_pendente' com o erro", r.status_code == 200 and "qnap_pendente" in p1
+            and um("SELECT revisao FROM item WHERE codigo=?", c1)[0] == "pendente", str(p1)[:200])
+        # 2) QNAP volta: a coleta tenta de novo e grava na pasta certa; pede a releitura da folha
+        k.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(acervo),)); k.commit()
+        n = fotos_qnap.enviar_pendentes()
+        alvo1 = pj_dir / "03 - Fotografias" / "JPG" / f"{c1}.jpg"
+        ver("QNAP de volta: a coleta grava na pasta do projeto (03 - Fotografias/JPG/<código>.jpg) e pede a releitura DESTA folha",
+            n == 1 and alvo1.is_file() and um("SELECT item_codigo, motivo FROM pedido_releitura WHERE item_codigo=?", c1) == (c1, fotos_qnap.MOTIVO_RELEITURA), f"{n} {alvo1}")
+        # 3) com o QNAP no ar: na HORA (segundo plano da própria requisição); PNG leva o original e o JPG
+        r = adm.post("/api/projetos/F084-P0001/folhas/enviar", params={"serie": "S03", "nome": "planta.png"}, content=img("PNG", (90, 120, 200)))
+        c2 = r.json().get("codigo")
+        ver("na hora: logo depois do envio, o PNG está em PNG/ e o JPG em JPG/ da série, e o pedido de releitura existe",
+            (pj_dir / "03 - Fotografias" / "PNG" / f"{c2}.png").is_file() and (pj_dir / "03 - Fotografias" / "JPG" / f"{c2}.jpg").is_file()
+            and um("SELECT COUNT(*) FROM pedido_releitura WHERE item_codigo=?", c2)[0] == 1 and um("SELECT COUNT(*) FROM evento WHERE tipo='folha_gravada_no_qnap' AND codigo=?", c2)[0] == 1, r.text[:200])
+        # 4) projeto sem pasta no acervo: cria "<código> - <título>" no fundo
+        r = adm.post("/api/projetos/F084-P0002/folhas/enviar", params={"serie": "S03", "nome": "obra.jpg"}, content=img("JPEG", (10, 200, 10)))
+        c3 = r.json().get("codigo")
+        ver("projeto sem pasta no acervo: cria 'F084-P0002 - Casa Dois' (não usa a pasta de outro projeto) e grava lá",
+            (acervo / "F084 - EDA Eduardo de Almeida" / "01 - Projetos" / "F084-P0002 - Casa Dois" / "03 - Fotografias" / "JPG" / f"{c3}.jpg").is_file(), r.text[:200])
+        # 5) o CAMP Vision lê e devolve: a folha é legendada (só se ainda para conferir)
+        (pj_dir / "catalogacao").mkdir(exist_ok=True)
+        (pj_dir / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"projeto_codigo": "F084-P0001", "documentos": [
+            {"codigo": c1, "titulo": "Fachada sul da residência", "tipo_de_desenho": "Fotografia", "ano": "1978", "carimbo": {"obra": "Residência Max Define"}},
+            {"codigo": c2, "titulo": "Planta térreo", "tipo_de_desenho": "Planta"}]}, ensure_ascii=False), encoding="utf-8")
+        k.execute("UPDATE item SET revisao='corrigida', titulo='Título da pessoa' WHERE codigo=?", (c2,)); k.commit()
+        for cod in (c1, c2):
+            pid = um("SELECT id FROM pedido_releitura WHERE item_codigo=?", cod)[0]
+            lan.post(f"/api/estacoes/pedidos-releitura/{pid}/iniciado", json={"estacao": "campvision2"}, headers=T_)
+            rr = lan.post(f"/api/estacoes/pedidos-releitura/{pid}/concluido", json={"ok": True, "mensagem": "1 folha relida"}, headers=T_)
+        ver("releitura concluída: a foto ganha o título, o ano e o carimbo lidos pelo CAMP Vision e fica no histórico",
+            um("SELECT titulo, ano_folha, projeto_carimbo FROM item WHERE codigo=?", c1) == ("Fachada sul da residência", 1978, "Residência Max Define")
+            and um("SELECT COUNT(*) FROM evento WHERE tipo='foto_lida_pelo_cv' AND codigo=?", c1)[0] == 1, str(um("SELECT titulo, ano_folha, projeto_carimbo FROM item WHERE codigo=?", c1)))
+        ver("folha já revisada por uma pessoa: a leitura NÃO troca o que ela fez", um("SELECT titulo FROM item WHERE codigo=?", c2) == ("Título da pessoa",))
+        ver("a faixa do painel continua: a próxima foto do projeto é D90003", str(adm.post("/api/projetos/F084-P0001/folhas/enviar", params={"serie": "S03", "nome": "x.jpg"}, content=img("JPEG", (1, 2, 3))).json().get("codigo", "")).endswith("-D90003"))
+        k.close(); shutil.rmtree(base, ignore_errors=True)
+        for l in res: print(l)
     elif modo == "ux17_clique_duplo":
         # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
         # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
@@ -15018,6 +15094,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cor do original: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
+rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")
+if rc != 0: ok(False, f"teste fotos_qnap não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Fotos do painel no QNAP: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")

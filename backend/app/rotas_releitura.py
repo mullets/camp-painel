@@ -319,6 +319,10 @@ def concluido(pid: int, d: Concluido, request: Request) -> dict:
         resultado: dict = {}
         if d.ok:
             resultado = _importar_de_novo(con, p["projeto_codigo"])
+            if p["item_codigo"]:                             # 28/10: foto enviada pelo painel: a leitura preenche a folha (se ainda para conferir)
+                from .fotos_qnap import aplicar_leitura, e_do_painel
+                if e_do_painel(p["item_codigo"]):
+                    resultado["foto_do_painel"] = aplicar_leitura(con, p["item_codigo"])
             destravados = _destravar_lotes(con, p["projeto_codigo"])
             if destravados:
                 resultado["lotes_destravados"] = destravados
