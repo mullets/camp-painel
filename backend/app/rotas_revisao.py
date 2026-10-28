@@ -823,9 +823,14 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
         i = con.execute("SELECT i.revisao, i.status_site, i.retida, i.lote_id, l.aprovado_em FROM item i LEFT JOIN lista_processamento l ON l.id=i.lote_id WHERE i.codigo=?", (codigo,)).fetchone()
         if not i:
             raise HTTPException(404, "Folha não existe")
-        # 19/10: lote aprovado NÃO trava mais (o Rafa: "isso tá me irritando muito"); o que trava é a folha estar no site
-        if i["status_site"] in ("rascunho", "no_ar"):
-            raise HTTPException(409, "Esta folha já está no site. Despublique pela página da folha antes de retê-la.")
+        # 19/10: lote aprovado NÃO trava mais (o Rafa: "isso tá me irritando muito"). 28/10: folha no site também não: ao reter, o painel
+        # a deixa privada no site (nada é apagado). Se o site recusar, nada muda.
+        escondida = False
+        if d.retida and i["status_site"] in ("rascunho", "no_ar"):
+            from .publicador import esconder_folha_no_site
+            con.close()
+            escondida = esconder_folha_no_site(codigo, u["email"], "folha retida")
+            con = connect()
         motivo = (d.motivo or "").strip()[:300] or None
         if d.retida:
             con.execute("""UPDATE item SET retida=1, retida_motivo=?, retida_por=?, retida_em=datetime('now'),
@@ -841,7 +846,7 @@ def reter(codigo: str, d: RetencaoItem, u: dict = Depends(auth.exige("operador")
         _evento(con, "item", codigo, "folha_retida" if d.retida else "folha_liberada", u["email"], {"motivo": motivo})
         con.commit()
         rev = con.execute("SELECT revisao FROM item WHERE codigo=?", (codigo,)).fetchone()[0]
-        return {"ok": True, "retida": d.retida, "revisao": rev}
+        return {"ok": True, "retida": d.retida, "revisao": rev, **({"escondida_no_site": True} if escondida else {})}
     finally:
         con.close()
 

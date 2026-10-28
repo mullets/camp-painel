@@ -68,7 +68,7 @@ def descartar_lote(lid: int, d: Descarte, u: dict = Depends(auth.exige("admin"))
 # MOVER folhas e MESCLAR projetos. O código da folha é a chave primária ({projeto}-{ano}-{série}-D{seq}) e aparece em
 # item_agente, item_localizacao, pedido_releitura, item.duplicata_de e erro.codigo: tudo é trocado numa transação só,
 # com a checagem de chave estrangeira adiada até o fim. Ou move tudo, ou não move nada.
-# Folha PÚBLICA no site (no_ar) não é movida: despublique antes. Folha que já tinha registro no site (rascunho/privado)
+# Folha PÚBLICA no site (no_ar): pela tela, o painel a deixa privada no site antes de mover (28/10); pelo CAMP Vision, recusa. Folha que já tinha registro no site (rascunho/privado)
 # é movida e perde o vínculo (o registro antigo fica privado no site; ao publicar o destino, ela sobe com o código novo).
 # ---------------------------------------------------------------------------------------------------------------------
 import json as _json
@@ -146,7 +146,7 @@ def _ano_da_folha(con, it) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None, soltar_lote: bool = False) -> dict:
+def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None, soltar_lote: bool = False, publicada_ok: bool = False) -> dict:
     """Move as folhas para o destino (transação já aberta por quem chama). Devolve o que foi movido, as duplicatas e o que foi ignorado.
     `soltar_lote` (CAMP-098, folha movida por uma pessoa): a folha deixa o lote do projeto de origem (lote_id fica no histórico). Antes ela
     continuava contando no lote de lá ("Faltam conferir 1 de 7") e o lote nunca podia ser aprovado. Mover o LOTE inteiro não solta."""
@@ -167,7 +167,7 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None,
             ignorados.append({"codigo": c, "motivo": "já está no destino"}); continue
         _mesmo_fundo(con, it["projeto_codigo"], d, f"a folha {c}")
         if it["status_site"] == "no_ar":
-            if it["tainacan_item_id"]:
+            if it["tainacan_item_id"] and not publicada_ok:   # (a simulação do mover da tela passa: ao aplicar, a rota a esconde no site antes)
                 raise HTTPException(409, f"A folha {c} está publicada no site. Despublique esta folha (ou o projeto) antes de mover; as outras folhas podem ser movidas.")
             _status_velho(con, c, ator)                                # marcada como publicada mas sem registro no site: status velho, não trava
         igual = None
@@ -254,9 +254,25 @@ def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.
     """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou)."""
     if not d.itens:
         raise HTTPException(400, "Escolha pelo menos uma folha.")
-    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True), simular=d.simular)
+    escondidas = []
+    if not d.simular:                    # 28/10: folha publicada não trava mais o mover: o painel a deixa privada no site antes (nada é apagado)
+        from .publicador import esconder_folha_no_site
+        con = connect()
+        try:
+            no_ar = [x[0] for x in con.execute(f"SELECT codigo FROM item WHERE codigo IN ({','.join('?' * len(d.itens))}) AND status_site='no_ar' AND tainacan_item_id IS NOT NULL",
+                                              list(d.itens))]
+        finally:
+            con.close()
+        if no_ar:                        # confere ANTES (simulando) se o mover passa: não esconde nada no site para depois recusar
+            _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True, publicada_ok=True), simular=True)
+        for c in no_ar:
+            if esconder_folha_no_site(c, u["email"], "folha movida para " + d.destino):
+                escondidas.append(c)
+    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True, publicada_ok=d.simular), simular=d.simular)
     if d.simular:
         return {**r, "simulado": True}
+    if escondidas:
+        r["escondidas_no_site"] = escondidas
     tarefas.add_task(_enviar_redirecionamentos)
     return r
 

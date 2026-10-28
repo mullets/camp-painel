@@ -4673,7 +4673,22 @@ def filho(modo):
         # liberar devolve para conferir; folha já no site não pode ser retida; permissões
         op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": True}); lb = op.post(f"/api/itens/{D(PL, 1)}/retencao", json={"retida": False})
         ver("liberar: a folha deixa de ser retida e volta para CONFERIR (olho humano de novo)", lb.status_code == 200 and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 1)) == 0 and sql("SELECT revisao FROM item WHERE codigo=?", D(PL, 1)) == "pendente" and sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 1)) is None)
-        ver("folha que já está no site não pode ser retida (409 com a explicação)", "já está no site" in op.post(f"/api/itens/{D(PL, 4)}/retencao", json={"retida": True}).text)
+        # 28/10 (Beatriz: "não é possível reter a página após ela ter sido publicada"): reter a folha publicada a deixa PRIVADA no site antes
+        k.execute("INSERT OR REPLACE INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (7998,8013,'publish','f',?)", (D(PL, 4),))
+        k.execute("UPDATE item SET tainacan_item_id=7998, status_site='no_ar' WHERE codigo=?", (D(PL, 4),)); k.commit()
+        class WPRecusa:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo): raise RuntimeError("Tainacan recusou: 503")
+        publicador.WP = WPRecusa
+        rr = op.post(f"/api/itens/{D(PL, 4)}/retencao", json={"retida": True})
+        ver("28/10: o site recusou esconder: 502 e NADA muda (não retém, continua publicada)", rr.status_code == 502 and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 4)) == 0
+            and sql("SELECT status_site FROM item WHERE codigo=?", D(PL, 4)) == "no_ar", rr.text[:200])
+        publicador.WP = WPGrava; st_chamadas.clear()
+        rr = op.post(f"/api/itens/{D(PL, 4)}/retencao", json={"retida": True})
+        ver("28/10: reter folha publicada: o painel a deixa privada no site (nada apagado) e retém",
+            rr.status_code == 200 and rr.json().get("escondida_no_site") is True and (7998, "private") in st_chamadas and sql("SELECT retida FROM item WHERE codigo=?", D(PL, 4)) == 1
+            and sql("SELECT status_site FROM item WHERE codigo=?", D(PL, 4)) == "fora_do_ar" and sql("SELECT status FROM wp_item WHERE id=7998") == "private"
+            and sql("SELECT COUNT(*) FROM evento WHERE tipo='site_folha_escondida' AND codigo=?", D(PL, 4)) == 1, rr.text[:200] + " " + str(st_chamadas))
         ver("leitura 403, sem login 401, folha inexistente 404", lei.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 403 and anon.post(f"/api/itens/{D(PL, 2)}/retencao", json={"retida": True}).status_code == 401 and op.post("/api/itens/F089-P0002-1970-S01-D99999/retencao", json={"retida": True}).status_code == 404)
         op.post(f"/api/itens/{D(PL, 3)}/retencao", json={"retida": True, "motivo": "x" * 500})
         ver("motivo é limitado a 300 caracteres", len(sql("SELECT retida_motivo FROM item WHERE codigo=?", D(PL, 3))) == 300)
@@ -5959,7 +5974,29 @@ def filho(modo):
         ver("mover é tudo ou nada: com uma folha inexistente, nenhuma é movida (404)", at.status_code == 404 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", m1) == PM)
         sv = adm.post("/api/itens/mover", json={"itens": [m4], "destino": PX})
         ver("folha marcada 'no ar' sem registro no site é movida: o status velho vira nao_publicado e fica no histórico", sv.status_code == 200 and sql("SELECT status_site FROM item WHERE codigo=?", f"{PX}-1980-S01-D00003") == "nao_publicado" and sql("SELECT COUNT(*) FROM evento WHERE tipo='status_site_corrigido' AND codigo=?", m4) == 1, sv.text[:200])
-        ver("folha pública no site não é movida (409): despublique antes", adm.post("/api/itens/mover", json={"itens": [f"{PP}-1970-S01-D00001"], "destino": PX}).status_code == 409)
+        # 28/10 (Beatriz: "para mudar uma folha de projeto aparece que é necessário despublicar"): o painel a deixa privada no site e move
+        from app import publicador as _pubm
+        _st_mv = []
+        class _WPRecusaMv:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, alvo): raise RuntimeError("Tainacan recusou: 503")
+        class _WPGravaMv:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, alvo): _st_mv.append((wid, alvo))
+        _wp_orig = _pubm.WP
+        pub1 = f"{PP}-1970-S01-D00001"
+        sm = adm.post("/api/itens/mover", json={"itens": [pub1], "destino": PX, "simular": True})
+        ver("28/10: simular o mover de folha pública: mostra o que faria, sem tocar no site", sm.status_code == 200 and sm.json().get("simulado") is True and not _st_mv, sm.text[:200])
+        _pubm.WP = _WPRecusaMv
+        rv = adm.post("/api/itens/mover", json={"itens": [pub1], "destino": PX})
+        ver("28/10: o site recusou esconder: 502 e NADA é movido", rv.status_code == 502 and sql("SELECT status_site FROM item WHERE codigo=?", pub1) == "no_ar", rv.text[:200])
+        _pubm.WP = _WPGravaMv
+        rv = adm.post("/api/itens/mover", json={"itens": [pub1], "destino": PX, "motivo": "é do outro projeto"})
+        mvd = (rv.json().get("movidos") or [{}])[0] if rv.status_code == 200 else {}
+        ver("28/10: mover folha PUBLICADA: o painel a deixa privada no site (nada apagado), move e registra o redirecionamento",
+            rv.status_code == 200 and (777, "private") in _st_mv and rv.json().get("escondidas_no_site") == [pub1] and str(mvd.get("para", "")).startswith(PX)
+            and mvd.get("tinha_registro_no_site") is True, rv.text[:300] + " " + str(_st_mv))
+        _pubm.WP = _wp_orig
         # 4) MOVER LOTE para o projeto certo
         ml = adm.post(f"/api/filas/{LW}/mover-para", json={"projeto_codigo": PX2})
         ver("mover lote: o lote e as folhas dele passam para o projeto certo", ml.status_code == 200 and sql("SELECT projeto_codigo FROM lista_processamento WHERE id=?", LW) == PX2 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id=?", PX2, LW) == 2, ml.text[:200])
@@ -12320,7 +12357,7 @@ def filho(modo):
         ver("reter/liberar ficam no histórico", q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo IN ('folha_retida','folha_liberada')", B(1))[0] == 2)
         # ---------- (b) folha no site ----------
         r = op.post(f"/api/itens/{B(3)}/retencao", json={"retida": True})
-        ver("folha no site: reter continua recusado com mensagem clara", r.status_code == 409 and "já está no site" in r.text and q("SELECT retida FROM item WHERE codigo=?", B(3))[0] == 0, r.text[:200])
+        ver("28/10: folha marcada no site (sem item no site para esconder): reter é aceito", r.status_code == 200 and q("SELECT retida FROM item WHERE codigo=?", B(3))[0] == 1, r.text[:200])
         # ---------- lote em revisão: reter e liberar como antes ----------
         r = op.post(f"/api/itens/{A(1)}/retencao", json={"retida": True, "motivo": "foto de pessoa"})
         ver("lote em revisão: reter marca a folha conferida", r.status_code == 200 and tuple(q("SELECT retida, revisao FROM item WHERE codigo=?", A(1))) == (1, "conferida"), r.text[:200])
