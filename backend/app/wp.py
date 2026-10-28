@@ -83,6 +83,12 @@ def detectar_codigo(*textos: str) -> tuple[str | None, str | None, str | None]:
     return codigo, fundo, projeto
 
 
+def filtro_modificados_desde(desde: str) -> dict:
+    """UX-46: parâmetros do Tainacan v2 para "criados ou modificados depois de `desde`". O Tainacan passa `datequery` ao WP_Query como
+    date_query; a coluna é a de UTC (post_modified_gmt), a mesma referência do datetime('now') do SQLite."""
+    return {"datequery[0][column]": "post_modified_gmt", "datequery[0][after]": str(desde), "datequery[0][inclusive]": "true"}
+
+
 class WP:
     def __init__(self, log=None) -> None:
         self.log = log or (lambda *_: None)
@@ -137,8 +143,26 @@ class WP:
     def metadados_da_colecao(self, cid: int) -> list[dict]:
         return self._get(f"/wp-json/tainacan/v2/collection/{cid}/metadata").json()
 
-    def itens(self, cid: int, status: str = "publish,draft,private,pending") -> Iterator[dict]:
-        yield from self._paginado(f"/wp-json/tainacan/v2/collection/{cid}/items", log=self.log, status=status, order="ASC", orderby="id")
+    def itens(self, cid: int, status: str = "publish,draft,private,pending", desde: str | None = None) -> Iterator[dict]:
+        """Itens da coleção, em qualquer status. UX-46: com `desde` ('AAAA-MM-DD HH:MM:SS', UTC), só os criados ou modificados depois."""
+        extra = filtro_modificados_desde(desde) if desde else {}
+        yield from self._paginado(f"/wp-json/tainacan/v2/collection/{cid}/items", log=self.log, status=status, order="ASC", orderby="id", **extra)
+
+    def filtro_de_data_funciona(self, cid: int, status: str = "publish,draft,private,pending") -> bool:
+        """UX-46: o site respeita o filtro de data dos itens? Duas perguntas baratas (1 item cada) à coleção `cid`, que tem itens:
+        modificados depois de 2999 tem de vir VAZIO (site que ignora o parâmetro devolve a coleção inteira) e modificados depois
+        de 1971 tem de vir com algum item (site que não entende a data devolve nada, e a sincronização não veria mudança nenhuma)."""
+        def pergunta(desde):
+            r = self._get(f"/wp-json/tainacan/v2/collection/{cid}/items", status=status, perpage=1, paged=1, **filtro_modificados_desde(desde))
+            dados = r.json()
+            if isinstance(dados, dict) and "items" in dados:
+                dados = dados["items"]
+            return dados if isinstance(dados, list) else None
+        futuro = pergunta("2999-01-01 00:00:00")
+        if futuro is None or len(futuro) > 0:
+            return False
+        passado = pergunta("1971-01-01 00:00:00")
+        return bool(passado)
 
     def taxonomias(self) -> list[dict]:
         return self._get("/wp-json/tainacan/v2/taxonomies", perpage=100).json()
@@ -279,10 +303,12 @@ class WP:
             raise RuntimeError(f"O site recusou mudar a página do arquiteto: {r.status_code} {r.text[:200]}")
         return r.json()
 
-    def paginas(self) -> Iterator[dict]:
+    def paginas(self, desde: str | None = None) -> Iterator[dict]:
         # 27/10: só os campos que o espelho guarda (antes vinha o conteúdo inteiro de ~5.200 páginas a cada rodada)
+        # UX-46: com `desde`, só as modificadas depois (modified_after do WordPress; se o site ignorar, vêm todas: mais lento, nunca errado)
         yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None,
-                                  _fields="id,title,slug,link,status,parent,modified")
+                                  _fields="id,title,slug,link,status,parent,modified",
+                                  **({"modified_after": str(desde).replace(" ", "T")} if desde else {}))
 
     def quem_sou(self) -> dict:
         return self._get("/wp-json/wp/v2/users/me", context="edit").json()

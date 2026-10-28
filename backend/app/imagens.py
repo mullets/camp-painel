@@ -66,11 +66,15 @@ def radical(url: str | None) -> str:
     return stem
 
 
-def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print, info: dict | None = None, respiro=None, lote: int = 250) -> dict:
+def resolver_anexos(con, wp, colecao_id: int, divergencia=None, log=print, info: dict | None = None, respiro=None, lote: int = 250,
+                    so_ids: set | None = None) -> dict:
     """Passo da sincronização: troca o ID do anexo pela URL real do arquivo, completa a miniatura que falta
-    com o próprio documento (quando for imagem) e aponta miniaturas que não são do arquivo do item."""
+    com o próprio documento (quando for imagem) e aponta miniaturas que não são do arquivo do item.
+    UX-46: `so_ids` (sincronização incremental) limita aos itens que vieram na rodada; os outros ficam como estavam."""
     out = {"itens": 0, "com_miniatura": 0, "via_documento": 0, "sem_imagem": 0, "divergentes": 0, "anexos": 0}
     linhas = con.execute("SELECT id, codigo_detectado, thumb_url, json FROM wp_item WHERE colecao_id=?", (colecao_id,)).fetchall()
+    if so_ids is not None:
+        linhas = [r for r in linhas if int(r["id"]) in so_ids]
     dados, ids = [], set()
     for r in linhas:
         try:

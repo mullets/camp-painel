@@ -821,17 +821,22 @@ META_CODIGO_DOCUMENTO = 8030      # "Código do documento" na coleção Acervo C
 
 
 ESPELHO_RECENTE_S = 2 * 3600     # 27/10: sincronização completa e bem-sucedida há menos disto dispensa perguntar ao site pelo código
+ESPELHO_COMPLETA_S = 24 * 3600   # UX-46: a incremental recente também vale, se houver completa OK há menos disto
 
 
 def espelho_basta(con, codigo: str) -> bool:
     """27/10 (site lento, ~3,4 s por pedido): a busca pelo código no site antes de criar a folha pode ser pulada quando o espelho é recente:
     a última sincronização COMPLETA deu certo e começou há menos de ESPELHO_RECENTE_S (ela lê todos os itens, em qualquer status), e
     tudo o que o painel cria depois entra no espelho na hora. Nunca pula quando a folha tem tentativa anterior que falhou
-    (pendente_criar_no_site): aí o item pode existir sem o painel saber."""
+    (pendente_criar_no_site): aí o item pode existir sem o painel saber.
+    UX-46: uma sincronização INCREMENTAL OK recente também conta (ela leu tudo o que foi criado ou modificado no site desde a anterior),
+    desde que haja uma completa OK que começou há menos de ESPELHO_COMPLETA_S. Linha antiga sem tipo = completa."""
     if con.execute("SELECT 1 FROM divergencia_site WHERE entidade='item' AND codigo=? AND campo='pendente_criar_no_site' AND resolvida=0", (codigo,)).fetchone():
         return False
-    r = con.execute("SELECT 1 FROM sincronizacao WHERE ok=1 AND terminada_em IS NOT NULL AND iniciada_em >= datetime('now', ?) LIMIT 1",
-                    (f"-{int(ESPELHO_RECENTE_S)} seconds",)).fetchone()
+    r = con.execute("SELECT 1 FROM sincronizacao s WHERE s.ok=1 AND s.terminada_em IS NOT NULL AND s.iniciada_em >= datetime('now', ?) "
+                    "AND (COALESCE(s.tipo,'completa')='completa' OR EXISTS (SELECT 1 FROM sincronizacao c WHERE c.ok=1 AND c.terminada_em IS NOT NULL "
+                    "AND COALESCE(c.tipo,'completa')='completa' AND c.iniciada_em >= datetime('now', ?))) LIMIT 1",
+                    (f"-{int(ESPELHO_RECENTE_S)} seconds", f"-{int(ESPELHO_COMPLETA_S)} seconds")).fetchone()
     return bool(r)
 
 
