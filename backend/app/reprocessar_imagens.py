@@ -76,7 +76,7 @@ def recorte_automatico(aplicar: bool = False, limite: int = 0, incluir_cor: bool
         linhas = candidatos_recorte(con, fundo, projeto)
         if prog:
             prog.total(len(linhas))
-        grupos: dict[str, list[str]] = {k: [] for k in ("recorte", "cor", "incerto", "manual", "igual", "sem_imagem")}
+        grupos: dict[str, list[str]] = {k: [] for k in ("recorte", "cor", "cor_original", "incerto", "manual", "igual", "sem_imagem")}
         for r in linhas:
             if prog:
                 prog.passo("Analisando as imagens", r["codigo"])
@@ -89,8 +89,11 @@ def recorte_automatico(aplicar: bool = False, limite: int = 0, incluir_cor: bool
                     pl = recorte_auto.plano(con, r, Path(cam), r["giro_manual"] or 0, espelho_efetivo(r), rec, ang)
                 except Exception:  # noqa: BLE001  (arquivo corrompido)
                     pl = {"situacao": "erro", "recorte_auto": None, "cor": False}
+                ja_com_cor = (r["site_imagem_recorte"] if "site_imagem_recorte" in r.keys() else None) == recorte_auto.VERSAO_COM_COR and not pl["cor"]
                 if pl["recorte_auto"]:
                     grupos["recorte"].append(r["codigo"])
+                elif ja_com_cor:              # 28/10: subiu com o ajuste de cor (v1); agora volta com a cor do original
+                    grupos["cor_original"].append(r["codigo"])
                 elif pl["situacao"] == "incerto":
                     grupos["incerto"].append(r["codigo"])
                 elif pl["situacao"] == "manual":
@@ -104,11 +107,12 @@ def recorte_automatico(aplicar: bool = False, limite: int = 0, incluir_cor: bool
     finally:
         con.close()
     contagem = {k: len(v) for k, v in grupos.items()}
-    alvo = grupos["recorte"] + (grupos["cor"] if incluir_cor else [])
+    alvo = grupos["recorte"] + grupos["cor_original"] + (grupos["cor"] if incluir_cor else [])
     out = {"ok": True, "simulacao": not aplicar, "analisadas": len(linhas), "contagem": contagem, "mudariam": len(alvo),
            "codigos": {k: v[:500] for k, v in grupos.items()}}
     if not aplicar:
         out["mensagem"] = (f"SIMULAÇÃO: {len(alvo)} de {len(linhas)} folha(s) no site mudariam ({contagem['recorte']} com recorte, "
+                           f"{contagem['cor_original']} voltam à cor do original, "
                            f"{contagem['cor']} só cor{'' if incluir_cor else ', fora do reenvio'}; {contagem['incerto']} incerta(s) para conferir). Nada foi enviado.")
         return out
     feitas, falhas = [], []
