@@ -233,6 +233,11 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - No resultado: "**N folha(s) precisaram de nova tentativa (o site demorou)**". Falha de vez: "(o site não respondeu em 3 tentativas)" e
   "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas".
 
+## Mudar de fundo (28/10/2026)
+- No "Mais ⋯" do projeto (admin): **Mudar de fundo** — "Para o projeto cadastrado no fundo errado (ex.: digitalizado como Convidado e é de
+  um arquiteto)…". Escolhe o **Fundo certo**; a prévia diz "Vai virar F0xx-P00NN (N folhas)". Botão **Mudar de fundo**; aviso "Projeto mudou de
+  fundo: X agora é Y" + "As etiquetas já impressas têm o código antigo: imprima de novo." Indisponível: "Já tem registro no site: não dá para mudar de fundo."
+
 ## Apagar lote sem folhas (28/10/2026)
 - Lote em Importar/Verificar destino SEM nenhuma folha no painel: no Ignorar ▾ da Home, **Apagar este lote (sem folhas)**; no Material novo,
   **Apagar lote** (só admin). Confirmação: "O lote não tem nenhuma folha no painel: sai de todas as listas e contagens, para todos. Os arquivos

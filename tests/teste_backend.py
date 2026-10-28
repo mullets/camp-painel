@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11125,6 +11125,50 @@ def filho(modo):
             "Apagar este lote (sem folhas)" in html and "'Apagar lote'" in html and "o CAMP Vision achou ${qtd(n,'arquivo','arquivos')} na pasta deste lote" in html)
         k.close()
         for l in res: print(l)
+    elif modo == "mudar_de_fundo":
+        # 28/10 (Rafael, F000-P0004 "Projeto Não Identificado 10": "isso é do Euclides de Oliveira, não consigo mudar de fundo? foi digitalizado
+        # errado como Convidado"): o projeto inteiro muda de fundo com o próximo P livre de lá; folhas acompanham; antigo redireciona.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F000','Convidado','CNV',1),('F031','Euclides de Oliveira','EDO',1)")
+        for f, n, t in (("F000", 4, "Projeto Não Identificado 10"), ("F031", 1, "Casa Um"), ("F031", 2, "Casa Dois"), ("F000", 5, "Já no site")):
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,0)", (f"{f}-P{n:04d}", f, n, t))
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES ('L','F000-P0004','/x','revisao',datetime('now'))").lastrowid
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,lote_id) VALUES ('F000-P0004-0000-S01-D00001','F000-P0004','S01',1,'Planta','campvision','corrigida',?)", (lid,))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,tainacan_item_id) VALUES ('F000-P0005-0000-S01-D00001','F000-P0005','S01',1,'x','campvision','conferida',555)")
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        k = connect(); um = lambda q, *a: (lambda r: tuple(r) if r else None)(k.execute(q, a).fetchone())
+        U = "/api/projetos/F000-P0004/mudar-fundo"
+        ver("operador não muda de fundo (403)", op.post(U, json={"fundo": "F031"}).status_code == 403)
+        sm = adm.post(U, json={"fundo": "F031", "simular": True}).json()
+        ver("simular: mostra o código novo (próximo P livre do fundo certo) e não muda nada", sm.get("para") == "F031-P0003" and sm.get("folhas") == 1 and um("SELECT fundo_codigo FROM projeto WHERE codigo='F000-P0004'")[0] == "F000", str(sm))
+        ver("recusa: fundo inexistente 404, mesmo fundo 400, projeto com registro no site 409",
+            adm.post(U, json={"fundo": "F999"}).status_code == 404 and adm.post(U, json={"fundo": "F000"}).status_code == 400
+            and adm.post("/api/projetos/F000-P0005/mudar-fundo", json={"fundo": "F031"}).status_code == 409)
+        r = adm.post(U, json={"fundo": "F031", "motivo": "digitalizado errado como Convidado"}); j = r.json()
+        ver("muda: o projeto vira F031-P0003, do fundo F031, com o título e o lote",
+            r.status_code == 200 and j.get("para") == "F031-P0003" and um("SELECT fundo_codigo, titulo FROM projeto WHERE codigo='F031-P0003'") == ("F031", "Projeto Não Identificado 10")
+            and um("SELECT projeto_codigo FROM lista_processamento WHERE id=?", lid)[0] == "F031-P0003" and not um("SELECT 1 FROM projeto WHERE codigo='F000-P0004'"), r.text[:300])
+        ver("as folhas acompanham (código novo, antigo guardado) e o antigo redireciona",
+            um("SELECT codigo_anterior FROM item WHERE codigo='F031-P0003-0000-S01-D00001'") == ("F000-P0004-0000-S01-D00001",)
+            and um("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo='F000-P0004'") == ("F031-P0003",)
+            and um("SELECT COUNT(*) FROM evento WHERE tipo='projeto_mudou_de_fundo' AND codigo='F031-P0003'")[0] == 1
+            and any("etiquetas" in a for a in j.get("avisos") or []), str(j)[:300])
+        ver("o número P do fundo certo fica reservado (o próximo projeto de lá é P0004)", adm.post("/api/projetos/verificar", json={"fundo_codigo": "F031", "titulo": "Casa Nova"}).json().get("proximo_codigo") == "F031-P0004")
+        ver("'Mudar o código' continua só no mesmo fundo (aponta para 'Mudar de fundo')",
+            "Mudar de fundo" in adm.post("/api/projetos/F031-P0001/recodificar", json={"novo": "F000-P0099"}).text)
+        k.close()
+        for l in res: print(l)
     elif modo == "ux17_clique_duplo":
         # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
         # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
@@ -14873,6 +14917,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Apagar lote: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Mudar de fundo: o projeto inteiro vai para o fundo certo com o próximo P; folhas acompanham; antigo redireciona")
+rc, out = rodar("mudar_de_fundo", f"{tmp}/mudar_de_fundo.db")
+if rc != 0: ok(False, f"teste mudar_de_fundo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Mudar de fundo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")
