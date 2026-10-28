@@ -356,10 +356,12 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             det = [l["destino_motivo"], f"o painel faria: {_texto_faria(pf)}" if pf else None, parado]
             linhas.append({"sev": "b" if mov.get("estado") == "movendo" else "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": " · ".join(p for p in det if p), "destino": True,
+                           **({"apagar": l["id"], "apagar_arquivos": l.get("folhas_encontradas") or 0} if not (l["itens_total"] or 0) and not l.get("aprovado_em") else {}),   # 28/10 (campo novo, opcional): lote sem folhas no painel → "Apagar este lote"
                            "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Verificar destino", "destino", l["id"])})
         else:
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {parado}" if parado else ""),
+                           **({"apagar": l["id"], "apagar_arquivos": l.get("folhas_encontradas") or 0} if not (l["itens_total"] or 0) and not l.get("aprovado_em") else {}),   # 28/10 (campo novo, opcional): lote sem folhas no painel → "Apagar este lote"
                            "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
     linhas = _por_idade(vis(linhas), ordem)
     if linhas:

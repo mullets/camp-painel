@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11081,6 +11081,50 @@ def filho(modo):
             "function releituraAvisoTxt" in html and "o CAMP Vision não consulta os pedidos há" in html and "A última releitura falhou" in html and "'Pedir de novo'" in html)
         k.close(); shutil.rmtree(raiz, ignore_errors=True)
         for l in res: print(l)
+    elif modo == "apagar_lote_vazio":
+        # 28/10 (Rafael, Home "Para conferir": F026-P0004, F026-P0006, F026-P0010 — "esses não têm folhas, quero que apague eles"): lote sem
+        # nenhuma folha no painel ganha "Apagar este lote (sem folhas)" (admin), que é o descarte de sempre; Desfazer traz de volta.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from pathlib import Path as _P
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        for n in (4, 6, 7):
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n,))
+            c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F026-P000{n}", "F026", n, f"Clube {n}"))
+        vazio = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, folhas_encontradas, resultado) VALUES ('Lote 6','F026-P0006','/x/6','revisao',3,'{}')").lastrowid
+        cheio = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote 7','F026-P0007','/x/7','revisao')").lastrowid
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,lote_id) VALUES ('F026-P0007-1970-S01-D00001','F026-P0007','S01',1,'f','campvision','pendente',?)", (cheio,))
+        c.commit(); c.close()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        def linhas():
+            ts = adm.get("/api/painel").json().get("tarefas") or []
+            return {x.get("codigo"): x for g in ts if g.get("id") == "conferir" for x in g.get("itens", [])}
+        L = linhas()
+        ver("Home: o lote sem folhas no painel traz 'apagar' (com quantos arquivos o CAMP Vision achou); o lote com folhas não",
+            L.get("F026-P0006", {}).get("apagar") == vazio and L.get("F026-P0006", {}).get("apagar_arquivos") == 3 and "apagar" not in L.get("F026-P0007", {}), str({k: {kk: v.get(kk) for kk in ("apagar", "apagar_arquivos", "acao")} for k, v in L.items()}))
+        ver("operador não apaga (403)", op.post(f"/api/filas/{vazio}/descartar", json={"motivo": "lote sem folhas"}).status_code == 403)
+        r = adm.post(f"/api/filas/{vazio}/descartar", json={"motivo": "lote sem folhas no painel (apagado pela Home)"})
+        k = connect()
+        ver("apagar: o lote sai da Home e das listas (descartado, com autor e motivo); nada mais muda", r.status_code == 200 and "F026-P0006" not in linhas()
+            and k.execute("SELECT descartado_por FROM lista_processamento WHERE id=?", (vazio,)).fetchone()[0] == "adm@camp.arq.br", r.text[:200])
+        ver("lote com folhas continua recusado (409)", adm.post(f"/api/filas/{cheio}/descartar", json={"motivo": "teste"}).status_code == 409)
+        d = adm.delete(f"/api/filas/{vazio}/descartar")
+        ver("Desfazer: o lote volta para a Home e fica no histórico", d.status_code == 200 and "F026-P0006" in linhas()
+            and k.execute("SELECT COUNT(*) FROM evento WHERE tipo='lote_descarte_desfeito' AND codigo=?", (str(vazio),)).fetchone()[0] == 1, d.text[:200])
+        ver("Desfazer é só admin (operador 403)", op.delete(f"/api/filas/{vazio}/descartar").status_code == 403)
+        html = (_P(__file__).parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: 'Apagar este lote (sem folhas)' no Ignorar ▾, 'Apagar lote' no Material novo, aviso dos arquivos na pasta",
+            "Apagar este lote (sem folhas)" in html and "'Apagar lote'" in html and "o CAMP Vision achou ${qtd(n,'arquivo','arquivos')} na pasta deste lote" in html)
+        k.close()
+        for l in res: print(l)
     elif modo == "ux17_clique_duplo":
         # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
         # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
@@ -14821,6 +14865,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ler de novo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Apagar lote sem folhas: Home/Material novo, só admin, Desfazer")
+rc, out = rodar("apagar_lote_vazio", f"{tmp}/apagar_lote_vazio.db")
+if rc != 0: ok(False, f"teste apagar_lote_vazio não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Apagar lote: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")

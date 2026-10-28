@@ -64,6 +64,24 @@ def descartar_lote(lid: int, d: Descarte, u: dict = Depends(auth.exige("admin"))
         con.close()
 
 
+@router.delete("/filas/{lid}/descartar")
+def desfazer_descarte(lid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """28/10: o "Desfazer" do "Apagar este lote" (o descarte só marca o lote; nada foi apagado, então volta inteiro)."""
+    con = connect()
+    try:
+        l = con.execute("SELECT descartado_em FROM lista_processamento WHERE id=?", (lid,)).fetchone()
+        if not l:
+            raise HTTPException(404, "Lote não existe")
+        if not l["descartado_em"]:
+            return {"ok": True, "id": lid}
+        con.execute("UPDATE lista_processamento SET descartado_em=NULL, descartado_por=NULL, descartado_motivo=NULL, descartado_duplicata_de=NULL, atualizado_em=datetime('now') WHERE id=?", (lid,))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('lista',?,'lote_descarte_desfeito',?,NULL)", (str(lid), u["email"]))
+        con.commit()
+        return {"ok": True, "id": lid}
+    finally:
+        con.close()
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # MOVER folhas e MESCLAR projetos. O código da folha é a chave primária ({projeto}-{ano}-{série}-D{seq}) e aparece em
 # item_agente, item_localizacao, pedido_releitura, item.duplicata_de e erro.codigo: tudo é trocado numa transação só,
