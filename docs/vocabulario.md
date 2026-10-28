@@ -219,6 +219,11 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - No andamento, a escrita que esbarrou no site lento: "**o site não respondeu a tempo, continua na fila**" (não conta como falha;
   entra em "ainda na fila"). Recusa do site (4xx) conta em "falharam" e espera a próxima tentativa.
 - Ao lado de **Sincronizar agora**: "Só lê o site e atualiza as diferenças: não envia nada."
+- Sincronização incremental (UX-46): **Sincronizar agora** lê só o que mudou; **Sincronizar tudo** (admin) relê o site inteiro. Texto
+  abaixo dos botões: ""Sincronizar agora" lê só o que mudou no site desde a última conferência. "Sincronizar tudo" relê o site inteiro
+  (leva vários minutos) e tira do painel o que saiu do site; o painel faz isso sozinho uma vez por dia." Em "Última conferência":
+  "**só o que mudou: N itens**" quando a última foi incremental. Tarefas: "Sincronizar tudo com o site" / "Sincronizando tudo com o site";
+  passo "Lendo do site o que mudou desde a última sincronização"; fim "Sincronizado só o que mudou: N itens do site, N divergências."
 - No Histórico de ações: "{quem} mandou ao site as correções e escritas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
 
 ## Publicação paciente com o site lento (27/10/2026)

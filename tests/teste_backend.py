@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ux47_reenvio_pendencias", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "ler_de_novo_destrava"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -803,6 +803,205 @@ def filho(modo):
         w._get = _get
         list(w.paginas())
         ver("páginas pedidas só com os campos usados (_fields), sem o conteúdo inteiro", "id" in str(pedido.get("_fields")) and "content" not in str(pedido.get("_fields")), pedido)
+        k.close()
+        for l in res: print(l)
+    elif modo == "sync_incremental":
+        # UX-46 (Rafael: sincronização que leia só o que mudou). Site FALSO no nível do cliente WP (WP._get substituído, as funções reais de
+        # itens/páginas/filtro montam os pedidos): nenhuma chamada sai do processo. O site falso respeita (ou não) o filtro de data do Tainacan.
+        init_db(); aplicar_migracoes()
+        import time as _t, datetime as _dt
+        import app.sincronizador as sz
+        from app import auth, wp as _wp, publicador as _pub
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F099','Fundo de teste','FTS',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F098','Fundo sem nada','FSN',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F099-P0001','F099',1,'Casa',1970)")
+        COD = {k: f"F099-P0001-1970-S01-D{k:05d}" for k in range(1, 13)}
+        c.executemany("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,'S01',?,?,'campvision')",
+                      [(COD[k], "F099-P0001", k, f"Planta {k}") for k in COD])
+        c.commit()
+        def agora_utc(min_=0): return (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=min_)).strftime("%Y-%m-%d %H:%M:%S")
+        def item_site(k, mod, titulo=None):
+            return {"id": 1000 + k, "title": titulo or f"Planta {k}", "slug": f"planta-{k}", "url": f"https://fake/{k}/", "status": "publish",
+                    "_mod_gmt": mod, "modification_date": f"{mod[8:10]}/{mod[5:7]}/{mod[0:4]}",   # o Tainacan manda só a data, em pt-BR
+                    "document_type": "url", "document": "", "thumbnail": {}, "metadata": {"1": {"name": "Código de Catalogação", "value_as_string": COD[k]}}}
+        VELHO = "2026-10-01 12:00:00"
+        SITE = {8007: {100: {"id": 100, "title": "P0001 — Casa", "slug": "p0001-casa", "url": "u", "status": "publish", "_mod_gmt": VELHO,
+                             "modification_date": "01/10/2026", "metadata": {"1": {"name": "Código de Catalogação", "value_as_string": "F099-P0001"}}}},
+                8013: {1000 + k: item_site(k, VELHO) for k in range(1, 11)}}
+        PAGINAS = {90001: {"id": 90001, "title": {"rendered": "Página 1"}, "slug": "pagina-1", "link": "https://fake/p1/", "status": "publish", "parent": 0,
+                           "modified": "2026-10-01T09:00:00", "_mod": "2026-10-01T09:00:00"}}
+        PEDIDOS = []
+        class _R:
+            def __init__(self, dados, total_pag=1): self._d, self.headers, self.status_code = dados, {"X-WP-TotalPages": str(total_pag)}, 200
+            def json(self): return self._d
+        class SiteFalso(_wp.WP):
+            respeita = True          # o site aplica o filtro de data
+            engana_sonda = False     # aplica o filtro só nas perguntas de 1 item (a sonda passa, a listagem vem inteira)
+            recusa_filtro = False    # responde erro a qualquer pedido com datequery
+            def __init__(self, log=None): self.log, self.base = (log or (lambda *_: None)), "https://fake"
+            def _get(self, path, **q):
+                PEDIDOS.append((path, dict(q)))
+                if path.endswith("/users/me"): return _R({"name": "teste", "roles": ["administrator"]})
+                if path.endswith("/taxonomies"): return _R([{"id": 77, "name": "Fundos", "slug": "fundos"}])
+                if "/taxonomy/" in path: return _R([{"id": 5, "name": "F099 · Fundo de teste", "slug": "f099"}] if int(q.get("paged", 1)) == 1 else [])
+                if path.endswith("/collections"): return _R([{"id": 8007, "name": "Projetos", "slug": "p", "url": "u"}, {"id": 8013, "name": "Acervo", "slug": "a", "url": "u"}])
+                if path.endswith("/metadata"): return _R([])
+                if "/items" in path:
+                    cid = int(path.split("/collection/")[1].split("/")[0])
+                    depois = q.get("datequery[0][after]")
+                    if depois and SiteFalso.recusa_filtro:
+                        raise RuntimeError("400 rest_invalid_param datequery")
+                    lst = sorted(SITE[cid].values(), key=lambda x: x["id"])
+                    aplica = depois and q.get("datequery[0][column]") == "post_modified_gmt" and (SiteFalso.respeita or (SiteFalso.engana_sonda and int(q.get("perpage", 100)) == 1))
+                    if aplica:
+                        lst = [x for x in lst if x["_mod_gmt"] >= depois]
+                    pp, pg = int(q.get("perpage", 100)), int(q.get("paged", 1))
+                    return _R([{k: v for k, v in x.items() if not k.startswith("_")} for x in lst[(pg - 1) * pp: pg * pp]], max(1, -(-len(lst) // pp)))
+                if path.endswith("/pages"):
+                    lst = list(PAGINAS.values())
+                    if q.get("modified_after"):
+                        lst = [x for x in lst if x["_mod"] >= q["modified_after"]]
+                    return _R([{k: v for k, v in x.items() if not k.startswith("_")} for x in lst] if int(q.get("page", 1)) == 1 else [])
+                raise RuntimeError(f"pedido inesperado ao site falso: {path}")
+            def anexos(self, ids): return {}
+        sz.WP = SiteFalso
+        k = connect()
+        def pedidos_itens(): return [q for p, q in PEDIDOS if "/items" in p]
+        def vinc(n_): r = k.execute("SELECT tainacan_item_id FROM item WHERE codigo=?", (COD[n_],)).fetchone(); return r[0] if r else "?"
+        def sinc(): return dict(k.execute("SELECT * FROM sincronizacao ORDER BY id DESC LIMIT 1").fetchone())
+        quieto = lambda *a, **kk: None
+
+        # ===== 1) a primeira rodada é COMPLETA (não há completa nas últimas 24 h) =====
+        PEDIDOS.clear()
+        r1 = sz.executar(log=quieto)
+        ver("sem completa anterior, 'Sincronizar agora' faz a completa", r1.get("ok") and r1.get("tipo") == "completa" and sinc().get("tipo") == "completa", (r1, sinc()))
+        ver("a completa pede os itens SEM filtro de data", pedidos_itens() and not any("datequery[0][after]" in q for q in pedidos_itens()), pedidos_itens()[:3])
+        ver("a completa liga as 10 folhas", all(vinc(n_) == 1000 + n_ for n_ in range(1, 11)), [vinc(n_) for n_ in range(1, 11)])
+
+        # ===== 2) mudanças no site depois da completa (que "começou há 1 h") =====
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-60 minutes'), terminada_em=datetime('now','-50 minutes')"); k.commit()
+        inicio_completa = k.execute("SELECT iniciada_em FROM sincronizacao WHERE id=(SELECT MAX(id) FROM sincronizacao)").fetchone()[0]
+        AGORA = agora_utc(-5)
+        SITE[8013][1002] = item_site(2, AGORA, titulo="Planta 2 corrigida")       # modificado
+        SITE[8013][1011] = item_site(11, AGORA)                                       # criado no site
+        del SITE[8013][1003]                                                         # apagado no site (a incremental não vê)
+        PAGINAS[90002] = {"id": 90002, "title": {"rendered": "Página 2"}, "slug": "pagina-2", "link": "https://fake/p2/", "status": "publish", "parent": 0,
+                          "modified": AGORA.replace(" ", "T"), "_mod": AGORA.replace(" ", "T")}
+        k.execute("UPDATE item SET tainacan_item_id=NULL WHERE codigo=?", (COD[4],))   # folha sem vínculo que NÃO mudou no site: a incremental não mexe
+        k.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES ('item',?,'fundo_trocado','F099','Outro')", (COD[5],))
+        k.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES ('item',?,'fundo_trocado','F099','Outro')", (COD[2],))
+        k.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel,valor_site) VALUES ('item',?,'pendente_criar_no_site',NULL,NULL)", (COD[12],))
+        k.commit()
+        PEDIDOS.clear()
+        r2 = sz.executar(log=quieto)
+        s2 = sinc()
+        esperado_desde = k.execute("SELECT datetime(?, '-10 minutes')", (inicio_completa,)).fetchone()[0]
+        ver("com completa OK nas últimas 24 h, 'Sincronizar agora' faz a INCREMENTAL", r2.get("ok") and r2.get("tipo") == "incremental" and s2.get("tipo") == "incremental", (r2, s2))
+        listagem = [q for q in pedidos_itens() if int(q.get("perpage", 100)) != 1]
+        ver("a incremental pede os itens com o filtro de data do Tainacan (post_modified_gmt, desde o começo da última OK − 10 min)",
+            listagem and all(q.get("datequery[0][after]") == esperado_desde and q.get("datequery[0][column]") == "post_modified_gmt" for q in listagem),
+            (esperado_desde, listagem[:2]))
+        ver("…e grava de onde leu (sincronizacao.desde)", s2.get("desde") == esperado_desde, s2)
+        sondas = [q.get("datequery[0][after]") for q in pedidos_itens() if int(q.get("perpage", 100)) == 1]
+        ver("antes, confere se o site respeita o filtro (2 perguntas de 1 item: 2999 vazio, 1971 com item)", sorted(sondas) == ["1971-01-01 00:00:00", "2999-01-01 00:00:00"], sondas)
+        ver("a incremental leu só os 2 itens modificados (não os 11)", r2.get("itens") == 2, r2)
+        ver("o item modificado foi atualizado no espelho", k.execute("SELECT titulo FROM wp_item WHERE id=1002").fetchone()[0] == "Planta 2 corrigida")
+        ver("o item criado no site entrou no espelho e a folha dele foi ligada", vinc(11) == 1011, vinc(11))
+        ver("a incremental NÃO apaga nada do espelho (o item que saiu do site continua até a completa)",
+            k.execute("SELECT COUNT(*) FROM wp_item WHERE id=1003").fetchone()[0] == 1 and k.execute("SELECT COUNT(*) FROM wp_pagina WHERE id=90001").fetchone()[0] == 1)
+        ver("a incremental não zera vínculos de quem não mudou (D00003 continua ligado; todas as 10 de antes também)",
+            vinc(3) == 1003 and all(vinc(n_) == 1000 + n_ for n_ in (1, 2, 5, 6, 7, 8, 9, 10)), [vinc(n_) for n_ in range(1, 12)])
+        ver("…e só reconcilia os códigos que vieram (a folha D00004, que não mudou no site, não foi mexida)", vinc(4) is None, vinc(4))
+        ver("divergência de um item que NÃO veio na rodada continua", k.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND campo='fundo_trocado' AND resolvida=0", (COD[5],)).fetchone()[0] == 1)
+        ver("divergência do item que veio na rodada é substituída (sumiu: o item no site está certo)", k.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND campo='fundo_trocado' AND resolvida=0", (COD[2],)).fetchone()[0] == 0)
+        sem_itens = [r[0] for r in k.execute("SELECT codigo FROM divergencia_site WHERE campo='sem_itens_no_site' AND resolvida=0")]
+        ver("'fundo sem itens no site' recalculado pelo espelho inteiro (F098 sim, uma vez só; F099 não)", sem_itens.count("F098") == 1 and "F099" not in sem_itens, sem_itens)
+        ver("pendência de escrita ('pendente_*') não é tocada", k.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo=? AND campo='pendente_criar_no_site' AND resolvida=0", (COD[12],)).fetchone()[0] == 1)
+        pg_q = [q for p, q in PEDIDOS if p.endswith("/pages")]
+        ver("páginas: só as modificadas (modified_after, com folga para o fuso do site)", pg_q and pg_q[0].get("modified_after") and r2.get("paginas") == 1, (pg_q[:1], r2.get("paginas")))
+        ver("coleção sem nada modificado não é 'coleção vazia suspeita' na incremental",
+            k.execute("SELECT COUNT(*) FROM divergencia_site WHERE campo='colecao_vazia_suspeita'").fetchone()[0] == 0 and k.execute("SELECT total_itens FROM wp_colecao WHERE id=8007").fetchone()[0] == 1)
+
+        # ===== 3) espelho_basta (publicação pula a busca no site) =====
+        ver("espelho_basta: incremental OK recente + completa OK há 1 h → pula a busca", _pub.espelho_basta(k, COD[1]) is True)
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-3 hours') WHERE tipo='completa'"); k.commit()
+        ver("espelho_basta: incremental OK recente + completa há 3 h (< 24 h) → a incremental conta", _pub.espelho_basta(k, COD[1]) is True)
+        ver("espelho_basta: nunca pula com pendente_criar_no_site", _pub.espelho_basta(k, COD[12]) is False)
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-25 hours') WHERE tipo='completa'"); k.commit()
+        ver("espelho_basta: incremental recente mas a última completa tem mais de 24 h → pergunta ao site", _pub.espelho_basta(k, COD[1]) is False)
+        ver("sem completa nas últimas 24 h, a próxima rodada é COMPLETA", getattr(sz, "desde_para_incremental", lambda _c: "?")(k) is None)
+
+        def envelhecer():   # no teste tudo cai no mesmo segundo; a completa tira o que tem visto_em anterior ao começo dela
+            for t_ in ("wp_colecao", "wp_taxonomia", "wp_termo", "wp_item", "wp_pagina"):
+                k.execute(f"UPDATE {t_} SET visto_em=datetime('now','-2 hours')")
+            k.commit()
+        # ===== 4) a completa (sem completa há 25 h) apaga o que saiu do site e refaz tudo =====
+        envelhecer()
+        PEDIDOS.clear()
+        r3 = sz.executar(log=quieto)
+        ver("completa (a diária) roda quando a última completa tem mais de 24 h", r3.get("tipo") == "completa" and not any("datequery[0][after]" in q for q in pedidos_itens()), r3)
+        ver("a completa tira do espelho o item que saiu do site e desliga a folha dele", k.execute("SELECT COUNT(*) FROM wp_item WHERE id=1003").fetchone()[0] == 0 and vinc(3) is None, vinc(3))
+        ver("a completa reconcilia tudo (D00004 religada)", vinc(4) == 1004, vinc(4))
+
+        # ===== 5) site que ignora o filtro: cai para a completa, nunca dá resultado errado =====
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-60 minutes'), terminada_em=datetime('now','-50 minutes') WHERE id=(SELECT MAX(id) FROM sincronizacao)"); k.commit()
+        SiteFalso.respeita = False
+        del SITE[8013][1004]
+        envelhecer()
+        PEDIDOS.clear()
+        r4 = sz.executar(log=quieto)
+        ver("site ignora o filtro (a pergunta de 2999 veio com itens): a rodada vira COMPLETA", r4.get("ok") and r4.get("tipo") == "completa" and sinc().get("tipo") == "completa"
+            and "filtro" in str(r4.get("motivo_completa")), (r4, sinc()))
+        ver("…e é completa de verdade: lê tudo sem filtro e tira o que saiu do site", any("datequery[0][after]" not in q for q in pedidos_itens())
+            and k.execute("SELECT COUNT(*) FROM wp_item WHERE id=1004").fetchone()[0] == 0 and vinc(4) is None, vinc(4))
+        SiteFalso.respeita, SiteFalso.engana_sonda = False, True
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-60 minutes'), terminada_em=datetime('now','-50 minutes') WHERE id=(SELECT MAX(id) FROM sincronizacao)"); k.commit()
+        del SITE[8013][1005]
+        envelhecer()
+        r5 = sz.executar(log=quieto)
+        ver("site que passa na pergunta mas manda itens antigos na listagem: percebe e vira COMPLETA", r5.get("ok") and r5.get("tipo") == "completa"
+            and "modificado em" in str(r5.get("motivo_completa")) and k.execute("SELECT COUNT(*) FROM wp_item WHERE id=1005").fetchone()[0] == 0, r5)
+        SiteFalso.engana_sonda, SiteFalso.recusa_filtro, SiteFalso.respeita = False, True, True
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-60 minutes'), terminada_em=datetime('now','-50 minutes') WHERE id=(SELECT MAX(id) FROM sincronizacao)"); k.commit()
+        r6 = sz.executar(log=quieto)
+        ver("site que recusa o filtro (erro): vira COMPLETA e dá certo", r6.get("ok") and r6.get("tipo") == "completa", r6)
+        SiteFalso.recusa_filtro = False
+
+        # ===== 6) a automática: incremental no intervalo, completa 1×/dia; o botão "Sincronizar tudo" força a completa =====
+        k.execute("UPDATE configuracao SET valor='60' WHERE chave='sync.intervalo_min'")
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-3 hours'), terminada_em=datetime('now','-2 hours')"); k.commit()
+        a1 = sz.passo_automatico()
+        ver("automática com completa há 3 h: faz a INCREMENTAL", a1.get("acao") == "rodou" and a1.get("tipo") == "incremental" and sinc().get("tipo") == "incremental", (a1, sinc()))
+        k.execute("UPDATE sincronizacao SET iniciada_em=datetime('now','-25 hours'), terminada_em=datetime('now','-2 hours')"); k.commit()
+        a2 = sz.passo_automatico()
+        ver("automática com a última completa há mais de 24 h: faz a COMPLETA (1×/dia)", a2.get("acao") == "rodou" and a2.get("tipo") == "completa" and sinc().get("tipo") == "completa", (a2, sinc()))
+        auth.criar_usuario("Rafael Teste", "rafael@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Ana Operadora", "ana@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cliente(email):
+            cl = TestClient(app, raise_server_exceptions=False); cl.post("/api/auth/login", json={"email": email, "senha": "senha-longa-12345"}); return cl
+        ra = cliente("rafael@camp.arq.br")
+        def esperar_tarefa(tid):
+            t = {}
+            for _ in range(600):
+                t = ra.get(f"/api/tarefas/{tid}").json()
+                if t.get("estado") != "rodando": return t
+                _t.sleep(0.1)
+            return t
+        t1 = esperar_tarefa(ra.post("/api/site/sincronizar?tarefa=1").json().get("tarefa_id"))
+        ver("botão 'Sincronizar agora' (logo depois de uma completa): incremental, com a mensagem 'só o que mudou'",
+            (t1.get("resultado") or {}).get("tipo") == "incremental" and "só o que mudou" in ((t1.get("resultado") or {}).get("mensagem") or ""), t1.get("resultado"))
+        t2 = esperar_tarefa(ra.post("/api/site/sincronizar?tarefa=1&tipo=completa").json().get("tarefa_id"))
+        ver("botão 'Sincronizar tudo' (tipo=completa): COMPLETA mesmo com completa recente", (t2.get("resultado") or {}).get("tipo") == "completa" and sinc().get("tipo") == "completa", t2.get("resultado"))
+        rop = cliente("ana@camp.arq.br").post("/api/site/sincronizar?tarefa=1&tipo=completa")
+        ver("'Sincronizar tudo' é de admin (operador recebe 403)", rop.status_code == 403, rop.status_code)
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("a tela tem 'Sincronizar tudo' chamando a completa", "Sincronizar tudo" in html and "tipo=completa" in html)
         k.close()
         for l in res: print(l)
     elif modo == "ux40_enviar_fila":
@@ -14593,6 +14792,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sincronização: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Sincronização incremental (UX-46): só o que mudou, não apaga, não zera vínculos, cai para a completa, completa 1×/dia, espelho_basta")
+rc, out = rodar("sync_incremental", f"{tmp}/sync_incremental.db")
+if rc != 0: ok(False, f"teste sync_incremental não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sincronização incremental: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

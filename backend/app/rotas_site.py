@@ -9,11 +9,13 @@ router = APIRouter(prefix="/api/site", tags=["site"])
 
 
 @router.post("/sincronizar")
-def sincronizar(bg: BackgroundTasks, tarefa: int = 0, u: dict = Depends(auth.exige("admin"))):
+def sincronizar(bg: BackgroundTasks, tarefa: int = 0, tipo: str = "auto", u: dict = Depends(auth.exige("admin"))):
+    """UX-46: tipo=auto ("Sincronizar agora": só o que mudou, quando dá) ou tipo=completa ("Sincronizar tudo": lê o site inteiro)."""
     from .sincronizador import executar, iniciar
+    tipo = "completa" if tipo == "completa" else "auto"
     if tarefa:                                   # H4: vira tarefa, com o chip do topo e o aviso de conclusão
-        return iniciar(u)                        # 27/10: uma por vez; com uma rodando (a automática inclusive), devolve a mesma
-    bg.add_task(executar)
+        return iniciar(u, tipo)                  # 27/10: uma por vez; com uma rodando (a automática inclusive), devolve a mesma
+    bg.add_task(executar, tipo=tipo)
     return {"ok": True, "aviso": "Sincronização iniciada em segundo plano. Acompanhe em /api/site/status."}
 
 
