@@ -596,21 +596,22 @@ def _prefixo(con, tabela: str, coluna: str, antigo: str, novo: str, onde: str = 
                        (novo, n + 1, antigo, n + 1, antigo + "-")).rowcount
 
 
-def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None) -> dict:
+def _recodificar(con, antigo: str, novo: str, ator: str, motivo: str | None, outro_fundo: bool = False) -> dict:
     p = con.execute("SELECT * FROM projeto WHERE codigo=?", (antigo,)).fetchone()
     if not p:
         raise HTTPException(404, f"O projeto {antigo} não existe.")
     if p["mesclado_em"]:
         raise HTTPException(409, f"O projeto {antigo} já foi mesclado em {p['mesclado_em']}: mude o código de lá, se precisar.")
-    if not novo.startswith(p["fundo_codigo"] + "-"):
-        raise HTTPException(400, f"O código novo tem que ser do mesmo fundo ({p['fundo_codigo']}-P….). Fundos não se misturam.")
+    if not novo.startswith(p["fundo_codigo"] + "-") and not outro_fundo:
+        raise HTTPException(400, f"O código novo tem que ser do mesmo fundo ({p['fundo_codigo']}-P….). Para corrigir o fundo, use “Mudar de fundo”.")
     if con.execute("SELECT 1 FROM projeto WHERE codigo=?", (novo,)).fetchone():
         raise HTTPException(409, f"O código {novo} já é de outro projeto. Escolha um número livre (ou use Mesclar, se for o mesmo projeto).")
     numero = int(novo[-4:])
     if numero < 1:
         raise HTTPException(400, "O número P tem que ser 0001 ou maior.")
-    con.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,NULL)", (p["fundo_codigo"], numero))
-    con.execute("UPDATE projeto SET codigo=?, numero=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, numero, antigo))
+    fundo_novo = novo.split("-")[0]
+    con.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero, reservado_por) VALUES (?,?,NULL)", (fundo_novo, numero))
+    con.execute("UPDATE projeto SET codigo=?, numero=?, fundo_codigo=?, atualizado_em=datetime('now') WHERE codigo=?", (novo, numero, fundo_novo, antigo))
     folhas = []
     for it in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (antigo,)).fetchall():
         c = it["codigo"]
@@ -710,6 +711,54 @@ def recodificar(codigo: str, d: Recodificar, tarefas: BackgroundTasks, u: dict =
     r = _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], d.motivo))
     tarefas.add_task(_enviar_codigos_ao_site, r["folhas"], u["email"])   # o metadado "Código do documento" no site (falha vira pendência)
     tarefas.add_task(_enviar_redirecionamentos)          # CAMP-014: manda o mapa ao site (falha não desfaz o local; o coletor repete)
+    return r
+
+
+class MudarFundo(BaseModel):
+    fundo: str
+    motivo: str | None = None
+    simular: bool = False
+
+
+@router.post("/projetos/{codigo}/mudar-fundo")
+def mudar_fundo(codigo: str, d: MudarFundo, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """28/10 (Rafael: "isso é do Euclides de Oliveira, não consigo mudar de fundo? foi digitalizado errado como Convidado"): corrige o fundo
+    de um projeto cadastrado no fundo errado. O projeto ganha o PRÓXIMO número livre do fundo certo (projetos_novos.proximo_numero, nunca
+    reusa) e as folhas acompanham, como no "Mudar o código" (o antigo fica guardado e vira redirecionamento). Não é misturar fundos: o
+    projeto inteiro muda. Só admin; só projeto que NÃO está no site (nem ele nem folhas): o que já está no site fica onde está.
+    A pasta no QNAP e as etiquetas já impressas continuam com o código antigo (o aviso diz). `simular`: só mostra o código novo."""
+    antigo, fundo = codigo.strip().upper(), (d.fundo or "").strip().upper()
+    con = connect()
+    try:
+        p = con.execute("SELECT * FROM projeto WHERE codigo=?", (antigo,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Projeto não existe")
+        if p["mesclado_em"] or p["descartado_em"]:
+            raise HTTPException(409, "Este projeto foi mesclado ou descartado.")
+        if not con.execute("SELECT 1 FROM fundo WHERE codigo=?", (fundo,)).fetchone():
+            raise HTTPException(404, f"O fundo {fundo} não existe.")
+        if fundo == p["fundo_codigo"]:
+            raise HTTPException(400, "O projeto já é deste fundo.")
+        if p["tainacan_item_id"] or p["wp_page_id"] or con.execute("SELECT 1 FROM item WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL LIMIT 1", (antigo,)).fetchone():
+            raise HTTPException(409, "Este projeto (ou alguma folha dele) já tem registro no site: não dá para mudar de fundo.")
+        from .projetos_novos import proximo_numero
+        novo = f"{fundo}-P{proximo_numero(con, fundo):04d}"
+        n_folhas = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (antigo,)).fetchone()[0]
+    finally:
+        con.close()
+    if d.simular:
+        return {"simulado": True, "de": antigo, "para": novo, "folhas": n_folhas}
+    mot = (d.motivo or "").strip()[:300] or f"fundo corrigido: {antigo.split('-')[0]} → {fundo}"
+    r = _transacao(lambda con: _recodificar(con, antigo, novo, u["email"], mot, outro_fundo=True))
+    k = connect()
+    try:
+        k.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'projeto_mudou_de_fundo',?,?)",
+                  (novo, u["email"], _json.dumps({"de": antigo, "para": novo, "motivo": mot}, ensure_ascii=False)))
+        k.commit()
+    finally:
+        k.close()
+    r["avisos"] = list(r.get("avisos") or []) + ["As etiquetas já impressas têm o código antigo: imprima de novo."]
+    tarefas.add_task(_enviar_redirecionamentos)
     return r
 
 
