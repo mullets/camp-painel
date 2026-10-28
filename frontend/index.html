@@ -3201,7 +3201,10 @@ function tagRevisao(r,retida){if(retida)return '<span class="tag r mini rev-tag"
 /* 19/10 (F009-P0092: "autoria não confirmada" laranja em cima da imagem de folha já conferida; "Com problema (10)" sem bater com as marcas):
    UMA lista dos avisos da folha, usada pelo cartão e pelo filtro "Com problema". Autoria não confirmada continua valendo depois da conferência
    (CAMP-046: a folha sobe com o crédito "Autoria não confirmada" até alguém registrar a autoria), mas vira uma marca pequena no rodapé. */
-function folhaJaConferida(it){return !!(it&&it.lote_id&&it.revisao&&it.revisao!=='pendente')}
+/* 28/10 (Rafael: "ao entrar em um item de slide muda o modo que edito... não tem as ferramentas de espelhar, girar, cortar"): a foto enviada
+   pelo painel (faixa D90001+) não tem lote, mas é conferida como as outras: abre na mesma revisão (girar, espelhar, recortar, legendar). */
+function emConferencia(x){return !!(x&&(x.lote_id||/-D9\d{4}$/.test(String(x.codigo||''))))}
+function folhaJaConferida(it){return !!(it&&emConferencia(it)&&it.revisao&&it.revisao!=='pendente')}
 function avisosFolha(it){return [it.autoria_divergente?['autoria não confirmada','O autor lido no carimbo não é o titular do fundo: a folha sobe com o crédito "Autoria não confirmada" até alguém registrar a autoria.']:null,
   dupAConferir(it)?['duplicata','Marcada como cópia de '+it.duplicata_de]:null,
   it.espelhado&&it.espelho_manual==null&&!folhaJaConferida(it)?['espelhada?','O CAMP Vision achou que foi digitalizada pelo verso: a prévia já sai espelhada. Confira na revisão.']:null].filter(Boolean)}
@@ -3222,7 +3225,7 @@ function folhaSemNumero(it){return !!it&&numFolha(it)==null&&!it.retida&&seriesC
 function nRepetidos(its){const g={};for(const it of its||[]){const n=numFolha(it);if(n==null)continue;const k=String(it.tipo_documento||it.serie_codigo||'').toLocaleLowerCase('pt-BR')+'|'+n;(g[k]||(g[k]=[])).push(it.codigo)}
   const m={};for(const L of Object.values(g))if(L.length>1)for(const c of L)m[c]=L.filter(x=>x!==c);return m}
 function semImagemFolha(it){return (!usaPreviaFolha(it)&&!it.thumb_url)||!!(window.SEM_IMG_PJ&&window.SEM_IMG_PJ.has(it.codigo))}
-function flagsFolha(it){const tp=tiposProblemaFolha(it);return [it.lote_id&&it.revisao==='pendente'?'conferir':'',tp.length?'problema':'',semImagemFolha(it)?'semimg':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':'',folhaSemNumero(it)?'semnum':'',...tp.map(x=>'t-'+x.k)].filter(Boolean).join(' ')}
+function flagsFolha(it){const tp=tiposProblemaFolha(it);return [emConferencia(it)&&it.revisao==='pendente'?'conferir':'',tp.length?'problema':'',semImagemFolha(it)?'semimg':'',(it.status_site==='no_ar'||it.status_site==='rascunho'||it.origem_catalogacao==='site')?'site':'',folhaSemNumero(it)?'semnum':'',...tp.map(x=>'t-'+x.k)].filter(Boolean).join(' ')}
 function contagemFolhas(its){const c={todas:its.length,conferir:0,problema:0,semimg:0,site:0,lote:0,conferidas:0,semnum:0};for(const it of its){const f=flagsFolha(it).split(' ');if(f.includes('semnum'))c.semnum++;if(f.includes('conferir'))c.conferir++;if(f.includes('problema'))c.problema++;if(f.includes('semimg'))c.semimg++;if(f.includes('site'))c.site++;if(it.lote_id){c.lote++;if(it.revisao!=='pendente')c.conferidas++}}return c}
 function barraFolhasHTML(its,noSite){if(its.length<2)return '';const c=contagemFolhas(its),b=(f,t,n)=>`<button class="btn sm${f===''?' on':''}" aria-pressed="${f===''}" data-fl-f="${f}" data-fl-t="${t}">${t} (${n})</button>`;   // #95: filtro ligado não é botão azul (o azul é só o próximo passo)
   return `<div class="folhas-bar" role="toolbar" aria-label="Filtrar folhas"><span class="fb-cont" role="status">${c.lote?`Conferidas <b>${c.conferidas} de ${c.lote}</b>`:`<b>${fmtN(its.length)}</b> folhas`}${noSite!=null?` <small class="help fb-site">· ${escHtml(Math.max(Number(noSite)||0,c.site))} no site</small>`:''}</span><div class="act">${b('','Todas',c.todas)}${b('problema','Com problema',c.problema)}${b('semimg','Sem imagem',c.semimg)}${b('conferir','A conferir',c.conferir)}${b('site','No site',c.site)}${c.semnum?b('semnum','Sem nº',c.semnum):''}</div>${(()=>{const ch=chipsTiposHTML(its,'','data-fl-f');return ch?`<div class="act fb-tipos" role="group" aria-label="Problemas por tipo">${ch}</div>`:''})()}<label class="fb-ordem">Ordem <select data-fl-ordem aria-label="Ordem das folhas">${[['codigo','código'],['folha','nº de folha'],['tipo','tipo']].map(([v,t])=>`<option value="${v}"${ordemFolhas()===v?' selected':''}>${t}</option>`).join('')}</select></label><div class="act fb-tam" role="group" aria-label="Tamanho das miniaturas">${['p','m','g'].map(t=>`<button class="btn sm${tamMiniaturas()===t?' on':''}" aria-pressed="${tamMiniaturas()===t}" data-tam="${t}" title="Miniaturas ${({p:'pequenas',m:'médias',g:'grandes'})[t]}">${t.toUpperCase()}</button>`).join('')}</div></div>`}
@@ -4061,8 +4064,8 @@ function cardItemProjeto(it){
   const codigo=it.codigo||('TAINACAN-'+it.tainacan_item_id);
   const navegavel=/^F\d{3}-P\d{4}-.+/.test(codigo);
   const imagem=usaPreviaFolha(it)?`<img class="img-real img-prev" src="${urlPreviaFolha(codigo,it.giro_manual,480,it.espelhar,ajusteChave(it))}" loading="lazy" alt="${escHtml(codigo)}">`:it.thumb_url?`<img class="img-real" src="${escHtml(urlThumbSite(it))}" loading="lazy" alt="${escHtml(codigo)}">`:semImagemHTML('O CAMP Vision não gerou a prévia desta folha.',/^F\d{3}-P\d{4}-/.test(codigo)?codigo:null,true);   // 19/10: no cartão, curto
-  const revisavel=!!it.lote_id&&EU&&EU.papel!=='leitura';
-  const rev=it.lote_id?` ${tagRevisao(it.revisao,it.retida)}`:'';
+  const revisavel=emConferencia(it)&&EU&&EU.papel!=='leitura';
+  const rev=emConferencia(it)?` ${tagRevisao(it.revisao,it.retida)}`:'';
   const flag=flagsAvisosHTML(it);   // 19/10: embaixo do título, não em cima da imagem
   const status=it.status_site==='rascunho'?' <span class="tag b" style="font-size:12px">rascunho</span>':it.status_site==='fora_do_ar'?' <span class="tag" style="font-size:12px">despublicado</span>':'';
   const origem=it.origem_catalogacao==='site'?'<span class="tag origin" title="Ainda não está no catálogo do painel. Ao abrir, a folha é importada do site e passa a poder ser editada.">só no site</span>':'';
@@ -4172,7 +4175,7 @@ function pjEstadoFolhas(d){const its=((d&&d.itens)||[]).filter(i=>i.origem_catal
   const bloq=new Set(er.filter(e=>e.gravidade==='bloqueia'&&e.categoria!=='autoria_divergente'&&String(e.codigo||'').length>10).map(e=>e.codigo));
   const o={prontas:0,ressalva:0,fora:0,conferir:0,foraProjeto:contaProblemas(d).foraProjeto||0,motivosRessalva:{}};
   for(const i of its){if(i.retida||i.duplicata_de||bloq.has(i.codigo)){o.fora++;continue}
-    if(i.lote_id&&i.revisao==='pendente'){o.conferir++;continue}
+    if(emConferencia(i)&&i.revisao==='pendente'){o.conferir++;continue}
     const sinais=((i.pendencias&&i.pendencias.sinais)||[]),m=i.autoria_divergente?'autoria não confirmada':sinais.length?String(sinais[0]):!String(i.titulo||'').trim()?'carimbo não lido (sem título)':null;
     if(m){o.ressalva++;o.motivosRessalva[m]=(o.motivosRessalva[m]||0)+1}else o.prontas++}
   return o}
@@ -4394,7 +4397,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-cv-v
   catch(err){b.disabled=false;toast(err.message)}});
 async function passoProximo(acao,lote,code,btn){const fim=!!(btn&&btn.closest('[data-fim-passo]'));   /* CAMP-070: do fim da conferência, fica ali e mostra o passo seguinte */
   if(acao==='importar'){acaoRevisaoLote('importar',lote,code,btn);return}   // CAMP-067: antes não desligava o botão nem dizia "Importando…" (QNAP lento parecia "não fez nada")
-  if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p){window.REV_CHEIA_PEDIDA=revCheiaPreferida();abrirRevisaoItem(p.codigo)}else toast('Nenhuma folha pendente.');return}   /* UX-10: começa na primeira pendente, em tela cheia (quem saiu dela fica sem) */
+  if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>emConferencia(x)&&x.revisao==='pendente');if(p){window.REV_CHEIA_PEDIDA=revCheiaPreferida();abrirRevisaoItem(p.codigo)}else toast('Nenhuma folha pendente.');return}   /* UX-10: começa na primeira pendente, em tela cheia (quem saiu dela fica sem) */
   if(acao==='publicar'){publicarDireto(code);return}
   try{let r={};if(acao==='importar'){r=await API('/api/lotes/'+encodeURIComponent(lote)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`)}
     else if(acao==='aprovar'){if(!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;if(btn)btn.disabled=true;try{r=await API('/api/lotes/'+encodeURIComponent(lote)+'/aprovar',{method:'POST'})}finally{if(btn&&btn.isConnected)btn.disabled=false}toast('Lote aprovado')}
@@ -4444,12 +4447,12 @@ function naoImportadasHTML(lista,code){if(!lista.length)return '';const re=/^(\S
   const frase=col.length?`<b>${qtd(col.length,'folha deste lote não entrou','folhas deste lote não entraram')}</b> porque o número (${escHtml(faixaD(col.map(c=>c.d)))}) já existe no projeto${grupos.length===1&&grupos[0]?` (${escHtml(grupos[0])}-…)`:''}. Se forem as mesmas folhas lidas de novo, não é preciso fazer nada. Se forem folhas diferentes, relate o problema para numerar de novo.`:'';
   const resto=outros.length?`${frase?' ':''}<b>${qtd(outros.length,'folha não entrou','folhas não entraram')}</b> por código inválido ou de outro projeto.`:'';
   return `<div class="rl-nao" role="note"><p class="help">${frase}${resto}${col.length&&EU&&EU.papel!=='leitura'?` <button class="btn sm" data-relatar-folha="${escHtml(code)}">Relatar problema</button>`:''}</p><details class="rl-nao-lista"><summary>ver ${col.length+outros.length===1?'qual':`as ${fmtN(col.length+outros.length)}`}</summary><div class="tw"><table><thead><tr><th>Folha do lote</th><th>Número</th><th>Já é de</th></tr></thead><tbody>${linhas}</tbody></table></div></details></div>`}
-function proximaPendente(codigo){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo);return [...L.slice(i+1),...L.slice(0,Math.max(i,0))].find(x=>x.revisao==='pendente')}
+function proximaPendente(codigo){const L=(window.ITENS_PJ||[]).filter(x=>emConferencia(x)),i=L.findIndex(x=>x.codigo===codigo);return [...L.slice(i+1),...L.slice(0,Math.max(i,0))].find(x=>x.revisao==='pendente')}
 /* Cartão "Girar folha já publicada" (c): a miniatura da conferência mostra a folha como ela vai ficar no site (a prévia com o giro e o espelho
    gravados), e a marca "orientação incerta" quando o CAMP Vision não teve certeza do giro. Folha já no site e fora da conferência: a imagem do site. */
 function orientIncerta(it){if(folhaJaConferida(it))return false;   /* CAMP-068: conferir é ter olhado a folha em pé: o aviso sai (e continua fora ao recarregar, a revisão fica gravada) */
   const p=it&&it.pendencias,s=window.CV_SAIDAS;return !!((p&&Array.isArray(p.sinais)&&p.sinais.includes('orientação incerta'))||(s&&s.orientacao&&(s.orientacao.incertas||[]).includes(dCurto(it&&it.codigo))))}
-function usaPreviaFolha(it){return !!(it.pendencias&&it.pendencias.previa)&&(!it.thumb_url||(!!it.lote_id&&it.revisao==='pendente'))}
+function usaPreviaFolha(it){return !!(it.pendencias&&it.pendencias.previa)&&(!it.thumb_url||(emConferencia(it)&&it.revisao==='pendente'))}
 function urlThumbSite(it){const u=String(it.thumb_url||'');return it.giro_manual?u+(u.includes('?')?'&':'?')+'g='+it.giro_manual:u}   /* depois de girar no site o arquivo tem o mesmo endereço: o g= evita a imagem velha guardada no navegador */
 function urlPreviaFolha(codigo,giro,t,esp,aj){return `/api/itens/${encodeURIComponent(codigo)}/previa?${t?`t=${t}&`:''}g=${giro||0}${esp?'&e=1':''}${aj?'&a='+encodeURIComponent(aj):''}`}
 /* 19/10: marca do recorte/alinhamento na URL da prévia (a imagem muda no mesmo endereço; sem a marca o navegador mostraria a velha) */
@@ -4469,8 +4472,8 @@ async function abrirRevisaoItem(codigo){
     return `<label class="rev-campo"><span>${rot}</span><input id="${id}" type="text" value="${escHtml(v==null?'':v)}"${op?'':' disabled'}${su?` class="sugerido" placeholder="${escHtml(su)}" data-sugerido="${escHtml(su)}" aria-describedby="${id}-sug"`:''}>${su?`<small class="rev-sug" id="${id}-sug">sugerido do projeto · <kbd>Tab</kbd> aceita</small>`:''}${lido&&String(lido)!==String(v??'')?`<small class="rev-lido">o CAMP Vision leu: ${escHtml(lido)}</small>`:''}</label>`};   /* H9: o valor lido ao lado do campo */
   const pj=[window.PJ_D,CONF.d].map(x=>x&&x.projeto).find(x=>x&&x.codigo===String(codigo).slice(0,10))||null,sugAno=pj&&+pj.ano>0?String(pj.ano):'',sugEnd=pj?(pj.endereco_obra||[pj.cidade,pj.uf].filter(Boolean).join(', ')):'',sugCli=pj?pj.cliente||'':'';
   const temImg=!!(p.previa||it.thumb_url);
-  const falta=(window.ITENS_PJ||[]).filter(x=>x.lote_id&&x.revisao==='pendente').length;
- const lote=(window.ITENS_PJ||[]).filter(x=>x.lote_id),pos=lote.findIndex(x=>x.codigo===codigo)+1,feitas=lote.filter(x=>x.revisao!=='pendente').length,dica=op&&(()=>{try{return Number(localStorage.getItem('camp.dicaRev')||0)<3}catch(_){return false}})();
+  const falta=(window.ITENS_PJ||[]).filter(x=>emConferencia(x)&&x.revisao==='pendente').length;
+ const lote=(window.ITENS_PJ||[]).filter(x=>emConferencia(x)),pos=lote.findIndex(x=>x.codigo===codigo)+1,feitas=lote.filter(x=>x.revisao!=='pendente').length,dica=op&&(()=>{try{return Number(localStorage.getItem('camp.dicaRev')||0)<3}catch(_){return false}})();
   const corpo=`${conf?'':`<div class="rev-cheia-bar"><button type="button" class="btn sm" data-rev-cheia aria-pressed="${cheia}" title="Tecla F">${cheia?'Sair da tela cheia':'Tela cheia'}</button><small class="help"><kbd>?</kbd> mostra todos os atalhos</small></div>`}${cvInfoFolha(codigo,conf)}${lote.length&&!conf?`<div class="rev-prog" role="status"><b>Folha ${pos} de ${lote.length}</b> · ${feitas} conferida${feitas===1?'':'s'}<progress max="${lote.length}" value="${feitas}"></progress></div>${it.revisao==='pendente'&&falta===1?`<p class="help rev-ultima"><b>É a última.</b> Ao conferir, ficam ${lote.length} de ${lote.length}.</p>`:''}`:''}<div class="rev-grade"><div class="rev-col-img">${p.previa||it.thumb_url?`<a id="rv-img-link" class="rev-prev-link" href="${p.previa?urlPreviaFolha(codigo,it.giro_manual,0,it.espelhar,ajusteChave(it)):escHtml(urlThumbSite(it))}" target="_blank" rel="noopener" title="Abrir só a imagem numa aba nova, para ler com calma"><img class="rev-prev" id="rv-img" src="${p.previa?urlPreviaFolha(codigo,it.giro_manual,0,it.espelhar,ajusteChave(it)):escHtml(urlThumbSite(it))}" alt="Folha ${escHtml(codigo)}: clique para abrir numa aba nova"></a><div class="rev-prev-dica"><a href="${p.previa?urlPreviaFolha(codigo,it.giro_manual,0,it.espelhar,ajusteChave(it)):escHtml(urlThumbSite(it))}" target="_blank" rel="noopener" id="rv-img-link2">Abrir a imagem numa aba nova ↗</a></div>${op&&p.previa?`<div class="rev-giro"><button class="btn sm" data-rev-girar="-90" data-codigo="${escHtml(codigo)}">↺ Virar à esquerda</button><button class="btn sm" data-rev-girar="90" data-codigo="${escHtml(codigo)}">Virar à direita ↻</button><button class="btn sm" data-rev-espelhar="${escHtml(codigo)}" aria-pressed="${it.espelhar?'true':'false'}" title="Para folha digitalizada pelo verso, com o texto ao contrário">⇋ Espelhar</button><button class="btn sm" data-rev-ajustar="${escHtml(codigo)}" title="Recortar as bordas e endireitar a folha torta (K). O arquivo original não muda">✂ Recortar e alinhar</button><button class="btn sm" data-rev-ajuste-desfazer="${escHtml(codigo)}"${ajusteChave(it)?'':' hidden'}>Desfazer recorte/alinhamento</button></div>`:''}`:semImagemHTML('Sem imagem não dá para conferir. Peça para o CAMP Vision ler de novo.',codigo)}</div><div class="rev-col-dados">
     <p class="help">${it.revisao==='pendente'?`Ainda faltam <b>${falta}</b> folha(s) a conferir.`:'Esta folha já foi revisada.'}</p>
     <h3 class="hoje-h">O que o CAMP Vision leu</h3>${p.titulo_lido?`<div class="us-kv"><span>Título no carimbo</span><b>${escHtml(p.titulo_lido)}</b></div>`:''}${it.tipo_lido?`<div class="us-kv"><span>Tipo lido</span><b>${escHtml(it.tipo_lido)}${it.tipo_documento?'':' (não existe na lista do painel)'}</b></div>`:''}${it.duplicata_de?`<div class="us-kv"><span>Duplicata de</span><b>${escHtml(it.duplicata_de)}</b></div>`:''}<div class="rev-chips" id="rv-chips">${aponta}</div>${op&&projetoDivergente(p)?desteProjetoHTML(codigo):''}
@@ -4559,7 +4562,7 @@ function ligarRevisaoItem(codigo,dica){const b=revHost();if(!b)return;
   /* 19/10: clicar na imagem abre só a imagem numa aba nova (para ler); o link acompanha o giro/espelho (trocarPreviaNaTela) */
   if(dica){try{localStorage.setItem('camp.dicaRev',String(Number(localStorage.getItem('camp.dicaRev')||0)+1))}catch(_){}}
   raMostrar(codigo)}
-function concluirConferencia(){const n=(window.ITENS_PJ||[]).filter(x=>x.lote_id).length,code=window.PROJETO_PJ||alvoProjetoAtual()||'';
+function concluirConferencia(){const n=(window.ITENS_PJ||[]).filter(x=>emConferencia(x)).length,code=window.PROJETO_PJ||alvoProjetoAtual()||'';
   openDrawer('Conferência concluída','',`<div class="estado-vazio fim-conf" role="status"><b>✔ Era a última. ${n} de ${n} folhas conferidas.</b>${fimPassoHTML(code)}<div class="act"><button class="btn" id="rev-fim">Fechar e ver o projeto</button></div></div>`);
   const b=document.getElementById('rev-fim');if(b)b.onclick=()=>{closeDrawer(true);const e=document.getElementById('pj-proximo');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})};fimConferenciaPasso(code)}
 /* CAMP-070 (20/10, "não consegui publicar diretamente após conferir todas as folhas, foi necessário sair da página"): ao conferir a última folha,
@@ -4577,7 +4580,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!e.shiftKey&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&revCheia()&&e.target.matches&&e.target.matches('.rev-campos-grade input[type="text"][id^="rv-"]')&&!window._REV_SALVANDO&&!document.getElementById('conf-ov')){const b=revSel('[data-rev-item="conferida"]');if(b&&!b.disabled){e.preventDefault();b.click()}return}
   if((/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(e.target.tagName||'')&&e.target.id!=='rv-img-link')||e.metaKey||e.ctrlKey||e.altKey||window._REV_SALVANDO||document.getElementById('conf-ov'))return;   /* UX-10: a imagem (link) com foco depois do zoom não tira os atalhos. SUMMARY: Enter em "Não publicar esta folha" abre o quadro, não confirma a folha */
   if(revConf()){const k={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[e.key];if(k){e.preventDefault();confMover(k);return}}   /* na tela de conferir, as setas andam na lista (a que está filtrada) */
-  const cod=revAberta(),L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===cod);if(i<0)return;
+  const cod=revAberta(),L=(window.ITENS_PJ||[]).filter(x=>emConferencia(x)),i=L.findIndex(x=>x.codigo===cod);if(i<0)return;
   /* UX-10: R/L giram, M espelha, D duplicata, P relatar problema; na tela cheia J/K anterior/próxima, C recorta, + − 0 zoom; F entra e sai da tela cheia */
   const cheia=revCheia(),k=e.key.length===1?e.key.toLowerCase():e.key,clicar=sel=>{const b=revSel(sel);if(b&&!b.disabled){e.preventDefault();b.click()}};
   if(e.key==='Enter')clicar('[data-rev-item="conferida"]');
@@ -4790,7 +4793,7 @@ function revEscopo(){return revConf()?'conferir':'drawer'}
 function revAberta(){if(revConf())return CONF.atual||null;return mainEl.classList.contains('with-drawer')&&(document.getElementById('d-title')||{}).textContent==='Revisar folha'?(document.getElementById('d-sub')||{}).textContent:null}
 function revTeclas(){return revConf()?!!CONF.atual&&!mainEl.classList.contains('with-drawer'):!!revAberta()}   /* atalhos da revisão: na tela de conferir, só sem gaveta por cima */
 const CONF_FILTROS=[['todas','Todas'],['a_conferir','A conferir'],['problema','Com problema'],['sem_imagem','Sem imagem']];
-function confFolhas(){return (window.ITENS_PJ||[]).filter(x=>x.lote_id)}
+function confFolhas(){return (window.ITENS_PJ||[]).filter(x=>emConferencia(x))}
 function confTemImg(it){return !!((it.pendencias&&it.pendencias.previa)||it.thumb_url)}
 function confProblemas(it){const p=it.pendencias||{},o=[];
   if(it.autoria_divergente)o.push(['r','autoria']);if(dupAConferir(it))o.push(['a','duplicata']);if(orientIncerta(it))o.push(['a','orientação incerta']);if(espelhadaAConferir(it))o.push(['a','espelhada?']);
@@ -5065,7 +5068,7 @@ async function usarConsenso(code,campo,itens,lote){
     if(r.ignoradas.length)avisoNoLugar(`<b>${r.ignoradas.length} folha(s) não mudaram:</b> ${r.ignoradas.map(x=>`${escHtml(x.codigo.slice(-6))} (${escHtml(x.motivo)})`).join(' · ')}`,{antes:document.getElementById('pj-consenso')||'#pd',id:'consenso'});
     carregarConsenso(code)}catch(e){toast(e.message)}}
 document.addEventListener('click',async e=>{const u=e.target.closest('[data-cs-usar]'),t=e.target.closest('[data-cs-todas]'),vv=e.target.closest('[data-cs-ver]'),code=window.PROJETO_PJ;if(!code||!(u||t||vv))return;e.preventDefault();
-  if(vv){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===vv.dataset.csVer);if(it&&it.lote_id&&EU&&EU.papel!=='leitura')abrirRevisaoItem(it.codigo);else nav('item/'+vv.dataset.csVer);return}
+  if(vv){const it=(window.ITENS_PJ||[]).find(x=>x.codigo===vv.dataset.csVer);if(it&&emConferencia(it)&&EU&&EU.papel!=='leitura')abrirRevisaoItem(it.codigo);else nav('item/'+vv.dataset.csVer);return}
   if(u){u.disabled=true;usarConsenso(code,u.dataset.csUsar,[u.dataset.codigo],u.dataset.lote);return}
   const c=((window.CONSENSO_PJ||{}).campos||[]).find(x=>x.campo===t.dataset.csTodas);if(!c)return;
   if(!await confirmar({titulo:`Usar "${c.consenso}" em todas?`,alvo:c.rotulo,texto:(()=>{const L=c.divergentes.filter(x=>!x.trava),nv=L.filter(x=>csTipo(x)==='vazio').length,nr=L.filter(x=>csTipo(x)==='valor').length,np=L.length-nv-nr;return `${qtd(L.length,'folha passa','folhas passam')} a dizer "${c.consenso}": ${[nv?qtd(nv,'sem valor','sem valor'):'',np?qtd(np,'escrita de outro jeito','escritas de outro jeito'):'',nr?qtd(nr,'que diz outra coisa','que dizem outra coisa'):''].filter(Boolean).join(', ')}. Fica no histórico de cada folha.`})(),botao:'Usar em todas'}))return;
@@ -5121,14 +5124,14 @@ function problemasPorTipoHTML(d,p){const its=d.itens||[],code=p.codigo,C=escHtml
   for(const it of its)for(const x of tiposProblemaFolha(it)){if(x.k==='retida')continue;const g=G.get(x.k)||{...x,folhas:[],soltos:[]};if(x.b){g.b=true;g.c='r'}g.folhas.push(it);G.set(x.k,g)}
   for(const e of (d.erros||[])){if(noPainel.has(e.codigo))continue;const k='erro-'+String(e.categoria||'outro'),g=G.get(k)||{k,t:rotuloErroTipo(e),c:'a',b:false,folhas:[],soltos:[]};if(e.gravidade==='bloqueia'){g.b=true;g.c='r'}g.soltos.push(e);G.set(k,g)}
   if(!G.size)return '';
-  const folhaBt=it=>{const c=escHtml(it.codigo),n=escHtml(String(it.codigo).split('-').pop());return rev&&it.lote_id?`<button type="button" class="lnk code" data-rev-abrir="${c}">${n}</button>`:`<a class="lnk code" href="#item/${c}">${n}</a>`};
+  const folhaBt=it=>{const c=escHtml(it.codigo),n=escHtml(String(it.codigo).split('-').pop());return rev&&emConferencia(it)?`<button type="button" class="lnk code" data-rev-abrir="${c}">${n}</button>`:`<a class="lnk code" href="#item/${c}">${n}</a>`};
   const acoes=g=>{const o=[];
     if(g.k==='autoria'&&op){for(const x of parceirosDeAutoria(g.folhas))o.push(`<button type="button" class="btn sm pri" data-autoria-parceiro="${escHtml(x.escritorio)}" data-disc="${escHtml(x.disciplina)}" data-projeto="${C}" data-n="${x.n}">Confirmar: ${escHtml(x.escritorio)}, parceiro${x.disciplina?` (${escHtml(x.disciplina.toLocaleLowerCase('pt-BR'))})`:''}${x.n===g.folhas.length?'':` · ${x.n} folha${x.n===1?'':'s'}`}</button>`);
       o.push(`<button type="button" class="btn sm" data-autoria-fundo="${C}" data-itens="${escHtml(g.folhas.map(i=>i.codigo).join(' '))}">É de ${escHtml(p.fundo||'o titular do fundo')} (${g.folhas.length})</button>`)}
     if(g.k==='duplicata')o.push(`<button type="button" class="btn sm" data-dupv-abrir="${C}">Conferir as duplicatas lado a lado</button>`);
     /* 23/10 ("já conferi e fica lá"): conferir não tira "outro projeto" (CAMP-068); aqui, um clique confirma "É deste projeto" em todas as folhas do cartão */
     if((g.k==='outro_projeto'||g.k==='erro-projeto_errado')&&op&&g.folhas.length)o.push(`<button type="button" class="btn sm pri" data-deste-lote="${C}" data-itens="${escHtml(g.folhas.map(i=>i.codigo).join(' '))}">${g.folhas.length===1?'É deste projeto':`São deste projeto (${fmtN(g.folhas.length)})`}</button>`);
-    if(g.folhas.length&&rev&&g.folhas.some(i=>i.lote_id)&&g.k!=='duplicata'&&g.k!=='autoria')o.push(`<button type="button" class="btn sm" data-pt-conferir="${escHtml(g.k)}" data-projeto="${C}">Conferir estas folhas</button>`);
+    if(g.folhas.length&&rev&&g.folhas.some(i=>emConferencia(i))&&g.k!=='duplicata'&&g.k!=='autoria')o.push(`<button type="button" class="btn sm" data-pt-conferir="${escHtml(g.k)}" data-projeto="${C}">Conferir estas folhas</button>`);
     if(g.soltos.length||g.k.startsWith('erro-'))o.push(`<button type="button" class="btn sm" onclick="nav('erros/${C}')">Resolver em Problemas</button>`);
     return o.join(' ')};
   const grupo=g=>{const n=g.folhas.length+g.soltos.length,a=acoes(g);return `<section class="pt-grupo${g.b?' bloq':''}" data-pt-tipo="${escHtml(g.k)}"><h3><span class="tag ${g.b?'r':'a'} mini">${g.b?'impede publicar':'aviso'}</span> ${escHtml(g.t)} <b class="pt-n">${fmtN(n)}</b></h3>
@@ -5209,7 +5212,7 @@ async function salvarRevisaoItem(codigo,estado){
 /* 19/10: para onde a revisão vai depois de conferir, reter ou mover a folha (calculado ANTES de mudar a lista: a folha movida sai dela).
    A próxima a conferir; se esta era a última a conferir, "Conferência concluída"; sem nenhuma a conferir (lote aprovado, ou revendo as já conferidas),
    a seguinte na ordem; depois da última, fecha a janela (o aviso diz que era a última). Antes: num lote aprovado ia para "Conferência concluída · Aprovar o lote". */
-function depoisDaRevisao(codigo,eraPendente){const L=(window.ITENS_PJ||[]).filter(x=>x.lote_id),i=L.findIndex(x=>x.codigo===codigo),p=proximaPendente(codigo),s=i>=0?L[i+1]:null;
+function depoisDaRevisao(codigo,eraPendente){const L=(window.ITENS_PJ||[]).filter(x=>emConferencia(x)),i=L.findIndex(x=>x.codigo===codigo),p=proximaPendente(codigo),s=i>=0?L[i+1]:null;
   const conf=revConf();   /* na tela de conferir: no lugar da janela "Conferência concluída" e de fechar a gaveta, o painel da direita diz que acabou */
   const f=p?()=>abrirRevisaoItem(p.codigo):eraPendente&&L.length?()=>conf?confConcluida(true):concluirConferencia():s?()=>abrirRevisaoItem(s.codigo):()=>conf?confConcluida(false):closeDrawer(true);f.fim=!p&&!(eraPendente&&L.length)&&!s;return f}
 /* CAMP-068: o que a conferência resolveu no banco (espelho confirmado, problemas do CAMP Vision fechados) sai da tela na hora:
@@ -5313,7 +5316,7 @@ function pjCarregarQuadros(d,p,folhas){pjGlobais(d,p);setTimeout(()=>{slGuardar(
   const a=window.ACAO_APOS_PROJETO;if(!a||a.codigo!==p.codigo)return;window.ACAO_APOS_PROJETO=null;
   if(a.tipo==='publicar')setTimeout(()=>publicarDireto(p.codigo),600);else if(a.tipo==='folha')setTimeout(()=>abrirRevisaoItem(a.folha),900);
   else if(a.tipo==='cv')setTimeout(()=>{pjAbrirGaveta(p.codigo,'folhas');const c=document.getElementById('pj-cv'),d=c&&(c.querySelector('#cv-sec-retiradas')||[...c.querySelectorAll('details')].find(x=>/Retiradas/.test(x.textContent)));if(d)d.open=true;if(c&&c.scrollIntoView)c.scrollIntoView({behavior:'smooth',block:'start'})},1600);
-  else setTimeout(()=>{if(a.tipo==='revisao'&&(window.ITENS_PJ||[]).some(x=>x.lote_id&&x.revisao==='pendente'))passoProximo('conferir',null,p.codigo);else{const e=document.getElementById('pj-cards');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}},1100)},0)}
+  else setTimeout(()=>{if(a.tipo==='revisao'&&(window.ITENS_PJ||[]).some(x=>emConferencia(x)&&x.revisao==='pendente'))passoProximo('conferir',null,p.codigo);else{const e=document.getElementById('pj-cards');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}},1100)},0)}
 /* CAMP-124 (P3, 20/10): "34 no painel · 31 no site · números diferentes" aparecia como alerta quando a diferença era só das 3 retidas.
    Agora a conta aparece explicada (neutra quando fecha); amarela só com folha que devia estar no site e não está, ou que só existe no site. */
 function contaSiteHTML(fonte,cs){const P=fonte.documentos_locais??0,S=cs?cs.site:(fonte.documentos_site??0),curto=c=>escHtml(String(c).split('-').pop());
@@ -5540,7 +5543,7 @@ function acaoCondicao(tipo,alvo){
   else if(tipo==='editar_projeto'){const [c,campo]=String(alvo).split(':');Promise.resolve(editarProjeto(c)).then(()=>{const el=document.getElementById('ep-'+campo);if(!el)return;const det=el.type==='hidden'&&el.closest('details');if(det){det.open=true;det.classList.add('realce');(det.querySelector('input:not([type=hidden])')||det).focus()}else{el.focus();el.classList.add('realce')}})}   /* B10: avisos de qualidade levam ao campo */
   else if(tipo==='autoria')registrarAutoria(alvo);
   else if(tipo==='erros')go('erros')
- else if(tipo==='revisao'){const p=(window.ITENS_PJ||[]).find(x=>x.lote_id&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else{const e=document.getElementById('pj-proximo')||document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}}}
+ else if(tipo==='revisao'){const p=(window.ITENS_PJ||[]).find(x=>emConferencia(x)&&x.revisao==='pendente');if(p)abrirRevisaoItem(p.codigo);else{const e=document.getElementById('pj-proximo')||document.getElementById('pj-revisao');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}}}
 function alvoProjetoAtual(){const m=(location.hash||'').match(/^#projeto\/([^/]+)/);return m?m[1]:null}
 const _closeDrawerBase=closeDrawer;
 closeDrawer=function(force){const r=_closeDrawerBase(force);if(r!==false&&PUB_REFRESH){const c=PUB_REFRESH;PUB_REFRESH=null;setTimeout(()=>typeof c==='function'?c():carregarPublicacao(c),500)}return r};
@@ -6471,7 +6474,7 @@ async function errExecutar(acao,e){const proj=e.projeto_codigo,f=e.folha;
   if(acao==='mover'){openDrawer('É de outro projeto',f,`<p class="help">Escolha o projeto certo. A folha ganha o código dele; o código antigo fica guardado e aparece no histórico dos dois projetos. Só projetos do mesmo fundo. O problema fecha sozinho quando a folha é movida.</p>${outroProjetoCorpoHTML(f,'err')}`);setTimeout(()=>{const i=document.querySelector('#d-body .op-busca');if(i)i.focus()},50);return}
   /* 20/10 (print da F026-P0009): aberto da aba Problemas do próprio projeto, "Abrir a folha" abre a revisão ALI (conferir/girar/espelhar),
      sem sair da lista — ao conferir, o problema sai da lista na hora. Antes ia para a página da folha, onde não dá para conferir. */
-  if(['girar','espelhar','abrir_folha'].includes(acao)&&f&&window.PROJETO_PJ===proj&&rotaAtual().startsWith('projeto/')&&(window.ITENS_PJ||[]).some(x=>x.codigo===f&&x.lote_id)){abrirRevisaoItem(f);return}
+  if(['girar','espelhar','abrir_folha'].includes(acao)&&f&&window.PROJETO_PJ===proj&&rotaAtual().startsWith('projeto/')&&(window.ITENS_PJ||[]).some(x=>x.codigo===f&&emConferencia(x))){abrirRevisaoItem(f);return}
   errSair();
   if(acao==='abrir_lote'){window.ACAO_APOS_PROJETO={tipo:'cv',codigo:proj};nav('projeto/'+proj)}
   else if(['girar','espelhar','abrir_folha'].includes(acao)){window.ACAO_APOS_PROJETO={tipo:'folha',codigo:proj,folha:f};nav('projeto/'+proj)}
