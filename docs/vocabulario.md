@@ -238,6 +238,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   um arquiteto)…". Escolhe o **Fundo certo**; a prévia diz "Vai virar F0xx-P00NN (N folhas)". Botão **Mudar de fundo**; aviso "Projeto mudou de
   fundo: X agora é Y" + "As etiquetas já impressas têm o código antigo: imprima de novo." Indisponível: "Já tem registro no site: não dá para mudar de fundo."
 
+- Folha do **Convidado (F000)**, em "É de outro projeto…": "Projeto certo (código ou nome; de qualquer fundo: esta folha está no Convidado)";
+  o projeto novo pede **Fundo (obrigatório)** ("— escolha o fundo —"; falta: "Escolha o fundo do projeto."). Dica: "O projeto inteiro é de
+  outro fundo? Use Mais ⋯ → Mudar de fundo no projeto: ele e todas as folhas vão juntos."
+
 ## Apagar lote sem folhas (28/10/2026)
 - Lote em Importar/Verificar destino SEM nenhuma folha no painel: no Ignorar ▾ da Home, **Apagar este lote (sem folhas)**; no Material novo,
   **Apagar lote** (só admin). Confirmação: "O lote não tem nenhuma folha no painel: sai de todas as listas e contagens, para todos. Os arquivos
