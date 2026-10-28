@@ -76,9 +76,10 @@ def enviar_correcoes_pendentes(tarefa: int = 1, u: dict = Depends(auth.exige("ad
         p.total(min(antes["prontas"], fila.LOTE_MAX))
         p.passo("Enviando ao site as correções que estão esperando")
 
-        def andou(codigo, ok, erro):
+        def andou(codigo, ok, erro, na_fila=False):
             p.passo("Enviando ao site as correções que estão esperando", codigo)
-            p.feita(1, f"{codigo}: {'enviada' if ok else 'falhou: ' + limpar(erro)}")
+            # UX-47: erro passageiro (site lento) não é falha: a escrita continua na fila e sai na próxima tentativa
+            p.feita(1, f"{codigo}: {'enviada' if ok else ('o site não respondeu a tempo, continua na fila: ' if na_fila else 'falhou: ') + limpar(erro)}")
 
         r = fila.executar_pendentes(limite=fila.LOTE_MAX, orcamento_s=900.0, forcar_manual=True, ator=u["email"],
                                     ao_terminar_item=andou)
@@ -104,6 +105,7 @@ def enviar_correcoes_pendentes(tarefa: int = 1, u: dict = Depends(auth.exige("ad
         if not n_env and not n_fal:
             msg = f"Nada saiu nesta rodada: nenhuma correção pronta para enviar ({depois['total']} ainda na fila)"
         return {"ok": not falhas, "mensagem": msg, "enviadas": r["enviadas"], "falhas": falhas,
+                "na_fila": [{"codigo": x["codigo"], "erro": limpar(x["erro"])} for x in r.get("na_fila") or []],
                 "ainda_na_fila": depois["total"], "esperando_proxima_tentativa": depois["total"] - depois["prontas"],
                 "proxima_em": depois["proxima_em"]}
 

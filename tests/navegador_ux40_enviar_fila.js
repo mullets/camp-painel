@@ -92,9 +92,9 @@ con.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel) V
     chk(cfg('site.reenvio_persistente') === '0', 'site.reenvio_persistente continua 0');
     chk(py(`print(con.execute("SELECT COUNT(*) FROM evento WHERE tipo='site_correcoes_enviadas' AND ator='rafael@camp.arq.br'").fetchone()[0])`) === '1', 'Histórico de ações: um registro de quem mandou');
     await ad.page.evaluate(() => go('auditoria'));
-    await ad.page.waitForFunction(() => /mandou ao site as correções de folhas que estavam esperando/.test(document.getElementById('v-auditoria').innerText), null, { timeout: 15000 }).catch(() => {});
+    await ad.page.waitForFunction(() => /mandou ao site as correções e escritas que estavam esperando/.test(document.getElementById('v-auditoria').innerText), null, { timeout: 15000 }).catch(() => {});
     const au = so(await ad.page.evaluate(() => document.getElementById('v-auditoria').innerText));
-    chk(/mandou ao site as correções de folhas que estavam esperando/.test(au) && /0 enviadas, 2 falharam, 2 ainda na fila/.test(au), 'o Histórico de ações mostra a frase e a contagem');
+    chk(/mandou ao site as correções e escritas que estavam esperando/.test(au) && /0 enviadas, 2 falharam, 2 ainda na fila/.test(au), 'o Histórico de ações mostra a frase e a contagem');
     await ad.ctx.close();
   } catch (e) { chk(false, 'exceção: ' + e.message); }
   chk(!erros.length, 'sem erro no console' + (erros.length ? ': ' + erros.slice(0, 3).join(' | ') : ''));
