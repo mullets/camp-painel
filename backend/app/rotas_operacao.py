@@ -866,6 +866,13 @@ def _ler_pasta_bruto(con, pasta: Path, entrada: Path | None, esperado: str | Non
         pacote_cod = _codigo_do_pacote(pasta)
         if esperado and pacote_cod and pacote_cod.upper() == esperado.strip().upper():
             info, status, sem_manifesto = {"codigo": pacote_cod}, {"status": "pronto"}, True
+        elif esperado and re.match(rf"^{re.escape(esperado.strip())}\b", pasta.name, re.I) \
+                and con.execute("SELECT 1 FROM projeto WHERE codigo=?", (esperado.strip().upper(),)).fetchone():
+            # 28/10 (log do CAMP Vision: "Aviso de F008-P0001 aceito mas com ok:false — sem info_projeto.json nem status.json"): a pasta é a
+            # DO PROJETO (o nome começa pelo código que o aviso disse), só não tem lote do CAMP Vision para ler (ex.: só as fotos enviadas
+            # pelo painel, ou uma releitura que não achou a folha). Não é erro: não há o que atualizar.
+            return {"acao": "sem_mudanca", "pasta": str(pasta), "codigo": esperado.strip().upper(),
+                    "motivo": "pasta do projeto sem lote do CAMP Vision (sem info_projeto.json, status.json nem pacote): nada a atualizar"}
         else:
             return {"acao": "ignorada", "pasta": str(pasta), "motivo": "sem info_projeto.json nem status.json nesta pasta"}
 
@@ -1077,7 +1084,7 @@ def ler_pasta_do_aviso(con, pasta_txt: str, codigo: str | None) -> dict:
     r = _ler_pasta(con, alvo, Path(entrada_txt) if entrada_txt else None, codigo)
     if r["acao"] == "entrada":
         return {"ok": False, "acao": "ignorada", "pasta": str(alvo), "motivo": "pasta da entrada bruta: o painel só lê o material final"}
-    r["ok"] = r["acao"] in ("nova", "atualizada", "igual", "complemento")
+    r["ok"] = r["acao"] in ("nova", "atualizada", "igual", "complemento", "sem_mudanca")
     if r["ok"] and r.get("etapa") == "revisao":
         r["importacao"] = _importar_se_tem_pacote(con, alvo)
     return r
