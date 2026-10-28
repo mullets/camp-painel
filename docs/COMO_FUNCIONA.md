@@ -2157,7 +2157,7 @@ Entre as folhas de um lote (ou do projeto), o valor mais frequente de **ano**, *
 
 `POST /api/itens/{c}/retencao` (operador+), corpo `{"retida": true|false, "motivo": "…"}` (migração `047`):
 
-- lote aprovado → 409; folha no site → 409 "Despublique pela página da folha antes de retê-la";
+- lote aprovado → 409; folha no site (28/10) → o painel a deixa privada no site e retém (se o site recusar: 502 e nada muda);
 - **reter**: `retida=1`, `retida_motivo` (até 300), `retida_por`, `retida_em`; se estava pendente, passa a `conferida` (conta como conferida);
 - **liberar** ("Voltar a publicar"): limpa tudo e devolve a folha a `pendente` (precisa conferir de novo);
 - evento `folha_retida` / `folha_liberada`.

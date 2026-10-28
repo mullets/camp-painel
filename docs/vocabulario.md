@@ -233,6 +233,11 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - No resultado: "**N folha(s) precisaram de nova tentativa (o site demorou)**". Falha de vez: "(o site não respondeu em 3 tentativas)" e
   "o próximo Publicar envia só as que faltam, sem duplicar as já enviadas".
 
+## Mover e reter folha publicada (28/10/2026)
+- Mover: a folha publicada pode ser marcada; ao lado dela, "**publicada: ao mover, sai do público no site (fica privada, nada é apagado)**".
+- Reter ("Não publicar esta folha"): "Se ela já está publicada, sai do público no site (fica privada, nada é apagado)." Aviso depois de reter:
+  "**· saiu do público no site (ficou privada)**". Se o site recusar: "Não consegui tirar a folha … do site (…). Nada foi mudado; tente de novo."
+
 ## Publicação sem duplicar (27/10/2026)
 - Uma folha com erro não para a publicação: as demais seguem e o resultado diz "**N folha(s) enviada(s), N com erro**" (com a primeira
   folha e o erro) e "**As enviadas foram publicadas.**". Durante: "Enviadas N folha(s); faltam N. N com erro até agora."

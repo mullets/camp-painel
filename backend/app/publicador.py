@@ -1056,6 +1056,29 @@ def _gravar_metadados(con, wp, iid: int, fila: list, out: dict) -> list:
     return resto
 
 
+def esconder_folha_no_site(codigo: str, ator: str, motivo: str) -> bool:
+    """28/10 (Beatriz: "para mudar uma folha de projeto aparece que é necessário despublicar"; "não é possível reter a página depois de
+    publicada"): antes de mover ou reter uma folha que está no site, o painel mesmo a deixa PRIVADA lá (nada é apagado; o item continua no
+    site, só sai do público). Devolve True se escondeu, False se não havia o que esconder. Levanta HTTPException(502) se o site recusar:
+    aí quem chama não move nem retém (a folha continua como estava)."""
+    from fastapi import HTTPException
+    con = connect()
+    try:
+        r = con.execute("SELECT tainacan_item_id, status_site FROM item WHERE codigo=?", (codigo,)).fetchone()
+    finally:
+        con.close()
+    if not r or not r["tainacan_item_id"] or r["status_site"] not in ("no_ar", "rascunho"):
+        return False
+    wid = int(r["tainacan_item_id"])
+    try:
+        WP().atualizar_status_item(COL_ACERVO, wid, "private")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"Não consegui tirar a folha {codigo} do site ({str(e)[:160]}). Nada foi mudado; tente de novo.") from e
+    from .publicacao import persistir_resultado
+    persistir_resultado([("item", codigo, wid)], "fora_do_ar", "private", "item", codigo, "site_folha_escondida", ator, {"motivo": motivo})
+    return True
+
+
 def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> dict:
     """Item na coleção 'Acervo CAMP' (rascunho) a partir de uma folha do painel. Sobe o JPG como documento quando houver arquivo local."""
     con = connect()
