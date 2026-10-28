@@ -260,8 +260,11 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   não criou outro; "mande os itens que sobraram para a lixeira no site") e "**Folha com mais de um item no site**" (achado na sincronização).
 
 ## Recorte automático das imagens públicas (UX-44, 27/10/2026)
-- Só a imagem que vai ao site (até 1.920 px) e o "**Ver como vai ao site**" são recortados na borda do papel e clareados (branco e contraste
-  pelo papel). O TIF e a prévia do CAMP Vision não mudam. O recorte feito à mão ("Recortar e alinhar") sempre vence.
+- Só a imagem que vai ao site (até 1.920 px) e o "**Ver como vai ao site**" são recortados na borda do papel. 28/10 (Rafael: "quero sempre
+  igual o original"): a cor NÃO é mais ajustada (imagem.ajuste_cor = 0); no "Reprocessar imagens públicas", as que subiram clareadas aparecem
+  como "**voltam à cor do original**". Em Máquinas → Catálogo local × site (admin): **Voltar à cor do original…** confere e, confirmando
+  ("Reenviar com a cor do original"), reenvia SÓ essas; nenhuma: "Nenhuma imagem no site com a cor ajustada: todas já estão com a cor do original."
+  O TIF e a prévia do CAMP Vision não mudam. O recorte feito à mão ("Recortar e alinhar") sempre vence.
 - Na conferência, sobre a prévia: o retângulo tracejado e o selo **recorte automático** (com "o tracejado é o que vai ao site; o original
   não muda") ou **recorte automático incerto** (com o motivo: "Vai inteira ao site; se precisar, use “Recortar e alinhar” (K).").
 - Botões: **Usar recorte inteiro (sem recorte)** e, depois dele, **Usar recorte automático**; o selo da escolha é

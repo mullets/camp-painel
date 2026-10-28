@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11179,6 +11179,81 @@ def filho(modo):
             "Mudar de fundo" in adm.post("/api/projetos/F031-P0001/recodificar", json={"novo": "F000-P0099"}).text)
         k.close()
         for l in res: print(l)
+    elif modo == "cor_original":
+        # 28/10 (Rafael: "pq estamos tendo diferença de cor nas imagens? olha os thumbs" / "quero sempre igual o original"): a imagem que vai ao
+        # site sai com a COR DO ORIGINAL (sem o branco/contraste do UX-44); o recorte do fundo do scanner continua. As que subiram com a cor
+        # ajustada (versão v1) entram no reprocessar ("voltam à cor do original").
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, shutil, time as _tm
+        from pathlib import Path as _P
+        sys.path.insert(0, str(RAIZ / "tests"))
+        import fixtures_recorte as fx
+        from app import auth, publicador, recorte_auto
+        from PIL import Image, ImageStat
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = _P(os.environ["CAMP_DB_PATH"]).parent
+        prontos = base / "prontos_cor"; shutil.rmtree(prontos, ignore_errors=True)
+        os.environ["CAMP_CACHE_DIR"] = str(prontos / "cache")
+        os.environ["CAMP_IMAGENS_CORRIGIDAS_DIR"] = str(base / "corrigidas_cor")
+        c = connect()
+        ver("depois das migrações, o ajuste de cor está DESLIGADO (imagem.ajuste_cor = 0)",
+            c.execute("SELECT valor FROM configuracao WHERE chave='imagem.ajuste_cor'").fetchone()[0] == "0" and not recorte_auto.cor_ligada(c))
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F008','Eduardo de Almeida','EDA',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F008',1)")
+        P = "F008-P0001"; D = lambda n: f"{P}-1976-S01-D{n:05d}"
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?,'F008',1,'Residência Max Define',1976,9400)", (P,))
+        def folha(n, im, tid=None, media=None, versao=None):
+            rel = f"_campvision/preview/{P}/{D(n)}.jpg"; (prontos / rel).parent.mkdir(parents=True, exist_ok=True); im.save(prontos / rel, "JPEG", quality=95)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id,site_media_id,site_imagem_recorte,revisao,pendencias) VALUES (?,?,?,?,?,'campvision',?,?,?,?,'conferida',?)",
+                      (D(n), P, "S01", n, "Planta", "no_ar" if tid else "nao_publicado", tid, media, versao, _j.dumps({"previa": rel})))
+            return prontos / rel
+        heli = Image.new("RGB", (2400, 1600), (232, 222, 182))      # cópia heliográfica amarelada até a borda (sem fundo do scanner)
+        from PIL import ImageDraw
+        dr = ImageDraw.Draw(heli); dr.rectangle((400, 400, 1400, 1000), fill=(70, 100, 170)); dr.ellipse((1600, 300, 2000, 700), fill=(214, 160, 82))
+        folha(1, heli); folha(2, heli, 7101, 5601, "v1"); folha(3, fx.planta(), 7102, 5602, "v1")
+        c.execute("UPDATE item SET sem_recorte_auto=1 WHERE codigo IN (?,?)", (D(1), D(2)))   # só a cor em jogo (sem recorte)
+        c.commit()
+        k = connect()
+        def publica(cod):
+            i = k.execute("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", (cod,)).fetchone()
+            cam, _ = publicador.imagem_pronta_para_o_site(k, i); return Image.open(cam).convert("RGB")
+        pub = publica(D(1))
+        def cor(im, x, y): return ImageStat.Stat(im.crop((x - 20, y - 20, x + 20, y + 20))).median
+        esc = pub.size[0] / 2400
+        difs = [max(abs(a - b) for a, b in zip(cor(heli, x, y), cor(pub, int(x * esc), int(y * esc)))) for x, y in ((200, 200), (900, 700), (1800, 500))]
+        ver("imagem pública com a cor do original: papel amarelado, massa azul e mancha laranja iguais ao original (diferença <= 4)", max(difs) <= 4, str(difs))
+        pr = publica(D(3))
+        ver("o recorte do fundo do scanner continua (a planta no fundo lilás é recortada)", pr.size != (1920, 1280) and max(pr.size) <= 1920, str(pr.size))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        class Fake:
+            chamadas = []
+            def __init__(self, *a, **k): pass
+            def substituir_midia(self, media_id, caminho, nome=None):
+                Fake.chamadas.append(media_id); return {"id": media_id, "source_url": "http://site-falso.invalid/f.jpg"}
+        publicador.WP = Fake
+        def esperar(rr, ate=40):
+            tid = rr.json().get("tarefa_id"); t0 = _tm.monotonic(); t = {}
+            while _tm.monotonic() - t0 < ate:
+                t = adm.get(f"/api/tarefas/{tid}").json()
+                if t["estado"] != "rodando": break
+                _tm.sleep(0.2)
+            resu = t.get("resultado"); return t, (_j.loads(resu) if isinstance(resu, str) else resu or {})
+        t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={}))
+        ver("reprocessar (simulação): a folha que subiu com a cor ajustada (v1) aparece em 'voltam à cor do original'; nada enviado",
+            out.get("codigos", {}).get("cor_original") == [D(2)] and out["codigos"].get("recorte") == [D(3)] and "voltam à cor do original" in (out.get("mensagem") or "") and not Fake.chamadas, str(out)[:400])
+        t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={"so_cor_original": True, "aplicar": True, "confirmar": "REPROCESSAR"}))
+        ver("'Voltar à cor do original' (só as clareadas): reenvia SÓ a v1 sem recorte (mesmo anexo 5601), não a que seria recortada, e marca a versão nova",
+            Fake.chamadas == [5601] and k.execute("SELECT site_imagem_recorte FROM item WHERE codigo=?", (D(2),)).fetchone()[0] == recorte_auto.VERSAO != "v1"
+            and k.execute("SELECT site_imagem_recorte FROM item WHERE codigo=?", (D(3),)).fetchone()[0] == "v1", f"{out} {Fake.chamadas}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: botão 'Voltar à cor do original…' (Máquinas), que confere antes e reenvia só essas", "Voltar à cor do original…" in html and "so_cor_original:true,aplicar:true" in html)
+        k.close(); c.close()
+        for l in res: print(l)
     elif modo == "ux17_clique_duplo":
         # UX-17: clique duplo em Publicar/Importar. O servidor não publica nem importa 2× (o 2º pedido concorrente recebe a MESMA tarefa
         # ou 409; o que chega logo depois de publicar, sem folha nova, devolve "nada foi feito de novo"); Desfazer (voltar para rascunho)
@@ -14935,6 +15010,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Mudar de fundo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Cor do original: a imagem pública sai com a cor do original; as que subiram com a cor ajustada voltam no reprocessar")
+rc, out = rodar("cor_original", f"{tmp}/cor_original.db")
+if rc != 0: ok(False, f"teste cor_original não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cor do original: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Sincronização com o site: uma por vez, adia durante publicação, intervalo do fim, transações curtas, a automática é do painel")
 rc, out = rodar("sync_uma_por_vez", f"{tmp}/sync_uma_por_vez.db")

@@ -24,7 +24,8 @@ import json
 import os
 from pathlib import Path
 
-VERSAO = "v1"            # muda quando o algoritmo muda: entra na chave dos caches e marca a imagem que subiu (item.site_imagem_recorte)
+VERSAO = "v2"            # v2 (28/10): sem ajuste de cor por padrão; as que subiram em v1 voltam à cor original no reprocessar
+VERSAO_COM_COR = "v1"            # muda quando o algoritmo muda: entra na chave dos caches e marca a imagem que subiu (item.site_imagem_recorte)
 LADO_ANALISE = 1500
 MARGEM = 0.01
 AREA_MIN, AREA_MAX = 0.10, 0.97
@@ -46,7 +47,9 @@ def recorte_ligado(con) -> bool:
 
 
 def cor_ligada(con) -> bool:
-    return _cfg(con, "imagem.ajuste_cor") not in ("0", "false", "nao", "")
+    """28/10 (Rafael: "quero sempre igual o original"): DESLIGADO por padrão (migração 200). A imagem pública vai com a cor do original;
+    o recorte da borda do scanner continua (não mexe na cor)."""
+    return _cfg(con, "imagem.ajuste_cor", "0") not in ("0", "false", "nao", "")
 
 
 def recusado(item) -> bool:
