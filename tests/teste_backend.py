@@ -11165,6 +11165,16 @@ def filho(modo):
             and um("SELECT COUNT(*) FROM evento WHERE tipo='projeto_mudou_de_fundo' AND codigo='F031-P0003'")[0] == 1
             and any("etiquetas" in a for a in j.get("avisos") or []), str(j)[:300])
         ver("o número P do fundo certo fica reservado (o próximo projeto de lá é P0004)", adm.post("/api/projetos/verificar", json={"fundo_codigo": "F031", "titulo": "Casa Nova"}).json().get("proximo_codigo") == "F031-P0004")
+        # folha solta do Convidado vai para projeto de OUTRO fundo; fora do Convidado, fundos continuam não se misturando
+        k.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F000',6)"); k.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F000-P0006','F000',6,'Outro Não Identificado',0)")
+        k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao) VALUES ('F000-P0006-0000-S01-D00001','F000-P0006','S01',1,'Corte','campvision','conferida')")
+        k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao) VALUES ('F031-P0002-0000-S01-D00001','F031-P0002','S01',1,'Fachada','campvision','conferida')"); k.commit()
+        mv = adm.post("/api/itens/mover", json={"itens": ["F000-P0006-0000-S01-D00001"], "destino": "F031-P0001"})
+        ver("folha do Convidado (F000) vai para projeto de outro fundo (F031)", mv.status_code == 200 and str(((mv.json().get("movidos") or [{}])[0]).get("para", "")).startswith("F031-P0001-"), mv.text[:200])
+        ver("fora do Convidado, fundos continuam não se misturando (409)", adm.post("/api/itens/mover", json={"itens": ["F031-P0002-0000-S01-D00001"], "destino": "F000-P0006"}).status_code == 409)
+        html = (__import__("pathlib").Path(__file__).parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: 'É de outro projeto' da folha do Convidado busca em qualquer fundo e cria o projeto no fundo escolhido",
+            "de qualquer fundo: esta folha está no Convidado" in html and 'class="op-np-fundo"' in html and "Escolha o fundo do projeto." in html)
         ver("'Mudar o código' continua só no mesmo fundo (aponta para 'Mudar de fundo')",
             "Mudar de fundo" in adm.post("/api/projetos/F031-P0001/recodificar", json={"novo": "F000-P0099"}).text)
         k.close()

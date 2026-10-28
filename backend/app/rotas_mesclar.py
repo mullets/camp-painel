@@ -126,10 +126,15 @@ def _destino_valido(con, destino: str):
     return d
 
 
+from .publicador import CONVIDADO
+
+
 def _mesmo_fundo(con, projeto_origem: str, d, oque: str) -> None:
     """Regra de 14/10: fundos não se misturam. Mover folha, lote ou mesclar projeto só dentro do MESMO fundo (409 se não)."""
     o = con.execute("SELECT fundo_codigo FROM projeto WHERE codigo=?", (projeto_origem,)).fetchone()
     fo, fd = (o["fundo_codigo"] if o else None), d["fundo_codigo"]
+    if fo == CONVIDADO:            # 28/10: material do F000 · Convidado digitalizado no fundo errado vai para o fundo certo (nunca esteve no site)
+        return
     if fo and fd and fo != fd:
         raise HTTPException(409, f"Fundos não se misturam: {oque} é do fundo {fo} e o projeto {d['codigo']} é do fundo {fd}. "
                                  f"Escolha um projeto do fundo {fo}; nada foi movido.")
