@@ -3095,6 +3095,13 @@ def filho(modo):
         x = av(pasta=rel(entrada / "F099-P0008 - Casa Oito")).json()
         ver("aviso de pasta da ENTRADA bruta: recusado (o painel só lê o material final)", x["ok"] is False and "entrada bruta" in x["motivo"], str(x))
         ver("aviso de pasta sem manifesto: ok=false", av(pasta=rel(d8 / "Plantas")).json()["ok"] is False)
+        # 28/10 (log do CAMP Vision: "Aviso de F008-P0001 aceito mas com ok:false — sem info_projeto.json nem status.json nesta pasta"): a pasta
+        # é a DO PROJETO (nome começa pelo código avisado, projeto existe) e só não tem lote do CAMP Vision: não é erro, "nada a atualizar"
+        so_fotos = d8.parent / "F099-P0008 - Casa Oito (fotos)"; (so_fotos / "03 - Fotografias" / "JPG").mkdir(parents=True, exist_ok=True)
+        x = av(codigo="F099-P0008", pasta=rel(so_fotos)).json()
+        ver("aviso da pasta DO PROJETO sem lote do CAMP Vision (só fotos): ok=true, 'sem_mudanca', nada criado", x["ok"] is True and x["acao"] == "sem_mudanca" and etapas()["F099-P0008"][0] == "revisao", str(x))
+        x = av(codigo="F099-P0007", pasta=rel(so_fotos)).json()
+        ver("…mas com código que não é o da pasta continua ok=false", x["ok"] is False, str(x))
         ver("aviso: com token configurado ele é obrigatório (sem token = 401, de dentro e de fora); token válido vale até de fora (desenho do rede.py)", (lan.post("/api/campvision/aviso", json={"pasta": rel(d8)}).status_code, fora.post("/api/campvision/aviso", json={"pasta": rel(d8)}).status_code, fora.post("/api/campvision/aviso", json={"pasta": rel(d8)}, headers=T).status_code) == (401, 401, 202))
         ver("a varredura completa segue como reconciliação (acha o P0009 que não foi avisado)", op.post("/api/filas/varrer-qnap").json()["novas"] >= 1 and "F099-P0009" in etapas())
         # ---------------- folhas no QNAP: contar DOCUMENTOS (TIF/ e JPG/ do mesmo código = um) e mostrar o que ainda não está no painel ----------------
