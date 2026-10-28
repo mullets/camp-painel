@@ -1632,6 +1632,7 @@ class ReprocessarRecorte(BaseModel):
     confirmar: str = ""             # aplicar exige confirmar == "REPROCESSAR"
     limite: int = 0                 # no máximo N folhas por vez (0 = todas)
     incluir_cor: bool = False       # também as que só mudam de cor (sem recorte)
+    so_cor_original: bool = False   # 28/10: SÓ as que subiram com a cor ajustada (v1) voltam à cor do original (nada de recorte novo)
     fundo: str | None = None
     projeto: str | None = None
 
@@ -1648,9 +1649,10 @@ def reprocessar_recorte_automatico(d: ReprocessarRecorte, u: dict = Depends(auth
 
     def rodar(prog):
         return rp.recorte_automatico(aplicar=d.aplicar, limite=d.limite, incluir_cor=d.incluir_cor, fundo=d.fundo, projeto=d.projeto,
-                                     ator=u["email"], prog=prog)
+                                     ator=u["email"], prog=prog, so_cor_original=d.so_cor_original)
     return tarefas.iniciar("reprocessar_recorte", alvo, u, rodar,
-                           titulo=("Reprocessar imagens públicas com recorte automático" if d.aplicar else "Simular recorte automático nas imagens públicas"))
+                           titulo=("Voltar à cor do original as imagens do site" if d.so_cor_original and d.aplicar else
+                                   "Conferir imagens do site com a cor ajustada" if d.so_cor_original else"Reprocessar imagens públicas com recorte automático" if d.aplicar else "Simular recorte automático nas imagens públicas"))
 
 
 @router.get("/itens/{codigo}/ajuste/sugerir")

@@ -11246,9 +11246,12 @@ def filho(modo):
         t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={}))
         ver("reprocessar (simulação): a folha que subiu com a cor ajustada (v1) aparece em 'voltam à cor do original'; nada enviado",
             out.get("codigos", {}).get("cor_original") == [D(2)] and out["codigos"].get("recorte") == [D(3)] and "voltam à cor do original" in (out.get("mensagem") or "") and not Fake.chamadas, str(out)[:400])
-        t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={"aplicar": True, "confirmar": "REPROCESSAR"}))
-        ver("aplicar: reenvia a v1 com a cor do original (mesmo anexo) e marca a versão nova", 5601 in Fake.chamadas
-            and k.execute("SELECT site_imagem_recorte FROM item WHERE codigo=?", (D(2),)).fetchone()[0] == recorte_auto.VERSAO != "v1", f"{out} {Fake.chamadas}")
+        t, out = esperar(adm.post("/api/imagens-publicas/recorte-automatico", json={"so_cor_original": True, "aplicar": True, "confirmar": "REPROCESSAR"}))
+        ver("'Voltar à cor do original' (só as clareadas): reenvia SÓ a v1 sem recorte (mesmo anexo 5601), não a que seria recortada, e marca a versão nova",
+            Fake.chamadas == [5601] and k.execute("SELECT site_imagem_recorte FROM item WHERE codigo=?", (D(2),)).fetchone()[0] == recorte_auto.VERSAO != "v1"
+            and k.execute("SELECT site_imagem_recorte FROM item WHERE codigo=?", (D(3),)).fetchone()[0] == "v1", f"{out} {Fake.chamadas}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: botão 'Voltar à cor do original…' (Máquinas), que confere antes e reenvia só essas", "Voltar à cor do original…" in html and "so_cor_original:true,aplicar:true" in html)
         k.close(); c.close()
         for l in res: print(l)
     elif modo == "ux17_clique_duplo":

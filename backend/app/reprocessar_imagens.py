@@ -62,7 +62,7 @@ def candidatos_recorte(con, fundo: str | None = None, projeto: str | None = None
 
 
 def recorte_automatico(aplicar: bool = False, limite: int = 0, incluir_cor: bool = False, fundo: str | None = None, projeto: str | None = None,
-                       ator: str = "script", prog=None) -> dict:
+                       ator: str = "script", prog=None, so_cor_original: bool = False) -> dict:
     """SIMULA por padrão: para cada folha no site (ainda sem esta versão), o que o derivado público levaria. Grupos:
     recorte (o fundo do scanner sai), cor (só branco/contraste), incerto (não recorta; conferir), igual (sem fundo e cor desligada,
     recusado ou desligado), manual (recorte manual: só cor), sem_imagem. aplicar=True reenvia 'recorte' (e 'cor', se incluir_cor), até `limite`."""
@@ -107,7 +107,8 @@ def recorte_automatico(aplicar: bool = False, limite: int = 0, incluir_cor: bool
     finally:
         con.close()
     contagem = {k: len(v) for k, v in grupos.items()}
-    alvo = grupos["recorte"] + grupos["cor_original"] + (grupos["cor"] if incluir_cor else [])
+    alvo = (grupos["cor_original"] if so_cor_original else
+            grupos["recorte"] + grupos["cor_original"] + (grupos["cor"] if incluir_cor else []))
     out = {"ok": True, "simulacao": not aplicar, "analisadas": len(linhas), "contagem": contagem, "mudariam": len(alvo),
            "codigos": {k: v[:500] for k, v in grupos.items()}}
     if not aplicar:
