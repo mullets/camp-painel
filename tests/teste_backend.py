@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "ler_de_novo_destrava"}
+MODOS_RAPIDOS = {"ux47_reenvio_pendencias", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "ler_de_novo_destrava"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -910,6 +910,162 @@ def filho(modo):
         ver("logo depois, de novo: a que falhou espera a próxima tentativa (não martela o site) e nada sai", tid2 != tid and len(chamadas) == n and "Nada saiu nesta rodada" in ((t2.get("resultado") or {}).get("mensagem") or ""), t2.get("resultado"))
         ct = _fila.contar(c)
         ver("contagem para a tela: 2 na fila, 0 prontas (as duas esperam a próxima tentativa)", ct["total"] == 2 and ct["prontas"] == 0 and ct["proxima_em"], ct)
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux47_reenvio_pendencias":
+        # UX-47: a rodada do "Enviar as N agora" (UX-40) também reenvia as escritas pendentes de FUNDO, PROJETO e ARQUITETO, com o valor de
+        # AGORA no painel e sem duplicar no site. Site FALSO (publicador.WP substituído): nenhuma chamada sai do processo.
+        init_db(); aplicar_migracoes()
+        import json, time as _t
+        from app import auth, publicador as _pub, fila_correcao_site as _fila
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:500]}")
+        CP = _pub.COL_PROJETOS
+        c = connect()
+        c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (10,'Fundos')"); c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (11,'Arquitetos')")
+        for mid, nome in ((800, "Código de Catalogação"), (801, "Cidade"), (802, "Ano"), (803, "Fundo"), (804, "Arquiteto")):
+            c.execute("INSERT OR REPLACE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (?,?,?,'Tainacan\\Metadata_Types\\Text')", (mid, CP, nome))
+        # F050: o fundo não chegou ao site (a criação falhou); o termo do FUNDO já existe no site (uma tentativa anterior o criou sem a
+        # resposta chegar ao painel); o do arquiteto não
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F050','Fundo Cinquenta','CIN',1)")
+        a1 = c.execute("INSERT INTO agente (tipo,forma_autorizada) VALUES ('pessoa','Ana Cinquenta')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F050',?,'produtor')", (a1,))
+        # F051 no site (termo 902), renomeado e com "Sobre o acervo" que não chegaram; arquiteto com termo 950
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id,procedencia) VALUES ('F051','Fundo Novo Nome','CUM',1,902,'Doação da família')")
+        a2 = c.execute("INSERT INTO agente (tipo,forma_autorizada,historia,fonte_historia,tainacan_term_id) VALUES ('pessoa','Bruno Nome Novo','Bio de agora','Fonte X',950)").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F051',?,'produtor')", (a2,))
+        c.execute("INSERT INTO agente_retrato (agente_id,imagem,tipo,media_id) VALUES (?,?,'image/jpeg',333)", (a2, b"\xff\xd8\xff\x00"))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id,procedencia) VALUES ('F052','Fundo Lento','LEN',1,903,'Compra')")
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F000','Convidado','CON',1,NULL)")
+        for n in range(1, 6):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F051',?)", (n,))
+        P = {n: f"F051-P000{n}" for n in range(1, 6)}
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade) VALUES (?, 'F051',1,'Casa Um',1960,'São Paulo')", (P[1],))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?, 'F051',2,'Casa Dois',1961)", (P[2],))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tainacan_item_id) VALUES (?, 'F051',3,'Casa Três',1962,'Santos',7000)", (P[3],))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?, 'F051',4,'Casa Quatro',1964,7100)", (P[4],))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id,capa_item) VALUES (?, 'F051',5,'Casa Cinco',1965,7200,'F051-P0005-1965-S01-D00001')", (P[5],))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id,site_media_id) VALUES ('F051-P0005-1965-S01-D00001',?,'S01',1,'Planta','campvision','rascunho',7201,4444)", (P[5],))
+        # P0003: a cidade foi editada DEPOIS do último envio confirmado; o ano foi enviado antes (não precisa ir de novo)
+        c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,'editado','x',?)", (P[3], json.dumps({"antes": {"ano": 1950}, "depois": {"ano": 1962}})))
+        c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,'site_metadados','x','{}')", (P[3],))
+        c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('projeto',?,'editado','x',?)", (P[3], json.dumps({"antes": {"cidade": "Rio"}, "depois": {"cidade": "Santos"}})))
+        pend = {("fundo", "F050", "pendente_criar_no_site"), ("fundo", "F051", "pendente_renomear_no_site"), ("fundo", "F051", "pendente_descricao_no_site"),
+                ("projeto", P[1], "pendente_criar_no_site"), ("projeto", P[2], "pendente_criar_no_site"), ("projeto", P[3], "pendente_metadados_no_site"),
+                ("projeto", P[4], "pendente_metadado_Ano"), ("projeto", P[5], "pendente_capa_no_site"),
+                ("agente", str(a2), "pendente_hub_no_site"), ("agente", str(a2), "pendente_renomear_no_site"), ("fundo", "F052", "pendente_descricao_no_site")}
+        # fora da rodada: publicar/tirar do ar (situação do fundo) e o F000 · Convidado
+        fora = [("fundo", "F051", "pendente_status_no_site"), ("fundo", "F000", "pendente_criar_no_site")]
+        for e, cod, campo in sorted(pend) + fora:
+            c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel) VALUES (?,?,?,'erro antigo: The read operation timed out')", (e, cod, campo))
+        c.commit()
+        chamadas = []
+        site = {"termos": {10: [{"id": 901, "name": "Fundo Cinquenta", "slug": "fundo-cinquenta"}], 11: []}, "busca": {P[1]: [{"id": 5001, "status": "draft", "title": "P0001 — Casa Um",
+                "metadata": {"c": {"name": "Código de Catalogação", "value": P[1]}}}]}, "lento": {903}, "recusa_ano": True, "prox": 6000}
+        class WPFalso:
+            def __init__(self, *a, **k): pass
+            def termos(self, tid): chamadas.append(("termos", tid)); return list(site["termos"].get(tid, []))
+            def criar_termo(self, tid, nome, desc=""):
+                site["prox"] += 1; t = {"id": site["prox"], "name": nome}; site["termos"].setdefault(tid, []).append(t); chamadas.append(("criar_termo", tid, nome)); return t
+            def atualizar_termo(self, tid, termo, **k): chamadas.append(("atualizar_termo", tid, termo, k.get("name"))); return {}
+            def gravar_hub(self, termo, meta):
+                chamadas.append(("hub", termo, dict(meta)))
+                if termo in site["lento"]:
+                    raise RuntimeError("O site recusou gravar a página do arquiteto: 503 Service Unavailable")
+                return {"ok": True, "page_id": 1}
+            def buscar_por_codigo(self, cid, mid, codigo): chamadas.append(("busca", cid, mid, codigo)); return list(site["busca"].get(codigo, []))
+            def criar_item(self, cid, titulo, status="draft", desc=""):
+                site["prox"] += 1; chamadas.append(("criar_item", cid, titulo, site["prox"])); return {"id": site["prox"], "slug": "x"}
+            def definir_metadado(self, wid, mid, valor):
+                chamadas.append(("meta", wid, mid, valor))
+                if mid == 802 and wid == 7100 and site["recusa_ano"]:
+                    raise RuntimeError("Tainacan recusou metadado 802 no item 7100: 400 valor inválido")
+                return {}
+            def patch_item(self, cid, wid, **k): chamadas.append(("patch", wid, k)); return {}
+            def upload_media(self, *a, **k): chamadas.append(("upload",)); return {"id": 999}
+        _pub.WP = WPFalso
+        ct0 = _fila.contar(c)
+        ver("contagem: as 11 escritas de fundo/projeto/arquiteto entram (status do fundo e F000 · Convidado não)",
+            ct0["total"] == 11 and ct0["prontas"] == 11 and ct0["outras"] == 11 and ct0["folhas"] == 0
+            and ct0["por_entidade"] == {"fundo": 4, "projeto": 5, "agente": 2}, ct0)
+        cli = {}
+        for nome, papel in (("adm", "admin"), ("op", "operador")):
+            auth.criar_usuario(nome, f"{nome}@camp.arq.br", "senha-longa-12345", papel, forcar_troca=False)
+            cli[nome] = TestClient(app, raise_server_exceptions=False); cli[nome].post("/api/auth/login", json={"email": f"{nome}@camp.arq.br", "senha": "senha-longa-12345"})
+        def achar(o, k):
+            if isinstance(o, dict):
+                if k in o: return o[k]
+                for v in o.values():
+                    r_ = achar(v, k)
+                    if r_ is not None: return r_
+            return None
+        cf = achar(cli["adm"].get("/api/estacoes").json(), "correcoes_fila") or {}
+        ver("a tela (Máquinas) recebe a contagem com os novos tipos (o botão diz quantas)", cf.get("total") == 11 and cf.get("prontas") == 11 and cf.get("outras") == 11, cf)
+        ver("o automático continua desligado (flag 0): nada sai sozinho", _fila.executar_pendentes().get("desligado") is True and not chamadas, chamadas)
+        ver("operador não manda (403)", cli["op"].post("/api/site/correcoes-pendentes/enviar?tarefa=1").status_code == 403)
+        def clicar():
+            r = cli["adm"].post("/api/site/correcoes-pendentes/enviar?tarefa=1"); tid = r.json().get("tarefa_id"); t = {}
+            for _ in range(300):
+                t = cli["adm"].get(f"/api/tarefas/{tid}").json()
+                if t.get("estado") != "rodando": break
+                _t.sleep(0.05)
+            return t
+        t = clicar()
+        rr = t.get("resultado") or {}
+        ver("resultado: 9 enviadas, 1 falhou (4xx), 2 ainda na fila (a recusada e a do site lento)",
+            len(rr.get("enviadas") or []) == 9 and len(rr.get("falhas") or []) == 1 and rr.get("ainda_na_fila") == 2
+            and "9 enviadas, 1 falhou, 2 ainda na fila" in (rr.get("mensagem") or ""), rr)
+        ver("andamento: 11 de 11, a do site lento aparece como 'continua na fila' (não como falha)", t.get("total") == 11 and t.get("feitas") == 11
+            and "F052 (fundo): o site não respondeu a tempo, continua na fila" in json.dumps(t, ensure_ascii=False), t)
+        aberta = lambda e, cod, campo: c.execute("SELECT COUNT(*) FROM divergencia_site WHERE entidade=? AND codigo=? AND campo=? AND resolvida=0", (e, cod, campo)).fetchone()[0]
+        fechadas = [p for p in pend if not aberta(*p)]
+        ver("cada tipo reenviado fecha a pendência (9)", set(fechadas) == pend - {("projeto", P[4], "pendente_metadado_Ano"), ("fundo", "F052", "pendente_descricao_no_site")}, fechadas)
+        ver("falha 4xx: a pendência fica, com o erro novo", aberta("projeto", P[4], "pendente_metadado_Ano") == 1 and "400" in c.execute(
+            "SELECT valor_painel FROM divergencia_site WHERE codigo=? AND campo='pendente_metadado_Ano' AND resolvida=0", (P[4],)).fetchone()[0]
+            and [f.get("codigo") for f in rr.get("falhas") or [] if "400" in (f.get("erro") or "")] == [f"{P[4]} (projeto)"], rr.get("falhas"))
+        ver("erro passageiro (503): fica na fila, não conta como falha", aberta("fundo", "F052", "pendente_descricao_no_site") == 1
+            and all("F052" not in f.get("codigo", "") for f in rr.get("falhas") or []) and any("F052" in x.get("codigo", "") for x in rr.get("na_fila") or []), rr)
+        ver("publicar/tirar do ar e F000 não foram tocados", all(aberta(*p) for p in fora) and not any(x[0] == "patch" and x[1] == 903 for x in chamadas))
+        f50 = c.execute("SELECT tainacan_term_id FROM fundo WHERE codigo='F050'").fetchone()[0]
+        cria_t = [x for x in chamadas if x[0] == "criar_termo"]
+        ver("fundo: não duplica o termo que o site já tinha (liga no 901); só o do arquiteto é criado", f50 == 901 and cria_t == [("criar_termo", 11, "Ana Cinquenta")], (f50, cria_t))
+        ver("fundo: renomeado com o nome de AGORA; arquiteto idem", ("atualizar_termo", 10, 902, "Fundo Novo Nome") in chamadas and ("atualizar_termo", 11, 950, "Bruno Nome Novo") in chamadas,
+            [x for x in chamadas if x[0] == "atualizar_termo"])
+        hubs = {x[1]: x[2] for x in chamadas if x[0] == "hub"}
+        ver("fundo: 'Sobre o acervo' de agora vai à página (902)", (hubs.get(902) or {}).get("_camp_acervo_procedencia") == "Doação da família" or any(
+            x[0] == "hub" and x[1] == 902 and x[2].get("_camp_acervo_procedencia") == "Doação da família" for x in chamadas), hubs)
+        hub_a = [x[2] for x in chamadas if x[0] == "hub" and "_camp_bio" in x[2]]
+        ver("arquiteto: biografia e fonte de agora; retrato já subido vai pelo id (não sobe de novo); nada é apagado",
+            hub_a and hub_a[-1].get("_camp_bio") == "Bio de agora" and hub_a[-1].get("_camp_foto_id") == 333 and ("upload",) not in chamadas
+            and "__limpar__" not in json.dumps(hub_a), hub_a)
+        cria_i = [x for x in chamadas if x[0] == "criar_item"]
+        ids = {k: c.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (v,)).fetchone()[0] for k, v in P.items()}
+        ver("projeto: o dossiê que o site já tinha é ligado sem criar outro (5001); o que não existia é criado UMA vez",
+            ids[1] == 5001 and len(cria_i) == 1 and P[2].split("-")[1] in cria_i[0][2] and ids[2] == cria_i[0][3], (ids, cria_i))
+        ver("projeto ligado: os metadados de agora completam o dossiê (Código de Catalogação, Cidade)",
+            ("meta", 5001, 800, P[1]) in chamadas and ("meta", 5001, 801, "São Paulo") in chamadas, [x for x in chamadas if x[0] == "meta" and x[1] == 5001])
+        m7000 = [x for x in chamadas if x[0] == "meta" and x[1] == 7000]
+        ver("projeto: só o campo editado depois do último envio vai, com o valor de agora (Cidade = Santos)", m7000 == [("meta", 7000, 801, "Santos")], m7000)
+        ver("projeto: capa de agora vai ao site", ("patch", 7200, {"_thumbnail_id": 4444}) in chamadas, [x for x in chamadas if x[0] == "patch"])
+        bp = {r[0]: dict(r) for r in c.execute("SELECT d.campo, r.tentativas, r.proxima_em FROM reenvio_pendencia_site r JOIN divergencia_site d ON d.id=r.divergencia_id")}
+        ver("as duas que ficaram esperam a próxima tentativa (1 tentativa)", set(bp) == {"pendente_metadado_Ano", "pendente_descricao_no_site"} and all(v["tentativas"] == 1 for v in bp.values()), bp)
+        ct1 = _fila.contar(c)
+        ver("contagem depois: 2 na fila, 0 prontas", ct1["total"] == 2 and ct1["prontas"] == 0 and ct1["proxima_em"], ct1)
+        n = len(chamadas)
+        t2 = clicar()
+        ver("de novo logo depois: nada sai (não martela o site, não cria de novo)", len(chamadas) == n and "Nada saiu" in ((t2.get("resultado") or {}).get("mensagem") or ""), t2.get("resultado"))
+        ev = c.execute("SELECT detalhe FROM evento WHERE tipo='site_correcoes_enviadas' ORDER BY id").fetchall()
+        d0 = json.loads(ev[0][0]) if ev else {}
+        ver("Histórico: N enviadas, N falharam, N ainda na fila", d0.get("enviadas") == 9 and d0.get("falharam") == 1 and d0.get("ainda_na_fila") == 2, d0)
+        # o site voltou e o Ano passou a ser aceito: na próxima tentativa as duas saem
+        site["lento"].clear(); site["recusa_ano"] = False
+        c.execute("UPDATE reenvio_pendencia_site SET proxima_em=datetime('now','-1 minute')"); c.commit()
+        r3 = _fila.executar_pendentes(forcar_manual=True, ator="adm@camp.arq.br")
+        ver("próxima tentativa: as duas saem e fecham", len(r3.get("enviadas") or []) == 2 and not r3.get("falhas") and _fila.contar(c)["total"] == 0
+            and ("meta", 7100, 802, "1964") in chamadas, r3)
+        ver("no fim, nada duplicado: 1 dossiê criado, 1 termo criado", len([x for x in chamadas if x[0] == "criar_item"]) == 1 and len([x for x in chamadas if x[0] == "criar_termo"]) == 1)
         c.close()
         for l in res: print(l)
     elif modo == "ux39_dispensar_interrompida":
@@ -13770,6 +13926,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-35: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("117e) UX-47: a mesma rodada reenvia as escritas pendentes de fundo, projeto e arquiteto (valor de agora, sem duplicar no site)")
+rc, out = rodar("ux47_reenvio_pendencias", f"{tmp}/ux47.db")
+if rc != 0: ok(False, f"teste ux47_reenvio_pendencias não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-47: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("117e) UX-39: dispensar também a leitura interrompida (para todos; volta sozinho se o CAMP Vision mexer no lote)")
 print("117e) UX-40: \"Enviar as N agora\" manda uma rodada da fila de correções ao site (manual; o automático continua desligado)")

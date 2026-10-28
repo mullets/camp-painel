@@ -732,7 +732,7 @@ def estacoes(fresco: int = 0, u: dict = Depends(auth.exige("leitura"))) -> dict:
         "ultima_sincronizacao": dict(s) if s else None,
         "divergencias": cont["site_divergencias"],
         "escritas_pendentes": con.execute("SELECT COUNT(*) FROM divergencia_site WHERE resolvida=0 AND campo LIKE 'pendente%'").fetchone()[0],
-        # UX-40: correções de folhas na fila do painel (o que o botão "Enviar as N agora" manda); prontas = podem sair já
+        # UX-40/UX-47: o que o botão "Enviar as N agora" manda (correções de folhas + escritas pendentes de fundo, projeto e arquiteto); prontas = podem sair já
         "correcoes_fila": __import__("app.fila_correcao_site", fromlist=["contar"]).contar(con),
         "rascunhos_no_site": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='draft'").fetchone()[0],
         "publicados_sem_codigo": con.execute("SELECT COUNT(*) FROM wp_item WHERE status='publish' AND codigo_detectado IS NULL").fetchone()[0],

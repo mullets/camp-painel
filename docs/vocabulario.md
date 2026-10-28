@@ -210,9 +210,16 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   Confirmação: "Manda agora ao site as N correções que estão esperando. Uma rodada só; o reenvio automático continua desligado."
 - Resultado: "**Enviadas** · **falharam** · **ainda na fila**", com cada folha que falhou e o motivo. Folha que falhou "**espera a próxima
   tentativa**" (não sai de novo no clique seguinte). "**Nada a enviar**: o painel não vê diferença desta folha para o site."
-- "Escritas pendentes" conta toda gravação no site que falhou (fundo, projeto, arquiteto, folha); o botão só manda as correções de folhas.
+- "Escritas pendentes" conta toda gravação no site que falhou (fundo, projeto, arquiteto, folha). UX-47 (28/10/2026): o botão manda as
+  correções de folhas e também as escritas pendentes de fundos, projetos e arquitetos (criar o fundo ou o dossiê sem duplicar, nome,
+  "Sobre o acervo", dados e capa do projeto, página do arquiteto), sempre com o valor de agora no painel. A contagem diz
+  "**N correções de folhas e N escritas de fundos, projetos e arquitetos esperando o site**" (só a parte que existe).
+  Publicar ou tirar do ar (situação do fundo, página do arquiteto) não entra: isso continua sendo pedido na tela.
+  Dossiê que o site já tinha: no Histórico, "**página do projeto que já estava no site ligada (sem criar outra)**".
+- No andamento, a escrita que esbarrou no site lento: "**o site não respondeu a tempo, continua na fila**" (não conta como falha;
+  entra em "ainda na fila"). Recusa do site (4xx) conta em "falharam" e espera a próxima tentativa.
 - Ao lado de **Sincronizar agora**: "Só lê o site e atualiza as diferenças: não envia nada."
-- No Histórico de ações: "{quem} mandou ao site as correções de folhas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
+- No Histórico de ações: "{quem} mandou ao site as correções e escritas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
 
 ## Publicação paciente com o site lento (27/10/2026)
 - No acompanhamento da publicação: "**Folha X: o site demorou (…). Tentando de novo em N s (tentativa 2 de 3)**"; quando o painel

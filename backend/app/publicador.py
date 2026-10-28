@@ -337,25 +337,14 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         _resolver_pendencia(con, "projeto", codigo, "pendente_criar_no_site")
         con.execute("INSERT OR REPLACE INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado, fundo_detectado, projeto_detectado, metadados, json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (iid, COL_PROJETOS, "draft", titulo, it.get("slug"), it.get("url"), codigo, p["fundo_codigo"], codigo, "{}", json.dumps(it, ensure_ascii=False)))
-        arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (p["fundo_codigo"],)).fetchone()
-        valores = {"Código de Catalogação": codigo, "Ano": str(p["ano"]) if p["ano"] else None, "Cidade": p["cidade"],
-                   "Programa / uso": p["tipologia"], "Cliente (divulgável)": p["cliente"],
-                   "Autoria do projeto": p["autoria"], "Papel no projeto": PAPEIS_PROJETO.get(p["papel_no_projeto"] or "", p["papel_no_projeto"]),
-                   "Natureza do trabalho": p["natureza"], "Modalidade": p["modalidade"], "Situação da obra": p["situacao_obra"],
-                   "Fundo": p["fundo_termo"] or p["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None}
-        for nome, valor in valores.items():
+        for nome, valor in valores_dossie(con, codigo, p).items():
             if valor in (None, ""):
                 continue
-            mid, tipo = _meta(con, COL_PROJETOS, nome)
-            if not mid:
-                _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
-                continue
             try:
-                col = {v_: k_ for k_, v_ in CAMPOS_PROJETO_SITE.items()}.get(nome)
-                if col in ("tipologia", "natureza", "modalidade", "situacao_obra"):
-                    valor = _valor_para_site(con, col, valor, tipo)   # B3: taxonomia do site recebe id(s)
-                wp.definir_metadado(iid, mid, valor)
+                gravar_metadado_dossie(con, wp, iid, nome, valor)
                 out["metadados"].append(nome)
+            except MetadadoAusente as e:
+                _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", str(e))
             except Exception as e:  # noqa: BLE001
                 _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", str(e)[:200])
         out["item_id"] = iid
@@ -365,6 +354,32 @@ def criar_dossie_no_site(codigo: str, ator: str) -> dict:
         _pendencia(con, "projeto", codigo, "pendente_criar_no_site", out["erro"])
     con.commit(); con.close()
     return out
+
+
+class MetadadoAusente(RuntimeError):
+    """O site não tem o metadado (nem pelo nome, nem pelo ID conhecido): nada foi gravado."""
+
+
+def valores_dossie(con, codigo: str, p) -> dict:
+    """Os metadados que a criação do dossiê grava no site, com os valores de AGORA no painel (UX-47: o reenvio usa os mesmos).
+    `p`: a linha do projeto com fundo_titulo e fundo_termo (como em criar_dossie_no_site)."""
+    arq = con.execute("SELECT a.tainacan_term_id, a.forma_autorizada FROM fundo_agente fa JOIN agente a ON a.id=fa.agente_id WHERE fa.fundo_codigo=? AND fa.papel='produtor' ORDER BY fa.inicio LIMIT 1", (p["fundo_codigo"],)).fetchone()
+    return {"Código de Catalogação": codigo, "Ano": str(p["ano"]) if p["ano"] else None, "Cidade": p["cidade"],
+            "Programa / uso": p["tipologia"], "Cliente (divulgável)": p["cliente"],
+            "Autoria do projeto": p["autoria"], "Papel no projeto": PAPEIS_PROJETO.get(p["papel_no_projeto"] or "", p["papel_no_projeto"]),
+            "Natureza do trabalho": p["natureza"], "Modalidade": p["modalidade"], "Situação da obra": p["situacao_obra"],
+            "Fundo": p["fundo_termo"] or p["fundo_titulo"], "Arquiteto": (arq[0] or arq[1]) if arq else None}
+
+
+def gravar_metadado_dossie(con, wp, iid: int, nome: str, valor) -> None:
+    """Grava UM metadado do dossiê no site. Site sem o metadado: MetadadoAusente; erro do site sobe como veio."""
+    mid, tipo = _meta(con, COL_PROJETOS, nome)
+    if not mid:
+        raise MetadadoAusente(f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
+    col = {v_: k_ for k_, v_ in CAMPOS_PROJETO_SITE.items()}.get(nome)
+    if col in ("tipologia", "natureza", "modalidade", "situacao_obra"):
+        valor = _valor_para_site(con, col, valor, tipo)   # B3: taxonomia do site recebe id(s)
+    wp.definir_metadado(iid, mid, valor)
 
 
 COL_ACERVO = 8013
