@@ -42,8 +42,8 @@ a{color:var(--blue)}
 code,.mono{font-family:var(--mono);font-size:.92em}
 
 /* layout */
-.app{display:grid;grid-template-columns:var(--side) 1fr;height:100%}
-.side{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:4px}
+.app{display:grid;grid-template-columns:var(--side) 1fr;grid-template-rows:minmax(0,1fr);height:100%}   /* uma barra só: a linha da grade não cresce com o menu (menu alto fazia a página e o conteúdo rolarem juntos) */
+.side{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:4px;min-height:0;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
 .brand .mark{min-width:30px;padding:0 2px;height:30px;flex:none;border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:var(--fs-2xs);letter-spacing:.5px}
 .brand b{font-weight:600;display:block;line-height:1.2}
@@ -750,8 +750,8 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
   .lab-wrap{grid-template-columns:1fr}
 }
 @media (max-width:720px){
-  .app{grid-template-columns:1fr;grid-template-rows:1fr auto}
-  .side{order:2;flex-direction:row;padding:6px 8px;border-right:0;border-top:1px solid var(--line);overflow-x:auto;gap:0;position:sticky;bottom:0;background:var(--surface);padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+  .app{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+  .side{order:2;flex-direction:row;padding:6px 8px;border-right:0;border-top:1px solid var(--line);overflow-x:auto;overflow-y:hidden;gap:0;position:sticky;bottom:0;background:var(--surface);padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
   .brand,.side .foot,.nav .grp{display:none}
   .nav{flex-direction:row;gap:2px;width:100%}
   .nav button{flex-direction:column;gap:3px;font-size:var(--fs-sm);padding:6px 8px;min-width:64px;justify-content:center}
