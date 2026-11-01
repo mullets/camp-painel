@@ -45,7 +45,9 @@ alterado.
   - Funciona acima de 4 GB (ZIP64).
 - O e-mail também leva a página `https://painel.camp.arq.br/entrega/<código>` (a configuração `painel.url` mais `/entrega/`). É uma
   página simples, sem login, com **Baixar tudo (.zip)** e um botão **Baixar** por arquivo, para quem preferir arquivo por arquivo.
-- O link é **temporário**: vale `entrega.validade_dias` dias e pode ser cancelado a qualquer momento.
+- O link é **temporário**: vale `entrega.validade_dias` dias e pode ser cancelado a qualquer momento. Ele para às **23h59 (horário de
+  São Paulo)** do último dia: pedido aprovado em 01/11 com 14 dias vale até "15 de novembro de 2026, às 23h59". O texto do e-mail sai
+  do mesmo valor gravado (`entrega_link.expira_em`, em UTC), então a data do e-mail é o minuto exato em que o link para.
 - O código tem 43 caracteres aleatórios e só existe no e-mail: o banco guarda o hash (`entrega_link.token_hash`).
 - O link vale `entrega.validade_dias` dias (padrão 14). Vencido ou cancelado, a página diz isso e não lista nada.
 - A página e os arquivos não entram em cache nem em buscadores (`no-store`, `noindex`).
@@ -65,7 +67,9 @@ alterado.
 | `entrega.validade_dias` | dias de validade do link (1 a 90; padrão 14) |
 | `entrega.responder_para` | e-mail que recebe as respostas, no canal do site (vazio = `email_solicitacoes` do site) |
 | `sender.token` | token da API do Sender.net (sensível: a tela só mostra se está preenchido) |
-| `sender.campanha_entrega` | ID do e-mail transacional do Sender.net com o layout da entrega |
+| `sender.campanha_entrega` | ID do e-mail transacional do Sender.net com o layout da entrega (desde 01/11/2026: o TR09, `bov4VK`, preenchido pela migração 202 só se estava vazio) |
+| `sender.tr04_…` a `sender.tr09_…` | IDs dos 6 e-mails transacionais da CAMP no Sender.net (ver abaixo) |
+| `sender.site_ativo` | `1` = o site manda os e-mails dele pelo Sender.net; `0` (padrão) = o site continua com o e-mail de sempre |
 
 ### Sender.net (canal padrão)
 
@@ -79,7 +83,10 @@ alterado.
    | `{{link}}` | o link do .zip com tudo (use como endereço do botão "Baixar os arquivos") |
    | `{{link_pagina}}` | a página para baixar arquivo por arquivo |
    | `{{tamanho}}` | tamanho total do pacote (ex.: "410 MB") |
-   | `{{validade}}` | até quando o link vale (dd/mm/aaaa) |
+   | `{{validade}}` | até quando o link vale, por extenso: "15 de novembro de 2026, às 23h59" (horário de São Paulo; o minuto em que o link para) |
+   | `{{validade_curta}}` | a mesma data em dd/mm/aaaa (era o `{{validade}}` até 01/11/2026) |
+   | `{{material}}` | resumo curto do pacote (até 160 caracteres): "12 arquivos em alta resolução — F009-P0018, F009-P0020" |
+   | `{{protocolo}}` | protocolo do pedido: `CAMP-<ano>-<id do pedido no site, 6 dígitos>` (o mesmo do e-mail "pedido recebido" do site); pedido só do painel: `CAMP-<ano>-P<id no painel, 6 dígitos>` |
    | `{{pedido}}` | número do pedido no painel |
    | `{{quantidade}}` | quantos arquivos |
    | `{{lista}}` | um arquivo por linha: código · título (resolução) |
@@ -91,9 +98,30 @@ alterado.
 4. Em um pedido qualquer, use **Enviar um teste para mim** e confira o e-mail.
 
 Como o painel chama o Sender.net: `POST https://api.sender.net/v2/message/<sender.campanha_entrega>/send`, com
-`Authorization: Bearer <sender.token>` e o corpo `{"to": {"email", "name"}, "variables": {…}}`. Uma resposta 4xx/5xx ou
+`Authorization: Bearer <sender.token>` e o corpo `{"to": {"email", "name"}, "variables": {…}, "headers": {"X-CAMP-Protocolo": "<protocolo>"}}`. Uma resposta 4xx/5xx ou
 `"success": false` conta como falha: o painel mostra a mensagem do Sender.net, sem o token, e não marca o pedido. Se o Sender.net
 mudar o formato da API, o teste mostra o erro na hora.
+
+### Os 6 e-mails transacionais da CAMP (Sender.net, 01/11/2026)
+
+| Chave | ID | E-mail | Variáveis | Quem manda |
+|---|---|---|---|---|
+| `sender.tr04_solicitacao_recebida` | `egx4Z6` | pedido recebido | nome, protocolo | site |
+| `sender.tr05_pdf_disponivel` | `ejv4Z5` | PDF disponível | nome, projeto, protocolo, link | site |
+| `sender.tr06_visita_solicitada` | `bkw48X` | visita solicitada | nome, local, data, grupo, protocolo | site |
+| `sender.tr07_visita_confirmada` | `elv4x6` | visita confirmada | nome, local, data, horario, grupo, protocolo | site |
+| `sender.tr08_inscricao_recebida` | `bm24O0` | inscrição recebida | nome, curso, protocolo | site |
+| `sender.tr09_material_download` | `bov4VK` | material para download | nome, material, protocolo, validade, link | painel (esta entrega) |
+
+As chaves das variáveis são exatamente essas (minúsculas, sem acento). Datas por extenso, horário de São Paulo.
+
+**Configuração enviada ao site.** Os IDs, o token (`sender.token`) e `sender.site_ativo` ficam no painel. Em Configurações → E-mail e
+avisos, o botão **Enviar a configuração do Sender ao site** manda tudo ao site (`POST /wp-json/camp/v1/painel/sender`, contrato 1.5,
+`docs/CONTRATO_UNICO.md` §6) e mostra o que o site ficou usando: Sender.net ligado ou desligado, token preenchido ou não, quantos
+e-mails. O token nunca aparece na tela, na resposta nem no histórico. Token vazio no painel não é enviado: o site mantém o dele. O site só
+usa o Sender.net com `sender.site_ativo = 1`, o token e o ID do e-mail preenchidos; senão continua com o e-mail de sempre. Site antigo
+(sem a rota) responde 404: a tela diz "atualize o site" e nada muda. Rotas: `POST /api/configuracoes/sender/enviar-ao-site` e
+`GET /api/configuracoes/sender/site` (admin).
 
 ### E-mail do site (alternativa)
 
@@ -118,10 +146,12 @@ aceita até 60 e-mails por hora. Para usar, basta a senha de aplicativo do site 
   - `backend/app/rotas_pedidos.py` (`GET /api/solicitacoes/{id}/envio`, `POST …/enviar`, `POST …/cancelar-link`);
   - `backend/app/rotas_entrega.py` (página pública);
   - `backend/app/wp.py` (`enviar_email_pedido`);
-  - `db/migrations/201_entrega_por_email.sql`;
+  - `db/migrations/201_entrega_por_email.sql` e `202_sender_transacional.sql`;
+  - `backend/app/wp.py` (`sincronizar_sender`) e `backend/app/rotas_admin.py` (`/api/configuracoes/sender/…`);
   - tela em `frontend/index.html` (`envioHTML`, `linksEnvioHTML`).
 - Site: `wp-content/plugins/camp-acervo-auto-pages/includes/class-painel-api.php` (`send_request_mail`), versão 1.22.7.
 - Testes:
-  - `tests/teste_backend.py` modo `entrega_por_email` (30 verificações, com Sender.net e site falsos);
+  - `tests/teste_backend.py` modo `entrega_por_email` (30 verificações, com Sender.net e site falsos) e modo `sender_transacional`
+    (migração 202, variáveis do TR09, configuração enviada ao site falso, 404 do site antigo);
   - `tests/navegador_entrega_email.js` (o clique de ponta a ponta com um Sender.net falso local:
     `CAMP_SENDER_URL=http://127.0.0.1:8898/v2 bash tests/rodar_um.sh tests/navegador_entrega_email.js`).

@@ -275,3 +275,13 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Botões: **Usar recorte inteiro (sem recorte)** e, depois dele, **Usar recorte automático**; o selo da escolha é
   **sem recorte (escolhido na conferência)**.
 - Rotina de admin: **Reprocessar imagens públicas com recorte automático** (simula por padrão; só reenvia confirmando "REPROCESSAR").
+
+## Sender.net: configuração enviada ao site (01/11/2026)
+- Em Configurações → **E-mail e avisos**, o botão **Enviar a configuração do Sender ao site** (admin). Texto acima: "Manda ao site se ele
+  usa o Sender.net nos e-mails dele, os IDs dos 6 e-mails transacionais e o token. Desligado, o site continua com o e-mail de sempre.
+  O token não aparece aqui."
+- Resultado: "**O site recebeu:** Sender.net ligado/desligado · token preenchido/sem token · N e-mails transacionais." Ligado sem token:
+  "Sem o token, o site continua com o e-mail de sempre." Erro: "Não foi enviada: <motivo>"; site antigo: "O site ainda não recebe a
+  configuração do Sender.net: atualize o site (plugin da CAMP 1.23.0 ou mais novo). Nada mudou no site." Com campo alterado sem salvar:
+  "Salve as alterações desta seção antes de enviar ao site."
+- No e-mail de entrega, a validade é por extenso: "15 de novembro de 2026, às 23h59" (horário de São Paulo).

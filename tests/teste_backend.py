@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "sender_transacional"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11412,6 +11412,161 @@ def filho(modo):
             and "https://painel.exemplo/entrega/" in kw.get("texto", "") and kw.get("pedido_site_id") == 502 and "#" in kw.get("assunto", ""), str(kw)[:200])
         ver("canal site: pedido entregue com o canal no resumo", "e-mail do site" in (um("SELECT entrega FROM solicitacao WHERE id=?", S3)[0] or ""))
         print("\n".join(res))
+    elif modo == "sender_transacional":
+        # 01/11/2026: a CAMP criou 6 e-mails transacionais no Sender.net (TR04–TR09). A configuração mora no painel (migração 202) e vai ao
+        # site por POST /wp-json/camp/v1/painel/sender (contrato 1.5); a entrega em alta resolução usa o TR09 com material, protocolo e a
+        # validade por extenso igual ao minuto em que o link para.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j, logging as _lg, tempfile, httpx
+        from datetime import datetime as _dt, timezone as _tz
+        from pathlib import Path as _P
+        from PIL import Image
+        from app import auth, entrega
+        import app.wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        # 1) migração 202
+        esperado = {"sender.tr04_solicitacao_recebida": "egx4Z6", "sender.tr05_pdf_disponivel": "ejv4Z5", "sender.tr06_visita_solicitada": "bkw48X",
+                    "sender.tr07_visita_confirmada": "elv4x6", "sender.tr08_inscricao_recebida": "bm24O0", "sender.tr09_material_download": "bov4VK",
+                    "sender.site_ativo": "0"}
+        tem = {k: um("SELECT valor, sensivel, descricao FROM configuracao WHERE chave=?", k) for k in esperado}
+        ver("migração 202: as 6 chaves dos e-mails e sender.site_ativo, não sensíveis e com descrição",
+            all(tem[k] and tem[k][0] == v and tem[k][1] == 0 and len(tem[k][2] or "") > 20 for k, v in esperado.items()), tem)
+        ver("migração 202: sender.campanha_entrega vazio vira o TR09 (bov4VK)", um("SELECT valor FROM configuracao WHERE chave='sender.campanha_entrega'")[0] == "bov4VK")
+        c.execute("UPDATE configuracao SET valor='meu-layout' WHERE chave='sender.campanha_entrega'")
+        c.execute("UPDATE configuracao SET valor='trocado' WHERE chave='sender.tr04_solicitacao_recebida'")
+        c.execute("DELETE FROM migracao WHERE nome='202_sender_transacional.sql'"); c.commit()
+        _aplicar_migracoes_real()
+        ver("migração 202 de novo: não sobrescreve sender.campanha_entrega nem um ID já trocado",
+            um("SELECT valor FROM configuracao WHERE chave='sender.campanha_entrega'")[0] == "meu-layout"
+            and um("SELECT valor FROM configuracao WHERE chave='sender.tr04_solicitacao_recebida'")[0] == "trocado")
+        c.execute("UPDATE configuracao SET valor='egx4Z6' WHERE chave='sender.tr04_solicitacao_recebida'")
+        c.execute("UPDATE configuracao SET valor=NULL WHERE chave='sender.campanha_entrega'")
+        c.execute("DELETE FROM migracao WHERE nome='202_sender_transacional.sql'"); c.commit()
+        _aplicar_migracoes_real()
+        ver("migração 202: sender.campanha_entrega NULL também é preenchido", um("SELECT valor FROM configuracao WHERE chave='sender.campanha_entrega'")[0] == "bov4VK")
+        # 2) validade: 23h59 de São Paulo do último dia, e o texto sai do MESMO expira_em
+        e1 = entrega.calcular_expira_em(14, _dt(2026, 11, 1, 15, 0, tzinfo=_tz.utc))
+        ver("expira em 23h59 de São Paulo do 14º dia (02h59 UTC do dia seguinte)", e1 == "2026-11-16 02:59:00", e1)
+        ver("validade por extenso: 15 de novembro de 2026, às 23h59", entrega.validade_longa(e1) == "15 de novembro de 2026, às 23h59", entrega.validade_longa(e1))
+        e2 = entrega.calcular_expira_em(14, _dt(2026, 11, 2, 1, 0, tzinfo=_tz.utc))       # 22h de 01/11 em São Paulo: conta do dia de SP
+        ver("o dia conta pelo horário de São Paulo (22h de 01/11 em SP = 02/11 UTC)", entrega.validade_longa(e2) == "15 de novembro de 2026, às 23h59", e2)
+        ver("validade curta continua dd/mm/aaaa no dia de São Paulo", entrega._data_br(e1) == "15/11/2026", entrega._data_br(e1))
+        # 3) material e protocolo
+        arqs = [{"codigo": f"F009-P{18 + ((i - 1) % 3):04d}-1970-S01-D{i:05d}", "titulo": "", "resolucao": "TIFF", "tamanho": 10} for i in range(1, 13)]
+        ver("material: 12 arquivos em alta resolução — projetos", entrega.material(arqs) == "12 arquivos em alta resolução — F009-P0018, F009-P0019, F009-P0020", entrega.material(arqs))
+        ver("material: um arquivo leva a folha", entrega.material(arqs[:1]) == "1 arquivo em alta resolução — F009-P0018-1970-S01-D00001", entrega.material(arqs[:1]))
+        muitos = [{"codigo": f"F0{i:02d}-P{i:04d}-1970-S01-D00001"} for i in range(1, 60)]
+        mm = entrega.material(muitos)
+        ver("material: lista longa cortada em até 160 caracteres com …", len(mm) <= 160 and mm.endswith("…") and mm.startswith("59 arquivos em alta resolução — F001-P0001"), mm)
+        sid_site = c.execute("INSERT INTO solicitacao (solicitante,email,finalidade,origem,recebida_em) VALUES ('Maria Souza','maria@exemplo.org','pesquisa','site','2026-10-31 12:00:00')").lastrowid
+        c.execute("INSERT INTO pedido_site (site_id,tipo,codigo,criado_no_site,payload,situacao,destino,destino_id) VALUES (4321,'alta-resolucao','F001-P0001','2025-12-31 23:00:00','{}','importado','solicitacao',?)", (sid_site,))
+        sid_painel = c.execute("INSERT INTO solicitacao (solicitante,email,finalidade,origem,recebida_em) VALUES ('João','joao@exemplo.org','pesquisa','email','2026-11-01 10:00:00')").lastrowid
+        c.commit()
+        s_site, s_pai = (c.execute("SELECT * FROM solicitacao WHERE id=?", (x,)).fetchone() for x in (sid_site, sid_painel))
+        ver("protocolo do pedido do site: CAMP-<ano no site>-<id do site com 6 dígitos>", entrega.protocolo(c, s_site) == "CAMP-2025-004321", entrega.protocolo(c, s_site))
+        ver("protocolo do pedido só do painel: CAMP-<ano>-P<id com 6 dígitos>", entrega.protocolo(c, s_pai) == f"CAMP-2026-P{sid_painel:06d}", entrega.protocolo(c, s_pai))
+        t = entrega.textos(c, s_site, arqs, "https://painel.exemplo/entrega/abc", e1, "")
+        v = t["variaveis"]
+        tr09 = {"nome", "material", "protocolo", "validade", "link"}
+        ver("TR09: as variáveis nome, material, protocolo, validade e link", tr09 <= set(v) and v["nome"] == "Maria" and v["protocolo"] == "CAMP-2025-004321"
+            and v["validade"] == "15 de novembro de 2026, às 23h59" and v["link"].endswith("/tudo.zip"), v)
+        ver("variáveis antigas continuam (layout antigo) e a data curta vai em validade_curta",
+            {"nome_completo", "link_pagina", "tamanho", "pedido", "quantidade", "lista", "mensagem"} <= set(v) and v["validade_curta"] == "15/11/2026", v)
+        ver("chaves das variáveis em minúsculas e sem acento", all(k.isascii() and k == k.lower() for k in v), list(v))
+        # 4) aprovar e enviar pelo Sender.net (falso): validade = o expira_em gravado, em São Paulo; cabeçalho X-CAMP-Protocolo
+        base = _P(tempfile.mkdtemp(prefix="sender_"))
+        os.environ["CAMP_ENTREGAS_DIR"] = str(base / "entregas")
+        raiz = base / "ACERVOS_CAMP"; pj = raiz / "F001 - ARM" / "01 - Projetos" / "F001-P0001 - Casa" / "TIF"; pj.mkdir(parents=True)
+        F1 = "F001-P0001-1965-S01-D00001"
+        Image.new("RGB", (50, 40), (10, 20, 30)).save(pj / f"{F1}.tif", "TIFF")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F001-P0001','F001',1,'Casa',1965)")
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_tif) VALUES (?,?,?,?,?,?,?)",
+                  (F1, "F001-P0001", "S01", 1, "Planta 1", "campvision", f"F001 - ARM/01 - Projetos/F001-P0001 - Casa/TIF/{F1}.tif"))
+        c.execute("INSERT INTO solicitacao_item (solicitacao_id,codigo,formato) VALUES (?,?,'tif')", (sid_site, F1))
+        c.execute("UPDATE configuracao SET valor='snd-tok-SEGREDO-987' WHERE chave='sender.token'"); c.commit()
+        chamadas = []
+        class Resp:
+            def __init__(s_, st, js): s_.status_code, s_._js = st, js
+            def json(s_): return s_._js
+        def falso_post(url, **kw): chamadas.append((url, kw)); return Resp(200, {"success": True, "data": {"emailId": "e-1"}})
+        entrega.httpx.post = falso_post
+        r = entrega.aprovar_e_enviar(c, sid_site, {"email": "op@camp.arq.br"})
+        url, kw = chamadas[-1] if chamadas else ("", {})
+        corpo = kw.get("json") or {}
+        exp = um("SELECT expira_em FROM entrega_link WHERE solicitacao_id=? ORDER BY id DESC", sid_site)[0]
+        sp = entrega._em_sp(exp)
+        ver("entrega pelo TR09: rota do bov4VK", url.endswith("/message/bov4VK/send"), url)
+        ver("validade do e-mail = o expira_em gravado, em São Paulo, às 23h59", corpo.get("variables", {}).get("validade") == entrega.validade_longa(exp)
+            and (sp.hour, sp.minute) == (23, 59), f"{exp} {corpo.get('variables', {}).get('validade')}")
+        ver("cabeçalho X-CAMP-Protocolo com o protocolo do pedido", corpo.get("headers") == {"X-CAMP-Protocolo": "CAMP-2025-004321"}, corpo.get("headers"))
+        ver("material do pacote real", corpo.get("variables", {}).get("material") == f"1 arquivo em alta resolução — {F1}", corpo.get("variables", {}).get("material"))
+        # 5) a configuração vai ao site (site falso), o token vai mas nunca volta nem fica em log/histórico
+        logs = []
+        class Pega(_lg.Handler):
+            def emit(s_, rec):
+                try: logs.append(rec.getMessage())
+                except Exception: logs.append(str(rec.msg))
+        _lg.getLogger().addHandler(Pega()); _lg.getLogger().setLevel(_lg.DEBUG)
+        site = {"status": 200, "pedidos": [], "token": ""}
+        def h(req):
+            corpo_ = _j.loads(req.content or b"{}") if req.content else {}
+            site["pedidos"].append((req.method, req.url.path, corpo_, req.headers.get("authorization")))
+            if site["status"] == 404:
+                return httpx.Response(404, json={"code": "rest_no_route", "message": "Nenhuma rota"})
+            if req.method == "POST":
+                if corpo_.get("token") == "__limpar__": site["token"] = ""
+                elif corpo_.get("token"): site["token"] = corpo_["token"]
+            return httpx.Response(200, json={"ok": True, "ativo": bool(corpo_.get("ativo")), "token_preenchido": bool(site["token"]),
+                                             "templates": corpo_.get("templates") or {}, "token": site["token"]})   # site com defeito que ecoa: o painel tira
+        def falso_init(self, log=None):
+            self.log = log or (lambda *_: None); self.base = "http://site-falso.invalid"
+            self.h = httpx.Client(base_url=self.base, headers={"Authorization": "Basic eDp5"}, transport=httpx.MockTransport(h))
+        _wp.WP.__init__ = falso_init
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op2@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        ad, op = cli("ad@camp.arq.br", "senha-admin-12345"), cli("op2@camp.arq.br", "senha-operador-123")
+        ver("operador não envia a configuração ao site", op.post("/api/configuracoes/sender/enviar-ao-site").status_code == 403)
+        r = ad.post("/api/configuracoes/sender/enviar-ao-site")
+        met, rota, enviado, aut = site["pedidos"][-1] if site["pedidos"] else ("", "", {}, "")
+        ver("POST /wp-json/camp/v1/painel/sender com a autenticação do site", met == "POST" and rota == "/wp-json/camp/v1/painel/sender" and aut == "Basic eDp5", rota)
+        ver("corpo: ativo (desligado por padrão), os 6 modelos e o token", enviado.get("ativo") is False and enviado.get("token") == "snd-tok-SEGREDO-987"
+            and enviado.get("templates") == {"solicitacao_recebida": "egx4Z6", "pdf_disponivel": "ejv4Z5", "visita_solicitada": "bkw48X",
+                                             "visita_confirmada": "elv4x6", "inscricao_recebida": "bm24O0", "material_download": "bov4VK"}, enviado)
+        ver("resposta: o que o site ficou usando, sem o token", r.status_code == 200 and r.json().get("token_preenchido") is True and r.json().get("ativo") is False
+            and len(r.json().get("templates", {})) == 6 and "snd-tok" not in r.text and "token" not in {k for k in r.json() if k != "token_preenchido" and k != "token_enviado"}, r.text)
+        ver("histórico registra o envio sem o token", um("SELECT COUNT(*) FROM evento WHERE tipo='sender_enviado_ao_site'")[0] == 1
+            and not um("SELECT 1 FROM evento WHERE detalhe LIKE '%snd-tok%'"))
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='sender.site_ativo'"); c.commit()
+        ver("ligado no painel: vai ativo=true", ad.post("/api/configuracoes/sender/enviar-ao-site").json().get("ativo") is True and site["pedidos"][-1][2].get("ativo") is True)
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='sender.token'"); c.commit()
+        r = ad.post("/api/configuracoes/sender/enviar-ao-site")
+        ver("token vazio no painel: não vai (o site mantém o dele)", r.status_code == 200 and "token" not in site["pedidos"][-1][2] and r.json().get("token_preenchido") is True, site["pedidos"][-1][2])
+        g = ad.get("/api/configuracoes/sender/site")
+        ver("GET: o estado do site, sem o token", g.status_code == 200 and site["pedidos"][-1][0] == "GET" and "snd-tok" not in g.text, g.text)
+        c.execute("UPDATE configuracao SET valor='id inválido!' WHERE chave='sender.tr05_pdf_disponivel'"); c.commit()
+        n_antes = len(site["pedidos"])
+        r = ad.post("/api/configuracoes/sender/enviar-ao-site")
+        ver("ID inválido: 400 e nada vai ao site", r.status_code == 400 and "tr05" in r.text and len(site["pedidos"]) == n_antes, r.text)
+        c.execute("UPDATE configuracao SET valor='ejv4Z5' WHERE chave='sender.tr05_pdf_disponivel'"); c.commit()
+        site["status"] = 404
+        c.execute("UPDATE configuracao SET valor='snd-tok-SEGREDO-987' WHERE chave='sender.token'"); c.commit()
+        r = ad.post("/api/configuracoes/sender/enviar-ao-site")
+        ver("site antigo (404): 409 com 'atualize o site', sem quebrar e sem o token", r.status_code == 409 and "atualize o site" in r.text and "snd-tok" not in r.text, f"{r.status_code} {r.text}")
+        g = ad.get("/api/configuracoes/sender/site")
+        ver("site antigo (404) no GET: 409 com a frase", g.status_code == 409 and "atualize o site" in g.text, g.text)
+        arq_logs = " ".join(p_.read_text(errors="ignore") for p_ in _P(os.environ.get("CAMP_LOG_DIR", "/nao")).glob("**/*") if p_.is_file())
+        ver("o token não vai para nenhum log", "snd-tok" not in " ".join(logs) and "snd-tok" not in arq_logs, len(logs))
+        print("\n".join(res))
     elif modo == "fotos_qnap":
         # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
         # mandar ler elas e já legendar como faz com todas"): a foto enviada pelo painel é gravada na pasta do projeto no acervo, no padrão do
@@ -15260,6 +15415,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega por e-mail: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Sender.net: e-mails transacionais TR04–TR09, validade por extenso, configuração enviada ao site")
+rc, out = rodar("sender_transacional", f"{tmp}/sender_transacional.db")
+if rc != 0: ok(False, f"teste sender_transacional não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sender.net: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
 rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")
