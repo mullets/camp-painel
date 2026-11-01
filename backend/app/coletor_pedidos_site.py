@@ -202,4 +202,6 @@ def status(con) -> dict:
     u = con.execute("SELECT quando, lidas, novas, importadas, erro FROM pedido_site_coleta ORDER BY id DESC LIMIT 1").fetchone()
     return {"minutos": _minutos(con), "ultima": dict(u) if u else None,
             "pendentes": con.execute("SELECT COUNT(*) FROM pedido_site WHERE situacao<>'importado'").fetchone()[0],
-            "importados": con.execute("SELECT COUNT(*) FROM pedido_site WHERE situacao='importado'").fetchone()[0]}
+            "importados": con.execute("SELECT COUNT(*) FROM pedido_site WHERE situacao='importado'").fetchone()[0],
+            # 01/11 (Rafael: "não recebi esses mails"): o que ficou preso, com o motivo, para a tela mostrar
+            "falhas": [dict(r) for r in con.execute("SELECT site_id, tipo, codigo, criado_no_site, erro FROM pedido_site WHERE situacao='falhou' ORDER BY site_id DESC LIMIT 5")]}
