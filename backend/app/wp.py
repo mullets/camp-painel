@@ -478,3 +478,32 @@ def _wp_enviar_redirecionamentos(self, itens: list[dict]) -> dict:
 
 
 WP.enviar_redirecionamentos = _wp_enviar_redirecionamentos
+
+
+def _wp_enviar_email_pedido(self, para: str, nome: str, assunto: str, texto: str, responder_para: str | None = None,
+                            pedido_site_id: int | None = None) -> dict:
+    """Entrega de pedido (01/11/2026) · pede ao site para mandar o e-mail de entrega pelo e-mail do site (wp_mail → o SMTP configurado
+    no site). Devolve {ok, id?}. Contrato: docs/CONTRATO_UNICO.md 1.4 (POST /painel/pedido/enviar)."""
+    corpo = {"para": para, "nome": nome, "assunto": assunto, "texto": texto}
+    if responder_para:
+        corpo["responder_para"] = responder_para
+    if pedido_site_id:
+        corpo["pedido_site_id"] = int(pedido_site_id)
+    r = self.h.post("/wp-json/camp/v1/painel/pedido/enviar", json=corpo)
+    if r.status_code == 404 and "rest_no_route" in r.text:
+        raise RuntimeError("O site ainda não tem o envio de e-mail de pedidos (atualize o site)")
+    if r.status_code == 401:
+        raise RuntimeError("O site recusou as credenciais (401)")
+    if r.status_code >= 400:
+        try:
+            msg = str(r.json().get("message") or "")[:160]
+        except ValueError:
+            msg = ""
+        raise RuntimeError(f"O site não conseguiu mandar o e-mail ({r.status_code}){': ' + msg if msg else ''}")
+    try:
+        return r.json()
+    except ValueError:
+        return {}
+
+
+WP.enviar_email_pedido = _wp_enviar_email_pedido

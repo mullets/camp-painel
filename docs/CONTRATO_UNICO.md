@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.3 (27/10/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
+Versão deste documento: **1.4 (01/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -138,6 +138,7 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
 - `POST /painel/hub` — cria/atualiza o fundo/arquiteto; campo vazio NÃO apaga; para limpar, mandar `"__limpar__"`.
 - **NOVO 1.2** (UX-41, site plugin 1.6.3): datas do arquiteto no mesmo `{"meta": {...}}` do hub, OPCIONAIS: `_camp_arq_nascimento` e `_camp_arq_falecimento` (pessoa: ano, ex. `"1925"`) e `_camp_arq_atuacao` (escritório/família: `"1964–2010"`, `"desde 1964"`, `"até 2010"`), vindos de `agente.existencia_inicio/existencia_fim`. Só vai o preenchido; o painel nunca manda `"__limpar__"` para datas (não há como esvaziá-las no painel). O site mantém o texto escrito à mão quando ele já contém o valor (`"São Paulo, 1925"` × `"1925"`, resposta em `mantidos`, opcional) e, com um só ano no texto, troca só o ano. Site anterior a 1.6.3 devolve as chaves em `ignorados` (sem erro). Ordem: site primeiro, painel depois.
 - `POST /painel/pessoa/apagar` `{"email": "..."}` — LGPD.
+- **NOVO 1.4** (site plugin 1.22.7, painel `entrega.py`): `POST /painel/pedido/enviar` `{"para","nome","assunto","texto","responder_para"?,"pedido_site_id"?}` (auth `edit_pages`) → `{"ok":true}`. O site manda o e-mail de entrega de um pedido de alta resolução pelo e-mail do site (`wp_mail`, que sai pelo plugin de SMTP configurado no site), só texto, um destinatário. Erros: 400 (campo inválido), 429 (mais de 60 por hora), 502 (o SMTP do site recusou; `message` traz o motivo). Com `pedido_site_id` de um `camp_solicitacao`, grava `_camp_atendido_em`. Os arquivos NÃO vão no e-mail: o texto leva o link público do painel `https://<painel.url>/entrega/<token>`. Rota usada só quando `entrega.canal = site`; o canal padrão é o Sender.net (o painel fala direto com `api.sender.net`, fora deste contrato). Site antigo (404 `rest_no_route`): o painel avisa "atualize o site" e não marca o pedido. Ordem: site primeiro, painel depois (o painel funciona sem ela pelo Sender.net).
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.
 

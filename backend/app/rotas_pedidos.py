@@ -6,6 +6,8 @@
     POST /api/solicitacoes/{id}/entregar marca como entregue, com data, e guarda o resumo do pacote.
 (c) Métricas: GET /api/solicitacoes/metricas, pedidos por fundo e tempo médio entre o pedido e a entrega.
 (d) Aviso por e-mail ao admin quando chega um pedido pelo site (alertas.avisar_pedido_novo, assunto opcional).
+(f) 01/11/2026 · Aprovar e enviar por e-mail (entrega.py): prévia, envio (Sender.net ou e-mail do site) com link de download com prazo,
+    envio de teste para quem aprova, cancelar o link; página pública /entrega/<token> para a pessoa baixar os arquivos.
 """
 from __future__ import annotations
 
@@ -276,5 +278,47 @@ def entregar(sid: int, d: Entrega, u: dict = Depends(auth.exige("operador"))) ->
         con.commit()
         em = con.execute("SELECT entregue_em FROM solicitacao WHERE id=?", (sid,)).fetchone()[0]
         return {"ok": True, "entregue_em": em, "entrega": entrega, "total": p["total"]}
+    finally:
+        con.close()
+
+
+# ---------------- (f) aprovar e enviar por e-mail (entrega.py) ----------------
+class Envio(BaseModel):
+    mensagem: str | None = None          # parágrafo opcional no e-mail (ex.: condições de uso, crédito)
+    canal: str | None = None             # sender | site (vazio = o de Configurações)
+    teste: bool = False                  # manda só para quem aprova (link de 1 dia) e não muda o pedido
+
+
+@router.get("/solicitacoes/{sid}/envio")
+def previa_envio(sid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """O que vai no e-mail de entrega: arquivos achados no QNAP, o que fica de fora, texto, validade do link e canais prontos."""
+    from . import entrega
+    con = connect()
+    try:
+        r = entrega.previa(con, sid)
+        r["links"] = entrega.links(con, sid)
+        return r
+    finally:
+        con.close()
+
+
+@router.post("/solicitacoes/{sid}/enviar")
+def aprovar_e_enviar(sid: int, d: Envio, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Aprova o pedido e manda o e-mail com o link de download. Só marca como entregue depois do envio aceito."""
+    from . import entrega
+    con = connect()
+    try:
+        return entrega.aprovar_e_enviar(con, sid, u, d.mensagem or "", d.canal, d.teste)
+    finally:
+        con.close()
+
+
+@router.post("/solicitacoes/{sid}/cancelar-link")
+def cancelar_link(sid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """O link de download do pedido para de funcionar (ex.: mandado para o e-mail errado)."""
+    from . import entrega
+    con = connect()
+    try:
+        return {"ok": True, "cancelados": entrega.cancelar_links(con, sid, u)}
     finally:
         con.close()

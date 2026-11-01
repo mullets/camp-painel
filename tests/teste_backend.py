@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11261,6 +11261,144 @@ def filho(modo):
         ver("tela: botão 'Voltar à cor do original…' (Máquinas), que confere antes e reenvia só essas", "Voltar à cor do original…" in html and "so_cor_original:true,aplicar:true" in html)
         k.close(); c.close()
         for l in res: print(l)
+    elif modo == "entrega_por_email":
+        # 01/11/2026 (Rafael: "quando recebemos uma solicitação de envio de material em alta, poder aprovar pelo sistema e já enviar o que
+        # ele pediu pelo próprio sistema" / "podemos usar interligação com o sender.net"): aprovar → link de download com prazo → e-mail
+        # (Sender.net ou e-mail do site) → pedido entregue SÓ depois do envio aceito; a pessoa baixa pelo link público.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from PIL import Image
+        from app import auth, entrega
+        import app.wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        base = _P(tempfile.mkdtemp(prefix="entrega_"))
+        os.environ["CAMP_ENTREGAS_DIR"] = str(base / "entregas")
+        raiz = base / "ACERVOS_CAMP"; pj = raiz / "F001 - ARM" / "01 - Projetos" / "F001-P0001 - Residência Teresa Martino" / "TIF"; pj.mkdir(parents=True)
+        P = "F001-P0001"; F1, F2, F3 = f"{P}-1965-S01-D00001", f"{P}-1965-S01-D00002", f"{P}-1965-S01-D00003"
+        Image.new("RGB", (400, 300), (10, 20, 30)).save(pj / f"{F1}.tif", "TIFF")
+        Image.new("RGB", (4000, 3000), (200, 180, 160)).save(pj / f"{F2}.tif", "TIFF")          # só TIFF: o JPG de 3000 px é gerado
+        (base / "fora.txt").write_text("segredo")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(raiz),))
+        c.execute("UPDATE configuracao SET valor='https://painel.exemplo' WHERE chave='painel.url'")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor) VALUES ('painel.url','https://painel.exemplo')")
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='wp.app_password'")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1965)", (P, "F001", 1, "Residência Teresa Martino"))
+        for cod, n, tif in ((F1, 1, f"F001 - ARM/01 - Projetos/F001-P0001 - Residência Teresa Martino/TIF/{F1}.tif"),
+                            (F2, 2, f"F001 - ARM/01 - Projetos/F001-P0001 - Residência Teresa Martino/TIF/{F2}.tif"), (F3, 3, None)):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_tif) VALUES (?,?,?,?,?,?,?)",
+                      (cod, P, "S01", n, f"Planta {n}", "campvision", tif))
+        def novo_pedido(email="maria@exemplo.org", nome="Maria Souza"):
+            sid = c.execute("INSERT INTO solicitacao (solicitante,email,finalidade,origem) VALUES (?,?,'pesquisa','site')", (nome, email)).lastrowid
+            for cod, fmt in ((F1, "tif"), (F2, "jpg_3000"), (F3, "tif"), (P, "pdf")):
+                c.execute("INSERT INTO solicitacao_item (solicitacao_id,codigo,formato) VALUES (?,?,?)", (sid, cod, fmt))
+            c.commit(); return sid
+        S1 = novo_pedido()
+        c.execute("INSERT INTO pedido_site (site_id,tipo,codigo,criado_no_site,payload,situacao,destino,destino_id) VALUES (501,'alta-resolucao',?,datetime('now'),'{}','importado','solicitacao',?)", (F1, S1))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        op, le, pub = cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitor-1234"), TestClient(app, raise_server_exceptions=False)
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        # 1) prévia: o que vai e o que fica de fora; sem canal configurado não envia
+        pv = op.get(f"/api/solicitacoes/{S1}/envio").json()
+        ver("prévia lista os 2 arquivos achados no QNAP", [a["codigo"] for a in pv.get("arquivos", [])] == [F1, F2], str(pv)[:300])
+        fora = {(f["codigo"], f["formato"]) for f in pv.get("fora", [])}
+        ver("fica de fora: folha sem TIFF e o PDF", (F3, "tif") in fora and (P, "pdf") in fora, str(pv.get("fora")))
+        ver("prévia não mostra o caminho do QNAP", "origem" not in str(pv.get("arquivos")))
+        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={})
+        ver("sem Sender nem site configurados: 409 e nada muda", r.status_code == 409 and um("SELECT situacao FROM solicitacao WHERE id=?", S1)[0] != "entregue", f"{r.status_code} {r.text[:150]}")
+        ver("papel leitura não envia", le.post(f"/api/solicitacoes/{S1}/enviar", json={}).status_code == 403)
+        # 2) Sender recusa: 502, o pedido não muda, o link criado é cancelado, nada de 'entregue'
+        c.execute("UPDATE configuracao SET valor='tok-secreto-123' WHERE chave='sender.token'")
+        c.execute("UPDATE configuracao SET valor='aBc123' WHERE chave='sender.campanha_entrega'"); c.commit()
+        chamadas = []
+        class Resp:
+            def __init__(s_, st, js): s_.status_code, s_._js = st, js
+            def json(s_): return s_._js
+        resposta = {"v": Resp(500, {"success": False, "message": "erro interno tok-secreto-123"})}
+        def falso_post(url, **kw): chamadas.append((url, kw)); return resposta["v"]
+        entrega.httpx.post = falso_post
+        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={"mensagem": "Uso só para a pesquisa."})
+        ver("Sender recusa: 502 com a mensagem do Sender, sem o token", r.status_code == 502 and "Sender.net" in r.text and "tok-secreto" not in r.text, r.text[:200])
+        ver("Sender recusa: pedido continua não entregue", um("SELECT situacao FROM solicitacao WHERE id=?", S1)[0] != "entregue")
+        ver("Sender recusa: o link criado fica cancelado", um("SELECT COUNT(*) FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0] == 0)
+        # 3) Sender aceita: entregue, com o resumo; o token não fica no banco
+        resposta["v"] = Resp(200, {"success": True, "message": "Email sent", "data": {"emailId": "e-77"}})
+        chamadas.clear()
+        r = op.post(f"/api/solicitacoes/{S1}/enviar", json={"mensagem": "Uso só para a pesquisa."})
+        ver("Sender aceita: 200", r.status_code == 200 and r.json().get("canal") == "sender", r.text[:200])
+        url, kw = chamadas[-1] if chamadas else ("", {})
+        ver("Sender: rota do e-mail transacional e token Bearer", url.endswith("/message/aBc123/send") and kw.get("headers", {}).get("Authorization") == "Bearer tok-secreto-123", url)
+        corpo = kw.get("json") or {}
+        link = (corpo.get("variables") or {}).get("link", "")
+        ver("Sender: para quem pediu, com as variáveis do layout", corpo.get("to", {}).get("email") == "maria@exemplo.org" and link.startswith("https://painel.exemplo/entrega/")
+            and corpo["variables"].get("nome") == "Maria" and corpo["variables"].get("mensagem") == "Uso só para a pesquisa." and F1 in corpo["variables"].get("lista", ""), str(corpo)[:300])
+        sit = um("SELECT situacao, entrega FROM solicitacao WHERE id=?", S1)
+        ver("pedido vira entregue com o resumo do envio", sit and sit[0] == "entregue" and "Sender.net" in (sit[1] or "") and "maria@exemplo.org" in (sit[1] or ""), str(sit))
+        ver("itens entregues marcados; os que ficaram de fora não", um("SELECT entregue FROM solicitacao_item WHERE solicitacao_id=? AND codigo=?", S1, F1)[0] == 1
+            and um("SELECT entregue FROM solicitacao_item WHERE solicitacao_id=? AND codigo=?", S1, F3)[0] == 0)
+        token = link.rsplit("/", 1)[-1]
+        ver("o token não fica gravado no banco", token and not um("SELECT 1 FROM entrega_link WHERE token_hash=? OR arquivos LIKE ?", token, f"%{token}%"))
+        ver("evento entregue_por_email registrado", um("SELECT COUNT(*) FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='entregue_por_email'", str(S1))[0] == 1)
+        ver("enviar de novo um pedido entregue: 409", op.post(f"/api/solicitacoes/{S1}/enviar", json={}).status_code == 409)
+        # 4) a pessoa baixa pelo link público (sem login)
+        pg = pub.get(f"/entrega/{token}")
+        ver("página pública lista os arquivos, sem cache e fora de buscador", pg.status_code == 200 and F1 in pg.text and F2 in pg.text and F3 not in pg.text
+            and pg.headers.get("cache-control") == "no-store" and "noindex" in pg.headers.get("x-robots-tag", ""), f"{pg.status_code}")
+        a1 = pub.get(f"/entrega/{token}/1")
+        ver("baixa o TIFF igual ao do QNAP", a1.status_code == 200 and a1.content == (pj / f"{F1}.tif").read_bytes() and F1 in a1.headers.get("content-disposition", ""))
+        a2 = pub.get(f"/entrega/{token}/2")
+        import io as _io
+        lado = max(Image.open(_io.BytesIO(a2.content)).size) if a2.status_code == 200 else 0
+        ver("JPG de 3000 px gerado do TIFF (lado maior 3000)", lado == 3000, f"{a2.status_code} lado={lado}")
+        ver("downloads contados", um("SELECT downloads FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0] == 2)
+        from app.main import _rota_log, _SemCodigoDeEntrega
+        import logging as _lg
+        _rec = _lg.LogRecord("uvicorn.access", 20, "", 0, '%s - "%s %s HTTP/%s" %d', ("1.2.3.4:5", "GET", f"/entrega/{token}/2", "1.1", 200), None)
+        _SemCodigoDeEntrega().filter(_rec)
+        ver("o código do link não vai para o log de acesso do serviço", token not in _rec.getMessage() and "/entrega/***/2" in _rec.getMessage(), _rec.getMessage())
+        ver("o código do link não vai para o log técnico", _rota_log(f"/entrega/{token}/1") == "/entrega/***/1" and _rota_log("/api/x") == "/api/x")
+        ver("token inventado: 404", pub.get("/entrega/" + "x" * 43).status_code == 404 and pub.get("/entrega/../etc").status_code == 404)
+        ver("arquivo que não existe no pacote: 404", pub.get(f"/entrega/{token}/9").status_code == 404)
+        # arquivo adulterado para fora do QNAP nunca é servido
+        lid = um("SELECT id, arquivos FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)
+        arqs = _j.loads(lid[1]); arqs[0]["caminho"] = str(base / "fora.txt")
+        c.execute("UPDATE entrega_link SET arquivos=? WHERE id=?", (_j.dumps(arqs), lid[0])); c.commit()
+        ver("caminho fora do QNAP e das pastas do painel: 404", pub.get(f"/entrega/{token}/1").status_code == 404)
+        # 5) cancelar o link; link vencido
+        ver("cancelar o link", op.post(f"/api/solicitacoes/{S1}/cancelar-link").json().get("cancelados") == 1)
+        ver("link cancelado: página 410 e arquivo 410", pub.get(f"/entrega/{token}").status_code == 410 and pub.get(f"/entrega/{token}/2").status_code == 410)
+        # 6) envio de teste: vai para quem aprova, o pedido não muda
+        S2 = novo_pedido("joao@exemplo.org", "João")
+        r = op.post(f"/api/solicitacoes/{S2}/enviar", json={"teste": True})
+        ver("envio de teste vai para quem aprova", r.status_code == 200 and (chamadas[-1][1]["json"]["to"]["email"] == "op@camp.arq.br"), r.text[:200])
+        ver("envio de teste não muda o pedido", um("SELECT situacao FROM solicitacao WHERE id=?", S2)[0] != "entregue")
+        tk2 = chamadas[-1][1]["json"]["variables"]["link"].rsplit("/", 1)[-1]
+        c.execute("UPDATE entrega_link SET expira_em='2000-01-01 00:00:00' WHERE teste=1"); c.commit()
+        ver("link vencido: 410", pub.get(f"/entrega/{tk2}").status_code == 410)
+        # 7) canal 'site': o e-mail sai pelo site (rota /painel/pedido/enviar), com o id do pedido no site
+        site = []
+        class FakeWP:
+            def enviar_email_pedido(self, **kw): site.append(kw); return {"ok": True}
+        _wp.WP = FakeWP
+        c.execute("UPDATE configuracao SET valor='senha-app' WHERE chave='wp.app_password'"); c.commit()
+        S3 = novo_pedido("ana@exemplo.org", "Ana Lima")
+        c.execute("INSERT INTO pedido_site (site_id,tipo,codigo,criado_no_site,payload,situacao,destino,destino_id) VALUES (502,'alta-resolucao',?,datetime('now'),'{}','importado','solicitacao',?)", (F1, S3)); c.commit()
+        r = op.post(f"/api/solicitacoes/{S3}/enviar", json={"canal": "site"})
+        kw = site[-1] if site else {}
+        ver("canal site: e-mail sai pelo site com o link e o id do pedido do site", r.status_code == 200 and kw.get("para") == "ana@exemplo.org"
+            and "https://painel.exemplo/entrega/" in kw.get("texto", "") and kw.get("pedido_site_id") == 502 and "#" in kw.get("assunto", ""), str(kw)[:200])
+        ver("canal site: pedido entregue com o canal no resumo", "e-mail do site" in (um("SELECT entrega FROM solicitacao WHERE id=?", S3)[0] or ""))
+        print("\n".join(res))
     elif modo == "fotos_qnap":
         # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
         # mandar ler elas e já legendar como faz com todas"): a foto enviada pelo painel é gravada na pasta do projeto no acervo, no padrão do
@@ -15101,6 +15239,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cor do original: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Entrega por e-mail: aprovar, link com prazo, Sender.net ou e-mail do site, download público")
+rc, out = rodar("entrega_por_email", f"{tmp}/entrega_por_email.db")
+if rc != 0: ok(False, f"teste entrega_por_email não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Entrega por e-mail: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
 rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")

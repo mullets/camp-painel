@@ -65,6 +65,8 @@ from .rotas_releitura import router as rotas_releitura
 app.include_router(rotas_releitura)
 from .rotas_pedidos import router as rotas_pedidos   # Sobras #12: antes de rotas_operacao (/solicitacoes/metricas)
 app.include_router(rotas_pedidos)
+from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página pública de download do pedido entregue por e-mail
+app.include_router(rotas_entrega)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 from .rotas_planilha import router as rotas_planilha
@@ -310,6 +312,28 @@ async def _sincronizacao_periodica() -> None:
         await asyncio.sleep(max(1.0, espera))
 
 
+def _rota_log(caminho: str) -> str:
+    """O caminho para o log técnico, sem o código do link de entrega (/entrega/<token>: quem lê o log não baixa o pedido de ninguém)."""
+    if caminho.startswith("/entrega/"):
+        partes = caminho.split("/")
+        if len(partes) > 2:
+            partes[2] = "***"
+        return "/".join(partes)
+    return caminho
+
+
+class _SemCodigoDeEntrega(logging.Filter):
+    """O log de acesso do uvicorn (journal do serviço) também não guarda o código do link de entrega."""
+    def filter(self, rec: logging.LogRecord) -> bool:
+        a = rec.args
+        if isinstance(a, tuple) and len(a) >= 3 and isinstance(a[2], str) and a[2].startswith("/entrega/"):
+            rec.args = a[:2] + (_rota_log(a[2].split("?", 1)[0]),) + a[3:]
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_SemCodigoDeEntrega())
+
+
 @app.middleware("http")
 async def cabecalhos_seguranca(request: Request, call_next):
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
@@ -319,14 +343,14 @@ async def cabecalhos_seguranca(request: Request, call_next):
         resp = await call_next(request)
     except Exception as e:
         duracao = round((time.perf_counter() - inicio) * 1000)
-        log_registrar(logging.ERROR, "http_exception", f"{request.method} {request.url.path} falhou",
-                      request_id=request_id, metodo=request.method, rota=request.url.path, ip=ip,
+        log_registrar(logging.ERROR, "http_exception", f"{request.method} {_rota_log(request.url.path)} falhou",
+                      request_id=request_id, metodo=request.method, rota=_rota_log(request.url.path), ip=ip,
                       duracao_ms=duracao, erro_tipo=type(e).__name__, exc_info=True)
         raise
     duracao = round((time.perf_counter() - inicio) * 1000)
     nivel = logging.WARNING if resp.status_code >= 400 else logging.INFO
-    log_registrar(nivel, "http_request", f"{request.method} {request.url.path} {resp.status_code}",
-                  request_id=request_id, metodo=request.method, rota=request.url.path, ip=ip,
+    log_registrar(nivel, "http_request", f"{request.method} {_rota_log(request.url.path)} {resp.status_code}",
+                  request_id=request_id, metodo=request.method, rota=_rota_log(request.url.path), ip=ip,
                   status=resp.status_code, duracao_ms=duracao)
     resp.headers["X-Request-ID"] = request_id
     resp.headers["X-Content-Type-Options"] = "nosniff"
