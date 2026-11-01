@@ -1,5 +1,6 @@
 """Página PÚBLICA de download de um pedido entregue por e-mail (01/11/2026; ver entrega.py).
 
+GET /entrega/<token>/tudo.zip todos os arquivos do pedido num .zip (o link principal do e-mail), montado na hora
 GET /entrega/<token>          lista os arquivos do pedido, com o tamanho e um botão para baixar cada um
 GET /entrega/<token>/<n>      o arquivo n (TIFF/JPG), servido do QNAP ou da pasta do painel
 
@@ -12,7 +13,7 @@ import json
 from html import escape
 
 from fastapi import APIRouter
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
 from . import entrega
 from .db import connect
@@ -52,12 +53,41 @@ def pagina(token: str) -> HTMLResponse:
             f'<br><small>{escape(a["resolucao"])} · {escape(entrega._fmt_tamanho(a.get("tamanho")))}</small></span>'
             f'<a class="btn" href="/entrega/{escape(token)}/{int(a["n"])}" download>Baixar</a></li>' for a in arquivos)
         validade = entrega._data_br(r["expira_em"])
+        total = entrega._fmt_tamanho(sum(a.get("tamanho") or 0 for a in arquivos))
+        tudo = f'<p><a class="btn" href="/entrega/{escape(token)}/tudo.zip" download>Baixar tudo (.zip{", " + escape(total) if total else ""})</a></p>'
+
         corpo = (f'<h1>Material do pedido #{int(r["solicitacao_id"])}</h1>'
                  f'<p class="sub">{len(arquivos)} arquivo(s) do acervo da CAMP. O link vale até {escape(validade)}.</p>'
-                 f'<ul>{itens}</ul><p>Ao publicar ou expor este material, cite a fonte: <b>Acervo CAMP (camp.arq.br)</b>.</p>')
+                 f'{tudo}<p class="sub">Ou baixe arquivo por arquivo:</p><ul>{itens}</ul><p>Ao publicar ou expor este material, cite a fonte: <b>Acervo CAMP (camp.arq.br)</b>.</p>')
         return _pagina(f"Pedido #{int(r['solicitacao_id'])}", corpo)
     finally:
         con.close()
+
+
+def _encerrado(r, motivo: str) -> HTMLResponse:
+    if motivo == "inexistente":
+        return _pagina("Link não encontrado", "<h1>Link não encontrado</h1><p>Confira se o endereço foi copiado inteiro do e-mail.</p>", 404)
+    quando = "venceu" if motivo == "vencido" else "foi cancelado"
+    return _pagina("Link encerrado", f"<h1>Este link {quando}</h1><p>Responda o e-mail da CAMP que a equipe manda um link novo.</p>", 410)
+
+
+@router.get("/entrega/{token}/tudo.zip", include_in_schema=False)
+def baixar_tudo(token: str):
+    """Rafael, 01/11: "o ideal é o link de download ser um zip de todo aquele projeto que solicitou, e ser um link temporário"."""
+    con = connect()
+    try:
+        r, motivo = entrega.achar(con, token)
+        if motivo:
+            return _encerrado(r, motivo)
+        arquivos = entrega.arquivos_do_zip(con, r)
+        if not arquivos:
+            return _pagina("Arquivos indisponíveis", "<h1>Os arquivos não estão disponíveis agora</h1><p>Responda o e-mail da CAMP que a equipe manda de novo.</p>", 404)
+        entrega.contar_download(con, r["id"])
+        sid = int(r["solicitacao_id"])
+    finally:
+        con.close()
+    return StreamingResponse(entrega.zip_em_pedacos(arquivos), media_type="application/zip",
+                             headers={**_SEM_CACHE, "Content-Disposition": f'attachment; filename="CAMP-pedido-{sid}.zip"'})
 
 
 @router.get("/entrega/{token}/{n}", include_in_schema=False)

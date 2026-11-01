@@ -59,13 +59,17 @@ const sender = http.createServer((req, res) => { let b = ''; req.on('data', d =>
   chk(ult.corpo.variables && ult.corpo.variables.mensagem === 'Uso só para a pesquisa.' && ult.corpo.variables.nome === 'Beatriz', 'o recado e o nome vão como variáveis do layout');
   const sit = execFileSync('python3', ['-c', 'import sqlite3,sys;print(sqlite3.connect(sys.argv[1]).execute("SELECT situacao FROM solicitacao WHERE id=?",(int(sys.argv[2]),)).fetchone()[0])', DB, SID], { encoding: 'utf-8' }).trim();
   chk(sit === 'entregue', 'o pedido fica entregue', sit);
-  const link = (ult.corpo.variables || {}).link || '';
+  const link = (ult.corpo.variables || {}).link_pagina || '';
+  chk((ult.corpo.variables || {}).link === link + '/tudo.zip', 'o link principal do e-mail é o .zip de tudo');
   const rel = link.replace(/^https?:\/\/[^/]+/, '');
   const pub = await (await br.newContext()).newPage();
   const r1 = await pub.goto(BASE + rel);
   chk(r1.status() === 200 && (await pub.textContent('body')).includes(F1), 'o link público abre a página com o arquivo, sem login', `${r1.status()} ${rel}`);
   const r2 = await pub.request.get(BASE + rel + '/1');
   chk(r2.status() === 200 && (await r2.body()).length === fs.statSync(`${RAIZ}/TIF/${F1}.tif`).size, 'o arquivo baixa inteiro');
+  const z = await pub.request.get(BASE + rel + '/tudo.zip');
+  const zb = await z.body();
+  chk(z.status() === 200 && zb.slice(0, 2).toString() === 'PK' && zb.includes(Buffer.from(`${P}/${F1}.tif`)), 'o link do .zip baixa um zip com o arquivo na pasta do projeto', `${z.status()} ${zb.length}`);
   chk(!erros.length, 'nenhum erro de JavaScript', erros.join(' | '));
   await br.close(); sender.close();
   console.log(linhas.join('\n'));
