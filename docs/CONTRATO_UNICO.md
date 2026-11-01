@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.4 (01/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
+Versão deste documento: **1.5 (01/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -139,6 +139,20 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
 - **NOVO 1.2** (UX-41, site plugin 1.6.3): datas do arquiteto no mesmo `{"meta": {...}}` do hub, OPCIONAIS: `_camp_arq_nascimento` e `_camp_arq_falecimento` (pessoa: ano, ex. `"1925"`) e `_camp_arq_atuacao` (escritório/família: `"1964–2010"`, `"desde 1964"`, `"até 2010"`), vindos de `agente.existencia_inicio/existencia_fim`. Só vai o preenchido; o painel nunca manda `"__limpar__"` para datas (não há como esvaziá-las no painel). O site mantém o texto escrito à mão quando ele já contém o valor (`"São Paulo, 1925"` × `"1925"`, resposta em `mantidos`, opcional) e, com um só ano no texto, troca só o ano. Site anterior a 1.6.3 devolve as chaves em `ignorados` (sem erro). Ordem: site primeiro, painel depois.
 - `POST /painel/pessoa/apagar` `{"email": "..."}` — LGPD.
 - **NOVO 1.4** (site plugin 1.22.7, painel `entrega.py`): `POST /painel/pedido/enviar` `{"para","nome","assunto","texto","responder_para"?,"pedido_site_id"?}` (auth `edit_pages`) → `{"ok":true}`. O site manda o e-mail de entrega de um pedido de alta resolução pelo e-mail do site (`wp_mail`, que sai pelo plugin de SMTP configurado no site), só texto, um destinatário. Erros: 400 (campo inválido), 429 (mais de 60 por hora), 502 (o SMTP do site recusou; `message` traz o motivo). Com `pedido_site_id` de um `camp_solicitacao`, grava `_camp_atendido_em`. Os arquivos NÃO vão no e-mail: o texto leva o link público do painel `https://<painel.url>/entrega/<token>`. Rota usada só quando `entrega.canal = site`; o canal padrão é o Sender.net (o painel fala direto com `api.sender.net`, fora deste contrato). Site antigo (404 `rest_no_route`): o painel avisa "atualize o site" e não marca o pedido. Ordem: site primeiro, painel depois (o painel funciona sem ela pelo Sender.net).
+- **NOVO 1.5** (site plugin 1.23.0, painel `wp.sincronizar_sender`): `POST /painel/sender` (mesma autenticação das outras rotas painel → site) — o painel manda ao site a configuração dos e-mails transacionais do Sender.net, que mora no painel (Configurações → E-mail e avisos). Corpo:
+  ```json
+  {"ativo": true,
+   "templates": {"solicitacao_recebida": "egx4Z6", "pdf_disponivel": "ejv4Z5", "visita_solicitada": "bkw48X",
+                 "visita_confirmada": "elv4x6", "inscricao_recebida": "bm24O0", "material_download": "bov4VK"},
+   "token": "<token da API do Sender.net>"}
+  ```
+  `token` é OPCIONAL: ausente = o site mantém o token que tem; `"__limpar__"` = o site apaga o token (mesma convenção do hub). O painel não manda `token` quando `sender.token` está vazio, e só manda em `templates` os IDs preenchidos. Resposta 200 (o token NUNCA volta):
+  ```json
+  {"ok": true, "ativo": true, "token_preenchido": true,
+   "templates": {"solicitacao_recebida": "egx4Z6", "pdf_disponivel": "ejv4Z5", "visita_solicitada": "bkw48X",
+                 "visita_confirmada": "elv4x6", "inscricao_recebida": "bm24O0", "material_download": "bov4VK"}}
+  ```
+  `GET /painel/sender` devolve o mesmo estado (sem o token). O site só usa o Sender.net num e-mail quando `ativo = true` e o token e o ID daquele e-mail estão preenchidos; senão continua com a cópia de sempre por `wp_mail`. Envio do site ao Sender.net: `POST https://api.sender.net/v2/message/<ID>/send` com `{"to":{"email","name"},"variables":{…},"headers":{"X-CAMP-Protocolo":"<protocolo>"}}`; variáveis em minúsculas, sem acento; datas por extenso, horário de São Paulo ("15 de novembro de 2026"); protocolo `CAMP-AAAA-NNNNNN` (ano e id do pedido no site, 6 dígitos). Site antigo (404): o painel diz "atualize o site" e nada muda. Ordem: qualquer uma (o painel aguenta o site antigo; o site sem a configuração continua com `wp_mail`). O TR09 (`material_download`) também é o e-mail da entrega que o painel manda direto ao Sender.net (`sender.campanha_entrega`), com `validade` = "15 de novembro de 2026, às 23h59", o minuto em que o link para.
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.
 

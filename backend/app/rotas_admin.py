@@ -199,6 +199,45 @@ def salvar_config(chave: str, d: Valor, u: dict = Depends(auth.exige("master")))
     return {"ok": True}
 
 
+# ---- Sender.net: a configuração do painel vai ao site (01/11/2026, contrato 1.5) ----
+def _sender_site(acao):
+    from . import wp
+    con = connect()
+    try:
+        return acao(wp, con)
+    except wp.SiteSemRotaSender as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)[:300])
+    except Exception as e:  # noqa: BLE001 — site sem resposta: frase, nunca o erro cru (que poderia trazer o corpo enviado)
+        raise HTTPException(502, f"Não consegui falar com o site ({type(e).__name__}). Nada mudou no site.")
+    finally:
+        con.close()
+
+
+@router.post("/configuracoes/sender/enviar-ao-site")
+def enviar_sender_ao_site(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Manda ao site sender.site_ativo, os 6 IDs dos e-mails transacionais e o token (POST /wp-json/camp/v1/painel/sender).
+    A resposta diz o que o site ficou usando (ligado, token preenchido, modelos), nunca o token."""
+    def acao(wp, con):
+        c = wp.config_sender(con)
+        r = wp.sincronizar_sender(con)
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('config','sender','sender_enviado_ao_site',?,?)",
+                    (u["email"], json.dumps({"ativo": c["ativo"], "templates": c["templates"], "token_enviado": bool(c["token"]),
+                                             "site": {k: r.get(k) for k in ("ativo", "token_preenchido")}}, ensure_ascii=False)))
+        con.commit()
+        return {**r, "token_enviado": bool(c["token"])}
+    return _sender_site(acao)
+
+
+@router.get("/configuracoes/sender/site")
+def ver_sender_no_site(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """O que o site está usando agora (GET /wp-json/camp/v1/painel/sender), sem o token."""
+    return _sender_site(lambda wp, con: wp.WP().ler_sender())
+
+
 def config(chave: str, padrao: str = "") -> str:
     """Leitura interna para o resto do sistema."""
     con = connect()

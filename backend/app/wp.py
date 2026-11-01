@@ -507,3 +507,93 @@ def _wp_enviar_email_pedido(self, para: str, nome: str, assunto: str, texto: str
 
 
 WP.enviar_email_pedido = _wp_enviar_email_pedido
+
+
+# ---- e-mails transacionais do site pelo Sender.net (01/11/2026, contrato 1.5) ----
+SENDER_MODELOS = {               # chave em `configuracao` -> nome do modelo na rota do site
+    "sender.tr04_solicitacao_recebida": "solicitacao_recebida",
+    "sender.tr05_pdf_disponivel": "pdf_disponivel",
+    "sender.tr06_visita_solicitada": "visita_solicitada",
+    "sender.tr07_visita_confirmada": "visita_confirmada",
+    "sender.tr08_inscricao_recebida": "inscricao_recebida",
+    "sender.tr09_material_download": "material_download",
+}
+_RE_ID_SENDER = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class SiteSemRotaSender(RuntimeError):
+    """O site ainda não tem POST /painel/sender (plugin anterior a 1.23.0)."""
+
+
+def _so_estado_sender(j) -> dict:
+    """O que a rota do site devolve, sem nada que possa ser o token (a rota não o devolve; isto é só uma garantia a mais)."""
+    if not isinstance(j, dict):
+        return {}
+    modelos = j.get("templates") if isinstance(j.get("templates"), dict) else {}
+    return {"ok": j.get("ok", True) is not False, "ativo": bool(j.get("ativo")), "token_preenchido": bool(j.get("token_preenchido")),
+            "templates": {str(k): str(v) for k, v in modelos.items() if str(k) in SENDER_MODELOS.values()}}
+
+
+def _wp_enviar_sender(self, ativo: bool, templates: dict, token: str | None = None) -> dict:
+    """POST /wp-json/camp/v1/painel/sender {"ativo", "templates", "token"?}. `token` None = o site mantém o que tem; "__limpar__" = apaga.
+    Devolve {ok, ativo, token_preenchido, templates}: o token nunca volta e nunca entra em mensagem de erro."""
+    corpo = {"ativo": bool(ativo), "templates": dict(templates)}
+    if token:
+        corpo["token"] = token
+    r = self.h.post("/wp-json/camp/v1/painel/sender", json=corpo)
+    texto = (r.text or "")[:200].replace(token, "***") if token else (r.text or "")[:200]
+    if r.status_code == 404:
+        raise SiteSemRotaSender("O site ainda não recebe a configuração do Sender.net: atualize o site (plugin da CAMP 1.23.0 ou mais novo). Nada mudou no site.")
+    if r.status_code == 401:
+        raise RuntimeError("O site recusou as credenciais (401). Confira usuário e Application Password")
+    if r.status_code >= 400:
+        raise RuntimeError(f"O site recusou a configuração do Sender.net ({r.status_code}): {texto}")
+    try:
+        return _so_estado_sender(r.json())
+    except ValueError:
+        raise RuntimeError("O site respondeu num formato inesperado ao receber a configuração do Sender.net")
+
+
+def _wp_ler_sender(self) -> dict:
+    """GET /wp-json/camp/v1/painel/sender: o estado no site (sem o token)."""
+    r = self.h.get("/wp-json/camp/v1/painel/sender")
+    if r.status_code == 404:
+        raise SiteSemRotaSender("O site ainda não recebe a configuração do Sender.net: atualize o site (plugin da CAMP 1.23.0 ou mais novo).")
+    if r.status_code >= 400:
+        raise RuntimeError(f"O site recusou mostrar a configuração do Sender.net ({r.status_code})")
+    try:
+        return _so_estado_sender(r.json())
+    except ValueError:
+        raise RuntimeError("O site respondeu num formato inesperado")
+
+
+WP.enviar_sender = _wp_enviar_sender
+WP.ler_sender = _wp_ler_sender
+
+
+def config_sender(con) -> dict:
+    """A configuração do Sender.net do painel no formato da rota do site. O token fica separado (quem chama nunca o mostra)."""
+    def v(chave):
+        r = con.execute("SELECT valor FROM configuracao WHERE chave=?", (chave,)).fetchone()
+        return ((r[0] if r and r[0] is not None else "") or "").strip()
+    templates, invalidos = {}, []
+    for chave, nome in SENDER_MODELOS.items():
+        x = v(chave)
+        if not x:
+            continue                              # vazio não vai: o site mantém o que tem (como no hub, vazio nunca apaga)
+        if not _RE_ID_SENDER.match(x):
+            invalidos.append(chave)
+            continue
+        templates[nome] = x
+    return {"ativo": v("sender.site_ativo").lower() in ("1", "sim", "true", "s"), "templates": templates,
+            "token": v("sender.token"), "invalidos": invalidos}
+
+
+def sincronizar_sender(con, cliente: "WP | None" = None) -> dict:
+    """Manda ao site a configuração do Sender.net do painel (sender.site_ativo, os 6 modelos e o token). Token vazio no painel não vai
+    (o site mantém o dele). Devolve o estado que o site confirmou, sem o token. Erros: SiteSemRotaSender (site antigo) e RuntimeError."""
+    c = config_sender(con)
+    if c["invalidos"]:
+        raise ValueError("Estes IDs do Sender.net não parecem válidos (só letras, números, - e _): " + ", ".join(c["invalidos"]))
+    w = cliente or WP()
+    return w.enviar_sender(c["ativo"], c["templates"], c["token"] or None)

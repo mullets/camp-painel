@@ -52,7 +52,7 @@ def pagina(token: str) -> HTMLResponse:
             f'<li><span><span class="cod">{escape(a["codigo"])}</span>{"<br>" + escape(a["titulo"]) if a.get("titulo") else ""}'
             f'<br><small>{escape(a["resolucao"])} · {escape(entrega._fmt_tamanho(a.get("tamanho")))}</small></span>'
             f'<a class="btn" href="/entrega/{escape(token)}/{int(a["n"])}" download>Baixar</a></li>' for a in arquivos)
-        validade = entrega._data_br(r["expira_em"])
+        validade = entrega.validade_longa(r["expira_em"])
         total = entrega._fmt_tamanho(sum(a.get("tamanho") or 0 for a in arquivos))
         tudo = f'<p><a class="btn" href="/entrega/{escape(token)}/tudo.zip" download>Baixar tudo (.zip{", " + escape(total) if total else ""})</a></p>'
 

@@ -6,8 +6,9 @@ próprio sistema". Fluxo:
 1. Prévia (`previa`): o que vai no pacote (o arquivo de cada folha pedida, já achado no QNAP), o que fica de fora e o texto do e-mail.
 2. Aprovar e enviar (`aprovar_e_enviar`): cria um link de download com prazo (`entrega.validade_dias`), prepara os arquivos e manda
    o e-mail à pessoa. Canal (`entrega.canal`):
-   - `sender`: e-mail transacional do Sender.net com o layout pronto (`sender.token` + `sender.campanha_entrega`), com as variáveis
-     {{nome}}, {{link}} (o .zip com tudo), {{link_pagina}}, {{tamanho}}, {{validade}}, {{pedido}}, {{quantidade}}, {{lista}}, {{mensagem}};
+   - `sender`: e-mail transacional do Sender.net com o layout pronto (`sender.token` + `sender.campanha_entrega`, o TR09
+     "material_download"), com as variáveis {{nome}}, {{link}} (o .zip com tudo), {{link_pagina}}, {{tamanho}}, {{validade}} (texto
+     longo, igual ao fim real do link), {{validade_curta}}, {{material}}, {{protocolo}}, {{pedido}}, {{quantidade}}, {{lista}}, {{mensagem}};
    - `site`: o e-mail do próprio site (rota `POST /wp-json/camp/v1/painel/pedido/enviar`, que usa o SMTP configurado no site).
    Só depois do envio aceito o pedido vira "entregue". Se o envio falhar, o link é cancelado e nada muda no pedido.
 3. Download: o link do e-mail baixa TUDO num .zip (/entrega/<token>/tudo.zip, montado na hora, sem cópia em disco); a página
@@ -25,7 +26,7 @@ import os
 import re
 import secrets
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -38,6 +39,13 @@ SENDER_URL = os.environ.get("CAMP_SENDER_URL", "https://api.sender.net/v2")
 CANAIS = {"sender": "Sender.net", "site": "e-mail do site"}
 LADO_3000 = 3000
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{20,80}$")
+MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+MATERIAL_MAX = 160
+try:
+    from zoneinfo import ZoneInfo
+    FUSO_SP = ZoneInfo("America/Sao_Paulo")
+except Exception:  # noqa: BLE001 — servidor sem a base de fusos: o Brasil não tem horário de verão desde 2019
+    FUSO_SP = timezone(timedelta(hours=-3), "America/Sao_Paulo")
 
 
 class EnvioErro(Exception):
@@ -63,6 +71,25 @@ def _hash(token: str) -> str:
 def validade_dias(con) -> int:
     v = _cfg(con, "entrega.validade_dias", "14")
     return max(1, min(90, int(v))) if v.isdigit() else 14
+
+
+def calcular_expira_em(dias: int, agora: datetime | None = None) -> str:
+    """Fim do link (UTC, 'AAAA-MM-DD HH:MM:SS', como o banco compara): 23h59 de São Paulo do último dia que vale (hoje + `dias`).
+    O texto `validade` do e-mail ("15 de novembro de 2026, às 23h59") sai deste mesmo valor: o link para exatamente nesse minuto."""
+    agora = agora or datetime.now(timezone.utc)
+    dia = agora.astimezone(FUSO_SP).date() + timedelta(days=dias)
+    fim = datetime.combine(dia, time(23, 59), tzinfo=FUSO_SP)
+    return fim.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _em_sp(iso_utc: str) -> datetime:
+    return datetime.strptime(iso_utc[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(FUSO_SP)
+
+
+def validade_longa(iso_utc: str) -> str:
+    """'15 de novembro de 2026, às 23h59' (hora de São Paulo) a partir do `expira_em` gravado (UTC)."""
+    d = _em_sp(iso_utc)
+    return f"{d.day} de {MESES[d.month - 1]} de {d.year}, às {d.hour}h{d.minute:02d}"
 
 
 def canal_configurado(con) -> dict:
@@ -183,7 +210,48 @@ def _fmt_tamanho(n: int | None) -> str:
 
 
 def _data_br(iso: str) -> str:
-    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}"
+    """dd/mm/aaaa do `expira_em` (UTC) no dia de São Paulo (23h59 de SP já é o dia seguinte em UTC)."""
+    try:
+        return _em_sp(iso).strftime("%d/%m/%Y")
+    except ValueError:
+        return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}"
+
+
+def protocolo(con, s) -> str:
+    """Protocolo do pedido nos e-mails transacionais (CAMP-AAAA-NNNNNN). Pedido que veio do site: o mesmo do site, CAMP-<ano do pedido
+    no site>-<id do pedido no site com 6 dígitos>, para a pessoa ver o mesmo número que recebeu no "pedido recebido" (TR04). Pedido
+    registrado só no painel: CAMP-<ano>-P<id do painel com 6 dígitos> (o "P" evita confundir com um número do site)."""
+    r = con.execute("SELECT site_id, criado_no_site FROM pedido_site WHERE destino='solicitacao' AND destino_id=? ORDER BY site_id LIMIT 1",
+                    (s["id"],)).fetchone()
+    k = s.keys()
+    recebida = str((s["recebida_em"] if "recebida_em" in k else "") or "")
+    if r:
+        ano = str(r[1] or "")[:4]
+        ano = ano if ano.isdigit() else (recebida[:4] if recebida[:4].isdigit() else str(datetime.now(FUSO_SP).year))
+        return f"CAMP-{ano}-{int(r[0]):06d}"
+    ano = recebida[:4] if recebida[:4].isdigit() else str(datetime.now(FUSO_SP).year)
+    return f"CAMP-{ano}-P{int(s['id']):06d}"
+
+
+def material(arquivos: list[dict]) -> str:
+    """Resumo curto do pacote para o {{material}} do TR09: "12 arquivos em alta resolução — F009-P0018, F009-P0020" (projetos; um
+    arquivo só: a folha). Até MATERIAL_MAX caracteres, com "…" quando a lista não cabe."""
+    n = len(arquivos)
+    cab = f"{n} arquivo{'s' if n != 1 else ''} em alta resolução"
+    if n == 1:
+        cods = [arquivos[0]["codigo"]]
+    else:
+        cods = list(dict.fromkeys((a["codigo"][:10] if re.match(r"^F\d{3}-P\d{4}", a["codigo"]) else a["codigo"]) for a in arquivos))
+    texto = f"{cab} — {', '.join(cods)}" if cods else cab
+    if len(texto) <= MATERIAL_MAX:
+        return texto
+    out = f"{cab} — "
+    for i, c_ in enumerate(cods):
+        prox = (", " if i else "") + c_
+        if len(out) + len(prox) + 3 > MATERIAL_MAX:
+            return out + (", …" if i else "…")
+        out += prox
+    return out
 
 
 def link_base(con) -> str:
@@ -198,7 +266,7 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
     nome = (s["solicitante"] or "").strip() or "olá"
     primeiro = nome.split()[0]
     lista = "\n".join(f"- {a['codigo']}{' · ' + a['titulo'] if a['titulo'] else ''} ({a['resolucao']})" for a in arquivos)
-    validade = _data_br(expira_em)
+    validade = validade_longa(expira_em)
     assunto = f"CAMP · seu pedido de material em alta resolução (pedido #{s['id']})"
     corpo = (f"Olá, {primeiro},\n\n"
              "Seu pedido de material em alta resolução ao acervo da CAMP foi aprovado.\n\n"
@@ -209,8 +277,11 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
              "Ao publicar ou expor este material, cite a fonte: Acervo CAMP (camp.arq.br).\n"
              "Se tiver qualquer dúvida, é só responder este e-mail.\n\n"
              "Equipe CAMP\n")
+    # TR09 (material_download, Sender.net): nome, material, protocolo, validade (texto longo = o minuto em que o link para), link.
+    # As outras variáveis continuam (layouts antigos); a data curta antiga (dd/mm/aaaa) passou para `validade_curta`.
     variaveis = {"nome": primeiro, "nome_completo": nome, "link": link, "link_pagina": link_pagina, "tamanho": _fmt_tamanho(total),
-                 "validade": validade, "pedido": str(s["id"]),
+                 "validade": validade, "validade_curta": _data_br(expira_em), "pedido": str(s["id"]),
+                 "material": material(arquivos), "protocolo": protocolo(con, s),
                  "quantidade": str(len(arquivos)), "lista": lista, "mensagem": mensagem or ""}
     return {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
 
@@ -225,7 +296,8 @@ def _enviar_sender(con, para: str, nome: str, variaveis: dict) -> str:
     try:
         r = httpx.post(f"{SENDER_URL}/message/{campanha}/send", timeout=30,
                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "Content-Type": "application/json"},
-                       json={"to": {"email": para, "name": nome}, "variables": variaveis})
+                       json={"to": {"email": para, "name": nome}, "variables": variaveis,
+                             **({"headers": {"X-CAMP-Protocolo": variaveis["protocolo"]}} if variaveis.get("protocolo") else {})})
     except httpx.HTTPError as e:
         raise EnvioErro(f"Não consegui falar com o Sender.net ({type(e).__name__})")
     try:
@@ -276,12 +348,12 @@ def _pedido_site_id(con, sid: int) -> int | None:
 def previa(con, sid: int, mensagem: str = "") -> dict:
     s = _solicitacao(con, sid)
     m = montar(con, sid)
-    expira = (datetime.now(timezone.utc) + timedelta(days=validade_dias(con))).strftime("%Y-%m-%d %H:%M:%S")
+    expira = calcular_expira_em(validade_dias(con))
     t = textos(con, s, m["arquivos"], f"{link_base(con)}/entrega/…", expira, mensagem)
     c = canal_configurado(con)
     return {"id": sid, "para": s["email"] or "", "nome": s["solicitante"] or "", "email_valido": bool(ENDERECO.match(s["email"] or "")),
             "situacao": s["situacao"], "arquivos": [{k: v for k, v in a.items() if k not in ("origem", "gerar")} for a in m["arquivos"]],
-            "fora": m["fora"], "assunto": t["assunto"], "texto": t["texto"], "validade": _data_br(expira), "validade_dias": validade_dias(con),
+            "fora": m["fora"], "assunto": t["assunto"], "texto": t["texto"], "validade": validade_longa(expira), "validade_dias": validade_dias(con),
             **c}
 
 
@@ -306,7 +378,7 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
         raise HTTPException(409, "Nenhum arquivo deste pedido foi achado no QNAP. Veja o que ficou de fora no pacote.")
     token = secrets.token_urlsafe(32)
     dias = 1 if teste else validade_dias(con)
-    expira = (datetime.now(timezone.utc) + timedelta(days=dias)).strftime("%Y-%m-%d %H:%M:%S")
+    expira = calcular_expira_em(dias)
     lid = con.execute("INSERT INTO entrega_link (solicitacao_id, token_hash, arquivos, para, canal, teste, criado_por, expira_em) VALUES (?,?,?,?,?,?,?,?)",
                       (sid, _hash(token), "[]", para, canal, int(teste), ator.get("email"), expira)).lastrowid
     con.commit()
