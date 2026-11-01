@@ -11339,7 +11339,8 @@ def filho(modo):
         url, kw = chamadas[-1] if chamadas else ("", {})
         ver("Sender: rota do e-mail transacional e token Bearer", url.endswith("/message/aBc123/send") and kw.get("headers", {}).get("Authorization") == "Bearer tok-secreto-123", url)
         corpo = kw.get("json") or {}
-        link = (corpo.get("variables") or {}).get("link", "")
+        link = (corpo.get("variables") or {}).get("link_pagina", "")
+        ver("o link principal do e-mail é o .zip de tudo", (corpo.get("variables") or {}).get("link") == link + "/tudo.zip" and link, str(corpo.get("variables"))[:200])
         ver("Sender: para quem pediu, com as variáveis do layout", corpo.get("to", {}).get("email") == "maria@exemplo.org" and link.startswith("https://painel.exemplo/entrega/")
             and corpo["variables"].get("nome") == "Maria" and corpo["variables"].get("mensagem") == "Uso só para a pesquisa." and F1 in corpo["variables"].get("lista", ""), str(corpo)[:300])
         sit = um("SELECT situacao, entrega FROM solicitacao WHERE id=?", S1)
@@ -11361,6 +11362,16 @@ def filho(modo):
         lado = max(Image.open(_io.BytesIO(a2.content)).size) if a2.status_code == 200 else 0
         ver("JPG de 3000 px gerado do TIFF (lado maior 3000)", lado == 3000, f"{a2.status_code} lado={lado}")
         ver("downloads contados", um("SELECT downloads FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0] == 2)
+        import zipfile as _zf
+        z = pub.get(f"/entrega/{token}/tudo.zip")
+        try:
+            zz = _zf.ZipFile(_io.BytesIO(z.content)); nomes = zz.namelist()
+            ok_zip = zz.testzip() is None and nomes == [f"{P}/{F1}.tif", f"{P}/{F2}.jpg"] and zz.read(nomes[0]) == (pj / f"{F1}.tif").read_bytes()
+        except Exception as e:  # noqa: BLE001
+            ok_zip, nomes = False, str(e)
+        ver("tudo.zip: zip válido com os 2 arquivos na pasta do projeto, TIFF íntegro", z.status_code == 200 and ok_zip and "CAMP-pedido-" in z.headers.get("content-disposition", ""), f"{z.status_code} {nomes}")
+        ver("a página tem o botão Baixar tudo (.zip)", "tudo.zip" in pg.text and "Baixar tudo" in pg.text)
+        ver("downloads contados (com o zip)", um("SELECT downloads FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0] == 3)
         from app.main import _rota_log, _SemCodigoDeEntrega
         import logging as _lg
         _rec = _lg.LogRecord("uvicorn.access", 20, "", 0, '%s - "%s %s HTTP/%s" %d', ("1.2.3.4:5", "GET", f"/entrega/{token}/2", "1.1", 200), None)
@@ -11377,12 +11388,14 @@ def filho(modo):
         # 5) cancelar o link; link vencido
         ver("cancelar o link", op.post(f"/api/solicitacoes/{S1}/cancelar-link").json().get("cancelados") == 1)
         ver("link cancelado: página 410 e arquivo 410", pub.get(f"/entrega/{token}").status_code == 410 and pub.get(f"/entrega/{token}/2").status_code == 410)
+        zc = pub.get(f"/entrega/{token}/tudo.zip")
+        ver("link cancelado: o .zip mostra a página de link encerrado (410), sem arquivo", zc.status_code == 410 and "text/html" in zc.headers.get("content-type", ""))
         # 6) envio de teste: vai para quem aprova, o pedido não muda
         S2 = novo_pedido("joao@exemplo.org", "João")
         r = op.post(f"/api/solicitacoes/{S2}/enviar", json={"teste": True})
         ver("envio de teste vai para quem aprova", r.status_code == 200 and (chamadas[-1][1]["json"]["to"]["email"] == "op@camp.arq.br"), r.text[:200])
         ver("envio de teste não muda o pedido", um("SELECT situacao FROM solicitacao WHERE id=?", S2)[0] != "entregue")
-        tk2 = chamadas[-1][1]["json"]["variables"]["link"].rsplit("/", 1)[-1]
+        tk2 = chamadas[-1][1]["json"]["variables"]["link_pagina"].rsplit("/", 1)[-1]
         c.execute("UPDATE entrega_link SET expira_em='2000-01-01 00:00:00' WHERE teste=1"); c.commit()
         ver("link vencido: 410", pub.get(f"/entrega/{tk2}").status_code == 410)
         # 7) canal 'site': o e-mail sai pelo site (rota /painel/pedido/enviar), com o id do pedido no site

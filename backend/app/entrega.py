@@ -7,10 +7,11 @@ próprio sistema". Fluxo:
 2. Aprovar e enviar (`aprovar_e_enviar`): cria um link de download com prazo (`entrega.validade_dias`), prepara os arquivos e manda
    o e-mail à pessoa. Canal (`entrega.canal`):
    - `sender`: e-mail transacional do Sender.net com o layout pronto (`sender.token` + `sender.campanha_entrega`), com as variáveis
-     {{nome}}, {{link}}, {{validade}}, {{pedido}}, {{quantidade}}, {{lista}}, {{mensagem}};
+     {{nome}}, {{link}} (o .zip com tudo), {{link_pagina}}, {{tamanho}}, {{validade}}, {{pedido}}, {{quantidade}}, {{lista}}, {{mensagem}};
    - `site`: o e-mail do próprio site (rota `POST /wp-json/camp/v1/painel/pedido/enviar`, que usa o SMTP configurado no site).
    Só depois do envio aceito o pedido vira "entregue". Se o envio falhar, o link é cancelado e nada muda no pedido.
-3. Download (`abrir`/`arquivo`): a pessoa abre /entrega/<token> (rota pública do painel, sem login) e baixa cada arquivo.
+3. Download: o link do e-mail baixa TUDO num .zip (/entrega/<token>/tudo.zip, montado na hora, sem cópia em disco); a página
+   /entrega/<token> lista os arquivos um a um. Rotas públicas do painel, sem login, até a validade.
 
 Os arquivos NÃO vão anexados (um TIFF tem centenas de MB). O TIFF e o JPG em resolução original saem direto do QNAP; o JPG de 3000 px
 (e o JPG pedido de uma folha que só tem TIFF) é gerado na pasta do painel (`<pasta do banco>/entregas/<link>/`). O token só existe no
@@ -189,7 +190,11 @@ def link_base(con) -> str:
     return _cfg(con, "painel.url", "https://painel.camp.arq.br").rstrip("/")
 
 
-def textos(con, s, arquivos: list[dict], link: str, expira_em: str, mensagem: str) -> dict:
+def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensagem: str) -> dict:
+    """`link` (o principal, 01/11 Rafael: "o ideal é o link de download ser um zip de todo aquele projeto") baixa tudo num .zip;
+    `link_pagina` abre a página com os arquivos um a um."""
+    link = f"{link_pagina}/tudo.zip"
+    total = sum(a.get("tamanho") or 0 for a in arquivos)
     nome = (s["solicitante"] or "").strip() or "olá"
     primeiro = nome.split()[0]
     lista = "\n".join(f"- {a['codigo']}{' · ' + a['titulo'] if a['titulo'] else ''} ({a['resolucao']})" for a in arquivos)
@@ -198,12 +203,14 @@ def textos(con, s, arquivos: list[dict], link: str, expira_em: str, mensagem: st
     corpo = (f"Olá, {primeiro},\n\n"
              "Seu pedido de material em alta resolução ao acervo da CAMP foi aprovado.\n\n"
              + (f"{mensagem}\n\n" if mensagem else "")
-             + f"Baixe os arquivos por este link (vale até {validade}):\n{link}\n\n"
+             + f"Baixe tudo num só arquivo .zip{' (' + _fmt_tamanho(total) + ')' if total else ''}, por este link temporário (vale até {validade}):\n{link}\n\n"
+             f"Se preferir baixar arquivo por arquivo:\n{link_pagina}\n\n"
              f"O que está no pacote ({len(arquivos)} arquivo(s)):\n{lista}\n\n"
              "Ao publicar ou expor este material, cite a fonte: Acervo CAMP (camp.arq.br).\n"
              "Se tiver qualquer dúvida, é só responder este e-mail.\n\n"
              "Equipe CAMP\n")
-    variaveis = {"nome": primeiro, "nome_completo": nome, "link": link, "validade": validade, "pedido": str(s["id"]),
+    variaveis = {"nome": primeiro, "nome_completo": nome, "link": link, "link_pagina": link_pagina, "tamanho": _fmt_tamanho(total),
+                 "validade": validade, "pedido": str(s["id"]),
                  "quantidade": str(len(arquivos)), "lista": lista, "mensagem": mensagem or ""}
     return {"assunto": assunto, "texto": corpo, "variaveis": variaveis}
 
@@ -342,7 +349,7 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
                              "envio_id": envio_id or None, "folhas": [a["codigo"] for a in arquivos][:200]}, ensure_ascii=False)))
     con.commit()
     return {"ok": True, "teste": teste, "canal": canal, "para": para, "arquivos": len(arquivos), "fora": m["fora"],
-            "validade": _data_br(expira), "entrega": resumo, "link": link}
+            "validade": _data_br(expira), "entrega": resumo, "link": t["variaveis"]["link"]}
 
 
 def links(con, sid: int) -> list[dict]:
@@ -390,3 +397,61 @@ def arquivo(con, token: str, n: int) -> tuple[Path, str]:
     con.execute("UPDATE entrega_link SET downloads=downloads+1, ultimo_download_em=datetime('now') WHERE id=?", (r["id"],))
     con.commit()
     return alvo, a["nome"]
+
+
+def contar_download(con, link_id: int) -> None:
+    con.execute("UPDATE entrega_link SET downloads=downloads+1, ultimo_download_em=datetime('now') WHERE id=?", (link_id,))
+    con.commit()
+
+
+def arquivos_do_zip(con, r) -> list[tuple[Path, str]]:
+    """(arquivo, nome dentro do zip) de cada arquivo do link que ainda existe e está em lugar permitido; pasta = código do projeto."""
+    out = []
+    for a in json.loads(r["arquivos"] or "[]"):
+        alvo = _permitido(con, a.get("caminho", ""))
+        if alvo is not None:
+            nome = a["nome"]
+            out.append((alvo, f"{nome[:10]}/{nome}" if re.match(r"^F\d{3}-P\d{4}", nome) else nome))
+    return out
+
+
+class _Cano:
+    """Destino de escrita do zip que só acumula; o gerador entrega os pedaços conforme o zip é escrito (nada em disco)."""
+    def __init__(self) -> None:
+        self.pedacos: list[bytes] = []
+        self.pos = 0
+
+    def write(self, b) -> int:
+        self.pedacos.append(bytes(b))
+        self.pos += len(b)
+        return len(b)
+
+    def tell(self) -> int:
+        return self.pos
+
+    def flush(self) -> None:
+        pass
+
+    def tirar(self) -> bytes:
+        b, self.pedacos = b"".join(self.pedacos), []
+        return b
+
+
+def zip_em_pedacos(arquivos: list[tuple[Path, str]], bloco: int = 1024 * 1024):
+    """O .zip (sem compressão: TIFF e JPG já são comprimidos; ZIP64 para pacote acima de 4 GB) gerado aos pedaços."""
+    import zipfile
+    cano = _Cano()
+    with zipfile.ZipFile(cano, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
+        for origem, nome in arquivos:
+            info = zipfile.ZipInfo.from_file(origem, nome)
+            info.compress_type = zipfile.ZIP_STORED
+            with origem.open("rb") as f, z.open(info, "w", force_zip64=True) as dst:
+                while True:
+                    b = f.read(bloco)
+                    if not b:
+                        break
+                    dst.write(b)
+                    if cano.pos:
+                        yield cano.tirar()
+            yield cano.tirar()
+    yield cano.tirar()

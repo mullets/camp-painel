@@ -38,8 +38,14 @@ alterado.
 
 ## O link de download
 
-- Endereço: `https://painel.camp.arq.br/entrega/<código>` (a configuração `painel.url` mais `/entrega/`). É uma página simples, sem
-  login, com um botão **Baixar** por arquivo.
+- O link principal do e-mail baixa **tudo num só .zip**: `https://painel.camp.arq.br/entrega/<código>/tudo.zip`. Num pedido de
+  projeto inteiro, é o projeto todo, com uma pasta por projeto dentro do zip (`F001-P0001/F001-P0001-1965-S01-D00001.tif`).
+  - O zip é montado na hora, aos pedaços, sem cópia em disco.
+  - É sem compressão, porque TIFF e JPG já são comprimidos; isso deixa o download começar na hora.
+  - Funciona acima de 4 GB (ZIP64).
+- O e-mail também leva a página `https://painel.camp.arq.br/entrega/<código>` (a configuração `painel.url` mais `/entrega/`). É uma
+  página simples, sem login, com **Baixar tudo (.zip)** e um botão **Baixar** por arquivo, para quem preferir arquivo por arquivo.
+- O link é **temporário**: vale `entrega.validade_dias` dias e pode ser cancelado a qualquer momento.
 - O código tem 43 caracteres aleatórios e só existe no e-mail: o banco guarda o hash (`entrega_link.token_hash`).
 - O link vale `entrega.validade_dias` dias (padrão 14). Vencido ou cancelado, a página diz isso e não lista nada.
 - A página e os arquivos não entram em cache nem em buscadores (`no-store`, `noindex`).
@@ -70,7 +76,9 @@ alterado.
    |---|---|
    | `{{nome}}` | primeiro nome de quem pediu |
    | `{{nome_completo}}` | nome completo |
-   | `{{link}}` | o link de download (use como endereço do botão "Baixar os arquivos") |
+   | `{{link}}` | o link do .zip com tudo (use como endereço do botão "Baixar os arquivos") |
+   | `{{link_pagina}}` | a página para baixar arquivo por arquivo |
+   | `{{tamanho}}` | tamanho total do pacote (ex.: "410 MB") |
    | `{{validade}}` | até quando o link vale (dd/mm/aaaa) |
    | `{{pedido}}` | número do pedido no painel |
    | `{{quantidade}}` | quantos arquivos |
