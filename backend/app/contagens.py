@@ -111,8 +111,16 @@ def pedem_acao(con, n: dict, decisoes: list[dict], usuario_id: int | None = None
             esc_prob = _q(con, f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND {ERROS_PEDEM_ACAO}", *ids_err)
     n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] - esc_dec + n["material_novo"] + n["erros_bloqueantes"] - esc_bloq, "decisoes": n["decisoes"],
                        "material_novo": n["material_novo"], "problemas": n["erros_pedem_acao"] - esc_prob, "pedidos": n["pedidos_abertos"],
-                       "emprestimos": n["emprestimos_atrasados"]}
+                       "emprestimos": n["emprestimos_atrasados"], "inscricoes": _inscricoes_novas(con)}
     return n["pedem_acao"]
+
+
+def _inscricoes_novas(con) -> int:
+    """02/11 (Rafael: "inscrições no painel tinha que ter a contagem do lado"): inscrições em curso ainda não vistas (situação "nova")."""
+    try:
+        return _q(con, "SELECT COUNT(*) FROM inscricao WHERE tipo='inscricao' AND situacao='nova'")
+    except Exception:  # noqa: BLE001 - banco antigo, sem a tabela de inscrições
+        return 0
 
 
 def precisa_de_voce(n: dict) -> int:

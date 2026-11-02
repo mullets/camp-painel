@@ -186,8 +186,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 /* fundos register */
 .sig{display:inline-grid;place-items:center;width:44px;height:30px;border:1.5px solid var(--ink);font-family:var(--mono);font-weight:500;font-size:var(--fs-sm);letter-spacing:.5px}
 .sig.na{border-style:dashed;color:var(--ink3);border-color:var(--ink3)}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:var(--fs-md)}
-.kv dt{color:var(--ink3)}.kv dd{margin:0}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;font-size:var(--fs-md)}
+.kv dt{color:var(--ink3)}.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}   /* 02/11: e-mail/link/texto comprido quebra a linha, a ficha não rola de lado */
 
 /* etiquetas */
 #v-etiquetas{max-width:1480px}
@@ -639,7 +639,7 @@ progress.pg{width:100%;max-width:260px;height:8px;accent-color:var(--blue);verti
 .dirty-state.on::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--amber)}
 .drawer .db{padding:16px 20px;display:grid;gap:18px}
 .drawer .db h3{font-size:var(--fs-sm2);color:var(--ink3);font-weight:500;margin:0 0 8px}
-.drawer .kv{grid-template-columns:120px 1fr}
+.drawer .kv{grid-template-columns:120px minmax(0,1fr)}
 .drawer .act{display:flex;gap:8px;flex-wrap:wrap}
 .drawer textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);resize:vertical}
 .hist li{padding:6px 0;border-top:1px solid var(--line2);font-size:var(--fs-md);display:flex;gap:10px}
@@ -6099,7 +6099,7 @@ function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{cons
   /* UX-19: os números do menu seguem UMA regra, "itens que pedem ação de você", e vêm todos de pendencias.pedem_acao (servidor).
      Problemas conta só o que bloqueia ou pede correção (os avisos têm aba própria). Servidor antigo sem o campo: as contas de antes. */
   const A=p.pedem_acao||{precisa_de_voce:(+p.decisoes||0)+(+p.material_novo||0)+(+p.erros_bloqueantes||0),decisoes:p.decisoes,material_novo:p.material_novo,problemas:p.erros_abertos,pedidos:p.pedidos_abertos,emprestimos:p.emprestimos_atrasados};
-  pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true)}
+  pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true);pr('n-ins',A.inscricoes)}
 async function atualizarPendencias(){try{atualizarContadoresMenu(await API('/api/pendencias'))}catch(_){}}
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
