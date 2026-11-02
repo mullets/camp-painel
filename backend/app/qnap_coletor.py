@@ -176,6 +176,15 @@ def coletar() -> dict:
                     c_.close()
             except Exception:  # noqa: BLE001 - o livro nunca derruba a coleta
                 pass
+            try:                                    # 02/11: diário do CAMP Vision (contrato 2.6) → relatório e gasto por fundo no painel
+                from .cv_eventos import ler as ler_eventos_cv
+                c_ = connect()
+                try:
+                    ler_eventos_cv(c_, prontos)
+                finally:
+                    c_.close()
+            except Exception:  # noqa: BLE001 - o diário nunca derruba a coleta
+                pass
 
         _atual = threading.Thread(target=alvo, daemon=True)
         _atual.start()

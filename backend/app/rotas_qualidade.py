@@ -144,3 +144,25 @@ def replica_estado(u: dict = Depends(auth.exige("leitura"))) -> dict:
         return {**est, "ultima_valida": replica.ultima_valida(con), "preservacao": replica.preservacao(con, est)}
     finally:
         con.close()
+
+
+@router.get("/campvision/relatorio")
+def relatorio_cv(dias: int = 30, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """02/11: o que o CAMP Vision fez (dia a dia, com os projetos) e quanto gastou; por fundo. Fonte: o diário dele (cv_eventos)."""
+    from . import cv_eventos
+    con = connect()
+    try:
+        return cv_eventos.resumo(con, dias)
+    finally:
+        con.close()
+
+
+@router.get("/fundos/{codigo}/gasto-cv")
+def gasto_cv_fundo(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """02/11: quanto o CAMP Vision já gastou lendo este fundo (total, por mês, por prancha)."""
+    from . import cv_eventos
+    con = connect()
+    try:
+        return cv_eventos.gasto_fundo(con, codigo.strip().upper())
+    finally:
+        con.close()

@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "sender_transacional"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "sender_transacional"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -1418,7 +1418,7 @@ def filho(modo):
         from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
         from app.publicacao_guiada import plano
         _vcopia = (_P(__file__).parent / "contrato" / "VERSAO").read_text(encoding="utf-8").strip()
-        ver("UX-08: o painel implementa o contrato 2.5, a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.5" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
+        ver("UX-08: o painel implementa o contrato da cópia literal (2.6 desde 02/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.6" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
@@ -11594,6 +11594,59 @@ def filho(modo):
         arq_logs = " ".join(p_.read_text(errors="ignore") for p_ in _P(os.environ.get("CAMP_LOG_DIR", "/nao")).glob("**/*") if p_.is_file())
         ver("o token não vai para nenhum log", "snd-tok" not in " ".join(logs) and "snd-tok" not in arq_logs, len(logs))
         print("\n".join(res))
+    elif modo == "relatorio_cv":
+        # 02/11 (Rafael: "esses relatórios do campvision, consigo acessar no meu painel? / tudo que ele fez resumidamente e o valor gasto /
+        # no painel de um fundo, o quanto já gastamos com ele"): o diário do CV2 (contrato 2.6, ACERVOS_CAMP/_campvision/eventos.jsonl)
+        # entra pelo coletor do QNAP e vira o relatório dia a dia e o gasto por fundo.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from datetime import date as _d, timedelta as _td
+        from pathlib import Path as _P
+        from app import auth, cv_eventos, qnap_coletor
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        prontos = _P(tempfile.mkdtemp(prefix="cvev_")); (prontos / "_campvision").mkdir()
+        hoje, ontem = _d.today().isoformat(), (_d.today() - _td(days=1)).isoformat()
+        linhas = [{"quando": f"{ontem}T10:00:00", "projeto": "F001-P9003 - Auditório USP", "pasta": "/a", "pranchas": 20, "com_carimbo": 8, "erros": 0, "campos_a_revisar": 1, "custo_usd": 0.69, "duracao_segundos": 600, "falha": ""},
+                  {"quando": f"{ontem}T11:00:00", "projeto": "F001-P0005 - AUDITÓRIO", "pasta": "/b", "pranchas": 17, "com_carimbo": 6, "erros": 0, "campos_a_revisar": 0, "custo_usd": 0.0, "duracao_segundos": 5, "falha": ""},
+                  {"quando": f"{hoje}T09:30:00", "projeto": "F009-P0092 - Casa", "pasta": "/c", "pranchas": 5, "com_carimbo": 5, "erros": 2, "campos_a_revisar": 0, "custo_usd": 0.25, "duracao_segundos": 120, "falha": "leitura falhou: x"}]
+        arq = prontos / "_campvision" / "eventos.jsonl"
+        arq.write_text("\n".join(_j.dumps(l, ensure_ascii=False) for l in linhas) + "\n{quebrada\n", encoding="utf-8")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','ARM',1)")
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),)); c.commit()
+        r1 = cv_eventos.ler(c, prontos)
+        ver("lê o diário: 3 linhas, a quebrada é pulada", r1.get("novas") == 3 and r1.get("lidas") == 3, str(r1))
+        ver("arquivo igual não é relido", cv_eventos.ler(c, prontos).get("pulado") is True)
+        with arq.open("a", encoding="utf-8") as f:
+            f.write(_j.dumps({**linhas[2], "quando": f"{hoje}T15:00:00", "falha": "", "custo_usd": 0.1}) + "\n")
+        r2 = cv_eventos.ler(c, prontos)
+        ver("linha nova entra sem duplicar as antigas", r2.get("novas") == 1 and c.execute("SELECT COUNT(*) FROM cv_evento").fetchone()[0] == 4, str(r2))
+        ver("sem o arquivo: pula sem erro", cv_eventos.ler(c, prontos / "nada").get("pulado") is True)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-longa-12345"), cli("op@camp.arq.br", "senha-operador-123")
+        r = adm.get("/api/campvision/relatorio").json()
+        ver("hoje: 2 leituras, 10 pranchas, US$ 0,35, 1 falha", r["hoje"]["projetos"] == 2 and r["hoje"]["pranchas"] == 10 and abs(r["hoje"]["custo_usd"] - 0.35) < 1e-9 and r["hoje"]["falhas"] == 1, str(r["hoje"]))
+        ver("tudo: US$ 1,04 em 30 pranchas lidas desde ontem (a passagem P9003→P0005, custo 0, não conta de novo)", abs(r["tudo"]["custo_usd"] - 1.04) < 1e-9 and r["tudo"]["pranchas"] == 30 and r["tudo"]["desde"] == ontem, str(r["tudo"]))
+        ver("dia a dia com os projetos de cada dia", [d["dia"] for d in r["por_dia"]] == [hoje, ontem] and len(r["por_dia"][1]["lista"]) == 2
+            and r["por_dia"][0]["lista"][0]["falha"] == "leitura falhou: x")
+        pf = {f["fundo"]: f for f in r["por_fundo"]}
+        ver("gasto por fundo (P9xxx provisório conta no fundo)", abs(pf["F001"]["custo_usd"] - 0.69) < 1e-9 and pf["F001"]["titulo"] == "Arnaldo Martino" and abs(pf["F009"]["custo_usd"] - 0.35) < 1e-9, str(pf))
+        g = adm.get("/api/fundos/F001/gasto-cv").json()
+        ver("página do fundo: total, pranchas e custo por prancha", abs(g["custo_usd"] - 0.69) < 1e-9 and g["pranchas"] == 20 and g["custo_por_prancha"] == round(0.69 / 20, 4) and g["por_mes"], str(g)[:200])
+        ver("operador não vê gasto (403)", op.get("/api/campvision/relatorio").status_code == 403 and op.get("/api/fundos/F001/gasto-cv").status_code == 403)
+        c.execute("UPDATE configuracao SET valor='5,5' WHERE chave='custos.cotacao_dolar'"); c.commit()
+        ver("cotação do dólar em Configurações vale para mostrar em R$", adm.get("/api/fundos/F001/gasto-cv").json()["cotacao_dolar"] == 5.5)
+        # o coletor do QNAP lê o diário em segundo plano
+        c.execute("DELETE FROM cv_evento"); c.execute("DELETE FROM cv_evento_leitura"); c.commit()
+        qnap_coletor.coletar()
+        ver("o coletor do QNAP traz o diário", c.execute("SELECT COUNT(*) FROM cv_evento").fetchone()[0] == 4)
+        print("\n".join(res))
     elif modo == "fotos_qnap":
         # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
         # mandar ler elas e já legendar como faz com todas"): a foto enviada pelo painel é gravada na pasta do projeto no acervo, no padrão do
@@ -15450,6 +15503,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sender.net: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Relatório do CAMP Vision e gasto por fundo (diário do CV2, contrato 2.6)")
+rc, out = rodar("relatorio_cv", f"{tmp}/relatorio_cv.db")
+if rc != 0: ok(False, f"teste relatorio_cv não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Relatório do CAMP Vision: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
 rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")

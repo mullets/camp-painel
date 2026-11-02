@@ -1,4 +1,4 @@
-Relatório do lote 20261027-045540-F026 - SBU Sami Bussab_P0001 - Edificio Taruma 1972 — F026-P0001 CASA DA PRAIA
+Relatório do lote 20261102-010753-F026 - SBU Sami Bussab_P0001 - Edificio Taruma 1972 — F026-P0001 Edifício Tarumã
 origem: 100 - Scanners/F026 - SBU Sami Bussab/P0001 - Edificio Taruma 1972
 
 1. Arquivos na origem × registros na saída
@@ -27,4 +27,4 @@ origem: 100 - Scanners/F026 - SBU Sami Bussab/P0001 - Edificio Taruma 1972
    nenhum
 
 Erros: 4 (0 bloqueiam). Detalhe em erros.json.
-Execução: CV2 2026-10-27-01+fd70bef · contrato 2.5 · modelo claude-sonnet-5 · 2 chamada(s) · 2000 tokens entrada / 200 saída · US$ 0.0060 · 0.2 s · prompts prancha:3349d9da, fotografia:da623ca9, textual:b3df79d7
+Execução: CV2 2026-10-27-02+04313b7 · contrato 2.6 · modelo claude-sonnet-5 · 2 chamada(s) · 2000 tokens entrada / 200 saída · US$ 0.0060 · 0.3 s · prompts prancha:3349d9da, fotografia:da623ca9, textual:b3df79d7
