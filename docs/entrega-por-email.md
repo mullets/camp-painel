@@ -155,3 +155,35 @@ aceita até 60 e-mails por hora. Para usar, basta a senha de aplicativo do site 
     (migração 202, variáveis do TR09, configuração enviada ao site falso, 404 do site antigo);
   - `tests/navegador_entrega_email.js` (o clique de ponta a ponta com um Sender.net falso local:
     `CAMP_SENDER_URL=http://127.0.0.1:8898/v2 bash tests/rodar_um.sh tests/navegador_entrega_email.js`).
+
+## Termo de uso antes do download (02/11/2026)
+
+Pedido do Rafael: "na hora que ele receba o email com o link para download, ele tenha que dar OK no termo de uso … dando o aceite aí sim
+abre o download".
+
+- O link do e-mail (`{{link}}`) abre a página `/entrega/<código>` com o **termo de uso**. Ali não há botão de download.
+- O termo diz que:
+  - o uso é **só não comercial**;
+  - o uso comercial depende de autorização por escrito e custa **R$ 150,00 por folha** (configuração `entrega.preco_comercial_folha`);
+  - o crédito é obrigatório;
+  - vale a Lei de Direitos Autorais (Lei nº 9.610/1998);
+  - o uso em desacordo sujeita o responsável às sanções civis e penais.
+- O texto padrão está em `entrega.TERMO_PADRAO`. Para mudar, escreva o termo inteiro em **Configurações → `entrega.termo`**; `{preco}` vira o
+  valor por folha. **Peça a revisão do texto a quem cuida da parte jurídica da CAMP.**
+- Para baixar, a pessoa escreve o **nome completo**, marca **Li e aceito** (a declaração de uso não comercial) e clica em
+  **Aceitar e baixar**. Só então a página mostra **Baixar tudo (.zip)** e os arquivos um a um.
+- Sem aceite, o `.zip` volta para o termo, e cada arquivo responde 403.
+- O aceite fica guardado como prova em `entrega_link`: `aceite_em`, `aceite_nome`, `aceite_ip` e `aceite_termo`, o texto exato
+  aceito, porque o termo pode mudar depois. Também gera o evento `termo_aceito`. Só o primeiro aceite conta.
+- O pedido mostra a coluna **Termo de uso** nos links enviados: aceito por quem e quando.
+- Para o layout do Sender.net (TR09), há a variável nova `{{preco_comercial}}` ("150,00"). O botão do e-mail deve usar `{{link}}`.
+
+## Tudo no próprio pedido (02/11/2026)
+
+- O pedido já abre com **Enviar o material**: o material pedido, os arquivos achados, o recado e **Aprovar e enviar**. Não é mais
+  preciso clicar em "Ver o que entregar".
+- O material pode ser editado ali mesmo: o formato (TIFF, JPG original, JPG 3000 px, PDF), **tirar**, **incluir código** e
+  **trocar pelo projeto inteiro**, para mandar o projeto todo no .zip quando o site pediu uma folha. A rota é
+  `PUT /api/solicitacoes/{id}/material`, só antes de entregar.
+- O recado do e-mail já vem com as **condições de uso** gravadas no pedido.
+- Em **Mais opções** ficam a lista com os caminhos no QNAP (CSV), **Já entreguei por outro meio** e o texto do e-mail do site.

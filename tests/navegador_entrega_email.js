@@ -23,7 +23,7 @@ con.execute("UPDATE configuracao SET valor='camp42' WHERE chave='sender.campanha
 con.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero) VALUES ('F026', 98)")
 con.execute("INSERT OR REPLACE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('${P}','F026',98,'Casa do pedido',1970)")
 con.execute("INSERT OR REPLACE INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_tif) VALUES ('${F1}','${P}','S01',1,'Planta térrea','campvision','TIF/${F1}.tif')")
-sid=con.execute("INSERT INTO solicitacao (solicitante,email,finalidade,origem) VALUES ('Beatriz Teste','bia@exemplo.org','pesquisa','site')").lastrowid
+sid=con.execute("INSERT INTO solicitacao (solicitante,email,finalidade,origem,condicoes_uso) VALUES ('Beatriz Teste','bia@exemplo.org','pesquisa','site','Uso acadêmico, citar o Acervo CAMP')").lastrowid
 con.execute("INSERT INTO solicitacao_item (solicitacao_id,codigo,formato) VALUES (?,?,'tif')",(sid,'${F1}'))
 con.execute("INSERT INTO solicitacao_item (solicitacao_id,codigo,formato) VALUES (?,?,'pdf')",(sid,'${P}'))
 con.commit(); print(sid)`, DB, RAIZ], { encoding: 'utf-8' }).trim();
@@ -39,8 +39,12 @@ const sender = http.createServer((req, res) => { let b = ''; req.on('data', d =>
   await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
   await pg.goto(BASE + '/#solicitacoes'); await pg.reload(); await pg.waitForTimeout(1200);
   await pg.evaluate(id => abrirSolicitacao(id), +SID); await pg.waitForTimeout(800);
-  await pg.click(`[data-sol-pacote="${SID}"]`); await pg.waitForSelector(`[data-sol-envio="${SID}"]`, { timeout: 8000 });
-  await pg.click(`[data-sol-envio="${SID}"]`); await pg.waitForSelector(`[data-se-enviar="${SID}"]`, { timeout: 8000 });
+  const direto = await pg.waitForSelector(`[data-se-enviar="${SID}"]`, { timeout: 8000 }).then(() => true).catch(() => false);
+  chk(direto, 'o pedido já abre com "Aprovar e enviar" (sem "Ver o que entregar")');
+  chk((await pg.inputValue('#se-msg')) === 'Uso acadêmico, citar o Acervo CAMP', 'o recado já vem com as condições de uso do pedido');
+  await pg.click('[data-se-projeto]'); await pg.waitForTimeout(1500);
+  const mat = await pg.textContent('.se-itens');
+  chk(mat.includes(P) && !mat.includes(F1), 'trocar pelo projeto inteiro troca o material no próprio pedido', mat.slice(0, 160));
   const box = await pg.textContent('#sol-pacote');
   chk(box.includes('bia@exemplo.org') && box.includes(F1), 'a prévia mostra o destinatário e o arquivo achado no QNAP', box.slice(0, 200));
   chk(/Fica de fora/.test(box) && box.includes(P), 'o PDF do projeto aparece em "Fica de fora"');
@@ -60,11 +64,17 @@ const sender = http.createServer((req, res) => { let b = ''; req.on('data', d =>
   const sit = execFileSync('python3', ['-c', 'import sqlite3,sys;print(sqlite3.connect(sys.argv[1]).execute("SELECT situacao FROM solicitacao WHERE id=?",(int(sys.argv[2]),)).fetchone()[0])', DB, SID], { encoding: 'utf-8' }).trim();
   chk(sit === 'entregue', 'o pedido fica entregue', sit);
   const link = (ult.corpo.variables || {}).link_pagina || '';
-  chk((ult.corpo.variables || {}).link === link + '/tudo.zip', 'o link principal do e-mail é o .zip de tudo');
+  chk((ult.corpo.variables || {}).link === link, 'o link do e-mail abre a página do termo');
   const rel = link.replace(/^https?:\/\/[^/]+/, '');
   const pub = await (await br.newContext()).newPage();
-  const r1 = await pub.goto(BASE + rel);
-  chk(r1.status() === 200 && (await pub.textContent('body')).includes(F1), 'o link público abre a página com o arquivo, sem login', `${r1.status()} ${rel}`);
+  const r0 = await pub.goto(BASE + rel);
+  const t0 = await pub.textContent('body');
+  chk(r0.status() === 200 && /Termo de uso/.test(t0) && /não comercial/.test(t0) && /150,00 por folha/.test(t0) && !(await pub.$('a[href$="tudo.zip"]')), 'o link abre o termo de uso, sem botão de baixar', `${r0.status()}`);
+  const z0 = await pub.request.get(BASE + rel + '/tudo.zip', { maxRedirects: 0 });
+  chk(z0.status() === 303, 'sem aceite, o .zip não sai (volta ao termo)', String(z0.status()));
+  await pub.fill('#nome', 'Beatriz Teste'); await pub.check('input[name=aceito]'); await pub.click('button[type=submit]');
+  await pub.waitForSelector('a[href$="tudo.zip"]', { timeout: 8000 }).catch(() => {});
+  chk((await pub.textContent('body')).includes(F1) && !!(await pub.$('a[href$="tudo.zip"]')), 'depois do aceite, a página mostra o arquivo e o Baixar tudo (.zip)');
   const r2 = await pub.request.get(BASE + rel + '/1');
   chk(r2.status() === 200 && (await r2.body()).length === fs.statSync(`${RAIZ}/TIF/${F1}.tif`).size, 'o arquivo baixa inteiro');
   const z = await pub.request.get(BASE + rel + '/tudo.zip');

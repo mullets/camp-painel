@@ -322,3 +322,51 @@ def cancelar_link(sid: int, u: dict = Depends(auth.exige("operador"))) -> dict:
         return {"ok": True, "cancelados": entrega.cancelar_links(con, sid, u)}
     finally:
         con.close()
+
+
+class ItemMaterial(BaseModel):
+    codigo: str
+    formato: str = "tif"
+
+
+class Material(BaseModel):
+    itens: list[ItemMaterial]
+
+
+@router.put("/solicitacoes/{sid}/material")
+def trocar_material(sid: int, d: Material, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """02/11 (Rafael: "melhorar isso para resolver tudo aí mesmo"): o material do pedido (código + formato) editado no próprio pedido,
+    ex.: trocar a folha pedida no site pelo projeto inteiro. Substitui a lista; só antes de entregar."""
+    if not d.itens:
+        raise HTTPException(400, "Deixe ao menos um material no pedido.")
+    if len(d.itens) > LIMITE_ITENS:
+        raise HTTPException(400, f"No máximo {LIMITE_ITENS} materiais por pedido.")
+    con = connect()
+    try:
+        s = con.execute("SELECT situacao FROM solicitacao WHERE id=?", (sid,)).fetchone()
+        if not s:
+            raise HTTPException(404, "Pedido não existe")
+        if s["situacao"] in ("entregue", "recusada"):
+            raise HTTPException(409, "Pedido já entregue ou recusado: o material não muda mais.")
+        novos = []
+        for it in d.itens:
+            cod, fmt = it.codigo.strip().upper(), it.formato.strip()
+            if fmt not in FORMATOS:
+                raise HTTPException(400, f"Formato inválido: {fmt}")
+            if not CODIGO.match(cod):
+                raise HTTPException(400, f"Código inválido: {cod}")
+            tab = "item" if cod.count("-") == 4 else "projeto"
+            if not con.execute(f"SELECT 1 FROM {tab} WHERE codigo=?", (cod,)).fetchone():
+                raise HTTPException(400, f"{cod} não existe no painel.")
+            if (cod, fmt) not in novos:
+                novos.append((cod, fmt))
+        antes = [tuple(r) for r in con.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=? ORDER BY codigo, formato", (sid,))]
+        con.execute("DELETE FROM solicitacao_item WHERE solicitacao_id=?", (sid,))
+        for cod, fmt in novos:
+            con.execute("INSERT INTO solicitacao_item (solicitacao_id, codigo, formato) VALUES (?,?,?)", (sid, cod, fmt))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,'editada',?,?)",
+                    (str(sid), u["email"], json.dumps({"material_antes": [f"{c} {f}" for c, f in antes], "material": [f"{c} {f}" for c, f in novos]}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "itens": [{"codigo": c, "formato": f} for c, f in novos]}
+    finally:
+        con.close()

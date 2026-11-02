@@ -11,8 +11,9 @@ próprio sistema". Fluxo:
      longo, igual ao fim real do link), {{validade_curta}}, {{material}}, {{protocolo}}, {{pedido}}, {{quantidade}}, {{lista}}, {{mensagem}};
    - `site`: o e-mail do próprio site (rota `POST /wp-json/camp/v1/painel/pedido/enviar`, que usa o SMTP configurado no site).
    Só depois do envio aceito o pedido vira "entregue". Se o envio falhar, o link é cancelado e nada muda no pedido.
-3. Download: o link do e-mail baixa TUDO num .zip (/entrega/<token>/tudo.zip, montado na hora, sem cópia em disco); a página
-   /entrega/<token> lista os arquivos um a um. Rotas públicas do painel, sem login, até a validade.
+3. Download: o link do e-mail abre /entrega/<token> com o TERMO DE USO (uso não comercial; comercial = R$ por folha, Lei 9.610/98).
+   Só depois do aceite (nome + "Li e aceito"; guardado como prova) a página libera o .zip com tudo (/entrega/<token>/tudo.zip,
+   montado na hora, sem cópia em disco) e os arquivos um a um. Rotas públicas do painel, sem login, até a validade.
 
 Os arquivos NÃO vão anexados (um TIFF tem centenas de MB). O TIFF e o JPG em resolução original saem direto do QNAP; o JPG de 3000 px
 (e o JPG pedido de uma folha que só tem TIFF) é gerado na pasta do painel (`<pasta do banco>/entregas/<link>/`). O token só existe no
@@ -46,6 +47,57 @@ try:
     FUSO_SP = ZoneInfo("America/Sao_Paulo")
 except Exception:  # noqa: BLE001 — servidor sem a base de fusos: o Brasil não tem horário de verão desde 2019
     FUSO_SP = timezone(timedelta(hours=-3), "America/Sao_Paulo")
+
+
+# 02/11 (Rafael): o termo que a pessoa aceita antes de baixar. Editável em Configurações (entrega.termo); {preco} = valor por folha.
+TERMO_PADRAO = """Termo de uso do material do Acervo CAMP
+
+1. Uso não comercial. Este material é cedido somente para uso não comercial: estudo, pesquisa, ensino, trabalhos acadêmicos e
+maquetes didáticas, na finalidade informada no pedido.
+
+2. Uso comercial é cobrado. Qualquer uso comercial (livros e revistas à venda, publicidade, produtos, projetos ou exposições com
+fins lucrativos, entre outros) depende de autorização prévia e por escrito da CAMP e custa R$ {preco} por folha.
+
+3. Crédito obrigatório. Toda reprodução deve citar a fonte: "Acervo CAMP – Casa da Arquitetura Moderna Paulista" e o autor do projeto.
+
+4. Direitos autorais. Os desenhos e documentos são protegidos pela Lei de Direitos Autorais (Lei nº 9.610/1998). Não é permitido
+vender, ceder ou repassar os arquivos a terceiros, nem alterá-los de forma a atribuir a outra pessoa a autoria da obra.
+
+5. Responsabilidade. O uso em desacordo com este termo sujeita o responsável às sanções civis e penais previstas em lei, além da
+cobrança do valor do uso comercial.
+
+Ao marcar "Li e aceito" e clicar em "Aceitar e baixar", declaro que li este termo, que o uso será não comercial e que concordo com
+estas condições."""
+
+
+def preco_comercial(con) -> str:
+    v = _cfg(con, "entrega.preco_comercial_folha", "150").replace(",", ".")
+    try:
+        n = float(v)
+    except ValueError:
+        n = 150.0
+    return f"{n:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def termo(con) -> str:
+    return (_cfg(con, "entrega.termo") or TERMO_PADRAO).replace("{preco}", preco_comercial(con))
+
+
+def aceitar(con, token: str, nome: str, ip: str) -> None:
+    """Registra o aceite do termo (prova: quando, nome digitado, IP e o texto exato). Só a primeira vez conta."""
+    r, motivo = achar(con, token)
+    if motivo:
+        raise HTTPException(410 if r else 404, "Este link não vale mais.")
+    if r["aceite_em"]:
+        return
+    nome = " ".join((nome or "").split())[:160]
+    if len(nome) < 3:
+        raise HTTPException(400, "Escreva seu nome completo.")
+    con.execute("UPDATE entrega_link SET aceite_em=datetime('now'), aceite_nome=?, aceite_ip=?, aceite_termo=? WHERE id=? AND aceite_em IS NULL",
+                (nome, (ip or "")[:64], termo(con), r["id"]))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('solicitacao',?,'termo_aceito',?,?)",
+                (str(r["solicitacao_id"]), r["para"] or "público", json.dumps({"nome": nome, "link": r["id"]}, ensure_ascii=False)))
+    con.commit()
 
 
 class EnvioErro(Exception):
@@ -261,7 +313,7 @@ def link_base(con) -> str:
 def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensagem: str) -> dict:
     """`link` (o principal, 01/11 Rafael: "o ideal é o link de download ser um zip de todo aquele projeto") baixa tudo num .zip;
     `link_pagina` abre a página com os arquivos um a um."""
-    link = f"{link_pagina}/tudo.zip"
+    link = link_pagina                      # 02/11: o link abre o termo de uso; aceito, a página libera o .zip e os arquivos
     total = sum(a.get("tamanho") or 0 for a in arquivos)
     nome = (s["solicitante"] or "").strip() or "olá"
     primeiro = nome.split()[0]
@@ -271,15 +323,17 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
     corpo = (f"Olá, {primeiro},\n\n"
              "Seu pedido de material em alta resolução ao acervo da CAMP foi aprovado.\n\n"
              + (f"{mensagem}\n\n" if mensagem else "")
-             + f"Baixe tudo num só arquivo .zip{' (' + _fmt_tamanho(total) + ')' if total else ''}, por este link temporário (vale até {validade}):\n{link}\n\n"
-             f"Se preferir baixar arquivo por arquivo:\n{link_pagina}\n\n"
+             + f"Abra este link temporário (vale até {validade}), aceite o termo de uso e baixe tudo num só arquivo .zip"
+             f"{' (' + _fmt_tamanho(total) + ')' if total else ''}:\n{link}\n\n"
+             f"O material é cedido só para uso não comercial. Uso comercial depende de autorização da CAMP e custa R$ {preco_comercial(con)} por folha.\n\n"
              f"O que está no pacote ({len(arquivos)} arquivo(s)):\n{lista}\n\n"
-             "Ao publicar ou expor este material, cite a fonte: Acervo CAMP (camp.arq.br).\n"
+             "Ao usar este material, cite a fonte: Acervo CAMP – Casa da Arquitetura Moderna Paulista.\n"
              "Se tiver qualquer dúvida, é só responder este e-mail.\n\n"
              "Equipe CAMP\n")
     # TR09 (material_download, Sender.net): nome, material, protocolo, validade (texto longo = o minuto em que o link para), link.
     # As outras variáveis continuam (layouts antigos); a data curta antiga (dd/mm/aaaa) passou para `validade_curta`.
     variaveis = {"nome": primeiro, "nome_completo": nome, "link": link, "link_pagina": link_pagina, "tamanho": _fmt_tamanho(total),
+                 "preco_comercial": preco_comercial(con),
                  "validade": validade, "validade_curta": _data_br(expira_em), "pedido": str(s["id"]),
                  "material": material(arquivos), "protocolo": protocolo(con, s),
                  "quantidade": str(len(arquivos)), "lista": lista, "mensagem": mensagem or ""}
@@ -351,7 +405,12 @@ def previa(con, sid: int, mensagem: str = "") -> dict:
     expira = calcular_expira_em(validade_dias(con))
     t = textos(con, s, m["arquivos"], f"{link_base(con)}/entrega/…", expira, mensagem)
     c = canal_configurado(con)
-    return {"id": sid, "para": s["email"] or "", "nome": s["solicitante"] or "", "email_valido": bool(ENDERECO.match(s["email"] or "")),
+    itens = [{"codigo": r[0], "formato": r[1], "titulo": (con.execute("SELECT titulo FROM item WHERE codigo=?", (r[0],)).fetchone() or con.execute(
+                  "SELECT titulo FROM projeto WHERE codigo=?", (r[0],)).fetchone() or [""])[0] or ""}
+             for r in con.execute("SELECT codigo, formato FROM solicitacao_item WHERE solicitacao_id=? ORDER BY codigo, formato", (sid,))]
+    k = s.keys()
+    return {"id": sid, "para": s["email"] or "", "itens": itens, "condicoes_uso": (s["condicoes_uso"] if "condicoes_uso" in k else "") or "",
+            "entrega": s["entrega"] if "entrega" in k else None, "entregue_em": s["entregue_em"] if "entregue_em" in k else None, "nome": s["solicitante"] or "", "email_valido": bool(ENDERECO.match(s["email"] or "")),
             "situacao": s["situacao"], "arquivos": [{k: v for k, v in a.items() if k not in ("origem", "gerar")} for a in m["arquivos"]],
             "fora": m["fora"], "assunto": t["assunto"], "texto": t["texto"], "validade": validade_longa(expira), "validade_dias": validade_dias(con),
             **c}
@@ -430,6 +489,7 @@ def links(con, sid: int) -> list[dict]:
         venceu = r["expira_em"] < datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         out.append({"id": r["id"], "para": r["para"], "canal": r["canal"], "teste": bool(r["teste"]), "criado_em": r["criado_em"],
                     "criado_por": r["criado_por"], "expira_em": r["expira_em"], "downloads": r["downloads"], "ultimo_download_em": r["ultimo_download_em"],
+                    "aceite_em": r["aceite_em"], "aceite_nome": r["aceite_nome"],
                     "situacao": "cancelado" if r["revogado_em"] else "vencido" if venceu else "ativo"})
     return out
 
@@ -462,6 +522,8 @@ def arquivo(con, token: str, n: int) -> tuple[Path, str]:
     r, motivo = achar(con, token)
     if motivo:
         raise HTTPException(410 if motivo in ("cancelado", "vencido") else 404, "Este link não vale mais." if r else "Link não encontrado.")
+    if not r["aceite_em"]:
+        raise HTTPException(403, "Aceite o termo de uso antes de baixar.")
     a = next((x for x in json.loads(r["arquivos"] or "[]") if x.get("n") == n), None)
     alvo = _permitido(con, a["caminho"]) if a else None
     if alvo is None:
