@@ -1689,7 +1689,8 @@ def filho(modo):
         lista = [
             {"id": 901, "curso": "Residência em Acervos de Arquitetura", "turma": "janeiro de 2027", "nome": "Marina Souza", "email": "marina@x.com", "telefone": "11 9", "cidade": "São Paulo", "formacao": "FAU-USP", "motivacao": "Quero aprender acervos.", "disponivel": "sim", "portfolio": "https://x.com/cv", "soube": "Instagram", "emkt": True, "cv": {"nome": "cv.pdf", "tamanho": len(PDF)}, "texto": "corpo", "criado_em": "2026-11-02T12:00:00+00:00"},
             {"id": 902, "curso": "Residência em Acervos de Arquitetura", "nome": "Beto Lima", "email": "beto@x.com", "cidade": "Santos", "formacao": "Arquivologia", "motivacao": "Interesse.", "disponivel": "parte", "emkt": False, "cv": None, "criado_em": "2026-11-02T12:05:00+00:00"},
-            {"id": 903, "nome": "Carla", "email": "carla@x.com", "cv": {"nome": "x.pdf", "tamanho": 10}, "criado_em": "2026-11-02T12:06:00+00:00"},
+            {"id": 903, "curso": "Introdução aos Acervos de Arquitetura", "turma": "março de 2027", "nome": "Carla", "email": "carla@x.com", "cv": {"nome": "x.pdf", "tamanho": 10}, "criado_em": "2026-11-02T12:06:00+00:00"},
+            {"id": 904, "curso": "", "nome": "Davi", "email": "davi@x.com", "cv": None, "criado_em": "2026-11-02T12:07:00+00:00"},
         ]
         class Resp:
             def __init__(s, code, dados=None, content=b""): s.status_code, s._d, s.content = code, dados, content
@@ -1710,8 +1711,8 @@ def filho(modo):
         class WPF:
             def __init__(s, *a, **k): s.h = H(*a, **k)
         o = ins.coletar(c, WPF(Resp(200, lista), {901: Resp(200, content=PDF), 903: Resp(200, content=b"<html>nao e pdf")}))
-        ver("lê 3, grava 3, confirma só as 2 prontas (a 903 ficou sem o PDF válido)", o["lidas"] == 3 and o["novas"] == 3 and confirmacoes == [[901, 902]] and not o["erro"], str((o, confirmacoes)))
-        ver("confirma no site só DEPOIS do COMMIT local", commits_antes and commits_antes[0] == [901, 902, 903], str(commits_antes))
+        ver("lê 4, grava 4, confirma só as 3 prontas (a 903 ficou sem o PDF válido)", o["lidas"] == 4 and o["novas"] == 4 and confirmacoes == [[901, 902, 904]] and not o["erro"], str((o, confirmacoes)))
+        ver("confirma no site só DEPOIS do COMMIT local", commits_antes and commits_antes[0] == [901, 902, 903, 904], str(commits_antes))
         m = c.execute("SELECT * FROM inscricao WHERE site_id=901").fetchone()
         arq = ins.pasta_cv() / (m["cv_arquivo"] or "x")
         ver("PDF salvo na pasta privada ao lado do banco, com nome aleatório", m["cv_arquivo"] and m["cv_arquivo"].startswith("901-") and arq.read_bytes() == PDF and arq.parent.parent == _pl.Path(os.environ["CAMP_DB_PATH"]).resolve().parent, str(dict(m)))
@@ -1720,7 +1721,7 @@ def filho(modo):
         confirmacoes.clear()
         o2 = ins.coletar(c, WPF(Resp(200, [lista[2]]), {903: Resp(200, content=PDF)}))
         r903 = c.execute("SELECT cv_arquivo FROM inscricao WHERE site_id=903").fetchone()[0]
-        ver("na volta seguinte o PDF da 903 vem, é guardado e só então ela é confirmada (sem duplicar)", o2["novas"] == 0 and confirmacoes == [[903]] and r903 and c.execute("SELECT COUNT(*) FROM inscricao").fetchone()[0] == 3, str((o2, confirmacoes)))
+        ver("na volta seguinte o PDF da 903 vem, é guardado e só então ela é confirmada (sem duplicar)", o2["novas"] == 0 and confirmacoes == [[903]] and r903 and c.execute("SELECT COUNT(*) FROM inscricao").fetchone()[0] == 4, str((o2, confirmacoes)))
         n_col = c.execute("SELECT COUNT(*) FROM inscricao_coleta").fetchone()[0]
         o3 = ins.coletar(c, WPF(Resp(404, [])))
         ver("site sem a rota (404): silêncio, sem erro e sem registrar falha", o3["sem_rota"] and not o3["erro"] and c.execute("SELECT COUNT(*) FROM inscricao_coleta").fetchone()[0] == n_col, str(o3))
@@ -1738,7 +1739,12 @@ def filho(modo):
         ver("operador não vê (dados pessoais): 403", x.get("/api/inscricoes").status_code == 403 and x.get(f"/api/inscricoes/{m['id']}/cv").status_code == 403)
         x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
         r = x.get("/api/inscricoes")
-        ver("admin lista as 3 com resumo por situação, sem expor o nome do arquivo", r.status_code == 200 and len(r.json()["itens"]) == 3 and r.json()["resumo"]["nova"] == 3 and "cv_arquivo" not in r.json()["itens"][0] and r.json()["ultima_busca"], r.text[:200])
+        ver("admin lista as 4 com resumo por situação, sem expor o nome do arquivo", r.status_code == 200 and len(r.json()["itens"]) == 4 and r.json()["resumo"]["nova"] == 4 and "cv_arquivo" not in r.json()["itens"][0] and r.json()["ultima_busca"], r.text[:200])
+        cs = {k["curso"]: k["n"] for k in r.json()["cursos"]}
+        ver("cursos distintos com contagem; curso vazio vira '(curso não informado)'", cs == {"Residência em Acervos de Arquitetura": 2, "Introdução aos Acervos de Arquitetura": 1, "(curso não informado)": 1}, str(cs))
+        rc_ = x.get("/api/inscricoes?curso=" + "Introdução aos Acervos de Arquitetura").json()
+        ver("filtro por curso: só a do curso, e o resumo conta dentro do curso", [i["nome"] for i in rc_["itens"]] == ["Carla"] and rc_["resumo"]["nova"] == 1 and len(rc_["cursos"]) == 3, str(rc_)[:200])
+        ver("filtro por curso sem curso informado", [i["nome"] for i in x.get("/api/inscricoes?curso=(curso não informado)").json()["itens"]] == ["Davi"])
         r = x.get(f"/api/inscricoes/{m['id']}/cv")
         ver("download do currículo: PDF, como anexo, nosniff", r.status_code == 200 and r.content == PDF and r.headers["content-type"] == "application/pdf" and "attachment" in r.headers.get("content-disposition", "") and r.headers.get("x-content-type-options") == "nosniff", str(dict(r.headers))[:200])
         id902 = c.execute("SELECT id FROM inscricao WHERE site_id=902").fetchone()[0]
@@ -1748,6 +1754,36 @@ def filho(modo):
         ver("mudar situação e nota, com evento", r.status_code == 200 and tuple(m2) == ("selecionada", "ótima") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='inscricao' AND tipo='editada'").fetchone()[0] == 1, r.text[:120])
         ver("situação inválida: 400", x.patch(f"/api/inscricoes/{m['id']}", json={"situacao": "aprovadissima"}).status_code == 400)
         ver("filtro por situação", [i["nome"] for i in x.get("/api/inscricoes?situacao=selecionada").json()["itens"]] == ["Marina Souza"])
+        ver("situação e curso combinados", [i["nome"] for i in x.get("/api/inscricoes?situacao=selecionada&curso=Residência em Acervos de Arquitetura").json()["itens"]] == ["Marina Souza"] and x.get("/api/inscricoes?situacao=selecionada&curso=Introdução aos Acervos de Arquitetura").json()["itens"] == [])
+        # Avise-me (tipo interesse) e curso_id; site antigo sem os campos = inscricao
+        lista2 = [
+            {"id": 950, "tipo": "interesse", "curso_id": "introducao-acervos-arquitetura", "curso": "Introdução aos Acervos de Arquitetura", "turma": "", "nome": "Eva", "email": "eva@x.com", "emkt": True, "cv": None, "criado_em": "2026-11-02T13:00:00+00:00"},
+            {"id": 951, "tipo": "interesse", "curso_id": "oficinas-tecnicas", "curso": "Oficinas técnicas", "nome": "Fábio", "email": "fabio@x.com", "emkt": False, "cv": None, "criado_em": "2026-11-02T13:01:00+00:00"},
+            {"id": 952, "tipo": "interesse", "curso_id": "oficinas-tecnicas", "curso": "Oficinas técnicas", "nome": "Gil", "email": "gil@x.com", "cv": None, "criado_em": "2026-11-02T13:02:00+00:00"},
+        ]
+        confirmacoes.clear()
+        o5 = ins.coletar(c, WPF(Resp(200, lista2)))
+        ver("Avise-me: grava como interesse, aguardando, com curso_id, e confirma", o5["novas"] == 3 and confirmacoes == [[950, 951, 952]] and c.execute("SELECT COUNT(*) FROM inscricao WHERE tipo='interesse' AND situacao='aguardando'").fetchone()[0] == 3, str(o5))
+        ver("sem os campos novos: tipo inscricao e curso_id vazio", tuple(c.execute("SELECT tipo, curso_id FROM inscricao WHERE site_id=902").fetchone()) == ("inscricao", ""))
+        ri = x.get("/api/inscricoes").json()
+        ver("lista padrão = só inscrições (o Avise-me não mistura); totais por tipo", len(ri["itens"]) == 4 and ri["totais"]["inscricao"] == 4 and ri["totais"]["interesse"] == 3, str(ri["totais"]))
+        rv = x.get("/api/inscricoes?tipo=interesse").json()
+        cv_ = {k["chave"]: (k["n"], k["aguardando"]) for k in rv["cursos"]}
+        ver("Avise-me: cursos por curso_id com quantos aguardam", cv_ == {"introducao-acervos-arquitetura": (1, 1), "oficinas-tecnicas": (2, 2)} and rv["resumo"] == {"aguardando": 3, "avisado": 0}, str((cv_, rv["resumo"])))
+        rv = x.get("/api/inscricoes?tipo=interesse&curso_id=oficinas-tecnicas").json()
+        ver("Avise-me: filtro por curso_id", sorted(i["nome"] for i in rv["itens"]) == ["Fábio", "Gil"], str([i["nome"] for i in rv["itens"]]))
+        ver("tipo inválido: 400", x.get("/api/inscricoes?tipo=xyz").status_code == 400)
+        csv1 = x.get("/api/inscricoes/interesse.csv?curso_id=oficinas-tecnicas")
+        ver("CSV do curso: cabeçalho e os 2 e-mails, só admin", csv1.status_code == 200 and "text/csv" in csv1.headers["content-type"] and csv1.text.lstrip("\ufeff").splitlines()[0] == "nome;email;curso;data" and "fabio@x.com" in csv1.text and "gil@x.com" in csv1.text and "eva@x.com" not in csv1.text, repr(csv1.text[:160]))
+        ids_of = [i["id"] for i in rv["itens"]]
+        ra = x.post("/api/inscricoes/avisados", json={"ids": ids_of + [m["id"]]})
+        ver("Marcar como avisados: só os de interesse do lote (a inscrição não muda)", ra.status_code == 200 and ra.json()["marcados"] == 2 and c.execute("SELECT situacao FROM inscricao WHERE id=?", (m["id"],)).fetchone()[0] == "selecionada" and c.execute("SELECT COUNT(*) FROM inscricao WHERE tipo='interesse' AND situacao='avisado' AND avisado_em IS NOT NULL").fetchone()[0] == 2, ra.text)
+        csv2 = x.get("/api/inscricoes/interesse.csv?curso_id=oficinas-tecnicas")
+        ver("depois de avisados, o CSV do curso vem vazio (só quem aguarda); com todos=1 voltam", len(csv2.text.strip().splitlines()) == 1 and "gil@x.com" in x.get("/api/inscricoes/interesse.csv?curso_id=oficinas-tecnicas&todos=1").text)
+        x2 = TestClient(app, raise_server_exceptions=False); x2.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador: CSV e avisados 403", x2.get("/api/inscricoes/interesse.csv").status_code == 403 and x2.post("/api/inscricoes/avisados", json={"ids": [1]}).status_code == 403)
+        id950 = c.execute("SELECT id FROM inscricao WHERE site_id=950").fetchone()[0]
+        ver("situação de inscrição não vale para o Avise-me (400) e a dele sim", x.patch(f"/api/inscricoes/{id950}", json={"situacao": "selecionada"}).status_code == 400 and x.patch(f"/api/inscricoes/{id950}", json={"situacao": "avisado"}).status_code == 200)
         loc = lgpd.apagar_pessoa_local(c, "MARINA@x.com")
         ver("LGPD (apagar esta pessoa): a inscrição e o PDF saem", loc.get("inscricao") == 1 and not arq.exists() and c.execute("SELECT COUNT(*) FROM inscricao WHERE email='marina@x.com'").fetchone()[0] == 0, str(loc))
         c.close()

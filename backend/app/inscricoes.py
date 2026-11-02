@@ -1,4 +1,7 @@
-"""Inscrições da Residência em Acervos de Arquitetura (02/11/2026, CAMP: "quero [as inscrições, com o currículo] no meu adm").
+"""Inscrições em cursos e "Avise-me da próxima turma" (02/11/2026, CAMP: "quero [as inscrições, com o currículo] no meu adm";
+"o avise-me também tem que ir para o painel, para quando tiver novos cursos avisar esse povo").
+
+Cada registro tem `tipo` (inscricao | interesse) e `curso_id` (slug estável do curso; site antigo sem os campos = inscricao e "").
 
 Coleta (contrato 1.6, docs/CONTRATO_UNICO.md): GET /wp-json/camp/v1/inscricoes (só leitura) → grava em `inscricao` e baixa o PDF do
 currículo (GET /inscricoes/{id}/cv) para a pasta privada inscricoes_cv/ ao lado do banco → COMMIT → POST /inscricoes/confirmar.
@@ -28,8 +31,11 @@ from .log_tecnico import registrar
 router = APIRouter(prefix="/api", tags=["inscricoes"])
 
 SITUACOES = ("nova", "em_analise", "selecionada", "nao_selecionada", "desistiu")
+SITUACOES_INTERESSE = ("aguardando", "avisado")
+TIPOS = ("inscricao", "interesse")
 CV_MAX = 5 * 1024 * 1024
 LIMITE_LOTE = 100
+SEM_CURSO = "(curso não informado)"
 
 
 def pasta_cv() -> Path:
@@ -100,11 +106,12 @@ def coletar(con=None, wp=None) -> dict:
                 else:
                     arquivo, tamanho = b
             if not ja:
+                tipo = "interesse" if d.get("tipo") == "interesse" else "inscricao"
                 con.execute(
-                    """INSERT OR IGNORE INTO inscricao (site_id, curso, turma, nome, email, telefone, cidade, formacao, motivacao, disponivel,
+                    """INSERT OR IGNORE INTO inscricao (site_id, tipo, curso_id, situacao, curso, turma, nome, email, telefone, cidade, formacao, motivacao, disponivel,
                            portfolio, soube, emkt, cv_arquivo, cv_nome, cv_tamanho, texto, criado_no_site)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (sid, _txt(d.get("curso"), 160), _txt(d.get("turma"), 80), _txt(d.get("nome"), 120) or "(sem nome)", _txt(d.get("email"), 200) or None,
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (sid, tipo, _txt(d.get("curso_id"), 80).lower(), "aguardando" if tipo == "interesse" else "nova", _txt(d.get("curso"), 160), _txt(d.get("turma"), 80), _txt(d.get("nome"), 120) or "(sem nome)", _txt(d.get("email"), 200) or None,
                      _txt(d.get("telefone"), 40) or None, _txt(d.get("cidade"), 80) or None, _txt(d.get("formacao"), 160) or None,
                      _txt(d.get("motivacao"), 2500) or None, d.get("disponivel") if d.get("disponivel") in ("sim", "parte") else "",
                      _txt(d.get("portfolio"), 300) or None, _txt(d.get("soube"), 120) or None, 1 if d.get("emkt") is True else 0,
@@ -112,7 +119,7 @@ def coletar(con=None, wp=None) -> dict:
                      _txt(d.get("criado_em"), 40) or None))
                 out["novas"] += 1
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('inscricao',?,'criada','site',?)",
-                            (str(sid), json.dumps({"curso": _txt(d.get("curso"), 160), "com_cv": bool(arquivo)}, ensure_ascii=False)))
+                            (str(sid), json.dumps({"tipo": tipo, "curso": _txt(d.get("curso"), 160), "com_cv": bool(arquivo)}, ensure_ascii=False)))
             elif arquivo:
                 con.execute("UPDATE inscricao SET cv_arquivo=?, cv_nome=?, cv_tamanho=? WHERE site_id=?",
                             (arquivo, _txt(cv_info.get("nome"), 120) or None, tamanho, sid))
@@ -168,26 +175,104 @@ def _linha(r) -> dict:
     d = dict(r)
     d["tem_cv"] = bool(d.pop("cv_arquivo", None))
     d["emkt"] = bool(d.get("emkt"))
+    d["curso"] = d.get("curso") or SEM_CURSO
+    d["chave_curso"] = d.get("curso_id") or "nome:" + d["curso"]
     return d
 
 
+def _filtros(tipo: str | None, curso_id: str | None, curso: str | None) -> tuple[list[str], list]:
+    """tipo (padrão inscricao) + curso: `curso_id` é o slug, ou "nome:<curso>" para curso sem slug; `curso` filtra pelo nome legível."""
+    t = tipo or "inscricao"
+    if t not in TIPOS:
+        raise HTTPException(400, "Tipo inválido")
+    onde, vals = ["tipo=?"], [t]
+    if curso_id and curso_id != "todos":
+        if curso_id.startswith("nome:"):
+            onde.append("curso_id='' AND COALESCE(NULLIF(curso,''), ?)=?"); vals += [SEM_CURSO, curso_id[5:]]
+        else:
+            onde.append("curso_id=?"); vals.append(curso_id)
+    if curso and curso != "todos":
+        onde.append("COALESCE(NULLIF(curso,''), ?)=?"); vals += [SEM_CURSO, curso]
+    return onde, vals
+
+
 @router.get("/inscricoes")
-def listar(situacao: str | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+def listar(tipo: str | None = None, situacao: str | None = None, curso_id: str | None = None, curso: str | None = None,
+           u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Filtros combináveis: tipo (inscricao | interesse), curso e situação. `resumo` conta por situação dentro do tipo e do curso;
+    `cursos` lista os cursos daquele tipo, com a chave do filtro, o nome e o total (e, no interesse, quantos aguardam aviso);
+    `totais` conta cada tipo."""
+    t = tipo or "inscricao"
+    sits = SITUACOES_INTERESSE if t == "interesse" else SITUACOES
     con = connect()
     try:
-        resumo = {s: 0 for s in SITUACOES}
-        for r in con.execute("SELECT situacao, COUNT(*) n FROM inscricao GROUP BY situacao"):
+        onde, vals = _filtros(t, curso_id, curso)
+        w = " AND ".join(onde)
+        resumo = {s: 0 for s in sits}
+        for r in con.execute(f"SELECT situacao, COUNT(*) n FROM inscricao WHERE {w} GROUP BY situacao", vals):
             resumo[r["situacao"]] = r["n"]
-        if situacao and situacao != "todas":
-            if situacao not in SITUACOES:
+        cursos = [{"chave": r["curso_id"] or "nome:" + r["c"], "curso_id": r["curso_id"], "curso": r["c"], "n": r["n"], "aguardando": r["ag"]}
+                  for r in con.execute("""SELECT curso_id, COALESCE(NULLIF(MAX(curso),''), ?) c, COUNT(*) n, SUM(situacao='aguardando') ag FROM inscricao
+                                          WHERE tipo=? GROUP BY curso_id, CASE WHEN curso_id='' THEN COALESCE(NULLIF(curso,''), ?) ELSE '' END ORDER BY c""", (SEM_CURSO, t, SEM_CURSO))]
+        totais = {k: 0 for k in TIPOS}
+        for r in con.execute("SELECT tipo, COUNT(*) n, SUM(situacao IN ('nova','aguardando')) novos FROM inscricao GROUP BY tipo"):
+            if r["tipo"] in totais:
+                totais[r["tipo"]] = r["n"]
+                totais[r["tipo"] + "_novos"] = r["novos"]
+        if situacao and situacao not in ("todas", "todos"):
+            if situacao not in sits:
                 raise HTTPException(400, "Situação inválida")
-            rows = con.execute("SELECT * FROM inscricao WHERE situacao=? ORDER BY COALESCE(criado_no_site, importado_em) DESC, id DESC", (situacao,)).fetchall()
-        else:
-            rows = con.execute("SELECT * FROM inscricao ORDER BY COALESCE(criado_no_site, importado_em) DESC, id DESC").fetchall()
+            onde.append("situacao=?"); vals.append(situacao)
+        rows = con.execute(f"SELECT * FROM inscricao WHERE {' AND '.join(onde)} ORDER BY COALESCE(criado_no_site, importado_em) DESC, id DESC", vals).fetchall()
         ult = con.execute("SELECT quando, lidas, novas, confirmadas, erro FROM inscricao_coleta ORDER BY id DESC LIMIT 1").fetchone()
-        return {"itens": [_linha(r) for r in rows], "resumo": resumo, "ultima_busca": dict(ult) if ult else None}
+        return {"itens": [_linha(r) for r in rows], "resumo": resumo, "cursos": cursos, "totais": totais, "ultima_busca": dict(ult) if ult else None}
     finally:
         con.close()
+
+
+class Avisados(BaseModel):
+    ids: list[int]
+
+
+@router.post("/inscricoes/avisados")
+def marcar_avisados(d: Avisados, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Avise-me: marca como avisadas (avisado_em) as pessoas da lista. Só vale para tipo interesse."""
+    ids = sorted({int(i) for i in d.ids if int(i) > 0})[:2000]
+    if not ids:
+        return {"ok": True, "marcados": 0}
+    con = connect()
+    try:
+        n = con.execute(f"UPDATE inscricao SET situacao='avisado', avisado_em=datetime('now'), atualizado_em=datetime('now') WHERE tipo='interesse' AND situacao<>'avisado' AND id IN ({','.join('?' * len(ids))})", ids).rowcount
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('inscricao','interesse','avisados',?,?)",
+                    (u["email"], json.dumps({"marcados": n}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "marcados": n}
+    finally:
+        con.close()
+
+
+@router.get("/inscricoes/interesse.csv")
+def interesse_csv(curso_id: str | None = None, todos: int = 0, u: dict = Depends(auth.exige("admin"))):
+    """CSV (nome, email, curso, data) do Avise-me do curso filtrado; por padrão só quem ainda não foi avisado. Sem log dos e-mails."""
+    import csv
+    import io
+    from fastapi.responses import Response
+    con = connect()
+    try:
+        onde, vals = _filtros("interesse", curso_id, None)
+        if not todos:
+            onde.append("situacao='aguardando'")
+        rows = con.execute(f"SELECT nome, email, curso, turma, COALESCE(criado_no_site, importado_em) quando FROM inscricao WHERE {' AND '.join(onde)} ORDER BY quando", vals).fetchall()
+    finally:
+        con.close()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["nome", "email", "curso", "data"])
+    for r in rows:
+        w.writerow([r["nome"], r["email"] or "", r["curso"] or SEM_CURSO, (r["quando"] or "")[:10]])
+    nome = "avise-me-" + ("".join(ch if ch.isalnum() else "-" for ch in (curso_id or "todos").replace("nome:", "")).strip("-")[:50] or "todos") + ".csv"
+    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 def _uma(con, iid: int):
@@ -218,9 +303,11 @@ def editar(iid: int, d: EdicaoInscricao, u: dict = Depends(auth.exige("admin")))
         r = _uma(con, iid)
         campos, vals, mud = [], [], {}
         if d.situacao is not None:
-            if d.situacao not in SITUACOES:
+            if d.situacao not in (SITUACOES_INTERESSE if r["tipo"] == "interesse" else SITUACOES):
                 raise HTTPException(400, "Situação inválida")
             campos.append("situacao=?"); vals.append(d.situacao); mud["situacao"] = [r["situacao"], d.situacao]
+            if r["tipo"] == "interesse":
+                campos.append("avisado_em=" + ("datetime('now')" if d.situacao == "avisado" else "NULL"))
         if d.nota is not None:
             campos.append("nota=?"); vals.append(d.nota.strip()[:2000] or None); mud["nota"] = True
         if campos:
