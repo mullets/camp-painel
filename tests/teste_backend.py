@@ -11340,7 +11340,8 @@ def filho(modo):
         ver("Sender: rota do e-mail transacional e token Bearer", url.endswith("/message/aBc123/send") and kw.get("headers", {}).get("Authorization") == "Bearer tok-secreto-123", url)
         corpo = kw.get("json") or {}
         link = (corpo.get("variables") or {}).get("link_pagina", "")
-        ver("o link principal do e-mail é o .zip de tudo", (corpo.get("variables") or {}).get("link") == link + "/tudo.zip" and link, str(corpo.get("variables"))[:200])
+        ver("o link do e-mail abre a página do termo (não baixa direto)", (corpo.get("variables") or {}).get("link") == link and link, str(corpo.get("variables"))[:200])
+        ver("e-mail avisa: uso não comercial e R$ 150,00 por folha no comercial", corpo["variables"].get("preco_comercial") == "150,00")
         ver("Sender: para quem pediu, com as variáveis do layout", corpo.get("to", {}).get("email") == "maria@exemplo.org" and link.startswith("https://painel.exemplo/entrega/")
             and corpo["variables"].get("nome") == "Maria" and corpo["variables"].get("mensagem") == "Uso só para a pesquisa." and F1 in corpo["variables"].get("lista", ""), str(corpo)[:300])
         sit = um("SELECT situacao, entrega FROM solicitacao WHERE id=?", S1)
@@ -11351,7 +11352,21 @@ def filho(modo):
         ver("o token não fica gravado no banco", token and not um("SELECT 1 FROM entrega_link WHERE token_hash=? OR arquivos LIKE ?", token, f"%{token}%"))
         ver("evento entregue_por_email registrado", um("SELECT COUNT(*) FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='entregue_por_email'", str(S1))[0] == 1)
         ver("enviar de novo um pedido entregue: 409", op.post(f"/api/solicitacoes/{S1}/enviar", json={}).status_code == 409)
-        # 4) a pessoa baixa pelo link público (sem login)
+        # 4) 02/11: o link abre o TERMO DE USO; sem aceite nada baixa
+        t0 = pub.get(f"/entrega/{token}")
+        ver("link abre o termo: não comercial, R$ 150,00 por folha, Lei 9.610/1998, sem botão de baixar", t0.status_code == 200 and "Termo de uso" in t0.text
+            and "não comercial" in t0.text and "R$ 150,00 por folha" in t0.text and "9.610/1998" in t0.text and "tudo.zip" not in t0.text and f"/entrega/{token}/1" not in t0.text)
+        ver("sem aceite: arquivo 403 e .zip volta para o termo", pub.get(f"/entrega/{token}/1").status_code == 403
+            and pub.get(f"/entrega/{token}/tudo.zip", follow_redirects=False).status_code == 303)
+        sem = pub.post(f"/entrega/{token}/aceite", data={"nome": "Maria Souza"}, follow_redirects=False)
+        ver("aceite sem marcar 'Li e aceito': não libera", sem.status_code == 400 and "Li e aceito" in sem.text and not um("SELECT aceite_em FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0])
+        ac = pub.post(f"/entrega/{token}/aceite", data={"nome": "Maria  Souza", "aceito": "1"}, follow_redirects=False)
+        reg = um("SELECT aceite_em, aceite_nome, aceite_ip, aceite_termo FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)
+        ver("aceite registrado como prova: quando, nome, IP e o texto aceito", ac.status_code == 303 and reg[0] and reg[1] == "Maria Souza" and reg[2] and "R$ 150,00 por folha" in (reg[3] or ""), str(reg)[:120])
+        ver("evento termo_aceito", um("SELECT COUNT(*) FROM evento WHERE entidade='solicitacao' AND codigo=? AND tipo='termo_aceito'", str(S1))[0] == 1)
+        pub.post(f"/entrega/{token}/aceite", data={"nome": "Outra Pessoa", "aceito": "1"})
+        ver("o primeiro aceite não é sobrescrito", um("SELECT aceite_nome FROM entrega_link WHERE solicitacao_id=? AND revogado_em IS NULL", S1)[0] == "Maria Souza")
+        # depois do aceite, a pessoa baixa pelo link público (sem login)
         pg = pub.get(f"/entrega/{token}")
         ver("página pública lista os arquivos, sem cache e fora de buscador", pg.status_code == 200 and F1 in pg.text and F2 in pg.text and F3 not in pg.text
             and pg.headers.get("cache-control") == "no-store" and "noindex" in pg.headers.get("x-robots-tag", ""), f"{pg.status_code}")
@@ -11398,6 +11413,18 @@ def filho(modo):
         tk2 = chamadas[-1][1]["json"]["variables"]["link_pagina"].rsplit("/", 1)[-1]
         c.execute("UPDATE entrega_link SET expira_em='2000-01-01 00:00:00' WHERE teste=1"); c.commit()
         ver("link vencido: 410", pub.get(f"/entrega/{tk2}").status_code == 410)
+        # 6b) 02/11: material editável no pedido — trocar a folha pelo projeto inteiro; formato; código inexistente; pedido entregue não muda
+        S4 = novo_pedido("rui@exemplo.org", "Rui")
+        pv4 = op.get(f"/api/solicitacoes/{S4}/envio").json()
+        ver("prévia traz o material do pedido (código e formato)", {(i["codigo"], i["formato"]) for i in pv4.get("itens", [])} >= {(F1, "tif"), (P, "pdf")}, str(pv4.get("itens"))[:200])
+        rm = op.put(f"/api/solicitacoes/{S4}/material", json={"itens": [{"codigo": P, "formato": "tif"}]})
+        pv4 = op.get(f"/api/solicitacoes/{S4}/envio").json()
+        ver("trocar pelo projeto inteiro: o pacote passa a ter as folhas do projeto", rm.status_code == 200 and [i["codigo"] for i in pv4["itens"]] == [P]
+            and {a["codigo"] for a in pv4["arquivos"]} == {F1, F2}, rm.text[:200])
+        ver("código inexistente: 400", op.put(f"/api/solicitacoes/{S4}/material", json={"itens": [{"codigo": "F999-P0001", "formato": "tif"}]}).status_code == 400)
+        ver("formato inválido: 400", op.put(f"/api/solicitacoes/{S4}/material", json={"itens": [{"codigo": P, "formato": "gif"}]}).status_code == 400)
+        ver("papel leitura não muda o material", le.put(f"/api/solicitacoes/{S4}/material", json={"itens": [{"codigo": P, "formato": "tif"}]}).status_code == 403)
+        ver("pedido entregue: material não muda (409)", op.put(f"/api/solicitacoes/{S1}/material", json={"itens": [{"codigo": P, "formato": "tif"}]}).status_code == 409)
         # 7) canal 'site': o e-mail sai pelo site (rota /painel/pedido/enviar), com o id do pedido no site
         site = []
         class FakeWP:
@@ -11474,7 +11501,7 @@ def filho(modo):
         v = t["variaveis"]
         tr09 = {"nome", "material", "protocolo", "validade", "link"}
         ver("TR09: as variáveis nome, material, protocolo, validade e link", tr09 <= set(v) and v["nome"] == "Maria" and v["protocolo"] == "CAMP-2025-004321"
-            and v["validade"] == "15 de novembro de 2026, às 23h59" and v["link"].endswith("/tudo.zip"), v)
+            and v["validade"] == "15 de novembro de 2026, às 23h59" and v["link"] == "https://painel.exemplo/entrega/abc", v)   # 02/11: o link abre o termo de uso (antes: o .zip direto)
         ver("variáveis antigas continuam (layout antigo) e a data curta vai em validade_curta",
             {"nome_completo", "link_pagina", "tamanho", "pedido", "quantidade", "lista", "mensagem"} <= set(v) and v["validade_curta"] == "15/11/2026", v)
         ver("chaves das variáveis em minúsculas e sem acento", all(k.isascii() and k == k.lower() for k in v), list(v))
