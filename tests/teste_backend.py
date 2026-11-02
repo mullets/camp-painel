@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "sender_transacional"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "sender_transacional", "inscricoes_residencia"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -1672,6 +1672,84 @@ def filho(modo):
         r = x.post("/api/pedidos/coletar")
         ver("POST /api/pedidos/coletar (admin) responde mesmo sem o site configurado (erro registrado)", r.status_code == 200 and r.json()["erro"], r.text[:160])
         ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
+        c.close()
+        for l in res: print(l)
+    elif modo == "inscricoes_residencia":
+        # 02/11/2026 · inscrições da Residência (contrato 1.6): coleta com PDF, confirma só depois do COMMIT e do PDF, 404 = silêncio,
+        # PDF inválido não confirma, telas só para admin, download do currículo, LGPD apaga inscrição e PDF.
+        init_db(); aplicar_migracoes()
+        import pathlib as _pl
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth, inscricoes as ins, lgpd
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        PDF = b"%PDF-1.4\n% curriculo\n"
+        lista = [
+            {"id": 901, "curso": "Residência em Acervos de Arquitetura", "turma": "janeiro de 2027", "nome": "Marina Souza", "email": "marina@x.com", "telefone": "11 9", "cidade": "São Paulo", "formacao": "FAU-USP", "motivacao": "Quero aprender acervos.", "disponivel": "sim", "portfolio": "https://x.com/cv", "soube": "Instagram", "emkt": True, "cv": {"nome": "cv.pdf", "tamanho": len(PDF)}, "texto": "corpo", "criado_em": "2026-11-02T12:00:00+00:00"},
+            {"id": 902, "curso": "Residência em Acervos de Arquitetura", "nome": "Beto Lima", "email": "beto@x.com", "cidade": "Santos", "formacao": "Arquivologia", "motivacao": "Interesse.", "disponivel": "parte", "emkt": False, "cv": None, "criado_em": "2026-11-02T12:05:00+00:00"},
+            {"id": 903, "nome": "Carla", "email": "carla@x.com", "cv": {"nome": "x.pdf", "tamanho": 10}, "criado_em": "2026-11-02T12:06:00+00:00"},
+        ]
+        class Resp:
+            def __init__(s, code, dados=None, content=b""): s.status_code, s._d, s.content = code, dados, content
+            def json(s): return s._d
+        chamadas, confirmacoes, commits_antes = [], [], []
+        class H:
+            def __init__(s, lista_resp, cv=None): s.lista_resp, s.cv = lista_resp, cv or {}
+            def get(s, path, params=None):
+                chamadas.append(path)
+                if path == "/wp-json/camp/v1/inscricoes": return s.lista_resp
+                sid = int(path.split("/")[-2]); return s.cv.get(sid, Resp(404))
+            def post(s, path, json=None):
+                assert path == "/wp-json/camp/v1/inscricoes/confirmar", path
+                ids = list((json or {}).get("ids", []))
+                c2 = connect(); commits_antes.append(sorted(r[0] for r in c2.execute("SELECT site_id FROM inscricao"))); c2.close()
+                confirmacoes.append(ids)
+                return Resp(200, {"confirmados": ids, "ja_confirmados": [], "nao_encontrados": [], "falhas": []})
+        class WPF:
+            def __init__(s, *a, **k): s.h = H(*a, **k)
+        o = ins.coletar(c, WPF(Resp(200, lista), {901: Resp(200, content=PDF), 903: Resp(200, content=b"<html>nao e pdf")}))
+        ver("lê 3, grava 3, confirma só as 2 prontas (a 903 ficou sem o PDF válido)", o["lidas"] == 3 and o["novas"] == 3 and confirmacoes == [[901, 902]] and not o["erro"], str((o, confirmacoes)))
+        ver("confirma no site só DEPOIS do COMMIT local", commits_antes and commits_antes[0] == [901, 902, 903], str(commits_antes))
+        m = c.execute("SELECT * FROM inscricao WHERE site_id=901").fetchone()
+        arq = ins.pasta_cv() / (m["cv_arquivo"] or "x")
+        ver("PDF salvo na pasta privada ao lado do banco, com nome aleatório", m["cv_arquivo"] and m["cv_arquivo"].startswith("901-") and arq.read_bytes() == PDF and arq.parent.parent == _pl.Path(os.environ["CAMP_DB_PATH"]).resolve().parent, str(dict(m)))
+        ver("campos gravados (disponível, e-mails da CAMP, situação nova)", m["disponivel"] == "sim" and m["emkt"] == 1 and m["situacao"] == "nova" and m["cidade"] == "São Paulo", str(dict(m)))
+        ver("sem currículo: confirmada e sem arquivo", c.execute("SELECT cv_arquivo FROM inscricao WHERE site_id=902").fetchone()[0] is None)
+        confirmacoes.clear()
+        o2 = ins.coletar(c, WPF(Resp(200, [lista[2]]), {903: Resp(200, content=PDF)}))
+        r903 = c.execute("SELECT cv_arquivo FROM inscricao WHERE site_id=903").fetchone()[0]
+        ver("na volta seguinte o PDF da 903 vem, é guardado e só então ela é confirmada (sem duplicar)", o2["novas"] == 0 and confirmacoes == [[903]] and r903 and c.execute("SELECT COUNT(*) FROM inscricao").fetchone()[0] == 3, str((o2, confirmacoes)))
+        n_col = c.execute("SELECT COUNT(*) FROM inscricao_coleta").fetchone()[0]
+        o3 = ins.coletar(c, WPF(Resp(404, [])))
+        ver("site sem a rota (404): silêncio, sem erro e sem registrar falha", o3["sem_rota"] and not o3["erro"] and c.execute("SELECT COUNT(*) FROM inscricao_coleta").fetchone()[0] == n_col, str(o3))
+        class Quebra:
+            class h:
+                @staticmethod
+                def get(*a, **k): raise RuntimeError("site fora do ar")
+        o4 = ins.coletar(c, Quebra())
+        ver("site fora do ar: registra e NÃO levanta", o4["erro"] == "site fora do ar", str(o4))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x.get("/api/inscricoes").status_code == 401 and x.get(f"/api/inscricoes/{m['id']}/cv").status_code == 401)
+        x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não vê (dados pessoais): 403", x.get("/api/inscricoes").status_code == 403 and x.get(f"/api/inscricoes/{m['id']}/cv").status_code == 403)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.get("/api/inscricoes")
+        ver("admin lista as 3 com resumo por situação, sem expor o nome do arquivo", r.status_code == 200 and len(r.json()["itens"]) == 3 and r.json()["resumo"]["nova"] == 3 and "cv_arquivo" not in r.json()["itens"][0] and r.json()["ultima_busca"], r.text[:200])
+        r = x.get(f"/api/inscricoes/{m['id']}/cv")
+        ver("download do currículo: PDF, como anexo, nosniff", r.status_code == 200 and r.content == PDF and r.headers["content-type"] == "application/pdf" and "attachment" in r.headers.get("content-disposition", "") and r.headers.get("x-content-type-options") == "nosniff", str(dict(r.headers))[:200])
+        id902 = c.execute("SELECT id FROM inscricao WHERE site_id=902").fetchone()[0]
+        ver("sem currículo: 404", x.get(f"/api/inscricoes/{id902}/cv").status_code == 404)
+        r = x.patch(f"/api/inscricoes/{m['id']}", json={"situacao": "selecionada", "nota": "ótima"})
+        m2 = c.execute("SELECT situacao, nota FROM inscricao WHERE id=?", (m["id"],)).fetchone()
+        ver("mudar situação e nota, com evento", r.status_code == 200 and tuple(m2) == ("selecionada", "ótima") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='inscricao' AND tipo='editada'").fetchone()[0] == 1, r.text[:120])
+        ver("situação inválida: 400", x.patch(f"/api/inscricoes/{m['id']}", json={"situacao": "aprovadissima"}).status_code == 400)
+        ver("filtro por situação", [i["nome"] for i in x.get("/api/inscricoes?situacao=selecionada").json()["itens"]] == ["Marina Souza"])
+        loc = lgpd.apagar_pessoa_local(c, "MARINA@x.com")
+        ver("LGPD (apagar esta pessoa): a inscrição e o PDF saem", loc.get("inscricao") == 1 and not arq.exists() and c.execute("SELECT COUNT(*) FROM inscricao WHERE email='marina@x.com'").fetchone()[0] == 0, str(loc))
         c.close()
         for l in res: print(l)
     elif modo == "camp014_redir":
@@ -14896,6 +14974,14 @@ else:
 print("124) Coletor de pedidos e correções do site a cada 10 minutos (CAMP-013)")
 rc, out = rodar("camp013_coletor", f"{tmp}/c013.db")
 if rc != 0: ok(False, f"teste do CAMP-013 não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("124b) Inscrições da Residência vindas do site, com o currículo em PDF (contrato 1.6)")
+rc, out = rodar("inscricoes_residencia", f"{tmp}/ins.db")
+if rc != 0: ok(False, f"teste das inscrições não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

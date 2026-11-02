@@ -131,8 +131,10 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_ped, n_ev = _anonimizar_pedidos(con, ped) if ped else (0, 0)
     erros = con.execute("UPDATE erro SET relatado_por=? WHERE origem='site' AND relatado_por IS NOT NULL AND relatado_por<>? AND lower(relatado_por) LIKE ?",
                         (REMOVIDO, REMOVIDO, f"%{em}%")).rowcount
+    from . import inscricoes   # 02/11/2026: inscrições da Residência e o PDF do currículo também
+    n_ins = inscricoes.apagar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins}
 
 
 def chamar_site(con, email: str) -> dict:

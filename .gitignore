@@ -10,3 +10,5 @@ node_modules/
 backend/logs/
 backend/backups/
 *.db.gz
+# currículos em PDF das inscrições da Residência (dados pessoais; ao lado do banco)
+inscricoes_cv/

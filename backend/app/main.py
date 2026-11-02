@@ -65,6 +65,8 @@ from .rotas_releitura import router as rotas_releitura
 app.include_router(rotas_releitura)
 from .rotas_pedidos import router as rotas_pedidos   # Sobras #12: antes de rotas_operacao (/solicitacoes/metricas)
 app.include_router(rotas_pedidos)
+from .inscricoes import router as rotas_inscricoes   # 02/11/2026: inscrições da Residência (contrato 1.6)
+app.include_router(rotas_inscricoes)
 from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página pública de download do pedido entregue por e-mail
 app.include_router(rotas_entrega)
 app.include_router(rotas_operacao)
@@ -170,6 +172,11 @@ async def _coleta_pedidos_site_periodica() -> None:
             con.close()
             if minutos > 0:
                 await asyncio.to_thread(cp.coletar)
+                try:
+                    from . import inscricoes   # 02/11/2026 (contrato 1.6): separada dos pedidos; nunca levanta
+                    await asyncio.to_thread(inscricoes.coletar)
+                except Exception:  # noqa: BLE001
+                    pass
                 try:
                     from . import redir_site
                     await asyncio.to_thread(redir_site.enviar_pendentes)

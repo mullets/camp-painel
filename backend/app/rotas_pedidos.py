@@ -174,7 +174,13 @@ def coleta_status(u: dict = Depends(auth.exige("operador"))) -> dict:
 def coletar_agora(u: dict = Depends(auth.exige("admin"))) -> dict:
     """Busca agora os pedidos e correções do site (o mesmo que o coletor automático faz a cada 10 min)."""
     from . import coletor_pedidos_site as cp
-    return cp.coletar()
+    out = cp.coletar()
+    try:
+        from . import inscricoes   # 02/11/2026: inscrições da Residência na mesma busca (contrato 1.6)
+        out["inscricoes"] = inscricoes.coletar()
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 # ---------------- (b) pacote de entrega ----------------
