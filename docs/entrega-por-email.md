@@ -187,3 +187,23 @@ abre o download".
   `PUT /api/solicitacoes/{id}/material`, só antes de entregar.
 - O recado do e-mail já vem com as **condições de uso** gravadas no pedido.
 - Em **Mais opções** ficam a lista com os caminhos no QNAP (CSV), **Já entreguei por outro meio** e o texto do e-mail do site.
+
+## Aviso da situação da inscrição em curso (02/11/2026)
+
+Pedido do Rafael: "quando coloco uma pessoa que se inscreveu no nosso painel, e mudo o status dela, devia mandar um e-mail para ela
+avisando que status está".
+
+- Em **Inscrições**, ao trocar a situação de uma **inscrição** para **em análise**, **selecionada** ou **não selecionada**, aparecem:
+  - **Avisar por e-mail**, já marcado;
+  - um **recado** opcional;
+  - o texto do e-mail.
+- **Salvar** muda a situação e manda o e-mail. A tela diz para quem foi ou por que não foi; a situação muda de qualquer jeito.
+- Não manda e-mail para **desistiu**, para o "Avise-me" (interesse), nem quando só a nota mudou.
+- **Canal:**
+  - o e-mail transacional **TR10** do Sender.net, em `sender.tr10_inscricao_situacao`, com as variáveis `{{nome}}`,
+    `{{nome_completo}}`, `{{curso}}`, `{{turma}}`, `{{situacao}}` ("Em análise", "Selecionada", "Não selecionada"),
+    `{{situacao_codigo}}`, `{{texto}}` (o parágrafo padrão de cada situação) e `{{mensagem}}` (o recado);
+  - sem TR10, sai pelo **e-mail do site**, só texto.
+- Fica registrado no histórico como `aviso_situacao` ou `aviso_situacao_falhou`, com a situação, o canal e o erro.
+- Código: `backend/app/inscricoes_aviso.py` e `PATCH /api/inscricoes/{id}` (`avisar`, `mensagem`); a prévia está em
+  `GET /api/inscricoes/{id}/aviso?situacao=`. Migração 206.

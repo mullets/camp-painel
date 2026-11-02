@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "sender_transacional", "inscricoes_residencia"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "sender_transacional", "inscricoes_residencia"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11761,6 +11761,71 @@ def filho(modo):
         qnap_coletor.coletar()
         ver("o coletor do QNAP traz o diário", c.execute("SELECT COUNT(*) FROM cv_evento").fetchone()[0] == 4)
         print("\n".join(res))
+    elif modo == "inscricao_aviso":
+        # 02/11 (Rafael: "quando coloco uma pessoa que se inscreveu no nosso painel, e mudo o status dela, devia mandar um e-mail para
+        # ela avisando que status está"): em análise / selecionada / não selecionada avisam a pessoa (Sender.net TR10 ou e-mail do site).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, entrega
+        import app.wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='' WHERE chave IN ('wp.app_password','sender.token','sender.tr10_inscricao_situacao')")
+        c.execute("INSERT INTO inscricao (site_id,tipo,curso_id,curso,turma,nome,email,situacao) VALUES (1,'inscricao','residencia','Residência em Acervos','turma 2027','Ana Lima','ana@exemplo.org','nova')")
+        c.execute("INSERT INTO inscricao (site_id,tipo,curso_id,curso,nome,email,situacao) VALUES (2,'interesse','residencia','Residência em Acervos','Bia','bia@exemplo.org','aguardando')")
+        c.commit()
+        I1 = c.execute("SELECT id FROM inscricao WHERE site_id=1").fetchone()[0]; I2 = c.execute("SELECT id FROM inscricao WHERE site_id=2").fetchone()[0]
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-longa-12345"), cli("op@camp.arq.br", "senha-operador-123")
+        sit = lambda i: c.execute("SELECT situacao FROM inscricao WHERE id=?", (i,)).fetchone()[0]
+        pv = adm.get(f"/api/inscricoes/{I1}/aviso?situacao=selecionada").json()
+        ver("prévia: e-mail para a pessoa, com curso e situação", pv.get("avisa") and pv.get("para") == "ana@exemplo.org" and "Residência em Acervos" in pv.get("texto", "") and "selecionada" in pv.get("texto", ""), str(pv)[:200])
+        ver("prévia: desistiu não avisa", adm.get(f"/api/inscricoes/{I1}/aviso?situacao=desistiu").json().get("avisa") is False)
+        r = adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "em_analise"}).json()
+        ver("sem envio configurado: a situação muda e a tela diz por que não avisou", sit(I1) == "em_analise" and r["aviso"] and r["aviso"]["enviado"] is False and "configurado" in r["aviso"]["erro"], str(r))
+        chamadas = []
+        class Resp:
+            def __init__(s_, st, js): s_.status_code, s_._js = st, js
+            def json(s_): return s_._js
+        resp = {"v": Resp(200, {"success": True})}
+        entrega.httpx.post = lambda url, **kw: chamadas.append((url, kw)) or resp["v"]
+        c.execute("UPDATE configuracao SET valor='tok-x' WHERE chave='sender.token'")
+        c.execute("UPDATE configuracao SET valor='tr10ID' WHERE chave='sender.tr10_inscricao_situacao'"); c.commit()
+        r = adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "selecionada", "mensagem": "As aulas começam em 10/03."}).json()
+        url, kw = chamadas[-1] if chamadas else ("", {})
+        v = (kw.get("json") or {}).get("variables") or {}
+        ver("selecionada: e-mail TR10 do Sender.net para a pessoa", r["aviso"] and r["aviso"]["enviado"] and url.endswith("/message/tr10ID/send") and kw["json"]["to"]["email"] == "ana@exemplo.org", str(r))
+        ver("variáveis: nome, curso, turma, situação, recado", v.get("nome") == "Ana" and v.get("curso") == "Residência em Acervos" and v.get("turma") == "turma 2027"
+            and v.get("situacao") == "Selecionada" and v.get("mensagem") == "As aulas começam em 10/03." and "selecionada" in v.get("texto", ""), str(v)[:200])
+        ver("evento aviso_situacao registrado", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='inscricao' AND tipo='aviso_situacao'").fetchone()[0] == 1)
+        n = len(chamadas)
+        adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "selecionada", "nota": "ok"})
+        ver("mesma situação (só a nota mudou): não manda de novo", len(chamadas) == n)
+        r = adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "nao_selecionada", "avisar": False}).json()
+        ver("'Avisar por e-mail' desmarcado: muda sem mandar", sit(I1) == "nao_selecionada" and len(chamadas) == n and r["aviso"] is None)
+        adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "desistiu"})
+        ver("desistiu: não manda", len(chamadas) == n)
+        adm.patch(f"/api/inscricoes/{I2}", json={"situacao": "avisado"})
+        ver("'Avise-me' (interesse): não manda por aqui", len(chamadas) == n)
+        resp["v"] = Resp(500, {"success": False, "message": "erro tok-x"})
+        r = adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "em_analise"}).json()
+        ver("Sender recusa: a situação muda, a tela mostra o erro (sem o token)", sit(I1) == "em_analise" and r["aviso"]["enviado"] is False and "Sender.net" in r["aviso"]["erro"] and "tok-x" not in r["aviso"]["erro"], str(r))
+        ver("evento aviso_situacao_falhou", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='inscricao' AND tipo='aviso_situacao_falhou'").fetchone()[0] == 1)
+        site = []
+        class FakeWP:
+            def enviar_email_pedido(self, **kw): site.append(kw); return {"ok": True}
+        _wp.WP = FakeWP
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='sender.tr10_inscricao_situacao'")
+        c.execute("UPDATE configuracao SET valor='senha-app' WHERE chave='wp.app_password'"); c.commit()
+        r = adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "selecionada"}).json()
+        ver("sem TR10: sai pelo e-mail do site", r["aviso"] and r["aviso"].get("canal") == "site" and site and site[-1]["para"] == "ana@exemplo.org" and "selecionada" in site[-1]["texto"], str(r))
+        ver("operador não muda inscrição (403)", op.patch(f"/api/inscricoes/{I1}", json={"situacao": "em_analise"}).status_code == 403)
+        print("\n".join(res))
     elif modo == "fotos_qnap":
         # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
         # mandar ler elas e já legendar como faz com todas"): a foto enviada pelo painel é gravada na pasta do projeto no acervo, no padrão do
@@ -15633,6 +15698,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Relatório do CAMP Vision: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Inscrição em curso: mudar a situação avisa a pessoa por e-mail")
+rc, out = rodar("inscricao_aviso", f"{tmp}/inscricao_aviso.db")
+if rc != 0: ok(False, f"teste inscricao_aviso não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Aviso da inscrição: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
 rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")
