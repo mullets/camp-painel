@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import auth, email_envio, uso_formularios
+from . import auth, email_envio, protocolo, uso_formularios
 from .db import connect
 
 router = APIRouter(prefix="/api", tags=["uso"])
@@ -98,7 +98,10 @@ def _filtro(q, de, ate, uso, fundo, material, testes: str | None = None, ids: li
         w.append(sql_teste())
     elif testes != "incluir":
         w.append("NOT " + sql_teste())
-    if q:
+    prot = protocolo.ler(q) if q else None
+    if prot:                            # protocolo do cadastro de download (CAMP-AAAA-DNNNNNN): a entrada do Fluent Forms
+        w.append("u.origem_id = ?" if prot["tipo"] == "download" else "0"); p += [prot["id"]] if prot["tipo"] == "download" else []
+    elif q:
         like = f"%{q.strip()}%"
         w.append("(u.nome LIKE ? OR u.email LIKE ? OR u.instituicao LIKE ? OR u.material_codigo LIKE ? OR u.uso LIKE ? OR COALESCE(i.titulo,p.titulo) LIKE ?)")
         p += [like] * 6
@@ -128,7 +131,7 @@ _ANTERIOR = """SELECT {col} FROM uso_download u2 WHERE u2.apagada=0 AND u2.id<>u
 
 
 def _sql_pedidos(w: str) -> str:
-    return f"""SELECT u.id, u.recebida_em, u.nome, u.email, u.instituicao, u.uso, u.material_codigo, u.pagina, u.anonimizada,
+    return f"""SELECT u.id, u.origem_id, u.recebida_em, u.importada_em, u.nome, u.email, u.instituicao, u.uso, u.material_codigo, u.pagina, u.anonimizada,
                       COALESCE(i.titulo, p.titulo) AS material_titulo,
                       ({_ANTERIOR.format(col='u2.id')}) AS repetido_de, ({_ANTERIOR.format(col='u2.recebida_em')}) AS repetido_de_em
                  FROM uso_download u {JUNCAO} WHERE {w}"""
@@ -159,6 +162,10 @@ def _lista(sql, ordem, pagina, por_pagina, q, de, ate, uso, fundo, material, tes
     try:
         w, p = _filtro(q, de, ate, uso, fundo, material, testes)
         itens, total, pagina, por = _pagina(con, sql(w), p, pagina, por_pagina, ordem)
+        for it in itens:
+            if "origem_id" in it:
+                it["protocolo"] = protocolo.download(it.pop("origem_id"), it.get("recebida_em") or it.pop("importada_em", None))
+                it.pop("importada_em", None)
         return {"itens": itens, "total": total, "pagina": pagina, "por_pagina": por}
     finally:
         con.close()
@@ -237,8 +244,9 @@ def exportar(visao: str = Query("pedidos"), ids: str | None = Query(None), q: st
         buf = io.StringIO()
         cw = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_ALL)
         if visao == "pedidos":
-            cw.writerow(["quando", "nome", "email", "telefone", "instituicao", "uso_declarado", "material_codigo", "material_titulo", "pagina_da_ficha"])
-            linhas = con.execute(f"""SELECT u.recebida_em, u.nome, u.email, u.telefone, u.instituicao, u.uso, u.material_codigo,
+            cw.writerow(["protocolo", "quando", "nome", "email", "telefone", "instituicao", "uso_declarado", "material_codigo", "material_titulo", "pagina_da_ficha"])
+            linhas = con.execute(f"""SELECT 'CAMP-' || COALESCE(NULLIF(substr(COALESCE(u.recebida_em, u.importada_em), 1, 4), ''), strftime('%Y','now')) || '-D' || printf('%06d', u.origem_id) AS protocolo,
+                                            u.recebida_em, u.nome, u.email, u.telefone, u.instituicao, u.uso, u.material_codigo,
                                             COALESCE(i.titulo, p.titulo) AS material_titulo, u.pagina
                                        FROM uso_download u {JUNCAO} WHERE {w} ORDER BY u.recebida_em DESC, u.id DESC""", p).fetchall()
         elif visao == "pessoas":
@@ -279,6 +287,7 @@ def detalhe(uid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(404, "Registro não encontrado")
         d = dict(r)
         d["resposta"] = json.loads(d.pop("resposta_json")) if d.get("resposta_json") else None
+        d["protocolo"] = protocolo.download(d["origem_id"], d.get("recebida_em") or d.get("importada_em"))
         d["emails"] = [dict(x) for x in con.execute("SELECT enviado_em, enviado_por, assunto, ok FROM uso_email WHERE uso_id=? ORDER BY id DESC LIMIT 20", (uid,))]
         rep = con.execute(f"SELECT ({_ANTERIOR.format(col='u2.id')}), ({_ANTERIOR.format(col='u2.recebida_em')}) FROM uso_download u WHERE u.id=?", (uid,)).fetchone()
         d["repetido_de"], d["repetido_de_em"] = (rep[0], rep[1]) if rep else (None, None)

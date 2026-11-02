@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, protocolo
 from .config import settings
 from .db import connect
 from .log_tecnico import registrar
@@ -109,14 +109,14 @@ def coletar(con=None, wp=None) -> dict:
                 tipo = "interesse" if d.get("tipo") == "interesse" else "inscricao"
                 con.execute(
                     """INSERT OR IGNORE INTO inscricao (site_id, tipo, curso_id, situacao, curso, turma, nome, email, telefone, cidade, formacao, motivacao, disponivel,
-                           portfolio, soube, emkt, cv_arquivo, cv_nome, cv_tamanho, texto, criado_no_site)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           portfolio, soube, emkt, cv_arquivo, cv_nome, cv_tamanho, texto, criado_no_site, protocolo)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (sid, tipo, _txt(d.get("curso_id"), 80).lower(), "aguardando" if tipo == "interesse" else "nova", _txt(d.get("curso"), 160), _txt(d.get("turma"), 80), _txt(d.get("nome"), 120) or "(sem nome)", _txt(d.get("email"), 200) or None,
                      _txt(d.get("telefone"), 40) or None, _txt(d.get("cidade"), 80) or None, _txt(d.get("formacao"), 160) or None,
                      _txt(d.get("motivacao"), 2500) or None, d.get("disponivel") if d.get("disponivel") in ("sim", "parte") else "",
                      _txt(d.get("portfolio"), 300) or None, _txt(d.get("soube"), 120) or None, 1 if d.get("emkt") is True else 0,
                      arquivo, _txt((cv_info or {}).get("nome"), 120) or None if arquivo else None, tamanho, _txt(d.get("texto"), 8000) or None,
-                     _txt(d.get("criado_em"), 40) or None))
+                     _txt(d.get("criado_em"), 40) or None, protocolo.do_site(d.get("protocolo"), sid, d.get("criado_em"))))
                 out["novas"] += 1
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('inscricao',?,'criada','site',?)",
                             (str(sid), json.dumps({"tipo": tipo, "curso": _txt(d.get("curso"), 160), "com_cv": bool(arquivo)}, ensure_ascii=False)))
@@ -177,6 +177,7 @@ def _linha(r) -> dict:
     d["emkt"] = bool(d.get("emkt"))
     d["curso"] = d.get("curso") or SEM_CURSO
     d["chave_curso"] = d.get("curso_id") or "nome:" + d["curso"]
+    d["protocolo"] = protocolo.do_site(d.get("protocolo"), d["site_id"], d.get("criado_no_site") or d.get("importado_em"))
     return d
 
 
@@ -198,7 +199,7 @@ def _filtros(tipo: str | None, curso_id: str | None, curso: str | None) -> tuple
 
 @router.get("/inscricoes")
 def listar(tipo: str | None = None, situacao: str | None = None, curso_id: str | None = None, curso: str | None = None,
-           u: dict = Depends(auth.exige("admin"))) -> dict:
+           q: str | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
     """Filtros combináveis: tipo (inscricao | interesse), curso e situação. `resumo` conta por situação dentro do tipo e do curso;
     `cursos` lista os cursos daquele tipo, com a chave do filtro, o nome e o total (e, no interesse, quantos aguardam aviso);
     `totais` conta cada tipo."""
@@ -223,6 +224,12 @@ def listar(tipo: str | None = None, situacao: str | None = None, curso_id: str |
             if situacao not in sits:
                 raise HTTPException(400, "Situação inválida")
             onde.append("situacao=?"); vals.append(situacao)
+        prot = protocolo.ler(q) if q else None
+        if prot:                         # protocolo da inscrição/Avise-me (CAMP-AAAA-NNNNNN = id no site)
+            onde.append("site_id=?" if prot["tipo"] == "site" else "0"); vals += [prot["id"]] if prot["tipo"] == "site" else []
+        elif q and q.strip():
+            like = f"%{q.strip()}%"
+            onde.append("(nome LIKE ? OR email LIKE ? OR cidade LIKE ? OR formacao LIKE ?)"); vals += [like] * 4
         rows = con.execute(f"SELECT * FROM inscricao WHERE {' AND '.join(onde)} ORDER BY COALESCE(criado_no_site, importado_em) DESC, id DESC", vals).fetchall()
         ult = con.execute("SELECT quando, lidas, novas, confirmadas, erro FROM inscricao_coleta ORDER BY id DESC LIMIT 1").fetchone()
         return {"itens": [_linha(r) for r in rows], "resumo": resumo, "cursos": cursos, "totais": totais, "ultima_busca": dict(ult) if ult else None}

@@ -40,6 +40,33 @@ def _norm(v) -> str:
     return unicodedata.normalize("NFKD", str(v or "")).encode("ascii", "ignore").decode().lower()
 
 
+def _busca_protocolo(con, prot: dict, admin: bool) -> list[dict]:
+    """Resultados da busca global por protocolo. Inscrições e downloads têm dados pessoais: só para admin e master."""
+    from . import entrega, protocolo as pr
+    out: list[dict] = []
+    if prot["tipo"] in ("site", "painel"):
+        if prot["tipo"] == "site":
+            ids = [r[0] for r in con.execute("SELECT destino_id FROM pedido_site WHERE destino='solicitacao' AND site_id=?", (prot["id"],))]
+        else:
+            ids = [r[0] for r in con.execute("""SELECT id FROM solicitacao WHERE id=? AND id NOT IN
+                                                (SELECT destino_id FROM pedido_site WHERE destino='solicitacao' AND destino_id IS NOT NULL)""", (prot["id"],))]
+        prots = entrega.protocolos_pedidos(con, ids)
+        for r in con.execute(f"SELECT id, solicitante, situacao, recebida_em FROM solicitacao WHERE id IN ({','.join('?' * len(ids)) or 'NULL'})", ids):
+            out.append({"tipo": "pedido", "codigo": prots.get(r["id"]), "titulo": r["solicitante"] or "(sem nome)",
+                        "subtitulo": "Pedido de alta resolução · " + str(r["situacao"] or "").replace("_", " "), "rota": "solicitacoes", "abrir": r["id"]})
+    if prot["tipo"] == "site" and admin:
+        for r in con.execute("SELECT id, site_id, tipo, nome, curso, protocolo, criado_no_site, importado_em FROM inscricao WHERE site_id=?", (prot["id"],)):
+            pt = pr.do_site(r["protocolo"], r["site_id"], r["criado_no_site"] or r["importado_em"])
+            out.append({"tipo": "avise-me" if r["tipo"] == "interesse" else "inscrição", "codigo": pt, "titulo": r["nome"] or "(sem nome)",
+                        "subtitulo": r["curso"] or "", "rota": "inscricoes", "filtro": pt, "ins_tipo": r["tipo"], "abrir_inscricao": r["id"]})
+    if prot["tipo"] == "download" and admin:
+        for r in con.execute("SELECT id, origem_id, nome, material_codigo, recebida_em, importada_em FROM uso_download WHERE origem_id=? AND apagada=0", (prot["id"],)):
+            pt = pr.download(r["origem_id"], r["recebida_em"] or r["importada_em"])
+            out.append({"tipo": "download", "codigo": pt, "titulo": r["nome"] or "(dados apagados)", "subtitulo": "Cadastro de download" + (f" · {r['material_codigo']}" if r["material_codigo"] else ""),
+                        "rota": "uso", "filtro": pt, "abrir_uso": r["id"]})
+    return out
+
+
 @router.get("/busca")
 def busca_global(q: str, limite: int = 20, fundo: str | None = None, so: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """`fundo` (opcional): só projetos desse fundo (ex.: escolher o destino de "É de outro projeto…", que não pode ser de outro fundo).
@@ -49,6 +76,14 @@ def busca_global(q: str, limite: int = 20, fundo: str | None = None, so: str | N
     if not termo:
         return {"q": termo, "resultados": []}
     limite = max(5, min(limite, 40))
+    from . import protocolo as _pr
+    prot = _pr.ler(termo) if not so and not fundo else None
+    if prot:                     # 02/11/2026: protocolo (CAMP-AAAA-NNNNNN, -DNNNNNN, -PNNNNNN) leva direto ao pedido, inscrição ou download
+        con = connect()
+        try:
+            return {"q": termo, "resultados": _busca_protocolo(con, prot, auth.PAPEIS.get(u["papel"], 0) >= auth.PAPEIS["admin"])}
+        finally:
+            con.close()
     like = f"%{termo}%"
     nt = _norm(termo)
     nl = f"%{nt}%"

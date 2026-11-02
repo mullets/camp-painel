@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "sender_transacional", "inscricoes_residencia"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "sender_transacional", "inscricoes_residencia", "protocolos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -1672,6 +1672,83 @@ def filho(modo):
         r = x.post("/api/pedidos/coletar")
         ver("POST /api/pedidos/coletar (admin) responde mesmo sem o site configurado (erro registrado)", r.status_code == 200 and r.json()["erro"], r.text[:160])
         ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
+        c.close()
+        for l in res: print(l)
+    elif modo == "protocolos":
+        # 02/11/2026 · protocolos (contrato 1.7): formato único, o do site quando vem, calculado quando não vem; telas, busca e avisos.
+        init_db(); aplicar_migracoes()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        import json as _json
+        from app import auth, protocolo as pr, inscricoes as ins, entrega, coletor_pedidos_site as cps, alertas
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        ver("formata site, download e painel", pr.formatar(412, "2026-11-02T10:00:00+00:00") == "CAMP-2026-000412" and pr.download(1234, "2026-01-05") == "CAMP-2026-D001234" and pr.formatar(7, "2025-03-01", "P") == "CAMP-2025-P000007")
+        ver("lê com ou sem hífens, maiúsc./minúsc.", pr.ler("camp 2026 000412") == {"tipo": "site", "ano": "2026", "id": 412} and pr.ler("CAMP-2026-D001234")["tipo"] == "download" and pr.ler("camp-2025-p000007")["tipo"] == "painel" and pr.ler("F009-P0012") is None and pr.ler("CAMP-2026-000000") is None)
+        ver("vale o do site quando vem; senão calcula", pr.do_site("CAMP-2025-000412", 412, "2026-01-01") == "CAMP-2025-000412" and pr.do_site("lixo", 412, "2026-01-01") == "CAMP-2026-000412" and pr.do_site(None, 9, "2026") == "CAMP-2026-000009")
+        c = connect()
+        # pedidos do site: um com protocolo vindo do site (1.7), um de site antigo (sem o campo)
+        for d in ({"id": 412, "tipo": "alta-resolucao", "codigo": "F001-P0001", "nome": "Ana (exemplo)", "email": "ana@x.com", "finalidade": "pesquisa", "mensagem": "tese", "criado_em": "2026-11-02T12:00:00+00:00", "protocolo": "CAMP-2026-000412"},
+                  {"id": 77, "tipo": "consulta", "codigo": "F001-P0002", "nome": "Beto (exemplo)", "email": "beto@x.com", "criado_em": "2025-12-30T12:00:00+00:00"}):
+            c.execute("INSERT INTO pedido_site (site_id, tipo, codigo, criado_no_site, payload) VALUES (?,?,?,?,?)", (d["id"], d["tipo"], d["codigo"], d["criado_em"], _json.dumps(d)))
+        c.commit(); cps.processar_pendentes(c)
+        sid412 = c.execute("SELECT destino_id FROM pedido_site WHERE site_id=412").fetchone()[0]
+        sid77 = c.execute("SELECT destino_id FROM pedido_site WHERE site_id=77").fetchone()[0]
+        mao = c.execute("INSERT INTO solicitacao (solicitante, email, finalidade, origem, recebida_em) VALUES ('Caio (exemplo)','caio@x.com','outro','email','2026-10-01 10:00:00')").lastrowid
+        c.commit()
+        pp = entrega.protocolos_pedidos(c, [sid412, sid77, mao])
+        ver("pedido: o do site, o calculado (site antigo) e o do painel (P)", pp == {sid412: "CAMP-2026-000412", sid77: "CAMP-2025-000077", mao: f"CAMP-2026-P{mao:06d}"}, str(pp))
+        s412 = c.execute("SELECT * FROM solicitacao WHERE id=?", (sid412,)).fetchone()
+        ver("entrega.protocolo (TR09) usa o mesmo número", entrega.protocolo(c, s412) == "CAMP-2026-000412")
+        # inscrições: com e sem o campo
+        class Resp:
+            def __init__(s, code, dados=None, content=b""): s.status_code, s._d, s.content = code, dados, content
+            def json(s): return s._d
+        class H:
+            def get(s, path, params=None):
+                return Resp(200, [{"id": 950, "tipo": "interesse", "curso_id": "oficinas-tecnicas", "curso": "Oficinas técnicas", "nome": "Eva (exemplo)", "email": "eva@x.com", "cv": None, "criado_em": "2026-11-02T13:00:00+00:00", "protocolo": "CAMP-2026-000950"},
+                                  {"id": 951, "curso": "Residência em Acervos de Arquitetura", "nome": "Fábio (exemplo)", "email": "fabio@x.com", "cv": None, "criado_em": "2026-11-02T13:05:00+00:00"}])
+            def post(s, path, json=None): return Resp(200, {"confirmados": json["ids"], "ja_confirmados": []})
+        class WPF:
+            h = H()
+        ins.coletar(c, WPF())
+        ver("inscrição guarda o protocolo do site", c.execute("SELECT protocolo FROM inscricao WHERE site_id=950").fetchone()[0] == "CAMP-2026-000950")
+        # downloads
+        c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email, uso, material_codigo) VALUES (4, 1234, '2026-11-01 09:00:00', 'Gil (exemplo)', 'gil@x.com', 'pesquisa', 'F001-P0001')")
+        c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email, uso, material_codigo) VALUES (4, 1240, '2026-11-01 10:00:00', 'Hana (exemplo)', 'hana@x.com', 'pesquisa', 'F001-P0002')")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Lei", "lei@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        it = {i["id"]: i["protocolo"] for i in x.get("/api/solicitacoes?situacao=todos").json()["itens"]}
+        ver("tela de pedidos mostra o protocolo de cada pedido", it == pp, str(it))
+        ver("filtro de pedidos acha pelo protocolo sem hífens", [i["id"] for i in x.get("/api/solicitacoes?situacao=todos&q=camp2026000412").json()["itens"]] == [sid412])
+        ver("filtro de pedidos acha o do painel (P) e por nome", [i["id"] for i in x.get(f"/api/solicitacoes?situacao=todos&q=CAMP-2026-P{mao:06d}").json()["itens"]] == [mao] and [i["id"] for i in x.get("/api/solicitacoes?situacao=todos&q=Beto").json()["itens"]] == [sid77])
+        ver("protocolo de download não acha pedido", x.get("/api/solicitacoes?situacao=todos&q=CAMP-2026-D000412").json()["itens"] == [])
+        iv = {i["site_id"]: i["protocolo"] for i in x.get("/api/inscricoes?tipo=interesse").json()["itens"] + x.get("/api/inscricoes").json()["itens"]}
+        ver("inscrições: o do site e o calculado", iv == {950: "CAMP-2026-000950", 951: "CAMP-2026-000951"}, str(iv))
+        ver("inscrições: busca por protocolo", [i["site_id"] for i in x.get("/api/inscricoes?q=CAMP 2026 000951").json()["itens"]] == [951])
+        us = x.get("/api/uso").json()["itens"]
+        ver("downloads: protocolo D na lista", sorted(i["protocolo"] for i in us) == ["CAMP-2026-D001234", "CAMP-2026-D001240"], str(us)[:200])
+        f = x.get("/api/uso?q=camp-2026-d001234").json()["itens"]
+        ver("downloads: busca por protocolo acha só aquele", [i["nome"] for i in f] == ["Gil (exemplo)"], str(f)[:200])
+        uid = f[0]["id"]
+        ver("downloads: protocolo no detalhe e no CSV", x.get(f"/api/uso/{uid}").json()["protocolo"] == "CAMP-2026-D001234" and "CAMP-2026-D001240" in x.get("/api/uso/exportar.csv").text)
+        b = x.get("/api/busca?q=CAMP-2026-000412").json()["resultados"]
+        ver("busca do topo: protocolo leva ao pedido", len(b) == 1 and b[0]["tipo"] == "pedido" and b[0]["abrir"] == sid412 and b[0]["rota"] == "solicitacoes", str(b))
+        b = x.get("/api/busca?q=camp2026000950").json()["resultados"]
+        ver("busca do topo: protocolo leva ao Avise-me", len(b) == 1 and b[0]["tipo"] == "avise-me" and b[0]["rota"] == "inscricoes" and b[0]["filtro"] == "CAMP-2026-000950", str(b))
+        b = x.get("/api/busca?q=CAMP-2026-D001240").json()["resultados"]
+        ver("busca do topo: protocolo leva ao download", len(b) == 1 and b[0]["tipo"] == "download" and b[0]["rota"] == "uso", str(b))
+        y = TestClient(app, raise_server_exceptions=False); y.post("/api/auth/login", json={"email": "lei@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("leitura: a busca acha o pedido, mas não inscrição nem download (dados pessoais)", [r["tipo"] for r in y.get("/api/busca?q=CAMP-2026-000412").json()["resultados"]] == ["pedido"] and y.get("/api/busca?q=CAMP-2026-000950").json()["resultados"] == [] and y.get("/api/busca?q=CAMP-2026-D001240").json()["resultados"] == [])
+        enviados = []
+        for k_, v_ in (("smtp.host", "smtp.teste"), ("smtp.usuario", "painel@camp.arq.br"), ("smtp.senha", "x"), ("avisos.email", "equipe@camp.arq.br")):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        c.commit()
+        def falso(smtp, para, titulo, corpo, **kw): enviados.append({"para": para, "titulo": titulo, "corpo": corpo})   # SMTP falso
+        alertas.avisar_pedido_novo(c, sid412, enviar=falso)
+        ver("aviso de pedido novo cita o protocolo", any("Protocolo: CAMP-2026-000412" in str(e) for e in enviados), str(enviados)[:300])
         c.close()
         for l in res: print(l)
     elif modo == "inscricoes_residencia":
@@ -15083,6 +15160,14 @@ else:
 print("124b) Inscrições da Residência vindas do site, com o currículo em PDF (contrato 1.6)")
 rc, out = rodar("inscricoes_residencia", f"{tmp}/ins.db")
 if rc != 0: ok(False, f"teste das inscrições não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("124c) Protocolos: pedidos, inscrições e downloads, na tela, na busca e nos avisos (contrato 1.7)")
+rc, out = rodar("protocolos", f"{tmp}/prot.db")
+if rc != 0: ok(False, f"teste dos protocolos não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
