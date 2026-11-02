@@ -341,12 +341,13 @@ def textos(con, s, arquivos: list[dict], link_pagina: str, expira_em: str, mensa
 
 
 # ---------------------------------------------------------------- envio
-def _enviar_sender(con, para: str, nome: str, variaveis: dict) -> str:
-    token, campanha = _cfg(con, "sender.token"), _cfg(con, "sender.campanha_entrega")
+def _enviar_sender(con, para: str, nome: str, variaveis: dict, chave_campanha: str = "sender.campanha_entrega") -> str:
+    """Um e-mail transacional do Sender.net. `chave_campanha`: a configuração com o ID do e-mail (padrão: o da entrega, TR09)."""
+    token, campanha = _cfg(con, "sender.token"), _cfg(con, chave_campanha)
     if not token or not campanha:
-        raise EnvioErro("O Sender.net não está configurado (sender.token e sender.campanha_entrega em Configurações)")
+        raise EnvioErro(f"O Sender.net não está configurado (sender.token e {chave_campanha} em Configurações)")
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", campanha):
-        raise EnvioErro("sender.campanha_entrega não parece um ID do Sender.net")
+        raise EnvioErro(f"{chave_campanha} não parece um ID do Sender.net")
     try:
         r = httpx.post(f"{SENDER_URL}/message/{campanha}/send", timeout=30,
                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "Content-Type": "application/json"},

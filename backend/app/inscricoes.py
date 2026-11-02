@@ -294,6 +294,19 @@ def detalhe(iid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
 class EdicaoInscricao(BaseModel):
     situacao: str | None = None
     nota: str | None = None
+    avisar: bool = True                  # 02/11: mudou para em análise/selecionada/não selecionada → e-mail à pessoa (dá para desmarcar)
+    mensagem: str | None = None          # recado opcional no e-mail do aviso
+
+
+@router.get("/inscricoes/{iid}/aviso")
+def previa_aviso(iid: int, situacao: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """O e-mail que a pessoa recebe se a situação mudar para `situacao` (para a tela mostrar antes de salvar)."""
+    from . import inscricoes_aviso
+    con = connect()
+    try:
+        return inscricoes_aviso.previa(con, _uma(con, iid), situacao)
+    finally:
+        con.close()
 
 
 @router.patch("/inscricoes/{iid}")
@@ -316,7 +329,12 @@ def editar(iid: int, d: EdicaoInscricao, u: dict = Depends(auth.exige("admin")))
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('inscricao',?,'editada',?,?)",
                         (str(r["site_id"]), u["email"], json.dumps(mud, ensure_ascii=False)))
             con.commit()
-        return {"ok": True}
+        aviso = None
+        if d.situacao is not None and d.situacao != r["situacao"] and r["tipo"] == "inscricao" and d.avisar:
+            from . import inscricoes_aviso
+            if d.situacao in inscricoes_aviso.AVISA:
+                aviso = inscricoes_aviso.enviar(con, _uma(con, iid), d.situacao, d.mensagem or "", u)
+        return {"ok": True, "aviso": aviso}
     finally:
         con.close()
 
