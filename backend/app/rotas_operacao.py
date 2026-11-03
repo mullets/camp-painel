@@ -260,7 +260,7 @@ def analytics_ligado(con) -> bool:
     Só lê a configuração: nada de rede."""
     v = {r[0]: (r[1] or "").strip() for r in con.execute(
         "SELECT chave, valor FROM configuracao WHERE chave IN ('ga4.propriedade','ga4.conta_servico','analytics.site_kit')")}
-    return bool(v.get("ga4.propriedade") and v.get("ga4.conta_servico")) or v.get("analytics.site_kit") == "1"
+    return bool(v.get("ga4.conta_servico")) or v.get("analytics.site_kit") == "1"   # 03/11: a propriedade o painel acha sozinho
 
 
 def _analytics_desligado() -> dict:
@@ -327,6 +327,11 @@ def _analytics_calcular() -> dict:
     try:
         c0 = connect()
         try:
+            try:   # 03/11: com a chave, a propriedade (vazia ou um G-… no lugar) é descoberta e gravada sozinha
+                from . import visitas as _vis
+                _vis.preparar(c0)
+            except Exception:  # noqa: BLE001
+                pass
             cfg = ga4_direto.configurado(c0)
         finally:
             c0.close()

@@ -3226,6 +3226,12 @@ Pedido do Rafael (03/11/2026): "para colocar o analytics no nosso painel, adapte
   - **Primeira coleta:** busca `visitas.dias_iniciais` dias (padrão 90, máximo 480).
   - **Coletas seguintes:** buscam de novo os últimos 3 dias do GA4 e os últimos 4 do Search Console, porque o Google ainda ajusta esses números. O que é mais velho não muda. Nada se duplica: o período recoletado é apagado e gravado de novo numa transação.
   - **Erros:** se uma fonte falha, a outra segue. O erro fica em `visita_coleta` e aparece na tela.
+- **Preenche sozinho** (`visitas.preparar`, 03/11, Rafael: "já preencha tudo que sabe que tem"): com a chave da conta de serviço, o painel descobre e grava o resto.
+  - **`ga4.propriedade`:** pela Admin API (`accountSummaries` + fluxos). Escolhe o fluxo cujo G-… é o que foi colado, ou cujo endereço é o domínio do site, ou a única propriedade.
+  - **`sc.site`:** pela lista de sites do Search Console, `sc-domain:` primeiro.
+  - Também roda antes do resumo ao vivo (`/api/analytics`) e do diagnóstico.
+- **Sem a chave:** o coletor usa o **Site Kit** do site (`analytics-4/data/report` e `search-console/data/searchanalytics`), com o usuário do painel no site.
+- **Falha antes do Google** (nada ligado, chave colada errada): fica em `visita_coleta`. A tela mostra "Por que ainda não há visitas" e abre o diagnóstico sozinha (admin).
 - **Tabelas** (migração 209): `visita_coleta`, `visita_dia`, `visita_dimensao`, `visita_periodo`, `busca_google`.
 - **Rotas** (`rotas_visitas.py`):
   - `GET /api/visitas?periodo=7d|28d|90d|mes|mes_anterior` (ou `de`/`ate`): perfil leitura. A chave da conta nunca sai do servidor.
