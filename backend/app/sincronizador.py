@@ -16,7 +16,7 @@ import traceback
 import threading
 
 from .db import connect
-from .wp import WP, detectar_codigo, metadados_texto
+from .wp import WP, detectar_codigo, endereco_da_pagina, metadados_texto
 from .imagens import documento_do_item, resolver_anexos, thumb_do_item
 
 
@@ -352,7 +352,7 @@ def _executar_impl(gravar_espelho: bool = True, log=print, tipo: str = "auto") -
                 titulo = (pg.get("title") or {}).get("rendered", "") if isinstance(pg.get("title"), dict) else str(pg.get("title"))
                 cod, _, _ = detectar_codigo(pg.get("slug", ""), titulo)
                 con.execute("INSERT OR REPLACE INTO wp_pagina (id, titulo, slug, url, status, pai_id, codigo_detectado, json) VALUES (?,?,?,?,?,?,?,?)",
-                            (pg["id"], titulo, pg.get("slug"), pg.get("link"), pg.get("status"), pg.get("parent"), cod,
+                            (pg["id"], titulo, pg.get("slug"), endereco_da_pagina(pg), pg.get("status"), pg.get("parent"), cod,   # 03/11: rascunho com o endereço definitivo
                              json.dumps({k: pg.get(k) for k in ("id", "slug", "link", "status", "parent", "modified")}, ensure_ascii=False)))
                 n["paginas"] += 1
             if gravar_espelho and not desde:   # UX-46: a incremental não vê remoção, então não apaga nada

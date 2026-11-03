@@ -5146,6 +5146,26 @@ def filho(modo):
         adm.put("/api/fundos/F085/direitos", json={"situacao": "autorizado", "titular": "Família", "documento_autorizacao": "Termo 2"})
         r = adm.post("/api/fundos/F085/arquiteto-site/publicar")
         ver("página com o mesmo nome FORA de /acervo/arquitetos/ não é publicada (409: o site ainda não criou)", r.status_code == 409 and not any(x == ("status", 78, "publish") for x in chamadas), r.text[:200])
+        # 03/11 (F001 Arnaldo Martino): página nova em RASCUNHO vem do WordPress com o endereço provisório (?page_id=) e o modelo
+        # do endereço definitivo em permalink_template. O painel tem de achá-la e publicá-la (antes: "o site não criou a página").
+        k0 = connect(); k0.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F001','Arnaldo Martino','ARM',1,901)"); k0.commit(); k0.close()
+        paginas["arnaldo-martino"] = [{"id": 91, "slug": "arnaldo-martino", "status": "draft", "link": "https://camp.arq.br/?page_id=91",
+                                       "permalink_template": "https://camp.arq.br/acervo/arquitetos/%pagename%/", "title": {"raw": "Arnaldo Martino"}}]
+        paginas["outro-arquiteto"] = [{"id": 78, "slug": "outro-arquiteto", "status": "draft", "link": "https://camp.arq.br/?page_id=78",
+                                       "permalink_template": "https://camp.arq.br/outra-area/%pagename%/"}]
+        _mudar_antigo = WPArq.mudar_status_pagina
+        WPArq.mudar_status_pagina = lambda self, pid, st: chamadas.append(("status", pid, st)) or {"id": pid, "status": st, "link": f"https://camp.arq.br/acervo/arquitetos/{'arnaldo-martino' if pid == 91 else 'x'}/"}
+        adm.put("/api/fundos/F001/direitos", json={"situacao": "autorizado", "titular": "Família", "documento_autorizacao": "Termo 3"})
+        r = adm.post("/api/fundos/F001/arquiteto-site/publicar"); j = r.json()
+        ver("rascunho novo (endereço ?page_id=) é achado pelo modelo de endereço e publicado", r.status_code == 200 and ("status", 91, "publish") in chamadas
+            and j.get("url") == "https://camp.arq.br/acervo/arquitetos/arnaldo-martino/", r.text[:200])
+        r = adm.post("/api/fundos/F085/arquiteto-site/publicar")
+        ver("rascunho cujo modelo de endereço é FORA de /acervo/arquitetos/ continua não publicado", r.status_code == 409 and ("status", 78, "publish") not in chamadas, r.text[:200])
+        WPArq.mudar_status_pagina = _mudar_antigo
+        from app.wp import endereco_da_pagina
+        ver("espelho: rascunho guarda o endereço definitivo (não o ?page_id=)", endereco_da_pagina(paginas["arnaldo-martino"][0]) == "https://camp.arq.br/acervo/arquitetos/arnaldo-martino/"
+            and endereco_da_pagina({"link": "https://camp.arq.br/acervo/arquitetos/x/"}) == "https://camp.arq.br/acervo/arquitetos/x/"
+            and endereco_da_pagina({"link": "https://camp.arq.br/?page_id=5"}) == "https://camp.arq.br/?page_id=5")
         # o "Publicar" do projeto publica junto a página do arquiteto (sem ela, o projeto não aparece)
         from app.publicacao import condicoes_projeto
         pr = k.execute("SELECT * FROM projeto WHERE codigo='F086-P0001'").fetchone()
