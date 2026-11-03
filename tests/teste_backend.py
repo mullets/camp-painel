@@ -14,6 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS |= {"ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -14366,7 +14367,26 @@ def filho(modo):
         ver("simular de novo: a folha já reprocessada fica de fora (0 analisadas)", out.get("analisadas") == 0, str(out))
         for l in res: print(l)
         c.close()
+    elif modo == "ux69_boot":
+        # UX-69: o painel ficava parado em "Montando o painel…" com "Dados de exemplo… nada aqui é real" (navegador embutido do app).
+        # O comportamento é provado no navegador (tests/navegador_ux69_boot.js: 500, localStorage bloqueado, APIs ausentes, exceção no
+        # começo, resposta que nunca chega); aqui, a guarda rápida de que as proteções continuam no código (roda no atualizar.sh).
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        i_script = html.find("<script>\n")
+        ver("armazenamento bloqueado não para o script: localStorage/sessionStorage trocados por memória antes de qualquer uso",
+            "Object.defineProperty(window,n,{configurable:true,value:mem()})" in html and 0 <= i_script < html.find("for(const n of ['localStorage','sessionStorage'])") < html.find("localStorage.getItem("))
+        ver("'Dados de exemplo… nada aqui é real' não existe mais (nunca aparece para quem está logado)",
+            "Dados de exemplo" not in html and "nada aqui é real" not in html)
+        ver("erro no começo vira mensagem com 'Tentar de novo' (bootErro + window error + aplicarUsuario protegido)",
+            "function bootErro(e)" in html and "window.addEventListener('error',e=>{if(!window.CAMP_BOOT_OK" in html
+            and "function aplicarUsuario(u){try{aplicarUsuario0(u)" in html and 'onclick="location.reload()">Tentar de novo<' in html)
+        ver("o Painel tem tempo-limite na primeira montagem e o erro diz 'Tentar de novo'",
+            "+window.CAMP_BOOT_LIMITE_MS||20000" in html and 'onclick="carregarPainel()">Tentar de novo<' in html and "Tentar novamente" not in html[html.find("function painelErroHTML"):html.find("function painelErroHTML") + 400])
+        for l in res: print(l)
     return 0
+
 
 if "--filho" in sys.argv:
     sys.exit(filho(sys.argv[2]))
@@ -16064,6 +16084,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sincronização incremental: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Painel não trava ao montar (UX-69): armazenamento bloqueado, erro no começo, tempo-limite, sem 'Dados de exemplo'")
+rc, out = rodar("ux69_boot", f"{tmp}/ux69_boot.db")
+if rc != 0: ok(False, f"teste ux69_boot não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Montar o painel: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
