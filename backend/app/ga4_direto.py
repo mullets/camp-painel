@@ -14,8 +14,11 @@ import time
 import httpx
 
 ESCOPO = "https://www.googleapis.com/auth/analytics.readonly"
+ESCOPO_SC = "https://www.googleapis.com/auth/webmasters.readonly"     # 03/11: Search Console (só leitura)
 API = "https://analyticsdata.googleapis.com/v1beta"
-_TOKEN: dict = {"chave": None, "token": None, "expira": 0.0}
+API_ADMIN = "https://analyticsadmin.googleapis.com/v1beta"             # 03/11: conferir a propriedade e os fluxos (G-…)
+API_SC = "https://searchconsole.googleapis.com/webmasters/v3"
+_TOKENS: dict = {}                                                       # (conta, escopo) -> {token, expira}
 
 
 def _cfg(con, chave: str) -> str:
@@ -40,21 +43,23 @@ def configurado(con) -> dict | None:
     return {"propriedade": prop, "conta": conta}
 
 
-def _token(conta: dict, cliente: httpx.Client) -> str:
-    chave = conta["client_email"] + conta.get("private_key_id", "")
-    if _TOKEN["chave"] == chave and _TOKEN["token"] and time.time() < _TOKEN["expira"] - 60:
-        return _TOKEN["token"]
+def _token(conta: dict, cliente: httpx.Client, escopo: str = ESCOPO) -> str:
+    """Token OAuth temporário (1 h) da conta de serviço, só de leitura, um por escopo (Analytics, Search Console)."""
+    chave = (conta["client_email"] + conta.get("private_key_id", ""), escopo)
+    t = _TOKENS.get(chave)
+    if t and time.time() < t["expira"] - 60:
+        return t["token"]
     import jwt   # pyjwt; assinatura RS256 usa o pacote cryptography
     agora = int(time.time())
     uri = conta.get("token_uri") or "https://oauth2.googleapis.com/token"
-    afirmacao = jwt.encode({"iss": conta["client_email"], "scope": ESCOPO, "aud": uri, "iat": agora, "exp": agora + 3600},
+    afirmacao = jwt.encode({"iss": conta["client_email"], "scope": escopo, "aud": uri, "iat": agora, "exp": agora + 3600},
                            conta["private_key"], algorithm="RS256", headers={"kid": conta.get("private_key_id")} if conta.get("private_key_id") else None)
     r = cliente.post(uri, data={"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": afirmacao})
     if r.status_code >= 400:
         raise RuntimeError(f"O Google recusou a conta de serviço ({r.status_code}): {_msg(r)}")
     j = r.json()
-    _TOKEN.update(chave=chave, token=j["access_token"], expira=time.time() + int(j.get("expires_in", 3600)))
-    return _TOKEN["token"]
+    _TOKENS[chave] = {"token": j["access_token"], "expira": time.time() + int(j.get("expires_in", 3600))}
+    return j["access_token"]
 
 
 def _msg(r) -> str:
@@ -94,3 +99,58 @@ class GA4:
         j = self._post("runRealtimeReport", {"metrics": [{"name": "activeUsers"}]})
         rows = j.get("rows") or []
         return int(rows[0]["metricValues"][0]["value"]) if rows else 0
+
+
+    # ---- 03/11 (visitas com histórico): consulta completa com filtro e paginação, e a Admin API
+    def run_report(self, corpo: dict, limite_total: int = 100000) -> list[dict]:
+        """runReport com o corpo inteiro (dimensionFilter etc.), paginado; devolve as linhas como {dimensão|métrica: valor}."""
+        out, offset = [], 0
+        while True:
+            j = self._post("runReport", {**corpo, "limit": 10000, "offset": offset})
+            dims = [h["name"] for h in j.get("dimensionHeaders") or []]
+            mets = [h["name"] for h in j.get("metricHeaders") or []]
+            for r in j.get("rows") or []:
+                d = {n: (v.get("value") or "") for n, v in zip(dims, r.get("dimensionValues") or [])}
+                d.update({n: (v.get("value") or "0") for n, v in zip(mets, r.get("metricValues") or [])})
+                out.append(d)
+            total = int(j.get("rowCount") or 0)
+            offset += 10000
+            if offset >= total or offset >= limite_total or not j.get("rows"):
+                return out
+
+    def fluxos(self) -> list[dict]:
+        """Os fluxos de dados da propriedade (Admin API): o G-… e o endereço de cada um."""
+        r = self.h.get(f"{API_ADMIN}/properties/{self.prop}/dataStreams", headers={"Authorization": f"Bearer {_token(self.conta, self.h)}"})
+        if r.status_code >= 400:
+            raise RuntimeError(f"Admin API recusou ({r.status_code}): {_msg(r)}")
+        return [{"nome": s.get("displayName"), "tipo": s.get("type"), "id_medicao": (s.get("webStreamData") or {}).get("measurementId"),
+                 "endereco": (s.get("webStreamData") or {}).get("defaultUri")} for s in r.json().get("dataStreams") or []]
+
+
+class SearchConsole:
+    """Search Console API (searchAnalytics.query), com a MESMA conta de serviço. Ela precisa ser usuária da propriedade no Search
+    Console (Configurações → Usuários e permissões → adicionar o e-mail da conta, permissão Restrita)."""
+
+    def __init__(self, conta: dict, site: str, cliente: httpx.Client | None = None):
+        self.conta, self.site = conta, site.strip()
+        self.h = cliente or httpx.Client(timeout=60)
+
+    def consulta(self, de: str, ate: str, dimensoes: list[str], limite_total: int = 100000) -> list[dict]:
+        from urllib.parse import quote
+        url = f"{API_SC}/sites/{quote(self.site, safe='')}/searchAnalytics/query"
+        out, inicio = [], 0
+        while True:
+            r = self.h.post(url, json={"startDate": de, "endDate": ate, "dimensions": dimensoes, "rowLimit": 25000, "startRow": inicio,
+                                       "dataState": "final"},
+                            headers={"Authorization": f"Bearer {_token(self.conta, self.h, ESCOPO_SC)}"})
+            if r.status_code == 403:
+                raise RuntimeError(f"A conta de serviço {self.conta['client_email']} não tem acesso a {self.site} no Search Console: "
+                                   "Configurações → Usuários e permissões → adicionar esse e-mail (Restrito)")
+            if r.status_code >= 400:
+                raise RuntimeError(f"Search Console recusou ({r.status_code}): {_msg(r)}")
+            linhas = r.json().get("rows") or []
+            out += [{**dict(zip(dimensoes, l.get("keys") or [])), "cliques": int(l.get("clicks") or 0), "impressoes": int(l.get("impressions") or 0),
+                     "posicao": float(l.get("position") or 0)} for l in linhas]
+            inicio += 25000
+            if len(linhas) < 25000 or inicio >= limite_total:
+                return out

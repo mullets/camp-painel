@@ -3213,6 +3213,34 @@ Códigos de erro (`erro_codigo`) e o que fazer:
 
 ---
 
+### C.9.5 Visitas ao site com histórico (GA4 + Search Console → banco do painel)
+
+Pedido do Rafael (03/11/2026): "para colocar o analytics no nosso painel, adapte essa solução para nós" e "faça ele no dashboard". O caminho é: Google → coletor no painel → banco → tela. A tela não chama o Google: lê só o banco.
+
+- **Coletor** (`backend/app/visitas.py`, `coletar`): roda sozinho uma vez por dia depois de `visitas.coleta_hora` (padrão 6 h). Se der erro, tenta de novo 3 h depois. O botão "Buscar agora" (admin) roda em segundo plano. Só roda uma coleta por vez.
+  - **GA4** (`GA4.run_report`, paginado): busca usuários, sessões e visualizações por dia. Busca também, por dia, o canal, a origem/mídia, a página (com o título), a cidade e o aparelho.
+    - O filtro `ga4.dominio` (hostName, com e sem `www.`) separa o site público de outros sistemas.
+    - Pessoas únicas não se somam dia a dia. Por isso os períodos 7, 28 e 90 dias, este mês e mês passado vêm prontos do Google (`visita_periodo`).
+  - **Search Console** (`SearchConsole.consulta`, escopo `webmasters.readonly`, site em `sc.site`, ex.: `sc-domain:camp.arq.br`): pesquisas e páginas por dia (cliques, impressões, posição média).
+    - O Google omite pesquisas raras e entrega os dados com 2 a 3 dias de atraso.
+  - **Primeira coleta:** busca `visitas.dias_iniciais` dias (padrão 90, máximo 480).
+  - **Coletas seguintes:** buscam de novo os últimos 3 dias do GA4 e os últimos 4 do Search Console, porque o Google ainda ajusta esses números. O que é mais velho não muda. Nada se duplica: o período recoletado é apagado e gravado de novo numa transação.
+  - **Erros:** se uma fonte falha, a outra segue. O erro fica em `visita_coleta` e aparece na tela.
+- **Tabelas** (migração 209): `visita_coleta`, `visita_dia`, `visita_dimensao`, `visita_periodo`, `busca_google`.
+- **Rotas** (`rotas_visitas.py`):
+  - `GET /api/visitas?periodo=7d|28d|90d|mes|mes_anterior` (ou `de`/`ate`): perfil leitura. A chave da conta nunca sai do servidor.
+  - `POST /api/visitas/coletar`: admin.
+  - `GET /api/visitas/diagnostico`: admin. Confere a credencial, a propriedade numérica, o token, o acesso, o fluxo G-…, os dados, o filtro de domínio e o Search Console. Cada item vem com o que fazer.
+- **Tela:**
+  - Na Home ("Visitas ao site"): resumo de 28 dias, gráfico por dia, de onde chegam, o que buscaram e o botão "Ver tudo". Sem histórico, continua o resumo ao vivo de C.9.3.
+  - Menu Acompanhamento → **Visitas ao site** (tecla V): períodos, números, gráfico, canais, origem, cidades, aparelhos, páginas mais vistas e pesquisas no Google.
+- **Para ligar:**
+  1. No Google Cloud do projeto da conta de serviço, habilite **Google Analytics Data API**, **Google Analytics Admin API** e **Google Search Console API**.
+  2. GA4: conta de serviço como Leitor (C.9.1).
+  3. Search Console: Configurações → Usuários e permissões → adicionar o `client_email` (Restrito). Depois preencha `sc.site`.
+  4. Confira `ga4.dominio` (`camp.arq.br`).
+- **Testes:** modo `visitas_site` (Google falso com `httpx.MockTransport`) e `tests/navegador_visitas_site.js`.
+
 ## C.10 Relatórios para prestação de contas (`rotas_relatorios.py`)
 
 Tela "Relatórios" (todos veem, inclusive leitura).
