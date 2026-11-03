@@ -44,9 +44,13 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 
 /* layout */
 .app{display:grid;grid-template-columns:var(--side) 1fr;grid-template-rows:minmax(0,1fr);height:100%}   /* uma barra só: a linha da grade não cresce com o menu (menu alto fazia a página e o conteúdo rolarem juntos) */
-.side{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:4px;min-height:0;overflow-y:auto}
+.side{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;gap:4px;min-height:0}
+/* 03/11: só a lista do menu rola (tela baixa), com barra fina; o .side não recorta nada (o botão de recolher fica meio para fora) e os nomes não quebram */
+.side>.nav{min-height:0;overflow-y:auto;overflow-x:hidden;flex:0 1 auto;scrollbar-width:thin;margin-right:-8px;padding-right:8px}
+.nav button{white-space:nowrap}.nav button>span:not(.n){overflow:hidden;text-overflow:ellipsis}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
-.brand .mark{min-width:30px;padding:0 2px;height:30px;flex:none;border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:var(--fs-2xs);letter-spacing:.5px}
+.brand .mark{width:32px;height:30px;flex:none;display:grid;place-items:center}   /* 03/11: a logomarca da CAMP (antes: "CAMP" numa caixa) */
+.brand .mark-camp{width:32px;height:30px;fill:var(--ink)}
 .brand b{font-weight:600;display:block;line-height:1.2}
 .brand small{color:var(--ink3)}
 .nav{display:flex;flex-direction:column;gap:2px}
@@ -752,6 +756,7 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
 }
 @media (max-width:720px){
   .app{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+  .side>.nav{overflow:visible;margin-right:0;padding-right:0}
   .side{order:2;flex-direction:row;padding:6px 8px;border-right:0;border-top:1px solid var(--line);overflow-x:auto;overflow-y:hidden;gap:0;position:sticky;bottom:0;background:var(--surface);padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
   .brand,.side .foot,.nav .grp{display:none}
   .nav{flex-direction:row;gap:2px;width:100%}
@@ -1161,7 +1166,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 <body>
 <div class="app">
 <aside class="side"><button type="button" class="collapse" id="collapse" title="Recolher menu ([ ou ⌘/Ctrl + B)" aria-label="Recolher menu ([ ou ⌘/Ctrl + B)" aria-expanded="true" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
-  <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
+  <div class="brand"><div class="mark" title="Casa da Arquitetura Moderna Paulista"><svg class="mark-camp" viewBox="0 0 48 44" role="img" aria-label="CAMP"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></div><div><b>Acervos</b><small>administração interna</small></div></div>
   <nav class="nav" id="nav">
     <!-- UX-28: menu pela ordem do trabalho. Topo (as filas do dia, sempre à vista) · Acervo · Público · Acompanhamento · Administração · Ajuda; o resto no "Mais". Nome do menu = título da página -->
     <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Precisa de você<span class="n" id="n-gente" hidden></span></button>
@@ -1640,7 +1645,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="login" id="login"><form class="box" onsubmit="fazerLogin(event)">
-  <div class="brand"><div class="mark">CAMP</div><div><b>Acervos</b><small>administração interna</small></div></div>
+  <div class="brand"><div class="mark" title="Casa da Arquitetura Moderna Paulista"><svg class="mark-camp" viewBox="0 0 48 44" role="img" aria-label="CAMP"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></div><div><b>Acervos</b><small>administração interna</small></div></div>
   <label class="field">E-mail<input id="lg-email" type="email" autocomplete="username" required></label>
   <label class="field">Senha<span class="senha-linha"><input id="lg-senha" type="password" autocomplete="current-password" required><button type="button" class="olho" data-olho aria-label="Mostrar a senha" aria-pressed="false" title="Mostrar a senha">👁</button></span></label>
   <label class="field" id="lg-totp-wrap" style="display:none">Código do autenticador<input id="lg-totp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code"></label>

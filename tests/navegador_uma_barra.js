@@ -17,15 +17,22 @@ const chk = (ok, msg, det = '') => { linhas.push((ok ? 'ok    ' : 'FALHA ') + ms
     for (const tela of ['', '#problemas']) {
       await pg.goto(BASE + '/' + tela); await pg.reload(); await pg.waitForTimeout(1500);
       const r = await pg.evaluate(() => {
-        const se = document.scrollingElement, main = document.querySelector('.main'), side = document.querySelector('.side');
+        const se = document.scrollingElement, main = document.querySelector('.main'), side = document.querySelector('.side'), nav = document.querySelector('.side>.nav');
+        const col = document.getElementById('collapse'), cr = col ? col.getBoundingClientRect() : null;
+        const colVisivel = !cr || cr.width === 0 || document.elementFromPoint(cr.left + cr.width * 0.8, cr.top + cr.height / 2)?.closest('#collapse') !== null;
+        const quebra = [...document.querySelectorAll('.side>.nav button')].filter(b => b.offsetParent && b.getBoundingClientRect().height > 44).map(b => b.textContent.trim().slice(0, 20));
         return { pagina: se.scrollHeight - innerHeight, main: main.scrollHeight - main.clientHeight, mainAlt: Math.round(main.getBoundingClientRect().height),
-                 side: Math.round(side.getBoundingClientRect().bottom), sideRola: side.scrollHeight > side.clientHeight + 1, sideOy: getComputedStyle(side).overflowY };
+                 side: Math.round(side.getBoundingClientRect().bottom), sideRola: nav.scrollHeight > nav.clientHeight + 1, sideOy: getComputedStyle(nav).overflowY, sideRecorta: getComputedStyle(side).overflowX !== 'visible', colVisivel, quebra };
       });
       const nome = `${w}x${h} ${tela || 'home'}`;
       chk(r.pagina <= 0, `${nome}: a página não rola (só o conteúdo)`, `sobra ${r.pagina}px`);
       chk(r.mainAlt <= h, `${nome}: o conteúdo cabe na altura da tela`, `${r.mainAlt}px`);
       chk(r.side <= h + 1, `${nome}: o menu termina dentro da tela`, `fundo em ${r.side}px`);
-      if (w > 720 && r.sideRola) chk(r.sideOy === 'auto', `${nome}: menu mais alto que a tela rola dentro dele`, r.sideOy);
+      if (w > 720 && r.sideRola) chk(r.sideOy === 'auto', `${nome}: menu mais alto que a tela: a lista rola dentro dele`, r.sideOy);
+      if (w > 720) {
+        chk(!r.sideRecorta && r.colVisivel, `${nome}: o botão de recolher o menu aparece inteiro (o menu não recorta)`, JSON.stringify({ rec: r.sideRecorta, vis: r.colVisivel }));
+        chk(!r.quebra.length, `${nome}: os nomes do menu não quebram em duas linhas`, r.quebra.join(' | '));
+      }
     }
   }
   chk(!erros.length, 'nenhum erro de JavaScript', erros.join(' | '));
