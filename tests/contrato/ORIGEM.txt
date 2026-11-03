@@ -1,4 +1,4 @@
 Cópia LITERAL de campvision-new/docs/contrato/exemplos/ (e de docs/contrato-painel.md), gerada pelo próprio CV2 (python -m tests.contrato_exemplos).
-Origem: github.com/mullets/campvision-new, contrato 2.6 de 02/11/2026 (commit 823fe36, branch claude/eventos-no-acervo — diário de eventos em ACERVOS_CAMP/_campvision/eventos.jsonl).
+Origem: github.com/mullets/campvision-new, contrato 2.7 de 03/11/2026 (commit 3c462ff, branch claude/ux-cv-orientacao-leitura — UX-60: resposta quebrada consertada/tentada de novo; execucao.novas_tentativas, execucao.folhas_resposta_quebrada, execucao.campos_descartados, documentos[].resposta_quebrada e a linha "resposta do modelo quebrada: N campo(s)…" em erros.json).
 NÃO editar à mão. Para atualizar: copiar de novo do campvision-new e trocar o commit acima. Os testes do painel (bloco contrato_cv2) leem ESTES arquivos.
-Ordem de deploy: tanto faz. O arquivo novo (_campvision/eventos.jsonl) é opcional: o painel 2.6 sem ele mostra "o CAMP Vision ainda não copiou o diário"; o CV2 2.6 com painel 2.5 só tem o aviso de versão diferente em Estações.
+Ordem de deploy: tanto faz. Os campos novos são opcionais: o painel 2.7 com um CV2 2.6 só não vê as contagens novas; o CV2 2.7 com painel 2.6 só tem o aviso de versão diferente em Estações.
