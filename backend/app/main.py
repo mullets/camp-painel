@@ -69,6 +69,8 @@ from .inscricoes import router as rotas_inscricoes   # 02/11/2026: inscrições 
 app.include_router(rotas_inscricoes)
 from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página pública de download do pedido entregue por e-mail
 app.include_router(rotas_entrega)
+from .contatos_emkt import router as rotas_contatos_emkt   # 03/11/2026: quem aceitou receber e-mails da CAMP → CSV para o Sender.net
+app.include_router(rotas_contatos_emkt)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 from .rotas_planilha import router as rotas_planilha
