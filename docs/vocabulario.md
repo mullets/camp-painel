@@ -166,7 +166,9 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **sugerido do projeto**: valor do projeto (ano, cidade, cliente) mostrado em cinza num campo vazio da folha. Não é dado lido nem
   confirmado; só vale se a pessoa aceitar (Tab) e salvar. Nunca chamar de "lido" ou "herdado" na tela.
 - **Mais tipos**: onde ficam os tipos documentais além dos 4 mais usados no projeto.
-- **Atalhos da conferência**: a lista que a tecla ? abre na revisão.
+- **Atalhos da conferência**: a lista que a tecla ? abre na revisão (e o botão **? atalhos** da barra da folha).
+- **Girar 90°** / **Girar 180°** (UX-66): os botões da barra do alto da folha em conferência, sempre à vista; a mesma rotina da tecla R
+  (90° para a direita) e do "Virar à esquerda/direita" embaixo da imagem. 180° é para a folha de cabeça para baixo.
 
 ## Título de projeto que é nome de pasta (UX-15)
 - **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",

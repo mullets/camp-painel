@@ -14,7 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
-MODOS_RAPIDOS |= {"ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
+MODOS_RAPIDOS |= {"ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -14385,6 +14385,22 @@ def filho(modo):
         ver("o Painel tem tempo-limite na primeira montagem e o erro diz 'Tentar de novo'",
             "+window.CAMP_BOOT_LIMITE_MS||20000" in html and 'onclick="carregarPainel()">Tentar de novo<' in html and "Tentar novamente" not in html[html.find("function painelErroHTML"):html.find("function painelErroHTML") + 400])
         for l in res: print(l)
+    elif modo == "ux66_girar":
+        # UX-66: girar a folha com um clique sem rolar, na gaveta, na tela cheia e na tela de conferir; o "?" abre os atalhos.
+        # O comportamento é provado no navegador (tests/navegador_ux66_girar.js, 1366×768 e 1366×600); aqui, a guarda rápida.
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("a barra da folha tem 'Girar 90°' e 'Girar 180°' (também na tela de conferir: a barra não depende de conf)",
+            'data-rev-girar-rapido="90"' in html and 'Girar 90°</button>' in html and 'data-rev-girar-rapido="180"' in html and 'Girar 180°</button>' in html
+            and "const barra=`<div class=\"rev-cheia-bar rev-barra\">${conf?'':" in html and "const corpo=`${barra}" in html)
+        ver("os botões usam a mesma rotina do atalho R (girarFolha → POST /api/itens/{c}/girar)",
+            "if(b.dataset.revGirarRapido)girarFolha(b.dataset.codigo,+b.dataset.revGirarRapido)" in html)
+        ver("a barra fica à vista sem rolar (sticky no alto e no pé)", ".rev-barra{position:sticky;top:0;bottom:0;" in html)
+        ver("o '?' é botão que abre os atalhos (não é mais texto que parece link)",
+            "data-rev-atalhos" in html and "else ajudaAtalhosRevisao()});" in html and "<kbd>?</kbd> mostra todos os atalhos</small>" not in html)
+        for l in res: print(l)
+
     return 0
 
 
@@ -16092,6 +16108,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Montar o painel: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Girar a folha com um clique sem rolar (UX-66): Girar 90°/180° na barra, ? abre os atalhos")
+rc, out = rodar("ux66_girar", f"{tmp}/ux66_girar.db")
+if rc != 0: ok(False, f"teste ux66_girar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Girar a folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
