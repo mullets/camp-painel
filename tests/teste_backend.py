@@ -11951,8 +11951,10 @@ def filho(modo):
         pem = k_.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
         conta = {"type": "service_account", "client_email": "painel@camp.iam.gserviceaccount.com", "private_key": pem, "private_key_id": "abc", "token_uri": "https://oauth2.googleapis.com/token", "project_id": "camp-x"}
         c = connect()
-        ver("sem Google ligado: a coleta explica o que falta e não grava nada", "ga4.propriedade" in (visitas.coletar(hoje=_d(2026, 11, 3))["ga4"].get("erro") or "")
-            and c.execute("SELECT COUNT(*) FROM visita_dia").fetchone()[0] == 0)
+        r0 = visitas.coletar(hoje=_d(2026, 11, 3))
+        ver("sem Google ligado: a coleta explica o que falta e não grava visitas", "ga4.conta_servico" in (r0["ga4"].get("erro") or "")
+            and c.execute("SELECT COUNT(*) FROM visita_dia").fetchone()[0] == 0, str(r0)[:300])
+        ver("o motivo fica registrado para a tela mostrar", "ga4.conta_servico" in (c.execute("SELECT erro FROM visita_coleta ORDER BY id DESC").fetchone()[0] or ""))
         c.execute("UPDATE configuracao SET valor='467114271' WHERE chave='ga4.propriedade'"); c.execute("UPDATE configuracao SET valor=? WHERE chave='ga4.conta_servico'", (_j.dumps(conta),))
         c.execute("UPDATE configuracao SET valor='sc-domain:camp.arq.br' WHERE chave='sc.site'"); c.execute("UPDATE configuracao SET valor='5' WHERE chave='visitas.dias_iniciais'"); c.commit()
         corpos, escopos, estado = [], [], {"fator": 1, "quebra": None}
@@ -11960,7 +11962,27 @@ def filho(modo):
             r_ = corpo["dateRanges"][0] if "dateRanges" in corpo else corpo
             a, b = _d.fromisoformat(r_["startDate"]), _d.fromisoformat(r_["endDate"])
             return [_d.fromordinal(o) for o in range(a.toordinal(), b.toordinal() + 1)]
+        def sk_corpo(q):
+            mets = [{"name": q[k]} for k in sorted(k for k in q if k.startswith("metrics["))]
+            dims = [{"name": q[k]} for k in sorted(k for k in q if k.startswith("dimensions["))]
+            return {"dateRanges": [{"startDate": q["startDate"], "endDate": q["endDate"]}], "metrics": mets, **({"dimensions": dims} if dims else {})}
         def responder(req):
+            if req.url.host == "site-falso.invalid":
+                q = dict(req.url.params); corpos.append(("sitekit", req.url.path))
+                if req.url.path.endswith("/searchanalytics"):
+                    dim = q["dimensions"].split(",")[1]
+                    return httpx.Response(200, json=[{"keys": [d.isoformat(), "camp acervo" if dim == "query" else "https://camp.arq.br/"], "clicks": 1, "impressions": 5, "position": 2.0}
+                                                     for d in dias_de({"startDate": q["startDate"], "endDate": q["endDate"]})])
+                req = httpx.Request("POST", "https://analyticsdata.googleapis.com/x", json=sk_corpo(q))
+            if req.url.host == "analyticsadmin.googleapis.com":
+                if req.url.path.endswith("/accountSummaries"):
+                    return httpx.Response(200, json={"accountSummaries": [{"propertySummaries": [{"property": "properties/111", "displayName": "Outro site"}, {"property": "properties/555", "displayName": "CAMP"}]}]})
+                num = req.url.path.split("/")[-2]
+                w = {"111": ("G-OUTRO1", "https://outro.org"), "555": ("G-SITE123", "https://www.camp.arq.br/")}[num]
+                return httpx.Response(200, json={"dataStreams": [{"type": "WEB_DATA_STREAM", "webStreamData": {"measurementId": w[0], "defaultUri": w[1]}}]})
+            if req.method == "GET" and req.url.path.endswith("/sites"):
+                return httpx.Response(200, json={"siteEntry": [{"siteUrl": "https://camp.arq.br/", "permissionLevel": "siteFullUser"}, {"siteUrl": "sc-domain:camp.arq.br", "permissionLevel": "siteOwner"},
+                                                               {"siteUrl": "sc-domain:outro.org", "permissionLevel": "siteUnverifiedUser"}]})
             if req.url.host == "oauth2.googleapis.com":
                 a = dict(x.split("=", 1) for x in req.content.decode().split("&"))["assertion"]
                 cl = _jwt.decode(a, k_.public_key(), algorithms=["RS256"], audience="https://oauth2.googleapis.com/token")
@@ -12018,6 +12040,25 @@ def filho(modo):
         p28 = visitas.periodos(_d(2026, 11, 4))["28d"]
         s28 = visitas.resumo(c, p28[0], p28[1], "28d")
         ver("pessoas: o número único do Google para o período (não a soma dos dias)", s28["total"]["pessoas"] == 14 and s28["total"]["pessoas_exato"], str(s28["total"]))
+        # 03/11 (Rafael: "continua sem funcionar… já preencha tudo que sabe que tem"): só com a chave, o painel acha o resto
+        cfgv = lambda k: c.execute("SELECT valor FROM configuracao WHERE chave=?", (k,)).fetchone()[0]
+        c.execute("UPDATE configuracao SET valor='G-SITE123' WHERE chave='ga4.propriedade'"); c.execute("UPDATE configuracao SET valor='' WHERE chave='sc.site'"); c.commit()
+        r4 = visitas.coletar(por="teste", cliente=cli, hoje=_d(2026, 11, 4))
+        ver("G-… colado no lugar do número: o painel acha a propriedade certa (pelo fluxo) e grava", cfgv("ga4.propriedade") == "555" and r4["ga4"].get("ok"), str(r4)[:300])
+        ver("sc.site vazio: o painel acha a propriedade do Search Console (domínio primeiro) e grava", cfgv("sc.site") == "sc-domain:camp.arq.br" and r4["search_console"].get("ok"), str(r4.get("notas")))
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='ga4.propriedade'"); c.commit()
+        ver("propriedade vazia: acha pelo domínio do site (com www. no fluxo)", visitas.preparar(c, cli) and cfgv("ga4.propriedade") == "555")
+        ga4_direto._TOKENS.clear()
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='ga4.conta_servico'"); c.commit()
+        cli_sk = httpx.Client(base_url="http://site-falso.invalid", transport=httpx.MockTransport(responder))
+        n_antes = len(corpos)
+        r5 = visitas.coletar(por="teste", cliente=cli_sk, hoje=_d(2026, 11, 5))
+        ver("sem a chave: busca pelo Site Kit do site (Analytics e Search Console)", r5.get("via") == "Site Kit" and r5["ga4"].get("ok") and r5["search_console"].get("ok")
+            and c.execute("SELECT COUNT(*) FROM visita_dia WHERE dia='2026-11-04'").fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM busca_google WHERE valor='camp acervo'").fetchone()[0] > 0
+            and any(t == "sitekit" for t, _ in corpos[n_antes:]), str(r5)[:300])
+        c.execute("UPDATE configuracao SET valor='não é json' WHERE chave='ga4.conta_servico'"); c.commit()
+        ver("chave colada errada: diz para colar o arquivo .json inteiro", "arquivo .json inteiro" in (visitas.coletar(por="teste", cliente=cli, hoje=_d(2026, 11, 5))["ga4"].get("erro") or ""))
         auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
         auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
         def cli_(e, s_):

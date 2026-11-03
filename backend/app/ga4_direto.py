@@ -154,3 +154,56 @@ class SearchConsole:
             inicio += 25000
             if len(linhas) < 25000 or inicio >= limite_total:
                 return out
+
+
+# ---- 03/11 (Rafael: "continua sem funcionar… já preencha tudo que sabe que tem"): com a chave da conta de serviço o painel
+# descobre sozinho o número da propriedade GA4 (pelo domínio do site ou pelo G-… colado no lugar) e a propriedade do Search Console.
+def _dominio_de(url: str) -> str:
+    from urllib.parse import urlparse
+    h = (urlparse(url if "://" in url else "https://" + url).hostname or "").lower()
+    return h.removeprefix("www.")
+
+
+def descobrir_propriedade(conta: dict, cliente: httpx.Client, dominio: str = "", dica: str = "") -> dict:
+    """{propriedade, nome, id_medicao, vistas:[...]} — a propriedade GA4 que a conta enxerga e cujo fluxo é o do site."""
+    h = {"Authorization": f"Bearer {_token(conta, cliente)}"}
+    r = cliente.get(f"{API_ADMIN}/accountSummaries", params={"pageSize": 200}, headers=h)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Admin API recusou ({r.status_code}): {_msg(r)}")
+    props = [(p.get("property", "").removeprefix("properties/"), p.get("displayName") or "")
+             for a in r.json().get("accountSummaries") or [] for p in a.get("propertySummaries") or []]
+    if not props:
+        raise RuntimeError(f"A conta de serviço {conta['client_email']} não enxerga nenhuma propriedade GA4: no GA4, Administrador → "
+                           "Gerenciamento de acesso à propriedade → adicionar esse e-mail como Leitor")
+    dominio, dica = _dominio_de(dominio) if dominio else "", (dica or "").strip().upper()
+    vistas, achou = [], None
+    for num, nome in props:
+        rr = cliente.get(f"{API_ADMIN}/properties/{num}/dataStreams", headers=h)
+        fl = [(s_.get("webStreamData") or {}) for s_ in (rr.json().get("dataStreams") or [])] if rr.status_code < 400 else []
+        for w in fl:
+            vistas.append(f"{nome} ({num}): {w.get('measurementId')} {w.get('defaultUri') or ''}".strip())
+            if achou is None and ((dica.startswith("G-") and (w.get("measurementId") or "").upper() == dica)
+                                  or (dominio and _dominio_de(w.get("defaultUri") or "") == dominio)):
+                achou = {"propriedade": num, "nome": nome, "id_medicao": w.get("measurementId")}
+    if achou is None and len(props) == 1:
+        achou = {"propriedade": props[0][0], "nome": props[0][1], "id_medicao": None}
+    if achou is None:
+        raise RuntimeError("Não achei a propriedade do site entre as que a conta enxerga: " + "; ".join(vistas or [f"{n} ({x})" for x, n in props])[:400]
+                           + ". Preencha ga4.propriedade com o número certo.")
+    achou["vistas"] = vistas
+    return achou
+
+
+def descobrir_search_console(conta: dict, cliente: httpx.Client, dominio: str) -> str:
+    """A propriedade do Search Console do site que a conta enxerga (domínio primeiro, depois o prefixo https)."""
+    r = cliente.get(f"{API_SC}/sites", headers={"Authorization": f"Bearer {_token(conta, cliente, ESCOPO_SC)}"})
+    if r.status_code >= 400:
+        raise RuntimeError(f"Search Console recusou ({r.status_code}): {_msg(r)}")
+    sites = [x.get("siteUrl") for x in r.json().get("siteEntry") or [] if x.get("permissionLevel") != "siteUnverifiedUser"]
+    d = _dominio_de(dominio)
+    for alvo in (f"sc-domain:{d}", f"https://{d}/", f"https://www.{d}/", f"http://{d}/", f"http://www.{d}/"):
+        if alvo in sites:
+            return alvo
+    raise RuntimeError(f"A conta de serviço {conta['client_email']} não tem acesso ao Search Console de {d}"
+                       + (f" (enxerga: {', '.join(sites)})" if sites else "")
+                       + ": no Search Console, Configurações → Usuários e permissões → adicionar esse e-mail (Restrito)")
