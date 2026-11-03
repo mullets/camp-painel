@@ -870,7 +870,7 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;
   --r-sm:4px;--r-md:8px;--r-lg:12px;
   /* escala de tipo: use estes tamanhos (os valores são os que o painel já usava) */
-  --fs-2xs:12px;--fs-xs:12px;--fs-etq-peq:11.5px;   /* UX-27: mínimo 12 px na tela (antes 11 e 11,5); as etiquetas impressas têm tamanhos próprios */--fs-sm:12px;--fs-sm2:12.5px;--fs-md:13px;--fs-base:14px;--fs-lg:17px;
+  --fs-2xs:12px;--fs-xs:12px;--fs-etq-peq:11.5px;   /* UX-27: mínimo 12 px na tela (antes 11 e 11,5); as etiquetas impressas têm tamanhos próprios */--fs-sm:12px;--fs-sm2:12.5px;--fs-md:13px;--fs-base:14px;--fs-lg:17px;--fs-hero:40px;
 }
 .cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
@@ -911,16 +911,33 @@ tr.emp-atrasado td{background:var(--red-soft)}tr.emp-atrasado td:first-child{box
 .emp-fora{display:block;margin-top:4px;font-size:var(--fs-md);color:var(--amber)}.emp-fora.r{color:var(--red)}.emp-fora .lnk{font-size:var(--fs-md)}
 .emp-aviso-r{background:var(--red-soft);color:var(--red);margin:0 0 12px}.emp-obs{white-space:pre-line}.emp-acoes{margin:12px 0}
 .sol-envio{border:1px solid var(--line);border-radius:var(--r-md);padding:12px;background:var(--surface)}.se-itens{list-style:none;margin:4px 0;padding:0;display:grid;gap:6px}.se-item{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}.se-item select{width:auto}.se-incluir{display:flex;gap:6px;margin-top:6px}.se-incluir input{flex:1;min-width:0}
-.vis-kpis{grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));margin-bottom:10px}.vis-kpi .v{font-size:var(--fs-lg)}.vis-antes{color:var(--ink3);white-space:nowrap}
-.vis-d{font-weight:600;white-space:nowrap}.vis-d.sobe{color:var(--green)}.vis-d.desce{color:var(--red)}.vis-d.igual,.vis-d.novo{color:var(--ink3)}
-.ini-chart.vis-chart rect{fill:var(--blue);opacity:.55}.ini-chart.vis-chart rect.hoje{opacity:1}.vis-chart polyline.vis-antes-l{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-dasharray:4 3}
-.vis-leg{display:inline-block;width:14px;height:8px;margin:0 4px 0 8px;vertical-align:middle;border-radius:var(--r-sm)}.vis-leg.barra{background:var(--blue);opacity:.55;margin-left:0}.vis-leg.linha{height:0;border-top:2px dashed var(--ink2);border-radius:0}
+.vis-d{font-weight:600;white-space:nowrap;font-size:var(--fs-sm)}.vis-d.sobe{color:var(--green)}.vis-d.desce{color:var(--red)}.vis-d.igual,.vis-d.novo{color:var(--ink3);font-weight:500}
 .vis-h3{font-size:var(--fs-md);margin:14px 0 6px;color:var(--ink2)}.vis-res0{margin:0}
 .vis-top{list-style:none;margin:0;padding:0;display:grid;gap:8px}.vis-top li{min-width:0}.vis-top-l{display:flex;gap:8px;justify-content:space-between;align-items:baseline;min-width:0}
 .vis-top-l a{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vis-top-n{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink2);font-size:var(--fs-md)}
-.vis-top-b{display:block;height:4px;margin-top:3px;border-radius:var(--r-sm);background:linear-gradient(90deg,var(--blue) var(--p),var(--line) var(--p))}
-.vis-canais{display:flex;height:10px;border-radius:var(--r-sm);overflow:hidden;gap:2px}.vis-canais span,.vis-leg.c0,.vis-leg.c1,.vis-leg.c2,.vis-leg.c3{background:var(--blue)}
-.vis-canais .c1,.vis-leg.c1{background:var(--green)}.vis-canais .c2,.vis-leg.c2{background:var(--amber)}.vis-canais .c3,.vis-leg.c3{background:var(--ink3)}.vis-canais-l{margin-top:6px}.vis-canais-l .vis-leg:first-child{margin-left:0}
+.vis-top-b{display:block;height:4px;margin-top:3px;border-radius:var(--r-sm);background:linear-gradient(90deg,var(--blue) var(--p),var(--blue-soft) var(--p))}
+.vh{display:grid;gap:14px}
+.vh-hero{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.vh-num{font-size:var(--fs-hero);line-height:1;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.vh-txt{color:var(--ink2);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.vh-txt small,.vh-d small{color:var(--ink3);font-size:var(--fs-sm)}
+.vh-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,96px),1fr));border-top:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.vh-st{display:grid;gap:2px;padding:10px 12px 10px 0}.vh-st+.vh-st{padding-left:12px;border-left:1px solid var(--line2)}
+.vh-l{color:var(--ink3);font-size:var(--fs-sm)}.vh-v{font-size:var(--fs-lg);font-weight:600;color:var(--ink)}.vh-d{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.vh-graf{margin:0}.vh-graf figcaption{color:var(--ink2);font-size:var(--fs-sm);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.vh-graf svg{width:100%;height:auto;display:block;overflow:visible}.vh-graf line{stroke:var(--line);stroke-width:1}.vh-graf line.g{stroke:var(--line2)}
+.vh-graf text{fill:var(--ink3);font:var(--fs-sm) var(--sans);font-variant-numeric:tabular-nums}
+.vh-dia path{fill:var(--blue);opacity:.45}.vh-dia.ult path{opacity:1}.vh-dia:hover path{opacity:.85}.vh-hit{fill:transparent}
+.vh-antes{fill:none;stroke:var(--ink2);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.6}
+.vh-k{display:inline-block;width:12px;height:10px;border-radius:var(--r-sm);background:var(--blue);opacity:.45;flex:none}.vh-k.linha{height:2px;background:var(--ink2);opacity:.6;margin-left:10px}
+.vh-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:8px 24px;align-items:start}
+.vh-h{font-size:var(--fs-md);font-weight:600;margin:0 0 6px;color:var(--ink)}
+.vh-pgs{list-style:none;margin:0;padding:0;counter-reset:pg}.vh-pgs li{counter-increment:pg;display:grid;grid-template-columns:18px minmax(0,1fr) auto 58px;column-gap:8px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line2)}
+.vh-pgs li:first-child{border-top:0}.vh-pgs li::before{content:counter(pg);color:var(--ink3);font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+.vh-pgs a{color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vh-pgs a:hover{color:var(--blue);text-decoration:underline}
+.vh-pn{font-variant-numeric:tabular-nums;color:var(--ink);text-align:right}.vh-pd{text-align:right}
+.vh-m{grid-column:2/-1;display:block;height:4px;margin-top:4px;border-radius:var(--r-sm);background:var(--blue-soft)}.vh-m i{display:block;height:100%;border-radius:var(--r-sm);background:var(--blue)}
+.vh-seg{display:flex;gap:2px;height:8px}.vh-seg span{border-radius:var(--r-sm);min-width:2px}
+.vh-seg .c0,.vh-k.c0{background:var(--blue);opacity:1}.vh-seg .c1,.vh-k.c1{background:var(--green);opacity:1}.vh-seg .c2,.vh-k.c2{background:var(--amber);opacity:1}.vh-seg .c3,.vh-k.c3{background:var(--ink3);opacity:1}
+.vh-leg{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px;font-size:var(--fs-md);color:var(--ink2)}.vh-leg li{display:flex;align-items:center;gap:6px}.vh-leg b{margin-left:auto;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .vis-barras{width:100%;height:160px;display:block;fill:var(--blue)}#ini-visitas .vis-barras{height:56px;margin-top:6px}.vis-barras rect:hover{fill:var(--ink)}#v-visitas .vis-grid{margin:12px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px}#v-visitas .vis-grid>.panel{margin:0}#vis-per{margin:0 0 12px}.vis-diag li{margin:0 0 8px}.vis-res{margin:6px 0 0}
 .sol-trilha-box{display:grid;gap:6px;margin:12px 0}.sol-trilha{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}.sol-trilha li{flex:1;min-width:92px}
 .sol-trilha button{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-md);padding:6px 8px;text-align:left;cursor:pointer;font:inherit;font-size:var(--fs-sm2);color:var(--ink2);display:grid;gap:2px}
@@ -6252,27 +6269,36 @@ async function visQuinzenas(){const h=new Date();h.setHours(12,0,0,0);const dia=
   atual.dias14=Array.from({length:14},(_,i)=>dia(14-i));antes.dias14=Array.from({length:14},(_,i)=>dia(28-i));return {atual,antes}}
 function visDelta(a,b){if(!b)return a?'<span class="vis-d novo">novo</span>':'';const p=Math.round((a-b)/b*100);if(Math.abs(p)<3)return '<span class="vis-d igual" title="praticamente igual">= igual</span>';
   return `<span class="vis-d ${p>0?'sobe':'desce'}" title="${p>0?'subiu':'caiu'} ${Math.abs(p)}% frente às 2 semanas anteriores">${p>0?'▲':'▼'} ${Math.abs(p)}%</span>`}
-function iniVisitas2HTML(A,B){const mapa=(r)=>Object.fromEntries((r.por_dia||[]).map(d=>[d.dia,d])),ma=mapa(A),mb=mapa(B);
+function iniVisitas2HTML(A,B){const mapa=r=>Object.fromEntries((r.por_dia||[]).map(d=>[d.dia,d])),ma=mapa(A),mb=mapa(B);
   const va=A.dias14.map(d=>+((ma[d]||{}).sessoes)||0),vb=B.dias14.map(d=>+((mb[d]||{}).sessoes)||0);
-  const sa=A.total.sessoes||0,sb=B.total.sessoes||0,pa=A.total.visualizacoes||0,pb=B.total.visualizacoes||0,ca=(A.busca||{}).cliques||0,cb=(B.busca||{}).cliques||0;
-  const ppv=x=>x[0]?x[1]/x[0]:0,ra=ppv([sa,pa]),rb=ppv([sb,pb]),f1=x=>x.toFixed(1).replace('.',',');
-  const kpi=(l,v,d,antes)=>`<div class="kpi vis-kpi"><div class="l">${l}</div><div class="v">${v}</div><small class="help">${d} <span class="vis-antes">antes: ${antes}</span></small></div>`;
-  const kpis=`<div class="hoje-kpis vis-kpis">${kpi('Visitas',fmtN(sa),visDelta(sa,sb),fmtN(sb))}${kpi('Páginas vistas',fmtN(pa),visDelta(pa,pb),fmtN(pb))}${kpi('Páginas por visita',f1(ra),visDelta(ra,rb),f1(rb))}${kpi('Cliques vindos do Google',(A.busca||{}).impressoes||ca?fmtN(ca):'—',(A.busca||{}).impressoes||ca?visDelta(ca,cb):'',(B.busca||{}).impressoes||cb?fmtN(cb):'—')}</div>`;
-  // gráfico: barras = visitas por dia nestas 2 semanas; linha tracejada = as 2 semanas anteriores, dia a dia
-  const topo=Math.max(10,Math.ceil(Math.max(...va,...vb)/10)*10),x0=40,w=590/14,y0=110,k=90/topo,dm=s=>s.slice(8,10)+'/'+s.slice(5,7);
-  const sem=['dom','seg','ter','qua','qui','sex','sáb'],ds=d=>sem[new Date(d+'T12:00:00').getDay()];
-  const barras=va.map((n,i)=>{const h=Math.max(n*k,n?2:0);return `<rect class="${i===13?'hoje':''}" x="${(x0+i*w+3).toFixed(1)}" y="${(y0-h).toFixed(1)}" width="${(w-6).toFixed(1)}" height="${h.toFixed(1)}" rx="2"><title>${ds(A.dias14[i])} ${dm(A.dias14[i])}: ${qtd(n,'visita','visitas')} (2 semanas antes, ${ds(B.dias14[i])} ${dm(B.dias14[i])}: ${fmtN(vb[i])})</title></rect>`}).join('');
-  const linha=vb.map((n,i)=>`${(x0+i*w+w/2).toFixed(1)},${(y0-n*k).toFixed(1)}`).join(' ');
-  const mediaA=Math.round(sa/14),mediaB=Math.round(sb/14),melhor=va.indexOf(Math.max(...va));
-  const graf=`<div class="ini-chart vis-chart"><svg viewBox="0 0 640 150" role="img" aria-label="Visitas por dia nas últimas 2 semanas, com as 2 semanas anteriores tracejadas"><line x1="34" y1="20" x2="630" y2="20"/><line x1="34" y1="65" x2="630" y2="65"/><line x1="34" y1="110" x2="630" y2="110"/><text x="28" y="24" text-anchor="end">${topo}</text><text x="28" y="69" text-anchor="end">${topo/2}</text><text x="28" y="114" text-anchor="end">0</text>${barras}<polyline class="vis-antes-l" points="${linha}"/><text x="40" y="140">${dm(A.dias14[0])}</text><text x="335" y="140" text-anchor="middle">${dm(A.dias14[7])}</text><text x="628" y="140" text-anchor="end">ontem</text></svg>
-    <p class="ini-nota"><span class="vis-leg barra"></span> visitas por dia <span class="vis-leg linha"></span> 2 semanas antes · média de ${qtd(mediaA,'visita','visitas')} por dia (antes ${fmtN(mediaB)})${va[melhor]?` · melhor dia: ${ds(A.dias14[melhor])} ${dm(A.dias14[melhor])} (${fmtN(va[melhor])})`:''}</p></div>`;
-  // páginas mais vistas, com barra proporcional e a variação de cada uma
+  const sa=A.total.sessoes||0,sb=B.total.sessoes||0,pa=A.total.visualizacoes||0,pb=B.total.visualizacoes||0,ba=A.busca||{},bb=B.busca||{},ca=ba.cliques||0,cb=bb.cliques||0;
+  const ra=sa?pa/sa:0,rb=sb?pb/sb:0,f1=x=>x.toFixed(1).replace('.',','),temG=ba.impressoes||ca;
+  const dm=s=>s.slice(8,10)+'/'+s.slice(5,7),sem=['dom','seg','ter','qua','qui','sex','sáb'],ds=d=>sem[new Date(d+'T12:00:00').getDay()];
+  // o número que abre o quadro + três números de apoio, sem caixas
+  const hero=`<div class="vh-hero"><span class="vh-num">${fmtN(sa)}</span><span class="vh-txt">visitas em 2 semanas ${visDelta(sa,sb)}<small>antes: ${fmtN(sb)}</small></span></div>`;
+  const st=(l,v,d,antes)=>`<div class="vh-st"><span class="vh-l">${l}</span><span class="vh-v">${v}</span><span class="vh-d">${d}<small>antes ${antes}</small></span></div>`;
+  const stats=`<div class="vh-stats">${st('Páginas vistas',fmtN(pa),visDelta(pa,pb),fmtN(pb))}${st('Páginas por visita',f1(ra),visDelta(ra,rb),f1(rb))}${temG?st('Cliques do Google',fmtN(ca),visDelta(ca,cb),fmtN(cb)):''}</div>`;
+  // colunas finas (≤ 24 px, topo arredondado, base reta) = visitas por dia; linha de 2 px = as 2 semanas anteriores
+  const W=600,H=120,x0=36,y0=96,top=Math.max(10,Math.ceil(Math.max(...va,...vb)/10)*10),k=(y0-8)/top,band=(W-x0)/14,bw=Math.min(24,band-6);
+  const col=(x,h)=>{if(h<=0)return '';const r=Math.min(4,h);return `M${x},${y0}V${(y0-h+r).toFixed(1)}Q${x},${(y0-h).toFixed(1)} ${x+r},${(y0-h).toFixed(1)}H${(x+bw-r).toFixed(1)}Q${(x+bw).toFixed(1)},${(y0-h).toFixed(1)} ${(x+bw).toFixed(1)},${(y0-h+r).toFixed(1)}V${y0}Z`};
+  const cx=i=>x0+i*band+band/2;
+  const barras=va.map((n,i)=>`<g class="vh-dia${i===13?' ult':''}"><rect class="vh-hit" x="${(x0+i*band).toFixed(1)}" y="0" width="${band.toFixed(1)}" height="${y0}"/><path d="${col(+(cx(i)-bw/2).toFixed(1),n*k)}"/><title>${ds(A.dias14[i])} ${dm(A.dias14[i])}: ${qtd(n,'visita','visitas')} · 2 semanas antes (${ds(B.dias14[i])} ${dm(B.dias14[i])}): ${fmtN(vb[i])}</title></g>`).join('');
+  const linha=vb.map((n,i)=>`${cx(i).toFixed(1)},${(y0-n*k).toFixed(1)}`).join(' ');
+  const melhor=va.indexOf(Math.max(...va));
+  const graf=`<figure class="vh-graf"><figcaption><span class="vh-k barra"></span>visitas por dia <span class="vh-k linha"></span>2 semanas antes</figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Visitas por dia nas últimas 2 semanas: ${va.join(', ')}; nas 2 semanas anteriores: ${vb.join(', ')}">
+    <line x1="${x0}" y1="${y0}" x2="${W}" y2="${y0}"/><line class="g" x1="${x0}" y1="${(y0-top*k).toFixed(1)}" x2="${W}" y2="${(y0-top*k).toFixed(1)}"/><line class="g" x1="${x0}" y1="${(y0-top*k/2).toFixed(1)}" x2="${W}" y2="${(y0-top*k/2).toFixed(1)}"/>
+    <text x="${x0-6}" y="${(y0-top*k+4).toFixed(1)}" text-anchor="end">${fmtN(top)}</text><text x="${x0-6}" y="${(y0-top*k/2+4).toFixed(1)}" text-anchor="end">${fmtN(top/2)}</text><text x="${x0-6}" y="${y0+4}" text-anchor="end">0</text>
+    ${barras}<polyline class="vh-antes" points="${linha}"/>
+    <text x="${cx(0).toFixed(1)}" y="${H-4}" text-anchor="middle">${dm(A.dias14[0])}</text><text x="${cx(7).toFixed(1)}" y="${H-4}" text-anchor="middle">${dm(A.dias14[7])}</text><text x="${cx(13).toFixed(1)}" y="${H-4}" text-anchor="middle">ontem</text></svg>
+    <p class="ini-nota">Média de ${qtd(Math.round(sa/14),'visita','visitas')} por dia (antes ${fmtN(Math.round(sb/14))})${va[melhor]?` · melhor dia: ${ds(A.dias14[melhor])} ${dm(A.dias14[melhor])}, ${fmtN(va[melhor])}`:''}</p></figure>`;
+  // páginas mais visitadas: lista limpa, número alinhado, medidor fino
   const antesPg=Object.fromEntries((B.paginas||[]).map(x=>[x.valor,+x.visualizacoes||0])),pgs=(A.paginas||[]).slice(0,6),mx=Math.max(1,...pgs.map(x=>+x.visualizacoes||0));
   const nomePg=x=>{const t=String(x.extra||'').replace(/\s*[–—|-]\s*CAMP.*$/i,'').trim();return t&&t!=='(not set)'?t:(x.valor==='/'?'Página inicial':x.valor)};
-  const tops=pgs.length?`<h3 class="vis-h3">Páginas mais visitadas</h3><ol class="vis-top">${pgs.map(x=>`<li><div class="vis-top-l"><a href="https://camp.arq.br${escHtml(x.valor)}" target="_blank" rel="noopener" title="${escHtml(x.valor)}">${escHtml(nomePg(x))}</a><span class="vis-top-n">${fmtN(x.visualizacoes)} ${visDelta(+x.visualizacoes||0,antesPg[x.valor]||0)}</span></div><span class="vis-top-b" style="--p:${Math.round((+x.visualizacoes||0)/mx*100)}%"></span></li>`).join('')}</ol>`:'<p class="ini-nota">Sem páginas registradas no período.</p>';
-  const tc=(A.canais||[]).reduce((s,x)=>s+(+x.sessoes||0),0),can=(A.canais||[]).slice(0,4);
-  const canais=can.length&&tc?`<h3 class="vis-h3">De onde chegam</h3><div class="vis-canais" role="img" aria-label="${escHtml(can.map(x=>`${x.valor} ${Math.round(x.sessoes/tc*100)}%`).join(', '))}">${can.map((x,i)=>`<span class="c${i}" style="flex:${+x.sessoes||0}" title="${escHtml(x.valor)}: ${fmtN(x.sessoes)} visitas"></span>`).join('')}</div><p class="ini-nota vis-canais-l">${can.map((x,i)=>`<span class="vis-leg c${i}"></span>${escHtml(VIS_CANAL[x.valor]||x.valor)} ${Math.round(x.sessoes/tc*100)}%`).join(' ')}</p>`:'';
-  return `<div class="pb">${kpis}${graf}${tops}${canais}<div class="act vis-res"><button type="button" class="btn sm" onclick="nav('visitas')">Ver tudo</button></div></div>`}
+  const tops=pgs.length?`<h3 class="vh-h">Páginas mais visitadas</h3><ol class="vh-pgs">${pgs.map(x=>`<li><a href="https://camp.arq.br${escHtml(x.valor)}" target="_blank" rel="noopener" title="${escHtml(x.valor)}">${escHtml(nomePg(x))}</a><span class="vh-pn">${fmtN(x.visualizacoes)}</span><span class="vh-pd">${visDelta(+x.visualizacoes||0,antesPg[x.valor]||0)}</span><span class="vh-m"><i style="width:${Math.max(2,Math.round((+x.visualizacoes||0)/mx*100))}%"></i></span></li>`).join('')}</ol>`:'<p class="ini-nota">Sem páginas registradas no período.</p>';
+  const tc=(A.canais||[]).reduce((t,x)=>t+(+x.sessoes||0),0),can=(A.canais||[]).slice(0,4);
+  const canais=can.length&&tc?`<h3 class="vh-h">De onde chegam</h3><div class="vh-seg" role="img" aria-label="${escHtml(can.map(x=>`${VIS_CANAL[x.valor]||x.valor} ${Math.round(x.sessoes/tc*100)}%`).join(', '))}">${can.map((x,i)=>`<span class="c${i}" style="flex:${+x.sessoes||0}"><title>${escHtml(VIS_CANAL[x.valor]||x.valor)}: ${fmtN(x.sessoes)} visitas</title></span>`).join('')}</div><ul class="vh-leg">${can.map((x,i)=>`<li><span class="vh-k c${i}"></span>${escHtml(VIS_CANAL[x.valor]||x.valor)} <b>${Math.round(x.sessoes/tc*100)}%</b></li>`).join('')}</ul>`:'';
+  return `<div class="pb vh">${hero}${stats}${graf}<div class="vh-cols"><div>${tops}</div><div>${canais}<div class="act vis-res"><button type="button" class="btn sm" onclick="nav('visitas')">Ver tudo</button></div></div></div></div>`}
 const VIS_CANAL={'Organic Search':'Google e outras buscas','Direct':'Direto (digitou ou favorito)','Referral':'Links de outros sites','Organic Social':'Redes sociais','Paid Search':'Busca paga','Email':'E-mail','Unassigned':'Sem origem','Paid Social':'Redes sociais (pago)','Organic Video':'Vídeo'};
 function iniVisitasHistHTML(r){const t=r.total,b=r.busca||{},top=(r.canais||[]).slice(0,3),q=(b.consultas||[]).slice(0,3);
   return `<div class="pb"><p class="vis-res"><b>${t.pessoas!=null?qtd(t.pessoas,'pessoa','pessoas'):qtd(t.sessoes,'visita','visitas')}</b> nos últimos 28 dias · ${qtd(t.visualizacoes,'página vista','páginas vistas')}${b.cliques?` · ${qtd(b.cliques,'clique','cliques')} vindos do Google`:''}</p>
