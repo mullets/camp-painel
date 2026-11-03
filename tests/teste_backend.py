@@ -15,7 +15,7 @@ def ok(cond, msg):
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
-MODOS_RAPIDOS |= {"ux63_minor_exif"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10947,6 +10947,64 @@ def filho(modo):
         ver("erros.json: os [Minor] embrulhados entram como aviso; o erro de verdade, como bloqueio",
             [x["gravidade"] for x in novos] == ["aviso", "aviso", "bloqueia"] and novos[1]["descricao"].startswith("1 arquivo (D00002): o nome do autor"), [tuple(x) for x in novos])
         for l in res: print(l)
+    elif modo == "ux64_problemas_ruido":
+        # UX-64 (P1): Problemas inflado (577 abertos; F001-P0033 com 337 problemas para 49 folhas). (a) problema de folha RETIRADA pelo CAMP Vision
+        # (fora do painel, "não existe mais" na lista) fica aberto só no problema da retirada; os outros fecham sozinhos com registro e voltam se
+        # a folha entrar no painel; (c) mensagens automáticas repetidas são mescladas sozinhas (o "Mesclar" do UX-20). Nada é apagado.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F001','Fundo de teste')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',7)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F001-P0007','F001',7,'Projeto 7',1950)")
+        D = lambda n: f"F001-P0007-1950-S01-D{n:05d}"
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem) VALUES (?,'F001-P0007','S01',1,'x','pendente','importado')""", (D(1),))
+        E = lambda cod, grav, cat, orig, desc, chave=None: c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave) VALUES (?,?,?,?,?,?,?)",
+                                                                    (grav, cat, orig, cod, desc, "CAMP Vision" if orig == "campvision" else "op", chave)).lastrowid
+        # (a) D00025: a retirada (com a decisão) + o bloqueio do erros.json + a autoria divergente = 3 linhas para a mesma folha
+        ret = E(D(25), "corrigir", "autoria_divergente", "campvision", "O CAMP Vision retirou esta folha do lote: autoria divergente. Ela não entrou na revisão.", f"campvision:retirado:{D(25)}")
+        b25 = E(D(25), "bloqueia", "outro", "campvision", "título ilegível", "campvision:erros:b25")
+        a25 = E(D(25), "corrigir", "autoria_divergente", "campvision", "carimbo de outro autor", "campvision:erros:a25")
+        # D00026: o erros.json diz "outra pasta": a decisão "É deste projeto / É de outro projeto…" (CAMP-069) mora neste, que fica aberto
+        E(D(26), "corrigir", "outro", "campvision", "O CAMP Vision retirou esta folha do lote: em branco.", f"campvision:retirado:{D(26)}")
+        o26 = E(D(26), "bloqueia", "outro", "campvision", "D00026 com identificação para outra pasta (OUTRA)", "campvision:erros:o26")
+        # (c) repetidas: 3 automáticas iguais na D00001; 2 relatos iguais de pessoa (só pelo botão)
+        rep = [E(D(1), "corrigir", "orientacao", "campvision", "orientação incerta", f"campvision:erros:rep{i}") for i in range(3)]
+        pes = [E(D(1), "corrigir", "outro", "operador", "conferir a escala") for _ in range(2)]
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        n = ad.get("/api/erros/contagem").json()
+        g = lambda i: c.execute("SELECT situacao, resolucao FROM erro WHERE id=?", (i,)).fetchone()
+        ver("(a) D00025: fica aberto só o problema da retirada (com a decisão)", g(ret)["situacao"] == "aberto" and g(b25)["situacao"] == "corrigido" and g(a25)["situacao"] == "corrigido",
+            [tuple(g(i)) for i in (ret, b25, a25)])
+        ver("(a) fecha com o motivo (retirada; volta se a folha entrar) e evento no histórico",
+            "retirada do lote" in (g(b25)["resolucao"] or "") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='fechado_automatico' AND codigo IN (?,?)", (str(b25), str(a25))).fetchone()[0] == 2)
+        ver("(a) D00026: o 'de outro projeto' fica aberto (leva a decisão 'É deste projeto / É de outro projeto…')", g(o26)["situacao"] == "aberto")
+        ver("(c) 3 mensagens automáticas iguais: fica a mais antiga; 2 fecham como 'não era problema' dizendo qual ficou",
+            g(rep[0])["situacao"] == "aberto" and all(g(i)["situacao"] == "ignorado" and f"nº {rep[0]}" in g(i)["resolucao"] for i in rep[1:]), [tuple(g(i)) for i in rep])
+        ver("(c) ...com evento 'mesclado' automático", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='mesclado' AND detalhe LIKE '%\"automatico\": true%'").fetchone()[0] == 2)
+        ver("(c) relatos iguais de PESSOAS não são mesclados sozinhos", all(g(i)["situacao"] == "aberto" for i in pes))
+        # abertos: ret, o26, a retirada da D26, rep[0], 2 relatos = 6 (antes: 11)
+        ver("contagem: abertos 6 (antes 11)", n.get("abertos") == 6, str(n))
+        ad.get("/api/erros/contagem")
+        ver("idempotente: abrir de novo não fecha nem registra outra vez", c.execute("SELECT COUNT(*) FROM evento WHERE tipo IN ('fechado_automatico','mesclado')").fetchone()[0] == 4)
+        # cópia mesclada que uma pessoa reabriu não é mesclada de novo
+        ad.patch(f"/api/erros/{rep[1]}", json={"situacao": "aberto"}); ad.get("/api/erros/contagem")
+        ver("(c) cópia reaberta por uma pessoa não é mesclada de novo", g(rep[1])["situacao"] == "aberto")
+        # a folha entra no painel (devolvida e importada): o que fechou por ela estar fora volta
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem) VALUES (?,'F001-P0007','S01',25,'x','pendente','importado')""", (D(25),)); c.commit()
+        ad.get("/api/erros/contagem")
+        ver("(a) a folha entrou no painel: os 2 problemas dela reabrem (com registro); a retirada fecha (a folha entrou)",
+            g(b25)["situacao"] == "aberto" and g(a25)["situacao"] == "aberto" and g(ret)["situacao"] == "corrigido"
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='reaberto_automatico'").fetchone()[0] == 2, [tuple(g(i)) for i in (ret, b25, a25)])
+        ver("nenhum problema foi apagado", c.execute("SELECT COUNT(*) FROM erro").fetchone()[0] == 10)
+        for l in res: print(l)
     elif modo == "ux20_massa":
         # UX-20: ações em massa com Desfazer de verdade (volta situação E resolução; quem foi mexido depois fica) e "mensagens
         # repetidas" → Ver (prévia, nada muda) → Mesclar (fica o mais antigo; cópias fecham com a resolução dizendo qual ficou).
@@ -16153,6 +16211,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-63: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-64: Problemas sem ruído (folha retirada, mensagens repetidas)")
+rc, out = rodar("ux64_problemas_ruido", f"{tmp}/ux64_problemas_ruido.db")
+if rc != 0: ok(False, f"teste ux64_problemas_ruido não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-64: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-19: avisos em aba própria e números do menu com a regra única 'pedem ação de você'")
 rc, out = rodar("ux19_pedem_acao", f"{tmp}/ux19_pedem_acao.db")
