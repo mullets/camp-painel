@@ -26,16 +26,19 @@ con.commit()`, DB]);
   await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
   await pg.goto(BASE + '/#painel'); await pg.reload();
   // 03/11 (Rafael: "refaça o relatório de visitas embaixo do ritmo das últimas 2 semanas, com gráficos e números … e quais páginas são as mais visitadas")
-  await pg.waitForSelector('#ini-visitas .vh-graf svg', { timeout: 10000 }).catch(() => {});
+  await pg.waitForSelector('#ini-visitas .vh-g', { timeout: 10000 }).catch(() => {});
   const h = (await pg.textContent('#ini-visitas').catch(() => '')) || '';
   chk(await pg.evaluate(() => { const r = document.getElementById('ini-ritmo'), v = document.getElementById('ini-visitas'); return !!(r && v && r.closest('.ini-col') === v.closest('.ini-col') && (r.compareDocumentPosition(v) & Node.DOCUMENT_POSITION_FOLLOWING)); }),
     'Home: Visitas ao site fica logo abaixo do Ritmo das últimas 2 semanas');
-  chk(await pg.$$eval('#ini-visitas .vh-graf .vh-dia', r => r.length) === 14 && !!(await pg.$('#ini-visitas polyline.vh-antes')), 'Home: gráfico de 14 dias com as 2 semanas anteriores tracejadas');
-  chk(/visitas em 2 semanas/.test(h) && /Páginas vistas/.test(h) && /Páginas por visita/.test(h) && /antes/.test(h) && !!(await pg.$('#ini-visitas .vis-d')), 'Home: números com a comparação com as 2 semanas anteriores', h.slice(0, 300));
-  chk(/Páginas mais visitadas/.test(h) && /Burle Marx/.test(h) && !(/Burle Marx – CAMP/.test(h)) && !!(await pg.$('#ini-visitas .vh-m')), 'Home: páginas mais visitadas com barra (título sem "– CAMP")');
-  chk(/De onde chegam/.test(h) && /Google e outras buscas 100%/.test(h), 'Home: de onde chegam, em português e em %', h.slice(-300));
-  chk(/\d/.test((await pg.textContent('#ini-visitas .vh-num').catch(() => '')) || '') && !(await pg.$('#ini-visitas .kpi')), 'Home: um número principal (visitas) e os de apoio sem caixas');
-  chk(/Média de \d+ visitas por dia/.test(h) && /melhor dia/.test(h), 'Home: média por dia e melhor dia');
+  // 03/11 (Rafael: "achei bem ruim… ruim de ler"): uma frase que responde como estamos indo; gráfico em HTML (texto não estica com a tela)
+  chk(/\d+ visitas nas últimas 2 semanas — (praticamente igual|▲ \d+% a mais|▼ \d+% a menos)/.test(h) || /\d+ visitas nas últimas 2 semanas/.test(h), 'Home: frase com o total e a comparação com as 2 semanas anteriores', h.slice(0, 200));
+  chk(/páginas vistas/.test(h) && /páginas por visita/.test(h), 'Home: números de apoio numa linha só');
+  chk(await pg.$$eval('#ini-visitas .vh-g-c', r => r.length) === 14 && !!(await pg.$('#ini-visitas .vh-g-l polyline')) && !(await pg.$('#ini-visitas svg text')), 'Home: 14 colunas + linha das 2 semanas antes, sem texto dentro do SVG');
+  chk(await pg.evaluate(() => [...document.querySelectorAll('#ini-visitas .vh-g-x span, #ini-visitas .vh-g-y')].every(e => parseFloat(getComputedStyle(e).fontSize) >= 12 && parseFloat(getComputedStyle(e).fontSize) <= 14)), 'Home: rótulos do gráfico entre 12 e 14 px (não esticam)');
+  chk(/Páginas mais visitadas/.test(h) && /Burle Marx/.test(h) && !(/Burle Marx – CAMP/.test(h)) && (await pg.$$eval('#ini-visitas .vh-pgs li', l => l.length)) >= 1, 'Home: páginas mais visitadas (título sem "– CAMP")');
+  chk(await pg.evaluate(() => [...document.querySelectorAll('#ini-visitas .vh-pgs li')].every(li => li.closest('.vh-bloco') && li.getBoundingClientRect().right <= li.closest('.vh-bloco').getBoundingClientRect().right + 1)), 'Home: a lista de páginas não invade a coluna ao lado');
+  chk(/De onde chegam/.test(h) && /Google e outras buscas\s*100%/.test(h), 'Home: de onde chegam, em português e em %', h.slice(-300));
+  chk(/Média de \d+ visitas por dia/.test(h) && /Dia mais forte/.test(h), 'Home: média por dia e dia mais forte');
   await pg.click('#ini-visitas button:has-text("Ver tudo")');
   await pg.waitForSelector('#v-visitas.on .hoje-kpis, #v-visitas .hoje-kpis', { timeout: 10000 }).catch(() => {});
   const t = (await pg.textContent('#vis-corpo').catch(() => '')) || '';
