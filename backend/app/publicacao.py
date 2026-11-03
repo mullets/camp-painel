@@ -119,14 +119,27 @@ def condicoes_projeto(con, p) -> dict:
     prontas = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL_LOCAL}", (codigo,)).fetchone()[0]
     lote_sem_aprovar = con.execute("""SELECT COUNT(*) FROM lista_processamento l WHERE l.projeto_codigo=? AND l.aprovado_em IS NULL AND l.etapa IN ('revisao','rascunho')
                                        AND EXISTS (SELECT 1 FROM item i WHERE i.lote_id=l.id)""", (codigo,)).fetchone()[0]
-    if nao_conf and prontas == 0:
-        rev_msg, rev_rot = (f"1 folha espera" if nao_conf == 1 else f"{nao_conf} folhas esperam") + " conferência na Revisão do lote", "Conferir as folhas"
+    # UX-62 (P1, F001-P0033: "Publicar" com 0 de 49 folhas conferidas): projeto que AINDA NÃO está no site não publica com folha a conferir,
+    # mesmo que algumas já estejam prontas, que o lote esteja em outra etapa ou que haja folhas antigas sem lote. Projeto já publicado segue
+    # como antes (a página pública é atualizada com as conferidas; as que faltam conferir ficam de fora até alguém conferir).
+    falta_conf = con.execute("""SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND revisao='pendente'
+                                AND duplicata_de IS NULL AND COALESCE(retida,0)=0""", (codigo,)).fetchone()[0]
+    ainda_fora = p["status_site"] != "no_ar"
+    aprova_junto = False
+    if (nao_conf and prontas == 0) or (ainda_fora and falta_conf):
+        n = falta_conf or nao_conf
+        rev_msg, rev_rot = (f"1 folha espera" if n == 1 else f"{n} folhas esperam") + " conferência na Revisão do lote", "Conferir as folhas"
     elif lote_sem_aprovar:
         rev_msg, rev_rot = "O lote ainda não foi aprovado na Revisão do lote", "Aprovar o lote"
+        from .publicacao_guiada import lotes_para_aprovar      # import tardio: publicacao_guiada importa este módulo
+        a_aprovar, nao_aprovados = lotes_para_aprovar(con, codigo)
+        aprova_junto = bool(a_aprovar) and len(a_aprovar) == nao_aprovados   # todos conferidos: o próprio Publicar aprova (CAMP-148)
     else:
         rev_msg, rev_rot = None, None
-    conds.append({"id": "revisao", "bloqueia": True, "ok": rev_msg is None, "texto": "Folhas conferidas e lote aprovado" if rev_msg is None else ("Nenhuma folha conferida ainda" if nao_conf and prontas == 0 else "Lote não aprovado"),
-                  "detalhe": rev_msg, "acao": None if rev_msg is None else {"tipo": "revisao", "rotulo": rev_rot, "alvo": codigo}})
+    conds.append({"id": "revisao", "bloqueia": True, "ok": rev_msg is None, "texto": "Folhas conferidas e lote aprovado" if rev_msg is None else ("Nenhuma folha conferida ainda" if nao_conf and prontas == 0 else "Folhas a conferir" if rev_rot == "Conferir as folhas" else "Lote não aprovado"),
+                  "detalhe": rev_msg, "acao": None if rev_msg is None else {"tipo": "revisao", "rotulo": rev_rot, "alvo": codigo},
+                  "falta_conferir": falta_conf if rev_rot == "Conferir as folhas" else 0,   # UX-62 (campo opcional): a tela diz "Falta conferir N folhas"
+                  "aprova_junto": aprova_junto})                                             # UX-62 (campo opcional): só falta aprovar, e o Publicar aprova junto
 
     total = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (codigo,)).fetchone()[0]
     elegiveis = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL}", (codigo,)).fetchone()[0]
@@ -202,6 +215,11 @@ def avisos_qualidade(p) -> list[dict]:
 
 def motivos_bloqueio(c: dict) -> list[str]:
     return [x["detalhe"] or x["texto"] for x in c["condicoes"] if x["bloqueia"] and not x["ok"]]
+
+
+def status_recusa(ids) -> int:
+    """UX-62: publicar recusado por conferência/aprovação que falta = 409 (conflito com o estado do lote); outros bloqueios seguem 400."""
+    return 409 if "revisao" in set(ids) else 400
 
 
 def persistir_resultado(sucessos, status_painel, status_wp, entidade, codigo, tipo_evento, ator, detalhe) -> str | None:

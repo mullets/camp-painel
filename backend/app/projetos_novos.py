@@ -31,6 +31,11 @@ def proximo_numero(con, fundo_codigo: str, proximo_p_local: str | None = None) -
 def criar_projeto(con, fundo_codigo: str, titulo: str, ano: int | None, cidade: str | None, identificacao: str | None, ator: str,
                   detalhe: dict, endereco_obra: str | None = None, reservado_por: int | None = None) -> dict:
     """Pega o próximo P do fundo, grava numero_p, projeto e o evento 'criado'. NÃO faz commit (quem chama controla a transação)."""
+    from .similaridade import titulo_sem_pasta
+    limpo = titulo_sem_pasta(titulo)                    # UX-67: "Teatro Piracicaba - 12 Folhas" entra como "Teatro Piracicaba"
+    if limpo and limpo != (titulo or "").strip():
+        detalhe = {**detalhe, "titulo_da_pasta": titulo, "titulo": limpo}
+        titulo = limpo
     numero = proximo_numero(con, fundo_codigo, detalhe.get("proximo_p_local"))
     prox = f"P{numero:04d}"
     codigo = f"{fundo_codigo}-{prox}"

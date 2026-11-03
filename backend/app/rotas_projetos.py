@@ -515,7 +515,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         cands = [c.get("codigo") for c in (cx.get("candidatos") or []) if isinstance(c, dict)]
         if codigo in cands or cx.get("projeto_codigo") == codigo:
             decisoes_pend.append({"id": dd["id"], "tipo": dd["tipo"] or "projeto_parecido", "titulo": dd["titulo"], "origem": dd["origem"],
-                                  "criada_em": dd["criada_em"], "pergunta": _perg_dec(dd, cx)})
+                                  "criada_em": dd["criada_em"], "pergunta": _perg_dec(dd, cx),
+                                  **({"campo": cx.get("campo")} if dd["tipo"] == "divergencia" else {})})   # UX-68 (opcional): o campo da divergência
     pedidos = [dict(r) for r in con.execute("SELECT s.* FROM solicitacao s JOIN solicitacao_item si ON si.solicitacao_id=s.id WHERE si.codigo=? OR si.codigo LIKE ? GROUP BY s.id", (codigo, codigo + "-%"))]
     # Folha movida aparece nos DOIS projetos: no destino (o código novo começa com o projeto) e na origem (o código antigo, em detalhe.de).
     eventos = [dict(r) for r in con.execute("""SELECT tipo, ator, quando, detalhe, entidade, codigo FROM evento
@@ -927,7 +928,7 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
     Três fases, para nunca segurar transação do banco durante a rede: (1) ler e validar; (2) falar com o WordPress;
     (3) gravar o resultado local numa conexão nova e curta. Publicar exige todas as condições de publicacao.condicoes_projeto.
     """
-    from .publicacao import condicoes_projeto, motivos_bloqueio, persistir_resultado
+    from .publicacao import condicoes_projeto, motivos_bloqueio, persistir_resultado, status_recusa
     from .wp import WP
     alvo = {"publicar": "publish", "rascunho": "draft", "tirar_do_ar": "private"}.get(d.acao)
     if not alvo:
@@ -941,9 +942,10 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if not p:
             raise HTTPException(404, "Projeto não existe")
         if alvo == "publish":
-            falta = motivos_bloqueio(condicoes_projeto(con, p))
-            if falta:
-                raise HTTPException(400, "Não dá para publicar ainda: " + " | ".join(falta))
+            cp = condicoes_projeto(con, p)
+            falta = motivos_bloqueio(cp)
+            if falta:                     # UX-62: folha a conferir / lote sem aprovar = 409 com o motivo
+                raise HTTPException(status_recusa(c["id"] for c in cp["condicoes"] if c["bloqueia"] and not c["ok"]), "Não dá para publicar ainda: " + " | ".join(falta))
         if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
             raise HTTPException(403, "Despublicar o que já está publicado exige o admin master")
         alvos = []

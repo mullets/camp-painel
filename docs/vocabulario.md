@@ -179,6 +179,14 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Título sugerido**: o título sem o prefixo de pasta. Botão **Usar o título sugerido** (uma pessoa aceita, um projeto por vez; nada é renomeado sozinho)
   e **Corrigir o título** (abre a edição).
 - Cidade: a tela sugere a **forma do acervo** (a mais usada: "São Paulo, SP" × "São Paulo") com o botão **Usar**; o campo continua texto livre.
+- UX-67 (03/11/2026): a **contagem de folhas da pasta** no fim do nome ("Teatro Piracicaba - 12 Folhas", "(12 fls)", "12 folhas") também é
+  nome de pasta. Projeto novo (reserva da estação, decisão, destino automático) já nasce sem ela e sem os códigos de pasta; o nome da pasta fica
+  no histórico do projeto.
+- **Corrigir vários títulos** (admin, no aviso da tela Projetos): uma lista com o título de hoje riscado e o **título novo** já preenchido com
+  a sugestão **no carimbo** (o nome da obra que a maioria das folhas diz: "no carimbo: Teatro Municipal de Piracicaba (4 de 5 folhas)") ou
+  **da pasta** (sem a contagem e os códigos). **Ver o que muda** só mostra ("N títulos mudam (nada foi gravado ainda)"); **Aplicar N títulos**
+  grava depois da confirmação. **Histórico das correções** com **Desfazer** (volta o título de antes; o que alguém mudou depois fica como está).
+  O código do projeto nunca muda; no Histórico do projeto: "título corrigido (veio da pasta)" / "correção de título desfeita".
 
 ## Números e estado do topo (UX-05, 27/10/2026)
 - Todo número de contagem vem de `backend/app/contagens.py` (a mesma regra em Home, Material novo, Máquinas, Relatórios e menu).
@@ -202,6 +210,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar).
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").
+- UX-68 (03/11/2026): **decisão** é só o que está na fila de **Decisões** (projeto parecido, lote com números repetidos, dado diferente do
+  cadastro, mesmo nome em outro fundo, verificar destino). O número do menu, a página Decisões e o "**N decisões pendentes sobre este projeto**"
+  da página do projeto contam a mesma fila. No cartão **Dados do projeto**, a diferença entre o carimbo das folhas e o cadastro (e as obras
+  distintas na pasta) é "**N a confirmar**", com o botão **Confirmar** e, em "O que falta", "**Confirmar N dados do projeto (carimbo × cadastro)**":
+  é calculada das folhas e se resolve no próprio projeto (**Usar … no projeto** / **Manter o do projeto**); não é decisão. A diferença que
+  também está na fila (o mesmo campo) conta uma vez só, como decisão ("1 decisão pendente · sobre este projeto, na fila de Decisões", **Ver em Decisões**).
 
 ## Máquinas em abas (UX-24, 27/10/2026)
 - Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);
