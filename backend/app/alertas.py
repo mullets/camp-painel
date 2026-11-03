@@ -335,7 +335,12 @@ def avisar_pedido_novo(con, sid: int, enviar=None, registrado_por: str | None = 
     else:
         titulo = f"[CAMP Painel] Pedido de material novo: {quem}"
         abertura = "Chegou um pedido de material pelo site.\n\n"
-    corpo = (abertura +
+    try:
+        from .entrega import protocolo as _protocolo
+        prot = _protocolo(con, s)
+    except Exception:  # noqa: BLE001  (o aviso não pode falhar por causa do protocolo)
+        prot = ""
+    corpo = (abertura + (f"Protocolo: {prot}\n" if prot else "") +
              f"Quem pediu: {s['solicitante']}" + (f" ({s['instituicao']})" if s["instituicao"] else "") + "\n"
              f"E-mail: {s['email'] or '—'}\n"
              f"Para quê: {FINALIDADES.get(s['finalidade'], s['finalidade'])}\n"

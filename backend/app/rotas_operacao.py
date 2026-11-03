@@ -1224,20 +1224,36 @@ SITUACOES = ["aguarda_resposta", "aguarda_orcamento", "aguarda_credito", "em_pre
 
 
 @router.get("/solicitacoes")
-def listar_solicitacoes(situacao: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
+def listar_solicitacoes(situacao: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """q: protocolo (CAMP-AAAA-NNNNNN do site ou CAMP-AAAA-PNNNNNN do painel, com ou sem hífens) ou texto (quem pediu, e-mail, instituição)."""
+    from . import entrega, protocolo as pr
     con = connect()
     sql = f"""SELECT s.*, us.nome AS responsavel_nome, (SELECT GROUP_CONCAT(codigo || ' (' || formato || ')', ' · ') FROM solicitacao_item si WHERE si.solicitacao_id=s.id) AS itens,
                     ({_PEDIDO_ANTERIOR.format(col='s2.id')}) AS repetido_de, ({_PEDIDO_ANTERIOR.format(col='s2.recebida_em')}) AS repetido_de_em
              FROM solicitacao s LEFT JOIN usuario us ON us.id=s.responsavel"""
     p: list = []
-    if situacao == "abertas": sql += " WHERE s.situacao NOT IN ('entregue','recusada')"
-    elif situacao and situacao != "todos": sql += " WHERE s.situacao=?"; p.append(situacao)
+    onde: list[str] = []
+    if situacao == "abertas": onde.append("s.situacao NOT IN ('entregue','recusada')")
+    elif situacao and situacao != "todos": onde.append("s.situacao=?"); p.append(situacao)
+    prot = pr.ler(q) if q else None
+    if prot and prot["tipo"] == "site":
+        onde.append("s.id IN (SELECT destino_id FROM pedido_site WHERE destino='solicitacao' AND site_id=?)"); p.append(prot["id"])
+    elif prot and prot["tipo"] == "painel":
+        onde.append("s.id=? AND s.id NOT IN (SELECT destino_id FROM pedido_site WHERE destino='solicitacao' AND destino_id IS NOT NULL)"); p.append(prot["id"])
+    elif prot:
+        onde.append("0")                      # protocolo de download: não é pedido
+    elif q and q.strip():
+        like = f"%{q.strip()}%"
+        onde.append("(s.solicitante LIKE ? OR s.email LIKE ? OR s.instituicao LIKE ?)"); p += [like] * 3
+    if onde:
+        sql += " WHERE " + " AND ".join(onde)
     rows = con.execute(sql + " ORDER BY s.recebida_em DESC", p).fetchall()
+    prots = entrega.protocolos_pedidos(con, [r["id"] for r in rows], {r["id"]: r["recebida_em"] for r in rows})
     resumo = {r[0]: r[1] for r in con.execute("SELECT situacao, COUNT(*) FROM solicitacao GROUP BY 1")}
     top = con.execute("""SELECT substr(si.codigo,1,4) AS fundo, COUNT(*) AS n FROM solicitacao_item si GROUP BY 1 ORDER BY 2 DESC LIMIT 1""").fetchone()
     media = con.execute("SELECT AVG(julianday(entregue_em)-julianday(recebida_em)) FROM solicitacao WHERE entregue_em IS NOT NULL").fetchone()[0]
     con.close()
-    return {"itens": [dict(r) for r in rows], "resumo": resumo, "fundo_mais_pedido": dict(top) if top else None, "dias_medio_entrega": round(media, 1) if media else None}
+    return {"itens": [{**dict(r), "protocolo": prots.get(r["id"])} for r in rows], "resumo": resumo, "fundo_mais_pedido": dict(top) if top else None, "dias_medio_entrega": round(media, 1) if media else None}
 
 
 @router.post("/solicitacoes")

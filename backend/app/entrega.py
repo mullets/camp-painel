@@ -273,16 +273,36 @@ def protocolo(con, s) -> str:
     """Protocolo do pedido nos e-mails transacionais (CAMP-AAAA-NNNNNN). Pedido que veio do site: o mesmo do site, CAMP-<ano do pedido
     no site>-<id do pedido no site com 6 dígitos>, para a pessoa ver o mesmo número que recebeu no "pedido recebido" (TR04). Pedido
     registrado só no painel: CAMP-<ano>-P<id do painel com 6 dígitos> (o "P" evita confundir com um número do site)."""
-    r = con.execute("SELECT site_id, criado_no_site FROM pedido_site WHERE destino='solicitacao' AND destino_id=? ORDER BY site_id LIMIT 1",
-                    (s["id"],)).fetchone()
     k = s.keys()
-    recebida = str((s["recebida_em"] if "recebida_em" in k else "") or "")
-    if r:
-        ano = str(r[1] or "")[:4]
-        ano = ano if ano.isdigit() else (recebida[:4] if recebida[:4].isdigit() else str(datetime.now(FUSO_SP).year))
-        return f"CAMP-{ano}-{int(r[0]):06d}"
-    ano = recebida[:4] if recebida[:4].isdigit() else str(datetime.now(FUSO_SP).year)
-    return f"CAMP-{ano}-P{int(s['id']):06d}"
+    return protocolos_pedidos(con, [int(s["id"])], {int(s["id"]): str((s["recebida_em"] if "recebida_em" in k else "") or "")})[int(s["id"])]
+
+
+def protocolos_pedidos(con, ids: list[int], recebidas: dict | None = None) -> dict[int, str]:
+    """{id do pedido no painel: protocolo} de uma vez (telas). Vale o protocolo que o site mandou no pedido (contrato 1.7, guardado
+    no payload de pedido_site); site antigo: calculado (app/protocolo.py). Pedido só do painel: CAMP-AAAA-PNNNNNN."""
+    from . import protocolo as pr
+    ids = [int(i) for i in ids]
+    out: dict[int, str] = {}
+    if not ids:
+        return out
+    for i in range(0, len(ids), 500):
+        lote = ids[i:i + 500]
+        for r in con.execute(f"""SELECT destino_id, site_id, criado_no_site, payload FROM pedido_site WHERE destino='solicitacao'
+                                 AND destino_id IN ({','.join('?' * len(lote))}) ORDER BY site_id DESC""", lote):
+            try:
+                enviado = (json.loads(r["payload"] or "{}") or {}).get("protocolo")
+            except (ValueError, AttributeError):
+                enviado = None
+            out[int(r["destino_id"])] = pr.do_site(enviado, r["site_id"], r["criado_no_site"] or (recebidas or {}).get(int(r["destino_id"])))
+    faltam = [i for i in ids if i not in out]
+    rec = dict(recebidas or {})
+    for i in range(0, len(faltam), 500):
+        lote = [j for j in faltam[i:i + 500] if j not in rec]
+        if lote:
+            rec.update({int(r[0]): r[1] for r in con.execute(f"SELECT id, recebida_em FROM solicitacao WHERE id IN ({','.join('?' * len(lote))})", lote)})
+    for j in faltam:
+        out[j] = pr.formatar(j, rec.get(j) or datetime.now(FUSO_SP).isoformat(), "P")
+    return out
 
 
 def material(arquivos: list[dict]) -> str:

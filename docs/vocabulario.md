@@ -88,6 +88,7 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 **Público** (**Pedidos de alta resolução**, antes "Pedidos do site" e "Pedidos de material"; **Inscrições** (título da tela: **Inscrições em cursos**), vindas do site, tecla S, só admin e master, filtro por curso (curso · turma; sem curso: "(curso não informado)"), duas abas: **Inscrições** (com o currículo; situações **Nova**, **Em análise**, **Selecionada**, **Não selecionada**, **Desistiu**) e **Avise-me** (quem pediu aviso da próxima turma; **Aguardando aviso**, **Avisado**; botões **Copiar e-mails**, **Baixar CSV**, **Marcar como avisados**); **Downloads**, antes "Downloads do site");
 **Acompanhamento**; **Administração** (**Máquinas**, antes "Máquinas e site"; **Configurações**); **Ajuda**. O resto fica em **Mais**.
 "Fundos e arquitetos" deixou de existir: são dois itens, cada um com a sua página.
+**Protocolo** (02/11/2026, contrato 1.7): o número que a pessoa recebeu do site, igual em todas as telas do Público e na busca do topo. `CAMP-AAAA-NNNNNN` (pedido, inscrição, Avise-me), `CAMP-AAAA-DNNNNNN` (cadastro de download), `CAMP-AAAA-PNNNNNN` (pedido registrado só no painel). Em fonte de código, com **copiar** no detalhe; busca com ou sem hífens. Não usar "número do pedido" nem "ticket".
 **Recolher menu** / **Expandir menu** (UX-28): o botão "‹" no topo do menu e as teclas `[` ou `⌘/Ctrl+B`. Recolhido, o menu é uma barra
 estreita só com ícones; o nome do item, o número e a tecla aparecem na dica ao passar o mouse ou focar. Não usar "barra lateral".
 

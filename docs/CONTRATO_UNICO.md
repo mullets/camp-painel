@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.6 (02/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
+Versão deste documento: **1.7 (02/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -161,6 +161,10 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
   - Roda junto com a coleta de pedidos, separada dela (erro nas inscrições não atrapalha os pedidos). Site antigo (404 em `/inscricoes`): o painel não faz nada nem registra falha. Ordem: qualquer uma.
   - No painel: aba **Inscrições** (situação da seleção) e aba **Avise-me** (aguardando · avisado; "Marcar como avisados", "Copiar e-mails" e CSV `nome;email;curso;data` do curso filtrado, só quem aguarda por padrão). O painel não manda nada de volta ao site sobre o aviso.
   - LGPD: o "apagar esta pessoa" do painel apaga também as inscrições, os pedidos de aviso e o PDF; o `POST /painel/pessoa/apagar` do site deve cobrir também `camp_inscricao` e o PDF guardado lá.
+- **NOVO 1.7** (protocolos, 02/11/2026; painel `app/protocolo.py`): todo formulário tem protocolo, e o painel mostra e busca pelo mesmo número que a pessoa recebeu.
+  - Formato: `CAMP-AAAA-NNNNNN` para registro do site que é post (pedido de alta resolução/consulta/correção, inscrição, Avise-me, contato, agendamento) = ano de criação no site + id do post com 6 dígitos; `CAMP-AAAA-DNNNNNN` para o cadastro de download (entrada do Fluent Forms; o `D` evita confundir com id de post); `CAMP-AAAA-PNNNNNN` para pedido registrado só no painel (id do painel).
+  - Campo OPCIONAL `"protocolo"` (texto) em cada objeto de `GET /solicitacoes` e `GET /inscricoes`. Veio no formato acima: o painel usa (o site é a fonte). Não veio (site antigo): o painel calcula pela mesma regra, com o ano de `criado_em`. Downloads: o painel sempre calcula (id da entrada + ano da data da entrada).
+  - No painel: aparece nas telas Pedidos de alta resolução, Inscrições em cursos e Downloads (lista e detalhe, com "copiar"), no aviso por e-mail de pedido novo e no TR09; a busca do topo e os filtros dessas telas acham pelo protocolo, com ou sem hífens. Ordem de deploy: qualquer uma.
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.
 
