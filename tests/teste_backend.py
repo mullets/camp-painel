@@ -13732,11 +13732,12 @@ def filho(modo):
         i3 = html.find('</div>\n  </div>`;', i2)
         esq, dir_ = html[i0:i2], html[i2:i3]
         def ordem(trecho, ids): pos = [trecho.find(x) for x in ids]; return all(q >= 0 for q in pos) and pos == sorted(pos)
-        ver("UX-30 (desfeito a pedido do Rafael): ritmo na coluna da esquerda, depois do caminho do material",
-            i0 > 0 and i1 > i0 and i2 > i1 and ordem(esq, ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-ritmo"')))
-        ver("UX-30 (desfeito): coluna da direita completa: saúde, Hoje, qualidade, melhorias, % no site e visitas (admin), nessa ordem",
-            i3 > i2 and ordem(dir_, ('id="ini-saude"', 'id="ini-t-hoje"', 'id="ini-qualidade"', 'id="ini-melhorias"', 'id="ini-t-site"', 'id="ini-visitas"'))
-            and "${admin?`<section class=\"panel\" aria-labelledby=\"ini-t-vis\">" in dir_)
+        # 03/11 (Rafael: "refaça o relatório de visitas embaixo do ritmo das últimas 2 semanas"): visitas (admin) logo abaixo do ritmo
+        ver("UX-30 (desfeito a pedido do Rafael): ritmo na coluna da esquerda, depois do caminho do material, e as visitas (admin) logo abaixo do ritmo",
+            i0 > 0 and i1 > i0 and i2 > i1 and ordem(esq, ('id="ini-tarefas"', 'id="ini-caminho"', 'id="ini-ritmo"', 'id="ini-visitas"'))
+            and "${admin?`<section class=\"panel\" aria-labelledby=\"ini-t-vis\">" in esq)
+        ver("UX-30 (desfeito): coluna da direita completa: saúde, Hoje, qualidade, melhorias e % no site, nessa ordem",
+            i3 > i2 and ordem(dir_, ('id="ini-saude"', 'id="ini-t-hoje"', 'id="ini-qualidade"', 'id="ini-melhorias"', 'id="ini-t-site"')) and 'id="ini-visitas"' not in dir_)
         ver("UX-30 (desfeito): nenhuma métrica recolhida nem escondida na Home (sem <details> 'Números do acervo', sem estado lembrado)",
             'id="ini-numeros"' not in html and "camp.ini.numeros" not in html and "verVisitas" not in html)
         ver("UX-12: com o GA desligado a Home não pede /api/analytics (usa analytics_ligado de /api/painel)",

@@ -25,11 +25,16 @@ con.commit()`, DB]);
   await pg.goto(BASE + '/');
   await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
   await pg.goto(BASE + '/#painel'); await pg.reload();
-  await pg.waitForSelector('#ini-visitas .vis-barras', { timeout: 10000 }).catch(() => {});
+  // 03/11 (Rafael: "refaça o relatório de visitas embaixo do ritmo das últimas 2 semanas, com gráficos e números … e quais páginas são as mais visitadas")
+  await pg.waitForSelector('#ini-visitas .vis-chart svg', { timeout: 10000 }).catch(() => {});
   const h = (await pg.textContent('#ini-visitas').catch(() => '')) || '';
-  chk(/nos últimos 28 dias/.test(h) && !!(await pg.$('#ini-visitas .vis-barras')), 'Home: resumo de 28 dias do histórico, com o gráfico por dia', h.slice(0, 200));
-  chk(/Organic Search/.test(h) && /acervo burle marx/.test(h), 'Home: de onde chegam e o que buscaram no Google', h.slice(0, 300));
-  chk(await pg.$$eval('#ini-visitas .vis-barras rect', r => r.length) === 28, 'Home: 28 barras (uma por dia)');
+  chk(await pg.evaluate(() => { const r = document.getElementById('ini-ritmo'), v = document.getElementById('ini-visitas'); return !!(r && v && r.closest('.ini-col') === v.closest('.ini-col') && (r.compareDocumentPosition(v) & Node.DOCUMENT_POSITION_FOLLOWING)); }),
+    'Home: Visitas ao site fica logo abaixo do Ritmo das últimas 2 semanas');
+  chk(await pg.$$eval('#ini-visitas .vis-chart rect', r => r.length) === 14 && !!(await pg.$('#ini-visitas polyline.vis-antes-l')), 'Home: gráfico de 14 dias com as 2 semanas anteriores tracejadas');
+  chk(/Visitas/.test(h) && /Páginas vistas/.test(h) && /Páginas por visita/.test(h) && /antes:/.test(h) && !!(await pg.$('#ini-visitas .vis-d')), 'Home: números com a comparação com as 2 semanas anteriores', h.slice(0, 300));
+  chk(/Páginas mais visitadas/.test(h) && /Burle Marx/.test(h) && !(/Burle Marx – CAMP/.test(h)) && !!(await pg.$('#ini-visitas .vis-top-b')), 'Home: páginas mais visitadas com barra (título sem "– CAMP")');
+  chk(/De onde chegam/.test(h) && /Google e outras buscas 100%/.test(h), 'Home: de onde chegam, em português e em %', h.slice(-300));
+  chk(/média de \d+ visitas por dia/.test(h) && /melhor dia/.test(h), 'Home: média por dia e melhor dia');
   await pg.click('#ini-visitas button:has-text("Ver tudo")');
   await pg.waitForSelector('#v-visitas.on .hoje-kpis, #v-visitas .hoje-kpis', { timeout: 10000 }).catch(() => {});
   const t = (await pg.textContent('#vis-corpo').catch(() => '')) || '';
