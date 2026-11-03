@@ -14,7 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
-MODOS_RAPIDOS |= {"ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
+MODOS_RAPIDOS |= {"ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -14401,6 +14401,32 @@ def filho(modo):
             "data-rev-atalhos" in html and "else ajudaAtalhosRevisao()});" in html and "<kbd>?</kbd> mostra todos os atalhos</small>" not in html)
         for l in res: print(l)
 
+    elif modo == "ux71_avisos":
+        # UX-71: conferência sem rolagem para o lado e com avisos legíveis; avisos repetidos por campo viram um só.
+        # O comportamento é provado no navegador (tests/navegador_ux71_avisos.js: 1570, 1366 e 390 px, gaveta, tela cheia e tela de conferir);
+        # aqui, a guarda rápida, e a regra de juntar rodada de verdade no node (se houver node).
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("aviso longo quebra linha dentro da coluna (a .tag dos avisos não é mais nowrap; colunas com min-width:0)",
+            ".rev-chips .tag{white-space:normal;overflow-wrap:anywhere;max-width:100%;" in html and ".rev-grade>*,.rev-col-dados,.rev-col-img,.cf-pane,.cf-avisos,.cv-folha{min-width:0}" in html)
+        ver("os avisos da folha passam por juntarAvisosRepetidos (bloqueios, sinais e ressalvas)",
+            "function juntarAvisosRepetidos(lista)" in html and "juntarAvisosRepetidos(p.ressalvas).map(" in html and "juntarAvisosRepetidos(p.sinais).map(" in html)
+        import shutil, json as _json
+        i0 = html.find("function juntarAvisosRepetidos(lista)"); i1 = html.find("\nfunction apontaRevHTML", i0)
+        if shutil.which("node") and i0 > 0 and i1 > i0:
+            ress = [f"valor descartado: resposta do modelo quebrada ({c})" for c in ("titulo", "escala", "folha", "codigo_unidade")] + ["valor descartado: resposta do modelo quebrada (titulo_prancha, resto de marcação tirado)", "série incerta", "só um (campo)"]
+            js = html[i0:i1] + "\nconsole.log(JSON.stringify(juntarAvisosRepetidos(" + _json.dumps(ress, ensure_ascii=False) + ")))"
+            r = subprocess.run(["node", "-e", js], capture_output=True, text=True)
+            try:
+                out = _json.loads(r.stdout)
+            except ValueError:
+                out = None
+            ver("5 'valor descartado… (campo)' viram UM aviso com os 5 campos; o que não repete fica como veio",
+                out == [{"texto": "valor descartado: resposta do modelo quebrada: 5 campos", "campos": ["titulo", "escala", "folha", "codigo_unidade", "titulo_prancha (resto de marcação tirado)"]},
+                        {"texto": "série incerta"}, {"texto": "só um (campo)"}], (r.stdout + r.stderr)[:400])
+        for l in res: print(l)
+
     return 0
 
 
@@ -16116,6 +16142,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Girar a folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Conferência sem rolagem lateral (UX-71): avisos quebram linha, repetidos por campo viram um")
+rc, out = rodar("ux71_avisos", f"{tmp}/ux71_avisos.db")
+if rc != 0: ok(False, f"teste ux71_avisos não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Avisos da folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

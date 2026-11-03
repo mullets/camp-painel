@@ -632,7 +632,10 @@ abbr.termo{text-decoration:underline dotted;cursor:help}#termo-pop{position:abso
 progress.pg{width:100%;max-width:260px;height:8px;accent-color:var(--blue);vertical-align:middle}.fila-pasta{font-size:var(--fs-sm);color:var(--ink3);margin-top:4px}.fila-pasta summary{cursor:pointer}.fila-acao{white-space:nowrap;text-align:right}.fila-ajuda{margin-top:14px;font-size:var(--fs-md)}
 .rl-estado{margin:0 0 8px}.rl-estado:empty{display:none}.rl-estado .tag{margin-right:4px}
 .tag.mini{font-size:var(--fs-sm)}
-.rev-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.rev-prev{max-width:100%;border-radius:var(--r-md);border:1px solid var(--line);display:block;margin:0 auto 4px;cursor:zoom-in}.rev-prev-dica{text-align:center;font-size:var(--fs-sm2);margin:0 0 10px}
+.rev-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;min-width:0}
+/* UX-71: aviso longo quebra linha dentro da coluna (antes: .tag sem quebra empurrava a coluna e abria rolagem para o lado) */
+.rev-chips .tag{white-space:normal;overflow-wrap:anywhere;max-width:100%;text-align:left;line-height:1.35}.rev-aviso-grupo{display:block;border-radius:var(--r)}.rev-aviso-campos{display:block;font-family:var(--mono,monospace);font-size:var(--fs-2xs)}
+.rev-grade>*,.rev-col-dados,.rev-col-img,.cf-pane,.cf-avisos,.cv-folha{min-width:0}.rev-col-dados .us-kv b,.cf-avisos,.cv-folha{overflow-wrap:anywhere}.rev-prev{max-width:100%;border-radius:var(--r-md);border:1px solid var(--line);display:block;margin:0 auto 4px;cursor:zoom-in}.rev-prev-dica{text-align:center;font-size:var(--fs-sm2);margin:0 0 10px}
 .rev-campo{display:grid;gap:3px;margin:8px 0;font-size:var(--fs-sm2)}.rev-campo span{color:var(--ink3)}.rev-campo input,.rev-campo select{width:100%}
 .thumb .cap .btn.sm{margin-top:6px}
 .qnap-spark{width:100%;height:34px;color:var(--ink2);margin:6px 0 2px;display:block}.qnap-card .site-line span{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qnap-rodape{margin-top:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
@@ -4583,7 +4586,16 @@ async function abrirRevisaoItem(codigo){
 /* leitura no modo de conferir: /edicao é de operador (403); os mesmos campos vêm de /api/itens/<código> e aparecem desligados */
 function edicaoSoLeitura(d){d=d||{};const local={};['titulo','folha','escala','dimensoes','suporte','credito','endereco_folha','cliente_folha','ano_folha','tipo_documento','foto_ano','foto_estagio','foto_fotografo'].forEach(k=>{local[k]=d[k]??null});local.parceiros=Array.isArray(d.parceiros)?d.parceiros:[];
   return {codigo:d.codigo,local,tipos_documento:[],disciplinas:[...new Set(local.parceiros.map(x=>x.disciplina).filter(Boolean))],fundo_codigo:d.fundo_codigo||String(d.codigo||'').split('-')[0],imagem_site_pendente:false,so_leitura:true}}
-function apontaRevHTML(p,it){const tag=(c,t)=>`<span class="tag ${c}">${escHtml(t)}</span> `,ok=folhaJaConferida(it);p=p||{};return [...(p.bloqueios||[]).map(x=>tag('r',x)),...(p.sinais||[]).map(x=>ok&&/orienta[cç][aã]o incerta/i.test(x)?tag('g',x+': conferida'):tag('a',x)),...(p.ressalvas||[]).map(x=>tag('a',x))].join('')||'<small class="help">Nada apontado.</small>'}
+/* UX-71: aviso repetido por campo ("valor descartado: resposta do modelo quebrada (titulo)", "… (escala)", 16 vezes) vira UM aviso com a
+   lista dos campos. Junta só o que tem o MESMO texto antes do parêntese final e aparece 2 vezes ou mais; o resto fica como veio. */
+function juntarAvisosRepetidos(lista){const L=(lista||[]).map(x=>String(x==null?'':x)).filter(Boolean),re=/^(.+?)\s*\(([^()]+)\)\s*$/,grupos=new Map(),saida=[];
+  for(const x of L){const m=re.exec(x);if(m){const k=m[1].trim();if(!grupos.has(k)){grupos.set(k,[]);saida.push({k})}grupos.get(k).push(m[2].trim())}else saida.push({t:x})}
+  return saida.map(o=>{if(o.t!=null)return {texto:o.t};const cs=grupos.get(o.k);if(cs.length<2)return {texto:`${o.k} (${cs[0]})`};
+    const nomes=[...new Set(cs.map(c=>{const i=c.indexOf(',');return i>0?`${c.slice(0,i).trim()} (${c.slice(i+1).trim()})`:c}))];
+    return {texto:`${o.k}: ${nomes.length} campos`,campos:nomes}})}
+function apontaRevHTML(p,it){const ok=folhaJaConferida(it);p=p||{};
+  const tag=(c,a)=>a.campos?`<span class="tag ${c} rev-aviso-grupo"><b>${escHtml(a.texto)}</b> <span class="rev-aviso-campos">${a.campos.map(escHtml).join(', ')}</span></span> `:`<span class="tag ${c}">${escHtml(a.texto)}</span> `;
+  return [...juntarAvisosRepetidos(p.bloqueios).map(a=>tag('r',a)),...juntarAvisosRepetidos(p.sinais).map(a=>ok&&!a.campos&&/orienta[cç][aã]o incerta/i.test(a.texto)?tag('g',{texto:a.texto+': conferida'}):tag('a',a)),...juntarAvisosRepetidos(p.ressalvas).map(a=>tag('a',a))].join('')||'<small class="help">Nada apontado.</small>'}
 /* Sírio, 19/10: o CAMP Vision marcou "projeto divergente" numa folha que está na pasta certa. A pessoa diz "É deste projeto": o aviso sai,
    e o bloqueio também (se era o único). Fica no histórico. Código só em data-*. */
 function falaDeProjetoDivergente(t){return /projeto divergente|outro projeto|outra obra|outra pasta|sem identificacao/.test(semAcento(t).replace(/_/g,' '))}   /* 20/10 (CAMP-069): "sem identificação" e "outra pasta" são o mesmo caso */
