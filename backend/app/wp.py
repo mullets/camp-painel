@@ -307,11 +307,24 @@ class WP:
         # 27/10: só os campos que o espelho guarda (antes vinha o conteúdo inteiro de ~5.200 páginas a cada rodada)
         # UX-46: com `desde`, só as modificadas depois (modified_after do WordPress; se o site ignorar, vêm todas: mais lento, nunca errado)
         yield from self._paginado("/wp-json/wp/v2/pages", log=self.log, status="publish,draft,private", context="edit", per_page=100, page=None,
-                                  _fields="id,title,slug,link,status,parent,modified",
+                                  _fields="id,title,slug,link,status,parent,modified,permalink_template,generated_slug",
                                   **({"modified_after": str(desde).replace(" ", "T")} if desde else {}))
 
     def quem_sou(self) -> dict:
         return self._get("/wp-json/wp/v2/users/me", context="edit").json()
+
+
+def endereco_da_pagina(pg: dict) -> str:
+    """03/11: o endereço definitivo da página. Rascunho vem do WordPress com o provisório (…/?page_id=123); aí vale o
+    `permalink_template` (contexto edit) com o slug no lugar de %pagename%. Sem modelo, fica o que veio."""
+    link = str(pg.get("link") or "")
+    if "page_id=" not in link and "?p=" not in link:
+        return link
+    modelo = str(pg.get("permalink_template") or "")
+    slug = str(pg.get("slug") or pg.get("generated_slug") or "")
+    if modelo and slug and ("%pagename%" in modelo or "%postname%" in modelo):
+        return modelo.replace("%pagename%", slug).replace("%postname%", slug)
+    return link
 
 
 def metadados_texto(item: dict) -> dict:

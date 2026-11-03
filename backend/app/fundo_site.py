@@ -93,12 +93,29 @@ def pagina_arquiteto(con, codigo: str) -> dict:
     return {**base, "existe": True, "publica": pag["status"] == "publish", "url": pag["url"], "status": pag["status"], "id": pag["id"]}
 
 
+def _link_arquiteto(pg: dict) -> str | None:
+    """O endereço da página se ela está sob /acervo/arquitetos/, senão None.
+    03/11 (F001 Arnaldo Martino: "O site tem o fundo, mas não criou a página deste arquiteto"): a página nova do arquiteto nasce em
+    RASCUNHO, e para rascunho o WordPress devolve em `link` o endereço provisório (…/?page_id=123), não o definitivo. O painel só
+    aceitava `link` com /acervo/arquitetos/ e nunca achava a página de um fundo novo. Agora vale também o `permalink_template`
+    (contexto edit), que traz o endereço definitivo com %pagename%."""
+    link = str(pg.get("link") or "")
+    if "/acervo/arquitetos/" in link:
+        return link
+    modelo = str(pg.get("permalink_template") or "")
+    slug = str(pg.get("slug") or pg.get("generated_slug") or "")
+    if "/acervo/arquitetos/" in modelo and slug:
+        return modelo.replace("%pagename%", slug).replace("%postname%", slug)
+    return None
+
+
 def _achar_no_site(con, wp, codigo: str) -> dict | None:
-    """A página do arquiteto direto no site (para quando o espelho ainda não a tem, ex.: acabou de ser criada). Só aceita página sob /acervo/arquitetos/."""
+    """A página do arquiteto direto no site (para quando o espelho ainda não a tem, ex.: acabou de ser criada). Só aceita página sob
+    /acervo/arquitetos/ (pelo endereço ou, no rascunho, pelo modelo de endereço: ver _link_arquiteto)."""
     for slug in _slugs_candidatos(con, codigo):
         for pg in wp.pagina_por_slug(slug):
-            link = str(pg.get("link") or "")
-            if "/acervo/arquitetos/" in link:
+            link = _link_arquiteto(pg)
+            if link:
                 titulo = (pg.get("title") or {}).get("raw") or (pg.get("title") or {}).get("rendered") or ""
                 con.execute("INSERT OR REPLACE INTO wp_pagina (id, titulo, slug, url, status, pai_id, codigo_detectado, json, visto_em) VALUES (?,?,?,?,?,?,?,?,datetime('now'))",
                             (pg["id"], titulo, pg.get("slug"), link, pg.get("status"), pg.get("parent"), codigo, json.dumps({"id": pg["id"], "link": link}, ensure_ascii=False)))
