@@ -123,6 +123,24 @@ def _achar_no_site(con, wp, codigo: str) -> dict | None:
     return None
 
 
+def _achar_pelo_fundo(con, wp, codigo: str) -> dict | None:
+    """03/11 (F001 Arnaldo Martino, página já publicada e o painel ainda dizendo "o site não criou a página"): quando o endereço não
+    bate (ex.: o site deu outro slug à página, como arnaldo-martino-2, ou o nome do fundo no painel difere do termo), pergunta ao site
+    qual é a página ligada ao termo do fundo e usa o id dela."""
+    f = con.execute("SELECT tainacan_term_id FROM fundo WHERE codigo=?", (codigo,)).fetchone()
+    if not (f and f["tainacan_term_id"]) or not hasattr(wp, "pagina_do_hub"):
+        return None
+    pg = wp.pagina_do_hub(int(f["tainacan_term_id"]))
+    if not pg or not pg.get("id"):
+        return None
+    from .wp import endereco_da_pagina
+    link = endereco_da_pagina(pg)
+    titulo = (pg.get("title") or {}).get("raw") or (pg.get("title") or {}).get("rendered") or ""
+    con.execute("INSERT OR REPLACE INTO wp_pagina (id, titulo, slug, url, status, pai_id, codigo_detectado, json, visto_em) VALUES (?,?,?,?,?,?,?,?,datetime('now'))",
+                (pg["id"], titulo, pg.get("slug"), link, pg.get("status"), pg.get("parent"), codigo, json.dumps({"id": pg["id"], "link": link}, ensure_ascii=False)))
+    return {"id": pg["id"], "url": link, "status": pg.get("status")}
+
+
 def mudar_pagina_arquiteto(codigo: str, publicar: bool, ator: str, motivo: str | None = None) -> dict:
     """21/10 (Rafa: "muito confuso publicar um arquiteto"): o painel publica (ou tira do público) a página do arquiteto; ninguém precisa ir ao site.
 
@@ -151,6 +169,8 @@ def mudar_pagina_arquiteto(codigo: str, publicar: bool, ator: str, motivo: str |
         alvo = {"id": pg["id"], "url": pg["url"], "status": pg["status"]} if pg["existe"] else None
         if not alvo:
             alvo = _achar_no_site(con, wp, codigo)
+        if not alvo:
+            alvo = _achar_pelo_fundo(con, wp, codigo)
         if not alvo:
             if publicar:
                 out.update(motivo_sem_pagina(con, codigo, out.get("aviso")))

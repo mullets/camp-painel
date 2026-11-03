@@ -5162,6 +5162,17 @@ def filho(modo):
         r = adm.post("/api/fundos/F085/arquiteto-site/publicar")
         ver("rascunho cujo modelo de endereço é FORA de /acervo/arquitetos/ continua não publicado", r.status_code == 409 and ("status", 78, "publish") not in chamadas, r.text[:200])
         WPArq.mudar_status_pagina = _mudar_antigo
+        # 03/11 (F001 já publicado e o painel ainda dizendo que o site não criou a página): o endereço não bate com nenhum slug
+        # candidato (o site deu outro slug); o painel pergunta ao site a página ligada ao termo do fundo e usa o id.
+        k1 = connect(); k1.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F002','ARM Arnaldo Martino Filho','AMF',1,902)"); k1.commit(); k1.close()
+        WPArq.pagina_do_hub = lambda self, termo: chamadas.append(("hub", termo)) or ({"id": 95, "slug": "arnaldo-martino-filho-2", "status": "publish",
+                                         "link": "https://camp.arq.br/acervo/arquitetos/arnaldo-martino-filho-2/", "title": {"raw": "Arnaldo Martino Filho"}} if termo == 902 else None)
+        adm.put("/api/fundos/F002/direitos", json={"situacao": "autorizado", "titular": "Família", "documento_autorizacao": "Termo 4"})
+        r = adm.post("/api/fundos/F002/arquiteto-site/publicar"); j = r.json()
+        ver("página com outro endereço: achada pelo termo do fundo (id), sem erro; já publicada, nada muda", r.status_code == 200 and ("hub", 902) in chamadas
+            and j.get("url") == "https://camp.arq.br/acervo/arquitetos/arnaldo-martino-filho-2/" and ("status", 95, "publish") not in chamadas, r.text[:200])
+        r = adm.post("/api/fundos/F085/arquiteto-site/publicar")
+        ver("o site diz que o fundo não tem página: continua 409 com o motivo", r.status_code == 409, r.text[:120])
         from app.wp import endereco_da_pagina
         ver("espelho: rascunho guarda o endereço definitivo (não o ?page_id=)", endereco_da_pagina(paginas["arnaldo-martino"][0]) == "https://camp.arq.br/acervo/arquitetos/arnaldo-martino/"
             and endereco_da_pagina({"link": "https://camp.arq.br/acervo/arquitetos/x/"}) == "https://camp.arq.br/acervo/arquitetos/x/"
