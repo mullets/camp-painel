@@ -88,9 +88,9 @@ async function abrirHome(page) {
     await P.waitForTimeout(1500);
     const vis = sel => P.locator(sel).first().isVisible();
     const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2')].map(h => h.textContent.trim())));
-    chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Ritmo das últimas 2 semanas']),
-      `UX-30 desfeito: coluna da esquerda com o ritmo de volta depois do caminho: ${JSON.stringify(colunas[0])}`);
-    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Está tudo funcionando?', 'Hoje', 'Qualidade da base', 'Melhorias de hoje', 'Quanto do acervo já está no site', 'Visitas ao site']),
+    chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Ritmo das últimas 2 semanas', 'Visitas ao site']),
+      `UX-30 desfeito: coluna da esquerda com o ritmo depois do caminho e, 03/11 (pedido do Rafael), as visitas logo abaixo do ritmo: ${JSON.stringify(colunas[0])}`);
+    chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Está tudo funcionando?', 'Hoje', 'Qualidade da base', 'Melhorias de hoje', 'Quanto do acervo já está no site']),
       `UX-30 desfeito: coluna da direita completa (saúde, Hoje e as métricas abaixo): ${JSON.stringify(colunas[1])}`);
     const recolhido = await P.evaluate(() => ({ det: ['ini-qualidade', 'ini-melhorias', 'ini-ritmo', 'ini-t-site', 'ini-visitas'].filter(id => { const e = document.getElementById(id); return !e || !!e.closest('details'); }), numeros: !!document.getElementById('ini-numeros') }));
     chk(!recolhido.det.length && !recolhido.numeros, `UX-30 desfeito: nenhum bloco recolhido "Números do acervo" na Home: ${JSON.stringify(recolhido)}`);
