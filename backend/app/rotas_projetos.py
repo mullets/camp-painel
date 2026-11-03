@@ -195,10 +195,18 @@ def listar(fundo: str | None = None, q: str | None = None, status: str | None = 
         por_pagina = max(1, min(por_pagina, 500))
         rows = con.execute(sql + f" ORDER BY {_ORDENS.get(ordem, _ORDENS['codigo'])} LIMIT ? OFFSET ?", [*par, por_pagina, (max(pagina, 1) - 1) * por_pagina]).fetchall()
         itens = []
+        from .fundo_site import pagina_arquiteto
+        from .publicacao import metas_projeto
+        paginas: dict = {}                                   # UX-73: a página do arquiteto é do fundo (uma consulta por fundo)
         for r in rows:
             d = dict(r)
             f = fases.get(d["codigo"])
             d["fase"], d["itens_pendentes"] = (f["fase"], f["itens_pendentes"]) if f else (None, 0)
+            p = con.execute("SELECT * FROM projeto WHERE codigo=?", (d["codigo"],)).fetchone()
+            if d["fundo_codigo"] not in paginas:
+                paginas[d["fundo_codigo"]] = pagina_arquiteto(con, d["fundo_codigo"])
+            mt = metas_projeto(con, p, pagina=paginas[d["fundo_codigo"]])
+            d["metas"] = {"feitas": mt["feitas"], "total": mt["total"]}   # UX-73 (campo opcional): "objetivos 4 de 12" na lista
             itens.append(d)
         return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "itens": itens}
     finally:
@@ -928,7 +936,7 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
     Três fases, para nunca segurar transação do banco durante a rede: (1) ler e validar; (2) falar com o WordPress;
     (3) gravar o resultado local numa conexão nova e curta. Publicar exige todas as condições de publicacao.condicoes_projeto.
     """
-    from .publicacao import condicoes_projeto, motivos_bloqueio, persistir_resultado, status_recusa
+    from .publicacao import conferida_sql, condicoes_projeto, motivos_bloqueio, persistir_resultado, status_recusa
     from .wp import WP
     alvo = {"publicar": "publish", "rascunho": "draft", "tirar_do_ar": "private"}.get(d.acao)
     if not alvo:
@@ -954,9 +962,9 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
             alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
         esconder = []   # folha retida que tem registro no site: publicar NUNCA a publica; ela vai (ou volta) para privado
         if d.incluir_folhas:
-            for i in con.execute("""SELECT i.codigo, i.tainacan_item_id, w.colecao_id, COALESCE(i.retida,0) FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
+            for i in con.execute(f"""SELECT i.codigo, i.tainacan_item_id, w.colecao_id, COALESCE(i.retida,0) FROM item i LEFT JOIN wp_item w ON w.id=i.tainacan_item_id
                                     WHERE i.projeto_codigo=? AND i.tainacan_item_id IS NOT NULL AND i.duplicata_de IS NULL
-                                      AND (i.lote_id IS NULL OR i.revisao<>'pendente')
+                                      AND {conferida_sql("i.")}
                                       AND NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=i.codigo AND eb.situacao IN ('aberto','em_correcao')
                                                       AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')""", (codigo,)):   # 21/10 (4.1): folha com bloqueio fica de fora
                 if i[3] and alvo == "publish":

@@ -17,6 +17,7 @@ MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux3
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5422,6 +5423,7 @@ def filho(modo):
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F079','Fundo Um Passo','UMP',1)")
         c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_conferencia'")   # UX-73: a trava por folha a conferir só vale exigindo a conferência
         lotes = {}
         def projeto(n, pendente=False):
             P = f"F079-P{n:04d}"
@@ -5528,6 +5530,7 @@ def filho(modo):
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F062','Fundo UX62','U62',1)")
         c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_conferencia'")   # UX-73: a trava do UX-62 só vale exigindo a conferência
         def projeto(n, etapa, aprovado, pend, conf, legado=0, status="nao_publicado"):
             P = f"F062-P{n:04d}"
             c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F062',?)", (n,))
@@ -5589,6 +5592,138 @@ def filho(modo):
         ver("D (tudo conferido, lote sem aprovar): marcado aprova_junto", rd.get("aprova_junto") is True, str(rd))
         r5 = adm.post(f"/api/projetos/{D}/publicar-tudo")
         ver("D: publicar-tudo publica (aprovação junto, CAMP-148)", r5.status_code == 200 and st_proj(D) == "no_ar", r5.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux73_publicar_com_metas":
+        # UX-73 (Rafa: "Quero que possa publicar como está. Só precisa avisar que falta x ou h coisas serem feitas, como objetivos em uma
+        # gamificação"). Com publicacao.exige_conferencia = 0 (padrão da migração), projeto com 0 de N folhas conferidas publica por TODAS as
+        # rotas e as folhas não conferidas vão junto; conferir/aprovar e o título de pasta viram METAS (com progresso). Com '1', volta o UX-62 (409).
+        init_db(); _aplicar_migracoes_real()
+        import time as _t
+        from app import auth, publicador as _pub, wp as _wpm
+        from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
+        from fastapi.testclient import TestClient
+        from app.main import app
+        import app.rotas_projetos as _rp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        def _seguro(f, padrao=False):      # sem a correção os campos novos não existem: a verificação FALHA (não derruba o modo)
+            try:
+                return f()
+            except Exception:  # noqa: BLE001
+                return padrao
+        objetivos = lambda g_: {x["id"]: x for x in (((g_ or {}).get("metas") or {}).get("objetivos") or [])}
+        c = connect()
+        cfg = lambda: c.execute("SELECT valor FROM configuracao WHERE chave='publicacao.exige_conferencia'").fetchone()
+        ver("a migração cria publicacao.exige_conferencia = '0' (publicar como está)", cfg() is not None and cfg()[0] == "0", str(cfg() and tuple(cfg())))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F073','Fundo UX73','U73',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        def projeto(n, pend=5, titulo="Teatro Municipal", dados=False):
+            P = f"F073-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F073',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,tipologia,natureza,modalidade,situacao_obra,autorizado_site,tainacan_item_id,status_site) "
+                      "VALUES (?,'F073',?,?,1975,?,?,?,?,?,1,?,'nao_publicado')",
+                      (P, n, titulo, "Piracicaba" if dados else None, "Teatro" if dados else None, "Edificação (obra nova)" if dados else None,
+                       "Encomenda pública" if dados else None, "Construída" if dados else None, 7300 + n * 100))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft','Teatro',?)", (7300 + n * 100, P))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote',?,'/x','revisao')", (P,)).lastrowid
+            for k in range(1, pend + 1):
+                cod, wid = f"{P}-1975-S01-D{k:05d}", 7300 + n * 100 + k
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id,lote_id) VALUES (?,?,'S01',?,?,'campvision','pendente','rascunho',?,?)",
+                          (cod, P, k, f"Planta {k}", wid, lid))
+                c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, cod))
+            return P, lid
+        (A, la), (B, _), (C, _), (D, _), (E, _) = projeto(1, dados=True), projeto(2), projeto(3), projeto(4), projeto(5)
+        F, _ = projeto(6, titulo="T099_Teatro")                               # título de pasta: meta, não trava
+        c.commit()
+        status = []
+        class WPF:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st): status.append((wid, st)); return {"status": st}
+            def gravar_metadados_lote(self, *a, **k): return {"ok": True, "gravados": []}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        _pub.WP = WPF; _wpm.WP = WPF; _rp.WP = WPF
+        auth.criar_usuario("A", "adm73@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm73@camp.arq.br", "senha": "senha-longa-12345"})
+        st_proj = lambda P_: c.execute("SELECT status_site FROM projeto WHERE codigo=?", (P_,)).fetchone()[0]
+        prow = lambda P_: c.execute("SELECT * FROM projeto WHERE codigo=?", (P_,)).fetchone()
+        wids = lambda P_: {r[0] for r in c.execute("SELECT tainacan_item_id FROM item WHERE projeto_codigo=?", (P_,))}
+        publicados = lambda P_: {w for w, s_ in status if s_ == "publish"} & wids(P_)
+        # 1) a seleção (ELEGIVEL_LOCAL) inclui as não conferidas
+        n_el = c.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL_LOCAL}", (A,)).fetchone()[0]
+        ver("com '0', as 5 folhas não conferidas entram na seleção (ELEGIVEL_LOCAL)", n_el == 5, str(n_el))
+        # 2) condições e metas antes de publicar
+        g = adm.get(f"/api/projetos/{A}/publicacao").json()
+        rv = next((x for x in g["condicoes"] if x["id"] == "revisao"), {})
+        ver("a conferência que falta vira META (revisao.bloqueia = False) e exige_conferencia = False", rv.get("bloqueia") is False and not rv.get("ok") and g.get("exige_conferencia") is False, str(rv)[:200])
+        m = g.get("metas") or {}
+        ob = objetivos(g)
+        ver("metas: 'conferir' com progresso 0 de 5 e 'Falta conferir 5 folhas'", _seguro(lambda: ob["conferir"]["progresso"] == [0, 5] and ob["conferir"]["feito"] is False
+            and ob["conferir"]["falta"] == "Falta conferir 5 folhas" and ob["conferir"]["acao"]["tipo"] == "revisao"), str(ob.get("conferir")))
+        ver("metas: 'aprovar' em aberto (lote sem aprovar)", _seguro(lambda: ob["aprovar"]["feito"] is False and ob["aprovar"]["acao"]["rotulo"] == "Aprovar o lote"), str(ob.get("aprovar")))
+        ver("metas: dados preenchidos (tipo, natureza, modalidade, situação, ano, cidade) contam como feitos", bool(ob) and all(ob.get(k, {}).get("feito") for k in ("programa", "natureza", "modalidade", "situacao_obra", "ano", "cidade", "titulo")), str({k: ob.get(k, {}).get("feito") for k in ob}))
+        ver("metas: resumo feitas/total bate com a lista", _seguro(lambda: m.get("total") == len(ob) and m.get("feitas") == sum(1 for x in ob.values() if x["feito"]) and m["total"] >= 10), f"{m.get('feitas')}/{m.get('total')}")
+        gB = adm.get(f"/api/projetos/{B}/publicacao").json(); obB = objetivos(gB)
+        ver("metas sem os dados: 'Falta dizer o tipo da obra' leva ao campo tipologia; natureza e modalidade também", _seguro(lambda: obB["programa"]["feito"] is False and obB["programa"]["acao"] == {"tipo": "editar_projeto", "rotulo": "Escolher o tipo", "alvo": f"{B}:tipologia"}
+            and obB["natureza"]["acao"]["alvo"] == f"{B}:natureza" and obB["modalidade"]["acao"]["alvo"] == f"{B}:modalidade" and "tipo da obra" in obB["programa"]["falta"]), str(obB.get("programa")))
+        ver("metas: o projeto com mais dados tem mais objetivos feitos", _seguro(lambda: m["feitas"] > gB["metas"]["feitas"]), _seguro(lambda: f"{m['feitas']} x {gB['metas']['feitas']}", ""))
+        gF = adm.get(f"/api/projetos/{F}/publicacao").json()
+        tF = next((x for x in gF["condicoes"] if x["id"] == "titulo"), {})
+        ver("título de pasta (T099_) vira meta: condição titulo não bloqueia e a meta 'titulo' está aberta", tF.get("bloqueia") is False and _seguro(lambda: not objetivos(gF)["titulo"]["feito"]), str(tF)[:160])
+        plF = adm.get(f"/api/projetos/{F}/publicar/plano").json()
+        ver("plano do Publicar: nenhum bloqueio (nem conferência nem título) e todas as folhas a publicar", plF["pode_executar"] and not plF["bloqueios"] and plF["folhas_a_publicar"] == 5 and plF.get("metas", {}).get("total"), str(plF["bloqueios"])[:160])
+        # 3) todas as rotas de publicar respondem 2xx com 0 de 5 conferidas
+        r1 = adm.post(f"/api/projetos/{A}/publicar", json={"acao": "publicar"})
+        ver("/publicar (rota direta): 2xx e o projeto fica publicado", r1.status_code == 200 and r1.json().get("ok") and st_proj(A) == "no_ar", r1.text[:200])
+        ver("/publicar: as 5 folhas não conferidas foram publicadas junto", len(publicados(A) - {7400}) == 5, str(sorted(publicados(A))))
+        r2 = adm.post(f"/api/projetos/{B}/publicar-tudo")
+        ver("/publicar-tudo: 2xx e publicado com as folhas não conferidas", r2.status_code == 200 and st_proj(B) == "no_ar" and len(publicados(B) - {7500}) == 5, r2.text[:200])
+        r3 = adm.post(f"/api/projetos/{C}/publicar-tudo?tarefa=1")
+        for _ in range(100):
+            if st_proj(C) == "no_ar":
+                break
+            _t.sleep(0.1)
+        ver("/publicar-tudo com tarefa: 2xx e a tarefa publica", r3.status_code in (200, 202) and r3.json().get("tarefa_id") and st_proj(C) == "no_ar", r3.text[:200])
+        r4 = adm.post("/api/projetos/lote", json={"codigos": [D], "acao": "publicar"})
+        ver("/projetos/lote: publica o projeto sem conferência", r4.status_code == 200 and r4.json().get("ok") and st_proj(D) == "no_ar", r4.text[:200])
+        rf = _pub.propagar_status_fundo("F073", "no_ar", "adm73@camp.arq.br")
+        ign = {x["codigo"]: x["motivo"] for x in rf.get("ignorados") or []}
+        ver("publicar o fundo inteiro: E publicado, sem ignorar por conferência", E not in ign and st_proj(E) == "no_ar" and len(publicados(E) - {7800}) == 5, str(rf)[:300])
+        # 4) Publicar NÃO aprova o lote nem marca folhas como conferidas
+        ver("publicar não aprova o lote nem confere folhas", c.execute("SELECT aprovado_em FROM lista_processamento WHERE id=?", (la,)).fetchone()[0] is None
+            and c.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND revisao='pendente'", (A,)).fetchone()[0] == 5)
+        # 5) depois de publicado, conferir continua possível (a meta avança)
+        f1 = f"{A}-1975-S01-D00001"
+        rr = adm.post(f"/api/itens/{f1}/revisao", json={"estado": "conferida"})
+        ver("folha publicada sem conferir pode ser conferida depois (não é 'sem_mudanca')", rr.status_code == 200 and rr.json().get("revisao") == "conferida" and not rr.json().get("sem_mudanca"), rr.text[:160])
+        obA = objetivos(adm.get(f"/api/projetos/{A}/publicacao").json())
+        ver("a meta 'conferir' avança para 1 de 5", _seguro(lambda: obA["conferir"]["progresso"] == [1, 5] and obA["conferir"]["falta"] == "Falta conferir 4 folhas"), str(obA.get("conferir")))
+        # 6) a folha não conferida ainda fora do site sobe (criar_folha_no_site não recusa por conferência com '0')
+        G, _ = projeto(7, pend=1); c.execute("UPDATE item SET tainacan_item_id=NULL, status_site='nao_publicado' WHERE projeto_codigo=?", (G,)); c.commit()
+        class WPQuebra:
+            def __init__(self, *a, **k): raise RuntimeError("site falso fora")
+        _pub.WP = WPQuebra
+        fG = f"{G}-1975-S01-D00001"
+        e0 = _pub.criar_folha_no_site(fG, "adm73@camp.arq.br").get("erro") or ""
+        ver("com '0', enviar ao site a folha não conferida passa da regra da conferência", "conferida" not in e0, e0[:160])
+        # 7) com '1', volta tudo como era (UX-62): 409 e a não conferida fica de fora
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_conferencia'"); c.commit()
+        e1 = _pub.criar_folha_no_site(fG, "adm73@camp.arq.br").get("erro") or ""
+        ver("com '1', a folha não conferida não sobe (como antes)", "conferida" in e1, e1[:160])
+        _pub.WP = WPF
+        H, _ = projeto(8); c.commit()
+        n_el1 = c.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND {ELEGIVEL_LOCAL}", (H,)).fetchone()[0]
+        ver("com '1', a seleção deixa as não conferidas de fora", n_el1 == 0, str(n_el1))
+        rv1 = next(x for x in condicoes_projeto(c, prow(H))["condicoes"] if x["id"] == "revisao")
+        ver("com '1', a conferência volta a bloquear", rv1["bloqueia"] is True and not rv1["ok"], str(rv1)[:160])
+        h1 = adm.post(f"/api/projetos/{H}/publicar", json={"acao": "publicar"})
+        h2 = adm.post(f"/api/projetos/{H}/publicar-tudo")
+        h3 = adm.post(f"/api/projetos/{H}/publicar-tudo?tarefa=1")
+        ver("com '1', /publicar, /publicar-tudo e a tarefa recusam com 409", h1.status_code == 409 and h2.status_code == 409 and h3.status_code == 409 and st_proj(H) != "no_ar",
+            f"{h1.status_code} {h2.status_code} {h3.status_code}")
+        I, _ = projeto(9, titulo="T099_Teatro"); c.commit()
+        tI = next((x for x in condicoes_projeto(c, prow(I))["condicoes"] if x["id"] == "titulo"), {})
+        ver("com '1', o título de pasta volta a bloquear (UX-15)", tI.get("bloqueia") is True, str(tI)[:120])
         c.close()
         for l in res: print(l)
     elif modo == "ux67_nomes_pasta":
@@ -14097,6 +14232,7 @@ def filho(modo):
         # UX-15: nome de pasta/código como título (T099_, "F000 - …", "01 - …", TIFF, P0012, "Projeto Não Identificado N") não é criado,
         # importado, editado nem publicado; o aviso da tela Projetos lista TODOS; a sugestão de título nunca é aplicada sozinha; cidades agrupadas.
         init_db(); aplicar_migracoes()
+        _c0 = connect(); _c0.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_conferencia'"); _c0.commit(); _c0.close()   # UX-73: título de pasta só trava exigindo a conferência
         from app import auth
         from app.similaridade import titulo_tecnico, sugerir_titulo
         from app.publicacao import condicoes_projeto
@@ -16312,6 +16448,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-62: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160b2) UX-73: publicar como está (folhas não conferidas vão juntas), com metas; publicacao.exige_conferencia=1 volta o UX-62")
+rc, out = rodar("ux73_publicar_com_metas", f"{tmp}/ux73.db")
+if rc != 0: ok(False, f"teste ux73_publicar_com_metas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-73: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("160c) UX-67: título que veio da pasta (“- 12 Folhas”, códigos): limpo na importação; correção dos existentes com prévia, aplicar e desfazer")
 rc, out = rodar("ux67_nomes_pasta", f"{tmp}/ux67.db")
