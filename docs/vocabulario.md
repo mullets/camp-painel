@@ -205,6 +205,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar).
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").
+- UX-68 (03/11/2026): **decisão** é só o que está na fila de **Decisões** (projeto parecido, lote com números repetidos, dado diferente do
+  cadastro, mesmo nome em outro fundo, verificar destino). O número do menu, a página Decisões e o "**N decisões pendentes sobre este projeto**"
+  da página do projeto contam a mesma fila. No cartão **Dados do projeto**, a diferença entre o carimbo das folhas e o cadastro (e as obras
+  distintas na pasta) é "**N a confirmar**", com o botão **Confirmar** e, em "O que falta", "**Confirmar N dados do projeto (carimbo × cadastro)**":
+  é calculada das folhas e se resolve no próprio projeto (**Usar … no projeto** / **Manter o do projeto**); não é decisão. A diferença que
+  também está na fila (o mesmo campo) conta uma vez só, como decisão ("1 decisão pendente · sobre este projeto, na fila de Decisões", **Ver em Decisões**).
 
 ## Máquinas em abas (UX-24, 27/10/2026)
 - Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);

@@ -169,7 +169,7 @@ for n in range(1, 35):
     const cs = await page.evaluate(() => (SL.consenso || {}).txt || '');
     const nums = (cs.match(/\d+/g) || []).map(Number);
     chk(/1 folha diz outra coisa/.test(cs) && /27 folhas sem algum dado no carimbo/.test(cs) && nums.every(n => n <= 34), '(8) consenso conta folhas (34 no projeto): "' + cs + '"');
-    chk(/1 pergunta/.test(await cartao('dados')), '(8) o cartão Dados faz UMA pergunta (o ano): "' + await cartao('dados') + '"');
+    chk(/1 a confirmar/.test(await cartao('dados')), '(8) o cartão Dados tem UMA diferença a confirmar (o ano): "' + await cartao('dados') + '"');
     // (9) uma linha por campo, um botão
     await gaveta('dados'); if (!(await page.isVisible('#pj-consenso'))) { await page.click('#pj-gaveta [data-pjc-porfolha]'); await page.waitForTimeout(300) }
     const ano = await page.$eval('#pj-consenso .cs-campo', c => ({ t: c.textContent.replace(/\s+/g, ' '), divs: c.querySelectorAll('.cs-div').length, todas: [...c.querySelectorAll('[data-cs-todas]')].map(b => b.textContent), usar: c.querySelectorAll('[data-cs-usar]').length, li: c.querySelectorAll('li').length }));

@@ -3931,19 +3931,26 @@ function pjPerguntasHTML(r,code){const {perg,opc}=pjPerguntas(r),op=EU&&['operad
     const proj=q.proj?`<p class="pjq-txt">No carimbo das folhas: <b>${v(c.consenso)}</b>. No cadastro do projeto: <b>${v(c.projeto)}</b>.</p><div class="act">${adm?`<button type="button" class="btn sm" data-cs-proj="${escHtml(c.campo)}">Usar “${v(c.consenso)}” no projeto</button>`:''}${op?`<button type="button" class="btn sm" data-cs-manter="${escHtml(c.campo)}" data-lote="${L}">Manter o do projeto</button>`:''}</div>`:'';
     return `<li class="pjq" data-pjq="${escHtml(c.campo)}"><h3>${escHtml(c.rotulo)}</h3>${proj}${fol}</li>`};
   const opcHTML=opc.length?`<details class="pjq-opc"><summary>${qtd(opc.length,'campo','campos')} com folhas sem o dado no carimbo (não é diferença)</summary><ul class="pjq-lista">${opc.map(({c,livres})=>`<li class="pjq"><h3>${escHtml(c.rotulo)}</h3><p class="pjq-txt">As folhas dizem <b>${v(c.consenso)}</b>; ${qtd(livres.length,'folha não diz nada ou escreve de outro jeito','folhas não dizem nada ou escrevem de outro jeito')}.</p><div class="act">${usarTodas(c,livres)}</div></li>`).join('')}</ul></details>`:'';
-  return (perg.length?`<ul class="pjq-lista">${perg.map(linha).join('')}</ul>`:'<p class="help">Nada a decidir: as folhas concordam com o cadastro do projeto.</p>')+opcHTML}
+  return (perg.length?`<ul class="pjq-lista">${perg.map(linha).join('')}</ul>`:'<p class="help">Nada a confirmar: as folhas concordam com o cadastro do projeto.</p>')+opcHTML}
 function pjcDados(code){const S=window.SL&&window.SL.code===code?window.SL:{},C=escHtml(code),r=window.CONSENSO_PJ,o={d:[]};
   const gav=t=>`<button type="button" class="btn sm pjc-main" data-pjc-gav="dados" data-codigo="${C}" aria-expanded="${pjGav(code).aberta==='dados'}">${t}</button>`;
   if(!S.consenso){o.v='…';o.d.push('conferindo as folhas com o cadastro');return {html:pjcCartao('dados','Dados do projeto',o),urg:false}}
-  const {perg,opc}=S.consenso.tem&&window.PROJETO_PJ===code?pjPerguntas(r):{perg:[],opc:[]};
+  const {perg,opc}=S.consenso.tem&&window.PROJETO_PJ===code?pjPerguntasDoCartao(r):{perg:[],opc:[]},nDec=((window.PJ_D||{}).decisoes_pendentes||[]).length;
   // 20/10 (CAMP-126): "obras distintas" que espera uma pessoa conta aqui (o cartão não diz "Em ordem" com essa decisão aberta); CAMP-125: a sugestão do CAMP Vision com "Usar" à vista
   const cv=window.CV_SAIDAS&&window.CV_SAIDAS.projeto_codigo===code?window.CV_SAIDAS:null,obras=cvObrasPendente(cv),sug=(cv&&cv.sugestoes)||[],op=EU&&['operador','admin','master'].includes(EU.papel);
-  const obrasBt=`<button type="button" class="btn sm${perg.length?'':' pjc-main'}" data-obras-abrir="${C}">${perg.length?'Obras distintas':'Decidir'}</button>`;
-  if(perg.length){o.cor='at';o.v=obras?qtd(perg.length+1,'decisão pendente','decisões pendentes'):qtd(perg.length,'pergunta','perguntas');o.d.push(perg.length===1?pjPerguntaCurta(perg[0]):perg.map(q=>escHtml(q.c.rotulo.toLowerCase())).join(', '));if(obras)o.d.push('obras distintas na pasta');o.acoes=gav('Decidir')+(obras?' '+obrasBt:'')}
-  else if(obras){o.cor='at';o.v='1 decisão pendente';o.d.push(`o CAMP Vision achou ${cv.obras.grupos.length} códigos de unidade: mesmo conjunto ou projetos diferentes?`);o.acoes=obrasBt}
-  else{o.cor='ok';o.v='Em ordem';o.d.push(S.consenso.tem?'as folhas concordam com o cadastro':'nada a decidir');if(opc.length){o.d.push(qtd(opc.length,'campo pode ser completado','campos podem ser completados'));o.acoes=gav('Ver')}else o.acoes=`<button type="button" class="btn sm" data-pjc-aba="dados" data-codigo="${C}">Ver dados</button>`}
+  // UX-68: "decisão" é só a fila de Decisões (o número do menu). O que este cartão conta (o carimbo das folhas × o cadastro, obras distintas na pasta)
+  // é calculado das folhas e se resolve aqui: são "dados a confirmar". A decisão registrada sobre o mesmo campo conta só em Decisões.
+  const obrasBt=`<button type="button" class="btn sm${perg.length?'':' pjc-main'}" data-obras-abrir="${C}">${perg.length?'Obras distintas':'Confirmar'}</button>`;
+  if(perg.length){o.cor='at';o.v=qtd(perg.length+(obras?1:0),'a confirmar','a confirmar');o.d.push(perg.length===1?pjPerguntaCurta(perg[0]):perg.map(q=>escHtml(q.c.rotulo.toLowerCase())).join(', '));if(obras)o.d.push('obras distintas na pasta');o.acoes=gav('Confirmar')+(obras?' '+obrasBt:'')}
+  else if(obras){o.cor='at';o.v='1 a confirmar';o.d.push(`o CAMP Vision achou ${cv.obras.grupos.length} códigos de unidade: mesmo conjunto ou projetos diferentes?`);o.acoes=obrasBt}
+  else if(nDec){o.cor='at';o.v=qtd(nDec,'decisão pendente','decisões pendentes');o.d.push('sobre este projeto, na fila de Decisões');o.acoes=`<a class="btn sm pjc-main" href="#decisoes">Ver em Decisões</a>`}   /* UX-68 */
+  else{o.cor='ok';o.v='Em ordem';o.d.push(S.consenso.tem?'as folhas concordam com o cadastro':'nada a confirmar');if(opc.length){o.d.push(qtd(opc.length,'campo pode ser completado','campos podem ser completados'));o.acoes=gav('Ver')}else o.acoes=`<button type="button" class="btn sm" data-pjc-aba="dados" data-codigo="${C}">Ver dados</button>`}
   if(sug.length&&op){const L=escHtml(cv.lote_id);o.d.push(sug.map(x=>`sugestão: ${escHtml(ROT_CAMPO_CV[x.campo]||x.campo)} ${escHtml(x.sugerido)}`).join(' · '));o.acoes=(o.acoes||'')+' '+sug.slice(0,2).map(x=>`<button type="button" class="btn sm" data-cv-resp="sugestao" data-lote="${L}" data-chave="${escHtml(x.campo)}" data-acao="usar" data-valor="${escHtml(x.sugerido)}">Usar ${escHtml(ROT_CAMPO_CV[x.campo]||x.campo)} ${escHtml(x.sugerido)}</button>`).join(' ')}
+  if(nDec&&(perg.length||obras))o.d.push(`e ${qtd(nDec,'decisão pendente','decisões pendentes')} em <a href="#decisoes">Decisões</a>`);   /* UX-68: a mesma conta do menu */
   return {html:pjcCartao('dados','Dados do projeto',o),urg:perg.length>0||obras}}
+/* UX-68: as diferenças do carimbo que já viraram decisão registrada (tipo 'divergencia', o mesmo campo) contam em Decisões, não aqui (sem contar 2 vezes) */
+function pjPerguntasDoCartao(r){const x=pjPerguntas(r),dec=new Set(((window.PJ_D||{}).decisoes_pendentes||[]).filter(d=>d.tipo==='divergencia'&&d.campo).map(d=>d.campo));
+  return dec.size?{perg:x.perg.filter(q=>!dec.has(q.c.campo)),opc:x.opc}:x}
 document.addEventListener('click',e=>{const a=e.target.closest('[data-obras-abrir]');if(!a)return;const s=window.CV_SAIDAS;if(!s||!s.obras)return;openDrawer('Obras distintas na pasta',a.dataset.obrasAbrir,cvObrasHTML(s))});
 /* 21/10 (Rafa, F024-P0001: "pq fica como rascunho? eu quero que suba isso… botão de atualizar a página"):
    projeto já publicado com folhas que o visitante ainda não vê (rascunho no site, ou conferidas e nunca enviadas) e/ou correções feitas depois
@@ -4008,7 +4015,7 @@ function pendenciasProjeto(d){if(!d||!d.projeto)return null;const code=d.projeto
     add('retiradas',`Decidir ${qtd(ret,'folha retirada','folhas retiradas')} pelo CAMP Vision`,ret,{cv:'retiradas'});
     const nRl=relDecisoes(cv).abertas.length;add('releituras',`Decidir ${qtd(nRl,'mudança da releitura','mudanças da releitura')} do CAMP Vision`,nRl,{passo:'releituras'})}
   const aut=its.filter(i=>i.autoria_divergente).length;add('autoria',`Confirmar a autoria de ${qtd(aut,'folha','folhas')}`,aut,{aba:'erros'});
-  const pg=S.consenso.tem&&window.PROJETO_PJ===code?pjPerguntas(window.CONSENSO_PJ).perg.length:0;add('dados',`Decidir ${qtd(pg,'pergunta','perguntas')} dos dados do projeto`,pg,{gav:'dados'});
+  const pg=S.consenso.tem&&window.PROJETO_PJ===code?pjPerguntasDoCartao(window.CONSENSO_PJ).perg.length:0;add('dados',`Confirmar ${qtd(pg,'dado','dados')} do projeto (carimbo × cadastro)`,pg,{gav:'dados'});   /* UX-68 */
   if(!c.conferir&&lotes.length&&!lotes.every(x=>x.aprovado_em)&&!umPasso())add('aprovar','Aprovar o lote',1,{pp:'aprovar'});   // CAMP-148: com o um passo, o Publicar aprova junto
   if(its.length&&g.estado!=='no_ar'){const falta=(g.condicoes||[]).filter(x=>x.bloqueia&&!x.ok&&['direitos','teste','aceite_cv'].includes(x.id))[0];
     if(falta)add('publicar',`Publicar: falta ${faltaCondicao(falta).curto}`,1,{aba:'publicacao'});else if(!k.bloq&&!c.conferir&&!out.some(x=>x.chave==='aprovar'))add('publicar','Publicar no site',1,{publicar:true})}

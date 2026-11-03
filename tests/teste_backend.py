@@ -14,7 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
-MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5682,6 +5682,52 @@ def filho(modo):
         ver("Desfazer fica no histórico e não se repete", (adm.get("/api/titulos-de-pasta/historico").json().get("lotes") or [{}])[0].get("desfeito") is True
             and adm.post("/api/titulos-de-pasta/desfazer", json={"lote": a.get("lote")}).status_code == 404
             and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='titulo_corrigido_desfeito' AND codigo=?", (P33,)).fetchone()[0] == 1)
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux68_decisoes":
+        # UX-68 (P2): "Decisões" com dois sentidos. A página Decisões (e o número do menu) conta a fila `decisao`; o cartão "Dados do projeto"
+        # contava as diferenças carimbo × cadastro (calculadas das folhas) como "decisões pendentes". Aqui: as diferenças NÃO entram na fila,
+        # o projeto informa as decisões dele pela MESMA fila (e o campo da divergência, para a tela não contar duas vezes).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, decisoes as _dec
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F068','Fundo 68','F68',1)")
+        P = "F068-P0033"
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F068',33)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1975)", (P, "F068", 33, "Teatro"))
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L',?,'/x','revisao')", (P,)).lastrowid
+        for k in range(1, 4):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,ano_folha) VALUES (?,?,'S01',?,?,'campvision',?,'conferida',1978)",
+                      (f"{P}-1978-S01-D{k:05d}", P, k, f"Planta {k}", lid))
+        c.commit()
+        auth.criar_usuario("Adm", "adm68@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm68@camp.arq.br", "senha": "senha-longa-12345"})
+        cs = adm.get(f"/api/projetos/{P}/consenso").json()
+        ano = next((x for x in cs.get("campos", []) if x["campo"] == "ano"), {})
+        ver("as folhas dizem 1978 e o cadastro 1975: a página do projeto tem o que confirmar", ano.get("projeto_difere") is True and str(ano.get("consenso")) == "1978", str(ano)[:200])
+        menu = lambda: adm.get("/api/pendencias").json()
+        m0, d0, pj0 = menu(), adm.get("/api/decisoes").json(), adm.get(f"/api/projetos/{P}/detalhe").json()
+        ver("sem decisão registrada: Decisões, o menu e o projeto dizem 0 (a diferença do carimbo não é decisão)",
+            d0["total"] == 0 and (m0.get("pedem_acao") or {}).get("decisoes", m0.get("decisoes")) == 0 and pj0.get("decisoes_pendentes") == [], f"{d0['total']} {m0.get('decisoes')} {pj0.get('decisoes_pendentes')}")
+        # o CAMP Vision registra a divergência do ano (a fila de Decisões)
+        did, _ = _dec.abrir(c, "divergencia", f"divergencia:{P}:ano:1978", "F068", "Teatro",
+                            {"projeto_codigo": P, "projeto_titulo": "Teatro", "lote_id": lid, "campo": "ano", "valor_cadastro": "1975", "valor_cv": "1978",
+                             "candidatos": [{"valor": "1975", "fontes": ["cadastro do painel"]}, {"valor": "1978", "fontes": ["CAMP Vision"]}]}, "campvision")
+        c.commit()
+        m1, d1, pj1 = menu(), adm.get("/api/decisoes").json(), adm.get(f"/api/projetos/{P}/detalhe").json()
+        dp = pj1.get("decisoes_pendentes") or []
+        ver("com a decisão registrada: o número do menu, a página Decisões e o projeto dizem 1",
+            d1["total"] == 1 and (m1.get("pedem_acao") or {}).get("decisoes", m1.get("decisoes")) == 1 and len(dp) == 1, f"{d1['total']} {m1.get('pedem_acao')} {dp}")
+        ver("a decisão do projeto diz o campo (ano), para a tela não contar a mesma diferença duas vezes", dp and dp[0].get("tipo") == "divergencia" and dp[0].get("campo") == "ano", str(dp)[:200])
+        # usar o valor do carimbo no projeto responde a decisão (CAMP-106): menu, Decisões e projeto voltam a 0 juntos
+        r = adm.patch(f"/api/projetos/{P}", json={"ano": 1978})
+        m2, d2, pj2 = menu(), adm.get("/api/decisoes").json(), adm.get(f"/api/projetos/{P}/detalhe").json()
+        ver("usar 1978 no projeto fecha a decisão: os três voltam a 0 juntos", r.status_code == 200 and d2["total"] == 0
+            and (m2.get("pedem_acao") or {}).get("decisoes", m2.get("decisoes")) == 0 and pj2.get("decisoes_pendentes") == [], r.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "conferir_so_avisos":
@@ -15951,6 +15997,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-67: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160d) UX-68: Decisões é só a fila de decisões; o projeto conta a mesma fila (as diferenças do carimbo são 'dados a confirmar')")
+rc, out = rodar("ux68_decisoes", f"{tmp}/ux68.db")
+if rc != 0: ok(False, f"teste ux68_decisoes não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-68: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("161) CAMP-150: conferir só as folhas com aviso (as sem aviso entram conferidas sozinhas), atrás de revisao.conferir_so_avisos")
 rc, out = rodar("conferir_so_avisos", f"{tmp}/conferir_so_avisos.db")
