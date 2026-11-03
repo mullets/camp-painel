@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -8553,7 +8553,7 @@ def filho(modo):
         cli = httpx.Client(transport=httpx.MockTransport(responder))
         orig = ga4_direto.GA4.__init__
         ga4_direto.GA4.__init__ = lambda self, cfg, cliente=None: orig(self, cfg, cli)
-        ga4_direto._TOKEN.update(chave=None, token=None, expira=0)
+        ga4_direto._TOKENS.clear()
         a = ro._analytics_calcular()
         ver("analytics pelo GA4 direto: períodos, páginas e 'agora' (Realtime)", a["disponivel"] and a["origem"].startswith("Google Analytics 4 (direto") and a["periodos"]["7d"] == {"activeUsers": 40, "screenPageViews": 120}
             and a["top_paginas"][0]["visualizacoes"] == 12 and a["agora"] == {"disponivel": True, "usuarios": 3, "janela_min": 30}, str(a)[:400])
@@ -11933,6 +11933,105 @@ def filho(modo):
         r = adm.patch(f"/api/inscricoes/{I1}", json={"situacao": "selecionada"}).json()
         ver("sem TR10: sai pelo e-mail do site", r["aviso"] and r["aviso"].get("canal") == "site" and site and site[-1]["para"] == "ana@exemplo.org" and "selecionada" in site[-1]["texto"], str(r))
         ver("operador não muda inscrição (403)", op.patch(f"/api/inscricoes/{I1}", json={"situacao": "em_analise"}).status_code == 403)
+        print("\n".join(res))
+    elif modo == "visitas_site":
+        # 03/11 (Rafael: "para colocar o analytics no nosso painel, adapte essa solução para nós" / "faça ele no dashboard"): GA4 + Search
+        # Console → coletor → banco do painel → tela. O Google é falso (MockTransport): nenhuma chamada real.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, httpx, jwt as _jwt
+        from datetime import date as _d, datetime
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+        from fastapi.testclient import TestClient
+        from app import auth, ga4_direto, visitas
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        k_ = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = k_.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+        conta = {"type": "service_account", "client_email": "painel@camp.iam.gserviceaccount.com", "private_key": pem, "private_key_id": "abc", "token_uri": "https://oauth2.googleapis.com/token", "project_id": "camp-x"}
+        c = connect()
+        ver("sem Google ligado: a coleta explica o que falta e não grava nada", "ga4.propriedade" in (visitas.coletar(hoje=_d(2026, 11, 3))["ga4"].get("erro") or "")
+            and c.execute("SELECT COUNT(*) FROM visita_dia").fetchone()[0] == 0)
+        c.execute("UPDATE configuracao SET valor='467114271' WHERE chave='ga4.propriedade'"); c.execute("UPDATE configuracao SET valor=? WHERE chave='ga4.conta_servico'", (_j.dumps(conta),))
+        c.execute("UPDATE configuracao SET valor='sc-domain:camp.arq.br' WHERE chave='sc.site'"); c.execute("UPDATE configuracao SET valor='5' WHERE chave='visitas.dias_iniciais'"); c.commit()
+        corpos, escopos, estado = [], [], {"fator": 1, "quebra": None}
+        def dias_de(corpo):
+            r_ = corpo["dateRanges"][0] if "dateRanges" in corpo else corpo
+            a, b = _d.fromisoformat(r_["startDate"]), _d.fromisoformat(r_["endDate"])
+            return [_d.fromordinal(o) for o in range(a.toordinal(), b.toordinal() + 1)]
+        def responder(req):
+            if req.url.host == "oauth2.googleapis.com":
+                a = dict(x.split("=", 1) for x in req.content.decode().split("&"))["assertion"]
+                cl = _jwt.decode(a, k_.public_key(), algorithms=["RS256"], audience="https://oauth2.googleapis.com/token")
+                escopos.append(cl["scope"])
+                return httpx.Response(200, json={"access_token": "tok-" + str(len(escopos)), "expires_in": 3600})
+            corpo = _j.loads(req.content)
+            if estado["quebra"] and estado["quebra"] in req.url.host:
+                return httpx.Response(403, json={"error": {"message": "sem acesso"}})
+            if "searchconsole" in req.url.host:
+                corpos.append(("sc", corpo))
+                dim = corpo["dimensions"][1]
+                linhas = [{"keys": [d.isoformat(), "arquitetura modernista" if dim == "query" else "https://camp.arq.br/acervo/"], "clicks": 2, "impressions": 10, "position": 4.0} for d in dias_de(corpo)]
+                return httpx.Response(200, json={"rows": linhas})
+            corpos.append(("ga", corpo))
+            nomes = [x["name"] for x in corpo.get("dimensions") or []]
+            mh = [{"name": m["name"]} for m in corpo["metrics"]]
+            f = estado["fator"]
+            if not nomes:   # período pronto: pessoas únicas (menos que a soma dos dias)
+                return httpx.Response(200, json={"metricHeaders": mh, "rowCount": 1, "rows": [{"metricValues": [{"value": str(7 * f)}, {"value": "30"}, {"value": "90"}]}]})
+            vals = {"date": None, "sessionDefaultChannelGroup": "Organic Search", "sessionSourceMedium": "google / organic", "pagePath": "/acervo/arquitetos/burle-marx/",
+                    "pageTitle": "Burle Marx – CAMP", "city": "São Paulo", "country": "Brazil", "deviceCategory": "mobile"}
+            linhas = [{"dimensionValues": [{"value": d.strftime("%Y%m%d") if n == "date" else vals[n]} for n in nomes],
+                       "metricValues": [{"value": str(3 * f)}, {"value": str(4 * f)}, {"value": str(9 * f)}]} for d in dias_de(corpo)]
+            return httpx.Response(200, json={"dimensionHeaders": [{"name": n} for n in nomes], "metricHeaders": mh, "rowCount": len(linhas), "rows": linhas})
+        cli = httpx.Client(transport=httpx.MockTransport(responder))
+        ga4_direto._TOKENS.clear()
+        r = visitas.coletar(por="teste", cliente=cli, hoje=_d(2026, 11, 3))
+        ver("1ª coleta: GA4 e Search Console ok", r["ga4"].get("ok") and r["search_console"].get("ok"), str(r)[:300])
+        dias = [x[0] for x in c.execute("SELECT dia FROM visita_dia ORDER BY dia")]
+        ver("1ª coleta busca os dias iniciais (visitas.dias_iniciais) até ontem", dias[0] == "2026-10-29" and dias[-1] == "2026-11-02" and len(dias) == 5, str(dias))
+        ga = [b for t, b in corpos if t == "ga"]
+        ver("filtra pelo domínio do site (com e sem www.)", all(b.get("dimensionFilter", {}).get("filter", {}).get("inListFilter", {}).get("values") == ["camp.arq.br", "www.camp.arq.br"] for b in ga))
+        ver("um token por escopo, só leitura (analytics.readonly e webmasters.readonly)", sorted(escopos) == ["https://www.googleapis.com/auth/analytics.readonly", "https://www.googleapis.com/auth/webmasters.readonly"], str(escopos))
+        ver("dimensões guardadas por dia (canal, origem, página com título, cidade, aparelho)",
+            {x[0] for x in c.execute("SELECT DISTINCT tipo FROM visita_dimensao")} == {"canal", "origem", "pagina", "cidade", "dispositivo"}
+            and c.execute("SELECT extra FROM visita_dimensao WHERE tipo='pagina'").fetchone()[0] == "Burle Marx – CAMP"
+            and c.execute("SELECT valor FROM visita_dimensao WHERE tipo='cidade'").fetchone()[0] == "São Paulo, Brazil")
+        estado["fator"] = 2
+        r2 = visitas.coletar(por="teste", cliente=cli, hoje=_d(2026, 11, 4))
+        ver("2ª coleta recoleta só os últimos dias (o Google ainda ajusta) e acrescenta o novo", r2["ga4"]["de"] == "2026-10-30" and r2["ga4"]["ate"] == "2026-11-03", str(r2)[:200])
+        linhas = {x[0]: x[1] for x in c.execute("SELECT dia, sessoes FROM visita_dia")}
+        ver("sem duplicar: dia velho fica, dias recoletados trocam de número", len(linhas) == 6 and linhas["2026-10-29"] == 4 and linhas["2026-10-30"] == 8 and linhas["2026-11-03"] == 8, str(linhas))
+        ver("dimensões também sem duplicar", c.execute("SELECT COUNT(*) FROM visita_dimensao WHERE tipo='canal'").fetchone()[0] == 6)
+        ver("Search Console sem duplicar", c.execute("SELECT COUNT(*) FROM busca_google WHERE tipo='consulta'").fetchone()[0] == 6)
+        ver("cada coleta fica registrada (fonte, período, linhas, quem pediu)", c.execute("SELECT COUNT(*) FROM visita_coleta WHERE erro IS NULL AND por='teste' AND linhas>0").fetchone()[0] == 4)
+        estado["quebra"] = "searchconsole"
+        r3 = visitas.coletar(por="teste", cliente=cli, hoje=_d(2026, 11, 4))
+        ver("Search Console sem acesso: o erro diz o que fazer, o GA4 segue, nada se perde", r3["ga4"].get("ok") and not r3["search_console"]["ok"] and "Usuários e permissões" in r3["search_console"]["erro"]
+            and c.execute("SELECT COUNT(*) FROM busca_google WHERE tipo='consulta'").fetchone()[0] == 6, str(r3)[:300])
+        ver("o erro fica registrado na coleta", "Search Console" in (c.execute("SELECT erro FROM visita_coleta WHERE fonte='search_console' ORDER BY id DESC").fetchone()[0] or ""))
+        estado["quebra"] = None
+        s = visitas.resumo(c, "2026-10-29", "2026-11-03")
+        ver("resumo do período: soma visitas e páginas, ranking de canais e pesquisas", s["total"]["sessoes"] == 4 + 8 * 5 and s["total"]["pessoas"] is None and s["canais"][0]["valor"] == "Organic Search"
+            and s["busca"]["consultas"][0]["valor"] == "arquitetura modernista" and s["busca"]["consultas"][0]["ctr"] == 20.0 and s["busca"]["consultas"][0]["posicao"] == 4.0, str(s["total"]))
+        p28 = visitas.periodos(_d(2026, 11, 4))["28d"]
+        s28 = visitas.resumo(c, p28[0], p28[1], "28d")
+        ver("pessoas: o número único do Google para o período (não a soma dos dias)", s28["total"]["pessoas"] == 14 and s28["total"]["pessoas_exato"], str(s28["total"]))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli_(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op = cli_("adm@camp.arq.br", "senha-longa-12345"), cli_("op@camp.arq.br", "senha-operador-123")
+        a = op.get("/api/visitas?periodo=livre&de=2026-10-29&ate=2026-11-03")
+        ver("tela: a equipe lê o histórico (sem chamar o Google)", a.status_code == 200 and a.json()["total"]["sessoes"] == 44 and len(a.json()["por_dia"]) == 6 and a.json()["cobertura"]["de"] == "2026-10-29", a.text[:200])
+        ver("tela: não devolve a chave da conta de serviço", "PRIVATE KEY" not in a.text and "private_key" not in a.text)
+        ver("tela: período inválido = 400", op.get("/api/visitas?periodo=xx").status_code == 400 and op.get("/api/visitas?periodo=livre&de=ontem&ate=hoje").status_code == 400)
+        ver("buscar agora e diagnóstico só para admin", op.post("/api/visitas/coletar").status_code == 403 and op.get("/api/visitas/diagnostico").status_code == 403)
+        agora = datetime(2026, 11, 5, 7, 0)
+        ver("coleta automática: depois da hora do dia, se ainda não houve hoje", visitas.precisa_coletar(c, agora) and not visitas.precisa_coletar(c, datetime(2026, 11, 5, 5, 0))
+            and not visitas.precisa_coletar(c, datetime.now().replace(hour=23)))
+        c.close()
         print("\n".join(res))
     elif modo == "contatos_emkt":
         # 03/11 (Rafael: "mostrar no painel quem aceitou receber e-mails da CAMP, para exportar a lista para o Sender.net"): inscrições com
@@ -15884,6 +15983,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Aviso da inscrição: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Visitas ao site: Google Analytics + Search Console guardados no painel, sem duplicar, tela e permissões")
+rc, out = rodar("visitas_site", f"{tmp}/visitas_site.db")
+if rc != 0: ok(False, f"teste visitas_site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Visitas ao site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Lista de e-mail da CAMP: quem aceitou receber e-mails, CSV para o Sender.net")
 rc, out = rodar("contatos_emkt", f"{tmp}/contatos_emkt.db")

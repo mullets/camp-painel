@@ -71,6 +71,8 @@ from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página públ
 app.include_router(rotas_entrega)
 from .contatos_emkt import router as rotas_contatos_emkt   # 03/11/2026: quem aceitou receber e-mails da CAMP → CSV para o Sender.net
 app.include_router(rotas_contatos_emkt)
+from .rotas_visitas import router as rotas_visitas   # 03/11/2026: visitas ao site com histórico (GA4 + Search Console)
+app.include_router(rotas_visitas)
 app.include_router(rotas_operacao)
 app.include_router(rotas_gestao)
 from .rotas_planilha import router as rotas_planilha
@@ -117,6 +119,7 @@ async def _startup() -> None:
     asyncio.create_task(_sincronizacao_periodica())
     asyncio.create_task(_coleta_qnap_periodica())
     asyncio.create_task(_coleta_uso_periodica())
+    asyncio.create_task(_coleta_visitas_periodica())
     asyncio.create_task(_alertas_periodicos())
     asyncio.create_task(_lgpd_periodica())
     asyncio.create_task(_reconciliacao_noturna())
@@ -928,6 +931,25 @@ async def _coleta_uso_periodica() -> None:
         except Exception:  # noqa: BLE001  (nunca derruba o painel; cada coleta registra o próprio erro em uso_coleta)
             pass
         await asyncio.sleep(max(minutos, 5) * 60 if minutos > 0 else 300)
+
+
+async def _coleta_visitas_periodica() -> None:
+    """03/11: visitas ao site (GA4 + Search Console) uma vez por dia, depois de visitas.coleta_hora; confere a cada 20 min."""
+    import asyncio
+    from . import visitas
+    await asyncio.sleep(120)
+    while True:
+        try:
+            con = connect()
+            try:
+                vai = visitas.precisa_coletar(con)
+            finally:
+                con.close()
+            if vai:
+                await asyncio.to_thread(visitas.coletar)
+        except Exception:  # noqa: BLE001  (nunca derruba o painel; cada coleta registra o próprio erro em visita_coleta)
+            pass
+        await asyncio.sleep(1200)
 
 
 async def _coleta_qnap_periodica() -> None:
