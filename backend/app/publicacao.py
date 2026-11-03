@@ -18,7 +18,25 @@ from .db import connect
 # 21/10 ("publicar sem travar", 4.1): problema que BLOQUEIA numa folha deixa só aquela folha de fora (não trava o projeto inteiro)
 SEM_BLOQUEIO_NA_FOLHA = ("NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=item.codigo AND eb.situacao IN ('aberto','em_correcao') "
                          "AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')")
-ELEGIVEL_LOCAL = f"duplicata_de IS NULL AND retida=0 AND (lote_id IS NULL OR revisao<>'pendente') AND {SEM_BLOQUEIO_NA_FOLHA}"   # retida = a pessoa decidiu que esta folha não vai ao site
+# UX-73 ("publicar como está"): a configuração publicacao.exige_conferencia decide se a folha não conferida fica de fora. Lida DENTRO da
+# própria SQL (subconsulta), para que todos os lugares que usam ELEGIVEL_LOCAL/ELEGIVEL sigam a mesma regra sem passar parâmetro.
+# Sem a chave ou '0' (padrão): a folha não conferida também vai ao site (conferir vira meta). '1': como antes (UX-62).
+EXIGE_CONFERENCIA_SQL = "COALESCE((SELECT TRIM(cfg_ec.valor) FROM configuracao cfg_ec WHERE cfg_ec.chave='publicacao.exige_conferencia'),'0')='1'"
+
+
+def conferida_sql(prefixo: str = "") -> str:
+    """A folha passa pela regra da conferência: não veio de lote, já foi conferida, ou a conferência não é exigida (UX-73).
+    `prefixo` é o apelido da tabela item na consulta (ex.: "i.")."""
+    return f"({prefixo}lote_id IS NULL OR {prefixo}revisao<>'pendente' OR NOT ({EXIGE_CONFERENCIA_SQL}))"
+
+
+def exige_conferencia(con) -> bool:
+    """UX-73: configuração publicacao.exige_conferencia (sem a chave ou 0: publica como está; 1: só com tudo conferido, UX-62)."""
+    r = con.execute("SELECT valor FROM configuracao WHERE chave='publicacao.exige_conferencia'").fetchone()
+    return bool(r) and str(r[0]).strip() == "1"
+
+
+ELEGIVEL_LOCAL = f"duplicata_de IS NULL AND retida=0 AND {conferida_sql()} AND {SEM_BLOQUEIO_NA_FOLHA}"   # retida = a pessoa decidiu que esta folha não vai ao site
 # O que ainda para o projeto inteiro (lista fechada): direitos, projeto sem título e um bloqueio no PRÓPRIO projeto registrado por uma
 # pessoa (ou arquivo corrompido apontado pelo CAMP Vision sem dizer a folha). Bloqueio em folha nunca para o projeto.
 # a mesma regra para as contas gerais (Painel inicial): o bloqueio que trava um projeto (no próprio projeto ou no fundo, não numa folha)
@@ -40,6 +58,7 @@ def condicoes_projeto(con, p) -> dict:
     from .rotas_gestao import direitos_permitem_publicar   # import tardio: evita ciclo entre módulos
     codigo, fundo = p["codigo"], p["fundo_codigo"]
     conds: list[dict] = []
+    exige = exige_conferencia(con)   # UX-73: sem exigir (padrão), conferir/aprovar e título de obra são METAS (bloqueia=False), não trava
 
     msg = direitos_permitem_publicar(con, fundo)
     conds.append({"id": "direitos", "bloqueia": True, "ok": msg is None, "texto": f"Direitos do fundo {fundo} autorizados",
@@ -66,8 +85,9 @@ def condicoes_projeto(con, p) -> dict:
         motivo = titulo_tecnico(p["titulo"])
         if motivo:
             sug = sugerir_titulo(p["titulo"])
-            conds.append({"id": "titulo", "bloqueia": True, "ok": False, "texto": "Projeto com nome de obra (não de pasta)",
-                          "detalhe": f"Não dá para publicar porque o título “{p['titulo'].strip()}” {motivo}"
+            conds.append({"id": "titulo", "bloqueia": exige, "ok": False, "texto": "Projeto com nome de obra (não de pasta)",
+                          "detalhe": (f"Não dá para publicar porque o título “{p['titulo'].strip()}” {motivo}" if exige
+                                      else f"O título “{p['titulo'].strip()}” {motivo}: dá para publicar assim, mas o site mostra esse nome")
                                      + (f". Sugestão: “{sug}”" if sug else ""),
                           "sugestao": sug, "acao": {"tipo": "editar_projeto", "rotulo": "Corrigir o título", "alvo": f"{codigo}:titulo"}})
     fora_bloq = con.execute(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND NOT ({SEM_BLOQUEIO_NA_FOLHA})", (codigo,)).fetchone()[0]
@@ -136,7 +156,8 @@ def condicoes_projeto(con, p) -> dict:
         aprova_junto = bool(a_aprovar) and len(a_aprovar) == nao_aprovados   # todos conferidos: o próprio Publicar aprova (CAMP-148)
     else:
         rev_msg, rev_rot = None, None
-    conds.append({"id": "revisao", "bloqueia": True, "ok": rev_msg is None, "texto": "Folhas conferidas e lote aprovado" if rev_msg is None else ("Nenhuma folha conferida ainda" if nao_conf and prontas == 0 else "Folhas a conferir" if rev_rot == "Conferir as folhas" else "Lote não aprovado"),
+    # UX-73: com publicacao.exige_conferencia = 0 (padrão) a conferência é META: aparece como aviso e a folha não conferida também vai ao site
+    conds.append({"id": "revisao", "bloqueia": exige, "ok": rev_msg is None, "texto": "Folhas conferidas e lote aprovado" if rev_msg is None else ("Nenhuma folha conferida ainda" if nao_conf and prontas == 0 else "Folhas a conferir" if rev_rot == "Conferir as folhas" else "Lote não aprovado"),
                   "detalhe": rev_msg, "acao": None if rev_msg is None else {"tipo": "revisao", "rotulo": rev_rot, "alvo": codigo},
                   "falta_conferir": falta_conf if rev_rot == "Conferir as folhas" else 0,   # UX-62 (campo opcional): a tela diz "Falta conferir N folhas"
                   "aprova_junto": aprova_junto})                                             # UX-62 (campo opcional): só falta aprovar, e o Publicar aprova junto
@@ -189,7 +210,86 @@ def condicoes_projeto(con, p) -> dict:
         conds.append({"id": "resolucao", "bloqueia": False, "ok": True, "texto": f"Imagens no site com no máximo {lado} px no lado maior (regra do fundo {fundo})",
                       "detalhe": None, "acao": None})
     return {"condicoes": conds, "pode_publicar": all(c["ok"] for c in conds if c["bloqueia"]),
-            "folhas_total": total, "folhas_elegiveis": elegiveis, "dossie_no_site": dossie}
+            "folhas_total": total, "folhas_elegiveis": elegiveis, "dossie_no_site": dossie,
+            "exige_conferencia": exige,                       # UX-73 (campo opcional): a tela sabe se folha não conferida vai ao site
+            "metas": metas_projeto(con, p, pagina=pg)}        # UX-73 (campo opcional): objetivos do projeto (não impedem publicar)
+
+
+# UX-73 · METAS ("como objetivos em uma gamificação", pedido do Rafa): o que falta para o projeto ficar completo. NÃO impedem publicar
+# (o que impede está em condicoes_projeto, com bloqueia=True). Cada objetivo: {id, texto, feito, falta, progresso?, acao}.
+# Os dados do projeto são as colunas reais: tipologia (Programa / uso = o "tipo" da obra), natureza (Natureza do trabalho: obra nova,
+# reforma…), modalidade, situacao_obra, ano, cidade (docs/vocabulario.md, backend/app/tipologia.py).
+METAS_DADOS = (   # (id, coluna, objetivo, o que falta, rótulo do botão)
+    ("programa", "tipologia", "Tipo da obra (programa / uso)", "Falta dizer o tipo da obra (programa / uso: residência, escola…)", "Escolher o tipo"),
+    ("natureza", "natureza", "Natureza do trabalho (obra nova, reforma…)", "Falta dizer a natureza do trabalho (obra nova, reforma, restauro…)", "Escolher a natureza"),
+    ("modalidade", "modalidade", "Modalidade (concurso, encomenda…)", "Falta dizer a modalidade (concurso, encomenda pública ou privada…)", "Escolher a modalidade"),
+    ("situacao_obra", "situacao_obra", "Situação da obra (construída, demolida…)", "Falta dizer a situação da obra (construída, não construída…)", "Escolher a situação"),
+    ("ano", "ano", "Ano do projeto", "Falta o ano do projeto", "Informar o ano"),
+    ("cidade", "cidade", "Cidade da obra", "Falta a cidade da obra", "Informar a cidade"),
+)
+
+
+def _n(n: int, um: str, varios: str) -> str:
+    return f"{n} {um if n == 1 else varios}"
+
+
+def metas_projeto(con, p, pagina: dict | None = None) -> dict:
+    """UX-73: os objetivos do projeto e o resumo {feitas, total}. Só lê. `pagina`: a página do arquiteto já consultada (evita repetir)."""
+    chaves = p.keys() if hasattr(p, "keys") else []
+    v = lambda k: (p[k] if k in chaves else None)  # noqa: E731
+    codigo, fundo = v("codigo"), v("fundo_codigo")
+    q = lambda sql: con.execute(sql, (codigo,)).fetchone()[0]  # noqa: E731
+    obj: list[dict] = []
+
+    def meta(id_, texto, feito, falta, acao=None, progresso=None):
+        m = {"id": id_, "texto": texto, "feito": bool(feito), "falta": None if feito else falta, "acao": None if feito else acao}
+        if progresso is not None:
+            m["progresso"] = progresso
+        obj.append(m)
+
+    total = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=?")
+    # 1) conferir as folhas que vieram do CAMP Vision (duplicata e retida não contam: não vão ao site)
+    conf_total = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND duplicata_de IS NULL AND COALESCE(retida,0)=0")
+    if conf_total:
+        conf = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND lote_id IS NOT NULL AND duplicata_de IS NULL AND COALESCE(retida,0)=0 AND revisao<>'pendente'")
+        meta("conferir", "Folhas conferidas", conf >= conf_total, f"Falta conferir {_n(conf_total - conf, 'folha', 'folhas')}",
+             {"tipo": "revisao", "rotulo": "Conferir as folhas", "alvo": codigo}, [conf, conf_total])
+    # 2) aprovar o lote (o lote já publicado pelo fluxo antigo conta como feito)
+    lotes = con.execute("""SELECT COUNT(*), SUM(CASE WHEN l.aprovado_em IS NOT NULL OR l.etapa='publicado' THEN 1 ELSE 0 END) FROM lista_processamento l
+                           WHERE l.projeto_codigo=? AND l.descartado_em IS NULL AND EXISTS (SELECT 1 FROM item i WHERE i.lote_id=l.id)""", (codigo,)).fetchone()
+    if lotes and lotes[0]:
+        aprov = lotes[1] or 0
+        meta("aprovar", "Lote aprovado" if lotes[0] == 1 else "Lotes aprovados", aprov >= lotes[0],
+             "Falta aprovar o lote (depois de conferir as folhas)" if lotes[0] == 1 else f"Falta aprovar {lotes[0] - aprov} de {lotes[0]} lotes",
+             {"tipo": "revisao", "rotulo": "Aprovar o lote", "alvo": codigo}, [aprov, lotes[0]] if lotes[0] > 1 else None)
+    # 3) título de obra (não nome de pasta, código ou genérico)
+    from .similaridade import titulo_tecnico
+    t = str(v("titulo") or "").strip()
+    tit_ok = bool(t) and not titulo_tecnico(t) and not TITULO_GENERICO.search(t) and t.upper() != str(codigo or "").upper()
+    meta("titulo", "Título de obra (não nome de pasta)", tit_ok,
+         "Falta dar um título de obra" + (f" (hoje: “{t}”)" if t else ""), {"tipo": "editar_projeto", "rotulo": "Corrigir o título", "alvo": f"{codigo}:titulo"})
+    # 4) dados do projeto: tipo, natureza, modalidade, situação, ano, cidade
+    for id_, col, texto, falta, rot in METAS_DADOS:
+        meta(id_, texto, v(col) not in (None, "", 0, "0"), falta, {"tipo": "editar_projeto", "rotulo": rot, "alvo": f"{codigo}:{col}"})
+    if total:
+        # 5) autoria confirmada (CAMP-046: a folha sobe com "Autoria não confirmada"; o nome lido não vira fato)
+        div = q("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND autoria_divergente=1")
+        meta("autoria", "Autoria confirmada nas folhas", not div, f"Falta confirmar a autoria de {_n(div, 'folha', 'folhas')} (sobem como “Autoria não confirmada”)",
+             {"tipo": "autoria", "rotulo": "Registrar coautoria/terceiros", "alvo": codigo}, [total - div, total])
+        # 6) folhas sem problema que bloqueia (essas ficam de fora do site)
+        bloq = q(f"SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND NOT ({SEM_BLOQUEIO_NA_FOLHA})")
+        meta("folhas_sem_problema", "Folhas sem problema", not bloq, f"Falta resolver {_n(bloq, 'folha com problema', 'folhas com problema')} (fora do site até resolver)", {"tipo": "erros", "rotulo": "Ver os problemas", "alvo": codigo}, [total - bloq, total])
+    # 7) página do arquiteto pública (sem ela, o site não mostra os projetos do fundo)
+    if fundo:
+        if pagina is None:
+            from .fundo_site import pagina_arquiteto
+            pagina = pagina_arquiteto(con, fundo)
+        sem = bool(pagina.get("sem_arquiteto"))
+        meta("pagina_arquiteto", "Página do arquiteto pública no site", pagina.get("publica"),
+             "Falta cadastrar o arquiteto titular do fundo" if sem else "Falta publicar a página do arquiteto (o Publicar do projeto a publica junto)",
+             {"tipo": "fundo", "rotulo": "Abrir o fundo", "alvo": fundo} if sem else {"tipo": "publicar_arquiteto", "rotulo": "Publicar a página do arquiteto", "alvo": fundo})
+    feitas = sum(1 for m in obj if m["feito"])
+    return {"objetivos": obj, "feitas": feitas, "total": len(obj)}
 
 
 # B10 · avisos de qualidade da ficha: não bloqueiam a publicação, mas mostram o que falta e levam ao campo

@@ -58,7 +58,7 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     await page.evaluate(() => nav('projeto/F074-P0001'));
     await page.waitForSelector('#pj-status [data-pjs-publicar]:not([disabled])', { timeout: 20000 }); await page.waitForTimeout(300);
     const antes = so(await page.textContent('#pj-status'));
-    chk(/Publicar 3 folhas/.test(antes) && /ao publicar, 3 folhas ficam públicas na hora/.test(antes), 'antes do clique, o Próximo passo diz o que muda ("ao publicar, 3 folhas ficam públicas na hora"): "' + antes.slice(0, 220) + '"');
+    chk(/Publicar (3 folhas|como está)/.test(antes) && /ao publicar, 3 folhas ficam públicas na hora/.test(antes), 'antes do clique, o Próximo passo diz o que muda ("ao publicar, 3 folhas ficam públicas na hora"): "' + antes.slice(0, 220) + '"');
     const estadoNoClique = await page.evaluate(() => { const b = document.querySelector('#pj-status [data-pjs-publicar]'); b.click(); b.click(); const x = document.querySelector('#pj-status .pjs-pub'); return { dis: !!(x && x.disabled), txt: x ? x.textContent : '' }; });
     chk(estadoNoClique.dis && /Publicando/.test(estadoNoClique.txt), 'o botão apaga na hora e diz "Publicando…" (' + JSON.stringify(estadoNoClique) + ')');
     await page.waitForFunction(() => /Publicado ✓|Não terminou/.test((document.querySelector('#pj-status') || {}).textContent || ''), null, { timeout: 30000 });

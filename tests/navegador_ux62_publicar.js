@@ -18,6 +18,7 @@ const py = (codigo) => execFileSync('python3', ['-c', 'import sqlite3,sys,json\n
 const A = 'F003-P9621', B = 'F003-P9622';
 py(`
 con.execute("UPDATE configuracao SET valor='0' WHERE chave='publicacao.exige_direitos'")
+con.execute("UPDATE configuracao SET valor='1' WHERE chave='publicacao.exige_conferencia'")   # UX-73: a trava por folha a conferir só vale exigindo a conferência
 for cod, n, etapa, pend, conf, leg in (('${A}', 9621, 'processando', 6, 0, 2), ('${B}', 9622, 'revisao', 0, 3, 0)):
     con.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero) VALUES ('F003', ?)", (n,))
     con.execute("INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, cidade, autorizado_site) VALUES (?, 'F003', ?, 'Teatro Municipal', 1975, 'Piracicaba', 1)", (cod, n))

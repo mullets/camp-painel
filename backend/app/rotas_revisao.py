@@ -507,6 +507,8 @@ def revisar(codigo: str, d: RevisaoItem, u: dict = Depends(auth.exige("operador"
         if not i:
             raise HTTPException(404, "Folha não existe")
         fechado = "lote_aprovado" if i["aprovado_em"] else ("no_site" if i["status_site"] in ("rascunho", "no_ar") else None)
+        if fechado == "no_site" and i["revisao"] == "pendente" and d.estado in ("conferida", "corrigida"):
+            fechado = None   # UX-73: folha publicada "como está" (sem conferir) ainda pode ser conferida: é a meta "conferir as folhas"
         if d.estado in ("conferida", "corrigida") and not fechado:
             from .revisao_politica import falta_titulo_para_conferencia
             if falta_titulo_para_conferencia(i):
@@ -1117,8 +1119,9 @@ def conferir_so_avisos() -> bool:
 
 
 def _pendentes_do_lote(con, lote_id: int):
+    # UX-73: a folha que foi ao site sem conferir (publicar como está) também entra: conferir continua sendo a meta do projeto
     return con.execute(f"""SELECT codigo, titulo, status_site, pendencias, duplicata_de, autoria_divergente, espelhado, espelho_manual, retida FROM item
-                           WHERE {_DO_LOTE} AND revisao='pendente' AND status_site NOT IN ('rascunho','no_ar') ORDER BY codigo""", (lote_id,)).fetchall()
+                           WHERE {_DO_LOTE} AND revisao='pendente' ORDER BY codigo""", (lote_id,)).fetchall()
 
 
 def contar_sem_aviso(con, lote_id: int) -> int:

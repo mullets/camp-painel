@@ -565,7 +565,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         padrao_proj = cfg_int(cfg_proj, COL_PROJETOS)
         padrao_item = cfg_int(cfg_item, COL_ACERVO)
 
-        from .publicacao import condicoes_projeto, motivos_bloqueio
+        from .publicacao import condicoes_projeto, conferida_sql, motivos_bloqueio
         projetos = con.execute("SELECT * FROM projeto WHERE fundo_codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL ORDER BY codigo", (codigo,)).fetchall()
         ignorados = []
         alvos = []
@@ -586,7 +586,7 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
 
             itens = con.execute(
                 "SELECT codigo, tainacan_item_id, COALESCE(retida,0) AS retida FROM item "
-                "WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND duplicata_de IS NULL AND (lote_id IS NULL OR revisao<>'pendente')",
+                f"WHERE projeto_codigo=? AND tainacan_item_id IS NOT NULL AND duplicata_de IS NULL AND {conferida_sql()}",   # UX-73: a mesma regra da conferência
                 (p["codigo"],),
             ).fetchall()
             for i in itens:
@@ -1098,7 +1098,9 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
     if i["duplicata_de"]:
         con.close(); out["erro"] = "folha duplicada não sobe ao site"; return out
     if i["lote_id"] and i["revisao"] == "pendente":
-        con.close(); out["erro"] = "a folha ainda não foi conferida na revisão do lote: confira antes de enviar ao site"; return out
+        from .publicacao import exige_conferencia      # UX-73: sem exigir a conferência (padrão), a folha não conferida também sobe
+        if exige_conferencia(con):
+            con.close(); out["erro"] = "a folha ainda não foi conferida na revisão do lote: confira antes de enviar ao site"; return out
     if not i["dossie_id"]:
         con.close(); out["erro"] = "o projeto ainda não tem dossiê no site (crie o projeto no site primeiro)"; return out
     inicio = con.execute("SELECT datetime('now')").fetchone()[0]      # 27/10: início desta tentativa (o órfão só vale se criado depois)

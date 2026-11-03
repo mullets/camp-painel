@@ -209,6 +209,7 @@ def plano(con, p) -> dict:
                        + ": sobem ao site com o crédito “Autoria não confirmada”."})
     return {"passos": passos, "bloqueios": bloqueios, "avisos": avisos, "pode_executar": not bloqueios, "ja_publicado": p["status_site"] == "no_ar",
             "folhas_a_enviar": a_enviar, "folhas_a_publicar": elegiveis, "um_passo": um_passo, "lotes_a_aprovar": a_aprovar,
+            "exige_conferencia": cond["exige_conferencia"], "metas": {"feitas": cond["metas"]["feitas"], "total": cond["metas"]["total"]},   # UX-73 (opcionais)
             "fora": {"duplicadas": duplicadas, "autoria_divergente": divergentes, "nao_conferidas": nao_conferidas, "retidas": retidas}}
 
 

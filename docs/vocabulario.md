@@ -108,6 +108,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 | Botão | Efeito | Observação |
 |---|---|---|
 | **Publicar** | vai para `no_ar` | exige direitos autorizados, projeto autorizado e sem bloqueios |
+| **Publicar como está** (UX-73) | o mesmo Publicar, quando ainda há objetivo aberto | com `publicacao.exige_conferencia = 0` (padrão), folhas não conferidas também vão; os objetivos que faltam ficam no quadro |
 | **Voltar para rascunho** | vai para `rascunho` | continua salvo para revisão; se estava publicado, exige admin master (tira do público, como despublicar) |
 | **Despublicar** | vai para `fora_do_ar` | exige admin master quando já estava publicado; fundo pede o motivo |
 | **Autorizar publicação** | marca o projeto como autorizado | não publica sozinho |
@@ -176,7 +177,8 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 
 ## Título de projeto que é nome de pasta (UX-15)
 - **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
-  "Projeto Não Identificado 3"). Regra única em `similaridade.titulo_tecnico`: criar, importar planilha e editar recusam; **Publicar** bloqueia.
+  "Projeto Não Identificado 3"). Regra única em `similaridade.titulo_tecnico`: criar, importar planilha e editar recusam; **Publicar** bloqueia
+  só com `publicacao.exige_conferencia = 1` (UX-73: no padrão é o objetivo "Título de obra (não nome de pasta)").
 - **Título sugerido**: o título sem o prefixo de pasta. Botão **Usar o título sugerido** (uma pessoa aceita, um projeto por vez; nada é renomeado sozinho)
   e **Corrigir o título** (abre a edição).
 - Cidade: a tela sugere a **forma do acervo** (a mais usada: "São Paulo, SP" × "São Paulo") com o botão **Usar**; o campo continua texto livre.
@@ -314,3 +316,19 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   configuração do Sender.net: atualize o site (plugin da CAMP 1.23.0 ou mais novo). Nada mudou no site." Com campo alterado sem salvar:
   "Salve as alterações desta seção antes de enviar ao site."
 - No e-mail de entrega, a validade é por extenso: "15 de novembro de 2026, às 23h59" (horário de São Paulo).
+
+## Objetivos do projeto (UX-73, 03/11/2026)
+"Quero que possa publicar como está. Só precisa avisar que falta x ou h coisas serem feitas, como objetivos em uma gamificação" (Rafa).
+- **Objetivos do projeto**: quadro no bloco "Próximo passo" com a barra **N de M objetivos** e a lista: ✓ no que está feito; no que falta,
+  a frase começa com **Falta** ("Falta conferir 49 folhas", "Falta aprovar o lote (depois de conferir as folhas)", "Falta dizer o tipo da obra
+  (programa / uso: residência, escola…)", "Falta dizer a natureza do trabalho (obra nova, reforma, restauro…)", "Falta dizer a modalidade
+  (concurso, encomenda pública ou privada…)", "Falta dar um título de obra") e um botão que leva ao lugar: **Conferir as folhas**,
+  **Aprovar o lote**, **Escolher o tipo**, **Escolher a natureza**, **Escolher a modalidade**, **Escolher a situação**, **Informar o ano**,
+  **Informar a cidade**, **Corrigir o título**, **Ver os problemas**, **Publicar a página do arquiteto**. Rodapé: "Não impedem publicar: o projeto
+  pode ir ao site como está e ser completado depois."
+- **Tipo da obra** = o campo **Programa / uso** (coluna `tipologia`); **Natureza do trabalho** traz "Edificação (obra nova)", "Reforma / ampliação"…
+- **Publicar como está**: o rótulo do Publicar enquanto houver objetivo aberto (cartão Site: "pronto: dá para publicar como está" e
+  "objetivos: N de M"). Sem objetivo aberto, volta a ser **Publicar**.
+- **Dados do projeto que faltam**: na Revisão do lote e no fim da conferência (aprovar o lote), só os dados do projeto que faltam, com o botão
+  que abre a edição já no campo.
+- Lista de Projetos: selo `objetivos N/M` (verde quando todos feitos).

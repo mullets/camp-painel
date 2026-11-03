@@ -584,6 +584,7 @@ Todas as chaves abaixo são criadas por migrações (arquivo entre parênteses) 
 | `site.credito_padrao` | `Acervo {agente}/CAMP - Casa da Arquitetura Moderna Paulista` | Crédito padrão (003). |
 | `sync.intervalo_min` | `15` | Minutos entre sincronizações automáticas site → painel; `0` desliga (009). |
 | `publicacao.exige_direitos` | `0` | `1` = fundo sem direitos preenchidos também bloqueia publicar (043). |
+| `publicacao.exige_conferencia` | `0` | UX-73 (216). `0` = **publicar como está**: folha não conferida também vai ao site; conferir, aprovar o lote e título de pasta viram **objetivos** (metas) do projeto. `1` = como antes (UX-62): projeto ainda fora do site com folha a conferir não publica (409) e a folha não conferida fica de fora. |
 | `painel.url` | `https://painel.camp.arq.br` | Endereço usado nos links dos e-mails (052). |
 
 **QNAP e réplica (`qnap.*`, `replica.*`)**
@@ -3325,6 +3326,7 @@ Passo a passo de `gerar_bag`:
 | `tainacan.projetos_collection_id`, `tainacan.itens_collection_id` | coleções (padrão 8007 e 8013) |
 | `sync.intervalo_min` | sincronização automática (padrão 15; 0 desliga) |
 | `publicacao.exige_direitos` | `1` = fundo com direitos não definidos não publica |
+| `publicacao.exige_conferencia` | `0` (padrão) = publica como está, com objetivos; `1` = só publica com tudo conferido (UX-62) |
 | `pedidos.token` | token da rota pública de pedidos do site |
 | `avisos.pedido_novo`, `avisos.email`, `smtp.*` | e-mail de aviso de pedido novo |
 | `uso.form_id`, `uso.coleta_min`, `uso.email_assunto`, `uso.email_corpo` | coleta e e-mails do Uso do acervo |
@@ -4074,8 +4076,35 @@ A regra é uma só (`backend/app/publicacao.py`, `condicoes_projeto`), usada pel
 
 1. **Requisito "Sem autoria divergente nem erros bloqueantes"** (`bloqueia: True`): lê a view `v_bloqueios_publicacao` — conta folhas do projeto com `autoria_divergente=1` e erros com `gravidade='bloqueia'` em `aberto`/`em_correcao` cujo `codigo` é o projeto ou começa com `código-do-projeto-`. Se houver só autoria divergente (sem outros bloqueantes — `_outros_bloqueantes`), a ação oferecida é "É de outro autor? Registrar coautoria/terceiros"; senão "Ver erros".
 2. Erros `corrigir` e `aviso` **não** bloqueiam.
-3. Uma folha individual só vai ao site se `autoria_divergente=0 AND duplicata_de IS NULL AND retida=0` e, se veio de lote, já foi conferida (`ELEGIVEL_LOCAL`).
-4. Os outros requisitos bloqueantes do mesmo checklist: direitos do fundo (`direitos_permitem_publicar`: restrição registrada bloqueia; `nao_definida` só bloqueia com `publicacao.exige_direitos=1`), projeto autorizado, aceite do lote no CAMP Vision (CV2 §10), não é lote de teste, folhas conferidas e lote aprovado, existe no site. Avisos que não bloqueiam: folhas retidas, folhas fora do site, resolução máxima do fundo, qualidade da ficha (ano, cidade, programa, título genérico — B10).
+3. Uma folha individual só vai ao site se `duplicata_de IS NULL AND retida=0`, sem problema que bloqueia na própria folha e, se veio de lote, já foi conferida **quando a conferência é exigida** (`ELEGIVEL_LOCAL`). Autoria não confirmada não tira a folha (CAMP-046: sobe com "Autoria não confirmada").
+4. Os outros requisitos bloqueantes do mesmo checklist: direitos do fundo (`direitos_permitem_publicar`: restrição registrada bloqueia; `nao_definida` só bloqueia com `publicacao.exige_direitos=1`), projeto autorizado e existe no site (o botão Publicar — publicação guiada — faz os dois sozinho: cria o dossiê, envia as folhas e autoriza; só a rota direta `/publicar` os exige prontos), não é lote de teste, bloqueio registrado por pessoa no próprio projeto, projeto sem título. Avisos que não bloqueiam: aceite do CAMP Vision, folhas retidas, folhas fora do site, folhas com problema (ficam de fora), resolução máxima do fundo, qualidade da ficha (ano, cidade, programa, título genérico — B10).
+
+#### Publicar como está, com objetivos (UX-73, 03/11/2026)
+
+Pedido do Rafa: "Quero que possa publicar como está. Só precisa avisar que falta x ou h coisas serem feitas, como objetivos em uma gamificação."
+A configuração `publicacao.exige_conferencia` (migração 216, padrão `0`) decide:
+
+- **`0` (padrão) — publicar como está.** Folha vinda do CAMP Vision e ainda não conferida também vai ao site. A regra está na própria SQL:
+  `ELEGIVEL_LOCAL` usa `conferida_sql()`, que lê a configuração por subconsulta (`EXIGE_CONFERENCIA_SQL`), e a mesma função é usada nas cópias
+  da regra em `publicador.py` (publicar o fundo inteiro) e `rotas_projetos.py` (rota `/publicar`); `criar_folha_no_site` também só recusa a
+  folha não conferida com `1`. As condições `revisao` (conferir/aprovar) e `titulo` (título de pasta, UX-15/67) passam a `bloqueia: False`.
+  Continua de fora: duplicata, retida e folha com problema que bloqueia. Publicar **não** aprova lote com folha a conferir nem marca folhas
+  como conferidas (o lote todo conferido continua sendo aprovado junto, CAMP-148). A folha publicada sem conferir pode ser conferida depois
+  (`POST /itens/{c}/revisao` e "Conferir só sem avisos" aceitam folha já no site, só para marcar como conferida; reabrir continua protegido).
+- **`1` — como antes (UX-62).** Projeto ainda fora do site com folha a conferir não publica (409 em `/publicar`, `/publicar-tudo`, tarefa;
+  fora da lista no lote e no fundo inteiro) e a folha não conferida fica de fora; título de pasta bloqueia.
+
+**Objetivos (metas).** `condicoes_projeto` devolve (campos opcionais) `exige_conferencia` e `metas = {objetivos: [...], feitas, total}`
+(`publicacao.metas_projeto`). Cada objetivo: `{id, texto, feito, falta, progresso?: [n, total], acao: {tipo, rotulo, alvo}}`. Não impedem
+publicar. Os objetivos: `conferir` (folhas do lote conferidas, N de M), `aprovar` (lote aprovado), `titulo` (título de obra, não de pasta),
+`programa` (coluna `tipologia`, "tipo da obra" = Programa / uso), `natureza` (Natureza do trabalho: obra nova, reforma…), `modalidade`,
+`situacao_obra`, `ano`, `cidade`, `autoria` (folhas com autoria não confirmada), `folhas_sem_problema` e `pagina_arquiteto`. O plano do
+Publicar traz o resumo (`metas: {feitas, total}`) e a lista de Projetos (`GET /projetos`) também, para o selo "objetivos N/M".
+Na tela: o bloco "Próximo passo" e o cartão Site mostram **Publicar como está** enquanto houver objetivo aberto; o quadro
+**Objetivos do projeto** tem a barra "N de M objetivos" e, em cada objetivo que falta, o que falta ("Falta conferir 49 folhas", "Falta dizer
+o tipo da obra…") e o botão que leva ao lugar (a folha a conferir, ou a edição do projeto já no campo). Na Revisão do lote e no fim da
+conferência aparece **Dados do projeto que faltam** (tipo, natureza, modalidade, situação, ano, cidade, título). Testes: modo
+`ux73_publicar_com_metas` e `tests/navegador_ux73_metas.js`.
 5. Problema bloqueante aberto em projeto **já publicado** aparece: como item urgente no painel ("está publicado com erro bloqueante", prioridade 98 em `/api/hoje`; "o projeto está no site com este problema" em "O que fazer agora"), como faixa vermelha na aba Publicação, e por e-mail (assunto `bloqueio`).
 
 ---
