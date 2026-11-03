@@ -33,19 +33,24 @@ mostrar_mudancas() {
 com_andamento() {
   local log="$1"; shift
   "$@" > "$log" 2>&1 &
-  local pid=$! gira='|/-\\' i=0 ultimo=0
+  local pid=$! gira='|/-\\' i=0 ultimo=-100
   while kill -0 "$pid" 2>/dev/null; do
     local oks parte
     oks="$(grep -c '^  ok' "$log" 2>/dev/null || true)"
-    parte="$(grep -E '^[0-9]+[a-z]?\) ' "$log" 2>/dev/null | tail -1 | cut -c1-60)"
+    parte="$(grep -E '^[0-9]+[a-z]?\) ' "$log" 2>/dev/null | tail -1 | sed -E 's/^[0-9]+[a-z]?\) //' | cut -c1-60)"
     if [ -t 1 ]; then
-      printf "\r  %s %3ss · %4s verificações ok · %-60s" "${gira:i++%4:1}" "$((SECONDS - T0))" "${oks:-0}" "${parte:-rodando as partes em paralelo…}"
+      # 03/11 (Rafael: "tá bem ruim isso"): a linha tinha ~110 caracteres; em tela estreita (celular no SSH) quebrava em duas e o \r
+      # só voltava ao começo da 2ª, então cada volta virava texto novo. Agora cabe na largura da tela e a linha é apagada antes.
+      local cols linha
+      cols="$(tput cols 2>/dev/null || echo 80)"; [ "${cols:-0}" -gt 20 ] 2>/dev/null || cols=80
+      linha="$(printf "  %s %ss · %s · %s ok" "${gira:i++%4:1}" "$((SECONDS - T0))" "${parte:-preparando…}" "${oks:-0}")"
+      printf "\r\033[K%s" "${linha:0:$((cols - 1))}"
     elif [ $((SECONDS - ultimo)) -ge 10 ]; then
-      ultimo=$SECONDS; echo "  $((SECONDS - T0)) s · ${oks:-0} verificações ok · ${parte:-rodando as partes em paralelo…}"
+      ultimo=$SECONDS; echo "  $((SECONDS - T0)) s · ${parte:-preparando…} · ${oks:-0} verificações ok"
     fi
     sleep 1
   done
-  [ -t 1 ] && printf "\r%*s\r" 110 ""
+  [ -t 1 ] && printf "\r\033[K"
   wait "$pid"
 }
 

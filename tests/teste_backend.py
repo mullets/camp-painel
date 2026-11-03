@@ -14241,10 +14241,15 @@ def adiantar_em_paralelo():
                    CAMP_LOG_DIR=str(pasta / "logs"), CAMP_BACKUP_DIR=str(pasta / "backups"))
         r = subprocess.run([PY, __file__, "--filho", modo], env=env, capture_output=True, text=True)
         return alvo, r.returncode, (r.stdout + r.stderr).strip()
+    # 03/11: uma linha de andamento por parte pronta ("0) em paralelo: N de M partes prontas"): o atualizar.sh mostra a última
+    # (antes ficava "0 verificações ok · rodando as partes em paralelo…" até o fim desta fase).
+    print(f"0) em paralelo: 0 de {len(alvos)} partes prontas", flush=True)
     with cf.ThreadPoolExecutor(max_workers=max(2, min(8, os.cpu_count() or 2))) as ex:
-        for (modo, nome), rc, out in ex.map(um, alvos):
+        for k, fut in enumerate(cf.as_completed([ex.submit(um, a) for a in alvos]), 1):
+            (modo, nome), rc, out = fut.result()
             if rc == 0 and "FALHA" not in out:
                 _ADIANTADOS[(modo, f"{tmp}/{nome}")] = (rc, out)
+            print(f"0) em paralelo: {k} de {len(alvos)} partes prontas", flush=True)
 
 adiantar_em_paralelo()
 
