@@ -14,7 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
-MODOS_RAPIDOS |= {"ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
+MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -14427,6 +14427,65 @@ def filho(modo):
                         {"texto": "série incerta"}, {"texto": "só um (campo)"}], (r.stdout + r.stderr)[:400])
         for l in res: print(l)
 
+    elif modo == "ux59_orientacao":
+        # UX-59 (parte do painel): folha de "orientação incerta" com giro SUGERIDO pelo CAMP Vision. O campo `rotacao_sugerida` dos documentos do
+        # pacote é OPCIONAL (o CAMP Vision ainda não manda): o importador guarda em pendencias; a prévia aceita s= (giro só para mostrar).
+        # O comportamento na tela é provado no navegador (tests/navegador_ux59_orientacao.js).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, pathlib as _pl, tempfile, io
+        from app import importador_lote, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from PIL import Image
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        prontos = _pl.Path(tempfile.mkdtemp()); pasta = prontos / "SESI"; (pasta / "catalogacao").mkdir(parents=True)
+        c = connect(); c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)"); c.execute("INSERT OR IGNORE INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F026-P0001','F026',1,'SESI',1972)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote','F026-P0001',?,'revisao')", (str(pasta),)).lastrowid
+        c.commit(); c.close()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        k = connect()
+        pac = _j.loads((_pl.Path(__file__).resolve().parent / "contrato" / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        D1, D2 = pac["documentos"][0]["codigo"], pac["documentos"][1]["codigo"]
+        def gravar(mudar):
+            for lista in ("documentos", "itens"):
+                for d in pac.get(lista) or []:
+                    for kk in ("rotacao_sugerida",):
+                        d.pop(kk, None)
+                    d.update(mudar.get(d.get("codigo"), {}))
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(pac, ensure_ascii=False), encoding="utf-8")
+        def pend(cod): return _j.loads(k.execute("SELECT pendencias FROM item WHERE codigo=?", (cod,)).fetchone()[0] or "{}")
+        gravar({D1: {"orientacao_incerta": True, "orientacao_corrigida": False, "rotacao_sugerida": 180}, D2: {"orientacao_incerta": True, "orientacao_corrigida": False, "rotacao_sugerida": "270"}})
+        importador_lote.importar_lote(k, lote, "teste"); k.commit()
+        ver("pacote com rotacao_sugerida (incerta): vai para as pendências da folha, normalizado (180; '270' → -90)",
+            pend(D1).get("rotacao_sugerida") == 180 and pend(D2).get("rotacao_sugerida") == -90, str((pend(D1).get("rotacao_sugerida"), pend(D2).get("rotacao_sugerida"))))
+        ver("importar NÃO grava giro nenhum (giro_manual continua 0): a sugestão só aparece na tela", k.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo='F026-P0001' AND COALESCE(giro_manual,0)<>0").fetchone()[0] == 0)
+        gravar({D1: {"orientacao_incerta": True, "orientacao_corrigida": False}, D2: {"orientacao_incerta": False, "orientacao_corrigida": False, "rotacao_sugerida": 90}})
+        importador_lote.importar_lote(k, lote, "teste"); k.commit()
+        ver("CAMP Vision antigo (sem o campo) e folha sem 'incerta': nenhuma sugestão (campo opcional, nada quebra)",
+            "rotacao_sugerida" not in pend(D1) and "rotacao_sugerida" not in pend(D2), str((pend(D1), pend(D2)))[:300])
+        # prévia: s= gira só a imagem mostrada
+        rel = pend(D1).get("previa") or ""
+        alvo = prontos / rel; alvo.parent.mkdir(parents=True, exist_ok=True)
+        im = Image.new("RGB", (1000, 1600), "white"); im.paste((0, 0, 0), (0, 1400, 1000, 1600)); im.save(alvo, "JPEG", quality=85)
+        def baixar(q):
+            r = adm.get(f"/api/itens/{D1}/previa{q}")
+            if r.status_code != 200:
+                return None, r.status_code
+            return Image.open(io.BytesIO(r.content)).convert("RGB"), 200
+        a, st_a = baixar(""); b, st_b = baixar("?s=180"); c90, st_c = baixar("?s=90"); x, st_x = baixar("?s=45")
+        preto = lambda img, y: sum(img.getpixel((img.width // 2, y))) < 100
+        ver("prévia sem s=: como chegou (carimbo no pé)", a is not None and preto(a, a.height - 10) and not preto(a, 10), str(st_a))
+        ver("prévia com s=180: a mesma folha virada (carimbo no alto)", b is not None and preto(b, 10) and not preto(b, b.height - 10), str(st_b))
+        ver("prévia com s=90: deitada (girada 90°)", c90 is not None and c90.width > c90.height, str(st_c))
+        ver("s= inválido (45) é ignorado", x is not None and x.size == a.size and preto(x, x.height - 10), str(st_x))
+        ver("pedir a prévia com s= não grava nada", (k.execute("SELECT COALESCE(giro_manual,0) FROM item WHERE codigo=?", (D1,)).fetchone()[0]) == 0)
+        for l in res: print(l)
+        k.close()
+
     return 0
 
 
@@ -16150,6 +16209,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Avisos da folha: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Orientação incerta com giro sugerido (UX-59): campo opcional rotacao_sugerida, prévia com s= sem gravar")
+rc, out = rodar("ux59_orientacao", f"{tmp}/ux59_orientacao.db")
+if rc != 0: ok(False, f"teste ux59_orientacao não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Giro sugerido: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

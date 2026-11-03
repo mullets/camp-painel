@@ -169,6 +169,9 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Atalhos da conferência**: a lista que a tecla ? abre na revisão (e o botão **? atalhos** da barra da folha).
 - **Girar 90°** / **Girar 180°** (UX-66): os botões da barra do alto da folha em conferência, sempre à vista; a mesma rotina da tecla R
   (90° para a direita) e do "Virar à esquerda/direita" embaixo da imagem. 180° é para a folha de cabeça para baixo.
+- **orientação incerta — confira** (UX-59): a folha de orientação incerta que o CAMP Vision mandou com giro sugerido aparece já girada
+  como sugerido; **nada é gravado** até a pessoa agir. **Gravar este giro** grava; **Ver como chegou** mostra a imagem original;
+  "Está certo" grava o giro junto (é o que a pessoa conferiu); girar conta a partir do que está na tela.
 
 ## Título de projeto que é nome de pasta (UX-15)
 - **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
