@@ -423,6 +423,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 "sinais": [txt for chave, txt in SINAIS if d.get(chave)] + (["orientação girada pelo CAMP Vision: confira a prévia"] if _girada_pelo_cv(d) else []),
                 "confianca": d.get("confianca"), "previa": d.get("preview") or "",
                 "ano_do_projeto": d.get("ano_do_projeto")}
+        if d.get("orientacao_incerta") and not d.get("orientacao_corrigida") and _rotacao(d.get("rotacao_sugerida")):
+            # UX-59 (campo OPCIONAL, ainda não vem do CAMP Vision): giro horário que deixaria a prévia de pé quando a orientação é incerta.
+            # A conferência só MOSTRA a folha assim (nada é gravado sozinho); quem confere confirma ou gira.
+            pend["rotacao_sugerida"] = _rotacao(d.get("rotacao_sugerida"))
         if str(d.get("fotografo") or "").strip():                   # 21/10: a revisão mostra "o CAMP Vision leu" ao lado do Fotógrafo
             pend["fotografo_lido"] = str(d["fotografo"]).strip()[:200]
         publicavel = bool(d.get("publicavel"))
