@@ -15,7 +15,7 @@ def ok(cond, msg):
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
-MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11005,6 +11005,44 @@ def filho(modo):
             and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='reaberto_automatico'").fetchone()[0] == 2, [tuple(g(i)) for i in (ret, b25, a25)])
         ver("nenhum problema foi apagado", c.execute("SELECT COUNT(*) FROM erro").fetchone()[0] == 10)
         for l in res: print(l)
+    elif modo == "ux70_contadores":
+        # UX-70 (P3): contadores que não batiam. Menu "Material novo 16" × aba "Precisam de você" 17 (o menu contava só importar + conferir; a aba
+        # conta todo lote que depende de uma pessoa, inclusive o parado com erro e o que espera aprovar/publicar). Problemas: com filtro, o
+        # "sem filtro" contava também o que a pessoa escondeu (o menu e a aba não contam).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.qualidade_base import adiar as _adiar
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n_ in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n_,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P000{n_}", "F099", n_, f"Projeto {n_}"))
+        lc = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote conferir','F099-P0001','/a','revisao')").lastrowid
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, lote_id, revisao, origem) VALUES ('F099-P0001-1970-S01-D00001','F099-P0001','S01',1,'x',?,'pendente','importado')""", (lc,))
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Lote parado','F099-P0002','/b','erro',?)",
+                  (_j.dumps({"erro": "falha de disco/rede ao copiar"}),))
+        for k_ in range(3):
+            c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','outro','operador','F099-P0001',?)", (f"p{k_}",))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        uid_ = c.execute("SELECT id FROM usuario WHERE email='op@camp.arq.br'").fetchone()[0]
+        _adiar(c, uid_, "erro:" + str(c.execute("SELECT MIN(id) FROM erro").fetchone()[0])); c.commit()
+        F = op.get("/api/filas").json()
+        aba = sum(1 for l in F if not l.get("adiado") and not l.get("dispensado") and (l["fase"] in ("erro", "importar", "conferir", "aprovar", "publicar") or l.get("leitura_interrompida")))
+        P = op.get("/api/pendencias").json()
+        ver("menu Material novo = aba 'Precisam de você' (o lote parado com erro também depende de uma pessoa)", aba == 2 and (P.get("pedem_acao") or {}).get("material_novo") == aba,
+            str({"aba": aba, "menu": (P.get("pedem_acao") or {}).get("material_novo"), "fases": [l["fase"] for l in F]}))
+        ver("o 'material novo' das outras telas (Máquinas, saudação) continua importar + conferir", P.get("material_novo") == 1, str(P.get("material_novo")))
+        n = op.get("/api/erros/contagem?gravidade=corrigir").json()
+        ver("Problemas: menu = aba Abertos = 'sem filtro' (todos sem o que você escondeu)", (P.get("pedem_acao") or {}).get("problemas") == 2 and n.get("pedem_acao") == 2
+            and (n.get("sem_filtro") or {}).get("pedem_acao") == 2, str({"menu": (P.get("pedem_acao") or {}).get("problemas"), "aba": n.get("pedem_acao"), "sem_filtro": n.get("sem_filtro")}))
+        for l in res: print(l)
     elif modo == "ux20_massa":
         # UX-20: ações em massa com Desfazer de verdade (volta situação E resolução; quem foi mexido depois fica) e "mensagens
         # repetidas" → Ver (prévia, nada muda) → Mesclar (fica o mais antigo; cópias fecham com a resolução dizendo qual ficou).
@@ -12947,7 +12985,11 @@ def filho(modo):
         mesmo("lotes em Verificar destino", {"filas (linhas)": sum(1 for l in vivos3 if l["fase"] == "importar" and l.get("destino_suspeito")),
                                              "pendencias": pend3.get("lotes_verificar_destino"), "painel": g(pai3, "pendencias", "lotes_verificar_destino"), "esperado": 2})
         mesmo("material novo com os de Verificar destino", {"pendencias": pend3.get("material_novo"), "estacoes.pipeline": g(est3, "pipeline", "aguardando_revisao"),
-                                                            "painel": g(pai3, "pendencias", "material_novo"), "painel.pedem_acao": g(pai3, "pendencias", "pedem_acao", "material_novo"), "esperado": 4})
+                                                            "painel": g(pai3, "pendencias", "material_novo"), "esperado": 4})
+        # UX-70: o número do MENU "Material novo" (pedem_acao.material_novo) é o da aba que ele abre, "Precisam de você" (todo lote que depende de uma pessoa)
+        gente3 = sum(1 for l in vivos3 if not l.get("dispensado") and (l["fase"] in ("erro", "importar", "conferir", "aprovar", "publicar") or l.get("leitura_interrompida")))
+        mesmo("menu Material novo = aba 'Precisam de você' (UX-70)", {"filas (aba)": gente3, "pendencias.pedem_acao": g(pend3, "pedem_acao", "material_novo"),
+                                                                   "painel.pedem_acao": g(pai3, "pendencias", "pedem_acao", "material_novo"), "esperado": gente3})
         mesmo("Precisa de você com os de Verificar destino", {"pendencias": pend3.get("precisa_de_voce"), "painel.pendencias": g(pai3, "pendencias", "precisa_de_voce"),
                                                               "painel.contagens": g(pai3, "contagens", "precisa_de_voce"), "esperado": 4})
         it3 = {i_["acao"]["alvo"]: i_ for g_ in pai3.get("tarefas") or [] if g_["id"] == "conferir" for i_ in g_["itens"] if i_.get("acao")}
@@ -16219,6 +16261,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-64: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-70: o número do menu é o da tela que ele abre (Material novo, Problemas)")
+rc, out = rodar("ux70_contadores", f"{tmp}/ux70_contadores.db")
+if rc != 0: ok(False, f"teste ux70_contadores não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-70: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-19: avisos em aba própria e números do menu com a regra única 'pedem ação de você'")
 rc, out = rodar("ux19_pedem_acao", f"{tmp}/ux19_pedem_acao.db")

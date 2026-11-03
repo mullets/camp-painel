@@ -6213,7 +6213,11 @@ function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{cons
   /* UX-19: os números do menu seguem UMA regra, "itens que pedem ação de você", e vêm todos de pendencias.pedem_acao (servidor).
      Problemas conta só o que bloqueia ou pede correção (os avisos têm aba própria). Servidor antigo sem o campo: as contas de antes. */
   const A=p.pedem_acao||{precisa_de_voce:(+p.decisoes||0)+(+p.material_novo||0)+(+p.erros_bloqueantes||0),decisoes:p.decisoes,material_novo:p.material_novo,problemas:p.erros_abertos,pedidos:p.pedidos_abertos,emprestimos:p.emprestimos_atrasados};
-  pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true);pr('n-ins',A.inscricoes)}
+  pr('n-dec',A.decisoes,true);pr('n-filas',A.material_novo);pr('n-gente',A.precisa_de_voce,!!A.decisoes);/* CAMP-154: o número do "Precisa de você" */pr('n-err',A.problemas);pr('n-sol',A.pedidos);pr('n-emp',A.emprestimos,true);pr('n-ins',A.inscricoes);
+  /* UX-70: o menu diz o que o número conta, e é o mesmo número da tela que ele abre */
+  const dica=(v,t)=>{const b=document.querySelector(`#nav button[data-v="${v}"]`);if(b)b.title=t};
+  if(p.pedem_acao){dica('painel','Decisões, lotes para importar e conferir e problemas que impedem publicar (sem o que você escondeu).');dica('erros','Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos. É o número da aba “Abertos” de Problemas.')}
+  if(p.lotes_precisam_de_voce!=null)dica('filas','Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro. É o número da aba “Precisam de você” de Material novo.')}
 async function atualizarPendencias(){try{atualizarContadoresMenu(await API('/api/pendencias'))}catch(_){}}
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
@@ -6707,10 +6711,10 @@ async function errCarregarDiagnostico(){
   try{
     const d=await API('/api/erros/diagnostico');
     if(!d||!Number.isFinite(d.abertos)){el.hidden=true;return}
-    const principais=(d.projetos_com_mais_alertas||[]).slice(0,4);
+    const principais=(d.projetos_com_mais_alertas||[]).slice(0,4),N_=ERR_N&&(ERR_N.sem_filtro||ERR_N),pa=N_&&Number.isFinite(N_.pedem_acao)?N_.pedem_acao:null;   /* UX-70: "577 no menu" × "2.112 abertos": diz qual é qual */
     el.innerHTML=`<div class="ph"><h2>Entenda os problemas do acervo</h2></div>
       <div class="pb">
-        <p class="help">${fmtN(d.abertos)} abertos no total. ${fmtN(d.bloqueantes)} bloqueiam a publicação; ${fmtN(d.avisos)} são avisos. Destes, ${fmtN(d.avisos_menores_exiftool)} são avisos menores do exiftool.</p>
+        <p class="help">${pa!=null?`${fmtN(pa)} pedem ação: é o número do menu Problemas e da aba Abertos. `:''}${d.avisos?`Contando os ${fmtN(d.avisos)} avisos, são ${fmtN(d.abertos)} abertos no total`:`${fmtN(d.abertos)} abertos no total`}; ${qtd(d.bloqueantes,'marcado','marcados')} como bloqueio.${d.avisos?` Dos avisos, ${fmtN(d.avisos_menores_exiftool)} são avisos menores do exiftool.`:''}</p>
         <div class="act">
           <button type="button" class="btn sm" data-err-diag-grav="bloqueia">Ver bloqueios (${fmtN(d.bloqueantes)})</button>
           <button type="button" class="btn sm" data-err-diag-grav="aviso">Ver avisos (${fmtN(d.avisos)})</button>

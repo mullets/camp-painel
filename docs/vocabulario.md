@@ -190,6 +190,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - O topo diz "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
   "QNAP ok" · "QNAP em atenção" · "QNAP quase cheio" · "QNAP desconectado"; "site ok" · "site lento" · "site não respondeu uma vez" · "site sem resposta".
 - Em Material novo o filtro "Chegando" conta o mesmo que o resumo ("N chegando"): o CAMP Vision lendo + folhas que faltam importar.
+- UX-70: o número do menu é o da tela que ele abre, e o menu diz o que conta (dica ao passar o mouse). **Material novo** = aba
+  "**Precisam de você**" ("Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro."); **Problemas** =
+  aba "**Abertos**" ("Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos."). No resumo de Problemas:
+  "**N pedem ação: é o número do menu Problemas e da aba Abertos. Contando os N avisos, são N abertos no total; N marcados como bloqueio.**"
 - Alertas (UX-07): cada assunto mostra **normal**, **atenção**, **crítico** ou **não medido** (minúsculas, como chip). "Não medido" só
   quando a medição falhou ou não existe, e sempre com o porquê na frase ("Não medido: o endereço do site não está configurado…").
 - Preservação (UX-02): o bloco do topo de Máquinas diz quantas cópias as imagens têm, em frase simples: "Suas imagens têm duas cópias"

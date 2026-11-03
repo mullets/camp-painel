@@ -290,6 +290,9 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     n["emprestimos_atrasados"] = contar_atrasados(con)                       # originais fora com o prazo vencido (tela Empréstimos)
     # contador do menu: o que é de operador (UX-09: + "Ler de novo"; UX-01: + "Verificar destino", como na aba "Precisam de você" do Material novo)
     n["material_novo"] = n["lotes_importar"] + n["lotes_verificar_destino"] + n["lotes_conferir"] + n["leituras_interrompidas"]
+    # UX-70: o número do menu "Material novo" é o da aba que ele abre ("Precisam de você"): todo lote que depende de uma pessoa
+    # (importar, conferir, aprovar, publicar, com erro, ler de novo). Antes o menu contava só importar + conferir (16) e a aba, 17.
+    n["lotes_precisam_de_voce"] = sum(1 for l in L if l["fase"] in cg.FASES_PEDEM_PESSOA or l.get("leitura_interrompida"))
     n["esperam_admin"] = n["lotes_aprovar"] + n["lotes_publicar"]
     # UX-19 + UX-03 + UX-05: "itens que pedem ação de você" (os números do menu, a saudação e a Home), com o que esta pessoa
     # escondeu por 7 dias fora da conta dela: UMA regra, em contagens.pedem_acao
