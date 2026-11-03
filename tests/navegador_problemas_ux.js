@@ -31,8 +31,8 @@ if not con.execute("SELECT 1 FROM erro WHERE descricao LIKE 'Problema sintético
         cod = random.choice(itens) if n % 3 else random.choice(projs)
         con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,criado_em) VALUES (?,?,?,?,?,?,datetime('now',?))",
                     (g, random.choice(['orientacao','espelhado','metadado','credito','outro']), 'campvision' if n % 2 else 'revisao', cod, 'Problema sintético %d' % n, 'CAMP Vision', '-%d days' % (n % 30)))
-    for _ in range(3):   # UX-20: a mesma mensagem 3 vezes (o CAMP Vision registrou de novo a cada leitura)
-        con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('aviso','outro','campvision',?,'Aviso menor do exiftool: tag duplicada','CAMP Vision')", (projs[0],))
+    for _ in range(3):   # UX-20: a mesma mensagem 3 vezes. UX-64: as AUTOMÁTICAS repetidas o painel já mescla sozinho; o botão serve aos relatos de pessoas
+        con.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por) VALUES ('aviso','outro','operador',?,'Legenda com erro de digitação','operador@camp.arq.br')", (projs[0],))
 `);
 const ABERTOS = +py(`print(con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchone()[0])`);
 const AVISOS = +py(`print(con.execute("SELECT COUNT(*) FROM erro WHERE situacao IN ('aberto','em_correcao') AND gravidade='aviso'").fetchone()[0])`);
@@ -143,7 +143,7 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Abertos" é o que bloqueia ou
     chk(await page.isVisible('[data-err-repetidos]'), 'UX-20: o aviso "mensagens repetidas" tem o botão Ver');
     await page.click('[data-err-repetidos]'); await page.waitForSelector('#conf-ov', { timeout: 5000 });
     const mtxt = (await page.textContent('#conf-ov')).replace(/\s+/g, ' ');
-    chk(/Mesclar 2/.test(mtxt) && /exiftool: tag duplicada/.test(mtxt) && /fica o nº/.test(mtxt), 'UX-20: Ver mostra os grupos repetidos, qual fica e quantas cópias fecham: "' + mtxt.slice(0, 160) + '"');
+    chk(/Mesclar 2/.test(mtxt) && /Legenda com erro de digitação/.test(mtxt) && /fica o nº/.test(mtxt), 'UX-20: Ver mostra os grupos repetidos, qual fica e quantas cópias fecham: "' + mtxt.slice(0, 160) + '"');
     await page.click('#conf-ov [data-conf="sim"]'); await page.waitForFunction(() => document.querySelector('#toast.on .toast-acao'), null, { timeout: 8000 }); await pronto();
     chk(await aba('avisos') === av0 - 2, `UX-20: Mesclar fecha as 2 cópias (${av0} -> ${await aba('avisos')})`);
     await page.click('#toast .toast-acao'); await page.waitForFunction(() => /Desfeito/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }); await pronto();

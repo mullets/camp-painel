@@ -121,6 +121,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 | **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s |
 | **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
+| **N motivos** (UX-64) | em Problemas, a mesma folha com vários problemas vira UMA linha; embaixo do código, "2 motivos"; cada motivo tem a própria caixa, o "O que fazer" e o botão. Problema de folha retirada pelo CAMP Vision (menos o "de outro projeto", que leva a decisão) fecha sozinho com "A folha foi retirada do lote pelo CAMP Vision e não está no painel: quem decide é o problema da retirada (Devolver à revisão). Volta sozinho se a folha entrar no painel."; mensagem automática repetida fecha sozinha com "Mensagem repetida: o mesmo problema continua aberto no nº N." |
 | **Dispensar este lote** (UX-35, UX-39) | só em lote parado com erro do CAMP Vision ou com a **Leitura interrompida** (UX-39: o "Ler de novo" já foi pedido e nada muda), operador ou acima: o lote sai das listas e das contagens **para todos** (Material novo, Precisa de você, menu, alertas por e-mail). Nada é apagado nem muda no QNAP; volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar (na leitura interrompida: se o lote sair de "sendo lido" ou recomeçar a etapa). Em Material novo é secundário, depois de "Tentar de novo" ou "Ler de novo". No Ignorar ▾ aparece como **Dispensar este lote (para todos)**. Desfazer por 8 s |
 | **dispensado** / **Voltar a mostrar** (UX-35, UX-39) | o lote dispensado continua em Material novo › Todas com o chip "dispensado"; "Voltar a mostrar" desfaz a dispensa (fica no Histórico como "lote parado dispensado") |
 
@@ -194,6 +195,14 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - O topo diz "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
   "QNAP ok" · "QNAP em atenção" · "QNAP quase cheio" · "QNAP desconectado"; "site ok" · "site lento" · "site não respondeu uma vez" · "site sem resposta".
 - Em Material novo o filtro "Chegando" conta o mesmo que o resumo ("N chegando"): o CAMP Vision lendo + folhas que faltam importar.
+- UX-60: em **Qualidade do CAMP Vision**, o quadro **Folhas sem leitura por resposta quebrada**: "**N folhas ficaram sem leitura** em N projetos:
+  a resposta do modelo veio quebrada e o CAMP Vision descartou o campo, em vez de gravar um valor errado. Abra a folha e preencha o campo na
+  conferência." Cada folha (uma vez só) com os campos e "esperando conferência" / a revisão / "fora do painel". Sem nenhuma: "Nenhuma folha
+  ficou sem leitura por resposta quebrada do modelo."
+- UX-70: o número do menu é o da tela que ele abre, e o menu diz o que conta (dica ao passar o mouse). **Material novo** = aba
+  "**Precisam de você**" ("Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro."); **Problemas** =
+  aba "**Abertos**" ("Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos."). No resumo de Problemas:
+  "**N pedem ação: é o número do menu Problemas e da aba Abertos. Contando os N avisos, são N abertos no total; N marcados como bloqueio.**"
 - Alertas (UX-07): cada assunto mostra **normal**, **atenção**, **crítico** ou **não medido** (minúsculas, como chip). "Não medido" só
   quando a medição falhou ou não existe, e sempre com o porquê na frase ("Não medido: o endereço do site não está configurado…").
 - Preservação (UX-02): o bloco do topo de Máquinas diz quantas cópias as imagens têm, em frase simples: "Suas imagens têm duas cópias"

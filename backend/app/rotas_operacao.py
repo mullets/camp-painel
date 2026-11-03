@@ -1406,7 +1406,7 @@ def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, escondidos
 def _fechar_sozinhos(con) -> None:
     """Antes de mostrar: fecha (com registro) o que se resolveu sozinho com certeza. Só banco, rápido; nunca o QNAP."""
     from . import problemas
-    if problemas.fechar_resolvidos(con):
+    if problemas.fechar_resolvidos(con) or con.in_transaction:   # UX-63: a reclassificação do [Minor] também grava
         con.commit()
 
 
@@ -1442,8 +1442,9 @@ def contar_erros(gravidade: str | None = None, categoria: str | None = None, ori
         # UX-06: com filtro, quantos existem SEM ele (campo novo, opcional). A tela usa para dizer "sem estes filtros há 574 abertos"
         # em vez de abas e lista zeradas sem explicação.
         if any(x and str(x).strip() for x in (gravidade, categoria, origem, projeto, q)):
-            out["sem_filtro"] = {k: con.execute("SELECT COUNT(*) FROM erro" + _filtro_erros(k, None, None, None, None, None)[0],
-                                                _filtro_erros(k, None, None, None, None, None)[1]).fetchone()[0] for k in ("abertos", "pedem_acao", "avisos", "todos")}
+            # UX-70: sem filtro, mas sem o que esta pessoa escondeu (como a aba e o menu)
+            out["sem_filtro"] = {k: con.execute("SELECT COUNT(*) FROM erro" + _filtro_erros(k, None, None, None, None, None, esc)[0],
+                                                _filtro_erros(k, None, None, None, None, None, esc)[1]).fetchone()[0] for k in ("abertos", "pedem_acao", "avisos", "todos")}
         return out
     finally:
         con.close()

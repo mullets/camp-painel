@@ -15,6 +15,10 @@ import re
 
 ABERTOS = ("aberto", "em_correcao")
 ATOR_AUTOMATICO = "painel (automático)"
+# UX-64 (a): o problema de uma folha que o CAMP Vision RETIROU (não está no painel) fecha sozinho com este motivo: quem decide é o problema
+# da retirada ("Devolver à revisão"). A marca na resolução serve para reabrir se a folha entrar no painel.
+MOTIVO_FORA = "A folha foi retirada do lote pelo CAMP Vision e não está no painel: quem decide é o problema da retirada (Devolver à revisão). Volta sozinho se a folha entrar no painel."
+ORIGENS_AUTOMATICAS = ("campvision", "revisao")
 _FOLHA = re.compile(r"^F\d{3}-P\d{4}-.+-D\d+$")
 _PROJ = re.compile(r"^F\d{3}-P\d{4}")
 
@@ -173,11 +177,17 @@ def explicar(e, ctx: dict) -> dict:
                     sozinho = {"seguro": True, "mover_para": novo, "motivo": f"A folha mudou de código: o problema passou para {novo}."}
             elif folha in ctx["retiradas"]:
                 from .importador_lote import fala_de_projeto_divergente
-                if e["categoria"] == "projeto_errado" or fala_de_projeto_divergente(e["descricao"]):
+                outro = e["categoria"] == "projeto_errado" or fala_de_projeto_divergente(e["descricao"])
+                if outro:
                     o_que = "O CAMP Vision tirou esta folha do lote por achar que é de outro projeto. Ela não está no painel e não vai ao site."
                     fazer = "Veja a folha. Se for deste projeto, \"É deste projeto\" a devolve ao lote; se não for, \"É de outro projeto…\" e ela fica fora."
                 else:
                     o_que = "O CAMP Vision tirou esta folha do lote antes da revisão. Ela não está no painel e não vai ao site."
+                # UX-64 (a): a mesma folha aparecia 2–3 vezes (bloqueio do erros.json, autoria, a retirada). Fica aberto o problema da retirada,
+                # que tem a decisão (Devolver à revisão); este fecha sozinho (volta se a folha entrar no painel). Exceção: o "de outro projeto",
+                # que leva a decisão "É deste projeto / É de outro projeto…" (CAMP-069) aqui e na página do projeto.
+                if not outro:
+                    sozinho = {"seguro": True, "fora_do_painel": True, "motivo": MOTIVO_FORA}
             else:
                 sozinho = {"seguro": True, "motivo": "A folha não existe mais no painel. Fechado sozinho, fica no histórico."}
             acao = "abrir_projeto" if pj else None
@@ -236,7 +246,12 @@ def enriquecer(con, erros: list) -> list[dict]:
 
 def fechar_resolvidos(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
     """Fecha (situação 'corrigido') os problemas abertos que se resolveram sozinhos COM CERTEZA, gravando o porquê na resolução
-    e um evento 'fechado_automatico' no histórico. Os "talvez" ficam abertos. Não faz commit. Devolve os ids fechados."""
+    e um evento 'fechado_automatico' no histórico. Os "talvez" ficam abertos. Não faz commit. Devolve os ids fechados.
+    UX-63: antes, o aviso [Minor] do exiftool gravado como bloqueio vira aviso (avisos_cv.reclassificar_menores, com registro)."""
+    from .avisos_cv import reclassificar_menores
+    reclassificar_menores(con, ator)
+    reabrir_se_voltou(con, ator)                 # UX-64 (a): a folha retirada entrou no painel: o que fechou por ela estar fora volta
+    mesclar_repetidos_auto(con, ator)            # UX-64 (c): o "mesclar repetidas" (UX-20), sozinho, só nos automáticos
     abertos = con.execute("SELECT * FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchall()
     if not abertos:
         return []
@@ -260,4 +275,40 @@ def fechar_resolvidos(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'fechado_automatico',?,?)",
                         (str(e["id"]), ator, json.dumps({"codigo": e["codigo"], "motivo": s["motivo"]}, ensure_ascii=False)))
             fechados.append(e["id"])
+    return fechados
+
+
+def reabrir_se_voltou(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
+    """UX-64 (a): problema fechado sozinho porque a folha estava fora do painel (MOTIVO_FORA) e a folha agora EXISTE no painel: reabre,
+    com evento 'reaberto_automatico'. Não faz commit."""
+    voltam = con.execute("""SELECT e.id, e.codigo FROM erro e WHERE e.situacao='corrigido' AND e.resolucao=?
+                            AND EXISTS (SELECT 1 FROM item i WHERE i.codigo=e.codigo)""", ("Resolvido sozinho: " + MOTIVO_FORA,)).fetchall()
+    out = []
+    for r in voltam:
+        n = con.execute("UPDATE erro SET situacao='aberto', resolvido_em=NULL, resolucao=NULL WHERE id=? AND situacao='corrigido'", (r["id"],)).rowcount
+        if n:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'reaberto_automatico',?,?)",
+                        (str(r["id"]), ator, json.dumps({"codigo": r["codigo"], "motivo": "A folha entrou no painel: o problema volta a valer."}, ensure_ascii=False)))
+            out.append(r["id"])
+    return out
+
+
+def mesclar_repetidos_auto(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
+    """UX-64 (c): o "mesclar repetidas" do UX-20, sem clique, só para os problemas AUTOMÁTICOS (CAMP Vision, revisão): mesma origem, código e
+    mensagem → fica aberto o mais antigo; as cópias fecham como "Não era problema" dizendo qual ficou, com evento 'mesclado' (automatico=true).
+    Cópia que alguém já reabriu depois de mesclada não é mesclada de novo. Relatos de pessoas só pelo botão. Não faz commit."""
+    from .rotas_operacao import _grupos_repetidos
+    fechados = []
+    for g in _grupos_repetidos(con, None):
+        if g["origem"] not in ORIGENS_AUTOMATICAS:
+            continue
+        for i in g["fecham"]:
+            if con.execute("SELECT 1 FROM evento WHERE entidade='erro' AND codigo=? AND tipo='mesclado'", (str(i),)).fetchone():
+                continue
+            n = con.execute("UPDATE erro SET situacao='ignorado', resolvido_em=datetime('now'), resolucao=? WHERE id=? AND situacao IN ('aberto','em_correcao')",
+                            (f"Mensagem repetida: o mesmo problema continua aberto no nº {g['fica']}.", i)).rowcount
+            if n:
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'mesclado',?,?)",
+                            (str(i), ator, json.dumps({"codigo": g["codigo"], "fica": g["fica"], "automatico": True}, ensure_ascii=False)))
+                fechados.append(i)
     return fechados

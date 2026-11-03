@@ -16,6 +16,7 @@ def ok(cond, msg):
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10888,6 +10889,203 @@ def filho(modo):
         ver("pendencias.pedem_acao: Problemas = 5 (sem os avisos); erros_abertos continua 12", pa.get("problemas") == 5 and p_.get("erros_abertos") == 12 and p_.get("erros_avisos") == 7, str(pa))
         ver("Precisa de você = decisões + material novo + bloqueios (a mesma soma da tela)", pa.get("precisa_de_voce") == p_["decisoes"] + p_["material_novo"] + p_["erros_bloqueantes"], str(pa))
         for l in res: print(l)
+    elif modo == "ux63_minor_exif":
+        # UX-63 (P1): aviso [Minor] do exiftool que veio embrulhado (caminho no fim, "EXIF conferido em N de M…", "exiftool relatou…")
+        # entrava como "metadado errado — bloqueia o projeto todo" (F001-P0005, P0007, P0011, P0012, P0014) e o resumo dizia "0 são avisos
+        # menores do exiftool". Agora é aviso na importação e o que já estava gravado é reclassificado (com registro; nada é apagado).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile as _tf
+        from pathlib import Path as _P
+        from app import auth
+        from app.importador_lote import registrar_erros_cv
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F001','Fundo de teste')")
+        for n in (5, 7):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1950)", (f"F001-P000{n}", "F001", n, f"Projeto {n}"))
+        CAM = "Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated) - /mnt/qnap/ACERVOS_CAMP/F001/01 - Projetos/F001-P0005 - Casa/S01/TIF/F001-P0005-1950-S01-D00001.tif"
+        EMB = "EXIF conferido em 6 de 48 arquivo(s) já no acervo: F001-P0005-1950-S01-D00002.tif Warning: [Minor] IPTC:By-line exceeds length limit (truncated)"
+        REL = ("exiftool relatou 2 problema(s): Warning: [Minor] IPTC:Credit exceeds length limit (truncated) - /a/01 - Projetos/F001-P0005-1950-S01-D00003.tif "
+               "Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated) - /a/01 - Projetos/F001-P0005-1950-S01-D00004.tif")
+        VERDADE = "EXIF conferido em 6 de 48 arquivo(s): exiftool relatou 1 problema(s): Error: File not found - /a/x.tif Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated)"
+        # o que JÁ estava gravado como bloqueio (base de produção antes da correção)
+        ids = [c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave) VALUES ('bloqueia','metadado','campvision','F001-P0005',?,'CAMP Vision',?)",
+                         (d, f"campvision:erros:velho{i}")).lastrowid for i, d in enumerate((CAM, EMB, REL))]
+        verd = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave) VALUES ('bloqueia','metadado','campvision','F001-P0005',?,'CAMP Vision','campvision:erros:verd')", (VERDADE,)).lastrowid
+        pessoa = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','metadado','operador','F001-P0005','[Minor] o título está errado, corrigir')").lastrowid
+        fech = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,situacao,resolucao) VALUES ('bloqueia','metadado','campvision','F001-P0007',?,'corrigido','ok')", (CAM.replace("P0005", "P0007"),)).lastrowid
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        n = ad.get("/api/erros/contagem").json()
+        g = lambda i: c.execute("SELECT gravidade, categoria, descricao, situacao FROM erro WHERE id=?", (i,)).fetchone()
+        ver("os 3 [Minor] embrulhados (caminho no fim, 'EXIF conferido em…', 'exiftool relatou…') viram aviso ao abrir Problemas",
+            all(g(i)["gravidade"] == "aviso" for i in ids), [g(i)["gravidade"] for i in ids])
+        ver("nada se perde: a mensagem técnica antiga fica no fim do texto e o texto para gente vem antes",
+            all(g(i)["descricao"].endswith(d) and "Detalhe técnico:" in g(i)["descricao"] for i, d in zip(ids, (CAM, EMB, REL))) and "o título era longo demais" in g(ids[0])["descricao"], g(ids[0])["descricao"][:160])
+        ver("fica no histórico (evento problema_reclassificado com o antes)", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='problema_reclassificado'").fetchone()[0] == 3
+            and _j.loads((c.execute("SELECT detalhe FROM evento WHERE tipo='problema_reclassificado' AND codigo=?", (str(ids[1]),)).fetchone() or ['{}'])[0]).get("de") == "bloqueia")
+        ver("erro de verdade junto com o [Minor] continua bloqueio", g(verd)["gravidade"] == "bloqueia")
+        ver("relato de pessoa e problema já fechado não são mexidos", g(pessoa)["gravidade"] == "bloqueia" and g(fech)["gravidade"] == "bloqueia")
+        ver("contagem 'pedem ação' = só o erro de verdade e o relato da pessoa (2); os 3 estão em Avisos", n.get("pedem_acao") == 2 and n.get("avisos") == 3, str(n))
+        p_ = ad.get("/api/pendencias").json()
+        ver("menu: Problemas conta 2 (os [Minor] saíram)", (p_.get("pedem_acao") or {}).get("problemas") == 2, str(p_.get("pedem_acao")))
+        d = ad.get("/api/erros/diagnostico").json()
+        ver("resumo: 'Destes, 3 são avisos menores do exiftool' e só 2 marcados como bloqueio", d.get("avisos_menores_exiftool") == 3 and d.get("bloqueantes") == 2,
+            str({k: d.get(k) for k in ("avisos", "bloqueantes", "avisos_menores_exiftool")}))
+        ad.get("/api/erros/contagem")
+        ver("idempotente: abrir de novo não reclassifica nem registra outra vez", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='problema_reclassificado'").fetchone()[0] == 3)
+        # na importação (erros.json), já entra como aviso
+        pasta = _P(_tf.mkdtemp()); (pasta / "catalogacao").mkdir()
+        (pasta / "catalogacao" / "erros.json").write_text(_j.dumps([{"arquivo": "", "categoria": "metadado", "gravidade": "bloqueia", "detalhe": x}
+                                                                     for x in (CAM.replace("P0005", "P0007"), EMB.replace("P0005", "P0007"), VERDADE)]), encoding="utf-8")
+        registrar_erros_cv(c, "F001-P0007", pasta); c.commit()
+        novos = c.execute("SELECT gravidade, descricao FROM erro WHERE codigo='F001-P0007' AND chave LIKE 'campvision:erros:%' ORDER BY id").fetchall()
+        ver("erros.json: os [Minor] embrulhados entram como aviso; o erro de verdade, como bloqueio",
+            [x["gravidade"] for x in novos] == ["aviso", "aviso", "bloqueia"] and novos[1]["descricao"].startswith("1 arquivo (D00002): o nome do autor"), [tuple(x) for x in novos])
+        for l in res: print(l)
+    elif modo == "ux64_problemas_ruido":
+        # UX-64 (P1): Problemas inflado (577 abertos; F001-P0033 com 337 problemas para 49 folhas). (a) problema de folha RETIRADA pelo CAMP Vision
+        # (fora do painel, "não existe mais" na lista) fica aberto só no problema da retirada; os outros fecham sozinhos com registro e voltam se
+        # a folha entrar no painel; (c) mensagens automáticas repetidas são mescladas sozinhas (o "Mesclar" do UX-20). Nada é apagado.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F001','Fundo de teste')")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',7)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F001-P0007','F001',7,'Projeto 7',1950)")
+        D = lambda n: f"F001-P0007-1950-S01-D{n:05d}"
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem) VALUES (?,'F001-P0007','S01',1,'x','pendente','importado')""", (D(1),))
+        E = lambda cod, grav, cat, orig, desc, chave=None: c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave) VALUES (?,?,?,?,?,?,?)",
+                                                                    (grav, cat, orig, cod, desc, "CAMP Vision" if orig == "campvision" else "op", chave)).lastrowid
+        # (a) D00025: a retirada (com a decisão) + o bloqueio do erros.json + a autoria divergente = 3 linhas para a mesma folha
+        ret = E(D(25), "corrigir", "autoria_divergente", "campvision", "O CAMP Vision retirou esta folha do lote: autoria divergente. Ela não entrou na revisão.", f"campvision:retirado:{D(25)}")
+        b25 = E(D(25), "bloqueia", "outro", "campvision", "título ilegível", "campvision:erros:b25")
+        a25 = E(D(25), "corrigir", "autoria_divergente", "campvision", "carimbo de outro autor", "campvision:erros:a25")
+        # D00026: o erros.json diz "outra pasta": a decisão "É deste projeto / É de outro projeto…" (CAMP-069) mora neste, que fica aberto
+        E(D(26), "corrigir", "outro", "campvision", "O CAMP Vision retirou esta folha do lote: em branco.", f"campvision:retirado:{D(26)}")
+        o26 = E(D(26), "bloqueia", "outro", "campvision", "D00026 com identificação para outra pasta (OUTRA)", "campvision:erros:o26")
+        # (c) repetidas: 3 automáticas iguais na D00001; 2 relatos iguais de pessoa (só pelo botão)
+        rep = [E(D(1), "corrigir", "orientacao", "campvision", "orientação incerta", f"campvision:erros:rep{i}") for i in range(3)]
+        pes = [E(D(1), "corrigir", "outro", "operador", "conferir a escala") for _ in range(2)]
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        n = ad.get("/api/erros/contagem").json()
+        g = lambda i: c.execute("SELECT situacao, resolucao FROM erro WHERE id=?", (i,)).fetchone()
+        ver("(a) D00025: fica aberto só o problema da retirada (com a decisão)", g(ret)["situacao"] == "aberto" and g(b25)["situacao"] == "corrigido" and g(a25)["situacao"] == "corrigido",
+            [tuple(g(i)) for i in (ret, b25, a25)])
+        ver("(a) fecha com o motivo (retirada; volta se a folha entrar) e evento no histórico",
+            "retirada do lote" in (g(b25)["resolucao"] or "") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='fechado_automatico' AND codigo IN (?,?)", (str(b25), str(a25))).fetchone()[0] == 2)
+        ver("(a) D00026: o 'de outro projeto' fica aberto (leva a decisão 'É deste projeto / É de outro projeto…')", g(o26)["situacao"] == "aberto")
+        ver("(c) 3 mensagens automáticas iguais: fica a mais antiga; 2 fecham como 'não era problema' dizendo qual ficou",
+            g(rep[0])["situacao"] == "aberto" and all(g(i)["situacao"] == "ignorado" and f"nº {rep[0]}" in g(i)["resolucao"] for i in rep[1:]), [tuple(g(i)) for i in rep])
+        ver("(c) ...com evento 'mesclado' automático", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='mesclado' AND detalhe LIKE '%\"automatico\": true%'").fetchone()[0] == 2)
+        ver("(c) relatos iguais de PESSOAS não são mesclados sozinhos", all(g(i)["situacao"] == "aberto" for i in pes))
+        # abertos: ret, o26, a retirada da D26, rep[0], 2 relatos = 6 (antes: 11)
+        ver("contagem: abertos 6 (antes 11)", n.get("abertos") == 6, str(n))
+        ad.get("/api/erros/contagem")
+        ver("idempotente: abrir de novo não fecha nem registra outra vez", c.execute("SELECT COUNT(*) FROM evento WHERE tipo IN ('fechado_automatico','mesclado')").fetchone()[0] == 4)
+        # cópia mesclada que uma pessoa reabriu não é mesclada de novo
+        ad.patch(f"/api/erros/{rep[1]}", json={"situacao": "aberto"}); ad.get("/api/erros/contagem")
+        ver("(c) cópia reaberta por uma pessoa não é mesclada de novo", g(rep[1])["situacao"] == "aberto")
+        # a folha entra no painel (devolvida e importada): o que fechou por ela estar fora volta
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem) VALUES (?,'F001-P0007','S01',25,'x','pendente','importado')""", (D(25),)); c.commit()
+        ad.get("/api/erros/contagem")
+        ver("(a) a folha entrou no painel: os 2 problemas dela reabrem (com registro); a retirada fecha (a folha entrou)",
+            g(b25)["situacao"] == "aberto" and g(a25)["situacao"] == "aberto" and g(ret)["situacao"] == "corrigido"
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='reaberto_automatico'").fetchone()[0] == 2, [tuple(g(i)) for i in (ret, b25, a25)])
+        ver("nenhum problema foi apagado", c.execute("SELECT COUNT(*) FROM erro").fetchone()[0] == 10)
+        for l in res: print(l)
+    elif modo == "ux70_contadores":
+        # UX-70 (P3): contadores que não batiam. Menu "Material novo 16" × aba "Precisam de você" 17 (o menu contava só importar + conferir; a aba
+        # conta todo lote que depende de uma pessoa, inclusive o parado com erro e o que espera aprovar/publicar). Problemas: com filtro, o
+        # "sem filtro" contava também o que a pessoa escondeu (o menu e a aba não contam).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.qualidade_base import adiar as _adiar
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')")
+        for n_ in (1, 2):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',?)", (n_,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (f"F099-P000{n_}", "F099", n_, f"Projeto {n_}"))
+        lc = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote conferir','F099-P0001','/a','revisao')").lastrowid
+        c.execute("""INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, lote_id, revisao, origem) VALUES ('F099-P0001-1970-S01-D00001','F099-P0001','S01',1,'x',?,'pendente','importado')""", (lc,))
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('Lote parado','F099-P0002','/b','erro',?)",
+                  (_j.dumps({"erro": "falha de disco/rede ao copiar"}),))
+        for k_ in range(3):
+            c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','outro','operador','F099-P0001',?)", (f"p{k_}",))
+        c.commit()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        uid_ = c.execute("SELECT id FROM usuario WHERE email='op@camp.arq.br'").fetchone()[0]
+        _adiar(c, uid_, "erro:" + str(c.execute("SELECT MIN(id) FROM erro").fetchone()[0])); c.commit()
+        F = op.get("/api/filas").json()
+        aba = sum(1 for l in F if not l.get("adiado") and not l.get("dispensado") and (l["fase"] in ("erro", "importar", "conferir", "aprovar", "publicar") or l.get("leitura_interrompida")))
+        P = op.get("/api/pendencias").json()
+        ver("menu Material novo = aba 'Precisam de você' (o lote parado com erro também depende de uma pessoa)", aba == 2 and (P.get("pedem_acao") or {}).get("material_novo") == aba,
+            str({"aba": aba, "menu": (P.get("pedem_acao") or {}).get("material_novo"), "fases": [l["fase"] for l in F]}))
+        ver("o 'material novo' das outras telas (Máquinas, saudação) continua importar + conferir", P.get("material_novo") == 1, str(P.get("material_novo")))
+        n = op.get("/api/erros/contagem?gravidade=corrigir").json()
+        ver("Problemas: menu = aba Abertos = 'sem filtro' (todos sem o que você escondeu)", (P.get("pedem_acao") or {}).get("problemas") == 2 and n.get("pedem_acao") == 2
+            and (n.get("sem_filtro") or {}).get("pedem_acao") == 2, str({"menu": (P.get("pedem_acao") or {}).get("problemas"), "aba": n.get("pedem_acao"), "sem_filtro": n.get("sem_filtro")}))
+        for l in res: print(l)
+    elif modo == "ux60_resposta_quebrada":
+        # UX-60 (parte do painel): o CAMP Vision descarta o campo quando a resposta do modelo vem quebrada e avisa POR CAMPO
+        # ("valor descartado: resposta do modelo quebrada (cidade)"). Em Qualidade do CAMP Vision: quantas folhas ficaram sem leitura
+        # por isso (uma folha conta uma vez, com os campos juntos), contando pelo que o painel já recebe, com o caminho para cada uma.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F026','Fundo de teste')")
+        for n_ in (30, 31):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n_,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1975)", (f"F026-P00{n_}", "F026", n_, f"Projeto {n_}"))
+        D = lambda p, n: f"F026-P00{p}-1975-S01-D{n:05d}"
+        RQ = "valor descartado: resposta do modelo quebrada"
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem, pendencias) VALUES (?,?,?,?,?,?,?,?)",
+                  (D(30, 1), "F026-P0030", "S01", 1, "x", "pendente", "importado", _j.dumps({"ressalvas": [f"{RQ} (cidade)", f"{RQ} (uf, resto de marcação tirado)"]})))
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem, pendencias) VALUES (?,?,?,?,?,?,?,?)",
+                  (D(30, 2), "F026-P0030", "S01", 2, "x", "conferida", "importado", "{}"))
+        E = lambda cod, desc, sit="aberto": c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,situacao) VALUES ('aviso','metadado','campvision',?,?,'CAMP Vision',?)", (cod, desc, sit))
+        E(D(30, 1), f"{RQ} (cidade)"); E(D(30, 1), f"{RQ} (uf, resto de marcação tirado)")       # 2 avisos, 1 folha
+        E(D(30, 2), f"{RQ} (titulo)", "corrigido")                                                # já conferida: continua contando (ficou sem leitura)
+        E(D(31, 7), f"{RQ} (ano)")                                                                # folha fora do painel
+        E(D(30, 3), "cidade diverge do grupo (lido 'Santos')")                                    # outro aviso: não conta
+        E("F026-P0030", f"{RQ} (projeto)")                                                        # não é folha: não conta
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        r = ad.get("/api/qualidade-cv").json().get("resposta_quebrada") or {}
+        L = {f["codigo"]: f for f in r.get("lista") or []}
+        ver("conta 3 folhas (uma folha com 2 campos quebrados conta uma vez) em 2 projetos", r.get("folhas") == 3 and r.get("projetos") == 2, str(r)[:300])
+        ver("a folha junta os campos (cidade, uf)", L.get(D(30, 1), {}).get("campos") == ["cidade", "uf"], str(L.get(D(30, 1))))
+        ver("diz se a folha está no painel e a revisão (para o link ir à conferência)", L.get(D(30, 1), {}).get("existe") is True and L[D(30, 1)]["revisao"] == "pendente"
+            and L.get(D(30, 2), {}).get("revisao") == "conferida" and L.get(D(31, 7), {}).get("existe") is False, str(L)[:300])
+        ver("outros avisos e problema do projeto não contam", D(30, 3) not in L and "F026-P0030" not in L)
+        ver("só admin vê (como o resto da tela)", op.get("/api/qualidade-cv").status_code == 403)
+        for l in res: print(l)
     elif modo == "ux20_massa":
         # UX-20: ações em massa com Desfazer de verdade (volta situação E resolução; quem foi mexido depois fica) e "mensagens
         # repetidas" → Ver (prévia, nada muda) → Mesclar (fica o mais antigo; cópias fecham com a resolução dizendo qual ficou).
@@ -12830,7 +13028,11 @@ def filho(modo):
         mesmo("lotes em Verificar destino", {"filas (linhas)": sum(1 for l in vivos3 if l["fase"] == "importar" and l.get("destino_suspeito")),
                                              "pendencias": pend3.get("lotes_verificar_destino"), "painel": g(pai3, "pendencias", "lotes_verificar_destino"), "esperado": 2})
         mesmo("material novo com os de Verificar destino", {"pendencias": pend3.get("material_novo"), "estacoes.pipeline": g(est3, "pipeline", "aguardando_revisao"),
-                                                            "painel": g(pai3, "pendencias", "material_novo"), "painel.pedem_acao": g(pai3, "pendencias", "pedem_acao", "material_novo"), "esperado": 4})
+                                                            "painel": g(pai3, "pendencias", "material_novo"), "esperado": 4})
+        # UX-70: o número do MENU "Material novo" (pedem_acao.material_novo) é o da aba que ele abre, "Precisam de você" (todo lote que depende de uma pessoa)
+        gente3 = sum(1 for l in vivos3 if not l.get("dispensado") and (l["fase"] in ("erro", "importar", "conferir", "aprovar", "publicar") or l.get("leitura_interrompida")))
+        mesmo("menu Material novo = aba 'Precisam de você' (UX-70)", {"filas (aba)": gente3, "pendencias.pedem_acao": g(pend3, "pedem_acao", "material_novo"),
+                                                                   "painel.pedem_acao": g(pai3, "pendencias", "pedem_acao", "material_novo"), "esperado": gente3})
         mesmo("Precisa de você com os de Verificar destino", {"pendencias": pend3.get("precisa_de_voce"), "painel.pendencias": g(pai3, "pendencias", "precisa_de_voce"),
                                                               "painel.contagens": g(pai3, "contagens", "precisa_de_voce"), "esperado": 4})
         it3 = {i_["acao"]["alvo"]: i_ for g_ in pai3.get("tarefas") or [] if g_["id"] == "conferir" for i_ in g_["itens"] if i_.get("acao")}
@@ -16206,6 +16408,38 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-06: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-63: aviso [Minor] do exiftool embrulhado não bloqueia o projeto; o que já estava gravado vira aviso (com registro)")
+rc, out = rodar("ux63_minor_exif", f"{tmp}/ux63_minor_exif.db")
+if rc != 0: ok(False, f"teste ux63_minor_exif não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-63: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-64: Problemas sem ruído (folha retirada, mensagens repetidas)")
+rc, out = rodar("ux64_problemas_ruido", f"{tmp}/ux64_problemas_ruido.db")
+if rc != 0: ok(False, f"teste ux64_problemas_ruido não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-64: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-70: o número do menu é o da tela que ele abre (Material novo, Problemas)")
+rc, out = rodar("ux70_contadores", f"{tmp}/ux70_contadores.db")
+if rc != 0: ok(False, f"teste ux70_contadores não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-70: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-60: Qualidade do CAMP Vision conta as folhas sem leitura por resposta quebrada")
+rc, out = rodar("ux60_resposta_quebrada", f"{tmp}/ux60_resposta_quebrada.db")
+if rc != 0: ok(False, f"teste ux60_resposta_quebrada não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-60: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-19: avisos em aba própria e números do menu com a regra única 'pedem ação de você'")
 rc, out = rodar("ux19_pedem_acao", f"{tmp}/ux19_pedem_acao.db")

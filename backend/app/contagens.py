@@ -10,6 +10,8 @@ Aqui fica a definição ÚNICA de cada métrica; /api/painel, /api/pendencias, /
 - Pedidos abertos: tudo menos entregue/recusado; "esperando": aguarda resposta/orçamento.
 - No site: folha/projeto/fundo com status_site='no_ar' (projeto juntado ou descartado não conta; fundo só ativo).
 - Precisa de você (o número do menu e da saudação): decisões + material novo (importar + conferir) + problemas que impedem publicar.
+- UX-70: o número do menu "Material novo" (pedem_acao.material_novo) é o da aba que ele abre, "Precisam de você": lotes em
+  FASES_PEDEM_PESSOA ou com a leitura interrompida. O "material_novo" de fora (Máquinas, saudação) continua importar + conferir.
 - Estações de captura ligadas: foto/contex/universal que respondem na rede OU cujo programa deu sinal (o CAMP Vision e o QNAP não contam).
 - Estado do topo: o PIOR estado entre QNAP, site, CAMP Vision, cópia do acervo e cópia de segurança (ok < atencao < critico).
 """
@@ -26,6 +28,7 @@ PROJETO_VIVO = "mesclado_em IS NULL AND descartado_em IS NULL"
 LOTE_VIVO = ("l.descartado_em IS NULL AND EXISTS (SELECT 1 FROM projeto p_ WHERE p_.codigo=l.projeto_codigo "
              "AND p_.mesclado_em IS NULL AND p_.descartado_em IS NULL)")
 TIPOS_CAPTURA = ("foto", "contex", "universal")
+FASES_PEDEM_PESSOA = ("erro", "importar", "conferir", "aprovar", "publicar")   # UX-70: a aba "Precisam de você" de Material novo (FILA_GENTE na tela)
 ORDEM_NIVEL = {"ok": 0, None: 0, "atencao": 1, "critico": 2}
 
 
@@ -110,7 +113,8 @@ def pedem_acao(con, n: dict, decisoes: list[dict], usuario_id: int | None = None
             esc_bloq = _q(con, f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND {ERROS_ABERTOS} AND {TRAVA_SQL}", *ids_err)
             esc_prob = _q(con, f"SELECT COUNT(*) FROM erro WHERE id IN ({marc}) AND {ERROS_PEDEM_ACAO}", *ids_err)
     n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] - esc_dec + n["material_novo"] + n["erros_bloqueantes"] - esc_bloq, "decisoes": n["decisoes"],
-                       "material_novo": n["material_novo"], "problemas": n["erros_pedem_acao"] - esc_prob, "pedidos": n["pedidos_abertos"],
+                       # UX-70: o menu "Material novo" = a aba "Precisam de você" (lotes que dependem de uma pessoa); sem o campo, como antes
+                       "material_novo": n.get("lotes_precisam_de_voce", n["material_novo"]), "problemas": n["erros_pedem_acao"] - esc_prob, "pedidos": n["pedidos_abertos"],
                        "emprestimos": n["emprestimos_atrasados"], "inscricoes": _inscricoes_novas(con)}
     return n["pedem_acao"]
 

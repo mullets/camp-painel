@@ -390,7 +390,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         con.close(); raise HTTPException(404, "Projeto não existe")
     try:                                   # 21/10 (4.2): problema fantasma (folha que não existe mais, fora do projeto) não aparece aqui
         from .problemas import fechar_resolvidos
-        if fechar_resolvidos(con):
+        if fechar_resolvidos(con) or con.in_transaction:     # UX-63: a reclassificação do [Minor] também grava
             con.commit()
     except Exception:  # noqa: BLE001  (nunca derruba a página do projeto)
         con.rollback()

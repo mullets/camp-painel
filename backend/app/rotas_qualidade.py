@@ -3,6 +3,7 @@ Fonte: revisao_campo (o que a revisão fez com cada campo lido) e lista_processa
 import csv
 import io
 import json
+import re
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import Response
@@ -12,6 +13,41 @@ from .db import connect
 
 router = APIRouter(prefix="/api", tags=["qualidade"])
 ROTULO_CAMPO = {"titulo": "Título", "tipo_documento": "Tipo", "folha": "Folha", "escala": "Escala", "ano_folha": "Ano da folha"}
+
+
+RESPOSTA_QUEBRADA = "valor descartado: resposta do modelo quebrada"      # o texto que o CAMP Vision põe por campo (UX-37/UX-60, saneamento.RESSALVA)
+_CAMPO_QUEBRADO = re.compile(re.escape(RESPOSTA_QUEBRADA) + r"\s*\(([^),]+)")
+
+
+def folhas_resposta_quebrada(con, limite: int = 300) -> dict:
+    """UX-60 (parte do painel): folhas que ficaram sem leitura (algum campo descartado) porque a resposta do modelo veio quebrada.
+    Conta pelo que o painel JÁ recebe: os avisos por campo com esse texto (tabela erro, qualquer situação) e as ressalvas guardadas
+    na folha (item.pendencias). Uma folha conta uma vez, com os campos juntos. Só leitura."""
+    folhas: dict[str, dict] = {}
+
+    def anota(cod, texto, existe=None, revisao=None):
+        cod = str(cod or "").strip()
+        if cod.count("-") < 4:
+            return
+        f = folhas.setdefault(cod, {"codigo": cod, "projeto_codigo": cod[:10], "campos": [], "existe": False, "revisao": None})
+        for c in _CAMPO_QUEBRADO.findall(texto or ""):
+            if c.strip() not in f["campos"]:
+                f["campos"].append(c.strip())
+        if existe:
+            f["existe"], f["revisao"] = True, revisao
+    padrao = f"%{RESPOSTA_QUEBRADA}%"
+    for r in con.execute("SELECT codigo, descricao FROM erro WHERE descricao LIKE ?", (padrao,)):
+        anota(r["codigo"], r["descricao"])
+    for r in con.execute("SELECT codigo, pendencias, revisao FROM item WHERE pendencias LIKE ?", (padrao,)):
+        anota(r["codigo"], r["pendencias"], True, r["revisao"])
+    if folhas:
+        cods = list(folhas)
+        for i in range(0, len(cods), 400):
+            parte = cods[i:i + 400]
+            for r in con.execute(f"SELECT codigo, revisao FROM item WHERE codigo IN ({','.join('?' * len(parte))})", parte):
+                folhas[r["codigo"]].update(existe=True, revisao=r["revisao"])
+    lista = sorted(folhas.values(), key=lambda f: f["codigo"])
+    return {"folhas": len(lista), "projetos": len({f["projeto_codigo"] for f in lista}), "lista": lista[:limite]}
 
 
 @router.get("/qualidade-cv")
@@ -44,7 +80,8 @@ def qualidade(u: dict = Depends(auth.exige("admin"))) -> dict:
             v["pct_aceito"] = round(100 * v["iguais"] / v["total"]) if v["total"] else None
             v["custo_por_folha"] = round(v["custo_usd"] / v["folhas"], 4) if v["folhas"] else None
             v["custo_usd"] = round(v["custo_usd"], 4)
-        return {"por_campo": campos, "por_lote": lotes, "por_versao": sorted(versoes.values(), key=lambda x: x["versao"], reverse=True)}
+        return {"por_campo": campos, "por_lote": lotes, "por_versao": sorted(versoes.values(), key=lambda x: x["versao"], reverse=True),
+                "resposta_quebrada": folhas_resposta_quebrada(con)}      # UX-60 (campo novo, opcional)
     finally:
         con.close()
 
