@@ -54,6 +54,22 @@ com_andamento() {
   wait "$pid"
 }
 
+pedir_senha_antes() {
+  if sudo -n true 2>/dev/null; then
+    SUDO_OK=1
+  else
+    echo "== senha do servidor (para reiniciar o painel no fim; pedida agora para você não precisar esperar os testes)"
+    if ! sudo -v; then
+      echo "${VERMELHO}ERRO: sem a senha não dá para reiniciar o painel. NADA foi feito.${FIM}"
+      exit 11
+    fi
+  fi
+  # mantém a senha válida durante a atualização (o sudo esquece depois de ~15 min parado); para sozinho quando o script termina
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null; sleep 50; done ) &
+  SUDO_VIVO=$!
+  trap 'kill "$SUDO_VIVO" 2>/dev/null' EXIT
+}
+
 main() {
 INICIO=$SECONDS
 FORCAR=0; [ "${1:-}" = "--forcar" ] && FORCAR=1
@@ -79,6 +95,9 @@ echo "versão atual: $(git log -1 --format='%cd · %s' --date=format:'%d/%m %H:%
 echo "versão nova:  $(git log -1 --format='%cd · %s' --date=format:'%d/%m %H:%M' origin/main)"
 mostrar_mudancas
 
+# 03/11 (Rafael: "podia pedir a senha de cara, né, pra depois já aplicar"): o sudo (reiniciar o serviço) é pedido AGORA, antes dos
+# minutos de teste, e fica válido até o fim; a pessoa pode sair de perto e a atualização termina sozinha.
+pedir_senha_antes
 echo "== base antes da atualização"
 PYTHONPATH=backend python scripts/diagnostico_base.py
 
@@ -111,7 +130,7 @@ echo "== testes rápidos da versão nova (numa cópia; a base real e o serviço 
 TESTE_DIR="$(mktemp -d)"
 git worktree add --detach "$TESTE_DIR" origin/main >/dev/null
 limpa_teste() { git worktree remove --force "$TESTE_DIR" >/dev/null 2>&1 || rm -rf "$TESTE_DIR"; git worktree prune; }
-trap limpa_teste EXIT
+trap 'limpa_teste; kill "${SUDO_VIVO:-}" 2>/dev/null' EXIT
 cmp -s "$TESTE_DIR/backend/requirements.txt" backend/requirements.txt || pip install -q -r "$TESTE_DIR/backend/requirements.txt"
 LOG_TESTE="backend/logs/teste-atualizar-$STAMP.log"; mkdir -p backend/logs
 T0=$SECONDS
@@ -124,7 +143,7 @@ if ! com_andamento "$LOG_TESTE" bash -c "cd '$TESTE_DIR' && exec python -u tests
 fi
 echo "${VERDE}testes ok: $(grep -c '^  ok' "$LOG_TESTE") verificações em $((SECONDS - T0)) s${FIM} ${CINZA}(detalhe: $LOG_TESTE)${FIM}"
 limpa_teste
-trap - EXIT
+trap 'kill "${SUDO_VIVO:-}" 2>/dev/null' EXIT
 
 echo "== git pull main"
 git pull -q --ff-only origin main
