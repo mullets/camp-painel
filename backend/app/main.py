@@ -101,6 +101,8 @@ from .folhas_enviadas import router as rotas_folhas_enviadas
 app.include_router(rotas_folhas_enviadas)
 from .destino_auto import router as rotas_destino_auto   # UX-43
 app.include_router(rotas_destino_auto)
+from .titulos_pasta import router as rotas_titulos_pasta   # UX-67
+app.include_router(rotas_titulos_pasta)
 
 
 @app.on_event("startup")
@@ -826,7 +828,7 @@ def reservar_projeto_estacao(d: ReservaProjetoEstacao, request: Request) -> dict
         "codigo": codigo,
         "numero_projeto": prox,
         "fundo_codigo": d.fundo_codigo,
-        "titulo": titulo,
+        "titulo": novo["titulo"],                     # UX-67: o título gravado (sem "- 12 Folhas" e códigos de pasta)
         "ano": d.ano or 0,
         "cidade": d.cidade,
         "identificacao_original": identificacao,

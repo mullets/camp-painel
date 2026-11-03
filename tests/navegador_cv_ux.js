@@ -106,7 +106,7 @@ gravarAceite(ACEITE);
 
     // ---- consenso × projeto, no próprio cartão ----
     const cs = await cartao('dados');
-    chk(/1 pergunta/.test(cs) && /cliente: “LUIZ SALLES” \(carimbo\) × “Luiz Marcelo Sales” \(cadastro\)/.test(cs), 'consenso: o cartão Dados mostra "1 pergunta · cliente: “LUIZ SALLES” (carimbo) × “Luiz Marcelo Sales” (cadastro)": "' + cs + '"');
+    chk(/1 a confirmar/.test(cs) && /cliente: “LUIZ SALLES” \(carimbo\) × “Luiz Marcelo Sales” \(cadastro\)/.test(cs), 'consenso: o cartão Dados mostra "1 a confirmar · cliente: “LUIZ SALLES” (carimbo) × “Luiz Marcelo Sales” (cadastro)": "' + cs + '"');
     await gaveta('dados');
     chk(!!(await page.$('#pj-perguntas [data-cs-proj="cliente"]')) && !!(await page.$('#pj-perguntas [data-cs-manter="cliente"]')), '"Decidir" mostra "Usar no projeto" e "Manter o do projeto"');
     await page.click('#pj-perguntas [data-cs-manter="cliente"]');

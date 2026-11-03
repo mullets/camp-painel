@@ -14,6 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5489,7 +5490,7 @@ def filho(modo):
             c.execute("SELECT autorizado_site FROM projeto WHERE codigo=?", (P5,)).fetchone()[0] == 1)
         # 3) o que continua travando
         r2 = op.post(f"/api/projetos/{P2}/publicar-tudo")
-        ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (400 dizendo 'Falta conferir 1 folha')", r2.status_code == 400 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
+        ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (409 dizendo 'Falta conferir 1 folha'; UX-62)", r2.status_code == 409 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
         r3 = op.post(f"/api/projetos/{P3}/publicar-tudo")
         ver("ligado: bloqueio registrado por pessoa continua bloqueando, e o lote NÃO é aprovado", r3.status_code == 400 and aprovado(P3)[0] is None and st_proj(P3) != "no_ar", r3.text[:200])
         # CAMP-149: aba "Pronto para publicar" e publicar vários de uma vez
@@ -5508,6 +5509,225 @@ def filho(modo):
         ver("Desfazer (master) volta o projeto para rascunho", d.status_code == 200 and st_proj(P) == "rascunho", d.text[:200])
         c.execute("UPDATE configuracao SET valor='0' WHERE chave='publicacao.publicar_um_passo'"); c.commit()
         ver("CAMP-149: desligado o um passo, o operador não publica em lote (403)", op.post("/api/projetos/lote", json={"codigos": [P2], "acao": "publicar"}).status_code == 403)
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux62_publicar_conferido":
+        # UX-62 (P1, F001-P0033 "Teatro Piracicaba": o cartão Site dizia "pronto" e mostrava Publicar com 0 de 49 folhas conferidas).
+        # Projeto que ainda não está no site não publica com folha a conferir, por NENHUMA rota (projeto, publicar-tudo, tarefa, lote, fundo):
+        # 409 com o motivo. Projeto já publicado continua podendo atualizar a página (as não conferidas ficam de fora).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador as _pub, wp as _wpm
+        from app.publicacao import condicoes_projeto
+        from fastapi.testclient import TestClient
+        from app.main import app
+        import app.rotas_projetos as _rp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F062','Fundo UX62','U62',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        def projeto(n, etapa, aprovado, pend, conf, legado=0, status="nao_publicado"):
+            P = f"F062-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F062',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id,status_site) VALUES (?,'F062',?,'Teatro',1975,1,?,?)",
+                      (P, n, 6200 + n * 100, status))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft','Teatro',?)", (6200 + n * 100, P))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES ('Lote',?,'/x',?,?)",
+                            (P, etapa, "2026-10-01 10:00:00" if aprovado else None)).lastrowid
+            k = 0
+            for rv_, qtd_, lote in (("pendente", pend, lid), ("conferida", conf, lid), ("conferida", legado, None)):
+                for _ in range(qtd_):
+                    k += 1
+                    cod, wid = f"{P}-1975-S01-D{k:05d}", 6200 + n * 100 + k
+                    c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id,lote_id) VALUES (?,?,'S01',?,?,'campvision',?,'rascunho',?,?)",
+                              (cod, P, k, f"Planta {k}", rv_, wid, lote))
+                    c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, cod))
+            return P
+        # A: lote aprovado, mas com folhas a conferir (chegaram depois) e algumas conferidas; B: lote ainda "processando", 0 de 49 conferidas + folhas antigas sem lote
+        A = projeto(1, "revisao", True, 4, 2)
+        B = projeto(2, "processando", False, 49, 0, legado=3)
+        C = projeto(3, "revisao", True, 2, 3, status="no_ar")          # já publicado: atualizar a página continua possível
+        D = projeto(4, "revisao", False, 0, 3)                          # tudo conferido, lote sem aprovar: o Publicar aprova junto (CAMP-148)
+        c.commit()
+        status = []
+        class WPF:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st): status.append((wid, st)); return {"status": st}
+            def gravar_metadados_lote(self, *a, **k): return {"ok": True, "gravados": []}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        _pub.WP = WPF; _wpm.WP = WPF; _rp.WP = WPF
+        auth.criar_usuario("A", "adm62@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm62@camp.arq.br", "senha": "senha-longa-12345"})
+        st_proj = lambda P_: c.execute("SELECT status_site FROM projeto WHERE codigo=?", (P_,)).fetchone()[0]
+        rev = lambda P_: next(x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo=?", (P_,)).fetchone())["condicoes"] if x["id"] == "revisao")
+        for P_, n in ((A, 4), (B, 49)):
+            r_ = rev(P_)
+            ver(f"{P_}: a condição 'revisao' trava e diz quantas faltam conferir ({n})", not r_["ok"] and r_.get("falta_conferir") == n and str(n) in (r_["detalhe"] or ""), str(r_))
+            pg = adm.get(f"/api/projetos/{P_}/publicacao").json()
+            ver(f"{P_}: /publicacao não diz pode_publicar", pg.get("pode_publicar") is False, str(pg.get("pode_publicar")))
+            pl = adm.get(f"/api/projetos/{P_}/publicar/plano").json()
+            ver(f"{P_}: o plano do Publicar tem o bloqueio de conferência", not pl["pode_executar"] and any(b["id"] == "revisao" for b in pl["bloqueios"]), str(pl["bloqueios"]))
+            r1 = adm.post(f"/api/projetos/{P_}/publicar-tudo")
+            ver(f"{P_}: publicar-tudo recusa com 409 e o motivo", r1.status_code == 409 and "confer" in r1.text and bool(r1.json().get("plano")), r1.text[:200])
+            r2 = adm.post(f"/api/projetos/{P_}/publicar-tudo?tarefa=1")
+            ver(f"{P_}: publicar-tudo com tarefa recusa com 409 (nem começa)", r2.status_code == 409, r2.text[:200])
+            r3 = adm.post(f"/api/projetos/{P_}/publicar", json={"acao": "publicar"})
+            ver(f"{P_}: a rota direta /publicar recusa com 409", r3.status_code == 409 and "conferência" in r3.text, r3.text[:200])
+            r4 = adm.post("/api/projetos/lote", json={"codigos": [P_], "acao": "publicar"})
+            ver(f"{P_}: publicar em lote deixa o projeto de fora com o motivo", r4.status_code == 200 and not r4.json()["ok"] and "confer" in str(r4.json()["falhas"]), r4.text[:200])
+            ver(f"{P_}: nada foi publicado", st_proj(P_) != "no_ar")
+        rf = _pub.propagar_status_fundo("F062", "no_ar", "adm62@camp.arq.br")
+        ign = {x["codigo"]: x["motivo"] for x in rf.get("ignorados") or []}
+        ver("publicar o fundo inteiro deixa A e B de fora, com o motivo", A in ign and B in ign and "conferência" in ign[B] and st_proj(A) != "no_ar" and st_proj(B) != "no_ar", str(rf)[:300])
+        pendentes_wid = {6300 + k for k in range(1, 5)} | {6400 + k for k in range(1, 50)}
+        ver("nenhuma folha a conferir foi ao site", not any(w in pendentes_wid for w, s_ in status if s_ == "publish"), str(status[:10]))
+        # o que continua valendo
+        ver("C (já publicado): a conferência que falta não trava a atualização da página", rev(C)["ok"], str(rev(C)))
+        rd = rev(D)
+        ver("D (tudo conferido, lote sem aprovar): marcado aprova_junto", rd.get("aprova_junto") is True, str(rd))
+        r5 = adm.post(f"/api/projetos/{D}/publicar-tudo")
+        ver("D: publicar-tudo publica (aprovação junto, CAMP-148)", r5.status_code == 200 and st_proj(D) == "no_ar", r5.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux67_nomes_pasta":
+        # UX-67 (P2): títulos com texto da pasta ("Teatro Piracicaba - 12 Folhas", "… - 08 Folhas", "F000 - CNV - Convidado").
+        # Novos: a importação (reserva da estação, decisão, destino automático) grava sem a contagem e sem os códigos. Existentes: prévia
+        # (simular é o padrão; nada muda), aplicar só por admin com o que ele conferiu, histórico e Desfazer. O código F/P nunca muda.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from app.similaridade import titulo_tecnico, sugerir_titulo
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("“Teatro Piracicaba - 12 Folhas” é título de pasta, e a sugestão é “Teatro Piracicaba”",
+            bool(titulo_tecnico("Teatro Piracicaba - 12 Folhas")) and sugerir_titulo("Teatro Piracicaba - 12 Folhas") == "Teatro Piracicaba", str(sugerir_titulo("Teatro Piracicaba - 12 Folhas")))
+        casos = {"Casa Azul (12 fls)": "Casa Azul", "Casa Azul 12 folhas": "Casa Azul", "Casa Azul, 8 fls.": "Casa Azul",
+                 "Sede do Conselho Regional de Técnicos de Administração - 08 Folhas": "Sede do Conselho Regional de Técnicos de Administração"}
+        ver("as outras formas da contagem (“(12 fls)”, “12 folhas”, “, 8 fls.”) também saem", all(sugerir_titulo(k) == v for k, v in casos.items()),
+            str({k: sugerir_titulo(k) for k in casos}))
+        ver("nome de obra não vira título de pasta", not any(titulo_tecnico(t) for t in ("Edifício Folhas Secas", "Casa 2 - Reforma", "Residência Tarumã")))
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F067','Fundo 67','F67',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('decisoes.parecido_estacao','0','x',0)")
+        def proj(n, t, site=None):
+            cod = f"F067-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F067',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,tainacan_item_id) VALUES (?,?,?,?,?)", (cod, "F067", n, t, site))
+            return cod
+        P33 = proj(33, "Teatro Piracicaba - 12 Folhas")
+        P30 = proj(30, "Sede do Conselho Regional de Técnicos de Administração - 08 Folhas")
+        PCNV = proj(31, "F000 - CNV - Convidado")
+        POK = proj(32, "Residência Tarumã")
+        for k in range(1, 6):        # o carimbo das folhas do P33 diz o nome da obra (4 de 5 iguais)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,projeto_carimbo) VALUES (?,?,'S01',?,?,'campvision',?)",
+                      (f"{P33}-1975-S01-D{k:05d}", P33, k, f"Planta {k}", "TEATRO MUNICIPAL DE PIRACICABA" if k < 5 else "OUTRA COISA"))
+        c.commit()
+        auth.criar_usuario("Adm", "adm67@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op67@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm67@camp.arq.br"), cli("op67@camp.arq.br")
+        def ntc():
+            try: return c.execute("SELECT COUNT(*) FROM titulo_correcao").fetchone()[0]
+            except Exception: return -1                                  # sem a migração 215
+        tit = lambda cod: c.execute("SELECT titulo FROM projeto WHERE codigo=?", (cod,)).fetchone()[0]
+        # 1) importação: a estação reserva com o nome da pasta
+        async def _lan(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("192.168.15.40", 50000)}
+            await app(scope, receive, send)
+        r = TestClient(_lan, raise_server_exceptions=False).post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F067", "titulo": "Ginásio de Esportes - 37 Folhas", "confirmar_novo": True})
+        novo = r.json().get("codigo") if r.status_code == 200 else None
+        ver("reserva da estação: o projeto novo nasce “Ginásio de Esportes” (sem “- 37 Folhas”)", bool(novo) and tit(novo) == "Ginásio de Esportes" and r.json().get("titulo") == "Ginásio de Esportes", r.text[:200])
+        ev = c.execute("SELECT detalhe FROM evento WHERE codigo=? AND tipo='criado'", (novo,)).fetchone() if novo else None
+        ver("o nome da pasta fica guardado no histórico do projeto", bool(ev) and "37 Folhas" in ev[0], str(ev and ev[0])[:200])
+        from app.projetos_novos import criar_projeto
+        cx = connect(); n2 = criar_projeto(cx, "F067", "T099_Casa_Verde (12 fls)", 1970, None, None, "teste", {}); cx.commit(); cx.close()
+        ver("criar projeto (decisão/destino automático) também limpa prefixo e contagem", tit(n2["codigo"]) == "Casa Verde", tit(n2["codigo"]))
+        # 2) prévia: lista, sugere do carimbo, não muda nada
+        ver("operador não vê a prévia (403)", op.get("/api/titulos-de-pasta/previa").status_code == 403)
+        pv = adm.get("/api/titulos-de-pasta/previa").json(); por = {x["codigo"]: x for x in pv.get("itens", [])}
+        ver("a prévia lista os títulos de pasta (e não o nome de obra)", {P33, P30, PCNV} <= set(por) and POK not in por, str(sorted(por)))
+        ver("P33: sugere o nome lido no carimbo (4 de 5 folhas), com a sugestão da pasta ao lado",
+            por.get(P33, {}).get("sugerido") == "Teatro Municipal de Piracicaba" and por[P33].get("fonte") == "carimbo"
+            and por[P33].get("titulo_da_pasta") == "Teatro Piracicaba" and (por[P33].get("titulo_carimbo") or {}).get("folhas") == 4, str(por.get(P33))[:300])
+        ver("P30: sem carimbo, sugere a pasta sem “- 08 Folhas”", por.get(P30, {}).get("sugerido") == "Sede do Conselho Regional de Técnicos de Administração" and por[P30]["fonte"] == "pasta", str(por.get(P30))[:200])
+        ver("a prévia não muda nada", tit(P33) == "Teatro Piracicaba - 12 Folhas" and tit(P30).endswith("08 Folhas"))
+        itens = [{"codigo": P33, "titulo": "Teatro Municipal de Piracicaba", "fonte": "carimbo"},
+                 {"codigo": P30, "titulo": por.get(P30, {}).get("sugerido") or "Sede do Conselho Regional de Técnicos de Administração", "fonte": "pasta"},
+                 {"codigo": PCNV, "titulo": "F000 - Convidado"}]          # título novo ainda técnico: recusado
+        # 3) simular é o padrão
+        s1 = adm.post("/api/titulos-de-pasta/corrigir", json={"itens": itens})
+        sj = s1.json() if s1.status_code == 200 else {}
+        ver("sem modo = simular: diz o que muda e o que fica, e NÃO grava", s1.status_code == 200 and sj.get("aplicado") is False and [m["codigo"] for m in sj.get("mudam", [])] == [P33, P30]
+            and [x["codigo"] for x in sj.get("recusados", [])] == [PCNV] and tit(P33) == "Teatro Piracicaba - 12 Folhas"
+            and ntc() == 0, s1.text[:300])
+        ver("operador não aplica (403)", op.post("/api/titulos-de-pasta/corrigir", json={"itens": itens, "modo": "aplicar"}).status_code == 403 and tit(P33).endswith("12 Folhas"))
+        # 4) aplicar
+        a = adm.post("/api/titulos-de-pasta/corrigir", json={"itens": itens, "modo": "aplicar"}).json()
+        ver("aplicar (admin) troca só o título dos conferidos; o código não muda", a.get("aplicado") is True and tit(P33) == "Teatro Municipal de Piracicaba"
+            and tit(P30) == "Sede do Conselho Regional de Técnicos de Administração" and tit(PCNV) == "F000 - CNV - Convidado"
+            and c.execute("SELECT COUNT(*) FROM projeto WHERE codigo IN (?,?)", (P33, P30)).fetchone()[0] == 2, str(a)[:300])
+        ver("cada troca fica no histórico do projeto (evento titulo_corrigido com antes e depois)",
+            c.execute("SELECT COUNT(*) FROM evento WHERE tipo='titulo_corrigido' AND codigo IN (?,?)", (P33, P30)).fetchone()[0] == 2)
+        h = adm.get("/api/titulos-de-pasta/historico").json().get("lotes", [])
+        ver("o histórico mostra a aplicação (2 títulos, quem e quando)", len(h) == 1 and h[0]["lote"] == a.get("lote") and h[0]["n"] == 2 and h[0]["ator"] == "adm67@camp.arq.br" and not h[0]["desfeito"], str(h)[:300])
+        pv2 = {x["codigo"] for x in adm.get("/api/titulos-de-pasta/previa").json().get("itens", [])}
+        ver("os corrigidos saem da prévia", P33 not in pv2 and P30 not in pv2 and PCNV in pv2, str(pv2))
+        # 5) desfazer (o que alguém mudou depois fica)
+        c.execute("UPDATE projeto SET titulo='Sede do CRA' WHERE codigo=?", (P30,)); c.commit()
+        dz = adm.post("/api/titulos-de-pasta/desfazer", json={"lote": a.get("lote")}).json()
+        ver("Desfazer volta o título de antes; o que mudou depois fica como está", tit(P33) == "Teatro Piracicaba - 12 Folhas" and tit(P30) == "Sede do CRA"
+            and [x["codigo"] for x in dz.get("voltaram", [])] == [P33] and [x["codigo"] for x in dz.get("mantidos", [])] == [P30], str(dz)[:300])
+        ver("Desfazer fica no histórico e não se repete", (adm.get("/api/titulos-de-pasta/historico").json().get("lotes") or [{}])[0].get("desfeito") is True
+            and adm.post("/api/titulos-de-pasta/desfazer", json={"lote": a.get("lote")}).status_code == 404
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='titulo_corrigido_desfeito' AND codigo=?", (P33,)).fetchone()[0] == 1)
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux68_decisoes":
+        # UX-68 (P2): "Decisões" com dois sentidos. A página Decisões (e o número do menu) conta a fila `decisao`; o cartão "Dados do projeto"
+        # contava as diferenças carimbo × cadastro (calculadas das folhas) como "decisões pendentes". Aqui: as diferenças NÃO entram na fila,
+        # o projeto informa as decisões dele pela MESMA fila (e o campo da divergência, para a tela não contar duas vezes).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, decisoes as _dec
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F068','Fundo 68','F68',1)")
+        P = "F068-P0033"
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F068',33)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1975)", (P, "F068", 33, "Teatro"))
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L',?,'/x','revisao')", (P,)).lastrowid
+        for k in range(1, 4):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,ano_folha) VALUES (?,?,'S01',?,?,'campvision',?,'conferida',1978)",
+                      (f"{P}-1978-S01-D{k:05d}", P, k, f"Planta {k}", lid))
+        c.commit()
+        auth.criar_usuario("Adm", "adm68@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm68@camp.arq.br", "senha": "senha-longa-12345"})
+        cs = adm.get(f"/api/projetos/{P}/consenso").json()
+        ano = next((x for x in cs.get("campos", []) if x["campo"] == "ano"), {})
+        ver("as folhas dizem 1978 e o cadastro 1975: a página do projeto tem o que confirmar", ano.get("projeto_difere") is True and str(ano.get("consenso")) == "1978", str(ano)[:200])
+        menu = lambda: adm.get("/api/pendencias").json()
+        m0, d0, pj0 = menu(), adm.get("/api/decisoes").json(), adm.get(f"/api/projetos/{P}/detalhe").json()
+        ver("sem decisão registrada: Decisões, o menu e o projeto dizem 0 (a diferença do carimbo não é decisão)",
+            d0["total"] == 0 and (m0.get("pedem_acao") or {}).get("decisoes", m0.get("decisoes")) == 0 and pj0.get("decisoes_pendentes") == [], f"{d0['total']} {m0.get('decisoes')} {pj0.get('decisoes_pendentes')}")
+        # o CAMP Vision registra a divergência do ano (a fila de Decisões)
+        did, _ = _dec.abrir(c, "divergencia", f"divergencia:{P}:ano:1978", "F068", "Teatro",
+                            {"projeto_codigo": P, "projeto_titulo": "Teatro", "lote_id": lid, "campo": "ano", "valor_cadastro": "1975", "valor_cv": "1978",
+                             "candidatos": [{"valor": "1975", "fontes": ["cadastro do painel"]}, {"valor": "1978", "fontes": ["CAMP Vision"]}]}, "campvision")
+        c.commit()
+        m1, d1, pj1 = menu(), adm.get("/api/decisoes").json(), adm.get(f"/api/projetos/{P}/detalhe").json()
+        dp = pj1.get("decisoes_pendentes") or []
+        ver("com a decisão registrada: o número do menu, a página Decisões e o projeto dizem 1",
+            d1["total"] == 1 and (m1.get("pedem_acao") or {}).get("decisoes", m1.get("decisoes")) == 1 and len(dp) == 1, f"{d1['total']} {m1.get('pedem_acao')} {dp}")
+        ver("a decisão do projeto diz o campo (ano), para a tela não contar a mesma diferença duas vezes", dp and dp[0].get("tipo") == "divergencia" and dp[0].get("campo") == "ano", str(dp)[:200])
+        # usar o valor do carimbo no projeto responde a decisão (CAMP-106): menu, Decisões e projeto voltam a 0 juntos
+        r = adm.patch(f"/api/projetos/{P}", json={"ano": 1978})
+        m2, d2, pj2 = menu(), adm.get("/api/decisoes").json(), adm.get(f"/api/projetos/{P}/detalhe").json()
+        ver("usar 1978 no projeto fecha a decisão: os três voltam a 0 juntos", r.status_code == 200 and d2["total"] == 0
+            and (m2.get("pedem_acao") or {}).get("decisoes", m2.get("decisoes")) == 0 and pj2.get("decisoes_pendentes") == [], r.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "conferir_so_avisos":
@@ -15761,6 +15981,30 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"um passo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160b) UX-62: Publicar só com as folhas conferidas e o lote aprovado (todas as rotas; 409 com o motivo)")
+rc, out = rodar("ux62_publicar_conferido", f"{tmp}/ux62.db")
+if rc != 0: ok(False, f"teste ux62_publicar_conferido não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-62: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160c) UX-67: título que veio da pasta (“- 12 Folhas”, códigos): limpo na importação; correção dos existentes com prévia, aplicar e desfazer")
+rc, out = rodar("ux67_nomes_pasta", f"{tmp}/ux67.db")
+if rc != 0: ok(False, f"teste ux67_nomes_pasta não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-67: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160d) UX-68: Decisões é só a fila de decisões; o projeto conta a mesma fila (as diferenças do carimbo são 'dados a confirmar')")
+rc, out = rodar("ux68_decisoes", f"{tmp}/ux68.db")
+if rc != 0: ok(False, f"teste ux68_decisoes não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-68: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("161) CAMP-150: conferir só as folhas com aviso (as sem aviso entram conferidas sozinhas), atrás de revisao.conferir_so_avisos")
 rc, out = rodar("conferir_so_avisos", f"{tmp}/conferir_so_avisos.db")

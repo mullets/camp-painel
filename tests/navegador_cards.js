@@ -99,7 +99,7 @@ for n in range(1, 35):
     const f = await card('folhas'), p = await card('problemas'), d = await card('dados'), s = await card('site');
     chk(f && f.v === '19 / 19' && /\bok\b/.test(f.cls) && /conferidas · lotes aprovados/.test(f.d) && /7 sem imagem/.test(f.d) && f.bts.includes('Ver folhas'), '(1) Folhas: "19 / 19", verde, "conferidas · lotes aprovados · 7 sem imagem", "Ver folhas": ' + JSON.stringify(f));
     chk(p && p.v === '5' && /\bbl\b/.test(p.cls) && /impedem publicar \(arquivo corrompido\)/.test(p.d) && /13 avisos/.test(p.d) && p.bts.includes('Resolver'), '(1) Problemas: "5" vermelho, "impedem publicar (arquivo corrompido) · 13 avisos", "Resolver": ' + JSON.stringify(p));
-    chk(d && d.v === '1 pergunta' && /\bat\b/.test(d.cls) && /cliente: “LUIZ SALLES” \(carimbo\) × “Luiz Marcelo Sales” \(cadastro\)/.test(d.d) && d.bts.includes('Decidir'), '(1) Dados: "1 pergunta" âmbar, cliente carimbo × cadastro, "Decidir": ' + JSON.stringify(d));
+    chk(d && d.v === '1 a confirmar' && /\bat\b/.test(d.cls) && /cliente: “LUIZ SALLES” \(carimbo\) × “Luiz Marcelo Sales” \(cadastro\)/.test(d.d) && d.bts.includes('Confirmar'), '(1) Dados: "1 a confirmar" âmbar (UX-68: não é decisão), cliente carimbo × cadastro, "Confirmar": ' + JSON.stringify(d));
     chk(s && s.v === 'Não publicado' && !/\b(ok|at|bl)\b/.test(s.cls.replace('pjc', '')) && /libera quando os problemas forem resolvidos/.test(s.d) && s.bts.includes('Publicar'), '(1) Site: "Não publicado", neutro, "libera quando os problemas forem resolvidos", "Publicar": ' + JSON.stringify(s));
     chk(await page.$eval('#pj-cards [data-pjc-publicar]', b => b.getAttribute('aria-disabled') === 'true' && !!b.title), '(1) "Publicar" fica apagado e diz o porquê');
     chk((await page.$$('#pj-cards .btn.pri')).length === 1 && /Resolver/.test(await txt('#pj-cards .btn.pri')), '(1) um botão azul só, o do cartão mais urgente (Resolver)');
@@ -162,7 +162,7 @@ for n in range(1, 35):
     await page.waitForFunction(() => /bl/.test((document.querySelector('#pj-cards [data-pjc="folhas"]') || {}).className || ''), null, { timeout: 8000 }).catch(() => {});
     const f = await card('folhas'), d = await card('dados');
     chk(f.v === '0 / 34' && /\bbl\b/.test(f.cls) && /34 a conferir/.test(f.d) && /Lote parado por erro do CAMP Vision/.test(f.d) && !/Falha ao ler/.test(f.d) && f.bts[0] === 'Conferir' && !f.bts.includes('Pedir releitura') && f.bts.includes('Detalhes dos lotes'), '(6) B: Folhas vermelho "0 / 34", "34 a conferir", "Lote parado por erro" em 1 linha (CAMP-128: a mensagem e o "Pedir releitura" ficam uma vez, em Detalhes dos lotes): ' + JSON.stringify(f));
-    chk(d.v === '1 pergunta' && /ano: “1978” em 6 folhas; 1 diz outra coisa/.test(d.d), '(6) B: Dados "1 pergunta" (ano), sem contar folha sem ano nem grafia diferente: ' + JSON.stringify(d));
+    chk(d.v === '1 a confirmar' && /ano: “1978” em 6 folhas; 1 diz outra coisa/.test(d.d), '(6) B: Dados "1 a confirmar" (ano), sem contar folha sem ano nem grafia diferente: ' + JSON.stringify(d));
     const gb = await page.evaluate(() => ({ folhas: document.querySelector('.pj-gav[data-gav="folhas"]').checkVisibility(), rev: !!document.getElementById('pj-revisao') }));
     chk(!gb.folhas, '(9) B (P0): lote parado por erro do CAMP Vision: "Detalhes dos lotes" NÃO abre sozinho (o aviso fica na barra "O que falta"): ' + JSON.stringify(gb));
     chk(JSON.stringify(await visiveis()) === '[]', '(2) B: depois de fechar, nada empilhado: ' + JSON.stringify(await visiveis()));
