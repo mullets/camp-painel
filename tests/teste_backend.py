@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "sender_transacional", "inscricoes_residencia", "protocolos"}
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11903,6 +11903,61 @@ def filho(modo):
         ver("sem TR10: sai pelo e-mail do site", r["aviso"] and r["aviso"].get("canal") == "site" and site and site[-1]["para"] == "ana@exemplo.org" and "selecionada" in site[-1]["texto"], str(r))
         ver("operador não muda inscrição (403)", op.patch(f"/api/inscricoes/{I1}", json={"situacao": "em_analise"}).status_code == 403)
         print("\n".join(res))
+    elif modo == "contatos_emkt":
+        # 03/11 (Rafael: "mostrar no painel quem aceitou receber e-mails da CAMP, para exportar a lista para o Sender.net"): inscrições com
+        # emkt + cadastros de download com o aceite consentimento_base; um por e-mail; LGPD (anonimizado/apagado não entra); quem saiu não volta.
+        init_db(); _aplicar_migracoes_real()
+        import csv as _csv, io as _io, json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        for sid, tipo, nome, email, emkt, q in ((1, "inscricao", "Ana Lima", "ana@exemplo.org", 1, "2026-11-01 10:00:00"),
+                                                (2, "inscricao", "Bia Reis", "bia@exemplo.org", 0, "2026-11-01 11:00:00"),
+                                                (3, "interesse", "Carla Dias", "Carla@EXEMPLO.org", 1, "2026-10-20 09:00:00")):
+            c.execute("INSERT INTO inscricao (site_id,tipo,curso_id,curso,nome,email,emkt,criado_no_site) VALUES (?,?,?,?,?,?,?,?)",
+                      (sid, tipo, "res", "Residência em Acervos", nome, email, emkt, q))
+        for oid, nome, email, inst, resp, anon, apag, q in (
+                (11, "Carla Dias Souza", "carla@exemplo.org", "USP", {"consentimento_base": "on"}, 0, 0, "2026-11-02 08:00:00"),
+                (12, "Davi Melo", "davi@exemplo.org", "", {"uso_pretendido": "pesquisa"}, 0, 0, "2026-11-02 09:00:00"),
+                (13, "Eva", "eva@exemplo.org", "", {"consentimento_base": "on"}, 1, 0, "2026-11-02 09:00:00"),
+                (14, "Fábio", "fabio@exemplo.org", "", {"consentimento_base": "on"}, 0, 1, "2026-11-02 09:00:00"),
+                (15, "Gil Prado", "gil@exemplo.org", "FAU", {"consentimento_base": ["on"]}, 0, 0, "2026-11-03 09:00:00"),
+                (16, "Hugo", "hugo@exemplo.org", "", {"consentimento_base": ""}, 0, 0, "2026-11-03 09:00:00")):
+            c.execute("""INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,instituicao,resposta_json,anonimizada,apagada)
+                         VALUES (4,?,?,?,?,?,?,?,?)""", (oid, q, nome, email, inst, _j.dumps(resp), anon, apag))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-longa-12345"), cli("op@camp.arq.br", "senha-operador-123")
+        d = adm.get("/api/contatos-email").json()
+        emails = [p["email"] for p in d["itens"]]
+        ver("lista: Ana (inscrição), Carla (avise-me + download), Gil (download)", sorted(emails) == ["ana@exemplo.org", "carla@exemplo.org", "gil@exemplo.org"], str(emails))
+        ver("não entra: quem não marcou, sem aceite, aceite vazio, anonimizado, apagado", not ({"bia@exemplo.org", "davi@exemplo.org", "hugo@exemplo.org", "eva@exemplo.org", "fabio@exemplo.org"} & set(emails)))
+        cl = next((p for p in d["itens"] if p["email"] == "carla@exemplo.org"), {})
+        ver("mesmo e-mail (maiúsculas diferentes) vira uma linha só, com as duas origens e os dados mais recentes", len(cl.get("origens", [])) == 2
+            and cl.get("instituicao") == "USP" and cl.get("nome") == "Carla Dias Souza" and cl.get("consentiu_em", "").startswith("2026-11-02"), str(cl))
+        ver("contagem por origem", d["total"] == 3 and d["por_origem"].get("cadastro de download") == 2 and d["por_origem"].get("inscrição") == 1 and d["por_origem"].get("avise-me") == 1, str(d["por_origem"]))
+        r = adm.get("/api/contatos-email.csv")
+        linhas = list(_csv.reader(_io.StringIO(r.content.decode("utf-8-sig"))))
+        ver("CSV no formato do Sender.net: email, firstname, lastname…", r.status_code == 200 and linhas[0][:3] == ["email", "firstname", "lastname"] and len(linhas) == 4
+            and ["gil@exemplo.org", "Gil", "Prado"] == linhas[1][:3] and "camp-contatos-email-sender.csv" in r.headers.get("content-disposition", ""), str(linhas[:2]))
+        ver("exportar fica no histórico", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='contatos_email' AND tipo='exportada'").fetchone()[0] == 1)
+        ver("tirar da lista", adm.post("/api/contatos-email/tirar", json={"email": "GIL@exemplo.org", "motivo": "pediu para sair"}).status_code == 200)
+        d2 = adm.get("/api/contatos-email").json()
+        ver("quem saiu não aparece na lista nem no CSV, e aparece em 'saíram'", d2["total"] == 2 and "gil@exemplo.org" not in adm.get("/api/contatos-email.csv").text
+            and [p["email"] for p in d2["fora"]] == ["gil@exemplo.org"] and d2["fora"][0]["fora"]["motivo"] == "pediu para sair")
+        c.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,resposta_json) VALUES (4,17,'2026-11-04 10:00:00','Gil Prado','gil@exemplo.org',?)", (_j.dumps({"consentimento_base": "on"}),)); c.commit()
+        ver("quem saiu não volta sozinho num cadastro novo", "gil@exemplo.org" not in [p["email"] for p in adm.get("/api/contatos-email").json()["itens"]])
+        adm.post("/api/contatos-email/devolver", json={"email": "gil@exemplo.org"})
+        ver("devolver à lista", "gil@exemplo.org" in [p["email"] for p in adm.get("/api/contatos-email").json()["itens"]])
+        ver("e-mail inválido: 400", adm.post("/api/contatos-email/tirar", json={"email": "x"}).status_code == 400)
+        ver("operador não vê nem exporta (403)", op.get("/api/contatos-email").status_code == 403 and op.get("/api/contatos-email.csv").status_code == 403)
+        print("\n".join(res))
     elif modo == "fotos_qnap":
         # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
         # mandar ler elas e já legendar como faz com todas"): a foto enviada pelo painel é gravada na pasta do projeto no acervo, no padrão do
@@ -15791,6 +15846,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Aviso da inscrição: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Lista de e-mail da CAMP: quem aceitou receber e-mails, CSV para o Sender.net")
+rc, out = rodar("contatos_emkt", f"{tmp}/contatos_emkt.db")
+if rc != 0: ok(False, f"teste contatos_emkt não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Lista de e-mail: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
 rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")
