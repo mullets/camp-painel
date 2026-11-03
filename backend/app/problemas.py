@@ -236,7 +236,10 @@ def enriquecer(con, erros: list) -> list[dict]:
 
 def fechar_resolvidos(con, ator: str = ATOR_AUTOMATICO) -> list[int]:
     """Fecha (situação 'corrigido') os problemas abertos que se resolveram sozinhos COM CERTEZA, gravando o porquê na resolução
-    e um evento 'fechado_automatico' no histórico. Os "talvez" ficam abertos. Não faz commit. Devolve os ids fechados."""
+    e um evento 'fechado_automatico' no histórico. Os "talvez" ficam abertos. Não faz commit. Devolve os ids fechados.
+    UX-63: antes, o aviso [Minor] do exiftool gravado como bloqueio vira aviso (avisos_cv.reclassificar_menores, com registro)."""
+    from .avisos_cv import reclassificar_menores
+    reclassificar_menores(con, ator)
     abertos = con.execute("SELECT * FROM erro WHERE situacao IN ('aberto','em_correcao')").fetchall()
     if not abertos:
         return []

@@ -15,6 +15,7 @@ def ok(cond, msg):
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux63_minor_exif"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -10887,6 +10888,65 @@ def filho(modo):
         ver("pendencias.pedem_acao: Problemas = 5 (sem os avisos); erros_abertos continua 12", pa.get("problemas") == 5 and p_.get("erros_abertos") == 12 and p_.get("erros_avisos") == 7, str(pa))
         ver("Precisa de você = decisões + material novo + bloqueios (a mesma soma da tela)", pa.get("precisa_de_voce") == p_["decisoes"] + p_["material_novo"] + p_["erros_bloqueantes"], str(pa))
         for l in res: print(l)
+    elif modo == "ux63_minor_exif":
+        # UX-63 (P1): aviso [Minor] do exiftool que veio embrulhado (caminho no fim, "EXIF conferido em N de M…", "exiftool relatou…")
+        # entrava como "metadado errado — bloqueia o projeto todo" (F001-P0005, P0007, P0011, P0012, P0014) e o resumo dizia "0 são avisos
+        # menores do exiftool". Agora é aviso na importação e o que já estava gravado é reclassificado (com registro; nada é apagado).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile as _tf
+        from pathlib import Path as _P
+        from app import auth
+        from app.importador_lote import registrar_erros_cv
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F001','Fundo de teste')")
+        for n in (5, 7):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F001',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1950)", (f"F001-P000{n}", "F001", n, f"Projeto {n}"))
+        CAM = "Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated) - /mnt/qnap/ACERVOS_CAMP/F001/01 - Projetos/F001-P0005 - Casa/S01/TIF/F001-P0005-1950-S01-D00001.tif"
+        EMB = "EXIF conferido em 6 de 48 arquivo(s) já no acervo: F001-P0005-1950-S01-D00002.tif Warning: [Minor] IPTC:By-line exceeds length limit (truncated)"
+        REL = ("exiftool relatou 2 problema(s): Warning: [Minor] IPTC:Credit exceeds length limit (truncated) - /a/01 - Projetos/F001-P0005-1950-S01-D00003.tif "
+               "Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated) - /a/01 - Projetos/F001-P0005-1950-S01-D00004.tif")
+        VERDADE = "EXIF conferido em 6 de 48 arquivo(s): exiftool relatou 1 problema(s): Error: File not found - /a/x.tif Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated)"
+        # o que JÁ estava gravado como bloqueio (base de produção antes da correção)
+        ids = [c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave) VALUES ('bloqueia','metadado','campvision','F001-P0005',?,'CAMP Vision',?)",
+                         (d, f"campvision:erros:velho{i}")).lastrowid for i, d in enumerate((CAM, EMB, REL))]
+        verd = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,chave) VALUES ('bloqueia','metadado','campvision','F001-P0005',?,'CAMP Vision','campvision:erros:verd')", (VERDADE,)).lastrowid
+        pessoa = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('bloqueia','metadado','operador','F001-P0005','[Minor] o título está errado, corrigir')").lastrowid
+        fech = c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,situacao,resolucao) VALUES ('bloqueia','metadado','campvision','F001-P0007',?,'corrigido','ok')", (CAM.replace("P0005", "P0007"),)).lastrowid
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        n = ad.get("/api/erros/contagem").json()
+        g = lambda i: c.execute("SELECT gravidade, categoria, descricao, situacao FROM erro WHERE id=?", (i,)).fetchone()
+        ver("os 3 [Minor] embrulhados (caminho no fim, 'EXIF conferido em…', 'exiftool relatou…') viram aviso ao abrir Problemas",
+            all(g(i)["gravidade"] == "aviso" for i in ids), [g(i)["gravidade"] for i in ids])
+        ver("nada se perde: a mensagem técnica antiga fica no fim do texto e o texto para gente vem antes",
+            all(g(i)["descricao"].endswith(d) and "Detalhe técnico:" in g(i)["descricao"] for i, d in zip(ids, (CAM, EMB, REL))) and "o título era longo demais" in g(ids[0])["descricao"], g(ids[0])["descricao"][:160])
+        ver("fica no histórico (evento problema_reclassificado com o antes)", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='erro' AND tipo='problema_reclassificado'").fetchone()[0] == 3
+            and _j.loads((c.execute("SELECT detalhe FROM evento WHERE tipo='problema_reclassificado' AND codigo=?", (str(ids[1]),)).fetchone() or ['{}'])[0]).get("de") == "bloqueia")
+        ver("erro de verdade junto com o [Minor] continua bloqueio", g(verd)["gravidade"] == "bloqueia")
+        ver("relato de pessoa e problema já fechado não são mexidos", g(pessoa)["gravidade"] == "bloqueia" and g(fech)["gravidade"] == "bloqueia")
+        ver("contagem 'pedem ação' = só o erro de verdade e o relato da pessoa (2); os 3 estão em Avisos", n.get("pedem_acao") == 2 and n.get("avisos") == 3, str(n))
+        p_ = ad.get("/api/pendencias").json()
+        ver("menu: Problemas conta 2 (os [Minor] saíram)", (p_.get("pedem_acao") or {}).get("problemas") == 2, str(p_.get("pedem_acao")))
+        d = ad.get("/api/erros/diagnostico").json()
+        ver("resumo: 'Destes, 3 são avisos menores do exiftool' e só 2 marcados como bloqueio", d.get("avisos_menores_exiftool") == 3 and d.get("bloqueantes") == 2,
+            str({k: d.get(k) for k in ("avisos", "bloqueantes", "avisos_menores_exiftool")}))
+        ad.get("/api/erros/contagem")
+        ver("idempotente: abrir de novo não reclassifica nem registra outra vez", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='problema_reclassificado'").fetchone()[0] == 3)
+        # na importação (erros.json), já entra como aviso
+        pasta = _P(_tf.mkdtemp()); (pasta / "catalogacao").mkdir()
+        (pasta / "catalogacao" / "erros.json").write_text(_j.dumps([{"arquivo": "", "categoria": "metadado", "gravidade": "bloqueia", "detalhe": x}
+                                                                     for x in (CAM.replace("P0005", "P0007"), EMB.replace("P0005", "P0007"), VERDADE)]), encoding="utf-8")
+        registrar_erros_cv(c, "F001-P0007", pasta); c.commit()
+        novos = c.execute("SELECT gravidade, descricao FROM erro WHERE codigo='F001-P0007' AND chave LIKE 'campvision:erros:%' ORDER BY id").fetchall()
+        ver("erros.json: os [Minor] embrulhados entram como aviso; o erro de verdade, como bloqueio",
+            [x["gravidade"] for x in novos] == ["aviso", "aviso", "bloqueia"] and novos[1]["descricao"].startswith("1 arquivo (D00002): o nome do autor"), [tuple(x) for x in novos])
+        for l in res: print(l)
     elif modo == "ux20_massa":
         # UX-20: ações em massa com Desfazer de verdade (volta situação E resolução; quem foi mexido depois fica) e "mensagens
         # repetidas" → Ver (prévia, nada muda) → Mesclar (fica o mais antigo; cópias fecham com a resolução dizendo qual ficou).
@@ -16085,6 +16145,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-06: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-63: aviso [Minor] do exiftool embrulhado não bloqueia o projeto; o que já estava gravado vira aviso (com registro)")
+rc, out = rodar("ux63_minor_exif", f"{tmp}/ux63_minor_exif.db")
+if rc != 0: ok(False, f"teste ux63_minor_exif não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-63: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-19: avisos em aba própria e números do menu com a regra única 'pedem ação de você'")
 rc, out = rodar("ux19_pedem_acao", f"{tmp}/ux19_pedem_acao.db")

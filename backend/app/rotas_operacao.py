@@ -1406,7 +1406,7 @@ def _filtro_erros(situacao, gravidade, categoria, origem, projeto, q, escondidos
 def _fechar_sozinhos(con) -> None:
     """Antes de mostrar: fecha (com registro) o que se resolveu sozinho com certeza. Só banco, rápido; nunca o QNAP."""
     from . import problemas
-    if problemas.fechar_resolvidos(con):
+    if problemas.fechar_resolvidos(con) or con.in_transaction:   # UX-63: a reclassificação do [Minor] também grava
         con.commit()
 
 

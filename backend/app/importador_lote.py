@@ -190,8 +190,8 @@ def registrar_erros_cv(con, proj: str, pasta: Path | str) -> int:
             grav = "corrigir"      # CAMP-046 (contrato 2.4): autoria divergente é aviso, nunca bloqueia a publicação
         chave = "campvision:erros:" + hashlib.sha1(f"{proj}|{arquivo}|{cat}|{detalhe}".encode("utf-8")).hexdigest()[:20]
         descricao = detalhe
-        from .avisos_cv import avisos_menores, texto_humano
-        menores = avisos_menores(detalhe)
+        from .avisos_cv import so_avisos_menores, texto_humano
+        menores = so_avisos_menores(detalhe)   # UX-63: também com o caminho no fim ou embrulhado na frase do lote
         if menores:                # UX-08: aviso [Minor] do exiftool nunca trava (vira "aviso", com o texto para gente e o técnico depois)
             grav, cat = "aviso", ("metadado" if cat == "outro" else cat)
             descricao = (" ".join(texto_humano(a)[1] for a in menores) + " Detalhe técnico: " + detalhe)[:500]

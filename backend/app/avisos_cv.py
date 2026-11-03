@@ -24,6 +24,8 @@ CHAVE = "campvision:aviso-menor:"
 
 _TRADUZ = (
     (re.compile(r"IPTC:By-line exceeds length limit", re.I), "o nome do autor era longo demais para o campo IPTC e foi cortado"),
+    (re.compile(r"IPTC:ObjectName exceeds length limit", re.I), "o título era longo demais para o campo IPTC e foi cortado"),     # UX-63
+    (re.compile(r"IPTC:Credit exceeds length limit", re.I), "o crédito era longo demais para o campo IPTC e foi cortado"),      # UX-63
     (re.compile(r"IPTC:(\S+) exceeds length limit", re.I), "o campo IPTC {0} era longo demais e foi cortado"),
     (re.compile(r"Duplicate .* tag", re.I), "uma etiqueta de metadados veio repetida no arquivo"),
 )
@@ -42,6 +44,57 @@ def avisos_menores(texto) -> list[dict] | None:
     if not achados or not _SOBRA_OK.match("".join(resto)):
         return None
     return achados
+
+
+# UX-63: o mesmo aviso [Minor] em outras roupas, que o CAMP Vision também deixa em catalogacao/erros.json:
+# - a linha crua do exiftool, com o caminho no fim ("Warning: [Minor] IPTC:ObjectName exceeds length limit (truncated) - /…/01 - Projetos/…/X.tif");
+# - embrulhada na frase do lote ("EXIF conferido em 6 de 48 arquivo(s) já no acervo: …", "exiftool relatou 1 problema(s): …", "1 image files updated").
+# Antes, qualquer embrulho fazia o aviso parecer "erro de verdade" e ele entrava como 'bloqueia' (F001-P0005, P0007, P0011, P0012, P0014).
+_MINOR_COM_CAMINHO = re.compile(r"Warning:\s*\[Minor\]\s*(?P<msg>[^;|\n]+?)\s+-\s+(?:[^;|\n]*?[/\\])?(?P<arq>[^\s/\\;|]+\." + _EXT + r")(?=\s|[;|]|$)", re.I)
+_EMBRULHO = re.compile(r"(?i)\bEXIF conferido em \d+ de \d+ arquivo\(s\)(?:\s+já no acervo)?|\bexiftool relatou \d+ problema\(s\)|\b\d+ image files? (?:updated|unchanged)")
+
+
+def so_avisos_menores(texto) -> list[dict] | None:
+    """UX-63: como avisos_menores, mas aceita os embrulhos que o CAMP Vision põe em volta (caminho no fim da linha, frase do lote).
+    Serve para classificar o PROBLEMA (aviso × bloqueio); o lote parado continua com a regra estrita de avisos_menores."""
+    t = str(texto or "")
+    if "[minor]" not in t.lower():
+        return None
+    t = _MINOR_COM_CAMINHO.sub(lambda m: f"; {m.group('arq')} Warning: [Minor] {m.group('msg')}; ", t)
+    t = _EMBRULHO.sub(" ; ", t)
+    return avisos_menores(t)
+
+
+def e_aviso_menor(e) -> bool:
+    """UX-63: o problema (linha de `erro`) é aviso [Minor] do exiftool? Pela chave (lote) ou pelo texto (erros.json)."""
+    if (e["chave"] or "").startswith(CHAVE):
+        return True
+    return (e["origem"] or "") == "campvision" and "[minor]" in (e["descricao"] or "").lower()
+
+
+SQL_AVISO_MENOR = f"(chave LIKE '{CHAVE}%' OR (origem='campvision' AND descricao LIKE '%[Minor]%'))"   # LIKE do SQLite: sem classe [..], sem caixa
+
+
+def reclassificar_menores(con, ator: str = "painel (automático)") -> list[int]:
+    """UX-63: problema aberto do CAMP Vision que é SÓ aviso [Minor] do exiftool, gravado como 'bloqueia'/'corrigir' antes desta regra,
+    passa a 'aviso' (não impede publicar e não conta em "pedem ação"). Nada é apagado: o texto antigo fica no fim ("Detalhe técnico")
+    e no histórico (evento 'problema_reclassificado'). Idempotente (só mexe no que ainda não é aviso). Não faz commit."""
+    feitos = []
+    for e in con.execute("""SELECT id, gravidade, categoria, codigo, descricao FROM erro WHERE origem='campvision' AND gravidade<>'aviso'
+                            AND situacao IN ('aberto','em_correcao') AND descricao LIKE '%[Minor]%'""").fetchall():
+        av = so_avisos_menores(e["descricao"])
+        if not av:
+            continue
+        frase = " ".join(texto_humano(a)[1] for a in av)
+        nova = (frase + " Detalhe técnico: " + e["descricao"])[:2000]
+        cat = "metadado" if e["categoria"] == "outro" else e["categoria"]
+        n = con.execute("UPDATE erro SET gravidade='aviso', categoria=?, descricao=? WHERE id=? AND gravidade<>'aviso'", (cat, nova, e["id"])).rowcount
+        if n:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('erro',?,'problema_reclassificado',?,?)",
+                        (str(e["id"]), ator, json.dumps({"codigo": e["codigo"], "de": e["gravidade"], "para": "aviso", "categoria_antes": e["categoria"],
+                                                         "motivo": "aviso [Minor] do exiftool: não impede publicar", "descricao_antes": e["descricao"]}, ensure_ascii=False)))
+            feitos.append(e["id"])
+    return feitos
 
 
 def texto_humano(aviso: dict) -> tuple[str | None, str]:

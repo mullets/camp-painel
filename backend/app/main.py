@@ -112,9 +112,9 @@ async def _startup() -> None:
     init_db()
     aplicar_migracoes()
     try:                                     # CAMP-122 (P1): lote que ficou em "erro" só por aviso [Minor] do exiftool (ex.: F026-P0009) sai do vermelho
-        from .avisos_cv import curar_lotes
+        from .avisos_cv import curar_lotes, reclassificar_menores
         from .db import connect as _c
-        _con = _c(); curar_lotes(_con); _con.commit(); _con.close()
+        _con = _c(); curar_lotes(_con); reclassificar_menores(_con); _con.commit(); _con.close()   # UX-63: [Minor] gravado como bloqueio vira aviso
     except Exception:  # noqa: BLE001  (nunca impede o painel de subir)
         pass
     import asyncio

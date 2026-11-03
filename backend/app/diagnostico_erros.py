@@ -7,6 +7,7 @@ from __future__ import annotations
 
 
 def diagnosticar(con, limite: int = 15) -> dict:
+    from .avisos_cv import SQL_AVISO_MENOR      # UX-63: o aviso [Minor] que veio do erros.json (chave campvision:erros:) também conta
     where = "situacao IN ('aberto','em_correcao')"
     total = con.execute(f"SELECT COUNT(*) FROM erro WHERE {where}").fetchone()[0]
     linhas = con.execute(f"""SELECT origem, gravidade, categoria, COUNT(*) AS quantidade
@@ -25,7 +26,7 @@ def diagnosticar(con, limite: int = 15) -> dict:
     simples = con.execute(f"""SELECT
         SUM(CASE WHEN gravidade='bloqueia' THEN 1 ELSE 0 END) AS bloqueantes,
         SUM(CASE WHEN gravidade='aviso' THEN 1 ELSE 0 END) AS informativos,
-        SUM(CASE WHEN chave LIKE 'campvision:aviso-menor:%' THEN 1 ELSE 0 END) AS avisos_exiftool,
+        SUM(CASE WHEN gravidade='aviso' AND {SQL_AVISO_MENOR} THEN 1 ELSE 0 END) AS avisos_exiftool,
         SUM(CASE WHEN origem IN ('campvision','revisao') THEN 1 ELSE 0 END) AS origem_automatica
         FROM erro WHERE {where}""").fetchone()
     return {
