@@ -1420,7 +1420,7 @@ def filho(modo):
         from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
         from app.publicacao_guiada import plano
         _vcopia = (_P(__file__).parent / "contrato" / "VERSAO").read_text(encoding="utf-8").strip()
-        ver("UX-08: o painel implementa o contrato da cópia literal (2.6 desde 02/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.6" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
+        ver("UX-08: o painel implementa o contrato da cópia literal (2.7 desde 03/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.7" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
