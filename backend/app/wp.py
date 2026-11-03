@@ -232,6 +232,22 @@ class WP:
             raise RuntimeError(f"Tainacan recusou editar termo {termo_id}: {r.status_code} {r.text[:200]}")
         return r.json()
 
+    def pagina_do_hub(self, termo_id: int) -> dict | None:
+        """03/11: a página do arquiteto que o SITE liga ao fundo (meta _camp_term_id), sem adivinhar pelo endereço: a rota do hub com
+        nada para gravar devolve o page_id; depois a página é lida pelo id. None = o site não tem página para este fundo."""
+        r = self.h.post(f"/wp-json/camp/v1/painel/hub/{int(termo_id)}", json={"meta": {}})
+        if r.status_code == 404:
+            return None
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou dizer qual é a página do arquiteto: {r.status_code} {r.text[:200]}")
+        pid = (r.json() or {}).get("page_id") if isinstance(r.json(), dict) else None
+        if not pid:
+            return None
+        g = self.h.get(f"/wp-json/wp/v2/pages/{int(pid)}", params={"context": "edit"})
+        if g.status_code >= 400:
+            raise RuntimeError(f"O site recusou ler a página do arquiteto {pid}: {g.status_code} {g.text[:200]}")
+        return g.json()
+
     def gravar_hub(self, termo_id: int, meta: dict) -> dict:
         """B1/B9: grava campos da página-hub de um fundo (rota do plugin da CAMP; ver docs/site/painel-hub.php)."""
         r = self.h.post(f"/wp-json/camp/v1/painel/hub/{int(termo_id)}", json={"meta": meta})
