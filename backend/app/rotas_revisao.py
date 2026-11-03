@@ -1362,9 +1362,10 @@ def jpg_da_folha_no_qnap(raiz, rel):
 
 
 @router.get("/itens/{codigo}/previa")
-def previa(codigo: str, t: int = 0, o: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
+def previa(codigo: str, t: int = 0, o: int = 0, s: int = 0, u: dict = Depends(auth.exige("leitura"))) -> FileResponse:
     """Prévia (~3000 px, já girada) que o CAMP Vision grava em ACERVOS_CAMP/_campvision/preview/. O caminho vem do pacote (de fora): só serve de dentro dessa pasta.
-    19/10: folha com recorte/alinhamento serve o JPG corrigido do painel (o = 1: sem o ajuste, para a tela de recortar)."""
+    19/10: folha com recorte/alinhamento serve o JPG corrigido do painel (o = 1: sem o ajuste, para a tela de recortar).
+    UX-59: s = giro SUGERIDO (90, 180, 270) só para mostrar a folha de pé na conferência; somado ao giro gravado, nada é gravado."""
     con = connect()
     try:
         i = con.execute(f"SELECT {_COLS_AJUSTE.replace('i.', '')} FROM item WHERE codigo=?", (codigo,)).fetchone()
@@ -1394,6 +1395,8 @@ def previa(codigo: str, t: int = 0, o: int = 0, u: dict = Depends(auth.exige("le
     giro, lado = (i["giro_manual"] if i else 0), (t if 120 <= t <= 1600 else 0)     # t = miniatura (lado maior em px); 0 = tamanho da prévia
     esp = bool(i) and imagens.espelho_efetivo(i)
     rec, ang = ajuste.ler(i) if i and not o else (None, 0.0)
+    if s % 360 in (90, 180, 270) and not ajuste.tem_ajuste(rec, ang):              # UX-59: só a imagem mostrada; o recorte manual (já olhado) vence
+        giro = ((giro or 0) + s) % 360
     if (giro or esp or ajuste.tem_ajuste(rec, ang)) and not imagens.disponivel():
         raise HTTPException(503, "O servidor ainda não tem o Pillow instalado: rode ./atualizar.sh")
     if ajuste.tem_ajuste(rec, ang):                    # o JPG corrigido (gera de novo se sumiu ou se a origem mudou)
