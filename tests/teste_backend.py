@@ -15,7 +15,7 @@ def ok(cond, msg):
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
-MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11043,6 +11043,48 @@ def filho(modo):
         ver("Problemas: menu = aba Abertos = 'sem filtro' (todos sem o que você escondeu)", (P.get("pedem_acao") or {}).get("problemas") == 2 and n.get("pedem_acao") == 2
             and (n.get("sem_filtro") or {}).get("pedem_acao") == 2, str({"menu": (P.get("pedem_acao") or {}).get("problemas"), "aba": n.get("pedem_acao"), "sem_filtro": n.get("sem_filtro")}))
         for l in res: print(l)
+    elif modo == "ux60_resposta_quebrada":
+        # UX-60 (parte do painel): o CAMP Vision descarta o campo quando a resposta do modelo vem quebrada e avisa POR CAMPO
+        # ("valor descartado: resposta do modelo quebrada (cidade)"). Em Qualidade do CAMP Vision: quantas folhas ficaram sem leitura
+        # por isso (uma folha conta uma vez, com os campos juntos), contando pelo que o painel já recebe, com o caminho para cada uma.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F026','Fundo de teste')")
+        for n_ in (30, 31):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',?)", (n_,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1975)", (f"F026-P00{n_}", "F026", n_, f"Projeto {n_}"))
+        D = lambda p, n: f"F026-P00{p}-1975-S01-D{n:05d}"
+        RQ = "valor descartado: resposta do modelo quebrada"
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem, pendencias) VALUES (?,?,?,?,?,?,?,?)",
+                  (D(30, 1), "F026-P0030", "S01", 1, "x", "pendente", "importado", _j.dumps({"ressalvas": [f"{RQ} (cidade)", f"{RQ} (uf, resto de marcação tirado)"]})))
+        c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem, pendencias) VALUES (?,?,?,?,?,?,?,?)",
+                  (D(30, 2), "F026-P0030", "S01", 2, "x", "conferida", "importado", "{}"))
+        E = lambda cod, desc, sit="aberto": c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao,relatado_por,situacao) VALUES ('aviso','metadado','campvision',?,?,'CAMP Vision',?)", (cod, desc, sit))
+        E(D(30, 1), f"{RQ} (cidade)"); E(D(30, 1), f"{RQ} (uf, resto de marcação tirado)")       # 2 avisos, 1 folha
+        E(D(30, 2), f"{RQ} (titulo)", "corrigido")                                                # já conferida: continua contando (ficou sem leitura)
+        E(D(31, 7), f"{RQ} (ano)")                                                                # folha fora do painel
+        E(D(30, 3), "cidade diverge do grupo (lido 'Santos')")                                    # outro aviso: não conta
+        E("F026-P0030", f"{RQ} (projeto)")                                                        # não é folha: não conta
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        ad = TestClient(app, raise_server_exceptions=False); ad.post("/api/auth/login", json={"email": "ad@camp.arq.br", "senha": "senha-admin-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-operador-123"})
+        r = ad.get("/api/qualidade-cv").json().get("resposta_quebrada") or {}
+        L = {f["codigo"]: f for f in r.get("lista") or []}
+        ver("conta 3 folhas (uma folha com 2 campos quebrados conta uma vez) em 2 projetos", r.get("folhas") == 3 and r.get("projetos") == 2, str(r)[:300])
+        ver("a folha junta os campos (cidade, uf)", L.get(D(30, 1), {}).get("campos") == ["cidade", "uf"], str(L.get(D(30, 1))))
+        ver("diz se a folha está no painel e a revisão (para o link ir à conferência)", L.get(D(30, 1), {}).get("existe") is True and L[D(30, 1)]["revisao"] == "pendente"
+            and L.get(D(30, 2), {}).get("revisao") == "conferida" and L.get(D(31, 7), {}).get("existe") is False, str(L)[:300])
+        ver("outros avisos e problema do projeto não contam", D(30, 3) not in L and "F026-P0030" not in L)
+        ver("só admin vê (como o resto da tela)", op.get("/api/qualidade-cv").status_code == 403)
+        for l in res: print(l)
     elif modo == "ux20_massa":
         # UX-20: ações em massa com Desfazer de verdade (volta situação E resolução; quem foi mexido depois fica) e "mensagens
         # repetidas" → Ver (prévia, nada muda) → Mesclar (fica o mais antigo; cópias fecham com a resolução dizendo qual ficou).
@@ -16269,6 +16311,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-70: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("UX-60: Qualidade do CAMP Vision conta as folhas sem leitura por resposta quebrada")
+rc, out = rodar("ux60_resposta_quebrada", f"{tmp}/ux60_resposta_quebrada.db")
+if rc != 0: ok(False, f"teste ux60_resposta_quebrada não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-60: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-19: avisos em aba própria e números do menu com a regra única 'pedem ação de você'")
 rc, out = rodar("ux19_pedem_acao", f"{tmp}/ux19_pedem_acao.db")
