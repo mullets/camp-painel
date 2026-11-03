@@ -12577,6 +12577,8 @@ def filho(modo):
         partes = {p_["id"]: p_ for p_ in (est.get("estado_geral") or {}).get("partes", [])}
         ver("sem réplica: o topo fica vermelho (crítico), mesmo com o resto ok", (est.get("estado_geral") or {}).get("nivel") == "critico" and (partes.get("replica") or {}).get("nivel") == "critico", str(est.get("estado_geral"))[:300])
         ver("sem réplica: nenhum e-mail de 'Cópia do acervo parada' (não medido, com o motivo)", (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("replica") or {}).get("nivel") == "nao_medido")
+        import shutil as _shu                                   # 03/11: o disco do destino é SIMULADO (50% livre); antes media o disco real da
+        _shu.disk_usage = lambda p_: _shu._ntuple_diskusage(1000 * 2**30, 500 * 2**30, 500 * 2**30)   # máquina e falhava com pouco espaço livre
         destino = _pl.Path(_tf.mkdtemp()) / "replica" / "ACERVOS_CAMP"                                  # destino que NÃO existe (indisponível)
         c.execute("UPDATE configuracao SET valor=? WHERE chave='replica.raiz'", (str(destino),)); c.commit()
         pv = x.get("/api/estacoes?fresco=1").json().get("preservacao") or {}
