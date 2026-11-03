@@ -174,6 +174,14 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Título sugerido**: o título sem o prefixo de pasta. Botão **Usar o título sugerido** (uma pessoa aceita, um projeto por vez; nada é renomeado sozinho)
   e **Corrigir o título** (abre a edição).
 - Cidade: a tela sugere a **forma do acervo** (a mais usada: "São Paulo, SP" × "São Paulo") com o botão **Usar**; o campo continua texto livre.
+- UX-67 (03/11/2026): a **contagem de folhas da pasta** no fim do nome ("Teatro Piracicaba - 12 Folhas", "(12 fls)", "12 folhas") também é
+  nome de pasta. Projeto novo (reserva da estação, decisão, destino automático) já nasce sem ela e sem os códigos de pasta; o nome da pasta fica
+  no histórico do projeto.
+- **Corrigir vários títulos** (admin, no aviso da tela Projetos): uma lista com o título de hoje riscado e o **título novo** já preenchido com
+  a sugestão **no carimbo** (o nome da obra que a maioria das folhas diz: "no carimbo: Teatro Municipal de Piracicaba (4 de 5 folhas)") ou
+  **da pasta** (sem a contagem e os códigos). **Ver o que muda** só mostra ("N títulos mudam (nada foi gravado ainda)"); **Aplicar N títulos**
+  grava depois da confirmação. **Histórico das correções** com **Desfazer** (volta o título de antes; o que alguém mudou depois fica como está).
+  O código do projeto nunca muda; no Histórico do projeto: "título corrigido (veio da pasta)" / "correção de título desfeita".
 
 ## Números e estado do topo (UX-05, 27/10/2026)
 - Todo número de contagem vem de `backend/app/contagens.py` (a mesma regra em Home, Material novo, Máquinas, Relatórios e menu).

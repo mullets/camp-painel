@@ -130,7 +130,11 @@ _TECNICOS = (
     (re.compile(r"^\s*\d+\s*[-–—]\s", re.I), "começa com número de pasta (ex.: “01 - ”)"),
     (re.compile(r"\bTIFF?\b", re.I), "tem “TIFF” (formato de arquivo)"),
     (re.compile(r"\bP\d{4}\s*$", re.I), "termina com o número do projeto (P####)"),
+    (re.compile(r"\S.*?" + r"(?:\s+[-–—,]\s*|\s+|\s*\()\(?\s*\d{1,4}\s*(?:folhas?|fls?\.?)\s*\)?\s*$", re.I),
+     "termina com a contagem de folhas da pasta (ex.: “- 12 Folhas”)"),          # UX-67 (F001-P0033 "Teatro Piracicaba - 12 Folhas")
 )
+# UX-67: "- 12 Folhas", "12 folhas", "(12 fls)", ", 8 fls." no fim do nome da pasta: a contagem não é parte do nome da obra
+_SUFIXO_FOLHAS = re.compile(r"(?:\s*[-–—,]\s*|\s+|\s*(?=\())\(?\s*\d{1,4}\s*(?:folhas?|fls?\.?)\s*\)?\s*$", re.I)
 _PREFIXOS_LIMPOS = re.compile(r"^\s*(?:T\d{3}_+|F\d{3}(?:-P\d{4})?\s*[-–—_]+\s*|P\d{4}\s*[-–—_]+\s*|\d+\s*[-–—]\s+)", re.I)
 
 
@@ -157,11 +161,22 @@ def sugerir_titulo(titulo: str | None) -> str | None:
         if novo == t:
             break
         t = novo
-    t = re.sub(r"\s*[-–—_]?\s*\(?\bP\d{4}\)?\s*$", "", t, flags=re.I)
-    t = " ".join(t.replace("_", " ").split()).strip(" -–—")
+    for _ in range(2):                                   # UX-67: "Casa P0012 - 12 Folhas" tem a contagem E o número no fim
+        t = _SUFIXO_FOLHAS.sub("", t)
+        t = re.sub(r"\s*[-–—_]?\s*\(?\bP\d{4}\)?\s*$", "", t, flags=re.I)
+    t = " ".join(t.replace("_", " ").split()).strip(" -–—,")
     if not t or t == (titulo or "").strip() or titulo_tecnico(t) or len(t) < 3:
         return None
     return t
+
+
+def titulo_sem_pasta(titulo: str | None) -> str:
+    """UX-67: o título de um projeto NOVO vindo do nome da pasta, sem o que é da pasta ("- 12 Folhas", "(12 fls)", "T099_", "F000 - ",
+    "P0060 - ", "… P0012"). Só quando o título é técnico e a limpeza deixa um nome de obra; senão devolve o que veio (a tela avisa)."""
+    t = " ".join(str(titulo or "").split())
+    if not t or not titulo_tecnico(t):
+        return t
+    return sugerir_titulo(t) or t
 
 
 def buscar_em_outros_fundos(con, fundo_codigo: str | None, titulo: str, ano: int | None = 0, cidade: str | None = None, limite: int = 3) -> list[dict]:

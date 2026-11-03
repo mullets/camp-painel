@@ -14,7 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
-MODOS_RAPIDOS |= {"ux62_publicar_conferido"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
+MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5587,6 +5587,101 @@ def filho(modo):
         ver("D (tudo conferido, lote sem aprovar): marcado aprova_junto", rd.get("aprova_junto") is True, str(rd))
         r5 = adm.post(f"/api/projetos/{D}/publicar-tudo")
         ver("D: publicar-tudo publica (aprovação junto, CAMP-148)", r5.status_code == 200 and st_proj(D) == "no_ar", r5.text[:200])
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux67_nomes_pasta":
+        # UX-67 (P2): títulos com texto da pasta ("Teatro Piracicaba - 12 Folhas", "… - 08 Folhas", "F000 - CNV - Convidado").
+        # Novos: a importação (reserva da estação, decisão, destino automático) grava sem a contagem e sem os códigos. Existentes: prévia
+        # (simular é o padrão; nada muda), aplicar só por admin com o que ele conferiu, histórico e Desfazer. O código F/P nunca muda.
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from app.similaridade import titulo_tecnico, sugerir_titulo
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        ver("“Teatro Piracicaba - 12 Folhas” é título de pasta, e a sugestão é “Teatro Piracicaba”",
+            bool(titulo_tecnico("Teatro Piracicaba - 12 Folhas")) and sugerir_titulo("Teatro Piracicaba - 12 Folhas") == "Teatro Piracicaba", str(sugerir_titulo("Teatro Piracicaba - 12 Folhas")))
+        casos = {"Casa Azul (12 fls)": "Casa Azul", "Casa Azul 12 folhas": "Casa Azul", "Casa Azul, 8 fls.": "Casa Azul",
+                 "Sede do Conselho Regional de Técnicos de Administração - 08 Folhas": "Sede do Conselho Regional de Técnicos de Administração"}
+        ver("as outras formas da contagem (“(12 fls)”, “12 folhas”, “, 8 fls.”) também saem", all(sugerir_titulo(k) == v for k, v in casos.items()),
+            str({k: sugerir_titulo(k) for k in casos}))
+        ver("nome de obra não vira título de pasta", not any(titulo_tecnico(t) for t in ("Edifício Folhas Secas", "Casa 2 - Reforma", "Residência Tarumã")))
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F067','Fundo 67','F67',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('decisoes.parecido_estacao','0','x',0)")
+        def proj(n, t, site=None):
+            cod = f"F067-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F067',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,tainacan_item_id) VALUES (?,?,?,?,?)", (cod, "F067", n, t, site))
+            return cod
+        P33 = proj(33, "Teatro Piracicaba - 12 Folhas")
+        P30 = proj(30, "Sede do Conselho Regional de Técnicos de Administração - 08 Folhas")
+        PCNV = proj(31, "F000 - CNV - Convidado")
+        POK = proj(32, "Residência Tarumã")
+        for k in range(1, 6):        # o carimbo das folhas do P33 diz o nome da obra (4 de 5 iguais)
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,projeto_carimbo) VALUES (?,?,'S01',?,?,'campvision',?)",
+                      (f"{P33}-1975-S01-D{k:05d}", P33, k, f"Planta {k}", "TEATRO MUNICIPAL DE PIRACICABA" if k < 5 else "OUTRA COISA"))
+        c.commit()
+        auth.criar_usuario("Adm", "adm67@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op67@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm67@camp.arq.br"), cli("op67@camp.arq.br")
+        def ntc():
+            try: return c.execute("SELECT COUNT(*) FROM titulo_correcao").fetchone()[0]
+            except Exception: return -1                                  # sem a migração 215
+        tit = lambda cod: c.execute("SELECT titulo FROM projeto WHERE codigo=?", (cod,)).fetchone()[0]
+        # 1) importação: a estação reserva com o nome da pasta
+        async def _lan(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("192.168.15.40", 50000)}
+            await app(scope, receive, send)
+        r = TestClient(_lan, raise_server_exceptions=False).post("/api/estacoes/projetos/reservar", json={"fundo_codigo": "F067", "titulo": "Ginásio de Esportes - 37 Folhas", "confirmar_novo": True})
+        novo = r.json().get("codigo") if r.status_code == 200 else None
+        ver("reserva da estação: o projeto novo nasce “Ginásio de Esportes” (sem “- 37 Folhas”)", bool(novo) and tit(novo) == "Ginásio de Esportes" and r.json().get("titulo") == "Ginásio de Esportes", r.text[:200])
+        ev = c.execute("SELECT detalhe FROM evento WHERE codigo=? AND tipo='criado'", (novo,)).fetchone() if novo else None
+        ver("o nome da pasta fica guardado no histórico do projeto", bool(ev) and "37 Folhas" in ev[0], str(ev and ev[0])[:200])
+        from app.projetos_novos import criar_projeto
+        cx = connect(); n2 = criar_projeto(cx, "F067", "T099_Casa_Verde (12 fls)", 1970, None, None, "teste", {}); cx.commit(); cx.close()
+        ver("criar projeto (decisão/destino automático) também limpa prefixo e contagem", tit(n2["codigo"]) == "Casa Verde", tit(n2["codigo"]))
+        # 2) prévia: lista, sugere do carimbo, não muda nada
+        ver("operador não vê a prévia (403)", op.get("/api/titulos-de-pasta/previa").status_code == 403)
+        pv = adm.get("/api/titulos-de-pasta/previa").json(); por = {x["codigo"]: x for x in pv.get("itens", [])}
+        ver("a prévia lista os títulos de pasta (e não o nome de obra)", {P33, P30, PCNV} <= set(por) and POK not in por, str(sorted(por)))
+        ver("P33: sugere o nome lido no carimbo (4 de 5 folhas), com a sugestão da pasta ao lado",
+            por.get(P33, {}).get("sugerido") == "Teatro Municipal de Piracicaba" and por[P33].get("fonte") == "carimbo"
+            and por[P33].get("titulo_da_pasta") == "Teatro Piracicaba" and (por[P33].get("titulo_carimbo") or {}).get("folhas") == 4, str(por.get(P33))[:300])
+        ver("P30: sem carimbo, sugere a pasta sem “- 08 Folhas”", por.get(P30, {}).get("sugerido") == "Sede do Conselho Regional de Técnicos de Administração" and por[P30]["fonte"] == "pasta", str(por.get(P30))[:200])
+        ver("a prévia não muda nada", tit(P33) == "Teatro Piracicaba - 12 Folhas" and tit(P30).endswith("08 Folhas"))
+        itens = [{"codigo": P33, "titulo": "Teatro Municipal de Piracicaba", "fonte": "carimbo"},
+                 {"codigo": P30, "titulo": por.get(P30, {}).get("sugerido") or "Sede do Conselho Regional de Técnicos de Administração", "fonte": "pasta"},
+                 {"codigo": PCNV, "titulo": "F000 - Convidado"}]          # título novo ainda técnico: recusado
+        # 3) simular é o padrão
+        s1 = adm.post("/api/titulos-de-pasta/corrigir", json={"itens": itens})
+        sj = s1.json() if s1.status_code == 200 else {}
+        ver("sem modo = simular: diz o que muda e o que fica, e NÃO grava", s1.status_code == 200 and sj.get("aplicado") is False and [m["codigo"] for m in sj.get("mudam", [])] == [P33, P30]
+            and [x["codigo"] for x in sj.get("recusados", [])] == [PCNV] and tit(P33) == "Teatro Piracicaba - 12 Folhas"
+            and ntc() == 0, s1.text[:300])
+        ver("operador não aplica (403)", op.post("/api/titulos-de-pasta/corrigir", json={"itens": itens, "modo": "aplicar"}).status_code == 403 and tit(P33).endswith("12 Folhas"))
+        # 4) aplicar
+        a = adm.post("/api/titulos-de-pasta/corrigir", json={"itens": itens, "modo": "aplicar"}).json()
+        ver("aplicar (admin) troca só o título dos conferidos; o código não muda", a.get("aplicado") is True and tit(P33) == "Teatro Municipal de Piracicaba"
+            and tit(P30) == "Sede do Conselho Regional de Técnicos de Administração" and tit(PCNV) == "F000 - CNV - Convidado"
+            and c.execute("SELECT COUNT(*) FROM projeto WHERE codigo IN (?,?)", (P33, P30)).fetchone()[0] == 2, str(a)[:300])
+        ver("cada troca fica no histórico do projeto (evento titulo_corrigido com antes e depois)",
+            c.execute("SELECT COUNT(*) FROM evento WHERE tipo='titulo_corrigido' AND codigo IN (?,?)", (P33, P30)).fetchone()[0] == 2)
+        h = adm.get("/api/titulos-de-pasta/historico").json().get("lotes", [])
+        ver("o histórico mostra a aplicação (2 títulos, quem e quando)", len(h) == 1 and h[0]["lote"] == a.get("lote") and h[0]["n"] == 2 and h[0]["ator"] == "adm67@camp.arq.br" and not h[0]["desfeito"], str(h)[:300])
+        pv2 = {x["codigo"] for x in adm.get("/api/titulos-de-pasta/previa").json().get("itens", [])}
+        ver("os corrigidos saem da prévia", P33 not in pv2 and P30 not in pv2 and PCNV in pv2, str(pv2))
+        # 5) desfazer (o que alguém mudou depois fica)
+        c.execute("UPDATE projeto SET titulo='Sede do CRA' WHERE codigo=?", (P30,)); c.commit()
+        dz = adm.post("/api/titulos-de-pasta/desfazer", json={"lote": a.get("lote")}).json()
+        ver("Desfazer volta o título de antes; o que mudou depois fica como está", tit(P33) == "Teatro Piracicaba - 12 Folhas" and tit(P30) == "Sede do CRA"
+            and [x["codigo"] for x in dz.get("voltaram", [])] == [P33] and [x["codigo"] for x in dz.get("mantidos", [])] == [P30], str(dz)[:300])
+        ver("Desfazer fica no histórico e não se repete", (adm.get("/api/titulos-de-pasta/historico").json().get("lotes") or [{}])[0].get("desfeito") is True
+            and adm.post("/api/titulos-de-pasta/desfazer", json={"lote": a.get("lote")}).status_code == 404
+            and c.execute("SELECT COUNT(*) FROM evento WHERE tipo='titulo_corrigido_desfeito' AND codigo=?", (P33,)).fetchone()[0] == 1)
         c.close()
         for l in res: print(l)
     elif modo == "conferir_so_avisos":
@@ -15848,6 +15943,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-62: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160c) UX-67: título que veio da pasta (“- 12 Folhas”, códigos): limpo na importação; correção dos existentes com prévia, aplicar e desfazer")
+rc, out = rodar("ux67_nomes_pasta", f"{tmp}/ux67.db")
+if rc != 0: ok(False, f"teste ux67_nomes_pasta não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-67: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("161) CAMP-150: conferir só as folhas com aviso (as sem aviso entram conferidas sozinhas), atrás de revisao.conferir_so_avisos")
 rc, out = rodar("conferir_so_avisos", f"{tmp}/conferir_so_avisos.db")
