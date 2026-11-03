@@ -3921,10 +3921,10 @@ function pjcSite(code,d){const g=(window.PUB_G||{})[code],C=escHtml(code),o={d:[
     o.acoes=(np.total&&g.pode_agir!==false&&EU&&['admin','master'].includes(EU.papel)?`<button type="button" class="btn sm pjc-main" data-pj-atualizar-no-ar="${C}">Atualizar a página pública</button> `:'')+(d&&d.site_url?linkPaginaSite(d.site_url,true,'btn sm',d.site_url_origem==='presumido'):'')+' '+req;urg=!!np.total;return {html:pjcCartao('site','Site',o),urg}}
   o.v=g.estado==='rascunho'?'Rascunho':g.estado==='fora_do_ar'?'Despublicado':'Não publicado';if(g.estado==='rascunho')o.d.push('só a equipe vê');
   // a mesma regra do passo a passo: só trava o que uma pessoa precisa resolver (autorizar o projeto o próprio Publicar faz); os problemas primeiro
-  const fl=(g.condicoes||[]).filter(x=>x.bloqueia&&!x.ok&&['bloqueios','direitos','teste','aceite_cv'].includes(x.id)),falta=fl.find(x=>x.id==='bloqueios')||fl[0];
+  const fl=(g.condicoes||[]).filter(x=>x.bloqueia&&!x.ok&&(['bloqueios','direitos','teste','aceite_cv'].includes(x.id)||(x.id==='revisao'&&!x.aprova_junto))),falta=fl.find(x=>x.id==='bloqueios')||fl[0];   /* UX-62: folha a conferir / lote sem aprovar também trava (antes: "pronto" com 0 de 49 conferidas) */
   // CAMP-072 (20/10, exaustão): projeto só reservado (nenhuma folha) aparecia "pronto: o painel autoriza e envia ao site" com Publicar liberado
   if(!pjItens(code).length&&g.estado!=='rascunho'&&g.estado!=='fora_do_ar'){o.d.push(falta&&falta.id==='teste'?'lote de teste não vai ao site':'nenhuma folha ainda: nada para publicar');/* CAMP-114: o lote de teste diz o porquê */o.acoes=req;return {html:pjcCartao('site','Site',o),urg}}
-  if(falta){const f=faltaCondicao(falta);o.d.push(falta.id==='bloqueios'?'libera quando os problemas forem resolvidos':'falta: '+f.curto);
+  if(falta){const f=faltaCondicao(falta);o.d.push(falta.id==='bloqueios'?'libera quando os problemas forem resolvidos':falta.id==='revisao'?f.texto:'falta: '+f.curto);
     o.acoes=g.pode_agir&&falta.acao&&falta.id!=='bloqueios'?`<button type="button" class="btn sm" data-pp-cond="${escHtml(falta.acao.tipo)}" data-alvo="${escHtml(falta.acao.alvo||'')}">${escHtml(falta.acao.rotulo)}</button>`
       :g.pode_agir?`<button type="button" class="btn sm" data-pjc-publicar="${C}" aria-disabled="true" title="${escHtml(falta.id==='bloqueios'?'Resolva os problemas que impedem publicar':f.curto.replace(/<[^>]+>/g,''))}">Publicar</button>`:''}
   else if(g.pode_agir||g.eu_publico){o.d.push('pronto: o painel autoriza e envia ao site');o.acoes=pjcBt(`data-pjc-publicar="${C}"`,'Publicar');urg=true}
@@ -4433,6 +4433,8 @@ function faltaCondicao(c){const n=parseInt(String(c.detalhe||'').match(/\d+/)||'
   if(c.id==='direitos')return {texto:`faltam os direitos do fundo${c.acao&&c.acao.alvo?' '+escHtml(c.acao.alvo):''} para publicar`,curto:'definir os direitos do fundo',detalhe:c.detalhe||''};
   if(c.id==='teste')return {texto:'este é um lote de teste: ele não vai ao site',curto:'lote de teste não vai ao site',detalhe:''};
   if(c.id==='aceite_cv')return {texto:'o aceite do lote no CAMP Vision não passou',curto:'o aceite do lote no CAMP Vision',detalhe:c.detalhe||''};
+  if(c.id==='revisao'){const nf=+c.falta_conferir||(/espera|conferir/i.test(String(c.detalhe||''))?n:0);   /* UX-62: diz o que falta, com o número */
+    return nf?{texto:`falta conferir ${qtd(nf,'folha','folhas')}`,curto:`conferir ${qtd(nf,'folha','folhas')}`,detalhe:''}:{texto:'falta aprovar o lote',curto:'aprovar o lote',detalhe:''}}
   return {texto:'falta: '+min,curto:min,detalhe:c.detalhe||''}}
 function proximoPassoHTML(r,code,pagina){   // pagina=true: dentro do bloco Próximo passo da página do projeto (CAMP-147); sem: o quadro do fim da conferência
   const l=r.lote;if(!l)return '';
@@ -4444,7 +4446,7 @@ function proximoPassoHTML(r,code,pagina){   // pagina=true: dentro do bloco Pró
       :[`Faltam conferir ${escHtml(l.itens_pendentes)} de ${escHtml(l.itens_total)} folha(s). Clique numa folha para ver, virar e conferir, ou aprove todas de uma vez.`,op?bt('Começar a conferir','conferir')+(()=>{const n=semAvisoNoLote(l);return ` <button class="btn" data-rev-lote="todas" data-lote="${escHtml(l.id)}" data-projeto="${escHtml(code)}" title="Só as folhas sem nenhum aviso; as com aviso ficam para conferir uma a uma">Conferir só sem avisos${n==null?'':` (${fmtN(n)})`}</button>`})():''],   /* UX-11: o número é das folhas SEM aviso, não o total a conferir */
     aprovar:umPasso()?['Todas as folhas foram conferidas. Pronto para publicar: o mesmo clique aprova o lote.',op||ad?bt('Publicar no site','publicar'):'<small class="help">Um operador ou admin publica.</small>']   // CAMP-148
       :['Todas as folhas foram conferidas. Falta aprovar o lote.',ad?bt('Aprovar o lote','aprovar'):'<small class="help">Falta um admin aprovar.</small>'],
-    publicar:(()=>{const g=(window.PUB_G||{})[code],hum=g&&(g.condicoes||[]).find(c=>c.bloqueia&&!c.ok&&['direitos','bloqueios','teste','aceite_cv'].includes(c.id));   // 19/10: o aceite do CAMP Vision é a MESMA regra do quadro "O que o CAMP Vision entregou"
+    publicar:(()=>{const g=(window.PUB_G||{})[code],hum=g&&(g.condicoes||[]).find(c=>c.bloqueia&&!c.ok&&(['direitos','bloqueios','teste','aceite_cv'].includes(c.id)||(c.id==='revisao'&&!c.aprova_junto)));   /* UX-62 */   // 19/10: o aceite do CAMP Vision é a MESMA regra do quadro "O que o CAMP Vision entregou"
       if(hum){const f=faltaCondicao(hum);return [`Lote aprovado, mas ${f.texto}.${f.detalhe?` <small class="help">${escHtml(f.detalhe)}</small>`:''}`,ad&&hum.acao?`<button class="btn pri" data-pp-cond="${escHtml(hum.acao.tipo)}" data-alvo="${escHtml(hum.acao.alvo||'')}">${escHtml(hum.acao.rotulo)}</button>`:hum.id==='bloqueios'?`<a class="btn" href="#erros/${escHtml(code)}">Ver os problemas</a>`:'<small class="help">Falta um admin resolver.</small>']}
       return ['Lote aprovado. O painel autoriza e envia ao site na hora.',ad?bt('Publicar','publicar'):'<small class="help">Falta um admin publicar.</small>']})(),
     publicado:['Tudo certo: este lote já foi publicado.',linkPublicoProjeto(code)],
@@ -4458,7 +4460,7 @@ function proximoPassoSemLoteHTML(code,g,pagina){
   if(pagina)return '';   // CAMP-147: sem lote, na página do projeto quem diz o próximo passo é o bloco de publicação (pjStatusHTML)
   if(!g)return '';const ad=!!g.pode_agir,c=escHtml(code);
   if(g.estado==='no_ar')return `<div class="panel pp"><div class="pb"><div class="pp-acao"><p class="help"><b>Publicado.</b> Este projeto está no site.</p>${linkPublicoProjeto(code)}</div></div></div>`;
-  const hum=(g.condicoes||[]).find(x=>x.bloqueia&&!x.ok&&['direitos','bloqueios','teste'].includes(x.id));
+  const hum=(g.condicoes||[]).find(x=>x.bloqueia&&!x.ok&&(['direitos','bloqueios','teste'].includes(x.id)||(x.id==='revisao'&&!x.aprova_junto)));   /* UX-62 */
   const fc=hum&&faltaCondicao(hum),corpo=hum?[`${fc.texto.charAt(0).toUpperCase()+fc.texto.slice(1)}.${fc.detalhe?` <small class="help">${escHtml(fc.detalhe)}</small>`:''}`,ad&&hum.acao?`<button class="btn pri" data-pp-cond="${escHtml(hum.acao.tipo)}" data-alvo="${escHtml(hum.acao.alvo||'')}">${escHtml(hum.acao.rotulo)}</button>`:'']:['Pronto para publicar. O painel autoriza e envia ao site na hora.',ad?`<button class="btn pri" data-pp="publicar" data-projeto="${c}">Publicar</button>`:'<small class="help">Um administrador publica.</small>'];
   return `<div class="panel pp"><div class="pb"><div class="pp-acao"><p class="help">${corpo[0]}</p>${corpo[1]}</div></div></div>`}
 function desenharProximoPasso(code){const b=document.getElementById('pj-proximo'),u=window.PP_ULT;if(!b||!u||u.code!==code)return;b.innerHTML=u.r.lote?proximoPassoHTML(u.r,code,true):proximoPassoSemLoteHTML(code,(window.PUB_G||{})[code],true);pjStatusDesenhar(code);

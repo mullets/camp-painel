@@ -15,7 +15,7 @@ import time
 from fastapi import HTTPException
 
 from .db import connect
-from .publicacao import ELEGIVEL_LOCAL, condicoes_projeto
+from .publicacao import ELEGIVEL_LOCAL, condicoes_projeto, status_recusa
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait  # noqa: E402
 
@@ -238,7 +238,7 @@ def executar(codigo: str, u: dict, progresso=None) -> dict:
         if rep:
             return rep
         if pl["bloqueios"]:
-            raise HTTPException(400, "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]))
+            raise HTTPException(status_recusa(b["id"] for b in pl["bloqueios"]), "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]))   # UX-62: 409 quando falta conferir/aprovar
         feitos: list[str] = []
 
         def _p(**kw):

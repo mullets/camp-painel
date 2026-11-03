@@ -14,6 +14,7 @@ def ok(cond, msg):
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS |= {"ux62_publicar_conferido"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -5489,7 +5490,7 @@ def filho(modo):
             c.execute("SELECT autorizado_site FROM projeto WHERE codigo=?", (P5,)).fetchone()[0] == 1)
         # 3) o que continua travando
         r2 = op.post(f"/api/projetos/{P2}/publicar-tudo")
-        ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (400 dizendo 'Falta conferir 1 folha')", r2.status_code == 400 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
+        ver("ligado: lote com folha ainda a conferir NÃO é aprovado nem publicado (409 dizendo 'Falta conferir 1 folha'; UX-62)", r2.status_code == 409 and "Falta conferir 1 folha" in r2.text and aprovado(P2)[0] is None and st_proj(P2) != "no_ar", r2.text[:200])
         r3 = op.post(f"/api/projetos/{P3}/publicar-tudo")
         ver("ligado: bloqueio registrado por pessoa continua bloqueando, e o lote NÃO é aprovado", r3.status_code == 400 and aprovado(P3)[0] is None and st_proj(P3) != "no_ar", r3.text[:200])
         # CAMP-149: aba "Pronto para publicar" e publicar vários de uma vez
@@ -5508,6 +5509,84 @@ def filho(modo):
         ver("Desfazer (master) volta o projeto para rascunho", d.status_code == 200 and st_proj(P) == "rascunho", d.text[:200])
         c.execute("UPDATE configuracao SET valor='0' WHERE chave='publicacao.publicar_um_passo'"); c.commit()
         ver("CAMP-149: desligado o um passo, o operador não publica em lote (403)", op.post("/api/projetos/lote", json={"codigos": [P2], "acao": "publicar"}).status_code == 403)
+        c.close()
+        for l in res: print(l)
+    elif modo == "ux62_publicar_conferido":
+        # UX-62 (P1, F001-P0033 "Teatro Piracicaba": o cartão Site dizia "pronto" e mostrava Publicar com 0 de 49 folhas conferidas).
+        # Projeto que ainda não está no site não publica com folha a conferir, por NENHUMA rota (projeto, publicar-tudo, tarefa, lote, fundo):
+        # 409 com o motivo. Projeto já publicado continua podendo atualizar a página (as não conferidas ficam de fora).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth, publicador as _pub, wp as _wpm
+        from app.publicacao import condicoes_projeto
+        from fastapi.testclient import TestClient
+        from app.main import app
+        import app.rotas_projetos as _rp
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F062','Fundo UX62','U62',1)")
+        c.execute("INSERT OR REPLACE INTO configuracao (chave,valor,descricao,sensivel) VALUES ('site.publicar_arquiteto_junto','0','x',0)")
+        def projeto(n, etapa, aprovado, pend, conf, legado=0, status="nao_publicado"):
+            P = f"F062-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F062',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autorizado_site,tainacan_item_id,status_site) VALUES (?,'F062',?,'Teatro',1975,1,?,?)",
+                      (P, n, 6200 + n * 100, status))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8007,'draft','Teatro',?)", (6200 + n * 100, P))
+            lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, aprovado_em) VALUES ('Lote',?,'/x',?,?)",
+                            (P, etapa, "2026-10-01 10:00:00" if aprovado else None)).lastrowid
+            k = 0
+            for rv_, qtd_, lote in (("pendente", pend, lid), ("conferida", conf, lid), ("conferida", legado, None)):
+                for _ in range(qtd_):
+                    k += 1
+                    cod, wid = f"{P}-1975-S01-D{k:05d}", 6200 + n * 100 + k
+                    c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,status_site,tainacan_item_id,lote_id) VALUES (?,?,'S01',?,?,'campvision',?,'rascunho',?,?)",
+                              (cod, P, k, f"Planta {k}", rv_, wid, lote))
+                    c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado) VALUES (?,8013,'draft','f',?)", (wid, cod))
+            return P
+        # A: lote aprovado, mas com folhas a conferir (chegaram depois) e algumas conferidas; B: lote ainda "processando", 0 de 49 conferidas + folhas antigas sem lote
+        A = projeto(1, "revisao", True, 4, 2)
+        B = projeto(2, "processando", False, 49, 0, legado=3)
+        C = projeto(3, "revisao", True, 2, 3, status="no_ar")          # já publicado: atualizar a página continua possível
+        D = projeto(4, "revisao", False, 0, 3)                          # tudo conferido, lote sem aprovar: o Publicar aprova junto (CAMP-148)
+        c.commit()
+        status = []
+        class WPF:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st): status.append((wid, st)); return {"status": st}
+            def gravar_metadados_lote(self, *a, **k): return {"ok": True, "gravados": []}
+            def __getattr__(self, nome): return lambda *a, **k: {}
+        _pub.WP = WPF; _wpm.WP = WPF; _rp.WP = WPF
+        auth.criar_usuario("A", "adm62@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm62@camp.arq.br", "senha": "senha-longa-12345"})
+        st_proj = lambda P_: c.execute("SELECT status_site FROM projeto WHERE codigo=?", (P_,)).fetchone()[0]
+        rev = lambda P_: next(x for x in condicoes_projeto(c, c.execute("SELECT * FROM projeto WHERE codigo=?", (P_,)).fetchone())["condicoes"] if x["id"] == "revisao")
+        for P_, n in ((A, 4), (B, 49)):
+            r_ = rev(P_)
+            ver(f"{P_}: a condição 'revisao' trava e diz quantas faltam conferir ({n})", not r_["ok"] and r_.get("falta_conferir") == n and str(n) in (r_["detalhe"] or ""), str(r_))
+            pg = adm.get(f"/api/projetos/{P_}/publicacao").json()
+            ver(f"{P_}: /publicacao não diz pode_publicar", pg.get("pode_publicar") is False, str(pg.get("pode_publicar")))
+            pl = adm.get(f"/api/projetos/{P_}/publicar/plano").json()
+            ver(f"{P_}: o plano do Publicar tem o bloqueio de conferência", not pl["pode_executar"] and any(b["id"] == "revisao" for b in pl["bloqueios"]), str(pl["bloqueios"]))
+            r1 = adm.post(f"/api/projetos/{P_}/publicar-tudo")
+            ver(f"{P_}: publicar-tudo recusa com 409 e o motivo", r1.status_code == 409 and "confer" in r1.text and bool(r1.json().get("plano")), r1.text[:200])
+            r2 = adm.post(f"/api/projetos/{P_}/publicar-tudo?tarefa=1")
+            ver(f"{P_}: publicar-tudo com tarefa recusa com 409 (nem começa)", r2.status_code == 409, r2.text[:200])
+            r3 = adm.post(f"/api/projetos/{P_}/publicar", json={"acao": "publicar"})
+            ver(f"{P_}: a rota direta /publicar recusa com 409", r3.status_code == 409 and "conferência" in r3.text, r3.text[:200])
+            r4 = adm.post("/api/projetos/lote", json={"codigos": [P_], "acao": "publicar"})
+            ver(f"{P_}: publicar em lote deixa o projeto de fora com o motivo", r4.status_code == 200 and not r4.json()["ok"] and "confer" in str(r4.json()["falhas"]), r4.text[:200])
+            ver(f"{P_}: nada foi publicado", st_proj(P_) != "no_ar")
+        rf = _pub.propagar_status_fundo("F062", "no_ar", "adm62@camp.arq.br")
+        ign = {x["codigo"]: x["motivo"] for x in rf.get("ignorados") or []}
+        ver("publicar o fundo inteiro deixa A e B de fora, com o motivo", A in ign and B in ign and "conferência" in ign[B] and st_proj(A) != "no_ar" and st_proj(B) != "no_ar", str(rf)[:300])
+        pendentes_wid = {6300 + k for k in range(1, 5)} | {6400 + k for k in range(1, 50)}
+        ver("nenhuma folha a conferir foi ao site", not any(w in pendentes_wid for w, s_ in status if s_ == "publish"), str(status[:10]))
+        # o que continua valendo
+        ver("C (já publicado): a conferência que falta não trava a atualização da página", rev(C)["ok"], str(rev(C)))
+        rd = rev(D)
+        ver("D (tudo conferido, lote sem aprovar): marcado aprova_junto", rd.get("aprova_junto") is True, str(rd))
+        r5 = adm.post(f"/api/projetos/{D}/publicar-tudo")
+        ver("D: publicar-tudo publica (aprovação junto, CAMP-148)", r5.status_code == 200 and st_proj(D) == "no_ar", r5.text[:200])
         c.close()
         for l in res: print(l)
     elif modo == "conferir_so_avisos":
@@ -15761,6 +15840,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"um passo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("160b) UX-62: Publicar só com as folhas conferidas e o lote aprovado (todas as rotas; 409 com o motivo)")
+rc, out = rodar("ux62_publicar_conferido", f"{tmp}/ux62.db")
+if rc != 0: ok(False, f"teste ux62_publicar_conferido não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-62: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("161) CAMP-150: conferir só as folhas com aviso (as sem aviso entram conferidas sozinhas), atrás de revisao.conferir_so_avisos")
 rc, out = rodar("conferir_so_avisos", f"{tmp}/conferir_so_avisos.db")

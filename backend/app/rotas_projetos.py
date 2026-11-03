@@ -927,7 +927,7 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
     Três fases, para nunca segurar transação do banco durante a rede: (1) ler e validar; (2) falar com o WordPress;
     (3) gravar o resultado local numa conexão nova e curta. Publicar exige todas as condições de publicacao.condicoes_projeto.
     """
-    from .publicacao import condicoes_projeto, motivos_bloqueio, persistir_resultado
+    from .publicacao import condicoes_projeto, motivos_bloqueio, persistir_resultado, status_recusa
     from .wp import WP
     alvo = {"publicar": "publish", "rascunho": "draft", "tirar_do_ar": "private"}.get(d.acao)
     if not alvo:
@@ -941,9 +941,10 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if not p:
             raise HTTPException(404, "Projeto não existe")
         if alvo == "publish":
-            falta = motivos_bloqueio(condicoes_projeto(con, p))
-            if falta:
-                raise HTTPException(400, "Não dá para publicar ainda: " + " | ".join(falta))
+            cp = condicoes_projeto(con, p)
+            falta = motivos_bloqueio(cp)
+            if falta:                     # UX-62: folha a conferir / lote sem aprovar = 409 com o motivo
+                raise HTTPException(status_recusa(c["id"] for c in cp["condicoes"] if c["bloqueia"] and not c["ok"]), "Não dá para publicar ainda: " + " | ".join(falta))
         if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
             raise HTTPException(403, "Despublicar o que já está publicado exige o admin master")
         alvos = []

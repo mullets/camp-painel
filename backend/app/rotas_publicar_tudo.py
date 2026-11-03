@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from .publicacao import ELEGIVEL_LOCAL
+from .publicacao import ELEGIVEL_LOCAL, status_recusa
 from . import auth, publicacao_guiada
 from .db import connect
 
@@ -195,7 +195,8 @@ def _iniciar_tarefa_travada(codigo: str, u: dict):
                 return JSONResponse(status_code=200, content={"tarefa_id": fim[0], "ja_feito": True})
         pl = publicacao_guiada.plano(con, p)
         if pl["bloqueios"]:                                       # algo que só uma pessoa resolve: nem começa
-            return JSONResponse(status_code=400, content={"detail": "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]), "plano": pl})
+            return JSONResponse(status_code=status_recusa(b["id"] for b in pl["bloqueios"]),   # UX-62: 409 quando falta conferir/aprovar
+                                content={"detail": "Não dá para publicar ainda: " + " | ".join(b["detalhe"] or b["texto"] for b in pl["bloqueios"]), "plano": pl})
         cur = con.execute("INSERT INTO tarefa_publicacao (projeto_codigo, ator, estado, etapa, total) VALUES (?,?, 'rodando', 'dossie', ?)", (codigo, u["email"], pl["folhas_a_enviar"]))
         tid = cur.lastrowid
         con.commit()
@@ -297,7 +298,7 @@ def publicar_tudo(codigo: str, tarefa: int = 0, u: dict = Depends(auth.exige("op
     try:
         return publicacao_guiada.executar(codigo, u)
     except HTTPException as e:
-        if e.status_code != 400:
+        if e.status_code not in (400, 409):          # UX-62: 409 = falta conferir/aprovar (também devolve o plano)
             raise
         con = connect()                                  # 400 = algo que só uma pessoa resolve: devolve o plano para a tela mostrar
         try:
@@ -305,4 +306,4 @@ def publicar_tudo(codigo: str, tarefa: int = 0, u: dict = Depends(auth.exige("op
             pl = publicacao_guiada.plano(con, p) if p else None
         finally:
             con.close()
-        return JSONResponse(status_code=400, content={"detail": e.detail, "plano": pl})
+        return JSONResponse(status_code=e.status_code, content={"detail": e.detail, "plano": pl})
