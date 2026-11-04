@@ -293,6 +293,89 @@ def _ano_lido_depois(con, antigo: str, novo: str) -> bool:
     return True
 
 
+def _versoes(d: dict) -> list[dict]:
+    """Contrato 2.8 (campo OPCIONAL `versoes`): os outros formatos da MESMA prancha (TIFF, DNG, JPG, JPG LIMPO…) que o CAMP Vision
+    juntou numa folha só. Aceita lista de caminhos ou de {arquivo|caminho, arquivo_origem, formato}. Ausente (CAMP Vision antigo) = []."""
+    v = d.get("versoes")
+    if not isinstance(v, list):
+        return []
+    out = []
+    for x in v[:20]:
+        if isinstance(x, str) and x.strip():
+            out.append({"arquivo": x.strip()})
+        elif isinstance(x, dict):
+            orig = x.get("arquivo_origem") or x.get("origem")
+            e = {k: val for k, val in {"arquivo": str(x.get("arquivo") or x.get("caminho") or "").strip(),
+                                       "arquivo_origem": str(orig).strip() if isinstance(orig, str) else "",
+                                       "formato": str(x.get("formato") or x.get("origem_formato") or "").strip()}.items() if val}
+            if e:
+                out.append(e)
+    return out
+
+
+def _hash_hex(v) -> str:
+    h = str(v or "").strip().lower()
+    return h if re.fullmatch(r"[0-9a-f]{8,64}", h) else ""
+
+
+def marcar_repetidas_por_imagem(con, proj: str, novos: list[str], ator: str, lote_id: int) -> list[dict]:
+    """CAMP-DUP-FORMATOS: um código NOVO cuja imagem (md5 igual, ou dHash ≤ 6 bits em qualquer das 4 rotações da prévia) é a de uma
+    folha que o projeto JÁ TEM entra como cópia dela (duplicata_de, 'mesma_folha' / 'exata' pelo md5), com aviso, em vez de folha "limpa".
+    Entre as novas do mesmo lote, fica a de melhor formato (TIFF > DNG > JPG LIMPO > JPG). Só compara com folhas que têm md5/phash.
+    Nada é apagado; "Não é duplicata" na tela Duplicatas desfaz. NÃO faz commit."""
+    from . import folhas_repetidas as fr
+    if not novos:
+        return []
+    raiz = _raiz_prontos(con)
+    q = ",".join("?" * len(novos))
+    guardadas = [(r["codigo"], (r["md5"] or "").lower(), [h for h in [_hash_hex(r["phash"])] if h])
+                 for r in con.execute(f"""SELECT codigo, md5, phash FROM item WHERE projeto_codigo=? AND duplicata_de IS NULL
+                                          AND codigo NOT IN ({q}) AND (COALESCE(md5,'')<>'' OR COALESCE(phash,'')<>'')""", (proj, *novos))]
+    linhas = con.execute(f"SELECT codigo, sequencial, md5, phash, arquivo_origem, arquivo_jpg, pendencias, duplicata_de FROM item WHERE codigo IN ({q})", novos).fetchall()
+    linhas = sorted(linhas, key=lambda r: (*fr.rank_formato(r["arquivo_origem"]), r["sequencial"] or 0))
+    feitas = []
+    for r in linhas:
+        if r["duplicata_de"]:
+            continue
+        md5 = (r["md5"] or "").lower()
+        hs = [h for h in [_hash_hex(r["phash"])] if h]
+        arq = fr.imagem_da_folha(raiz, r) if raiz and raiz.is_dir() else None
+        if arq:
+            try:
+                hs += fr.dhash_rotacoes(arq)
+            except Exception:  # noqa: BLE001 — prévia ilegível: só compara pelo hash do CAMP Vision
+                pass
+        achou = None
+        for cod, m5, gh in guardadas:
+            if md5 and m5 and md5 == m5:
+                achou = (cod, "exata", "mesmo arquivo (md5)")
+                break
+            d = fr.menor_distancia(hs, gh)
+            if d <= fr.LIMIAR_FORTE and (not achou or d < achou[3]):
+                achou = (cod, "mesma_folha", f"imagem igual (dHash {d})", d)
+        if not achou:
+            if md5 or hs:
+                guardadas.append((r["codigo"], md5, hs))
+            continue
+        de = fr.raiz_da_cadeia(con, achou[0])
+        if de == r["codigo"]:
+            continue
+        try:
+            pend = json.loads(r["pendencias"] or "{}") or {}
+        except ValueError:
+            pend = {}
+        aviso = f"mesma prancha que {de.rsplit('-', 1)[-1]} (outro formato ou cópia): entrou como cópia — confira na tela Duplicatas do projeto"
+        if isinstance(pend, dict):
+            pend["sinais"] = [*(pend.get("sinais") or []), aviso]
+        con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=?, pendencias=? WHERE codigo=?",
+                    (de, achou[1], json.dumps(pend, ensure_ascii=False) if isinstance(pend, dict) else r["pendencias"], r["codigo"]))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'duplicata_marcada',?,?)",
+                    (r["codigo"], ator, json.dumps({"original": de, "tipo": achou[1], "motivo": achou[2], "lote": lote_id, "conferida": False,
+                                                    "via": "importação: mesma prancha em outro formato"}, ensure_ascii=False)))
+        feitas.append({"codigo": r["codigo"], "copia_de": de, "motivo": achou[2]})
+    return feitas
+
+
 def importar_lote(con, lote_id: int, ator: str) -> dict:
     """NÃO faz commit (quem chama controla a transação)."""
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -320,6 +403,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         raise HTTPException(400, "O pacote não traz a lista de documentos")
 
     tipos = {n.lower(): n for (n,) in con.execute("SELECT nome FROM tipo_documento")}
+    from .folhas_repetidas import ler_preparo
+    preparo = ler_preparo(pasta)                           # CAMP-DUP-FORMATOS: md5 e dHash que o CAMP Vision calculou (catalogacao/preparo.json)
+    novos_codigos: list[str] = []
     # folhas em que uma pessoa disse "É deste projeto (o CAMP Vision errou)": a leitura nova não traz o aviso de volta
     confirmadas = {r[0] for r in con.execute(SQL_CONFIRMADAS, (proj + "-%",))}
     series = {r[0] for r in con.execute("SELECT codigo FROM serie")}
@@ -385,7 +471,11 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
                 existentes[cod] = con.execute("SELECT codigo, revisao, status_site FROM item WHERE codigo=?", (cod,)).fetchone()
                 recodificadas.append({"de": velha["codigo"], "para": cod})
         ex = existentes.get(cod)
+        md5_ = (str(d.get("md5") or "").strip().lower() or (preparo.get(cod) or {}).get("md5") or "")
+        phash_ = _hash_hex(d.get("hash_perceptual") or d.get("phash")) or _hash_hex((preparo.get(cod) or {}).get("phash"))
         if ex and (ex["revisao"] != "pendente" or ex["status_site"] in ("rascunho", "no_ar")):
+            if md5_ or phash_:                                     # dado de máquina: só preenche o que falta (a defesa compara com ele)
+                con.execute("UPDATE item SET md5=COALESCE(NULLIF(md5,''),?), phash=COALESCE(NULLIF(phash,''),?) WHERE codigo=?", (md5_ or None, phash_ or None, cod))
             ignoradas += 1                                         # já revisada por uma pessoa, ou já no site: não se mexe no que a pessoa fez…
             if ex["status_site"] not in ("rascunho", "no_ar"):     # …mas os CAMINHOS dos arquivos são da máquina: a releitura pode ter movido/renomeado
                 _atualizar_arquivos(con, cod, d)                    # (aviso de 14/10: D00001 conferida apontava para o JPG S01 que não existe mais)
@@ -405,12 +495,16 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             continue
         tipo_lido = str(d.get("tipo_de_desenho") or d.get("tipo") or "").strip()
         arqs = [str(a) for a in (d.get("arquivos") or [])]
+        versoes = _versoes(d)                                       # contrato 2.8 (opcional): os outros formatos da mesma prancha
+        arqs += [v["arquivo"] for v in versoes if v.get("arquivo") and v["arquivo"] not in arqs]
         tif = next((a for a in arqs if a.lower().endswith((".tif", ".tiff"))), None)
         jpg = next((a for a in arqs if a.lower().endswith((".jpg", ".jpeg"))), None)
         tif = tif or _tif_irmao(con, jpg, cod)
         origem = d.get("arquivo_origem")
         if isinstance(origem, list):
             origem = " | ".join(str(o.get("arquivo_origem") if isinstance(o, dict) else o) for o in origem if o)
+        if not str(origem or "").strip() and versoes:
+            origem = " | ".join(v["arquivo_origem"] for v in versoes if v.get("arquivo_origem"))
         ano = str(d.get("ano") or "").strip()
         md = d.get("metadados") if isinstance(d.get("metadados"), dict) else {}
         carimbo_ = d.get("carimbo") if isinstance(d.get("carimbo"), dict) else {}
@@ -427,6 +521,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             # UX-59 (campo OPCIONAL, ainda não vem do CAMP Vision): giro horário que deixaria a prévia de pé quando a orientação é incerta.
             # A conferência só MOSTRA a folha assim (nada é gravado sozinho); quem confere confirma ou gira.
             pend["rotacao_sugerida"] = _rotacao(d.get("rotacao_sugerida"))
+        if versoes:
+            pend["versoes"] = versoes
         if str(d.get("fotografo") or "").strip():                   # 21/10: a revisão mostra "o CAMP Vision leu" ao lado do Fotógrafo
             pend["fotografo_lido"] = str(d["fotografo"]).strip()[:200]
         publicavel = bool(d.get("publicavel"))
@@ -459,6 +555,10 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
         if str(d.get("fotografo") or "").strip():       # contrato 2.2: sem coluna própria, fica junto do que o CV2 leu
             lido["fotografo"] = str(d["fotografo"]).strip()[:200]
         campos["lido_json"] = json.dumps(lido, ensure_ascii=False)
+        if md5_:
+            campos["md5"] = md5_
+        if phash_:
+            campos["phash"] = phash_
         campos["tipos_documento"] = None          # releitura de folha NÃO conferida: vale o tipo lido (um só); conferidas mantêm o que a pessoa marcou
         if ex:
             con.execute("UPDATE item SET " + ", ".join(f"{k}=?" for k in campos) + ", atualizado_em=datetime('now') WHERE codigo=?", (*campos.values(), cod))
@@ -467,6 +567,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             con.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, origem, " + ", ".join(campos) + ") VALUES (?,?,?,?,'campvision'," + ",".join("?" * len(campos)) + ")",
                         (cod, proj, serie, seq, *campos.values()))
             criados += 1
+            if not d.get("duplicata_de"):
+                novos_codigos.append(cod)
         if lido.get("fotografo"):                    # 21/10: o fotógrafo lido vira o valor inicial da folha (nunca sobrescreve o da pessoa)
             from .dados_foto import valor_inicial_fotografo
             valor_inicial_fotografo(con, cod, lido["fotografo"])
@@ -475,6 +577,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     for cod, de, tipo in duplicatas:                               # depois de todas existirem (a referência é de item para item)
         if de != cod and con.execute("SELECT 1 FROM item WHERE codigo=?", (de,)).fetchone() and not _pessoa_decidiu_duplicata(con, cod, de):
             con.execute("UPDATE item SET duplicata_de=?, tipo_duplicata=? WHERE codigo=?", (de, {"quase": "perceptual"}.get(tipo, tipo) if {"quase": "perceptual"}.get(tipo, tipo) in ("exata", "perceptual", "mesma_folha") else None, cod))
+    from .folhas_repetidas import ligado as _repetida_ligada
+    repetidas = marcar_repetidas_por_imagem(con, proj, novos_codigos, ator, lote_id) if novos_codigos and _repetida_ligada(con) else []
     retirados = [{"codigo": r.get("codigo"), "bloqueios": r.get("bloqueios") or []} for r in (pacote.get("retirados") or []) if isinstance(r, dict)]
     registrados = registrar_problemas(con, proj, pacote, problemas, lote_id) + registrar_erros_cv(con, proj, pasta)
     from .problemas import fechar_resolvidos
@@ -490,6 +594,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
               "pacote_sha": assinatura_pacote(pacote)}             # campo novo, opcional: a varredura mantém a importação enquanto o pacote não mudar
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
+    if repetidas:                                                  # campo novo, opcional (CAMP-DUP-FORMATOS): códigos novos que são a mesma prancha de outra folha
+        resumo["repetidas_por_formato"] = repetidas
     if religadas:                                                  # campo novo, opcional: folhas que já estavam no projeto e só ganharam a imagem de volta
         resumo["religadas"] = religadas
     if complemento:
