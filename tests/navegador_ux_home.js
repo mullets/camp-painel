@@ -88,7 +88,7 @@ async function abrirHome(page) {
     await P.waitForTimeout(1500);
     const vis = sel => P.locator(sel).first().isVisible();
     const colunas = await P.evaluate(() => [...document.querySelectorAll('#v-painel .ini-grid > .ini-col')].map(c => [...c.querySelectorAll(':scope > section > .ph h2')].map(h => h.textContent.trim())));
-    chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Ritmo das últimas 2 semanas', 'Visitas ao site']),
+    chk(colunas.length === 2 && JSON.stringify(colunas[0]) === JSON.stringify(['O que fazer agora', 'O caminho do material', 'Folhas conferidas por dia — últimas 2 semanas', 'Visitas ao site'])   /* redesenho §11 (05/11): o ritmo ganhou o título descritivo */,
       `UX-30 desfeito: coluna da esquerda com o ritmo depois do caminho e, 03/11 (pedido do Rafael), as visitas logo abaixo do ritmo: ${JSON.stringify(colunas[0])}`);
     chk(colunas.length === 2 && JSON.stringify(colunas[1]) === JSON.stringify(['Está tudo funcionando?', 'Hoje', 'Qualidade da base', 'Melhorias de hoje', 'Quanto do acervo já está no site']),
       `UX-30 desfeito: coluna da direita completa (saúde, Hoje e as métricas abaixo): ${JSON.stringify(colunas[1])}`);

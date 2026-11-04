@@ -9294,6 +9294,12 @@ def filho(modo):
         cam = {x["id"]: x for x in pa["caminho"]}
         ver("caminho: QNAP 7 pastas; CAMP Vision = 2 em leitura + 1 decisão + 1 erro; 'acumula' no passo de gente com mais trabalho (publicar: 3)",
             cam["qnap"]["q"] == 7 and cam["campvision"]["q"] == 4 and cam["publicar"]["estado"] == "acumula" and cam["aprovar"]["estado"] == "pronto" and "2 prontos · 1 travado" in cam["publicar"]["detalhe"], str(pa["caminho"]))
+        # Redesenho §10 (campos opcionais): a unidade de cada passo (nunca se somam), a próxima ação de gente e o bloqueio de verdade (vermelho)
+        gente_ = [x for x in pa["caminho"] if x["id"] in ("importar", "conferir", "aprovar", "publicar") and x["q"]]
+        ver("Redesenho §10: unidades (estações/pastas/lotes), 'próximo passo' = 1º passo de gente com algo esperando, erro do CAMP Vision = bloqueio",
+            [(x["id"], x["unidade_plural"]) for x in pa["caminho"]] == [("digitalizar", "estações ligadas"), ("qnap", "pastas"), ("campvision", "pastas"), ("importar", "lotes"), ("conferir", "lotes"), ("aprovar", "lotes"), ("publicar", "lotes")]
+            and [x["id"] for x in pa["caminho"] if x["proxima"]] == [gente_[0]["id"]] and cam["campvision"]["bloqueio"] == "1 pasta parou com erro"
+            and cam["campvision"]["rota"] == "filas/processando" and cam["conferir"]["folhas"] == n["folhas_conferir"] and all(x["bloqueio"] is None for x in pa["caminho"] if x["id"] != "campvision"), str(pa["caminho"])[:400])
         fr = {f["codigo"]: f for f in adm.get("/api/fundos/resumo").json() if f.get("codigo")}
         ver("Fundos: só o F072 (restrito, com folhas esperando) aparece como travado — o mesmo número do painel", fr["F072"]["travado"] and not fr["F071"]["travado"] and sum(1 for f in fr.values() if f["travado"]) == n["travados_direitos"])
         ver("/api/hoje usa a mesma regra de 'prontos'", adm.get("/api/hoje").json()["kpis"]["prontos"]["valor"] == n["prontos_publicar"])
