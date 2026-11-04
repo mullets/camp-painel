@@ -1425,7 +1425,7 @@ def filho(modo):
         from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
         from app.publicacao_guiada import plano
         _vcopia = (_P(__file__).parent / "contrato" / "VERSAO").read_text(encoding="utf-8").strip()
-        ver("UX-08: o painel implementa o contrato da cópia literal (2.7 desde 03/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.7" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
+        ver("UX-08: o painel implementa o contrato da cópia literal (2.8 desde 04/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.8" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
@@ -15059,6 +15059,7 @@ def filho(modo):
         tpl = _j.loads((RAIZ / "tests" / "contrato" / "pacote_tainacan.json").read_text(encoding="utf-8"))
         def doc(n, im, extra=None):
             d_ = _j.loads(_j.dumps(tpl["documentos"][0])); rel = previa(n, im)
+            d_.pop("versoes", None)   # o exemplo do contrato 2.8 já traz `versoes`: a folha "sem versões" do teste não pode herdá-las
             d_.update({"codigo": D(n), "projeto_codigo": P, "fundo_codigo": "F001", "preview": rel, "arquivo": rel, "duplicata_de": None, "tipo_duplicata": "",
                        "publicavel": True, "bloqueios": [], "ressalvas": [], "orientacao_incerta": False, "titulo": f"Folha {n}",
                        "arquivos": [f"F001 - AMA Arnaldo Martino/01 - Projetos/{P} - Pavilhão do Brasil/01 - Desenhos e pranchas/JPG/{D(n)}.jpg"],
