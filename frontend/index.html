@@ -1019,33 +1019,71 @@ tr.emp-atrasado td{background:var(--red-soft)}tr.emp-atrasado td:first-child{box
 
 /* H6b · painel inicial: saudação que resume, faixa crítica única, "O que fazer agora", caminho do material, ritmo e a coluna "Está tudo funcionando?" */
 body.na-painel #system-banner{display:none!important}
-.ini-hello{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 14px}
-.ini-hello h1{font-size:24px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
-.ini-hello .sub{color:var(--ink2);margin:4px 0 0;font-size:13.5px}
-.ini-q{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;cursor:pointer;flex:none}
+/* Redesenho §5 (Rafael, 03/11/2026): cabeçalho compacto. Título forte, a contagem real numa frase e a data numa linha discreta; nada de banner */
+.ini-hello{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:0 0 14px}
+.ini-hello-t{min-width:0}
+.ini-hello h1{font-size:var(--fs-num);font-weight:600;margin:0;line-height:1.2;letter-spacing:-.01em;text-wrap:balance}
+.ini-hello .sub{color:var(--ink);margin:4px 0 0;font-size:var(--fs-lg);font-weight:500;line-height:1.35}
+.ini-hello .ini-data{color:var(--ink2);margin:2px 0 0;font-size:var(--fs-md)}
+.ini-q{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;font-size:var(--fs-base);cursor:pointer;flex:none}
+.ini-q:hover{border-color:var(--blue);color:var(--blue)}.ini-q:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .ini-alerta{display:flex;gap:12px;align-items:center;background:var(--red-soft);border:1px solid color-mix(in srgb,var(--red) 35%,transparent);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;flex-wrap:wrap}
 .ini-alerta b{color:var(--red)}.ini-alerta p{margin:0;flex:1 1 300px;min-width:0}
 .ini-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
 .ini-col{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
 .ini-col>.panel{margin:0}
-.ini-kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:1px;background:var(--line2);border-bottom:1px solid var(--line2);border-radius:var(--r) var(--r) 0 0;overflow:hidden}
-.ini-kpi{background:var(--surface);padding:12px 16px;display:grid;gap:2px;align-content:start;text-align:left;border:0;font:inherit;color:inherit;cursor:pointer}
-.ini-kpi:hover{background:var(--surface2)}.ini-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
-.ini-kpi .v{font:500 24px var(--mono);font-variant-numeric:tabular-nums;line-height:1.2}
-.ini-kpi .l{font-weight:500;font-size:var(--fs-md)}.ini-kpi .d{color:var(--ink3);font-size:var(--fs-sm)}
+/* Redesenho §7: faixa de indicadores (cartões do mesmo tamanho; os que abrem uma lista são botões, com a seta →) */
+.ini-kpis{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:12px;margin:0 0 16px}
+.ini-kpi{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 16px;display:grid;gap:2px;align-content:start;text-align:left;font:inherit;color:inherit;min-width:0}
+button.ini-kpi{cursor:pointer}button.ini-kpi:hover{border-color:var(--blue);background:var(--surface2)}button.ini-kpi:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ini-kpi .v{font:600 var(--fs-num)/1.15 var(--mono);font-variant-numeric:tabular-nums}
+.ini-kpi .v.sem{font:600 var(--fs-lg)/1.6 var(--sans);color:var(--ink2)}
+.ini-kpi .l{font-weight:600;font-size:var(--fs-base);line-height:1.3}.ini-kpi .d{color:var(--ink2);font-size:var(--fs-md);line-height:1.35}
+.ini-kpi .ir{position:absolute;top:10px;right:12px;color:var(--ink2);font-size:var(--fs-base)}button.ini-kpi:hover .ir{color:var(--blue)}
 .ini-kpi.warn .v{color:var(--amber)}.ini-kpi.go .v{color:var(--blue)}
-.ini-tg{border-bottom:1px solid var(--line2)}.ini-tg:last-child{border-bottom:0}
-/* UX-21: fila que o papel da pessoa não executa: continua visível (ela tem direito de ver), só esmaecida e no fim da lista */
-.ini-tg.ini-outro,.ini-kpi.ini-outro{opacity:.62}.ini-tg.ini-outro:hover,.ini-tg.ini-outro:focus-within,.ini-kpi.ini-outro:hover,.ini-kpi.ini-outro:focus-visible{opacity:1}.ini-outro-nota{font-size:var(--fs-sm);color:var(--ink3);text-transform:none;letter-spacing:0;font-weight:400}
-.ini-tgh{display:flex;align-items:center;gap:8px;padding:10px 16px 4px;font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}.ini-tgh .ini-ordem{margin-left:auto;text-transform:none;letter-spacing:0;background:none;border:0;cursor:pointer;color:var(--blue);font-family:inherit}   /* UX-27: como o .ini-link do cabeçalho (sem o fundo cinza do navegador, que no escuro dava 2,28) */.ini-tgh .ini-ordem[aria-pressed="true"]{font-weight:600;color:var(--ink)}
-.ini-quem{text-transform:none;letter-spacing:0;font-size:var(--fs-sm);border:1px solid var(--line);border-radius:10px;padding:0 8px}
-.ini-task{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 16px}
-.ini-task[data-ini-linha]{cursor:pointer}.ini-task[data-ini-linha]:hover{background:var(--surface2)}
+.ini-kpi-skel{display:inline-block;width:3ch;height:1em;vertical-align:middle}
+/* UX-21: o que o papel da pessoa não executa continua visível (ela tem direito de ver), só esmaecido e no fim da lista */
+.ini-task.ini-outro,.ini-kpi.ini-outro{opacity:.62}.ini-task.ini-outro:hover,.ini-task.ini-outro:focus-within,.ini-kpi.ini-outro:hover,.ini-kpi.ini-outro:focus-visible{opacity:1}.ini-outro-nota{font-size:var(--fs-sm);color:var(--ink2);text-transform:none;letter-spacing:0;font-weight:400}
+/* Redesenho §8: "O que fazer agora" = filtros com o total real, ordenação, e linhas de tarefa com área de clique grande */
+.ini-fazer>.ph{flex-wrap:wrap;gap:6px 12px}.ini-fazer-hint{flex:none}
+.ini-fila-barra{padding:0 8px;border-bottom:1px solid var(--line)}
+.ini-fila-barra .abas-sit{border:0;margin:0;gap:2px}.ini-fila-barra .abas-sit .btn{padding:8px 8px}.ini-fila-barra .abas-sit .btn b{margin-left:4px;font-variant-numeric:tabular-nums}
+.ini-ordem-sel{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:var(--fs-md);color:var(--ink2)}.ini-ordem-sel select{font-size:var(--fs-md);padding:4px 8px;border:1px solid var(--line);border-radius:var(--r);color:var(--ink)}
+.ini-status{padding:0 16px;font-size:var(--fs-md);color:var(--ink2)}.ini-status:not(:empty){padding:8px 16px;background:var(--blue-soft);color:var(--ink)}
+.ini-task{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:12px 16px;min-height:60px;border-top:1px solid var(--line2);cursor:pointer}
+.ini-lista>.ini-task:first-child,.ini-tgh+.ini-task{border-top:0}
+.ini-task:hover,.ini-task:focus-within{background:var(--surface2)}
 .ini-sev{align-self:stretch;border-radius:2px;background:var(--line)}.ini-sev.r{background:var(--red)}.ini-sev.a{background:var(--amber)}.ini-sev.b{background:var(--blue)}
-.ini-task .t{min-width:0}.ini-task .t b{display:block;font-weight:500;overflow-wrap:anywhere}.ini-task small{color:var(--ink3);font-size:var(--fs-sm2)}.ini-task small.ini-lote,.fila-lote{display:block;color:var(--ink2);font-size:var(--fs-sm2)}.fila-lotes{margin:2px 0;padding-left:18px;color:var(--ink2);font-size:var(--fs-sm2)}
-.ini-mais{display:block;width:100%;padding:6px 16px 12px;color:var(--blue);font:inherit;font-size:var(--fs-md);background:none;border:0;cursor:pointer;text-align:left}
-.ini-vazio{padding:16px;color:var(--ink2)}.ini-vazio b{color:var(--green)}
-.ph .ini-nota{margin-left:auto}.ini-task-bts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.ini-tipos{padding:0 16px 4px;color:var(--ink3);font-size:var(--fs-sm)}
+.ini-task .t{min-width:0;display:grid;gap:2px}.ini-task .t b{display:block;font-weight:600;font-size:var(--fs-base);line-height:1.35;overflow-wrap:anywhere}
+.ini-l1{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.ini-tipo{font-size:var(--fs-sm);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2)}
+.ini-urg{font-weight:600}.ini-motivo{font-size:var(--fs-md);color:var(--red)}
+.ini-task small{color:var(--ink2);font-size:var(--fs-md);line-height:1.4}.ini-task small.ini-lote,.fila-lote{display:block;color:var(--ink2);font-size:var(--fs-sm2)}.fila-lotes{margin:2px 0;padding-left:18px;color:var(--ink2);font-size:var(--fs-sm2)}
+.ini-task-fim{display:flex;align-items:center;justify-content:flex-end;gap:10px 12px;flex-wrap:wrap}
+.ini-espera{font-size:var(--fs-md);color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ini-task-bts{display:flex;gap:6px;align-items:center}
+.btn.ini-bt{border-color:var(--blue);color:var(--blue);background:var(--surface);font-weight:500}.btn.ini-bt:hover{background:var(--blue-soft)}
+.ini-mais-bt{min-width:34px;justify-content:center;font-weight:700;letter-spacing:.05em;color:var(--ink2)}
+.ini-task.ini-base .ini-tipo{color:var(--ink2)}
+.ini-tgh{display:flex;align-items:center;gap:8px;padding:12px 16px 6px;font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);border-top:1px solid var(--line2)}.ini-lista>.ini-tgh:first-child{border-top:0}
+.ini-quem{text-transform:none;letter-spacing:0;font-size:var(--fs-sm);border:1px solid var(--line);border-radius:10px;padding:0 8px}
+.ini-fila-pe{display:flex;flex-wrap:wrap;gap:0 16px;border-top:1px solid var(--line2)}
+.ini-mais{display:inline-block;padding:10px 16px;color:var(--blue);font:inherit;font-size:var(--fs-md);background:none;border:0;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.ini-vazio{padding:16px;color:var(--ink2)}.ini-vazio b{color:var(--green)}.ini-vazio-act{margin-top:8px}
+.ph .ini-nota{margin-left:auto}.ini-tipos{padding:10px 16px 2px;color:var(--ink2);font-size:var(--fs-md)}
+/* Redesenho §6: ajuda curta de cada seção, no lugar da caixa grande */
+.ini-ajuda-sec>summary{list-style:none;font-size:var(--fs-md);text-decoration:underline;text-underline-offset:3px}.ini-ajuda-sec>summary::-webkit-details-marker{display:none}
+.ini-ajuda-txt{left:0;right:auto;min-width:260px;max-width:min(360px,80vw);padding:10px 12px;gap:6px;font-size:var(--fs-md);color:var(--ink)}.ini-ajuda-txt p{margin:0}
+/* Redesenho §9: uma linha por sistema (ícone + nome + estado + uma frase), o que falha primeiro, hora da verificação */
+.ini-srv{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:10px 16px;border-bottom:1px solid var(--line2)}
+.ini-srv-ic{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:var(--fs-sm);margin-top:1px}
+.ini-srv-ic.g{background:var(--green-soft);color:var(--green)}.ini-srv-ic.a{background:var(--amber-soft);color:var(--amber)}.ini-srv-ic.r{background:var(--red-soft);color:var(--red)}.ini-srv-ic.c{background:var(--surface2);color:var(--ink2);border:1px solid var(--line)}
+.ini-srv-t{min-width:0}.ini-srv-l1{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}.ini-srv-l1 b{font-weight:600}
+.ini-srv-t p{margin:2px 0 0;color:var(--ink2);font-size:var(--fs-md);line-height:1.4}.ini-srv-t p.ini-srv-q{font-size:var(--fs-sm)}
+.ini-srv-mais{margin-left:auto;background:none;border:0;padding:0;color:var(--blue);font:inherit;font-size:var(--fs-sm);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.ini-srv-t p.ini-srv-det{font-family:var(--mono);font-size:var(--fs-sm);overflow-wrap:anywhere}
+.ini-saude-rodape{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;font-size:var(--fs-md);color:var(--ink2)}
+.ini-saude-p>.ph{flex-wrap:wrap;gap:6px 10px}#ini-saude-resumo{margin-left:auto}
 .qb-geral{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.qb-geral .v{font:500 28px var(--mono);font-variant-numeric:tabular-nums}
 .qb-seta{font-size:var(--fs-sm2);color:var(--ink3)}.qb-seta.sobe{color:var(--green)}.qb-seta.desce{color:var(--red)}
 .qb-crit{display:grid;gap:6px;margin:10px 0}.qb-crit label{display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:2px 8px;align-items:center;font-size:var(--fs-sm2)}
@@ -1084,7 +1122,12 @@ body.na-painel #system-banner{display:none!important}
 .ini-rodape{display:block;padding:8px 16px 12px;color:var(--blue);font:inherit;font-size:var(--fs-md);background:none;border:0;cursor:pointer;text-align:left}
 .ph .ini-link{margin-left:auto;color:var(--blue);font-size:var(--fs-sm2);background:none;border:0;cursor:pointer;font-family:inherit}
 @media (max-width:1100px){.ini-grid{grid-template-columns:minmax(0,1fr)}.ini-flow{grid-template-columns:repeat(7,minmax(110px,1fr))}}
-@media (max-width:760px){.ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ini-hello h1{font-size:20px}}
+@media (max-width:1100px){.ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.ini-hello h1{font-size:var(--fs-xl)}.ini-hello .sub{font-size:var(--fs-base)}.ini-q{width:44px;height:44px}
+  .ini-kpi{padding:10px 12px}.ini-kpi .v{font-size:var(--fs-xl)}
+  .ini-task{grid-template-columns:4px minmax(0,1fr);padding:12px}.ini-task-fim{grid-column:2;justify-content:space-between}.ini-task-bts .btn{min-height:44px}.ini-mais-bt{min-width:44px}
+  .ini-fila-barra{padding:0 4px}.ini-ordem-sel{margin-left:0;width:100%}.ini-ordem-sel select{flex:1;min-height:44px}.ini-fila-barra .abas-sit .btn{min-height:44px}
+  .ini-saude-rodape .btn,.ini-srv-mais{min-height:44px}.ini-fazer-hint{margin-left:0}}
 @media (prefers-reduced-motion:reduce){.ini-skel{animation:none}}
 /* P2-18 · janela de confirmação padrão (alvo + consequência; digitar o código para o que não tem volta) */
 .conf-ov{position:fixed;inset:0;background:rgba(10,14,20,.55);display:grid;place-items:center;z-index:80;padding:16px}
@@ -2577,7 +2620,13 @@ const AJUDA_PAGINAS={
  editar_projeto:{v:1,serve:'Corrigir os dados do projeto: nome, ano, cidade, cliente, programa.',passos:['Mude só o que tem certeza.','Ano desconhecido: deixe vazio (aparece "sem data").','Salve. Se o projeto já está no site, o painel atualiza a página.'],cores:[],cuidados:'',quem:'Operador e admin.'},
  editar_fundo:{v:1,serve:'Corrigir os dados do fundo: nome, sigla, período e descrição.',passos:['O código F0xx nunca muda.','A sigla vai no nome dos arquivos e nas etiquetas: mude só se ainda não há etiquetas impressas.','Salve. Se o fundo já está no site, o nome é atualizado lá.'],cores:[],cuidados:'',quem:'Admin.'},
  editar_folha:{v:1,serve:'Corrigir os dados de uma folha: título, tipo, escala, número da folha.',passos:['Compare com a imagem e mude só o que tem certeza.','Salve. Se a folha já está no site, o painel atualiza lá.'],cores:[],cuidados:'',quem:'Operador e admin.'},
- painel:{v:2,serve:'É o resumo do dia. Mostra o que precisa de você agora e se as máquinas estão funcionando.',passos:['Olhe a faixa vermelha no alto, se houver. É algo que pode parar o trabalho (por exemplo, o QNAP quase cheio). Clique nela para ver o que fazer.','Em "O que fazer agora", resolva de cima para baixo. Cada linha tem um botão que leva direto ao lugar certo.','"Decidir" vem primeiro: o CAMP Vision achou um projeto parecido com outro e está PARADO esperando você dizer se é o mesmo.','Depois, os lotes para conferir e os projetos prontos para publicar.','Os números do topo são clicáveis e abrem a lista que eles contam.'],cores:[['vermelho','parou ou vai parar: resolva hoje'],['amarelo','precisa de atenção, mas não para nada'],['azul','em andamento ou pronto para o próximo passo'],['verde','tudo certo'],['cinza','desligado ou sem dado (é normal fora do expediente)']],cuidados:'Máquina de captura desligada à noite é normal e não é erro. "Diferenças com o site" não quer dizer que o site está errado: é o painel avisando que os dois não batem; abra para ver.',quem:'Leitura vê tudo e não muda nada · operador importa e confere lotes · admin também decide, aprova, publica e mexe nas configurações.'},
+ painel:{v:3,titulo:'Entenda esta página',serve:'O resumo do dia: o que precisa de você agora e se as máquinas estão funcionando.',
+  /* Redesenho §6 (Rafael, 03/11/2026): o MESMO conteúdo de antes, dividido por assunto, em frases curtas */
+  passos:['Faixa vermelha no alto? Ela avisa algo que pode parar o trabalho (por exemplo, o QNAP quase cheio). Clique nela para ver o que fazer.','Depois, resolva "O que fazer agora" de cima para baixo.','Cada linha tem um botão que leva direto ao lugar certo.'],
+  assuntos:[['Os números do topo',['Cada número conta uma coisa só: decisões, lotes ou folhas.','Os números são clicáveis e abrem a lista que eles contam.','"Sem dados" quer dizer que o painel não conseguiu medir. 0 quer dizer que não há nenhum.']],
+   ['O que fazer agora',['"Urgente" vem primeiro, com o motivo.','"Decidir": o CAMP Vision achou um projeto parecido com outro e está PARADO esperando você dizer se é o mesmo.','Depois, os lotes para conferir e os projetos prontos para publicar.','Os filtros (Conferir, Publicar, Responder, Melhorar a base) mostram um tipo de trabalho só.','"⋯" guarda as ações menores, como "Agora não".']],
+   ['Está tudo funcionando?',['Uma linha por sistema: QNAP, CAMP Vision, site, estações e cópias.','O que falha vem primeiro. "Verificar agora" mede de novo.','Máquina de captura desligada à noite é normal e não é erro.']]],
+  cores:[['vermelho','parou ou vai parar: resolva hoje'],['amarelo','precisa de atenção, mas não para nada'],['azul','em andamento ou pronto para o próximo passo'],['verde','tudo certo'],['cinza','desligado ou sem dado (é normal fora do expediente)']],cuidados:'Máquina de captura desligada à noite é normal e não é erro. "Diferenças com o site" não quer dizer que o site está errado: é o painel avisando que os dois não batem; abra para ver.',quem:'Leitura vê tudo e não muda nada · operador importa e confere lotes · admin também decide, aprova, publica e mexe nas configurações.'},
  decisoes:{v:2,serve:'Aqui ficam as perguntas que o painel faz antes de agir. Há três tipos: projeto parecido (é o mesmo ou é outro?), lote com números repetidos (adicionar ao fim, ignorar ou substituir?), dado diferente do cadastro (qual ano, cidade ou cliente vale?).',passos:['Cada pergunta diz o que aconteceu e mostra os botões das escolhas possíveis.','Comece pelas que dizem "o CAMP Vision está parado esperando": enquanto ninguém responde, aquela pasta não anda.','Clique em "Decidir" para ver o que chegou (nome, ano, cidade, pasta do scanner) e o projeto parecido que já existe.','Se for a mesma obra, clique em "É o mesmo": o material entra no projeto que já existe.','Se for outra obra, clique em "É outro projeto": o painel cria um projeto novo com o próximo número do fundo.','Em até 2 minutos o CAMP Vision recebe a resposta e continua sozinho.'],cores:[['muito parecido','nome praticamente igual: quase sempre é o mesmo'],['parecido','vale abrir o projeto existente e comparar antes de decidir']],cuidados:'Na dúvida, abra o projeto que já existe ("Ver o projeto") e compare as folhas. Juntar dois projetos diferentes dá mais trabalho para desfazer do que criar um novo.',quem:'Todos veem · só admin decide.'},
  filas:{v:1,serve:'Aqui chega cada pasta que o CAMP Vision terminou de ler. Você leva cada uma até o site em 4 passos: importar, conferir, aprovar e publicar.',passos:['Fique na aba "Precisam de você": ela só mostra o que depende de uma pessoa.','Cada linha é um projeto. O botão azul é sempre o próximo passo: Importar folhas, Conferir folhas, Aprovar lote ou Publicar.','"Importar folhas" traz para o painel o que o CAMP Vision leu. Leva poucos segundos.','"Conferir folhas" abre a primeira folha. Confira se está de pé e se o tipo e o título estão certos; corrija e vá para a próxima.','Quando todas estiverem conferidas, um admin aprova o lote e publica.'],cores:[['Importar','chegou, falta trazer'],['Conferir','folhas esperando você olhar'],['Aprovar','falta um admin confirmar'],['Publicar','pronto para ir ao site'],['CAMP Vision lendo','ainda não terminou, espere'],['Erro','o CAMP Vision parou nessa pasta; abra para ver o motivo']],cuidados:'"Varrer QNAP" só serve se você acha que uma pasta enviada não apareceu: o CAMP Vision avisa sozinho. "Nova lista" é para casos raros (pasta antiga, fora do fluxo).',quem:'Operador importa e confere · admin aprova e publica · leitura só vê.'},
  projetos:{v:1,serve:'Lista de todas as obras de todos os arquitetos. Use para achar um projeto, ver o que falta em cada um e fazer ações em vários de uma vez.',passos:['Digite parte do nome, o código (F026-P0233) ou a cidade na busca.','Use os filtros de situação para ver só os publicados, os não publicados ou os que precisam de você.','Clique na linha para abrir o projeto.','Para publicar vários de uma vez, marque as caixas à esquerda e use a barra que aparece.','"Novo projeto" é só para obra que ainda não existe. Antes, procure pelo nome: o projeto pode já estar aqui.'],cores:[['publicado','visível no site'],['rascunho','no site, escondido'],['não publicado','só no painel'],['despublicado','retirado de propósito'],['sem folhas','ainda não digitalizado'],['Conferir 3','3 folhas esperando conferência']],cuidados:'O CAMP Vision cria projetos sozinho quando chega uma pasta nova. Criar à mão é exceção (inventário, material sem digitalização).',quem:'Todos veem · operador cria projeto · admin publica em lote.'},
@@ -2674,13 +2723,14 @@ function montarPaginasAjuda(){const c=document.getElementById('v-caminho-corpo')
 function chaveAjudaAtual(){const on=document.querySelector('section.content.on'),v=on&&on.id&&on.id.startsWith('v-')?on.id.slice(2):null;return v&&AJUDA_PAGINAS[v]?v:null}
 /* UX-31: depois do PRIMEIRO "Entendi" (qualquer página; preferência no servidor, por pessoa), as caixas das outras páginas chegam RECOLHIDAS
    (uma linha "ⓘ Como funciona esta página" que abre no clique). O "?" (reabrirAjuda) continua abrindo a caixa inteira. */
-function ajudaJaFechouAlguma(){return !!AJUDA_VISTAS&&Object.keys(AJUDA_VISTAS).some(x=>x.startsWith('ajuda.')&&AJUDA_VISTAS[x])}
+function ajudaJaFechouAlguma(){return !!AJUDA_VISTAS&&Object.keys(AJUDA_VISTAS).some(x=>x.startsWith('ajuda.')&&x!=='ajuda.painel_uso'&&AJUDA_VISTAS[x])}
 function caixaAjudaHTML(k,novo,recolhida){const vt=new Set(),a=AJUDA_PAGINAS[k],papel=EU&&EU.papel?{admin:'admin',master:'admin',operador:'operador',leitura:'leitura'}[EU.papel]:'';
-  const tit=`<h2 id="aj-t-${k}" tabindex="-1"><span aria-hidden="true">ⓘ</span> Como funciona esta página${novo?' <span class="tag b">Novo</span>':''}</h2>`;
+  const tit=`<h2 id="aj-t-${k}" tabindex="-1"><span aria-hidden="true">ⓘ</span> ${escHtml(a.titulo||'Como funciona esta página')}${novo?' <span class="tag b">Novo</span>':''}</h2>`;
   if(recolhida)return `<details class="ajuda-caixa ajuda-recolhida" role="note" aria-labelledby="aj-t-${k}" data-ajuda="${k}"><summary>${tit}</summary><div class="aj-topo"><span></span><button class="btn sm" data-ajuda-fechar="${k}">Entendi ✕</button></div>${caixaAjudaCorpo(k,a,vt,papel)}</details>`;
   return `<section class="ajuda-caixa" role="note" aria-labelledby="aj-t-${k}" data-ajuda="${k}"><div class="aj-topo">${tit}<button class="btn sm" data-ajuda-fechar="${k}">Entendi ✕</button></div>${caixaAjudaCorpo(k,a,vt,papel)}</section>`}
 function caixaAjudaCorpo(k,a,vt,papel){return `
   <p class="aj-serve"><b>Para que serve:</b> ${comTermos(escHtml(a.serve),vt)}</p><ol class="aj-passos">${a.passos.map(p=>`<li>${comTermos(escHtml(p),vt)}</li>`).join('')}</ol><details class="aj-passos-m"><summary>Ver os passos</summary><ol>${a.passos.map(p=>`<li>${escHtml(p)}</li>`).join('')}</ol></details>
+  ${(a.assuntos||[]).map(([t,fs])=>`<details class="aj-assunto"><summary>${escHtml(t)}</summary><ul>${fs.map(f=>`<li>${comTermos(escHtml(f),vt)}</li>`).join('')}</ul></details>`).join('')}
   ${a.cores.length?`<details><summary>O que significam as cores e etiquetas</summary><ul>${a.cores.map(([e,m])=>`<li><b>${escHtml(e)}</b>: ${escHtml(m)}</li>`).join('')}</ul></details>`:''}
   ${a.cuidados?`<details><summary>Cuidados</summary><p>${escHtml(a.cuidados)}</p></details>`:''}<details><summary>Quem pode</summary><p>${escHtml(a.quem)}${papel?` Você é <b>${escHtml(papel)}</b>.`:''}</p></details>
   <p class="aj-rodape"><button class="lnk" data-ajuda-atalhos>Passo a passo e atalhos de teclado</button> · <button class="lnk" onclick="nav('caminho')">Como o material anda</button> · <button class="lnk" onclick="nav('glossario')">Glossário</button></p>`}
@@ -2691,7 +2741,11 @@ function garantirCaixaAjuda(forcar){
   if(box&&!abrir){box.remove();return}
   const inteira=forcar||AJUDA_FORCADA.has(k);
   if(box&&abrir&&inteira&&box.classList.contains('ajuda-recolhida')){box.remove();box=null}   // UX-31: o "?" troca a linha recolhida pela caixa inteira
-  if(!box&&abrir){const hdr=sec.querySelector(':scope > .hdr');const html=caixaAjudaHTML(k,!!vista&&vista!==versao,!inteira&&ajudaJaFechouAlguma());hdr?hdr.insertAdjacentHTML('afterend',html):sec.insertAdjacentHTML('afterbegin',html)}}
+  /* Redesenho §6: na Home, depois do PRIMEIRO uso (a 1ª vez que a caixa apareceu inteira, ou um "Entendi" de versão anterior) ela chega
+     fechada, numa linha "Entenda esta página", e não reabre sozinha a cada visita; "Entendi" tira até a linha. O "?" abre a explicação inteira. */
+  const usou=k==='painel'&&!window.AJUDA_PAINEL_INTEIRA&&(!!vista||!!AJUDA_VISTAS['ajuda.painel_uso']);   /* na mesma visita (sem recarregar), continua inteira */
+  if(!box&&abrir){const hdr=sec.querySelector(':scope > .hdr'),rec=!inteira&&(ajudaJaFechouAlguma()||usou);const html=caixaAjudaHTML(k,!!vista&&vista!==versao,rec);hdr?hdr.insertAdjacentHTML('afterend',html):sec.insertAdjacentHTML('afterbegin',html);
+    if(k==='painel'&&!rec&&!AJUDA_VISTAS['ajuda.painel_uso']){window.AJUDA_PAINEL_INTEIRA=true;AJUDA_VISTAS['ajuda.painel_uso']='1';guardarVistasLocal();API('/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.painel_uso',valor:'1'})}).catch(()=>{})}}}
 async function carregarPreferenciasAjuda(){const ch='camp.ajuda.vistas.'+((EU&&EU.email)||'');try{const c=JSON.parse(localStorage.getItem(ch)||'null');if(c&&AJUDA_VISTAS===null){AJUDA_VISTAS=c;garantirCaixaAjuda()}}catch(_){}   /* H1: o que já se sabe aparece na hora (sem piscar a caixa) */
   try{AJUDA_VISTAS=await API('/api/auth/eu/preferencias')}catch(_){AJUDA_VISTAS=AJUDA_VISTAS||{}}guardarVistasLocal();garantirCaixaAjuda()}
 function guardarVistasLocal(){try{localStorage.setItem('camp.ajuda.vistas.'+((EU&&EU.email)||''),JSON.stringify(AJUDA_VISTAS||{}))}catch(_){}}
@@ -4669,7 +4723,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-cv-v
   catch(err){b.disabled=false;toast(err.message)}});
 async function passoProximo(acao,lote,code,btn){const fim=!!(btn&&btn.closest('[data-fim-passo]'));   /* CAMP-070: do fim da conferência, fica ali e mostra o passo seguinte */
   if(acao==='importar'){acaoRevisaoLote('importar',lote,code,btn);return}   // CAMP-067: antes não desligava o botão nem dizia "Importando…" (QNAP lento parecia "não fez nada")
-  if(acao==='conferir'){const p=(window.ITENS_PJ||[]).find(x=>emConferencia(x)&&x.revisao==='pendente');if(p){window.REV_CHEIA_PEDIDA=revCheiaPreferida();abrirRevisaoItem(p.codigo)}else toast('Nenhuma folha pendente.');return}   /* UX-10: começa na primeira pendente, em tela cheia (quem saiu dela fica sem) */
+  if(acao==='conferir'){const pend=x=>emConferencia(x)&&x.revisao==='pendente',p=(lote&&(window.ITENS_PJ||[]).find(x=>pend(x)&&String(x.lote_id)===String(lote)))||(window.ITENS_PJ||[]).find(pend);   /* Redesenho §8: com o lote, a 1ª folha pendente DELE */if(p){window.REV_CHEIA_PEDIDA=revCheiaPreferida();abrirRevisaoItem(p.codigo)}else toast('Nenhuma folha pendente.');return}   /* UX-10: começa na primeira pendente, em tela cheia (quem saiu dela fica sem) */
   if(acao==='publicar'){publicarDireto(code);return}
   try{let r={};if(acao==='importar'){r=await API('/api/lotes/'+encodeURIComponent(lote)+'/importar',{method:'POST'});toast(`${r.criadas} folha(s) importada(s)`)}
     else if(acao==='aprovar'){if(!await confirmar({titulo:'Aprovar o lote?',texto:'Confirma que a conferência acabou. Depois disso as folhas ficam travadas para edição (dá para reabrir a revisão).',botao:'Aprovar lote'}))return;if(btn)btn.disabled=true;try{r=await API('/api/lotes/'+encodeURIComponent(lote)+'/aprovar',{method:'POST'})}finally{if(btn&&btn.isConnected)btn.disabled=false}toast('Lote aprovado')}
@@ -5618,7 +5672,7 @@ function pjCarregarQuadros(d,p,folhas){pjGlobais(d,p);setTimeout(()=>{slGuardar(
   const a=window.ACAO_APOS_PROJETO;if(!a||a.codigo!==p.codigo)return;window.ACAO_APOS_PROJETO=null;
   if(a.tipo==='publicar')setTimeout(()=>publicarDireto(p.codigo),600);else if(a.tipo==='folha')setTimeout(()=>abrirRevisaoItem(a.folha),900);
   else if(a.tipo==='cv')setTimeout(()=>{pjAbrirGaveta(p.codigo,'folhas');const c=document.getElementById('pj-cv'),d=c&&(c.querySelector('#cv-sec-retiradas')||[...c.querySelectorAll('details')].find(x=>/Retiradas/.test(x.textContent)));if(d)d.open=true;if(c&&c.scrollIntoView)c.scrollIntoView({behavior:'smooth',block:'start'})},1600);
-  else setTimeout(()=>{if(a.tipo==='revisao'&&(window.ITENS_PJ||[]).some(x=>emConferencia(x)&&x.revisao==='pendente'))passoProximo('conferir',null,p.codigo);else{const e=document.getElementById('pj-cards');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}},1100)},0)}
+  else setTimeout(()=>{if(a.tipo==='revisao'&&(window.ITENS_PJ||[]).some(x=>emConferencia(x)&&x.revisao==='pendente'))passoProximo('conferir',a.lote||null,p.codigo);else{const e=document.getElementById('pj-cards');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}},1100)},0)}
 /* CAMP-124 (P3, 20/10): "34 no painel · 31 no site · números diferentes" aparecia como alerta quando a diferença era só das 3 retidas.
    Agora a conta aparece explicada (neutra quando fecha); amarela só com folha que devia estar no site e não está, ou que só existe no site. */
 function contaSiteHTML(fonte,cs){const P=fonte.documentos_locais??0,S=cs?cs.site:(fonte.documentos_site??0),curto=c=>escHtml(String(c).split('-').pop());
@@ -6156,7 +6210,7 @@ async function atualizarQnapAgora(){
   await recarregarCartaoQnap()}
 // ---------- H6b · painel inicial. Os números e as tarefas vêm PRONTOS do servidor (pendencias.py): a tela só desenha, nunca recalcula ----------
 let PAINEL_ACOES=[],PAINEL_EST=null,PAINEL_QI=null,PAINEL_D=null,PAINEL_REP=null;
-const INI_EXPLICA={decisoes:'Perguntas que esperam um admin: projeto parecido, lote com números repetidos, dado diferente do cadastro. Se é projeto parecido, o CAMP Vision fica parado naquela pasta.',conferir:'Lotes com folhas que ninguém olhou ainda: está de pé? o tipo e o título estão certos?',admin:'Lotes conferidos esperando a aprovação e lotes aprovados esperando a publicação. Só um admin faz.',travados:'Fundos que não podem ir ao site porque a autorização de direitos ainda não foi registrada. Clique para ver quais são.'};
+const INI_EXPLICA={decisoes:'Perguntas que esperam um admin: projeto parecido, lote com números repetidos, dado diferente do cadastro. Se é projeto parecido, o CAMP Vision fica parado naquela pasta.',conferir:'Lotes com folhas que ninguém olhou ainda: está de pé? o tipo e o título estão certos?',admin:'Lotes conferidos esperando a aprovação e lotes aprovados esperando a publicação. Só um admin faz.',importar:'Lotes que o CAMP Vision já leu e cujas folhas ainda não vieram para o painel: o botão Importar traz as folhas.',travados:'Fundos que não podem ir ao site porque a autorização de direitos ainda não foi registrada. Clique para ver quais são.'};
 const INI_QUEM={admin:'admin',operador:'operador','qualquer':'qualquer pessoa'};
 /* UX-21: a fila é de quem? 'admin' pede admin ou master; 'operador' pede operador ou mais; 'qualquer', qualquer um que edita.
    Quem só lê não executa nenhuma: para ele nada é esmaecido (a Home já diz "você pode ver tudo, sem alterar"). */
@@ -6164,39 +6218,95 @@ function iniGrupoMeu(quem){const pp=EU&&EU.papel;if(!pp||pp==='leitura')return t
 function qtd(n,um,varios){return `${fmtN(n)} ${n===1?um:varios}`}
 function juntarE(l){return l.length<2?(l[0]||''):l.slice(0,-1).join(', ')+' e '+l[l.length-1]}
 function fmtHoraCamp(v){const s=String(v||'').trim(),d=new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)?s:s.replace(' ','T')+'Z');return isNaN(d.getTime())?'':new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',minute:'2-digit',hour12:false}).format(d)}
-function saudacaoPainel(d,hj){
-  const h=+new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',hour12:false}).format(new Date()),oi=h<5||h>=18?'Boa noite':h<12?'Bom dia':'Boa tarde';
-  const nome=((EU&&EU.nome)||'').trim().split(/\s+/)[0],vc=nome?`, ${nome}`:'',p=d.pendencias,papel=EU&&EU.papel;
-  const dia=new Date().toLocaleDateString('pt-BR',{timeZone:FUSO_CAMP,weekday:'long',day:'numeric',month:'long'}),Dia=dia[0].toUpperCase()+dia.slice(1);
-  const hoje=hj&&hj.hoje,fo=hoje&&hoje.folhas?hoje.folhas.hoje:0,pu=hoje&&hoje.publicacoes?hoje.publicacoes.hoje:0;
-  const prod=[fo?qtd(fo,'folha trabalhada hoje','folhas trabalhadas hoje'):null,pu?qtd(pu,'publicação','publicações'):null].filter(Boolean).join(', ');
-  if(papel==='leitura')return [`${oi}${vc}. Veja como está o acervo hoje.`,`${Dia} · você pode ver tudo, sem alterar`];
-  if(papel==='operador'){const n=p.material_novo,t=n?`${oi}${vc}. ${qtd(n,'lote espera','lotes esperam')} você.`:`${oi}${vc}. Nenhum lote esperando você agora.`;
-    return [t,`${Dia} · ${p.decisoes_estacao?`${qtd(p.decisoes_estacao,'decisão','decisões')} para um admin: o CAMP Vision está parado nela${p.decisoes_estacao===1?'':'s'}`:prod||'nenhuma folha trabalhada ainda hoje'}`]}
-  const pa=(p.pedem_acao&&p.pedem_acao.precisa_de_voce!=null)?p.pedem_acao.precisa_de_voce:p.precisa_de_voce,g=pa!=null?+pa:(d.tarefas||[]).length;   /* UX-05/UX-19: o número do menu "Precisa de você" (pedem_acao, sem o que você escondeu) */
-  return [g?`${oi}${vc}. ${fmtN(g)} ${g===1?'coisa pede':'coisas pedem'} você.`:`${oi}${vc}. Tudo em dia.`,`${Dia}${prod?' · '+prod:''}`]}
+/* Redesenho §5 (Rafael, 03/11/2026): título forte ("Boa noite, Rafael."), subtítulo com a contagem REAL da fila ("N coisas pedem sua
+   atenção hoje" = fila.pedem_atencao, do servidor: o que é da função da pessoa, fora "Melhorar a base") e a data numa linha discreta. */
+function saudacaoPainel(d){
+  const agora=new Date(),h=+new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',hour12:false}).format(agora),oi=h<5||h>=18?'Boa noite':h<12?'Bom dia':'Boa tarde';
+  const nome=((EU&&EU.nome)||'').trim().split(/\s+/)[0],papel=EU&&EU.papel;
+  const dia=agora.toLocaleDateString('pt-BR',{timeZone:FUSO_CAMP,weekday:'long',day:'numeric',month:'long',year:'numeric'}),data=`${dia[0].toUpperCase()+dia.slice(1)} · ${fmtHoraCamp(agora.toISOString())}`;
+  const t1=`${oi}${nome?', '+nome:''}.`;
+  if(papel==='leitura')return {t1,t2:'Veja como está o acervo hoje: você pode ver tudo, sem alterar.',n:null,data};
+  const f=d.fila,pa=d.pendencias&&d.pendencias.pedem_acao,n=f&&f.pedem_atencao!=null?+f.pedem_atencao:pa&&pa.precisa_de_voce!=null?+pa.precisa_de_voce:null;   /* servidor antigo, sem "fila": o número do menu */
+  return {t1,n,data,t2:n==null?'Não consegui contar agora o que pede a sua atenção.':n?`${fmtN(n)} ${n===1?'coisa pede':'coisas pedem'} sua atenção hoje`:'Nada pede sua atenção agora.'}}
 function iniAlertasHTML(al){return (al||[]).map(a=>`<div class="ini-alerta" role="alert"><span class="ini-dot r" aria-hidden="true" style="margin:0"></span><p><b>${escHtml(a.titulo)}</b> ${escHtml(a.texto)}</p>${a.acao?`<button type="button" class="btn sm" data-ini-rota="${escHtml(a.acao.rota)}">${escHtml(a.acao.rotulo)}</button>`:''}</div>`).join('')}
+/* Redesenho §7: 3 ou 4 indicadores, cada um com UMA unidade (decisões, lotes ou folhas), número grande, rótulo e complemento. Os que contam
+   uma lista são botões que abrem essa lista; "Folhas conferidas hoje" não é lista (só informa). Sem dado: "Sem dados", nunca 0. */
 function iniKpisHTML(p){const admin=EU&&['admin','master'].includes(EU.papel);
-  const k=(cls,v,l,dd,rota,ex)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" title="${escHtml(ex)}"><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span></button>`;
-  /* UX-18: "0 decisões — nenhuma esperando" ocupava o lugar mais nobre da Home: com zero, o cartão nem aparece (Decisões continua no menu) */
-  const ks=[...(+p.decisoes?[k(iniGrupoMeu('admin')?'warn':'warn ini-outro',p.decisoes,p.decisoes===1?'decisão':'decisões',p.decisoes_estacao?'CAMP Vision parado esperando':'esperando resposta','decisoes',INI_EXPLICA.decisoes)]:[]),
+  const k=(cls,v,l,dd,rota,ex)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" title="${escHtml(ex)}" aria-label="${escHtml(`${fmtN(v)} ${l} (${dd}): abrir a lista`)}"><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span><span class="ir" aria-hidden="true">→</span></button>`;
+  /* UX-18: com zero decisões o cartão nem aparece (Decisões continua no menu) */
+  const ks=[...(+p.decisoes?[k(iniGrupoMeu('admin')?'warn':'warn ini-outro',p.decisoes,p.decisoes===1?'decisão pendente':'decisões pendentes',p.decisoes_estacao?'o CAMP Vision está parado esperando':'esperando resposta','decisoes',INI_EXPLICA.decisoes)]:[]),
     k('',p.lotes_conferir,p.lotes_conferir===1?'lote para conferir':'lotes para conferir',`${qtd(p.folhas_conferir,'folha','folhas')} no total`,'filas/conferir',INI_EXPLICA.conferir),
-    ...(admin?[k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'espera um admin':'esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin)]:[])];   // CAMP-146: saiu o número de fundos travados (pelos direitos: direito não definido não trava; restrição registrada aparece no fundo)
-  return `<div class="ini-kpis" style="--n:${ks.length}">${ks.join('')}</div>`}
-/* UX-03: "Ignorar ▾" em todo item do Precisa de você (quem só lê não vê). "Agora não" esconde só para você por 7 dias e volta
-   sozinho; "Não mostrar mais" (só problema) muda para "Não era problema" com autor, data e justificativa (bloqueio exige). */
+    admin?k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'lote espera um admin':'lotes esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin)
+      :k('',p.lotes_importar,p.lotes_importar===1?'lote para importar':'lotes para importar','o CAMP Vision leu; falta trazer as folhas','filas/importar',INI_EXPLICA.importar),
+    `<div class="ini-kpi ini-kpi-info" id="ini-kpi-hoje">${iniKpiHojeHTML(undefined)}</div>`];
+  return `<div class="ini-kpis" style="--n:${ks.length}" role="group" aria-label="Resumo do dia">${ks.join('')}</div>`}
+/* "Folhas conferidas hoje": o último dia do ritmo (/api/painel/ritmo), só se ele for HOJE no horário de São Paulo. Sem resposta = "Sem dados". */
+function iniKpiHojeHTML(R){if(R===undefined)return '<span class="v"><span class="ini-skel ini-kpi-skel"></span></span><span class="l">folhas conferidas hoje</span><span class="d">carregando…</span>';
+  const r=R&&!R.erro&&R.dias||[],u=r[r.length-1],hoje=new Intl.DateTimeFormat('en-CA',{timeZone:FUSO_CAMP}).format(new Date());
+  if(!u||u.dia!==hoje||u.conferidas==null)return `<span class="v sem">Sem dados</span><span class="l">folhas conferidas hoje</span><span class="d">${escHtml(R&&R.erro?'não consegui medir agora':'o ritmo de hoje ainda não foi medido')}</span>`;
+  const n=+u.conferidas,m=+R.media_conferidas||0;
+  return `<span class="v">${fmtN(n)}</span><span class="l">${n===1?'folha conferida hoje':'folhas conferidas hoje'}</span><span class="d">${m?`média de ${escHtml(String(m).replace('.',','))} por dia de trabalho nas últimas 2 semanas`:'nenhuma nas últimas 2 semanas'}</span>`}
+/* UX-03 + Redesenho §8: as ações menores de cada linha ficam no menu "⋯" (quem só lê não vê). "Agora não" esconde só para você por 7 dias e
+   volta sozinho; numa linha Urgente pede o motivo (fica no Histórico). "Não mostrar mais" (só problema) fecha como "não era problema". */
 function iniVoltaEm(){return new Date(Date.now()+7*864e5).toLocaleDateString('pt-BR',{timeZone:FUSO_CAMP,day:'2-digit',month:'2-digit'})}
 function iniIgnorarHTML(i,k){const volta=iniVoltaEm();
-  return `<details class="mais-menu ini-ignorar"><summary class="btn sm" aria-haspopup="menu" title="Tirar este item da sua lista">Ignorar ▾</summary><div class="mais-lista" role="menu"><button type="button" class="btn" role="menuitem" data-ini-adiar="${escHtml(i.adiar)}" data-ini-k="${k}" title="${escHtml(`Some só para você e volta sozinho em ${volta} (7 dias), se ainda precisar`)}">Agora não · esconder por 7 dias</button>${i.ignorar&&pode('problema.resolver')?`<button type="button" class="btn" role="menuitem" data-ini-naoera="${k}" title="Fecha o problema como não era problema, com o seu nome e a data">Não mostrar mais (não era problema)</button>`:''}${i.dispensar&&EU&&['operador','admin','master'].includes(EU.papel)?`<button type="button" class="btn" role="menuitem" data-ini-dispensar="${k}" title="${escHtml(UX35_DISPENSAR)}">Dispensar este lote (para todos)</button>`:''}${i.apagar&&EU&&['admin','master'].includes(EU.papel)?`<button type="button" class="btn" role="menuitem" data-ini-apagar="${k}" title="${escHtml(APAGAR_LOTE_TXT)}">Apagar este lote (sem folhas)</button>`:''}</div></details>`}
-/* UX-09: idade visível e ordenável. Nos grupos de lotes, "mais parado primeiro" pede ao servidor a mesma lista ordenada pela idade na etapa
-   (o navegador só lembra a escolha; nunca reordena sozinho o que veio). */
-const INI_ORDENA=['conferir','aprovar_publicar','problemas'];
-function iniOrdem(){try{return localStorage.getItem('camp.ini.ordem')||'padrao'}catch(_){return 'padrao'}}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-ordem]');if(!b)return;e.stopPropagation();const v=iniOrdem()==='parado'?'padrao':'parado';try{localStorage.setItem('camp.ini.ordem',v)}catch(_){}carregarPainel()},true);
-function iniTarefasHTML(d){const g0=d.tarefas||[],gs=[...g0.filter(g=>iniGrupoMeu(g.quem)),...g0.filter(g=>!iniGrupoMeu(g.quem))];PAINEL_ACOES=[];   /* UX-21: as filas da pessoa primeiro; as dos outros papéis, esmaecidas, no fim */
-  if(!gs.length)return `<div class="ini-vazio"><b>✔ Tudo em dia.</b> Nenhuma decisão, lote ou pedido esperando.${EU&&EU.papel!=='leitura'?' Quer adiantar trabalho? Veja os projetos que ainda não têm folhas digitalizadas.<div class="act" style="margin-top:8px"><button type="button" class="btn sm" data-ini-rota="projetos/sem_folhas">Ver projetos sem folhas</button></div>':''}</div>`;
-  return gs.map(g=>{const meu=iniGrupoMeu(g.quem);return `<div class="ini-tg${meu?'':' ini-outro'}" data-ini-grupo="${escHtml(g.id)}"${meu?'':` data-ini-outro="${escHtml(g.quem)}"`}><div class="ini-tgh">${escHtml(g.titulo)} <span class="ini-quem">${escHtml(INI_QUEM[g.quem]||g.quem)}</span>${INI_ORDENA.includes(g.id)&&g.total>1?`<button type="button" class="ini-link ini-ordem" data-ini-ordem aria-pressed="${iniOrdem()==='parado'}" title="Ordenar pelo tempo parado na mesma etapa">mais parado primeiro</button>`:''}${meu?'':` <span class="ini-outro-nota">você acompanha; quem faz é ${g.quem==='admin'?'um admin':'um operador'}</span>`}</div>${g.tipos?`<div class="ini-tipos">${escHtml(g.tipos.map(x=>`${fmtN(x.n)} ${x.rotulo}`).join(' · '))}</div>`:''}${g.itens.map(i=>{const k=PAINEL_ACOES.push(i)-1;
-    return `<div class="ini-task"${i.acao?'':` data-ini-linha="${k}"`}><span class="ini-sev ${escHtml(i.sev)}"></span><div class="t"><b>${escHtml(i.titulo)}</b>${i.lote?`<small class="ini-lote">${escHtml(i.lote)}</small>`:''}<small>${i.codigo?`<span class="code">${escHtml(i.codigo)}</span> · `:''}${escHtml(i.detalhe||'')}</small></div>${i.acao?`<span class="ini-task-bts">${i.adiar&&EU&&EU.papel!=='leitura'?iniIgnorarHTML(i,k):''}<button type="button" class="btn sm${i.sev==='r'&&i.acao.rotulo!=='Ver'?' pri':''}" data-ini-acao="${k}">${escHtml(i.acao.rotulo)}</button></span>`:''}</div>`}).join('')}${g.total>g.itens.length?`<button type="button" class="ini-mais" data-ini-rota="${escHtml(g.ver_todos.rota)}">${escHtml(g.ver_todos.rotulo)} →</button>`:''}</div>`}).join('')}
+  return `<details class="mais-menu ini-ignorar"><summary class="btn sm ini-mais-bt" aria-haspopup="menu" aria-label="${escHtml('Mais ações: '+i.titulo)}" title="Mais ações (Agora não…)"><span aria-hidden="true">⋯</span></summary><div class="mais-lista" role="menu"><button type="button" class="btn" role="menuitem" data-ini-adiar="${escHtml(i.adiar)}" data-ini-k="${k}" title="${escHtml(`Some só para você e volta sozinho em ${volta} (7 dias), se ainda precisar${i.urgente?'. É urgente: diga o motivo':''}`)}">Agora não · esconder por 7 dias</button>${i.ignorar&&pode('problema.resolver')?`<button type="button" class="btn" role="menuitem" data-ini-naoera="${k}" title="Fecha o problema como não era problema, com o seu nome e a data">Não mostrar mais (não era problema)</button>`:''}${i.dispensar&&EU&&['operador','admin','master'].includes(EU.papel)?`<button type="button" class="btn" role="menuitem" data-ini-dispensar="${k}" title="${escHtml(UX35_DISPENSAR)}">Dispensar este lote (para todos)</button>`:''}${i.apagar&&EU&&['admin','master'].includes(EU.papel)?`<button type="button" class="btn perigo-txt" role="menuitem" data-ini-apagar="${k}" title="${escHtml(APAGAR_LOTE_TXT)}">Apagar este lote (sem folhas)</button>`:''}</div></details>`}
+/* Redesenho §8: a fila "O que fazer agora" numa lista só. A ORDEM vem do servidor (?fila=urgente|antigo|recente|tipo; a regra está em
+   fila.regra e em docs/vocabulario.md); o navegador só filtra pelo tipo (os números dos filtros também vêm do servidor) e lembra a escolha. */
+const INI_ORDENS=[['urgente','Mais urgente primeiro'],['antigo','Mais antigo primeiro'],['recente','Mais recente primeiro'],['tipo','Por tipo']];
+const INI_LIMITE=8;let INI_FILTRO='todas',INI_VER_TODOS=false,INI_ACAO_EM=0,INI_PENDENTE=null,INI_STATUS=null;
+function iniOrdem(){try{const v=localStorage.getItem('camp.ini.fila');if(INI_ORDENS.some(o=>o[0]===v))return v;return localStorage.getItem('camp.ini.ordem')==='parado'?'antigo':'urgente'}catch(_){return 'urgente'}}   /* UX-09: quem tinha "mais parado primeiro" fica com "mais antigo primeiro" */
+function iniEsperaTxt(i){const h=i.espera_h;if(h==null||isNaN(+h))return '';const pre=i.parado_h!=null?'parado':'esperando';   /* UX-09: lote = "parado há" (tempo na mesma etapa) */
+  return +h<1?`${pre} há menos de 1 h`:+h<48?`${pre} há ${Math.round(+h)} h`:`${pre} há ${Math.round(+h/24)} dias`}
+function iniOrdemHTML(f){const ordem=(f&&f.ordem)||iniOrdem();return `<label class="ini-ordem-sel">Ordenar <select id="ini-ordem" aria-label="Ordenar a fila">${INI_ORDENS.map(([v,t])=>`<option value="${v}"${v===ordem?' selected':''}>${t}</option>`).join('')}</select></label>`}
+function iniFilaItens(){const f=PAINEL_D&&PAINEL_D.fila;return f?f.itens||[]:[]}
+function iniLinhaHTML(i,k,primeira){const a=i.acao,leitura=EU&&EU.papel==='leitura',esp=iniEsperaTxt(i);
+  const urg=i.urgente?`<span class="tag r ini-urg"><span aria-hidden="true">!</span> Urgente</span><span class="ini-motivo">${escHtml(i.urgente)}</span>`:'';
+  const outro=i.meu===false?`<span class="ini-outro-nota">você acompanha; quem faz é ${i.quem==='admin'?'um admin':'um operador'}</span>`:'';
+  const bt=a?`<button type="button" class="btn sm ${primeira?'pri':'ini-bt'}" data-ini-acao="${k}">${escHtml(a.rotulo)}</button>`:'';
+  return `<div class="ini-task${i.meu===false?' ini-outro':''}${i.nivel===2?' ini-base':''}" data-ini-linha="${k}" data-ini-grupo="${escHtml(i.grupo)}" data-ini-cat="${escHtml(i.filtro)}"${i.urgente?' data-ini-urgente=""':''}><span class="ini-sev ${i.nivel===2?'':escHtml(i.sev)}" aria-hidden="true"></span><div class="t"><div class="ini-l1"><span class="ini-tipo">${escHtml(i.tipo_tarefa||'')}</span>${urg}${outro}</div><b>${escHtml(i.titulo)}</b>${i.lote?`<small class="ini-lote">${escHtml(i.lote)}</small>`:''}${i.codigo||i.contexto?`<small class="ini-ctx">${i.codigo?`<span class="code">${escHtml(i.codigo)}</span>${i.contexto?' · ':''}`:''}${escHtml(i.contexto||'')}</small>`:''}</div><div class="ini-task-fim">${esp?`<span class="ini-espera">${escHtml(esp)}</span>`:''}<span class="ini-task-bts">${bt}${a&&!leitura&&i.adiar?iniIgnorarHTML(i,k):''}</span></div></div>`}
+function iniFiltrosHTML(f){const ativo=f.filtros.find(x=>x.id===INI_FILTRO)?INI_FILTRO:'todas',sempre=['todas','conferir','publicar','responder','base'];   /* os 5 do plano sempre (0 é 0); Decidir e Resolver só quando há */
+  return `<div class="abas-sit ini-filtros" role="group" aria-label="Filtrar a fila por tipo de trabalho">${f.filtros.filter(x=>sempre.includes(x.id)||x.n).map(x=>`<button type="button" class="btn sm" data-ini-filtro="${x.id}" aria-pressed="${x.id===ativo}">${escHtml(x.rotulo)} <b>${fmtN(x.n)}</b></button>`).join('')}</div>`}
+function iniTarefasHTML(d){PAINEL_ACOES=[];const f=d.fila;
+  if(!f)return '<div class="ini-vazio" role="alert">Não consegui montar a fila agora. <button type="button" class="btn sm" onclick="carregarPainel()">Tentar de novo</button></div>';
+  if(!f.itens.length)return `<div class="ini-vazio"><b>✔ Tudo em dia.</b> Nenhuma decisão, lote ou pedido esperando.${EU&&EU.papel!=='leitura'?' Quer adiantar trabalho? Veja os projetos que ainda não têm folhas digitalizadas.<div class="act ini-vazio-act"><button type="button" class="btn sm" data-ini-rota="projetos/sem_folhas">Ver projetos sem folhas</button></div>':''}</div>`;
+  if(!f.filtros.some(x=>x.id===INI_FILTRO&&(x.n||x.id==='todas')))INI_FILTRO='todas';
+  const st=INI_STATUS&&Date.now()-INI_STATUS.em<10000?INI_STATUS:null;
+  return `<div class="ini-fila-barra">${iniFiltrosHTML(f)}</div>
+  <div class="ini-status" id="ini-fila-status" role="status" aria-live="polite">${st?escHtml(st.txt):''}</div>
+  <div class="ini-lista" id="ini-lista">${iniListaHTML(f)}</div>`}
+function iniListaHTML(f){const its=iniFilaItens(),vis=its.filter(i=>INI_FILTRO==='todas'||i.filtro===INI_FILTRO),mostrar=INI_VER_TODOS?vis:vis.slice(0,INI_LIMITE);PAINEL_ACOES=[];
+  const nomeF=Object.fromEntries((f.filtros||[]).map(x=>[x.id,x]));let ult=null,h='';
+  mostrar.forEach((i,ix)=>{const k=PAINEL_ACOES.push(i)-1;
+    if(f.ordem==='tipo'&&i.filtro!==ult){ult=i.filtro;const fx=nomeF[i.filtro];h+=`<div class="ini-tgh" data-ini-grupo-titulo="${escHtml(i.filtro)}">${escHtml(fx?fx.rotulo:i.filtro)} <span class="ini-quem">${fmtN(fx?fx.n:0)}</span></div>`}
+    h+=iniLinhaHTML(i,k,ix===0&&i.meu!==false&&!!i.acao)});
+  if(!vis.length)h=`<div class="ini-vazio">Nada em “${escHtml((nomeF[INI_FILTRO]||{}).rotulo||'')}” agora.</div>`;
+  const tb=(f.grupos||{}).base;if(INI_FILTRO==='base'&&tb&&tb.tipos)h=`<div class="ini-tipos">${escHtml(tb.tipos.map(x=>`${fmtN(x.n)} ${x.rotulo}`).join(' · '))}</div>`+h;   /* quanto falta de cada tipo */
+  /* "Ver todos os itens da fila": nada é truncado sem aviso. "Melhorar a base" manda só a amostra do dia (o resto fica em Qualidade da base) */
+  const pe=[];if(vis.length>INI_LIMITE)pe.push(`<button type="button" class="ini-mais" data-ini-vertodos aria-expanded="${INI_VER_TODOS}">${INI_VER_TODOS?'Mostrar só os primeiros':`Ver todos os itens da fila (${fmtN(vis.length)})`}</button>`);
+  const G=f.grupos||{},links=Object.entries(G).filter(([id,g])=>(INI_FILTRO==='todas'?g.total>g.enviadas:(iniFilaItens().find(x=>x.grupo===id)||{}).filtro===INI_FILTRO)&&g.rota&&g.rotulo);
+  links.forEach(([id,g])=>pe.push(`<button type="button" class="ini-mais" data-ini-rota="${escHtml(g.rota)}">${g.total>g.enviadas&&id==='base'?`Mais ${fmtN(g.total-g.enviadas)} para melhorar a base · `:''}${escHtml(g.rotulo)} →</button>`));
+  return h+(pe.length?`<div class="ini-fila-pe">${pe.join('')}</div>`:'')}
+function iniListaDesenhar(){const el=document.getElementById('ini-lista'),f=PAINEL_D&&PAINEL_D.fila;if(!el||!f)return;el.innerHTML=iniListaHTML(f);
+  document.querySelectorAll('[data-ini-filtro]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.iniFiltro===INI_FILTRO)))}
+function iniStatus(txt){INI_STATUS={txt,em:Date.now()};const el=document.getElementById('ini-fila-status');if(el)el.textContent=txt}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-filtro],[data-ini-vertodos]');if(!b)return;
+  if(b.hasAttribute('data-ini-vertodos'))INI_VER_TODOS=!INI_VER_TODOS;else{INI_FILTRO=b.dataset.iniFiltro;INI_VER_TODOS=false}iniListaDesenhar();
+  if(b.hasAttribute('data-ini-filtro'))document.querySelector(`[data-ini-filtro="${INI_FILTRO}"]`)?.focus()});
+/* a ordem é do servidor: troca só a lista (o resto da Home fica parado), com carregando, erro e "Tentar de novo" */
+async function iniReordenar(v){try{localStorage.setItem('camp.ini.fila',v)}catch(_){}const el=document.getElementById('ini-lista');if(!el)return;
+  el.setAttribute('aria-busy','true');el.innerHTML=Array.from({length:3},()=>'<div class="ini-hskel"><span class="ini-skel"></span></div>').join('');
+  try{const d=await API('/api/painel?fila='+encodeURIComponent(v));PAINEL_D=d;atualizarContadoresMenu(d.pendencias);el.removeAttribute('aria-busy');const t=document.getElementById('ini-tarefas');if(t)t.innerHTML=iniTarefasHTML(d);document.getElementById('ini-ordem')?.focus()}
+  catch(err){el.removeAttribute('aria-busy');el.innerHTML=`<div class="ini-vazio" role="alert">Não consegui reordenar a lista: ${escHtml(err.message)} <button type="button" class="btn sm" onclick="iniReordenar('${escHtml(v)}')">Tentar de novo</button></div>`}}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='ini-ordem')iniReordenar(e.target.value)});
+/* A lista não se mexe enquanto a pessoa mexe nela (menu "⋯" aberto, ou o mouse/foco na lista sem ter clicado numa ação agora há pouco):
+   uma atualização que chegue nessa hora espera, com o aviso "Há novidades na lista" e o botão "Atualizar a lista". */
+function iniInteragindo(){const L=document.getElementById('ini-tarefas');if(!L)return false;if(L.querySelector('details[open]'))return true;
+  return Date.now()-INI_ACAO_EM>5000&&(L.matches(':hover')||L.contains(document.activeElement)&&document.activeElement!==document.body)}
+document.addEventListener('click',e=>{if(e.target.closest('#ini-tarefas [data-ini-acao],#ini-tarefas .mais-lista button,#ini-tarefas [data-ini-linha]'))INI_ACAO_EM=Date.now()},true);
+function iniAvisarPendente(){const el=document.getElementById('ini-fila-status');if(el)el.innerHTML='Há novidades na lista. <button type="button" class="btn sm" data-ini-aplicar>Atualizar a lista</button>'}
+document.addEventListener('click',e=>{if(e.target.closest('[data-ini-aplicar]')){INI_PENDENTE=null;INI_ACAO_EM=Date.now();carregarPainel()}});
+document.addEventListener('mouseleave',e=>{if(INI_PENDENTE&&e.target&&e.target.id==='ini-tarefas'&&!iniInteragindo()){INI_PENDENTE=null;carregarPainel()}},true);
 function iniEstacoesCaptura(e){if(e&&e.estacoes_resumo)return e.estacoes_resumo;/* UX-05: a mesma conta do topo */const m=((e&&e.maquinas)||[]).filter(x=>['foto','contex','universal'].includes(x.tipo));return {total:m.length,ligadas:m.filter(x=>x.online||x.app_online).length,nomes:m.filter(x=>x.online||x.app_online).map(x=>x.nome.replace(/^Estação /,''))}}
 function iniCaminhoHTML(c,e){return `<div class="ini-flow">${c.map((p,i)=>{let q=p.q==null?'—':fmtN(p.q),det=p.detalhe;
     if(p.id==='digitalizar'){if(!e){q='…';det='verificando…'}else{const s=iniEstacoesCaptura(e);q=fmtN(s.ligadas);det=s.ligadas?`de ${s.total} estações ligadas`:'estações desligadas'}}
@@ -6208,38 +6318,76 @@ function iniRitmoHTML(R,p){if(!R)return '<span class="ini-skel" style="height:15
   const hoje=v[v.length-1],media=+R.media_conferidas||0,falta=R.folhas_a_conferir,zera=R.dias_para_zerar,mf=String(media).replace('.',',');
   const frase=!media?'Nenhuma folha conferida nas últimas 2 semanas.':`Média de ${mf} ${media===1?'folha conferida':'folhas conferidas'} por dia de trabalho`+(falta?` · no ritmo atual, ${falta===1?'a folha':`as ${fmtN(falta)} folhas`} de ${qtd(p.lotes_conferir,'lote','lotes')} ficam conferidas em cerca de ${qtd(Math.max(1,zera||1),'dia de trabalho','dias de trabalho')}.`:'.');
   return `<svg viewBox="0 0 640 150" role="img" aria-label="Folhas conferidas por dia nas últimas 2 semanas; hoje ${hoje}"><line x1="34" y1="20" x2="630" y2="20"/><line x1="34" y1="65" x2="630" y2="65"/><line x1="34" y1="110" x2="630" y2="110"/><text x="28" y="24" text-anchor="end">${topo}</text><text x="28" y="69" text-anchor="end">${topo/2}</text><text x="28" y="114" text-anchor="end">0</text>${barras}${hoje?`<text x="${(x0+(v.length-1)*w+w/2).toFixed(1)}" y="${(y0-hoje*k-5).toFixed(1)}" text-anchor="middle">${hoje}</text>`:''}<text x="40" y="140">${dm(r[0].dia)}</text><text x="335" y="140" text-anchor="middle">${dm(r[Math.floor(r.length/2)].dia)}</text><text x="628" y="140" text-anchor="end">hoje</text></svg><p class="ini-nota">${escHtml(frase)}</p>`}
-function iniSaudeHTML(e,qi,p){
-  if(!e)return Array.from({length:5},()=>'<div class="ini-hskel"><span class="ini-skel"></span></div>').join('');
-  const L=[],admin=EU&&['admin','master'].includes(EU.papel),row=(c,t,txt,barra)=>L.push(`<div class="ini-hrow"><span class="ini-dot ${c}"></span><div><b>${escHtml(t)}</b><p>${txt}</p>${barra!=null?`<div class="ini-bar ${c==='r'?'r':c==='a'?'a':''}"><i style="width:${Math.max(0,Math.min(100,+barra))}%"></i></div>`:''}</div></div>`);
-  const q=e.qnap||{},niv=(qi&&qi.nivel_espaco)||q.nivel_espaco;
-  if(q.montado===false)row('r','QNAP desconectado deste servidor','O painel não consegue ler os lotes nem o espaço. Veja em Máquinas como conectar.');
-  else if(q.total_gb){const pct=(qi&&qi.livre_pct!=null)?qi.livre_pct:q.livre_pct,dias=qi&&qi.dias_ate_encher;row(niv==='critico'?'r':niv==='aviso'?'a':'g',`QNAP: ${String(pct??'—').replace('.',',')}% livre`,escHtml(`${fmtN(q.livre_gb)} GB de ${fmtN(q.total_gb)} GB.${dias?` No ritmo da semana, enche em ~${qtd(dias,'dia','dias')}.`:''}`),q.uso_pct)}
-  else row('','QNAP sem medida de espaço','A última coleta não trouxe o espaço livre.');
+/* Redesenho §9 ("Está tudo funcionando?"): UMA linha por sistema (QNAP, CAMP Vision, site público, estações de captura, cópias das imagens,
+   cópia de segurança do painel): nome + estado (normal · atenção · crítico · não medido, com ícone e cor) + uma frase; os detalhes técnicos
+   abrem em "detalhes". O que falha vem primeiro. O nível de QNAP, site, CAMP Vision, cópias e backup é o MESMO do topo (estado_geral, uma
+   regra só); nada aparece "em dia" sem a data da última cópia certa. Dados reais: /api/estacoes, /api/qnap e /api/replica. */
+const INI_SRV_NIVEL={r:['crítico','✕'],a:['atenção','!'],c:['não medido','?'],g:['normal','✓']},INI_SRV_ORDEM={r:0,a:1,c:2,g:3};
+let PAINEL_EST_EM=null;
+function iniQuando(s){if(!s)return '';const t=String(s).replace('T',' ');const hoje=new Intl.DateTimeFormat('en-CA',{timeZone:FUSO_CAMP}).format(new Date());
+  const d=new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(t)?t.replace(' ','T'):t.replace(' ','T')+'Z');if(isNaN(d.getTime()))return '';
+  return new Intl.DateTimeFormat('en-CA',{timeZone:FUSO_CAMP}).format(d)===hoje?`hoje às ${fmtHoraCamp(t)}`:fmtDataHora(t)}
+function iniSaudeLinhas(e,qi,p){const L=[],admin=EU&&['admin','master'].includes(EU.papel),G=(e.estado_geral&&e.estado_geral.partes)||[];
+  const parte=id=>G.find(x=>x.id===id),cor=(x,sem)=>!x||!x.nivel?sem:x.nivel==='critico'?'r':x.nivel==='atencao'?'a':'g';
+  const add=(id,nome,c,frase,det,quando)=>L.push({id,nome,c,frase,det,quando});
+  // QNAP: desconectado diz o impacto (importação e cópias); conectado, o espaço livre da última coleta
+  const q=e.qnap||{},niv=(qi&&qi.nivel_espaco)||q.nivel_espaco,pct=(qi&&qi.livre_pct!=null)?qi.livre_pct:q.livre_pct,dias=(qi&&qi.dias_ate_encher)||q.dias_ate_encher;
+  if(q.montado===false)add('qnap','QNAP','r','QNAP desconectado deste servidor: o painel não lê os lotes novos nem o espaço, a importação para e as imagens não são copiadas. Veja em Máquinas como conectar.',
+    admin?`Pasta esperada: ${q.raiz||'—'}${q.motivo?` (${q.motivo==='nao_existe'?'não existe neste servidor':q.motivo})`:''}.`:'',q.coletado_em);
+  else if(q.total_gb)add('qnap','QNAP',cor(parte('qnap'),niv==='critico'?'r':niv==='aviso'?'a':'g'),`${String(pct??'—').replace('.',',')}% livre: ${fmtN(q.livre_gb)} GB de ${fmtN(q.total_gb)} GB.${dias?` No ritmo da semana, enche em ~${qtd(dias,'dia','dias')}.`:''}`,'',q.coletado_em);
+  else add('qnap','QNAP','c','QNAP sem medida de espaço: a última coleta não trouxe o espaço livre.','',q.coletado_em);
+  // CAMP Vision: o sinal que ele manda a cada minuto, e o que está fazendo
   const cv=(e.maquinas||[]).find(m=>m.tipo==='processamento'),idade=cv?cv.app_heartbeat_idade_segundos:null;
   const cvp=[p.lotes_lendo?`Lendo ${qtd(p.lotes_lendo,'pasta','pastas')}.`:null,p.lotes_na_fila?`${qtd(p.lotes_na_fila,'pasta na fila','pastas na fila')}.`:null,p.decisoes_estacao?`Parado em ${qtd(p.decisoes_estacao,'decisão','decisões')}.`:null,p.lotes_erro?`${qtd(p.lotes_erro,'pasta parou','pastas pararam')} com erro.`:null].filter(Boolean).join(' ');
-  if(idade==null)row('','CAMP Vision ainda não deu sinal',escHtml('Quando ligado, ele avisa o painel a cada minuto. '+cvp));
-  else if(idade>3600)row('r',`CAMP Vision sem sinal ${textoIdade(idade)}`,'Os lotes novos não estão sendo lidos. Confira se o computador dele está ligado.');
-  else if(idade>180)row('a',`CAMP Vision sem sinal ${textoIdade(idade)}`,escHtml(cvp||'Pode ser só uma pausa; se passar de 1 hora, vira alerta.'));
-  else row(p.lotes_erro?'a':'g',p.lotes_erro?`CAMP Vision ligado, com ${qtd(p.lotes_erro,'erro','erros')}`:'CAMP Vision ligado',escHtml(cvp||'Nada para ler agora.'));
+  const cvDet=cv&&admin?[cv.app_versao?`versão ${cv.app_versao}`:null,cv.app_estado?`estado: ${cv.app_estado}`:null,cv.ip?`IP ${cv.ip}`:null].filter(Boolean).join(' · '):'';
+  if(idade==null)add('campvision','CAMP Vision','c','CAMP Vision ainda não deu sinal. Quando ligado, ele avisa o painel a cada minuto.'+(cvp?' '+cvp:''),cvDet,null);
+  else if(idade>3600)add('campvision','CAMP Vision','r',`CAMP Vision sem sinal ${textoIdade(idade)}: os lotes novos não estão sendo lidos. Confira se o computador dele está ligado.`,cvDet,cv.app_heartbeat_em);
+  else if(idade>180)add('campvision','CAMP Vision','a',`CAMP Vision sem sinal ${textoIdade(idade)}. ${cvp||'Pode ser só uma pausa; se passar de 1 hora, vira alerta.'}`,cvDet,cv.app_heartbeat_em);
+  else add('campvision','CAMP Vision',p.lotes_erro?'a':'g',p.lotes_erro?`CAMP Vision ligado, com ${qtd(p.lotes_erro,'erro','erros')}. ${cvp}`:`CAMP Vision ligado. ${cvp||'Nada para ler agora.'}`,cvDet,cv.app_heartbeat_em);
+  // site público: a sonda da página pública (o mesmo do topo); as diferenças com o site têm o botão "ver o que são"
   const s=e.site||{},h=s.http,ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em),seg=h&&h.ms?`${(h.ms/1000).toFixed(1).replace('.',',')} s`:'';
-  const conf=ult?` Conferido com o painel ${haTempo(ult)}.`:'',div=s.divergencias?` <button type="button" class="lnk" data-ini-div>${qtd(s.divergencias,'diferença','diferenças')} com o site · ver o que são</button>`:'';
-  if(!h)row('','Site sem medida','Ainda não houve verificação.'+div);
-  else if(siteAlerta(h))row('r','Site sem resposta','Não respondeu em duas verificações seguidas. Confira se camp.arq.br abre; se não abrir, avise a hospedagem.'+div);
-  else if(h.estado==='sem_resposta')row('a','Site não respondeu uma vez (conferindo de novo)','Uma verificação falhou; só vira alerta se a próxima também falhar.'+div);
-  else if(h.estado==='lento')row('a','Site funcionando, mas lento',escHtml(`Respondeu em ${seg} (normal: menos de 3 s)${h.medido_em?', medido '+haTempo(h.medido_em):''}.${conf}`)+div);
-  else row('g','Site funcionando',escHtml(`${seg?`Respondeu em ${seg}.`:''}${conf}`)+div);
+  const div=s.divergencias?` <button type="button" class="lnk" data-ini-div>${qtd(s.divergencias,'diferença','diferenças')} com o site · ver o que são</button>`:'';
+  const siteDet=[ult?`Conferido com o painel ${haTempo(ult)}.`:null,h&&h.erro&&admin?`Erro: ${h.erro}`:null].filter(Boolean).join(' ');
+  if(!h)L.push({id:'site',nome:'Site público',c:'c',frase:'Site sem medida: ainda não houve verificação.',html:div,det:siteDet});
+  else if(siteAlerta(h))L.push({id:'site',nome:'Site público',c:'r',frase:'Site sem resposta em duas verificações seguidas. Confira se camp.arq.br abre; se não abrir, avise a hospedagem.',html:div,det:siteDet,quando:h.medido_em});
+  else if(h.estado==='sem_resposta')L.push({id:'site',nome:'Site público',c:'a',frase:'Site não respondeu uma vez (conferindo de novo). Só vira alerta se a próxima verificação também falhar.',html:div,det:siteDet,quando:h.medido_em});
+  else if(h.estado==='lento')L.push({id:'site',nome:'Site público',c:'a',frase:`Site funcionando, mas lento: respondeu em ${seg} (normal: menos de 3 s).`,html:div,det:siteDet,quando:h.medido_em});
+  else L.push({id:'site',nome:'Site público',c:cor(parte('site'),'g'),frase:`Site funcionando${seg?`: respondeu em ${seg}`:''}.`,html:div,det:siteDet,quando:h.medido_em});
+  // estações de captura: desligadas fora do expediente é normal (cinza, com o porquê), não erro
   const est=iniEstacoesCaptura(e),hora=+new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',hour12:false}).format(new Date()),dsem=new Date().getDay(),fora=hora>=18||hora<8||dsem===0||dsem===6;
-  if(!est.total)row('','Nenhuma estação de captura cadastrada','Os endereços ficam em Configurações.');
-  else if(!est.ligadas)row('',`Estações de captura desligadas`,escHtml(`${est.total} de ${est.total}.${fora?' É normal fora do expediente.':''}`));
-  else row('g',`${est.ligadas} de ${est.total} estações ligadas`,escHtml(est.nomes.join(', ')));
-  const rp=PAINEL_REP;if(rp&&!rp.configurada&&admin)row('r','Suas imagens têm só uma cópia','As digitalizações estão só no QNAP. Veja Preservação em Máquinas.');   /* UX-02 */
-  if(rp&&rp.configurada)row(rp.nivel==='critico'?'r':rp.nivel==='aviso'?'a':'g',rp.nivel==='critico'?'A cópia do acervo parou':rp.nivel==='aviso'?'Cópia do acervo atrasada':'Cópia do acervo em dia',escHtml(rp.gravado_em?`Última cópia ${fmtDataHora(rp.gravado_em)}.${rp.nivel==='ok'?'':' '+rp.texto}`:rp.texto));
-  if(admin){const b=e.backup;
-    if(!b||!b.existe)row('r','Sem cópia de segurança do painel','Nenhuma cópia do banco foi feita. Veja em Máquinas.');
-    else if(b.ok===false)row('r','A última cópia de segurança falhou',escHtml(b.erro||'Veja o motivo em Máquinas.'));
-    else if(+b.idade_horas>36)row('a','Cópia de segurança atrasada',escHtml(`A última foi ${haTempo(String(b.em).replace('T',' '))}. O limite é 36 h.`));
-    else row('g','Cópia de segurança do painel',escHtml(`Feita ${fmtDataHora(b.em)}${b.quantidade?` · ${qtd(b.quantidade,'cópia guardada','cópias guardadas')}`:''}.`))}
-  return L.join('')+(estAdmin()?'<button type="button" class="ini-rodape" data-ini-rota="estacoes">Ver estações e site →</button>':'')}
+  if(!est.total)add('estacoes','Estações de captura','c','Nenhuma estação de captura cadastrada. Os endereços ficam em Configurações.','',null);
+  else if(!est.ligadas)L.push({id:'estacoes',nome:'Estações de captura',c:fora?'c':'a',rotulo:fora?'fora do expediente':null,frase:`Nenhuma ligada (0 de ${est.total}).${fora?' É normal fora do expediente.':' Em horário de trabalho: confira se os computadores estão ligados.'}`,det:''});
+  else add('estacoes','Estações de captura','g',`${est.ligadas} de ${est.total} ligadas: ${est.nomes.join(', ')}.`,'',null);
+  // cópias das imagens (réplica, UX-02): nunca "em dia" sem a data da última cópia certa
+  const rp=PAINEL_REP,dt=rp&&((rp.ultima_valida&&rp.ultima_valida.gravado_em)||rp.gravado_em);
+  if(!rp){if(admin)add('replica','Cópias das imagens','c','Não consegui medir as cópias das imagens agora.','',null)}
+  else if(!rp.configurada){if(admin)add('replica','Cópias das imagens','r','Suas imagens têm só uma cópia: as digitalizações estão só no QNAP. Veja Preservação em Máquinas.',rp.texto||'',null)}
+  else if(!rp.nivel)add('replica','Cópias das imagens','c','Cópia do acervo sem medida agora.'+(dt?` Última cópia certa: ${iniQuando(dt)}.`:''),rp.texto||'',null);
+  else if(rp.nivel==='ok'&&!dt)add('replica','Cópias das imagens','c','Não sei quando foi a última cópia certa: sem essa data, não dá para dizer que está em dia.',rp.texto||'',null);
+  else add('replica','Cópias das imagens',cor(parte('replica'),rp.nivel==='critico'?'r':rp.nivel==='aviso'?'a':'g'),`${rp.nivel==='critico'?'A cópia do acervo parou.':rp.nivel==='aviso'?'Cópia do acervo atrasada.':'Cópia do acervo em dia.'} Última cópia certa: ${dt?iniQuando(dt):'nenhuma registrada'}.`,rp.nivel==='ok'?'':rp.texto||'',null);
+  // cópia de segurança do painel (só admin, como antes): o nível é o mesmo do topo; a data da última cópia certa sempre junto
+  if(admin){const b=e.backup,pb=parte('backup');
+    if(!b||!b.existe)add('backup','Cópia de segurança do painel',cor(pb,'r'),'Nenhuma cópia do banco do painel foi feita ainda. Veja em Máquinas.',b&&b.erro?b.erro:'',null);
+    else if(b.ok===false)add('backup','Cópia de segurança do painel',cor(pb,'r'),`A última cópia de segurança falhou: ${b.erro||'veja o motivo em Máquinas'}.`,'',b.em);
+    else if(!b.em)add('backup','Cópia de segurança do painel','c','Não sei quando foi a última cópia certa do painel.','',null);
+    else if(+b.idade_horas>36)add('backup','Cópia de segurança do painel',cor(pb,'a'),`Cópia de segurança atrasada: a última certa foi ${iniQuando(b.em)} (o limite é 36 h).`,'',b.em);
+    else add('backup','Cópia de segurança do painel',cor(pb,'g'),`Em dia. Última cópia certa: ${iniQuando(b.em)}${b.quantidade?` · ${qtd(b.quantidade,'cópia guardada','cópias guardadas')}`:''}.`,'',b.em)}
+  return L.map((x,i)=>({...x,i})).sort((a,b)=>INI_SRV_ORDEM[a.c]-INI_SRV_ORDEM[b.c]||a.i-b.i)}   /* o que falha primeiro; empate: a ordem do plano */
+function iniSaudeHTML(e,qi,p){
+  if(!e)return Array.from({length:5},()=>'<div class="ini-hskel"><span class="ini-skel"></span></div>').join('');
+  const L=iniSaudeLinhas(e,qi,p);
+  const linhas=L.map(x=>{const [rot,ic]=INI_SRV_NIVEL[x.c],q=x.quando?iniQuando(x.quando):'';
+    return `<div class="ini-srv" data-srv="${x.id}" data-nivel="${x.c}"><span class="ini-srv-ic ${x.c}" aria-hidden="true">${ic}</span><div class="ini-srv-t"><div class="ini-srv-l1"><b>${escHtml(x.nome)}</b> <span class="tag ${x.c==='c'?'':x.c}">${escHtml(x.rotulo||rot)}</span>${x.det?`<button type="button" class="ini-srv-mais" aria-expanded="false" aria-controls="ini-srv-det-${x.id}" data-ini-srv-det>detalhes</button>`:''}</div><p>${escHtml(x.frase)}${x.html||''}</p>${q?`<p class="ini-srv-q">medido ${escHtml(q)}</p>`:''}${x.det?`<p class="ini-srv-det" id="ini-srv-det-${x.id}" hidden>${escHtml(x.det)}</p>`:''}</div></div>`}).join('');
+  const quando=PAINEL_EST_EM?`Verificado às ${fmtHoraCamp(PAINEL_EST_EM)}`:'';
+  return linhas+`<div class="ini-saude-rodape"><span id="ini-saude-quando">${escHtml(quando)}</span><button type="button" class="btn sm" data-ini-verificar>Verificar agora</button>${estAdmin()?'<button type="button" class="ini-rodape" data-ini-rota="estacoes">Ver detalhes dos sistemas →</button>':''}</div>`}
+function iniSaudeResumo(e,qi,p){if(!e)return '';const L=iniSaudeLinhas(e,qi,p),n=c=>L.filter(x=>x.c===c).length;
+  return n('r')?`<span class="tag r">${qtd(n('r'),'com problema','com problema')}</span>`:n('a')?`<span class="tag a">${qtd(n('a'),'em atenção','em atenção')}</span>`:n('c')?`<span class="tag">${qtd(n('c'),'sem medida','sem medida')}</span>`:'<span class="tag g">tudo normal</span>'}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-srv-det]');if(!b)return;const d=document.getElementById(b.getAttribute('aria-controls'));if(!d)return;d.hidden=!d.hidden;b.setAttribute('aria-expanded',String(!d.hidden));b.textContent=d.hidden?'detalhes':'esconder detalhes'});
+/* "Verificar agora": mede de novo (estações e site sem esperar o cache das sondas; QNAP e cópias relidos) e diz a hora */
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-ini-verificar]');if(!b||b.disabled)return;b.disabled=true;const t0=b.textContent;b.textContent='Verificando…';
+  try{const [es,qi,rp]=await Promise.all([API('/api/estacoes?fresco=1'),API('/api/qnap').catch(()=>null),API('/api/replica').catch(()=>null)]);PAINEL_EST=es;PAINEL_QI=qi;PAINEL_REP=rp;PAINEL_EST_EM=new Date().toISOString();iniSaudeAtualizar();
+    const q=document.getElementById('ini-saude-quando');if(q)q.textContent=`Verificado agora (${fmtHoraCamp(PAINEL_EST_EM)})`;document.querySelector('#ini-saude [data-ini-verificar]')?.focus()}
+  catch(err){b.disabled=false;b.textContent=t0;const q=document.getElementById('ini-saude-quando');if(q)q.textContent=`Não consegui verificar agora: ${err.message}`}});
 function iniNoSiteHTML(s){const r=(t,a,b,nota)=>{const pct=b?Math.round(100*a/b):0;return `<div class="ini-prog-row"><header><b>${t}</b><span>${fmtN(a)} de ${fmtN(b)} · ${pct}%</span></header><div class="ini-bar"><i style="width:${pct}%"></i></div>${nota?`<span class="ini-nota">${escHtml(nota)}</span>`:''}</div>`};
   return r('Folhas',s.folhas.no_ar,s.folhas.total)+r('Projetos',s.projetos.no_ar,s.projetos.total,s.projetos.sem_folhas?`${qtd(s.projetos.sem_folhas,'projeto ainda não tem','projetos ainda não têm')} folhas digitalizadas (são do inventário).`:'')+r('Fundos com página',s.fundos.no_ar,s.fundos.total)}
 const QB_CRIT=[['com_imagem','Com imagem'],['com_codigo','Com código completo'],['com_titulo','Com título'],['com_direitos','Com direitos definidos']];
@@ -6260,11 +6408,16 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-ini-
   const bloq=!!i.ignorar.bloqueia,r=await confirmar({titulo:'Não mostrar mais: não era problema?',alvo:i.titulo,texto:`O problema fecha como "não era problema", com o seu nome e a data, e sai do Precisa de você para todos.${bloq?' Ele bloqueia a publicação: diga por quê.':''}`,
     motivo:bloq?'obrigatorio':true,motivoRotulo:'Por que não era problema? (fica no histórico)',botao:'Não mostrar mais'});
   if(!r)return;b.disabled=true;try{const x=await API('/api/erros/'+encodeURIComponent(i.ignorar.erro)+'/ignorar',{method:'POST',body:JSON.stringify({justificativa:r.motivo||null})});
-    toast('Fechado: não era problema',x.desfazer?{acao:{rotulo:'Desfazer',fn:async()=>{try{await errDesfazer(x.desfazer);carregarPainel();atualizarPendencias()}catch(err){toast(err.message)}}}}:{});carregarPainel();atualizarPendencias()}catch(err){b.disabled=false;toast(err.message)}});
+    iniStatus(`Fechado como "não era problema": ${i.titulo}.`);toast('Fechado: não era problema',x.desfazer?{acao:{rotulo:'Desfazer',fn:async()=>{try{await errDesfazer(x.desfazer);carregarPainel();atualizarPendencias()}catch(err){toast(err.message)}}}}:{});carregarPainel();atualizarPendencias()}catch(err){b.disabled=false;toast(err.message)}});
+/* "Agora não": some só para você por 7 dias, com Desfazer (UX-22) e o título em Problemas › Ignorados (UX-03). Redesenho §8: numa linha
+   Urgente, esconder é relevante: pede o motivo, que vai para o Histórico de ações junto com o título. */
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-ini-adiar]');if(!b||b.disabled)return;b.disabled=true;b.closest('details')?.removeAttribute('open');
-  const id=b.dataset.iniAdiar,it=PAINEL_ACOES[+b.dataset.iniK],url=`/api/hoje/tarefas/${encodeURIComponent(id)}/agora-nao`;
-  try{await API(url,{method:'POST',body:JSON.stringify({titulo:it?[it.titulo,it.codigo].filter(Boolean).join(' · '):null})});   /* UX-03: Desfazer por 8 s (UX-22); o título vai para Problemas › Ignorados */
-    toast(`Escondida por 7 dias: volta sozinha em ${iniVoltaEm()}, se ainda precisar.`,{acao:{rotulo:'Desfazer',fn:async()=>{try{await API(url,{method:'DELETE'});toast('Voltou para a lista');carregarPainel();atualizarPendencias()}catch(err){toast(err.message)}}}});
+  const id=b.dataset.iniAdiar,it=PAINEL_ACOES[+b.dataset.iniK],url=`/api/hoje/tarefas/${encodeURIComponent(id)}/agora-nao`,titulo=it?[it.titulo,it.codigo].filter(Boolean).join(' · '):null;
+  let motivo=null;if(it&&it.urgente){const r=await confirmar({titulo:'Esconder um item urgente por 7 dias?',alvo:titulo,texto:`Ele está marcado como Urgente (${it.urgente}). Some só para você e volta sozinho em ${iniVoltaEm()}, se ainda precisar. O motivo fica no Histórico de ações.`,motivo:'obrigatorio',motivoRotulo:'Por que esconder agora?',botao:'Esconder por 7 dias'});
+    if(!r){b.disabled=false;return}motivo=r.motivo||null}
+  try{await API(url,{method:'POST',body:JSON.stringify({titulo,motivo})});
+    iniStatus(`Escondido por 7 dias: ${it?it.titulo:'o item'}. Volta sozinho em ${iniVoltaEm()}.`);
+    toast(`Escondida por 7 dias: volta sozinha em ${iniVoltaEm()}, se ainda precisar.`,{acao:{rotulo:'Desfazer',fn:async()=>{try{await API(url,{method:'DELETE'});iniStatus(`Voltou para a lista: ${it?it.titulo:'o item'}.`);toast('Voltou para a lista');carregarPainel();atualizarPendencias()}catch(err){toast(err.message)}}}});
     carregarPainel();atualizarPendencias()}catch(err){b.disabled=false;toast(err.message)}});
 // 02/11 (Rafael: "no painel de um fundo, o quanto já gastamos com ele"): a soma do diário do CAMP Vision para este fundo (só admin)
 async function carregarGastoFundo(code){const box=document.querySelector('#fd-gasto .pb');if(!box)return;
@@ -6479,37 +6632,46 @@ async function lerDeNovo(codigo,btn){if(btn){if(btn.disabled)return;btn.disabled
   catch(e){toast(e.message);if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=btn.dataset.txt0||'Ler de novo'}}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-ler-de-novo]');if(!b)return;e.stopPropagation();e.preventDefault();lerDeNovo(b.dataset.lerDeNovo,b)},true);   // o código só em data-*
 function iniExecutar(i,btn){const a=i&&i.acao;if(!a)return;const t=a.tipo,v=a.alvo;if(t==='reler')return lerDeNovo(v,btn);
-  if(t==='decisao')abrirDecisao(v);else if(t==='conferir')irDaFila('revisao',v);else if(t==='publicar')irDaFila('publicar',v);else if(t==='projeto')nav('projeto/'+v);
+  if(t==='decisao')abrirDecisao(v);else if(t==='conferir')irDaFila('revisao',v,a.lote)/* Redesenho §8: abre o lote certo */;else if(t==='publicar')irDaFila('publicar',v);else if(t==='projeto')nav('projeto/'+v);
   else if(t==='destino')abrirVerificarDestino(v)/* UX-01: a pasta não parece deste projeto: a mesma gaveta do Material novo, nunca "Importar" */;else if(t==='importar'||t==='aprovar')acaoFila(t,v,btn)/* UX-17: o botão da Home também apaga e diz "Importando…" */;else if(t==='erro')abrirErro(v);else if(t==='fila_erro')nav('filas/erro');else if(t==='pedido')abrirSolicitacao(v);else if(t==='emprestimo')abrirEmprestimo(v);else if(t==='rota')nav(v)}
+/* Redesenho §8: a linha inteira é clicável. Ação que só abre (decidir, conferir, ver o problema, responder…) roda no clique da linha; a que
+   muda dado (importar, aprovar, publicar, ler de novo) só no botão: a linha abre o projeto. O menu "⋯" e os botões têm o próprio clique. */
+const INI_ABRE=['decisao','conferir','erro','fila_erro','pedido','emprestimo','projeto','rota','destino'];
 document.addEventListener('click',e=>{const b=e.target.closest('[data-ini-acao],[data-ini-rota],[data-ini-linha],[data-ini-div]');if(!b||b.disabled)return;
+  if(b.hasAttribute('data-ini-linha')&&e.target.closest('details,summary,button,a,select,input'))return;
   if(b.dataset.iniAcao!=null)iniExecutar(PAINEL_ACOES[+b.dataset.iniAcao],b);else if(b.dataset.iniRota){const v0=b.dataset.iniRota.split('/')[0];if(!pode('rota.'+v0)){toast('Essa tela é só para administradores.');return}nav(b.dataset.iniRota)}else if(b.hasAttribute('data-ini-div'))abrirDivergencias();
-  else{const i=PAINEL_ACOES[+b.dataset.iniLinha],c=i&&i.codigo;if(c&&/^F\d{3}-P\d{4}$/.test(c))nav('projeto/'+c);else if(c&&/^F\d{3}$/.test(c))nav('fundo/'+c)}});
-function iniSaudeAtualizar(){const el=document.getElementById('ini-saude');if(el&&PAINEL_D)el.innerHTML=iniSaudeHTML(PAINEL_EST,PAINEL_QI,PAINEL_D.pendencias);
+  else{const i=PAINEL_ACOES[+b.dataset.iniLinha],c=i&&i.codigo;if(i&&i.acao&&INI_ABRE.includes(i.acao.tipo)){iniExecutar(i,null);return}if(c&&/^F\d{3}-P\d{4}$/.test(c))nav('projeto/'+c);else if(c&&/^F\d{3}$/.test(c))nav('fundo/'+c)}});
+/* Redesenho §6: ajuda curta de cada seção ("Como a fila é ordenada?"), aberta no clique e fechada com Esc ou clicando fora */
+function iniAjudaSecHTML(id,pergunta,frases){return `<details class="mais-menu ini-ajuda-sec" data-ini-ajuda="${escHtml(id)}"><summary class="ini-link" aria-haspopup="true">${escHtml(pergunta)}</summary><div class="mais-lista ini-ajuda-txt" role="note">${frases.map(f=>`<p>${escHtml(f)}</p>`).join('')}</div></details>`}
+function iniSaudeAtualizar(){const el=document.getElementById('ini-saude');if(el&&PAINEL_D)el.innerHTML=iniSaudeHTML(PAINEL_EST,PAINEL_QI,PAINEL_D.pendencias);const rs=document.getElementById('ini-saude-resumo');if(rs&&PAINEL_D)rs.innerHTML=iniSaudeResumo(PAINEL_EST,PAINEL_QI,PAINEL_D.pendencias);
   const c=document.getElementById('ini-caminho');if(c&&PAINEL_D)c.innerHTML=iniCaminhoHTML(PAINEL_D.caminho,PAINEL_EST)}
 function painelErroHTML(msg){return `<div class="panel" role="alert"><div class="pb state-row"><b>Não foi possível carregar o painel.</b><div>${escHtml(msg)}</div><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar de novo</button></div></div></div>`}
-async function carregarPainel(){const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.ini-grid'),vez=window._PAINEL_VEZ=(window._PAINEL_VEZ||0)+1;if(!tinha){PAINEL_EST=PAINEL_QI=null;sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando o resumo do dia…</div></div></div>';
+async function carregarPainel(){if(document.querySelector('#v-painel .ini-grid')&&iniInteragindo()){INI_PENDENTE=true;iniAvisarPendente();return}   /* Redesenho §8: a lista não se mexe enquanto a pessoa mexe nela */
+  const sec=document.getElementById('v-painel'),tinha=!!sec.querySelector('.ini-grid'),vez=window._PAINEL_VEZ=(window._PAINEL_VEZ||0)+1;if(!tinha){PAINEL_EST=PAINEL_QI=null;sec.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Montando o resumo do dia…</div></div></div>';
     /* UX-69: tempo-limite da primeira montagem: resposta que nunca chega vira erro com "Tentar de novo" (se a resposta vier depois, o painel monta igual) */
     setTimeout(()=>{if(vez===window._PAINEL_VEZ&&!sec.querySelector('.ini-grid'))sec.innerHTML=painelErroHTML('O servidor está demorando demais para responder.')},+window.CAMP_BOOT_LIMITE_MS||20000)}try{
   const admin=EU&&['admin','master'].includes(EU.papel);
   // em etapas (P0-5): saudação, alerta e "O que fazer agora" com /api/painel (rápido); estações, QNAP e visitas entram quando chegarem, no lugar de um esqueleto do mesmo tamanho
-  const pe=API('/api/estacoes').catch(()=>null),pq=API('/api/qnap').catch(()=>null),prp=API('/api/replica').catch(()=>null),pr=API('/api/painel/ritmo?dias=14').catch(()=>({dias:[]}));
-  const [d,hj]=await Promise.all([API('/api/painel'+(iniOrdem()==='parado'?'?ordem=parado':'')),API('/api/hoje').catch(()=>null)]);   // UX-09: mais parado primeiro
+  const pe=API('/api/estacoes').catch(()=>null),pq=API('/api/qnap').catch(()=>null),prp=API('/api/replica').catch(()=>null),pr=API('/api/painel/ritmo?dias=14').catch(e=>({dias:[],erro:e.message||'falhou'}));
+  const [d,hj]=await Promise.all([API('/api/painel?fila='+encodeURIComponent(iniOrdem())),API('/api/hoje').catch(()=>null)]);   // Redesenho §8: a ordem da fila é do servidor (UX-09: "mais parado primeiro" virou "mais antigo primeiro")
   PAINEL_D=d;atualizarContadoresMenu(d.pendencias);limparStale('painel');
   /* UX-12: a Home não pergunta ao Google (a rota de audiência ao vivo levava 5–16 s). 04/11: as visitas vêm só do banco do painel (vmMontar). */
   /* pedido do Rafael (27/10/2026): qualidade, melhorias, % no site e visitas voltam à coluna da direita abaixo de "Hoje", e o ritmo à esquerda,
      sempre abertos (desfaz o bloco recolhido "Números do acervo" do UX-30). Visitas com o GA desligado mostra "desligado" sem pedir /api/analytics (UX-12). */
-  const [t1,t2]=saudacaoPainel(d,hj),p=d.pendencias;
-  sec.innerHTML=`<div class="hdr ini-hello"><div><h1 id="ini-saud">${escHtml(t1)}</h1><p class="sub">${escHtml(t2)}</p></div><button type="button" class="ini-q" onclick="reabrirAjuda()" title="Como funciona esta página (tecla ?)" aria-label="Como funciona esta página">?</button></div>
+  const S=saudacaoPainel(d),p=d.pendencias;INI_PENDENTE=null;
+  /* Redesenho §5–§8: cabeçalho compacto (título, a contagem real da fila e a data), os indicadores logo abaixo e, em seguida, a fila */
+  sec.innerHTML=`<div class="hdr ini-hello"><div class="ini-hello-t"><h1 id="ini-saud">${escHtml(S.t1)}</h1><p class="sub" id="ini-sub">${escHtml(S.t2)}</p><p class="ini-data">${escHtml(S.data)}</p></div><button type="button" class="ini-q" onclick="reabrirAjuda()" title="Entenda esta página (tecla ?)" aria-label="Entenda esta página">?</button></div>
   <div id="ini-alertas">${iniAlertasHTML(d.alertas)}</div>
+  ${iniKpisHTML(p)}
   <div class="ini-grid">
     <div class="ini-col">
-      <section class="panel" aria-labelledby="ini-t-fazer">${iniKpisHTML(p)}<div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">mais urgente primeiro${atualizadoHa(d.contagens&&d.contagens.medido_em)}</span></div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
+      <section class="panel ini-fazer" aria-labelledby="ini-t-fazer"><div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2>${iniAjudaSecHTML('fila','Como a fila é ordenada?',[(d.fila&&d.fila.regra)||'Mais urgente primeiro.','Os filtros mostram só um tipo de trabalho; o número ao lado é o total real.','“⋯” guarda as ações menores, como “Agora não”.'])}${d.fila&&d.fila.itens.length?iniOrdemHTML(d.fila):''}${d.contagens&&d.contagens.medido_em?`<small class="help atualizado-ha ini-fazer-hint" title="${escHtml(fmtDataHora(d.contagens.medido_em))}">atualizado ${escHtml(haTempo(d.contagens.medido_em))}</small>`:''}</div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
       <section class="panel" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2><button type="button" class="ini-link" onclick="nav('caminho')">o que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
       <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Ritmo das últimas 2 semanas</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">folhas conferidas por dia</span></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
       ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div class="pb" id="ini-visitas">${vmCarregandoHTML()}</div></section>`:''}
     </div>
     <div class="ini-col">
-      <section class="panel" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2></div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
+      <section class="panel ini-saude-p" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2>${iniAjudaSecHTML('saude','O que significam as cores?',['Verde (✓ normal): funcionando.','Amarelo (! atenção): precisa de olho, mas não para o trabalho.','Vermelho (✕ crítico): parou ou vai parar; resolva hoje.','Cinza (? não medido): o painel não conseguiu medir, ou está desligado fora do expediente.','O que falha vem primeiro. “detalhes” mostra o lado técnico.'])}<span id="ini-saude-resumo">${iniSaudeResumo(PAINEL_EST,PAINEL_QI,p)}</span></div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
       <section class="panel ini-feed" aria-labelledby="ini-t-hoje"><div class="ph"><h2 id="ini-t-hoje">Hoje</h2>${admin?'<button type="button" class="ini-link" onclick="nav(\'auditoria\')">histórico completo</button>':''}</div>${iniHojeHTML(d.hoje_frases)}</section>
       <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">frente à semana passada</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
       <section class="panel" id="ini-melhorias" aria-labelledby="ini-t-mh"><div class="ph"><h2 id="ini-t-mh">Melhorias de hoje</h2><span class="hint ini-nota">correções feitas por pessoa</span></div>${iniMelhoriasHTML(hj&&hj.melhorias)}</section>
@@ -6518,8 +6680,8 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   </div>`;
   garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();iniSemLugar();
   if(rotaAtual()==='painel/qualidade'){const q=document.getElementById('ini-qualidade');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'})}
-  pr.then(r=>{const el=document.getElementById('ini-ritmo');if(el)el.innerHTML=iniRitmoHTML(r,p)});
-  Promise.all([pe,pq,prp]).then(([e,qi,rp])=>{PAINEL_EST=e;PAINEL_QI=qi;PAINEL_REP=rp;if(e)iniSaudeAtualizar();else{const el=document.getElementById('ini-saude');if(el)el.innerHTML='<div class="pb state-row"><b>Não consegui verificar as máquinas agora.</b><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div>'}});
+  pr.then(r=>{const el=document.getElementById('ini-ritmo');if(el)el.innerHTML=iniRitmoHTML(r,p);const k=document.getElementById('ini-kpi-hoje');if(k)k.innerHTML=iniKpiHojeHTML(r)});
+  Promise.all([pe,pq,prp]).then(([e,qi,rp])=>{PAINEL_EST=e;PAINEL_QI=qi;PAINEL_REP=rp;if(e)PAINEL_EST_EM=new Date().toISOString();if(e)iniSaudeAtualizar();else{const el=document.getElementById('ini-saude');if(el)el.innerHTML='<div class="pb state-row"><b>Não consegui verificar as máquinas agora.</b><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div>'}});
   if(admin)vmMontar(document.getElementById('ini-visitas'));
 }catch(e){if(e.status===401||e.status===428)return;if(tinha)marcarStale('painel',e.message,'carregarPainel()');else if(vez===window._PAINEL_VEZ)sec.innerHTML=painelErroHTML(e.message)}}
 function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{const el=document.getElementById(id);if(!el)return;el.textContent=n?fmtN(n):'';el.hidden=!n;el.classList.toggle('r',!!vermelho&&!!n)};
@@ -6695,7 +6857,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('#vd-ok');i
   if(!v)return;if(just.trim().length<3){res.textContent='Escreva a justificativa: ela fica no Histórico.';return}
   b.disabled=true;try{const r=await API('/api/lotes/'+encodeURIComponent(b.dataset.vdLote)+'/destino',{method:'POST',body:JSON.stringify(v==='confirmar'?{acao:'confirmar',justificativa:just}:{acao:'decisao',justificativa:just,destino:v.startsWith('mover:')?v.slice(6):null})});
     toast(r.mensagem||'Anotado');closeDrawer(true);if(rotaAtual().startsWith('filas'))carregarFilas();if(typeof carregarPainel==='function')carregarPainel()}catch(er){b.disabled=false;res.textContent=er.message}});
-function irDaFila(onde,projeto){if(onde==='erros'){go('erros');return}window.ACAO_APOS_PROJETO=(onde==='revisao'||onde==='publicar')?{tipo:onde,codigo:projeto}:null;nav('projeto/'+projeto)}
+function irDaFila(onde,projeto,lote){if(onde==='erros'){go('erros');return}window.ACAO_APOS_PROJETO=(onde==='revisao'||onde==='publicar')?{tipo:onde,codigo:projeto,lote:lote||null}:null;nav('projeto/'+projeto)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-filtro],[data-fila-acao],[data-fila-ir]');if(!b||b.disabled)return;   // códigos só em data-*
   if(b.dataset.filaFiltro){FILA_FILTRO=b.dataset.filaFiltro;desenharFilas()}else if(b.dataset.filaAcao)acaoFila(b.dataset.filaAcao,b.dataset.id,b);else irDaFila(b.dataset.filaIr,b.dataset.projeto)});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-importar-todas]');if(!b||b.disabled)return;

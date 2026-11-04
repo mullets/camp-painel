@@ -118,8 +118,8 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Ignorar um item (UX-03, 27/10/2026)
 | Texto | Efeito |
 |---|---|
-| **Ignorar ▾** | menu em todo item do Precisa de você (quem só lê não vê) |
-| **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s |
+| **⋯** (Mais ações; antes **Ignorar ▾**) | menu discreto em todo item do Precisa de você (quem só lê não vê); o nome acessível é "Mais ações: <título>" |
+| **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s. Em item **Urgente** pede o motivo ("Esconder um item urgente por 7 dias?", "Por que esconder agora?", botão **Esconder por 7 dias**), que vai para o Histórico de ações |
 | **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
 | **N motivos** (UX-64) | em Problemas, a mesma folha com vários problemas vira UMA linha; embaixo do código, "2 motivos"; cada motivo tem a própria caixa, o "O que fazer" e o botão. Problema de folha retirada pelo CAMP Vision (menos o "de outro projeto", que leva a decisão) fecha sozinho com "A folha foi retirada do lote pelo CAMP Vision e não está no painel: quem decide é o problema da retirada (Devolver à revisão). Volta sozinho se a folha entrar no painel."; mensagem automática repetida fecha sozinha com "Mensagem repetida: o mesmo problema continua aberto no nº N." |
@@ -243,6 +243,33 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   distintas na pasta) é "**N a confirmar**", com o botão **Confirmar** e, em "O que falta", "**Confirmar N dados do projeto (carimbo × cadastro)**":
   é calculada das folhas e se resolve no próprio projeto (**Usar … no projeto** / **Manter o do projeto**); não é decisão. A diferença que
   também está na fila (o mesmo campo) conta uma vez só, como decisão ("1 decisão pendente · sobre este projeto, na fila de Decisões", **Ver em Decisões**).
+
+## Home redesenhada: parte de cima (plano do Rafael de 03/11/2026, §5–§9)
+- **Cabeçalho**: título só com a saudação ("**Boa noite, Rafael.**"); subtítulo "**N coisas pedem sua atenção hoje**" (1: "1 coisa pede…";
+  0: "**Nada pede sua atenção agora.**"; quem só lê: "Veja como está o acervo hoje: você pode ver tudo, sem alterar."); a data com a hora numa
+  linha discreta. O N é a fila REAL do servidor (`fila.pedem_atencao`): o que é da função da pessoa, fora **Melhorar a base**.
+- **Entenda esta página** (antes "Como funciona esta página", só na Home): inteira na 1ª vez; depois do primeiro uso chega fechada numa linha e não
+  reabre a cada visita; **Entendi** tira até a linha; o **?** traz inteira. Assuntos: **Os números do topo**, **O que fazer agora**,
+  **Está tudo funcionando?**. Ajuda curta das seções: "**Como a fila é ordenada?**", "**O que significam as cores?**".
+- **Indicadores**: **decisões pendentes** (só com decisão), **lotes para conferir** ("N folhas no total"), **lotes esperam um admin** (admin) ou
+  **lotes para importar** (operador e leitura), **folhas conferidas hoje** ("média de N por dia de trabalho nas últimas 2 semanas"). Sem medida:
+  "**Sem dados**" (nunca 0). Os que abrem lista têm a seta →.
+- **O que fazer agora**: filtros **Todas · Decidir · Conferir · Publicar · Resolver · Responder · Melhorar a base** (com o total real; Decidir
+  e Resolver só quando há); **Ordenar**: **Mais urgente primeiro** · **Mais antigo primeiro** · **Mais recente primeiro** · **Por tipo**.
+  Regra do "mais urgente" (servidor, `pendencias.FILA_REGRA`): 1º o que é da sua função; 2º **Urgente** (o CAMP Vision parado esperando,
+  problema que impede publicar ou já está no site, lote parado com erro, empréstimo vencido há 7 dias ou mais); 3º o resto; por último Melhorar
+  a base; dentro de cada nível, quem espera há mais tempo. Cada linha: o tipo (**Decisão**, **Importar**, **Conferir**, **Verificar destino**,
+  **Aprovar**, **Publicar**, **Problema**, **Leitura interrompida**, **Pedido**, **Empréstimo**, **Melhorar a base**), o selo **! Urgente** com o
+  motivo, o código, "**esperando há N h**" / "**parado há N dias**" (lote) e o botão. "**Ver todos os itens da fila (N)**" / "**Mostrar só os
+  primeiros**"; "**Mais N para melhorar a base · Ver quanto falta em cada fundo →**". Com o menu aberto a lista não se mexe: "**Há novidades na
+  lista.**" + **Atualizar a lista**. Resultado na tela: "Escondido por 7 dias: <título>. Volta sozinho em dd/mm." / "Voltou para a lista: …".
+  Erro ao ordenar: "Não consegui reordenar a lista: … **Tentar de novo**". Filtro vazio: "Nada em “Publicar” agora."
+- **Está tudo funcionando?**: uma linha por sistema — **QNAP**, **CAMP Vision**, **Site público**, **Estações de captura**, **Cópias das
+  imagens**, **Cópia de segurança do painel** (admin) — com ícone e o estado em texto: **normal** (✓ verde), **atenção** (! amarelo),
+  **crítico** (✕ vermelho), **não medido** (? cinza) e, para estações desligadas fora do horário, **fora do expediente** (cinza). O que falha
+  primeiro; "**medido hoje às HH:MM**"; **detalhes** / **esconder detalhes**; nada "em dia" sem "**Última cópia certa: …**". No título: "N com
+  problema" / "N em atenção" / "N sem medida" / "tudo normal". Rodapé: "**Verificado às HH:MM**", **Verificar agora** (→ "Verificando…",
+  "Verificado agora (HH:MM)") e **Ver detalhes dos sistemas →** (admin).
 
 ## Máquinas em abas (UX-24, 27/10/2026)
 - Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);

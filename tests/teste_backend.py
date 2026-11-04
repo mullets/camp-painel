@@ -13851,8 +13851,31 @@ def filho(modo):
         ver("UX-18: o cartão de decisões só entra com decisão pendente (nunca '0 decisões — nenhuma esperando')",
             "...(+p.decisoes?[k(" in html and "'nenhuma esperando'" not in html)
         ver("UX-21: filas pelo papel: as de outro papel esmaecidas (ini-outro) e no fim, sem esconder; quem só lê não tem nada esmaecido",
-            "function iniGrupoMeu(quem)" in html and "gs=[...g0.filter(g=>iniGrupoMeu(g.quem)),...g0.filter(g=>!iniGrupoMeu(g.quem))]" in html
-            and ".ini-tg.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
+            # Redesenho §8 (03/11/2026): a fila virou UMA lista; a ordem "da função da pessoa primeiro" é do servidor (fila_da_home)
+            "function iniGrupoMeu(quem)" in html and "i.meu===false?' ini-outro'" in html
+            and ".ini-task.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
+        # Redesenho §5/§8: fila única da Home, com filtros, contagem da saudação e ordem explícita (função pura, sem banco)
+        import importlib
+        _pd = importlib.import_module("app.pendencias")
+        _G = [{"id": "decidir", "titulo": "Decidir", "quem": "admin", "total": 2, "itens": [
+                  {"sev": "a", "titulo": "d-normal", "detalhe": "chegou agora há pouco", "espera_h": 50, "acao": {"tipo": "decisao"}},
+                  {"sev": "r", "titulo": "d-urg", "detalhe": "o CAMP Vision está parado nesta pasta", "espera_h": 1, "urgente": "o CAMP Vision está parado nesta pasta, esperando a resposta", "acao": {"tipo": "decisao"}}]},
+              {"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": 1, "itens": [
+                  {"sev": "a", "titulo": "c1", "detalhe": "3 de 3 folhas a conferir · parado há 3 dias", "espera_h": 72, "parado_h": 72, "acao": {"tipo": "conferir"}}]},
+              {"id": "base", "titulo": "Melhorar a base", "quem": "qualquer", "total": 30, "itens": [{"sev": "b", "titulo": "b1", "detalhe": "x", "acao": {"tipo": "rota"}}]}]
+        _fa = _pd.fila_da_home(_G, "admin", "urgente")
+        ver("Redesenho §8: filtros com o total REAL dos grupos (base 30, não as linhas enviadas) e 'Todas' = soma",
+            _fa["contagens"]["todas"] == 33 and _fa["contagens"]["decidir"] == 2 and _fa["contagens"]["conferir"] == 1 and _fa["contagens"]["base"] == 30, str(_fa["contagens"]))
+        ver("Redesenho §5: a saudação conta o que é da função da pessoa, fora 'Melhorar a base' (admin: 3; operador: 1, a decisão é de admin)",
+            _fa["pedem_atencao"] == 3 and _pd.fila_da_home(_G, "operador")["pedem_atencao"] == 1 and _pd.fila_da_home(_G, "operador")["de_outro_papel"] == 2)
+        ver("Redesenho §8: mais urgente primeiro = Urgente, depois o resto pelo tempo de espera, a base no fim",
+            [x["titulo"] for x in _fa["itens"]] == ["d-urg", "c1", "d-normal", "b1"], str([x["titulo"] for x in _fa["itens"]]))
+        ver("Redesenho §8: 'mais antigo' ordena pela espera; operador vê a decisão (de admin) no fim, sem esconder",
+            [x["titulo"] for x in _pd.fila_da_home(_G, "admin", "antigo")["itens"]] == ["c1", "d-normal", "d-urg", "b1"]
+            and [x["titulo"] for x in _pd.fila_da_home(_G, "operador")["itens"]][-2:] == ["d-urg", "d-normal"])
+        _c = next(x for x in _fa["itens"] if x["titulo"] == "c1")
+        ver("Redesenho §8: o contexto não repete o tempo de espera nem o motivo da urgência; o tipo da tarefa vem pronto",
+            _c["contexto"] == "3 de 3 folhas a conferir" and _c["tipo_tarefa"] == "Conferir" and _fa["itens"][0]["contexto"] == "" and _fa["itens"][0]["nivel"] == 0)
         # Pedido do Rafael (27/10/2026): o bloco recolhido "Números do acervo" do UX-30 saiu; as métricas voltaram à grade,
         # sempre abertas: ritmo na coluna da esquerda (depois do caminho), qualidade, melhorias, % no site e visitas na da direita
         # (depois de "Hoje"). Nenhum <details> nem localStorage para recolher.

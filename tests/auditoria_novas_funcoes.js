@@ -638,9 +638,9 @@ w.route_to('estacoes'); await sleep(2800);
   w.route_to('painel'); }
 // ---------- [H1] caixa "Como funciona esta página": 1ª visita aberta, "Entendi" fecha e grava POR PESSOA, "?" reabre, versão nova volta com "Novo" ----------
 { const paginas=['painel','decisoes','filas','erros','solicitacoes','uso','projetos','fundos','arquitetos','localizacao','etiquetas','estacoes','auditoria','config'];
-  for(const k of [...paginas,'projeto','fundo','item']) await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.'+k,valor:null})});
+  for(const k of [...paginas,'projeto','fundo','item','painel_uso']) await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.'+k,valor:null})});
   await w.carregarPreferenciasAjuda(); const sem=[];
-  for(const k of paginas){ w.route_to(k); await sleep(500); const b=d.querySelector('#v-'+k+' > .ajuda-caixa'); if(!b||!/Como funciona esta página/.test(b.textContent)||!/Para que serve/.test(b.textContent)||!b.querySelector('ol li')||b.getAttribute('role')!=='note') sem.push(k) }
+  for(const k of paginas){ w.route_to(k); await sleep(500); const b=d.querySelector('#v-'+k+' > .ajuda-caixa'); if(!b||!(k==='painel'?/Entenda esta página/:/Como funciona esta página/).test(b.textContent)||!/Para que serve/.test(b.textContent)||!b.querySelector('ol li')||b.getAttribute('role')!=='note') sem.push(k) }
   chk(sem.length===0,'a caixa "Como funciona esta página" deveria aparecer na 1ª visita de toda página; faltou em: '+sem.join(', '));
   for(const [rota,k] of [['projeto/F003-P9001','projeto'],['fundo/F003','fundo'],['item/F003-P9001-1972-S01-D00001','item']]){ w.route_to(rota); await sleep(3500); chk(!!d.querySelector('#v-'+k+' > .ajuda-caixa'),'a caixa deveria aparecer também na página de '+k+' (mesmo depois de a página desenhar o conteúdo)') }
   w.route_to('painel'); await sleep(700); d.querySelector('#v-painel [data-ajuda-fechar="painel"]').click(); await sleep(1000);
@@ -840,7 +840,7 @@ w.route_to('estacoes'); await sleep(2800);
   chk(/Escolha o fundo/.test(txt('#m-proj'))&&d.getElementById('m-proj').classList.contains('on'),'"Criar projeto" sem fundo deveria dizer "Escolha o fundo." no próprio campo: "'+txt('#m-proj').slice(0,160)+'"'); w.closeModal();
   w.route_to('fundo/F026'); await sleep(3000); const bn=[...d.querySelectorAll('#v-fundo .act button')].find(x=>x.textContent.trim()==='Novo projeto'); if(bn){ bn.click(); await sleep(600); chk(d.getElementById('np-fundo').value==='F026','Novo projeto pela página do F026 deveria abrir já com F026: "'+d.getElementById('np-fundo').value+'"'); w.closeModal() } w.route_to('painel'); }
 // ---------- [Auditoria P1-15] contagens que batem ----------
-{ w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
+{ w.route_to('painel'); await sleep(2500); const P=(await J(adm,'/api/pendencias')).b, k=[...d.querySelectorAll('#v-painel .ini-kpi[data-ini-rota]')].map(b=>[b.dataset.iniRota,+b.querySelector('.v').textContent.replace(/\D/g,'')]);
   const esp={decisoes:P.decisoes,'filas/conferir':P.lotes_conferir,'filas/admin':P.esperam_admin,'fundos/travados':P.travados_direitos};
   chk(k.length===(P.decisoes?3:2)&&k.every(([r,v])=>esp[r]===v),'[H6b/CAMP-146/UX-18] os 3 números (saiu "travados por direitos"; o de decisões só com decisão pendente) do painel deveriam ser os da fonte única (/api/pendencias): '+JSON.stringify(k)+' x '+JSON.stringify(esp));
   chk(txt('#n-dec')===(P.decisoes?String(P.decisoes):'')&&txt('#n-filas')===((P.pedem_acao||P).material_novo?String((P.pedem_acao||P).material_novo):''),'[H6b] os contadores do menu deveriam vir da mesma fonte: decisões '+txt('#n-dec')+' / filas '+txt('#n-filas'));
@@ -860,7 +860,7 @@ w.route_to('estacoes'); await sleep(2800);
   const li=[...d.querySelectorAll('#v-painel .ini-task')].filter(x=>/é o mesmo projeto que/.test(x.textContent));
   chk(li.length>=1&&!!li[0].querySelector('button.pri')&&/Decidir/.test(li[0].textContent),'"O que fazer agora" deveria listar a decisão com o botão Decidir ('+li.length+')');
   chk(/CAMP Vision está parado/.test(txt('#ini-tarefas')),'deveria avisar que o CAMP Vision está parado esperando');
-  chk(/^Decidir/i.test(txt('#ini-tarefas .ini-tgh')),'"Decidir" deveria ser o primeiro grupo de "O que fazer agora": "'+txt('#ini-tarefas .ini-tgh')+'"');
+  chk(/^Decis/i.test(txt('#ini-lista .ini-task .ini-tipo')),'a decisão (urgente: o CAMP Vision está parado) deveria ser a primeira linha de "O que fazer agora": "'+txt('#ini-lista .ini-task .ini-tipo')+'"');
   const id1=dl.itens[0].id, id2=dl.itens[1].id; li[0].querySelector('button.pri').click(); await sleep(1600);
   chk(txt('#d-title').includes('Projeto parecido: é o mesmo?')&&/O que chegou/.test(txt('#d-body'))&&/Já existe no fundo/.test(txt('#d-body'))&&/está esperando a sua resposta/.test(txt('#d-body')),'a janela deveria mostrar o que chegou, o que já existe e que o CAMP Vision espera: "'+txt('#d-body').slice(0,110)+'"');
   chk(!!d.querySelector('#d-body [data-dec-acao="mesmo"]')&&!!d.querySelector('#d-body [data-dec-acao="novo"]')&&!!d.querySelector('#d-body .dec-cand')&&/folhas no painel/.test(txt('#d-body'))&&/mesmo nome/.test(txt('#d-body')),'deveria ter os dois caminhos e, em cada candidato, os motivos');
@@ -897,9 +897,10 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- TOPO DO PAINEL, SELO, CARTÃO DO QNAP E DIVERGÊNCIAS ----------
 { w.confirm=()=>true; w.closeDrawer(true); w.route_to('painel'); await sleep(3000);   // fecha qualquer painel lateral de testes anteriores (o painel protege edição pendente)
   const pn=(await J(adm,'/api/painel')).b;
-  chk(/^(Bom dia|Boa tarde|Boa noite), Rafael\. (\d+ coisas? pedem? você|Tudo em dia)\.$/.test(txt('#ini-saud')),'[H6b] a saudação deveria resumir o que pede a pessoa: "'+txt('#ini-saud')+'"');
-  chk(d.querySelectorAll('#ini-tarefas .ini-tg').length===pn.tarefas.length&&pn.tarefas.every(g=>txt('#ini-tarefas').includes(g.titulo)),'[H6b] "O que fazer agora" deveria ter um grupo por tipo de trabalho, vindo do servidor');
-  chk([...d.querySelectorAll('#ini-tarefas .ini-tg')].every(g=>g.querySelectorAll('.ini-task').length<=3),'[H6b] no máximo 3 linhas por grupo (o resto em "Ver os N…")');
+  // Redesenho §5/§8 (03/11/2026): título só com a saudação; a contagem real vai no subtítulo; a fila é UMA lista com filtros por tipo
+  chk(/^(Bom dia|Boa tarde|Boa noite), Rafael\.$/.test(txt('#ini-saud'))&&/^(\d+ coisas? pedem? sua atenção hoje|Nada pede sua atenção agora\.)$/.test(txt('#ini-sub')),'[H6b] a saudação e o subtítulo deveriam resumir o que pede a pessoa: "'+txt('#ini-saud')+' / '+txt('#ini-sub')+'"');
+  chk(pn.tarefas.every(g=>!!d.querySelector('#ini-tarefas [data-ini-filtro="'+({decidir:'decidir',conferir:'conferir',aprovar_publicar:'publicar',problemas:'resolver',pedidos:'responder',emprestimos:'responder',base:'base'}[g.id]||'resolver')+'"]')),'[H6b] "O que fazer agora" deveria ter um filtro por tipo de trabalho, vindo do servidor');
+  chk(d.querySelectorAll('#ini-lista .ini-task').length<=8&&(pn.fila.itens.length<=8||!!d.querySelector('#ini-tarefas [data-ini-vertodos]')),'[H6b] no máximo 8 linhas à vista; o resto em "Ver todos os itens da fila"');
   chk(!/folhas_importadas_do_lote|site_item_criado|campvision \(aviso\)/.test(txt('#v-painel')),'[H6b] "Hoje" deveria falar em frases, não com o nome técnico dos eventos');
   // diferenças com o site: o número leva a uma lista em português (agora na linha "Site" de "Está tudo funcionando?")
   chk(!!d.querySelector('#ini-saude [data-ini-div]')&&d.querySelector('#ini-saude [data-ini-div]').tagName==='BUTTON','a linha do site deveria ter o botão "ver o que são" nas diferenças (acessível por teclado)');

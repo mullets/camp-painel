@@ -329,7 +329,9 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         partes = [f"chegou {d['vezes']} vezes" if d["vezes"] > 1 else None, texto_espera(_horas_desde(d["criada_em"])),
                   "o CAMP Vision está parado nesta pasta" if d["origem"] == "estacao" else None]
         linhas.append({"sev": "r" if d["origem"] == "estacao" else "a", "titulo": tit, "codigo": c.get("codigo") or d["fundo"],
-                       "detalhe": " · ".join(p for p in partes if p), "adiar": f"decisao:{d['id']}", "acao": _acao("Decidir" if admin else "Ver", "decisao", d["id"])})
+                       "detalhe": " · ".join(p for p in partes if p), "adiar": f"decisao:{d['id']}", "acao": _acao("Decidir" if admin else "Ver", "decisao", d["id"]),
+                       "espera_h": _horas_desde(d["criada_em"]),   # Redesenho §8 (campos novos, opcionais): tempo de espera e o motivo da urgência
+                       **({"urgente": "o CAMP Vision está parado nesta pasta, esperando a resposta"} if d["origem"] == "estacao" else {})})
     linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "decidir", "titulo": "Decidir", "quem": "admin", "total": len(linhas), "itens": linhas[:por_grupo],
@@ -350,7 +352,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             det = [f"{l['itens_pendentes']} de {l['itens_total']} folhas a conferir", "o maior lote da fila" if e_maior else None,
                    parado]
             linhas.append({"sev": "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": " · ".join(p for p in det if p),
-                           "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Conferir", "conferir", l["projeto_codigo"])})
+                           "parado_h": l.get("parado_h"), "espera_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": {**_acao("Conferir", "conferir", l["projeto_codigo"]), "lote": l["id"]}})   # Redesenho §8 (opcional): o lote certo
         elif l.get("destino_suspeito"):              # UX-01: a pasta não parece deste projeto: "Verificar destino" (a gaveta do Material novo), nunca "Importar"
             mov = l.get("destino_movendo") or {}
             if not mov and faria is None:
@@ -360,12 +362,12 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             linhas.append({"sev": "b" if mov.get("estado") == "movendo" else "a", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": " · ".join(p for p in det if p), "destino": True,
                            **({"apagar": l["id"], "apagar_arquivos": l.get("folhas_encontradas") or 0} if not (l["itens_total"] or 0) and not l.get("aprovado_em") else {}),   # 28/10 (campo novo, opcional): lote sem folhas no painel → "Apagar este lote"
-                           "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Verificar destino", "destino", l["id"])})
+                           "parado_h": l.get("parado_h"), "espera_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Verificar destino", "destino", l["id"])})
         else:
             linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                            "detalhe": "o CAMP Vision terminou a leitura; falta trazer as folhas para o painel" + (f" · {parado}" if parado else ""),
                            **({"apagar": l["id"], "apagar_arquivos": l.get("folhas_encontradas") or 0} if not (l["itens_total"] or 0) and not l.get("aprovado_em") else {}),   # 28/10 (campo novo, opcional): lote sem folhas no painel → "Apagar este lote"
-                           "parado_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
+                           "parado_h": l.get("parado_h"), "espera_h": l.get("parado_h"), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]), "acao": _acao("Importar", "importar", l["id"])})
     linhas = _por_idade(vis(linhas), ordem)
     if linhas:
         grupos.append({"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
@@ -381,7 +383,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "b", "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"],
                        "detalhe": f"as {l['itens_total']} folhas já foram conferidas · " + ("pronto para publicar (o clique aprova o lote junto)" if um_passo else "falta aprovar o lote")
                        + (f" · {l['parado']}" if (l.get("parado_h") or 0) >= 24 else ""),
-                       "parado_h": l.get("parado_h"), "lote": lote_txt(l), "_lote": l, "adiar": chave_adiar_lote(l["id"]),
+                       "parado_h": l.get("parado_h"), "espera_h": l.get("parado_h"), "lote": lote_txt(l), "_lote": l, "adiar": chave_adiar_lote(l["id"]),
                        "acao": _acao("Publicar", "publicar", l["projeto_codigo"]) if um_passo else _acao("Aprovar", "aprovar", l["id"])})
     ordem = {"parcial": 0, "pronto": 1, "travado": 2}
     for l in sorted([l for l in L if l["fase"] == "publicar"], key=lambda l: (ordem[l["publicar"]["estado"]], str(l["atualizado_em"] or ""))):
@@ -395,7 +397,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         if (l.get("parado_h") or 0) >= 24:
             det += f" · {l['parado']}"
         linhas.append({"sev": sev, "titulo": titulo_limpo(l["projeto_titulo"]), "codigo": l["projeto_codigo"], "detalhe": det, "adiar": chave_adiar_lote(l["id"]),
-                       "parado_h": l.get("parado_h"), "lote": lote_txt(l), "_lote": l, "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
+                       "parado_h": l.get("parado_h"), "espera_h": l.get("parado_h"), "lote": lote_txt(l), "_lote": l, "acao": _acao(rot, "publicar" if s["estado"] != "travado" else "projeto", l["projeto_codigo"])})
     linhas = _por_idade(_juntar_lotes_do_projeto(vis(linhas)), ordem)
     if linhas and (admin or (um_passo and papel == "operador")):
         grupos.append({"id": "aprovar_publicar", "titulo": "Pronto para publicar", "quem": "operador" if um_passo else "admin", "total": len(linhas), "itens": linhas[:por_grupo],
@@ -409,6 +411,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "r", "titulo": e["descricao"], "codigo": e["codigo"],
                        "detalhe": " · ".join(p for p in ("o projeto está no site com este problema" if no_ar else "impede publicar", texto_espera(_horas_desde(e["criado_em"]))) if p),
                        "adiar": f"erro:{e['id']}", "ignorar": {"erro": e["id"], "bloqueia": True},   # UX-03: bloqueio pede justificativa
+                       "espera_h": _horas_desde(e["criado_em"]), "urgente": "o projeto está no site com este problema" if no_ar else "impede publicar o projeto",
                        "acao": _acao("Ver o problema", "erro", e["id"])})
     for l in [l for l in L if l["fase"] == "erro"]:
         try:     # UX-08: o que aconteceu, em linguagem de gente, antes do tempo de espera
@@ -421,6 +424,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "r", "titulo": f"O CAMP Vision parou com erro em {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
                        "detalhe": " · ".join(p for p in (o_que, texto_espera(_horas_desde(l["atualizado_em"]))) if p), "lote": l["identificador"], "adiar": chave_adiar_lote(l["id"]),
                        "dispensar": l["id"],                     # UX-35 (campo novo, opcional): "Dispensar este lote (para todos)" no Ignorar ▾
+                       "espera_h": _horas_desde(l["atualizado_em"]), "urgente": "o CAMP Vision parou neste lote",
                        "acao": _acao("Ver o erro", "fila_erro", l["id"])})
     pedidos = releituras_abertas(con)
     for l in [l for l in L if l.get("leitura_interrompida")]:       # UX-09: "sendo lido" há mais de 2 h sem sinal do CAMP Vision deste projeto
@@ -430,6 +434,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "a", "titulo": f"Leitura interrompida: {titulo_limpo(l['projeto_titulo'])}", "codigo": l["projeto_codigo"],
                        "detalhe": " · ".join(p for p in det if p), "lote": l["identificador"], "parado_h": l.get("parado_h"), "adiar": chave_adiar_lote(l["id"]),
                        "dispensar": l["id"],                     # UX-39 (campo novo, opcional): "Dispensar este lote (para todos)" também aqui
+                       "espera_h": l.get("parado_h"),
                        "acao": _acao("Ver na Fila", "rota", "filas/gente") if ped else _acao("Ler de novo", "reler", l["projeto_codigo"])})
     for h in con.execute("""SELECT estacao_id, detalhe, atualizado_em FROM estacao_heartbeat
                             WHERE estado='erro' AND detalhe IS NOT NULL AND atualizado_em >= datetime('now','-1 day') ORDER BY atualizado_em DESC"""):
@@ -439,13 +444,14 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
             alerta = None
         if isinstance(alerta, str) and alerta.strip():     # CAMP-046/CV2 2.4: o CV2 avisa lote incompleto pelo heartbeat (o /aviso exige código de projeto)
             linhas.append({"sev": "r", "titulo": "O CAMP Vision avisou: " + alerta.strip()[:200], "codigo": None, "detalhe": f"estação {h['estacao_id']}",
-                           "adiar": f"alerta:{h['estacao_id']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
+                           "adiar": f"alerta:{h['estacao_id']}", "espera_h": _horas_desde(h["atualizado_em"]), "urgente": "aviso do CAMP Vision",
+                           "acao": _acao("Ver a Fila", "fila_erro", None)})
     try:     # CAMP-017: lote que a estação enviou há mais de 1 h e o CAMP Vision não processou
         from .estacao_eventos import sem_processar
         for e in sem_processar(con):
             linhas.append({"sev": "a", "titulo": f"Lote enviado pela estação e sem processar: {titulo_limpo(e['projeto_titulo'] or e['projeto_codigo'])}", "codigo": e["projeto_codigo"],
                            "detalhe": f"enviado há {round(e['horas'])} h" + (f" por {e['operador']}" if e["operador"] else ""),
-                           "adiar": f"sem_processar:{e['projeto_codigo']}", "acao": _acao("Ver a Fila", "fila_erro", None)})
+                           "adiar": f"sem_processar:{e['projeto_codigo']}", "espera_h": e["horas"], "acao": _acao("Ver a Fila", "fila_erro", None)})
     except Exception:  # noqa: BLE001
         pass
     linhas = vis(linhas)
@@ -460,7 +466,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "a", "titulo": f"{s['solicitante']} pediu material" + (f" para {fin}" if fin else ""), "codigo": None,
                        "detalhe": " · ".join(p for p in ("aguarda a sua resposta" if s["situacao"] == "aguarda_resposta" else "aguarda o orçamento",
                                                          texto_espera(_horas_desde(s["recebida_em"]))) if p),
-                       "adiar": f"pedido:{s['id']}", "acao": _acao("Responder", "pedido", s["id"])})
+                       "adiar": f"pedido:{s['id']}", "espera_h": _horas_desde(s["recebida_em"]), "acao": _acao("Responder", "pedido", s["id"])})
     linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "pedidos", "titulo": "Pedidos esperando resposta", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
@@ -475,7 +481,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
         linhas.append({"sev": "a" if dias < 7 else "r", "titulo": f"{e['nome']} está com originais da CAMP e o prazo venceu", "codigo": None,
                        "detalhe": " · ".join(p for p in (f"devia ter devolvido em {e['prazo'][8:10]}/{e['prazo'][5:7]}",
                                                          f"{dias} {'dia' if dias == 1 else 'dias'} de atraso", o_que) if p),
-                       "adiar": f"emprestimo:{e['id']}", "acao": _acao("Ver", "emprestimo", e["id"])})
+                       "adiar": f"emprestimo:{e['id']}", "espera_h": dias * 24,
+                       **({"urgente": f"o prazo venceu há {dias} dias"} if dias >= 7 else {}), "acao": _acao("Ver", "emprestimo", e["id"])})
     linhas = vis(linhas)
     if linhas:
         grupos.append({"id": "emprestimos", "titulo": "Originais com prazo vencido", "quem": "operador", "total": len(linhas), "itens": linhas[:por_grupo],
@@ -542,6 +549,7 @@ def _juntar_lotes_do_projeto(linhas: list[dict]) -> list[dict]:
         x["lote"] = f"{len(ls)} lotes prontos · " + " · ".join(l["identificador"] for l in ls)
         x["adiar"] = "lote:" + ",".join(str(l["id"]) for l in ls)
         x["parado_h"] = max((l.get("parado_h") or 0) for l in ls)
+        x["espera_h"] = x["parado_h"]
         if all(l["fase"] == "aprovar" for l in ls):
             tot = sum(l["itens_total"] or 0 for l in ls)
             x["detalhe"] = f"as {tot} folhas dos {len(ls)} lotes já foram conferidas · pronto para publicar (o clique aprova os lotes junto)"
@@ -555,6 +563,85 @@ def _por_idade(linhas: list[dict], ordem: str) -> list[dict]:
     if ordem != "parado":
         return linhas
     return sorted(linhas, key=lambda x: -(x.get("parado_h") or 0))
+
+
+# ---------------- Redesenho §5/§7/§8: a fila "O que fazer agora" numa lista só, com filtros, prioridade e ordem explícitas ----------------
+FILA_MAX = 200          # linhas por grupo enviadas à Home (o resto fica na tela própria de cada fila; nada some sem aviso: "total" diz quantas há)
+# grupo → filtro rápido da Home (Todas · Decidir · Conferir · Publicar · Resolver · Responder · Melhorar a base)
+FILA_FILTRO = {"decidir": "decidir", "conferir": "conferir", "aprovar_publicar": "publicar", "problemas": "resolver",
+               "pedidos": "responder", "emprestimos": "responder", "base": "base"}
+FILA_FILTROS = [("todas", "Todas"), ("decidir", "Decidir"), ("conferir", "Conferir"), ("publicar", "Publicar"), ("resolver", "Resolver"),
+                ("responder", "Responder"), ("base", "Melhorar a base")]
+# o tipo de cada linha, em uma palavra (o botão já diz a ação: aqui é a natureza do trabalho)
+_TIPO_ACAO = {"decisao": "Decisão", "conferir": "Conferir", "importar": "Importar", "destino": "Verificar destino", "aprovar": "Aprovar",
+              "publicar": "Publicar", "projeto": "Publicar", "erro": "Problema", "fila_erro": "Problema", "reler": "Leitura interrompida",
+              "pedido": "Pedido", "emprestimo": "Empréstimo"}
+FILA_ORDENS = ("urgente", "antigo", "recente", "tipo")
+FILA_REGRA = ("Mais urgente primeiro: 1º o que é da sua função (o que outro papel faz vem no fim); 2º o que está marcado Urgente "
+              "(o CAMP Vision parado esperando, problema que impede publicar ou já está no site, lote parado com erro, empréstimo vencido há 7 dias ou mais); "
+              "3º o resto do trabalho; por último, Melhorar a base. Dentro de cada nível, o que espera há mais tempo vem antes.")
+_RE_ESPERA = re.compile(r"^(chegou agora há pouco|esperando há .+|parado há .+|enviado há .+)$")
+
+
+def _papel_faz(papel: str, quem: str) -> bool:
+    """O mesmo de iniGrupoMeu (UX-21): quem só lê não executa nada, então nada é "de outro papel" para ele."""
+    nivel = {"leitura": 0, "operador": 1, "admin": 2, "master": 3}
+    if papel == "leitura" or papel not in nivel:
+        return True
+    return nivel[papel] >= (nivel["admin"] if quem == "admin" else nivel["operador"] if quem == "operador" else 0)
+
+
+def fila_da_home(grupos: list[dict], papel: str, ordem: str = "urgente") -> dict:
+    """A fila da Home numa lista só. Cada linha leva (campos novos, opcionais): grupo, filtro, tipo_tarefa, meu, espera_h,
+    urgente (o motivo, só nas urgentes), contexto (o detalhe sem o tempo de espera, que tem coluna própria) e nivel (0 urgente,
+    1 trabalho, 2 base). Os contadores dos filtros são os totais REAIS dos grupos (o "total" de cada um), não as linhas enviadas.
+    `pedem_atencao` = linhas da função desta pessoa, fora "Melhorar a base": é o número da saudação ("N coisas pedem sua atenção hoje")."""
+    ordem = ordem if ordem in FILA_ORDENS else "urgente"
+    itens, cont = [], {k: 0 for k, _ in FILA_FILTROS}
+    pedem, outro = 0, 0
+    for gi, g in enumerate(grupos):
+        filtro = FILA_FILTRO.get(g["id"], "resolver")
+        meu = _papel_faz(papel, g.get("quem") or "")
+        cont[filtro] += g["total"]
+        cont["todas"] += g["total"]
+        if filtro != "base":
+            if meu:
+                pedem += g["total"]
+            else:
+                outro += g["total"]
+        for ii, i in enumerate(g["itens"]):
+            a = i.get("acao") or {}
+            tipo = "Melhorar a base" if filtro == "base" else _TIPO_ACAO.get(a.get("tipo"), g["titulo"])
+            if g["id"] == "problemas" and a.get("tipo") == "rota":
+                tipo = "Leitura interrompida"
+            urg = (i.get("urgente") or "").lower()       # o motivo da urgência já aparece ao lado do "Urgente": não repete no contexto
+            ctx = " · ".join(p for p in str(i.get("detalhe") or "").split(" · ")
+                             if p and not _RE_ESPERA.match(p.strip()) and not (urg and p.strip().lower() in urg))
+            nivel = 2 if filtro == "base" else (0 if i.get("urgente") else 1)
+            itens.append({**i, "grupo": g["id"], "filtro": filtro, "tipo_tarefa": tipo, "meu": meu, "quem": g.get("quem"), "nivel": nivel, "contexto": ctx,
+                          "_ordem": (gi, ii)})
+    esp = lambda x: x.get("espera_h") if x.get("espera_h") is not None else -1  # noqa: E731  (sem tempo conhecido: depois dos que têm)
+    ordem_tipo = [k for k, _ in FILA_FILTROS]
+    if ordem == "antigo":
+        chave = lambda x: (not x["meu"], x["nivel"] == 2, -esp(x), x["_ordem"])  # noqa: E731
+    elif ordem == "recente":
+        chave = lambda x: (not x["meu"], x["nivel"] == 2, x.get("espera_h") is None, esp(x), x["_ordem"])  # noqa: E731
+    elif ordem == "tipo":
+        chave = lambda x: (not x["meu"], ordem_tipo.index(x["filtro"]), x["nivel"], -esp(x), x["_ordem"])  # noqa: E731
+    else:
+        chave = lambda x: (not x["meu"], x["nivel"], -esp(x), x["_ordem"])  # noqa: E731
+    itens.sort(key=chave)
+    for x in itens:
+        x.pop("_ordem", None)
+    resto = {g["id"]: {"total": g["total"], "enviadas": len(g["itens"]), **(g.get("ver_todos") or {}), **({"tipos": g["tipos"]} if g.get("tipos") else {})}
+             for g in grupos}
+    return {"itens": itens, "contagens": cont, "filtros": [{"id": k, "rotulo": r, "n": cont[k]} for k, r in FILA_FILTROS],
+            "pedem_atencao": pedem, "de_outro_papel": outro, "ordem": ordem, "regra": FILA_REGRA, "grupos": resto}
+
+
+def tarefas_resumidas(grupos: list[dict], por_grupo: int = 3) -> list[dict]:
+    """O campo antigo "tarefas" do /api/painel, igual a antes (3 linhas por grupo), a partir dos grupos completos."""
+    return [{**g, "itens": g["itens"][:por_grupo]} for g in grupos]
 
 
 def caminho(con, n: dict) -> list[dict]:
