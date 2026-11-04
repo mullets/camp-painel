@@ -64,8 +64,9 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     const ponto = await page.evaluate(() => { const p = document.querySelector('#machine-status .ms-ponto'); return { cls: p.className, nivel: p.dataset.estadoGeral }; });
     chk(est.estado_geral && ['atencao', 'critico'].includes(est.estado_geral.nivel), 'com QNAP em 12% livre o estado geral não é "ok": ' + JSON.stringify(est.estado_geral && est.estado_geral.nivel));
     chk(ponto.nivel === est.estado_geral.nivel && !/\bon\b/.test(ponto.cls), `o ponto do topo herda o pior estado (${est.estado_geral.nivel}): classe "${ponto.cls}"`);
-    const topo = await txt('#machine-status .ms-resumo');
-    chk(/QNAP em atenção/.test(topo) && !/QNAP ok/.test(topo), `o topo não diz mais "QNAP ok" com o QNAP em atenção: "${topo}"`);
+    // redesenho §4: o botão diz o pior estado; o painel "Estado dos sistemas" (que ele abre) lista cada sistema e as estações
+    const topo = await txt('#machine-status .sis-painel'), botao = await txt('#machine-status .ms-resumo');
+    chk(/QNAP em atenção/.test(topo) && !/QNAP ok/.test(topo) && !/Sistemas funcionando/.test(botao), `o topo não diz mais "QNAP ok" nem "Sistemas funcionando" com o QNAP em atenção: botão "${botao}", painel "${topo.slice(0, 120)}"`);
     chk(new RegExp(`${est.estacoes_resumo.ligadas} de ${est.estacoes_resumo.total} estações ligadas`).test(topo), `topo: estações de captura pela mesma conta da Home (${est.estacoes_resumo.ligadas} de ${est.estacoes_resumo.total}): "${topo}"`);
 
     // ---- Material novo ----

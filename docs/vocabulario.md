@@ -163,7 +163,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 
 ## Quem vê o quê (modo operador, 13/10/2026)
 - Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
-- A tela "Máquinas e site" e o resumo de máquinas do topo são só para admin.
+- A tela "Máquinas e site" e o resumo de máquinas do topo (o botão **Estado dos sistemas**) são só para admin. O alerta que impede o trabalho (QNAP, CAMP Vision, site) aparece para todos (redesenho §4).
 - Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).
 
 ## Conferência (UX-10, 27/10/2026)
@@ -197,7 +197,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Números e estado do topo (UX-05, 27/10/2026)
 - Todo número de contagem vem de `backend/app/contagens.py` (a mesma regra em Home, Material novo, Máquinas, Relatórios e menu).
   Ao lado dele: "atualizado agora" / "atualizado há X" (nunca a hora solta).
-- O topo diz "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
+- O topo diz (desde o redesenho §4, no painel do botão **Estado dos sistemas**) "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
   "QNAP ok" · "QNAP em atenção" · "QNAP quase cheio" · "QNAP desconectado"; "site ok" · "site lento" · "site não respondeu uma vez" · "site sem resposta".
 - Em Material novo o filtro "Chegando" conta o mesmo que o resumo ("N chegando"): o CAMP Vision lendo + folhas que faltam importar.
 - UX-60: em **Qualidade do CAMP Vision**, o quadro **Folhas sem leitura por resposta quebrada**: "**N folhas ficaram sem leitura** em N projetos:
@@ -358,3 +358,15 @@ período); **Não consegui carregar.** com **Serviço afetado:** (QNAP, CAMP Vis
 **Você não tem acesso a isto.** com **Quem pode autorizar:**; sucesso com o identificador real ("**Lote conferido:** F003-P9001");
 **Dados desatualizados.** com **Última sincronização:** (no componente) ou **Última atualização às HH:MM** (na marca das listas); **Desfazer**.
 Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40".
+
+## Topo: Estado dos sistemas (redesenho §4, 04/11/2026)
+- Botão **Estado dos sistemas** (nome acessível "Estado dos sistemas: …"). O texto dele é o pior estado: **Sistemas funcionando** (só com
+  tudo medido e normal; nunca "Sistemas operacionais"), **Atenção necessária** (+ a 1ª atenção), o nome da falha crítica ("**QNAP
+  desconectado** +2") ou **Sistemas sem medida**. **desatualizado** quando o painel não verifica há 3 min.
+- Painel: **Estado dos sistemas**, **Última verificação: às HH:MM (há N min)**, **informação desatualizada**; linhas **QNAP**, **Site público**,
+  **CAMP Vision**, **Cópia das imagens**, **Cópia de segurança do painel**, **Estações de captura** ("N de M estações ligadas" — o número do
+  UX-05 mora aqui agora), com o chip **normal**/**atenção**/**crítico**/**não medido** e uma frase do impacto; **Ver as máquinas (N)**,
+  **Verificar agora**, **Abrir Máquinas**.
+- Alerta que impede o trabalho: o texto de sempre ("QNAP não está conectado a este servidor: …"), sem **Fechar por hoje**.
+- Busca do topo: "**Buscar projeto, fundo, arquiteto ou código**" (sem o exemplo de código no texto); no celular, onde não cabe, "**Buscar projeto ou código**".
+- Conta: o menu do nome/avatar mostra o nome, o papel (**admin master**, **admin**, **operador**, **só leitura**) e o e-mail.

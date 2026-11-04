@@ -74,7 +74,7 @@ Fonte em px cru é reprovada pelo `check_ui` (teto); use o token mais próximo.
 
 ### Espaçamento e componentes
 - `--gutter` (margem lateral da página: 26 px; 40 px ≥ 1500 px; 14 px no celular), `--gap-card` (16/20 px entre cartões), `--pad-card` (18 px),
-  `--sp-1…--sp-8` (4…40 px), `--r-card` (raio do cartão, 8 px), `--linha-min` (52 px, linha de lista confortável), `--toque` (44 px).
+  `--sp-1…--sp-8` (4…40 px), `--r-card` (raio do cartão, 8 px), `--linha-min` (52 px: altura mínima das linhas de tabela dentro de `.panel`), `--toque` (44 px), `--r-pill` (chip/pílula).
 - **Cartão** = `.panel`: `.ph` (título → resumo → ação) com `<div class="ph-txt"><h2>…</h2><p class="ph-resumo">…</p></div>`, `.pb` (conteúdo)
   e `.pf` (ações no rodapé). Contorno sutil, sem sombra.
 - **Métrica** = `<div class="metrica"><span class="v">123</span><span class="l">rótulo</span><span class="d">detalhe</span></div>` (números tabulares).
@@ -103,3 +103,23 @@ Já usam o componente: `estadoErroHTML` (todas as listas), a página "Sem acesso
 (`.stale-note`, agora com "Última atualização às HH:MM"). Ação reversível frequente continua com o **Desfazer** do aviso rápido
 (`toast(msg,{acao:{rotulo:'Desfazer',fn}})`, 8 s) e o resultado no lugar com `avisoNoLugar` (padrao-de-tela.md §6).
 **Erro nunca vira zero**: sem resposta, mostre `erro` com o serviço; carregando, `carregando` ou `NUM_SKEL`.
+
+## Moldura, menu e topo (redesenho §3, §4, §19)
+
+- **Menu** (`#nav`): grupos `.grp` Principal · Acervo · Público e processos · Administração · Ajuda. Item = `<button data-v="rota">` com
+  ícone SVG 24×24 de traço (aparece com 18 px) + nome + `<span class="n">` **só** quando o item é demanda (fila, pedido, decisão).
+  `.n.r` = demanda que bloqueia. Ativo: `.on` + `aria-current="page"` (fundo `--sel`, barra azul, texto 600). Item novo = linha em
+  `NAV_ATALHOS`/`AJUDA_ATALHOS` (o `check_ui` confere) e, se for só de admin, `data-pode` ou a regra de papel no CSS.
+- **Larguras**: ≥ 1280 px menu aberto; 721–1279 px menu recolhido por padrão (`camp.side` lembra a escolha da pessoa); ≤ 720 px gaveta
+  (`gavetaMenu(true|false)`, botão `#nav-gaveta` no topo, fundo `#nav-fundo`; com ela aberta `.main` fica `inert`).
+- **Home**: o contêiner `#v-painel .ini-grid` tem duas `.ini-col` — principal larga + secundária 300–360 px (400 px ≥ 1600). Abaixo de
+  1280 px a secundária desce; de 900 a 1279 px ela usa duas colunas. Cartões novos entram numa das `.ini-col`, nunca com largura fixa.
+- **Topo** (`.top`): ☰ (só celular) · busca (`#q`, centro, 44 px de altura) · onde estou (`#where`) · tarefas · **Estado dos sistemas**
+  (`#machine-status`, só admin) · conta (`.who`: nome + avatar + ▾, menu `#who-menu` com nome, papel e e-mail no cabeçalho).
+- **Estado dos sistemas** = `details.sis` > `summary.sis-btn.ms-resumo.{on|off|crit|sem}` (ícone ✓ ! ✕ ? + texto) e `.sis-painel`
+  (`.sis-item.{ok|atencao|critico|sem}` com `data-sis`, chip `.tag.st`, frase de impacto em `SIS_IMPACTO`, `.sis-quando` com a
+  última verificação, "Verificar agora" = `/api/estacoes?fresco=1`). Fonte única: `/api/estacoes.estado_geral` (mesma regra da Home).
+  Verde só com todas as partes medidas e ok. Sem resposta há 3 min (`SIS_VELHO_MS`) = `.sis-velho` + "informação desatualizada".
+- **Alerta do topo** (`#system-banner`): `.impede` (QNAP desconectado ou quase cheio, CAMP Vision sem sinal há 1 h, site sem resposta)
+  é persistente: aparece em todas as telas, inclusive na Home e para o operador, com `role="alert"` e sem "Fechar por hoje".
+  O resto (backup, conferência atrasada) continua com "Fechar por hoje" e fora da Home.

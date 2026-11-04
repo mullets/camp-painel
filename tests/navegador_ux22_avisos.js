@@ -75,10 +75,11 @@ const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!o
     await page.unroute('**/api/filas**');
 
     const topo = await page.evaluate(() => { atualizarTopoEstacoes({ maquinas: [{ tipo: 'foto', nome: 'Estação Foto 1', ip: '192.0.2.1', online: null, config_chave: 'estacao.foto1.ip' }, { tipo: 'armazenamento', nome: 'QNAP', ip: null, online: null }], site: { http: null } });
-      const r = document.querySelector('#machine-status .ms-resumo'); return { skel: r.querySelectorAll('.num-skel').length, txt: r.textContent }; });
-    chk(topo.skel === 2 && !/0 de 1/.test(topo.txt), 'topo: estação e site ainda não medidos = esqueleto, nunca "0 de 1 máquinas ligadas" (' + JSON.stringify(topo) + ')');
+      const r = document.querySelector('#machine-status .sis-painel'), b = document.querySelector('#machine-status .ms-resumo'); return { skel: r.querySelectorAll('.num-skel').length, txt: r.textContent, site: (r.querySelector('[data-sis="site"] .tag') || {}).textContent, botao: b.textContent }; });
+    // redesenho §4: o número das máquinas fica no painel "Estado dos sistemas"; o site sem medida é "não medido" (e o botão nunca fica verde)
+    chk(topo.skel === 1 && !/0 de 1/.test(topo.txt) && topo.site === 'não medido' && !/Sistemas funcionando/.test(topo.botao), 'topo: estação e site ainda não medidos = esqueleto e "não medido", nunca "0 de 1 máquinas ligadas" nem verde (' + JSON.stringify(topo) + ')');
     const topo2 = await page.evaluate(() => { atualizarTopoEstacoes({ maquinas: [{ tipo: 'foto', nome: 'Estação Foto 1', ip: '192.0.2.1', online: false, config_chave: 'estacao.foto1.ip' }], site: { http: { estado: 'online', ok: true } } });
-      return document.querySelector('#machine-status .ms-resumo').textContent; });
+      return document.querySelector('#machine-status .sis-painel').textContent; });
     chk(/0 de 1/.test(topo2), 'medida e desligada: aí sim "0 de 1" (' + topo2.trim() + ')');
     const ff = await page.evaluate(() => { const g = FUNDOS_API; FUNDOS_API = null; atualizarContadoresFundos(); const r = !!document.querySelector('#ffc-todos .num-skel'); FUNDOS_API = g; atualizarContadoresFundos(); return [r, document.getElementById('ffc-todos').textContent]; });
     chk(ff[0] && /^\d+$/.test(ff[1]), 'Fundos: abas antes da lista chegar = esqueleto; depois o número (' + JSON.stringify(ff) + ')');

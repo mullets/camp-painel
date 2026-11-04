@@ -1565,7 +1565,8 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
     chk(nv&&nv.valor===v0+' (teste 97)','[#97] o Salvar da seção deveria gravar o campo mudado: '+JSON.stringify(nv));
     await J(adm,'/api/config/site.credito_padrao',{method:'PUT',body:JSON.stringify({valor:v0})}); w.limparAlteracoes('config'); } else chk(false,'[#97] seção com site.credito_padrao não encontrada');
   w.route_to('painel'); await sleep(900);
-  chk(/\d+ de \d+/.test(txt('#machine-status .ms-resumo'))&&d.querySelectorAll('#machine-status .ms-lista .ms-linha').length>=2,'[#97] o topo deveria ter o resumo "N de M máquinas ligadas" e a lista no clique: "'+txt('#machine-status .ms-resumo')+'"');
+  // redesenho §4: o topo é UM botão "Estado dos sistemas" (o pior estado); o "N de M estações ligadas" e a lista das máquinas ficam no painel dele
+  chk(/Estado dos sistemas/.test(d.querySelector('#machine-status .ms-resumo')?.getAttribute('aria-label')||'')&&/\d+ de \d+ estações ligadas/.test(txt('#machine-status .sis-painel'))&&d.querySelectorAll('#machine-status .ms-lista .ms-linha').length>=2,'[#97/§4] o topo deveria ter o botão "Estado dos sistemas" e, no painel dele, "N de M estações ligadas" e a lista das máquinas: "'+txt('#machine-status .sis-painel').slice(0,160)+'"');
   okl.push('#97: Filas (Importar todas, sem botão Projeto), Fundos (4 abas + Filtros), Arquitetos, Auditoria (resumo), Configurações (seções com 1 Salvar), topo (resumo das máquinas)'); }
 // ---------- [#94] padrão único de tela: ≤1 botão azul no cabeçalho, abas de situação únicas, um só Voltar, linha clicável com data-abrir ----------
 { const ruins=[];

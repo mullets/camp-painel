@@ -874,11 +874,12 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
 :root{
   --fs-page:28px;--fs-sec:18px;--fs-sub:16px;--fs-body:15px;--fs-tab:14px;--fs-2nd:13px;--fs-metric:28px;--fs-metric-lg:32px;
   --lh-corpo:1.55;--lh-titulo:1.2;
-  --sp-7:32px;--sp-8:40px;--gutter:26px;--gap-card:16px;--r-card:var(--r-md);--pad-card:18px;--linha-min:52px;--toque:44px;
+  --sp-7:32px;--sp-8:40px;--gutter:26px;--gap-card:16px;--r-card:var(--r-md);--r-pill:999px;--pad-card:18px;--linha-min:52px;--toque:44px;
 }
 @media (min-width:1500px){:root{--gutter:40px;--gap-card:20px}}
 @media (max-width:720px){:root{--fs-page:24px;--fs-sec:17px;--gutter:14px;--pad-card:14px}}
 .grid{gap:var(--gap-card)}
+.hdr .act{flex-wrap:wrap}   /* cabeçalho de página: as ações quebram linha no celular em vez de abrir rolagem para o lado */
 .panel{border-radius:var(--r-card)}
 .panel .ph{padding:14px var(--pad-card);min-height:52px;flex-wrap:wrap}
 .panel .pb{padding:var(--pad-card)}
@@ -897,10 +898,11 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
 .btn.perigo-contorno{color:var(--red);border-color:var(--red)}.btn.perigo-contorno:hover{background:var(--red-soft);border-color:var(--red)}
 .btn:disabled{opacity:.55;cursor:not-allowed}
 /* links: além da cor, sublinhado (mais grosso no mouse e no foco) */
-a,.lnk{text-underline-offset:.2em;text-decoration-thickness:1px}
+a,.lnk{text-underline-offset:.2em;text-decoration-thickness:1px}a.btn{text-decoration:none}
 a:hover,a:focus-visible,.lnk:hover,.lnk:focus-visible{text-decoration-thickness:2px}
 .ph .ini-link:hover,.ph .ini-link:focus-visible,.ini-mais:hover,.ini-mais:focus-visible,.ini-rodape:hover,.ini-rodape:focus-visible{text-decoration:underline;text-underline-offset:.2em}
 /* hover e selecionado com degraus próprios (antes o hover era a mesma cor do fundo do cartão secundário) */
+.panel tbody tr{height:var(--linha-min)}   /* §18: linha de lista confortável (52 px no mínimo; cresce com o conteúdo) */
 tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 .tabs button:hover{color:var(--ink)}.tabs button.on{color:var(--sel-ink);border-color:var(--blue);font-weight:600}
 /* chip de estado: texto + ícone + cor (nunca só a cor) — <span class="tag st ok">normal</span> · atencao · critico · sem */
@@ -937,11 +939,12 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 .nav button:hover{background:var(--hover);color:var(--ink)}
 .nav button.on{background:var(--sel);color:var(--sel-ink);font-weight:600}
 .nav button.on::before{content:"";position:absolute;left:-12px;top:6px;bottom:6px;width:4px;border-radius:0 4px 4px 0;background:var(--blue)}
-.nav button .n{font:600 var(--fs-2xs)/1.5 var(--mono);min-width:24px;text-align:center;padding:1px 7px;border-radius:999px;background:var(--surface2);color:var(--ink);border:1px solid var(--line)}
+.nav button .n{font:600 var(--fs-2xs)/1.5 var(--mono);min-width:24px;text-align:center;padding:1px 7px;border-radius:var(--r-pill);background:var(--surface2);color:var(--ink);border:1px solid var(--line)}
 .nav button .n.r{background:var(--red-soft);color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)}
 .nav button.on .n{background:var(--surface);color:var(--sel-ink);border-color:var(--sel)}
 .nav .grp{margin:18px 12px 6px;font-size:var(--fs-xs);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2)}
 .nav .grp:first-child{margin-top:4px}
+@media (max-height:1000px){.nav button{min-height:38px;padding-top:8px;padding-bottom:8px}.nav .grp{margin-top:14px}.side .foot small{display:none}}   /* tela baixa: o "Mais" continua à vista sem rolar o menu; o resto da versão fica na dica */
 @media (min-width:721px){.app.collapsed .nav .grp:first-child{display:none}.app.collapsed .nav button.on::before{left:-8px}.app.collapsed .nav button .n:not([hidden]){min-width:0;border:0}}
 /* celular: gaveta + fundo escurecido; o botão ☰ fica no cabeçalho */
 .top-menu{display:none;width:44px;height:44px;flex:none;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);color:var(--ink);cursor:pointer;place-items:center}
@@ -960,6 +963,62 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 @media (min-width:1600px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr) 400px}}
 @media (max-width:1279px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr)}}   /* notebook/tablet: a coluna da direita desce para baixo da principal */
 @media (min-width:900px) and (max-width:1279px){#v-painel .ini-grid>.ini-col+.ini-col{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}   /* e usa a largura em duas colunas */
+/* ===== Redesenho §4 · barra superior: busca no centro, "Estado dos sistemas", alerta que impede o trabalho, conta num menu só ===== */
+.top{flex:none;gap:10px;padding:12px var(--gutter) 10px;border-bottom:1px solid var(--line2)}   /* flex:none: na coluna do .main o topo não encolhe por baixo do conteúdo */
+.top .search{flex:1 1 260px;max-width:640px;margin:0 auto;min-width:0}
+.top>.where,.top>.tarefas-chip,.top>.machine-status,.top>.who{flex:none}
+.top .where b{max-width:220px}
+.top .search input{height:44px;padding:10px 14px 10px 40px;font-size:var(--fs-body);border-color:var(--line-forte);border-radius:var(--r-md)}
+.top .search input::placeholder{color:var(--ink3);opacity:1}
+.top .search svg{top:14px;left:14px;width:16px;height:16px;stroke:var(--ink2)}
+.top .search .hint{top:12px}
+.top .search .res{top:50px;box-shadow:var(--sombra-pop)}
+.top .tarefas-chip{margin-left:0}
+.top .machine-status{margin-left:0;max-width:none}
+.sis{position:relative}
+.sis-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;max-width:min(340px,30vw);padding:6px 12px 6px 8px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.sis-btn:hover{background:var(--hover);border-color:var(--line-forte)}
+.sis-btn.crit{border-color:var(--red);background:var(--red-soft)}.sis-btn.off{border-color:var(--amber);background:var(--amber-soft)}
+.sis-ico.ms-ponto{width:22px;height:22px;flex:none;display:grid;place-items:center;border-radius:50%;font:700 var(--fs-xs)/1 var(--sans);color:var(--surface);background:var(--green)}
+.sis-ico.ms-ponto.off{background:var(--amber)}.sis-ico.ms-ponto.crit{background:var(--red);color:var(--on-red)}.sis-ico.ms-ponto.sem{background:var(--ink3)}
+.sis-txt{display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden}.sis-txt b{font-weight:600;font-size:var(--fs-tab);overflow:hidden;text-overflow:ellipsis}
+.sis-det{font-size:var(--fs-2nd);color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
+.sis-btn.crit .sis-txt b{color:var(--red)}
+.sis-velho-txt{font-size:var(--fs-xs);color:var(--amber);font-weight:600}
+.sis-btn.sis-velho{border-style:dashed}
+.sis-painel{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:min(440px,calc(100vw - 24px));max-height:min(78vh,720px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sombra-pop);padding:14px 16px 12px;display:grid;gap:10px;white-space:normal}
+.sis-cab{display:flex;align-items:center;gap:8px}.sis-cab h2{margin:0;font-size:var(--fs-sub)}.sis-cab .x{margin-left:auto;min-width:36px;min-height:36px}
+.sis-quando{margin:0;font-size:var(--fs-2nd);color:var(--ink2)}.sis-quando b{color:var(--ink);font-weight:500}.sis-quando .sis-aviso{color:var(--amber);font-weight:600}
+.sis-lista{list-style:none;margin:0;padding:0;display:grid}
+.sis-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:10px 0 10px 12px;border-top:1px solid var(--line2);border-left:3px solid transparent}
+.sis-item:first-child{border-top:0}
+.sis-item.critico{border-left-color:var(--red)}.sis-item.atencao{border-left-color:var(--amber)}.sis-item.ok{border-left-color:var(--green)}.sis-item.sem{border-left-color:var(--line-forte)}
+.sis-item b{font-weight:600}.sis-item p{grid-column:1/-1;margin:0;font-size:var(--fs-2nd);color:var(--ink2)}.sis-item p small{color:var(--ink3)}
+.sis-maq>summary{cursor:pointer;font-size:var(--fs-2nd);color:var(--ink2);padding:4px 0}
+.sis-maq .ms-lista{min-width:0;max-height:none;display:grid;gap:2px;margin-top:4px}
+.sis-pe{display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line2);padding-top:10px}
+/* alerta: persistente quando impede o trabalho (também na Home), com ícone e texto além da cor */
+.system-banner{font-size:var(--fs-2nd);color:var(--ink);padding:10px 12px}.system-banner .when{font-family:var(--sans);font-size:var(--fs-2nd);color:var(--ink2);white-space:nowrap}
+.system-banner.impede{border-width:1px 1px 1px 4px;cursor:default}
+.system-banner.impede .health-dot{width:22px;height:22px;display:grid;place-items:center;background:var(--red);color:var(--on-red);font:700 var(--fs-xs)/1 var(--sans)}
+.system-banner.impede .health-dot::before{content:"✕"}
+body.na-painel #system-banner.impede.on{display:flex!important}
+/* conta: nome + avatar + ▾ num menu só */
+.top .who{min-height:44px;padding:4px 6px 4px 10px;border:1px solid transparent;border-radius:var(--r-pill);color:var(--ink)}
+.top .who:hover{background:var(--hover);border-color:var(--line)}
+.who-seta{width:14px;height:14px;stroke:var(--ink2);fill:none;stroke-width:2;flex:none}
+.top .who-menu{top:62px;right:var(--gutter);box-shadow:var(--sombra-pop)}
+.who-cab{padding:8px 10px 6px;display:grid;gap:2px}.who-cab small{color:var(--ink2)}
+@media (max-width:1100px){.sis-det{display:none}}
+@media (max-width:720px){
+  .top{gap:8px}
+  .top .search{flex:1 1 0}
+  .who-seta{display:none}
+  .sis-btn{padding:6px;max-width:none}.sis-txt,.sis-velho-txt{display:none}
+  .sis-painel{position:fixed;left:12px;right:12px;top:64px;width:auto}
+  .top .who{padding:2px}
+  .top .who-menu{top:62px;right:12px}
+}
 .cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
@@ -1390,11 +1449,11 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
     <button type="button" class="top-menu" id="nav-gaveta" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div class="search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-      <input id="q" placeholder="Buscar projeto, fundo, arquiteto ou código (F0xx-P000x)" autocomplete="off" aria-label="Buscar projeto, fundo, arquiteto ou código">
+      <input id="q" placeholder="Buscar projeto, fundo, arquiteto ou código" autocomplete="off" aria-label="Buscar projeto, fundo, arquiteto ou código">
       <div class="res" id="qres"></div>
     </div>
-    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span class="who-nome">Rafael</span><div class="av">RM</div></div><div class="who-menu" id="who-menu" role="menu" hidden><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
-    <div class="system-banner" id="system-banner" onclick="go('estacoes')"><span class="health-dot"></span><div><b id="system-banner-title">Atenção no sistema</b><span id="system-banner-text"></span></div><span class="when" id="system-banner-when"></span></div>
+    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span class="who-nome">Rafael</span><div class="av">RM</div><svg class="who-seta" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div><div class="who-menu" id="who-menu" role="menu" hidden><div class="who-cab" role="presentation"><b id="who-cab-nome"></b><small id="who-cab-papel"></small></div><hr><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
+    <div class="system-banner" id="system-banner" onclick="faixaAbrirMaquinas()"><span class="health-dot"></span><div><b id="system-banner-title">Atenção no sistema</b><span id="system-banner-text"></span></div><span class="when" id="system-banner-when"></span></div>
   </div>
 
   <div class="gcrumb" id="gcrumb"></div>
@@ -1942,7 +2001,8 @@ function gavetaMenu(ab){const g=document.getElementById('nav-gaveta'),m=document
   document.body.classList.toggle('nav-aberto',ab);if(m)m.inert=ab;
   if(g){g.setAttribute('aria-expanded',String(ab));g.setAttribute('aria-label',ab?'Fechar menu':'Abrir menu')}
   if(ab){const b=document.querySelector('#nav button.on')||document.querySelector('#nav button');if(b)b.focus()}else if(g&&document.activeElement&&document.activeElement.closest('.side'))g.focus()}
-MQ_CELULAR.addEventListener('change',e=>{if(!e.matches&&document.body.classList.contains('nav-aberto'))gavetaMenu(false)});
+function buscaTexto(){const q=document.getElementById('q');if(q)q.placeholder=MQ_CELULAR.matches?'Buscar projeto ou código':'Buscar projeto, fundo, arquiteto ou código'}   /* §4: no celular o texto inteiro não cabe (o nome acessível continua completo) */
+buscaTexto();MQ_CELULAR.addEventListener('change',e=>{buscaTexto();if(!e.matches&&document.body.classList.contains('nav-aberto'))gavetaMenu(false)});
 function navSecAbrir(ab,lembrar){const n=document.getElementById('nav'),b=document.getElementById('nav-mais-pc');if(!n)return;n.classList.toggle('sec-aberta',ab);if(b)b.setAttribute('aria-expanded',String(ab));if(lembrar){try{localStorage.setItem('camp.nav.mais',ab?'1':'0')}catch(_){}}}
 try{if(localStorage.getItem('camp.nav.mais')==='1')setTimeout(()=>navSecAbrir(true),0)}catch(_){}
 document.addEventListener('click',e=>{if(e.target.closest('#nav-busca')){if(document.body.classList.contains('nav-aberto'))gavetaMenu(false);const q=document.getElementById('q');if(q){q.focus();q.select()}return}   /* UX-28: "Busca" no topo do menu = a mesma busca do ⌘/Ctrl+K */
@@ -2168,7 +2228,7 @@ async function vigiarTarefas(){clearTimeout(TAREFAS_TIMER);if(!EU||!MODO_SERVIDO
    /api/estacoes do topo (30 s) e a marca do projeto aberto (12 s). Só com tarefa rodando o chip pergunta /api/tarefas a cada 3 s. */
 function agendarNovidades(){clearTimeout(TAREFAS_TIMER);const rod=(TAREFAS_EST.rodando||[]).length>0;TAREFAS_TIMER=setTimeout(rod?vigiarTarefas:vigiarNovidades,rod?3000:document.hidden?60000:30000)}
 async function vigiarNovidades(){clearTimeout(TAREFAS_TIMER);if(!EU||!MODO_SERVIDOR)return;
-  const r=marcaRota(),q=new URLSearchParams(),n0=MARCA.escritas;if(['admin','master'].includes(EU.papel))q.set('estacoes','1');if(r&&document.visibilityState!=='hidden'&&!window.RELOGIN)q.set('projeto',r.code);
+  const r=marcaRota(),q=new URLSearchParams(),n0=MARCA.escritas;q.set('estacoes','1');   /* §4: todos os papéis (o operador só vê o alerta que impede o trabalho); servido do cache das sondas */if(r&&document.visibilityState!=='hidden'&&!window.RELOGIN)q.set('projeto',r.code);
   try{const n=await API('/api/novidades?'+q);if(n.tarefas){TAREFAS_EST=n.tarefas;desenharChipTarefas()}if(n.estacoes)atualizarTopoEstacoes(n.estacoes);if(r&&q.has('projeto')&&MARCA.escritas===n0)aplicarMarca(r,n.marca)}catch(_){}
   agendarNovidades()}
 function desenharChipTarefas(){const c=document.getElementById('tarefas-chip');if(!c)return;const R=TAREFAS_EST.rodando||[],N=tarefasConcluidasNaoVistas();
@@ -2865,7 +2925,7 @@ function recolhidoPadrao(){let p=null;try{p=localStorage.getItem('camp.side')}ca
 recolhidoPadrao();MQ_TABLET.addEventListener('change',recolhidoPadrao);
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
 // Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
-const NAV_ATALHOS={painel:'1',filas:'N',erros:'P',decisoes:'D',projetos:'2',fundos:'3',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',solicitacoes:'4',inscricoes:'S',uso:'U',visitas:'V',relatorios:'L',auditoria:'A',qualidade:'Q',estacoes:'5',config:'C',caminho:'M',glossario:'G'};   /* UX-28: na ordem do menu (ordem do trabalho); as teclas são as mesmas do CAMP-154: 1–5 os destinos, o resto por letra */
+const NAV_ATALHOS={painel:'1',filas:'N',erros:'P',decisoes:'D',projetos:'2',fundos:'3',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',solicitacoes:'4',inscricoes:'S',uso:'U',visitas:'V',relatorios:'L',estacoes:'5',config:'C',auditoria:'A',qualidade:'Q',caminho:'M',glossario:'G'};   /* UX-28: na ordem do menu (ordem do trabalho); as teclas são as mesmas do CAMP-154: 1–5 os destinos, o resto por letra. Redesenho §3: Histórico (A) e Qualidade (Q) foram para Administração, teclas iguais */
 const KEYS=Object.fromEntries(Object.entries(NAV_ATALHOS).map(([v,k])=>[k.toLowerCase(),v]));
 document.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=NAV_ATALHOS[b.dataset.v];let el=b.querySelector('kbd');if(!k){if(el)el.remove();return}if(!el){el=document.createElement('kbd');b.appendChild(el)}el.textContent=k});
 document.addEventListener('keydown',e=>{
@@ -7502,32 +7562,38 @@ function proximaSincronizacao(ultima,intervalo){
   return new Date(d.getTime()+(+intervalo||0)*60000).toISOString();
 }
 function dataUtc(v){if(!v)return null;const s=String(v).trim();const iso=/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)&&!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)?s.replace(' ','T')+'Z':s;const d=new Date(iso);return Number.isNaN(d.getTime())?null:d}
-function atualizarBannerSistema(d){
+function atualizarBannerSistema(d,soImpede){
   const el=document.getElementById('system-banner');if(!el)return;
-  const problemas=[],criticos=[];
+  const problemas=[],criticos=[],impede=[];
   // Máquina desligada/sem resposta NÃO entra aqui: é o estado normal fora do expediente e o indicador de cada máquina
   // na barra do topo (e a tela Estações) já mostra. O banner só avisa o que é problema de verdade.
-  /* H25: cada aviso é uma frase com o que fazer, e não só o estado */
-  const q=d?.qnap||{};if(q.montado===false)criticos.push('QNAP não está conectado a este servidor: o painel não vê o material novo. Avise o Rafael');
-  else if(q.nivel_espaco==='critico')criticos.push(`QNAP quase cheio (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%). Avise o Rafael para liberar espaço antes de digitalizar mais`);
+  /* H25: cada aviso é uma frase com o que fazer, e não só o estado.
+     Redesenho §4: o que IMPEDE o trabalho (QNAP desconectado ou quase cheio, CAMP Vision sem sinal há mais de 1 h, site sem resposta duas vezes)
+     é um alerta PERSISTENTE: aparece em todas as telas (também na Home e para o operador) e não tem "Fechar por hoje" enquanto durar. */
+  const q=d?.qnap||{};if(q.montado===false)impede.push('QNAP não está conectado a este servidor: o painel não vê o material novo. Avise o Rafael');
+  else if(q.nivel_espaco==='critico')impede.push(`QNAP quase cheio (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%). Avise o Rafael para liberar espaço antes de digitalizar mais`);
   else if(q.nivel_espaco==='aviso')problemas.push(`QNAP com pouco espaço (${fmtN(q.livre_gb)} GB livres, ${String(q.livre_pct).replace('.',',')}%). Avise o Rafael para liberar espaço`);
-  const s=d?.site||{};if(siteAlerta(s.http))criticos.push('página pública sem resposta: quem visita o acervo vê erro. Avise o Rafael');
+  const cv=((d?.estado_geral||{}).partes||[]).find(x=>x.id==='campvision');if(cv&&cv.nivel==='critico')impede.push('CAMP Vision sem sinal há mais de 1 h: os lotes novos não estão sendo lidos. Confira se o computador dele está ligado');
+  const s=d?.site||{};if(siteAlerta(s.http))impede.push('página pública sem resposta: quem visita o acervo vê erro. Avise o Rafael');
   const bk=d?.backup;if(bk){if(!bk.existe)problemas.push('nenhum backup do banco: peça a um admin "Fazer backup agora" em Máquinas');else{const h=+bk.idade_horas;if(bk.ok===false)criticos.push('o último backup do banco falhou. Avise o Rafael');else if(h>96)criticos.push('último backup do banco há '+Math.round(h/24)+' dias. Avise o Rafael');else if(h>36)problemas.push('último backup do banco há '+Math.round(h)+' h')}}
   const ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em);
   const du=dataUtc(ult),intervalo=Math.max(1,+(s.intervalo_sync_min||15));
   if(du&&Date.now()-du.getTime()>Math.max(30,intervalo*2.5)*60000)problemas.push('conferência com o site atrasada: use "Sincronizar agora" em Máquinas');
-  const todos=[...new Set([...criticos,...problemas])];
-  const assinatura=todos.join('|'),fechada=(()=>{try{return localStorage.getItem('camp.faixa.fechada.'+((EU&&EU.email)||''))}catch(_){return null}})();
-  if(!todos.length||fechada===hojeSP()+'|'+assinatura){el.classList.remove('on','bad');return}
-  el.classList.add('on');el.classList.toggle('bad',criticos.length>0);
+  const outros=soImpede?[]:[...new Set([...criticos,...problemas])];
+  const assinatura=outros.join('|'),fechada=(()=>{try{return localStorage.getItem('camp.faixa.fechada.'+((EU&&EU.email)||''))}catch(_){return null}})();
+  const fechouOutros=!outros.length||fechada===hojeSP()+'|'+assinatura,todos=[...impede,...(fechouOutros?[]:outros)];
+  if(!todos.length){el.classList.remove('on','bad','impede');el.removeAttribute('role');return}
+  el.classList.add('on');el.classList.toggle('bad',impede.length>0||criticos.length>0);el.classList.toggle('impede',impede.length>0);
+  if(impede.length)el.setAttribute('role','alert');else el.removeAttribute('role');
   const cap=t=>t.charAt(0).toUpperCase()+t.slice(1)+'.';
   document.getElementById('system-banner-title').textContent=cap(todos[0]);
   document.getElementById('system-banner-text').textContent=todos.length>1?' '+todos.slice(1).map(cap).join(' '):'';
-  document.getElementById('system-banner-when').innerHTML='ver detalhes <button type="button" class="lnk faixa-fechar" data-faixa-fechar title="Some até amanhã; volta se o problema continuar ou mudar">Fechar por hoje</button>';
+  document.getElementById('system-banner-when').innerHTML=(estAdmin()?'ver detalhes':'')+(impede.length||fechouOutros?'':' <button type="button" class="lnk faixa-fechar" data-faixa-fechar title="Some até amanhã; volta se o problema continuar ou mudar">Fechar por hoje</button>');
   el.dataset.assinatura=assinatura;
 }
+function faixaAbrirMaquinas(){if(estAdmin())go('estacoes')}   /* §4: o operador vê o alerta, mas Máquinas é de admin */
 function hojeSP(){return new Intl.DateTimeFormat('en-CA',{timeZone:FUSO_CAMP}).format(new Date())}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-faixa-fechar]');if(!b)return;e.stopPropagation();const el=document.getElementById('system-banner');try{localStorage.setItem('camp.faixa.fechada.'+((EU&&EU.email)||''),hojeSP()+'|'+(el.dataset.assinatura||''))}catch(_){}el.classList.remove('on','bad');toast('Aviso fechado por hoje. Ele volta amanhã se continuar.')},true);
+document.addEventListener('click',e=>{const b=e.target.closest('[data-faixa-fechar]');if(!b)return;e.stopPropagation();const el=document.getElementById('system-banner');try{localStorage.setItem('camp.faixa.fechada.'+((EU&&EU.email)||''),hojeSP()+'|'+(el.dataset.assinatura||''))}catch(_){}if(el.classList.contains('impede'))atualizarTopoEstacoes();else el.classList.remove('on','bad');toast('Aviso fechado por hoje. Ele volta amanhã se continuar.')},true);
 async function abrirConfigMaquina(chave){
   go('config');
   if(EU&&['admin','master'].includes(EU.papel))await carregarConfig();
@@ -7542,52 +7608,73 @@ async function abrirConfigMaquina(chave){
   },80);
 }
 async function atualizarTopoEstacoes(dado){
-  const el=document.getElementById('machine-status');if(!el||!EU)return;if(!['admin','master'].includes(EU.papel)){el.innerHTML='';return}   /* modo operador: máquinas e site são assunto do admin */
+  const el=document.getElementById('machine-status');if(!el||!EU)return;
+  /* modo operador: o botão "Estado dos sistemas" e as máquinas são assunto do admin; o operador só recebe o ALERTA que impede o trabalho (§4) */
+  if(!['admin','master'].includes(EU.papel)){el.innerHTML='';try{atualizarBannerSistema(dado||await API('/api/estacoes'),true)}catch(_){}return}
   try{
     const d=dado||await API('/api/estacoes');   /* UX-12: na consulta periódica os dados já vêm em /api/novidades */
-    const maquinas=d.maquinas.map(m=>{
-      const st=m.online===true?'on':m.online===false?'off':'unknown';
-      const extra=m.tipo==='processamento'?' proc':m.tipo==='armazenamento'?' qnap':'';
-      const estadoMaq=m.online===true?'máquina online':m.online===false?'máquina offline':'máquina não testada';
-      const estadoApp=m.app_online===true?'app '+(m.app_estado||'online'):m.app_online===false&&m.estacao_id?'app offline':null;
-      const detalhes=[
-        m.funcao,
-        m.ip?('IP '+m.ip):'IP não configurado',
-        estadoMaq,
-        estadoApp,
-        m.app_versao?('versão '+m.app_versao):null,
-        m.app_operador?('operador '+m.app_operador):null,
-        m.app_projeto?('projeto '+m.app_projeto):null,
-        m.app_situacao||null
-      ].filter(Boolean);
-      return `<button type="button" class="ms-linha ${st}${extra}" role="menuitem" onclick="abrirConfigMaquina('${escHtml(m.config_chave||'')}')" title="${escHtml(detalhes.join(' · '))}"><span class="ms ${st}${extra}" aria-hidden="true">${iconeEstacao(m.tipo)}</span><span><b>${escHtml(m.nome)}</b><small>${escHtml([estadoMaq,estadoApp].filter(Boolean).join(' · '))}</small></span></button>`;
-    }).join('');
-    // #97: no topo, UM resumo ("2 de 8 máquinas ligadas · QNAP ok · site ok"); a lista abre no clique (antes: 10 ícones sem rótulo)
+    SIS_ERRO=null;
+    /* Redesenho §4 (04/11/2026): UM botão "Estado dos sistemas" no topo. O texto dele é o PIOR estado (de /api/estacoes.estado_geral, a mesma
+       regra do UX-05): "Sistemas funcionando" só com todas as partes medidas e ok; com falha, o nome da falha ("QNAP desconectado +2");
+       com atenção, "Atenção necessária". O painel que abre lista cada sistema (nome + estado + uma frase), as máquinas, a hora da última
+       verificação e "Verificar agora". Antes (#97/UX-05): a frase técnica inteira cortada com "…" no topo. */
     const capt=d.maquinas.filter(m=>m.tipo!=='armazenamento'),lig=capt.filter(m=>m.online===true).length,qn=d.maquinas.find(m=>m.tipo==='armazenamento');
     const s=d.site||{},ult=s.ultima_sincronizacao&&(s.ultima_sincronizacao.terminada_em||s.ultima_sincronizacao.iniciada_em);
-    const prox=proximaSincronizacao(ult,s.intervalo_sync_min);
     const wpSt=siteAlerta(s.http)?'off':'on';
-    const wpTitle=['WordPress / página pública',siteRotulo(s.http).txt,ult?'última sincronização '+fmtDataHora(ult):'ainda não sincronizado',prox?'próxima '+fmtDataHora(prox):null].filter(Boolean);
-    const wp=`<button type="button" class="ms-linha ${wpSt}" role="menuitem" onclick="go('estacoes')" title="${escHtml(wpTitle.join(' · '))}"><span class="ms ${wpSt}" aria-hidden="true">${iconeWordpress()}</span><span><b>Página pública (WordPress)</b><small>${escHtml(wpTitle.slice(1).join(' · '))}</small></span></button>`;
+    const wpTitle=['Página pública (site)',siteRotulo(s.http).txt,ult?'última conferência '+fmtDataHora(ult):'ainda não conferido'].filter(Boolean);
+    const wp=`<button type="button" class="ms-linha ${wpSt}" onclick="go('estacoes')" title="${escHtml(wpTitle.join(' · '))}"><span class="ms ${wpSt}" aria-hidden="true">${iconeWordpress()}</span><span><b>Página pública (site)</b><small>${escHtml(wpTitle.slice(1).join(' · '))}</small></span></button>`;
     const qOk=!qn||qn.online!==false,sOk=wpSt==='on',tudo=qOk&&sOk;
-    /* UX-22: estação com IP ainda não medida (online null, a 1ª medição corre em segundo plano) = esqueleto, nunca "0 de 6"; site sem medida idem */
+    /* UX-22: estação com IP ainda não medida (online null) = esqueleto, nunca "0 de 6"; site sem medida idem */
     const medindo=capt.some(m=>m.ip&&m.online==null),siteMedindo=s.http==null;
-    /* UX-05: o ponto e as frases do topo herdam o PIOR estado (QNAP, site, CAMP Vision, cópias), de /api/estacoes.estado_geral;
-       "N de M estações ligadas" = a mesma conta da Home (estacoes_resumo: captura, rede OU programa ligado) */
-    const eg=d.estado_geral,er=d.estacoes_resumo,pt=k=>((eg&&eg.partes)||[]).find(x=>x.id===k),pq=pt('qnap'),ps=pt('site');
-    const ponto=eg?(eg.nivel==='critico'?'crit':eg.nivel==='atencao'?'off':'on'):(tudo?'on':'off');
-    const extraL=eg?[pq&&pq.texto,siteMedindo?null:ps&&ps.texto,...eg.partes.filter(x=>!['qnap','site'].includes(x.id)&&x.nivel&&x.nivel!=='ok').map(x=>x.texto)].filter(Boolean):[];
-    const extra=eg?escHtml(extraL.join(' · '))+(siteMedindo?' · site '+NUM_SKEL:'')
-      :`QNAP ${qOk?'ok':'sem resposta'} · site ${siteMedindo?NUM_SKEL:sOk?'ok':'sem resposta'}`;
-    const resumo=er?`<span class="ms-ponto ${ponto}" aria-hidden="true" data-estado-geral="${escHtml(eg?eg.nivel:'')}"></span><span class="ms-txt"><b>${medindo?NUM_SKEL:er.ligadas} de ${er.total}</b> estações ligadas</span><span class="ms-extra"> · ${extra}</span>`
-      :`<span class="ms-ponto ${ponto}" aria-hidden="true"></span><span class="ms-txt"><b>${medindo?NUM_SKEL:lig} de ${capt.length}</b> máquinas ligadas</span><span class="ms-extra"> · ${extra}</span>`;
-    const du=dataUtc(ult),min=du?Math.max(0,Math.round((Date.now()-du.getTime())/60000)):null,ha=min==null?'':min<1?'agora':min<60?`há ${min} min`:min<1440?`há ${Math.round(min/60)} h`:`há ${Math.round(min/1440)} dias`;
-    const syncTxt=ult?`<span class="sync-mini" title="O painel confere o site a cada ${escHtml(s.intervalo_sync_min||15)} min: o que foi publicado, despublicado ou mudado lá. ${escHtml(wpTitle.slice(2).join(' · '))}">Site conferido ${ha}</span>`:'';   /* H25: antes "sync 21:43" */
-    const aberto=!!el.querySelector('details.ms-menu[open]');
-    el.innerHTML=`<details class="mais-menu ms-menu"${aberto?' open':''}><summary class="btn sm ms-resumo" aria-haspopup="menu" title="${escHtml('Máquinas, QNAP e site'+(extraL.length?': '+extraL.join(' · '):''))}">${resumo}</summary><div class="mais-lista ms-lista" role="menu">${maquinas}${wp}<a class="btn sm" href="#estacoes" onclick="go('estacoes');return false">Abrir Máquinas</a></div></details>`+syncTxt;
+    const eg=d.estado_geral,er=d.estacoes_resumo;
+    const qSem=!!qn&&qn.online==null,partes=eg&&eg.partes?eg.partes.slice():[{id:'qnap',nivel:qSem?null:qOk?'ok':'critico',texto:qSem?'QNAP sem medida':qOk?'QNAP ok':'QNAP sem resposta'},{id:'site',nivel:siteMedindo?null:sOk?'ok':'critico',texto:siteMedindo?'site sem medida':sOk?'site ok':'site sem resposta'}];
+    /* o CAMP Vision que nunca deu sinal não entra no estado_geral do servidor: aqui ele aparece como "não medido" (nunca como verde) */
+    if(!partes.some(x=>x.id==='campvision')&&d.maquinas.some(m=>m.tipo==='processamento'))partes.push({id:'campvision',nivel:null,texto:'CAMP Vision ainda não deu sinal'});
+    const nivelG=eg?eg.nivel:(tudo?'ok':'critico'),ponto=nivelG==='critico'?'crit':nivelG==='atencao'?'off':nivelG==='ok'&&!partes.some(x=>x.nivel==null)?'on':'sem';
+    const ORD={critico:0,atencao:1,null:2,undefined:2,ok:3};partes.sort((a,b)=>ORD[a.nivel]-ORD[b.nivel]);
+    const cap=t=>String(t||'').charAt(0).toUpperCase()+String(t||'').slice(1);
+    const crit=partes.filter(x=>x.nivel==='critico'),aten=partes.filter(x=>x.nivel==='atencao'),sem=partes.filter(x=>x.nivel==null);
+    const titulo=crit.length?cap(crit[0].texto):aten.length?'Atenção necessária':sem.length?'Sistemas sem medida':'Sistemas funcionando';
+    const mais=crit.length?crit.length-1+aten.length:aten.length?aten.length-1:0;
+    const det=crit.length?(mais?`+${mais}`:''):aten.length?cap(aten[0].texto)+(mais?` +${mais}`:''):sem.length?cap(sem[0].texto):'';
+    const ICO={on:'✓',off:'!',crit:'✕',sem:'?'};
+    const linhaParte=x=>{const nv=x.nivel==='critico'?'critico':x.nivel==='atencao'?'atencao':x.nivel==='ok'?'ok':'sem';
+      const quando=x.medido_em?` · medido ${escHtml(quandoTxt(x.medido_em))}`:'',extra=x.id==='site'&&ult?` · conferido com o painel ${escHtml(quandoTxt(ult))}`:'';
+      return `<li class="sis-item ${nv}" data-sis="${escHtml(x.id)}"><b>${escHtml(SIS_NOME[x.id]||cap(x.id))}</b><span class="tag st ${nv}">${{critico:'crítico',atencao:'atenção',ok:'normal',sem:'não medido'}[nv]}</span><p>${escHtml(cap(x.texto))}.${SIS_IMPACTO[x.id+'.'+nv]?' '+escHtml(SIS_IMPACTO[x.id+'.'+nv]):''}<small>${quando}${extra}</small></p></li>`};
+    const estTxt=er?`${medindo?NUM_SKEL:fmtN(er.ligadas)} de ${fmtN(er.total)} estações ligadas`:`${medindo?NUM_SKEL:lig} de ${capt.length} máquinas ligadas`;
+    const maqs=d.maquinas.map(m=>{const st=m.online===true?'on':m.online===false?'off':'unknown',extra=m.tipo==='processamento'?' proc':m.tipo==='armazenamento'?' qnap':'';
+      const estadoMaq=m.online===true?'máquina online':m.online===false?'máquina offline':'máquina não testada',estadoApp=m.app_online===true?'app '+(m.app_estado||'online'):m.app_online===false&&m.estacao_id?'app offline':null;
+      const detalhes=[m.funcao,m.ip?('IP '+m.ip):'IP não configurado',estadoMaq,estadoApp,m.app_versao?('versão '+m.app_versao):null,m.app_operador?('operador '+m.app_operador):null,m.app_projeto?('projeto '+m.app_projeto):null,m.app_situacao||null].filter(Boolean);
+      return `<button type="button" class="ms-linha ${st}${extra}" onclick="abrirConfigMaquina('${escHtml(m.config_chave||'')}')" title="${escHtml(detalhes.join(' · '))}"><span class="ms ${st}${extra}" aria-hidden="true">${iconeEstacao(m.tipo)}</span><span><b>${escHtml(m.nome)}</b><small>${escHtml([estadoMaq,estadoApp].filter(Boolean).join(' · '))}</small></span></button>`}).join('');
+    const aberto=!!el.querySelector('details.ms-menu[open]'),rotulo=`Estado dos sistemas: ${titulo}${det?' '+det:''}`;
+    SIS_ULTIMA=eg&&eg.medido_em?eg.medido_em:new Date().toISOString();SIS_ULTIMA_LOCAL=Date.now();
+    el.innerHTML=`<details class="mais-menu ms-menu sis"${aberto?' open':''}><summary class="sis-btn ms-resumo ${ponto}" aria-label="${escHtml(rotulo)}" title="${escHtml(rotulo)}"><span class="ms-ponto sis-ico ${ponto}" aria-hidden="true" data-estado-geral="${escHtml(eg?eg.nivel:'')}">${ICO[ponto]}</span><span class="sis-txt"><b>${escHtml(titulo)}</b>${det?`<span class="sis-det">${escHtml(det)}</span>`:''}</span><span class="sis-velho-txt" hidden>desatualizado</span></summary>
+      <div class="sis-painel" role="region" aria-labelledby="sis-tit"><div class="sis-cab"><h2 id="sis-tit">Estado dos sistemas</h2><button type="button" class="x" data-sis-fechar aria-label="Fechar">×</button></div>
+      <p class="sis-quando" role="status"></p>
+      <ul class="sis-lista">${partes.map(linhaParte).join('')}<li class="sis-item neutro" data-sis="estacoes"><b>Estações de captura</b><span class="tag">${estTxt}</span><p>Desligada fora do expediente é normal; o estado de cada uma está abaixo.</p></li></ul>
+      <details class="sis-maq"><summary>Ver as máquinas (${fmtN(d.maquinas.length+1)})</summary><div class="ms-lista">${maqs}${wp}</div></details>
+      <div class="sis-pe"><button type="button" class="btn sm" data-sis-verificar>Verificar agora</button><a class="btn sm" href="#estacoes" onclick="go('estacoes');return false">Abrir Máquinas</a></div></div></details>`;
+    sisQuando();
     atualizarBannerSistema(d);
-  }catch(e){const b=document.getElementById('system-banner');if(b){b.classList.add('on');b.classList.remove('bad');document.getElementById('system-banner-title').textContent='Status do sistema indisponível';document.getElementById('system-banner-text').textContent=' · não foi possível atualizar a saúde agora';document.getElementById('system-banner-when').textContent='tentar novamente'}}
+  }catch(e){SIS_ERRO=e&&e.message||'sem resposta';sisQuando();const b=document.getElementById('system-banner');if(b){b.classList.add('on');b.classList.remove('bad','impede');document.getElementById('system-banner-title').textContent='Não consegui verificar o estado dos sistemas agora.';document.getElementById('system-banner-text').textContent=SIS_ULTIMA?' Mostrando a última verificação ('+quandoTxt(SIS_ULTIMA)+').':'';document.getElementById('system-banner-when').textContent='tentar novamente'}}
 }
+/* §4: nomes, impacto de uma frase e "desatualizado" do painel "Estado dos sistemas" */
+const SIS_NOME={qnap:'QNAP',site:'Site público',campvision:'CAMP Vision',replica:'Cópia das imagens',backup:'Cópia de segurança do painel'};
+const SIS_IMPACTO={'qnap.critico':'O painel não vê o material novo: importar e copiar arquivos ficam parados.','qnap.atencao':'Pouco espaço livre: avise o Rafael antes de digitalizar mais.',
+  'site.critico':'Quem visita o acervo vê erro e publicar fica parado.','site.atencao':'Pode ser só lentidão; o painel mede de novo sozinho.',
+  'campvision.critico':'Os lotes novos não estão sendo lidos.','campvision.sem':'Quando ligado, ele avisa o painel a cada minuto.','campvision.atencao':'O CAMP Vision não dá sinal há alguns minutos.',
+  'replica.critico':'Se o QNAP falhar, não há outra cópia das imagens.','replica.atencao':'A segunda cópia das imagens está atrasada.',
+  'backup.critico':'Avise o Rafael: o banco do painel está sem cópia recente.','backup.atencao':'Peça a um admin "Fazer backup agora" em Máquinas.'};
+let SIS_ULTIMA=null,SIS_ULTIMA_LOCAL=0,SIS_ERRO=null;
+const SIS_VELHO_MS=3*60e3;   // a consulta periódica é de 30 s (60 s com a aba escondida): 3 min sem resposta = informação velha
+function sisQuando(){const el=document.getElementById('machine-status');if(!el)return;const q=el.querySelector('.sis-quando'),btn=el.querySelector('.sis-btn'),velho=!!SIS_ULTIMA_LOCAL&&(Date.now()-SIS_ULTIMA_LOCAL>SIS_VELHO_MS||!!SIS_ERRO);
+  if(btn){btn.classList.toggle('sis-velho',velho);const v=btn.querySelector('.sis-velho-txt');if(v)v.hidden=!velho}
+  if(q){q.classList.toggle('velho',velho);q.innerHTML=SIS_ULTIMA?`Última verificação: <b>${escHtml(quandoTxt(SIS_ULTIMA))}</b>${velho?` · <span class="sis-aviso">informação desatualizada${SIS_ERRO?': o painel não conseguiu verificar de novo':''}</span>`:''}`:'Ainda não verificado.'}}
+setInterval(sisQuando,30e3);
+document.addEventListener('click',async e=>{const v=e.target.closest('[data-sis-verificar]');if(v){v.disabled=true;v.textContent='Verificando…';try{SIS_ERRO=null;await atualizarTopoEstacoes(await API('/api/estacoes?fresco=1'))}catch(err){SIS_ERRO=err.message;sisQuando();toast('Não consegui verificar agora: '+err.message)}return}
+  const f=e.target.closest('[data-sis-fechar]');if(f){const dt=f.closest('details');if(dt){dt.open=false;dt.querySelector('summary').focus()}return}
+  const ab=document.querySelector('#machine-status details.sis[open]');if(ab&&!e.target.closest('#machine-status'))ab.open=false});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const ab=document.querySelector('#machine-status details.sis[open]');if(ab){e.stopImmediatePropagation();ab.open=false;ab.querySelector('summary').focus()}},true);   /* captura: o Esc global tira o foco (blur); aqui ele volta ao botão */
 
 let IMP_PREVIA=null;
 function painelImportacao(){const admin=EU&&['admin','master'].includes(EU.papel);
@@ -8026,7 +8113,7 @@ function limparExemplos(){ // em modo servidor, nunca mostrar dado de exemplo co
 function versaoHTML(v){const dt=x=>{const d=new Date(x);return isNaN(d)?'':`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} às ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
   if(!v.data)return 'Servidor · versão '+escHtml(v.versao||'');
   return `Versão de <b>${escHtml(dt(v.data))}</b>${v.assunto?`<br><small>${escHtml(v.assunto)}</small>`:''}${v.no_ar_desde?`<br><small>servidor atualizado em ${escHtml(dt(v.no_ar_desde))}</small>`:''}`}
-if(MODO_SERVIDOR){limparExemplos();API('/api/versao').then(v=>{const f=document.getElementById('foot');f.innerHTML=versaoHTML(v);f.title=v.hash?`código ${v.hash}`:(v.versao||'')}).catch(()=>{document.getElementById('foot').textContent='Servidor não respondeu'})}
+if(MODO_SERVIDOR){limparExemplos();API('/api/versao').then(v=>{const f=document.getElementById('foot');f.innerHTML=versaoHTML(v);f.title=[v.assunto,v.hash?`código ${v.hash}`:(v.versao||'')].filter(Boolean).join(' · ')}).catch(()=>{document.getElementById('foot').textContent='Servidor não respondeu'})}
 
 function aplicarUsuario(u){try{aplicarUsuario0(u);window.CAMP_BOOT_OK=true;document.querySelectorAll('.boot-erro').forEach(x=>x.remove())}catch(e){bootErro(e);try{route_to(rotaAtual())}catch(_){}}}   /* UX-69: uma exceção aqui parava tudo antes de carregar o painel */
 function aplicarUsuario0(u){EU=u;umPassoMarcar();if(u&&u.publicar_um_passo===undefined)API('/api/auth/eu').then(x=>{if(EU&&x&&x.id===EU.id){EU.publicar_um_passo=!!x.publicar_um_passo;EU.conferir_so_avisos=!!x.conferir_so_avisos;EU.importacao_automatica=!!x.importacao_automatica;umPassoMarcar()}}).catch(()=>{});atualizarTopoEstacoes();clearInterval(window._estTopTimer);if(['admin','master'].includes(u.papel)){carregarUsuarios();carregarConfig()}const r0=rotaAtual().split('/')[0];window.FUNDOS_PRONTOS=carregarFundosAPI().then(()=>carregarProjetosEtiqueta());carregarAgentesAPI();if(r0!=='projetos')carregarProjetosAPI();if(r0!=='painel')carregarPainel();if(r0!=='filas')carregarFilas();if(r0!=='solicitacoes')carregarSolicitacoes();if(r0!=='erros')carregarErros();document.body.classList.remove('admin','operador','leitura');document.body.classList.add(u.papel);document.querySelector('.who span').textContent=u.nome;atualizarAvatarTopo(u);document.querySelector('.who').title='Meu perfil';document.getElementById('login').classList.remove('on');if(u.precisa_trocar_senha){document.getElementById('m-senha').classList.add('on')}aplicarPermissoes();(window.PREFS_PRONTAS=carregarPreferenciasAjuda()).finally(vigiarTarefas);route_to(rotaAtual())}
@@ -8062,7 +8149,7 @@ const COMECO_PAPEL={admin:['painel','Painel'],master:['painel','Painel'],operado
 async function boasVindas(u){const [rota,nome]=COMECO_PAPEL[u&&u.papel]||COMECO_PAPEL.leitura;
   const ok=await confirmar({titulo:`Bem-vindo ao painel, ${String(u&&u.nome||'').split(' ')[0]}`,html:'<p>Este painel leva o material digitalizado até o site.</p><p>Cada página tem uma caixa "Como funciona esta página"; o <b>?</b> ao lado do título a reabre.</p><p>Para o seu papel, comece por <b>'+escHtml(nome)+'</b>.</p>',botao:'Ir para '+nome,cancelar:'Ficar aqui'});if(ok)nav(rota)}
 /* H25: o avatar abre um menu (Meu perfil · Atalhos · Mostrar de novo as explicações · Sair) */
-function whoMenu(abrir){const m=document.getElementById('who-menu'),w=document.querySelector('.who');if(!m||!w)return;const v=abrir===undefined?m.hidden:abrir;m.hidden=!v;w.setAttribute('aria-expanded',String(v));if(v){const b=m.querySelector('button');if(b)b.focus()}}
+function whoMenu(abrir){const m=document.getElementById('who-menu'),w=document.querySelector('.who');if(!m||!w)return;const v=abrir===undefined?m.hidden:abrir;if(v&&EU){document.getElementById('who-cab-nome').textContent=EU.nome||'';document.getElementById('who-cab-papel').textContent=[{master:'admin master',admin:'admin',operador:'operador',leitura:'só leitura'}[EU.papel]||EU.papel,EU.email].filter(Boolean).join(' · ')}   /* §4: o menu da conta diz quem está e com que papel */m.hidden=!v;w.setAttribute('aria-expanded',String(v));if(v){const b=m.querySelector('button');if(b)b.focus()}}
 document.querySelector('.who').addEventListener('click',e=>{if(!EU)return;e.stopPropagation();whoMenu()});
 document.querySelector('.who').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&EU){e.preventDefault();whoMenu(true)}});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-who]');if(b){whoMenu(false);const a=b.dataset.who;if(a==='perfil')abrirPerfil();else if(a==='atalhos')abrirAjudaAtalhos();else if(a==='explicacoes')reverExplicacoes();else if(a==='avisos')abrirTarefas();else if(a==='sair')sair();return}if(!e.target.closest('#who-menu'))whoMenu(false)});
