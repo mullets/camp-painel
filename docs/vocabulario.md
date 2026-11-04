@@ -212,12 +212,28 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   "cópia atrasada" · "só uma cópia". Espaço: "enche em ~N dias" (menos de 30 = atenção; menos de 10 = crítico).
 
 ## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
-- Coluna da esquerda: **O que fazer agora**, **O caminho do material** e **Ritmo das últimas 2 semanas**.
+- Coluna da esquerda: **O que fazer agora**, **O caminho do material**, **Ritmo das últimas 2 semanas** e, logo abaixo (admin), **Visitas ao site** (03–04/11/2026).
 - Coluna da direita, completa: **Está tudo funcionando?**, **Hoje** e, abaixo, **Qualidade da base**, **Melhorias de hoje**,
-  **Quanto do acervo já está no site** e (admin) **Visitas ao site**. Tudo sempre aberto: nada de bloco recolhido.
+  **Quanto do acervo já está no site**. Tudo sempre aberto: nada de bloco recolhido.
   Pedido do Rafael em 27/10/2026 ("eu gostava dessa barra completa"): desfaz o bloco recolhido **Números do acervo** do UX-30.
 - **Visitas ao site** com o Google Analytics desligado mostra **desligado** na Home sem perguntar ao Google (UX-12) e também aparece em
   **Configurações** (com "Ver como ligar").
+- **Visitas ao site** (04/11/2026, especificação do Rafael): na Home, logo abaixo de **Ritmo das últimas 2 semanas** (coluna da esquerda),
+  e na tela do menu, o mesmo módulo: "Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse.", o filtro
+  **Últimos 7 dias** · **Últimos 30 dias** · **Últimos 90 dias** · **Intervalo personalizado** (**Aplicar**), as datas com "horário de São
+  Paulo · termina ontem, porque o dia de hoje ainda não terminou" e "**Última sincronização:** …" (chip **falhou**).
+  - **Evolução das visitas**: **Visitas no período** ("sessões no site público"), **Média de visitas por dia** ("total ÷ N dias"),
+    **Variação vs. período anterior** ("sem base para comparar" quando o anterior é zero; "sem dados completos do período anterior").
+    "**Visitas** = sessões: cada vez que alguém entra no site conta uma visita…". **Comparar com período anterior**, **Ver os números**,
+    "pico: …". **Visitas** é sempre sessão; não use "acessos", "pessoas" ou "páginas vistas" como sinônimo.
+  - **Projetos mais visitados**: "Ranking dos projetos do acervo que receberam mais acessos no período selecionado.", "**Visualizações** da
+    página do projeto…" (é a medida do ranking; nunca chame de "visitas"), **Ver todos os projetos (N)** / **Mostrar só os 10 mais
+    visitados**, "Buscar projeto ou arquiteto", **Mais visitados** · **Menos visitados** · **Maior crescimento**, **Exportar CSV**,
+    **Página pública**, "novo" (sem visualização no período anterior), "**Páginas não identificadas:** …(fora do ranking, para investigar)",
+    "Fora do ranking também: …". Sem autoria cadastrada: "**Acervo** <fundo>" (nunca o titular como autor).
+  - Estados: "Carregando as visitas…", "**Sem visitas registradas neste período**", "**Não foi possível carregar os dados de visitas**"
+    (com o erro técnico, **Tentar de novo** e **Ver o diagnóstico**), chip **desligado** / **sem dados** no título da Home.
+    Botão da Home para a tela: **Canais, cidades e pesquisas no Google**.
 - **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar).
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").

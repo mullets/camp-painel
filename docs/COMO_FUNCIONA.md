@@ -3238,15 +3238,72 @@ Pedido do Rafael (03/11/2026): "para colocar o analytics no nosso painel, adapte
   - `GET /api/visitas?periodo=7d|28d|90d|mes|mes_anterior` (ou `de`/`ate`): perfil leitura. A chave da conta nunca sai do servidor.
   - `POST /api/visitas/coletar`: admin.
   - `GET /api/visitas/diagnostico`: admin. Confere a credencial, a propriedade numérica, o token, o acesso, o fluxo G-…, os dados, o filtro de domínio e o Search Console. Cada item vem com o que fazer.
-- **Tela:**
-  - Na Home ("Visitas ao site"): resumo de 28 dias, gráfico por dia, de onde chegam, o que buscaram e o botão "Ver tudo". Sem histórico, continua o resumo ao vivo de C.9.3.
-  - Menu Acompanhamento → **Visitas ao site** (tecla V): períodos, números, gráfico, canais, origem, cidades, aparelhos, páginas mais vistas e pesquisas no Google.
+- **Tela (04/11/2026, especificação do Rafael "Visitas ao site"; "É na página de Dashboard"):** um só componente (`vmHTML`, estado `VM`) com
+  duas perguntas, no MESMO período: como as visitas evoluíram e quais projetos do acervo foram mais visitados.
+  - **Na Home** (admin), logo abaixo de "Ritmo das últimas 2 semanas", na coluna da esquerda, ocupando a largura dela. O componente se
+    adapta à largura do lugar (container query): ≥ 900 px linha completa (posição, foto, nome, barra, número, "Página pública");
+    abaixo disso a barra vai para baixo do nome e "Página pública" vira um ícone; no celular cada projeto é uma linha compacta.
+    A Home não pergunta mais ao Google (`/api/analytics`): lê só o banco.
+  - **Menu Acompanhamento → Visitas ao site** (tecla V): o mesmo componente e, abaixo, canais, origem, cidades, aparelhos e pesquisas no
+    Google das mesmas datas (`GET /api/visitas?periodo=livre&de&ate`), mais "Buscar agora" e "Diagnosticar" (admin).
+  - **Período:** Últimos 7 / 30 (padrão) / 90 dias ou intervalo personalizado. "Hoje" é calculado em São Paulo e o período termina
+    **ontem** (o dia de hoje ainda não terminou; data final depois de ontem é trazida para ontem e a tela diz). A tela mostra as datas,
+    "horário de São Paulo" e "Última sincronização" (a última coleta do GA4, com "falhou" e o erro quando falhou). O dia vem da dimensão
+    `date` do GA4, no fuso da propriedade (o da CAMP é America/Sao_Paulo).
+  - **Métricas (não são sinônimos; a tela diz qual é qual):**
+    - **Visitas** (evolução) = **sessões** do site público (`visita_dia.sessoes`, GA4 `sessions`). O painel não tem a tag do Google e a
+      coleta pela conta de serviço filtra `ga4.dominio`: acesso ao painel não entra.
+    - **Visualizações da página do projeto** (ranking) = `screenPageViews` das páginas de projeto (`visita_dimensao` tipo `pagina`).
+  - **Indicadores:** Visitas no período; Média de visitas por dia (total ÷ dias com dados); Variação vs. período anterior (o período
+    imediatamente anterior, de mesma duração), em % e em número. Só compara período inteiro com período inteiro; base zero → "sem base
+    para comparar" (sem %); anterior fora do histórico → "sem dados completos do período anterior".
+  - **Dia sem dado ≠ zero:** dia dentro de uma coleta do GA4 que deu certo e sem linha = 0 (o GA4 não devolve dia sem visita); dia fora
+    do que foi sincronizado = sem dado (`null`): o gráfico deixa em branco e a tabela diz "sem dado".
+  - **Gráfico:** linha azul de 2 px com segmentos retos (sem suavização), área suave, eixo Y do zero, pico marcado com um ponto e na
+    legenda; rótulos em HTML com tamanho fixo (nada de texto dentro do SVG); tooltip ao passar o mouse, tocar ou com as setas do teclado
+    (data e número exato); "Comparar com período anterior" desenha a segunda linha tracejada; "Ver os números" é a tabela.
+    Até 92 dias: um ponto por dia; até 731: por semana (blocos de 7 dias desde o início); acima: por mês.
+  - **Estados:** carregando (esqueleto); "Sem visitas registradas neste período"; "Não foi possível carregar os dados de visitas"
+    (nunca zero) com o erro técnico da última sincronização, "Tentar de novo", "Ver o diagnóstico" (admin) e, sem a chave, como ligar.
+    Na Home o título ganha "desligado" quando o Google não está ligado (`analytics_ligado` = falso) e nunca houve sincronização.
+  - **Ranking:** 10 iniciais, "Ver todos os projetos" (busca por projeto/arquiteto/código, ordem Mais visitados · Menos visitados · Maior
+    crescimento — maior aumento de visualizações frente ao período anterior; a posição é sempre a de "mais visitados"), "Exportar CSV"
+    do período. Linha inteira abre o projeto no painel; o botão "Página pública" abre a página do site em outra aba. 1º lugar com contorno
+    e número em dourado (`--amber`); barras azuis numa só escala (o 1º do período = 100%); números à direita, tabulares.
+    Nome do projeto; abaixo, a **autoria** cadastrada (`projeto.autoria`) ou, sem ela, "Acervo <fundo>" (o titular nunca aparece como
+    autor sem confirmação) e o ano (`ano`/`ano_fim`, 0 = sem ano).
+  - **Foto:** a capa do projeto (`projeto.capa_item`, só se a folha for do próprio projeto); senão a primeira folha publicada do projeto
+    com imagem (`item.status_site='no_ar'`, ordem série/sequencial); a imagem vem de `/api/itens/{folha}/previa?t=160`. Sem foto (ou se
+    a imagem não abrir), um desenho neutro. Nunca a imagem de outro projeto.
+- **Regra de identificação de projeto** (`visitas_relatorio.py`, `mapa_projetos` / `classificar`) — só o vínculo REAL, nunca o título:
+  1. item do projeto no espelho do site: `projeto.tainacan_item_id` → `wp_item.id` → `wp_item.url` em `/acervo/projetos/`;
+  2. página do projeto no espelho do site (`wp_pagina.id`) em `/acervo/projetos/<slug>/` cujo slug começa pelo código do projeto (o site
+     monta o slug a partir do código do item, que é imutável no painel) e cujo código existe no painel;
+  3. `projeto.url_publica_confirmada` (o painel perguntou ao site e o endereço abriu);
+  4. endereço antigo comprovado: `redirecionamento` de projeto (recodificar/mesclar; o site responde 301) e projeto mesclado → destino.
+  - **Normalização** (`normalizar`): sem domínio, sem query (utm_*, fbclid, gclid…) e sem fragmento, `%xx` decodificado, barras repetidas
+    juntas, minúsculas (o site resolve caminho de página sem diferenciar maiúsculas), barra no fim. Caminhos diferentes nunca se juntam.
+  - Endereço ligado a dois projetos não vai para nenhum. Página em `/acervo/projetos/<algo>/` sem vínculo (ou com código de projeto no
+    endereço sem a página no espelho) = **não identificada**: fica recolhida em "Páginas não identificadas", com as visualizações e o motivo,
+    sem ir para projeto nenhum. O resto (página inicial, arquitetos, fundos, `/acervo/projetos/` e a paginação, busca, documentos,
+    notícias…) fica fora do ranking, e a tela diz quantas visualizações ficaram fora.
+- **Rotas novas** (`rotas_visitas.py`, perfil leitura, só o banco; parâmetros `periodo=7d|30d|90d|livre`, `de`, `ate`):
+  - `GET /api/visitas/evolucao?…&comparar=1` → `{de, ate, dias, ontem, fuso, ajustado, metrica, agregacao, pontos[{inicio, fim, visitas}],
+    total, media_dia, dias_com_dados, completo, variacao{percentual, absoluta, base_zero, disponivel}, anterior{de, ate, total, pontos},
+    pico, sincronizacao{ultima, ultima_ok, falhou, nunca}, estado: ok|sem_dados|indisponivel}`.
+  - `GET /api/visitas/projetos?…&ordem=mais|menos|crescimento&busca=&limite=10` (0 = todos) → `{itens[{posicao, codigo, titulo, autoria{texto,
+    tipo: autoria|acervo}, ano, ano_fim, visualizacoes, anterior, diferenca, variacao_pct, base_zero, url_publica, caminhos, foto}], maximo,
+    total_projetos, encontrados, nao_identificadas{paginas, visualizacoes, itens}, outras{visualizacoes, paginas}, estado, sincronizacao}`.
+  - `GET /api/visitas/projetos.csv?…` → `visitas-projetos-<de>-a-<ate>.csv` (`;`, UTF-8 com BOM), todos os projetos do período.
+- **LGPD:** só números agregados do Google (nenhum dado de pessoa); nada sai do servidor além do que a tela mostra.
 - **Para ligar:**
   1. No Google Cloud do projeto da conta de serviço, habilite **Google Analytics Data API**, **Google Analytics Admin API** e **Google Search Console API**.
   2. GA4: conta de serviço como Leitor (C.9.1).
   3. Search Console: Configurações → Usuários e permissões → adicionar o `client_email` (Restrito). Depois preencha `sc.site`.
   4. Confira `ga4.dominio` (`camp.arq.br`).
-- **Testes:** modo `visitas_site` (Google falso com `httpx.MockTransport`) e `tests/navegador_visitas_site.js`.
+- **Testes:** modos `visitas_site` (Google falso com `httpx.MockTransport`) e `visitas_redesenho` (identificação, períodos, comparação,
+  agregação, CSV, permissões, erro ≠ zero); `tests/navegador_visitas_site.js` e `tests/navegador_visitas_redesenho.js` (critérios de aceite
+  no navegador, com prints em 1366/1920/390 px, claro e escuro; servidor próprio na porta 8975).
 
 ## C.10 Relatórios para prestação de contas (`rotas_relatorios.py`)
 
