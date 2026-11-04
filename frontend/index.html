@@ -1127,6 +1127,15 @@ tr.emp-atrasado td{background:var(--red-soft)}tr.emp-atrasado td:first-child{box
 .vm-erro{display:grid;gap:8px;padding:16px;border:1px solid var(--red);border-radius:var(--r-md);background:var(--red-soft);color:var(--ink)}.vm-erro b{font-size:var(--fs-lg)}.vm-erro p{margin:0;color:var(--ink2)}
 .vm-erro .act{display:flex;flex-wrap:wrap;gap:8px}.vm-erro code{display:block;font-family:var(--mono);font-size:var(--fs-md);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink2)}
 .vm-load{display:grid;gap:12px}.vm-load .ini-skel{height:18px}.vm-load .ini-skel.alto{height:160px}
+/* Redesenho §12: o resumo de visitas da Home (indicadores ao lado do gráfico; os 5 projetos logo abaixo) */
+.vm-res{grid-template-columns:minmax(190px,.75fr) minmax(0,1.6fr);align-items:start;gap:16px 20px}
+.vm-res-kpis{display:grid;gap:12px}.vm-res-kpis .l{display:block;font-size:var(--fs-md);color:var(--ink2)}
+.vm-res-tot{padding-left:12px;border-left:3px solid var(--blue)}.vm-res-tot .v{display:block;font-size:var(--fs-num);font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ink)}
+.vm-res-tot small,.vm-res-l small{display:block;font-size:var(--fs-md);color:var(--ink2);line-height:1.45}.vm-res-tot small b{color:var(--ink)}
+.vm-res-l{padding-left:12px;border-left:1px solid var(--line)}.vm-res-l b{display:block;font-size:var(--fs-xl);font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
+.vm-res .vm-g-area{height:170px}.vm-res .vm-g-leg{margin-bottom:10px}.vm-res-g{min-width:0}
+.vm-ir{justify-content:flex-end}.vm-ir .btn{font-size:var(--fs-base);padding:8px 14px}
+@container (max-width:640px){.vm-res{grid-template-columns:minmax(0,1fr)}.vm-res-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.vm-ir{justify-content:stretch}.vm-ir .btn{width:100%;min-height:44px}}
 @container (max-width:900px){
   .vm-row{grid-template-columns:34px 68px minmax(0,1fr) auto auto;gap:6px 14px}.vm-pos{grid-column:1;grid-row:1/3}.vm-foto{grid-column:2;grid-row:1/3;width:68px;height:48px}
   .vm-nome{grid-column:3;grid-row:1}.vm-barra{grid-column:3;grid-row:2}.vm-n{grid-column:4;grid-row:1/3}.vm-pub{grid-column:5;grid-row:1/3;padding:8px}.vm-pub-t{display:none}.vm-pub svg{width:16px;height:16px}
@@ -1193,44 +1202,84 @@ body.na-painel #system-banner{display:none!important}
 .ini-mais{display:block;width:100%;padding:6px 16px 12px;color:var(--blue);font:inherit;font-size:var(--fs-md);background:none;border:0;cursor:pointer;text-align:left}
 .ini-vazio{padding:16px;color:var(--ink2)}.ini-vazio b{color:var(--green)}
 .ph .ini-nota{margin-left:auto}.ini-task-bts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.ini-tipos{padding:0 16px 4px;color:var(--ink3);font-size:var(--fs-sm)}
-.qb-geral{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.qb-geral .v{font:500 28px var(--mono);font-variant-numeric:tabular-nums}
-.qb-seta{font-size:var(--fs-sm2);color:var(--ink3)}.qb-seta.sobe{color:var(--green)}.qb-seta.desce{color:var(--red)}
-.qb-crit{display:grid;gap:6px;margin:10px 0}.qb-crit label{display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:2px 8px;align-items:center;font-size:var(--fs-sm2)}
-.qb-crit label span{font:12.5px var(--mono);text-align:right;color:var(--ink2)}.qb-crit progress{grid-column:1/-1;width:100%;height:8px;accent-color:var(--blue)}
+.qb-geral{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.qb-geral .v{font:600 var(--fs-num) var(--mono);font-variant-numeric:tabular-nums}.qb-geral-l{font-size:var(--fs-md);color:var(--ink2)}
+.qb-var{margin:2px 0 6px}.qb-seta{font-size:var(--fs-md);color:var(--ink2)}.qb-seta.sobe{color:var(--green)}.qb-seta.desce{color:var(--red)}.qb-var .qb-seta{font-weight:600}
+.qb-crit{display:grid;gap:10px;margin:12px 0}.qb-crit label{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;align-items:center;font-size:var(--fs-base);color:var(--ink)}
+.qb-crit .qb-v{font:600 var(--fs-base) var(--mono);text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}.qb-crit .qb-rot .tag{font-style:normal;margin-left:4px}
+.qb-crit progress{grid-column:1/-1;width:100%;height:8px;accent-color:var(--blue)}.qb-crit small{grid-column:1/-1;font-size:var(--fs-md);color:var(--amber)}
+.qb-crit label.qb-zero .qb-v{color:var(--amber)}
+.qb-def{margin:0 0 10px}.qb-def summary,.qb-todos summary{cursor:pointer;color:var(--blue);font-size:var(--fs-md);padding:4px 0;min-height:32px}.qb-def dl{margin:6px 0 0;display:grid;gap:4px;font-size:var(--fs-md);color:var(--ink2)}.qb-def dt{font-weight:600;color:var(--ink)}.qb-def dd{margin:0 0 4px}
+.qb-fund-t{margin:6px 0 2px;font-size:var(--fs-md);font-weight:600;color:var(--ink)}
 .qb-fundos{list-style:none;margin:0;padding:0}.qb-fundos li{border-top:1px solid var(--line2)}
-.qb-fundos button{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;width:100%;padding:7px 0;background:none;border:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
-.qb-fundos button:hover b{color:var(--blue)}.qb-fundos .n{font:12.5px var(--mono);font-variant-numeric:tabular-nums}
-.mh-lista{list-style:none;margin:0;padding:0}.mh-lista li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:7px 16px;border-bottom:1px solid var(--line2);font-size:var(--fs-md)}
-.mh-lista li:last-child{border-bottom:0}.mh-lista .n{font:12.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--ink2);text-align:right}.mh-lista .n b{color:var(--ink)}
-.ini-flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;overflow-x:auto}
-.ini-step{border:1px solid var(--line);border-radius:var(--r);padding:10px;display:grid;gap:4px;align-content:start;min-width:96px;background:var(--surface);text-align:left;font:inherit;color:inherit;cursor:pointer}
-.ini-step:hover{border-color:var(--ink3)}
-.ini-step .i{font:500 12px var(--mono);color:var(--ink3)}.ini-step .nm{font-weight:500;font-size:var(--fs-md)}
-.ini-step .q{font:500 20px var(--mono);font-variant-numeric:tabular-nums}.ini-step .w{font-size:var(--fs-sm);color:var(--ink3)}
-.ini-step.stuck{border-color:var(--amber);background:var(--amber-soft)}.ini-step.stuck .q{color:var(--amber)}
-.ini-step.go{border-color:var(--blue);background:var(--blue-soft)}.ini-step.go .q{color:var(--blue)}
-.ini-legenda{display:flex;gap:14px;flex-wrap:wrap;color:var(--ink3);font-size:var(--fs-sm);margin-top:10px}
-.ini-legenda span{display:inline-flex;gap:6px;align-items:center}.ini-legenda i{width:10px;height:10px;border-radius:2px;display:inline-block}
-.ini-legenda i.a{background:var(--amber)}.ini-legenda i.b{background:var(--blue)}
-.ini-chart svg{width:100%;height:auto;display:block}
-.ini-chart rect{fill:var(--line)}.ini-chart rect.hoje{fill:var(--blue)}.ini-chart line{stroke:var(--line2);stroke-width:1}
-.ini-chart text{fill:var(--ink3);font:12px var(--mono)}
+.qb-fundos button{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;width:100%;min-height:44px;padding:6px 0;background:none;border:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
+.qb-fundos button:hover b{color:var(--blue)}.qb-fundos .n{font:600 var(--fs-md) var(--mono);font-variant-numeric:tabular-nums}.qb-fundos small.help{font-size:var(--fs-md)}
+.mh-cab{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:8px 16px 4px;font-size:var(--fs-sm);color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+.mh-lista{list-style:none;margin:0;padding:0}.mh-lista li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;min-height:44px;padding:6px 16px;border-bottom:1px solid var(--line2);font-size:var(--fs-base)}
+.mh-lista .n{font:var(--fs-md) var(--mono);font-variant-numeric:tabular-nums;color:var(--ink2);text-align:right}.mh-lista .n b{color:var(--ink);font-size:var(--fs-base)}
+.mh-total{margin:0 0 6px;font-size:var(--fs-base)}.mh-conta{margin:0}.mh-vazio p:first-child{margin:0 0 6px;font-size:var(--fs-base)}
+/* Redesenho §10: o caminho do material. Estreito (container < 980 px, que inclui notebook e celular): percurso vertical com a linha ligando
+   os passos; largo: 7 colunas ligadas por seta. Cor sempre com texto ao lado (.st). Alvo de toque ≥ 44 px. */
+.ini-cam .pb{container-type:inline-size}
+.ini-flow{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.ini-passo{position:relative;display:flex;min-width:0}
+.ini-step{position:relative;flex:1;min-width:0;min-height:44px;display:grid;grid-template-columns:30px minmax(0,1fr) auto;grid-template-areas:"i tx qq" "i st st";gap:2px 12px;align-items:center;padding:10px 12px;margin:3px 0;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);text-align:left;font:inherit;color:inherit;cursor:pointer}
+.ini-step:hover{border-color:var(--ink3);background:var(--surface2)}.ini-step:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ini-step .i{grid-area:i;align-self:start;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:2px solid var(--line);background:var(--surface);font:600 var(--fs-md) var(--mono);color:var(--ink2);position:relative;z-index:1}
+.ini-passo+.ini-passo::before{content:"";position:absolute;left:26px;top:-12px;height:28px;border-left:2px solid var(--line)}
+.ini-step .tx{grid-area:tx;display:grid;gap:1px;min-width:0}.ini-step .nm{font-weight:600;font-size:var(--fs-base);color:var(--ink)}.ini-step .w{font-size:var(--fs-md);color:var(--ink2);line-height:1.4}
+.ini-step .qq{grid-area:qq;text-align:right;line-height:1.2;white-space:nowrap}.ini-step .q{font:600 var(--fs-xl) var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}.ini-step .u{font-size:var(--fs-md);color:var(--ink2)}
+.ini-step .x{display:block;font-size:var(--fs-md);color:var(--ink2);white-space:normal}
+.ini-step .st{grid-area:st;justify-self:start;font-size:var(--fs-sm);font-weight:600;padding:1px 8px;border-radius:var(--r-sm);background:var(--surface2);color:var(--ink2)}
+.ini-passo.stuck .ini-step{border-color:var(--amber);background:var(--amber-soft)}.ini-passo.stuck .i{border-color:var(--amber);color:var(--amber)}.ini-passo.stuck .q,.ini-passo.stuck .st{color:var(--amber)}.ini-passo.stuck .st{background:var(--surface)}
+.ini-passo.go .ini-step{border-color:var(--blue);background:var(--blue-soft)}.ini-passo.go .i{border-color:var(--blue);color:var(--blue)}.ini-passo.go .q,.ini-passo.go .st{color:var(--blue)}.ini-passo.go .st{background:var(--surface)}
+.ini-passo.bloq .ini-step{border-color:var(--red);background:var(--red-soft)}.ini-passo.bloq .i{border-color:var(--red);color:var(--red)}.ini-passo.bloq .q,.ini-passo.bloq .st{color:var(--red)}.ini-passo.bloq .st{background:var(--surface)}
+.ini-passo.zero .q{color:var(--ink3)}
+@container (min-width:980px){
+  .ini-flow{grid-template-columns:repeat(7,minmax(0,1fr));gap:14px}
+  .ini-step{margin:0;grid-template-columns:minmax(0,1fr);grid-template-areas:"i" "tx" "qq" "st";align-content:start;align-items:start;gap:6px;padding:12px}
+  .ini-step .qq{text-align:left;white-space:normal}.ini-step .q{font-size:var(--fs-num)}
+  .ini-passo+.ini-passo::before{content:"→";left:-13px;top:50%;height:auto;border:0;transform:translate(-50%,-50%);color:var(--ink3);font-size:var(--fs-base)}
+}
+.ini-legenda{display:flex;gap:6px 16px;flex-wrap:wrap;color:var(--ink2);font-size:var(--fs-md);margin-top:12px}
+.ini-legenda span{display:inline-flex;gap:6px;align-items:center}.ini-legenda i{width:12px;height:12px;border-radius:var(--r-sm);display:inline-block;flex:none}
+.ini-legenda i.a{background:var(--amber)}.ini-legenda i.b{background:var(--blue)}.ini-legenda i.r{background:var(--red)}.ini-legenda i.z{background:var(--surface);border:1px solid var(--ink3)}
+.ini-cam-un{margin:6px 0 0}
+@container (max-width:520px){.ini-step{grid-template-columns:30px minmax(0,1fr);grid-template-areas:"i tx" "i qq" "i st"}.ini-step .qq{text-align:left;white-space:normal}.ini-step .x{display:inline;margin-left:6px}.ini-step .x::before{content:"· "}}
+/* Redesenho §11: folhas conferidas por dia, em HTML (rótulos com tamanho fixo, não esticam com a largura) */
+.ini-chart{container-type:inline-size;display:grid;gap:12px}
+.rt-per{margin:0;color:var(--ink2);font-size:var(--fs-md)}
+.rt-load{display:grid;gap:10px}.rt-load .ini-skel{height:200px}
+.rt-g{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 10px}
+.rt-y{position:relative;min-width:24px}.rt-y span{position:absolute;right:0;transform:translateY(50%);font-size:var(--fs-sm);color:var(--ink3);font-variant-numeric:tabular-nums;line-height:1}
+.rt-area{position:relative;height:180px;display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:4px;align-items:end;border-bottom:1px solid var(--line)}
+.rt-grade{position:absolute;left:0;right:0;border-top:1px dashed var(--line2);pointer-events:none}
+.rt-col{position:relative;height:100%;display:flex;align-items:flex-end;justify-content:center;outline:none;border-radius:var(--r-sm);cursor:default}
+.rt-col:hover,.rt-col:focus-visible{background:var(--surface2)}.rt-col:focus-visible{box-shadow:0 0 0 2px var(--blue)}
+.rt-bar{display:block;width:72%;max-width:36px;min-height:0;background:var(--blue);opacity:.55;border-radius:var(--r-sm) var(--r-sm) 0 0}
+.rt-col.hoje .rt-bar{opacity:1}.rt-col.vazio .rt-bar{opacity:1;height:2px!important;background:var(--line)}
+.rt-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:5;min-width:170px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);box-shadow:0 8px 22px rgba(0,0,0,.2);font-size:var(--fs-md);color:var(--ink2);line-height:1.45;white-space:nowrap;pointer-events:none}
+.rt-tip.ini{left:0;transform:none}.rt-tip.fim{left:auto;right:0;transform:none}
+.rt-tip b{display:block;color:var(--ink);font-size:var(--fs-base)}.rt-tip small{display:block;font-size:var(--fs-sm);color:var(--ink3)}
+.rt-col:hover .rt-tip,.rt-col:focus .rt-tip{display:block}
+.rt-x{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:4px;margin-top:6px}.rt-x span{text-align:center;font-size:var(--fs-sm);color:var(--ink3);font-variant-numeric:tabular-nums;white-space:nowrap}
+@container (max-width:560px){.rt-x span.imp{visibility:hidden}.rt-area{height:150px}}
+.rt-vazio .act{justify-content:center;margin-top:10px;display:flex}
 .ini-nota{font-size:var(--fs-sm);color:var(--ink3)}
 .ini-hrow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid var(--line2)}
 .ini-hrow:last-of-type{border-bottom:0}.ini-hrow b{font-weight:500}.ini-hrow p{margin:0;color:var(--ink2);font-size:var(--fs-sm2)}
 .ini-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);margin-top:6px}.ini-dot.g{background:var(--green)}.ini-dot.a{background:var(--amber)}.ini-dot.r{background:var(--red)}.ini-dot.b{background:var(--blue)}
 .ini-bar{height:8px;background:var(--surface2);border-radius:var(--r-sm);overflow:hidden;margin:6px 0 2px;border:1px solid var(--line2)}
 .ini-bar i{display:block;height:100%;background:var(--blue)}.ini-bar.r i{background:var(--red)}.ini-bar.a i{background:var(--amber)}
-.ini-prog{display:grid;gap:12px}.ini-prog-row{display:grid;gap:2px}
-.ini-prog-row header{display:flex;justify-content:space-between;gap:8px;font-size:var(--fs-md)}
-.ini-prog-row header span{font:12.5px var(--mono);color:var(--ink2);font-variant-numeric:tabular-nums}
+.ini-prog{display:grid;gap:16px}.ini-prog-row{display:grid;gap:2px}.ini-prog-row>p{margin:0}.ini-cob-n{font-size:var(--fs-base);color:var(--ink2)}.ini-cob-n b{color:var(--ink);font-variant-numeric:tabular-nums}.ini-cob-pct{font:600 var(--fs-lg) var(--mono);color:var(--ink)}.ini-cob-na{font-size:var(--fs-md);color:var(--ink2);font-weight:600}.ini-cob-ir{justify-self:start;padding:4px 0;min-height:32px;background:none;border:0;color:var(--blue);cursor:pointer;font:inherit;font-size:var(--fs-md);text-align:left}.ini-cob-ir:hover{text-decoration:underline}.qb-var .qb-sem{font-weight:400}
+.ini-prog-row header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:var(--fs-base)}
+.ini-prog-row header span{font-variant-numeric:tabular-nums}.ini-prog .ini-bar{height:10px}.ini-prog .ini-bar i{width:0}
 .ini-feed ul{margin:0;padding:0}.ini-feed li{list-style:none;display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:7px 16px;border-bottom:1px solid var(--line2);font-size:var(--fs-md)}
 .ini-feed li:last-child{border-bottom:0}.ini-feed time{font:12px var(--mono);color:var(--ink3);padding-top:1px}
 .ini-skel{display:block;border-radius:var(--r);background:linear-gradient(90deg,var(--line2),var(--surface2),var(--line2));background-size:200% 100%;animation:camp-skeleton 1.2s linear infinite}
 .ini-hskel{padding:9px 16px;border-bottom:1px solid var(--line2)}.ini-hskel .ini-skel{height:34px}
 .ini-rodape{display:block;padding:8px 16px 12px;color:var(--blue);font:inherit;font-size:var(--fs-md);background:none;border:0;cursor:pointer;text-align:left}
 .ph .ini-link{margin-left:auto;color:var(--blue);font-size:var(--fs-sm2);background:none;border:0;cursor:pointer;font-family:inherit}
-@media (max-width:1100px){.ini-grid{grid-template-columns:minmax(0,1fr)}.ini-flow{grid-template-columns:repeat(7,minmax(110px,1fr))}}
+@media (max-width:1100px){.ini-grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:760px){.ini-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ini-hello h1{font-size:20px}}
 @media (prefers-reduced-motion:reduce){.ini-skel{animation:none}}
 /* P2-18 · janela de confirmação padrão (alvo + consequência; digitar o código para o que não tem volta) */
@@ -6361,16 +6410,63 @@ function iniTarefasHTML(d){const g0=d.tarefas||[],gs=[...g0.filter(g=>iniGrupoMe
   return gs.map(g=>{const meu=iniGrupoMeu(g.quem);return `<div class="ini-tg${meu?'':' ini-outro'}" data-ini-grupo="${escHtml(g.id)}"${meu?'':` data-ini-outro="${escHtml(g.quem)}"`}><div class="ini-tgh">${escHtml(g.titulo)} <span class="ini-quem">${escHtml(INI_QUEM[g.quem]||g.quem)}</span>${INI_ORDENA.includes(g.id)&&g.total>1?`<button type="button" class="ini-link ini-ordem" data-ini-ordem aria-pressed="${iniOrdem()==='parado'}" title="Ordenar pelo tempo parado na mesma etapa">mais parado primeiro</button>`:''}${meu?'':` <span class="ini-outro-nota">você acompanha; quem faz é ${g.quem==='admin'?'um admin':'um operador'}</span>`}</div>${g.tipos?`<div class="ini-tipos">${escHtml(g.tipos.map(x=>`${fmtN(x.n)} ${x.rotulo}`).join(' · '))}</div>`:''}${g.itens.map(i=>{const k=PAINEL_ACOES.push(i)-1;
     return `<div class="ini-task"${i.acao?'':` data-ini-linha="${k}"`}><span class="ini-sev ${escHtml(i.sev)}"></span><div class="t"><b>${escHtml(i.titulo)}</b>${i.lote?`<small class="ini-lote">${escHtml(i.lote)}</small>`:''}<small>${i.codigo?`<span class="code">${escHtml(i.codigo)}</span> · `:''}${escHtml(i.detalhe||'')}</small></div>${i.acao?`<span class="ini-task-bts">${i.adiar&&EU&&EU.papel!=='leitura'?iniIgnorarHTML(i,k):''}<button type="button" class="btn sm${i.sev==='r'&&i.acao.rotulo!=='Ver'?' pri':''}" data-ini-acao="${k}">${escHtml(i.acao.rotulo)}</button></span>`:''}</div>`}).join('')}${g.total>g.itens.length?`<button type="button" class="ini-mais" data-ini-rota="${escHtml(g.ver_todos.rota)}">${escHtml(g.ver_todos.rotulo)} →</button>`:''}</div>`}).join('')}
 function iniEstacoesCaptura(e){if(e&&e.estacoes_resumo)return e.estacoes_resumo;/* UX-05: a mesma conta do topo */const m=((e&&e.maquinas)||[]).filter(x=>['foto','contex','universal'].includes(x.tipo));return {total:m.length,ligadas:m.filter(x=>x.online||x.app_online).length,nomes:m.filter(x=>x.online||x.app_online).map(x=>x.nome.replace(/^Estação /,''))}}
-function iniCaminhoHTML(c,e){return `<div class="ini-flow">${c.map((p,i)=>{let q=p.q==null?'—':fmtN(p.q),det=p.detalhe;
-    if(p.id==='digitalizar'){if(!e){q='…';det='verificando…'}else{const s=iniEstacoesCaptura(e);q=fmtN(s.ligadas);det=s.ligadas?`de ${s.total} estações ligadas`:'estações desligadas'}}
-    return `<button type="button" class="ini-step ${p.estado==='acumula'?'stuck':p.estado==='pronto'?'go':''}" data-ini-rota="${escHtml(p.rota)}" id="ini-passo-${escHtml(p.id)}"><span class="i">${i+1}</span><span class="nm">${escHtml(p.nome)}</span><span class="q">${escHtml(q)}</span><span class="w">${escHtml(det)}</span></button>`}).join('')}</div>
-  <div class="ini-legenda"><span><i class="a"></i>acumulando: é aqui que falta gente</span><span><i class="b"></i>pronto para o próximo passo</span></div>`}
-function iniRitmoHTML(R,p){if(!R)return '<span class="ini-skel" style="height:150px"></span>';const r=R.dias||[];if(!r.length)return '<p class="ini-nota">Sem dados de ritmo.</p>';
-  const v=r.map(x=>x.conferidas),topo=Math.max(10,Math.ceil(Math.max(...v)/10)*10),x0=40,w=590/v.length,y0=110,k=90/topo,dm=s=>s.slice(8,10)+'/'+s.slice(5,7);
-  const barras=v.map((n,i)=>{const h=Math.max(n*k,n?2:0);return `<rect class="${i===v.length-1?'hoje':''}" x="${(x0+i*w+3).toFixed(1)}" y="${(y0-h).toFixed(1)}" width="${Math.max(1,w-6).toFixed(1)}" height="${h.toFixed(1)}" rx="2"><title>${dm(r[i].dia)}: ${qtd(n,'folha conferida','folhas conferidas')}</title></rect>`}).join('');
-  const hoje=v[v.length-1],media=+R.media_conferidas||0,falta=R.folhas_a_conferir,zera=R.dias_para_zerar,mf=String(media).replace('.',',');
-  const frase=!media?'Nenhuma folha conferida nas últimas 2 semanas.':`Média de ${mf} ${media===1?'folha conferida':'folhas conferidas'} por dia de trabalho`+(falta?` · no ritmo atual, ${falta===1?'a folha':`as ${fmtN(falta)} folhas`} de ${qtd(p.lotes_conferir,'lote','lotes')} ficam conferidas em cerca de ${qtd(Math.max(1,zera||1),'dia de trabalho','dias de trabalho')}.`:'.');
-  return `<svg viewBox="0 0 640 150" role="img" aria-label="Folhas conferidas por dia nas últimas 2 semanas; hoje ${hoje}"><line x1="34" y1="20" x2="630" y2="20"/><line x1="34" y1="65" x2="630" y2="65"/><line x1="34" y1="110" x2="630" y2="110"/><text x="28" y="24" text-anchor="end">${topo}</text><text x="28" y="69" text-anchor="end">${topo/2}</text><text x="28" y="114" text-anchor="end">0</text>${barras}${hoje?`<text x="${(x0+(v.length-1)*w+w/2).toFixed(1)}" y="${(y0-hoje*k-5).toFixed(1)}" text-anchor="middle">${hoje}</text>`:''}<text x="40" y="140">${dm(r[0].dia)}</text><text x="335" y="140" text-anchor="middle">${dm(r[Math.floor(r.length/2)].dia)}</text><text x="628" y="140" text-anchor="end">hoje</text></svg><p class="ini-nota">${escHtml(frase)}</p>`}
+/* Redesenho §10 (plano do Rafael, 04/11/2026): "O caminho do material" — as 7 etapas conectadas, cada uma com posição, quantidade e a UNIDADE
+   que ela conta (estações, pastas ou lotes: nunca se somam), uma linha de descrição, e a cor com significado e com texto (não só cor):
+   amarelo = maior acúmulo / atenção, azul = próximo passo de uma pessoa, vermelho = parado com erro, neutro = nada esperando (zero não é problema).
+   Cada etapa abre a lista filtrada (data-ini-rota). Largo: horizontal; estreito (container query) e celular: percurso vertical. */
+const INI_PASSO_DESC={digitalizar:'As estações escaneiam e fotografam as folhas.',qnap:'Pastas enviadas, esperando a leitura do CAMP Vision.',campvision:'Lê cada folha: tipo, ano, carimbo e código.',
+  importar:'Trazer para o painel o que o CAMP Vision leu.',conferir:'Uma pessoa confere folha por folha.',aprovar:'Um admin confirma que a conferência acabou.',publicar:'Enviar ao site público.'};
+const INI_PASSO_UN={digitalizar:['estação ligada','estações ligadas'],qnap:['pasta','pastas'],campvision:['pasta','pastas']};
+function iniCaminhoHTML(c,e){const L=(c||[]).map((p,i)=>{let q=p.q,extra='',st='',cls='';
+    const un=p.unidade?[p.unidade,p.unidade_plural]:(INI_PASSO_UN[p.id]||['lote','lotes']),det=String(p.detalhe||'');
+    if(p.id==='digitalizar'){if(!e){q=null;extra='verificando as estações…'}else{const s=iniEstacoesCaptura(e);q=s.ligadas;extra=s.total?`de ${qtd(s.total,'estação','estações')} de captura`:'nenhuma estação cadastrada'}}
+    else if(p.id==='campvision'&&q)extra=det;
+    else if(p.id==='importar'&&det.includes(' · '))extra=det.slice(det.indexOf(' · ')+3);
+    else if(p.id==='conferir'&&q)extra=qtd(p.folhas!=null?+p.folhas:+((det.match(/(\d+) folhas/)||[])[1]||0),'folha para conferir','folhas para conferir');
+    else if(p.id==='publicar'&&q)extra=det;
+    const travados=p.id==='publicar'&&/travad/.test(det),proxima=p.proxima!=null?!!p.proxima:false;
+    if(q==null&&p.id!=='digitalizar'){st='sem medida';extra=det||'sem leitura'}
+    else if(p.bloqueio){cls='bloq';st='parado com erro';extra=p.bloqueio}
+    else if(p.estado==='acumula'){cls='stuck';st=proxima?'maior acúmulo · próximo passo':'maior acúmulo'}
+    else if(proxima){cls='go';st='próximo passo'}
+    else if(travados){cls='stuck';st='atenção'}
+    else if(q===0&&p.id!=='digitalizar'){cls='zero';extra=extra||'nada esperando'}
+    const qs=q==null?'—':fmtN(q),u=q==null?un[1]:(q===1?un[0]:un[1]);
+    const rot=`Passo ${i+1} de 7, ${p.nome}: ${q==null?'sem medida':qs+' '+u}${st?'. '+st:''}${extra&&st!=='sem medida'?'. '+extra:''}. Abrir a lista.`;
+    return `<li class="ini-passo ${cls}"><button type="button" class="ini-step" data-ini-rota="${escHtml(p.rota)}" id="ini-passo-${escHtml(p.id)}" data-unidade="${escHtml(u)}" aria-label="${escHtml(rot)}">
+      <span class="i" aria-hidden="true">${i+1}</span><span class="tx"><span class="nm">${escHtml(p.nome)}</span><span class="w">${escHtml(INI_PASSO_DESC[p.id]||'')}</span></span>
+      <span class="qq"><span class="q">${escHtml(qs)}</span> <span class="u">${escHtml(u)}</span>${extra?`<span class="x">${escHtml(extra)}</span>`:''}</span>${st?`<span class="st">${escHtml(st)}</span>`:''}</button></li>`}).join('');
+  return `<ol class="ini-flow" aria-label="O caminho do material: 7 passos, do scanner ao site">${L}</ol>
+  <div class="ini-legenda"><span><i class="a"></i>amarelo: maior acúmulo, é aqui que falta gente</span><span><i class="b"></i>azul: próximo passo de uma pessoa</span><span><i class="r"></i>vermelho: parado com erro</span><span><i class="z"></i>zero: nada esperando (não é problema)</span></div>
+  <p class="ini-nota ini-cam-un">Cada passo conta a sua unidade (estações, pastas ou lotes): os números não se somam. Clique num passo para ver a lista.</p>`}
+/* Redesenho §11: "Folhas conferidas por dia — últimas 2 semanas". Gráfico de barras em HTML (rótulos com tamanho fixo: não esticam como o
+   texto de SVG), total e média, dica com data, quantidade, unidade e origem, legenda "dia corrido". Sem nenhuma folha conferida: estado vazio
+   com atalho, sem gráfico falso. Falha ao buscar ≠ "sem atividade": mostra o erro e "Tentar de novo". */
+function rtDiaLongo(s){const d=new Date(s+'T12:00:00Z');return `${VM_SEM[d.getUTCDay()]} ${s.slice(8,10)}/${s.slice(5,7)}/${s.slice(0,4)}`}
+function iniRitmoHTML(R,p){if(!R)return '<div class="rt-load" role="status"><span class="ini-skel"></span><span class="vm-nota">Carregando o ritmo…</span></div>';
+  if(R.erro)return `<div class="vm-erro rt-erro" role="alert"><b>Não foi possível carregar o ritmo</b><p>O painel não respondeu ao pedir as folhas conferidas; nada foi trocado por zero.</p><code>${escHtml(R.erro)}</code><div class="act"><button type="button" class="btn sm" data-rt-tentar>Tentar de novo</button></div></div>`;
+  const r=R.dias||[];if(!r.length)return `<div class="vm-erro rt-erro" role="alert"><b>Não foi possível carregar o ritmo</b><p>O servidor respondeu sem os dias do período.</p><div class="act"><button type="button" class="btn sm" data-rt-tentar>Tentar de novo</button></div></div>`;
+  const v=r.map(x=>+x.conferidas||0),total=v.reduce((a,b)=>a+b,0),de=r[0].dia,ate=r[r.length-1].dia,dm=s=>s.slice(8,10)+'/'+s.slice(5,7),falta=+R.folhas_a_conferir||0;
+  const per=`De ${dm(de)} a ${dm(ate)} (hoje) · ${qtd(r.length,'dia corrido','dias corridos')}, horário de São Paulo`;
+  if(!total)return `<p class="rt-per">${escHtml(per)}</p><div class="vm-vazio rt-vazio" role="status"><b>Nenhuma folha conferida no período selecionado</b>${falta?`${qtd(falta,'folha espera','folhas esperam')} conferência agora.`:'Nenhuma folha esperando conferência agora.'}<div class="act"><button type="button" class="btn sm" data-ini-rota="${falta?'filas/conferir':'filas'}">${falta?'Ver o que falta conferir':'Ver o material novo'}</button></div></div>`;
+  const dias=v.filter(n=>n>0).length,media=+R.media_conferidas||0,mf=fmtNum(media,1),zera=R.dias_para_zerar,topo=vmTopo(Math.max(...v));
+  const prev=falta&&media?` No ritmo atual, ${falta===1?'a folha que falta fica conferida':`as ${fmtN(falta)} folhas que faltam ficam conferidas`} em cerca de ${qtd(Math.max(1,zera||1),'dia de trabalho','dias de trabalho')}.`:'';
+  const barras=r.map((x,i)=>{const n=v[i],ult=i===r.length-1,pos=i<3?'ini':i>r.length-4?'fim':'',dl=rtDiaLongo(x.dia);
+    return `<div class="rt-col${ult?' hoje':''}${n?'':' vazio'}" tabindex="0" role="img" aria-label="${escHtml(`${dl}${ult?' (hoje)':''}: ${qtd(n,'folha conferida','folhas conferidas')}`)}"><span class="rt-bar" data-h="${(n/topo*100).toFixed(2)}"></span>
+      <span class="rt-tip ${pos}" aria-hidden="true">${escHtml(dl)}${ult?' (hoje, até agora)':''}<b>${escHtml(qtd(n,'folha conferida','folhas conferidas'))}</b><small>origem: conferências registradas no painel</small></span></div>`}).join('');
+  const xs=r.map((x,i)=>`<span class="${(r.length-1-i)%2?'imp':''}">${i===r.length-1?'hoje':escHtml(dm(x.dia))}</span>`).join('');
+  return `<p class="rt-per">${escHtml(per)}</p><div class="vm-kpis rt-kpis"><div class="vm-kpi"><div class="l">Total no período</div><div class="v">${fmtN(total)}</div><small>${total===1?'folha conferida':'folhas conferidas'}</small></div>
+    <div class="vm-kpi"><div class="l">Média por dia de trabalho</div><div class="v">${mf}</div><small>${total===1?'folha':'folhas'} ÷ ${qtd(dias,'dia com conferência','dias com conferência')}</small></div>
+    <div class="vm-kpi"><div class="l">Hoje, até agora</div><div class="v">${fmtN(v[v.length-1])}</div><small>${v[v.length-1]===1?'folha conferida':'folhas conferidas'}</small></div></div>
+    <div class="rt-g" role="group" aria-label="${escHtml(`Folhas conferidas por dia, de ${dm(de)} a ${dm(ate)}. Passe o mouse ou use Tab em cada barra; “Ver os números” tem a tabela.`)}">
+      <div class="rt-y" aria-hidden="true">${[1,.5,0].map(f=>`<span data-y="${f*100}">${fmtN(f*topo)}</span>`).join('')}</div>
+      <div class="rt-area">${[.5,1].map(f=>`<i class="rt-grade" data-y="${f*100}"></i>`).join('')}${barras}</div><span></span><div class="rt-x" aria-hidden="true">${xs}</div></div>
+    <p class="vm-def rt-leg"><b>Cada barra é um dia corrido</b> (inclui fins de semana e feriados), no horário de São Paulo; a barra azul mais escura é hoje, ainda em andamento. A média conta só os dias com alguma folha conferida (dias de trabalho).${escHtml(prev)}</p>
+    <details class="vm-num rt-num"><summary>Ver os números</summary><div class="tw"><table><thead><tr><th>Dia</th><th class="num">Folhas conferidas</th></tr></thead><tbody>${r.map((x,i)=>`<tr><td>${escHtml(rtDiaLongo(x.dia))}${i===r.length-1?' (hoje)':''}</td><td class="num">${fmtN(v[i])}</td></tr>`).join('')}</tbody></table></div></details>`}
+function iniRitmoPosicionar(el){if(!el)return;el.querySelectorAll('[data-h]').forEach(b=>{b.style.height=b.dataset.h+'%'});el.querySelectorAll('.rt-y [data-y],.rt-grade[data-y]').forEach(s=>{s.style.bottom=s.dataset.y+'%'})}
+function iniRitmoMostrar(r,p){const el=document.getElementById('ini-ritmo');if(!el)return;el.innerHTML=iniRitmoHTML(r,p);iniRitmoPosicionar(el)}
+function iniRitmoCarregar(p){return API('/api/painel/ritmo?dias=14').catch(e=>(e&&(e.status===401||e.status===428))?null:{erro:(e&&e.message)||'sem resposta do servidor'})}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-rt-tentar]');if(!b)return;const p=PAINEL_D&&PAINEL_D.pendencias;iniRitmoMostrar(null,p);iniRitmoCarregar(p).then(r=>{if(r)iniRitmoMostrar(r,p)})});
 function iniSaudeHTML(e,qi,p){
   if(!e)return Array.from({length:5},()=>'<div class="ini-hskel"><span class="ini-skel"></span></div>').join('');
   const L=[],admin=EU&&['admin','master'].includes(EU.papel),row=(c,t,txt,barra)=>L.push(`<div class="ini-hrow"><span class="ini-dot ${c}"></span><div><b>${escHtml(t)}</b><p>${txt}</p>${barra!=null?`<div class="ini-bar ${c==='r'?'r':c==='a'?'a':''}"><i style="width:${Math.max(0,Math.min(100,+barra))}%"></i></div>`:''}</div></div>`);
@@ -6403,22 +6499,48 @@ function iniSaudeHTML(e,qi,p){
     else if(+b.idade_horas>36)row('a','Cópia de segurança atrasada',escHtml(`A última foi ${haTempo(String(b.em).replace('T',' '))}. O limite é 36 h.`));
     else row('g','Cópia de segurança do painel',escHtml(`Feita ${fmtDataHora(b.em)}${b.quantidade?` · ${qtd(b.quantidade,'cópia guardada','cópias guardadas')}`:''}.`))}
   return L.join('')+(estAdmin()?'<button type="button" class="ini-rodape" data-ini-rota="estacoes">Ver estações e site →</button>':'')}
-function iniNoSiteHTML(s){const r=(t,a,b,nota)=>{const pct=b?Math.round(100*a/b):0;return `<div class="ini-prog-row"><header><b>${t}</b><span>${fmtN(a)} de ${fmtN(b)} · ${pct}%</span></header><div class="ini-bar"><i style="width:${pct}%"></i></div>${nota?`<span class="ini-nota">${escHtml(nota)}</span>`:''}</div>`};
-  return r('Folhas',s.folhas.no_ar,s.folhas.total)+r('Projetos',s.projetos.no_ar,s.projetos.total,s.projetos.sem_folhas?`${qtd(s.projetos.sem_folhas,'projeto ainda não tem','projetos ainda não têm')} folhas digitalizadas (são do inventário).`:'')+r('Fundos com página',s.fundos.no_ar,s.fundos.total)}
+/* Redesenho §17: "Quanto do acervo já está no site": Folhas, Projetos e Fundos com página, cada um com publicado / total elegível / % / barra,
+   a unidade por extenso, a nota quando o denominador tem outra regra e o caminho para a lista do que falta. Total zero = "Não aplicável". */
+function iniPctTxt(a,b){if(!b)return null;const p=100*a/b;return p>0&&p<1?fmtNum(p,1)+'%':Math.round(p)+'%'}
+function iniNoSiteHTML(s){if(!s||!s.folhas||!s.projetos||!s.fundos)return '<p class="ini-nota">Não consegui contar o que está no site agora.</p>';
+  const r=(id,t,un,a,b,nota,link)=>{a=+a||0;b=+b||0;const pct=iniPctTxt(a,b),w=b?Math.min(100,100*a/b):0;
+    return `<div class="ini-prog-row" data-cob="${id}"><header><b>${t}</b>${b?`<span class="ini-cob-pct">${pct}</span>`:'<span class="ini-cob-na">Não aplicável</span>'}</header>
+      <p class="ini-cob-n">${b?`<b>${fmtN(a)}</b> de ${fmtN(b)} ${escHtml(un[1])} ${escHtml(un[2])}`:escHtml(`Nenhum${un[0]==='f'?'a':''} ${un[1].replace(/s$/,'')} para contar ainda.`)}</p>
+      ${b?`<div class="ini-bar" role="img" aria-label="${escHtml(`${t}: ${fmtN(a)} de ${fmtN(b)} ${un[1]} ${un[2]}, ${pct}`)}"><i data-w="${w.toFixed(2)}"></i></div>`:''}
+      ${nota?`<p class="ini-nota">${escHtml(nota)}</p>`:''}${link&&b&&a<b?`<button type="button" class="ini-link ini-cob-ir" data-ini-rota="${escHtml(link[0])}">${escHtml(link[1])} →</button>`:''}</div>`};
+  const sf=+s.projetos.sem_folhas||0;
+  return r('folhas','Folhas',['f','folhas','publicadas'],s.folhas.no_ar,s.folhas.total,'Total: todas as folhas digitalizadas que estão no painel, também as que ainda não foram conferidas.',['projetos/pronto','Ver projetos prontos para publicar'])
+    +r('projetos','Projetos',['m','projetos','com página publicada'],s.projetos.no_ar,s.projetos.total,sf?`O total inclui ${qtd(sf,'projeto','projetos')} do inventário ainda sem folhas digitalizadas: não é erro, ${sf===1?'ele ainda vai':'eles ainda vão'} passar pela digitalização.`:'',['projetos/nao_publicado','Ver projetos não publicados'])
+    +r('fundos','Fundos com página',['m','fundos','com página publicada'],s.fundos.no_ar,s.fundos.total,'Total: os fundos ativos do painel.',['fundos/nao_publicado','Ver fundos não publicados'])}
 const QB_CRIT=[['com_imagem','Com imagem'],['com_codigo','Com código completo'],['com_titulo','Com título'],['com_direitos','Com direitos definidos']];
+const QB_DEF={com_imagem:'a folha tem a imagem (JPG ou TIFF) no painel, ou a imagem já está no site.',com_codigo:'o código da folha está no formato F000-P0000-AAAA-S00-D0000, com o ano preenchido (não 0000).',
+  com_titulo:'o título da folha está preenchido.',com_direitos:'a situação dos direitos do fundo da folha foi registrada (não está “não definida”).'};
 function fmtPct(v){return v==null||v===''||isNaN(+v)?'—':fmtNum(v,1)+'%'}
 function qbSetaHTML(t){if(!t||!t.seta)return '<span class="qb-seta">sem retrato da semana passada ainda</span>';const d=Math.abs(t.diferenca||0),pts=`${String(d).replace('.',',')} ${d===1?'ponto':'pontos'}`;
   return t.seta==='sobe'?`<span class="qb-seta sobe" title="Comparado com ${escHtml(fmtDiaMes(t.dia_antes))}">↑ subiu ${pts}</span>`:t.seta==='desce'?`<span class="qb-seta desce" title="Comparado com ${escHtml(fmtDiaMes(t.dia_antes))}">↓ caiu ${pts}</span>`:'<span class="qb-seta">→ igual à semana passada</span>'}
+/* §15: a variação em PONTOS PERCENTUAIS (não "%"), contra um dia nomeado: o retrato de 7 dias atrás (ou o mais recente antes). Mesma fórmula do índice. */
+function qbVarHTML(t,curto){if(!t||!t.seta)return curto?'':`<span class="qb-seta qb-sem">${'Sem comparação: ainda não há retrato de 7 dias atrás (o painel guarda um por dia).'}</span>`;
+  const d=Math.abs(+t.diferenca||0),pp=`${fmtNum(d,1)} ${d===1?'ponto percentual':'pontos percentuais'}`,dia=fmtDiaMes(t.dia_antes),ref=curto?'':` frente a ${dia} (${fmtPct(t.antes)})`;
+  return t.seta==='sobe'?`<span class="qb-seta sobe">↑ subiu ${pp}${ref}</span>`:t.seta==='desce'?`<span class="qb-seta desce">↓ caiu ${pp}${ref}</span>`:`<span class="qb-seta">→ igual${curto?'':` a ${dia}`}</span>`}
 function fmtDiaMes(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}`:''}   /* dia/mês, para as setas de tendência (não confundir com fmtData, que leva o ano) */
-function qbCriteriosHTML(d){return `<div class="qb-crit">${QB_CRIT.map(([k,t])=>`<label>${t}<span>${fmtPct(d.pct[k])}</span><progress max="100" value="${+d.pct[k]||0}" aria-label="${t}: ${fmtPct(d.pct[k])}"></progress></label>`).join('')}</div>`}
+function qbCriteriosHTML(d){return `<div class="qb-crit">${QB_CRIT.map(([k,t])=>{const v=d.pct[k],zero=v!=null&&+v===0&&d.folhas;
+    return `<label class="${zero?'qb-zero':''}"><span class="qb-rot">${t}${zero?' <em class="tag a">atenção</em>':''}</span><span class="qb-v">${fmtPct(v)}</span><progress max="100" value="${+v||0}" aria-label="${t}: ${fmtPct(v)}${d[k]!=null&&d.folhas?` (${fmtN(d[k])} de ${fmtN(d.folhas)} folhas)`:''}"></progress>${zero?`<small>Nenhuma folha ${k==='com_direitos'?'tem os direitos do fundo definidos':'cumpre esta medida'}: ponto de atenção.</small>`:''}</label>`}).join('')}</div>`}
 function iniQualidadeHTML(q){if(!q||!q.geral)return '<p class="ini-nota">Não consegui calcular o índice agora.</p>';const g=q.geral;
   if(!g.folhas)return '<p class="ini-nota">Ainda não há folhas no painel para medir.</p>';
-  const piores=(q.fundos||[]).slice(0,6);
-  return `<div class="qb-geral"><span class="v">${fmtPct(g.indice)}</span>${qbSetaHTML(g.tendencia)}</div><p class="ini-nota">Índice geral: a média das quatro medidas abaixo, em ${qtd(g.folhas,'folha','folhas')}.</p>${qbCriteriosHTML(g)}
-  ${piores.length?`<p class="ini-nota">Fundos que mais precisam de cuidado:</p><ul class="qb-fundos">${piores.map(f=>`<li><button type="button" data-ini-rota="fundo/${escHtml(f.codigo)}"><span><b>${escHtml(f.sigla||f.codigo)}</b> <small class="help">${escHtml(f.titulo)}</small></span><span class="n">${fmtPct(f.indice)}</span>${qbSetaHTML(f.tendencia).replace(/sem retrato da semana passada ainda/,'')}</button></li>`).join('')}</ul>`:''}`}
+  const fs=q.fundos||[],linha=f=>`<li><button type="button" data-ini-rota="fundo/${escHtml(f.codigo)}"><span><b>${escHtml(f.sigla||f.codigo)}</b> <small class="help">${escHtml(f.titulo)}</small></span><span class="n">${fmtPct(f.indice)}</span>${qbVarHTML(f.tendencia,true)}</button></li>`;
+  return `<div class="qb-geral"><span class="v">${fmtPct(g.indice)}</span><span class="qb-geral-l">índice geral</span></div><p class="qb-var">${qbVarHTML(g.tendencia)}</p>
+  <p class="ini-nota">Média simples das quatro medidas abaixo, em ${qtd(g.folhas,'folha','folhas')} de projetos ativos (sem projetos mesclados, descartados ou de teste).</p>${qbCriteriosHTML(g)}
+  <details class="qb-def"><summary>Como cada medida é calculada</summary><dl>${QB_CRIT.map(([k,t])=>`<dt>${t}</dt><dd>${escHtml(QB_DEF[k])}</dd>`).join('')}<dt>Índice geral</dt><dd>a média das quatro porcentagens, sobre todas as folhas juntas. A comparação usa o retrato guardado de 7 dias atrás; a diferença é em pontos percentuais.</dd></dl></details>
+  ${fs.length?`<p class="qb-fund-t">Fundos que mais precisam de cuidado <span class="ini-nota">(menor índice primeiro)</span></p><ul class="qb-fundos">${fs.slice(0,3).map(linha).join('')}</ul>${fs.length>3?`<details class="qb-todos"><summary>Ver todos os ${fmtN(fs.length)} fundos com folhas</summary><ul class="qb-fundos">${fs.slice(3).map(linha).join('')}</ul></details>`:''}`:''}`}
+/* §16: só o essencial (pessoa, correções válidas hoje e nos últimos 7 dias), em ordem alfabética (não é ranking), o que conta e o que não conta.
+   Quem só lê vê o total da equipe, sem nomes. */
 function iniMelhoriasHTML(m){if(!m)return '<p class="ini-nota pb">Não consegui contar as melhorias agora.</p>';
-  if(!m.pessoas.length)return '<p class="ini-nota pb">Ninguém corrigiu nada nos últimos 7 dias.</p>';
-  return `<ul class="mh-lista">${m.pessoas.map(p=>`<li><span>${escHtml(p.nome)}</span><span class="n"><b>${fmtN(p.hoje)}</b> hoje</span><span class="n">${fmtN(p.semana)} na semana</span></li>`).join('')}</ul><p class="ini-nota pb">Conta as edições em fundos, projetos, folhas e arquitetos. Total hoje: ${fmtN(m.total_hoje)} · na semana: ${fmtN(m.total_semana)}.</p>`}
+  const ps=(m.pessoas||[]).slice().sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')),leitura=!EU||EU.papel==='leitura';
+  const conta='<p class="ini-nota mh-conta">Conta cada edição feita no painel em folhas, projetos, fundos e arquitetos (títulos, códigos, datas, fundos, folhas…). Criar, importar e sincronizar com o site não contam. É número de edições, não de projetos concluídos.</p>';
+  if(!ps.length)return `<div class="pb mh-vazio"><p>Nenhuma correção nos últimos 7 dias.</p>${conta}</div>`;
+  const tot=`<p class="mh-total">Equipe: <b>${fmtN(m.total_hoje)}</b> hoje · <b>${fmtN(m.total_semana)}</b> nos últimos 7 dias${m.desde?` <span class="ini-nota">(desde ${escHtml(fmtDiaMes(m.desde))})</span>`:''}</p>`;
+  if(leitura)return `<div class="pb">${tot}${conta}</div>`;
+  return `<div class="mh-cab" aria-hidden="true"><span>Pessoa</span><span>Hoje</span><span>7 dias</span></div><ul class="mh-lista">${ps.map(p=>`<li><span>${escHtml(p.nome)}</span><span class="n"><b>${fmtN(p.hoje)}</b> hoje</span><span class="n">${fmtN(p.semana)} na semana</span></li>`).join('')}</ul><div class="pb mh-pe">${tot}${conta}</div>`}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-ini-naoera]');if(!b||b.disabled)return;const i=PAINEL_ACOES[+b.dataset.iniNaoera];if(!i||!i.ignorar)return;b.closest('details')?.removeAttribute('open');
   const bloq=!!i.ignorar.bloqueia,r=await confirmar({titulo:'Não mostrar mais: não era problema?',alvo:i.titulo,texto:`O problema fecha como "não era problema", com o seu nome e a data, e sai do Precisa de você para todos.${bloq?' Ele bloqueia a publicação: diga por quê.':''}`,
     motivo:bloq?'obrigatorio':true,motivoRotulo:'Por que não era problema? (fica no histórico)',botao:'Não mostrar mais'});
@@ -6472,7 +6594,7 @@ document.addEventListener('click',async e=>{
 // evoluíram e quais projetos do acervo foram mais visitados — no MESMO período. Na Home fica logo abaixo do "Ritmo das últimas 2 semanas";
 // a tela Visitas ao site usa o mesmo componente e acrescenta canais, cidades e pesquisas no Google. Só lê o banco do painel
 // (/api/visitas/evolucao e /api/visitas/projetos): nada de Google por tela aberta. Visitas = sessões; ranking = visualizações da página do projeto.
-const VM={periodo:'30d',de:'',ate:'',comparar:false,todos:false,ordem:'mais',busca:'',ev:null,pj:null,erro:null,carregando:false,t:0,vez:0,numAberto:false,niAberto:false,sel:null};
+const VM={periodo:'30d',de:'',ate:'',comparar:false,todos:false,ordem:'mais',busca:'',fundo:'',autor:'',ev:null,pj:null,erro:null,carregando:false,t:0,vez:0,numAberto:false,niAberto:false,sel:null};
 const VM_PER=[['7d','Últimos 7 dias'],['30d','Últimos 30 dias'],['90d','Últimos 90 dias'],['livre','Intervalo personalizado']];
 const VM_ORD=[['mais','Mais visitados'],['menos','Menos visitados'],['crescimento','Maior crescimento']];
 const VM_MES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'],VM_SEM=['dom.','seg.','ter.','qua.','qui.','sex.','sáb.'];
@@ -6488,7 +6610,9 @@ function vmTopo(mx){if(mx<=4)return 4;const e=Math.pow(10,Math.floor(Math.log10(
 function vmSinc(s){const u=s&&s.ultima,ok=s&&s.ultima_ok;if(!u)return 'Última sincronização: nenhuma ainda';
   return `Última sincronização: ${escHtml(fmtDataHora(u.inicio))}${u.erro?` <span class="tag r" title="${escHtml(u.erro)}">falhou</span>${ok?` (a anterior que deu certo: ${escHtml(fmtDataHora(ok.inicio))})`:''}`:''}`}
 function vmCarregandoHTML(){return `<div class="vm-load" role="status" aria-live="polite"><span class="ini-skel"></span><span class="ini-skel alto"></span><span class="ini-skel"></span><span class="ini-skel"></span><span class="vm-nota">Carregando as visitas…</span></div>`}
-function vmMontar(el){if(!el)return;el.dataset.vm='1';if(VM.ev||VM.erro)vmRender();else el.innerHTML=vmCarregandoHTML();
+function vmMontar(el){if(!el)return;el.dataset.vm='1';
+  if(el.id==='ini-visitas'&&(VM.periodo==='livre'||VM.todos||VM.busca||VM.ordem!=='mais'||VM.fundo||VM.autor||VM.comparar)){   /* Redesenho §12: a Home é o resumo (7/30/90 dias, top 5); o resto fica na tela completa */
+    if(VM.periodo==='livre')VM.periodo='30d';Object.assign(VM,{todos:false,busca:'',ordem:'mais',fundo:'',autor:'',comparar:false,ev:null,pj:null,t:0})}if(VM.ev||VM.erro)vmRender();else el.innerHTML=vmCarregandoHTML();
   if(!VM.carregando&&(!VM.ev||Date.now()-VM.t>5*60e3))vmCarregar()}
 async function vmCarregar(){const vez=++VM.vez;VM.carregando=true;document.querySelectorAll('[data-vm] .vm').forEach(x=>{x.classList.add('vm-atualizando');x.setAttribute('aria-busy','true')});
   try{const [ev,pj]=await Promise.all([API('/api/visitas/evolucao?'+vmQS()+'&comparar=1'),API('/api/visitas/projetos?'+vmQS()+vmQSRank())]);
@@ -6496,17 +6620,18 @@ async function vmCarregar(){const vez=++VM.vez;VM.carregando=true;document.query
   catch(e){if(vez!==VM.vez)return;if(e.status===401||e.status===428)return;VM.erro=e.message||'sem resposta do servidor';VM.ev=VM.pj=null}
   finally{if(vez===VM.vez)VM.carregando=false}
   vmRender();if(typeof window.vmAoCarregar==='function')window.vmAoCarregar(VM.ev)}
-function vmQSRank(){return `&limite=${VM.todos?0:10}&ordem=${VM.ordem}&busca=${encodeURIComponent(VM.busca)}`}
+function vmQSRank(){return `&limite=${VM.todos?0:10}&ordem=${VM.ordem}&busca=${encodeURIComponent(VM.busca)}${vmQSFiltro()}`}
+function vmQSFiltro(){return `${VM.fundo?'&fundo='+encodeURIComponent(VM.fundo):''}${VM.autor?'&autor='+encodeURIComponent(VM.autor):''}`}
 async function vmCarregarRank(){const vez=++VM.vez;try{const pj=await API('/api/visitas/projetos?'+vmQS()+vmQSRank());if(vez!==VM.vez)return;VM.pj=pj;vmRenderRank()}catch(e){if(vez===VM.vez)toast(e.message)}}
 function vmRender(){document.querySelectorAll('[data-vm]').forEach(el=>{VM.larg=el.clientWidth||700;el.dataset.larg=VM.larg;el.innerHTML=vmHTML(el);vmPosicionar(el)});
   const t=document.getElementById('ini-vis-tag');if(t){const s=VM.ev&&VM.ev.sincronizacao;t.innerHTML=VM.ev&&VM.ev.estado==='indisponivel'&&s&&s.nunca?(PAINEL_D&&PAINEL_D.analytics_ligado===false?'<span class="tag a">desligado</span>':'<span class="tag r">sem dados</span>'):''}}
-function vmRenderRank(){document.querySelectorAll('[data-vm] [data-vm-rank]').forEach(el=>{el.innerHTML=vmRankHTML();vmPosicionar(el)})}
+function vmRenderRank(){document.querySelectorAll('[data-vm] [data-vm-rank]').forEach(el=>{el.innerHTML=el.closest('#ini-visitas')?vmRankHTML({max:5,curto:true}):vmRankHTML();vmPosicionar(el)})}
 function vmPosicionar(raiz){raiz.querySelectorAll('[data-x]').forEach(e=>{e.style.left=e.dataset.x+'%'});raiz.querySelectorAll('[data-y]').forEach(e=>{e.style.bottom=e.dataset.y+'%'});
   raiz.querySelectorAll('[data-w]').forEach(e=>{e.style.width=e.dataset.w+'%'});raiz.querySelectorAll('[data-t]').forEach(e=>{e.style.top=e.dataset.t+'%'})}
 function vmFiltroHTML(){const e=VM.ev||{};const hoje=e.ontem||'';
   return `<div class="vm-per"><select class="btn" data-vm-per aria-label="Período">${VM_PER.map(([k,t])=>`<option value="${k}"${VM.periodo===k?' selected':''}>${t}</option>`).join('')}</select>${VM.periodo==='livre'?`
     <input type="date" class="btn" data-vm-de aria-label="Data inicial" value="${escHtml(VM.de||e.de||'')}" max="${escHtml(hoje)}"><span class="vm-a">a</span><input type="date" class="btn" data-vm-ate aria-label="Data final" value="${escHtml(VM.ate||e.ate||'')}" max="${escHtml(hoje)}"><button type="button" class="btn sm pri" data-vm-aplicar>Aplicar</button>`:''}</div>`}
-function vmHTML(el){const e=VM.ev,naHome=el&&el.id==='ini-visitas';
+function vmHTML(el){const e=VM.ev,naHome=el&&el.id==='ini-visitas';if(naHome)return vmResumoHTML(e);
   const topo=`<div class="vm-top"><p class="vm-sub">Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse.</p>${vmFiltroHTML()}</div>`;
   if(!e&&!VM.erro)return `<div class="vm">${topo}${vmCarregandoHTML()}</div>`;
   const datas=e?`<p class="vm-datas">De <b>${escHtml(vmDMA(e.de))}</b> a <b>${escHtml(vmDMA(e.ate))}</b> (${qtd(e.dias,'dia','dias')}) · horário de São Paulo · termina ontem, porque o dia de hoje ainda não terminou${e.ajustado?' (a data final foi trazida para ontem)':''} · ${vmSinc(e.sincronizacao)}</p>`:'';
@@ -6514,17 +6639,39 @@ function vmHTML(el){const e=VM.ev,naHome=el&&el.id==='ini-visitas';
   const mais=naHome?`<div class="vm-mais"><button type="button" class="btn sm" data-vm-ir>Canais, cidades e pesquisas no Google</button></div>`:'';
   return `<div class="vm${VM.carregando?' vm-atualizando':''}"${VM.carregando?' aria-busy="true"':''}>${topo}${datas}
     <section class="vm-sec" aria-label="Evolução das visitas"><div class="vm-sec-h"><h3>Evolução das visitas</h3></div>${indisp?vmErroHTML():vmEvolucaoHTML(e)}</section>
-    <section class="vm-sec" aria-label="Projetos mais visitados"><div class="vm-sec-h"><h3>Projetos mais visitados</h3>${!indisp&&VM.pj&&VM.pj.total_projetos?`<a class="btn sm" href="/api/visitas/projetos.csv?${vmQS()}&ordem=${VM.ordem}&busca=${encodeURIComponent(VM.busca)}" download data-vm-csv>Exportar CSV</a>`:''}</div>
+    <section class="vm-sec" aria-label="Projetos mais visitados"><div class="vm-sec-h"><h3>Projetos mais visitados</h3>${!indisp&&VM.pj&&VM.pj.total_projetos?`<a class="btn sm" href="/api/visitas/projetos.csv?${vmQS()}&ordem=${VM.ordem}&busca=${encodeURIComponent(VM.busca)}${vmQSFiltro()}" download data-vm-csv>Exportar CSV</a>`:''}</div>
       <p class="vm-sub">Ranking dos projetos do acervo que receberam mais acessos no período selecionado.</p>
       ${indisp?'<p class="vm-nota">O ranking aparece quando os dados de visitas carregarem.</p>':`<p class="vm-def"><b>Visualizações</b> da página do projeto: cada vez que a página pública de um projeto foi aberta. É outra medida, diferente das visitas do gráfico (uma visita pode abrir várias páginas).</p>
-      ${VM.todos?`<div class="vm-ferr"><input type="search" class="btn" data-vm-busca placeholder="Buscar projeto ou arquiteto" aria-label="Buscar projeto ou arquiteto" value="${escHtml(VM.busca)}"><select class="btn" data-vm-ordem aria-label="Ordenar">${VM_ORD.map(([k,t])=>`<option value="${k}"${VM.ordem===k?' selected':''}>${t}</option>`).join('')}</select></div>`:''}
+      ${VM.todos?`<div class="vm-ferr"><input type="search" class="btn" data-vm-busca placeholder="Buscar projeto ou arquiteto" aria-label="Buscar projeto ou arquiteto" value="${escHtml(VM.busca)}"><select class="btn" data-vm-ordem aria-label="Ordenar">${VM_ORD.map(([k,t])=>`<option value="${k}"${VM.ordem===k?' selected':''}>${t}</option>`).join('')}</select>${vmFiltrosRankHTML()}</div>`:''}
       <div data-vm-rank>${vmRankHTML()}</div>`}
     </section>${mais}</div>`}
-function vmErroHTML(){const s=VM.ev&&VM.ev.sincronizacao,u=s&&s.ultima,admin=EU&&['admin','master'].includes(EU.papel);
+/* Redesenho §14: na lista completa (tela Visitas ao site), filtro por fundo e por arquiteto (autoria cadastrada), além da busca e da ordem. */
+function vmFiltrosRankHTML(){const r=VM.pj||{},fs=r.fundos||[],as=r.autores||[];if(!fs.length&&!as.length)return '';
+  return `${fs.length?`<select class="btn" data-vm-fundo aria-label="Filtrar por fundo"><option value="">Todos os fundos</option>${fs.map(f=>`<option value="${escHtml(f.codigo)}"${VM.fundo===f.codigo?' selected':''}>${escHtml(f.codigo)} · ${escHtml(f.sigla||f.titulo||'')} (${fmtN(f.projetos)})</option>`).join('')}</select>`:''}
+    ${as.length?`<select class="btn" data-vm-autor aria-label="Filtrar por arquiteto"><option value="">Todos os arquitetos</option>${as.map(a=>`<option value="${escHtml(a.nome)}"${VM.autor===a.nome?' selected':''}>${escHtml(a.nome)} (${fmtN(a.projetos)})</option>`).join('')}</select>`:''}`}
+/* Redesenho §12: na Home, só o RESUMO — total de visitas (sessões) com a definição, a evolução ao lado e os 5 projetos mais visitados logo abaixo,
+   filtro 7/30/90 dias, a data da última sincronização e o link para a análise completa. Falha ≠ zero: "Dados de audiência temporariamente indisponíveis". */
+function vmResumoHTML(e){const per=`<div class="vm-top"><p class="vm-sub">Resumo das visitas ao site público no período.</p><div class="vm-per"><select class="btn" data-vm-per aria-label="Período">${VM_PER.slice(0,3).map(([k,t])=>`<option value="${k}"${VM.periodo===k?' selected':''}>${t}</option>`).join('')}</select></div></div>`;
+  const ir=`<div class="vm-mais vm-ir"><button type="button" class="btn sm" data-vm-ir>Ver análise completa de visitas →</button></div>`;
+  if(!e&&!VM.erro)return `<div class="vm vm-resumo">${per}${vmCarregandoHTML()}</div>`;
+  const datas=e?`<p class="vm-datas">De <b>${escHtml(vmDMA(e.de))}</b> a <b>${escHtml(vmDMA(e.ate))}</b> · horário de São Paulo · termina ontem · ${vmSinc(e.sincronizacao)}</p>`:'';
+  if(VM.erro||e.estado==='indisponivel')return `<div class="vm vm-resumo">${per}${datas}${vmErroHTML('Dados de audiência temporariamente indisponíveis')}${ir}</div>`;
+  const media=e.media_dia==null?'—':fmtNum(e.media_dia,e.media_dia<10?1:0),v=e.variacao||{};
+  const vr=!v.disponivel?'<b>—</b><small>sem dados completos do período anterior</small>':v.base_zero?'<b>—</b><small>sem base de comparação (nenhuma visita no período anterior)</small>'
+    :`<b class="${v.percentual>0?'vm-sobe':v.percentual<0?'vm-desce':''}">${v.percentual>0?'+':''}${escHtml(String(v.percentual).replace('.',','))}%</b><small>frente a ${escHtml(vmDM(e.anterior.de))}–${escHtml(vmDM(e.anterior.ate))} (${fmtN(e.anterior.total)} ${e.anterior.total===1?'visita':'visitas'})</small>`;
+  const kpis=`<div class="vm-res-kpis"><div class="vm-res-tot"><span class="l">Visitas no período</span><span class="v">${fmtN(e.total)}</span><small><b>Visitas</b> = sessões: cada vez que alguém entra no site público conta uma, mesmo vendo várias páginas.${e.completo?'':` Dados de ${fmtN(e.dias_com_dados)} dos ${fmtN(e.dias)} dias.`}</small></div>
+    <div class="vm-res-l"><span class="l">Média por dia</span><b>${media}</b></div><div class="vm-res-l"><span class="l">Variação vs. período anterior</span>${vr}</div></div>`;
+  const graf=e.estado==='sem_dados'?`<div class="vm-vazio" role="status"><b>Sem visitas registradas neste período</b>Escolha outro período no filtro acima.</div>`:vmGraficoHTML(e,Math.round((VM.larg||700)*.6));
+  return `<div class="vm vm-resumo${VM.carregando?' vm-atualizando':''}"${VM.carregando?' aria-busy="true"':''}>${per}${datas}
+    <section class="vm-sec vm-res" aria-label="Evolução das visitas">${kpis}<div class="vm-res-g">${graf}</div></section>
+    <section class="vm-sec" aria-label="Projetos mais visitados"><div class="vm-sec-h"><h3>Projetos mais visitados</h3><span class="vm-nota">os 5 primeiros</span></div>
+      <p class="vm-def">Por <b>visualizações</b> da página do projeto: cada vez que a página pública de um projeto foi aberta (outra medida, diferente das visitas).</p>
+      <div data-vm-rank>${vmRankHTML({max:5,curto:true})}</div></section>${ir}</div>`}
+function vmErroHTML(titulo){const s=VM.ev&&VM.ev.sincronizacao,u=s&&s.ultima,admin=EU&&['admin','master'].includes(EU.papel);
   const porque=VM.erro?'O painel não respondeu ao pedir as visitas.':s&&s.nunca?'O painel ainda não conseguiu buscar as visitas no Google Analytics, por isso não há números para mostrar (nada foi trocado por zero).':'A última sincronização com o Google Analytics falhou e o painel não tem visitas guardadas para estas datas.';
   const tec=VM.erro||(u&&u.erro)||'';
   const ligar=!VM.erro&&s&&s.nunca?`<p>Para ligar: um administrador cola em Configurações a chave da conta de serviço do Google (ga4.conta_servico); o painel acha o resto sozinho e busca as visitas uma vez por dia.${admin?' “Ver o diagnóstico” mostra o que falta, item por item.':''}</p>`:'';
-  return `<div class="vm-erro" role="alert"><b>Não foi possível carregar os dados de visitas</b><p>${escHtml(porque)}</p>${ligar}${tec?`<p>Erro técnico${u&&!VM.erro?` da última sincronização (${escHtml(fmtDataHora(u.inicio))})`:''}:</p><code>${escHtml(tec)}</code>`:''}
+  return `<div class="vm-erro" role="alert"><b>${escHtml(titulo||'Não foi possível carregar os dados de visitas')}</b>${titulo?'<p>Não foi possível carregar os dados de visitas.</p>':''}<p>${escHtml(porque)}</p>${ligar}${tec?`<p>Erro técnico${u&&!VM.erro?` da última sincronização (${escHtml(fmtDataHora(u.inicio))})`:''}:</p><code>${escHtml(tec)}</code>`:''}
     <div class="act"><button type="button" class="btn sm" data-vm-tentar>Tentar de novo</button>${admin?'<button type="button" class="btn sm" data-vm-diag>Ver o diagnóstico</button>':''}</div></div>`}
 function vmVarHTML(v,ant){if(!v||!v.disponivel)return `<div class="v">—</div><small>sem dados completos do período anterior</small>`;
   if(v.base_zero)return `<div class="v">—</div><small>sem base para comparar: nenhuma visita de ${escHtml(vmDMA(ant.de))} a ${escHtml(vmDMA(ant.ate))}</small>`;
@@ -6558,23 +6705,24 @@ function vmGraficoHTML(e,larg){const P=e.pontos,n=P.length,A=VM.comparar&&e.ante
 function vmTabelaHTML(e){const A=VM.comparar&&e.anterior&&e.anterior.pontos||null;
   return `<details class="vm-num" data-vm-num${VM.numAberto?' open':''}><summary>Ver os números</summary><div class="tw"><table><thead><tr><th>${e.agregacao==='dia'?'Dia':e.agregacao==='semana'?'Semana':'Mês'}</th><th class="num">Visitas</th>${A?'<th class="num">Período anterior</th>':''}</tr></thead><tbody>
     ${e.pontos.map((p,i)=>`<tr><td>${escHtml(vmRotulo(p,e.agregacao,true))}${p.parcial?' <small class="help">(parcial)</small>':''}</td><td class="num">${p.visitas==null?'sem dado':fmtN(p.visitas)}</td>${A?`<td class="num">${A[i]&&A[i].visitas!=null?fmtN(A[i].visitas):'sem dado'}</td>`:''}</tr>`).join('')}</tbody></table></div></details>`}
-function vmRankHTML(){const r=VM.pj;if(!r)return '';
-  const itens=r.itens||[],mx=r.maximo||1;
+function vmRankHTML(o={}){const r=VM.pj;if(!r)return '';
+  const itens=o.max?(r.itens||[]).slice(0,o.max):(r.itens||[]),mx=r.maximo||1;
   let h='';
   if(!r.total_projetos)h=r.estado==='sem_dados'?`<div class="vm-vazio" role="status"><b>Sem visitas registradas neste período</b>Escolha outro período no filtro acima.</div>`:`<div class="vm-vazio" role="status"><b>Nenhuma página de projeto foi visitada neste período</b>As visitas foram a outras páginas do site (veja abaixo).</div>`;
-  else if(!itens.length)h=`<div class="vm-vazio" role="status"><b>Nenhum projeto encontrado</b>Nada com “${escHtml(VM.busca)}” no nome do projeto ou do arquiteto.</div>`;
+  else if(!itens.length)h=`<div class="vm-vazio" role="status"><b>Nenhum projeto encontrado</b>${VM.busca?`Nada com “${escHtml(VM.busca)}” no nome do projeto ou do arquiteto${VM.fundo||VM.autor?' com os filtros escolhidos':''}.`:'Nenhum projeto visitado com os filtros escolhidos.'}</div>`;
   else h=`<ol class="vm-rank">${itens.map(i=>{const ano=i.ano?(i.ano_fim?`${i.ano}–${i.ano_fim}`:String(i.ano)):'',a=i.autoria;
       const sub=[a?a.texto:'',ano].filter(Boolean).join(', ');
-      const vr=i.variacao_pct!=null?`<em class="vm-var ${i.variacao_pct>0?'vm-sobe':i.variacao_pct<0?'vm-desce':''}" title="frente ao período anterior (${fmtN(i.anterior)})">${i.variacao_pct>0?'▲ ':i.variacao_pct<0?'▼ ':''}${escHtml(String(Math.abs(i.variacao_pct)).replace('.',','))}%</em>`:i.base_zero?'<em class="vm-var" title="nenhuma visualização no período anterior: sem base para comparar">novo</em>':'';
+      const vr=i.variacao_pct!=null?`<em class="vm-var ${i.variacao_pct>0?'vm-sobe':i.variacao_pct<0?'vm-desce':''}" title="frente ao período anterior (${fmtN(i.anterior)})">${i.variacao_pct>0?'▲ ':i.variacao_pct<0?'▼ ':''}${escHtml(String(Math.abs(i.variacao_pct)).replace('.',','))}%</em>`:i.base_zero?'<em class="vm-var" title="nenhuma visualização no período anterior: sem base para comparar">novo</em>':'<em class="vm-var vm-semcomp" title="o período anterior não tem dados completos para comparar este projeto">sem comparação</em>';   /* §14: sem referência confiável, diz "sem comparação" (nunca seta) */
       return `<li class="vm-row${i.posicao===1?' top':''}" data-vm-proj="${escHtml(i.codigo)}" tabindex="0" aria-label="${i.posicao}º lugar: ${escHtml(i.titulo)}, ${qtd(i.visualizacoes,'visualização','visualizações')}. Abrir o projeto no painel">
         <span class="vm-pos" aria-hidden="true">${i.posicao}</span><span class="vm-foto" aria-hidden="true">${VM_FOTO}${i.foto?`<img src="/api/itens/${encodeURIComponent(i.foto)}/previa?t=160" alt="" loading="lazy" data-vm-img>`:''}</span>
         <span class="vm-nome"><b>${escHtml(i.titulo)}</b>${sub?`<small${a&&a.tipo==='acervo'?' title="Autoria do projeto não cadastrada: mostra o acervo de onde ele vem"':''}>${escHtml(sub)}</small>`:''}</span>
         <span class="vm-barra" aria-hidden="true"><i data-w="${Math.max(1,i.visualizacoes/mx*100).toFixed(1)}"></i></span>
         <span class="vm-n"><b>${fmtN(i.visualizacoes)}</b><small>${i.visualizacoes===1?'visualização':'visualizações'}</small>${vr}</span>
         ${i.url_publica?`<a class="vm-pub" href="${escHtml(i.url_publica)}" target="_blank" rel="noopener" data-vm-pub title="Abrir a página pública (outra aba)" aria-label="Abrir a página pública de ${escHtml(i.titulo)} em outra aba">${VM_SETA}<span class="vm-pub-t">Página pública</span></a>`:'<span></span>'}</li>`}).join('')}</ol>`;
+  if(o.curto)return h;
   const nt=r.total_projetos;
-  const mais=nt>10?`<div class="vm-mais">${VM.todos?`<button type="button" class="btn sm" data-vm-todos="0">Mostrar só os 10 mais visitados</button><span class="vm-nota">${r.busca?`${qtd(r.encontrados,'projeto encontrado','projetos encontrados')} de ${fmtN(nt)}`:qtd(nt,'projeto','projetos')}</span>`:`<button type="button" class="btn" data-vm-todos="1">Ver todos os projetos (${fmtN(nt)})</button>`}</div>`
-    :VM.todos&&r.busca?`<p class="vm-nota">${qtd(r.encontrados,'projeto encontrado','projetos encontrados')} de ${fmtN(nt)}</p>`:'';
+  const mais=nt>10?`<div class="vm-mais">${VM.todos?`<button type="button" class="btn sm" data-vm-todos="0">Mostrar só os 10 mais visitados</button><span class="vm-nota">${r.busca||r.fundo||r.autor?`${qtd(r.encontrados,'projeto encontrado','projetos encontrados')} de ${fmtN(nt)}`:qtd(nt,'projeto','projetos')}</span>`:`<button type="button" class="btn" data-vm-todos="1">Ver todos os projetos (${fmtN(nt)})</button>`}</div>`
+    :VM.todos&&(r.busca||r.fundo||r.autor)?`<p class="vm-nota">${qtd(r.encontrados,'projeto encontrado','projetos encontrados')} de ${fmtN(nt)}</p>`:'';
   const ni=r.nao_identificadas||{};
   const niH=ni.paginas?`<details class="vm-ni" data-vm-ni${VM.niAberto?' open':''}><summary>Páginas não identificadas: ${qtd(ni.paginas,'página','páginas')} · ${qtd(ni.visualizacoes,'visualização','visualizações')} (fora do ranking, para investigar)</summary>
       <p class="vm-nota">Parecem páginas de projeto, mas o painel não tem um vínculo confiável com um projeto cadastrado. As visualizações delas não foram atribuídas a nenhum projeto.</p>
@@ -6606,7 +6754,9 @@ document.addEventListener('toggle',ev=>{const d=ev.target;if(d&&d.matches&&d.mat
 document.addEventListener('change',ev=>{const t=ev.target;if(!t.closest||!t.closest('[data-vm]'))return;
   if(t.matches('[data-vm-per]')){VM.periodo=t.value;if(t.value==='livre'){VM.de=VM.de||(VM.ev&&VM.ev.de)||'';VM.ate=VM.ate||(VM.ev&&VM.ev.ate)||'';vmRender();const d=document.querySelector('[data-vm] [data-vm-de]');if(d)d.focus()}else{VM.todos=false;vmCarregar()}}
   else if(t.matches('[data-vm-comparar]')){VM.comparar=t.checked;vmRender()}
-  else if(t.matches('[data-vm-ordem]')){VM.ordem=t.value;vmCarregarRank()}});
+  else if(t.matches('[data-vm-ordem]')){VM.ordem=t.value;vmCarregarRank()}
+  else if(t.matches('[data-vm-fundo]')){VM.fundo=t.value;vmCarregarRank().then(vmRender)}   /* o CSV e a contagem mudam junto */
+  else if(t.matches('[data-vm-autor]')){VM.autor=t.value;vmCarregarRank().then(vmRender)}});
 let _vmBusca=0,_vmLarg=0;
 window.addEventListener('resize',()=>{clearTimeout(_vmLarg);_vmLarg=setTimeout(()=>{const el=[...document.querySelectorAll('[data-vm]')].find(x=>x.offsetParent);if(el&&VM.ev&&Math.abs((el.clientWidth||0)-(+el.dataset.larg||0))>40&&!el.contains(document.activeElement))vmRender()},200)});
 document.addEventListener('input',ev=>{const t=ev.target;if(!t.matches||!t.matches('[data-vm] [data-vm-busca]'))return;VM.busca=t.value;clearTimeout(_vmBusca);_vmBusca=setTimeout(vmCarregarRank,250)});
@@ -6619,7 +6769,7 @@ document.addEventListener('click',ev=>{const t=ev.target;if(!t.closest||!t.close
   else if(b.matches('[data-vm-tentar]'))vmCarregar();
   else if(b.matches('[data-vm-diag]'))nav('visitas');
   else if(b.matches('[data-vm-ir]'))nav('visitas');
-  else if(b.matches('[data-vm-todos]')){VM.todos=b.dataset.vmTodos==='1';if(!VM.todos){VM.busca='';VM.ordem='mais'}VM.vez++;API('/api/visitas/projetos?'+vmQS()+vmQSRank()).then(pj=>{VM.pj=pj;vmRender();if(VM.todos){const s=document.querySelector('[data-vm] [data-vm-busca]');if(s)s.focus()}}).catch(e=>toast(e.message))}});
+  else if(b.matches('[data-vm-todos]')){VM.todos=b.dataset.vmTodos==='1';if(!VM.todos){VM.busca='';VM.ordem='mais';VM.fundo='';VM.autor=''}VM.vez++;API('/api/visitas/projetos?'+vmQS()+vmQSRank()).then(pj=>{VM.pj=pj;vmRender();if(VM.todos){const s=document.querySelector('[data-vm] [data-vm-busca]');if(s)s.focus()}}).catch(e=>toast(e.message))}});
 const VIS_CANAL={'Organic Search':'Google e outras buscas','Direct':'Direto (digitou ou favorito)','Referral':'Links de outros sites','Organic Social':'Redes sociais','Paid Search':'Busca paga','Email':'E-mail','Unassigned':'Sem origem','Paid Social':'Redes sociais (pago)','Organic Video':'Vídeo'};
 function iniVisitasHTML(a){if(!a)return '<div class="pb"><span class="ini-skel" style="height:18px"></span></div>';
   if(!a.disponivel)return `<div class="pb ini-nota">O Google Analytics ainda não está ligado ao painel. <button type="button" class="lnk" data-pode="analytics.diagnostico" onclick="diagnosticarAnalytics()">Ver como ligar</button></div>`;
@@ -6655,7 +6805,7 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
     setTimeout(()=>{if(vez===window._PAINEL_VEZ&&!sec.querySelector('.ini-grid'))sec.innerHTML=painelErroHTML('O servidor está demorando demais para responder.')},+window.CAMP_BOOT_LIMITE_MS||20000)}try{
   const admin=EU&&['admin','master'].includes(EU.papel);
   // em etapas (P0-5): saudação, alerta e "O que fazer agora" com /api/painel (rápido); estações, QNAP e visitas entram quando chegarem, no lugar de um esqueleto do mesmo tamanho
-  const pe=API('/api/estacoes').catch(()=>null),pq=API('/api/qnap').catch(()=>null),prp=API('/api/replica').catch(()=>null),pr=API('/api/painel/ritmo?dias=14').catch(()=>({dias:[]}));
+  const pe=API('/api/estacoes').catch(()=>null),pq=API('/api/qnap').catch(()=>null),prp=API('/api/replica').catch(()=>null),pr=iniRitmoCarregar();   /* §11: a falha vira {erro} (nunca "sem dados") */
   const [d,hj]=await Promise.all([API('/api/painel'+(iniOrdem()==='parado'?'?ordem=parado':'')),API('/api/hoje').catch(()=>null)]);   // UX-09: mais parado primeiro
   PAINEL_D=d;atualizarContadoresMenu(d.pendencias);limparStale('painel');
   /* UX-12: a Home não pergunta ao Google (a rota de audiência ao vivo levava 5–16 s). 04/11: as visitas vêm só do banco do painel (vmMontar). */
@@ -6667,21 +6817,21 @@ async function carregarPainel(){const sec=document.getElementById('v-painel'),ti
   <div class="ini-grid">
     <div class="ini-col">
       <section class="panel" aria-labelledby="ini-t-fazer">${iniKpisHTML(p)}<div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">mais urgente primeiro${atualizadoHa(d.contagens&&d.contagens.medido_em)}</span></div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
-      <section class="panel" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2><button type="button" class="ini-link" onclick="nav('caminho')">o que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
-      <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Ritmo das últimas 2 semanas</h2><span class="hint" style="margin-left:auto;color:var(--ink3);font-size:12.5px">folhas conferidas por dia</span></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
+      <section class="panel ini-cam" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2><button type="button" class="ini-link" onclick="nav('caminho')">O que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
+      <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Folhas conferidas por dia — últimas 2 semanas</h2></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
       ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div class="pb" id="ini-visitas">${vmCarregandoHTML()}</div></section>`:''}
     </div>
     <div class="ini-col">
       <section class="panel" aria-labelledby="ini-t-saude"><div class="ph"><h2 id="ini-t-saude">Está tudo funcionando?</h2></div><div id="ini-saude">${iniSaudeHTML(PAINEL_EST,PAINEL_QI,p)}</div></section>
       <section class="panel ini-feed" aria-labelledby="ini-t-hoje"><div class="ph"><h2 id="ini-t-hoje">Hoje</h2>${admin?'<button type="button" class="ini-link" onclick="nav(\'auditoria\')">histórico completo</button>':''}</div>${iniHojeHTML(d.hoje_frases)}</section>
-      <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">frente à semana passada</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
-      <section class="panel" id="ini-melhorias" aria-labelledby="ini-t-mh"><div class="ph"><h2 id="ini-t-mh">Melhorias de hoje</h2><span class="hint ini-nota">correções feitas por pessoa</span></div>${iniMelhoriasHTML(hj&&hj.melhorias)}</section>
-      <section class="panel" aria-labelledby="ini-t-site"><div class="ph"><h2 id="ini-t-site">Quanto do acervo já está no site</h2></div><div class="pb ini-prog">${iniNoSiteHTML(d.no_site)}</div></section>
+      <section class="panel" id="ini-qualidade" aria-labelledby="ini-t-qb"><div class="ph"><h2 id="ini-t-qb">Qualidade da base</h2><span class="hint ini-nota">comparado com 7 dias atrás</span></div><div class="pb">${iniQualidadeHTML(hj&&hj.qualidade)}</div></section>
+      <section class="panel" id="ini-melhorias" aria-labelledby="ini-t-mh"><div class="ph"><h2 id="ini-t-mh">Melhorias de hoje</h2><span class="hint ini-nota">correções válidas, por pessoa</span></div>${iniMelhoriasHTML(hj&&hj.melhorias)}</section>
+      <section class="panel" aria-labelledby="ini-t-site"><div class="ph"><h2 id="ini-t-site">Quanto do acervo já está no site</h2></div><div class="pb ini-prog" id="ini-cobertura">${iniNoSiteHTML(d.no_site)}</div></section>
     </div>
   </div>`;
   garantirCaixaAjuda();aplicarPermissoes&&aplicarPermissoes();iniSemLugar();
   if(rotaAtual()==='painel/qualidade'){const q=document.getElementById('ini-qualidade');if(q&&q.scrollIntoView)q.scrollIntoView({block:'start'})}
-  pr.then(r=>{const el=document.getElementById('ini-ritmo');if(el)el.innerHTML=iniRitmoHTML(r,p)});
+  pr.then(r=>{if(r)iniRitmoMostrar(r,p)});vmPosicionar(document.getElementById('ini-cobertura')||document.createElement('i'));   /* §17: largura das barras sem estilo inline no HTML */
   Promise.all([pe,pq,prp]).then(([e,qi,rp])=>{PAINEL_EST=e;PAINEL_QI=qi;PAINEL_REP=rp;if(e)iniSaudeAtualizar();else{const el=document.getElementById('ini-saude');if(el)el.innerHTML='<div class="pb state-row"><b>Não consegui verificar as máquinas agora.</b><div class="retry"><button class="btn sm" onclick="carregarPainel()">Tentar novamente</button></div></div>'}});
   if(admin)vmMontar(document.getElementById('ini-visitas'));
 }catch(e){if(e.status===401||e.status===428)return;if(tinha)marcarStale('painel',e.message,'carregarPainel()');else if(vez===window._PAINEL_VEZ)sec.innerHTML=painelErroHTML(e.message)}}

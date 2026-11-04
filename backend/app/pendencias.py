@@ -582,6 +582,18 @@ def caminho(con, n: dict) -> list[dict]:
     pior = max(gente, key=lambda p: p["q"], default=None)
     for p in passos:
         p["estado"] = "acumula" if p is pior else ("pronto" if p["id"] in ("aprovar", "publicar") and p["q"] else "")
+    # Redesenho §10 (campos OPCIONAIS; a tela antiga ignora): a unidade contada em cada passo (nunca se somam unidades diferentes),
+    # a próxima ação de gente (o 1º passo de gente, na ordem do caminho, com algo esperando) e o que é bloqueio de verdade (vermelho).
+    unidades = {"digitalizar": ("estação ligada", "estações ligadas"), "qnap": ("pasta", "pastas"), "campvision": ("pasta", "pastas")}
+    for p in passos:
+        p["unidade"], p["unidade_plural"] = unidades.get(p["id"], ("lote", "lotes"))
+        p["proxima"] = p is (gente[0] if gente else None)
+        p["bloqueio"] = None
+    if n["lotes_erro"]:
+        passos[2]["bloqueio"] = f"{n['lotes_erro']} {'pasta parou' if n['lotes_erro'] == 1 else 'pastas pararam'} com erro"
+        if not n["lotes_processando"] and not n["decisoes_estacao"]:
+            passos[2]["rota"] = "filas/erro"
+    passos[4]["folhas"] = n["folhas_conferir"]
     return passos
 
 

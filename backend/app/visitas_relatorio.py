@@ -295,7 +295,8 @@ def _autoria(r) -> dict | None:
     return None
 
 
-def projetos(con, per: dict, ordem: str = "mais", busca: str = "", limite: int = 10, site: str = "https://camp.arq.br") -> dict:
+def projetos(con, per: dict, ordem: str = "mais", busca: str = "", limite: int = 10, site: str = "https://camp.arq.br",
+             fundo: str = "", autor: str = "") -> dict:
     if ordem not in ("mais", "menos", "crescimento"):
         raise ValueError("Ordem: mais, menos ou crescimento")
     de, ate = per["de"], per["ate"]
@@ -344,13 +345,33 @@ def projetos(con, per: dict, ordem: str = "mais", busca: str = "", limite: int =
                           "autoria": _autoria(r), "fundo_codigo": r["fundo_codigo"], "visualizacoes": d["v"], "anterior": a,
                           "diferenca": var["absoluta"], "variacao_pct": var["percentual"], "base_zero": var["base_zero"],
                           "url_publica": m["url"].get(cod) or (site.rstrip("/") + normalizar(mais_visto)),
-                          "caminhos": sorted(d["caminhos"]), "foto": _foto(con, cod)})
+                          "caminhos": sorted(d["caminhos"]), "foto": _foto(con, cod),
+                          "autores": [x.strip() for x in re.split(r"[;\n]+", r["autoria"] or "") if x.strip()]})
     itens.sort(key=lambda i: (-i["visualizacoes"], _sem_acento(i["titulo"])))
     for k, i in enumerate(itens, 1):
         i["posicao"] = k
     maximo = itens[0]["visualizacoes"] if itens else 0
     total_proj = sum(i["visualizacoes"] for i in itens)
+    # Redesenho §14 (campos opcionais): filtro por fundo e por arquiteto (autoria cadastrada) no ranking completo, com as opções
+    # tiradas do próprio ranking do período (só fundos/autores que têm projeto visitado). A posição continua a do ranking inteiro.
+    fundos: dict[str, dict] = {}
+    autores: dict[str, int] = {}
+    for i in itens:
+        if i["fundo_codigo"]:
+            f = fundos.setdefault(i["fundo_codigo"], {"codigo": i["fundo_codigo"], "titulo": None, "projetos": 0})
+            f["projetos"] += 1
+        for a in i["autores"]:
+            autores[a] = autores.get(a, 0) + 1
+    if fundos:
+        marc = ",".join("?" * len(fundos))
+        for r in con.execute(f"SELECT codigo, titulo, sigla FROM fundo WHERE codigo IN ({marc})", list(fundos)):
+            fundos[r["codigo"]]["titulo"] = r["titulo"]
+            fundos[r["codigo"]]["sigla"] = r["sigla"]
     sel = itens
+    if fundo:
+        sel = [i for i in sel if i["fundo_codigo"] == fundo]
+    if autor:
+        sel = [i for i in sel if autor in i["autores"]]
     if busca.strip():
         q = _sem_acento(busca.strip())
         sel = [i for i in itens if q in _sem_acento(" ".join([i["titulo"], i["codigo"], (i["autoria"] or {}).get("texto", "")]))]
@@ -361,6 +382,8 @@ def projetos(con, per: dict, ordem: str = "mais", busca: str = "", limite: int =
     sinc = sincronizacao(con)
     nao_ident = sorted(ni.values(), key=lambda d: -d["visualizacoes"])
     return {**per, "metrica": METRICA_RANKING, "site": site.rstrip("/"), "ordem": ordem, "busca": busca, "comparavel": comparavel,
+            "fundo": fundo, "autor": autor, "fundos": sorted(fundos.values(), key=lambda f: f["codigo"]),
+            "autores": [{"nome": a, "projetos": n} for a, n in sorted(autores.items(), key=lambda kv: _sem_acento(kv[0]))],
             "anterior": {"de": ade, "ate": aate}, "maximo": maximo, "total_projetos": len(itens), "encontrados": len(sel),
             "visualizacoes_projetos": total_proj, "itens": sel[:limite] if limite else sel,
             "nao_identificadas": {"paginas": len(nao_ident), "visualizacoes": sum(d["visualizacoes"] for d in nao_ident), "itens": nao_ident[:100]},
