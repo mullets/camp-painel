@@ -18,6 +18,7 @@ MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}  
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
+MODOS_RAPIDOS |= {"visitas_redesenho"}   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -12628,6 +12629,133 @@ def filho(modo):
             and not visitas.precisa_coletar(c, datetime.now().replace(hour=23)))
         c.close()
         print("\n".join(res))
+    elif modo == "visitas_redesenho":
+        # 04/11 (especificação do Rafael "Visitas ao site"): evolução das visitas (sessões) + projetos mais visitados (visualizações da página
+        # do projeto), só pelo vínculo REAL projeto ↔ página do site; institucionais fora; sem vínculo = "não identificada"; erro ≠ zero.
+        init_db(); _aplicar_migracoes_real()
+        from datetime import date as _d, timedelta as _td
+        from fastapi.testclient import TestClient
+        from app import auth, visitas_relatorio as vr
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        H = _d(2026, 11, 4)
+        vr.hoje_sp = lambda: H
+        c = connect()
+        for f, t in (("F001", "Arnaldo Martino"), ("F002", "Escritório Sol"), ("F003", "Outro Acervo")):
+            c.execute("INSERT OR IGNORE INTO fundo (codigo, titulo) VALUES (?,?)", (f, t))
+        PJ = [("F001-P0001", "Residência Teresa", 1964, None), ("F001-P0002", "Casa Azul", 1969, "Fulano de Tal; Beltrano"),
+              ("F002-P0003", "Edifício Sol", 1972, None), ("F002-P0004", "Museu", 1958, None), ("F003-P0001", "Museu", 1990, None)]
+        for cod, tit, ano, aut in PJ:
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo, numero) VALUES (?,?)", (cod[:4], int(cod[-4:])))
+            c.execute("INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, autoria) VALUES (?,?,?,?,?,?)", (cod, cod[:4], int(cod[-4:]), tit, ano, aut))
+        def folha(cod, n, st):
+            ic = f"{cod}-1960-S01-D{n:05d}"
+            c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, arquivo_jpg, status_site, origem) VALUES (?,?,?,?,?,?,'importado')", (ic, cod, "S01", n, f"x/{ic}.jpg", st))
+            return ic
+        capa1 = folha("F001-P0001", 2, "no_ar"); folha("F001-P0001", 1, "no_ar")
+        f4a = folha("F002-P0004", 1, "nao_publicado"); f4 = folha("F002-P0004", 2, "no_ar")
+        c.execute("UPDATE projeto SET capa_item=? WHERE codigo='F001-P0001'", (capa1,))
+        c.execute("UPDATE projeto SET capa_item=? WHERE codigo='F002-P0003'", (capa1,))          # capa apontando para folha de OUTRO projeto
+        S = "https://camp.arq.br/acervo/projetos/"
+        c.execute("INSERT INTO wp_item (id, colecao_id, status, titulo, slug, url, codigo_detectado) VALUES (5001, 8007, 'publish', 'Residência Teresa', 'f001-p0001-residencia-teresa', ?, 'F001-P0001')", (S + "f001-p0001-residencia-teresa/",))
+        c.execute("UPDATE projeto SET tainacan_item_id=5001 WHERE codigo='F001-P0001'")
+        c.execute("INSERT INTO wp_pagina (id, titulo, slug, url, status, codigo_detectado) VALUES (7002, 'Casa Azul', 'f001-p0002-casa-azul', ?, 'publish', 'F001-P0002')", (S + "f001-p0002-casa-azul/",))
+        c.execute("INSERT INTO wp_pagina (id, titulo, slug, url, status, codigo_detectado) VALUES (7004, 'Museu', 'f002-p0004-museu', ?, 'publish', 'F002-P0004')", (S + "f002-p0004-museu/",))
+        c.execute("UPDATE projeto SET url_publica_confirmada=? WHERE codigo='F002-P0003'", (S + "edificio-sol/",))
+        c.execute("INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, url_antiga) VALUES ('F002-P0009','F002-P0004','projeto','recodificado','/acervo/projetos/f002-p0009-museu-antigo/')")
+        c.execute("INSERT INTO redirecionamento (codigo_antigo, codigo_novo, entidade, motivo, url_antiga) VALUES ('F009-P0001','F003-P0001','projeto','teste','/acervo/projetos/dupla/')")
+        c.execute("UPDATE projeto SET url_publica_confirmada=? WHERE codigo='F001-P0002'", (S + "dupla/",))   # o mesmo endereço em 2 projetos
+        cid = c.execute("INSERT INTO visita_coleta (fonte, de, ate, linhas, por, fim) VALUES ('ga4','2026-09-05','2026-11-03',1,'teste',datetime('now'))").lastrowid
+        d0 = _d(2026, 9, 15)
+        while d0 <= _d(2026, 11, 3):                    # 05/09 a 14/09: sincronizado, sem visita (zero de verdade)
+            s_ = 395 if d0 == _d(2026, 11, 3) else 10 + d0.day % 5
+            c.execute("INSERT INTO visita_dia (dia, usuarios, sessoes, visualizacoes, coleta_id) VALUES (?,?,?,?,?)", (d0.isoformat(), s_, s_, s_ * 3, cid)); d0 += _td(days=1)
+        def pg(dia, caminho, v, titulo=None):
+            c.execute("INSERT OR REPLACE INTO visita_dimensao (dia, tipo, valor, extra, usuarios, sessoes, visualizacoes, coleta_id) VALUES (?,?,?,?,?,?,?,?)", (dia, "pagina", caminho, titulo, 1, 1, v, cid))
+        for cam, v, t in [("/acervo/projetos/f001-p0001-residencia-teresa/", 100, "Residência Teresa – CAMP"), ("/acervo/projetos/f001-p0001-residencia-teresa", 20, None),
+                          ("/acervo/projetos/f001-p0001-residencia-teresa/?utm_source=insta&utm_medium=social", 10, None), ("/ACERVO/Projetos/F001-P0001-residencia-teresa/", 5, None),
+                          ("/acervo/projetos/f001-p0002-casa-azul/", 60, None), ("/acervo/projetos/edificio-sol/", 40, None),
+                          ("/acervo/projetos/f002-p0009-museu-antigo/", 30, None), ("/acervo/projetos/f002-p0004-museu/", 25, None),
+                          ("/acervo/projetos/museu/", 50, "Museu – CAMP"), ("/acervo/projetos/f007-p0003-fantasma/", 8, None), ("/acervo/projetos/dupla/", 12, None),
+                          ("/", 500, "CAMP"), ("/acervo/arquitetos/arnaldo-martino/", 300, None), ("/acervo/projetos/", 200, "Projetos"), ("/acervo/busca/?q=museu", 80, None),
+                          ("/acervo/documentos/f001-p0001-1960-s01-d00001-planta/", 70, None), ("/noticias/abertura/", 40, None), ("/acervo/projetos/page/2/", 10, None),
+                          ("/acervo/", 30, None), ("/acervo/arquitetos/", 20, None)]:
+            pg("2026-10-20", cam, v, t)
+        pg("2026-09-20", "/acervo/projetos/f001-p0001-residencia-teresa/", 100); pg("2026-09-20", "/acervo/projetos/f002-p0004-museu/", 50); pg("2026-09-20", "/", 300)
+        c.commit()
+        per = vr.intervalo("30d", None, None, H)
+        ver("30 dias terminam ONTEM (hoje incompleto), fuso de São Paulo", per["de"] == "2026-10-05" and per["ate"] == "2026-11-03" and per["fuso"] == "America/Sao_Paulo", str(per))
+        r = vr.projetos(c, per, limite=0)
+        cods = [i["codigo"] for i in r["itens"]]
+        ver("ranking: só páginas de projeto, em ordem decrescente de visualizações", cods == ["F001-P0001", "F001-P0002", "F002-P0004", "F002-P0003"], str([(i["codigo"], i["visualizacoes"]) for i in r["itens"]]))
+        p1 = r["itens"][0] if r["itens"] else {}
+        ver("vínculo pelo ID real: item do site 5001 → F001-P0001 (com/sem barra, ?utm_*, maiúsculas consolidados)", p1.get("visualizacoes") == 135 and p1.get("url_publica") == S + "f001-p0001-residencia-teresa/", str(p1)[:300])
+        ver("página do espelho do site (ID 7002, slug com o código) e endereço confirmado contam", (dict((i["codigo"], i["visualizacoes"]) for i in r["itens"]).get("F001-P0002") == 60 and dict((i["codigo"], i["visualizacoes"]) for i in r["itens"]).get("F002-P0003") == 40))
+        ver("endereço antigo consolidado só porque há redirecionamento (F002-P0009 → F002-P0004)", dict((i["codigo"], i["visualizacoes"]) for i in r["itens"]).get("F002-P0004") == 55)
+        tudo = " ".join(i["codigo"] + " " + " ".join(i["caminhos"]) for i in r["itens"])
+        ver("institucionais fora: home, arquitetos, fundo, listagem, paginação, busca, documentos, notícias", not any(x in tudo for x in ("/acervo/arquitetos", "/acervo/busca", "/acervo/documentos", "/noticias", "/acervo/projetos/page")) and " / " not in tudo
+            and r["outras"]["visualizacoes"] == 500 + 300 + 200 + 80 + 70 + 40 + 10 + 30 + 20, str(r["outras"]))
+        ni = {d["caminho"]: d for d in r["nao_identificadas"]["itens"]}
+        ver("título igual ao de outro projeto NÃO vira vínculo: /acervo/projetos/museu/ fica não identificada", "/acervo/projetos/museu/" in ni and "F003-P0001" not in cods and ni["/acervo/projetos/museu/"]["visualizacoes"] == 50, str(list(ni)))
+        ver("código no endereço sem página no espelho e endereço de 2 projetos: não identificadas, sem atribuir", "/acervo/projetos/f007-p0003-fantasma/" in ni and "F007-P0003" in ni["/acervo/projetos/f007-p0003-fantasma/"]["motivo"]
+            and "/acervo/projetos/dupla/" in ni and "mais de um projeto" in ni["/acervo/projetos/dupla/"]["motivo"] and r["nao_identificadas"]["visualizacoes"] == 70)
+        ver("normalizar: tira query/fragmento, barra final e maiúsculas; não junta caminhos diferentes", vr.normalizar("https://WWW.camp.arq.br/Acervo/Projetos/F001-P0001-x?utm_source=a#topo") == "/acervo/projetos/f001-p0001-x/"
+            and vr.normalizar("/acervo/projetos/f001-p0001-x/") != vr.normalizar("/acervo/projetos/f001-p0001-y/") and vr.normalizar("/a.pdf") == "/a.pdf")
+        fot = {i["codigo"]: i["foto"] for i in r["itens"]}
+        ver("foto: capa do projeto; senão 1ª folha publicada do próprio projeto; sem foto = vazio (placeholder) e nunca a de outro projeto",
+            fot.get("F001-P0001") == capa1 and fot.get("F002-P0004") == f4 and fot.get("F001-P0002") is None and fot.get("F002-P0003") is None, str(fot))
+        aut = {i["codigo"]: i["autoria"] for i in r["itens"]}
+        ver("autoria cadastrada aparece; sem autoria, só o acervo (nunca o titular como autor)", aut["F001-P0002"] == {"texto": "Fulano de Tal, Beltrano", "tipo": "autoria"} and aut["F001-P0001"] == {"texto": "Acervo Arnaldo Martino", "tipo": "acervo"}, str(aut))
+        vv = {i["codigo"]: (i["anterior"], i["variacao_pct"], i["base_zero"]) for i in r["itens"]}
+        ver("variação por projeto: +35% (100 → 135), +10% (50 → 55), base zero sem percentual", vv["F001-P0001"] == (100, 35.0, False) and vv["F002-P0004"] == (50, 10.0, False) and vv["F001-P0002"] == (0, None, True), str(vv))
+        ver("ordenação: maior crescimento e menos visitados (sem mudar a posição do ranking)", [i["codigo"] for i in vr.projetos(c, per, "crescimento", limite=0)["itens"]] == ["F001-P0002", "F002-P0003", "F001-P0001", "F002-P0004"]
+            and [(i["codigo"], i["posicao"]) for i in vr.projetos(c, per, "menos", limite=0)["itens"]][0] == ("F002-P0003", 4))
+        ver("busca por arquiteto/autoria e por nome; barras pelo 1º do período mesmo filtrando", [i["codigo"] for i in vr.projetos(c, per, busca="beltrano")["itens"]] == ["F001-P0002"]
+            and vr.projetos(c, per, busca="residencia")["itens"][0]["codigo"] == "F001-P0001" and vr.projetos(c, per, busca="casa")["maximo"] == 135)
+        ver("10 iniciais + total para 'Ver todos'", len(vr.projetos(c, per)["itens"]) == 4 and vr.projetos(c, per, limite=2)["total_projetos"] == 4 and len(vr.projetos(c, per, limite=2)["itens"]) == 2)
+        e = vr.evolucao(c, per, True)
+        ver("evolução: visitas = sessões por dia, eixo de 30 pontos, total, média e pico", e["metrica"]["chave"] == "sessoes" and e["agregacao"] == "dia" and len(e["pontos"]) == 30
+            and e["total"] == sum(p["visitas"] for p in e["pontos"]) and e["pico"]["inicio"] == "2026-11-03" and e["pico"]["visitas"] == 395 and e["media_dia"] == round(e["total"] / 30, 1), str({k: e[k] for k in ("total", "media_dia", "pico")}))
+        ant = sum(p["visitas"] for p in e["anterior"]["pontos"])
+        ver("comparação com o período anterior de mesma duração (05/09 a 04/10, com 10 dias de zero de verdade)", e["anterior"]["de"] == "2026-09-05" and e["anterior"]["ate"] == "2026-10-04" and len(e["anterior"]["pontos"]) == 30
+            and e["variacao"]["absoluta"] == e["total"] - ant and e["variacao"]["percentual"] == round((e["total"] - ant) / ant * 100, 1), str(e["variacao"]))
+        bz = vr.evolucao(c, vr.intervalo("livre", "2026-09-15", "2026-09-24", H))
+        ver("base zero no período anterior: sem percentual ('sem base para comparar')", bz["variacao"]["base_zero"] and bz["variacao"]["percentual"] is None and bz["anterior"]["total"] == 0, str(bz["variacao"]))
+        sd = vr.evolucao(c, vr.intervalo("livre", "2026-09-05", "2026-09-10", H))
+        ver("período sincronizado sem visita: 'sem_dados' com zero de verdade; anterior fora do histórico: sem variação", sd["estado"] == "sem_dados" and sd["total"] == 0 and not sd["variacao"]["disponivel"], str({k: sd[k] for k in ("estado", "total", "variacao")}))
+        lg = vr.evolucao(c, vr.intervalo("livre", "2026-06-01", "2026-11-03", H))
+        ver("intervalo longo: agregação semanal (7 dias); semanas fora do histórico = sem dado (não zero)", lg["agregacao"] == "semana" and len(lg["pontos"]) == 23 and lg["pontos"][0]["visitas"] is None
+            and lg["total"] == sum(p["visitas"] or 0 for p in lg["pontos"]) and not lg["completo"] and not lg["variacao"]["disponivel"], str([p["visitas"] for p in lg["pontos"]][:5]))
+        ver("intervalo de anos: agregação mensal", vr.evolucao(c, vr.intervalo("livre", "2024-01-01", "2026-11-03", H))["agregacao"] == "mes")
+        aj = vr.intervalo("livre", "2026-10-01", "2026-11-04", H)
+        ver("intervalo até hoje para em ontem (hoje incompleto)", aj["ate"] == "2026-11-03" and aj["ajustado"])
+        auth.criar_usuario("Leitor", "leitor@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x.get("/api/visitas/evolucao").status_code == 401 and x.get("/api/visitas/projetos").status_code == 401 and x.get("/api/visitas/projetos.csv").status_code == 401)
+        x.post("/api/auth/login", json={"email": "leitor@camp.arq.br", "senha": "senha-leitor-1234"})
+        a = x.get("/api/visitas/evolucao?periodo=7d&comparar=1"); b = x.get("/api/visitas/projetos?periodo=7d")
+        ver("quem só lê vê a evolução e o ranking (mesmo período: 7 dias até ontem)", a.status_code == 200 and b.status_code == 200 and a.json()["de"] == b.json()["de"] == "2026-10-28" and a.json()["ate"] == b.json()["ate"] == "2026-11-03"
+            and len(a.json()["pontos"]) == 7 and "pontos" in a.json()["anterior"], a.text[:200])
+        ver("período inválido = 400 com a mensagem", x.get("/api/visitas/evolucao?periodo=livre&de=2026-11-02&ate=2026-10-01").status_code == 400 and x.get("/api/visitas/projetos?periodo=xx").status_code == 400
+            and x.get("/api/visitas/projetos?periodo=30d&ordem=zz").status_code == 400)
+        cs = x.get("/api/visitas/projetos.csv?periodo=30d")
+        lin = cs.text.lstrip("﻿").splitlines()
+        ver("CSV do ranking do período (todos os projetos, ; e BOM)", cs.status_code == 200 and "text/csv" in cs.headers.get("content-type", "") and "visitas-projetos-2026-10-05-a-2026-11-03.csv" in cs.headers.get("content-disposition", "")
+            and cs.text.startswith("﻿") and len(lin) == 5 and lin[1].startswith("1;F001-P0001;Residência Teresa;Acervo Arnaldo Martino;1964;135;100;35,0;"), cs.text[:300])
+        c.execute("INSERT INTO visita_coleta (fonte, de, ate, linhas, erro, por, fim) VALUES ('ga4','2026-11-03','2026-11-03',0,'GA4 recusou (403): sem acesso','teste',datetime('now'))"); c.commit()
+        fe = x.get("/api/visitas/evolucao?periodo=livre&de=2026-01-01&ate=2026-01-31").json()
+        ver("integração com erro e sem dado do período: 'indisponivel' (nunca zero) com o erro técnico da última sincronização", fe["estado"] == "indisponivel" and fe["total"] is None and all(p["visitas"] is None for p in fe["pontos"])
+            and "403" in (fe["sincronizacao"]["ultima"] or {}).get("erro", "") and fe["sincronizacao"]["falhou"], str(fe)[:300])
+        ok30 = x.get("/api/visitas/evolucao?periodo=30d").json()
+        ver("com o histórico guardado, a falha da última sincronização não apaga o período (mostra os dados e avisa)", ok30["estado"] == "ok" and ok30["sincronizacao"]["falhou"] and ok30["total"] > 0)
+        c.execute("DELETE FROM visita_dimensao"); c.execute("DELETE FROM visita_dia"); c.execute("DELETE FROM visita_coleta")
+        c.execute("INSERT INTO visita_coleta (fonte, de, ate, linhas, erro, por, fim) VALUES ('ga4','2026-11-03','2026-11-03',0,'Nada ligado: sem a chave da conta de serviço (ga4.conta_servico)','teste',datetime('now'))"); c.commit()
+        nl = x.get("/api/visitas/evolucao?periodo=30d").json(); np_ = x.get("/api/visitas/projetos?periodo=30d").json()
+        ver("Google não ligado: os dois blocos 'indisponivel' (total vazio, não zero) com o motivo", nl["estado"] == "indisponivel" and np_["estado"] == "indisponivel" and nl["total"] is None and nl["sincronizacao"]["nunca"]
+            and "ga4.conta_servico" in nl["sincronizacao"]["ultima"]["erro"])
+        c.close()
+        print("\n".join(res))
     elif modo == "contatos_emkt":
         # 03/11 (Rafael: "mostrar no painel quem aceitou receber e-mails da CAMP, para exportar a lista para o Sender.net"): inscrições com
         # emkt + cadastros de download com o aceite consentimento_base; um por e-mail; LGPD (anonimizado/apagado não entra); quem saiu não volta.
@@ -13740,8 +13868,11 @@ def filho(modo):
             i3 > i2 and ordem(dir_, ('id="ini-saude"', 'id="ini-t-hoje"', 'id="ini-qualidade"', 'id="ini-melhorias"', 'id="ini-t-site"')) and 'id="ini-visitas"' not in dir_)
         ver("UX-30 (desfeito): nenhuma métrica recolhida nem escondida na Home (sem <details> 'Números do acervo', sem estado lembrado)",
             'id="ini-numeros"' not in html and "camp.ini.numeros" not in html and "verVisitas" not in html)
-        ver("UX-12: com o GA desligado a Home não pede /api/analytics (usa analytics_ligado de /api/painel)",
-            "d.analytics_ligado===false?Promise.resolve({disponivel:false,desligado:true}):API('/api/analytics')" in html)
+        # 04/11 (especificação "Visitas ao site"): a Home não pede /api/analytics nunca; as visitas vêm só do banco (vmMontar → /api/visitas/evolucao e /projetos)
+        cp = html[html.find("async function carregarPainel()"):html.find("function atualizarContadoresMenu(")]
+        ver("UX-12: a Home não pede /api/analytics (as visitas vêm do banco do painel, pelo componente de visitas)",
+            cp and "API('/api/analytics" not in cp and "vmMontar(document.getElementById('ini-visitas'))" in cp
+            and "API('/api/visitas/evolucao?'+vmQS()+'&comparar=1')" in html and "API('/api/visitas/projetos?'+vmQS()+vmQSRank())" in html)
         ver("UX-30: Configurações tem 'Visitas ao site' (desligado / Ver como ligar)",
             '<div class="panel" id="cfg-visitas-painel"><div class="ph"><h2>Visitas ao site</h2>' in html and "async function carregarVisitasConfig()" in html and "if(v==='config')carregarVisitasConfig();" in html)
         for l in res: print(l)
@@ -13842,7 +13973,9 @@ def filho(modo):
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
         ver("tela: uma consulta periódica (/api/novidades a cada 30 s); sem os timers antigos de /api/estacoes (30 s) e da marca (12 s)",
             "API('/api/novidades?'" in html and "setInterval(atualizarTopoEstacoes" not in html and "setInterval(()=>vigiarMarca()" not in html and "document.hidden?60000:30000" in html)
-        ver("tela: com analytics_ligado===false o Painel nem chama /api/analytics", "d.analytics_ligado===false?Promise.resolve(" in html)
+        # 04/11 (especificação "Visitas ao site"): mais forte que antes — o Painel não chama /api/analytics nunca (as visitas vêm do banco)
+        cp_ = html[html.find("async function carregarPainel()"):html.find("function atualizarContadoresMenu(")]
+        ver("tela: o Painel nem chama /api/analytics (com o GA desligado ou ligado: visitas só do banco do painel)", bool(cp_) and "API('/api/analytics" not in cp_)
         c.close()
         for l in res: print(l)
     elif modo == "olhe_a_folha":
@@ -16776,6 +16909,15 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Visitas ao site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Visitas ao site (especificação do Rafael): evolução das visitas e projetos mais visitados, só pelo vínculo real")
+rc, out = rodar("visitas_redesenho", f"{tmp}/visitas_redesenho.db")
+if rc != 0: ok(False, f"teste visitas_redesenho não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Visitas (projetos): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 25, "Visitas (projetos): todas as verificações rodaram")
 
 print("Lista de e-mail da CAMP: quem aceitou receber e-mails, CSV para o Sender.net")
 rc, out = rodar("contatos_emkt", f"{tmp}/contatos_emkt.db")

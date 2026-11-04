@@ -1,5 +1,7 @@
-// 03/11 (Rafael: "para colocar o analytics no nosso painel, adapte essa solução para nós" / "faça ele no dashboard"): a Home mostra o
-// resumo de 28 dias do histórico guardado, e a tela "Visitas ao site" mostra tudo (períodos, canais, páginas, pesquisas no Google).
+// 03/11 (Rafael: "para colocar o analytics no nosso painel, adapte essa solução para nós" / "faça ele no dashboard") e 04/11 (especificação
+// "Visitas ao site": "É na página de Dashboard"): a Home tem o módulo completo de visitas logo abaixo do "Ritmo das últimas 2 semanas"
+// (evolução + projetos mais visitados, o mesmo componente da tela Visitas ao site), e a tela Visitas ao site acrescenta canais, origem,
+// cidades, aparelhos e pesquisas no Google do mesmo período. O teste completo dos critérios de aceite é tests/navegador_visitas_redesenho.js.
 // Uso: bash tests/rodar_um.sh tests/navegador_visitas_site.js
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || 'playwright');
@@ -8,52 +10,49 @@ const problemas = [], linhas = [];
 const chk = (ok, msg, det = '') => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg + (ok || !det ? '' : ' -> ' + det)); if (!ok) problemas.push(msg); };
 execFileSync('python3', ['-c', `
 import sqlite3,sys
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 con=sqlite3.connect(sys.argv[1])
-cid=con.execute("INSERT INTO visita_coleta (fonte,de,ate,linhas,por,fim) VALUES ('ga4',date('now','-40 days'),date('now','-1 day'),100,'teste',datetime('now'))").lastrowid
-for n in range(1,41):
-    dia=con.execute("SELECT date('now',?)",(f"-{n} days",)).fetchone()[0]
+ontem=datetime.now(ZoneInfo("America/Sao_Paulo")).date()-timedelta(days=1)
+cid=con.execute("INSERT INTO visita_coleta (fonte,de,ate,linhas,por,fim) VALUES ('ga4',?,?,100,'teste',datetime('now'))",((ontem-timedelta(days=39)).isoformat(),ontem.isoformat())).lastrowid
+url=con.execute("SELECT 'https://camp.arq.br/acervo/projetos/'||lower(codigo)||'-casa/' FROM projeto ORDER BY codigo LIMIT 1").fetchone()[0]
+con.execute("UPDATE wp_item SET url=?, status='publish' WHERE id=(SELECT tainacan_item_id FROM projeto ORDER BY codigo LIMIT 1)",(url,))
+for n in range(40):
+    dia=(ontem-timedelta(days=n)).isoformat()
     con.execute("INSERT INTO visita_dia (dia,usuarios,sessoes,visualizacoes,coleta_id) VALUES (?,?,?,?,?)",(dia,10+n%7,12+n%7,30,cid))
-    for tipo,valor,extra in (("canal","Organic Search",None),("origem","google / organic",None),("pagina","/acervo/arquitetos/burle-marx/","Burle Marx – CAMP"),("cidade","São Paulo, Brazil",None),("dispositivo","mobile",None)):
+    for tipo,valor,extra in (("canal","Organic Search",None),("origem","google / organic",None),("pagina","/acervo/arquitetos/burle-marx/","Burle Marx – CAMP"),("pagina",url[len("https://camp.arq.br"):],"Casa – CAMP"),("cidade","São Paulo, Brazil",None),("dispositivo","mobile",None)):
         con.execute("INSERT INTO visita_dimensao (dia,tipo,valor,extra,usuarios,sessoes,visualizacoes,coleta_id) VALUES (?,?,?,?,?,?,?,?)",(dia,tipo,valor,extra,5,6,15,cid))
     con.execute("INSERT INTO busca_google (dia,tipo,valor,cliques,impressoes,posicao,coleta_id) VALUES (?,?,?,?,?,?,?)",(dia,"consulta","acervo burle marx",2,20,3.5,cid))
-con.execute("INSERT INTO visita_coleta (fonte,de,ate,linhas,erro,por,fim) VALUES ('search_console',date('now','-5 days'),date('now','-1 day'),0,'Search Console recusou (403): sem acesso <b>x</b>','teste',datetime('now'))")
+con.execute("INSERT INTO visita_coleta (fonte,de,ate,linhas,erro,por,fim) VALUES ('search_console',?,?,0,'Search Console recusou (403): sem acesso <b>x</b>','teste',datetime('now'))",(ontem.isoformat(),ontem.isoformat()))
 con.commit()`, DB]);
 (async () => {
-  const br = await chromium.launch(); const erros = [];
+  const br = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {}); const erros = [];
   const pg = await (await br.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
   pg.on('pageerror', e => erros.push('pageerror: ' + e.message));
   await pg.goto(BASE + '/');
   await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
   await pg.goto(BASE + '/#painel'); await pg.reload();
-  // 03/11 (Rafael: "refaça o relatório de visitas embaixo do ritmo das últimas 2 semanas, com gráficos e números … e quais páginas são as mais visitadas")
-  await pg.waitForSelector('#ini-visitas .vh-g', { timeout: 10000 }).catch(() => {});
+  await pg.waitForSelector('#ini-visitas .vm-rank', { timeout: 15000 }).catch(() => {});
   const h = (await pg.textContent('#ini-visitas').catch(() => '')) || '';
-  chk(await pg.evaluate(() => { const r = document.getElementById('ini-ritmo'), v = document.getElementById('ini-visitas'); return !!(r && v && r.closest('.ini-col') === v.closest('.ini-col') && (r.compareDocumentPosition(v) & Node.DOCUMENT_POSITION_FOLLOWING)); }),
+  chk(await pg.evaluate(() => { const r = document.getElementById('ini-ritmo'), v = document.getElementById('ini-visitas'); return !!(r && v && r.closest('section').nextElementSibling === v.closest('section')); }),
     'Home: Visitas ao site fica logo abaixo do Ritmo das últimas 2 semanas');
-  // 03/11 (Rafael: "achei bem ruim… ruim de ler"): uma frase que responde como estamos indo; gráfico em HTML (texto não estica com a tela)
-  chk(/\d+ visitas nas últimas 2 semanas — (praticamente igual|▲ \d+% a mais|▼ \d+% a menos)/.test(h) || /\d+ visitas nas últimas 2 semanas/.test(h), 'Home: frase com o total e a comparação com as 2 semanas anteriores', h.slice(0, 200));
-  chk(/páginas vistas/.test(h) && /páginas por visita/.test(h), 'Home: números de apoio numa linha só');
-  chk(await pg.$$eval('#ini-visitas .vh-g-c', r => r.length) === 14 && !!(await pg.$('#ini-visitas .vh-g-l polyline')) && !(await pg.$('#ini-visitas svg text')), 'Home: 14 colunas + linha das 2 semanas antes, sem texto dentro do SVG');
-  chk(await pg.evaluate(() => [...document.querySelectorAll('#ini-visitas .vh-g-x span, #ini-visitas .vh-g-y')].every(e => parseFloat(getComputedStyle(e).fontSize) >= 12 && parseFloat(getComputedStyle(e).fontSize) <= 14)), 'Home: rótulos do gráfico entre 12 e 14 px (não esticam)');
-  chk(/Páginas mais visitadas/.test(h) && /Burle Marx/.test(h) && !(/Burle Marx – CAMP/.test(h)) && (await pg.$$eval('#ini-visitas .vh-pgs li', l => l.length)) >= 1, 'Home: páginas mais visitadas (título sem "– CAMP")');
-  chk(await pg.evaluate(() => [...document.querySelectorAll('#ini-visitas .vh-pgs li')].every(li => li.closest('.vh-bloco') && li.getBoundingClientRect().right <= li.closest('.vh-bloco').getBoundingClientRect().right + 1)), 'Home: a lista de páginas não invade a coluna ao lado');
-  chk(/De onde chegam/.test(h) && /Google e outras buscas\s*100%/.test(h), 'Home: de onde chegam, em português e em %', h.slice(-300));
-  chk(/Média de \d+ visitas por dia/.test(h) && /Dia mais forte/.test(h), 'Home: média por dia e dia mais forte');
-  await pg.click('#ini-visitas button:has-text("Ver tudo")');
-  await pg.waitForSelector('#v-visitas.on .hoje-kpis, #v-visitas .hoje-kpis', { timeout: 10000 }).catch(() => {});
-  const t = (await pg.textContent('#vis-corpo').catch(() => '')) || '';
-  chk((await pg.evaluate(() => location.hash)) === '#visitas', '"Ver tudo" abre a tela Visitas ao site');
-  chk(/Visitas/.test(t) && /Páginas vistas/.test(t) && /Cliques no Google/.test(t), 'tela: números do período', t.slice(0, 200));
-  chk(/Burle Marx – CAMP/.test(t) && /celular/.test(t) && /São Paulo, Brazil/.test(t) && /google \/ organic/.test(t), 'tela: páginas (com título), aparelhos, cidades e origem');
+  chk(/Evolução das visitas/.test(h) && /Projetos mais visitados/.test(h) && /Visitas no período/.test(h) && /Média de visitas por dia/.test(h), 'Home: o módulo completo (evolução com indicadores + projetos mais visitados)', h.slice(0, 200));
+  chk(!(await pg.$('#ini-visitas svg text')) && (await pg.$$eval('#ini-visitas polyline.lin', p => p.length)) >= 1, 'Home: gráfico de linha, sem texto dentro do SVG');
+  chk(await pg.evaluate(() => [...document.querySelectorAll('#ini-visitas .vm-g-x span, #ini-visitas .vm-g-y span')].every(e => parseFloat(getComputedStyle(e).fontSize) >= 12 && parseFloat(getComputedStyle(e).fontSize) <= 14)), 'Home: rótulos do gráfico entre 12 e 14 px (não esticam)');
+  chk((await pg.$$eval('#ini-visitas .vm-row', r => r.length)) === 1 && !/Burle Marx/.test(await pg.textContent('#ini-visitas .vm-rank')), 'Home: só a página de projeto no ranking (arquiteto fora)');
+  await pg.click('#ini-visitas [data-vm-ir]');
+  await pg.waitForFunction(() => /Cidades/.test((document.getElementById('vis-corpo') || {}).textContent || ''), null, { timeout: 10000 }).catch(() => {});
+  const t = (await pg.textContent('#v-visitas').catch(() => '')) || '';
+  chk((await pg.evaluate(() => location.hash)) === '#visitas', '"Canais, cidades e pesquisas no Google" abre a tela Visitas ao site');
+  chk(/Evolução das visitas/.test(t) && /Projetos mais visitados/.test(t), 'tela: o mesmo componente da Home');
+  chk(/Google e outras buscas/.test(t) && /celular/.test(t) && /São Paulo, Brazil/.test(t) && /google \/ organic/.test(t), 'tela: canais, aparelhos, cidades e origem do período');
   chk(/acervo burle marx/.test(t) && /10%/.test(t) && /3,5/.test(t), 'tela: pesquisas no Google com taxa de clique e posição', t.slice(-400));
-  chk(/a última busca falhou/.test(t) && !(await pg.$('#vis-corpo b:text-is("x")')), 'tela: mostra a falha da última busca (texto escapado)');
-  const n28 = await pg.$$eval('#vis-corpo .vis-barras rect', r => r.length);
-  await pg.click('[data-vis-per="7d"]'); await pg.waitForTimeout(800);
-  const n7 = await pg.$$eval('#vis-corpo .vis-barras rect', r => r.length);
-  await pg.click('[data-vis-per="90d"]'); await pg.waitForTimeout(800);
-  const n90 = await pg.$$eval('#vis-corpo .vis-barras rect', r => r.length);
-  chk(n28 === 28 && n7 === 7 && n90 === 40, 'tela: trocar o período (7, 28, 90 dias)', `${n7}/${n28}/${n90}`);
-  chk(await pg.$eval('[data-vis-per="90d"]', b => b.classList.contains('on')), 'o período escolhido fica marcado');
+  await pg.selectOption('#vis-modulo [data-vm-per]', '7d'); await pg.waitForTimeout(1200);
+  const n7 = await pg.evaluate(() => VM.ev.pontos.length);
+  await pg.selectOption('#vis-modulo [data-vm-per]', '90d'); await pg.waitForTimeout(1200);
+  const n90 = await pg.evaluate(() => ({ n: VM.ev.pontos.length, cob: VM.ev.dias_com_dados, txt: document.getElementById('vis-modulo').textContent }));
+  chk(n7 === 7 && n90.n === 90 && n90.cob === 40 && /dias sem dado ficam em branco/.test(n90.txt), 'tela: trocar o período (7, 90 dias); dias fora do histórico ficam em branco, não zero', `${n7}/${JSON.stringify(n90).slice(0, 80)}`);
+  chk(await pg.$eval('#vis-modulo [data-vm-per]', s => s.value) === '90d', 'o período escolhido fica marcado');
   chk(!!(await pg.$('#nav button[data-v="visitas"]')), 'item "Visitas ao site" no menu');
   await pg.setViewportSize({ width: 390, height: 800 }); await pg.waitForTimeout(300);
   chk(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'celular: sem rolagem horizontal');

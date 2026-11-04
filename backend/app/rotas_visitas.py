@@ -5,8 +5,9 @@ import threading
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
-from . import auth, visitas
+from . import auth, visitas, visitas_relatorio as vr
 from .db import connect
 
 router = APIRouter(prefix="/api", tags=["visitas"])
@@ -42,3 +43,58 @@ def coletar_agora(u: dict = Depends(auth.exige("admin"))) -> dict:
 @router.get("/visitas/diagnostico")
 def diagnostico(u: dict = Depends(auth.exige("admin"))) -> dict:
     return {"itens": visitas.diagnostico()}
+
+
+# ---------------------------------------------------------------- 04/11 (especificação do Rafael): evolução + projetos mais visitados
+def _periodo(periodo: str | None, de: str | None, ate: str | None) -> dict:
+    try:
+        return vr.intervalo(periodo, de, ate)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _site() -> str:
+    try:
+        from .config import settings
+        return settings.WP_BASE_URL or "https://camp.arq.br"
+    except Exception:  # noqa: BLE001
+        return "https://camp.arq.br"
+
+
+@router.get("/visitas/evolucao")
+def evolucao(periodo: str | None = None, de: str | None = None, ate: str | None = None, comparar: int = 0,
+             u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Visitas (sessões do site público) por dia/semana/mês no período, total, média, variação e a última sincronização. Só o banco."""
+    per = _periodo(periodo, de, ate)
+    con = connect()
+    try:
+        return vr.evolucao(con, per, bool(comparar))
+    finally:
+        con.close()
+
+
+def _projetos(periodo, de, ate, ordem, busca, limite) -> dict:
+    per = _periodo(periodo, de, ate)
+    con = connect()
+    try:
+        return vr.projetos(con, per, ordem, busca or "", max(0, min(int(limite), 5000)), _site())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    finally:
+        con.close()
+
+
+@router.get("/visitas/projetos")
+def projetos(periodo: str | None = None, de: str | None = None, ate: str | None = None, ordem: str = "mais", busca: str = "",
+             limite: int = 10, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Ranking dos projetos pelas visualizações da página pública de cada um (só o vínculo real projeto ↔ página; limite=0 = todos)."""
+    return _projetos(periodo, de, ate, ordem, busca, limite)
+
+
+@router.get("/visitas/projetos.csv")
+def projetos_csv(periodo: str | None = None, de: str | None = None, ate: str | None = None, ordem: str = "mais", busca: str = "",
+                 u: dict = Depends(auth.exige("leitura"))) -> Response:
+    r = _projetos(periodo, de, ate, ordem, busca, 0)
+    nome = f"visitas-projetos-{r['de']}-a-{r['ate']}.csv"
+    return Response(vr.csv_projetos(r), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
