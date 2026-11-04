@@ -82,7 +82,10 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 - Uma informação uma vez só (UX-36, visual): publicado, o chip **No site** fica no cabeçalho da página e o bloco Próximo passo não o repete;
   o "Projeto fechado" é dito no próprio Próximo passo (sem faixa verde separada), com os **avisos menores** ao lado da contagem das folhas.
 
-## Menu (UX-28; antes CAMP-154)
+## Menu (redesenho §3, 04/11/2026; UX-28; antes CAMP-154)
+**Grupos (redesenho §3):** **Principal** · **Acervo** · **Público e processos** · **Administração** · **Ajuda** ("Público" e "Acompanhamento" deixaram de ser
+grupos: Visitas ao site e Relatórios estão em Público e processos; Histórico de ações e Qualidade do CAMP Vision em Administração). No celular:
+**Abrir menu** / **Fechar menu** (o botão ☰ do cabeçalho). Os nomes abaixo continuam.
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
 topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);
 **Público** (**Pedidos de alta resolução**, antes "Pedidos do site" e "Pedidos de material"; **Inscrições** (título da tela: **Inscrições em cursos**), vindas do site, tecla S, só admin e master, filtro por curso (curso · turma; sem curso: "(curso não informado)"), duas abas: **Inscrições** (com o currículo; situações **Nova**, **Em análise**, **Selecionada**, **Não selecionada**, **Desistiu**) e **Avise-me** (quem pediu aviso da próxima turma; **Aguardando aviso**, **Avisado**; botões **Copiar e-mails**, **Baixar CSV**, **Marcar como avisados**); **Downloads**, antes "Downloads do site");

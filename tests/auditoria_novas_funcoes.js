@@ -1148,12 +1148,13 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   const perr=w.confirmar({titulo:'Erro',acao:async()=>{throw new Error('o servidor recusou')}}); await sleep(30); d.querySelector('#conf-ov [data-conf="sim"]').click(); await sleep(80);
   chk(/o servidor recusou/.test(txt('#conf-err'))&&!!d.getElementById('conf-ov'),'[P2-18] o erro da ação deveria aparecer DENTRO da janela, que continua aberta'); d.querySelector('#conf-ov [data-conf="nao"]').click(); await perr;
   w.__semAutoResposta=false; w.confirm=cOrig; w.route_to('painel'); okl.push('P2-18: confirmações do painel (papel, senha, sigla, despublicar fundo, duplo clique, Esc, erro na janela)'); }
-// ---------- [Celular] 5 destinos do papel na barra de baixo + "Mais" ----------
-{ w.marcarNavCelular(); const pri=[...d.querySelectorAll('#nav > button.mob-pri')].map(b=>b.dataset.v);
-  chk(pri.length===5&&pri[0]==='painel'&&pri.includes('estante')&&!!d.getElementById('nav-mais'),'[Celular] a barra de baixo deveria ter 5 destinos do papel (com Ler etiqueta) e o "Mais": '+pri.join(','));
-  const antes=w.location.hash; d.getElementById('nav-mais').click(); chk(d.body.classList.contains('nav-aberto')&&w.location.hash===antes,'[Celular] "Mais" deveria abrir o menu inteiro sem trocar de tela');
-  d.getElementById('nav-mais').click(); chk(!d.body.classList.contains('nav-aberto'),'[Celular] tocar de novo fecha o menu');
-  okl.push('Celular: barra de baixo por papel e "Mais"'); }
+// ---------- [Celular] menu em gaveta pelo ☰ do cabeçalho (redesenho §19, 04/11/2026; antes: barra de baixo com 5 destinos + "Mais") ----------
+// O abrir/fechar de verdade (largura de celular, Esc, fundo, foco) é medido no navegador em tests/navegador_redesenho_base.js; aqui, a estrutura.
+{ const g=d.getElementById('nav-gaveta');
+  chk(!!g&&g.getAttribute('aria-controls')==='nav'&&g.getAttribute('aria-label')==='Abrir menu'&&!!g.closest('.top'),'[Celular] o cabeçalho deveria ter o botão ☰ que abre o menu (aria-controls="nav", "Abrir menu")');
+  chk(!d.getElementById('nav-mais')&&!d.querySelector('#nav > button.mob-pri'),'[Celular] a barra de baixo com "Mais" não deveria voltar (o menu é uma gaveta só)');
+  const antes=w.location.hash; g.click(); chk(!d.body.classList.contains('nav-aberto')&&w.location.hash===antes,'[Celular] fora da largura de celular o ☰ não abre a gaveta nem troca de tela');
+  okl.push('Celular: menu em gaveta pelo cabeçalho'); }
 const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.lista.'+k));return v==null?dflt:v}catch(_){return dflt}};   // LISTA_MEM é const no painel: lê o mesmo localStorage
 // ---------- [Tabelas] filtro, busca e aba sobrevivem ao F5; "Limpar filtros" nas listas ----------
 { await w.carregarErros('todos'); await sleep(300); chk(memLista('erros.aba')==='todos','[Tabelas] a aba de Erros deveria ficar guardada para o F5'); await w.carregarErros('abertos');

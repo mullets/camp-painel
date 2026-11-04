@@ -45,12 +45,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   await page.goto(BASE + '/#painel'); await page.waitForSelector('#v-painel.on', { timeout: 15000 }); await sleep(1500);
   chk(pedidosZX === 0, 'o leitor ZXing NÃO é baixado ao abrir o painel (só ao abrir a tela da estante)');
+  // redesenho §19 (04/11/2026): no celular o menu é uma gaveta aberta pelo ☰ do cabeçalho (antes: barra de baixo com "Ler etiqueta" + "Mais")
+  await page.click('#nav-gaveta'); await sleep(400);
   const bt = page.locator('#nav > button[data-v="estante"]');
-  chk(await bt.isVisible(), 'celular: "Ler etiqueta" aparece na barra de baixo, entre os itens principais');
-  const caber = await page.evaluate(() => { const m = document.getElementById('nav-mais').getBoundingClientRect(); return { mais: m.right, larg: innerWidth, rolagem: document.documentElement.scrollWidth } });
-  chk(caber.mais <= caber.larg + 0.5 && caber.rolagem <= caber.larg, `celular: barra de baixo cabe (Mais termina em ${Math.round(caber.mais)} de ${caber.larg}px) e a página não rola para o lado (${caber.rolagem})`);
+  chk(await bt.isVisible(), 'celular: o ☰ do cabeçalho abre a gaveta e "Ler etiqueta" aparece nela');
+  const caber = await page.evaluate(() => { const m = document.querySelector('.side').getBoundingClientRect(); return { dir: m.right, larg: innerWidth, rolagem: document.documentElement.scrollWidth } });
+  chk(caber.dir <= caber.larg + 0.5 && caber.rolagem <= caber.larg, `celular: a gaveta cabe (termina em ${Math.round(caber.dir)} de ${caber.larg}px) e a página não rola para o lado (${caber.rolagem})`);
   await bt.click(); await page.waitForSelector('#v-estante.on'); await sleep(600);
-  chk(page.url().endsWith('#estante'), 'tocar em "Ler etiqueta" abre #estante');
+  chk(page.url().endsWith('#estante') && !(await page.evaluate(() => document.body.classList.contains('nav-aberto'))), 'tocar em "Ler etiqueta" abre #estante e fecha a gaveta');
   const temDetector = await page.evaluate(() => 'BarcodeDetector' in window);
   chk(temDetector || pedidosZX === 1, `sem BarcodeDetector neste navegador, o ZXing é pedido ao abrir a tela (${pedidosZX} pedido)`);
   if (SHOTS) await page.screenshot({ path: SHOTS + '/estante_390_leitura.png', fullPage: true });

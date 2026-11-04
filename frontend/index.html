@@ -769,26 +769,15 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
   .lab-wrap{grid-template-columns:1fr}
 }
 @media (max-width:720px){
-  .app{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
-  .side>.nav{overflow:visible;margin-right:0;padding-right:0}
-  .side{order:2;flex-direction:row;padding:6px 8px;border-right:0;border-top:1px solid var(--line);overflow-x:auto;overflow-y:hidden;gap:0;position:sticky;bottom:0;background:var(--surface);padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
-  .brand,.side .foot,.nav .grp{display:none}
-  .nav{flex-direction:row;gap:2px;width:100%}
-  .nav button{flex-direction:column;gap:3px;font-size:var(--fs-sm);padding:6px 8px;min-width:64px;justify-content:center}
-  .nav button .n{display:none}
-  .top{padding:12px 14px 8px}.top .who span{display:none}
+  /* Redesenho §19: no celular o menu é uma GAVETA à esquerda, aberta pelo botão ☰ do cabeçalho (#nav-gaveta); antes: barra de baixo + "Mais" */
+  .app{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr)}
+  .side{position:fixed;top:0;bottom:0;left:0;z-index:70;width:min(320px,86vw);padding:16px 12px calc(12px + env(safe-area-inset-bottom,0px));transform:translateX(-105%);visibility:hidden;transition:transform .2s ease,visibility 0s linear .2s;box-shadow:var(--sombra-pop)}
+  body.nav-aberto .side{transform:none;visibility:visible;transition:transform .2s ease}
+  .side .foot{display:none}
+  .top{padding:10px 14px 8px}.top .who .who-nome{display:none}
   .content{padding:4px 14px 30px}
   .g2,.g3,.g4{grid-template-columns:1fr}
   .hdr .act{margin-left:0}
-  /* celular: barra de baixo com 4 destinos do papel + "Mais" (o menu inteiro numa folha) */
-  body:not(.nav-aberto) .nav button:not(.mob-pri):not(#nav-mais){display:none}
-  #nav-mais{display:flex}
-  /* 5 destinos + "Mais" cabem em 360px sem rolar: cada botão divide a largura */
-  body:not(.nav-aberto) .nav button{min-width:0;flex:1 1 0;padding:6px 2px;text-align:center;line-height:1.15}
-  body.nav-aberto .side{position:fixed;inset:0;z-index:70;flex-direction:column;overflow:auto;padding:16px}
-  body.nav-aberto .nav{flex-direction:column}
-  body.nav-aberto .nav button{display:flex;flex-direction:row;font-size:var(--fs-base);min-height:44px;justify-content:flex-start}
-  body.nav-aberto .nav .grp{display:block}
   /* áreas de toque de 44px */
   .nav button,.btn,.tabs button,.abas-sit .btn{min-height:44px}
   /* painel lateral e janelas ocupam a tela toda */
@@ -799,7 +788,7 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
   #v-erros table th:nth-child(5),#v-erros table td:nth-child(5),
   #v-solicitacoes table th:nth-child(3),#v-solicitacoes table td:nth-child(3),#v-solicitacoes table th:nth-child(4),#v-solicitacoes table td:nth-child(4){display:none}
 }
-@media (min-width:721px){#nav-mais{display:none}#nav:not(.sec-aberta) .nav-sec{display:none}}   /* CAMP-154: 5 destinos + "Mais" */
+@media (min-width:721px){#nav:not(.sec-aberta) .nav-sec{display:none}}   /* CAMP-154: o resto no "Mais" (no celular a gaveta mostra tudo) */
 @media (max-width:720px){.nav-mais-pc{display:none!important}}
 .nav-mais-pc[aria-expanded="true"]{color:var(--ink)}
 
@@ -940,6 +929,37 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 .esq.t{height:20px;width:45%}.esq:nth-child(3n+2){width:88%}.esq:nth-child(3n){width:64%}
 .estado-desfazer{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+/* ===== Redesenho §3 · menu lateral: grupos, item ativo evidente, contadores só de demanda, ícones de um tamanho só ===== */
+.side{padding:18px 12px}
+.nav{gap:2px}
+.nav button{position:relative;gap:12px;padding:9px 12px;min-height:40px;font-size:var(--fs-body);font-weight:500;color:var(--ink2);border-radius:var(--r-md)}
+.nav button svg{width:18px;height:18px;stroke-width:1.75}
+.nav button:hover{background:var(--hover);color:var(--ink)}
+.nav button.on{background:var(--sel);color:var(--sel-ink);font-weight:600}
+.nav button.on::before{content:"";position:absolute;left:-12px;top:6px;bottom:6px;width:4px;border-radius:0 4px 4px 0;background:var(--blue)}
+.nav button .n{font:600 var(--fs-2xs)/1.5 var(--mono);min-width:24px;text-align:center;padding:1px 7px;border-radius:999px;background:var(--surface2);color:var(--ink);border:1px solid var(--line)}
+.nav button .n.r{background:var(--red-soft);color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)}
+.nav button.on .n{background:var(--surface);color:var(--sel-ink);border-color:var(--sel)}
+.nav .grp{margin:18px 12px 6px;font-size:var(--fs-xs);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2)}
+.nav .grp:first-child{margin-top:4px}
+@media (min-width:721px){.app.collapsed .nav .grp:first-child{display:none}.app.collapsed .nav button.on::before{left:-8px}.app.collapsed .nav button .n:not([hidden]){min-width:0;border:0}}
+/* celular: gaveta + fundo escurecido; o botão ☰ fica no cabeçalho */
+.top-menu{display:none;width:44px;height:44px;flex:none;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);color:var(--ink);cursor:pointer;place-items:center}
+.top-menu svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.top-menu:hover{background:var(--hover)}
+.nav-fundo{display:none}
+@media (max-width:720px){
+  .top-menu{display:grid}
+  body.nav-aberto .nav-fundo{display:block;position:fixed;inset:0;z-index:69;background:rgba(8,12,18,.55)}
+  .nav button{min-height:44px}
+  .side .collapse{display:none}
+}
+/* ===== Redesenho §19 · moldura: notebook/tablet com o menu recolhido por padrão (JS) e a grade da Home ===== */
+#v-painel .ini-grid{grid-template-columns:minmax(0,1fr) minmax(300px,360px);gap:var(--gap-card)}
+#v-painel .ini-col{gap:var(--gap-card)}
+@media (min-width:1600px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr) 400px}}
+@media (max-width:1279px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr)}}   /* notebook/tablet: a coluna da direita desce para baixo da principal */
+@media (min-width:900px) and (max-width:1279px){#v-painel .ini-grid>.ini-col+.ini-col{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}   /* e usa a largura em duas colunas */
 .cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
@@ -1330,7 +1350,8 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 <aside class="side"><button type="button" class="collapse" id="collapse" title="Recolher menu ([ ou ⌘/Ctrl + B)" aria-label="Recolher menu ([ ou ⌘/Ctrl + B)" aria-expanded="true" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
   <div class="brand"><div class="mark" title="Casa da Arquitetura Moderna Paulista"><svg class="mark-camp" viewBox="0 0 48 44" role="img" aria-label="CAMP"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></div><div><b>Acervos</b><small>administração interna</small></div></div>
   <nav class="nav" id="nav">
-    <!-- UX-28: menu pela ordem do trabalho. Topo (as filas do dia, sempre à vista) · Acervo · Público · Acompanhamento · Administração · Ajuda; o resto no "Mais". Nome do menu = título da página -->
+    <!-- Redesenho §3 (04/11/2026; antes UX-28): grupos por finalidade — Principal (as filas do dia, sempre à vista) · Acervo · Público e processos · Administração; Ajuda no fim. O resto no "Mais". Nome do menu = título da página -->
+    <div class="grp">Principal</div>
     <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Precisa de você<span class="n" id="n-gente" hidden></span></button>
     <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Material novo<span class="n" id="n-filas" hidden></span></button>
     <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Problemas<span class="n" id="n-err" hidden></span></button>
@@ -1344,35 +1365,35 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
     <button data-v="estante" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/><path d="M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>Ler etiqueta</button>
     <button data-v="etiquetas" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M3 12l9-9h9v9l-9 9z"/><circle cx="16" cy="8" r="1.5"/></svg>Etiquetas</button>
     <button data-v="emprestimos" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M4 7h11v10H4z"/><path d="M15 12h6M18 9l3 3-3 3"/></svg>Empréstimos<span class="n r" id="n-emp" hidden></span></button>
-    <div class="grp">Público</div>
+    <div class="grp">Público e processos</div>
     <button data-v="solicitacoes"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg>Pedidos de alta resolução<span class="n" id="n-sol" hidden></span></button>
     <button data-v="inscricoes" data-pode="rota.inscricoes"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h4"/><circle cx="10" cy="8" r="1"/></svg>Inscrições<span class="n" id="n-ins" hidden></span></button>
     <button data-v="uso" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 20h14"/></svg>Downloads</button>
-    <div class="grp nav-sec">Acompanhamento</div>
     <button data-v="visitas" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.5"/></svg>Visitas ao site</button>
     <button data-v="relatorios" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 17v-3M12 17v-6M15 17v-4"/></svg>Relatórios</button>
-    <button data-v="auditoria" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Histórico de ações</button>
-    <button data-v="qualidade" class="nav-sec" data-pode="rota.qualidade"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Qualidade do CAMP Vision</button>
     <div class="grp" data-grp="admin">Administração</div>
     <button data-v="estacoes"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></svg>Máquinas</button>
     <button data-v="config" class="nav-sec"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3 1 2-3.5-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>Configurações</button>
+    <button data-v="auditoria" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17" cy="17" r="3"/></svg>Histórico de ações</button>
+    <button data-v="qualidade" class="nav-sec" data-pode="rota.qualidade"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Qualidade do CAMP Vision</button>
     <div class="grp nav-sec">Ajuda</div>
     <button data-v="caminho" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M4 18h4l4-12h4l4 12"/><circle cx="4" cy="18" r="1.5"/><circle cx="20" cy="18" r="1.5"/></svg>Como o material anda</button>
     <button data-v="glossario" class="nav-sec"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>Glossário</button>
     <button type="button" id="nav-mais-pc" class="nav-mais-pc" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01"/></svg>Mais</button>
-  <button type="button" id="nav-mais" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Mais</button>
   </nav>
   <div class="foot" id="foot">Protótipo sem servidor</div>
 </aside>
 
+<div class="nav-fundo" id="nav-fundo" aria-hidden="true"></div>
 <main class="main">
   <div class="top">
+    <button type="button" class="top-menu" id="nav-gaveta" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div class="search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
       <input id="q" placeholder="Buscar projeto, fundo, arquiteto ou código (F0xx-P000x)" autocomplete="off" aria-label="Buscar projeto, fundo, arquiteto ou código">
       <div class="res" id="qres"></div>
     </div>
-    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span>Rafael</span><div class="av">RM</div></div><div class="who-menu" id="who-menu" role="menu" hidden><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
+    <div class="where" id="where"></div><div class="tarefas-chip" id="tarefas-chip" hidden role="status" aria-live="polite"></div><div class="machine-status" id="machine-status"></div><div class="who" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" title="Meu perfil, atalhos e sair"><span class="who-nome">Rafael</span><div class="av">RM</div></div><div class="who-menu" id="who-menu" role="menu" hidden><button type="button" role="menuitem" data-who="perfil">Meu perfil</button><button type="button" role="menuitem" data-who="atalhos">Atalhos de teclado</button><button type="button" role="menuitem" data-who="explicacoes">Mostrar de novo as explicações</button><button type="button" role="menuitem" data-who="avisos">Tarefas e avisos recentes</button><hr><button type="button" role="menuitem" data-who="sair">Sair</button></div>
     <div class="system-banner" id="system-banner" onclick="go('estacoes')"><span class="health-dot"></span><div><b id="system-banner-title">Atenção no sistema</b><span id="system-banner-text"></span></div><span class="when" id="system-banner-when"></span></div>
   </div>
 
@@ -1906,7 +1927,7 @@ function crumbs(route){const [v,arg]=route.split('/');const H=`<a onclick="go('p
   else if(v==='projeto'){const p=projOf(arg)||PROJ_INFO[arg]||{f:arg.slice(0,4)},fn=p.fn||fundoNome(p.f);out.push(...raiz(p,fn),`<b>${escHtml(arg)}${p.t&&p.t!==arg?' · '+escHtml(tituloExibicao(p.t)):''}</b>`)}
   else if((v==='duplicatas'||v==='conferir')&&arg){const p=projOf(arg)||PROJ_INFO[arg]||{f:arg.slice(0,4)},fn=p.fn||fundoNome(p.f);out.push(...raiz(p,fn),`<a onclick="nav('projeto/${escHtml(arg)}')">${escHtml(arg)}${p.t&&p.t!==arg?' · '+escHtml(tituloExibicao(p.t)):''}</a>`,`<b>${v==='conferir'?'Conferir folhas':'Duplicatas'}</b>`)}
   else if(v==='item'){const pc=arg.slice(0,10),p=projOf(pc)||PROJ_INFO[pc]||{f:pc.slice(0,4)},fn=p.fn||fundoNome(p.f);out.push(...raiz(p,fn),`<a onclick="nav('projeto/${escHtml(pc)}')">${escHtml(pc)}${p.t&&p.t!==pc?' · '+escHtml(tituloExibicao(p.t)):''}</a>`,`<b>folha ${escHtml(arg.slice(-6))}</b>`)}
-  else if(v&&v!=='painel'){const grp={fundos:'Acervo',arquitetos:'Acervo',etiquetas:'Acervo',localizacao:'Acervo',estante:'Acervo',emprestimos:'Acervo',solicitacoes:'Público',uso:'Público',relatorios:'Acompanhamento',auditoria:'Acompanhamento',qualidade:'Acompanhamento',estacoes:'Administração',config:'Administração',caminho:'Ajuda',glossario:'Ajuda'}[v]   /* UX-28: a trilha usa os grupos do menu; o topo (Precisa de você, Material novo, Problemas, Decisões, Projetos) não tem grupo */;if(grp)out.push(`<span>${grp}</span>`);out.push(`<b>${TITLES[v]}</b>`)}
+  else if(v&&v!=='painel'){const grp={fundos:'Acervo',arquitetos:'Acervo',etiquetas:'Acervo',localizacao:'Acervo',estante:'Acervo',emprestimos:'Acervo',solicitacoes:'Público e processos',inscricoes:'Público e processos',uso:'Público e processos',visitas:'Público e processos',relatorios:'Público e processos',auditoria:'Administração',qualidade:'Administração',estacoes:'Administração',config:'Administração',caminho:'Ajuda',glossario:'Ajuda'}[v]   /* §3 (antes UX-28): a trilha usa os grupos do menu; os itens de Principal (Precisa de você, Material novo, Problemas, Decisões, Projetos) não repetem o grupo */;if(grp)out.push(`<span>${grp}</span>`);out.push(`<b>${TITLES[v]}</b>`)}
   else out.push('<b>Precisa de você</b>');
   document.getElementById('gcrumb').innerHTML=out.join(S)}
 function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document.getElementById('v-nao-encontrado');if(!sec){sec=document.createElement('section');sec.className='content';sec.id='v-nao-encontrado';document.getElementById('drawer').before(sec)}const semAcesso=titulo==='Sem acesso';   /* §20: sem permissão diz o porquê e quem autoriza, no componente de estados */
@@ -1914,19 +1935,29 @@ function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document
 const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 // UMA regra: papel mínimo de cada ação/tela. O servidor continua sendo a garantia (devolve 403); aqui o botão simplesmente não aparece para quem não pode.
 const PODE={'estante.registrar':'operador','estante.mover':'operador','projeto.criar':'admin','projeto.editar':'admin','projetos.lote':'admin','arquiteto.cadastrar':'admin','problema.resolver':'operador','pedido.mudar':'operador','rota.estacoes':'operador','rota.uso':'admin','rota.inscricoes':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','emprestimo.criar':'operador','emprestimo.devolver':'operador','analytics.diagnostico':'admin'};
-/* Celular: os 4 destinos da barra de baixo dependem do papel; o resto fica em "Mais" */
-const NAV_CELULAR={admin:['painel','decisoes','filas','projetos','estante'],master:['painel','decisoes','filas','projetos','estante'],operador:['painel','filas','projetos','erros','estante'],leitura:['painel','projetos','fundos','arquitetos','estante']};   /* a estante (ler etiqueta) é o uso típico do celular */
-function marcarNavCelular(){const l=NAV_CELULAR[(EU&&EU.papel)||'leitura']||NAV_CELULAR.leitura;document.querySelectorAll('#nav > button[data-v]').forEach(b=>b.classList.toggle('mob-pri',l.includes(b.dataset.v)))}
+/* Redesenho §19: no celular o menu inteiro abre numa GAVETA pelo ☰ do cabeçalho (antes: barra de baixo com 5 destinos + "Mais").
+   Aberta: o resto da tela fica inerte (o Tab não sai da gaveta); fecha com Esc, no fundo escurecido, ao escolher um item ou ao alargar a tela. */
+const MQ_CELULAR=window.matchMedia?matchMedia('(max-width:720px)'):{matches:false,addEventListener(){}};
+function gavetaMenu(ab){const g=document.getElementById('nav-gaveta'),m=document.querySelector('.main');ab=!!ab&&MQ_CELULAR.matches;
+  document.body.classList.toggle('nav-aberto',ab);if(m)m.inert=ab;
+  if(g){g.setAttribute('aria-expanded',String(ab));g.setAttribute('aria-label',ab?'Fechar menu':'Abrir menu')}
+  if(ab){const b=document.querySelector('#nav button.on')||document.querySelector('#nav button');if(b)b.focus()}else if(g&&document.activeElement&&document.activeElement.closest('.side'))g.focus()}
+MQ_CELULAR.addEventListener('change',e=>{if(!e.matches&&document.body.classList.contains('nav-aberto'))gavetaMenu(false)});
 function navSecAbrir(ab,lembrar){const n=document.getElementById('nav'),b=document.getElementById('nav-mais-pc');if(!n)return;n.classList.toggle('sec-aberta',ab);if(b)b.setAttribute('aria-expanded',String(ab));if(lembrar){try{localStorage.setItem('camp.nav.mais',ab?'1':'0')}catch(_){}}}
 try{if(localStorage.getItem('camp.nav.mais')==='1')setTimeout(()=>navSecAbrir(true),0)}catch(_){}
-document.addEventListener('click',e=>{if(e.target.closest('#nav-busca')){if(document.body.classList.contains('nav-aberto')){document.body.classList.remove('nav-aberto');const mm=document.getElementById('nav-mais');if(mm){mm.setAttribute('aria-expanded','false');mm.lastChild.textContent='Mais'}}const q=document.getElementById('q');if(q){q.focus();q.select()}return}   /* UX-28: "Busca" no topo do menu = a mesma busca do ⌘/Ctrl+K */
+document.addEventListener('click',e=>{if(e.target.closest('#nav-busca')){if(document.body.classList.contains('nav-aberto'))gavetaMenu(false);const q=document.getElementById('q');if(q){q.focus();q.select()}return}   /* UX-28: "Busca" no topo do menu = a mesma busca do ⌘/Ctrl+K */
   if(e.target.closest('#nav-mais-pc')){const n=document.getElementById('nav');navSecAbrir(!(n&&n.classList.contains('sec-aberta')),true)}});
-document.addEventListener('click',e=>{const m=e.target.closest('#nav-mais');if(m){const ab=!document.body.classList.contains('nav-aberto');document.body.classList.toggle('nav-aberto',ab);m.setAttribute('aria-expanded',String(ab));m.lastChild.textContent=ab?'Fechar':'Mais';return}
-  if(document.body.classList.contains('nav-aberto')&&e.target.closest('#nav button[data-v]')){document.body.classList.remove('nav-aberto');const mm=document.getElementById('nav-mais');if(mm){mm.setAttribute('aria-expanded','false');mm.lastChild.textContent='Mais'}}});
+document.addEventListener('click',e=>{if(e.target.closest('#nav-gaveta')){gavetaMenu(!document.body.classList.contains('nav-aberto'));return}
+  if(document.body.classList.contains('nav-aberto')&&(e.target.closest('#nav-fundo')||e.target.closest('#nav button[data-v]')))gavetaMenu(false)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('nav-aberto')){e.preventDefault();e.stopPropagation();gavetaMenu(false)}},true);
+/* §3: setas ↑ ↓ (e Home/End) andam pelos itens visíveis do menu; Tab continua normal */
+document.getElementById('nav').addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||!e.target.closest('#nav button'))return;
+  const bs=[...document.querySelectorAll('#nav > button')].filter(b=>b.offsetParent&&!b.hidden),i=bs.indexOf(e.target.closest('button'));if(i<0)return;e.preventDefault();
+  const j=e.key==='Home'?0:e.key==='End'?bs.length-1:(i+(e.key==='ArrowDown'?1:-1)+bs.length)%bs.length;bs[j].focus()});
 function pode(acao){if(acao==='qnap.varrer')return !!EU&&(['admin','master'].includes(EU.papel)||(EU.papel==='operador'&&!EU.importacao_automatica));   // CAMP-153: com a importação automática (CAMP-151) ligada, "Varrer QNAP" sai da tela do operador; desligada, é o caminho dele para o aviso perdido (CAMP-075)
   if(acao==='projetos.publicar')return !!EU&&(['admin','master'].includes(EU.papel)||(EU.papel==='operador'&&umPasso()));   // CAMP-149: com o um passo, o operador publica vários
   const min=PODE[acao];return !min||(!!EU&&(PAPEL_NIVEL[EU.papel]||0)>=PAPEL_NIVEL[min])}
-function aplicarPermissoes(){marcarNavCelular();document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
+function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
 function route_to(route){route=route||'painel';setTimeout(()=>{window.PJ_ROTA=route;vigiarMarca()},0);   /* exaustão CAMP-105: nova visita ao projeto (vindo de outra tela) reabre a gaveta do que trava; redesenhar na mesma visita não */
   document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){FILA_FILTRO=a1||null;carregarFilas()}if(v==='projetos'){carregarProjetosAPI(a1?{situacao:a1}:{});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='erros'){ERR_F.projeto=/^F\d{3}(-P\d{4})?$/.test(a1)?a1:'';carregarErros()}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
@@ -2817,7 +2848,7 @@ function instalarExportacoes(){
 
 // ---------- atalhos e barra lateral ----------
 const appEl=document.querySelector('.app');
-function setCollapsed(c){appEl.classList.toggle('collapsed',c);navDica(null);const cb=document.getElementById('collapse');if(cb){const t=(c?'Expandir menu':'Recolher menu')+' ([ ou ⌘/Ctrl + B)';cb.title=t;cb.setAttribute('aria-label',t);cb.setAttribute('aria-expanded',String(!c))}try{localStorage.setItem('camp.side',c?'1':'')}catch(e){}}
+function setCollapsed(c,lembrar=true){appEl.classList.toggle('collapsed',c);navDica(null);const cb=document.getElementById('collapse');if(cb){const t=(c?'Expandir menu':'Recolher menu')+' ([ ou ⌘/Ctrl + B)';cb.title=t;cb.setAttribute('aria-label',t);cb.setAttribute('aria-expanded',String(!c))}if(lembrar)try{localStorage.setItem('camp.side',c?'1':'0')}catch(e){}}
 /* UX-28: menu recolhido — a dica ao lado do ícone diz o nome do item, o número (se houver) e a tecla (mouse e foco pelo teclado) */
 function navDica(b){let d=document.getElementById('nav-dica');if(!b||!appEl.classList.contains('collapsed')||(window.matchMedia&&matchMedia('(max-width:720px)').matches)){if(d)d.hidden=true;return}
   if(!d){d=document.createElement('div');d.id='nav-dica';d.className='nav-dica';d.setAttribute('role','tooltip');document.body.appendChild(d)}
@@ -2828,7 +2859,10 @@ function navDica(b){let d=document.getElementById('nav-dica');if(!b||!appEl.clas
   nv.addEventListener('mouseover',e=>navDica(alvo(e)));nv.addEventListener('mouseleave',()=>navDica(null));
   nv.addEventListener('focusin',e=>navDica(alvo(e)));nv.addEventListener('focusout',()=>navDica(null));nv.addEventListener('click',()=>navDica(null))}
 document.getElementById('collapse').addEventListener('click',()=>setCollapsed(!appEl.classList.contains('collapsed')));
-try{if(localStorage.getItem('camp.side')==='1')setCollapsed(true)}catch(e){}
+/* §19: notebook/tablet (721–1279 px) começa com o menu recolhido, a não ser que a pessoa já tenha escolhido (camp.side = '1' ou '0') */
+const MQ_TABLET=window.matchMedia?matchMedia('(min-width:721px) and (max-width:1279px)'):{matches:false,addEventListener(){}};
+function recolhidoPadrao(){let p=null;try{p=localStorage.getItem('camp.side')}catch(e){}if(p==='1')setCollapsed(true,false);else if(p==='0')setCollapsed(false,false);else setCollapsed(MQ_TABLET.matches,false)}
+recolhidoPadrao();MQ_TABLET.addEventListener('change',recolhidoPadrao);
 // ATALHOS DO MENU: UMA tabela gera as teclas, os rótulos do menu, a ajuda e a dica do painel (docs/padroes.md).
 // Regra: dígitos 1–9 = as nove primeiras entradas NA ORDEM DO MENU; grupo Sistema = letras (E, A, C). scripts/check_ui.py confere.
 const NAV_ATALHOS={painel:'1',filas:'N',erros:'P',decisoes:'D',projetos:'2',fundos:'3',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',solicitacoes:'4',inscricoes:'S',uso:'U',visitas:'V',relatorios:'L',auditoria:'A',qualidade:'Q',estacoes:'5',config:'C',caminho:'M',glossario:'G'};   /* UX-28: na ordem do menu (ordem do trabalho); as teclas são as mesmas do CAMP-154: 1–5 os destinos, o resto por letra */

@@ -2,7 +2,8 @@
 //   CAMP_DB_PATH=/tmp/x.db python3 tests/semear_banco_teste.py
 //   (cd backend && CAMP_DB_PATH=/tmp/x.db CAMP_COOKIE_SECURE=false WP_BASE_URL=http://127.0.0.1:9 python3 -m uvicorn app.main:app --port 8953)
 //   CAMP_BASE=http://127.0.0.1:8953 node tests/navegador_ux28_menu.js
-// Confere: ordem dos grupos (Topo · Acervo · Público · Acompanhamento · Administração · Ajuda); as filas do dia à vista sem abrir o "Mais";
+// Confere: ordem dos grupos (redesenho §3, 04/11/2026: Principal · Acervo · Público e processos · Administração · Ajuda; antes Topo · Acervo ·
+// Público · Acompanhamento · Administração · Ajuda); as filas do dia à vista sem abrir o "Mais";
 // nome do menu = título de cada página; as teclas de antes continuam iguais; trilha do projeto por onde se entrou (Projetos × Fundos).
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || '/opt/node22/lib/node_modules/playwright');
 const BASE = process.env.CAMP_BASE || 'http://127.0.0.1:8953';
@@ -32,15 +33,15 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
 
   // 1) com o "Mais" fechado: o topo (filas do dia) e os destinos, pela ordem do trabalho
   const v0 = await visiveis(page);
-  chk(v0.join(',') === 'painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,#Público,solicitacoes,#Administração,estacoes,nav-mais-pc',
-      '"Mais" fechado: Topo (Precisa de você · Material novo · Problemas · Decisões · Projetos · Busca) · Acervo · Público · Administração: ' + v0.join(','));
+  chk(v0.join(',') === '#Principal,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,#Público e processos,solicitacoes,inscricoes,#Administração,estacoes,nav-mais-pc',
+      '"Mais" fechado: Principal (Precisa de você · Material novo · Problemas · Decisões · Projetos · Busca) · Acervo · Público e processos · Administração: ' + v0.join(','));
   chk(['filas', 'erros', 'decisoes'].every(v => v0.includes(v)), 'as filas do dia (Material novo, Problemas, Decisões) à vista sem abrir o "Mais"');
 
   // 2) com o "Mais" aberto: todos os grupos, na ordem pedida
   await page.click('#nav-mais-pc'); await page.waitForTimeout(200);
   const v1 = await visiveis(page);
-  chk(v1.join(',') === 'painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos,#Público,solicitacoes,uso,#Acompanhamento,relatorios,auditoria,qualidade,#Administração,estacoes,config,#Ajuda,caminho,glossario,nav-mais-pc',
-      '"Mais" aberto: Acervo · Público · Acompanhamento · Administração · Ajuda, cada um com os seus itens: ' + v1.join(','));
+  chk(v1.join(',') === '#Principal,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos,#Público e processos,solicitacoes,inscricoes,uso,visitas,relatorios,#Administração,estacoes,config,auditoria,qualidade,#Ajuda,caminho,glossario,nav-mais-pc',
+      '"Mais" aberto: Principal · Acervo · Público e processos · Administração (com Histórico e Qualidade do CAMP Vision, só admin) · Ajuda: ' + v1.join(','));
   await page.click('#nav-mais-pc');
 
   // 3) nome do menu = título da página (h1, topo e trilha)
@@ -64,7 +65,8 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
   // 4) as teclas de antes, com o "Mais" fechado
   await page.evaluate(() => { navSecAbrir(false, true); go('painel') }); await page.waitForTimeout(700);
   const kbd = await page.$$eval('#nav button[data-v]', bs => Object.fromEntries(bs.map(x => [x.dataset.v, (x.querySelector('kbd') || {}).textContent || null])));
-  chk(JSON.stringify(kbd) === JSON.stringify(Object.fromEntries(Object.keys(kbd).map(v => [v, TECLAS[v]]))), 'o menu anuncia as mesmas teclas de antes: ' + JSON.stringify(kbd));
+  const TECLAS_TODAS = { ...TECLAS, inscricoes: 'S', visitas: 'V' };   // itens que entraram depois do UX-28 (Inscrições, Visitas ao site)
+  chk(JSON.stringify(kbd) === JSON.stringify(Object.fromEntries(Object.keys(kbd).map(v => [v, TECLAS_TODAS[v]]))), 'o menu anuncia as mesmas teclas de antes: ' + JSON.stringify(kbd));
   const errTecla = [];
   for (const [v, k] of Object.entries(TECLAS)) { await page.evaluate(() => go('glossario')); await page.waitForTimeout(200); const r = await tecla(page, k.toLowerCase()); if (v === 'glossario' ? r !== 'glossario' : r !== v) errTecla.push(`${k}→${r} (esperado ${v})`) }
   chk(!errTecla.length, 'cada tecla abre a mesma tela de antes' + (errTecla.length ? ': ' + errTecla.join(', ') : ''));
