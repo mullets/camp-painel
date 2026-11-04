@@ -141,7 +141,7 @@ def explicar(e, ctx: dict) -> dict:
         from .rotas_revisao import pede_so_olhar_a_folha
         o_que = "O CAMP Vision apontou (veja o detalhe)."
         if pede_so_olhar_a_folha(e["descricao"]):
-            fazer = "Abra a folha e confira. Se estiver certa, \"Está certo\" resolve e o aviso sai daqui; se algo estiver errado, corrija e salve."
+            fazer = "Abra a folha e confira. Se estiver certa, \"Confirmar folha\" (ou \"Salvar e próxima folha\") resolve e o aviso sai daqui; se algo estiver errado, corrija e salve."
     acao = None
     sozinho = None
     criado = e["criado_em"] or ""

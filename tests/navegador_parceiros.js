@@ -46,10 +46,11 @@ const espera = async (f, ms = 6000) => { const t = Date.now(); while (Date.now()
   await pg.fill(`${L} >> nth=1 >> .parc-outra`, 'Paisagismo de cobertura');
   chk(await sujo(), 'mexer nos parceiros marca "Alterações não salvas"');
   chk(await pg.evaluate(() => document.querySelector('[data-parc-bloco="rv-parceiros"]').classList.contains('alterado')), 'o bloco fica marcado como alterado');
-  await pg.click('[data-rev-item="corrigida"]');
+  // redesenho §4.2 F: o antigo "Salvar correção" é o "Salvar e próxima folha" com campo mudado; folha sem imagem pergunta antes
+  await pg.click('[data-rev-item="conferida"]'); await pg.waitForSelector('#conf-ov [data-conf="sim"]', { timeout: 2500 }).then(() => pg.click('#conf-ov [data-conf="sim"]'), () => {});
   await espera(async () => (await item(D(1))).item.revisao !== 'pendente');
   const i1 = (await item(D(1))).item;
-  chk(nomes(i1.parceiros) === 'Escritório Técnico Calc|Estrutura ; Burle Marx & Cia|Paisagismo de cobertura' && i1.revisao === 'corrigida', '"Salvar correção" grava os dois parceiros', JSON.stringify([i1.parceiros, i1.revisao]));
+  chk(nomes(i1.parceiros) === 'Escritório Técnico Calc|Estrutura ; Burle Marx & Cia|Paisagismo de cobertura' && i1.revisao === 'corrigida', '"Salvar e próxima folha" (antes "Salvar correção") grava os dois parceiros', JSON.stringify([i1.parceiros, i1.revisao]));
   const foi = await espera(async () => await aberta() === D(2));
   chk(foi && !(await pergunta()) && !(await sujo()), 'depois de salvar, a próxima folha abre SEM "Sair sem salvar?" e sem "Alterações não salvas"', await pergunta());
   // sugestões de nome (datalist)

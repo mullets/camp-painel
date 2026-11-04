@@ -134,6 +134,82 @@ const dialogo = pg => pg.evaluate(() => { const o = document.getElementById('con
     chk(await pg.evaluate(() => document.getElementById('pd').dataset.vista === 'lista' && getComputedStyle([...document.querySelectorAll('#pd .thumb')].find(x => !x.hidden)).display === 'grid'), '§3.4 alternância grade/lista');
     await pg.click('#pd .folhas-bar [data-fl-vista="grade"]');
 
+    // ---------- 3) abrir uma folha ----------
+    await pg.evaluate(() => { mainEl.scrollTop = 420 }); await pg.waitForTimeout(150);
+    const rolagem0 = await pg.evaluate(() => mainEl.scrollTop);
+    await pg.click(`#pd .thumb[data-rev-abrir="${D(3)}"] .img-real`);
+    chk(await abriu(pg, D(3)), '§4 clicar na folha abre "Revisar folha"');
+    const rv = await pg.evaluate(() => { const b = document.getElementById('d-body'); const t = document.querySelector('#pd .thumb.aberta');
+      return { titulo: document.getElementById('d-title').textContent, folha: (b.querySelector('.rv-folha') || {}).textContent || '', proj: (b.querySelector('.rv-proj') || {}).textContent || '',
+        pos: (b.querySelector('.rv-nav .rev-prog b') || {}).textContent || '', ant: !!b.querySelector('.rv-nav [data-rev-ir]:not([disabled])'), dest: t ? t.dataset.revAbrir : null, cur: t ? t.getAttribute('aria-current') : null,
+        img: (document.getElementById('rv-img') || {}).src || '', sug: (b.querySelector('.rv-sug') || {}).innerText || '', aviso: (b.querySelector('.rv-al.aviso') || {}).innerText || '', erro: !!b.querySelector('.rv-al.erro') }; });
+    chk(rv.titulo === 'Revisar folha' && /^Folha 03/.test(rv.folha) && /F026-P0171-1974-S01-D00003/.test(rv.proj) && /Edifício Página Interna/.test(rv.proj), '§4.2 A: "Revisar folha", Folha 03, código e nome do projeto', JSON.stringify(rv));
+    chk(rv.pos === '3 de 10' && rv.ant, '§4.2 A: ‹ Anterior · 3 de 10 · Próxima ›', JSON.stringify(rv.pos));
+    chk(rv.dest === D(3) && rv.cur === 'true', '§4.3 a folha aberta fica destacada na grade (aria-current)', JSON.stringify(rv));
+    chk(um('SELECT revisao FROM item WHERE codigo=?', D(3)) === 'pendente', '§4.3 abrir a folha NÃO a confere (banco continua "pendente")');
+    chk(/orientação incerta/.test(rv.aviso) && !rv.erro, '§4.2 B: D03 mostra "Aviso do CAMP Vision" (orientação incerta), sem erro impeditivo', rv.aviso);
+    chk(/Orientação sugerida/.test(rv.sug) && /Usar sugestão/.test(rv.sug) && /[?&]s=180/.test(rv.img) && +um('SELECT COALESCE(giro_manual,0) FROM item WHERE codigo=?', D(3)) === 0, '§4.2 E: giro sugerido na tela e em "Sugestões do CAMP Vision", sem gravar', JSON.stringify([rv.sug, rv.img]));
+    await pg.click('#d-body .rv-sug [data-rev-sug-aceitar]');
+    chk(await espera(() => +um('SELECT COALESCE(giro_manual,0) FROM item WHERE codigo=?', D(3)) === 180), '§4.2 E: "Usar sugestão" grava o giro sugerido (só no clique)');
+    chk(um('SELECT revisao FROM item WHERE codigo=?', D(3)) === 'pendente', '§4.3 usar a sugestão de giro não confere a folha');
+    // zoom e tela cheia
+    await pg.click('#d-body [data-rev-zoom="+"]');
+    chk(await pg.evaluate(() => /125%/.test(document.querySelector('#d-body .rv-zoom-n').textContent) && /scale\(1\.25\)/.test(document.getElementById('rv-img').style.transform)), '§4.2 C: zoom (+) amplia a imagem (125%)');
+    await pg.click('#d-body [data-rev-cheia]');
+    const cheia = await pg.evaluate(() => { const r = document.getElementById('drawer').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight }; });
+    chk(cheia.l <= 0 && cheia.t <= 0 && cheia.w >= cheia.vw - 1 && cheia.h >= cheia.vh - 1, '§8 tela cheia de verdade: o painel cobre a janela', JSON.stringify(cheia));
+    await pg.click('#d-body [data-rev-cheia]');
+    // rodapé à vista sem rolar
+    const rod = await pg.evaluate(() => { const r = document.querySelector('#d-body .rv-rodape').getBoundingClientRect(); return { b: r.bottom, t: r.top, vh: innerHeight, txt: document.querySelector('#d-body .rv-rodape').innerText.replace(/\s+/g, ' ') }; });
+    chk(rod.b <= rod.vh + 1 && rod.t < rod.vh && /Salvar e próxima folha/.test(rod.txt) && /Confirmar folha/.test(rod.txt) && /Relatar problema/.test(rod.txt) && /Fechar/.test(rod.txt), '§4.2 F: rodapé Salvar e próxima folha · Confirmar folha · Relatar problema · Fechar, à vista sem rolar', JSON.stringify(rod));
+
+    // ---------- 4) avisos separados por gravidade ----------
+    await pg.click('#d-body .rv-nav [data-rev-ir]:not([disabled]) >> text=Próxima');
+    chk(await abriu(pg, D(4)), '§4.2 A: "Próxima ›" abre a D04');
+    chk(await pg.evaluate(() => document.querySelector('#pd .thumb.aberta').dataset.revAbrir) === D(4), '§4.3 o destaque da grade acompanha a folha aberta');
+    const av4 = await pg.evaluate(() => (document.querySelector('#d-body .rv-al.aviso') || {}).innerText || '');
+    chk(/Aviso do CAMP Vision/.test(av4) && (av4.match(/valor descartado/g) || []).length === 1 && /titulo/.test(av4) && /escala/.test(av4), '§4.2 B + UX-71: os avisos repetidos viram UM aviso com os campos', av4);
+    await pg.click('#d-body .rv-nav [data-rev-ir]:not([disabled]) >> text=Próxima');
+    chk(await abriu(pg, D(5)), 'a D05 abre');
+    const er5 = await pg.evaluate(() => ({ erro: (document.querySelector('#d-body .rv-al.erro') || {}).innerText || '', aviso: !!document.querySelector('#d-body .rv-al.aviso') }));
+    chk(/Impede publicar/.test(er5.erro) && /carimbo ilegível/.test(er5.erro) && !er5.aviso, '§4.2 B: bloqueio aparece como "Impede publicar", separado de aviso', JSON.stringify(er5));
+
+    // ---------- 6) alteração não salva ao trocar de folha e ao fechar ----------
+    await pg.fill('#rv-escala', '1:50');
+    await pg.click('#d-body .rv-nav [data-rev-ir]:not([disabled]) >> text=Anterior');
+    chk(await espera(async () => /Sair sem salvar/.test(await dialogo(pg))), '§4.3 trocar de folha com alteração pergunta "Sair sem salvar?"');
+    await pg.click('#conf-ov [data-conf="nao"]'); await pg.waitForTimeout(300);
+    chk((await sub(pg)) === D(5) && await pg.inputValue('#rv-escala') === '1:50', '§4.3 "Continuar editando" fica na folha com o que foi digitado');
+    await pg.click('#d-body [data-rev-fechar]');
+    chk(await espera(async () => /Sair sem salvar/.test(await dialogo(pg))), '§7.5 Fechar com alteração pergunta');
+    await pg.click('#conf-ov [data-conf="sim"]'); await pg.waitForTimeout(500);
+    chk(um('SELECT escala FROM item WHERE codigo=?', D(5)) === '1:100', 'sair sem salvar não grava nada');
+    const depois = await pg.evaluate(() => ({ aberto: mainEl.classList.contains('with-drawer'), dest: document.querySelectorAll('#pd .thumb.aberta').length, filtro: (document.querySelector('#pd .folhas-bar [data-fl-f].on') || {}).dataset?.flF, y: mainEl.scrollTop }));
+    chk(!depois.aberto && depois.dest === 0, 'ao fechar, o painel sai e o destaque também', JSON.stringify(depois));
+    chk(depois.filtro === 'conferir' && Math.abs(depois.y - rolagem0) < 80, '§7.9 o filtro e a posição da galeria ficam ao abrir/fechar o painel', JSON.stringify([depois, rolagem0]));
+
+    // ---------- 5) Usar sugestão de título + Confirmar folha (fica) ----------
+    await pg.click(`#pd .thumb[data-rev-abrir="${D(2)}"] .img-real`);
+    chk(await abriu(pg, D(2)), 'a D02 abre');
+    chk(await pg.inputValue('#rv-titulo') === 'Folha 2', 'D02: o título NÃO vem trocado pela leitura (nada aplicado sozinho)');
+    await pg.click('#d-body .rv-sug [data-rev-usar="titulo"]');
+    chk(await pg.inputValue('#rv-titulo') === 'Planta do pavimento tipo' && um('SELECT titulo FROM item WHERE codigo=?', D(2)) === 'Folha 2', '§4.2 E: "Usar sugestão" põe o título no campo; o banco só muda ao salvar');
+    await pg.click('#d-body .rv-rodape [data-rev-ficar]');
+    chk(await espera(() => um('SELECT revisao FROM item WHERE codigo=?', D(2)) === 'corrigida' && um('SELECT titulo FROM item WHERE codigo=?', D(2)) === 'Planta do pavimento tipo'), '§4.2 F: "Confirmar folha" grava o título e confere (corrigida)');
+    chk(await espera(async () => (await sub(pg)) === D(2) && !!(await pg.$('#d-body .rv-estado [data-rev-estado="corrigida"]'))), '"Confirmar folha" fica na mesma folha, já com o selo do banco');
+    chk(await espera(() => pg.evaluate(n => (document.querySelector('#pj-status .pj-conf .prog-txt') || {}).textContent === `${n} de 10 folhas conferidas`, nConf + 1)), '§9 a contagem do Próximo passo sobe junto (sem recarregar)');
+    chk(await pg.evaluate(c => !!document.querySelector(`#pd .thumb[data-rev-abrir="${c}"] .rev-tag[data-rev-estado="corrigida"]`), D(2)), 'o cartão da folha mostra "corrigida" na hora');
+    // Salvar e próxima folha
+    await pg.click(`#pd .thumb[data-rev-abrir="${D(6)}"] .img-real`); await abriu(pg, D(6));
+    await pg.click('#d-body .rv-rodape [data-rev-item="conferida"]:not([data-rev-ficar])');
+    chk(await espera(() => um('SELECT revisao FROM item WHERE codigo=?', D(6)) === 'conferida'), '§4.2 F: "Salvar e próxima folha" confere a D06');
+    chk(await abriu(pg, D(8)), '"Salvar e próxima folha" vai para a próxima a conferir (D08; a D07 já estava conferida)', await sub(pg));
+    await pg.evaluate(() => closeDrawer(true));
+    // teclado: o número da folha no cartão é um botão (Tab chega nele; Enter abre a revisão)
+    await pg.focus(`#pd .thumb button.cap-id[data-rev-abrir="${D(9)}"]`); await pg.keyboard.press('Enter');
+    chk(await abriu(pg, D(9)), '§7.7 pelo teclado: Enter no número da folha abre a revisão');
+    await pg.evaluate(() => closeDrawer(true));
+
     // 1920: a grade aparece na 1ª tela
     await pg.setViewportSize({ width: 1920, height: 1080 }); await abrirProjeto(pg, 'itens');
     chk(await pg.evaluate(() => { const t = document.querySelector('#pd .thumb'); return t && t.getBoundingClientRect().top < innerHeight; }), '§9 a galeria aparece na 1ª tela (1920×1080) sem percorrer cartões');
@@ -142,6 +218,8 @@ const dialogo = pg => pg.evaluate(() => { const o = document.getElementById('con
     // ---------- 9) permissões ----------
     const op = await entrar(br, 'operador@camp.arq.br', 'senha-operador-123', null, erros); await abrirProjeto(op.pg);
     chk(await op.pg.evaluate(() => ![...document.querySelectorAll('#pd .pj-cab .act button')].some(b => b.textContent.trim() === 'Editar')), '§5.8 operador: sem "Editar" (só admin edita o projeto)');
+    await op.pg.click(`#pd .thumb[data-rev-abrir="${D(9)}"] .img-real`); await abriu(op.pg, D(9));
+    chk(await op.pg.evaluate(() => !!document.querySelector('#d-body .rv-rodape [data-rev-item="conferida"]')), 'operador revisa a folha');
     await op.ctx.close();
     const le = await entrar(br, 'leitor@camp.arq.br', 'senha-leitor-1234', null, erros); await abrirProjeto(le.pg);
     const lt = await le.pg.evaluate(() => ({ editar: [...document.querySelectorAll('#pd .pj-cab .act button')].some(b => b.textContent.trim() === 'Editar'), rev: !!document.querySelector('#pd .thumb[data-rev-abrir]') }));
@@ -152,6 +230,9 @@ const dialogo = pg => pg.evaluate(() => { const o = document.getElementById('con
     const cel = await entrar(br, 'rafael@camp.arq.br', 'senha-bem-longa-123', { width: 390, height: 844 }, erros); await abrirProjeto(cel.pg);
     const lado = pg2 => pg2.evaluate(() => ({ doc: document.documentElement.scrollWidth - innerWidth, main: mainEl.scrollWidth - mainEl.clientWidth }));
     chk((await lado(cel.pg)).doc <= 0 && (await lado(cel.pg)).main <= 0, '390 px: a página sem rolagem lateral', JSON.stringify(await lado(cel.pg)));
+    await cel.pg.evaluate(c => abrirRevisaoItem(c), D(9)); await abriu(cel.pg, D(9));
+    const dr = await cel.pg.evaluate(() => { const d = document.getElementById('drawer'); return { w: d.getBoundingClientRect().width, vw: innerWidth, lado: d.scrollWidth - d.clientWidth }; });
+    chk(dr.w >= dr.vw - 1 && dr.lado <= 0, '§7.8 390 px: "Revisar folha" ocupa a largura toda, sem rolagem lateral', JSON.stringify(dr));
     await cel.ctx.close();
   } catch (e) { chk(false, 'o teste rodou até o fim', e.stack); }
   finally { await br.close(); }

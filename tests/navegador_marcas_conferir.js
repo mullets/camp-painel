@@ -56,7 +56,7 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
   const tagsDe = c => pg.evaluate(c => { const r = document.querySelector(`#cf-linhas [data-cf-folha="${c}"]`); return r ? [...r.querySelectorAll('.cf-tags .tag')].map(t => t.textContent.trim()) : null; }, c);
   const comProblema = () => pg.evaluate(() => { const b = document.querySelector('#cf-filtros [data-cf-filtro="problema"] b'); return b ? +b.textContent : -1; });
   const aberta = () => pg.evaluate(() => { const s = document.querySelector('#cf-linhas .cf-linha.sel'); return s ? s.dataset.cfFolha : null; });
-  const abre = async c => { await pg.click(`#cf-linhas [data-cf-folha="${c}"]`); return espera(async () => await aberta() === c && !!(await pg.$('#cf-pane [data-rev-item="corrigida"]'))); };
+  const abre = async c => { await pg.click(`#cf-linhas [data-cf-folha="${c}"]`); return espera(async () => await aberta() === c && !!(await pg.$('#cf-pane [data-rev-item="conferida"]'))); };
   const entrar = async () => { await pg.goto(BASE + '/#conferir/' + P + '/' + D(1)); await pg.reload(); return pg.waitForSelector('#cf-linhas .cf-linha', { timeout: 15000 }).then(() => true, () => false); };
   try {
     chk(await entrar(), 'abre a tela de conferir do lote');

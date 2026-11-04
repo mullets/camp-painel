@@ -347,7 +347,7 @@ w.route_to('estacoes'); await sleep(2800);
     if(ta){ ta.click(); await sleep(1500); chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===90&&/Giro desfeito/.test(txt('#toast'))&&!d.querySelector('#toast .toast-acao'),'[H4] "Desfazer" do giro deveria voltar a 90 (e não oferecer outro Desfazer): "'+txt('#toast')+'"');
       d.querySelector('[data-rev-girar="-90"]').click(); await sleep(1500); } }
   d.getElementById('rv-titulo').value='Planta corrigida no teste'; d.getElementById('rv-escala').value='1:75';
-  d.querySelector('[data-rev-item="corrigida"]').click(); await sleep(3400);
+  d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3400);
   const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
   chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar correção" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
   w.closeDrawer(true); d.querySelector('#pj-revisao [data-rev-lote="todas"]').click(); await sleep(3600);
@@ -681,7 +681,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- [H9] janela Revisar folha: progresso, aviso da última, atalhos, campo alterado, tipos na ordem de uso ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500); const L=(w.ITENS_PJ||[]).filter(x=>x.lote_id);
   if(L.length>=2){ const a=L[0]; await w.abrirRevisaoItem(a.codigo); await sleep(1200);
-    chk(/Folha 1 de \d+ · \d+ conferidas?/.test(txt('#d-body .rev-prog'))&&!!d.querySelector('#d-body .rev-prog progress'),'a janela deveria mostrar "Folha 1 de N · X conferidas" com barra: "'+txt('#d-body .rev-prog')+'"');
+    chk(/^1 de \d+ · \d+ conferidas?/.test(txt('#d-body .rev-prog'))&&!!d.querySelector('#d-body .rev-prog progress')&&/^Folha /.test(txt('#d-body .rv-folha')),'a janela deveria mostrar "1 de N · X conferidas" com barra (redesenho §4.2 A: entre ‹ Anterior e Próxima ›; o nome da folha fica no título "Folha NN"): "'+txt('#d-body .rev-prog')+'"');
     const ops=[...d.querySelectorAll('#rv-tipo option')].map(o=>o.value).filter(Boolean); const rk=v=>{const i=['planta','corte','eleva','fachada','perspectiva','detalhe','implanta'].findIndex(p=>v.toLowerCase().startsWith(p));return i<0?99:i};
     chk(ops.length===0||ops.every((v,i)=>i===0||rk(ops[i-1])<=rk(v)),'os tipos deveriam vir na ordem de uso (Planta, Corte, …): '+ops.slice(0,6).join(', '));
     const inp=d.getElementById('rv-folha'); inp.value=(inp.value||'')+'X'; inp.dispatchEvent(new w.Event('input',{bubbles:true})); chk(inp.closest('.rev-campo').classList.contains('alterado'),'campo mudado deveria ganhar a marca "alterado"');

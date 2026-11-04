@@ -14179,7 +14179,7 @@ def filho(modo):
         ver("migração 140 rodada de novo não muda nada", c.execute("SELECT COUNT(*) FROM evento WHERE ator='migração 140'").fetchone()[0] == 2)
         from app.problemas import enriquecer
         ex = enriquecer(c, [dict(x) for x in c.execute("SELECT * FROM erro WHERE id=?", (e4,))])
-        ver("a gaveta do problema não diz 'Problema relatado' para aviso do CAMP Vision", ex and "relatado" not in (ex[0].get("o_que") or "").lower() and "Está certo" in (ex[0].get("fazer") or ""), str(ex)[:300])
+        ver("a gaveta do problema não diz 'Problema relatado' para aviso do CAMP Vision", ex and "relatado" not in (ex[0].get("o_que") or "").lower() and "Confirmar folha" in (ex[0].get("fazer") or ""), str(ex)[:300])
         c.close()
         for l in res: print(l)
     elif modo == "camp069_outro_projeto":
@@ -15591,7 +15591,9 @@ def filho(modo):
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
         ver("a barra da folha tem 'Girar 90°' e 'Girar 180°' (também na tela de conferir: a barra não depende de conf)",
             'data-rev-girar-rapido="90"' in html and 'Girar 90°</button>' in html and 'data-rev-girar-rapido="180"' in html and 'Girar 180°</button>' in html
-            and "const barra=`<div class=\"rev-cheia-bar rev-barra\">${conf?'':" in html and "const corpo=`${barra}" in html)
+            # redesenho da página do projeto (04/11/2026, §4.2 C): a barra virou a "Ferramentas da imagem" (role=toolbar), logo acima da
+            # imagem, depois da identificação e dos avisos; os botões de girar não dependem de conf (só a Tela cheia)
+            and "const barra=`<div class=\"rev-cheia-bar rev-barra rv-ferr\" role=\"toolbar\" aria-label=\"Ferramentas da imagem\">${op&&p.previa?" in html and "const corpo=`<div class=\"rv\">${cab}${alertas}${barra}" in html)
         ver("os botões usam a mesma rotina do atalho R (girarFolha → POST /api/itens/{c}/girar)",
             "if(b.dataset.revGirarRapido)girarFolha(b.dataset.codigo,+b.dataset.revGirarRapido)" in html)
         ver("a barra fica à vista sem rolar (sticky no alto e no pé)", ".rev-barra{position:sticky;top:0;bottom:0;" in html)

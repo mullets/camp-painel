@@ -228,11 +228,12 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   confirmado; só vale se a pessoa aceitar (Tab) e salvar. Nunca chamar de "lido" ou "herdado" na tela.
 - **Mais tipos**: onde ficam os tipos documentais além dos 4 mais usados no projeto.
 - **Atalhos da conferência**: a lista que a tecla ? abre na revisão (e o botão **? atalhos** da barra da folha).
-- **Girar 90°** / **Girar 180°** (UX-66): os botões da barra do alto da folha em conferência, sempre à vista; a mesma rotina da tecla R
-  (90° para a direita) e do "Virar à esquerda/direita" embaixo da imagem. 180° é para a folha de cabeça para baixo.
+- **Girar à esquerda** · **Girar 90°** · **Girar 180°** (UX-66; redesenho de 04/11/2026): os botões da barra de ferramentas logo acima da
+  imagem, sempre à vista; **Girar 90°** é a mesma rotina da tecla R (90° para a direita) — os antigos "Virar à esquerda/direita" de baixo
+  da imagem viraram **Girar à esquerda** e **Girar 90°** na barra. 180° é para a folha de cabeça para baixo.
 - **orientação incerta — confira** (UX-59): a folha de orientação incerta que o CAMP Vision mandou com giro sugerido aparece já girada
-  como sugerido; **nada é gravado** até a pessoa agir. **Gravar este giro** grava; **Ver como chegou** mostra a imagem original;
-  "Está certo" grava o giro junto (é o que a pessoa conferiu); girar conta a partir do que está na tela.
+  como sugerido; **nada é gravado** até a pessoa agir. **Usar sugestão** (em "Sugestões do CAMP Vision"; antes "Gravar este giro") grava;
+  **Ver como chegou** mostra a imagem original; salvar ou confirmar a folha grava o giro junto; girar conta a partir do que está na tela.
 
 ## Título de projeto que é nome de pasta (UX-15)
 - **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
@@ -492,3 +493,12 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
 - **Cartão da folha**: **Folha NN** (ou o número D quando a folha não tem nº), o tipo, o selo `a conferir` / `conferida` / `corrigida` /
   `retida` (com ícone; "conferida" só com a revisão gravada) e o menu ⋯ (**Revisar folha**, **Abrir a página da folha**, **Relatar
   problema**). Filtros: os de sempre + **Tipo** ("Todos os tipos"); **Grade** / **Lista**.
+- **Revisar folha** (painel ao lado): **Folha NN** + selo + "por Nome" · código · projeto; **‹ Anterior** · "**N de M** · X conferidas" ·
+  **Próxima ›**. Avisos em grupos: **Impede publicar** ("resolva antes de publicar") e **Aviso do CAMP Vision** ("confira; não impede
+  publicar"); sem nada: "Nada apontado.". Barra: **Girar à esquerda**, **Girar 90°**, **Girar 180°**, **Espelhar**, **Recortar e alinhar**,
+  **−** / **N%** / **+** (ampliação), **Tela cheia**, **? atalhos**. **Sugestões do CAMP Vision** ("Leitura automática: só vale se você usar e
+  salvar."): **Título sugerido**, **Tipo sugerido**, **Orientação sugerida**, cada um com **Usar sugestão** (depois: "Sugestão no campo").
+  **Dados da folha (editáveis)** (campo vazio: "· vazio"); **Identificado pelo CAMP Vision** (só leitura); **Outras ações desta folha** (Abrir a página da folha, Ler dados agora, Marcar duplicata, capa); **Não publicar esta folha** e **É de outro projeto…** (recolhidos).
+  Rodapé: **Salvar e próxima folha** (na última: **Salvar e concluir**; tecla Enter; antes "Está certo e próxima" — e "Salvar correção",
+  que fazia o mesmo com campo mudado) · **✓ Confirmar folha** (grava e fica na folha) · **Voltar para a conferir** (folha já conferida) ·
+  **Relatar problema** · **Fechar**. Abrir a folha NÃO a confere.

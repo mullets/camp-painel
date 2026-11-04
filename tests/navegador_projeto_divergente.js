@@ -41,7 +41,10 @@ const espera = async (f, ms = 6000) => { const t = Date.now(); while (Date.now()
   chk(await pg.isVisible(`[data-deste-projeto="${D(1)}"]`), 'a revisão mostra "É deste projeto (o CAMP Vision errou)" na folha com projeto divergente');
   // erro: o motivo aparece no lugar e o que foi digitado fica
   await pg.fill('#rv-titulo', 'Planta do térreo (Sírio)'); await pg.fill('#rv-ano', '1958/59');
-  await pg.click('[data-rev-item="corrigida"]'); await pg.waitForSelector('.aviso-local.erro', { timeout: 5000 });
+  // redesenho §4.2 F: "Salvar correção" saiu (fazia o mesmo que "Está certo" com campo mudado); aqui o erro vem pelo "Confirmar folha",
+  // que, como a folha não tem imagem, pergunta antes (a mesma pergunta do "Salvar e próxima folha", provada abaixo)
+  await pg.click('[data-rev-item="conferida"][data-rev-ficar]'); await pg.waitForSelector('#conf-ov [data-conf="sim"]', { timeout: 3000 }).then(() => pg.click('#conf-ov [data-conf="sim"]'), () => {});
+  await pg.waitForSelector('.aviso-local.erro', { timeout: 5000 });
   chk(/Ano da folha/.test(await pg.textContent('.aviso-local.erro')), 'erro de ano aparece no lugar, com o motivo');
   chk(await pg.inputValue('#rv-titulo') === 'Planta do térreo (Sírio)' && await pg.inputValue('#rv-ano') === '1958/59', 'depois do erro, o que foi digitado continua');
   // "É deste projeto"
@@ -64,7 +67,7 @@ const espera = async (f, ms = 6000) => { const t = Date.now(); while (Date.now()
   await pg.evaluate(c => abrirRevisaoItem(c), D(3)); await espera(async () => await aberta() === D(3));
   chk(!(await pg.$(`[data-deste-projeto="${D(3)}"]`)), 'folha sem o aviso não mostra o botão');
   await pg.check('[data-tipos-para="rv-tipo"] input[value="Planta"]'); await pg.check('[data-tipos-para="rv-tipo"] input[value="Corte"]');
-  await pg.click('[data-rev-item="corrigida"]'); await espera(async () => (await item(D(3))).item.revisao !== 'pendente');
+  await pg.click('[data-rev-item="conferida"]'); await espera(async () => (await item(D(3))).item.revisao !== 'pendente');
   const i3 = (await item(D(3))).item, foi2 = await espera(async () => await aberta() === D(2));
   chk(i3.tipo_documento === 'Planta; Corte' && i3.revisao === 'corrigida', 'Tipo marcado nas caixas é salvo pela revisão', JSON.stringify([i3.tipo_documento, i3.revisao]));
   chk(foi2 && !(await pergunta()) && !(await sujo()), 'Tipo + "Salvar correção": segue para a próxima sem "Sair sem salvar?"', await pergunta());

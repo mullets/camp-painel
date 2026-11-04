@@ -182,4 +182,10 @@ vem do `#pd` (`container: pjpg`): com a revisão aberta ao lado, a coluna da dir
   filtro **Tipo** (`[data-fl-tipo]`, `FL_TIPO`, soma com o de situação em `aplicarFiltroFolhas`); **Grade/Lista** (`[data-fl-vista]`,
   `#pd[data-vista]`, `camp.folhasVista`). Folha aberta: `.thumb.aberta[aria-current]` (`revDestacar`). Filtro, tipo e rolagem voltam
   quando a página do MESMO projeto é redesenhada (`PJ_VISTA`) e ao fechar o painel lateral (`_ROL_DRAWER`).
+- **Revisar folha** (`abrirRevisaoItem`, `.drawer-rev`; ≥ 1181 px: coluna de 52vw; 721–1180: por cima, até 1000 px; celular: tela toda):
+  `.rv` > `.rv-cab` (`.rv-folha`, `.rv-proj`, `.rv-nav` com `[data-rev-ir]` e `.rev-prog`) → `.rv-alertas` (`#rv-chips` = `apontaRevHTML`:
+  `.rv-al.erro` / `.rv-al.aviso`) → `.rv-ferr` (barra `role=toolbar`) → `.rev-grade` (`.rev-col-img` | `.rev-col-dados`: `.rv-sug` com
+  `[data-rev-usar]`/`[data-rev-sug-aceitar]`, `.rev-campos`, `.rv-lido`, `.rv-mais`) → `.rv-rodape.rev-acoes` (fixo no pé). Duas colunas
+  quando o painel tem ≥ 840 px (`container: gaveta`). Primeiro `[data-rev-item="conferida"]` do rodapé = o botão azul (Enter);
+  `[data-rev-ficar]` = Confirmar folha.
 `tests/navegador_projeto_interno.js` confere.
