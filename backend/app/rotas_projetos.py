@@ -126,11 +126,53 @@ def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -
 
 
 _SELECT_PROJETOS = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo, p.ano, p.cidade, p.status_site, p.autorizado_site,
-                    p.tainacan_item_id, p.atualizado_em,
+                    p.tainacan_item_id, p.atualizado_em, p.ano_fim, p.autoria, p.papel_no_projeto,
                     (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
                     (SELECT GROUP_CONCAT(DISTINCT serie_codigo) FROM item i WHERE i.projeto_codigo=p.codigo) AS series
              FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL"""
-_ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo"}
+_ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo",
+           # redesenho Projetos (04/11/2026, §8): ordens novas, opcionais (quem não pede continua na de sempre). Sem data / sem autoria vão para o fim.
+           "fundo": "fundo COLLATE NOCASE, p.codigo", "ano": "(p.ano IS NULL OR p.ano=0), p.ano, p.codigo",
+           "autoria": "(COALESCE(TRIM(p.autoria),'')=''), p.autoria COLLATE NOCASE, p.codigo"}
+
+# Redesenho Projetos (§8): "tem imagem" = a MESMA regra da miniatura de Material novo (rotas_operacao._SQL_MINIATURA): a folha tem o JPG
+# registrado ou a prévia do CAMP Vision. Folha retida não conta (não vai ao site).
+TEM_IMAGEM = "(i.arquivo_jpg IS NOT NULL OR i.pendencias LIKE '%\"previa\"%')"
+_SEM_IMAGEM = f"NOT EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=p.codigo AND COALESCE(i.retida,0)=0 AND {TEM_IMAGEM})"
+# a miniatura da linha: a capa escolhida (se é do projeto e tem imagem); senão a 1ª folha do projeto com imagem. Nunca imagem genérica.
+_SQL_MINIATURA_PROJETO = f"""COALESCE((SELECT i.codigo FROM item i WHERE i.codigo=p.capa_item AND i.projeto_codigo=p.codigo AND COALESCE(i.retida,0)=0 AND {TEM_IMAGEM}),
+                                  (SELECT i.codigo FROM item i WHERE i.projeto_codigo=p.codigo AND COALESCE(i.retida,0)=0 AND {TEM_IMAGEM}
+                                    ORDER BY i.serie_codigo, i.sequencial, i.codigo LIMIT 1))"""
+MATERIAIS = ("com", "sem", "sem_imagem")
+
+
+def sem_acento(s) -> str:
+    """minúsculas sem acento (a busca da lista acha "geriatrico" em "Geriátrico")."""
+    return "".join(c for c in unicodedata.normalize("NFD", str(s or "")) if unicodedata.category(c) != "Mn").lower()
+
+
+def _autores(texto) -> list[str]:
+    """A autoria REGISTRADA no projeto vem separada por ";" (ex.: os 8 autores do IAB)."""
+    return [a.strip() for a in re.split(r"[;\n]+", str(texto or "")) if a.strip()]
+
+
+def _tem_autor(texto, nome) -> int:
+    alvo = sem_acento(nome).strip()
+    return int(any(sem_acento(a) == alvo for a in _autores(texto)))
+
+
+def preparar_busca(con) -> None:
+    """As funções da busca/filtro da lista (sem acento e autoria), registradas na conexão que vai rodar _filtro_projetos."""
+    con.create_function("camp_norm", 1, sem_acento, deterministic=True)
+    con.create_function("camp_tem_autor", 2, _tem_autor, deterministic=True)
+
+
+def _periodo(periodo) -> tuple | None:
+    """'sem_data' ou 'AAAA-AAAA' (ex.: '1950-1959'); qualquer outra coisa é ignorada."""
+    if periodo == "sem_data":
+        return ("sem_data",)
+    m = re.fullmatch(r"(\d{4})-(\d{4})", str(periodo or ""))
+    return (int(m.group(1)), int(m.group(2))) if m else None
 
 
 # um problema (erro) em aberto ligado ao projeto ou a uma folha dele: a mesma regra da página do projeto
@@ -139,24 +181,49 @@ COM_PROBLEMA = ("EXISTS (SELECT 1 FROM erro e WHERE (e.codigo=p.codigo OR e.codi
 SITUACOES_PROJETO = ("todos", "gente", "pronto", "publicado", "nao_publicado", "sem_folhas", "com_problema")
 
 
-def contar_situacoes(con, fundo=None, q=None, fases=None) -> dict:
-    """Quantos projetos há em cada situação: o número das abas da lista de Projetos e do cabeçalho do fundo (#101), pela MESMA regra da lista."""
+def contar_situacoes(con, fundo=None, q=None, fases=None, **extra) -> dict:
+    """Quantos projetos há em cada situação: o número das abas da lista de Projetos e do cabeçalho do fundo (#101), pela MESMA regra da lista.
+    extra: os filtros opcionais do redesenho (autoria, periodo, material, pendencias), para a aba contar o que ela mostra."""
     from .filas_fase import lote_ativo_por_projeto
     fases = lote_ativo_por_projeto(con) if fases is None else fases
+    preparar_busca(con)
     n = {}
     for chave in SITUACOES_PROJETO:
-        w, par = _filtro_projetos(fases, fundo, q, None, None, None if chave == "todos" else chave)
+        w, par = _filtro_projetos(fases, fundo, q, None, None, None if chave == "todos" else chave, **extra)
         n[chave] = con.execute(f"SELECT COUNT(*) FROM ({_SELECT_PROJETOS + w})", par).fetchone()[0]
     return n
 
 
-def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao) -> tuple[str, list]:
-    """Condições comuns da lista, das contagens e da seleção em massa. situacao: gente | publicado | nao_publicado | sem_folhas | com_problema | todos."""
+def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao, autoria=None, periodo=None, material=None, pendencias=None) -> tuple[str, list]:
+    """Condições comuns da lista, das contagens e da seleção em massa. situacao: gente | publicado | nao_publicado | sem_folhas | com_problema | todos.
+    Redesenho Projetos (§8), tudo OPCIONAL: autoria (um nome da autoria registrada, ou '__sem__'), periodo ('AAAA-AAAA' ou 'sem_data'),
+    material ('com' = tem folha no painel, 'sem', 'sem_imagem' = nenhuma folha com imagem), pendencias ('com' = problema em aberto ou
+    lote esperando uma pessoa: as regras de "Com problema" e "Precisa de você" juntas). Com q, a conexão precisa de preparar_busca()."""
     from .filas_fase import PRECISAM_DE_GENTE
     w, par = "", []
     if fundo: w += " AND p.fundo_codigo=?"; par.append(fundo)
     if status: w += " AND p.status_site=?"; par.append(status)
-    if q: w += " AND (p.titulo LIKE ? OR p.codigo LIKE ? OR p.cidade LIKE ?)"; par += [f"%{q}%"] * 3
+    if q:
+        # Redesenho Projetos (§8): cada palavra tem de aparecer em algum campo (título, código — com ou sem hífen, parcial com zeros —, cidade,
+        # autoria registrada, cliente, endereço da obra, identificação original), sem acento e sem diferença de maiúscula. Tudo o que a
+        # busca antiga achava ("%texto%" em título, código ou cidade) continua achado.
+        campos = ("camp_norm(p.titulo)", "camp_norm(p.codigo)", "replace(lower(p.codigo),'-','')", "camp_norm(p.cidade)", "camp_norm(p.autoria)",
+                  "camp_norm(p.cliente)", "camp_norm(p.endereco_obra)", "camp_norm(p.identificacao_original)")
+        for tok in sem_acento(q).split():
+            sem_sep = re.sub(r"[\-_./]", "", tok)
+            w += " AND (" + " OR ".join(f"{c} LIKE ?" for c in campos) + ")"
+            par += [f"%{tok}%"] * 2 + [f"%{sem_sep}%"] + [f"%{tok}%"] * 5
+    if autoria == "__sem__": w += " AND COALESCE(TRIM(p.autoria),'')=''"
+    elif autoria: w += " AND camp_tem_autor(p.autoria, ?)"; par.append(autoria)
+    per = _periodo(periodo)
+    if per == ("sem_data",): w += " AND (p.ano IS NULL OR p.ano=0)"
+    elif per: w += " AND p.ano>0 AND p.ano<=? AND MAX(p.ano, COALESCE(p.ano_fim, p.ano))>=?"; par += [per[1], per[0]]   # a obra de 1958–61 entra em 1950 e em 1960
+    if material == "com": w += " AND folhas > 0"
+    elif material == "sem": w += " AND folhas = 0"
+    elif material == "sem_imagem": w += " AND " + _SEM_IMAGEM
+    if pendencias == "com":
+        cods = [c for c, f in fases.items() if f["fase"] in PRECISAM_DE_GENTE]
+        w += " AND (" + COM_PROBLEMA + (" OR p.codigo IN (" + ",".join("?" * len(cods)) + ")" if cods else "") + ")"; par += cods
     if com_folhas is True: w += " AND folhas > 0"
     if com_folhas is False: w += " AND folhas = 0"
     if situacao == "publicado": w += " AND p.status_site='no_ar'"
@@ -184,12 +251,14 @@ def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao) -> tup
 
 @router.get("/projetos")
 def listar(fundo: str | None = None, q: str | None = None, status: str | None = None, com_folhas: bool | None = None, situacao: str | None = None,
-           ordem: str = "codigo", pagina: int = 1, por_pagina: int = 100, u: dict = Depends(auth.exige("leitura"))) -> dict:
+           ordem: str = "codigo", pagina: int = 1, por_pagina: int = 100, autoria: str | None = None, periodo: str | None = None,
+           material: str | None = None, pendencias: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
     from .filas_fase import lote_ativo_por_projeto
     con = connect()
     try:
         fases = lote_ativo_por_projeto(con)
-        w, par = _filtro_projetos(fases, fundo, q, status, com_folhas, situacao)
+        preparar_busca(con)
+        w, par = _filtro_projetos(fases, fundo, q, status, com_folhas, situacao, autoria, periodo, material, pendencias)
         sql = _SELECT_PROJETOS + w
         total = con.execute(f"SELECT COUNT(*) FROM ({sql})", par).fetchone()[0]
         por_pagina = max(1, min(por_pagina, 500))
@@ -207,6 +276,10 @@ def listar(fundo: str | None = None, q: str | None = None, status: str | None = 
                 paginas[d["fundo_codigo"]] = pagina_arquiteto(con, d["fundo_codigo"])
             mt = metas_projeto(con, p, pagina=paginas[d["fundo_codigo"]])
             d["metas"] = {"feitas": mt["feitas"], "total": mt["total"]}   # UX-73 (campo opcional): "objetivos 4 de 12" na lista
+            # redesenho Projetos (§8), campos opcionais: a miniatura (capa ou 1ª folha com imagem DO PRÓPRIO projeto; null = quadro neutro)
+            # e se há problema em aberto (a mesma regra da aba "Com problema"). autoria/papel_no_projeto/ano_fim vêm do SELECT: só o registrado.
+            d["miniatura"] = con.execute(f"SELECT {_SQL_MINIATURA_PROJETO} FROM projeto p WHERE p.codigo=?", (d["codigo"],)).fetchone()[0]
+            d["com_problema"] = bool(con.execute(f"SELECT {COM_PROBLEMA} FROM projeto p WHERE p.codigo=?", (d["codigo"],)).fetchone()[0])
             itens.append(d)
         return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "itens": itens}
     finally:
@@ -214,22 +287,65 @@ def listar(fundo: str | None = None, q: str | None = None, status: str | None = 
 
 
 @router.get("/projetos/resumo")
-def resumo_projetos(fundo: str | None = None, q: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """Quantos projetos há em cada situação (para os filtros da lista), dentro do fundo e da busca escolhidos."""
+def resumo_projetos(fundo: str | None = None, q: str | None = None, autoria: str | None = None, periodo: str | None = None,
+                    material: str | None = None, pendencias: str | None = None, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Quantos projetos há em cada situação (para os filtros da lista), dentro do fundo, da busca e dos filtros escolhidos.
+    Redesenho Projetos (§8), chaves novas (opcionais): com_material, sem_material, sem_imagem, com_pendencias — os cartões da tela,
+    contados pela MESMA regra dos filtros da lista (com os mesmos filtros aplicados)."""
+    from .filas_fase import lote_ativo_por_projeto
     con = connect()
     try:
-        return contar_situacoes(con, fundo, q)
+        fases = lote_ativo_por_projeto(con)
+        extra = {"autoria": autoria, "periodo": periodo, "material": material, "pendencias": pendencias}
+        n = contar_situacoes(con, fundo, q, fases, **extra)
+        for chave, mudar in (("com_material", {"material": "com"}), ("sem_material", {"material": "sem"}), ("sem_imagem", {"material": "sem_imagem"}),
+                             ("com_pendencias", {"pendencias": "com"})):
+            w, par = _filtro_projetos(fases, fundo, q, None, None, None, **{**extra, **mudar})
+            n[chave] = con.execute(f"SELECT COUNT(*) FROM ({_SELECT_PROJETOS + w})", par).fetchone()[0]
+        return n
+    finally:
+        con.close()
+
+
+@router.get("/projetos/filtros")
+def filtros_projetos(u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Redesenho Projetos (§8): as opções dos filtros, só com dados REAIS do acervo (projetos vivos). autorias: cada nome da autoria
+    REGISTRADA no projeto (nunca o titular do fundo presumido como autor); decadas: as décadas que têm projeto com ano; sem_data e
+    sem_autoria: quantos não têm."""
+    con = connect()
+    try:
+        rows = con.execute("SELECT autoria, ano, ano_fim FROM projeto WHERE mesclado_em IS NULL AND descartado_em IS NULL").fetchall()
+        aut: dict[str, list] = {}
+        dec: dict[int, int] = {}
+        sem_aut = sem_data = 0
+        for r in rows:
+            nomes = _autores(r["autoria"])
+            if not nomes:
+                sem_aut += 1
+            for a in {sem_acento(x): x for x in nomes}.values():
+                k = sem_acento(a)
+                aut.setdefault(k, [a, 0])[1] += 1
+            ano = r["ano"] or 0
+            if not ano:
+                sem_data += 1
+                continue
+            for d in range(ano // 10 * 10, max(ano, r["ano_fim"] or ano) // 10 * 10 + 1, 10):
+                dec[d] = dec.get(d, 0) + 1
+        return {"autorias": [{"nome": v[0], "n": v[1]} for k, v in sorted(aut.items())], "sem_autoria": sem_aut,
+                "decadas": [{"de": d, "ate": d + 9, "n": n} for d, n in sorted(dec.items())], "sem_data": sem_data}
     finally:
         con.close()
 
 
 @router.get("/projetos/codigos")
 def codigos_projetos(fundo: str | None = None, q: str | None = None, status: str | None = None, situacao: str | None = None,
+                     autoria: str | None = None, periodo: str | None = None, material: str | None = None, pendencias: str | None = None,
                      u: dict = Depends(auth.exige("leitura"))) -> dict:
     from .filas_fase import lote_ativo_por_projeto
     con = connect()
     try:
-        w, par = _filtro_projetos(lote_ativo_por_projeto(con), fundo, q, status, None, situacao)
+        preparar_busca(con)
+        w, par = _filtro_projetos(lote_ativo_por_projeto(con), fundo, q, status, None, situacao, autoria, periodo, material, pendencias)
         rows = [r[0] for r in con.execute(f"SELECT codigo FROM ({_SELECT_PROJETOS + w}) ORDER BY codigo", par).fetchall()]
         return {"total": len(rows), "codigos": rows}
     finally:
