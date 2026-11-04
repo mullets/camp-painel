@@ -12719,6 +12719,13 @@ def filho(modo):
             and [(i["codigo"], i["posicao"]) for i in vr.projetos(c, per, "menos", limite=0)["itens"]][0] == ("F002-P0003", 4))
         ver("busca por arquiteto/autoria e por nome; barras pelo 1º do período mesmo filtrando", [i["codigo"] for i in vr.projetos(c, per, busca="beltrano")["itens"]] == ["F001-P0002"]
             and vr.projetos(c, per, busca="residencia")["itens"][0]["codigo"] == "F001-P0001" and vr.projetos(c, per, busca="casa")["maximo"] == 135)
+        # Redesenho §14 (05/11): filtro por fundo e por arquiteto no ranking completo; as opções vêm do ranking do período; a posição é a do ranking inteiro
+        rf, ra = vr.projetos(c, per, fundo="F002", limite=0), vr.projetos(c, per, autor="Beltrano", limite=0)
+        ver("ranking completo: filtro por fundo (F002) e por arquiteto (Beltrano), posição do ranking inteiro, opções do período",
+            [i["codigo"] for i in rf["itens"]] == ["F002-P0004", "F002-P0003"] and [i["posicao"] for i in rf["itens"]] == [3, 4] and rf["encontrados"] == 2 and rf["total_projetos"] == 4
+            and [i["codigo"] for i in ra["itens"]] == ["F001-P0002"] and [f["codigo"] for f in rf["fundos"]] == ["F001", "F002"]
+            and [(a["nome"], a["projetos"]) for a in rf["autores"]] == [("Beltrano", 1), ("Fulano de Tal", 1)]
+            and vr.projetos(c, per, autor="Arnaldo Martino")["itens"] == [], str([[i["codigo"] for i in rf["itens"]], rf.get("fundos"), rf.get("autores")])[:300])
         ver("10 iniciais + total para 'Ver todos'", len(vr.projetos(c, per)["itens"]) == 4 and vr.projetos(c, per, limite=2)["total_projetos"] == 4 and len(vr.projetos(c, per, limite=2)["itens"]) == 2)
         e = vr.evolucao(c, per, True)
         ver("evolução: visitas = sessões por dia, eixo de 30 pontos, total, média e pico", e["metrica"]["chave"] == "sessoes" and e["agregacao"] == "dia" and len(e["pontos"]) == 30
@@ -13879,6 +13886,12 @@ def filho(modo):
         ver("UX-12: a Home não pede /api/analytics (as visitas vêm do banco do painel, pelo componente de visitas)",
             cp and "API('/api/analytics" not in cp and "vmMontar(document.getElementById('ini-visitas'))" in cp
             and "API('/api/visitas/evolucao?'+vmQS()+'&comparar=1')" in html and "API('/api/visitas/projetos?'+vmQS()+vmQSRank())" in html)
+        # Redesenho §12 (05/11, plano do Rafael): a Home volta a ter só o RESUMO das visitas (total, evolução e top 5, filtro 7/30/90, link para a
+        # análise completa); o módulo completo (vmHTML: ver todos, busca, ordem, CSV, não identificadas, intervalo livre) fica na tela Visitas ao site.
+        ver("Redesenho §12: na Home, só o resumo de visitas (vmResumoHTML: top 5, 7/30/90 dias, 'Ver análise completa de visitas'); o completo fica na tela",
+            "if(naHome)return vmResumoHTML(e);" in html and "vmRankHTML({max:5,curto:true})" in html and "VM_PER.slice(0,3)" in html
+            and "data-vm-ir>Ver análise completa de visitas" in html and "Dados de audiência temporariamente indisponíveis" in html
+            and '<div class="panel"><div class="pb" id="vis-modulo"></div></div>' in html)
         ver("UX-30: Configurações tem 'Visitas ao site' (desligado / Ver como ligar)",
             '<div class="panel" id="cfg-visitas-painel"><div class="ph"><h2>Visitas ao site</h2>' in html and "async function carregarVisitasConfig()" in html and "if(v==='config')carregarVisitasConfig();" in html)
         for l in res: print(l)

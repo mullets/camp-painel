@@ -212,14 +212,14 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   "cópia atrasada" · "só uma cópia". Espaço: "enche em ~N dias" (menos de 30 = atenção; menos de 10 = crítico).
 
 ## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
-- Coluna da esquerda: **O que fazer agora**, **O caminho do material**, **Ritmo das últimas 2 semanas** e, logo abaixo (admin), **Visitas ao site** (03–04/11/2026).
+- Coluna da esquerda: **O que fazer agora**, **O caminho do material**, **Folhas conferidas por dia — últimas 2 semanas** (era "Ritmo das
+  últimas 2 semanas") e, logo abaixo (admin), **Visitas ao site** (03–05/11/2026).
 - Coluna da direita, completa: **Está tudo funcionando?**, **Hoje** e, abaixo, **Qualidade da base**, **Melhorias de hoje**,
   **Quanto do acervo já está no site**. Tudo sempre aberto: nada de bloco recolhido.
   Pedido do Rafael em 27/10/2026 ("eu gostava dessa barra completa"): desfaz o bloco recolhido **Números do acervo** do UX-30.
 - **Visitas ao site** com o Google Analytics desligado mostra **desligado** na Home sem perguntar ao Google (UX-12) e também aparece em
   **Configurações** (com "Ver como ligar").
-- **Visitas ao site** (04/11/2026, especificação do Rafael): na Home, logo abaixo de **Ritmo das últimas 2 semanas** (coluna da esquerda),
-  e na tela do menu, o mesmo módulo: "Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse.", o filtro
+- **Visitas ao site** (04/11/2026, especificação do Rafael; desde 05/11 a Home tem só o resumo, abaixo): na tela do menu, o módulo completo: "Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse.", o filtro
   **Últimos 7 dias** · **Últimos 30 dias** · **Últimos 90 dias** · **Intervalo personalizado** (**Aplicar**), as datas com "horário de São
   Paulo · termina ontem, porque o dia de hoje ainda não terminou" e "**Última sincronização:** …" (chip **falhou**).
   - **Evolução das visitas**: **Visitas no período** ("sessões no site público"), **Média de visitas por dia** ("total ÷ N dias"),
@@ -233,7 +233,29 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
     "Fora do ranking também: …". Sem autoria cadastrada: "**Acervo** <fundo>" (nunca o titular como autor).
   - Estados: "Carregando as visitas…", "**Sem visitas registradas neste período**", "**Não foi possível carregar os dados de visitas**"
     (com o erro técnico, **Tentar de novo** e **Ver o diagnóstico**), chip **desligado** / **sem dados** no título da Home.
-    Botão da Home para a tela: **Canais, cidades e pesquisas no Google**.
+    Botão da Home para a tela: **Ver análise completa de visitas →** (era "Canais, cidades e pesquisas no Google").
+- Redesenho da Home (05/11/2026, plano do Rafael §10–17):
+  - **O caminho do material**: cada passo diz a posição, a quantidade e a **unidade** ("estações ligadas", "pastas", "lotes"; os números não se
+    somam), uma linha do que é o passo e, quando for o caso, a marca em texto: **maior acúmulo** (amarelo), **próximo passo** (azul, o 1º passo
+    de gente com algo esperando), **parado com erro** (vermelho), **atenção** (publicar com lote travado), **sem medida**; zero = "**nada
+    esperando**" (não é problema). Link **O que é cada passo?**. Cada passo abre a lista filtrada.
+  - **Folhas conferidas por dia — últimas 2 semanas**: **Total no período**, **Média por dia de trabalho** ("folhas ÷ N dias com conferência"),
+    **Hoje, até agora**; "**Cada barra é um dia corrido** (inclui fins de semana e feriados)…"; dica "origem: conferências registradas no
+    painel"; vazio: "**Nenhuma folha conferida no período selecionado**" (com **Ver o que falta conferir** / **Ver o material novo**); falha:
+    "**Não foi possível carregar o ritmo**" com **Tentar de novo** (nunca zero no lugar do erro).
+  - **Visitas ao site** na Home é só o resumo: "Resumo das visitas ao site público no período.", **Últimos 7/30/90 dias**, **Visitas no
+    período**, **Média por dia**, **Variação vs. período anterior** ("sem base de comparação"), **Projetos mais visitados** ("os 5
+    primeiros") e o botão **Ver análise completa de visitas →** (abre a tela Visitas ao site, com o módulo completo). Falha: "**Dados de
+    audiência temporariamente indisponíveis**". Na tela completa, o ranking tem também **Todos os fundos** / **Todos os arquitetos** e, por
+    projeto, "**sem comparação**" quando o período anterior não tem dados completos.
+  - **Qualidade da base**: "índice geral" e a variação em **pontos percentuais** com o dia nomeado ("↓ caiu 0,8 ponto percentual frente a
+    28/10 (73,6%)"); sem retrato antigo: "**Sem comparação**: ainda não há retrato de 7 dias atrás". Medida em 0%: chip **atenção**.
+    **Como cada medida é calculada**; **Fundos que mais precisam de cuidado** (3) e **Ver todos os N fundos com folhas**.
+  - **Melhorias de hoje**: "correções válidas, por pessoa", em ordem alfabética (não é ranking); "**Equipe:** N hoje · N nos últimos 7 dias";
+    o que conta e o que não conta; quem só lê vê só o total da equipe. Vazio: "Nenhuma correção nos últimos 7 dias."
+  - **Quanto do acervo já está no site**: "**N** de M folhas publicadas", "… projetos com página publicada", "… fundos com página publicada",
+    a porcentagem e a barra; total zero = "**Não aplicável**"; a nota do denominador e os links **Ver projetos prontos para publicar** ·
+    **Ver projetos não publicados** · **Ver fundos não publicados**.
 - **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar).
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").

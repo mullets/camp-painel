@@ -73,11 +73,11 @@ def evolucao(periodo: str | None = None, de: str | None = None, ate: str | None 
         con.close()
 
 
-def _projetos(periodo, de, ate, ordem, busca, limite) -> dict:
+def _projetos(periodo, de, ate, ordem, busca, limite, fundo="", autor="") -> dict:
     per = _periodo(periodo, de, ate)
     con = connect()
     try:
-        return vr.projetos(con, per, ordem, busca or "", max(0, min(int(limite), 5000)), _site())
+        return vr.projetos(con, per, ordem, busca or "", max(0, min(int(limite), 5000)), _site(), fundo=fundo or "", autor=autor or "")
     except ValueError as e:
         raise HTTPException(400, str(e))
     finally:
@@ -86,15 +86,16 @@ def _projetos(periodo, de, ate, ordem, busca, limite) -> dict:
 
 @router.get("/visitas/projetos")
 def projetos(periodo: str | None = None, de: str | None = None, ate: str | None = None, ordem: str = "mais", busca: str = "",
-             limite: int = 10, u: dict = Depends(auth.exige("leitura"))) -> dict:
-    """Ranking dos projetos pelas visualizações da página pública de cada um (só o vínculo real projeto ↔ página; limite=0 = todos)."""
-    return _projetos(periodo, de, ate, ordem, busca, limite)
+             limite: int = 10, fundo: str = "", autor: str = "", u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """Ranking dos projetos pelas visualizações da página pública de cada um (só o vínculo real projeto ↔ página; limite=0 = todos).
+    fundo / autor (opcionais): só os projetos daquele fundo / com aquele arquiteto na autoria cadastrada."""
+    return _projetos(periodo, de, ate, ordem, busca, limite, fundo, autor)
 
 
 @router.get("/visitas/projetos.csv")
 def projetos_csv(periodo: str | None = None, de: str | None = None, ate: str | None = None, ordem: str = "mais", busca: str = "",
-                 u: dict = Depends(auth.exige("leitura"))) -> Response:
-    r = _projetos(periodo, de, ate, ordem, busca, 0)
+                 fundo: str = "", autor: str = "", u: dict = Depends(auth.exige("leitura"))) -> Response:
+    r = _projetos(periodo, de, ate, ordem, busca, 0, fundo, autor)
     nome = f"visitas-projetos-{r['de']}-a-{r['ate']}.csv"
     return Response(vr.csv_projetos(r), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
