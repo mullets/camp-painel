@@ -169,3 +169,17 @@ progresso de catalogação). JS em `LST` (`frontend/index.html`); CSS no bloco "
   `abrirProjetosCom({...})`. `tests/navegador_projetos_lista.js` confere.
 - **Ferramentas avançadas**: função operacional sensível vai para `details.ferramentas-avancadas` (contorno tracejado, resumo com o
   estado atual, aviso `.fa-aviso`), recolhida por padrão; a confirmação de cada ação continua a mesma.
+
+## Página do projeto (redesenho, 04/11/2026 — documento do Rafael §3–§10)
+
+`showProjeto` (`#pd`) monta: cabeçalho `.dethdr.pj-cab` (`h1` + `#pj-selo` + `.pj-meta`; ações Editar + `pjMaisMenuHTML`) → abas
+`.pj-tabs` (`role=tablist`, ← → Home End; chaves `itens` Visão geral · `folhas` · `dados` Metadados · `erros` · `historico`;
+`PJ_ABA_ALIAS` leva `publicacao` → Metadados e `pedidos` → Histórico) → `.pj-vg` (`role=tabpanel`, `data-pj-vista`), uma grade com
+`#pj-status` (Próximo passo + `#pj-conf` = `pjConfHTML`: `LST.progresso` + `.pj-etapas`), `.pj-vg-lado` (só na Visão geral: `#pj-falta` +
+`pjCardsHTML`, os 4 cartões em coluna, fixa ao rolar) e `.pj-vg-corpo` (`pjGavetaHTML` + as `.pj-aba` + a aba). A largura das colunas
+vem do `#pd` (`container: pjpg`): com a revisão aberta ao lado, a coluna da direita desce. Abaixo de 1020 px de `#pd`: status → corpo → lado.
+- Grade de folhas: `.thumb` > `.cap` com `.cap-cab` (`.cap-id` + `LST.mais`), `.cap-tipo`, `.cap-sel` (`tagRevisao` com `data-rev-estado`);
+  filtro **Tipo** (`[data-fl-tipo]`, `FL_TIPO`, soma com o de situação em `aplicarFiltroFolhas`); **Grade/Lista** (`[data-fl-vista]`,
+  `#pd[data-vista]`, `camp.folhasVista`). Folha aberta: `.thumb.aberta[aria-current]` (`revDestacar`). Filtro, tipo e rolagem voltam
+  quando a página do MESMO projeto é redesenhada (`PJ_VISTA`) e ao fechar o painel lateral (`_ROL_DRAWER`).
+`tests/navegador_projeto_interno.js` confere.

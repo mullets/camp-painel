@@ -1596,7 +1596,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
 // ---------- [#95] página do projeto: um só próximo passo (logo abaixo do título), requisitos recolhidos, trilha sem repetir, título limpo ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500);
   const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
-  chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&!d.querySelector('#pd .tabs ~ * #pj-proximo'),'[#95] o Próximo passo deveria vir logo abaixo do título, antes dos requisitos e fora das abas');
+  chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&(d.querySelector('#pj-painel')||{}).firstElementChild===d.getElementById('pj-status'),'[#95] o Próximo passo deveria vir logo abaixo do título e das abas (redesenho §3.2: a faixa de abas fica junto do cabeçalho), como 1º bloco, antes dos requisitos');
   // 19/10 (proposta B): o passo a passo fica escondido (só nas gavetas); o botão azul visível é o do cartão mais urgente
   await sleep(300); const azuisB=[...d.querySelectorAll('#pd .btn.pri')],azuis=azuisB.map(b=>b.textContent.trim());
   chk(azuis.length===1&&/conferir/i.test(azuis[0])&&!!azuisB[0].closest('#pj-status'),'[#95/CAMP-147] deveria haver UM só botão azul na página, o do Próximo passo: '+JSON.stringify(azuis));

@@ -50,7 +50,10 @@ for k in range(1, 7):
   const abrir = async (page, c) => { await page.evaluate(c => { window.SL = null; window.PJ_GAV = null; nav('projeto/' + c) }, c);
     await page.waitForFunction(c => window.PUB_G && PUB_G[c] && document.querySelector('#pj-cards .pjc[data-pjc="site"]') && !/…/.test(document.querySelector('#pj-cards .pjc[data-pjc="site"] .pjc-v').textContent)
 , c, { timeout: 15000 });
-    await page.waitForSelector('#pj-status .metas', { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(1200) };
+    await page.waitForSelector('#pj-status .metas', { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(1200);
+    // Redesenho da página do projeto (04/11/2026, §3.3): no Próximo passo os objetivos ficam recolhidos (barra e "N de M" à vista);
+    // a pessoa abre a lista — e a página lembra que ela abriu (PJ_METAS_ABERTO). O teste abre como a pessoa faria.
+    await page.evaluate(() => { const d = document.querySelector('#pj-status details.metas'); if (d && !d.open) d.querySelector('summary').click(); }); await page.waitForTimeout(200) };
   try {
     const { ctx, page } = await entrar(1366, 900);
     await abrir(page, A);
