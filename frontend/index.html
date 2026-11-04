@@ -17,25 +17,32 @@
   --red:#B22E2E; --red-soft:#F7E1E1; --green:#236B4B; --green-soft:#DDEFE6;
   --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --r:6px; --side:232px; --on-blue:#FFFFFF;
+  --r:6px; --side:248px; --on-blue:#FFFFFF;
+  /* Redesenho §18 (04/11/2026): degraus de superfície bem distintos (fundo → cartão → hover → selecionado) e texto sobre o vermelho */
+  --hover:#ECEFF3; --sel:#D6E2F4; --sel-ink:#163C75; --line-forte:#AEB6BF; --on-red:#FFFFFF;
+  --sombra-pop:0 12px 32px rgba(16,24,40,.16);
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#141920; --surface:#1C222B; --surface2:#232B35; --line:#33404D; --line2:#2A3440;
-  --ink:#ECEFF2; --ink2:#B1BAC4; --ink3:#97A1AD;
+  --bg:#0F1419; --surface:#1A2129; --surface2:#222B35; --line:#36424F; --line2:#2A3440;   /* §18: fundo mais escuro, cartão mais claro (antes #141920 × #1C222B quase iguais) */
+  --ink:#ECEFF2; --ink2:#BAC3CC; --ink3:#9AA5B1;
   --blue:#7FA6E6; --blue-soft:#22314A; --amber:#E0A040; --amber-soft:#3A2E17;
   --red:#E37070; --red-soft:#3E2020; --green:#5EBB8F; --green-soft:#1B3529;
   --on-blue:#10151B;   /* UX-27: texto sobre o azul claro do tema escuro (o branco dava 2,3) */
+  --hover:#2A3441; --sel:#25395A; --sel-ink:#A9C6F5; --line-forte:#56636F; --on-red:#10151B;
+  --sombra-pop:0 14px 36px rgba(0,0,0,.5);
 }}
 :root[data-theme="dark"]{
-  --bg:#141920; --surface:#1C222B; --surface2:#232B35; --line:#33404D; --line2:#2A3440;
-  --ink:#ECEFF2; --ink2:#B1BAC4; --ink3:#97A1AD;
+  --bg:#0F1419; --surface:#1A2129; --surface2:#222B35; --line:#36424F; --line2:#2A3440;   /* §18: fundo mais escuro, cartão mais claro (antes #141920 × #1C222B quase iguais) */
+  --ink:#ECEFF2; --ink2:#BAC3CC; --ink3:#9AA5B1;
   --blue:#7FA6E6; --blue-soft:#22314A; --amber:#E0A040; --amber-soft:#3A2E17;
   --red:#E37070; --red-soft:#3E2020; --green:#5EBB8F; --green-soft:#1B3529;
   --on-blue:#10151B;   /* UX-27: texto sobre o azul claro do tema escuro (o branco dava 2,3) */
+  --hover:#2A3441; --sel:#25395A; --sel-ink:#A9C6F5; --line-forte:#56636F; --on-red:#10151B;
+  --sombra-pop:0 14px 36px rgba(0,0,0,.5);
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
 *{box-sizing:border-box}
-body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:var(--fs-body)/var(--lh-corpo) var(--sans);-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
 :where(input:not([type=checkbox],[type=radio],[type=range],[type=color],[type=file]),select,textarea){background-color:var(--surface)}   /* UX-27: no tema escuro o campo sem fundo próprio ficava branco do navegador com o texto claro (1,15) */
 a{color:var(--blue)}
@@ -110,11 +117,11 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 .av{width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:var(--fs-2xs);font-weight:600;overflow:hidden;flex:none}
 .av img{width:100%;height:100%;object-fit:cover;display:block}.av.g{width:96px;height:96px;font-size:28px}.av.p{width:26px;height:26px;font-size:var(--fs-sm)}
 .foto-perfil{display:flex;gap:14px;align-items:center}.foto-perfil .help{display:block;margin:4px 0}.usr-nome{display:flex;gap:8px;align-items:center}
-.content{padding:8px 26px 40px;display:none}
+.content{padding:8px var(--gutter) 40px;display:none}
 .content.on{display:block}
-h1{font-size:20px;font-weight:600;margin:6px 0 2px;letter-spacing:-.01em}
+h1{font-size:var(--fs-page);line-height:var(--lh-titulo);font-weight:600;margin:6px 0 4px;letter-spacing:-.015em}   /* §18: título da página 28 px (antes 20) */
 .sub{color:var(--ink2);margin:0 0 18px;max-width:70ch}
-h2{font-size:var(--fs-base);font-weight:600;margin:0 0 10px}
+h2{font-size:var(--fs-sec);line-height:1.3;font-weight:600;margin:0 0 10px}   /* §18: título de seção 18 px (antes 14) */
 .hdr{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .hdr .sub{margin:0}
 .hdr .act{margin-left:auto;display:flex;gap:8px}
@@ -134,7 +141,7 @@ h2{font-size:var(--fs-base);font-weight:600;margin:0 0 10px}
 @media screen{
   :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
   .search input:focus:focus-visible,.field input:focus:focus-visible,.field select:focus:focus-visible,.field textarea:focus:focus-visible,.filterbar input:focus:focus-visible,.tags-input input:focus:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
-  small:where(:not(.label *)){font-size:max(12px,.833em)}
+  small:where(:not(.label *)){font-size:max(13px,.833em)}   /* §18: secundário ≥ 13 px */
   code:where(:not(.label *)),.mono:where(:not(.label *)),kbd:where(:not(.label *)){font-size:max(12px,.92em)}   /* :where = a mesma especificidade de antes */
 }
 .tag{display:inline-block;font-size:var(--fs-xs);padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
@@ -159,14 +166,14 @@ h2{font-size:var(--fs-base);font-weight:600;margin:0 0 10px}
 .grid{display:grid;gap:16px}
 .g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 .tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13.5px}
-th{text-align:left;font-weight:500;color:var(--ink3);font-size:var(--fs-sm2);padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:10px 14px;border-bottom:1px solid var(--line2);vertical-align:middle}
+table{width:100%;border-collapse:collapse;font-size:var(--fs-tab)}
+th{text-align:left;font-weight:600;color:var(--ink2);font-size:var(--fs-2nd);padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:12px 14px;border-bottom:1px solid var(--line2);vertical-align:middle}
 tr:last-child td{border-bottom:0}
 tbody tr:hover td{background:var(--surface2)}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .stat{padding:14px 16px}
-.stat .v{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.stat .v{font-size:var(--fs-metric);font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:-.02em;line-height:1.1}
 .stat .l{color:var(--ink2);font-size:var(--fs-md);margin-top:2px}
 .stat .d{font-size:var(--fs-sm);margin-top:6px}
 .bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
@@ -421,7 +428,7 @@ tbody tr.sel td{background:var(--blue-soft)}
 .hoje-frase{margin:4px 0 0;color:var(--ink2);font-size:var(--fs-base)}.hoje-frase b{color:var(--ink)}
 .hoje-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 16px}
 .hoje-kpi{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface2)}
-.hoje-kpi .v{font-family:var(--mono);font-size:26px;line-height:1.1}.hoje-kpi .l{font-size:var(--fs-sm2);font-weight:600;margin-top:2px}.hoje-kpi .d{font-size:var(--fs-xs);color:var(--ink3);margin-top:2px}
+.hoje-kpi .v{font-family:var(--mono);font-size:var(--fs-metric);line-height:1.1}.hoje-kpi .l{font-size:var(--fs-sm2);font-weight:600;margin-top:2px}.hoje-kpi .d{font-size:var(--fs-xs);color:var(--ink3);margin-top:2px}
 .hoje-h{font-size:var(--fs-sm2);color:var(--ink3);margin:0 0 8px;font-weight:600}
 .hoje-acoes{display:grid;gap:8px}.hoje-acao{display:flex;gap:12px;align-items:center;text-align:left;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);color:inherit;cursor:pointer;font:inherit}
 .hoje-acao:hover{border-color:var(--ink3)}.hoje-acao .n{width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:var(--fs-2xs);flex:none}
@@ -754,7 +761,7 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
 .modal .box .pf{padding:12px 18px;border-top:1px solid var(--line2);display:flex;justify-content:flex-end;gap:8px}
 .x{margin-left:auto;background:none;border:0;font-size:18px;cursor:pointer;color:var(--ink3)}
 
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}   /* animações: ver o bloco §18 */
 /* CAMP-116 (exaustão, 20/10): no tablet (768 px) "Está certo" tinha 28 px de altura; toque precisa de alvo maior. Tela de toque: 44 px em qualquer largura */
 @media (max-width:1024px){.btn{min-height:36px}}@media (pointer:coarse){.btn{min-height:44px}}
 @media (max-width:980px){
@@ -833,7 +840,7 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
 .action-list .t b{display:block;font-size:var(--fs-md)}.action-list .t small{display:block;color:var(--ink3);margin-top:2px}
 .kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .kpi{padding:16px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--surface2)}
-.kpi .v{font-family:var(--mono);font-size:28px;line-height:1}.kpi .l{font-size:var(--fs-xs);color:var(--ink3);margin-top:6px;line-height:1.35}
+.kpi .v{font-family:var(--mono);font-size:var(--fs-metric);line-height:1}.kpi .l{font-size:var(--fs-xs);color:var(--ink3);margin-top:6px;line-height:1.35}
 .analytics-lock{display:flex;gap:14px;align-items:flex-start;padding:18px;border:1px dashed var(--line);border-radius:var(--r-lg);background:var(--surface2)}
 .analytics-lock .ico{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font-weight:700;flex:none}
 .analytics-lock b{display:block;margin-bottom:5px}.analytics-lock p{margin:0;color:var(--ink3);font-size:var(--fs-sm2);line-height:1.5;max-width:760px}
@@ -870,8 +877,69 @@ body:not(.admin):not(.master) #est-abas,body:not(.admin):not(.master) #est-alert
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;
   --r-sm:4px;--r-md:8px;--r-lg:12px;
   /* escala de tipo: use estes tamanhos (os valores são os que o painel já usava) */
-  --fs-2xs:12px;--fs-xs:12px;--fs-etq-peq:11.5px;   /* UX-27: mínimo 12 px na tela (antes 11 e 11,5); as etiquetas impressas têm tamanhos próprios */--fs-sm:12px;--fs-sm2:12.5px;--fs-md:13px;--fs-base:14px;--fs-lg:17px;--fs-xl:20px;--fs-num:28px;--fs-hero:40px;
+  --fs-2xs:12px;--fs-xs:12px;--fs-etq-peq:11.5px;   /* UX-27: mínimo 12 px na tela (antes 11 e 11,5); as etiquetas impressas têm tamanhos próprios */--fs-sm:13px;--fs-sm2:13px;--fs-md:13px;   /* §18: secundário confortável (antes 12 e 12,5) */--fs-base:14px;--fs-lg:17px;--fs-xl:20px;--fs-num:28px;--fs-hero:40px;
 }
+/* ===== Redesenho §18 · sistema de design (04/11/2026; o guia está em docs/UI.md, "Sistema de design") =====
+   Escala tipográfica: página 28 px (24 no celular) · seção 18 px · subtítulo 16 px · texto 15 px · linhas de tabela 14 px ·
+   secundário 13 px · métricas 28/32 px. Superfícies: --bg (fundo) → --surface (cartão) → --hover → --sel (selecionado). */
+:root{
+  --fs-page:28px;--fs-sec:18px;--fs-sub:16px;--fs-body:15px;--fs-tab:14px;--fs-2nd:13px;--fs-metric:28px;--fs-metric-lg:32px;
+  --lh-corpo:1.55;--lh-titulo:1.2;
+  --sp-7:32px;--sp-8:40px;--gutter:26px;--gap-card:16px;--r-card:var(--r-md);--pad-card:18px;--linha-min:52px;--toque:44px;
+}
+@media (min-width:1500px){:root{--gutter:40px;--gap-card:20px}}
+@media (max-width:720px){:root{--fs-page:24px;--fs-sec:17px;--gutter:14px;--pad-card:14px}}
+.grid{gap:var(--gap-card)}
+.panel{border-radius:var(--r-card)}
+.panel .ph{padding:14px var(--pad-card);min-height:52px;flex-wrap:wrap}
+.panel .pb{padding:var(--pad-card)}
+/* cartão = título → resumo → conteúdo → ação: <div class="ph"><div class="ph-txt"><h2>…</h2><p class="ph-resumo">…</p></div>…</div> … <div class="pf">ações</div> */
+.ph-txt{display:grid;gap:2px;min-width:0}.ph-resumo{margin:0;color:var(--ink2);font-size:var(--fs-2nd)}
+.panel>.pf{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;padding:12px var(--pad-card);border-top:1px solid var(--line2)}
+/* métrica: número grande + rótulo + detalhe, números alinhados em cartões comparáveis */
+.metrica{display:grid;gap:2px;align-content:start;min-width:0}
+.metrica .v{font:600 var(--fs-metric)/1.1 var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.01em}.metrica.grande .v{font-size:var(--fs-metric-lg)}
+.metrica .l{font-weight:500;font-size:var(--fs-tab);color:var(--ink)}.metrica .d{font-size:var(--fs-2nd);color:var(--ink2)}
+/* botões: primário (um por bloco), secundário discreto, destrutivo vermelho (cheio na confirmação; só texto vermelho dentro do "Mais ⋯") */
+.btn{color:var(--ink);font-weight:500}
+.btn:hover{background:var(--hover);border-color:var(--line-forte)}
+.btn.pri{font-weight:600}.btn.pri:hover{background:var(--blue);border-color:var(--blue)}
+.btn.perigo{color:var(--on-red);font-weight:600}.btn.perigo:hover{background:var(--red);filter:brightness(1.08)}
+.btn.perigo-contorno{color:var(--red);border-color:var(--red)}.btn.perigo-contorno:hover{background:var(--red-soft);border-color:var(--red)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+/* links: além da cor, sublinhado (mais grosso no mouse e no foco) */
+a,.lnk{text-underline-offset:.2em;text-decoration-thickness:1px}
+a:hover,a:focus-visible,.lnk:hover,.lnk:focus-visible{text-decoration-thickness:2px}
+.ph .ini-link:hover,.ph .ini-link:focus-visible,.ini-mais:hover,.ini-mais:focus-visible,.ini-rodape:hover,.ini-rodape:focus-visible{text-decoration:underline;text-underline-offset:.2em}
+/* hover e selecionado com degraus próprios (antes o hover era a mesma cor do fundo do cartão secundário) */
+tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
+.tabs button:hover{color:var(--ink)}.tabs button.on{color:var(--sel-ink);border-color:var(--blue);font-weight:600}
+/* chip de estado: texto + ícone + cor (nunca só a cor) — <span class="tag st ok">normal</span> · atencao · critico · sem */
+.tag.st{display:inline-flex;align-items:center;gap:4px;font-weight:500}
+.tag.st::before{font-weight:700;font-size:.95em;line-height:1}
+.tag.st.ok{background:var(--green-soft);color:var(--green)}.tag.st.ok::before{content:"✓"}
+.tag.st.atencao{background:var(--amber-soft);color:var(--amber)}.tag.st.atencao::before{content:"!"}
+.tag.st.critico{background:var(--red-soft);color:var(--red)}.tag.st.critico::before{content:"✕"}
+.tag.st.sem{background:var(--surface2);color:var(--ink2)}.tag.st.sem::before{content:"?"}
+/* ===== Redesenho §20 · estados: estadoHTML(tipo,{…}) e esqueletoHTML(n) (docs/UI.md, "Estados") ===== */
+.estado{display:grid;grid-template-columns:32px minmax(0,1fr);gap:2px 12px;align-items:start;padding:14px 16px;border:1px solid var(--line);border-left:4px solid var(--line-forte);border-radius:var(--r-card);background:var(--surface);color:var(--ink);text-align:left}
+.estado>.estado-ico{grid-row:1/span 4;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:var(--fs-tab);background:var(--surface2);color:var(--ink2)}
+.estado>*:not(.estado-ico){grid-column:2}
+.estado .estado-tit{font-size:var(--fs-sub);font-weight:600;line-height:1.35}
+.estado p{margin:0;color:var(--ink2)}
+.estado .estado-meta{font-size:var(--fs-2nd);color:var(--ink2)}.estado .estado-meta b{color:var(--ink);font-weight:500}
+.estado .estado-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.estado.erro{border-left-color:var(--red);background:var(--red-soft)}.estado.erro>.estado-ico{background:var(--red);color:var(--on-red)}
+.estado.sem-permissao{border-left-color:var(--amber)}.estado.sem-permissao>.estado-ico{background:var(--amber-soft);color:var(--amber)}
+.estado.sucesso{border-left-color:var(--green);background:var(--green-soft)}.estado.sucesso>.estado-ico{background:var(--green);color:var(--surface)}
+.estado.desatualizado{border-left-color:var(--amber);background:var(--amber-soft)}.estado.desatualizado>.estado-ico{background:var(--amber);color:var(--surface)}
+.estado.carregando>.estado-ico{background:none}
+.estado.solto{border:0;background:none;padding:12px 0}   /* dentro de um cartão que já tem borda */
+.esq-lista{display:grid;gap:10px;min-height:var(--esq-h,0px)}   /* esqueleto: o contêiner define --esq-h (no CSS dele) e a página não pula quando o dado chega */
+.esq{display:block;height:14px;border-radius:var(--r-sm);background:linear-gradient(90deg,var(--line2),var(--surface2),var(--line2));background-size:200% 100%;animation:camp-skeleton 1.2s linear infinite}
+.esq.t{height:20px;width:45%}.esq:nth-child(3n+2){width:88%}.esq:nth-child(3n){width:64%}
+.estado-desfazer{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
 .cluster{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block}
 .status-dot.ok{background:var(--green)}.status-dot.warn{background:var(--amber)}.status-dot.bad{background:var(--red)}
@@ -1099,7 +1167,7 @@ body.na-painel #system-banner{display:none!important}
 .conf-opcao{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;cursor:pointer}
 .conf-opcao:has(input:checked){border-color:var(--blue);background:var(--blue-soft)}
 .conf-opcao b{display:block;font-weight:500}.conf-opcao small{display:block;color:var(--ink3);font-size:var(--fs-sm2)}
-.btn.perigo{background:var(--red);border-color:var(--red);color:#fff}.btn.perigo:disabled{opacity:.5}
+.btn.perigo{background:var(--red);border-color:var(--red);color:var(--on-red)}   /* §18: no escuro o branco sobre o vermelho claro dava 2,9 */.btn.perigo:disabled{opacity:.5}
 .senha-temp{font:600 20px var(--mono);letter-spacing:.04em;background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;user-select:all;overflow-wrap:anywhere}
 /* H4 · toda ação mostra o que está acontecendo: botão "trabalhando", resultado no lugar, Desfazer, chip de tarefas e aviso de conclusão */
 .toast.com-acao{pointer-events:auto;display:flex;gap:14px;align-items:center}
@@ -1841,7 +1909,8 @@ function crumbs(route){const [v,arg]=route.split('/');const H=`<a onclick="go('p
   else if(v&&v!=='painel'){const grp={fundos:'Acervo',arquitetos:'Acervo',etiquetas:'Acervo',localizacao:'Acervo',estante:'Acervo',emprestimos:'Acervo',solicitacoes:'Público',uso:'Público',relatorios:'Acompanhamento',auditoria:'Acompanhamento',qualidade:'Acompanhamento',estacoes:'Administração',config:'Administração',caminho:'Ajuda',glossario:'Ajuda'}[v]   /* UX-28: a trilha usa os grupos do menu; o topo (Precisa de você, Material novo, Problemas, Decisões, Projetos) não tem grupo */;if(grp)out.push(`<span>${grp}</span>`);out.push(`<b>${TITLES[v]}</b>`)}
   else out.push('<b>Precisa de você</b>');
   document.getElementById('gcrumb').innerHTML=out.join(S)}
-function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document.getElementById('v-nao-encontrado');if(!sec){sec=document.createElement('section');sec.className='content';sec.id='v-nao-encontrado';document.getElementById('drawer').before(sec)}sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1><p class="sub">${escHtml(detalhe)}</p></div></div><div class="panel"><div class="pb"><button class="btn pri" onclick="go('${fallback}')">Voltar</button></div></div>`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
+function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document.getElementById('v-nao-encontrado');if(!sec){sec=document.createElement('section');sec.className='content';sec.id='v-nao-encontrado';document.getElementById('drawer').before(sec)}const semAcesso=titulo==='Sem acesso';   /* §20: sem permissão diz o porquê e quem autoriza, no componente de estados */
+  sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1></div></div>${estadoHTML(semAcesso?'sem-permissao':'vazio',{titulo:detalhe,texto:semAcesso?'O seu papel neste painel não abre esta página.':'',quem:semAcesso?'um administrador (o Rafael)':'',acoes:`<button class="btn pri" onclick="go('${fallback}')">Voltar</button>`})}`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
 const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 // UMA regra: papel mínimo de cada ação/tela. O servidor continua sendo a garantia (devolve 403); aqui o botão simplesmente não aparece para quem não pode.
 const PODE={'estante.registrar':'operador','estante.mover':'operador','projeto.criar':'admin','projeto.editar':'admin','projetos.lote':'admin','arquiteto.cadastrar':'admin','problema.resolver':'operador','pedido.mudar':'operador','rota.estacoes':'operador','rota.uso':'admin','rota.inscricoes':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','emprestimo.criar':'operador','emprestimo.devolver':'operador','analytics.diagnostico':'admin'};
@@ -7876,10 +7945,30 @@ const soAvisos=()=>!!(EU&&EU.conferir_so_avisos),CONF_AUTO='painel (sem aviso: c
 function umPassoMarcar(){document.body.classList.toggle('um-passo',umPasso());if(typeof aplicarPermissoes==='function'&&EU)aplicarPermissoes()}
 const MODO_SERVIDOR=location.protocol.startsWith('http');
 /* H3: carregando diz o que está buscando e avisa se demorar (3 s / 15 s); erro diz o que fazer e guarda o detalhe técnico recolhido */
-function tabelaCarregando(sel,msg='Carregando…',retry=''){const tb=document.querySelector(sel);if(!tb)return;clearTimeout(tb._t3);clearTimeout(tb._t15);tb.innerHTML=`<tr><td colspan="12" class="state-row"><span class="skeleton-line"></span><div class="car-msg">${escHtml(msg)}</div></td></tr>`;
+function tabelaCarregando(sel,msg='Carregando…',retry=''){const tb=document.querySelector(sel);if(!tb)return;
+  if(!tb._cargaObs&&window.MutationObserver){tb._cargaObs=new MutationObserver(()=>{if([...tb.children].some(tr=>!tr.querySelector('td.state-row,td.empty')))tb.dataset.carregadaEm=Date.now()});tb._cargaObs.observe(tb,{childList:true})}   /* §20: hora da última lista que chegou */clearTimeout(tb._t3);clearTimeout(tb._t15);tb.innerHTML=`<tr><td colspan="12" class="state-row"><span class="skeleton-line"></span><div class="car-msg">${escHtml(msg)}</div></td></tr>`;
   tb._t3=setTimeout(()=>{const m=tb.querySelector('.car-msg');if(m)m.textContent=msg.replace(/…$/,'')+'… ainda buscando (o servidor está lento).'},3000);
   tb._t15=setTimeout(()=>{const m=tb.querySelector('.car-msg');if(m)m.innerHTML=`Está demorando mais que o normal.${retry?` <button class="btn sm" onclick="${retry}">Tentar de novo</button>`:''}`},15000)}
-function estadoErroHTML(o){return `<div class="estado-erro" role="alert"><b>${escHtml(o.titulo||'Não consegui carregar esta lista.')}</b><p>${escHtml(o.texto||'Verifique a conexão e tente de novo. Se continuar, avise o Rafael com o detalhe abaixo.')}</p>${o.retry?`<div class="retry"><button class="btn sm" onclick="${o.retry}">Tentar de novo</button></div>`:''}${o.detalhe?`<details class="erro-det"><summary>Ver detalhe para o suporte</summary><code>${escHtml(o.detalhe)}</code> <button type="button" class="lnk" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>toast('Detalhe copiado'))">Copiar</button></details>`:''}</div>`}
+/* Redesenho §20: UM componente para os estados de qualquer bloco que depende do servidor ou de outro sistema (docs/UI.md, "Estados").
+   tipo: carregando | vazio | erro | sem-permissao | sucesso | desatualizado. o: {titulo, texto, servico (erro: o sistema afetado),
+   ultima (erro: a última informação conhecida; desatualizado: a última sincronização, data ISO ou texto), quem (sem-permissao: quem
+   pode autorizar), id (sucesso: o identificador REAL, ex.: "F003-P9001"), acoes (HTML de botões já escapado), desfazer ({attr:'data-x="1"'}),
+   detalhe (texto técnico, recolhido), solto (sem borda, dentro de um cartão), linhas (carregando: quantas linhas de esqueleto)}.
+   Nunca use zero ou texto de exemplo no lugar do dado que não veio: é para isso que existem "erro" e "carregando". */
+const ESTADO_ICO={vazio:'–',erro:'✕','sem-permissao':'!',sucesso:'✓',desatualizado:'↻',carregando:''};
+const ESTADO_TIT={vazio:'Nada por aqui ainda.',erro:'Não consegui carregar.','sem-permissao':'Você não tem acesso a isto.',sucesso:'Pronto.',desatualizado:'Dados desatualizados.',carregando:'Carregando…'};
+function quandoTxt(v){if(!v)return '';const d=typeof v==='number'?new Date(v):dataUtc(v);if(!d)return String(v);const min=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  const h=new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,hour:'2-digit',minute:'2-digit',hour12:false}).format(d),hoje=hojeSP()===new Intl.DateTimeFormat('en-CA',{timeZone:FUSO_CAMP}).format(d);
+  return (hoje?'às '+h:'em '+new Intl.DateTimeFormat('pt-BR',{timeZone:FUSO_CAMP,day:'2-digit',month:'2-digit'}).format(d)+' às '+h)+(min<1?' (agora)':min<60?` (há ${min} min)`:min<1440?` (há ${Math.round(min/60)} h)`:'')}
+function esqueletoHTML(linhas=3,titulo=true){return `<span class="esq-lista" aria-hidden="true">${titulo?'<span class="esq t"></span>':''}${'<span class="esq"></span>'.repeat(Math.max(1,linhas))}</span>`}
+function estadoHTML(tipo,o={}){const t=ESTADO_TIT[tipo]?tipo:'vazio',papel=t==='erro'?'alert':'status',meta=[];
+  if(t==='carregando')return `<div class="estado carregando${o.solto?' solto':''}" role="status" aria-busy="true"><span class="estado-ico" aria-hidden="true"></span><span class="sr">${escHtml(o.titulo||ESTADO_TIT.carregando)}</span>${esqueletoHTML(o.linhas||3)}</div>`;
+  if(o.servico)meta.push(`Serviço afetado: <b>${escHtml(o.servico)}</b>`);
+  if(o.ultima)meta.push(t==='desatualizado'?`Última sincronização: <b>${escHtml(quandoTxt(o.ultima))}</b>`:`Última informação conhecida: <b>${escHtml(quandoTxt(o.ultima))}</b>`);
+  if(o.quem)meta.push(`Quem pode autorizar: <b>${escHtml(o.quem)}</b>`);
+  const tit=t==='sucesso'&&o.id?`${escHtml(o.titulo||'Feito')}: <span class="code">${escHtml(o.id)}</span>`:escHtml(o.titulo||ESTADO_TIT[t]);
+  return `<div class="estado ${t}${o.solto?' solto':''}" role="${papel}" data-estado="${t}"><span class="estado-ico" aria-hidden="true">${ESTADO_ICO[t]}</span><b class="estado-tit">${tit}</b>${o.texto?`<p>${escHtml(o.texto)}</p>`:''}${meta.map(m=>`<span class="estado-meta">${m}</span>`).join('')}${o.acoes||o.desfazer?`<div class="estado-acoes">${o.desfazer?`<button type="button" class="btn sm" ${o.desfazer.attr||''}>${escHtml(o.desfazer.rotulo||'Desfazer')}</button>`:''}${o.acoes||''}</div>`:''}${o.detalhe?`<details class="erro-det"><summary>Ver detalhe para o suporte</summary><code>${escHtml(o.detalhe)}</code> <button type="button" class="lnk" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>toast('Detalhe copiado'))">Copiar</button></details>`:''}</div>`}
+function estadoErroHTML(o){return estadoHTML('erro',{titulo:o.titulo||'Não consegui carregar esta lista.',texto:o.texto||'Verifique a conexão e tente de novo. Se continuar, avise o Rafael com o detalhe abaixo.',servico:o.servico,ultima:o.ultima,acoes:o.retry?`<button class="btn sm" onclick="${o.retry}">Tentar de novo</button>`:'',detalhe:o.detalhe,solto:o.solto!==false}).replace('class="estado erro','class="estado-erro estado erro')}
 /* Estados: página de fundo/projeto/folha mostra "Carregando…" quando troca de código (e não fica a anterior parecendo a nova) */
 function carregandoPagina(id,code){const el=document.getElementById(id);if(!el)return null;if(el.dataset.codigo===code)return null;el.dataset.codigo=code;el.setAttribute('aria-busy','true');
   const t=setTimeout(()=>{if(el.getAttribute('aria-busy')==='true')el.innerHTML='<div class="panel"><div class="pb state-row"><span class="skeleton-line"></span><div>Carregando '+escHtml(code)+'…</div></div></div>'},250);
@@ -7889,7 +7978,9 @@ function tabelaErro(sel,msg,retry=''){const tb=document.querySelector(sel);if(!t
   const comDados=[...tb.querySelectorAll(':scope > tr')].some(tr=>!tr.querySelector('td.state-row,td.empty'));const sec=tb.closest('section.content');
   if(comDados&&sec&&sec.id.startsWith('v-')){const v=sec.id.slice(2);marcarStale(v,msg,retry);if(!tb._stObs){tb._stObs=new MutationObserver(()=>{limparStale(v);tb._stObs.disconnect();tb._stObs=null});tb._stObs.observe(tb,{childList:true})}return}
   tb.innerHTML=`<tr><td colspan="12" class="state-row">${estadoErroHTML({detalhe:msg,retry})}</td></tr>`}
-function marcarStale(view,msg,retry=''){const sec=document.getElementById('v-'+view);if(!sec)return;let n=sec.querySelector('.stale-note');if(!n){n=document.createElement('div');n.className='stale-note';const hdr=sec.querySelector('.hdr');(hdr||sec).after(n)}n.innerHTML=`<span class="status-dot warn"></span><span><b>Dados desatualizados.</b> ${escHtml(msg)}</span>${retry?`<button class="btn sm" onclick="${retry}">Atualizar</button>`:''}`}
+function marcarStale(view,msg,retry=''){const sec=document.getElementById('v-'+view);if(!sec)return;let n=sec.querySelector('.stale-note');if(!n){n=document.createElement('div');n.className='stale-note';n.setAttribute('role','status');const hdr=sec.querySelector('.hdr');(hdr||sec).after(n)}
+  const t=Math.max(0,...[...sec.querySelectorAll('tbody')].map(b=>+b.dataset.carregadaEm||0));   /* §20: diz desde quando a lista na tela não muda */
+  n.innerHTML=`<span class="status-dot warn"></span><span><b>Dados desatualizados.</b> ${escHtml(msg)}${t?` · Última atualização ${escHtml(quandoTxt(t))}.`:''}</span>${retry?`<button class="btn sm" onclick="${retry}">Atualizar</button>`:''}`}
 function limparStale(view){document.querySelector('#v-'+view+' .stale-note')?.remove()}
 function limparExemplos(){ // em modo servidor, nunca mostrar dado de exemplo como se fosse real
   tabelaCarregando('#fundos-body','Carregando os fundos…');tabelaCarregando('#projetos-body','Carregando os projetos…');tabelaCarregando('#v-arquitetos tbody','Carregando os arquitetos…');   /* H3: carregando é carregando, não erro */

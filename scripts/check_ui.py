@@ -43,7 +43,7 @@ for _nome, _pad, _teto in (("tamanho de fonte cru (px)", r"font-size:\d+(\.\d+)?
     _n = len(re.findall(_pad, _pagina))
     if _n > _teto:
         errors.append(f"tokens: {_nome} subiu para {_n} (teto {_teto}): use var(--fs-*) / var(--r-sm|--r|--r-md|--r-lg) — CAMP-155")
-for _cru, _tok in (("font-size:11px", "--fs-2xs"), ("font-size:11.5px", "--fs-xs"), ("font-size:12px", "--fs-sm"), ("font-size:12.5px", "--fs-sm2"),
+for _cru, _tok in (("font-size:11px", "--fs-2xs"), ("font-size:11.5px", "--fs-xs"), ("font-size:12px", "--fs-xs"), ("font-size:12.5px", "--fs-sm2"),
                    ("font-size:13px", "--fs-md"), ("font-size:14px", "--fs-base"), ("font-size:17px", "--fs-lg"), ("border-radius:4px", "--r-sm"),
                    ("border-radius:6px", "--r"), ("border-radius:8px", "--r-md"), ("border-radius:12px", "--r-lg")):
     if re.search(re.escape(_cru) + r"(?![\d.])", _pagina):

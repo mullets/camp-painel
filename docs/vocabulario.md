@@ -348,3 +348,10 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Dados do projeto que faltam**: na Revisão do lote e no fim da conferência (aprovar o lote), só os dados do projeto que faltam, com o botão
   que abre a edição já no campo.
 - Lista de Projetos: selo `objetivos N/M` (verde quando todos feitos).
+
+## Estados de um bloco (redesenho §20, 04/11/2026)
+Os textos do componente único de estados (`estadoHTML`, docs/UI.md "Estados"): **Carregando…**; **Nada por aqui ainda.** (vazio: diga o
+período); **Não consegui carregar.** com **Serviço afetado:** (QNAP, CAMP Vision, site…) e **Última informação conhecida:**;
+**Você não tem acesso a isto.** com **Quem pode autorizar:**; sucesso com o identificador real ("**Lote conferido:** F003-P9001");
+**Dados desatualizados.** com **Última sincronização:** (no componente) ou **Última atualização às HH:MM** (na marca das listas); **Desfazer**.
+Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40".
