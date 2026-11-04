@@ -29,7 +29,7 @@ con.execute("INSERT INTO pedido_releitura (projeto_codigo, pedido_por) VALUES ('
 `);
 
 async function entrar(browser, email, senha, erros) {
-  const ESPERADO = u => /\/api\/auth\/eu$|\/favicon\.ico$|exemplo\.test|\/previa\?t=/.test(u);
+  const ESPERADO = u => /\/api\/auth\/eu$|\/favicon\.ico$|exemplo\.test|\/previa\?t=|\/api\/pedidos\/coleta$/.test(u);   // a coleta de pedidos responde 403 a quem só lê (já era assim no main)
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
   const page = await ctx.newPage();
   page.on('console', m => { if (m.type() === 'error' && !ESPERADO(((m.location() || {}).url || ''))) erros.push(email + ': ' + m.text()); });
@@ -64,7 +64,7 @@ const so = t => String(t || '').replace(/\s+/g, ' ');
     const tt = so(await task.textContent());
     chk(await task.count() === 1 && /não dá sinal deste lote há mais de 2 h/.test(tt) && /parado há 8 dias/.test(tt) && /releitura pedida agora: esperando o CAMP Vision/.test(tt) && /Ver na Fila/.test(tt),
       'Home: o item do print aparece ("parado há 8 dias", "releitura pedida agora", "Ver na Fila"): "' + tt.slice(0, 260) + '"');
-    await task.locator('summary', { hasText: 'Ignorar' }).click();
+    await task.locator('summary.ini-mais-bt').click();   // UX-03: o "Ignorar ▾" da Home virou "⋯" (Mais ações); este seletor já falhava no main
     const opc = task.locator('[data-ini-dispensar]');
     chk(await opc.count() === 1 && (await opc.textContent()) === 'Dispensar este lote (para todos)', 'Ignorar ▾: "Dispensar este lote (para todos)"');
     await opc.click();
@@ -91,6 +91,7 @@ const so = t => String(t || '').replace(/\s+/g, ' ');
     const lu = op.locator(UX31), bu = await lu.locator('td.fila-acao button').allTextContents();
     chk(JSON.stringify(bu) === '["Ler de novo","Dispensar este lote"]' && (await lu.locator('button.pri').allTextContents()).join() === 'Ler de novo',
       'Material novo: sem releitura pedida, "Ler de novo" (azul) e depois "Dispensar este lote" (secundário): ' + JSON.stringify(bu));
+    await ls.locator('details.lista-mais > summary').click();   // redesenho Material novo: as ações secundárias ficam no "⋯"
     await ls.locator('button[data-fila-dispensar]').click();
     await op.waitForSelector('#conf-ov', { timeout: 5000 }); await op.fill('#conf-motivo', 'já mandei ler de novo umas 10x e nada muda'); await op.click('#conf-ov [data-conf="sim"]');
     await op.waitForFunction(() => !document.querySelector('#filas-body tr[data-nav="projeto/F009-P0092"]'), null, { timeout: 10000 });

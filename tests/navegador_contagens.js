@@ -75,11 +75,11 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     chk(Array.isArray(filas) && !filas.some(l => /Descartado de teste/.test(l.projeto_titulo || '')), 'a Fila não mostra o lote do projeto descartado');
     const chipN = async k => num(await page.evaluate(k_ => { const b = document.querySelector(`#fila-chips [data-fila-filtro="${k_}"] b`); return b ? b.textContent : ''; }, k));
     const resumo = await txt('#fila-resumo');
-    const cheg = (resumo.match(/(\d+) chegando/) || [])[1];
-    chk(await chipN('chegando') === (cheg ? +cheg : 0), `filtro "Chegando" (${await chipN('chegando')}) = resumo "${resumo}"`);
+    // redesenho Material novo (04/11/2026): o resumo em frase saiu; as abas (as situações) dizem os números, da mesma fonte
+    const cheg = (await page.evaluate(() => FILAS_SRV.filter(l => filaNaAba(l, 'chegando')).length));
+    chk(await chipN('chegando') === cheg, `aba "Chegando" (${await chipN('chegando')}) = as linhas que ela mostra (${cheg})`);
     chk(await chipN('chegando') === pend.lotes_processando + pend.lotes_importar, `"Chegando" = CAMP Vision lendo + falta importar das contagens (${pend.lotes_processando}+${pend.lotes_importar})`);
-    const conf = (resumo.match(/(\d+) para conferir/) || [])[1];
-    chk((conf ? +conf : 0) === pend.lotes_conferir, `resumo "para conferir" = ${pend.lotes_conferir} (o cartão da Home)`);
+    chk(await chipN('conferir') === pend.lotes_conferir, `aba "Para conferir" (${await chipN('conferir')}) = ${pend.lotes_conferir} (o cartão da Home)`);
     await page.click('#fila-chips [data-fila-filtro="gente"]'); await page.waitForTimeout(400);
     const vis = await page.locator('#filas-body tr[data-fase]').count();
     chk(await chipN('gente') === vis, `"Precisam de você" (${await chipN('gente')}) = as linhas mostradas (${vis})`);

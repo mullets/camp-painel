@@ -601,12 +601,26 @@ def _erro_do_cv_explicado(d: dict) -> dict | None:
     return explicar_erro(t, fontes)
 
 
+# Redesenho Material novo (04/11/2026): campos que a tela não usa e pesam na resposta (JSON inteiro do CAMP Vision por lote).
+# Com ?leve=1 (parâmetro novo, opcional) eles não vão; sem o parâmetro a resposta é a de sempre.
+_FILAS_PESADOS = ("status_json", "resultado", "execucao_json", "aceite_json")
+# A miniatura da linha (campo novo, opcional): só imagem REAL do próprio lote (a 1ª folha não retida que tem imagem) ou, sem folha no
+# lote, a capa escolhida do projeto. Nunca imagem genérica; sem folha nenhuma, null (a tela mostra o quadro neutro).
+_SQL_MINIATURA = """COALESCE((SELECT i.codigo FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND COALESCE(i.retida,0)=0
+                                         AND (i.arquivo_jpg IS NOT NULL OR i.pendencias LIKE '%"previa"%')
+                                       ORDER BY i.sequencial, i.codigo LIMIT 1),
+                             (SELECT ic.codigo FROM item ic WHERE ic.codigo=p.capa_item AND ic.projeto_codigo=p.codigo
+                                       AND (ic.arquivo_jpg IS NOT NULL OR ic.pendencias LIKE '%"previa"%')))"""
+
+
 @router.get("/filas")
-def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
+def listar_filas(leve: bool = False, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
     from .filas_fase import SQL_FORA_DO_SITE
     rows = con.execute(f"""SELECT l.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, p.autorizado_site, p.lote_teste,
                                  p.status_site AS projeto_status_site, {SQL_FORA_DO_SITE} AS fora_do_site,
+                                 p.autoria AS projeto_autoria, p.papel_no_projeto AS projeto_papel, p.ano AS projeto_ano,   -- redesenho: autoria SÓ a registrada no projeto
+                                 {_SQL_MINIATURA} AS miniatura,
                                  (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=l.projeto_codigo) AS folhas_painel,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
@@ -655,6 +669,9 @@ def listar_filas(u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
                     from .destino_auto import modo as _modo_auto, planejar as _planejar_auto
                     plano_auto = {p["lote_id"]: p for p in _planejar_auto(con)} if _modo_auto(con) != "desligado" else {}
                 d["destino_auto"] = plano_auto.get(d["id"])
+        if leve:
+            for k in _FILAS_PESADOS:
+                d.pop(k, None)
         saida.append(d)
     con.close()
     return saida

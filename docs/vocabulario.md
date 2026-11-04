@@ -83,7 +83,7 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
   o "Projeto fechado" é dito no próprio Próximo passo (sem faixa verde separada), com os **avisos menores** ao lado da contagem das folhas.
 
 ## Menu (redesenho §3, 04/11/2026; UX-28; antes CAMP-154)
-**Grupos (redesenho §3):** **Principal** · **Acervo** · **Público e processos** · **Administração** · **Ajuda** ("Público" e "Acompanhamento" deixaram de ser
+**Grupos (redesenho §3; o 1º grupo passou de "Principal" a **Visão geral** no redesenho de Material novo §3, 04/11/2026):** **Visão geral** · **Acervo** · **Público e processos** · **Administração** · **Ajuda** ("Público" e "Acompanhamento" deixaram de ser
 grupos: Visitas ao site e Relatórios estão em Público e processos; Histórico de ações e Qualidade do CAMP Vision em Administração). No celular:
 **Abrir menu** / **Fechar menu** (o botão ☰ do cabeçalho). Os nomes abaixo continuam.
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
@@ -92,8 +92,39 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 **Acompanhamento**; **Administração** (**Máquinas**, antes "Máquinas e site"; **Configurações**); **Ajuda**. O resto fica em **Mais**.
 "Fundos e arquitetos" deixou de existir: são dois itens, cada um com a sua página.
 **Protocolo** (02/11/2026, contrato 1.7): o número que a pessoa recebeu do site, igual em todas as telas do Público e na busca do topo. `CAMP-AAAA-NNNNNN` (pedido, inscrição, Avise-me), `CAMP-AAAA-DNNNNNN` (cadastro de download), `CAMP-AAAA-PNNNNNN` (pedido registrado só no painel). Em fonte de código, com **copiar** no detalhe; busca com ou sem hífens. Não usar "número do pedido" nem "ticket".
+**Marca do menu** (Rafael, 04/11/2026): o logo da CAMP + **CAMP** (não "Acervos", sem "administração interna"); é um link com o nome acessível
+"**CAMP — ir para a página inicial**" que leva SEMPRE ao **Precisa de você** (a Home), também com o menu recolhido e na gaveta do celular.
+A aba do navegador diz "**CAMP — Administração**".
 **Recolher menu** / **Expandir menu** (UX-28): o botão "‹" no topo do menu e as teclas `[` ou `⌘/Ctrl+B`. Recolhido, o menu é uma barra
 estreita só com ícones; o nome do item, o número e a tecla aparecem na dica ao passar o mouse ou focar. Não usar "barra lateral".
+
+## Material novo (redesenho, 04/11/2026 — documento do Rafael §4–7)
+- Subtítulo: "Acompanhe os lotes que o CAMP Vision leu e o que ainda precisa de uma pessoa: importar, conferir, aprovar e publicar."
+- Ações do cabeçalho: **Varrer QNAP** (operador+) e **Novo lote** (antes "Nova lista"; operador+; registra à mão um lote de pasta antiga, fora
+  do fluxo). **Importar todas (N)** fica ao lado do número de registros, só com 2 ou mais lotes para importar.
+- Cartões: **lotes precisam de você** (= o número do menu), **folhas para conferir** ("em N lotes"), **parados há mais de 48 h** ("na mesma
+  etapa, esperando uma pessoa"), **projetos no site** ("de N projetos · ver em Projetos"; abre Projetos › No site).
+  "No site" × "publicações totais" (consolidado): o cartão conta PROJETOS publicados (`contagens.projetos_no_site`); a aba **No site** conta
+  os LOTES concluídos. Não existe "publicações totais".
+- Abas: **Precisam de você** · **Chegando** · **Para conferir** · **Pronto para publicar** · **Com problema** · **No site** · **Todos**. A dica de
+  cada uma diz o que conta. Filtro fino que vem de um link (ex.: "Chegando: falta importar", "Esperam um admin") aparece como aba extra.
+- Filtros: **Buscar** ("Filtrar por projeto, fundo ou lote… (tecla F)"), **Autoria** (só a **autoria registrada no projeto**; "Sem autoria
+  registrada" — o fundo não diz quem projetou), **Fundo**, **Etapa** (CAMP Vision lendo · Falta importar · Verificar destino · Leitura
+  interrompida · Falta conferir · Falta aprovar o lote · Falta publicar · Parado com erro · No site · Parado há mais de 48 h · Lote de teste ·
+  Dispensados), **Ordenar** (Ordem do trabalho · Mais recente · Parado há mais tempo · Projeto (A–Z) · Fundo (A–Z)), **Limpar filtros**,
+  "**N registros**" / "**N de M registros**". Vazio com filtro: "**Nenhum lote com estes filtros.**" "Há N lotes nesta aba; os filtros escondem todos."
+- Colunas: **Projeto / lote**, **Fundo / autoria** ("autoria: Nome" só quando registrada), **Progresso**, **Situação**, **Parado há**. O
+  progresso diz o que mede: **Arquivos recebidos** ("9 de 24 arquivos esperados"), **Leitura parada**, **Importação** ("0 de 12 folhas no
+  painel"), **Conferência** ("3 de 9 folhas conferidas"), **Aprovação** ("10 folhas conferidas · falta aprovar o lote"), **Publicação**
+  ("0 de 8 folhas no site" / "lote no site"). No celular, o tempo vem como "**Na mesma etapa:** há 4 h"; abaixo, "atualizado há X"
+  (a última mudança no lote; a leitura do QNAP também conta).
+- Chip novo: **escondido por você** (o "Agora não" de 7 dias). Sem permissão para importar: "**Falta um operador importar**".
+- **⋯** (Mais ações: código · lote): Tentar de novo, Dispensar este lote, Apagar lote (as mesmas ações e confirmações de antes).
+- Detalhe do lote (▸ "Ver os detalhes do lote …"): **Identificação**, **Etapas e folhas**, **Pendências e alertas** ("Nenhuma pendência além da
+  etapa atual."), **Último evento e histórico** ("Último evento:", "Abrir o projeto (histórico completo, folhas e publicação)").
+- Rodapé: "Mostrando a–b de N", **‹ Anterior** / **Próxima ›**, **Por página**, **Densidade**: **Confortável** / **Compacta**.
+- **Ferramentas avançadas** (recolhida): "Verificar destino pelo painel · modo Simular · o painel faria N decisões" e o aviso "Funções
+  operacionais sensíveis: mudam para onde os lotes vão. …".
 
 ## Avisos (UX-22)
 - Todo aviso rápido (toast) some sozinho em no máximo 8 s; o aviso de tarefa concluída no topo some em 8 s quando deu certo
@@ -127,7 +158,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
 | **N motivos** (UX-64) | em Problemas, a mesma folha com vários problemas vira UMA linha; embaixo do código, "2 motivos"; cada motivo tem a própria caixa, o "O que fazer" e o botão. Problema de folha retirada pelo CAMP Vision (menos o "de outro projeto", que leva a decisão) fecha sozinho com "A folha foi retirada do lote pelo CAMP Vision e não está no painel: quem decide é o problema da retirada (Devolver à revisão). Volta sozinho se a folha entrar no painel."; mensagem automática repetida fecha sozinha com "Mensagem repetida: o mesmo problema continua aberto no nº N." |
 | **Dispensar este lote** (UX-35, UX-39) | só em lote parado com erro do CAMP Vision ou com a **Leitura interrompida** (UX-39: o "Ler de novo" já foi pedido e nada muda), operador ou acima: o lote sai das listas e das contagens **para todos** (Material novo, Precisa de você, menu, alertas por e-mail). Nada é apagado nem muda no QNAP; volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar (na leitura interrompida: se o lote sair de "sendo lido" ou recomeçar a etapa). Em Material novo é secundário, depois de "Tentar de novo" ou "Ler de novo". No Ignorar ▾ aparece como **Dispensar este lote (para todos)**. Desfazer por 8 s |
-| **dispensado** / **Voltar a mostrar** (UX-35, UX-39) | o lote dispensado continua em Material novo › Todas com o chip "dispensado"; "Voltar a mostrar" desfaz a dispensa (fica no Histórico como "lote parado dispensado") |
+| **dispensado** / **Voltar a mostrar** (UX-35, UX-39) | o lote dispensado continua em Material novo › Todos (antes "Todas") com o chip "dispensado"; "Voltar a mostrar" desfaz a dispensa (fica no Histórico como "lote parado dispensado") |
 
 ## Etiquetas e lugar físico (UX-25)
 | Termo | Onde | O que significa |

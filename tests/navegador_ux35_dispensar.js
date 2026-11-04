@@ -28,7 +28,7 @@ con.execute("UPDATE lista_processamento SET etapa_desde=datetime('now','-7 days'
 `);
 
 async function entrar(browser, email, senha, erros) {
-  const ESPERADO = u => /\/api\/auth\/eu$|\/favicon\.ico$|exemplo\.test|\/previa\?t=/.test(u);
+  const ESPERADO = u => /\/api\/auth\/eu$|\/favicon\.ico$|exemplo\.test|\/previa\?t=|\/api\/pedidos\/coleta$/.test(u);   // a coleta de pedidos responde 403 a quem só lê (já era assim no main)
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
   const page = await ctx.newPage();
   page.on('console', m => { if (m.type() === 'error' && !ESPERADO(((m.location() || {}).url || ''))) erros.push(email + ': ' + m.text()); });
@@ -54,7 +54,7 @@ const chipN = async (page, k) => +(await page.locator(`#fila-chips [data-fila-fi
     await filas(op, 'gente');
     const n0 = await chipN(op, 'gente'), r0 = await op.textContent('#fila-resumo');
     chk(await op.locator(MILLAN).count() === 1 && await op.locator(CRASA).count() === 1, 'Precisam de você: os dois lotes com erro aparecem (como nos prints)');
-    chk(/2 com problema/.test(r0), 'resumo antes: "2 com problema": "' + r0.replace(/\s+/g, ' ').slice(0, 120) + '"');
+    chk(await chipN(op, 'problema') === 2, 'aba "Com problema" antes: 2 (redesenho Material novo: o número está na aba, não mais num resumo em frase)');
     const lm = op.locator(MILLAN);
     const bt = lm.locator('button[data-fila-dispensar]');
     chk(await bt.count() === 1 && (await bt.textContent()) === 'Dispensar este lote' && !/\bpri\b/.test(await bt.getAttribute('class')), '"Dispensar este lote" é secundário');
@@ -63,6 +63,7 @@ const chipN = async (page, k) => +(await page.locator(`#fila-chips [data-fila-fi
     const ordem = await lm.locator('td.fila-acao button').allTextContents();
     chk(ordem.indexOf('Dispensar este lote') === ordem.indexOf('Tentar de novo') + 1, 'fica ao lado de "Tentar de novo": ' + JSON.stringify(ordem));
 
+    await lm.locator('details.lista-mais > summary').click();   // redesenho Material novo: as ações secundárias ficam no "⋯"
     await bt.click();
     await op.waitForSelector('#conf-ov', { timeout: 5000 });
     const conf = await op.textContent('#conf-ov');
@@ -76,11 +77,12 @@ const chipN = async (page, k) => +(await page.locator(`#fila-chips [data-fila-fi
     chk(/Lote dispensado/.test(toastTxt) && await op.locator('#toast .toast-acao').count() === 1 && (await op.locator('#toast .toast-acao').textContent()) === 'Desfazer', 'toast com "Desfazer": "' + toastTxt + '"');
     await op.waitForTimeout(400);
     chk(await chipN(op, 'gente') === n0 - 1, `chip "Precisam de você" desce de ${n0} para ${n0 - 1}: ${await chipN(op, 'gente')}`);
-    chk(/1 com problema/.test(await op.textContent('#fila-resumo')), 'resumo depois: "1 com problema"');
+    chk(await chipN(op, 'problema') === 1, 'aba "Com problema" depois: 1');
     await op.click('#toast .toast-acao');
     await op.waitForSelector(MILLAN, { timeout: 10000 });
     chk(true, '"Desfazer" traz o lote de volta para a lista');
     await op.waitForTimeout(400);
+    await op.locator(MILLAN).locator('details.lista-mais > summary').click();
     await op.locator(MILLAN).locator('button[data-fila-dispensar]').click();
     await op.waitForSelector('#conf-ov', { timeout: 5000 }); await op.fill('#conf-motivo', 'o CAMP Vision não reescreve o status.json'); await op.click('#conf-ov [data-conf="sim"]');
     await op.waitForFunction(() => !document.querySelector('#filas-body tr[data-nav="projeto/F016-P0024"]'), null, { timeout: 10000 });
@@ -98,10 +100,10 @@ const chipN = async (page, k) => +(await page.locator(`#fila-chips [data-fila-fi
     // Precisa de você (Home): o Ignorar ▾ do lote com erro tem "Dispensar este lote (para todos)"
     await op.evaluate(() => nav('painel'));
     await op.waitForSelector('#ini-tarefas [data-ini-grupo="problemas"]', { timeout: 15000 }); await op.waitForTimeout(400);
-    const prob = (await op.textContent('#ini-tarefas [data-ini-grupo="problemas"]')).replace(/\s+/g, ' ');
+    const prob = (await op.textContent('#ini-tarefas')).replace(/\s+/g, ' ');
     chk(/CRASA/.test(prob) && !/Fazenda Fernando Millan/.test(prob), 'Home: o lote dispensado saiu do "Com problema"; o outro continua: "' + prob.slice(0, 200) + '"');
-    const task = op.locator('#ini-tarefas [data-ini-grupo="problemas"] .ini-task', { hasText: 'CRASA' });
-    await task.locator('summary', { hasText: 'Ignorar' }).click();
+    const task = op.locator('#ini-tarefas .ini-task', { hasText: 'CRASA' }).first();   // redesenho da Home §8: a fila é uma lista só (o grupo virou atributo do item)
+    await task.locator('summary.ini-mais-bt').click();   // UX-03: o "Ignorar ▾" da Home virou "⋯" (Mais ações); este seletor já falhava no main
     const opc = task.locator('[data-ini-dispensar]');
     chk(await opc.count() === 1 && (await opc.textContent()) === 'Dispensar este lote (para todos)', 'Ignorar ▾: "Dispensar este lote (para todos)"');
     await opc.click();

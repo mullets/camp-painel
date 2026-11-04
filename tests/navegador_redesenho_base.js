@@ -69,7 +69,7 @@ const CONTRASTE = () => {
     try {
     // §3 grupos e item ativo
     const grupos = await page.$$eval('#nav > .grp', es => es.filter(e => e.offsetParent).map(e => e.textContent.trim()));
-    chk(grupos.join(' · ') === 'Principal · Acervo · Público e processos · Administração', '§3 grupos do menu: ' + grupos.join(' · '));
+    chk(grupos.join(' · ') === 'Visão geral · Acervo · Público e processos · Administração', '§3 grupos do menu: ' + grupos.join(' · '));
     const ativo = await page.evaluate(() => { const a = document.querySelector('#nav button.on'), o = document.querySelector('#nav button:not(.on)[data-v="projetos"]'), side = document.querySelector('.side');
       const cs = getComputedStyle(a), bar = getComputedStyle(a, '::before');
       return { v: a.dataset.v, cur: a.getAttribute('aria-current'), bg: cs.backgroundColor, bgSide: getComputedStyle(side).backgroundColor, bgOutro: getComputedStyle(o).backgroundColor, peso: +cs.fontWeight, pesoOutro: +getComputedStyle(o).fontWeight, bar: bar.width, barBg: bar.backgroundColor } });

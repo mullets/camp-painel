@@ -3787,12 +3787,13 @@ A verificação que **cria** decisões acontece em outros pontos: `POST /api/est
 
 ### D.2.3 Material novo / Fila (`#filas`, tecla 3)
 
-**O que mostra** (`carregarFilas` → `GET /api/filas`, leitura): cada lote (`lista_processamento`) com a fase calculada por `filas_fase.fase_da_lista`.
+**O que mostra** (`carregarFilas` → `GET /api/filas?leve=1`, leitura; `leve` tira da resposta os JSONs do CAMP Vision que a tela não usa): cada lote (`lista_processamento`) com a fase calculada por `filas_fase.fase_da_lista`. Redesenho de 04/11/2026 (documento do Rafael; componentes em `docs/UI.md`, "Lista operacional"; textos em `docs/vocabulario.md`, "Material novo").
 
-1. Abas: **Precisam de você** (fases `erro`, `importar`, `conferir`, `aprovar`, `publicar` — padrão quando há algo), **CAMP Vision lendo** (`processando`), **Publicadas**, **Todas**, e uma aba extra quando a rota traz um filtro específico (`importar`, `conferir`, `aprovar`, `publicar`, `erro`, `operador` = importar+conferir, `admin` = aprovar+publicar).
-2. Resumo em frase ("2 para conferir · 1 para importar") e, para operador+ com mais de um lote para importar, **"Importar todas (N)"** → tarefa `POST /api/filas/importar-todas?tarefa=1` (operador).
+0. Cartões (`desenharCardsFila`): lotes que precisam de você (= menu), folhas para conferir, parados há mais de 48 h, projetos no site (`/api/pendencias.projetos_no_site`, abre Projetos › No site). Cada cartão seleciona a aba/filtro correspondente.
+1. Abas (`FILA_ABAS`, `filaNaAba`): **Precisam de você** · **Chegando** · **Para conferir** · **Pronto para publicar** · **Com problema** · **No site** · **Todos** (sem dispensados e sem o "Agora não" da pessoa, como `contagens.py`; "Todos" mostra tudo), e uma aba extra quando a rota traz um filtro fino (`importar`, `aprovar`, `publicar`, `processando`, `operador` = importar+conferir, `admin` = aprovar+publicar; `#filas/erro` abre "Com problema").
+2. Busca e filtros (`FILA_EST`, combináveis): busca local (título, código parcial, fundo, lote, autoria registrada, pasta), Autoria (só `projeto.autoria`), Fundo, Etapa (`FILA_ETAPAS`), Ordenar (`FILA_ORDENS`; o "Parado há" do cabeçalho alterna "Parado há mais tempo"). Estado na `sessionStorage` (`camp.fila.estado`): voltar do projeto restaura aba, filtros e página (`filaChegou`). Paginação no navegador (25/50/100; só a página fica no DOM) e densidade Confortável/Compacta. Ao lado de "N registros", para operador+ com mais de um lote para importar, **"Importar todas (N)"** → tarefa `POST /api/filas/importar-todas?tarefa=1` (operador).
 3. Na aba "Precisam de você", a tabela se divide em "Para operador (importar e conferir)" e "Para admin (aprovar e publicar)".
-4. Cada linha (`linhaFila`): código e título do projeto, fundo e nome do lote; situação com etiqueta, frase, barra de progresso e a régua compacta dos 7 passos; idade ("esperando há N dias" em amarelo acima de 48 h); **um** botão do próximo passo:
+4. Cada linha (`linhaFila`): ▸ detalhe, miniatura (1ª folha do lote com imagem, campo `miniatura`), título (link) com código e lote; fundo e autoria registrada (`projeto_autoria`); progresso que diz o que mede (`filaProgresso`); situação com etiqueta e frase; "Parado há" (amarelo acima de 48 h) e "atualizado há"; **um** botão do próximo passo e o "⋯" com as ações secundárias (Tentar de novo, Dispensar, Apagar lote). O detalhe (`filaDetalheHTML`) traz identificação, a régua dos 7 passos com as folhas por etapa, pendências e o último evento/histórico (`/api/projetos/{c}/detalhe`, na abertura). "Verificar destino pelo painel" fica em **Ferramentas avançadas** (recolhido).
 
 | Fase | Botão | Quem | O que chama |
 |---|---|---|---|
@@ -3804,7 +3805,7 @@ A verificação que **cria** decisões acontece em outros pontos: `POST /api/est
 | processando | — | — | "Na fila" ou "Lendo" |
 
 5. A linha inteira abre o projeto (`data-nav="projeto/…"`). Admin vê a pasta do QNAP.
-6. Cabeçalho: **"Nova lista"** (modal `#m-lista`, raro: pasta antiga fora do fluxo; `POST /api/filas`, operador; o projeto precisa existir) e **"Varrer QNAP"** (`data-pode="qnap.varrer"`, tarefa `POST /api/filas/varrer-qnap?tarefa=1`, operador), que lista ao fim as pastas ignoradas com o motivo.
+6. Cabeçalho: **"Novo lote"** (antes "Nova lista"; modal `#m-lista`, raro: pasta antiga fora do fluxo; `POST /api/filas`, operador; o projeto precisa existir) e **"Varrer QNAP"** (`data-pode="qnap.varrer"`, tarefa `POST /api/filas/varrer-qnap?tarefa=1`, operador), que lista ao fim as pastas ignoradas com o motivo.
 7. Vazio: "Ainda não chegou material do CAMP Vision" com "Procurar no QNAP agora".
 
 ### D.2.4 Problemas (`#erros`, tecla 4)

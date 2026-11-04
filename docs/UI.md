@@ -106,10 +106,18 @@ Já usam o componente: `estadoErroHTML` (todas as listas), a página "Sem acesso
 
 ## Moldura, menu e topo (redesenho §3, §4, §19)
 
-- **Menu** (`#nav`): grupos `.grp` Principal · Acervo · Público e processos · Administração · Ajuda. Item = `<button data-v="rota">` com
+- **Menu** (`#nav`): grupos `.grp` Visão geral · Acervo · Público e processos · Administração · Ajuda. Item = `<button data-v="rota">` com
   ícone SVG 24×24 de traço (aparece com 18 px) + nome + `<span class="n">` **só** quando o item é demanda (fila, pedido, decisão).
   `.n.r` = demanda que bloqueia. Ativo: `.on` + `aria-current="page"` (fundo `--sel`, barra azul, texto 600). Item novo = linha em
   `NAV_ATALHOS`/`AJUDA_ATALHOS` (o `check_ui` confere) e, se for só de admin, `data-pode` ou a regra de papel no CSS.
+- **Cores do menu** (redesenho Material novo §2–3): o menu é **azul-marinho escuro nos dois temas** (`--side-bg`), separado da área
+  principal clara; texto `--side-ink`/`--side-ink2`, título de grupo `--side-grp`, hover `--side-hover`, item ativo **fundo azul**
+  `--side-sel` com texto branco `--side-sel-ink` e a barra branca à esquerda. Não use `--surface`/`--ink` dentro de `.side`.
+- **Marca**: `a#brand-home.brand` = logo (`.mark`) + `.brand-nome` "CAMP"; clique = `nav('painel')` (fecha a gaveta no celular).
+- **Contadores**: o botão do menu é uma grade `ícone | rótulo | contador`; a pílula `.n` fica sempre na 3ª coluna (mesmo `right` em todos os
+  itens, 22 px de altura, `min-width` 34 px, algarismos tabulares, `fmtN`). A tecla do atalho (`kbd`) não ocupa espaço: aparece por cima,
+  só no item sem contador. Recolhido, o contador vira selo de 10 px no canto do ícone. Largura do menu aberto: `--side` 280 px (cabe
+  "Pedidos de alta resolução" + "1.234" numa linha). `tests/navegador_menu_camp.js` confere.
 - **Larguras**: ≥ 1280 px menu aberto; 721–1279 px menu recolhido por padrão (`camp.side` lembra a escolha da pessoa); ≤ 720 px gaveta
   (`gavetaMenu(true|false)`, botão `#nav-gaveta` no topo, fundo `#nav-fundo`; com ela aberta `.main` fica `inert`).
 - **Home**: o contêiner `#v-painel .ini-grid` tem duas `.ini-col` — principal larga + secundária 300–360 px (400 px ≥ 1600). Abaixo de
@@ -123,3 +131,32 @@ Já usam o componente: `estadoErroHTML` (todas as listas), a página "Sem acesso
 - **Alerta do topo** (`#system-banner`): `.impede` (QNAP desconectado ou quase cheio, CAMP Vision sem sinal há 1 h, site sem resposta)
   é persistente: aparece em todas as telas, inclusive na Home e para o operador, com `role="alert"` e sem "Fechar por hoje".
   O resto (backup, conferência atrasada) continua com "Fechar por hoje" e fora da Home.
+
+## Lista operacional (redesenho Material novo, 04/11/2026 — documento do Rafael §9)
+
+Os componentes que a tela **Material novo** (`#v-filas`) usa e que a tela **Projetos** deve reutilizar (Fase 4). O compartilhamento é
+visual e técnico: cada tela mantém os seus dados, as suas regras e as suas etapas (Projetos NÃO usa a barra de conferência de folhas como
+progresso de catalogação). JS em `LST` (`frontend/index.html`); CSS no bloco "Redesenho Material novo §4–7, §9–10". `tests/navegador_material_novo.js` confere.
+
+| # (§9) | Componente | Marcação / função | Regras |
+| --- | --- | --- | --- |
+| 1 | Cabeçalho de página | `.hdr` > `h1` + `p.sub` + `.act` (ações) | ações de entrada à direita; no máximo um `.btn.pri`; ação só com permissão (`data-pode`) |
+| 2 | Cartão de indicador selecionável | `.ind-cards` > `LST.cards([{v,l,d,attr,sel,tom,titulo}])` → `button.ind-card[aria-pressed]` com `.metrica` | número real (carregando = `NUM_SKEL`; sem medida = "—" + "não consegui medir agora"); rótulo com a UNIDADE; clicar abre o conjunto (ou outra tela, dito no `.d`); `tom:'atencao'` só com texto que explique |
+| 3 | Abas com contadores | `.lista-op>.abas-sit` > `LST.abas([{k,rot,n,titulo}],atual,'data-…')` | contagem = linhas que a aba mostra, da mesma regra do servidor (`contagens.py`); `titulo` explica o que conta; `b` com `NUM_SKEL` enquanto carrega |
+| 4 | Busca e filtros combináveis | `.filterbar.lista-filtros` > `label.busca-local.filtro-sel` (input `type=search`) + `label.filtro-sel` (`span` + `select`) ; `LST.opcoes(el,[[valor,rótulo]],atual)` ; `LST.casa(campos,q)` | filtros somam (nunca zeram os outros); opções só com dados reais; `select.ativo` marca o filtro ligado; "Limpar filtros" aparece só com filtro; tecla F foca a busca; busca sem acento e com código parcial (zeros à esquerda: "0012", "F003P0012") |
+| 5 | Tabela com colunas e ordenação | `table.lista-tab[data-sem-ordenar]` + `th[aria-sort]` > `button.th-ord` | ordenação sobre a lista INTEIRA (não só a página); `aria-sort` atualizado; cabeçalho fixo (`top:var(--top-h)`, medido do `.top`); colunas secundárias saem por `@container lista` (largura da lista, não da janela) |
+| 6 | Célula de projeto com miniatura | `.proj-cel` > `button.exp-bt` + `LST.mini(codigoDaFolha)` + `.proj-txt` (`a.proj-tit` + `.proj-meta`) | miniatura só de imagem REAL do próprio registro (`/api/itens/{c}/previa?t=120`, `loading=lazy`, 56×42); sem imagem, quadro neutro; nunca foto genérica; o título é link (teclado) |
+| 7 | Barra de progresso com legenda | `LST.progresso({rot,feito,total,texto,cls})` → `.prog` | `rot` diz O QUE mede ("Arquivos recebidos", "Importação", "Conferência", "Aprovação", "Publicação"); texto completo visível e no `aria-label`; 100% de um passo não é "pronto" |
+| 8 | Etiqueta de situação | `situacaoTag(situacaoDe(fase))` (+ `.tag` auxiliares) | texto sempre; a cor só ajuda (as 5 situações do vocabulário) |
+| 9 | Ação contextual + menu secundário | `.acao-cel` > um `.btn.sm.pri` (a etapa atual) + `LST.mais(rótulo,[botões role=menuitem])` (`details.mais-menu.lista-mais`, nome "Mais ações: …") | a ação depende da etapa e do papel; destrutivo em `.perigo-txt`, com a confirmação de sempre (`confirmar`) |
+| 10 | Painel de detalhes expansível | `button.exp-bt[aria-expanded][aria-controls]` → `tr.fila-det-tr` > `.fila-det[role=region]` com `section`s | só desenhado quando aberto; o que precisa do servidor carrega na abertura (esqueleto → dado ou `estadoHTML('erro')`) |
+| 11 | Paginação e densidade | `.lista-rodape` > `.pg-ctl` (`paginadorHTML({total,pagina,por,opcoes:[25,50,100]})`) + `.densidade` (`[data-…-dens="conf|comp"]`) | só a página fica no DOM; "Mostrando a–b de N" com números reais; Compacta esconde miniatura e frases secundárias; preferências em `LISTA_MEM` |
+| 12 | Estados | `estadoHTML('vazio'|'erro'|'carregando',…)`, `vazioHTML`, `tabelaErro` | filtro sem resultado diz quantos registros a aba tem e oferece "Limpar filtros"; erro nunca vira zero |
+
+- **Volta para a lista**: o estado (aba, busca, filtros, página) fica em `sessionStorage` (`LST.sessao`, com try/catch); voltando da página
+  do registro pela MESMA rota, tudo volta; chegando por um link com filtro, começa limpo naquele filtro. Ordenação, itens por página e
+  densidade são preferência da pessoa (`localStorage`).
+- **Celular** (≤ 720 px): `thead` some e cada linha vira cartão (projeto → progresso → situação → tempo → ação); abas rolam na horizontal;
+  filtros em duas colunas. Nada de rolagem lateral na página.
+- **Ferramentas avançadas**: função operacional sensível vai para `details.ferramentas-avancadas` (contorno tracejado, resumo com o
+  estado atual, aviso `.fa-aviso`), recolhida por padrão; a confirmação de cada ação continua a mesma.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CAMP Acervos — Administração</title>
+<title>CAMP — Administração</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -963,6 +963,151 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 @media (min-width:1600px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr) 400px}}
 @media (max-width:1279px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr)}}   /* notebook/tablet: a coluna da direita desce para baixo da principal */
 @media (min-width:900px) and (max-width:1279px){#v-painel .ini-grid>.ini-col+.ini-col{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}   /* e usa a largura em duas colunas */
+/* ===== Redesenho Material novo §2–3 (04/11/2026) · menu lateral azul-marinho escuro nos DOIS temas, independente da área clara;
+   item ativo com fundo azul e texto branco. Tokens --side-* (docs/UI.md, "Moldura"). ===== */
+:root{--side-bg:#0E1F3A;--side-ink:#F2F5FA;--side-ink2:#C3CEDF;--side-grp:#9DB0CC;--side-hover:#1B3359;--side-sel:#2457A6;--side-sel-ink:#FFFFFF;--side-line:#25406A;--side-n:#22395F;--side-n-r:#C93C3C}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--side-bg:#0A1628;--side-hover:#16294A;--side-sel:#2D63B8;--side-line:#1F3456;--side-n:#1C3152;--side-n-r:#C93C3C}}
+:root[data-theme="dark"]{--side-bg:#0A1628;--side-hover:#16294A;--side-sel:#2D63B8;--side-line:#1F3456;--side-n:#1C3152;--side-n-r:#C93C3C}
+.side{background:var(--side-bg);border-right-color:var(--side-line);color:var(--side-ink)}
+.side .nav button{color:var(--side-ink2)}
+.side .nav button:hover{background:var(--side-hover);color:var(--side-ink)}
+.side .nav button.on{background:var(--side-sel);color:var(--side-sel-ink)}
+.side .nav button.on::before{background:var(--side-sel-ink)}
+.side .nav button:focus-visible,.side .brand:focus-visible{outline:2px solid var(--side-ink);outline-offset:-2px}
+.side .nav .grp{color:var(--side-grp)}
+.side .foot{color:var(--side-ink2);border-top-color:var(--side-line)}.side .foot a{color:var(--side-ink)}
+.side .collapse{background:var(--side-bg);border-color:var(--side-line);color:var(--side-ink2)}
+.side .nav-mais-pc[aria-expanded="true"]{color:var(--side-ink)}
+.side .nav button kbd{background:var(--side-hover);color:var(--side-ink);border-color:var(--side-line)}
+@media (min-width:721px){.app.collapsed .side .nav .grp{border-top-color:var(--side-line)}}
+/* Menu (pedido do Rafael, 04/11): a marca é o logo + "CAMP" e leva SEMPRE à Home (#painel) */
+.side .brand{color:var(--side-ink);text-decoration:none;border-radius:var(--r-md);margin:0 0 6px;padding:6px 8px 12px}
+.side .brand:hover{background:var(--side-hover)}
+.side .brand .mark-camp{fill:var(--side-ink)}.side .brand .mark-camp rect{fill:var(--side-bg)}
+.side .brand-nome{font:700 var(--fs-xl)/1 var(--sans);letter-spacing:.06em}
+@media (min-width:721px){.app.collapsed .side .brand{justify-content:center;padding:6px 0 12px}.app.collapsed .side .brand-nome{display:none}}
+/* contadores: todos na MESMA coluna à direita, sem encostar no rótulo; algarismos tabulares */
+/* o botão vira grade: ícone | rótulo (o texto ocupa o espaço) | contador; a pílula fica sempre na 3ª coluna, colada à direita */
+/* largura: o rótulo mais longo com contador ("Pedidos de alta resolução" + "1.234") cabe numa linha, sem cortar nem quebrar */
+:root{--side:280px}
+.side{padding-left:8px;padding-right:8px}
+.side .nav button{display:grid;grid-template-columns:18px minmax(0,1fr) auto;column-gap:10px;min-width:0;overflow:hidden;padding-left:10px;padding-right:10px;font-size:var(--fs-tab)}
+.side .nav button.on::before{left:-8px}
+.side .nav button .n{grid-column:3;grid-row:1;justify-self:end;margin-left:0;min-width:34px;height:22px;display:inline-grid;place-items:center;padding:0 7px;font:600 var(--fs-2xs)/1 var(--sans);font-variant-numeric:tabular-nums;background:var(--side-n);color:var(--side-ink);border:0;border-radius:var(--r-pill)}
+.side .nav button .n.r{background:var(--side-n-r);color:#FFFFFF}
+.side .nav button.on .n{background:var(--side-sel-ink);color:var(--side-sel)}
+.side .nav button.on .n.r{background:var(--side-n-r);color:#FFFFFF;box-shadow:0 0 0 2px var(--side-sel-ink)}
+/* a tecla do atalho não empurra a pílula: fica por cima, à direita, e só no item sem contador (no item com contador a tecla está na dica) */
+.side .nav button kbd{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
+.side .nav button:has(.n:not([hidden])) kbd{display:none}
+@media (min-width:721px){.app.collapsed .side .nav button{grid-template-columns:minmax(0,1fr);justify-items:center;column-gap:0}.app.collapsed .side .nav button .n:not([hidden]){position:absolute;top:3px;left:calc(50% + 8px);width:10px;height:10px;min-width:0;padding:0;font-size:0;background:var(--side-ink2);box-shadow:0 0 0 2px var(--side-bg)}
+  .app.collapsed .side .nav button .n.r:not([hidden]){background:var(--side-n-r)}.app.collapsed .side .nav button.on .n:not([hidden]){box-shadow:0 0 0 2px var(--side-sel)}}
+/* ===== Redesenho Material novo §4–7, §9–10 (04/11/2026) · lista operacional: cartões de indicador, abas, filtros, tabela, detalhe,
+   paginação e densidade. Componentes reutilizáveis (docs/UI.md, "Lista operacional"); só tokens. ===== */
+.ind-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--gap-card);margin:0 0 var(--gap-card)}
+.ind-card{display:flex;align-items:flex-start;text-align:left;padding:14px 16px;min-height:96px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);color:var(--ink);cursor:pointer;font:inherit}
+.ind-card:hover{background:var(--hover);border-color:var(--line-forte)}
+.ind-card[aria-pressed="true"]{background:var(--sel);border-color:var(--blue);box-shadow:inset 0 -3px 0 var(--blue)}.ind-card[aria-pressed="true"] .l{color:var(--sel-ink)}
+.ind-card:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.ind-card.atencao .v{color:var(--amber)}.ind-card:disabled{cursor:default}
+.lista-op{overflow:visible;container-type:inline-size;container-name:lista}
+.lista-op>.abas-sit{padding:4px 10px 0;margin:0;gap:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}.lista-op>.abas-sit .btn{flex:none}
+.lista-op>.abas-sit .btn{min-height:44px;padding:8px 9px;font-size:var(--fs-tab);border-radius:0;border:0;border-bottom:3px solid transparent;background:none;color:var(--ink2)}
+.lista-op>.abas-sit .btn[aria-pressed="true"]{color:var(--sel-ink);border-bottom-color:var(--blue);font-weight:600;background:none}
+.lista-op>.abas-sit .btn:hover{color:var(--ink);background:var(--hover)}
+.lista-op>.abas-sit .btn b{font:600 var(--fs-xs)/1.5 var(--sans);font-variant-numeric:tabular-nums;margin-left:6px;padding:1px 8px;border-radius:var(--r-pill);background:var(--surface2);border:1px solid var(--line)}
+.lista-op>.abas-sit .btn[aria-pressed="true"] b{background:var(--sel);border-color:var(--sel);color:var(--sel-ink)}
+.lista-filtros{gap:10px 12px;padding:14px var(--pad-card);align-items:flex-end}
+.lista-filtros .busca-local{flex:1 1 240px;min-width:0;display:block}
+.lista-filtros .busca-local input{display:block;width:100%;height:44px;padding:10px 12px;border:1px solid var(--line-forte);border-radius:var(--r-md);font-size:var(--fs-body)}
+.lista-filtros .filtro-sel{display:grid;gap:2px;font-size:var(--fs-2nd);color:var(--ink2);min-width:0}
+.lista-filtros .filtro-sel select{height:44px;width:170px;max-width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);font-size:var(--fs-tab);color:var(--ink)}
+.lista-filtros .filtro-sel select.ativo{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+.lista-resumo .cnt{font-size:var(--fs-tab);color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lista-resumo #fila-limpar{min-height:32px}
+.lista-resumo{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin:0;padding:0 var(--pad-card) 10px;font-size:var(--fs-2nd);color:var(--ink2);min-height:0}
+.lista-tw{overflow:visible}
+.lista-tab{table-layout:auto}
+.lista-tab thead th{position:sticky;top:var(--top-h,0px);z-index:3;background:var(--surface2);font-size:var(--fs-2nd);color:var(--ink2);border-bottom:1px solid var(--line);padding:10px 12px}
+.lista-tab th .th-ord{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-weight:600;color:inherit;border-radius:var(--r-sm)}
+.lista-tab th .th-ord::after{content:"↕";opacity:.45;font-weight:400}
+.lista-tab th[aria-sort="ascending"] .th-ord::after{content:"↑";opacity:1}.lista-tab th[aria-sort="descending"] .th-ord::after{content:"↓";opacity:1}
+.lista-tab th[aria-sort="ascending"],.lista-tab th[aria-sort="descending"]{color:var(--sel-ink)}
+.lista-tab th .th-ord:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.lista-tab td{padding:12px 10px;vertical-align:middle;font-size:var(--fs-tab)}
+.lista-tab tbody tr[data-nav]{cursor:pointer}
+.lista-tab tr[data-nav] td:last-child{padding-right:12px}.lista-tab tr[data-nav] td:last-child::after{content:none}   /* o título é o link do projeto; a seta das listas comuns sobra aqui */
+.proj-meta .code,.proj-meta .fila-lote{white-space:nowrap}
+.lista-tab .c-proj{min-width:280px;width:30%}.lista-tab .c-fundo{min-width:130px;max-width:200px}.lista-tab .c-prog{min-width:150px;width:17%}
+.lista-tab .c-sit{min-width:170px;max-width:280px}.lista-tab .c-parado{white-space:nowrap}.lista-tab .c-acao{text-align:right;white-space:nowrap}
+.proj-cel{display:flex;gap:10px;align-items:center;min-width:0}
+.exp-bt{flex:none;width:32px;height:32px;display:grid;place-items:center;border:1px solid transparent;border-radius:var(--r-md);background:none;color:var(--ink2);cursor:pointer}
+.exp-bt:hover{background:var(--surface2);border-color:var(--line)}.exp-bt:focus-visible{outline:2px solid var(--blue)}
+.exp-bt svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;transition:transform .15s}.exp-bt[aria-expanded="true"] svg{transform:rotate(90deg)}
+.mini{flex:none;width:56px;height:42px;border-radius:var(--r-sm);background:var(--surface2) linear-gradient(135deg,transparent 46%,var(--line) 47%,var(--line) 53%,transparent 54%);border:1px solid var(--line);overflow:hidden;display:block}
+.mini img{width:100%;height:100%;object-fit:cover;display:block;background:var(--surface2)}
+.proj-txt{display:grid;gap:2px;min-width:0}
+.proj-tit{font-weight:600;font-size:var(--fs-tab);color:var(--ink);text-decoration:none;line-height:1.3}.proj-tit:hover,.proj-tit:focus-visible{text-decoration:underline}
+.proj-meta{font-size:var(--fs-2nd);color:var(--ink2);display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline}.proj-meta .code{font-size:var(--fs-2nd)}
+.proj-meta.so-estreito{display:none}.fundo-nome+.proj-meta{margin-top:2px}
+.fundo-nome{display:block;line-height:1.3}
+.prog{display:grid;gap:3px;min-width:0}
+.prog-rot{font-size:var(--fs-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2)}
+.prog-txt{font-size:var(--fs-2nd);color:var(--ink)}
+.prog-barra{display:flex;align-items:center;gap:8px}.prog-barra progress.pg{flex:1;max-width:none;height:8px}
+.prog-pct{font-size:var(--fs-2nd);color:var(--ink2);font-variant-numeric:tabular-nums;min-width:3.2em;text-align:right}
+.prog.feito .prog-txt{color:var(--green)}.prog.pendente .prog-txt{color:var(--amber)}
+.c-sit .sit-chips{display:inline-flex;flex-wrap:wrap;gap:4px;vertical-align:middle}
+.c-sit .sit-frase{display:block;margin-top:4px;font-size:var(--fs-2nd);color:var(--ink2);line-height:1.45}
+.c-parado .atualizado-lote{display:block;margin-top:2px}.c-parado .rot-cel{display:none;color:var(--ink2)}
+.acao-cel{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end}
+.lista-mais>summary{min-width:36px;min-height:36px;justify-content:center;font-size:var(--fs-sub);line-height:1}
+.lista-mais .mais-lista{right:0;top:calc(100% + 4px);text-align:left}
+.lista-tab .fila-grupo td{background:var(--surface2);font-size:var(--fs-2nd);padding:8px 12px}
+.fila-det-tr>td{background:var(--surface2);padding:0;cursor:default}
+.fila-det-tr:hover>td{background:var(--surface2)}
+.fila-det{display:grid;grid-template-columns:minmax(240px,1fr) minmax(300px,1.3fr) minmax(220px,1fr);gap:16px 24px;padding:16px 20px 18px 56px;border-left:3px solid var(--blue)}
+.fila-det>section:last-child{grid-column:1/-1}
+@container lista (max-width:900px){.fila-det{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.fila-det>section:nth-child(2){grid-column:1/-1;grid-row:1}}
+.fila-det h3{margin:0 0 8px;font-size:var(--fs-tab);font-weight:600}
+.det-dl{display:grid;gap:6px;margin:0}.det-dl>div{display:grid;grid-template-columns:minmax(110px,40%) minmax(0,1fr);gap:8px}
+.det-dl dt{color:var(--ink2);font-size:var(--fs-2nd)}.det-dl dd{margin:0;font-size:var(--fs-2nd);overflow-wrap:anywhere}
+.det-folhas,.det-alertas{margin:8px 0 0;padding-left:18px;font-size:var(--fs-2nd);display:grid;gap:4px}
+.fila-det .steps.caminho{font-size:var(--fs-xs)}
+.fila-hist .hist{font-size:var(--fs-2nd)}.det-ult{margin:0 0 6px;font-size:var(--fs-2nd)}
+.lista-rodape{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between;padding:10px var(--pad-card);border-top:1px solid var(--line2)}
+.lista-rodape .pg-ctl{padding:0;flex:1 1 auto;font-size:var(--fs-tab)}
+.densidade{display:inline-flex;gap:4px;align-items:center;font-size:var(--fs-2nd);color:var(--ink2)}.densidade>span{margin-right:4px}
+/* densidade compacta: sem miniatura e sem o selo de "atualizado", linhas mais baixas */
+.dens-comp .lista-tab td{padding-top:6px;padding-bottom:6px}.dens-comp .lista-tab tbody tr{height:auto}
+.dens-comp .lista-tab .mini,.dens-comp .lista-tab .atualizado-lote,.dens-comp .lista-tab .sit-frase{display:none}
+/* ferramentas avançadas: recolhidas, identificadas e com aviso (protege contra clique acidental) */
+.ferramentas-avancadas{margin-top:var(--gap-card);border:1px dashed var(--line-forte);border-radius:var(--r-card);background:var(--surface)}
+.ferramentas-avancadas>summary{cursor:pointer;padding:14px var(--pad-card);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;min-height:44px}
+.ferramentas-avancadas .fa-tit{font-weight:600;font-size:var(--fs-sub)}.ferramentas-avancadas .fa-sub{font-size:var(--fs-2nd);color:var(--ink2)}
+.ferramentas-avancadas .fa-aviso{margin:0 var(--pad-card) 12px}
+.ferramentas-avancadas #fila-destino-auto>.panel{margin:0 var(--pad-card) var(--pad-card)}
+/* largura da LISTA (não da janela: o menu aberto ou recolhido muda o espaço): só as colunas secundárias saem (o fundo vai para baixo
+   do projeto); a ação continua */
+@container lista (max-width:1150px){.lista-tab .c-fundo{display:none}.lista-tab .proj-meta.so-estreito{display:block}.lista-tab .c-proj{min-width:200px;width:auto}.lista-tab .c-prog{min-width:120px}.lista-tab .c-sit{min-width:140px}.lista-tab td{padding-left:8px;padding-right:8px}}
+@container lista (max-width:960px){.lista-tab .mini{display:none}}
+@container lista (max-width:860px){.lista-tab .c-parado .atualizado-lote{display:none}}
+/* celular: cada linha vira um cartão (projeto → situação → progresso → parado → ação), sem rolagem lateral */
+@media (max-width:720px){
+  .ind-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ind-card{min-height:0;padding:12px}
+  .lista-op>.abas-sit{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}.lista-op>.abas-sit .btn{flex:none}
+  .lista-filtros .filtro-sel{flex:1 1 45%}.lista-filtros .busca-local{flex:1 1 100%}
+  .lista-tab .c-parado .rot-cel{display:inline}.lista-filtros .filtro-sel select{max-width:none;width:100%;min-width:0}.lista-filtros .cnt{margin-left:0}
+  .lista-tab,.lista-tab tbody{display:block}.lista-tab thead{display:none}
+  .lista-tab tbody tr[data-fase]{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:14px var(--pad-card);border-bottom:1px solid var(--line);height:auto}
+  .lista-tab tbody tr[data-fase]>td{display:block;padding:0;border:0;min-width:0;max-width:none;width:auto;text-align:left}
+  .lista-tab tbody tr[data-fase]>td.c-fundo{display:none}
+  .lista-tab .c-acao{white-space:normal}.lista-tab .acao-cel{justify-content:flex-start;flex-wrap:wrap}.lista-tab .acao-cel .btn{min-height:44px}
+  .lista-tab .lista-mais .mais-lista{right:auto;left:0}
+  .lista-tab .fila-grupo,.lista-tab .fila-det-tr,.lista-tab tbody tr:not([data-fase]){display:block}.lista-tab .fila-grupo td,.lista-tab .fila-det-tr>td,.lista-tab tbody tr:not([data-fase])>td{display:block}
+  .fila-det{padding:14px;grid-template-columns:minmax(0,1fr)}
+  .lista-rodape{flex-direction:column;align-items:stretch}
+}
 /* ===== Redesenho §4 · barra superior: busca no centro, "Estado dos sistemas", alerta que impede o trabalho, conta num menu só ===== */
 .top{flex:none;gap:10px;padding:12px var(--gutter) 10px;border-bottom:1px solid var(--line2)}   /* flex:none: na coluna do .main o topo não encolhe por baixo do conteúdo */
 .top .search{flex:1 1 260px;max-width:640px;margin:0 auto;min-width:0}
@@ -1502,10 +1647,10 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 <body>
 <div class="app">
 <aside class="side"><button type="button" class="collapse" id="collapse" title="Recolher menu ([ ou ⌘/Ctrl + B)" aria-label="Recolher menu ([ ou ⌘/Ctrl + B)" aria-expanded="true" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
-  <div class="brand"><div class="mark" title="Casa da Arquitetura Moderna Paulista"><svg class="mark-camp" viewBox="0 0 48 44" role="img" aria-label="CAMP"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></div><div><b>Acervos</b><small>administração interna</small></div></div>
+  <a class="brand" id="brand-home" href="#painel" aria-label="CAMP — ir para a página inicial" title="Ir para a página inicial (Precisa de você)"><span class="mark"><svg class="mark-camp" viewBox="0 0 48 44" aria-hidden="true" focusable="false"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></span><span class="brand-nome" aria-hidden="true">CAMP</span></a>
   <nav class="nav" id="nav">
     <!-- Redesenho §3 (04/11/2026; antes UX-28): grupos por finalidade — Principal (as filas do dia, sempre à vista) · Acervo · Público e processos · Administração; Ajuda no fim. O resto no "Mais". Nome do menu = título da página -->
-    <div class="grp">Principal</div>
+    <div class="grp">Visão geral</div>
     <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Precisa de você<span class="n" id="n-gente" hidden></span></button>
     <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Material novo<span class="n" id="n-filas" hidden></span></button>
     <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Problemas<span class="n" id="n-err" hidden></span></button>
@@ -1565,15 +1710,33 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
   </section>
   <!-- FILAS -->
   <section class="content" id="v-filas">
-  <div class="hdr"><div><h1>Material novo</h1><p class="sub">O que o CAMP Vision já leu e o que ainda precisa de uma pessoa: importar, conferir, aprovar e publicar.</p></div><div class="act"><button class="btn pri" onclick="openModal('m-lista')">Nova lista</button></div></div>
-  <div class="abas-sit" id="fila-chips" role="group" aria-label="Filtrar por situação"></div>
-  <p class="sub" id="fila-resumo"></p>
+  <!-- Redesenho Material novo (04/11/2026, documento do Rafael §4–7): cabeçalho → panorama (cartões) → abas → busca e filtros → tabela → paginação;
+       ferramentas avançadas (Verificar destino pelo painel) no fim, recolhidas. Componentes em docs/UI.md, "Lista operacional". -->
+  <div class="hdr"><div><h1>Material novo</h1><p class="sub">Acompanhe os lotes que o CAMP Vision leu e o que ainda precisa de uma pessoa: importar, conferir, aprovar e publicar.</p></div><div class="act" id="fila-acoes"><button class="btn" type="button" data-pode="lote.novo" onclick="openModal('m-lista')" title="Registrar à mão um lote de uma pasta antiga, fora do fluxo das estações">Novo lote</button></div></div>
+  <div class="ind-cards" id="fila-cards" role="group" aria-label="Panorama do material novo"></div>
   <div id="fila-sem-processar"></div>
-  <div id="fila-destino-auto"></div>
-  <div class="panel"><div class="filterbar"><input placeholder="Filtrar por projeto, fundo ou lista… (tecla F)" data-filter><span class="cnt"></span></div><div class="tw"><table>
-    <thead><tr><th>Projeto</th><th>Situação</th><th><button type="button" class="lnk" data-fila-ordem aria-pressed="false" title="Ordenar pelo tempo parado na mesma etapa (clique de novo para voltar à ordem normal)">Parado há</button></th><th></th></tr></thead>
-    <tbody id="filas-body"><tr><td colspan="4" class="empty">Carregando…</td></tr></tbody>
-  </table></div></div>
+  <div class="panel lista-op" id="fila-lista">
+    <div class="abas-sit" id="fila-chips" role="group" aria-label="Situação dos lotes"></div>
+    <div class="filterbar lista-filtros" id="fila-filtros">
+      <label class="busca-local filtro-sel"><span>Buscar</span><input type="search" id="fila-q" aria-label="Buscar: filtrar por projeto, fundo ou lote" placeholder="Filtrar por projeto, fundo ou lote… (tecla F)" autocomplete="off" spellcheck="false"></label>
+      <label class="filtro-sel"><span>Autoria</span><select id="fila-f-arq" aria-label="Autoria registrada no projeto"></select></label>
+      <label class="filtro-sel"><span>Fundo</span><select id="fila-f-fundo" aria-label="Fundo"></select></label>
+      <label class="filtro-sel"><span>Etapa</span><select id="fila-f-etapa" aria-label="Etapa do fluxo"></select></label>
+      <label class="filtro-sel"><span>Ordenar</span><select id="fila-f-ordem" aria-label="Ordenar por"></select></label>
+    </div>
+    <div class="lista-resumo"><span class="cnt" id="fila-cnt" aria-live="polite"></span><button type="button" class="btn sm lnk" id="fila-limpar" hidden>Limpar filtros</button><span id="fila-resumo"></span></div>
+    <div class="tw lista-tw"><table class="lista-tab fila-tab" data-sem-ordenar>
+      <caption class="sr">Lotes de material novo</caption>
+      <thead><tr><th scope="col" class="c-proj" aria-sort="none"><button type="button" class="th-ord" data-fila-ord="projeto">Projeto / lote</button></th><th scope="col" class="c-fundo" aria-sort="none"><button type="button" class="th-ord" data-fila-ord="fundo">Fundo / autoria</button></th><th scope="col" class="c-prog">Progresso</th><th scope="col" class="c-sit">Situação</th><th scope="col" class="c-parado" aria-sort="none"><button type="button" class="th-ord" data-fila-ordem aria-pressed="false" title="Ordenar pelo tempo parado na mesma etapa (clique de novo para voltar à ordem do trabalho)">Parado há</button></th><th scope="col" class="c-acao"><span class="sr">Ação</span></th></tr></thead>
+      <tbody id="filas-body"><tr><td colspan="6" class="empty">Carregando…</td></tr></tbody>
+    </table></div>
+    <div class="lista-rodape" id="fila-rodape"><div class="pg-ctl" id="fila-pag" role="navigation" aria-label="Paginação dos lotes"></div>
+      <div class="densidade" role="group" aria-label="Densidade da lista"><span>Densidade</span><button type="button" class="btn sm" data-fila-dens="conf" aria-pressed="true">Confortável</button><button type="button" class="btn sm" data-fila-dens="comp" aria-pressed="false">Compacta</button></div></div>
+  </div>
+  <details class="ferramentas-avancadas" id="fila-avancado"><summary><span class="fa-tit">Ferramentas avançadas</span> <span class="fa-sub" id="fila-avancado-sub">Verificar destino pelo painel</span></summary>
+    <p class="help fa-aviso">Funções operacionais sensíveis: mudam para onde os lotes vão. Leia a explicação de cada modo antes de trocar; o que é aplicado fica no Histórico e dá para desfazer enquanto o CAMP Vision não reorganizar a pasta.</p>
+    <div id="fila-destino-auto"></div>
+  </details>
   <details class="fila-ajuda"><summary>Como funciona</summary><p>O CAMP Vision lê as pastas do QNAP e grava o resultado. Aí o trabalho passa para você, nesta ordem: <b>importar</b> as folhas para o painel, <b>conferir</b> (clique na folha; dá para virar, corrigir e aprovar todas de uma vez), <b>aprovar</b> o lote (admin) e <b>publicar</b> o projeto no site (admin). A lista só aparece em "Publicadas" quando o projeto é publicado.</p></details>
 </section>
 
@@ -2088,7 +2251,7 @@ function mostrarNaoEncontrado(titulo,detalhe,fallback='painel'){let sec=document
   sec.innerHTML=`<div class="hdr"><div><h1>${escHtml(titulo)}</h1></div></div>${estadoHTML(semAcesso?'sem-permissao':'vazio',{titulo:detalhe,texto:semAcesso?'O seu papel neste painel não abre esta página.':'',quem:semAcesso?'um administrador (o Rafael)':'',acoes:`<button class="btn pri" onclick="go('${fallback}')">Voltar</button>`})}`;show('nao-encontrado');document.getElementById('where').innerHTML='<b>Não encontrado</b>';document.getElementById('gcrumb').innerHTML='<b>Não encontrado</b>'}
 const PAPEL_NIVEL={leitura:1,operador:2,admin:3,master:4};
 // UMA regra: papel mínimo de cada ação/tela. O servidor continua sendo a garantia (devolve 403); aqui o botão simplesmente não aparece para quem não pode.
-const PODE={'estante.registrar':'operador','estante.mover':'operador','projeto.criar':'admin','projeto.editar':'admin','projetos.lote':'admin','arquiteto.cadastrar':'admin','problema.resolver':'operador','pedido.mudar':'operador','rota.estacoes':'operador','rota.uso':'admin','rota.inscricoes':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','emprestimo.criar':'operador','emprestimo.devolver':'operador','analytics.diagnostico':'admin'};
+const PODE={'estante.registrar':'operador','estante.mover':'operador','projeto.criar':'admin','projeto.editar':'admin','projetos.lote':'admin','arquiteto.cadastrar':'admin','problema.resolver':'operador','pedido.mudar':'operador','rota.estacoes':'operador','rota.uso':'admin','rota.inscricoes':'admin','rota.auditoria':'admin','rota.qualidade':'admin','rota.config':'admin','fundo.reservar':'admin','fundo.sigla':'admin','fundos.exportar':'operador','qnap.varrer':'operador','lote.novo':'operador','emprestimo.criar':'operador','emprestimo.devolver':'operador','analytics.diagnostico':'admin'};
 /* Redesenho §19: no celular o menu inteiro abre numa GAVETA pelo ☰ do cabeçalho (antes: barra de baixo com 5 destinos + "Mais").
    Aberta: o resto da tela fica inerte (o Tab não sai da gaveta); fecha com Esc, no fundo escurecido, ao escolher um item ou ao alargar a tela. */
 const MQ_CELULAR=window.matchMedia?matchMedia('(max-width:720px)'):{matches:false,addEventListener(){}};
@@ -2104,6 +2267,10 @@ document.addEventListener('click',e=>{if(e.target.closest('#nav-busca')){if(docu
   if(e.target.closest('#nav-mais-pc')){const n=document.getElementById('nav');navSecAbrir(!(n&&n.classList.contains('sec-aberta')),true)}});
 document.addEventListener('click',e=>{if(e.target.closest('#nav-gaveta')){gavetaMenu(!document.body.classList.contains('nav-aberto'));return}
   if(document.body.classList.contains('nav-aberto')&&(e.target.closest('#nav-fundo')||e.target.closest('#nav button[data-v]')))gavetaMenu(false)});
+/* redesenho Material novo §7: o cabeçalho da tabela fica fixo logo abaixo do topo (que também é fixo e muda de altura) */
+{const t=document.querySelector('.top');if(t&&window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.setProperty('--top-h',t.offsetHeight+'px')).observe(t)}
+/* Menu (Rafael, 04/11): o logo + "CAMP" leva SEMPRE à Home (o mesmo nav() do "Precisa de você": respeita alterações não salvas e fecha a gaveta) */
+document.addEventListener('click',e=>{const b=e.target.closest('#brand-home');if(!b||e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;e.preventDefault();if(document.body.classList.contains('nav-aberto'))gavetaMenu(false);nav('painel')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('nav-aberto')){e.preventDefault();e.stopPropagation();gavetaMenu(false)}},true);
 /* §3: setas ↑ ↓ (e Home/End) andam pelos itens visíveis do menu; Tab continua normal */
 document.getElementById('nav').addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||!e.target.closest('#nav button'))return;
@@ -2114,7 +2281,7 @@ function pode(acao){if(acao==='qnap.varrer')return !!EU&&(['admin','master'].inc
   const min=PODE[acao];return !min||(!!EU&&(PAPEL_NIVEL[EU.papel]||0)>=PAPEL_NIVEL[min])}
 function aplicarPermissoes(){document.querySelectorAll('[data-pode]').forEach(el=>{el.hidden=!pode(el.dataset.pode)})}
 function route_to(route){route=route||'painel';setTimeout(()=>{window.PJ_ROTA=route;vigiarMarca()},0);   /* exaustão CAMP-105: nova visita ao projeto (vindo de outra tela) reabre a gaveta do que trava; redesenhar na mesma visita não */
-  document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){FILA_FILTRO=a1||null;carregarFilas()}if(v==='projetos'){carregarProjetosAPI(a1?{situacao:a1}:{});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='erros'){ERR_F.projeto=/^F\d{3}(-P\d{4})?$/.test(a1)?a1:'';carregarErros()}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
+  document.body.classList.toggle('na-painel',route.split('/')[0]==='painel');{const v0=route.split('/')[0];if(EU&&PODE['rota.'+v0]&&!pode('rota.'+v0)){setWhere('painel');crumbs('painel');mostrarNaoEncontrado('Sem acesso','Esta página é só para administradores. Fale com o Rafael.','painel');return}}setWhere(route);crumbs(route);montarPaginasAjuda();if(EU){const v=route.split('/')[0];if(v==='localizacao')carregarLocalizacoes();if(v==='estante')abrirEstante(route);else estnPararCamera();const a1=route.split('/')[1]||'';if(v==='emprestimos')carregarEmprestimos(a1||null);if(v==='decisoes')carregarDecisoes();if(v==='config')carregarVisitasConfig();if(v==='filas'){filaChegou(a1);carregarFilas()}if(v==='projetos'){carregarProjetosAPI(a1?{situacao:a1}:{});avisoNomeDePasta();if(window.matchMedia&&matchMedia('(min-width:721px)').matches)setTimeout(()=>{const q=document.getElementById('proj-q');if(q&&document.activeElement===document.body)q.focus()},50)}if(v==='fundos'){if(a1)FUNDO_FILTRO=a1;carregarFundosAPI()}if(v==='solicitacoes')carregarSolicitacoes();if(v==='inscricoes')carregarInscricoes();if(v==='erros'){ERR_F.projeto=/^F\d{3}(-P\d{4})?$/.test(a1)?a1:'';carregarErros()}if(v==='painel'&&typeof carregarPainel==='function')carregarPainel();if(v==='estacoes'){estAba(a1,true);carregarEstacoes();setTimeout(()=>{if(estAdmin())carregarReplica();carregarAlertas()},1500)}if(v==='auditoria')carregarAuditoria();if(v==='qualidade')carregarQualidadeCV();if(v==='uso')carregarUso();if(v==='relatorios')carregarRelatorios();if(v==='visitas')carregarVisitas();if(v==='etiquetas')aplicarRotaEtiquetas(route);if(v==='arquitetos'&&/^\d+$/.test(a1)&&['admin','master'].includes(EU.papel))editarAgente(+a1)}const [v,arg]=route.split('/');if(v==='fundo'&&arg){show('fundo','fundos');showFundo(arg)}else if(v==='projeto'&&arg){if(window.PJ_ROTA!==route)window.PJ_GAV=null;show('projeto','projetos');showProjeto(arg)}else if(v==='item'&&arg){show('item','projetos');showItem(arg)}else if(v==='duplicatas'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('duplicatas','projetos');showDuplicatas(arg)}else if(v==='conferir'&&/^F\d{3}-P\d{4}$/.test(arg||'')){show('conferir','projetos');showConferir(arg,route.split('/')[2]||null)}else if(document.getElementById('v-'+v))show(v,v);else mostrarNaoEncontrado('Página não encontrada','A rota #'+route+' não existe neste painel.','painel')}
 if(!history.state||!history.state.camp){const r0=location.hash.slice(1)||'painel';history.replaceState({camp:true,campIndex:0,campRoute:r0,campScroll:0},'','#'+r0);NAV_INDEX=0}
 let POP_VOLTANDO=false;window.addEventListener('popstate',e=>{if(POP_VOLTANDO){POP_VOLTANDO=false;return}if(temAlteracoes()){POP_VOLTANDO=true;history.go(1);confirmarDescarte().then(ok=>{if(ok){ALTERACOES_PENDENTES.clear();atualizarDirtyUI();history.back()}});return}const st=e.state||{};NAV_INDEX=Number(st.campIndex)||0;const route=st.campRoute||location.hash.slice(1)||'painel';route_to(route);requestAnimationFrame(()=>{mainEl.scrollTop=Number(st.campScroll)||0})});
 navEl.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)});
@@ -3581,7 +3748,7 @@ function ativarPaginacao(el,{por=50,modo='paginas'}={}){
   ctl.addEventListener('change',ev=>{const sl=ev.target.closest('select[data-pg="por"]');if(sl){est.por=+sl.value;est.pagina=1;aplicar()}});
   let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(aplicar,0)}).observe(el,{childList:true,attributes:true,subtree:true,attributeFilter:['style','hidden']});
   aplicar()}
-const PAG_ALVOS=[['#filas-body',50,'paginas'],['#fundos-body',50,'paginas'],['#loc-body',50,'paginas'],['#usr-body',50,'paginas'],['#v-solicitacoes tbody',50,'paginas'],['#v-arquitetos tbody',50,'paginas'],['.project-series .thumbs',60,'mais']];
+const PAG_ALVOS=[['#fundos-body',50,'paginas'],['#loc-body',50,'paginas'],['#usr-body',50,'paginas'],['#v-solicitacoes tbody',50,'paginas'],['#v-arquitetos tbody',50,'paginas'],['.project-series .thumbs',60,'mais']];
 function ativarPaginacoes(){PAG_ALVOS.forEach(([sel,por,modo])=>document.querySelectorAll(sel).forEach(el=>ativarPaginacao(el,{por,modo})))}
 let _pgT=0;new MutationObserver(()=>{clearTimeout(_pgT);_pgT=setTimeout(ativarPaginacoes,150)}).observe(document.body,{childList:true,subtree:true});
 function situacaoProjetoHTML(p){return situacaoTag(situacaoDe(p.fase,p.status_site,+p.folhas||0))}
@@ -7009,15 +7176,12 @@ function atualizarContadoresMenu(p){if(!p)return;const pr=(id,n,vermelho)=>{cons
   const dica=(v,t)=>{const b=document.querySelector(`#nav button[data-v="${v}"]`);if(b)b.title=t};
   if(p.pedem_acao){dica('painel','Decisões, lotes para importar e conferir e problemas que impedem publicar (sem o que você escondeu).');dica('erros','Só o que pede ação: bloqueia a publicação ou pede correção, sem os avisos. É o número da aba “Abertos” de Problemas.')}
   if(p.lotes_precisam_de_voce!=null)dica('filas','Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro. É o número da aba “Precisam de você” de Material novo.')}
-async function atualizarPendencias(){try{atualizarContadoresMenu(await API('/api/pendencias'))}catch(_){}}
+async function atualizarPendencias(){try{const p=await API('/api/pendencias');window.PEND_ULT=p;window.PEND_ERRO=false;atualizarContadoresMenu(p)}catch(_){window.PEND_ERRO=true}if(typeof desenharCardsFila==='function'&&rotaAtual().startsWith('filas'))desenharCardsFila()}   /* redesenho Material novo: o cartão "projetos no site" usa a mesma contagem (contagens.py) */
 function mostrarTop10Analytics(){const a=window._analyticsAtual||{};openDrawer('Top 10 do site','últimos 30 dias',`<div class="grid" style="gap:18px"><div><h3>Fundos</h3><ol class="rank">${rankHTML(a.top_fundos,'fundo',10)}</ol></div><div><h3>Projetos</h3><ol class="rank">${rankHTML(a.top_projetos,'projeto',10)}</ol></div><div><h3>Páginas</h3><ol class="rank">${rankHTML(a.top_paginas,'pagina',10)}</ol></div></div>`)}
 
 let FILAS_SRV=[],FILA_FILTRO=null;
 const FILA_GENTE=['erro','importar','conferir','aprovar','publicar'];
 let FILAS_EM=null;
-async function carregarFilas(){try{FILAS_SRV=await API('/api/filas');FILAS_EM=new Date().toISOString().slice(0,19).replace('T',' ');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
-  desenharFilas();atualizarPendencias();carregarSemProcessar();carregarDestinoAuto();
-  const act=sec.querySelector('.hdr .act');if(act&&!act.querySelector('[data-qnap]')){const b=document.createElement('button');b.className='btn';b.dataset.qnap='1';b.dataset.pode='qnap.varrer';b.textContent='Varrer QNAP';b.onclick=varrerQnap;act.prepend(b)}}catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#filas-body',e.message,'carregarFilas()')}}}   /* H3: erro nunca vira a lista de exemplo */
 /* CAMP-017: lotes que a estação enviou há mais de 1 h e o CAMP Vision ainda não processou */
 async function carregarSemProcessar(){const el=document.getElementById('fila-sem-processar');if(!el)return;if(EU&&EU.papel==='leitura'){el.innerHTML='';return}   /* a rota é de operador (estacao_eventos.py): leitura não pede nem vê o quadro */
   try{const r=await API('/api/estacoes/eventos/pendentes');
@@ -7028,25 +7192,115 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-ler-
   b.disabled=true;try{const r=await API(`/api/estacoes/eventos/${encodeURIComponent(id)}/${ler?'ler-agora':'dispensar'}`,{method:'POST'});toast(r.mensagem||(ler?'Pasta lida.':'Aviso dispensado.'));carregarFilas()}catch(er){b.disabled=false;toast(er.message)}},true);
 function idadeFila(s){const t=Date.parse(String(s||'').replace(' ','T')+'Z');return isNaN(t)?'—':textoIdade((Date.now()-t)/1000)}
 const FILA_FILTRO_GRUPO={operador:['importar','conferir'],admin:['aprovar','publicar'],chegando:['processando','importar']},FILA_FILTRO_NOME={importar:'Chegando: falta importar',conferir:'Para conferir',aprovar:'Pronto para publicar: falta aprovar',publicar:'Pronto para publicar',erro:'Com problema',operador:'Importar e conferir',admin:'Esperam um admin'};
-function filaPassa(l){const f=FILA_FILTRO;if(l.dispensado&&f!=='todas')return false;   /* UX-35: o lote dispensado fica só em "Todas" (para todos) */
-  return f==='gente'?(FILA_GENTE.includes(l.fase)||!!l.leitura_interrompida)&&!l.adiado:f==='todas'?true:FILA_FILTRO_GRUPO[f]?FILA_FILTRO_GRUPO[f].includes(l.fase):l.fase===f}
+/* ===== Redesenho Material novo (04/11/2026, documento do Rafael §4–7, §9–13) =====
+   Componentes da "lista operacional" (docs/UI.md): LST.cards (cartão de indicador selecionável), LST.abas (abas com contadores reais),
+   LST.opcoes (filtros), LST.progresso (barra com legenda), LST.mini (miniatura real ou quadro neutro), LST.mais (menu secundário),
+   LST.casa (busca local sem acento, código parcial com zeros), LST.sessao (estado da lista na volta). Cada tela mantém os seus dados e regras. */
+const LST={
+  cards(cs){return cs.map(c=>`<button type="button" class="ind-card${c.tom?' '+c.tom:''}" ${c.attr||''} aria-pressed="${!!c.sel}"${c.titulo?` title="${escHtml(c.titulo)}"`:''}><span class="metrica"><span class="v">${c.v}</span><span class="l">${escHtml(c.l)}</span>${c.d?`<span class="d">${escHtml(c.d)}</span>`:''}</span></button>`).join('')},
+  abas(as,atual,attr){return as.map(a=>`<button type="button" class="btn sm" ${attr}="${escHtml(a.k)}" aria-pressed="${atual===a.k}"${a.titulo?` title="${escHtml(a.titulo)}"`:''}>${escHtml(a.rot)} <b>${a.n==null?NUM_SKEL:fmtN(a.n)}</b></button>`).join('')},
+  opcoes(el,ops,v){if(!el)return;const h=ops.map(([k,t])=>`<option value="${escHtml(k)}">${escHtml(t)}</option>`).join('');if(el._h!==h){el.innerHTML=h;el._h=h}el.value=ops.some(o=>o[0]===v)?v:'';el.classList.toggle('ativo',!!el.value&&el.value!==ops[0][0])},
+  progresso(o){const pct=o.total?Math.min(100,Math.round(100*(+o.feito||0)/o.total)):null;
+    return `<div class="prog${o.cls?' '+o.cls:''}"><span class="prog-rot">${escHtml(o.rot)}</span><span class="prog-txt">${escHtml(o.texto)}</span>${pct!=null?`<span class="prog-barra"><progress class="pg" value="${escHtml(+o.feito||0)}" max="${escHtml(o.total)}" aria-label="${escHtml(o.rot+': '+o.texto)}"></progress><span class="prog-pct" aria-hidden="true">${pct}%</span></span>`:''}</div>`},
+  mini(codigo){return `<span class="mini" aria-hidden="true">${codigo?`<img src="${escHtml(urlPreviaFolha(codigo,0,120))}" alt="" loading="lazy" decoding="async" width="56" height="42" onerror="this.remove()">`:''}</span>`},
+  mais(rotulo,itens){return itens.length?`<details class="mais-menu lista-mais" data-no-nav><summary class="btn sm" aria-haspopup="menu" aria-label="${escHtml('Mais ações: '+rotulo)}" title="Mais ações"><span aria-hidden="true">⋯</span></summary><div class="mais-lista" role="menu">${itens.join('')}</div></details>`:''},
+  normal(t){return String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()},
+  casa(campos,q){const h=LST.normal(campos.join(' ')),hs=h.replace(/[\s\-_./]/g,'');return LST.normal(q).split(/\s+/).filter(Boolean).every(t=>h.includes(t)||hs.includes(t.replace(/[\-_./]/g,'')))},
+  sessao:{get(k){try{return JSON.parse(sessionStorage.getItem(k)||'null')}catch(_){return null}},set(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(_){}}},
+  colator:new Intl.Collator('pt-BR',{sensitivity:'base',numeric:true})
+};
+/* Abas = as situações (CAMP-146) + "Precisam de você" (= o número do menu, UX-70) + "Todos". A contagem de cada aba é o número de linhas
+   que ela mostra, com a mesma regra das contagens do servidor (contagens.py): sem o lote dispensado (UX-35) e sem o "Agora não" desta pessoa. */
+const FILA_ABAS=[['gente','Precisam de você','Lotes que dependem de uma pessoa: importar, conferir, aprovar, publicar ou parados com erro.'],['chegando','Chegando','O CAMP Vision está lendo, ou as folhas ainda não vieram para o painel.'],['conferir','Para conferir','Há folhas que ninguém conferiu.'],['pronto','Pronto para publicar','Conferido; falta aprovar o lote ou o clique de publicar.'],['problema','Com problema','O CAMP Vision parou com erro.'],['publicado','No site','Lotes concluídos: o projeto está publicado e as folhas do lote já estão no site.'],['todas','Todos','Todos os lotes, inclusive os dispensados e os que você escondeu por 7 dias.']];
+const FILA_ETAPAS=[['','Todas'],['processando','CAMP Vision lendo'],['importar','Falta importar'],['destino','Verificar destino'],['interrompida','Leitura interrompida'],['conferir','Falta conferir'],['aprovar','Falta aprovar o lote'],['publicar','Falta publicar'],['erro','Parado com erro'],['publicado','No site'],['parado48','Parado há mais de 48 h'],['teste','Lote de teste'],['dispensado','Dispensados']];
+const FILA_ORDENS=[['trabalho','Ordem do trabalho'],['recente','Mais recente'],['parado','Parado há mais tempo'],['projeto','Projeto (A–Z)'],['fundo','Fundo (A–Z)']];
+const FILA_EST_PADRAO={q:'',arq:'',fundo:'',etapa:'',pagina:1};
+let FILA_EST={...FILA_EST_PADRAO,ordem:(()=>{try{const o=localStorage.getItem('camp.fila.ordem');return FILA_ORDENS.some(x=>x[0]===o)?o:'trabalho'}catch(_){return 'trabalho'}})(),por:+LISTA_MEM.get('fila.por',25)||25,dens:LISTA_MEM.get('fila.dens','conf')};
+let FILA_ROTA='',FILAS_OK=false;const FILA_ABERTOS=new Set();
+function filaGuardar(){LST.sessao.set('camp.fila.estado',{rota:FILA_ROTA,aba:FILA_FILTRO,q:FILA_EST.q,arq:FILA_EST.arq,fundo:FILA_EST.fundo,etapa:FILA_EST.etapa,pagina:FILA_EST.pagina})}
+/* Chegada pela rota: voltando do projeto (mesma rota), filtros, ordenação e página voltam como estavam; vindo de um link com filtro
+   (Home: "#filas/conferir"), começa limpo naquele filtro. */
+function filaChegou(arg){arg=arg==='erro'?'problema':(arg||'');const s=LST.sessao.get('camp.fila.estado');
+  if(s&&(s.rota||'')===arg){Object.assign(FILA_EST,{q:s.q||'',arq:s.arq||'',fundo:s.fundo||'',etapa:s.etapa||'',pagina:+s.pagina||1});FILA_FILTRO=s.aba||arg||null}
+  else{Object.assign(FILA_EST,FILA_EST_PADRAO);FILA_FILTRO=arg||null}
+  FILA_ROTA=arg;const q=document.getElementById('fila-q');if(q)q.value=FILA_EST.q}
+async function carregarFilas(){const cnt=document.getElementById('fila-cnt'),tb=document.getElementById('filas-body');
+  if(cnt&&(!FILAS_OK||(tb&&/^Carregando/.test((tb.querySelector('td.empty')||{}).textContent||''))))cnt.innerHTML=NUM_SKEL;   /* UX-22: carregando, nunca "0 registros" */
+  try{FILAS_SRV=await API('/api/filas?leve=1');FILAS_OK=true;FILAS_EM=new Date().toISOString().slice(0,19).replace('T',' ');const sec=document.getElementById('v-filas');sec.querySelector('.aviso-exemplo')?.remove();
+  desenharFilas();atualizarPendencias();carregarSemProcessar();carregarDestinoAuto();
+  const act=document.getElementById('fila-acoes');if(act&&!act.querySelector('[data-qnap]')){const b=document.createElement('button');b.className='btn';b.type='button';b.dataset.qnap='1';b.dataset.pode='qnap.varrer';b.textContent='Varrer QNAP';b.title='Ler agora as pastas do QNAP (o painel também lê sozinho de tempos em tempos)';b.onclick=varrerQnap;act.prepend(b);if(typeof aplicarPermissoes==='function')aplicarPermissoes()}}catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#filas-body',e.message,'carregarFilas()');if(cnt)cnt.textContent=''}}}   /* H3: erro nunca vira a lista de exemplo */
+function filaNaAba(l,a){if(a==='todas')return true;if(l.dispensado)return false;   /* UX-35: o lote dispensado fica só em "Todos" (para todos) */
+  if(a==='gente')return (FILA_GENTE.includes(l.fase)||!!l.leitura_interrompida)&&!l.adiado;
+  if(a==='publicado')return l.fase==='publicado';
+  if(['chegando','conferir','pronto','problema'].includes(a))return !l.adiado&&FASE_SITUACAO[l.fase]===a;
+  return FILA_FILTRO_GRUPO[a]?FILA_FILTRO_GRUPO[a].includes(l.fase):l.fase===a}   /* filtros finos que vêm de links (#filas/importar, #filas/admin…) */
+function filaPassa(l){return filaNaAba(l,FILA_FILTRO)}
+function filaNaEtapa(l,e){switch(e){case '':return true;case 'destino':return l.fase==='importar'&&!!l.destino_suspeito;case 'importar':return l.fase==='importar'&&!l.destino_suspeito;
+  case 'interrompida':return !!l.leitura_interrompida;case 'processando':return l.fase==='processando'&&!l.leitura_interrompida;case 'parado48':return (+l.parado_h||0)>48&&(FILA_GENTE.includes(l.fase)||!!l.leitura_interrompida);
+  case 'teste':return !!+l.lote_teste;case 'dispensado':return !!l.dispensado;default:return l.fase===e}}
+function filaCasaFiltros(l){const E=FILA_EST;if(E.fundo&&l.fundo_codigo!==E.fundo)return false;
+  if(E.arq){const a=String(l.projeto_autoria||'').trim();if(E.arq==='__sem__'?a:a!==E.arq)return false}
+  return !E.q||LST.casa([l.projeto_titulo,l.projeto_codigo,l.fundo,l.fundo_codigo,l.nome,identLote(l),l.projeto_autoria,l.pasta_qnap,'lote '+l.id],E.q)}
+function filaFiltrosAtivos(){const E=FILA_EST;return !!(E.q||E.arq||E.fundo||E.etapa)}
+function filaOrdenar(vis,ordem){const ord={erro:0,conferir:1,importar:2,aprovar:3,publicar:4,processando:5,publicado:6},C=LST.colator;
+  const trabalho=(a,b)=>FILA_FILTRO==='gente'&&(a.fase==='erro')===(b.fase==='erro')?String(a.atualizado_em).localeCompare(String(b.atualizado_em)):(ord[a.fase]-ord[b.fase])||(a.fase==='publicado'?String(b.atualizado_em).localeCompare(String(a.atualizado_em)):String(a.atualizado_em).localeCompare(String(b.atualizado_em)));
+  const f={parado:(a,b)=>(+b.parado_h||0)-(+a.parado_h||0),recente:(a,b)=>String(b.criado_em||'').localeCompare(String(a.criado_em||''))||(b.id-a.id),
+    projeto:(a,b)=>C.compare(a.projeto_titulo||'',b.projeto_titulo||'')||C.compare(a.projeto_codigo,b.projeto_codigo),fundo:(a,b)=>C.compare(a.fundo||'',b.fundo||'')||C.compare(a.projeto_titulo||'',b.projeto_titulo||'')}[ordem]||trabalho;
+  return vis.sort(f)}
+function desenharCardsFila(){const el=document.getElementById('fila-cards');if(!el)return;const L=FILAS_SRV||[],P=window.PEND_ULT;
+  const gente=L.filter(l=>filaNaAba(l,'gente')),conf=L.filter(l=>filaNaAba(l,'conferir')),folhas=conf.reduce((s,l)=>s+(+l.itens_pendentes||0),0),parados=gente.filter(l=>(+l.parado_h||0)>48);
+  const ns=P&&P.projetos_no_site!=null?+P.projetos_no_site:null;
+  el.innerHTML=!FILAS_OK?LST.cards([1,2,3,4].map(()=>({v:NUM_SKEL,l:'',attr:'disabled'}))):LST.cards([
+    {v:fmtN(gente.length),l:gente.length===1?'lote precisa de você':'lotes precisam de você',d:'importar, conferir, aprovar, publicar ou parados com erro',attr:'data-fila-card="gente"',sel:FILA_FILTRO==='gente'&&!FILA_EST.etapa,titulo:'É o número do menu "Material novo"'},
+    {v:fmtN(folhas),l:folhas===1?'folha para conferir':'folhas para conferir',d:`em ${qtd(conf.length,'lote','lotes')}`,attr:'data-fila-card="conferir"',sel:FILA_FILTRO==='conferir'&&!FILA_EST.etapa},
+    {v:fmtN(parados.length),l:'parados há mais de 48 h',d:'na mesma etapa, esperando uma pessoa',attr:'data-fila-card="parado48"',sel:FILA_EST.etapa==='parado48',tom:parados.length?'atencao':''},
+    {v:ns==null?(window.PEND_ERRO?'—':NUM_SKEL):fmtN(ns),l:'projetos no site',d:ns==null?(window.PEND_ERRO?'não consegui medir agora':''):`de ${fmtN(P.projetos_total)} projetos · ver em Projetos`,attr:'data-fila-card="no_site"',titulo:'Projetos publicados: qualquer visitante vê. A aba "No site" desta tela conta LOTES concluídos, não projetos.'}])}
 function desenharFilas(){
-  document.querySelectorAll('[data-fila-ordem]').forEach(b=>b.setAttribute('aria-pressed',String(FILA_ORDEM==='parado')));   // UX-09
-  const L=FILAS_SRV,n=f=>L.filter(f).length,nv=f=>L.filter(l=>!l.adiado&&!l.dispensado&&f(l)).length,gente=nv(l=>FILA_GENTE.includes(l.fase)||!!l.leitura_interrompida);   /* UX-05: o lote em "Agora não" desta pessoa não conta (igual ao menu) */
-  if(FILA_FILTRO===null)FILA_FILTRO=gente?'gente':'todas';
-  const chip=(k,t,q)=>`<button class="btn sm" data-fila-filtro="${k}" aria-pressed="${FILA_FILTRO===k}">${t} <b>${q}</b></button>`,extra=FILA_FILTRO_NOME[FILA_FILTRO];
-  document.getElementById('fila-chips').innerHTML=chip('gente','Precisam de você',gente)+chip('chegando','Chegando',nv(l=>FASE_SITUACAO[l.fase]==='chegando'))+chip('publicado','No site',n(l=>l.fase==='publicado'))+chip('todas','Todas',L.length)+(extra?chip(FILA_FILTRO,extra,n(filaPassa)):'');
-  const partes=['chegando','conferir','pronto','problema'].map(k=>[nv(l=>FASE_SITUACAO[l.fase]===k),SITUACOES[k][1].toLowerCase()]).filter(x=>x[0]);   // CAMP-146
-  const nImp=n(l=>l.fase==='importar'&&!l.destino_suspeito),nDest=n(l=>l.fase==='importar'&&l.destino_suspeito),podeImp=EU&&['operador','admin','master'].includes(EU.papel)&&nImp>1&&['gente','todas','importar'].includes(FILA_FILTRO);   // #97: "Importar todas (N)" vira UMA tarefa (H4); UX-01: sem os lotes em "Verificar destino"
-  document.getElementById('fila-resumo').innerHTML=(partes.length?escHtml(partes.map(x=>`${x[0]} ${x[1]}`).join(' · ')):'')+atualizadoHa(FILAS_EM)+(podeImp?` <button class="btn sm" data-fila-importar-todas>Importar todas (${nImp})</button>`:'')+(nDest?` <span class="tag a" data-fila-dest-n title="A pasta não parece do projeto: estes lotes não entram em Importar todas">${escHtml(qtd(nDest,'lote','lotes'))} para verificar destino</span>`:'');
-  const ordem={erro:0,conferir:1,importar:2,aprovar:3,publicar:4,processando:5,publicado:6};
-  const vis=L.filter(filaPassa).sort(FILA_ORDEM==='parado'?(a,b)=>(+b.parado_h||0)-(+a.parado_h||0):(a,b)=>FILA_FILTRO==='gente'&&(a.fase==='erro')===(b.fase==='erro')?String(a.atualizado_em).localeCompare(String(b.atualizado_em)):(ordem[a.fase]-ordem[b.fase])||(a.fase==='publicado'?String(b.atualizado_em).localeCompare(String(a.atualizado_em)):String(a.atualizado_em).localeCompare(String(b.atualizado_em))));
-  const OPER=['erro','importar','conferir'],gOp=vis.filter(l=>OPER.includes(l.fase)),gAd=vis.filter(l=>!OPER.includes(l.fase)),grp=(t,sub)=>`<tr class="fila-grupo"><td colspan="4"><b>${t}</b> <small class="help">${sub}</small></td></tr>`;
- document.getElementById('filas-body').innerHTML=vis.length?(FILA_FILTRO==='gente'&&gOp.length&&gAd.length?grp('Para operador','importar e conferir')+filaJuntar(gOp).map(linhaFila).join('')+grp('Para admin','aprovar e publicar')+filaJuntar(gAd).map(linhaFila).join(''):filaJuntar(vis).map(linhaFila).join('')):`<tr><td colspan="4" class="empty">${!L.length?vazioHTML('Ainda não chegou material do CAMP Vision.','Se você acabou de digitalizar, confira se a pasta foi enviada ao QNAP (tecla F12 na estação).',(pode('qnap.varrer')?'<button class="btn sm pri" onclick="varrerQnap()">Procurar no QNAP agora</button>':'')):FILA_FILTRO==='gente'?vazioHTML('Nada esperando por você agora.','Quando o CAMP Vision terminar de ler uma pasta do scanner, ela aparece aqui para você importar e conferir.','<button class="btn sm" data-fila-filtro="processando">Ver o que o CAMP Vision está lendo</button>'):'Nenhuma lista nesta situação.'}</td></tr>`}
+  const L=FILAS_SRV||[],E=FILA_EST,sec=document.getElementById('v-filas');if(!sec)return;
+  if(FILA_FILTRO===null)FILA_FILTRO=L.some(l=>filaNaAba(l,'gente'))?'gente':'todas';
+  sec.classList.toggle('dens-comp',E.dens==='comp');sec.querySelectorAll('[data-fila-dens]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filaDens===E.dens)));
+  const abas=FILA_ABAS.map(([k,rot,t])=>({k,rot,titulo:t,n:L.filter(l=>filaNaAba(l,k)).length}));
+  if(!FILA_ABAS.some(a=>a[0]===FILA_FILTRO))abas.push({k:FILA_FILTRO,rot:FILA_FILTRO_NOME[FILA_FILTRO]||FILA_FILTRO,n:L.filter(filaPassa).length});   /* o filtro fino de um link continua visível como aba */
+  document.getElementById('fila-chips').innerHTML=LST.abas(abas,FILA_FILTRO,'data-fila-filtro');
+  desenharCardsFila();
+  const arqs=[...new Set(L.map(l=>String(l.projeto_autoria||'').trim()).filter(Boolean))].sort(LST.colator.compare),fundos=new Map();L.forEach(l=>fundos.set(l.fundo_codigo,l.fundo));
+  LST.opcoes(document.getElementById('fila-f-arq'),[['','Todas'],...arqs.map(a=>[a,a]),['__sem__','Sem autoria registrada']],E.arq);
+  LST.opcoes(document.getElementById('fila-f-fundo'),[['','Todos'],...[...fundos].sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).map(([c,t])=>[c,`${c} · ${t}`])],E.fundo);
+  LST.opcoes(document.getElementById('fila-f-etapa'),FILA_ETAPAS,E.etapa);LST.opcoes(document.getElementById('fila-f-ordem'),FILA_ORDENS,E.ordem);
+  const q=document.getElementById('fila-q');if(q&&document.activeElement!==q&&q.value!==E.q)q.value=E.q;
+  document.getElementById('fila-limpar').hidden=!filaFiltrosAtivos();
+  sec.querySelectorAll('[data-fila-ordem]').forEach(b=>b.setAttribute('aria-pressed',String(E.ordem==='parado')));   // UX-09
+  sec.querySelectorAll('.fila-tab thead th[aria-sort]').forEach(th=>{const b=th.querySelector('[data-fila-ord],[data-fila-ordem]'),k=b&&(b.dataset.filaOrd||'parado');th.setAttribute('aria-sort',k===E.ordem?(k==='parado'?'descending':'ascending'):'none')});
+  const naAba=L.filter(filaPassa),vis=filaOrdenar(naAba.filter(l=>filaNaEtapa(l,E.etapa)&&filaCasaFiltros(l)),E.ordem);
+  const OPER=['erro','importar','conferir'],agrupar=FILA_FILTRO==='gente'&&E.ordem==='trabalho';
+  let itens;if(agrupar){const gOp=filaJuntar(vis.filter(l=>OPER.includes(l.fase))),gAd=filaJuntar(vis.filter(l=>!OPER.includes(l.fase)));itens=gOp.length&&gAd.length?[...gOp.map(x=>({x,g:'op'})),...gAd.map(x=>({x,g:'ad'}))]:[...gOp,...gAd].map(x=>({x}))}else itens=filaJuntar(vis).map(x=>({x}));
+  const total=itens.length,pags=Math.max(1,Math.ceil(total/E.por));E.pagina=Math.min(Math.max(1,E.pagina),pags);const ini=(E.pagina-1)*E.por,pag=itens.slice(ini,ini+E.por);
+  const grp=(t,sub)=>`<tr class="fila-grupo"><td colspan="6"><b>${t}</b> <small class="help">${sub}</small></td></tr>`;let ult=null,h='';
+  for(const it of pag){if(it.g&&it.g!==ult){h+=it.g==='op'?grp('Para operador','importar e conferir'):grp('Para admin','aprovar e publicar');ult=it.g}h+=linhaFila(it.x)}
+  const limpar='<button type="button" class="btn sm" data-fila-limpar>Limpar filtros</button>';
+  document.getElementById('filas-body').innerHTML=h||`<tr><td colspan="6" class="empty">${!L.length?vazioHTML('Ainda não chegou material do CAMP Vision.','Se você acabou de digitalizar, confira se a pasta foi enviada ao QNAP (tecla F12 na estação).',(pode('qnap.varrer')?'<button class="btn sm pri" onclick="varrerQnap()">Procurar no QNAP agora</button>':''))
+    :naAba.length&&filaFiltrosAtivos()?estadoHTML('vazio',{titulo:'Nenhum lote com estes filtros.',texto:`Há ${qtd(naAba.length,'lote','lotes')} nesta aba; os filtros escondem todos.`,acoes:limpar,solto:true})
+    :FILA_FILTRO==='gente'?vazioHTML('Nada esperando por você agora.','Quando o CAMP Vision terminar de ler uma pasta do scanner, ela aparece aqui para você importar e conferir.','<button class="btn sm" data-fila-filtro="chegando">Ver o que está chegando</button>')
+    :estadoHTML('vazio',{titulo:'Nenhum lote nesta situação.',texto:'Veja as outras abas ou "Todos".',acoes:filaFiltrosAtivos()?limpar:'',solto:true})}</td></tr>`;
+  const cnt=document.getElementById('fila-cnt');if(cnt)cnt.textContent=filaFiltrosAtivos()?`${fmtN(total)} de ${qtd(filaJuntar(naAba).length,'registro','registros')}`:qtd(total,'registro','registros');
+  const pg=document.getElementById('fila-pag');if(pg)pg.innerHTML=total>Math.min(25,E.por)||E.pagina>1||E.por!==25?paginadorHTML({total,pagina:E.pagina,por:E.por,opcoes:[25,50,100]}):(total?`<span class="pg-info">Mostrando ${fmtN(1)}–${fmtN(total)} de ${fmtN(total)}</span>`:'');
+  const nImp=L.filter(l=>l.fase==='importar'&&!l.destino_suspeito&&!l.dispensado).length,nDest=L.filter(l=>l.fase==='importar'&&l.destino_suspeito).length,podeImp=EU&&['operador','admin','master'].includes(EU.papel)&&nImp>1&&['gente','todas','importar','chegando'].includes(FILA_FILTRO);   // #97: "Importar todas (N)" vira UMA tarefa (H4); UX-01: sem os lotes em "Verificar destino"
+  document.getElementById('fila-resumo').innerHTML=`<span>${atualizadoHa(FILAS_EM)}</span>`+(podeImp?` <button type="button" class="btn sm pri" data-fila-importar-todas title="Traz para o painel as folhas de todos os lotes que o CAMP Vision já leu (menos os que estão em Verificar destino)">Importar todas (${nImp})</button>`:'')+(nDest?` <span class="tag a" data-fila-dest-n title="A pasta não parece do projeto: estes lotes não entram em Importar todas">${escHtml(qtd(nDest,'lote','lotes'))} para verificar destino</span>`:'');
+  filaGuardar()}
 /* UX-09: "Parado há" = tempo na MESMA etapa (etapa_desde, do servidor); a varredura do QNAP regrava atualizado_em e não serve de idade.
-   Clique no cabeçalho ordena do mais parado para o mais novo (o navegador lembra). */
-let FILA_ORDEM=(()=>{try{return localStorage.getItem('camp.fila.ordem')||''}catch(_){return ''}})();
-document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-ordem]');if(!b)return;e.stopPropagation();FILA_ORDEM=FILA_ORDEM==='parado'?'':'parado';try{localStorage.setItem('camp.fila.ordem',FILA_ORDEM)}catch(_){}desenharFilas()},true);
+   Clique no cabeçalho ordena do mais parado para o mais novo (o navegador lembra); o seletor "Ordenar" tem as outras ordens. */
+function filaMudar(o){Object.assign(FILA_EST,o);if(!('pagina' in o))FILA_EST.pagina=1;if('ordem' in o){try{localStorage.setItem('camp.fila.ordem',FILA_EST.ordem)}catch(_){}}if('por' in o)LISTA_MEM.set('fila.por',FILA_EST.por);if('dens' in o)LISTA_MEM.set('fila.dens',FILA_EST.dens);desenharFilas()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-ordem],[data-fila-ord],[data-fila-card],[data-fila-dens],[data-fila-limpar],#fila-limpar,[data-fila-exp]');if(!b||b.disabled||!b.closest('#v-filas'))return;e.stopPropagation();
+  if(b.hasAttribute('data-fila-ordem')){filaMudar({ordem:FILA_EST.ordem==='parado'?'trabalho':'parado'});return}
+  if(b.dataset.filaOrd){filaMudar({ordem:FILA_EST.ordem===b.dataset.filaOrd?'trabalho':b.dataset.filaOrd});return}
+  if(b.dataset.filaDens){filaMudar({dens:b.dataset.filaDens,pagina:FILA_EST.pagina});return}
+  if(b.dataset.filaExp){const id=b.dataset.filaExp;if(FILA_ABERTOS.has(id))FILA_ABERTOS.delete(id);else FILA_ABERTOS.add(id);filaMudar({pagina:FILA_EST.pagina});const nb=document.querySelector(`#filas-body [data-fila-exp="${CSS.escape(id)}"]`);if(nb)nb.focus();return}
+  if(b.dataset.filaCard){const k=b.dataset.filaCard;if(k==='no_site'){nav('projetos/publicado');return}FILA_FILTRO=k==='parado48'?'gente':k;filaMudar(k==='parado48'?{etapa:'parado48',ordem:'parado'}:{etapa:''});return}
+  const q=document.getElementById('fila-q');if(q)q.value='';filaMudar({...FILA_EST_PADRAO});if(q)q.focus()},true);
+document.addEventListener('input',e=>{if(e.target.id!=='fila-q')return;clearTimeout(window._filaQ);window._filaQ=setTimeout(()=>filaMudar({q:e.target.value.trim()}),150)});
+document.addEventListener('change',e=>{const m={'fila-f-arq':'arq','fila-f-fundo':'fundo','fila-f-etapa':'etapa','fila-f-ordem':'ordem'}[e.target.id];if(m){filaMudar({[m]:e.target.value||(m==='ordem'?'trabalho':'')});return}
+  const sl=e.target.closest&&e.target.closest('#fila-pag select[data-pg="por"]');if(sl)filaMudar({por:+sl.value||25})});
+document.addEventListener('click',e=>{const b=e.target.closest('#fila-pag button[data-pg]');if(!b||b.disabled)return;const a=b.dataset.pg;filaMudar({pagina:FILA_EST.pagina+(a==='ant'?-1:a==='prox'?1:0)});document.getElementById('fila-lista')?.scrollIntoView({block:'start'})});
 function espera48(l){if(l.dispensado)return escHtml(String(l.parado||'').replace(/^parado /,'')||idadeFila(l.atualizado_em));   // UX-35: dispensado não ganha "parado há"
   if(l.parado_h!=null){const h=+l.parado_h,txt=String(l.parado||'').replace(/^parado /,'');return (FILA_GENTE.includes(l.fase)||l.leitura_interrompida)&&h>48?`<span class="tag a" title="Na mesma etapa há mais de 48 horas">parado ${escHtml(txt)}</span>`:escHtml(txt||idadeFila(l.atualizado_em))}const t=Date.parse(String(l.atualizado_em||'').replace(' ','T')+'Z'),h=isNaN(t)?0:(Date.now()-t)/3600000;return FILA_GENTE.includes(l.fase)&&h>48?`<span class="tag a" title="Esta lista está esperando uma pessoa há mais de 48 horas">esperando há ${escHtml(textoIdade(h*3600).replace(/^há\s*/,''))}</span>`:escHtml(idadeFila(l.atualizado_em))}
 /* UX-08: o erro do CAMP Vision em linguagem de gente (avisos_cv.explicar_erro): o que aconteceu, o que fazer e, fechado, "Ver detalhes técnicos".
@@ -7066,29 +7320,90 @@ function identLote(l){if(l&&l.identificador)return l.identificador;const m=Strin
 function filaProntoPublicar(l){return l.fase==='publicar'||(l.fase==='aprovar'&&umPasso())}
 function filaJuntar(ls){const out=[],por={};for(const l of ls){if(!filaProntoPublicar(l)){out.push(l);continue}const k=l.projeto_codigo;if(por[k]){por[k].grupo.push(l);continue}por[k]={grupo:[l]};out.push(por[k])}
   return out.map(x=>x.grupo?(x.grupo.length>1?x:x.grupo[0]):x)}
-function linhaFilaGrupo(G){const l=G[0],pj=escHtml(l.projeto_codigo),ad=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel),tot=G.reduce((s,x)=>s+(+x.itens_total||0),0);
+/* Redesenho Material novo §5: a linha tem colunas com tarefas distintas — Projeto / lote (miniatura, nome, código, lote) · Fundo / autoria ·
+   Progresso (diz O QUE mede) · Situação (texto + cor) · Parado há · a ação da etapa atual (+ "⋯" com as secundárias). O detalhe (§6) abre
+   embaixo, pelo botão ▸ do começo da linha; a linha inteira continua abrindo o projeto. */
+const FILA_IX_CAMINHO={processando:2,erro:2,importar:3,conferir:4,aprovar:5,publicar:6,publicado:7};
+function filaProgresso(l){const f=l.fase,tot=+l.itens_total||0,conf=+l.itens_conferidos||0,enc=+l.folhas_encontradas||0,esp=+l.folhas_esperadas||0,noSite=Math.max(0,tot-(+l.fora_do_site||0));
+  if(f==='processando'||f==='erro')return LST.progresso(esp?{rot:f==='erro'?'Leitura parada':'Arquivos recebidos',feito:Math.min(enc,esp),total:esp,texto:`${fmtN(enc)} de ${qtd(esp,'arquivo esperado','arquivos esperados')}`}
+    :{rot:f==='erro'?'Leitura parada':'Arquivos recebidos',texto:enc?`${qtd(enc,'arquivo lido','arquivos lidos')} até agora`:'nenhum arquivo lido ainda'});
+  if(f==='importar')return LST.progresso({rot:'Importação',feito:0,total:enc||null,texto:enc?`0 de ${qtd(enc,'folha','folhas')} no painel`:'nenhuma folha no painel ainda'});
+  if(f==='conferir')return LST.progresso({rot:'Conferência',feito:conf,total:tot,texto:`${fmtN(conf)} de ${qtd(tot,'folha conferida','folhas conferidas')}`});
+  if(f==='aprovar')return LST.progresso({rot:'Aprovação',cls:'pendente',texto:`${qtd(tot,'folha conferida','folhas conferidas')} · falta aprovar o lote`});
+  if(f==='publicar')return LST.progresso({rot:'Publicação',feito:noSite,total:tot||null,texto:tot?`${fmtN(noSite)} de ${qtd(tot,'folha','folhas')} no site`:'lote aprovado · falta publicar'});
+  if(f==='publicado')return LST.progresso({rot:'Publicação',cls:'feito',texto:tot?`${qtd(tot,'folha','folhas')} · lote no site`:'lote concluído'});
+  return ''}
+function filaProjCel(l,extra){const pj=escHtml(l.projeto_codigo),id=String(l.id),ab=FILA_ABERTOS.has(id),alvo=`${l.projeto_codigo} · ${identLote(l)}`;
+  return `<td class="c-proj"><div class="proj-cel"><button type="button" class="exp-bt" data-fila-exp="${escHtml(id)}" aria-expanded="${ab}" aria-controls="fila-det-${escHtml(id)}" aria-label="${escHtml((ab?'Fechar os detalhes do lote ':'Ver os detalhes do lote ')+alvo)}" title="Detalhes do lote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>${LST.mini(l.miniatura)}
+    <div class="proj-txt"><a class="proj-tit" href="#projeto/${pj}">${escHtml(l.projeto_titulo||l.projeto_codigo)}</a><span class="proj-meta"><span class="code">${pj}</span>${extra}</span><span class="proj-meta so-estreito">${escHtml(l.fundo||'')}</span></div></div></td>`}
+function filaFundoCel(l){const a=String(l.projeto_autoria||'').trim();
+  return `<td class="c-fundo"><span class="fundo-nome">${escHtml(l.fundo||'')}</span><span class="proj-meta"><span class="code">${escHtml(l.fundo_codigo||'')}</span>${a?`<span title="Autoria registrada no projeto">autoria: ${escHtml(a)}</span>`:''}</span></td>`}
+function filaParadoCel(l){return `<td class="c-parado"><span class="rot-cel">Na mesma etapa: </span>${espera48(l)}${l.atualizado_em?`<small class="help atualizado-lote" title="Última mudança registrada no lote (a leitura do QNAP também conta)">atualizado ${escHtml(haTempo(l.atualizado_em))}</small>`:''}</td>`}
+function linhaFilaGrupo(G){const l=G[0],pj=escHtml(l.projeto_codigo),ad=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel),tot=G.reduce((s,x)=>s+(+x.itens_total||0),0),fora=G.reduce((s,x)=>s+(+x.fora_do_site||0),0);
   const lotes=G.map(x=>`<li title="${escHtml(x.nome)}">${escHtml(identLote(x))} · ${escHtml(qtd(+x.itens_total||0,'folha','folhas'))}</li>`).join('');
-  return `<tr data-fase="${escHtml(l.fase)}" data-fila-grupo="${pj}" data-nav="projeto/${pj}"><td><span class="code">${pj}</span> <b>${escHtml(l.projeto_titulo)}</b><small class="fila-lote">${escHtml(G.length)} lotes prontos</small><ul class="fila-lotes">${lotes}</ul><small class="help">${escHtml(l.fundo)}</small></td>
-    <td>${situacaoTag(situacaoDe(l.fase))} ${escHtml(qtd(tot,'folha','folhas'))} nos ${escHtml(G.length)} lotes. Publicar leva os lotes juntos.</td><td>${espera48(G.slice().sort((a,b)=>String(a.atualizado_em).localeCompare(String(b.atualizado_em)))[0])}</td>
-    <td class="fila-acao">${(ad||umPasso()&&op)?`<button class="btn sm pri" data-fila-ir="publicar" data-projeto="${pj}">Publicar projeto</button>`:'<small class="help">Falta um admin publicar</small>'}</td></tr>`}
+  const um={...l,id:'g'+l.projeto_codigo};
+  return `<tr data-fase="${escHtml(l.fase)}" data-fila-grupo="${pj}" data-nav="projeto/${pj}">${filaProjCel(um,`<span class="fila-lote">${escHtml(G.length)} lotes prontos</span>`).replace('</div></div></td>',`<ul class="fila-lotes">${lotes}</ul></div></div></td>`)}${filaFundoCel(l)}
+    <td class="c-prog">${LST.progresso({rot:'Publicação',feito:Math.max(0,tot-fora),total:tot||null,texto:`${fmtN(Math.max(0,tot-fora))} de ${qtd(tot,'folha','folhas')} no site`})}</td>
+    <td class="c-sit">${situacaoTag(situacaoDe(l.fase))} <span class="sit-frase">${escHtml(qtd(tot,'folha','folhas'))} nos ${escHtml(G.length)} lotes. Publicar leva os lotes juntos.</span></td>${filaParadoCel(G.slice().sort((a,b)=>String(a.atualizado_em).localeCompare(String(b.atualizado_em)))[0])}
+    <td class="c-acao fila-acao">${(ad||umPasso()&&op)?`<button class="btn sm pri" data-fila-ir="publicar" data-projeto="${pj}">Publicar projeto</button>`:'<small class="help">Falta um admin publicar</small>'}</td></tr>${FILA_ABERTOS.has(String(um.id))?filaDetalheHTML(l,G):''}`}
 function linhaFila(l){if(l&&l.grupo)return linhaFilaGrupo(l.grupo);
-  const ad=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel),f=l.fase,id=escHtml(l.id),pj=escHtml(l.projeto_codigo);
-  const T={importar:['a','','O CAMP Vision terminou a leitura. Falta trazer as folhas para o painel.'],conferir:['a','',`Faltam conferir <b>${escHtml(l.itens_pendentes)}</b> de ${escHtml(l.itens_total)} folha(s).`],
-    aprovar:['b','',`Todas as ${escHtml(l.itens_total)} folha(s) conferidas. ${umPasso()?'Pronto para publicar (o clique aprova o lote junto).':'Falta aprovar o lote.'}`],publicar:['g','','Lote aprovado. Falta publicar o projeto no site.'],
-    processando:['b','',l.leitura_interrompida?`<span class="tag r">leitura interrompida</span> O CAMP Vision não dá sinal deste lote há mais de 2 h.${l.releitura_pedida_em?` Releitura pedida ${escHtml(idadeFila(l.releitura_pedida_em))}: esperando o CAMP Vision.`:l.releitura_ultima?` ${releituraUltimaTxt(l.releitura_ultima)}`:''}`:l.etapa==='enviado'?'Aguardando o CAMP Vision começar.':'O CAMP Vision está lendo as folhas.'],erro:['r','',erroCvExplicadoHTML(l.erro_cv_explicado)||(l.erro_cv?`O CAMP Vision parou com erro: “${escHtml(l.erro_cv)}”.`:'O CAMP Vision parou com erro e não deixou o motivo. Peça para ler de novo esta pasta.')],publicado:['g','','Concluída.']}[f]||['','',''];
-  const total=f==='processando'?l.folhas_esperadas:l.itens_total,feito=f==='processando'?(l.folhas_encontradas||0):f==='conferir'?l.itens_conferidos:l.itens_total;
-  const barra=total&&['processando','conferir','aprovar','publicar'].includes(f)?`<div><progress class="pg" value="${escHtml(feito)}" max="${escHtml(total)}"></progress> <small class="help">${escHtml(feito)} de ${escHtml(total)}</small></div>`:'';
-  const bt=(cls,txt,at)=>`<button class="btn sm ${cls}" ${at}>${txt}</button>`;
-  if(f==='importar'&&l.destino_suspeito)T[2]=l.destino_movendo?`${daEstadoTag(l.destino_movendo.estado)} ${escHtml(l.destino_motivo||'')}`   // UX-43: o painel já decidiu
+  const ad=EU&&['admin','master'].includes(EU.papel),op=EU&&['operador','admin','master'].includes(EU.papel),f=l.fase,id=escHtml(l.id),pj=escHtml(l.projeto_codigo),alvo=escHtml(l.projeto_codigo+' · '+identLote(l));
+  const T={importar:'O CAMP Vision terminou a leitura. Falta trazer as folhas para o painel.',conferir:`Faltam conferir <b>${escHtml(l.itens_pendentes)}</b> de ${escHtml(l.itens_total)} folha(s).`,
+    aprovar:`Todas as ${escHtml(l.itens_total)} folha(s) conferidas. ${umPasso()?'Pronto para publicar (o clique aprova o lote junto).':'Falta aprovar o lote.'}`,publicar:'Lote aprovado. Falta publicar o projeto no site.',
+    processando:l.leitura_interrompida?`<span class="tag r">leitura interrompida</span> O CAMP Vision não dá sinal deste lote há mais de 2 h.${l.releitura_pedida_em?` Releitura pedida ${escHtml(idadeFila(l.releitura_pedida_em))}: esperando o CAMP Vision.`:l.releitura_ultima?` ${releituraUltimaTxt(l.releitura_ultima)}`:''}`:l.etapa==='enviado'?'Aguardando o CAMP Vision começar.':'O CAMP Vision está lendo as folhas.',
+    erro:erroCvExplicadoHTML(l.erro_cv_explicado)||(l.erro_cv?`O CAMP Vision parou com erro: “${escHtml(l.erro_cv)}”.`:'O CAMP Vision parou com erro e não deixou o motivo. Peça para ler de novo esta pasta.'),publicado:'Concluída.'};
+  let frase=T[f]||'';
+  if(f==='importar'&&l.destino_suspeito)frase=l.destino_movendo?`${daEstadoTag(l.destino_movendo.estado)} ${escHtml(l.destino_motivo||'')}`   // UX-43: o painel já decidiu
     :`<span class="tag a">verificar destino</span> ${escHtml(l.destino_motivo||'A pasta não parece deste projeto.')}${l.destino_auto?`<small class="help da-faria">O painel faria: ${escHtml(daFaria(l.destino_auto))}</small>`:''}`;   // UX-01
-  let acao=f==='importar'?(l.destino_suspeito?bt('pri','Verificar destino',`data-destino-lote="${id}"`):op?bt('pri','Importar folhas',`data-fila-acao="importar" data-id="${id}"`):''):f==='conferir'?bt('pri','Conferir folhas',`data-fila-ir="revisao" data-projeto="${pj}"`)
-    :f==='aprovar'?(umPasso()&&op?bt('pri','Publicar no site',`data-fila-ir="publicar" data-projeto="${pj}"`):ad?bt('pri','Aprovar lote',`data-fila-acao="aprovar" data-id="${id}"`):'<small class="help">Falta um admin aprovar</small>'):f==='publicar'?((ad||umPasso()&&op)?bt('pri','Publicar',`data-fila-ir="publicar" data-projeto="${pj}"`):'<small class="help">Falta um admin publicar</small>')
-    :(f==='erro'||f==='processando')&&l.dispensado?(op?bt('','Voltar a mostrar',`data-fila-mostrar="${id}" data-motivo="${escHtml(l.dispensado.motivo||'')}" title="O lote volta para as listas e as contagens de todos"`):'')   // UX-35
-    :f==='processando'&&l.leitura_interrompida?(op?(l.releitura_pedida_em&&!l.releitura_pedir_de_novo?'':bt('pri',l.releitura_pedida_em?'Pedir de novo':'Ler de novo',`data-ler-de-novo="${pj}"`)+' ')+bt('fila-dispensar','Dispensar este lote',`data-fila-dispensar="${id}" data-alvo="${escHtml(l.projeto_codigo+' · '+identLote(l))}" title="${escHtml(UX35_DISPENSAR)}"`):l.releitura_pedida_em?'':'<small class="help">Avise um operador</small>')   // UX-39: também na leitura interrompida (o "Ler de novo" já pedido e nada muda)
-    :f==='erro'?(op?bt('pri','Ler de novo esta pasta',`data-releitura-projeto="${pj}" title="${escHtml(UX08_LER_DE_NOVO)}"`)+' '+bt('','Tentar de novo',`data-fila-acao="retomar" data-id="${id}" title="${escHtml(UX08_TENTAR)}"`)+' '+bt('fila-dispensar','Dispensar este lote',`data-fila-dispensar="${id}" data-alvo="${escHtml(l.projeto_codigo+' · '+identLote(l))}" title="${escHtml(UX35_DISPENSAR)}"`):'<small class="help">Avise um operador</small>'):'';   // UX-08: um só azul, com o efeito no rótulo; o outro diz no tooltip quando usar
-  if(f==='importar'&&ad&&!+l.itens_total&&!l.aprovado_em)acao+=' '+bt('fila-dispensar','Apagar lote',`data-fila-apagar="${id}" data-arquivos="${escHtml(l.folhas_encontradas||0)}" data-alvo="${escHtml(l.projeto_codigo+' · '+identLote(l))}" title="${escHtml(APAGAR_LOTE_TXT)}"`);   // 28/10: lote sem folhas no painel
-  return `<tr data-fase="${escHtml(f)}" data-nav="projeto/${pj}"><td><span class="code">${pj}</span> <b>${escHtml(l.projeto_titulo)}</b><small class="fila-lote" title="${escHtml(l.nome)}">${escHtml(identLote(l))}</small><small class="help">${escHtml(l.fundo)}</small>${ad?`<details class="fila-pasta"><summary>pasta</summary><span class="mono">${escHtml(l.pasta_qnap)}</span></details>`:''}</td>
-    <td>${situacaoTag(situacaoDe(f))}${l.lote_teste?' <span class="tag a">teste</span>':''}${l.dispensado?` <span class="tag" data-fila-dispensado title="${escHtml(`Dispensado por ${nomeAtor(l.dispensado.por)} em ${fmtDataHora(l.dispensado.em)}${l.dispensado.motivo?': '+l.dispensado.motivo:''}. Volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar.`)}">dispensado</span>`:''} ${T[2]}${barra}${(()=>{const ix={processando:2,erro:2,importar:3,conferir:4,aprovar:5,publicar:6,publicado:7}[f];return ix===undefined?'':caminhoMaterialHTML(ix,'',{compacto:true,travado:f==='erro'?'o CAMP Vision parou com erro':''})})()}</td><td>${espera48(l)}</td><td class="fila-acao">${acao}</td></tr>`}   // #97: sem o botão "Projeto" (a linha já abre o projeto)
+  /* a ação = a etapa atual e a permissão (um só azul); o resto no "⋯" (menu secundário), na mesma ordem de antes */
+  const bt=(cls,txt,at)=>`<button type="button" class="btn sm ${cls}" ${at}>${txt}</button>`,mi=(cls,txt,at)=>`<button type="button" class="btn ${cls}" role="menuitem" ${at}>${txt}</button>`;
+  const DISP=mi('fila-dispensar','Dispensar este lote',`data-fila-dispensar="${id}" data-alvo="${alvo}" title="${escHtml(UX35_DISPENSAR)}"`);
+  let pri='',sec=[];
+  if(f==='importar'){pri=l.destino_suspeito?bt('pri','Verificar destino',`data-destino-lote="${id}"`):op?bt('pri','Importar folhas',`data-fila-acao="importar" data-id="${id}"`):'<small class="help">Falta um operador importar</small>';
+    if(ad&&!+l.itens_total&&!l.aprovado_em)sec.push(mi('perigo-txt fila-dispensar','Apagar lote',`data-fila-apagar="${id}" data-arquivos="${escHtml(l.folhas_encontradas||0)}" data-alvo="${alvo}" title="${escHtml(APAGAR_LOTE_TXT)}"`))}   // 28/10: lote sem folhas no painel
+  else if(f==='conferir')pri=bt('pri','Conferir folhas',`data-fila-ir="revisao" data-projeto="${pj}"`);
+  else if(f==='aprovar')pri=umPasso()&&op?bt('pri','Publicar no site',`data-fila-ir="publicar" data-projeto="${pj}"`):ad?bt('pri','Aprovar lote',`data-fila-acao="aprovar" data-id="${id}"`):'<small class="help">Falta um admin aprovar</small>';
+  else if(f==='publicar')pri=(ad||umPasso()&&op)?bt('pri','Publicar',`data-fila-ir="publicar" data-projeto="${pj}"`):'<small class="help">Falta um admin publicar</small>';
+  else if((f==='erro'||f==='processando')&&l.dispensado)pri=op?bt('','Voltar a mostrar',`data-fila-mostrar="${id}" data-motivo="${escHtml(l.dispensado.motivo||'')}" title="O lote volta para as listas e as contagens de todos"`):'';   // UX-35
+  else if(f==='processando'&&l.leitura_interrompida){if(op){pri=l.releitura_pedida_em&&!l.releitura_pedir_de_novo?'':bt('pri',l.releitura_pedida_em?'Pedir de novo':'Ler de novo',`data-ler-de-novo="${pj}"`);sec.push(DISP)}else pri=l.releitura_pedida_em?'':'<small class="help">Avise um operador</small>'}   // UX-39
+  else if(f==='erro'){if(op){pri=bt('pri','Ler de novo esta pasta',`data-releitura-projeto="${pj}" title="${escHtml(UX08_LER_DE_NOVO)}"`);sec.push(mi('','Tentar de novo',`data-fila-acao="retomar" data-id="${id}" title="${escHtml(UX08_TENTAR)}"`),DISP)}else pri='<small class="help">Avise um operador</small>'}   // UX-08: um só azul, com o efeito no rótulo
+  const nF=+l.itens_total||0,extra=`<span class="fila-lote" title="${escHtml(l.nome)}">${escHtml(identLote(l))}</span>${nF?`<span>${escHtml(qtd(nF,'folha','folhas'))}</span>`:''}`;
+  const chips=`${l.lote_teste?' <span class="tag a">teste</span>':''}${l.dispensado?` <span class="tag" data-fila-dispensado title="${escHtml(`Dispensado por ${nomeAtor(l.dispensado.por)} em ${fmtDataHora(l.dispensado.em)}${l.dispensado.motivo?': '+l.dispensado.motivo:''}. Volta sozinho se o CAMP Vision ler a pasta de novo e o resultado mudar.`)}">dispensado</span>`:''}${l.adiado?' <span class="tag" title="Você escondeu este lote por 7 dias (Agora não): ele não conta para você.">escondido por você</span>':''}`;
+  return `<tr data-fase="${escHtml(f)}" data-nav="projeto/${pj}">${filaProjCel(l,extra)}${filaFundoCel(l)}<td class="c-prog">${filaProgresso(l)}</td>
+    <td class="c-sit"><span class="sit-chips">${situacaoTag(situacaoDe(f))}${chips}</span> <span class="sit-frase">${frase}</span></td>${filaParadoCel(l)}<td class="c-acao fila-acao"><div class="acao-cel">${pri}${LST.mais(l.projeto_codigo+' · '+identLote(l),sec)}</div></td></tr>${FILA_ABERTOS.has(String(l.id))?filaDetalheHTML(l):''}`}   // #97: sem o botão "Projeto" (a linha já abre o projeto)
+/* §6: o detalhe do lote, sem poluir a lista — identificação completa, etapas reais com folhas por etapa, pendências e alertas, último evento
+   e histórico (do projeto, carregado só quando abre), comandos com permissão. Nada aqui é novo no servidor: são os campos de /api/filas. */
+function filaDetalheHTML(l,G){const ad=EU&&['admin','master'].includes(EU.papel),id=G?'g'+l.projeto_codigo:String(l.id),f=l.fase,a=String(l.projeto_autoria||'').trim();
+  const tot=G?G.reduce((s,x)=>s+(+x.itens_total||0),0):+l.itens_total||0,conf=G?tot:+l.itens_conferidos||0,enc=+l.folhas_encontradas||0,esp=+l.folhas_esperadas||0,fora=G?G.reduce((s,x)=>s+(+x.fora_do_site||0),0):+l.fora_do_site||0;
+  const dd=(t,v)=>v===''||v==null?'':`<div><dt>${escHtml(t)}</dt><dd>${v}</dd></div>`,dh=v=>v?escHtml(fmtDataHora(v)):'';
+  const ident=`<dl class="det-dl">${dd('Projeto',`<span class="code">${escHtml(l.projeto_codigo)}</span> ${escHtml(l.projeto_titulo||'')}`)}${G?dd('Lotes',G.map(x=>`${escHtml(identLote(x))} <small class="help">(nº ${escHtml(x.id)} · ${escHtml(x.nome)})</small>`).join('<br>')):dd('Lote',`${escHtml(identLote(l))} <small class="help">nº ${escHtml(l.id)} · “${escHtml(l.nome)}”</small>`)}
+    ${dd('Fundo',`<span class="code">${escHtml(l.fundo_codigo||'')}</span> ${escHtml(l.fundo||'')}`)}${dd('Autoria',a?`${escHtml(a)}${l.projeto_papel?` <small class="help">(${escHtml(l.projeto_papel)})</small>`:''}`:'<span class="help">não registrada no projeto (o fundo não diz quem projetou)</span>')}${dd('Ano do projeto',l.projeto_ano?escHtml(l.projeto_ano):'')}
+    ${dd('Chegou',dh(l.criado_em))}${dd('Nesta etapa desde',dh(l.etapa_desde))}${dd('Última mudança no lote',dh(l.atualizado_em))}${dd('Aprovado',l.aprovado_em?`${dh(l.aprovado_em)}${l.aprovado_por?' · '+escHtml(nomeAtor(l.aprovado_por)):''}`:'')}
+    ${ad&&l.pasta_qnap?dd('Pasta de origem',`<details class="fila-pasta" data-no-nav><summary>ver o caminho no QNAP</summary><span class="mono">${escHtml(l.pasta_qnap)}</span></details>`):''}</dl>`;
+  const ix=FILA_IX_CAMINHO[f],etapas=`${ix===undefined?'':caminhoMaterialHTML(ix,'',{travado:f==='erro'?'o CAMP Vision parou com erro':''})}<ul class="det-folhas">
+    <li><b>Arquivos lidos pelo CAMP Vision:</b> ${f==='processando'||f==='erro'||f==='importar'||enc?escHtml(fmtN(enc)):'—'}${esp?` de ${escHtml(qtd(esp,'esperado','esperados'))}`:''}</li><li><b>Folhas no painel:</b> ${escHtml(fmtN(tot))}</li>
+    <li><b>Conferidas:</b> ${escHtml(fmtN(conf))}${tot?` de ${escHtml(fmtN(tot))}`:''}${!G&&+l.itens_pendentes?` · faltam ${escHtml(fmtN(l.itens_pendentes))}`:''}</li><li><b>Aprovação do lote:</b> ${G||l.aprovado_em?'feita':f==='aprovar'?'falta aprovar':'ainda não'}</li>
+    <li><b>No site:</b> ${['publicar','publicado'].includes(f)?`${escHtml(fmtN(Math.max(0,tot-fora)))} de ${escHtml(qtd(tot,'folha','folhas'))}`:'ainda não'}</li></ul>`;
+  const al=[];
+  if(!G){if(f==='importar'&&l.destino_suspeito)al.push(`<b>Verificar destino:</b> ${escHtml(l.destino_motivo||'a pasta não parece deste projeto')}.${l.destino_auto?` O painel faria: ${escHtml(daFaria(l.destino_auto))}.`:''}`);
+    if(l.leitura_interrompida)al.push('<b>Leitura interrompida:</b> o CAMP Vision não dá sinal deste lote há mais de 2 h.');
+    if(f==='erro')al.push(erroCvExplicadoHTML(l.erro_cv_explicado)||escHtml(l.erro_cv||'O CAMP Vision parou com erro e não deixou o motivo.'));
+    if(esp&&enc<esp&&['processando','erro','importar'].includes(f))al.push(`<b>Arquivos faltando:</b> o CAMP Vision achou ${escHtml(fmtN(enc))} de ${escHtml(qtd(esp,'arquivo esperado','arquivos esperados'))}.`);
+    if(l.dispensado)al.push(`<b>Dispensado</b> por ${escHtml(nomeAtor(l.dispensado.por))} em ${escHtml(fmtDataHora(l.dispensado.em))}${l.dispensado.motivo?': '+escHtml(l.dispensado.motivo):''}.`);
+    if(l.adiado)al.push('<b>Escondido por você</b> por 7 dias (Agora não): não conta para você.');
+    if(+l.lote_teste)al.push('<b>Lote de teste:</b> não entra no inventário.');
+    if((+l.parado_h||0)>48&&FILA_GENTE.includes(f))al.push(`<b>Parado ${escHtml(String(l.parado||'').replace(/^parado /,''))}</b> na mesma etapa.`)}
+  return `<tr class="fila-det-tr" data-no-nav><td colspan="6"><div class="fila-det" id="fila-det-${escHtml(id)}" role="region" aria-label="${escHtml('Detalhes do lote '+l.projeto_codigo)}">
+    <section><h3>Identificação</h3>${ident}</section><section><h3>Etapas e folhas</h3>${etapas}</section>
+    <section><h3>Pendências e alertas</h3>${al.length?`<ul class="det-alertas">${al.map(x=>`<li>${x}</li>`).join('')}</ul>`:'<p class="help">Nenhuma pendência além da etapa atual.</p>'}</section>
+    <section><h3>Último evento e histórico</h3><div class="fila-hist" data-fila-hist="${escHtml(l.projeto_codigo)}">${esqueletoHTML(2,false)}</div><p><a href="#projeto/${escHtml(l.projeto_codigo)}">Abrir o projeto (histórico completo, folhas e publicação)</a></p></section>
+  </div></td></tr>`}
+/* o histórico vem do projeto (/api/projetos/{c}/detalhe: os 20 últimos eventos, os mesmos da aba Histórico do projeto), só quando o detalhe abre */
+const FILA_HIST={};
+new MutationObserver(()=>{document.querySelectorAll('#filas-body .fila-hist[data-fila-hist]:not([data-ok])').forEach(async el=>{el.dataset.ok='1';const c=el.dataset.filaHist;
+  try{const d=FILA_HIST[c]&&Date.now()-FILA_HIST[c].t<60000?FILA_HIST[c].d:(FILA_HIST[c]={t:Date.now(),d:await API('/api/projetos/'+encodeURIComponent(c)+'/detalhe')}).d;const ev=(d.eventos||[]).slice(0,5);
+    el.innerHTML=ev.length?`<p class="det-ult"><b>Último evento:</b> ${fraseEventoHTML(Object.assign({entidade:'projeto',codigo:c},ev[0]))} <small class="help">${escHtml(fmtDataHora(ev[0].quando))}</small></p>${ev.length>1?histEventosHTML(ev.slice(1),'projeto',c):''}`:'<p class="help">Sem eventos registrados no projeto.</p>'}
+  catch(e){delete FILA_HIST[c];el.innerHTML=estadoHTML('erro',{servico:'painel (histórico do projeto)',detalhe:e.message,solto:true})}})}).observe(document.getElementById('filas-body')||document.body,{childList:true});
 /* UX-35: "Dispensar este lote" — lote parado com erro do CAMP Vision (UX-39: ou com a leitura interrompida) que ninguém consegue resolver sai das listas e das contagens
    para TODOS (o "Agora não" é só seu, por 7 dias). Nada é apagado; volta sozinho se o CAMP Vision reler e o erro mudar. "Voltar a mostrar" desfaz. */
 const UX35_DISPENSAR='O lote sai das listas e das contagens para todo mundo. Nada é apagado; se o CAMP Vision ler a pasta de novo e o resultado mudar, ele volta.';
@@ -7160,6 +7475,10 @@ async function carregarDestinoAuto(){const el=document.getElementById('fila-dest
   const feitas=acoes.length?`<details class="da-feitas"${modo==='aplicar'?' open':''}><summary>O que o painel fez (${escHtml(acoes.length)})</summary><ul class="list">${acoes.map(linhaAcao).join('')}</ul></details>`:'';
   const criados=cri.length?`<h3 class="hoje-h">Projetos criados pelo painel (${escHtml(cri.length)})</h3><p class="help">Confira o título de cada um (vem do nome da pasta).</p><ul class="list">${cri.map(c=>`<li data-nav="projeto/${escHtml(c.codigo)}"><div class="t"><b><span class="code">${escHtml(c.codigo)}</span> ${escHtml(c.titulo)}</b><small>da pasta “${escHtml(c.nome_pasta||'')}” · ${escHtml(qtd(+c.folhas||0,'folha','folhas'))}</small></div><div class="m">${c.titulo_revisado?'<span class="tag g">título revisado</span>':'<span class="tag a">revise o título</span>'}</div></li>`).join('')}</ul>`:'';
   el.innerHTML=`<div class="panel" id="da-painel"><div class="ph"><h2>Verificar destino pelo painel</h2></div><div class="pb"><p class="help" id="da-modo">Modo: <b>${escHtml(m[1])}</b> — ${escHtml(m[2])}.</p>${modos}${previa}${feitas}${criados}</div></div>`}
+/* redesenho Material novo §6: "Verificar destino pelo painel" fica em Ferramentas avançadas (recolhido, identificado, com aviso). O resumo
+   diz o modo e quantos lotes o painel faria; sem nada a mostrar para esta pessoa, a área some. */
+{const el=document.getElementById('fila-destino-auto');if(el)new MutationObserver(()=>{const d=document.getElementById('fila-avancado'),sub=document.getElementById('fila-avancado-sub');if(!d)return;d.hidden=!el.innerHTML.trim();
+  const r=DESTINO_AUTO||{},m=(DA_MODOS.find(x=>x[0]===(r.modo||'simular'))||DA_MODOS[1])[1],n=r.modo==='desligado'?0:(r.previa||[]).length;if(sub)sub.textContent=`Verificar destino pelo painel · modo ${m}${n?` · o painel faria ${qtd(n,'decisão','decisões')}`:''}`}).observe(el,{childList:true})}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-da-modo],[data-da-aplicar],[data-da-desfazer]');if(!b||b.disabled)return;e.stopPropagation();e.preventDefault();
   if(b.dataset.daModo){const v=b.dataset.daModo;if(v==='aplicar'&&!await confirmar({titulo:'O painel resolve Verificar destino sozinho?',texto:'Em segundo plano, no máximo 10 lotes por vez: move o lote para o projeto do fundo que combina com a pasta ou cria o projeto. Cada lote é simulado antes; tudo fica no Histórico e dá para desfazer até o CAMP Vision reorganizar a pasta.',botao:'Aplicar sozinho'}))return;
     b.disabled=true;try{const r=await API('/api/destino-automatico/modo',{method:'POST',body:JSON.stringify({modo:v})});toast(r.mensagem||'Anotado')}catch(er){toast(er.message)}carregarFilas();return}
@@ -7175,7 +7494,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('#vd-ok');i
     toast(r.mensagem||'Anotado');closeDrawer(true);if(rotaAtual().startsWith('filas'))carregarFilas();if(typeof carregarPainel==='function')carregarPainel()}catch(er){b.disabled=false;res.textContent=er.message}});
 function irDaFila(onde,projeto,lote){if(onde==='erros'){go('erros');return}window.ACAO_APOS_PROJETO=(onde==='revisao'||onde==='publicar')?{tipo:onde,codigo:projeto,lote:lote||null}:null;nav('projeto/'+projeto)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-filtro],[data-fila-acao],[data-fila-ir]');if(!b||b.disabled)return;   // códigos só em data-*
-  if(b.dataset.filaFiltro){FILA_FILTRO=b.dataset.filaFiltro;desenharFilas()}else if(b.dataset.filaAcao)acaoFila(b.dataset.filaAcao,b.dataset.id,b);else irDaFila(b.dataset.filaIr,b.dataset.projeto)});
+  if(b.dataset.filaFiltro){FILA_FILTRO=b.dataset.filaFiltro;filaMudar({})}else if(b.dataset.filaAcao)acaoFila(b.dataset.filaAcao,b.dataset.id,b);else irDaFila(b.dataset.filaIr,b.dataset.projeto)});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fila-importar-todas]');if(!b||b.disabled)return;
   rodarTarefa('/api/filas/importar-todas',{},{titulo:'Importando os lotes da Fila',id:'importar-todas',fim:()=>{carregarFilas();if(typeof carregarPainel==='function')carregarPainel();return '<div class="act"><button class="btn sm pri" data-fila-filtro="gente">Ver o que falta conferir</button></div>'}})});
 async function etapaFila(id,etapa){if(!etapa)return;try{await API('/api/filas/'+id,{method:'PATCH',body:JSON.stringify({etapa})});toast('Lista: '+etapa);carregarFilas();carregarPainel()}catch(e){toast(e.message)}}

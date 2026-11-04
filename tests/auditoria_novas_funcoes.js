@@ -399,12 +399,13 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- FILAS: cada lista diz o que falta e tem UM botão para o próximo passo ----------
 { w.confirm=()=>true; w.route_to('filas'); await sleep(3000);
   const chips=[...d.querySelectorAll('#fila-chips [data-fila-filtro]')], lin=cod=>[...d.querySelectorAll('#filas-body tr')].find(t=>t.textContent.includes(cod));
-  chk(chips.length===4&&['gente','chegando','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 4 filtros (Precisam de você, Chegando, No site, Todas): '+chips.length);
+  chk(chips.length===7&&['gente','chegando','conferir','pronto','problema','publicado','todas'].every(k=>chips.some(c=>c.dataset.filaFiltro===k)),'a Fila deveria ter 7 abas (redesenho Material novo: Precisam de você, as 5 situações e Todos): '+chips.length);
   chk(chips.find(c=>c.getAttribute('aria-pressed')==='true').dataset.filaFiltro==='gente','o filtro padrão deveria ser "Precisam de você" quando há o que fazer');
-  chk(/para conferir/.test(txt('#fila-resumo'))&&/chegando/.test(txt('#fila-resumo')),   // CAMP-146: as 5 situações
-  'o resumo deveria dizer quantas listas estão em cada ponto: "'+txt('#fila-resumo')+'"');
-  chk(d.querySelectorAll('#v-filas thead th').length===4&&!/Pasta no QNAP|Aprovação/.test(txt('#v-filas thead')),'a tabela deveria ter 4 colunas (Projeto, Situação, Atualizado, ação), sem "Pasta no QNAP" nem "Aprovação"');
-  chk(!!d.querySelector('#filas-body details.fila-pasta'),'a pasta do QNAP deveria ficar recolhida dentro de cada linha');
+  chk(/Para conferir \d/.test(txt('#fila-chips'))&&/Chegando \d/.test(txt('#fila-chips')),   // CAMP-146: as 5 situações (redesenho Material novo: nas abas, com o número)
+  'as abas deveriam dizer quantas listas estão em cada ponto: "'+txt('#fila-chips')+'"');
+  chk(d.querySelectorAll('#v-filas thead th').length===6&&!/Pasta no QNAP|Aprovação/.test(txt('#v-filas thead')),'a tabela deveria ter 6 colunas (redesenho: Projeto / lote, Fundo / autoria, Progresso, Situação, Parado há, ação), sem "Pasta no QNAP" nem "Aprovação"');
+  d.querySelector('#filas-body [data-fila-exp]').click(); await sleep(300);
+  chk(!!d.querySelector('#filas-body .fila-det details.fila-pasta'),'a pasta do QNAP deveria ficar recolhida (redesenho: no detalhe do lote)'); d.querySelector('#filas-body [data-fila-exp]').click(); await sleep(200);
   let l9001=lin('F003-P9001');
   chk(!!l9001&&/Faltam conferir/.test(l9001.textContent)&&!!l9001.querySelector('progress.pg')&&!!l9001.querySelector('[data-fila-ir="revisao"]')&&!l9001.querySelector('[data-fila-acao="aprovar"]'),'F003-P9001 deveria dizer que faltam conferir folhas, com a barra de andamento e o botão "Conferir folhas": "'+(l9001&&l9001.textContent.slice(0,140))+'"');
   const lq=lin('F026-P0001'); chk(!!lq&&!!lq.querySelector('[data-fila-acao="importar"]')&&/Importar/.test(lq.textContent),'uma lista em revisão sem folhas importadas (F026-P0001) deveria oferecer "Importar folhas": "'+(lq&&lq.textContent.slice(100,260))+'"');
@@ -421,9 +422,9 @@ w.route_to('estacoes'); await sleep(2800);
   const bPu=l9001&&l9001.querySelector('[data-fila-ir="publicar"]'); if(bPu){bPu.click(); await sleep(4500)}
   await sleep(1500); chk(/projeto\/F003-P9001/.test(w.location.hash)&&!d.getElementById('pub-go')&&!!d.getElementById('pj-status'),'"Publicar" deveria levar ao projeto e publicar ali mesmo, sem janela de plano (etapa 2): '+w.location.hash+' / '+txt('#pj-status').slice(0,80)); w.closeDrawer(true);
   w.route_to('filas'); await sleep(2500); d.querySelector('[data-fila-filtro="chegando"]').click(); await sleep(400);
-  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>['processando','importar'].includes(t.dataset.fase)),'o filtro "Chegando" (UX-05: o mesmo número do resumo) deveria mostrar só listas em leitura ou com folhas para importar');
+  chk([...d.querySelectorAll('#filas-body tr[data-fase]')].every(t=>['processando','importar'].includes(t.dataset.fase)),'o filtro "Chegando" (UX-05: o mesmo número da aba) deveria mostrar só listas em leitura ou com folhas para importar');
   d.querySelector('[data-fila-filtro="todas"]').click(); await sleep(300);
-  chk(d.querySelectorAll('#filas-body tr[data-fase]').length===(await J(adm,'/api/filas')).b.length,'o filtro "Todas" deveria mostrar todas as listas do servidor');
+  { const nSrv=(await J(adm,'/api/filas')).b.length; chk(new RegExp('de '+nSrv+'$|^'+nSrv+' registros?$').test(txt('#fila-pag').replace(/\s+/g,' ').split('‹')[0].trim())||txt('#fila-cnt')===nSrv+(nSrv===1?' registro':' registros'),'o filtro "Todos" deveria contar todas as listas do servidor (a tela pagina: 25 por página)'); }
   await J(adm,'/api/lotes/'+lid+'/reabrir',{method:'POST'}); for(const it of (await J(adm,'/api/projetos/F003-P9001/detalhe')).b.itens) await J(adm,'/api/itens/'+it.codigo+'/revisao',{method:'POST',body:JSON.stringify({estado:'pendente'})}); }
 // ---------- MENU POR TRABALHO e PRÓXIMO PASSO no topo do projeto ----------
 { w.confirm=()=>true;
@@ -1159,9 +1160,11 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
 const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.lista.'+k));return v==null?dflt:v}catch(_){return dflt}};   // LISTA_MEM é const no painel: lê o mesmo localStorage
 // ---------- [Tabelas] filtro, busca e aba sobrevivem ao F5; "Limpar filtros" nas listas ----------
 { await w.carregarErros('todos'); await sleep(300); chk(memLista('erros.aba')==='todos','[Tabelas] a aba de Erros deveria ficar guardada para o F5'); await w.carregarErros('abertos');
-  w.route_to('filas'); await sleep(1200); const fi=d.querySelector('#v-filas [data-filter]'),lb=d.querySelector('#v-filas .filtro-limpar');
-  if(fi&&lb){ fi.value='xyz'; fi.dispatchEvent(new w.Event('input',{bubbles:true})); chk(!lb.hidden&&memLista('busca.v-filas')==='xyz','[Tabelas] a busca das Filas deveria ficar guardada e mostrar "Limpar filtros"');
-    lb.click(); chk(fi.value===''&&lb.hidden&&memLista('busca.v-filas')==='','[Tabelas] "Limpar filtros" deveria limpar a busca e a memória'); } else chk(false,'[Tabelas] a lista das Filas deveria ter "Limpar filtros"');
+  // redesenho Material novo (04/11/2026): a busca das Filas é da própria lista (combinada com os filtros) e fica guardada na sessão para a volta do projeto
+  w.route_to('filas'); await sleep(1200); const fi=d.getElementById('fila-q'),lb=d.getElementById('fila-limpar');
+  if(fi&&lb){ fi.value='xyz'; fi.dispatchEvent(new w.Event('input',{bubbles:true})); await sleep(400); const ss=()=>{try{return JSON.parse(w.sessionStorage.getItem('camp.fila.estado')||'{}').q}catch(_){return null}};
+    chk(!lb.hidden&&ss()==='xyz','[Tabelas] a busca das Filas deveria ficar guardada e mostrar "Limpar filtros"');
+    lb.click(); await sleep(200); chk(fi.value===''&&lb.hidden&&ss()==='','[Tabelas] "Limpar filtros" deveria limpar a busca e a memória'); } else chk(false,'[Tabelas] a lista das Filas deveria ter "Limpar filtros"');
   w.carregarProjetosAPI({fundo:'F003'}); await sleep(900); chk(memLista('projetos').fundo==='F003','[Tabelas] o filtro de Projetos deveria ficar guardado'); w.carregarProjetosAPI({fundo:''}); await sleep(600);
   okl.push('Tabelas: filtros guardados para o F5 e "Limpar filtros"'); w.route_to('painel'); }
 // ---------- [Editor] campos públicos x só do painel; estado do salvamento no topo; erro do servidor dentro do editor ----------
@@ -1280,7 +1283,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
 // ---------- [H5 pendências] caminho com marcas e "travado", mini-barra nas Filas, barra na página da folha, #caminho com onde/tempo/erros ----------
 { const h=w.caminhoMaterialHTML(2,'',{compacto:true,travado:'o CAMP Vision parou com erro'});
   chk(/class="trav"/.test(h)&&/Passo 3 de 7: Leitura do CAMP Vision \(parado: o CAMP Vision parou com erro\)/.test(h),'[H5] a mini-barra deveria dizer o passo e o motivo quando travada: '+h.slice(0,200));
-  w.route_to('filas'); await sleep(1800); chk(!!d.querySelector('#filas-body .steps.caminho.compacto'),'[H5] cada linha das Filas deveria ter a mini-barra dos 7 passos');
+  w.route_to('filas'); await sleep(1800); { const ex=d.querySelector('#filas-body [data-fila-exp]'); if(ex){ex.click(); await sleep(300)} chk(!!d.querySelector('#filas-body .fila-det .steps.caminho'),'[H5] o lote nas Filas deveria ter a barra dos 7 passos (redesenho Material novo: no detalhe do lote, com o nome de cada passo)'); if(ex) ex.click(); }
   w.route_to('item/F023-P0011-1959-S01-D00001'); await sleep(2500); chk(!!d.querySelector('#idet .it-caminho .steps.caminho'),'[H5] a página da folha deveria ter a barra do caminho');
   w.route_to('caminho'); await sleep(500); chk((txt('#v-caminho').match(/Onde no painel/g)||[]).length===7&&/Quanto tempo/.test(txt('#v-caminho'))&&/O que pode dar errado/.test(txt('#v-caminho')),'[H5] cada passo em "Como o material anda" deveria dizer onde no painel, quanto tempo e o que pode dar errado');
   okl.push('H5 pendências: marcas ✔●○⚠, travado com motivo, mini-barra nas Filas, barra na folha, #caminho completo'); w.route_to('painel'); }

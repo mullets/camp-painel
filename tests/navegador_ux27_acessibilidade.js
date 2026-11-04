@@ -72,9 +72,10 @@ function auditar() {
   const raiz = getComputedStyle(document.documentElement), tok = n => { const d = document.createElement('i'); d.style.color = `var(${n})`; document.body.appendChild(d); const c = rgba(getComputedStyle(d).color); d.remove(); return c };
   const tokens = [];
   for (const t of ['--ink', '--ink2', '--ink3', '--blue', '--red', '--green', '--amber']) for (const f of ['--bg', '--surface', '--surface2']) { const rz = razao(tok(t), tok(f)); if (rz < 4.5) tokens.push(`${t} sobre ${f}: ${rz.toFixed(2)} (${raiz.getPropertyValue(t).trim()} / ${raiz.getPropertyValue(f).trim()})`) }
-  // etapas compactas (Material novo): cada número com o nome da etapa
-  const etapas = [...document.querySelectorAll('.steps.caminho.compacto')].filter(vis);
-  const etapasSemNome = etapas.flatMap(s => [...s.querySelectorAll(':scope > span')].filter(sp => !/\.\s*\S/.test(sp.getAttribute('aria-label') || '') || !/\.\s*\S/.test(sp.title || '')).map(sp => sp.textContent));
+  // etapas (Material novo): cada passo com o nome da etapa. Redesenho Material novo (04/11/2026): a régua de números saiu da linha (o documento
+  // do Rafael pede menos "indicadores numerados difíceis de interpretar"); os 7 passos, com o nome escrito, ficam no detalhe do lote
+  const etapas = [...document.querySelectorAll('.steps.caminho.compacto, .fila-det .steps.caminho')].filter(vis);
+  const etapasSemNome = etapas.flatMap(s => [...s.querySelectorAll(':scope > span')].filter(sp => s.classList.contains('compacto') ? (!/\.\s*\S/.test(sp.getAttribute('aria-label') || '') || !/\.\s*\S/.test(sp.title || '')) : !/[A-Za-zÀ-ú]{3}/.test(sp.textContent)).map(sp => sp.textContent));
   const etapasRoleImg = etapas.filter(s => s.getAttribute('role') === 'img').length;
   return { campos: campos.length, semNome, h1s, inativasSemHidden, pequenos, baixos, tokens, etapas: etapas.length, etapasSemNome, etapasRoleImg };
 }
@@ -92,7 +93,7 @@ function auditar() {
   const item = await page.evaluate(() => API('/api/projetos/F026-P0001/itens').then(l => (l.itens || l)[0].codigo).catch(() => 'F026-P0001-1968-S01-D00001'));
   const TELAS = [
     ['Home', async () => { await page.evaluate(() => go('painel')); await page.waitForTimeout(1500) }],
-    ['Material novo', async () => { await page.evaluate(() => go('filas')); await page.waitForTimeout(1500) }],
+    ['Material novo', async () => { await page.evaluate(() => go('filas')); await page.waitForTimeout(1500); await page.evaluate(() => { const b = document.querySelector('#filas-body [data-fila-exp]'); if (b) b.click() }); await page.waitForTimeout(600) }],
     ['Problemas', async () => { await page.evaluate(() => go('erros')); await page.waitForTimeout(1500) }],
     ['Projetos', async () => { await page.evaluate(() => go('projetos')); await page.waitForTimeout(1500) }],
     ['Revisar folha', async () => { await page.evaluate(c => { nav('projeto/F026-P0001'); return new Promise(ok => setTimeout(() => { abrirRevisaoItem(c); ok() }, 900)) }, item); await page.waitForTimeout(1800) }],
@@ -112,7 +113,7 @@ function auditar() {
       chk(a.baixos.length === 0, `${T}: contraste de cada texto visível ≥ 4,5 (3 se grande)`, amostra(a.baixos, 20));
       if (nome === 'Home') chk(a.tokens.length === 0, `${T}: tokens de texto com contraste ≥ 4,5 sobre --bg/--surface/--surface2`, a.tokens.join(' | '));
       if (nome === 'Material novo' && tema === 'light') chk(a.etapas > 0 && a.etapasSemNome.length === 0 && a.etapasRoleImg === 0,
-        `${T}: etapas "1 2 3 4 5 6 7" com o nome da etapa em cada número (aria-label e title; ${a.etapas} trilhos)`, `sem nome: ${a.etapasSemNome.join(',')} · role=img: ${a.etapasRoleImg}`);
+        `${T}: os 7 passos com o nome da etapa em cada um (no detalhe do lote; ${a.etapas} trilhos)`, `sem nome: ${a.etapasSemNome.join(',')} · role=img: ${a.etapasRoleImg}`);
       if (AXE) {
         await page.evaluate(AXE);
         const res = await page.evaluate(() => axe.run(document, { runOnly: { type: 'rule', values: ['label', 'color-contrast', 'select-name', 'aria-input-field-name'] } }).then(r => r.violations.map(v => `${v.id}: ${v.nodes.length} (${v.nodes.slice(0, 4).map(n => n.target.join(' ')).join(', ')})`)));
