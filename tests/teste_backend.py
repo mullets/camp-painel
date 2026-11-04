@@ -19,7 +19,7 @@ MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
 MODOS_RAPIDOS |= {"visitas_redesenho"}
-MODOS_RAPIDOS |= {"material_novo_filas"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
+MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11232,6 +11232,76 @@ def filho(modo):
             str(sorted(set(F[l1]) - set(FL[l1]))))
         ver("?leve=1 é menor", len(_j.dumps(list(FL.values()))) < len(_j.dumps(list(F.values()))) - 4000, "")
         for l in res: print(l)
+    elif modo == "projetos_lista":
+        # Redesenho Projetos (documento do Rafael §8, §12, §13): /api/projetos, /api/projetos/resumo e /api/projetos/codigos ganham filtros
+        # OPCIONAIS (autoria registrada, período, material, pendências), a busca acha sem acento / código sem hífen / autoria / cliente, a lista
+        # traz campos OPCIONAIS (autoria, ano_fim, miniatura real do próprio projeto, com_problema) e /api/projetos/filtros dá as opções reais.
+        # Sem parâmetro novo, a resposta e as contagens são as de sempre (mais os campos novos).
+        init_db(); _aplicar_migracoes_real()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F097','Fundo Arnaldo Martino')")
+        for n_ in range(1, 7):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F097',?)", (n_,))
+        P = "INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,ano_fim,autoria,status_site,cliente,capa_item) VALUES (?,?,?,?,?,?,?,?,?,?)"
+        c.execute(P, ("F097-P0001", "F097", 1, "Pensionato geriátrico na Vila Madalena", 1972, None, "Arnaldo Martino", "nao_publicado", "Irmãs de Caridade", "F097-P0001-1972-S01-D00002"))
+        c.execute(P, ("F097-P0002", "F097", 2, "Edifício na Rua Lisboa", 1958, 1961, "Arnaldo Martino; Jorge Wilheim", "no_ar", None, None))
+        c.execute(P, ("F097-P0003", "F097", 3, "Clube de campo", 0, None, None, "nao_publicado", None, None))
+        c.execute(P, ("F097-P0004", "F097", 4, "Hotel sem folhas", 1969, None, None, "nao_publicado", None, None))
+        c.execute(P, ("F097-P0005", "F097", 5, "Escola com problema", 1966, None, None, "nao_publicado", None, None))
+        ins = "INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, revisao, origem, retida, arquivo_jpg) VALUES (?,?,'S01',?,'x','conferida','importado',?,?)"
+        c.execute(ins, ("F097-P0001-1972-S01-D00001", "F097-P0001", 1, 0, "a/1.jpg"))
+        c.execute(ins, ("F097-P0001-1972-S01-D00002", "F097-P0001", 2, 0, "a/2.jpg"))   # a capa escolhida (vence a 1ª folha)
+        c.execute(ins, ("F097-P0002-1958-S01-D00001", "F097-P0002", 1, 1, "b/1.jpg"))   # retida: não serve de miniatura nem conta como imagem
+        c.execute(ins, ("F097-P0002-1958-S01-D00002", "F097-P0002", 2, 0, "b/2.jpg"))
+        c.execute(ins, ("F097-P0003-1960-S01-D00001", "F097-P0003", 1, 0, None))         # folha sem imagem
+        c.execute(ins, ("F097-P0005-1966-S01-D00001", "F097-P0005", 1, 0, None))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('corrigir','metadado','operador','F097-P0005-1966-S01-D00001','x')")
+        c.commit()
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-leitor-1234"})
+        cods = lambda qs: sorted(i["codigo"] for i in x.get("/api/projetos?fundo=F097&por_pagina=500&" + qs).json()["itens"])  # noqa: E731
+        L = {i["codigo"]: i for i in x.get("/api/projetos?fundo=F097").json()["itens"]}
+        ver("sem parâmetro novo: os 5 projetos, com os campos de sempre", len(L) == 5 and all(k in L["F097-P0001"] for k in ("codigo", "titulo", "fundo", "folhas", "fase", "metas")), str(len(L)))
+        ver("autoria: só a registrada no projeto; sem registro, null (o fundo 'Arnaldo Martino' não vira autor)",
+            L["F097-P0001"].get("autoria") == "Arnaldo Martino" and L["F097-P0003"].get("autoria") is None, str([L["F097-P0001"].get("autoria"), L["F097-P0003"].get("autoria")]))
+        ver("período: ano_fim vem na lista (1958–1961)", L["F097-P0002"].get("ano") == 1958 and L["F097-P0002"].get("ano_fim") == 1961, "")
+        ver("miniatura: a capa escolhida; senão a 1ª folha com imagem e não retida; sem imagem, null",
+            L["F097-P0001"].get("miniatura") == "F097-P0001-1972-S01-D00002" and L["F097-P0002"].get("miniatura") == "F097-P0002-1958-S01-D00002"
+            and L["F097-P0003"].get("miniatura") is None and L["F097-P0004"].get("miniatura") is None, str({k: v.get("miniatura") for k, v in L.items()}))
+        ver("com_problema: a mesma regra da aba Com problema", L["F097-P0005"].get("com_problema") is True and L["F097-P0001"].get("com_problema") is False, "")
+        ver("busca sem acento e com palavras fora de ordem ('geriatrico vila')", cods("q=geriatrico%20vila") == ["F097-P0001"], str(cods("q=geriatrico%20vila")))
+        ver("busca por código parcial com zeros ('0002') e sem hífen ('f097p0002')", cods("q=0002") == ["F097-P0002"] and cods("q=f097p0002") == ["F097-P0002"], str([cods("q=0002"), cods("q=f097p0002")]))
+        ver("busca pela autoria registrada e pelo cliente ('wilheim', 'irmas')", cods("q=wilheim") == ["F097-P0002"] and cods("q=irmas") == ["F097-P0001"], "")
+        ver("busca antiga continua ('Casa' acha o que achava; texto exato do título)", cods("q=Edif%C3%ADcio%20na%20Rua") == ["F097-P0002"], "")
+        ver("autoria=Jorge Wilheim acha o projeto de dois autores; __sem__ = sem autoria registrada",
+            cods("autoria=Jorge%20Wilheim") == ["F097-P0002"] and cods("autoria=arnaldo%20martino") == ["F097-P0001", "F097-P0002"]
+            and cods("autoria=__sem__") == ["F097-P0003", "F097-P0004", "F097-P0005"], str(cods("autoria=__sem__")))
+        ver("período 1960-1969 inclui a obra de 1958–1961 e a de 1966/1969; sem_data = ano 0",
+            cods("periodo=1960-1969") == ["F097-P0002", "F097-P0004", "F097-P0005"] and cods("periodo=sem_data") == ["F097-P0003"], str(cods("periodo=1960-1969")))
+        ver("material: com folhas / sem folhas / sem imagem (folha retida não conta)",
+            cods("material=com") == ["F097-P0001", "F097-P0002", "F097-P0003", "F097-P0005"] and cods("material=sem") == ["F097-P0004"]
+            and cods("material=sem_imagem") == ["F097-P0003", "F097-P0004", "F097-P0005"], str(cods("material=sem_imagem")))
+        ver("pendências: problema em aberto (ou lote esperando uma pessoa)", cods("pendencias=com") == ["F097-P0005"], str(cods("pendencias=com")))
+        ver("filtros somam (autoria + período)", cods("autoria=Arnaldo%20Martino&periodo=1970-1979") == ["F097-P0001"], "")
+        ver("ordem nova 'ano' (sem data no fim) e 'autoria'", [i["codigo"] for i in x.get("/api/projetos?fundo=F097&ordem=ano").json()["itens"]][-1] == "F097-P0003"
+            and [i["codigo"] for i in x.get("/api/projetos?fundo=F097&ordem=autoria").json()["itens"]][:2] == ["F097-P0001", "F097-P0002"], "")
+        R0 = x.get("/api/projetos/resumo?fundo=F097").json()
+        ver("resumo: as chaves de sempre e as dos cartões, pela MESMA regra da lista",
+            R0["todos"] == 5 and R0.get("com_material") == len(cods("material=com")) and R0.get("sem_imagem") == len(cods("material=sem_imagem"))
+            and R0.get("com_pendencias") == len(cods("pendencias=com")) and R0.get("sem_material") == 1 and R0["publicado"] == 1, str(R0))
+        R1 = x.get("/api/projetos/resumo?fundo=F097&autoria=Arnaldo%20Martino").json()
+        ver("resumo com filtro: a aba conta o que ela mostra", R1["todos"] == 2 and R1["publicado"] == 1, str(R1))
+        ver("codigos (selecionar todos do filtro) usa os mesmos filtros", x.get("/api/projetos/codigos?fundo=F097&material=sem_imagem").json().get("codigos") == ["F097-P0003", "F097-P0004", "F097-P0005"], "")
+        Fi = x.get("/api/projetos/filtros").json()
+        ver("filtros: autorias só as registradas (cada nome uma vez, com quantos projetos), décadas reais, sem data e sem autoria",
+            Fi.get("autorias") == [{"nome": "Arnaldo Martino", "n": 2}, {"nome": "Jorge Wilheim", "n": 1}] and Fi.get("sem_autoria") == 3 and Fi.get("sem_data") == 1
+            and [d["de"] for d in Fi.get("decadas", [])] == [1950, 1960, 1970], str(Fi))
+        for l in res: print(l)
     elif modo == "ux60_resposta_quebrada":
         # UX-60 (parte do painel): o CAMP Vision descarta o campo quando a resposta do modelo vem quebrada e avisa POR CAMPO
         # ("valor descartado: resposta do modelo quebrada (cidade)"). Em Qualidade do CAMP Vision: quantas folhas ficaram sem leitura
@@ -16806,6 +16876,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Material novo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Redesenho Projetos: filtros e campos opcionais de /api/projetos (autoria registrada, período, material, pendências, miniatura)")
+rc, out = rodar("projetos_lista", f"{tmp}/projetos_lista.db")
+if rc != 0: ok(False, f"teste projetos_lista não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Projetos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-60: Qualidade do CAMP Vision conta as folhas sem leitura por resposta quebrada")
 rc, out = rodar("ux60_resposta_quebrada", f"{tmp}/ux60_resposta_quebrada.db")
