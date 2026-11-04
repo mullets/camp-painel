@@ -18,7 +18,8 @@ MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}  
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
-MODOS_RAPIDOS |= {"visitas_redesenho"}   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
+MODOS_RAPIDOS |= {"visitas_redesenho"}
+MODOS_RAPIDOS |= {"material_novo_filas"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -11186,6 +11187,51 @@ def filho(modo):
         ver("Problemas: menu = aba Abertos = 'sem filtro' (todos sem o que você escondeu)", (P.get("pedem_acao") or {}).get("problemas") == 2 and n.get("pedem_acao") == 2
             and (n.get("sem_filtro") or {}).get("pedem_acao") == 2, str({"menu": (P.get("pedem_acao") or {}).get("problemas"), "aba": n.get("pedem_acao"), "sem_filtro": n.get("sem_filtro")}))
         for l in res: print(l)
+    elif modo == "material_novo_filas":
+        # Redesenho Material novo (documento do Rafael §5, §7, §12): /api/filas ganha campos OPCIONAIS para a linha — a autoria SÓ a registrada
+        # no projeto (nunca o fundo como autor), a miniatura SÓ de folha real do próprio lote (com imagem; nunca retida; sem folha = capa do
+        # projeto ou nada) — e o parâmetro opcional ?leve=1, que tira os JSONs do CAMP Vision que a tela não usa. Sem ?leve, nada muda.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F098','Fundo Arnaldo Martino')")
+        for n_ in (1, 2, 3):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F098',?)", (n_,))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,autoria) VALUES ('F098-P0001','F098',1,'Casa A',1970,'Arnaldo Martino e Zezinho')")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F098-P0002','F098',2,'Casa B',1971)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,capa_item) VALUES ('F098-P0003','F098',3,'Casa C',1972,'F098-P0003-1972-S01-D00009')")
+        l1 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, status_json, resultado) VALUES ('L1','F098-P0001','/a','revisao',?,?)",
+                       (_j.dumps({"grande": "x" * 5000}), _j.dumps({"importacao": {"x": 1}}))).lastrowid
+        l2 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L2','F098-P0002','/b','revisao')").lastrowid
+        l3 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('L3','F098-P0003','/c','revisao')").lastrowid
+        ins = "INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial, titulo, lote_id, revisao, origem, retida, arquivo_jpg) VALUES (?,?,'S01',?,'x',?,'pendente','importado',?,?)"
+        c.execute(ins, ("F098-P0001-1970-S01-D00001", "F098-P0001", 1, l1, 1, "a/1.jpg"))      # retida: não serve de miniatura
+        c.execute(ins, ("F098-P0001-1970-S01-D00002", "F098-P0001", 2, l1, 0, None))           # sem imagem: não serve
+        c.execute(ins, ("F098-P0001-1970-S01-D00003", "F098-P0001", 3, l1, 0, "a/3.jpg"))      # a 1ª folha real com imagem
+        c.execute(ins, ("F098-P0003-1972-S01-D00009", "F098-P0003", 9, None, 0, "c/9.jpg"))   # capa do projeto (de outro lote)
+        c.commit()
+        auth.criar_usuario("Leitor", "le@camp.arq.br", "senha-leitor-1234", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-leitor-1234"})
+        F = {l["id"]: l for l in x.get("/api/filas").json()}
+        FL = {l["id"]: l for l in x.get("/api/filas?leve=1").json()}
+        ver("autoria: só a registrada no projeto; sem registro, null (o fundo 'Arnaldo Martino' não vira autor)",
+            F[l1].get("projeto_autoria") == "Arnaldo Martino e Zezinho" and F[l2].get("projeto_autoria") is None and F[l2].get("fundo") == "Fundo Arnaldo Martino",
+            str([F[l1].get("projeto_autoria"), F[l2].get("projeto_autoria")]))
+        ver("miniatura: a 1ª folha do lote com imagem e não retida", F[l1].get("miniatura") == "F098-P0001-1970-S01-D00003", str(F[l1].get("miniatura")))
+        ver("miniatura: lote sem folha usa a capa do projeto; sem capa nem folha, null", F[l3].get("miniatura") == "F098-P0003-1972-S01-D00009" and F[l2].get("miniatura") is None,
+            str([F[l3].get("miniatura"), F[l2].get("miniatura")]))
+        ver("sem ?leve a resposta continua com os campos de sempre (status_json, resultado)", "status_json" in F[l1] and "resultado" in F[l1] and "x" * 100 in (F[l1]["status_json"] or ""), "")
+        ver("?leve=1 tira status_json/resultado/execucao_json/aceite_json e mantém o resto (fase, contagens, campos novos)",
+            not any(k in FL[l1] for k in ("status_json", "resultado", "execucao_json", "aceite_json"))
+            and all(FL[i]["fase"] == F[i]["fase"] and FL[i]["itens_total"] == F[i]["itens_total"] and FL[i].get("miniatura") == F[i].get("miniatura") for i in F),
+            str(sorted(set(F[l1]) - set(FL[l1]))))
+        ver("?leve=1 é menor", len(_j.dumps(list(FL.values()))) < len(_j.dumps(list(F.values()))) - 4000, "")
+        for l in res: print(l)
     elif modo == "ux60_resposta_quebrada":
         # UX-60 (parte do painel): o CAMP Vision descarta o campo quando a resposta do modelo vem quebrada e avisa POR CAMPO
         # ("valor descartado: resposta do modelo quebrada (cidade)"). Em Qualidade do CAMP Vision: quantas folhas ficaram sem leitura
@@ -13853,7 +13899,7 @@ def filho(modo):
         ver("o histórico abre pelo menu do avatar (Tarefas e avisos recentes) e lista os avisos desta sessão", 'data-who="avisos">Tarefas e avisos recentes<' in html and "a==='avisos')abrirTarefas()" in html and "data-avisos-hist" in html)
         ver("chip de tarefa concluída com sucesso fecha sozinho em 8 s; a que falhou fica", "N.every(t=>t.estado==='ok')&&!document.hidden)CHIP_FECHAR=setTimeout(" in html and "marcarTarefasVistas()},8000)" in html)
         ver("números carregando = esqueleto (num-skel): contador das listas, máquinas do topo e abas de Fundos", ".num-skel{" in html and "cnt.innerHTML=NUM_SKEL" in html and "${medindo?NUM_SKEL:lig} de ${capt.length}" in html and "if(FUNDOS_API==null)e.innerHTML=NUM_SKEL" in html)
-        ver("Material novo começa com 'Carregando…' (não lista vazia = '0 registros')", '<tbody id="filas-body"><tr><td colspan="4" class="empty">Carregando…</td></tr></tbody>' in html)
+        ver("Material novo começa com 'Carregando…' (não lista vazia = '0 registros')", '<tbody id="filas-body"><tr><td colspan="6" class="empty">Carregando…</td></tr></tbody>' in html)
         for l in res: print(l)
     elif modo == "ux_home":
         # UX-18/21 (Home enxuta) e UX-30 desfeito a pedido do Rafael (métricas de volta, abertas). O comportamento é provado no navegador (tests/navegador_ux_home.js); aqui, a guarda rápida
@@ -16752,6 +16798,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"UX-70: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Redesenho Material novo: campos opcionais de /api/filas (autoria registrada, miniatura real, ?leve=1)")
+rc, out = rodar("material_novo_filas", f"{tmp}/material_novo_filas.db")
+if rc != 0: ok(False, f"teste material_novo_filas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Material novo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("UX-60: Qualidade do CAMP Vision conta as folhas sem leitura por resposta quebrada")
 rc, out = rodar("ux60_resposta_quebrada", f"{tmp}/ux60_resposta_quebrada.db")
