@@ -83,7 +83,7 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
   o "Projeto fechado" é dito no próprio Próximo passo (sem faixa verde separada), com os **avisos menores** ao lado da contagem das folhas.
 
 ## Menu (redesenho §3, 04/11/2026; UX-28; antes CAMP-154)
-**Grupos (redesenho §3):** **Principal** · **Acervo** · **Público e processos** · **Administração** · **Ajuda** ("Público" e "Acompanhamento" deixaram de ser
+**Grupos (redesenho §3; o 1º grupo passou de "Principal" a **Visão geral** no redesenho de Material novo §3, 04/11/2026):** **Visão geral** · **Acervo** · **Público e processos** · **Administração** · **Ajuda** ("Público" e "Acompanhamento" deixaram de ser
 grupos: Visitas ao site e Relatórios estão em Público e processos; Histórico de ações e Qualidade do CAMP Vision em Administração). No celular:
 **Abrir menu** / **Fechar menu** (o botão ☰ do cabeçalho). Os nomes abaixo continuam.
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
@@ -92,6 +92,9 @@ topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, 
 **Acompanhamento**; **Administração** (**Máquinas**, antes "Máquinas e site"; **Configurações**); **Ajuda**. O resto fica em **Mais**.
 "Fundos e arquitetos" deixou de existir: são dois itens, cada um com a sua página.
 **Protocolo** (02/11/2026, contrato 1.7): o número que a pessoa recebeu do site, igual em todas as telas do Público e na busca do topo. `CAMP-AAAA-NNNNNN` (pedido, inscrição, Avise-me), `CAMP-AAAA-DNNNNNN` (cadastro de download), `CAMP-AAAA-PNNNNNN` (pedido registrado só no painel). Em fonte de código, com **copiar** no detalhe; busca com ou sem hífens. Não usar "número do pedido" nem "ticket".
+**Marca do menu** (Rafael, 04/11/2026): o logo da CAMP + **CAMP** (não "Acervos", sem "administração interna"); é um link com o nome acessível
+"**CAMP — ir para a página inicial**" que leva SEMPRE ao **Precisa de você** (a Home), também com o menu recolhido e na gaveta do celular.
+A aba do navegador diz "**CAMP — Administração**".
 **Recolher menu** / **Expandir menu** (UX-28): o botão "‹" no topo do menu e as teclas `[` ou `⌘/Ctrl+B`. Recolhido, o menu é uma barra
 estreita só com ícones; o nome do item, o número e a tecla aparecem na dica ao passar o mouse ou focar. Não usar "barra lateral".
 

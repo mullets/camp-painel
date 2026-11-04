@@ -33,15 +33,15 @@ const tecla = async (pg, k) => { await pg.evaluate(() => document.activeElement 
 
   // 1) com o "Mais" fechado: o topo (filas do dia) e os destinos, pela ordem do trabalho
   const v0 = await visiveis(page);
-  chk(v0.join(',') === '#Principal,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,#Público e processos,solicitacoes,inscricoes,#Administração,estacoes,nav-mais-pc',
-      '"Mais" fechado: Principal (Precisa de você · Material novo · Problemas · Decisões · Projetos · Busca) · Acervo · Público e processos · Administração: ' + v0.join(','));
+  chk(v0.join(',') === '#Visão geral,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,#Público e processos,solicitacoes,inscricoes,#Administração,estacoes,nav-mais-pc',
+      '"Mais" fechado: Visão geral (Precisa de você · Material novo · Problemas · Decisões · Projetos · Busca) · Acervo · Público e processos · Administração: ' + v0.join(','));
   chk(['filas', 'erros', 'decisoes'].every(v => v0.includes(v)), 'as filas do dia (Material novo, Problemas, Decisões) à vista sem abrir o "Mais"');
 
   // 2) com o "Mais" aberto: todos os grupos, na ordem pedida
   await page.click('#nav-mais-pc'); await page.waitForTimeout(200);
   const v1 = await visiveis(page);
-  chk(v1.join(',') === '#Principal,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos,#Público e processos,solicitacoes,inscricoes,uso,visitas,relatorios,#Administração,estacoes,config,auditoria,qualidade,#Ajuda,caminho,glossario,nav-mais-pc',
-      '"Mais" aberto: Principal · Acervo · Público e processos · Administração (com Histórico e Qualidade do CAMP Vision, só admin) · Ajuda: ' + v1.join(','));
+  chk(v1.join(',') === '#Visão geral,painel,filas,erros,decisoes,projetos,nav-busca,#Acervo,fundos,arquitetos,localizacao,estante,etiquetas,emprestimos,#Público e processos,solicitacoes,inscricoes,uso,visitas,relatorios,#Administração,estacoes,config,auditoria,qualidade,#Ajuda,caminho,glossario,nav-mais-pc',
+      '"Mais" aberto: Visão geral · Acervo · Público e processos · Administração (com Histórico e Qualidade do CAMP Vision, só admin) · Ajuda: ' + v1.join(','));
   await page.click('#nav-mais-pc');
 
   // 3) nome do menu = título da página (h1, topo e trilha)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CAMP Acervos — Administração</title>
+<title>CAMP — Administração</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -963,6 +963,45 @@ tbody tr:hover td{background:var(--hover)}tbody tr.sel td{background:var(--sel)}
 @media (min-width:1600px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr) 400px}}
 @media (max-width:1279px){#v-painel .ini-grid{grid-template-columns:minmax(0,1fr)}}   /* notebook/tablet: a coluna da direita desce para baixo da principal */
 @media (min-width:900px) and (max-width:1279px){#v-painel .ini-grid>.ini-col+.ini-col{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}   /* e usa a largura em duas colunas */
+/* ===== Redesenho Material novo §2–3 (04/11/2026) · menu lateral azul-marinho escuro nos DOIS temas, independente da área clara;
+   item ativo com fundo azul e texto branco. Tokens --side-* (docs/UI.md, "Moldura"). ===== */
+:root{--side-bg:#0E1F3A;--side-ink:#F2F5FA;--side-ink2:#C3CEDF;--side-grp:#9DB0CC;--side-hover:#1B3359;--side-sel:#2457A6;--side-sel-ink:#FFFFFF;--side-line:#25406A;--side-n:#22395F;--side-n-r:#C93C3C}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--side-bg:#0A1628;--side-hover:#16294A;--side-sel:#2D63B8;--side-line:#1F3456;--side-n:#1C3152;--side-n-r:#C93C3C}}
+:root[data-theme="dark"]{--side-bg:#0A1628;--side-hover:#16294A;--side-sel:#2D63B8;--side-line:#1F3456;--side-n:#1C3152;--side-n-r:#C93C3C}
+.side{background:var(--side-bg);border-right-color:var(--side-line);color:var(--side-ink)}
+.side .nav button{color:var(--side-ink2)}
+.side .nav button:hover{background:var(--side-hover);color:var(--side-ink)}
+.side .nav button.on{background:var(--side-sel);color:var(--side-sel-ink)}
+.side .nav button.on::before{background:var(--side-sel-ink)}
+.side .nav button:focus-visible,.side .brand:focus-visible{outline:2px solid var(--side-ink);outline-offset:-2px}
+.side .nav .grp{color:var(--side-grp)}
+.side .foot{color:var(--side-ink2);border-top-color:var(--side-line)}.side .foot a{color:var(--side-ink)}
+.side .collapse{background:var(--side-bg);border-color:var(--side-line);color:var(--side-ink2)}
+.side .nav-mais-pc[aria-expanded="true"]{color:var(--side-ink)}
+.side .nav button kbd{background:var(--side-hover);color:var(--side-ink);border-color:var(--side-line)}
+@media (min-width:721px){.app.collapsed .side .nav .grp{border-top-color:var(--side-line)}}
+/* Menu (pedido do Rafael, 04/11): a marca é o logo + "CAMP" e leva SEMPRE à Home (#painel) */
+.side .brand{color:var(--side-ink);text-decoration:none;border-radius:var(--r-md);margin:0 0 6px;padding:6px 8px 12px}
+.side .brand:hover{background:var(--side-hover)}
+.side .brand .mark-camp{fill:var(--side-ink)}.side .brand .mark-camp rect{fill:var(--side-bg)}
+.side .brand-nome{font:700 var(--fs-xl)/1 var(--sans);letter-spacing:.06em}
+@media (min-width:721px){.app.collapsed .side .brand{justify-content:center;padding:6px 0 12px}.app.collapsed .side .brand-nome{display:none}}
+/* contadores: todos na MESMA coluna à direita, sem encostar no rótulo; algarismos tabulares */
+/* o botão vira grade: ícone | rótulo (o texto ocupa o espaço) | contador; a pílula fica sempre na 3ª coluna, colada à direita */
+/* largura: o rótulo mais longo com contador ("Pedidos de alta resolução" + "1.234") cabe numa linha, sem cortar nem quebrar */
+:root{--side:280px}
+.side{padding-left:8px;padding-right:8px}
+.side .nav button{display:grid;grid-template-columns:18px minmax(0,1fr) auto;column-gap:10px;min-width:0;overflow:hidden;padding-left:10px;padding-right:10px;font-size:var(--fs-tab)}
+.side .nav button.on::before{left:-8px}
+.side .nav button .n{grid-column:3;grid-row:1;justify-self:end;margin-left:0;min-width:34px;height:22px;display:inline-grid;place-items:center;padding:0 7px;font:600 var(--fs-2xs)/1 var(--sans);font-variant-numeric:tabular-nums;background:var(--side-n);color:var(--side-ink);border:0;border-radius:var(--r-pill)}
+.side .nav button .n.r{background:var(--side-n-r);color:#FFFFFF}
+.side .nav button.on .n{background:var(--side-sel-ink);color:var(--side-sel)}
+.side .nav button.on .n.r{background:var(--side-n-r);color:#FFFFFF;box-shadow:0 0 0 2px var(--side-sel-ink)}
+/* a tecla do atalho não empurra a pílula: fica por cima, à direita, e só no item sem contador (no item com contador a tecla está na dica) */
+.side .nav button kbd{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
+.side .nav button:has(.n:not([hidden])) kbd{display:none}
+@media (min-width:721px){.app.collapsed .side .nav button{grid-template-columns:minmax(0,1fr);justify-items:center;column-gap:0}.app.collapsed .side .nav button .n:not([hidden]){position:absolute;top:3px;left:calc(50% + 8px);width:10px;height:10px;min-width:0;padding:0;font-size:0;background:var(--side-ink2);box-shadow:0 0 0 2px var(--side-bg)}
+  .app.collapsed .side .nav button .n.r:not([hidden]){background:var(--side-n-r)}.app.collapsed .side .nav button.on .n:not([hidden]){box-shadow:0 0 0 2px var(--side-sel)}}
 /* ===== Redesenho §4 · barra superior: busca no centro, "Estado dos sistemas", alerta que impede o trabalho, conta num menu só ===== */
 .top{flex:none;gap:10px;padding:12px var(--gutter) 10px;border-bottom:1px solid var(--line2)}   /* flex:none: na coluna do .main o topo não encolhe por baixo do conteúdo */
 .top .search{flex:1 1 260px;max-width:640px;margin:0 auto;min-width:0}
@@ -1502,10 +1541,10 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 <body>
 <div class="app">
 <aside class="side"><button type="button" class="collapse" id="collapse" title="Recolher menu ([ ou ⌘/Ctrl + B)" aria-label="Recolher menu ([ ou ⌘/Ctrl + B)" aria-expanded="true" aria-controls="nav"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
-  <div class="brand"><div class="mark" title="Casa da Arquitetura Moderna Paulista"><svg class="mark-camp" viewBox="0 0 48 44" role="img" aria-label="CAMP"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></div><div><b>Acervos</b><small>administração interna</small></div></div>
+  <a class="brand" id="brand-home" href="#painel" aria-label="CAMP — ir para a página inicial" title="Ir para a página inicial (Precisa de você)"><span class="mark"><svg class="mark-camp" viewBox="0 0 48 44" aria-hidden="true" focusable="false"><path d="M0 7 L6 2 L18 8 L24 4 L36 10 L42 6 L48 9 L48 44 L0 44 Z"/><rect x="15" y="9" width="2.6" height="35" fill="var(--surface)"/><rect x="33" y="11" width="2.6" height="33" fill="var(--surface)"/></svg></span><span class="brand-nome" aria-hidden="true">CAMP</span></a>
   <nav class="nav" id="nav">
     <!-- Redesenho §3 (04/11/2026; antes UX-28): grupos por finalidade — Principal (as filas do dia, sempre à vista) · Acervo · Público e processos · Administração; Ajuda no fim. O resto no "Mais". Nome do menu = título da página -->
-    <div class="grp">Principal</div>
+    <div class="grp">Visão geral</div>
     <button data-v="painel" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>Precisa de você<span class="n" id="n-gente" hidden></span></button>
     <button data-v="filas"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Material novo<span class="n" id="n-filas" hidden></span></button>
     <button data-v="erros"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>Problemas<span class="n" id="n-err" hidden></span></button>
@@ -2104,6 +2143,8 @@ document.addEventListener('click',e=>{if(e.target.closest('#nav-busca')){if(docu
   if(e.target.closest('#nav-mais-pc')){const n=document.getElementById('nav');navSecAbrir(!(n&&n.classList.contains('sec-aberta')),true)}});
 document.addEventListener('click',e=>{if(e.target.closest('#nav-gaveta')){gavetaMenu(!document.body.classList.contains('nav-aberto'));return}
   if(document.body.classList.contains('nav-aberto')&&(e.target.closest('#nav-fundo')||e.target.closest('#nav button[data-v]')))gavetaMenu(false)});
+/* Menu (Rafael, 04/11): o logo + "CAMP" leva SEMPRE à Home (o mesmo nav() do "Precisa de você": respeita alterações não salvas e fecha a gaveta) */
+document.addEventListener('click',e=>{const b=e.target.closest('#brand-home');if(!b||e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;e.preventDefault();if(document.body.classList.contains('nav-aberto'))gavetaMenu(false);nav('painel')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('nav-aberto')){e.preventDefault();e.stopPropagation();gavetaMenu(false)}},true);
 /* §3: setas ↑ ↓ (e Home/End) andam pelos itens visíveis do menu; Tab continua normal */
 document.getElementById('nav').addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key)||!e.target.closest('#nav button'))return;

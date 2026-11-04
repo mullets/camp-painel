@@ -106,10 +106,18 @@ Já usam o componente: `estadoErroHTML` (todas as listas), a página "Sem acesso
 
 ## Moldura, menu e topo (redesenho §3, §4, §19)
 
-- **Menu** (`#nav`): grupos `.grp` Principal · Acervo · Público e processos · Administração · Ajuda. Item = `<button data-v="rota">` com
+- **Menu** (`#nav`): grupos `.grp` Visão geral · Acervo · Público e processos · Administração · Ajuda. Item = `<button data-v="rota">` com
   ícone SVG 24×24 de traço (aparece com 18 px) + nome + `<span class="n">` **só** quando o item é demanda (fila, pedido, decisão).
   `.n.r` = demanda que bloqueia. Ativo: `.on` + `aria-current="page"` (fundo `--sel`, barra azul, texto 600). Item novo = linha em
   `NAV_ATALHOS`/`AJUDA_ATALHOS` (o `check_ui` confere) e, se for só de admin, `data-pode` ou a regra de papel no CSS.
+- **Cores do menu** (redesenho Material novo §2–3): o menu é **azul-marinho escuro nos dois temas** (`--side-bg`), separado da área
+  principal clara; texto `--side-ink`/`--side-ink2`, título de grupo `--side-grp`, hover `--side-hover`, item ativo **fundo azul**
+  `--side-sel` com texto branco `--side-sel-ink` e a barra branca à esquerda. Não use `--surface`/`--ink` dentro de `.side`.
+- **Marca**: `a#brand-home.brand` = logo (`.mark`) + `.brand-nome` "CAMP"; clique = `nav('painel')` (fecha a gaveta no celular).
+- **Contadores**: o botão do menu é uma grade `ícone | rótulo | contador`; a pílula `.n` fica sempre na 3ª coluna (mesmo `right` em todos os
+  itens, 22 px de altura, `min-width` 34 px, algarismos tabulares, `fmtN`). A tecla do atalho (`kbd`) não ocupa espaço: aparece por cima,
+  só no item sem contador. Recolhido, o contador vira selo de 10 px no canto do ícone. Largura do menu aberto: `--side` 280 px (cabe
+  "Pedidos de alta resolução" + "1.234" numa linha). `tests/navegador_menu_camp.js` confere.
 - **Larguras**: ≥ 1280 px menu aberto; 721–1279 px menu recolhido por padrão (`camp.side` lembra a escolha da pessoa); ≤ 720 px gaveta
   (`gavetaMenu(true|false)`, botão `#nav-gaveta` no topo, fundo `#nav-fundo`; com ela aberta `.main` fica `inert`).
 - **Home**: o contêiner `#v-painel .ini-grid` tem duas `.ini-col` — principal larga + secundária 300–360 px (400 px ≥ 1600). Abaixo de
