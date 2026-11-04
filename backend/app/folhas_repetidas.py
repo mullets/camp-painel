@@ -12,6 +12,12 @@ Casa "a mesma prancha" (dentro do mesmo projeto):
            ou quando o dHash confirma a ≤ 12 bits ("Planta/001.tif" e "Corte/001.tif" NÃO são a mesma prancha);
          — mesma posição em duas subpastas com o mesmo número de arquivos, se o dHash confirmar a ≤ 12 bits.
   incerto (só listado, nunca entra no plano) — a posição casa e não há imagem para confirmar, ou a imagem não confirma.
+REGRA DURA (04/11/2026, depois da simulação real do F001, que juntava D3–D7 DNG do P0030 e fotos em sequência do P0001): duas folhas só
+são a mesma prancha se vierem de pastas de FORMATO/VERSÃO diferentes (`conflito`). Da mesma pasta, nunca (vira incerto); o mesmo formato
+em pastas diferentes (TIFF × TIFF), só pelo md5; sem arquivo de origem, só pelo md5. Um grupo tem no máximo uma folha por pasta/formato:
+junta-se pelo par mais forte primeiro (md5 > mesmo nome > menor dHash) e o par que violaria a regra vai para os incertos. As marcas
+antigas `duplicata_de` (CAMP Vision ou pessoa) não juntam nada: só informam; a de MÁQUINA que liga duas folhas da mesma pasta é listada
+como "marca antiga suspeita" (`marcas_suspeitas`) para uma pessoa revisar.
 A que fica ("principal"): não é cópia de outra > já está no site > já conferida > TIFF > DNG > JPG LIMPO > JPG > outra;
 "fotos em alta" > sem indicação > "fotos para internet"; empate: o menor D.
 """
@@ -180,7 +186,6 @@ def ler_preparo(pasta) -> dict[str, dict]:
     return out
 
 
-# ----------------------------------------------------------------- agrupar
 class _UF:
     def __init__(self):
         self.p = {}
@@ -196,52 +201,114 @@ class _UF:
         self.p[self.achar(a)] = self.achar(b)
 
 
+# ----------------------------------------------------------------- regra dura (CAMP-DUP-FORMATOS, 2ª rodada)
+def pasta_chave(arquivo_origem) -> str | None:
+    """A pasta do arquivo de origem (caminho inteiro, normalizado); None quando a folha não tem arquivo de origem."""
+    os_ = origens(arquivo_origem)
+    if not os_:
+        return None
+    return norm(str(_caminho(os_[0]).parent)) or "(raiz do lote)"
+
+
+def conflito(origem_a, origem_b, md5_igual: bool = False) -> str | None:
+    """REGRA DURA: duas folhas só podem ser a mesma prancha se vierem de pastas de FORMATO/VERSÃO diferentes (TIFF × DNG × JPG ×
+    JPG LIMPO; "em alta" × "para internet"). Devolve o motivo do NÃO (ou None quando podem ser a mesma prancha):
+      - a mesma pasta (fotos parecidas em sequência, pranchas de um mesmo jogo): NUNCA, nem pelo md5;
+      - o mesmo formato em pastas diferentes (TIFF × TIFF): só se o arquivo for o mesmo (md5);
+      - sem arquivo de origem conhecido: só o mesmo arquivo (md5)."""
+    pa, pb = pasta_chave(origem_a), pasta_chave(origem_b)
+    if pa is None or pb is None:
+        return None if md5_igual else "sem a pasta de origem, só o mesmo arquivo (md5) junta"
+    if pa == pb:
+        return f"as duas estão na mesma pasta ('{subpasta(origem_a)}'): folhas da mesma pasta nunca são a mesma prancha"
+    if not md5_igual and rank_formato(origem_a) == rank_formato(origem_b):
+        sa, sb = subpasta(origem_a), subpasta(origem_b)
+        if sa == sb:                               # 'TIFF' e 'TIFF': mostra a pasta de cima para a pessoa achar as duas
+            sa, sb = ("/".join(_caminho(origens(o)[0]).parent.parts[-2:]) for o in (origem_a, origem_b))
+        return f"as duas são {rotulo_formato(origem_a)} ('{sa}' e '{sb}'): só junto formatos diferentes"
+    return None
+
+
+def _campo(i, k):
+    try:
+        return i[k]
+    except (KeyError, IndexError):
+        return None
+
+
+def marca_de_pessoa(i) -> bool:
+    """A marca 'duplicata de' foi conferida por uma PESSOA (tela Duplicatas/revisão) e continua a mesma: nunca é alterada aqui."""
+    return bool(_campo(i, "duplicata_de") and _campo(i, "duplicata_conferida_em") and _campo(i, "duplicata_conferida_de") == _campo(i, "duplicata_de")
+                and (_campo(i, "duplicata_conferida_por") or "") != "limpeza de formatos")
+
+
+def marcas_suspeitas(itens: list) -> list[dict]:
+    """Marcas antigas de MÁQUINA (CAMP Vision pelo dHash, importação) que ligam duas folhas da MESMA pasta: provavelmente pranchas
+    diferentes e parecidas. Só listadas para uma pessoa revisar (marca de pessoa nunca entra)."""
+    por_cod = {i["codigo"]: i for i in itens}
+    out = []
+    for i in itens:
+        de = i["duplicata_de"]
+        if not de or de not in por_cod or marca_de_pessoa(i):
+            continue
+        pa = pasta_chave(i["arquivo_origem"])
+        if pa is not None and pa == pasta_chave(por_cod[de]["arquivo_origem"]):
+            tipo = _campo(i, "tipo_duplicata") or ""
+            out.append({"codigo": i["codigo"], "de": de, "tipo": tipo, "pasta": subpasta(i["arquivo_origem"]),
+                        "quem": "CAMP Vision" if tipo in ("exata", "perceptual") else "automática"})
+    return out
+
+
+# ----------------------------------------------------------------- agrupar
 def agrupar(itens: list, md5: dict[str, str], hashes: dict[str, list[str]]) -> dict:
     """itens: linhas de `item` de UM projeto (codigo, sequencial, arquivo_origem, duplicata_de, revisao, status_site…).
     md5 {codigo: md5}, hashes {codigo: [dHash…]} (vazio quando não há imagem). Devolve
-    {grupos: [[principal, cópia…]], motivos: {frozenset(par): {…}}, incertos: [(a, b, motivo)], sem_imagem: n}."""
+    {grupos: [[principal, cópia…]], motivos: {frozenset(par): {…}}, incertos: [(a, b, motivo)], sem_imagem: n}.
+
+    Junta pelo par MAIS FORTE primeiro (md5 > mesmo nome > menor dHash) e só se a união respeitar a regra dura (`conflito`) entre
+    TODAS as folhas dos dois grupos: um grupo tem no máximo uma folha por pasta e por formato. O par que a regra recusa vai para os
+    incertos (nunca para o plano). As marcas antigas `duplicata_de` NÃO juntam nada aqui (só informam)."""
     por_cod = {i["codigo"]: i for i in itens}
     cods = list(por_cod)
-    sub = {c: subpasta(por_cod[c]["arquivo_origem"]) for c in cods}
-    uf, motivos, incertos = _UF(), defaultdict(set), []
-
-    def unir(a, b, m):
-        uf.unir(a, b)
-        motivos[frozenset((a, b))].add(m)
+    ori = {c: por_cod[c]["arquivo_origem"] for c in cods}
+    sub = {c: subpasta(ori[c]) for c in cods}
+    m5 = {c: (md5.get(c) or "").strip().lower() for c in cods}
+    pares, incertos = [], []                       # pares: (força, dHash, a, b, motivo)
 
     por_md5 = defaultdict(list)
     for c in cods:
-        if md5.get(c):
-            por_md5[md5[c]].append(c)
+        if m5[c]:
+            por_md5[m5[c]].append(c)
     for g in por_md5.values():
-        for c in g[1:]:
-            unir(g[0], c, "mesmo arquivo (md5)")
+        for x, a in enumerate(g):
+            for b in g[x + 1:]:
+                pares.append((0, 0, a, b, "mesmo arquivo (md5)"))
     com = [c for c in cods if hashes.get(c)]
     for k, a in enumerate(com):
         for b in com[k + 1:]:
             d = menor_distancia(hashes[a], hashes[b])
             if d <= LIMIAR_FORTE:
-                unir(a, b, f"imagem igual (dHash {d})")
+                pares.append((2, d, a, b, f"imagem igual (dHash {d})"))
     por_rad = defaultdict(list)
     for c in cods:
-        r = radical(por_cod[c]["arquivo_origem"])
+        r = radical(ori[c])
         if r:
             por_rad[r].append(c)
     for g in por_rad.values():
         for x, a in enumerate(g):
             for b in g[x + 1:]:
-                if sub[a] == sub[b] or uf.achar(a) == uf.achar(b):
+                if sub[a] == sub[b]:
                     continue
                 d = menor_distancia(hashes.get(a), hashes.get(b))
                 if d <= LIMIAR_CONFIRMA:
-                    unir(a, b, f"mesmo nome em outra subpasta (dHash {d})")
+                    pares.append((1, d, a, b, f"mesmo nome em outra subpasta (dHash {d})"))
                 elif d == 64 and e_pasta_de_formato(sub[a]) and e_pasta_de_formato(sub[b]):
-                    unir(a, b, "mesmo nome em outra pasta de formato")
+                    pares.append((1, 64, a, b, "mesmo nome em outra pasta de formato"))
                 else:
                     incertos.append((a, b, "mesmo nome em outra subpasta" + (f", mas a imagem é diferente (dHash {d})" if d < 64 else ", sem imagem para confirmar")))
     por_sub = defaultdict(list)
     for c in cods:
-        os_ = origens(por_cod[c]["arquivo_origem"])
+        os_ = origens(ori[c])
         por_sub[sub[c]].append((_caminho(os_[0]).name.lower() if os_ else "", por_cod[c]["sequencial"] or 0, c))
     for s in por_sub:
         por_sub[s].sort()
@@ -251,13 +318,34 @@ def agrupar(itens: list, md5: dict[str, str], hashes: dict[str, list[str]]) -> d
             if len(por_sub[s1]) != len(por_sub[s2]) or len(por_sub[s1]) < 2:
                 continue
             for (_, _, a), (_, _, b) in zip(por_sub[s1], por_sub[s2]):
-                if uf.achar(a) == uf.achar(b):
-                    continue
                 d = menor_distancia(hashes.get(a), hashes.get(b))
                 if d <= LIMIAR_CONFIRMA:
-                    unir(a, b, f"mesma posição na subpasta (dHash {d})")
+                    pares.append((2, d, a, b, f"mesma posição na subpasta (dHash {d})"))
                 else:
                     incertos.append((a, b, "mesma posição na subpasta" + (f", mas a imagem é diferente (dHash {d})" if d < 64 else ", sem imagem para confirmar")))
+
+    seq = {c: por_cod[c]["sequencial"] or 0 for c in cods}
+    pares.sort(key=lambda p: (p[0], p[1], min(seq[p[2]], seq[p[3]]), max(seq[p[2]], seq[p[3]])))
+    uf, membros, motivos = _UF(), {c: [c] for c in cods}, defaultdict(set)
+    recusados = []                                 # (a, b, motivo do par, por que não, direto?)
+    for _, _, a, b, m in pares:
+        ra, rb = uf.achar(a), uf.achar(b)
+        if ra == rb:
+            motivos[frozenset((a, b))].add(m)
+            continue
+        porque = conflito(ori[a], ori[b], bool(m5[a]) and m5[a] == m5[b])
+        if porque:
+            recusados.append((a, b, m, porque, True))
+            continue
+        barra = next(((x, y, q) for x in membros[ra] for y in membros[rb]
+                      for q in [conflito(ori[x], ori[y], bool(m5[x]) and m5[x] == m5[y])] if q), None)
+        if barra:                                  # a união poria duas folhas da mesma pasta/formato no mesmo grupo: fica o par mais forte
+            x, y, q = barra
+            recusados.append((a, b, m, f"juntaria {_d(x)} e {_d(y)} ({q.split(':')[0]})", False))
+            continue
+        uf.unir(a, b)                              # _UF.unir: a raiz de `a` passa a apontar para a raiz de `b`
+        membros[rb] = membros[rb] + membros.pop(ra)
+        motivos[frozenset((a, b))].add(m)
     grupos = defaultdict(list)
     for c in cods:
         grupos[uf.achar(c)].append(c)
@@ -265,6 +353,12 @@ def agrupar(itens: list, md5: dict[str, str], hashes: dict[str, list[str]]) -> d
     grupos.sort(key=lambda g: por_cod[g[0]]["sequencial"] or 0)
     juntos = {c for g in grupos for c in g}
     vistos, inc = set(), []
+    for a, b, m, porque, direto in recusados:     # a regra dura recusou: vira INCERTO (nunca entra no plano)
+        par = frozenset((a, b))
+        if par in vistos or uf.achar(a) == uf.achar(b) or (not direto and a in juntos and b in juntos):
+            continue                               # (recusado só pelo grupo e as duas já têm o seu grupo: nada sobrou)
+        vistos.add(par)
+        inc.append((a, b, f"{m}, mas {porque}"))
     for a, b, m in incertos:                       # o par incerto que outro critério já juntou não é mais incerto
         if uf.achar(a) == uf.achar(b) or frozenset((a, b)) in vistos or (a in juntos and b in juntos):
             continue                               # (as duas já estão em grupos diferentes: a imagem já separou)
@@ -275,7 +369,15 @@ def agrupar(itens: list, md5: dict[str, str], hashes: dict[str, list[str]]) -> d
         inc.append((a, b, m))
     return {"grupos": grupos, "motivos": motivos, "incertos": inc, "juntos": juntos,
             "sem_imagem": sum(1 for c in cods if not hashes.get(c)),
-            "incertos_sem_imagem": sum(1 for _, _, m in inc if "sem imagem" in m)}
+            "incertos_sem_imagem": sum(1 for _, _, m in inc if "sem imagem" in m),
+            "marcas_suspeitas": marcas_suspeitas(itens)}
+
+
+def _d(cod: str) -> str:
+    try:
+        return "D" + str(int(str(cod).rsplit("-D", 1)[1]))
+    except (IndexError, ValueError):
+        return str(cod)
 
 
 # ----------------------------------------------------------------- importação (defesa)

@@ -322,14 +322,15 @@ def marcar_repetidas_por_imagem(con, proj: str, novos: list[str], ator: str, lot
     """CAMP-DUP-FORMATOS: um código NOVO cuja imagem (md5 igual, ou dHash ≤ 6 bits em qualquer das 4 rotações da prévia) é a de uma
     folha que o projeto JÁ TEM entra como cópia dela (duplicata_de, 'mesma_folha' / 'exata' pelo md5), com aviso, em vez de folha "limpa".
     Entre as novas do mesmo lote, fica a de melhor formato (TIFF > DNG > JPG LIMPO > JPG). Só compara com folhas que têm md5/phash.
+    Regra dura (folhas_repetidas.conflito): só casa folhas de pastas de formato diferentes (fotos parecidas da mesma pasta não são cópias).
     Nada é apagado; "Não é duplicata" na tela Duplicatas desfaz. NÃO faz commit."""
     from . import folhas_repetidas as fr
     if not novos:
         return []
     raiz = _raiz_prontos(con)
     q = ",".join("?" * len(novos))
-    guardadas = [(r["codigo"], (r["md5"] or "").lower(), [h for h in [_hash_hex(r["phash"])] if h])
-                 for r in con.execute(f"""SELECT codigo, md5, phash FROM item WHERE projeto_codigo=? AND duplicata_de IS NULL
+    guardadas = [(r["codigo"], (r["md5"] or "").lower(), [h for h in [_hash_hex(r["phash"])] if h], r["arquivo_origem"])
+                 for r in con.execute(f"""SELECT codigo, md5, phash, arquivo_origem FROM item WHERE projeto_codigo=? AND duplicata_de IS NULL
                                           AND codigo NOT IN ({q}) AND (COALESCE(md5,'')<>'' OR COALESCE(phash,'')<>'')""", (proj, *novos))]
     linhas = con.execute(f"SELECT codigo, sequencial, md5, phash, arquivo_origem, arquivo_jpg, pendencias, duplicata_de FROM item WHERE codigo IN ({q})", novos).fetchall()
     linhas = sorted(linhas, key=lambda r: (*fr.rank_formato(r["arquivo_origem"]), r["sequencial"] or 0))
@@ -346,7 +347,9 @@ def marcar_repetidas_por_imagem(con, proj: str, novos: list[str], ator: str, lot
             except Exception:  # noqa: BLE001 — prévia ilegível: só compara pelo hash do CAMP Vision
                 pass
         achou = None
-        for cod, m5, gh in guardadas:
+        for cod, m5, gh, og in guardadas:
+            if fr.conflito(r["arquivo_origem"], og, bool(md5 and m5 and md5 == m5)):
+                continue                           # regra dura: a mesma pasta (ou o mesmo formato, ou sem origem) não é "a mesma prancha em outro formato"
             if md5 and m5 and md5 == m5:
                 achou = (cod, "exata", "mesmo arquivo (md5)")
                 break
@@ -355,7 +358,7 @@ def marcar_repetidas_por_imagem(con, proj: str, novos: list[str], ator: str, lot
                 achou = (cod, "mesma_folha", f"imagem igual (dHash {d})", d)
         if not achou:
             if md5 or hs:
-                guardadas.append((r["codigo"], md5, hs))
+                guardadas.append((r["codigo"], md5, hs, r["arquivo_origem"]))
             continue
         de = fr.raiz_da_cadeia(con, achou[0])
         if de == r["codigo"]:
