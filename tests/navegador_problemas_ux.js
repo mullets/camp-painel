@@ -150,32 +150,35 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Abertos" é o que bloqueia ou
     chk(await aba('avisos') === av0, 'UX-20: Desfazer do Mesclar reabre as cópias');
 
     // ================= UX-03 =================
-    const grp = '[data-ini-grupo="problemas"]';
-    const homeIr = async () => { await page.evaluate(() => nav('painel')); await page.waitForSelector(grp + ' .ini-task', { timeout: 15000 }); await page.waitForTimeout(400); };
+    // Redesenho §8 (03/11/2026): a fila é uma lista só; as linhas dos problemas têm data-ini-grupo="problemas". "Ignorar ▾" virou "⋯".
+    const grp = '.ini-task[data-ini-grupo="problemas"]';
+    const homeIr = async () => { await page.evaluate(() => nav('painel')); await page.waitForSelector(grp, { timeout: 15000 }); await page.waitForTimeout(400); };
+    // esconder um item Urgente (o problema que impede publicar) pede o motivo (Redesenho §8): responde a janela quando ela vem
+    const motivoSeUrgente = async () => { if (await page.waitForSelector('#conf-ov', { timeout: 1500 }).catch(() => null)) { await page.fill('#conf-motivo', 'teste: volto a isso depois'); await page.click('#conf-ov [data-conf="sim"]'); } };
     await homeIr();
     const nTasks = await page.locator('#v-painel .ini-task:has([data-ini-acao])').count(), nIgn = await page.locator('#v-painel .ini-task:has([data-ini-acao]) .ini-ignorar').count();
-    chk(nTasks > 0 && nTasks === nIgn, `UX-03: todo item da Home com ação tem "Ignorar ▾" (${nIgn} de ${nTasks})`);
-    const t1 = page.locator(grp + ' .ini-task').first(), tit1 = (await t1.locator('.t b').textContent()).trim();
+    chk(nTasks > 0 && nTasks === nIgn, `UX-03: todo item da Home com ação tem o menu "⋯" (antes "Ignorar ▾") (${nIgn} de ${nTasks})`);
+    const t1 = page.locator(grp).first(), tit1 = (await t1.locator('.t b').textContent()).trim();
     await t1.locator('.ini-ignorar summary').click();
     const tip = await t1.locator('[data-ini-adiar]').getAttribute('title');
     chk(/volta sozinho em \d\d\/\d\d/.test(tip || ''), 'UX-03/UX-32: o "Agora não" diz quando o item volta: "' + tip + '"');
     chk(await t1.locator('[data-ini-naoera]').count() === 1, 'UX-03: problema tem também "Não mostrar mais (não era problema)"');
     const k1 = await t1.locator('[data-ini-adiar]').getAttribute('data-ini-adiar');
-    await t1.locator('[data-ini-adiar]').click();
+    await t1.locator('[data-ini-adiar]').click(); await motivoSeUrgente();
     await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent) && document.querySelector('#toast .toast-acao'), null, { timeout: 8000 });
     await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
     chk(true, 'UX-03: "Agora não": aviso com Desfazer e o item some');
     await page.click('#toast .toast-acao'); await page.waitForFunction(k => !!document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
     chk(true, 'UX-03: Desfazer (dentro dos 8 s) traz o item de volta');
     await page.locator(`[data-ini-adiar="${k1}"]`).locator('xpath=ancestor::details[1]/summary').click();
-    await page.click(`[data-ini-adiar="${k1}"]`); await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
+    await page.click(`[data-ini-adiar="${k1}"]`); await motivoSeUrgente(); await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), k1, { timeout: 8000 });
     await page.evaluate(() => nav('erros')); await pronto(); await page.waitForTimeout(600);
     chk(await page.isVisible('#err-ignorados') && !(await page.getAttribute('#err-ignorados', 'open')) && /Ignorados \(1\)/.test(await page.textContent('#err-ignorados summary')), 'UX-03: em Problemas, "Ignorados (1)" recolhido');
     await page.click('#err-ignorados summary');
     chk((await page.textContent('#err-ign-corpo')).includes(tit1) && await page.isVisible('[data-err-ign-mostrar]'), 'UX-03: ...com o item escondido, quando volta e "Mostrar de novo"');
     // "Não mostrar mais": bloqueio exige justificativa
     await homeIr();
-    const t2 = page.locator(grp + ' .ini-task:has([data-ini-naoera])').first(), k2 = await t2.locator('[data-ini-adiar]').getAttribute('data-ini-adiar');
+    const t2 = page.locator(grp + ':has([data-ini-naoera])').first(), k2 = await t2.locator('[data-ini-adiar]').getAttribute('data-ini-adiar');
     await t2.locator('.ini-ignorar summary').click(); await t2.locator('[data-ini-naoera]').click();
     await page.waitForSelector('#conf-ov', { timeout: 5000 });
     chk(await page.isDisabled('#conf-ov [data-conf="sim"]'), 'UX-03: bloqueio sem justificativa: "Não mostrar mais" fica travado');
@@ -201,7 +204,7 @@ const PEDEM = ABERTOS - AVISOS;   // UX-19: a aba "Abertos" é o que bloqueia ou
     await page.keyboard.press('j'); const a1 = await marcado(); await page.keyboard.press('j'); const a2 = await marcado(); await page.keyboard.press('k'); const a3 = await marcado();
     chk(a1 === 0 && a2 === 1 && a3 === 0 && (await page.evaluate(() => rotaAtual())) === 'painel', `UX-32: na Home, J desce e K sobe na lista (${a1}, ${a2}, ${a3}) sem trocar de tela`);
     const kH = await page.evaluate(() => (document.querySelector('.kb-atual [data-ini-adiar]') || {}).dataset?.iniAdiar);
-    await page.keyboard.press('i');
+    await page.keyboard.press('i'); await motivoSeUrgente();
     await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent), null, { timeout: 8000 });
     await page.waitForFunction(k => !document.querySelector(`[data-ini-adiar="${k}"]`), kH, { timeout: 8000 });
     chk((await page.evaluate(() => rotaAtual())) === 'painel', 'UX-32: I na Home ignora o item escolhido (esconde por 7 dias), sem abrir Arquitetos');

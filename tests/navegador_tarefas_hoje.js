@@ -26,14 +26,15 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
   await page.press('#lg-senha', 'Enter');
   await page.waitForSelector('#ini-qualidade .qb-geral', {timeout: 15000});
 
-  // ---- fila única: grupo "Melhorar a base" com "Agora não" ----
-  const grupo = page.locator('[data-ini-grupo="base"]');
-  ok(await grupo.count() === 1, 'painel inicial: grupo "Melhorar a base" em "O que fazer agora"');
-  ok(/fundos sem sigla|arquitetos sem fonte/.test(await grupo.locator('.ini-tipos').innerText()), 'o grupo diz quanto falta de cada tipo');
+  // ---- fila única: "Melhorar a base" com "Agora não" (Redesenho §8: virou o filtro "Melhorar a base" da lista única) ----
+  await page.click('#ini-tarefas [data-ini-filtro="base"]');
+  const grupo = page.locator('#ini-lista');
+  ok(await grupo.locator('.ini-task[data-ini-grupo="base"]').count() > 0 && await grupo.locator('.ini-task:not([data-ini-grupo="base"])').count() === 0, 'painel inicial: o filtro "Melhorar a base" de "O que fazer agora" mostra as tarefas da base');
+  ok(/fundos sem sigla|arquitetos sem fonte/.test(await grupo.locator('.ini-tipos').innerText()), 'o filtro diz quanto falta de cada tipo');
   const adiar = grupo.locator('[data-ini-adiar]').first();
   const id = await adiar.getAttribute('data-ini-adiar');
   ok(!!id, 'cada tarefa da base tem o botão "Agora não" (' + id + ')');
-  await adiar.locator('xpath=ancestor::details[1]/summary').click();   // UX-03: o "Agora não" mora no menu "Ignorar ▾"
+  await adiar.locator('xpath=ancestor::details[1]/summary').click();   // UX-03: o "Agora não" mora no menu "⋯" (antes "Ignorar ▾")
   await adiar.click();
   await page.waitForFunction(() => /Escondida por 7 dias/.test(document.getElementById('toast').textContent), null, {timeout: 8000});
   await page.waitForFunction(i => !document.querySelector(`[data-ini-adiar="${i}"]`) && document.querySelector('#ini-qualidade .qb-geral'), id, {timeout: 8000});
@@ -62,7 +63,8 @@ const ok = (cond, msg) => (cond ? oks : problemas).push(msg);
   } else problemas.push('o banco de teste não tem fundo sem sigla para corrigir');
 
   // ---- a tarefa leva à tela onde se corrige ----
-  const bt = page.locator('[data-ini-grupo="base"] .ini-task:has([data-ini-adiar^="q_sigla_"]) [data-ini-acao], [data-ini-grupo="base"] .ini-task:has([data-ini-adiar^="q_proj_"]) [data-ini-acao]').first();
+  await page.click('#ini-tarefas [data-ini-filtro="base"]');
+  const bt = page.locator('.ini-task[data-ini-grupo="base"]:has([data-ini-adiar^="q_sigla_"]) [data-ini-acao], .ini-task[data-ini-grupo="base"]:has([data-ini-adiar^="q_proj_"]) [data-ini-acao]').first();
   const rotulo = await bt.innerText();
   await bt.click();
   await page.waitForFunction(() => !location.hash.startsWith('#painel') && location.hash.length > 1, null, {timeout: 8000});

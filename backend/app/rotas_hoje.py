@@ -170,6 +170,7 @@ def hoje(u: dict = Depends(auth.exige("leitura"))) -> dict:
 
 class AgoraNao(BaseModel):
     titulo: str | None = None          # UX-03 (opcional): o que estava escrito no item, para a lista "Ignorados" em Problemas
+    motivo: str | None = None          # Redesenho §8 (opcional): por que escondeu um item Urgente (vai para o Histórico de ações)
 
 
 def _evento_tarefa(con, tarefa_id: str, tipo: str, ator: str, detalhe: dict) -> None:
@@ -193,6 +194,7 @@ def agora_nao(tarefa_id: str, d: AgoraNao | None = None, u: dict = Depends(auth.
     con = connect()
     try:
         titulo = ((d.titulo if d else None) or "").strip()[:300] or None
+        motivo = ((d.motivo if d else None) or "").strip()[:500] or None
         for tid in _chaves_da_tarefa(tarefa_id):            # UX-04: a linha que junta lotes do mesmo projeto ("lote:1,2") esconde cada um
             ate = qb.adiar(con, u["id"], tid)
             if titulo:
@@ -200,7 +202,7 @@ def agora_nao(tarefa_id: str, d: AgoraNao | None = None, u: dict = Depends(auth.
                     con.execute("UPDATE tarefa_adiada SET titulo=? WHERE usuario_id=? AND tarefa_id=?", (titulo, u["id"], tid))
                 except Exception:  # noqa: BLE001  (banco sem a migração 166: guarda sem o título)
                     pass
-            _evento_tarefa(con, tid, "escondido_7_dias", u["email"], {"ate": ate, "titulo": titulo})
+            _evento_tarefa(con, tid, "escondido_7_dias", u["email"], {"ate": ate, "titulo": titulo, **({"motivo": motivo} if motivo else {})})
         con.commit()
         return {"ok": True, "ate": ate, "mensagem": f"Escondida por {qb.DIAS_ADIAR} dias. Depois ela volta, se ainda precisar."}
     finally:

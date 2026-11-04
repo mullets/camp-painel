@@ -61,15 +61,16 @@ for t in ('site_publicar', 'publicacao_guiada'):
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
     await page.evaluate(() => nav('painel'));
     await page.waitForSelector('#ini-tarefas .ini-task', { timeout: 15000 }); await page.waitForTimeout(400);
+    await page.evaluate(() => { INI_VER_TODOS = true; iniListaDesenhar(); });   // Redesenho §8: lista única; todas as linhas à vista
 
     // ---- Home: Pronto para publicar ----
-    const pub = page.locator('[data-ini-grupo="aprovar_publicar"] .ini-task').filter({ hasText: 'F072-P0001' });
+    const pub = page.locator('.ini-task[data-ini-grupo="aprovar_publicar"]').filter({ hasText: 'F072-P0001' });
     const nPub = await pub.count(), tPub = nPub ? so(await pub.first().textContent()) : '';
     chk(nPub === 1, `Home: os 2 lotes prontos do mesmo projeto são UMA linha (${nPub})`);
     chk(/2 lotes prontos · complemento de 19\/10 · complemento de 20\/10/.test(tPub) && (await pub.first().locator('.ini-lote').count()) === 1, 'Home: abaixo do título, "2 lotes prontos · complemento de 19/10 · complemento de 20/10": "' + tPub.slice(0, 160) + '"');
     chk(/Publicar projeto|Ver o que falta/.test(tPub), 'Home: o botão age no projeto ("Publicar projeto")');
     chk(!/\(19 folhas\)|\(7 folhas\)/.test(await page.textContent('#ini-tarefas')), 'Home: a contagem velha do nome ("(19 folhas)") não aparece');
-    const conf = page.locator('[data-ini-grupo="conferir"] .ini-task').filter({ hasText: 'F072-P0002' });
+    const conf = page.locator('.ini-task[data-ini-grupo="conferir"]').filter({ hasText: 'F072-P0002' });
     const tConf = (await conf.count()) ? so(await conf.first().textContent()) : '';
     chk(/lote de \d\d\/10/.test(tConf) && /2 de 5 folhas a conferir/.test(tConf), 'Home: o lote parcialmente conferido mostra o identificador e "2 de 5 folhas a conferir": "' + tConf.slice(0, 160) + '"');
     const hoje = await page.$$eval('#v-painel .ini-feed li', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()).filter(t => /F072-P0003/.test(t)));

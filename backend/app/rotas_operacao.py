@@ -42,7 +42,7 @@ def _qnap_prontos_raiz() -> Path:
 
 # ---------------- painel inicial ----------------
 @router.get("/painel")
-def painel(ordem: str = "padrao", u: dict = Depends(auth.exige("leitura"))) -> dict:
+def painel(ordem: str = "padrao", fila: str = "urgente", u: dict = Depends(auth.exige("leitura"))) -> dict:
     con = connect()
     q = lambda sql, *p: con.execute(sql, p).fetchone()[0]  # noqa: E731
     # UX-05: os números vêm da fonte única (contagens.py); os campos antigos continuam, com os MESMOS valores das outras telas
@@ -88,7 +88,11 @@ def painel(ordem: str = "padrao", u: dict = Depends(auth.exige("leitura"))) -> d
     d["eventos"] = [dict(r) for r in con.execute("SELECT entidade, codigo, tipo, ator, quando FROM evento ORDER BY id DESC LIMIT 12")]
     # H6b: o que fazer agora, o caminho do material, o quanto está no site e as frases do dia, TODOS da fonte única (pendencias)
     d["pendencias"] = dict(cont)          # UX-05: exatamente o que /api/pendencias devolve (a mesma função, contagens.medir)
-    d["tarefas"] = pd.tarefas(con, u["papel"], n, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
+    # Redesenho §8: os grupos saem COMPLETOS (até FILA_MAX linhas cada) para a fila única da Home ("fila", campo novo, opcional:
+    # ?fila=urgente|antigo|recente|tipo, a ordem é do servidor); "tarefas" continua igual a antes (3 linhas por grupo) para quem já o lê.
+    grupos = pd.tarefas(con, u["papel"], n, por_grupo=pd.FILA_MAX, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
+    d["tarefas"] = pd.tarefas_resumidas(grupos)
+    d["fila"] = pd.fila_da_home(grupos, u["papel"], fila)
     d["caminho"] = pd.caminho(con, n)
     d["no_site"] = pd.no_site(con)
     d["hoje_frases"] = pd.atividade_hoje(con)

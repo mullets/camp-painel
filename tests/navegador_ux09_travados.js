@@ -59,7 +59,7 @@ lote(3, 'revisao', 16 * 24, 2)
     await page.goto(BASE + '/');
     await page.fill('#lg-email', 'operador@camp.arq.br'); await page.fill('#lg-senha', 'senha-operador-123'); await page.press('#lg-senha', 'Enter');
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
-    await page.evaluate(() => { try { localStorage.removeItem('camp.ini.ordem'); localStorage.removeItem('camp.fila.ordem'); } catch (_) {} nav('painel'); });
+    await page.evaluate(() => { try { localStorage.removeItem('camp.ini.ordem'); localStorage.removeItem('camp.ini.fila'); localStorage.removeItem('camp.fila.ordem'); } catch (_) {} nav('painel'); });
     await page.waitForSelector('#ini-tarefas .ini-task', { timeout: 15000 }); await page.waitForTimeout(400);
 
     // ---- Home ----
@@ -68,14 +68,20 @@ lote(3, 'revisao', 16 * 24, 2)
     chk(/não dá sinal deste lote há mais de 2 h/.test(tli) && /parado há 7 dias/.test(tli), 'Home: "Leitura interrompida: Edifício Lido" com o porquê e "parado há 7 dias": "' + tli.slice(0, 200) + '"');
     const bt = li.first().locator('[data-ini-acao]');
     chk((await bt.count()) === 1 && /Ler de novo/.test(await bt.textContent()), 'Home: o botão é "Ler de novo"');
-    const conf = await page.$$eval('[data-ini-grupo="conferir"] .ini-task', l => l.map(x => x.textContent.replace(/\s+/g, ' ')));
+    await page.evaluate(() => { INI_VER_TODOS = true; iniListaDesenhar(); });
+    const conf = await page.$$eval('.ini-task[data-ini-grupo="conferir"]', l => l.map(x => x.textContent.replace(/\s+/g, ' ')));
     chk(conf.some(t => /F073-P0003/.test(t) && /parado há 16 dias/.test(t)), 'Home: a linha do lote mostra "parado há 16 dias" (idade da etapa): ' + JSON.stringify(conf.map(t => t.slice(0, 90))));
-    const ordem0 = await page.$$eval('[data-ini-grupo="conferir"] .ini-task .code', l => l.map(x => x.textContent));
-    await page.click('[data-ini-grupo="conferir"] [data-ini-ordem]'); await page.waitForTimeout(1200);
-    const ordem1 = await page.$$eval('[data-ini-grupo="conferir"] .ini-task .code', l => l.map(x => x.textContent));
-    chk(ordem0.indexOf('F073-P0002') < ordem0.indexOf('F073-P0003') && ordem1.indexOf('F073-P0003') < ordem1.indexOf('F073-P0002')
-        && (await page.getAttribute('[data-ini-grupo="conferir"] [data-ini-ordem]', 'aria-pressed')) === 'true', `Home: "mais parado primeiro" sobe o lote de 16 dias (${ordem0.join(',')} → ${ordem1.join(',')})`);
-    await page.click('[data-ini-grupo="conferir"] [data-ini-ordem]'); await page.waitForTimeout(800);
+    // UX-09 → Redesenho §8: o "mais parado primeiro" de cada grupo virou a ordenação da fila (do servidor). "Mais urgente" já põe o que
+    // espera há mais tempo antes dentro do mesmo nível; "Mais recente primeiro" inverte; "Mais antigo primeiro" volta o de 16 dias ao topo.
+    const ordemConf = () => page.$$eval('.ini-task[data-ini-grupo="conferir"] .code', l => l.map(x => x.textContent));
+    const ordem0 = await ordemConf();
+    await page.selectOption('#ini-ordem', 'recente'); await page.waitForTimeout(1200); await page.evaluate(() => { INI_VER_TODOS = true; iniListaDesenhar(); });
+    const ordem1 = await ordemConf();
+    await page.selectOption('#ini-ordem', 'antigo'); await page.waitForTimeout(1200); await page.evaluate(() => { INI_VER_TODOS = true; iniListaDesenhar(); });
+    const ordem2 = await ordemConf();
+    chk(ordem0.indexOf('F073-P0003') < ordem0.indexOf('F073-P0002') && ordem1.indexOf('F073-P0002') < ordem1.indexOf('F073-P0003') && ordem2.indexOf('F073-P0003') < ordem2.indexOf('F073-P0002'),
+      `Home: o lote parado há 16 dias sobe em "mais urgente" e "mais antigo", e desce em "mais recente" (${ordem0.join(',')} | ${ordem1.join(',')} | ${ordem2.join(',')})`);
+    await page.selectOption('#ini-ordem', 'urgente'); await page.waitForTimeout(800);
     // 1 clique: dois cliques seguidos fazem UM pedido (o botão apaga enquanto pede)
     const bt2 = page.locator('#ini-tarefas .ini-task').filter({ hasText: 'Leitura interrompida: Edifício Lido' }).first().locator('[data-ini-acao]');
     await bt2.evaluate(b => { b.click(); b.click(); });
