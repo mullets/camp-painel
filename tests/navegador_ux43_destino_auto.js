@@ -51,6 +51,8 @@ const novo = 'F074-P' + String(proximo).padStart(4, '0');
     await page.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });
     await page.evaluate(() => { FILA_FILTRO = 'todas'; nav('filas'); });
     await page.waitForSelector('#filas-body tr[data-fase="importar"]', { timeout: 15000 }); await page.evaluate(() => { FILA_FILTRO = 'todas'; desenharFilas(); });
+    // redesenho Material novo §6: o quadro fica em "Ferramentas avançadas" (recolhido); quem trabalha nele abre a área primeiro
+    await page.waitForSelector('#da-painel', { state: 'attached', timeout: 15000 }); await page.click('#fila-avancado > summary');
     await page.waitForSelector('#da-painel', { timeout: 15000 }); await page.waitForTimeout(300);
     return page;
   };
