@@ -267,10 +267,10 @@ print(json.dumps({"dia": dia}))
     chk(cob.length === 3 && cob.every(c => { const [a, b, u] = esp[c.id], p = 100 * a / b; return c.n.includes(`${a.toLocaleString('pt-BR')} de ${b.toLocaleString('pt-BR')} ${u}`) && c.pct === (p > 0 && p < 1 ? p.toFixed(1).replace('.', ',') + '%' : Math.round(p) + '%') && Math.abs(c.w - p) < 0.1; }),
       'cobertura: Folhas, Projetos e Fundos com página, cada um com publicado / total / % / barra e a unidade por extenso', JSON.stringify([cob, esp]));
     chk(/não é erro/.test(await P.locator('#ini-cobertura [data-cob="projetos"]').innerText()) || !ns.projetos.sem_folhas, 'projetos sem folhas: nota do denominador, sem chamar de erro');
-    await P.route('**/api/painel', async r => { const resp = await r.fetch(); const j = await resp.json(); j.no_site.fundos = { no_ar: 0, total: 0 }; await r.fulfill({ response: resp, json: j }); });
+    await P.route(/\/api\/painel(\?|$)/, async r => { const resp = await r.fetch(); const j = await resp.json(); j.no_site.fundos = { no_ar: 0, total: 0 }; await r.fulfill({ response: resp, json: j }); });
     await home();
     chk(/Não aplicável/.test(await P.locator('#ini-cobertura [data-cob="fundos"]').innerText()) && !(await P.$('#ini-cobertura [data-cob="fundos"] .ini-bar')), 'total zero = "Não aplicável" (sem 0% e sem barra)');
-    await P.unroute('**/api/painel');
+    await P.unroute(/\/api\/painel(\?|$)/);
     await P.click('#ini-cobertura [data-cob="projetos"] .ini-cob-ir'); await P.waitForTimeout(400);
     chk(await P.evaluate(() => location.hash) === '#projetos/nao_publicado', 'link para a lista do que falta (projetos não publicados)');
 

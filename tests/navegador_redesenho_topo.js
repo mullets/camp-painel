@@ -50,6 +50,7 @@ const api = (page, url, o) => page.evaluate(async ([u, o]) => { const r = await 
     py(`con.execute("DELETE FROM usuario_preferencia WHERE chave LIKE 'ajuda.%'")\ncon.execute("DELETE FROM tarefa_adiada")`);
     const adm = await entrar(browser, 'rafael@camp.arq.br', 'senha-bem-longa-123', erros);
     const P = adm.page;
+    await P.waitForLoadState('networkidle').catch(() => {}); await P.waitForTimeout(800);   // a gravação "já viu a ajuda" do login tem de chegar ANTES de zerar (senão é corrida)
     py(`con.execute("DELETE FROM usuario_preferencia WHERE chave LIKE 'ajuda.%'")`);   // o login já abriu a Home: zera de novo para a "1ª vez"
     await P.evaluate(() => { try { localStorage.clear() } catch (_) {} });
     await P.reload(); await P.waitForFunction(() => typeof EU !== 'undefined' && !!EU, null, { timeout: 15000 });

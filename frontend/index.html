@@ -1178,7 +1178,7 @@ body.na-painel #system-banner{display:none!important}
 /* Redesenho §5 (Rafael, 03/11/2026): cabeçalho compacto. Título forte, a contagem real numa frase e a data numa linha discreta; nada de banner */
 .ini-hello{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:0 0 14px}
 .ini-hello-t{min-width:0}
-.ini-hello h1{font-size:var(--fs-num);font-weight:600;margin:0;line-height:1.2;letter-spacing:-.01em;text-wrap:balance}
+.ini-hello h1{font-size:var(--fs-page);font-weight:600;margin:0;line-height:1.2;letter-spacing:-.01em;text-wrap:balance}
 .ini-hello .sub{color:var(--ink);margin:4px 0 0;font-size:var(--fs-lg);font-weight:500;line-height:1.35}
 .ini-hello .ini-data{color:var(--ink2);margin:2px 0 0;font-size:var(--fs-md)}
 .ini-q{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;font-size:var(--fs-base);cursor:pointer;flex:none}
@@ -1213,7 +1213,7 @@ button.ini-kpi{cursor:pointer}button.ini-kpi:hover{border-color:var(--blue);back
 .ini-task .t{min-width:0;display:grid;gap:2px}.ini-task .t b{display:block;font-weight:600;font-size:var(--fs-base);line-height:1.35;overflow-wrap:anywhere}
 .ini-l1{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 .ini-tipo{font-size:var(--fs-sm);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2)}
-.ini-urg{font-weight:600}.ini-motivo{font-size:var(--fs-md);color:var(--red)}
+.ini-urg{font-weight:600}.ini-motivo{display:block;font-size:var(--fs-md);color:var(--red)}
 .ini-task small{color:var(--ink2);font-size:var(--fs-md);line-height:1.4}.ini-task small.ini-lote,.fila-lote{display:block;color:var(--ink2);font-size:var(--fs-sm2)}.fila-lotes{margin:2px 0;padding-left:18px;color:var(--ink2);font-size:var(--fs-sm2)}
 .ini-task-fim{display:flex;align-items:center;justify-content:flex-end;gap:10px 12px;flex-wrap:wrap}
 .ini-espera{font-size:var(--fs-md);color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -1494,6 +1494,9 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 #v-inscricoes .ins-av-acoes[hidden]{display:none}
 .with-drawer #v-inscricoes .ins-sub{display:block}
 @media (max-width:720px){#v-inscricoes .ins-cur,#v-inscricoes .ins-cid,#v-inscricoes .ins-form,#v-inscricoes .ins-dt,#v-inscricoes .ins-em{display:none}#v-inscricoes .ins-sub{display:block}}
+/* Redesenho §18 (revisão final): números de destaque na MESMA fonte do texto (sans), com algarismos alinhados; mono fica só para códigos (F026-P0002) */
+#v-painel :is(.ini-kpi .v,.qb-geral .v,.qb-v,.ini-cob-pct,.qq .q,.ini-step .i,.btn.sm>b,.ini-prog-row span.n){font-family:var(--sans);font-variant-numeric:tabular-nums;letter-spacing:0}
+#v-painel :is(.ini-kpi .v,.qb-geral .v){font-weight:600}
 </style>
 </head>
 <body>
@@ -6473,10 +6476,10 @@ function iniEsperaTxt(i){const h=i.espera_h;if(h==null||isNaN(+h))return '';cons
 function iniOrdemHTML(f){const ordem=(f&&f.ordem)||iniOrdem();return `<label class="ini-ordem-sel">Ordenar <select id="ini-ordem" aria-label="Ordenar a fila">${INI_ORDENS.map(([v,t])=>`<option value="${v}"${v===ordem?' selected':''}>${t}</option>`).join('')}</select></label>`}
 function iniFilaItens(){const f=PAINEL_D&&PAINEL_D.fila;return f?f.itens||[]:[]}
 function iniLinhaHTML(i,k,primeira){const a=i.acao,leitura=EU&&EU.papel==='leitura',esp=iniEsperaTxt(i);
-  const urg=i.urgente?`<span class="tag r ini-urg"><span aria-hidden="true">!</span> Urgente</span><span class="ini-motivo">${escHtml(i.urgente)}</span>`:'';
+  const urg=i.urgente?`<span class="tag r ini-urg"><span aria-hidden="true">!</span> Urgente</span>`:'';
   const outro=i.meu===false?`<span class="ini-outro-nota">você acompanha; quem faz é ${i.quem==='admin'?'um admin':'um operador'}</span>`:'';
   const bt=a?`<button type="button" class="btn sm ${primeira?'pri':'ini-bt'}" data-ini-acao="${k}">${escHtml(a.rotulo)}</button>`:'';
-  return `<div class="ini-task${i.meu===false?' ini-outro':''}${i.nivel===2?' ini-base':''}" data-ini-linha="${k}" data-ini-grupo="${escHtml(i.grupo)}" data-ini-cat="${escHtml(i.filtro)}"${i.urgente?' data-ini-urgente=""':''}><span class="ini-sev ${i.nivel===2?'':escHtml(i.sev)}" aria-hidden="true"></span><div class="t"><div class="ini-l1"><span class="ini-tipo">${escHtml(i.tipo_tarefa||'')}</span>${urg}${outro}</div><b>${escHtml(i.titulo)}</b>${i.lote?`<small class="ini-lote">${escHtml(i.lote)}</small>`:''}${i.codigo||i.contexto?`<small class="ini-ctx">${i.codigo?`<span class="code">${escHtml(i.codigo)}</span>${i.contexto?' · ':''}`:''}${escHtml(i.contexto||'')}</small>`:''}</div><div class="ini-task-fim">${esp?`<span class="ini-espera">${escHtml(esp)}</span>`:''}<span class="ini-task-bts">${bt}${a&&!leitura&&i.adiar?iniIgnorarHTML(i,k):''}</span></div></div>`}
+  return `<div class="ini-task${i.meu===false?' ini-outro':''}${i.nivel===2?' ini-base':''}" data-ini-linha="${k}" data-ini-grupo="${escHtml(i.grupo)}" data-ini-cat="${escHtml(i.filtro)}"${i.urgente?' data-ini-urgente=""':''}><span class="ini-sev ${i.nivel===2?'':escHtml(i.sev)}" aria-hidden="true"></span><div class="t"><div class="ini-l1"><span class="ini-tipo">${escHtml(i.tipo_tarefa||'')}</span>${urg}${outro}</div><b>${escHtml(i.titulo)}</b>${i.urgente?`<span class="ini-motivo">${escHtml(i.urgente)}</span>`:''}${i.lote?`<small class="ini-lote">${escHtml(i.lote)}</small>`:''}${i.codigo||i.contexto?`<small class="ini-ctx">${i.codigo?`<span class="code">${escHtml(i.codigo)}</span>${i.contexto?' · ':''}`:''}${escHtml(i.contexto||'')}</small>`:''}</div><div class="ini-task-fim">${esp?`<span class="ini-espera">${escHtml(esp)}</span>`:''}<span class="ini-task-bts">${bt}${a&&!leitura&&i.adiar?iniIgnorarHTML(i,k):''}</span></div></div>`}
 function iniFiltrosHTML(f){const ativo=f.filtros.find(x=>x.id===INI_FILTRO)?INI_FILTRO:'todas',sempre=['todas','conferir','publicar','responder','base'];   /* os 5 do plano sempre (0 é 0); Decidir e Resolver só quando há */
   return `<div class="abas-sit ini-filtros" role="group" aria-label="Filtrar a fila por tipo de trabalho">${f.filtros.filter(x=>sempre.includes(x.id)||x.n).map(x=>`<button type="button" class="btn sm" data-ini-filtro="${x.id}" aria-pressed="${x.id===ativo}">${escHtml(x.rotulo)} <b>${fmtN(x.n)}</b></button>`).join('')}</div>`}
 function iniTarefasHTML(d){PAINEL_ACOES=[];const f=d.fila;
@@ -6979,7 +6982,7 @@ async function carregarPainel(){if(document.querySelector('#v-painel .ini-grid')
   <div class="ini-grid">
     <div class="ini-col">
       <section class="panel ini-fazer" aria-labelledby="ini-t-fazer"><div class="ph"><h2 id="ini-t-fazer">O que fazer agora</h2>${iniAjudaSecHTML('fila','Como a fila é ordenada?',[(d.fila&&d.fila.regra)||'Mais urgente primeiro.','Os filtros mostram só um tipo de trabalho; o número ao lado é o total real.','“⋯” guarda as ações menores, como “Agora não”.'])}${d.fila&&d.fila.itens.length?iniOrdemHTML(d.fila):''}${d.contagens&&d.contagens.medido_em?`<small class="help atualizado-ha ini-fazer-hint" title="${escHtml(fmtDataHora(d.contagens.medido_em))}">atualizado ${escHtml(haTempo(d.contagens.medido_em))}</small>`:''}</div><div id="ini-tarefas">${iniTarefasHTML(d)}</div></section>
-      <section class="panel ini-cam" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2><button type="button" class="ini-link" onclick="nav('caminho')">O que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
+      <section class="panel ini-cam" aria-labelledby="ini-t-cam"><div class="ph"><h2 id="ini-t-cam">O caminho do material</h2>${iniAjudaSecHTML('conferir','O que significa conferir?',['Conferir é olhar cada folha que o CAMP Vision leu e confirmar (ou corrigir) o que ele achou: tipo, ano, carimbo e código.','Só folha conferida vai para Aprovar e depois para Publicar.','Cada etapa abaixo conta numa unidade própria (estações, pastas, lotes ou folhas): os números não se somam.'])}<button type="button" class="ini-link" onclick="nav('caminho')">O que é cada passo?</button></div><div class="pb" id="ini-caminho">${iniCaminhoHTML(d.caminho,PAINEL_EST)}</div></section>
       <section class="panel" aria-labelledby="ini-t-ritmo"><div class="ph"><h2 id="ini-t-ritmo">Folhas conferidas por dia — últimas 2 semanas</h2></div><div class="pb ini-chart" id="ini-ritmo">${iniRitmoHTML(null,p)}</div></section>
       ${admin?`<section class="panel" aria-labelledby="ini-t-vis"><div class="ph"><h2 id="ini-t-vis">Visitas ao site</h2><span id="ini-vis-tag"></span></div><div class="pb" id="ini-visitas">${vmCarregandoHTML()}</div></section>`:''}
     </div>

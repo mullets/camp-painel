@@ -36,7 +36,9 @@ const chk = (ok, msg) => { linhas.push((ok ? 'ok    ' : 'FALHA ') + msg); if (!o
     // ---- "F0xx-P000x" não fica solto no cabeçalho ----
     const top = await page.evaluate(() => ({ hint: !!document.querySelector('.top .search .hint'), ph: document.getElementById('q').placeholder,
       solto: [...document.querySelectorAll('.top *')].some(e => !e.children.length && /F0xx-P000x/.test(e.textContent)) }));
-    chk(!top.hint && !top.solto && /F0xx-P000x/.test(top.ph), 'busca: o exemplo "F0xx-P000x" está no placeholder e não solto no cabeçalho: ' + JSON.stringify(top));
+    // Redesenho §4 (plano do Rafael, 04/11): o placeholder passa a ser só "Buscar projeto, fundo, arquiteto ou código" (sem o exemplo);
+    // a intenção do UX-31 continua: nada de "F0xx-P000x" solto no cabeçalho
+    chk(!top.hint && !top.solto && /Buscar projeto(, fundo, arquiteto)? ou código/.test(top.ph), 'busca: placeholder do plano e nenhum exemplo solto no cabeçalho: ' + JSON.stringify(top));
 
     // ---- 1ª página: caixa inteira; Entendi grava no servidor ----
     await ir(page, 'painel');
