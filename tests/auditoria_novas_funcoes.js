@@ -347,7 +347,7 @@ w.route_to('estacoes'); await sleep(2800);
     if(ta){ ta.click(); await sleep(1500); chk((await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1)).giro_manual===90&&/Giro desfeito/.test(txt('#toast'))&&!d.querySelector('#toast .toast-acao'),'[H4] "Desfazer" do giro deveria voltar a 90 (e não oferecer outro Desfazer): "'+txt('#toast')+'"');
       d.querySelector('[data-rev-girar="-90"]').click(); await sleep(1500); } }
   d.getElementById('rv-titulo').value='Planta corrigida no teste'; d.getElementById('rv-escala').value='1:75';
-  d.querySelector('[data-rev-item="corrigida"]').click(); await sleep(3400);
+  d.querySelector('[data-rev-item="conferida"]').click(); await sleep(3400);
   const e1=(await J(adm,'/api/itens/'+D(1)+'/edicao')).b.local, r1=(await J(adm,'/api/projetos/'+pc+'/detalhe')).b.itens.find(i=>i.codigo===D(1));
   chk(e1.titulo==='Planta corrigida no teste'&&e1.escala==='1:75'&&r1.revisao==='corrigida'&&r1.revisado_por,'"Salvar correção" deveria gravar os campos E marcar como corrigida: '+JSON.stringify({t:e1.titulo,e:e1.escala,r:r1.revisao}));
   w.closeDrawer(true); d.querySelector('#pj-revisao [data-rev-lote="todas"]').click(); await sleep(3600);
@@ -681,7 +681,7 @@ w.route_to('estacoes'); await sleep(2800);
 // ---------- [H9] janela Revisar folha: progresso, aviso da última, atalhos, campo alterado, tipos na ordem de uso ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500); const L=(w.ITENS_PJ||[]).filter(x=>x.lote_id);
   if(L.length>=2){ const a=L[0]; await w.abrirRevisaoItem(a.codigo); await sleep(1200);
-    chk(/Folha 1 de \d+ · \d+ conferidas?/.test(txt('#d-body .rev-prog'))&&!!d.querySelector('#d-body .rev-prog progress'),'a janela deveria mostrar "Folha 1 de N · X conferidas" com barra: "'+txt('#d-body .rev-prog')+'"');
+    chk(/^1 de \d+ · \d+ conferidas?/.test(txt('#d-body .rev-prog'))&&!!d.querySelector('#d-body .rev-prog progress')&&/^Folha /.test(txt('#d-body .rv-folha')),'a janela deveria mostrar "1 de N · X conferidas" com barra (redesenho §4.2 A: entre ‹ Anterior e Próxima ›; o nome da folha fica no título "Folha NN"): "'+txt('#d-body .rev-prog')+'"');
     const ops=[...d.querySelectorAll('#rv-tipo option')].map(o=>o.value).filter(Boolean); const rk=v=>{const i=['planta','corte','eleva','fachada','perspectiva','detalhe','implanta'].findIndex(p=>v.toLowerCase().startsWith(p));return i<0?99:i};
     chk(ops.length===0||ops.every((v,i)=>i===0||rk(ops[i-1])<=rk(v)),'os tipos deveriam vir na ordem de uso (Planta, Corte, …): '+ops.slice(0,6).join(', '));
     const inp=d.getElementById('rv-folha'); inp.value=(inp.value||'')+'X'; inp.dispatchEvent(new w.Event('input',{bubbles:true})); chk(inp.closest('.rev-campo').classList.contains('alterado'),'campo mudado deveria ganhar a marca "alterado"');
@@ -1308,9 +1308,12 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   chk(!!d.getElementById('termo-pop')&&/Fundo/.test(txt('#termo-pop')),'[H2] passar o mouse sobre o termo deveria abrir o balão'); d.getElementById('termo-pop')?.remove(); ab.remove();
   okl.push('H2 pendências: glossário em ordem, 1 marca por caixa, gatilhos certos, balão no mouse'); w.route_to('painel'); }
 // ---------- [H1 pendências] "?" nas janelas laterais, foco depois do "Entendi", "?" nas páginas de detalhe, passos no celular ----------
-{ await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_projeto',valor:null})}); await w.carregarPreferenciasAjuda(); await sleep(200);
-  await w.editarProjeto('F026-P0001'); await sleep(600); const da=d.getElementById('d-ajuda');
-  chk(da&&!da.hidden&&!!d.querySelector('#d-body > .ajuda-caixa[data-ajuda="editar_projeto"]'),'[H1] "Editar projeto" deveria ter o "?" e, na 1ª vez, a caixa "Como funciona"');
+{ await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_projeto',valor:null})}); await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_fundo',valor:null})}); await w.carregarPreferenciasAjuda(); await sleep(200);
+  // redesenho da página do projeto §5.3 (04/11/2026): em "Editar projeto" a caixa grande deu lugar a "Sobre a edição" (recolhível); o "?" continua
+  await w.editarProjeto('F026-P0001'); await sleep(600);
+  chk(!d.getElementById('d-ajuda').hidden&&!d.querySelector('#d-body > .ajuda-caixa')&&!!d.querySelector('#d-body .ed-sobre'),'[H1/§5.3] "Editar projeto": o "?" continua e, no lugar da caixa grande, "Sobre a edição"'); w.closeDrawer(true); await sleep(200);
+  await w.editarFundo('F026'); await sleep(600); const da=d.getElementById('d-ajuda');
+  chk(da&&!da.hidden&&!!d.querySelector('#d-body > .ajuda-caixa[data-ajuda="editar_fundo"]'),'[H1] "Editar fundo" deveria ter o "?" e, na 1ª vez, a caixa "Como funciona"');
   d.querySelector('#d-body > .ajuda-caixa [data-ajuda-fechar]').click(); await sleep(400);
   chk(!d.querySelector('#d-body > .ajuda-caixa')&&d.activeElement===d.getElementById('d-title'),'[H1] "Entendi" na janela deveria fechar a caixa e pôr o foco no título da janela');
   da.click(); await sleep(100); chk(!!d.querySelector('#d-body > .ajuda-caixa'),'[H1] o "?" da janela deveria reabrir a caixa'); w.closeDrawer(true);
@@ -1596,7 +1599,7 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
 // ---------- [#95] página do projeto: um só próximo passo (logo abaixo do título), requisitos recolhidos, trilha sem repetir, título limpo ----------
 { w.route_to('projeto/F003-P9001'); await sleep(3500);
   const pp=d.getElementById('pj-proximo'), pub=d.getElementById('pd-pub');
-  chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&!d.querySelector('#pd .tabs ~ * #pj-proximo'),'[#95] o Próximo passo deveria vir logo abaixo do título, antes dos requisitos e fora das abas');
+  chk(!!pp&&!!pub&&!!(pp.compareDocumentPosition(pub)&4)&&!pp.closest('.tabs')&&(d.querySelector('#pj-painel')||{}).firstElementChild===d.getElementById('pj-status'),'[#95] o Próximo passo deveria vir logo abaixo do título e das abas (redesenho §3.2: a faixa de abas fica junto do cabeçalho), como 1º bloco, antes dos requisitos');
   // 19/10 (proposta B): o passo a passo fica escondido (só nas gavetas); o botão azul visível é o do cartão mais urgente
   await sleep(300); const azuisB=[...d.querySelectorAll('#pd .btn.pri')],azuis=azuisB.map(b=>b.textContent.trim());
   chk(azuis.length===1&&/conferir/i.test(azuis[0])&&!!azuisB[0].closest('#pj-status'),'[#95/CAMP-147] deveria haver UM só botão azul na página, o do Próximo passo: '+JSON.stringify(azuis));

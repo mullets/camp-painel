@@ -138,7 +138,7 @@ const print = async (pg, nome) => { nPrint++; await pg.screenshot({ path: path.j
     if (n === 4) {
       const t = await pane(); chk(/1927/.test(t) && /diverge/.test(t), 'D00004: o problema "ano lido 1927 diverge do projeto (1972)" aparece na folha', t.slice(0, 400));
       await print(op, 'D4_problema');
-      await op.fill('#rv-ano', '1972'); await op.click('#cf-pane [data-rev-item="corrigida"]'); await confirmar(op);
+      await op.fill('#rv-ano', '1972'); await op.click('#cf-pane [data-rev-item="conferida"]'); await confirmar(op);
       chk(await espera(() => um('SELECT ano_folha FROM item WHERE codigo=?', cod) == 1972), 'D00004: ano corrigido para 1972 ("Salvar correção")', um('SELECT ano_folha FROM item WHERE codigo=?', cod));
       feito[n] = 1; await op.waitForTimeout(800); continue;
     }

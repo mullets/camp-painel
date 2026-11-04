@@ -222,16 +222,18 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).
 
 ## Conferência (UX-10, 27/10/2026)
-- **Tela cheia** / **Sair da tela cheia**: o botão (e a tecla F) da gaveta "Revisar folha". "Começar a conferir" já abre em tela cheia.
+- **Tela cheia** / **Sair da tela cheia**: o botão (e a tecla F) da gaveta "Revisar folha". "Iniciar conferência" / "Continuar conferência"
+  (antes "Começar a conferir") já abre em tela cheia.
 - **sugerido do projeto**: valor do projeto (ano, cidade, cliente) mostrado em cinza num campo vazio da folha. Não é dado lido nem
   confirmado; só vale se a pessoa aceitar (Tab) e salvar. Nunca chamar de "lido" ou "herdado" na tela.
 - **Mais tipos**: onde ficam os tipos documentais além dos 4 mais usados no projeto.
 - **Atalhos da conferência**: a lista que a tecla ? abre na revisão (e o botão **? atalhos** da barra da folha).
-- **Girar 90°** / **Girar 180°** (UX-66): os botões da barra do alto da folha em conferência, sempre à vista; a mesma rotina da tecla R
-  (90° para a direita) e do "Virar à esquerda/direita" embaixo da imagem. 180° é para a folha de cabeça para baixo.
+- **Girar à esquerda** · **Girar 90°** · **Girar 180°** (UX-66; redesenho de 04/11/2026): os botões da barra de ferramentas logo acima da
+  imagem, sempre à vista; **Girar 90°** é a mesma rotina da tecla R (90° para a direita) — os antigos "Virar à esquerda/direita" de baixo
+  da imagem viraram **Girar à esquerda** e **Girar 90°** na barra. 180° é para a folha de cabeça para baixo.
 - **orientação incerta — confira** (UX-59): a folha de orientação incerta que o CAMP Vision mandou com giro sugerido aparece já girada
-  como sugerido; **nada é gravado** até a pessoa agir. **Gravar este giro** grava; **Ver como chegou** mostra a imagem original;
-  "Está certo" grava o giro junto (é o que a pessoa conferiu); girar conta a partir do que está na tela.
+  como sugerido; **nada é gravado** até a pessoa agir. **Usar sugestão** (em "Sugestões do CAMP Vision"; antes "Gravar este giro") grava;
+  **Ver como chegou** mostra a imagem original; salvar ou confirmar a folha grava o giro junto; girar conta a partir do que está na tela.
 
 ## Título de projeto que é nome de pasta (UX-15)
 - **Nome de pasta do sistema**: título que é nome de pasta ou código ("01 - Arquivo Arquivístico (TIFF)", "T099_Casa", "F000 - …", "Casa P0012",
@@ -474,3 +476,35 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
 - Alerta que impede o trabalho: o texto de sempre ("QNAP não está conectado a este servidor: …"), sem **Fechar por hoje**.
 - Busca do topo: "**Buscar projeto, fundo, arquiteto ou código**" (sem o exemplo de código no texto); no celular, onde não cabe, "**Buscar projeto ou código**".
 - Conta: o menu do nome/avatar mostra o nome, o papel (**admin master**, **admin**, **operador**, **só leitura**) e o e-mail.
+
+## Página do projeto (redesenho, 04/11/2026 — documento do Rafael §3–§9)
+- **Cabeçalho**: o nome (h1) com a situação (as 5 do CAMP-146) e a linha "código · fundo (link) · autoria: … (se registrada) · ano · cidade ·
+  N folhas". Ações: **Editar** (admin) e **Mais ⋯** (onde agora ficam **Etiquetas**, folha de contatos, duplicatas, relatar problema,
+  exportar, mover e o vermelho de sempre).
+- **Abas**: **Visão geral** · **Folhas (N)** · **Metadados** · **Problemas (N)** · **Histórico**. "Publicação" está em **Metadados**
+  (quadro "Requisitos para publicar", junto de "Como aparece no site"); "Pedidos" está em **Histórico** ("Pedidos de material (N)").
+  Em Histórico, o quadro principal se chama **Ações e alterações**.
+- **Próximo passo** (o mesmo bloco do CAMP-147) traz a conferência: rótulo **Conferência**, "**N de M folhas conferidas**" com a barra e as
+  etapas **Conferir folhas** → **Revisar metadados** → **Aprovar lote** → **Publicar no site** (orientação: "(feito)", "(você está aqui)",
+  "(não se aplica)" para quem lê com leitor de tela). Sem lote: "Nenhuma folha deste projeto está num lote em conferência." O botão azul da
+  conferência: **Iniciar conferência** (nenhuma conferida) ou **Continuar conferência**; ao lado, **Conferir só sem avisos (N)**.
+  **Objetivos do projeto** ficam recolhidos (a barra e o "N de M" à vista).
+- **Situação do projeto**: a coluna da direita da Visão geral (pendências + os cartões Folhas, Problemas, Dados do projeto, Site).
+- **Cartão da folha**: **Folha NN** (ou o número D quando a folha não tem nº), o tipo, o selo `a conferir` / `conferida` / `corrigida` /
+  `retida` (com ícone; "conferida" só com a revisão gravada) e o menu ⋯ (**Revisar folha**, **Abrir a página da folha**, **Relatar
+  problema**). Filtros: os de sempre + **Tipo** ("Todos os tipos"); **Grade** / **Lista**.
+- **Revisar folha** (painel ao lado): **Folha NN** + selo + "por Nome" · código · projeto; **‹ Anterior** · "**N de M** · X conferidas" ·
+  **Próxima ›**. Avisos em grupos: **Impede publicar** ("resolva antes de publicar") e **Aviso do CAMP Vision** ("confira; não impede
+  publicar"); sem nada: "Nada apontado.". Barra: **Girar à esquerda**, **Girar 90°**, **Girar 180°**, **Espelhar**, **Recortar e alinhar**,
+  **−** / **N%** / **+** (ampliação), **Tela cheia**, **? atalhos**. **Sugestões do CAMP Vision** ("Leitura automática: só vale se você usar e
+  salvar."): **Título sugerido**, **Tipo sugerido**, **Orientação sugerida**, cada um com **Usar sugestão** (depois: "Sugestão no campo").
+  **Dados da folha (editáveis)** (campo vazio: "· vazio"); **Identificado pelo CAMP Vision** (só leitura); **Outras ações desta folha** (Abrir a página da folha, Ler dados agora, Marcar duplicata, capa); **Não publicar esta folha** e **É de outro projeto…** (recolhidos).
+  Rodapé: **Salvar e próxima folha** (na última: **Salvar e concluir**; tecla Enter; antes "Está certo e próxima" — e "Salvar correção",
+  que fazia o mesmo com campo mudado) · **✓ Confirmar folha** (grava e fica na folha) · **Voltar para a conferir** (folha já conferida) ·
+  **Relatar problema** · **Fechar**. Abrir a folha NÃO a confere.
+- **Editar projeto** (painel ao lado): **Sobre a edição** (recolhível); **Informações públicas** (Nome do projeto, Ano "0 = sem data", Ano
+  final, Cidade, Cliente "Só se estiver escrito num documento (carimbo, contrato, memorial). Não deduza.", Autoria do projeto, Papel do
+  titular do fundo, Âmbito e conteúdo); **Programa / uso**; **Natureza do trabalho**; **Modalidade**; **Situação da obra** ("(escolha um)");
+  cada lista com "Buscar em …", "Nenhum termo com essa busca." e o resumo do que está marcado ("nada marcado"); **Só no painel** ("não vai
+  ao site"). Rodapé: **Cancelar** · **Salvar alterações** ("Salvando…"). Os termos são os da taxonomia do site (`/api/vocabulario/tipologia`),
+  nunca os do protótipo.

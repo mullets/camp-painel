@@ -55,8 +55,9 @@ const um = q => py(`print((con.execute("""${q}""").fetchone() or [''])[0])`);
   chk(!!(await pg.$('#rv-foto-ano')) && !!(await pg.$('#rv-foto-estagio')) && !!(await pg.$('#rv-foto-fotografo')), 'a revisão da foto tem Ano da foto, Estágio e Fotógrafo');
   if (await pg.$('#rv-foto-ano')) {
     await pg.fill('#rv-foto-ano', '2001'); await pg.fill('#rv-foto-fotografo', 'Caio');
-    await pg.click('[data-rev-item="corrigida"]');
-    chk(await espera(() => um(`SELECT foto_ano||'|'||foto_fotografo FROM item WHERE codigo='${D('S03', 3)}'`) === '2001|Caio'), '"Salvar correção" grava os dados da foto');
+    // redesenho §4.2 F: o antigo "Salvar correção" é o "Salvar e próxima folha" com campo mudado (folha sem imagem: pergunta antes)
+    await pg.click('[data-rev-item="conferida"]'); await pg.waitForSelector('#conf-ov [data-conf="sim"]', { timeout: 2500 }).then(() => pg.click('#conf-ov [data-conf="sim"]'), () => {});
+    chk(await espera(() => um(`SELECT foto_ano||'|'||foto_fotografo FROM item WHERE codigo='${D('S03', 3)}'`) === '2001|Caio'), '"Salvar e próxima folha" (antes "Salvar correção") grava os dados da foto');
   }
   await pg.evaluate(() => closeDrawer(true)); await pg.waitForTimeout(300);
   await pg.evaluate(c => abrirRevisaoItem(c), D('S01', 6)); await pg.waitForSelector('#rv-titulo', { timeout: 8000 }).catch(() => {});

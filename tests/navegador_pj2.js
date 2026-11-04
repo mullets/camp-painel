@@ -189,7 +189,10 @@ for n in range(1, 35):
     // (11) lote inteiro a conferir
     const tags = await page.evaluate(() => { const cs = [...document.querySelectorAll('#pd .thumb')]; return { n: cs.length, aConf: cs.filter(t => { const r = t.querySelector('.rev-tag'); return r && getComputedStyle(r).display !== 'none' }).length, or: cs.filter(t => t.querySelector('.or-inc')).length, fs: cs[0] && cs[0].querySelector('.or-inc') ? parseFloat(getComputedStyle(cs[0].querySelector('.or-inc')).fontSize) : 99,
       capFs: cs[0] && cs[0].querySelector('.cap') ? parseFloat(getComputedStyle(cs[0].querySelector('.cap')).fontSize) : 0 } });
-    chk(tags.n === 34 && tags.aConf === 0 && /A conferir \(34\)/.test(await txt('.folhas-bar')), '(11) lote inteiro a conferir: o selo "a conferir" não se repete nos 34 cartões (a barra diz "A conferir (34)"): ' + JSON.stringify(tags));
+    // Redesenho da página do projeto (documento do Rafael de 04/11/2026, §3.4 "Estado individual de conferência em selo legível" em cada
+    // cartão): a decisão de 19/10 de esconder o selo quando o lote inteiro está a conferir foi revista — cada cartão diz o seu estado.
+    // A intenção do (11) que fica: a barra diz "A conferir (34)" e o selo é pequeno (12 px), sem competir com o número da folha.
+    chk(tags.n === 34 && tags.aConf === 34 && /A conferir \(34\)/.test(await txt('.folhas-bar')), '(11) lote inteiro a conferir: cada um dos 34 cartões diz "a conferir" (§3.4) e a barra diz "A conferir (34)": ' + JSON.stringify(tags));
     // UX-27 (WCAG): nada na tela abaixo de 12 px. "Pequeno" agora = no mínimo de 12 px e nunca maior que o texto do cartão (antes ≤ 9,5 px).
     chk(tags.or === 34 && tags.fs >= 12 && tags.fs <= 12 && tags.fs <= tags.capFs, '(11) "orientação incerta" continua, pequeno (' + tags.fs + 'px, no mínimo de 12 px e não maior que o texto do cartão, ' + tags.capFs + 'px)');
     py(`con.execute("UPDATE item SET revisao='conferida' WHERE codigo='${B}-1978-S01-D00001'")`);

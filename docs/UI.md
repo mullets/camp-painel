@@ -169,3 +169,26 @@ progresso de catalogação). JS em `LST` (`frontend/index.html`); CSS no bloco "
   `abrirProjetosCom({...})`. `tests/navegador_projetos_lista.js` confere.
 - **Ferramentas avançadas**: função operacional sensível vai para `details.ferramentas-avancadas` (contorno tracejado, resumo com o
   estado atual, aviso `.fa-aviso`), recolhida por padrão; a confirmação de cada ação continua a mesma.
+
+## Página do projeto (redesenho, 04/11/2026 — documento do Rafael §3–§10)
+
+`showProjeto` (`#pd`) monta: cabeçalho `.dethdr.pj-cab` (`h1` + `#pj-selo` + `.pj-meta`; ações Editar + `pjMaisMenuHTML`) → abas
+`.pj-tabs` (`role=tablist`, ← → Home End; chaves `itens` Visão geral · `folhas` · `dados` Metadados · `erros` · `historico`;
+`PJ_ABA_ALIAS` leva `publicacao` → Metadados e `pedidos` → Histórico) → `.pj-vg` (`role=tabpanel`, `data-pj-vista`), uma grade com
+`#pj-status` (Próximo passo + `#pj-conf` = `pjConfHTML`: `LST.progresso` + `.pj-etapas`), `.pj-vg-lado` (só na Visão geral: `#pj-falta` +
+`pjCardsHTML`, os 4 cartões em coluna, fixa ao rolar) e `.pj-vg-corpo` (`pjGavetaHTML` + as `.pj-aba` + a aba). A largura das colunas
+vem do `#pd` (`container: pjpg`): com a revisão aberta ao lado, a coluna da direita desce. Abaixo de 1020 px de `#pd`: status → corpo → lado.
+- Grade de folhas: `.thumb` > `.cap` com `.cap-cab` (`.cap-id` + `LST.mais`), `.cap-tipo`, `.cap-sel` (`tagRevisao` com `data-rev-estado`);
+  filtro **Tipo** (`[data-fl-tipo]`, `FL_TIPO`, soma com o de situação em `aplicarFiltroFolhas`); **Grade/Lista** (`[data-fl-vista]`,
+  `#pd[data-vista]`, `camp.folhasVista`). Folha aberta: `.thumb.aberta[aria-current]` (`revDestacar`). Filtro, tipo e rolagem voltam
+  quando a página do MESMO projeto é redesenhada (`PJ_VISTA`) e ao fechar o painel lateral (`_ROL_DRAWER`).
+- **Revisar folha** (`abrirRevisaoItem`, `.drawer-rev`; ≥ 1181 px: coluna de 52vw; 721–1180: por cima, até 1000 px; celular: tela toda):
+  `.rv` > `.rv-cab` (`.rv-folha`, `.rv-proj`, `.rv-nav` com `[data-rev-ir]` e `.rev-prog`) → `.rv-alertas` (`#rv-chips` = `apontaRevHTML`:
+  `.rv-al.erro` / `.rv-al.aviso`) → `.rv-ferr` (barra `role=toolbar`) → `.rev-grade` (`.rev-col-img` | `.rev-col-dados`: `.rv-sug` com
+  `[data-rev-usar]`/`[data-rev-sug-aceitar]`, `.rev-campos`, `.rv-lido`, `.rv-mais`) → `.rv-rodape.rev-acoes` (fixo no pé). Duas colunas
+  quando o painel tem ≥ 840 px (`container: gaveta`). Primeiro `[data-rev-item="conferida"]` do rodapé = o botão azul (Enter);
+  `[data-rev-ficar]` = Confirmar folha.
+- **Editar projeto** (`editarProjeto`, `.drawer-ed`): `form.ed-form` > `.ed-sobre` + `details.ed-sec` (Informações públicas, Só no painel:
+  `.ed-grupo`) + `taxonomiaHTML` por faceta (`details.tp-facet.ed-sec` com `.tp-filtro` `data-sem-alteracao`, `.tp-gr` > `.tp-exp[aria-expanded]`
+  + `.tp-filhos`, `input[type=hidden]#ep-<coluna>`) + `.ed-rodape` (fixo: `[data-ed-cancelar]`, `[data-ed-salvar]`). Salvar usa
+  `salvarNoDrawer` (Salvando… / erro em `#d-erro`, sem fechar). `tests/navegador_projeto_interno.js` confere.

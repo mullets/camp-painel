@@ -84,8 +84,10 @@ for k in range(1, 14):
     const bt = page.locator('#pj-status [data-pjs-atualizar]');
     chk((await bt.count()) === 1 && /\bpri\b/.test(await bt.getAttribute('class')), 'com 1 folha que o visitante ainda não vê, "Atualizar no site" volta e é o botão azul');
     chk(/ao atualizar, 1 folha fica pública/.test(corpo2), 'e diz o que muda antes do clique ("ao atualizar, 1 folha fica pública"): "' + corpo2.slice(0, 240) + '"');
-    const cab2 = await page.getAttribute('#pj-status .pjs-cab [data-situacao]', 'data-situacao');
-    chk(cab2 === 'pronto', `com folha fora do site o lote volta a pedir publicar (chip ${cab2})`);
+    // redesenho da página do projeto (04/11/2026, §3.1 e §8 "mesma informação duplicada"): a situação fica só no cabeçalho, junto do título;
+    // o Próximo passo não tem mais chip. A intenção fica: com folha fora do site, o bloco volta a pedir publicar, sem chip repetido.
+    const cab2 = await page.evaluate(() => document.querySelectorAll('#pj-status .pjs-cab [data-situacao]').length);
+    chk(cab2 === 0 && /Atualizar no site/.test(corpo2 + (await page.textContent('#pj-status'))), `com folha fora do site o bloco volta a pedir publicar ("Atualizar no site"), sem repetir o chip da situação (${cab2})`);
 
     // ---- 3) publicado, em dia e sem pendência: projeto fechado, numa caixa só ----
     py(`con.execute("UPDATE item SET status_site='no_ar' WHERE codigo='${P}-1977-S01-D00004'")

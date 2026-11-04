@@ -71,7 +71,7 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
   const linhasVis = () => pg.evaluate(() => [...document.querySelectorAll('#cf-linhas .cf-linha')].map(x => x.dataset.cfFolha));
   const sairSemSalvar = async () => (await pg.evaluate(() => window._DIALOGOS.slice())).filter(t => /Sair sem salvar/.test(t)).length;
   const hash = () => pg.evaluate(() => location.hash);
-  const abreu = async c => espera(async () => await aberta() === c && (await paneDe()).includes(c.split('-').pop()) && !!(await pg.$('#cf-pane [data-rev-item="corrigida"]')));
+  const abreu = async c => espera(async () => await aberta() === c && (await paneDe()).includes(c.split('-').pop()) && !!(await pg.$('#cf-pane [data-rev-item="conferida"]')));
 
   // ---------- entra pela página do projeto (Voltar tem de voltar a ela) ----------
   await pg.goto(BASE + '/#projeto/' + P); await pg.reload(); await pg.waitForSelector(`.thumb[data-rev-abrir="${D(1)}"]`, { timeout: 15000 });
@@ -113,7 +113,7 @@ const espera = async (f, ms = 8000) => { const t = Date.now(); while (Date.now()
 
   // ---------- Salvar correção ----------
   await pg.fill('#rv-titulo', 'Prancha 2 corrigida');
-  await pg.click(`#cf-pane [data-rev-item="corrigida"][data-codigo="${D(2)}"]`);
+  await pg.click(`#cf-pane [data-rev-item="conferida"][data-codigo="${D(2)}"]`);
   const foi3 = await abreu(D(3));
   const i2 = await item(D(2));
   chk(i2.titulo === 'Prancha 2 corrigida' && i2.revisao === 'corrigida', '"Salvar correção" grava o título e marca a folha como corrigida (API)', JSON.stringify([i2.titulo, i2.revisao]));

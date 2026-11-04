@@ -56,7 +56,9 @@ async function medir(pg, host) {
     const h = document.querySelector(host); if (!h) return { erro: 'sem ' + host };
     const lado = e => e ? e.scrollWidth - e.clientWidth : 0;
     const col = h.querySelector('.rev-col-dados'), chips = h.querySelector('#rv-chips');
-    const cr = (col || h).getBoundingClientRect();
+    // redesenho da página do projeto §4.2 B (04/11/2026): os avisos ficam no bloco "Avisos desta folha" acima da imagem (largura do painel),
+    // não mais dentro da coluna de dados: a medida é a do bloco em que eles estão
+    const caixa = chips && col && !col.contains(chips) ? (chips.closest('.rv-alertas') || h) : (col || h), cr = caixa.getBoundingClientRect();
     const tags = chips ? [...chips.querySelectorAll('.tag, .rev-aviso-grupo')] : [];
     const fora = tags.filter(t => { const r = t.getBoundingClientRect(); return r.right > cr.right + 1 || r.left < cr.left - 1 || t.scrollWidth > t.clientWidth + 1; }).map(t => t.textContent.slice(0, 60));
     const txt = chips ? chips.innerText : '';

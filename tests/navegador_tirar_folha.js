@@ -110,7 +110,7 @@ let PG = null;
   chk(/2 a conferir/.test(await chips()), 'lote em revisão: "a conferir" diminui depois de mover', await chips());
   // dois cliques em "Salvar correção": grava uma vez e vai para a próxima (antes gravava duas vezes)
   await pg.fill('#rv-titulo', 'Prancha 3 (corrigida)'); const nRev = revisoes.length;
-  await pg.dblclick(`[data-rev-item="corrigida"][data-codigo="${D(PA, 3)}"]`);
+  await pg.dblclick(`[data-rev-item="conferida"][data-codigo="${D(PA, 3)}"]`);
   await espera(async () => await aberta() === D(PA, 4)); await new Promise(r => setTimeout(r, 600));
   chk(revisoes.length - nRev === 1 && (await item(D(PA, 3))).item.titulo === 'Prancha 3 (corrigida)', 'dois cliques em "Salvar correção" gravam uma vez só', String(revisoes.length - nRev));
   // "criar projeto novo" com nome PARECIDO de um que já existe no fundo: mostra o parecido como escolha e não cria nada
