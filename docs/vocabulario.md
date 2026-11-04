@@ -126,6 +126,30 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Ferramentas avançadas** (recolhida): "Verificar destino pelo painel · modo Simular · o painel faria N decisões" e o aviso "Funções
   operacionais sensíveis: mudam para onde os lotes vão. …".
 
+## Projetos (redesenho, 04/11/2026 — documento do Rafael §8)
+- Pergunta da tela: "Qual projeto quero localizar, consultar ou administrar?". Subtítulo: "Localize, consulte e administre os projetos do
+  acervo. Um projeto é o dossiê: …". Ação do cabeçalho: **Novo projeto** (admin).
+- Cartões (o número é do acervo inteiro; clicar liga o filtro): **projetos no acervo** ("sem os juntados e os descartados"; limpa os
+  filtros), **projetos no site** ("N% do acervo; qualquer visitante vê" = `contagens.projetos_no_site`), **com material digitalizado** ("ao
+  menos uma folha no painel"), **sem imagem** ("nenhuma folha com imagem no painel"), **com pendências** ("problema em aberto ou lote
+  esperando uma pessoa" = as regras de "Com problema" e "Precisa de você" juntas).
+- Abas (as de antes, CAMP-149): **Precisa de você** · **Pronto para publicar** · **No site** · **Com problema** · **Todos**; vindas de link:
+  **Não publicados**, **Sem folhas**. A aba conta o que ela mostra com a busca e os filtros ligados.
+- Filtros: **Buscar** ("Título, código, arquiteto ou cidade… (tecla F)"; dica: "Acha sem acento e com parte do código: 0233, F026P0233 ou F026-P0233"; acha também cliente e
+  identificação original), **Fundo**, **Arquiteto** (só a **autoria registrada no projeto**, "Nome (N)"; "**Sem autoria registrada (N)**"),
+  **Período** (as décadas com projeto, "1950–1959 (N)"; "**Sem data (N)**"; a obra de 1958–61 entra nas duas décadas), **Material**
+  (Com material digitalizado · Sem material digitalizado · Sem imagem), **Pendências** (Com pendências), **Ordenar** (Código ·
+  Atualizados por último · Nome (A–Z) · Mais folhas · Fundo (A–Z) · Data da obra · Arquiteto (A–Z)), **Limpar filtros**. Vazio com filtro:
+  "**Nenhum projeto com estes filtros.**" "A busca e os filtros somam: tire um deles ou limpe todos."
+- Colunas: **Projeto** (miniatura + nome; embaixo a cidade), **Código**, **Arquitetos** (sem registro: "**não registrada**" — nunca o
+  fundo), **Fundo**, **Data** ("1958–1961", "**sem data**"), **Folhas**, **Situação** (a situação do CAMP-146 + "objetivos N/M" + "**Site:**
+  não publicado / rascunho / despublicado" quando não é "No site" + a frase do que falta), **Atualizado** ("há 3 dias" + a data).
+  Colunas que saem na lista estreita vão para baixo do nome ("Fundo F003 · Burle Marx", "autoria não registrada", "12 folhas").
+- Ação: **Abrir projeto** (link; nome acessível "Abrir projeto F003-P0001") e **⋯** (Mais ações: código · título): **Conferir folhas**
+  (projeto com folhas para conferir), **Publicar no site…** (mostra o plano do lote antes), **Autorizar para o site…**, **Imprimir etiqueta
+  da pasta**, **Exportar (CSV)**, **Voltar para rascunho…** (vermelho, com a confirmação de sempre). Cada um só para quem pode.
+- Rodapé: "Mostrando a–b de N", **‹ Anterior** / **Próxima ›**, **Por página** (25 · 50 · 100), **Densidade**: **Confortável** / **Compacta**.
+
 ## Avisos (UX-22)
 - Todo aviso rápido (toast) some sozinho em no máximo 8 s; o aviso de tarefa concluída no topo some em 8 s quando deu certo
   (o que falhou fica até a pessoa fechar). Tudo fica em **Tarefas e avisos recentes** (menu do avatar), com a seção

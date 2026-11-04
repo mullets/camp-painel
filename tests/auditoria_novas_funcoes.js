@@ -445,8 +445,9 @@ w.route_to('estacoes'); await sleep(2800);
   const R=(await J(adm,'/api/projetos/resumo')).b, chips=[...d.querySelectorAll('#proj-chips [data-proj-sit]')], linhas=()=>[...d.querySelectorAll('#projetos-body tr[data-nav]')];
   chk(chips.map(c=>c.dataset.projSit).join(',')==='gente,pronto,publicado,com_problema,todos','(CAMP-149) as abas de Projetos deveriam ser as situações: Precisa de você, Pronto para publicar, No site, Com problema, Todos: '+chips.map(c=>c.dataset.projSit));
   chk(chips.every(c=>Number(c.querySelector('b').textContent.replace(/\D/g,''))===R[c.dataset.projSit]),'as contagens dos filtros deveriam bater com o servidor: '+JSON.stringify(R)+' / '+chips.map(c=>c.textContent.trim()).join(' | '));
-  chk(d.querySelectorAll('#v-projetos thead th').length===5&&/Situação/.test(txt('#v-projetos thead'))&&!/Séries|Última atividade|Publicação/.test(txt('#v-projetos thead')),'a tabela deveria ter 4 colunas de conteúdo (Projeto, Fundo, Folhas, Situação com a frase do que falta — CAMP-146), sem Séries nem Última atividade: "'+txt('#v-projetos thead')+'"');
-  chk(linhas().length>0&&/P\d{4}/.test(linhas()[0].querySelector('td:nth-child(2) .code').textContent)&&!!linhas()[0].querySelector('td:nth-child(2) b'),'a coluna Projeto deveria juntar o código e o nome');
+  // redesenho Projetos (04/11/2026, documento do Rafael §8): as colunas pedidas (Projeto, Código, Arquitetos, Fundo, Data, Folhas, Situação, Atualizado) + seleção e ação; Situação continua UMA coluna com a frase do que falta (CAMP-146), sem Séries
+  chk([...d.querySelectorAll('#v-projetos thead th')].map(th=>th.textContent.replace(/\s+/g,' ').trim()).filter(Boolean).join('|').replace(/\(s\)/,'s')==='Projeto|Código|Arquitetos|Fundo|Data|Folhas|Situação|Atualizado|Ação'&&!/Séries|Última atividade|Próximo passo/.test(txt('#v-projetos thead')),'a tabela deveria ter as colunas do redesenho (Projeto, Código, Arquitetos, Fundo, Data, Folhas, Situação, Atualizado, Ação), sem Séries nem Próximo passo: "'+txt('#v-projetos thead')+'"');
+  chk(linhas().length>0&&/P\d{4}/.test(linhas()[0].querySelector('td.c-pj-cod .code').textContent)&&!!linhas()[0].querySelector('td.c-proj .proj-tit'),'a linha deveria ter o nome (link) e o código');
   d.querySelector('[data-proj-sit="gente"]').click(); await sleep(2000);
   chk(linhas().length===R.gente&&linhas().every(t=>/Chegando|Para conferir|Pronto para publicar|Com problema/.test(t.textContent)),'"Precisam de você" deveria mostrar só projetos com algo a fazer, cada um dizendo o quê: '+linhas().length+' de '+R.gente);
   chk(d.querySelector('[data-proj-sit="gente"]').getAttribute('aria-pressed')==='true'&&!d.getElementById('proj-limpar').hidden,'o filtro ativo deveria ficar marcado e aparecer "Limpar filtros"');
@@ -496,7 +497,7 @@ w.route_to('estacoes'); await sleep(2800);
   const cel=d.querySelectorAll('#projetos-body .sel-cel')[2]; cel.click(); await sleep(300);
   chk(w.location.hash===h0&&w.eval('PROJETOS_SELECIONADOS.size')===3&&!!cel.querySelector('input').checked,'clicar na CÉLULA da caixa também deveria marcar sem navegar (selecionados='+w.eval('PROJETOS_SELECIONADOS.size')+')');
   chk(/3 projetos selecionados/.test(txt('#proj-bulk-count')),'a barra deveria dizer "3 projetos selecionados": "'+txt('#proj-bulk-count')+'"'); w.limparSelecaoProjetos();
-  d.querySelector('#projetos-body tr[data-nav] b').click(); await sleep(800); chk(/^#projeto\//.test(w.location.hash),'clicar no nome deveria continuar abrindo o projeto: '+w.location.hash); w.route_to('painel'); }
+  d.querySelector('#projetos-body tr[data-nav] .proj-tit').click(); await sleep(800); chk(/^#projeto\//.test(w.location.hash),'clicar no nome deveria continuar abrindo o projeto: '+w.location.hash); w.route_to('painel'); }
 // ---------- [Auditoria P0-4] os botões "Etiquetas" abrem a etiqueta do projeto/fundo/folha de ORIGEM (nunca a de outro fundo) ----------
 { const lab=()=>({f:d.getElementById('l-fundo').value,p:d.getElementById('l-proj').value,o:txt('#lab-origem'),aba:(d.querySelector('#lab-tabs .on')||{dataset:{}}).dataset.t});
   w.route_to('etiquetas/projeto/F003-P9001'); await sleep(3500); let L=lab();
@@ -1071,7 +1072,8 @@ okl.push('guia: checklist vivo do fundo e do arquiteto, passo a passo, botão qu
   // o seletor "por página" funciona
   w.eval('PROJ_PAG.por=5'); await w.carregarProjetosAPI({q:''}); await sleep(1500);
   { const sel=d.querySelector('#projetos-pag select[data-pg="por"]'); sel.value='25'; sel.dispatchEvent(new w.Event('change',{bubbles:true})); await sleep(1800);
-    chk(linhasP().length===Math.min(25,tot)&&d.getElementById('projetos-pag').hidden===(tot<=25),'trocar para 25 por página deveria mostrar '+Math.min(25,tot)+' linhas: '+linhasP().length); }
+    // redesenho Projetos (§7): o rodapé fica SEMPRE à vista com "Mostrando a–b de N" (antes sumia com uma página só)
+    chk(linhasP().length===Math.min(25,tot)&&d.getElementById('projetos-pag').hidden===false&&/Mostrando 1–/.test(txt('#projetos-pag')),'trocar para 25 por página deveria mostrar '+Math.min(25,tot)+' linhas e o rodapé "Mostrando…": '+linhasP().length); }
   w.eval('PROJ_PAG.por=100;PROJ_PAG.pagina=1'); await w.carregarProjetosAPI({q:''}); await sleep(1200); w.limparSelecaoProjetos();
   // auditoria
   w.route_to('auditoria'); await sleep(2200);
@@ -1532,10 +1534,11 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   okl.push('H13: Fundos com Pendências em palavras, Exportar no Mais, sigla sugerida/validada e confirmação do efeito'); }
 // ---------- [H12] Projetos: busca grande, coluna "Próximo passo", seleção no padrão do Gmail, Novo projeto com ajuda ----------
 { w.route_to('projetos'); await sleep(2000);
-  const q=d.getElementById('proj-q'); chk(!!q&&!!q.closest('.busca-grande')&&!!(q.compareDocumentPosition(d.getElementById('proj-chips'))&4),'[H12] a busca deveria vir grande, acima das abas');
-  chk(/Situação/.test(txt('#v-projetos thead'))&&!/Atualizado|Próximo passo/.test(txt('#v-projetos thead')),'[H12/CAMP-146] uma coluna "Situação" (com o que falta) no lugar de "Atualizado" e "Próximo passo"');
+  // redesenho Projetos (§4.4/§8): a busca é o 1º campo (o mais largo, 44 px) da barra de filtros, logo depois das abas, como em Material novo
+  const q=d.getElementById('proj-q'); chk(!!q&&!!q.closest('.lista-filtros .busca-local')&&!!(d.getElementById('proj-chips').compareDocumentPosition(q)&4)&&q.closest('.lista-filtros').querySelector('input,select')===q,'[H12] a busca deveria ser o 1º campo da barra de filtros, logo depois das abas');
+  chk(/Situação/.test(txt('#v-projetos thead'))&&!/Próximo passo/.test(txt('#v-projetos thead')),'[H12/CAMP-146] uma coluna "Situação" (com o que falta), sem "Próximo passo" separado');
   const lin=[...d.querySelectorAll('#projetos-body tr[data-nav]')].find(t=>t.textContent.includes('F003-P9001'));
-  chk(!!lin&&/Para conferir/.test(lin.textContent)&&/3 folhas faltam conferir/.test(lin.textContent),'[H12/CAMP-146] F003-P9001 deveria dizer "Para conferir · 3 folhas faltam conferir": '+(lin?lin.querySelector('.prox-passo').textContent:'linha não achada'));
+  chk(!!lin&&/Para conferir/.test(lin.textContent)&&/3 folhas faltam conferir/.test(lin.textContent),'[H12/CAMP-146] F003-P9001 deveria dizer "Para conferir · 3 folhas faltam conferir": '+(lin?lin.querySelector('.c-pj-sit').textContent:'linha não achada'));
   chk(!/Selecionar todos os resultados/.test(txt('#v-projetos .filterbar')),'[H12] "Selecionar todos os resultados" não deveria ficar sempre à vista');
   w.eval('PROJ_TOTAL=999'); w.selecionarProjetosVisiveis(true); await sleep(100);
   chk(/Todos os \d+ desta página estão marcados/.test(txt('#proj-sel-todos-msg'))&&!!d.querySelector('[data-proj-sel-todos]'),'[H12] marcar a página inteira deveria oferecer "Marcar todos os N resultados": "'+txt('#proj-sel-todos-msg')+'"');

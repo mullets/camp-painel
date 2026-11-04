@@ -158,5 +158,14 @@ progresso de catalogação). JS em `LST` (`frontend/index.html`); CSS no bloco "
   densidade são preferência da pessoa (`localStorage`).
 - **Celular** (≤ 720 px): `thead` some e cada linha vira cartão (projeto → progresso → situação → tempo → ação); abas rolam na horizontal;
   filtros em duas colunas. Nada de rolagem lateral na página.
+- **Projetos** (`#v-projetos`, redesenho Projetos 04/11/2026, §8): usa os MESMOS componentes 1–12 (`LST.cards` em `#proj-cards`,
+  `LST.abas` em `#proj-chips`, `.lista-filtros`/`LST.opcoes`, `table.lista-tab.proj-tab` com `th[aria-sort]` > `button.th-ord[data-proj-ord]`,
+  `.proj-cel` + `LST.mini(p.miniatura)`, `situacaoTag`, `.acao-cel` > "Abrir projeto" + `LST.mais`, `paginadorHTML` com `opcoes:[25,50,100]`,
+  `.densidade`, `estadoHTML`), sem a barra de progresso (#7): o andamento é o selo "objetivos N/M" (UX-73). Filtro, ordenação e página vão
+  ao SERVIDOR (`/api/projetos?…&autoria&periodo&material&pendencias`, todos opcionais); as opções vêm de `/api/projetos/filtros`; cartões e
+  abas de `/api/projetos/resumo` (a mesma regra da lista). As linhas são `tr.lst-linha` (Material novo usa `tr[data-fase]`); as colunas saem
+  por `@container lista` (1279 px: Fundo e Data; 980: Código; 880: Arquitetos; 700: cartão) e o que sai aparece embaixo do nome
+  (`.pj-estreito > .pj-e-*`). Estado da volta: `LST.sessao` `camp.proj.estado` (rota + filtros + página); link de outra tela com filtro:
+  `abrirProjetosCom({...})`. `tests/navegador_projetos_lista.js` confere.
 - **Ferramentas avançadas**: função operacional sensível vai para `details.ferramentas-avancadas` (contorno tracejado, resumo com o
   estado atual, aviso `.fa-aviso`), recolhida por padrão; a confirmação de cada ação continua a mesma.
