@@ -13,11 +13,20 @@ No servidor do painel:
   PYTHONPATH=backend python scripts/limpar_duplicatas_formato.py --desfazer ~/plano.desfazer.json            # mostra o que voltaria
   PYTHONPATH=backend python scripts/limpar_duplicatas_formato.py --desfazer ~/plano.desfazer.json --aplicar  # volta como estava
   Outras opções: --fundo F00x (padrão F001) · --db caminho.db · --sem-imagens · --listar N (grupos de exemplo por projeto)
+  --despublicar     cópias JÁ PUBLICADAS (grupo certo): na simulação mostra o plano; com --aplicar, deixa a cópia privada no site
+                    (a mesma rotina do painel: publicador.esconder_folha_no_site) e grava o redirecionamento 301 cópia → a que fica
+                    (redir_site.registrar; o coletor de 10 min envia ao site). Só se a que fica estiver PUBLICADA (senão: "publique antes").
+  --corrigir-marcas marcas antigas de MÁQUINA (CAMP Vision) que ligam duas folhas da MESMA pasta: na simulação entram no plano como
+                    "Não é duplicata" (ação nao_e da tela Duplicatas); com --aplicar --corrigir-marcas, são desfeitas. Marca de pessoa: nunca.
+
+REGRA DURA (04/11/2026, depois da simulação real): só junta folhas de pastas de FORMATO/VERSÃO diferentes (TIFF × DNG × JPG × JPG LIMPO,
+"em alta" × "para internet"); da mesma pasta, nunca (vira incerto). As marcas antigas "já é cópia de X" não juntam pranchas, só informam.
 
 O que faz ao aplicar: cada cópia vira "duplicata de" a folha que fica (tipo 'mesma_folha', conferida, com evento no histórico),
 pela MESMA função da tela Duplicatas do projeto (app.duplicatas._marcar), com o ator "limpeza de formatos". NUNCA apaga folha nem
 arquivo, nunca mexe em folha que está no site (lista à parte: precisa despublicar e redirecionar 301), e o que só casou pela ordem
-na subpasta (sem a imagem confirmar) não entra. Também guarda o md5/dHash das folhas analisadas (para a importação reconhecer
+na subpasta (sem a imagem confirmar) não entra (--despublicar e --corrigir-marcas são as únicas exceções, sempre pelo plano simulado).
+Tudo vai para o histórico e para o arquivo de desfazer (republica a cópia, tira o 301, volta a marca). Também guarda o md5/dHash das folhas analisadas (para a importação reconhecer
 a mesma prancha da próxima vez).
 """
 from __future__ import annotations
@@ -35,9 +44,11 @@ from app import folhas_repetidas as fr  # noqa: E402
 
 ATOR = "limpeza de formatos"
 COLS = """codigo, projeto_codigo, sequencial, serie_codigo, titulo, arquivo_origem, arquivo_jpg, pendencias, md5, phash, duplicata_de,
-          tipo_duplicata, revisao, status_site, tainacan_item_id, lote_id"""
+          tipo_duplicata, revisao, status_site, tainacan_item_id, lote_id, duplicata_conferida_em, duplicata_conferida_por, duplicata_conferida_de"""
 CAMPOS_DESFAZER = ("duplicata_conferida_em", "duplicata_conferida_por", "duplicata_conferida_de", "revisao", "revisado_por", "revisado_em",
                    "pendencias", "status_site")
+CAMPOS_MARCA = ("duplicata_de", "tipo_duplicata", *CAMPOS_DESFAZER)
+MOTIVO_301 = "a mesma prancha em outro formato (limpeza de formatos)"
 
 
 # ----------------------------------------------------------------- banco
@@ -85,9 +96,10 @@ def d_curto(cod: str) -> str:
         return cod
 
 
-def situacao(i) -> str:
+def situacao(i, grupo=None) -> str:
     if i["duplicata_de"]:
-        return f"já é cópia de {d_curto(i['duplicata_de'])}"
+        fora = grupo is not None and i["duplicata_de"] not in grupo
+        return f"já é cópia de {d_curto(i['duplicata_de'])}" + (" — marca antiga, fora deste grupo" if fora else "")
     if fr.no_site(i):
         return "no site"
     return "conferida" if fr.conferida(i) else "a conferir"
@@ -125,7 +137,7 @@ def analisar(con, proj: str, raiz: Path | None, usar_imagens: bool) -> dict | No
             guardar_phash[c] = pr.get("phash") or hashes[c][0]
     r = fr.agrupar(itens, md5, hashes)
     por_cod = {i["codigo"]: i for i in itens}
-    decisoes, publicadas, pulados, ja_copias = [], [], [], []
+    decisoes, publicadas, pulados, ja_copias, despublicar, principal_antes = [], [], [], [], [], []
     for g in r["grupos"]:
         orig = g[0]
         if por_cod[orig]["duplicata_de"]:
@@ -136,47 +148,75 @@ def analisar(con, proj: str, raiz: Path | None, usar_imagens: bool) -> dict | No
             if por_cod[c]["duplicata_de"]:
                 ja_copias.append(c)
             elif fr.no_site(por_cod[c]):
-                publicadas.append({"copia": c, "fica": orig, "situacao": por_cod[c]["status_site"], "site_id": por_cod[c]["tainacan_item_id"]})
+                x = {"copia": c, "fica": orig, "situacao": por_cod[c]["status_site"], "site_id": por_cod[c]["tainacan_item_id"]}
+                publicadas.append(x)
+                o = por_cod[orig]                  # --despublicar: só se a que fica já está PUBLICADA (o 301 tem para onde ir)
+                if o["status_site"] == "no_ar" and o["tainacan_item_id"] and x["site_id"]:
+                    despublicar.append({**x, "fica_site_id": o["tainacan_item_id"]})
+                else:
+                    principal_antes.append({**x, "fica_situacao": o["status_site"] or "nao_publicado"})
             else:
                 livres.append(c)
         if livres:
             decisoes.append({"acao": "marcar", "original": orig, "copias": livres})
     viram = sum(len(d["copias"]) for d in decisoes)
+    suspeitas = r["marcas_suspeitas"]
     return {"titulo": p["titulo"] if p else "", "itens": itens, "por_cod": por_cod, "r": r, "decisoes": decisoes, "publicadas": publicadas,
             "pulados": pulados, "ja_copias": ja_copias, "folhas": len(itens), "pranchas": len(itens) - sum(len(g) - 1 for g in r["grupos"]),
             "viram_copia": viram, "lidas": lidas, "falhas": falhas, "guardar_md5": guardar_md5, "guardar_phash": guardar_phash,
-            "carimbo": carimbo(con, proj)}
+            "carimbo": carimbo(con, proj), "despublicar": despublicar, "principal_antes": principal_antes, "suspeitas": suspeitas}
 
 
-def mostrar(proj: str, a: dict, listar: int) -> None:
+def mostrar(proj: str, a: dict, listar: int, despublicar: bool = False, corrigir_marcas: bool = False) -> None:
     pc, r = a["por_cod"], a["r"]
     nome = f"{proj.split('-')[-1]} {a['titulo'] or ''}".strip()
     ficam = a["folhas"] - a["viram_copia"] - len(a["ja_copias"])
     print("\n" + "─" * 100)
     print(f"{nome}: {a['folhas']} folhas → {a['pranchas']} pranchas; ficam {ficam}, {a['viram_copia']} viram cópia"
           + (f"; {len(a['ja_copias'])} já eram cópia" if a["ja_copias"] else "")
-          + (f" (das que ficam, {len(a['publicadas'])} repetida(s) já no site: ver abaixo)" if a["publicadas"] else ""))
+          + (f" (das que ficam, {len(a['publicadas'])} repetida(s) já no site: ver abaixo)" if a["publicadas"] else "")
+          + (f"; {len(a['suspeitas'])} MARCA(S) ANTIGA(S) SUSPEITA(S)" if a["suspeitas"] else "")
+          + (f"; {len(r['incertos'])} incerto(s)" if r["incertos"] else ""))
     if not r["grupos"]:
         print("   nenhuma prancha repetida.")
-    def fmt(c):
+    def fmt(c, g=None):
         rot, sp = fr.rotulo_formato(pc[c]["arquivo_origem"]), fr.subpasta(pc[c]["arquivo_origem"])
-        return f"{d_curto(c)} ({rot}{'' if fr.norm(sp) == fr.norm(rot) else ' · pasta ' + sp} · {situacao(pc[c])})"
+        return f"{d_curto(c)} ({rot}{'' if fr.norm(sp) == fr.norm(rot) else ' · pasta ' + sp} · {situacao(pc[c], g)})"
     for k, g in enumerate(r["grupos"]):
         if k >= listar:
             print(f"   … e mais {len(r['grupos']) - listar} prancha(s) repetida(s) (use --listar {len(r['grupos'])} para ver todas)")
             break
         mot = sorted({m for x in g for y in g if x < y for m in r["motivos"].get(frozenset((x, y)), ())})
-        print(f"   fica {fmt(g[0])}\n        ← " + "\n        ← ".join(fmt(c) for c in g[1:]) + f"\n        por quê: {'; '.join(mot)}")
-    if a["publicadas"]:
-        print("   JÁ NO SITE e repetidas — NÃO mexo nelas. Para limpar: despublicar a cópia e redirecionar (301) para a que fica:")
+        print(f"   fica {fmt(g[0], g)}\n        ← " + "\n        ← ".join(fmt(c, g) for c in g[1:]) + f"\n        por quê: {'; '.join(mot)}")
+    if a["publicadas"] and not despublicar:
+        print("   JÁ NO SITE e repetidas — NÃO mexo nelas. Para limpar: despublicar a cópia e redirecionar (301) para a que fica"
+              " (simule com --despublicar para ver o plano):")
         for x in a["publicadas"]:
             print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id'] or '?'} do site) → redirecionar para {x['fica']}")
+    elif a["publicadas"]:
+        if a["despublicar"]:
+            print(f"   --despublicar (só com --aplicar): {len(a['despublicar'])} cópia(s) JÁ NO SITE saem do site (ficam privadas) e redirecionam (301) para a que fica:")
+            for x in a["despublicar"]:
+                print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id']} do site) → 301 para {x['fica']} (no ar, item {x['fica_site_id']})")
+        if a["principal_antes"]:
+            print(f"   PUBLIQUE A PRINCIPAL ANTES: {len(a['principal_antes'])} cópia(s) no site cuja folha que fica NÃO está no ar (não despublico):")
+            for x in a["principal_antes"]:
+                print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id'] or '?'} do site): publique {x['fica']} ({x['fica_situacao']}) antes")
     for g in a["pulados"]:
         print(f"   grupo só de cópias ({', '.join(d_curto(c) for c in g)}): não mexo; confira na tela Duplicatas do projeto.")
+    if a["suspeitas"]:
+        print(f"   MARCAS ANTIGAS SUSPEITAS (mesma pasta; revise na tela Duplicatas — não desfaço sozinho): {len(a['suspeitas'])}")
+        for x in a["suspeitas"][:listar]:
+            print(f"     {d_curto(x['codigo'])} está marcada ({x['quem']}{', ' + x['tipo'] if x['tipo'] else ''}) como cópia de {d_curto(x['de'])},"
+                  f" mas as duas estão na pasta '{x['pasta']}'" + (" → com --corrigir-marcas: 'Não é duplicata' ao aplicar" if corrigir_marcas else ""))
+        if len(a["suspeitas"]) > listar:
+            print(f"     … e mais {len(a['suspeitas']) - listar} (use --listar {len(a['suspeitas'])})")
     if r["incertos"]:
         print(f"   INCERTOS (não entram no plano; confira na tela Duplicatas se quiser): {len(r['incertos'])}")
         for x, y, m in r["incertos"][:listar]:
             print(f"     {d_curto(x)} [{fr.subpasta(pc[x]['arquivo_origem'])}] ~ {d_curto(y)} [{fr.subpasta(pc[y]['arquivo_origem'])}]: {m}")
+        if len(r["incertos"]) > listar:
+            print(f"     … e mais {len(r['incertos']) - listar} (use --listar {len(r['incertos'])})")
 
 
 # ----------------------------------------------------------------- simular
@@ -197,32 +237,42 @@ def simular(a, db: str) -> int:
     fundo = a.fundo.upper()
     projetos = [p.upper() for p in a.projeto] if a.projeto else [r[0] for r in con.execute(
         "SELECT DISTINCT projeto_codigo FROM item WHERE projeto_codigo LIKE ? ORDER BY 1", (fundo + "-%",))]
-    plano = {"tipo": "limpeza_formatos", "versao": 1, "gerado_em": datetime.now().isoformat(timespec="seconds"), "banco": db,
-             "com_imagens": usar, "aviso": "PROPOSTA. Nada foi aplicado. Para aplicar: --aplicar --plano <este arquivo>.", "projetos": {}}
-    tot = {"folhas": 0, "pranchas": 0, "viram": 0, "publicadas": 0, "incertos": 0, "sem_imagem": 0}
+    plano = {"tipo": "limpeza_formatos", "versao": 2, "gerado_em": datetime.now().isoformat(timespec="seconds"), "banco": db,
+             "com_imagens": usar, "despublicar": bool(a.despublicar), "corrigir_marcas": bool(a.corrigir_marcas),
+             "aviso": "PROPOSTA. Nada foi aplicado. Para aplicar: --aplicar --plano <este arquivo>.", "projetos": {}}
+    tot = {"folhas": 0, "pranchas": 0, "viram": 0, "publicadas": 0, "incertos": 0, "sem_imagem": 0, "suspeitas": 0, "despublicar": 0, "principal_antes": 0}
     for proj in projetos:
         an = analisar(con, proj, raiz, usar)
         if not an:
             continue
-        mostrar(proj, an, a.listar)
+        mostrar(proj, an, a.listar, a.despublicar, a.corrigir_marcas)
         r = an["r"]
         tot["folhas"] += an["folhas"]; tot["pranchas"] += an["pranchas"]; tot["viram"] += an["viram_copia"]
         tot["publicadas"] += len(an["publicadas"]); tot["incertos"] += len(r["incertos"]); tot["sem_imagem"] += r["incertos_sem_imagem"]
+        tot["suspeitas"] += len(an["suspeitas"]); tot["despublicar"] += len(an["despublicar"]); tot["principal_antes"] += len(an["principal_antes"])
         plano["projetos"][proj] = {
             "titulo": an["titulo"], "carimbo": an["carimbo"], "folhas": an["folhas"], "pranchas": an["pranchas"],
             "decisoes": an["decisoes"], "publicadas_despublicar_e_301": an["publicadas"],
             "incertos": [{"a": x, "b": y, "motivo": m} for x, y, m in r["incertos"]],
+            "despublicar": an["despublicar"] if a.despublicar else [], "publique_a_principal_antes": an["principal_antes"],
+            "marcas_suspeitas": an["suspeitas"],
+            "revisar_marcas": [{"acao": "nao_e", "codigo": x["codigo"], "era_de": x["de"]} for x in an["suspeitas"]] if a.corrigir_marcas else [],
             "guardar_md5": an["guardar_md5"], "guardar_phash": an["guardar_phash"]}
     con.close()
     print("\n" + "═" * 100)
     print(f"TOTAL: {tot['folhas']} folhas → {tot['pranchas']} pranchas; {tot['viram']} viram cópia ao aplicar"
-          f" · {tot['publicadas']} repetida(s) já no site (não mexo) · {tot['incertos']} par(es) incerto(s) (não entram)")
+          + (f" · {tot['publicadas']} repetida(s) já no site (não mexo)" if not a.despublicar else
+             f" · {tot['publicadas']} repetida(s) já no site: {tot['despublicar']} saem do site com 301 ao aplicar com --despublicar,"
+             f" {tot['principal_antes']} esperam a principal ser publicada")
+          + f" · {tot['suspeitas']} marca(s) antiga(s) suspeita(s)" + (" (viram 'Não é duplicata' ao aplicar com --corrigir-marcas)" if a.corrigir_marcas and tot["suspeitas"] else "")
+          + f" · {tot['incertos']} par(es) incerto(s) (não entram)")
     if not usar:
         print(f"SEM IMAGENS: {tot['sem_imagem']} par(es) ficaram de fora só por falta de imagem para confirmar.")
     arq = Path(a.plano) if a.plano else Path.cwd() / f"plano_limpeza_formatos_{datetime.now():%Y%m%d-%H%M%S}.json"
     arq.write_text(json.dumps(plano, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\nPlano gravado em {arq}. NADA foi aplicado.")
-    print(f"Para aplicar (depois de conferir): PYTHONPATH=backend python scripts/limpar_duplicatas_formato.py --aplicar --plano {arq}")
+    extra = (" --despublicar" if a.despublicar else "") + (" --corrigir-marcas" if a.corrigir_marcas else "")
+    print(f"Para aplicar (depois de conferir): PYTHONPATH=backend python scripts/limpar_duplicatas_formato.py --aplicar --plano {arq}{extra}")
     return 0
 
 
@@ -236,6 +286,22 @@ def _backup(db: str) -> str:
     return str(bk.PASTA / r["arquivo"])
 
 
+def _mesmo_banco_do_painel(db: str) -> bool:
+    """A rotina de despublicar do painel grava pelo banco do painel (app.db.connect): só uso se for este mesmo banco."""
+    from app.config import settings
+    return str(Path(settings.CAMP_DB_PATH).resolve()) == db
+
+
+def _linha(con, cod: str, cols) -> dict:
+    r = con.execute(f"SELECT {', '.join(cols)} FROM item WHERE codigo=?", (cod,)).fetchone()
+    return dict(r) if r else {}
+
+
+def _erros_duplicata(con, cod: str) -> list[dict]:
+    return [dict(r) for r in con.execute("""SELECT id, situacao, resolvido_em, resolucao FROM erro WHERE codigo=? AND categoria='duplicata'
+                                            AND situacao IN ('aberto','em_correcao')""", (cod,))]
+
+
 def aplicar(a, db: str) -> int:
     from fastapi import HTTPException
     from app import duplicatas
@@ -246,15 +312,30 @@ def aplicar(a, db: str) -> int:
         sys.exit("ERRO: este arquivo não é um plano da limpeza de formatos.")
     if str(Path(plano.get("banco") or "").resolve()) != db:
         sys.exit(f"ERRO: o plano foi feito no banco {plano.get('banco')}, e este é {db}. Simule de novo neste banco.")
+    projs = plano["projetos"]
+    n_dec = sum(len(d["copias"]) for x in projs.values() for d in x["decisoes"])
+    n_marcas = sum(len(x.get("revisar_marcas") or []) for x in projs.values())
+    n_desp = sum(len(x.get("despublicar") or []) for x in projs.values())
+    if n_marcas and not a.corrigir_marcas:
+        print(f"O plano propõe desfazer {n_marcas} marca(s) antiga(s) suspeita(s): só com --corrigir-marcas. Não mexo nelas agora.")
+    if n_desp and not a.despublicar:
+        print(f"O plano tem {n_desp} cópia(s) publicada(s) para despublicar com 301: só com --despublicar. Não mexo nelas agora.")
+    if a.despublicar and not plano.get("despublicar"):
+        print("--despublicar: este plano foi simulado SEM --despublicar; simule de novo com --despublicar para ver e gravar esse plano.")
+    if a.corrigir_marcas and not plano.get("corrigir_marcas"):
+        print("--corrigir-marcas: este plano foi simulado SEM --corrigir-marcas; simule de novo com --corrigir-marcas para ver e gravar esse plano.")
+    n_marcas = n_marcas if a.corrigir_marcas else 0
+    n_desp = n_desp if a.despublicar else 0
+    if n_desp and not _mesmo_banco_do_painel(db):
+        sys.exit(f"ERRO: --despublicar usa a rotina do painel, que grava no banco do painel (CAMP_DB_PATH); este é {db}. Nada foi aplicado.")
     con = abrir(db, escrita=True)
-    velhos = [p for p, x in plano["projetos"].items() if carimbo(con, p) != x["carimbo"]]
+    velhos = [p for p, x in projs.items() if carimbo(con, p) != x["carimbo"]]
     if velhos:
         con.close()
         print("RECUSADO: o banco mudou desde a simulação nestes projetos: " + ", ".join(velhos) + ".")
         print("Nada foi aplicado. Rode a simulação de novo, confira e aplique o plano novo.")
         return 3
-    n = sum(len(d["copias"]) for x in plano["projetos"].values() for d in x["decisoes"])
-    if not n:
+    if not (n_dec or n_marcas or n_desp):
         con.close()
         print("O plano não tem nada a aplicar.")
         return 0
@@ -263,18 +344,39 @@ def aplicar(a, db: str) -> int:
     print(f"Backup do banco feito antes de mexer: {copia}")
     con = abrir(db, escrita=True)
     desfazer = {"tipo": "desfazer_limpeza_formatos", "banco": db, "plano": str(Path(a.plano).resolve()), "backup": copia,
-                "aplicado_em": datetime.now().isoformat(timespec="seconds"), "projetos": {}}
-    marcadas = falhas = 0
+                "aplicado_em": datetime.now().isoformat(timespec="seconds"), "projetos": {}, "marcas": {}, "despublicadas": {}}
+    arq = Path(a.plano).with_suffix(".desfazer.json")
+    gravar = lambda: arq.write_text(json.dumps(desfazer, ensure_ascii=False, indent=1), encoding="utf-8")  # noqa: E731
+    marcadas = falhas = soltas = 0
     try:
         con.execute("BEGIN IMMEDIATE")
-        if [p for p, x in plano["projetos"].items() if carimbo(con, p) != x["carimbo"]]:   # mudou durante o backup
+        if [p for p, x in projs.items() if carimbo(con, p) != x["carimbo"]]:   # mudou durante o backup
             con.rollback()
             print("RECUSADO: o banco mudou durante o backup. Nada foi aplicado; simule de novo.")
             return 3
-        for proj, x in plano["projetos"].items():
-            feitos, erros = [], []
+        for proj, x in projs.items():
+            feitos, erros, marcas = [], [], []
+            # 1º as marcas antigas suspeitas (--corrigir-marcas), depois as decisões: o _marcar reaponta quem apontava para a cópia
+            for k, m in enumerate((x.get("revisar_marcas") or []) if a.corrigir_marcas else []):
+                linha = con.execute(f"SELECT {COLS} FROM item WHERE codigo=? AND projeto_codigo=?", (m["codigo"], proj)).fetchone()
+                if not linha or linha["duplicata_de"] != m["era_de"] or fr.marca_de_pessoa(linha):
+                    erros.append({"marca": m["codigo"], "erro": "a marca mudou ou é de uma pessoa: não mexo"})
+                    continue
+                antes = _linha(con, m["codigo"], CAMPOS_MARCA)
+                apont = [r[0] for r in con.execute("SELECT codigo FROM item WHERE duplicata_de=?", (m["codigo"],))]
+                errs = _erros_duplicata(con, m["codigo"])
+                con.execute(f"SAVEPOINT m{k}")
+                try:
+                    duplicatas._nao_e(con, proj, duplicatas.Decisao(acao="nao_e", codigo=m["codigo"]), ATOR)
+                    for ap in apont:               # o nao_e passa quem apontava para esta à antiga original; aqui a marca errada é SÓ esta
+                        con.execute("UPDATE item SET duplicata_de=? WHERE codigo=? AND duplicata_de=?", (m["codigo"], ap, m["era_de"]))
+                    con.execute(f"RELEASE m{k}")
+                    marcas.append({"codigo": m["codigo"], "era_de": m["era_de"], "antes": antes, "apontavam": apont, "erros": errs})
+                except HTTPException as e:
+                    con.execute(f"ROLLBACK TO m{k}"); con.execute(f"RELEASE m{k}")
+                    erros.append({"marca": m["codigo"], "erro": e.detail})
             for k, d in enumerate(x["decisoes"]):
-                antes = {c: dict(con.execute(f"SELECT {', '.join(CAMPOS_DESFAZER)} FROM item WHERE codigo=?", (c,)).fetchone() or {}) for c in d["copias"]}
+                antes = {c: _linha(con, c, CAMPOS_DESFAZER) for c in d["copias"]}
                 apont = {c: [r[0] for r in con.execute("SELECT codigo FROM item WHERE duplicata_de=?", (c,))] for c in d["copias"]}
                 con.execute(f"SAVEPOINT l{k}")
                 try:
@@ -288,13 +390,16 @@ def aplicar(a, db: str) -> int:
                 con.execute("UPDATE item SET phash=? WHERE codigo=? AND projeto_codigo=? AND COALESCE(phash,'')=''", (h, c, proj))
             for c, h in (x.get("guardar_md5") or {}).items():
                 con.execute("UPDATE item SET md5=? WHERE codigo=? AND projeto_codigo=? AND COALESCE(md5,'')=''", (h, c, proj))
-            if feitos or erros:
+            if feitos or erros or marcas:
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,?,?,?)",
-                            (proj, "duplicatas_formato_limpas", ATOR, json.dumps({"copias_marcadas": len(feitos), "recusadas": erros, "plano": desfazer["plano"],
-                                                                                 "backup": copia}, ensure_ascii=False)))
+                            (proj, "duplicatas_formato_limpas", ATOR, json.dumps({"copias_marcadas": len(feitos), "marcas_desfeitas": [m["codigo"] for m in marcas],
+                                                                                 "recusadas": erros, "plano": desfazer["plano"], "backup": copia}, ensure_ascii=False)))
             desfazer["projetos"][proj] = feitos
-            marcadas += len(feitos); falhas += len(erros)
-            print(f"{proj}: {len(feitos)} cópia(s) marcada(s)" + (f"; {len(erros)} decisão(ões) recusada(s): " + "; ".join(e["erro"] for e in erros) if erros else ""))
+            if marcas:
+                desfazer["marcas"][proj] = marcas
+            marcadas += len(feitos); falhas += len(erros); soltas += len(marcas)
+            print(f"{proj}: {len(feitos)} cópia(s) marcada(s)" + (f"; {len(marcas)} marca(s) antiga(s) desfeita(s) ('Não é duplicata')" if marcas else "")
+                  + (f"; {len(erros)} recusada(s): " + "; ".join(str(e["erro"]) for e in erros) if erros else ""))
         from app.problemas import fechar_resolvidos
         fechar_resolvidos(con, ATOR)
         con.commit()
@@ -303,13 +408,68 @@ def aplicar(a, db: str) -> int:
         raise
     finally:
         con.close()
-    arq = Path(a.plano).with_suffix(".desfazer.json")
-    arq.write_text(json.dumps(desfazer, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"\nFEITO: {marcadas} folha(s) viraram cópia" + (f"; {falhas} decisão(ões) recusada(s) (o banco mudou nelas)" if falhas else "") + ".")
+    gravar()
+    tiradas, nao = 0, []
+    if n_desp:
+        tiradas, nao = _despublicar(projs, desfazer, gravar)
+    print(f"\nFEITO: {marcadas} folha(s) viraram cópia" + (f"; {soltas} marca(s) antiga(s) desfeita(s)" if soltas else "")
+          + (f"; {falhas} decisão(ões) recusada(s) (o banco mudou nelas)" if falhas else "") + ".")
+    if n_desp:
+        print(f"DESPUBLICAR: {tiradas} cópia(s) saíram do site (privadas) com 301 para a que fica; o coletor de 10 min envia o 301 ao site."
+              + (f" {len(nao)} não: " + "; ".join(nao) if nao else ""))
     print(f"Nenhuma folha nem arquivo foi apagado. Backup: {copia}")
     print(f"Para DESFAZER: PYTHONPATH=backend python scripts/limpar_duplicatas_formato.py --desfazer {arq}            (mostra)")
     print(f"               PYTHONPATH=backend python scripts/limpar_duplicatas_formato.py --desfazer {arq} --aplicar  (volta)")
     return 0
+
+
+def _despublicar(projs: dict, desfazer: dict, gravar) -> tuple[int, list[str]]:
+    """Cópias JÁ PUBLICADAS de um grupo certo: a mesma rotina do painel que tira uma folha do público (publicador.esconder_folha_no_site:
+    o item fica PRIVADO no site, nada é apagado; rede fora de qualquer transação) e o redirecionamento 301 cópia → a que fica
+    (redir_site.registrar, a fila que o coletor envia ao site). Cada uma é conferida de novo antes e registrada no desfazer na hora."""
+    from fastapi import HTTPException
+    from app import publicador, redir_site
+    tiradas, nao = 0, []
+    for proj, x in projs.items():
+        for e in x.get("despublicar") or []:
+            c, fica = e["copia"], e["fica"]
+            con = abrir(desfazer["banco"], escrita=True)
+            try:
+                ic = _linha(con, c, ("status_site", "tainacan_item_id", "duplicata_de", "projeto_codigo"))
+                io = _linha(con, fica, ("status_site", "tainacan_item_id", "duplicata_de", "projeto_codigo"))
+            finally:
+                con.close()
+            if not ic or ic["projeto_codigo"] != proj or ic["duplicata_de"] or ic["status_site"] not in ("no_ar", "rascunho") or str(ic["tainacan_item_id"]) != str(e["site_id"]):
+                nao.append(f"{d_curto(c)} mudou desde a simulação (não mexo)"); continue
+            if not io or io["status_site"] != "no_ar" or not io["tainacan_item_id"] or io["duplicata_de"]:
+                nao.append(f"{d_curto(c)}: publique {d_curto(fica)} antes"); continue
+            try:
+                escondeu = publicador.esconder_folha_no_site(c, ATOR, f"cópia de {fica} (mesma prancha em outro formato): sai do site com 301")
+            except HTTPException as err:
+                nao.append(f"{d_curto(c)}: {err.detail}"); continue
+            if not escondeu:
+                nao.append(f"{d_curto(c)}: nada a tirar do site"); continue
+            con = abrir(desfazer["banco"], escrita=True)
+            try:
+                con.execute("BEGIN IMMEDIATE")
+                redir_antes = con.execute("SELECT * FROM redirecionamento WHERE codigo_antigo=?", (c,)).fetchone()
+                apontavam = [r[0] for r in con.execute("SELECT codigo_antigo FROM redirecionamento WHERE codigo_novo=?", (c,))]
+                redir_site.registrar(con, c, fica, "item", MOTIVO_301, ATOR)
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,?,?,?)",
+                            (c, "duplicata_formato_despublicada", ATOR, json.dumps({"fica": fica, "site_id": e["site_id"], "estava": ic["status_site"],
+                                                                                   "redirecionamento": f"{c} → {fica} (301)"}, ensure_ascii=False)))
+                con.commit()
+            except Exception:
+                con.rollback()
+                raise
+            finally:
+                con.close()
+            desfazer["despublicadas"].setdefault(proj, []).append({"copia": c, "fica": fica, "site_id": e["site_id"], "estava": ic["status_site"],
+                                                                   "redir_antes": dict(redir_antes) if redir_antes else None, "redir_apontavam": apontavam})
+            gravar()
+            tiradas += 1
+            print(f"   {proj} {d_curto(c)}: saiu do site (privada) · 301 → {fica}")
+    return tiradas, nao
 
 
 # ----------------------------------------------------------------- desfazer
@@ -322,24 +482,42 @@ def desfazer(a, db: str) -> int:
     if str(Path(dados.get("banco") or "").resolve()) != db:
         sys.exit(f"ERRO: a limpeza foi feita no banco {dados.get('banco')}, e este é {db}.")
     con = abrir(db, escrita=a.aplicar)
-    volta, mudou = [], []
+    volta, mudou, mvolta, mmudou, dvolta, dmudou = [], [], [], [], [], []
     for proj, lista in dados["projetos"].items():
         for e in lista:
             r = con.execute("SELECT duplicata_de, duplicata_conferida_por FROM item WHERE codigo=?", (e["copia"],)).fetchone()
             (volta if r and r["duplicata_de"] == e["original"] and r["duplicata_conferida_por"] == ATOR else mudou).append((proj, e))
+    for proj, lista in (dados.get("marcas") or {}).items():          # marcas antigas desfeitas com --corrigir-marcas
+        for e in lista:
+            r = con.execute("SELECT duplicata_de, duplicata_conferida_por, duplicata_conferida_de FROM item WHERE codigo=?", (e["codigo"],)).fetchone()
+            (mvolta if r and not r["duplicata_de"] and r["duplicata_conferida_por"] == ATOR and r["duplicata_conferida_de"] == e["era_de"] else mmudou).append((proj, e))
+    for proj, lista in (dados.get("despublicadas") or {}).items():   # cópias tiradas do site com --despublicar
+        for e in lista:
+            r = con.execute("SELECT status_site, tainacan_item_id FROM item WHERE codigo=?", (e["copia"],)).fetchone()
+            (dvolta if r and r["status_site"] == "fora_do_ar" and str(r["tainacan_item_id"]) == str(e["site_id"]) else dmudou).append((proj, e))
     print(f"{'DESFAZENDO' if a.aplicar else 'SIMULAÇÃO do desfazer (nada é gravado)'}: {len(volta)} folha(s) voltam a ser folhas separadas"
           + (f"; {len(mudou)} mudaram depois da limpeza (uma pessoa mexeu) e ficam como estão: " + ", ".join(d_curto(e["copia"]) for _, e in mudou) if mudou else ""))
+    if mvolta or mmudou:
+        print(f"   marcas antigas: {len(mvolta)} voltam a ser cópia como eram" + (f"; {len(mmudou)} mudaram e ficam: " + ", ".join(d_curto(e["codigo"]) for _, e in mmudou) if mmudou else ""))
+    if dvolta or dmudou:
+        print(f"   despublicadas: {len(dvolta)} voltam ao site como estavam e perdem o 301" + (f"; {len(dmudou)} mudaram e ficam: " + ", ".join(d_curto(e["copia"]) for _, e in dmudou) if dmudou else ""))
     if not a.aplicar:
         for proj, e in volta[:a.listar]:
             print(f"   {proj} {d_curto(e['copia'])} deixa de ser cópia de {d_curto(e['original'])}")
+        for proj, e in mvolta[:a.listar]:
+            print(f"   {proj} {d_curto(e['codigo'])} volta a ser cópia de {d_curto(e['era_de'])} (marca antiga)")
+        for proj, e in dvolta[:a.listar]:
+            print(f"   {proj} {d_curto(e['copia'])} volta ao site ({e['estava']}); sai o 301 → {e['fica']}")
         con.close()
         print("Para desfazer de verdade, repita com --aplicar.")
         return 0
     con.close()
+    if dvolta and not _mesmo_banco_do_painel(db):
+        sys.exit(f"ERRO: republicar usa a conexão do painel (CAMP_DB_PATH), e este banco é {db}. Nada foi desfeito.")
     copia = _backup(db)
     print(f"Backup do banco feito antes de mexer: {copia}")
     con = abrir(db, escrita=True)
-    feitas = 0
+    feitas = mfeitas = 0
     try:
         con.execute("BEGIN IMMEDIATE")
         for k, (proj, e) in enumerate(volta):
@@ -356,6 +534,14 @@ def desfazer(a, db: str) -> int:
             except HTTPException as x:
                 con.execute(f"ROLLBACK TO u{k}"); con.execute(f"RELEASE u{k}")
                 print(f"   {d_curto(e['copia'])}: não voltou ({x.detail})")
+        for proj, e in mvolta:            # a marca antiga volta exatamente como era (duplicata_de, tipo, conferência, pendências, situação, problemas)
+            antes = {c: e["antes"].get(c) for c in CAMPOS_MARCA if c in e["antes"]}
+            con.execute("UPDATE item SET " + ", ".join(f"{c}=?" for c in antes) + " WHERE codigo=?", (*antes.values(), e["codigo"]))
+            for er in e.get("erros") or []:
+                con.execute("UPDATE erro SET situacao=?, resolvido_em=?, resolucao=? WHERE id=?", (er["situacao"], er["resolvido_em"], er["resolucao"], er["id"]))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,?,?,?)",
+                        (e["codigo"], "duplicata_marca_restaurada", ATOR, json.dumps({"de": e["era_de"], "via": "desfazer da limpeza de formatos"}, ensure_ascii=False)))
+            mfeitas += 1
         for proj in dados["projetos"]:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,?,?,?)",
                         (proj, "duplicatas_formato_desfeitas", ATOR, json.dumps({"arquivo": str(Path(a.desfazer).resolve()), "backup": copia}, ensure_ascii=False)))
@@ -365,8 +551,51 @@ def desfazer(a, db: str) -> int:
         raise
     finally:
         con.close()
-    print(f"FEITO: {feitas} folha(s) voltaram como estavam antes da limpeza. Backup: {copia}")
+    dfeitas, dnao = _republicar(db, dvolta) if dvolta else (0, [])
+    print(f"FEITO: {feitas} folha(s) voltaram como estavam antes da limpeza" + (f"; {mfeitas} marca(s) antiga(s) restaurada(s)" if mvolta else "")
+          + (f"; {dfeitas} cópia(s) de volta ao site, sem o 301" if dvolta else "") + f". Backup: {copia}")
+    for m in dnao:
+        print(f"   {m}")
     return 0
+
+
+def _republicar(db: str, dvolta: list) -> tuple[int, list[str]]:
+    """Desfaz o --despublicar: o item volta ao status que tinha no site (publish/draft) pelo mesmo cliente do site do painel e o 301
+    cópia → a que fica sai da fila (volta o que havia antes). Um 301 que o site JÁ recebeu fica lá: o contrato não tem rota para apagar."""
+    from app import publicador
+    from app.publicacao import persistir_resultado
+    feitas, avisos = 0, []
+    for proj, e in dvolta:
+        wid, estava = int(e["site_id"]), e.get("estava") or "no_ar"
+        wp_status = "publish" if estava == "no_ar" else "draft"
+        try:
+            publicador.WP().atualizar_status_item(publicador.COL_ACERVO, wid, wp_status)
+        except Exception as x:  # noqa: BLE001
+            avisos.append(f"{d_curto(e['copia'])}: o site não voltou o item {wid} ({str(x)[:160]}); o 301 continua. Tente de novo.")
+            continue
+        persistir_resultado([("item", e["copia"], wid)], estava, wp_status, "item", e["copia"], "site_folha_republicada", ATOR,
+                            {"via": "desfazer da limpeza de formatos", "fica": e["fica"]})
+        con = abrir(db, escrita=True)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            r = con.execute("SELECT aplicado_no_site FROM redirecionamento WHERE codigo_antigo=? AND codigo_novo=? AND criado_por=?", (e["copia"], e["fica"], ATOR)).fetchone()
+            if r and r[0]:
+                avisos.append(f"{d_curto(e['copia'])}: o 301 → {e['fica']} já tinha ido ao site; o painel tirou o seu, mas peça para tirar no site (o contrato não tem rota de apagar).")
+            con.execute("DELETE FROM redirecionamento WHERE codigo_antigo=? AND codigo_novo=? AND criado_por=?", (e["copia"], e["fica"], ATOR))
+            ant = e.get("redir_antes")
+            if ant:
+                cols = list(ant)
+                con.execute(f"INSERT OR REPLACE INTO redirecionamento ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [ant[c] for c in cols])
+            for ap in e.get("redir_apontavam") or []:
+                con.execute("UPDATE redirecionamento SET codigo_novo=?, aplicado_no_site=0, sem_site=0 WHERE codigo_antigo=? AND codigo_novo=?", (e["copia"], ap, e["fica"]))
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+        feitas += 1
+    return feitas, avisos
 
 
 def main() -> int:
@@ -379,6 +608,8 @@ def main() -> int:
     ap.add_argument("--desfazer", help="arquivo .desfazer.json gravado ao aplicar")
     ap.add_argument("--sem-imagens", action="store_true", help="não lê as prévias (só md5, nome e posição)")
     ap.add_argument("--listar", type=int, default=8, help="quantos grupos de exemplo mostrar por projeto (padrão 8)")
+    ap.add_argument("--despublicar", action="store_true", help="cópias JÁ PUBLICADAS: saem do site (privadas) com 301 para a que fica (só com --aplicar)")
+    ap.add_argument("--corrigir-marcas", action="store_true", help="marcas antigas de máquina entre folhas da MESMA pasta: 'Não é duplicata' (só com --aplicar)")
     a = ap.parse_args()
     db = caminho_db(a)
     if a.desfazer:
