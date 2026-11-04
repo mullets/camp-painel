@@ -51,9 +51,9 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     await page.waitForSelector('#ini-saud', { timeout: 15000 }); await page.waitForTimeout(1200);
     const pend = await api('/api/pendencias');
     chk(pend && pend.precisa_de_voce === (pend.pedem_acao || {}).precisa_de_voce && !!pend.medido_em, '/api/pendencias: "precisa_de_voce" é o mesmo número de pedem_acao (a regra única do menu, UX-19) e traz "medido_em": ' + JSON.stringify(pend && { p: pend.precisa_de_voce, pa: (pend.pedem_acao || {}).precisa_de_voce, m: pend.medido_em }));
-    const badge = num(await txt('#n-gente')), saud = await txt('#ini-saud');
+    const badge = num(await txt('#n-gente')), saud = await txt('#ini-sub');   // Redesenho §5: a contagem saiu do título para o subtítulo
     chk(badge === pend.precisa_de_voce, `menu "Precisa de você" = ${pend.precisa_de_voce} (mostra ${badge})`);
-    chk(pend.precisa_de_voce ? new RegExp('\\b' + pend.precisa_de_voce + ' coisas? pedem? você').test(saud) : /Tudo em dia/.test(saud), `a saudação diz o MESMO número do menu: "${saud}"`);
+    chk(pend.precisa_de_voce ? new RegExp('^' + pend.precisa_de_voce + ' coisas? pedem? sua atenção hoje').test(saud) : /Nada pede sua atenção/.test(saud), `a saudação diz o MESMO número do menu: "${saud}"`);
     const kpi = await page.evaluate(() => { const b = document.querySelector('.ini-kpi[data-ini-rota="filas/conferir"] .v'); return b ? b.textContent : ''; });
     chk(num(kpi) === pend.lotes_conferir, `cartão "lotes para conferir" da Home = ${pend.lotes_conferir} (mostra ${kpi})`);
     chk(/atualizado (agora|há)/.test(await txt('#v-painel .ph')), 'Home: "atualizado há X" ao lado dos números de "O que fazer agora"');
@@ -64,8 +64,9 @@ con.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, 
     const ponto = await page.evaluate(() => { const p = document.querySelector('#machine-status .ms-ponto'); return { cls: p.className, nivel: p.dataset.estadoGeral }; });
     chk(est.estado_geral && ['atencao', 'critico'].includes(est.estado_geral.nivel), 'com QNAP em 12% livre o estado geral não é "ok": ' + JSON.stringify(est.estado_geral && est.estado_geral.nivel));
     chk(ponto.nivel === est.estado_geral.nivel && !/\bon\b/.test(ponto.cls), `o ponto do topo herda o pior estado (${est.estado_geral.nivel}): classe "${ponto.cls}"`);
-    const topo = await txt('#machine-status .ms-resumo');
-    chk(/QNAP em atenção/.test(topo) && !/QNAP ok/.test(topo), `o topo não diz mais "QNAP ok" com o QNAP em atenção: "${topo}"`);
+    // redesenho §4: o botão diz o pior estado; o painel "Estado dos sistemas" (que ele abre) lista cada sistema e as estações
+    const topo = await txt('#machine-status .sis-painel'), botao = await txt('#machine-status .ms-resumo');
+    chk(/QNAP em atenção/.test(topo) && !/QNAP ok/.test(topo) && !/Sistemas funcionando/.test(botao), `o topo não diz mais "QNAP ok" nem "Sistemas funcionando" com o QNAP em atenção: botão "${botao}", painel "${topo.slice(0, 120)}"`);
     chk(new RegExp(`${est.estacoes_resumo.ligadas} de ${est.estacoes_resumo.total} estações ligadas`).test(topo), `topo: estações de captura pela mesma conta da Home (${est.estacoes_resumo.ligadas} de ${est.estacoes_resumo.total}): "${topo}"`);
 
     // ---- Material novo ----

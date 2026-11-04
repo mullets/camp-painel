@@ -9294,6 +9294,12 @@ def filho(modo):
         cam = {x["id"]: x for x in pa["caminho"]}
         ver("caminho: QNAP 7 pastas; CAMP Vision = 2 em leitura + 1 decisão + 1 erro; 'acumula' no passo de gente com mais trabalho (publicar: 3)",
             cam["qnap"]["q"] == 7 and cam["campvision"]["q"] == 4 and cam["publicar"]["estado"] == "acumula" and cam["aprovar"]["estado"] == "pronto" and "2 prontos · 1 travado" in cam["publicar"]["detalhe"], str(pa["caminho"]))
+        # Redesenho §10 (campos opcionais): a unidade de cada passo (nunca se somam), a próxima ação de gente e o bloqueio de verdade (vermelho)
+        gente_ = [x for x in pa["caminho"] if x["id"] in ("importar", "conferir", "aprovar", "publicar") and x["q"]]
+        ver("Redesenho §10: unidades (estações/pastas/lotes), 'próximo passo' = 1º passo de gente com algo esperando, erro do CAMP Vision = bloqueio",
+            [(x["id"], x["unidade_plural"]) for x in pa["caminho"]] == [("digitalizar", "estações ligadas"), ("qnap", "pastas"), ("campvision", "pastas"), ("importar", "lotes"), ("conferir", "lotes"), ("aprovar", "lotes"), ("publicar", "lotes")]
+            and [x["id"] for x in pa["caminho"] if x["proxima"]] == [gente_[0]["id"]] and cam["campvision"]["bloqueio"] == "1 pasta parou com erro"
+            and cam["campvision"]["rota"] == "filas/processando" and cam["conferir"]["folhas"] == n["folhas_conferir"] and all(x["bloqueio"] is None for x in pa["caminho"] if x["id"] != "campvision"), str(pa["caminho"])[:400])
         fr = {f["codigo"]: f for f in adm.get("/api/fundos/resumo").json() if f.get("codigo")}
         ver("Fundos: só o F072 (restrito, com folhas esperando) aparece como travado — o mesmo número do painel", fr["F072"]["travado"] and not fr["F071"]["travado"] and sum(1 for f in fr.values() if f["travado"]) == n["travados_direitos"])
         ver("/api/hoje usa a mesma regra de 'prontos'", adm.get("/api/hoje").json()["kpis"]["prontos"]["valor"] == n["prontos_publicar"])
@@ -12713,6 +12719,13 @@ def filho(modo):
             and [(i["codigo"], i["posicao"]) for i in vr.projetos(c, per, "menos", limite=0)["itens"]][0] == ("F002-P0003", 4))
         ver("busca por arquiteto/autoria e por nome; barras pelo 1º do período mesmo filtrando", [i["codigo"] for i in vr.projetos(c, per, busca="beltrano")["itens"]] == ["F001-P0002"]
             and vr.projetos(c, per, busca="residencia")["itens"][0]["codigo"] == "F001-P0001" and vr.projetos(c, per, busca="casa")["maximo"] == 135)
+        # Redesenho §14 (05/11): filtro por fundo e por arquiteto no ranking completo; as opções vêm do ranking do período; a posição é a do ranking inteiro
+        rf, ra = vr.projetos(c, per, fundo="F002", limite=0), vr.projetos(c, per, autor="Beltrano", limite=0)
+        ver("ranking completo: filtro por fundo (F002) e por arquiteto (Beltrano), posição do ranking inteiro, opções do período",
+            [i["codigo"] for i in rf["itens"]] == ["F002-P0004", "F002-P0003"] and [i["posicao"] for i in rf["itens"]] == [3, 4] and rf["encontrados"] == 2 and rf["total_projetos"] == 4
+            and [i["codigo"] for i in ra["itens"]] == ["F001-P0002"] and [f["codigo"] for f in rf["fundos"]] == ["F001", "F002"]
+            and [(a["nome"], a["projetos"]) for a in rf["autores"]] == [("Beltrano", 1), ("Fulano de Tal", 1)]
+            and vr.projetos(c, per, autor="Arnaldo Martino")["itens"] == [], str([[i["codigo"] for i in rf["itens"]], rf.get("fundos"), rf.get("autores")])[:300])
         ver("10 iniciais + total para 'Ver todos'", len(vr.projetos(c, per)["itens"]) == 4 and vr.projetos(c, per, limite=2)["total_projetos"] == 4 and len(vr.projetos(c, per, limite=2)["itens"]) == 2)
         e = vr.evolucao(c, per, True)
         ver("evolução: visitas = sessões por dia, eixo de 30 pontos, total, média e pico", e["metrica"]["chave"] == "sessoes" and e["agregacao"] == "dia" and len(e["pontos"]) == 30
@@ -13851,8 +13864,31 @@ def filho(modo):
         ver("UX-18: o cartão de decisões só entra com decisão pendente (nunca '0 decisões — nenhuma esperando')",
             "...(+p.decisoes?[k(" in html and "'nenhuma esperando'" not in html)
         ver("UX-21: filas pelo papel: as de outro papel esmaecidas (ini-outro) e no fim, sem esconder; quem só lê não tem nada esmaecido",
-            "function iniGrupoMeu(quem)" in html and "gs=[...g0.filter(g=>iniGrupoMeu(g.quem)),...g0.filter(g=>!iniGrupoMeu(g.quem))]" in html
-            and ".ini-tg.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
+            # Redesenho §8 (03/11/2026): a fila virou UMA lista; a ordem "da função da pessoa primeiro" é do servidor (fila_da_home)
+            "function iniGrupoMeu(quem)" in html and "i.meu===false?' ini-outro'" in html
+            and ".ini-task.ini-outro,.ini-kpi.ini-outro{opacity:" in html and "if(!pp||pp==='leitura')return true" in html)
+        # Redesenho §5/§8: fila única da Home, com filtros, contagem da saudação e ordem explícita (função pura, sem banco)
+        import importlib
+        _pd = importlib.import_module("app.pendencias")
+        _G = [{"id": "decidir", "titulo": "Decidir", "quem": "admin", "total": 2, "itens": [
+                  {"sev": "a", "titulo": "d-normal", "detalhe": "chegou agora há pouco", "espera_h": 50, "acao": {"tipo": "decisao"}},
+                  {"sev": "r", "titulo": "d-urg", "detalhe": "o CAMP Vision está parado nesta pasta", "espera_h": 1, "urgente": "o CAMP Vision está parado nesta pasta, esperando a resposta", "acao": {"tipo": "decisao"}}]},
+              {"id": "conferir", "titulo": "Para conferir", "quem": "operador", "total": 1, "itens": [
+                  {"sev": "a", "titulo": "c1", "detalhe": "3 de 3 folhas a conferir · parado há 3 dias", "espera_h": 72, "parado_h": 72, "acao": {"tipo": "conferir"}}]},
+              {"id": "base", "titulo": "Melhorar a base", "quem": "qualquer", "total": 30, "itens": [{"sev": "b", "titulo": "b1", "detalhe": "x", "acao": {"tipo": "rota"}}]}]
+        _fa = _pd.fila_da_home(_G, "admin", "urgente")
+        ver("Redesenho §8: filtros com o total REAL dos grupos (base 30, não as linhas enviadas) e 'Todas' = soma",
+            _fa["contagens"]["todas"] == 33 and _fa["contagens"]["decidir"] == 2 and _fa["contagens"]["conferir"] == 1 and _fa["contagens"]["base"] == 30, str(_fa["contagens"]))
+        ver("Redesenho §5: a saudação conta o que é da função da pessoa, fora 'Melhorar a base' (admin: 3; operador: 1, a decisão é de admin)",
+            _fa["pedem_atencao"] == 3 and _pd.fila_da_home(_G, "operador")["pedem_atencao"] == 1 and _pd.fila_da_home(_G, "operador")["de_outro_papel"] == 2)
+        ver("Redesenho §8: mais urgente primeiro = Urgente, depois o resto pelo tempo de espera, a base no fim",
+            [x["titulo"] for x in _fa["itens"]] == ["d-urg", "c1", "d-normal", "b1"], str([x["titulo"] for x in _fa["itens"]]))
+        ver("Redesenho §8: 'mais antigo' ordena pela espera; operador vê a decisão (de admin) no fim, sem esconder",
+            [x["titulo"] for x in _pd.fila_da_home(_G, "admin", "antigo")["itens"]] == ["c1", "d-normal", "d-urg", "b1"]
+            and [x["titulo"] for x in _pd.fila_da_home(_G, "operador")["itens"]][-2:] == ["d-urg", "d-normal"])
+        _c = next(x for x in _fa["itens"] if x["titulo"] == "c1")
+        ver("Redesenho §8: o contexto não repete o tempo de espera nem o motivo da urgência; o tipo da tarefa vem pronto",
+            _c["contexto"] == "3 de 3 folhas a conferir" and _c["tipo_tarefa"] == "Conferir" and _fa["itens"][0]["contexto"] == "" and _fa["itens"][0]["nivel"] == 0)
         # Pedido do Rafael (27/10/2026): o bloco recolhido "Números do acervo" do UX-30 saiu; as métricas voltaram à grade,
         # sempre abertas: ritmo na coluna da esquerda (depois do caminho), qualidade, melhorias, % no site e visitas na da direita
         # (depois de "Hoje"). Nenhum <details> nem localStorage para recolher.
@@ -13873,6 +13909,12 @@ def filho(modo):
         ver("UX-12: a Home não pede /api/analytics (as visitas vêm do banco do painel, pelo componente de visitas)",
             cp and "API('/api/analytics" not in cp and "vmMontar(document.getElementById('ini-visitas'))" in cp
             and "API('/api/visitas/evolucao?'+vmQS()+'&comparar=1')" in html and "API('/api/visitas/projetos?'+vmQS()+vmQSRank())" in html)
+        # Redesenho §12 (05/11, plano do Rafael): a Home volta a ter só o RESUMO das visitas (total, evolução e top 5, filtro 7/30/90, link para a
+        # análise completa); o módulo completo (vmHTML: ver todos, busca, ordem, CSV, não identificadas, intervalo livre) fica na tela Visitas ao site.
+        ver("Redesenho §12: na Home, só o resumo de visitas (vmResumoHTML: top 5, 7/30/90 dias, 'Ver análise completa de visitas'); o completo fica na tela",
+            "if(naHome)return vmResumoHTML(e);" in html and "vmRankHTML({max:5,curto:true})" in html and "VM_PER.slice(0,3)" in html
+            and "data-vm-ir>Ver análise completa de visitas" in html and "Dados de audiência temporariamente indisponíveis" in html
+            and '<div class="panel"><div class="pb" id="vis-modulo"></div></div>' in html)
         ver("UX-30: Configurações tem 'Visitas ao site' (desligado / Ver como ligar)",
             '<div class="panel" id="cfg-visitas-painel"><div class="ph"><h2>Visitas ao site</h2>' in html and "async function carregarVisitasConfig()" in html and "if(v==='config')carregarVisitasConfig();" in html)
         for l in res: print(l)

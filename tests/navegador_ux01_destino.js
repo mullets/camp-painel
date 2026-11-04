@@ -62,8 +62,9 @@ const idDe = P => +py(`print(con.execute("SELECT id FROM lista_processamento WHE
     // ---- Home (27/10, Rafael: "sempre um erro pra resolver quando clico em importar"): "Verificar destino" no lugar de "Importar" ----
     py(`con.execute("UPDATE lista_processamento SET atualizado_em=CASE WHEN projeto_codigo IN ('F071-P0010','F071-P0030') THEN '2000-01-01 00:00:00' ELSE '2000-01-02 00:00:00' END WHERE projeto_codigo LIKE 'F071-%'")`);   // os mais antigos aparecem primeiro
     await page.evaluate(() => { window.__toasts = []; const t0 = window.toast; window.toast = (m, o) => { window.__toasts.push(String(m)); return t0(m, o); }; nav('painel'); });
-    await page.waitForSelector('#ini-tarefas [data-ini-grupo="conferir"] .ini-task', { timeout: 15000 });
-    const tarefa = P => page.locator('#ini-tarefas [data-ini-grupo="conferir"] .ini-task').filter({ hasText: P });
+    await page.waitForSelector('#ini-tarefas .ini-task[data-ini-grupo="conferir"]', { timeout: 15000 });
+    await page.evaluate(() => { INI_FILTRO = 'conferir'; INI_VER_TODOS = true; iniListaDesenhar(); });   // Redesenho §8: lista única; filtro "Conferir" com todas as linhas
+    const tarefa = P => page.locator('#ini-tarefas .ini-task[data-ini-grupo="conferir"]').filter({ hasText: P });
     const th = tarefa('F071-P0030');
     await th.first().waitFor({ timeout: 15000 }).catch(() => {});
     const thb = (await th.locator('[data-ini-acao]').allTextContents()).map(x => x.trim());

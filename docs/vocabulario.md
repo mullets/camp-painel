@@ -82,7 +82,10 @@ par (não volta); juntar dois projetos continua sendo **Mesclar**, no projeto.
 - Uma informação uma vez só (UX-36, visual): publicado, o chip **No site** fica no cabeçalho da página e o bloco Próximo passo não o repete;
   o "Projeto fechado" é dito no próprio Próximo passo (sem faixa verde separada), com os **avisos menores** ao lado da contagem das folhas.
 
-## Menu (UX-28; antes CAMP-154)
+## Menu (redesenho §3, 04/11/2026; UX-28; antes CAMP-154)
+**Grupos (redesenho §3):** **Principal** · **Acervo** · **Público e processos** · **Administração** · **Ajuda** ("Público" e "Acompanhamento" deixaram de ser
+grupos: Visitas ao site e Relatórios estão em Público e processos; Histórico de ações e Qualidade do CAMP Vision em Administração). No celular:
+**Abrir menu** / **Fechar menu** (o botão ☰ do cabeçalho). Os nomes abaixo continuam.
 Os itens do menu têm estes nomes em todo o painel (menu, título da página, trilha, aba do navegador, ajuda), em grupos na ordem do trabalho:
 topo **Precisa de você** (o Painel inicial), **Material novo**, **Problemas**, **Decisões**, **Projetos**, **Busca**; **Acervo** (**Fundos**, **Arquitetos**, …);
 **Público** (**Pedidos de alta resolução**, antes "Pedidos do site" e "Pedidos de material"; **Inscrições** (título da tela: **Inscrições em cursos**), vindas do site, tecla S, só admin e master, filtro por curso (curso · turma; sem curso: "(curso não informado)"), duas abas: **Inscrições** (com o currículo; situações **Nova**, **Em análise**, **Selecionada**, **Não selecionada**, **Desistiu**) e **Avise-me** (quem pediu aviso da próxima turma; **Aguardando aviso**, **Avisado**; botões **Copiar e-mails**, **Baixar CSV**, **Marcar como avisados**); **Downloads**, antes "Downloads do site");
@@ -118,8 +121,8 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Ignorar um item (UX-03, 27/10/2026)
 | Texto | Efeito |
 |---|---|
-| **Ignorar ▾** | menu em todo item do Precisa de você (quem só lê não vê) |
-| **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s |
+| **⋯** (Mais ações; antes **Ignorar ▾**) | menu discreto em todo item do Precisa de você (quem só lê não vê); o nome acessível é "Mais ações: <título>" |
+| **Agora não · esconder por 7 dias** | some só para quem clicou e volta sozinho na data do tooltip; Desfazer por 8 s. Em item **Urgente** pede o motivo ("Esconder um item urgente por 7 dias?", "Por que esconder agora?", botão **Esconder por 7 dias**), que vai para o Histórico de ações |
 | **Não mostrar mais (não era problema)** | só em problema: fecha como "Não era problema" com autor, data e justificativa (obrigatória se bloqueia) |
 | **Ignorados (n)** | seção recolhida em Problemas: os escondidos por você ("Mostrar de novo") e os fechados pelo Ignorar ("Reabrir") |
 | **N motivos** (UX-64) | em Problemas, a mesma folha com vários problemas vira UMA linha; embaixo do código, "2 motivos"; cada motivo tem a própria caixa, o "O que fazer" e o botão. Problema de folha retirada pelo CAMP Vision (menos o "de outro projeto", que leva a decisão) fecha sozinho com "A folha foi retirada do lote pelo CAMP Vision e não está no painel: quem decide é o problema da retirada (Devolver à revisão). Volta sozinho se a folha entrar no painel."; mensagem automática repetida fecha sozinha com "Mensagem repetida: o mesmo problema continua aberto no nº N." |
@@ -160,7 +163,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 
 ## Quem vê o quê (modo operador, 13/10/2026)
 - Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
-- A tela "Máquinas e site" e o resumo de máquinas do topo são só para admin.
+- A tela "Máquinas e site" e o resumo de máquinas do topo (o botão **Estado dos sistemas**) são só para admin. O alerta que impede o trabalho (QNAP, CAMP Vision, site) aparece para todos (redesenho §4).
 - Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).
 
 ## Conferência (UX-10, 27/10/2026)
@@ -194,7 +197,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 ## Números e estado do topo (UX-05, 27/10/2026)
 - Todo número de contagem vem de `backend/app/contagens.py` (a mesma regra em Home, Material novo, Máquinas, Relatórios e menu).
   Ao lado dele: "atualizado agora" / "atualizado há X" (nunca a hora solta).
-- O topo diz "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
+- O topo diz (desde o redesenho §4, no painel do botão **Estado dos sistemas**) "**N de M estações ligadas**" (só as de captura; o CAMP Vision e o QNAP têm a sua frase) e o pior estado:
   "QNAP ok" · "QNAP em atenção" · "QNAP quase cheio" · "QNAP desconectado"; "site ok" · "site lento" · "site não respondeu uma vez" · "site sem resposta".
 - Em Material novo o filtro "Chegando" conta o mesmo que o resumo ("N chegando"): o CAMP Vision lendo + folhas que faltam importar.
 - UX-60: em **Qualidade do CAMP Vision**, o quadro **Folhas sem leitura por resposta quebrada**: "**N folhas ficaram sem leitura** em N projetos:
@@ -212,14 +215,14 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   "cópia atrasada" · "só uma cópia". Espaço: "enche em ~N dias" (menos de 30 = atenção; menos de 10 = crítico).
 
 ## Home: o que fica na frente (UX-18/21/30, 27/10/2026)
-- Coluna da esquerda: **O que fazer agora**, **O caminho do material**, **Ritmo das últimas 2 semanas** e, logo abaixo (admin), **Visitas ao site** (03–04/11/2026).
+- Coluna da esquerda: **O que fazer agora**, **O caminho do material**, **Folhas conferidas por dia — últimas 2 semanas** (era "Ritmo das
+  últimas 2 semanas") e, logo abaixo (admin), **Visitas ao site** (03–05/11/2026).
 - Coluna da direita, completa: **Está tudo funcionando?**, **Hoje** e, abaixo, **Qualidade da base**, **Melhorias de hoje**,
   **Quanto do acervo já está no site**. Tudo sempre aberto: nada de bloco recolhido.
   Pedido do Rafael em 27/10/2026 ("eu gostava dessa barra completa"): desfaz o bloco recolhido **Números do acervo** do UX-30.
 - **Visitas ao site** com o Google Analytics desligado mostra **desligado** na Home sem perguntar ao Google (UX-12) e também aparece em
   **Configurações** (com "Ver como ligar").
-- **Visitas ao site** (04/11/2026, especificação do Rafael): na Home, logo abaixo de **Ritmo das últimas 2 semanas** (coluna da esquerda),
-  e na tela do menu, o mesmo módulo: "Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse.", o filtro
+- **Visitas ao site** (04/11/2026, especificação do Rafael; desde 05/11 a Home tem só o resumo, abaixo): na tela do menu, o módulo completo: "Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse.", o filtro
   **Últimos 7 dias** · **Últimos 30 dias** · **Últimos 90 dias** · **Intervalo personalizado** (**Aplicar**), as datas com "horário de São
   Paulo · termina ontem, porque o dia de hoje ainda não terminou" e "**Última sincronização:** …" (chip **falhou**).
   - **Evolução das visitas**: **Visitas no período** ("sessões no site público"), **Média de visitas por dia** ("total ÷ N dias"),
@@ -233,7 +236,29 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
     "Fora do ranking também: …". Sem autoria cadastrada: "**Acervo** <fundo>" (nunca o titular como autor).
   - Estados: "Carregando as visitas…", "**Sem visitas registradas neste período**", "**Não foi possível carregar os dados de visitas**"
     (com o erro técnico, **Tentar de novo** e **Ver o diagnóstico**), chip **desligado** / **sem dados** no título da Home.
-    Botão da Home para a tela: **Canais, cidades e pesquisas no Google**.
+    Botão da Home para a tela: **Ver análise completa de visitas →** (era "Canais, cidades e pesquisas no Google").
+- Redesenho da Home (05/11/2026, plano do Rafael §10–17):
+  - **O caminho do material**: cada passo diz a posição, a quantidade e a **unidade** ("estações ligadas", "pastas", "lotes"; os números não se
+    somam), uma linha do que é o passo e, quando for o caso, a marca em texto: **maior acúmulo** (amarelo), **próximo passo** (azul, o 1º passo
+    de gente com algo esperando), **parado com erro** (vermelho), **atenção** (publicar com lote travado), **sem medida**; zero = "**nada
+    esperando**" (não é problema). Link **O que é cada passo?**. Cada passo abre a lista filtrada.
+  - **Folhas conferidas por dia — últimas 2 semanas**: **Total no período**, **Média por dia de trabalho** ("folhas ÷ N dias com conferência"),
+    **Hoje, até agora**; "**Cada barra é um dia corrido** (inclui fins de semana e feriados)…"; dica "origem: conferências registradas no
+    painel"; vazio: "**Nenhuma folha conferida no período selecionado**" (com **Ver o que falta conferir** / **Ver o material novo**); falha:
+    "**Não foi possível carregar o ritmo**" com **Tentar de novo** (nunca zero no lugar do erro).
+  - **Visitas ao site** na Home é só o resumo: "Resumo das visitas ao site público no período.", **Últimos 7/30/90 dias**, **Visitas no
+    período**, **Média por dia**, **Variação vs. período anterior** ("sem base de comparação"), **Projetos mais visitados** ("os 5
+    primeiros") e o botão **Ver análise completa de visitas →** (abre a tela Visitas ao site, com o módulo completo). Falha: "**Dados de
+    audiência temporariamente indisponíveis**". Na tela completa, o ranking tem também **Todos os fundos** / **Todos os arquitetos** e, por
+    projeto, "**sem comparação**" quando o período anterior não tem dados completos.
+  - **Qualidade da base**: "índice geral" e a variação em **pontos percentuais** com o dia nomeado ("↓ caiu 0,8 ponto percentual frente a
+    28/10 (73,6%)"); sem retrato antigo: "**Sem comparação**: ainda não há retrato de 7 dias atrás". Medida em 0%: chip **atenção**.
+    **Como cada medida é calculada**; **Fundos que mais precisam de cuidado** (3) e **Ver todos os N fundos com folhas**.
+  - **Melhorias de hoje**: "correções válidas, por pessoa", em ordem alfabética (não é ranking); "**Equipe:** N hoje · N nos últimos 7 dias";
+    o que conta e o que não conta; quem só lê vê só o total da equipe. Vazio: "Nenhuma correção nos últimos 7 dias."
+  - **Quanto do acervo já está no site**: "**N** de M folhas publicadas", "… projetos com página publicada", "… fundos com página publicada",
+    a porcentagem e a barra; total zero = "**Não aplicável**"; a nota do denominador e os links **Ver projetos prontos para publicar** ·
+    **Ver projetos não publicados** · **Ver fundos não publicados**.
 - **N folhas publicadas sem lugar** (UX-25) fica no fim de **O que fazer agora**, porque pede uma ação (guardar).
 - Fila de outro papel: aparece esmaecida e no fim, com "você acompanha; quem faz é um admin". Nunca se esconde o que a pessoa pode ver.
 - O número de decisões só aparece com decisão pendente (nunca "0 decisões").
@@ -243,6 +268,33 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   distintas na pasta) é "**N a confirmar**", com o botão **Confirmar** e, em "O que falta", "**Confirmar N dados do projeto (carimbo × cadastro)**":
   é calculada das folhas e se resolve no próprio projeto (**Usar … no projeto** / **Manter o do projeto**); não é decisão. A diferença que
   também está na fila (o mesmo campo) conta uma vez só, como decisão ("1 decisão pendente · sobre este projeto, na fila de Decisões", **Ver em Decisões**).
+
+## Home redesenhada: parte de cima (plano do Rafael de 03/11/2026, §5–§9)
+- **Cabeçalho**: título só com a saudação ("**Boa noite, Rafael.**"); subtítulo "**N coisas pedem sua atenção hoje**" (1: "1 coisa pede…";
+  0: "**Nada pede sua atenção agora.**"; quem só lê: "Veja como está o acervo hoje: você pode ver tudo, sem alterar."); a data com a hora numa
+  linha discreta. O N é a fila REAL do servidor (`fila.pedem_atencao`): o que é da função da pessoa, fora **Melhorar a base**.
+- **Entenda esta página** (antes "Como funciona esta página", só na Home): inteira na 1ª vez; depois do primeiro uso chega fechada numa linha e não
+  reabre a cada visita; **Entendi** tira até a linha; o **?** traz inteira. Assuntos: **Os números do topo**, **O que fazer agora**,
+  **Está tudo funcionando?**. Ajuda curta das seções: "**Como a fila é ordenada?**", "**O que significam as cores?**".
+- **Indicadores**: **decisões pendentes** (só com decisão), **lotes para conferir** ("N folhas no total"), **lotes esperam um admin** (admin) ou
+  **lotes para importar** (operador e leitura), **folhas conferidas hoje** ("média de N por dia de trabalho nas últimas 2 semanas"). Sem medida:
+  "**Sem dados**" (nunca 0). Os que abrem lista têm a seta →.
+- **O que fazer agora**: filtros **Todas · Decidir · Conferir · Publicar · Resolver · Responder · Melhorar a base** (com o total real; Decidir
+  e Resolver só quando há); **Ordenar**: **Mais urgente primeiro** · **Mais antigo primeiro** · **Mais recente primeiro** · **Por tipo**.
+  Regra do "mais urgente" (servidor, `pendencias.FILA_REGRA`): 1º o que é da sua função; 2º **Urgente** (o CAMP Vision parado esperando,
+  problema que impede publicar ou já está no site, lote parado com erro, empréstimo vencido há 7 dias ou mais); 3º o resto; por último Melhorar
+  a base; dentro de cada nível, quem espera há mais tempo. Cada linha: o tipo (**Decisão**, **Importar**, **Conferir**, **Verificar destino**,
+  **Aprovar**, **Publicar**, **Problema**, **Leitura interrompida**, **Pedido**, **Empréstimo**, **Melhorar a base**), o selo **! Urgente** com o
+  motivo, o código, "**esperando há N h**" / "**parado há N dias**" (lote) e o botão. "**Ver todos os itens da fila (N)**" / "**Mostrar só os
+  primeiros**"; "**Mais N para melhorar a base · Ver quanto falta em cada fundo →**". Com o menu aberto a lista não se mexe: "**Há novidades na
+  lista.**" + **Atualizar a lista**. Resultado na tela: "Escondido por 7 dias: <título>. Volta sozinho em dd/mm." / "Voltou para a lista: …".
+  Erro ao ordenar: "Não consegui reordenar a lista: … **Tentar de novo**". Filtro vazio: "Nada em “Publicar” agora."
+- **Está tudo funcionando?**: uma linha por sistema — **QNAP**, **CAMP Vision**, **Site público**, **Estações de captura**, **Cópias das
+  imagens**, **Cópia de segurança do painel** (admin) — com ícone e o estado em texto: **normal** (✓ verde), **atenção** (! amarelo),
+  **crítico** (✕ vermelho), **não medido** (? cinza) e, para estações desligadas fora do horário, **fora do expediente** (cinza). O que falha
+  primeiro; "**medido hoje às HH:MM**"; **detalhes** / **esconder detalhes**; nada "em dia" sem "**Última cópia certa: …**". No título: "N com
+  problema" / "N em atenção" / "N sem medida" / "tudo normal". Rodapé: "**Verificado às HH:MM**", **Verificar agora** (→ "Verificando…",
+  "Verificado agora (HH:MM)") e **Ver detalhes dos sistemas →** (admin).
 
 ## Máquinas em abas (UX-24, 27/10/2026)
 - Abas **Agora** · **Alertas** · **Logs**. "Agora" é o que o operador vê (Preservação, "Como está agora" e o caminho do material);
@@ -348,3 +400,22 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - **Dados do projeto que faltam**: na Revisão do lote e no fim da conferência (aprovar o lote), só os dados do projeto que faltam, com o botão
   que abre a edição já no campo.
 - Lista de Projetos: selo `objetivos N/M` (verde quando todos feitos).
+
+## Estados de um bloco (redesenho §20, 04/11/2026)
+Os textos do componente único de estados (`estadoHTML`, docs/UI.md "Estados"): **Carregando…**; **Nada por aqui ainda.** (vazio: diga o
+período); **Não consegui carregar.** com **Serviço afetado:** (QNAP, CAMP Vision, site…) e **Última informação conhecida:**;
+**Você não tem acesso a isto.** com **Quem pode autorizar:**; sucesso com o identificador real ("**Lote conferido:** F003-P9001");
+**Dados desatualizados.** com **Última sincronização:** (no componente) ou **Última atualização às HH:MM** (na marca das listas); **Desfazer**.
+Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40".
+
+## Topo: Estado dos sistemas (redesenho §4, 04/11/2026)
+- Botão **Estado dos sistemas** (nome acessível "Estado dos sistemas: …"). O texto dele é o pior estado: **Sistemas funcionando** (só com
+  tudo medido e normal; nunca "Sistemas operacionais"), **Atenção necessária** (+ a 1ª atenção), o nome da falha crítica ("**QNAP
+  desconectado** +2") ou **Sistemas sem medida**. **desatualizado** quando o painel não verifica há 3 min.
+- Painel: **Estado dos sistemas**, **Última verificação: às HH:MM (há N min)**, **informação desatualizada**; linhas **QNAP**, **Site público**,
+  **CAMP Vision**, **Cópia das imagens**, **Cópia de segurança do painel**, **Estações de captura** ("N de M estações ligadas" — o número do
+  UX-05 mora aqui agora), com o chip **normal**/**atenção**/**crítico**/**não medido** e uma frase do impacto; **Ver as máquinas (N)**,
+  **Verificar agora**, **Abrir Máquinas**.
+- Alerta que impede o trabalho: o texto de sempre ("QNAP não está conectado a este servidor: …"), sem **Fechar por hoje**.
+- Busca do topo: "**Buscar projeto, fundo, arquiteto ou código**" (sem o exemplo de código no texto); no celular, onde não cabe, "**Buscar projeto ou código**".
+- Conta: o menu do nome/avatar mostra o nome, o papel (**admin master**, **admin**, **operador**, **só leitura**) e o e-mail.

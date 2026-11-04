@@ -57,7 +57,13 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 - **Verificar destino resolvido pelo painel (UX-43, 27/10/2026, pedido do Rafael):** `destino_auto.py`, configuração `destino.automatico` = `desligado` | `simular` (PADRÃO: mostra "O painel faria" e não muda nada) | `aplicar`. Para cada lote do CAMP Vision em "Verificar destino" (sem folhas, em revisão, não complemento, sem decisão humana): **(a) mover** quando um projeto do MESMO fundo tem nota ≥ 0,8 e ≥ 0,15 acima do segundo; **(b) criar** o projeto quando nenhum chega a 0,5 — próximo P do contador do painel (`projetos_novos.criar_projeto`, nunca reusa número), título = nome da pasta limpo pelas regras do UX-15, ano da pasta ("1970-1971" → 1970 até 1971), `projeto.origem='automatico'`; **(c) pessoa** no resto (só código, empate, zona cinzenta, nome que não serve de título). Para decidir sozinho, palavra fraca (clube, garagem, apartamentos…) sozinha não conta como parecida. O lote **não muda de projeto no painel**: fica "movendo para F0xx-P0yyy" (não importa no antigo) até o CAMP Vision reorganizar a pasta (`vigia.py --reidentificar <antigo>`; lista em `GET /api/campvision/destinos`). Aplicar só em segundo plano (coletor ou a tarefa do botão "Aplicar estas N decisões"), simulando cada lote antes, no máximo 10 por rodada, nunca o mesmo lote duas vezes (nem depois do Desfazer). **Desfazer** (admin) enquanto o CAMP Vision não reorganizou: o lote volta a "Verificar destino" e o projeto criado, se vazio, é descartado (o número continua gasto).
 - **Teste:** toda verificação nova precisa de caso que DEVE pedir decisão e caso parecido que NÃO deve (falso alarme também é defeito).
 
-## 10. Menu pela ordem do trabalho (UX-28, 27/10/2026; antes: 5 destinos + "Mais", CAMP-154, 22/10/2026; menu por trabalho, 09/10/2026)
+## 10. Menu pela ordem do trabalho (redesenho §3/§19, 04/11/2026; UX-28, 27/10/2026; antes: 5 destinos + "Mais", CAMP-154, 22/10/2026; menu por trabalho, 09/10/2026)
+- **Redesenho §3 (plano do Rafael, 04/11/2026):** os grupos passam a ser **Principal** (as filas do dia, abaixo) · **Acervo** · **Público e processos**
+  (Pedidos de alta resolução, Inscrições, Downloads, Visitas ao site, Relatórios; antes "Público" + "Acompanhamento") · **Administração** (Máquinas,
+  Configurações e, saídos de "Acompanhamento", Histórico de ações e Qualidade do CAMP Vision, que já eram só de admin) · **Ajuda** (no fim, dentro do "Mais").
+  Teclas iguais. Item ativo: fundo `--sel`, barra azul à esquerda e texto mais forte; contador só em item que é demanda (pill à direita; vermelho
+  quando bloqueia). Setas ↑ ↓ andam pelo menu. **Celular (§19): gaveta à esquerda aberta pelo ☰ do cabeçalho** (fecha com Esc, no fundo ou ao escolher;
+  substitui a barra de baixo). **Notebook/tablet (721–1279 px): o menu começa recolhido** (só ícones) até a pessoa escolher; a escolha fica lembrada.
 - **Topo, sempre à vista** (as filas do dia nunca ficam no "Mais"): **Precisa de você** (1, o Painel inicial: junta Decisões, Material novo e Problemas
   que bloqueiam; é o CAMP-059) · **Material novo** (N) · **Problemas** (P) · **Decisões** (D) · **Projetos** (2) · **Busca** (a mesma do ⌘/Ctrl+K).
   O nome da Home continua **Precisa de você** (decisão do CAMP-154/CAMP-059; o card UX-28 sugeria "Hoje" — não renomeado, cabe ao Rafael).
@@ -68,7 +74,7 @@ Regra de projeto (pedido do Rafael, 08/10/2026): o painel não obedece cegamente
 - **Administração** (só admin; o título do grupo some para os outros): Máquinas (5) · Configurações (C).
 - **Ajuda**: Como o material anda (M) · Glossário (G).
 - Sempre à vista no computador: o Topo, Fundos, Arquitetos, Pedidos de alta resolução e Máquinas; o resto aparece ao abrir o **"Mais"** (que abre e
-  fecha, o navegador lembra, e abre sozinho quando a tela atual é um item dele). No celular, como antes: barra de baixo com os destinos do papel + "Mais".
+  fecha, o navegador lembra, e abre sozinho quando a tela atual é um item dele). No celular: a gaveta do ☰ com o menu inteiro (redesenho §19).
 - **Nome do menu = título da página** (h1, aba do navegador, trilha). Fundos e Arquitetos são itens separados, cada um com a sua página.
 - **Trilha do projeto** (e da folha, Conferir folhas, Duplicatas) respeita por onde se entrou: veio de Projetos → "Projetos / projeto"; veio de
   Fundos (ou link direto) → "Fundos / fundo / projeto". As outras telas mostram o grupo do menu ("Acervo / Arquitetos").

@@ -1,6 +1,6 @@
-// Visitas ao site (especificação do Rafael, 04/11/2026; "É na página de Dashboard"): na Home, logo abaixo do "Ritmo das últimas 2 semanas",
-// o módulo completo — filtro de período, Evolução das visitas (indicadores + gráfico) e Projetos mais visitados (10, ver todos, busca, ordem,
-// CSV, não identificadas) — e o mesmo componente na tela Visitas ao site. Critérios de aceite provados no navegador de verdade:
+// Visitas ao site (especificação do Rafael, 04/11/2026). Desde 05/11 (plano de redesenho §12) a Home tem só o RESUMO (provado aqui e em
+// tests/navegador_redesenho_relatorios.js) e a tela Visitas ao site tem o módulo completo — filtro de período, Evolução das visitas (indicadores + gráfico) e Projetos mais visitados (10, ver todos, busca, ordem,
+// CSV, não identificadas, intervalo personalizado). Critérios de aceite provados no navegador de verdade:
 // filtro muda gráfico e ranking juntos; 1º destacado; institucionais fora; tooltip (mouse e teclado); estados (carregando, sem dados,
 // indisponível com o erro técnico e sem zero); 390 px sem rolagem lateral; rótulos do gráfico com o mesmo tamanho em 1366 e 1920 px;
 // tema escuro. Tira prints (deviceScaleFactor 1) da Home e da tela em 1366, 1920 e 390 px, claro e escuro.
@@ -132,100 +132,108 @@ print(json.dumps({"ontem": ontem.isoformat(), "de30": (ontem - timedelta(days=29
     await P.unroute('**/api/visitas/evolucao*');
     // ---------- posição na Home ----------
     const pos = await P.evaluate(() => { const r = document.getElementById('ini-ritmo').closest('section'), v = document.getElementById('ini-visitas').closest('section'); return { logo: r.nextElementSibling === v, col: r.parentElement === v.parentElement, w: v.getBoundingClientRect().width }; });
-    chk(pos.logo && pos.col, 'Home: o módulo fica logo abaixo do "Ritmo das últimas 2 semanas", na mesma coluna', JSON.stringify(pos));
-    const txt = await P.locator('#ini-visitas').innerText();
+    chk(pos.logo && pos.col, 'Home: o resumo fica logo abaixo do gráfico de folhas conferidas por dia, na mesma coluna', JSON.stringify(pos));
+    // 05/11 (plano de redesenho §12): a Home tem só o RESUMO (total, evolução, top 5, 7/30/90 dias e o link); o módulo completo fica na tela
+    const hTxt = await P.locator('#ini-visitas').innerText();
+    chk(await P.$$eval('#ini-visitas .vm-row', r => r.length) === 5 && !(await P.$('#ini-visitas [data-vm-todos], #ini-visitas [data-vm-csv], #ini-visitas .vm-ni'))
+      && /Visitas no período/.test(hTxt) && /sessões/.test(hTxt) && /Ver análise completa de visitas/.test(hTxt) && (await P.$$eval('#ini-visitas [data-vm-per] option', o => o.map(x => x.value).join(','))) === '7d,30d,90d',
+      'Home: só o resumo (top 5, total = sessões, 7/30/90 dias, "Ver análise completa de visitas"); o completo fica na tela', hTxt.slice(0, 300));
+    if (PRINTS) { await tema('light'); await foto('vis-home-1366-claro.png', '#ini-visitas'); await tema('dark'); await P.waitForTimeout(100); await foto('vis-home-1366-escuro.png', '#ini-visitas'); await tema('light'); }
+    // ---------- tela Visitas ao site: o módulo completo (o que antes ficava também na Home) ----------
+    await P.evaluate(() => nav('visitas')); await esperarModulo('#vis-modulo');
+    const txt = await P.locator('#vis-modulo').innerText();
     chk(/Acompanhe a evolução dos acessos e descubra quais projetos despertam mais interesse/.test(txt) && /Evolução das visitas/.test(txt) && /Projetos mais visitados/.test(txt)
       && /Ranking dos projetos do acervo que receberam mais acessos no período selecionado/.test(txt), 'textos da especificação (subtítulo e as duas seções, nesta ordem)');
     const fmt = s => s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4);
-    chk(await P.$eval('#ini-visitas [data-vm-per]', s => s.value) === '30d' && txt.includes(`De ${fmt(ESP.de30)} a ${fmt(ESP.ontem)}`) && /horário de São Paulo/.test(txt) && /dia de hoje ainda não terminou/.test(txt) && /Última sincronização: \d\d\/\d\d\/\d{4}/.test(txt),
+    chk(await P.$eval('#vis-modulo [data-vm-per]', s => s.value) === '30d' && txt.includes(`De ${fmt(ESP.de30)} a ${fmt(ESP.ontem)}`) && /horário de São Paulo/.test(txt) && /dia de hoje ainda não terminou/.test(txt) && /Última sincronização: \d\d\/\d\d\/\d{4}/.test(txt),
       'período padrão: últimos 30 dias até ontem, com as datas, o fuso e a última sincronização', txt.slice(0, 400));
     chk(/Visitas no período/.test(txt) && /Média de visitas por dia/.test(txt) && /Variação vs\. período anterior/.test(txt) && /sessões/.test(txt) && /Visualizações da página do projeto|Visualizações\s+da página do projeto/.test(txt),
       'indicadores lado a lado e as duas métricas definidas na tela (visitas = sessões; ranking = visualizações da página do projeto)');
     // ---------- ranking ----------
-    const rank = () => P.$$eval('#ini-visitas .vm-row', rs => rs.map(r => ({ c: r.dataset.vmProj, n: +r.querySelector('.vm-n b').textContent.replace(/\D/g, ''), top: r.classList.contains('top'), w: parseFloat(r.querySelector('.vm-barra i').style.width) })));
+    const rank = () => P.$$eval('#vis-modulo .vm-row', rs => rs.map(r => ({ c: r.dataset.vmProj, n: +r.querySelector('.vm-n b').textContent.replace(/\D/g, ''), top: r.classList.contains('top'), w: parseFloat(r.querySelector('.vm-barra i').style.width) })));
     let R = await rank();
     chk(R.length === 10 && JSON.stringify(R.map(r => [r.c, r.n])) === JSON.stringify(ESP.top30.slice(0, 10)), '10 projetos mais visitados em 30 dias, em ordem e com o número exato', JSON.stringify(R.map(r => [r.c, r.n])) + ' ≠ ' + JSON.stringify(ESP.top30.slice(0, 10)));
-    chk(R.every(r => /^F\d{3}-P\d{4}$/.test(r.c)) && !/acervo\/arquitetos|\/acervo\/busca|noticias|Página inicial/.test(await P.locator('#ini-visitas .vm-rank').innerText()), 'institucionais fora do ranking (home, arquitetos, listagem, busca, notícias)');
-    const est1 = await P.evaluate(() => { const r = document.querySelector('#ini-visitas .vm-row'), b = getComputedStyle(r).borderTopColor, a = getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(); const c = document.createElement('i'); c.style.color = a; document.body.appendChild(c); const ac = getComputedStyle(c).color; c.remove(); return { b, ac, outro: getComputedStyle(document.querySelectorAll('#ini-visitas .vm-row')[1]).borderTopColor }; });
+    chk(R.every(r => /^F\d{3}-P\d{4}$/.test(r.c)) && !/acervo\/arquitetos|\/acervo\/busca|noticias|Página inicial/.test(await P.locator('#vis-modulo .vm-rank').innerText()), 'institucionais fora do ranking (home, arquitetos, listagem, busca, notícias)');
+    const est1 = await P.evaluate(() => { const r = document.querySelector('#vis-modulo .vm-row'), b = getComputedStyle(r).borderTopColor, a = getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(); const c = document.createElement('i'); c.style.color = a; document.body.appendChild(c); const ac = getComputedStyle(c).color; c.remove(); return { b, ac, outro: getComputedStyle(document.querySelectorAll('#vis-modulo .vm-row')[1]).borderTopColor }; });
     chk(R[0].top && !R[1].top && est1.b === est1.ac && est1.outro !== est1.ac, '1º lugar com contorno dourado (var(--amber)); os outros não', JSON.stringify(est1));
     chk(R[0].w === 100 && R.every((r, i) => Math.abs(r.w - Math.max(1, r.n / R[0].n * 100)) < 0.2), 'barras proporcionais ao 1º do período', JSON.stringify(R.map(r => r.w)));
-    const numDir = await P.evaluate(() => [...document.querySelectorAll('#ini-visitas .vm-n')].every(n => getComputedStyle(n).textAlign === 'right' && getComputedStyle(n.querySelector('b')).fontVariantNumeric.includes('tabular-nums')));
+    const numDir = await P.evaluate(() => [...document.querySelectorAll('#vis-modulo .vm-n')].every(n => getComputedStyle(n).textAlign === 'right' && getComputedStyle(n.querySelector('b')).fontVariantNumeric.includes('tabular-nums')));
     chk(numDir, 'números à direita, com algarismos tabulares');
-    await P.locator('#ini-visitas .vm-rank').scrollIntoViewIfNeeded(); await P.waitForFunction(() => [...document.querySelectorAll('#ini-visitas .vm-foto img')].every(i => i.complete), null, { timeout: 8000 }).catch(() => {});
-    const fotos = await P.evaluate(() => [...document.querySelectorAll('#ini-visitas .vm-row')].map(r => ({ c: r.dataset.vmProj, img: !!r.querySelector('.vm-foto img'), ok: !!(r.querySelector('.vm-foto img') || {}).naturalWidth, svg: !!r.querySelector('.vm-foto svg') })));
+    await P.locator('#vis-modulo .vm-rank').scrollIntoViewIfNeeded(); await P.waitForFunction(() => [...document.querySelectorAll('#vis-modulo .vm-foto img')].every(i => i.complete), null, { timeout: 8000 }).catch(() => {});
+    const fotos = await P.evaluate(() => [...document.querySelectorAll('#vis-modulo .vm-row')].map(r => ({ c: r.dataset.vmProj, img: !!r.querySelector('.vm-foto img'), ok: !!(r.querySelector('.vm-foto img') || {}).naturalWidth, svg: !!r.querySelector('.vm-foto svg') })));
     const f1 = fotos.find(f => f.c === 'F026-P0001'), f2 = fotos.find(f => f.c === 'F023-P0011'), sem = fotos.filter(f => !f.img);
     chk(f1 && f1.ok && f2 && f2.ok && sem.length >= 5 && sem.every(f => f.svg), 'miniatura real (capa / 1ª folha publicada) e desenho neutro quando não há foto', JSON.stringify(fotos));
-    const pub = await P.$eval('#ini-visitas .vm-row .vm-pub', a => ({ h: a.href, t: a.target }));
+    const pub = await P.$eval('#vis-modulo .vm-row .vm-pub', a => ({ h: a.href, t: a.target }));
     chk(/^https:\/\/camp\.arq\.br\/acervo\/projetos\/f\d{3}-p\d{4}-/.test(pub.h) && pub.t === '_blank', 'botão separado abre a página pública do projeto (outra aba)', JSON.stringify(pub));
-    const sub = await P.$$eval('#ini-visitas .vm-row .vm-nome small', s => s.map(x => x.textContent));
+    const sub = await P.$$eval('#vis-modulo .vm-row .vm-nome small', s => s.map(x => x.textContent));
     chk(sub.some(s => /^Sylvio Sawaya, Equipe técnica, 1966$/.test(s)) && sub.some(s => /^Acervo .+, \d{4}$/.test(s)), 'autoria cadastrada como autoria; sem autoria, só o acervo (nunca como autor)', JSON.stringify(sub.slice(0, 4)));
-    chk(!(await P.$('#ini-visitas svg text')) && !(await P.$('#ini-visitas a[style*="underline"]')), 'nenhum texto dentro do SVG; nada sublinhado');
+    chk(!(await P.$('#vis-modulo svg text')) && !(await P.$('#vis-modulo a[style*="underline"]')), 'nenhum texto dentro do SVG; nada sublinhado');
     // ---------- tooltip (mouse e teclado) ----------
-    const area = await P.$('#ini-visitas [data-vm-area]'); await area.scrollIntoViewIfNeeded(); const bx = await area.boundingBox();
+    const area = await P.$('#vis-modulo [data-vm-area]'); await area.scrollIntoViewIfNeeded(); const bx = await area.boundingBox();
     await P.mouse.move(bx.x + bx.width * 0.5, bx.y + bx.height * 0.5); await P.waitForTimeout(150);
-    const tip1 = await P.$eval('#ini-visitas [data-vm-tip]', t => ({ v: !t.hidden, s: t.textContent }));
+    const tip1 = await P.$eval('#vis-modulo [data-vm-tip]', t => ({ v: !t.hidden, s: t.textContent }));
     chk(tip1.v && /\d\d\/\d\d\/\d{4}/.test(tip1.s) && /\d+ visitas?/.test(tip1.s), 'tooltip ao passar o mouse: data e número exato', JSON.stringify(tip1));
     await P.mouse.move(bx.x + bx.width + 5, bx.y - 200);
-    await P.focus('#ini-visitas [data-vm-g]'); await P.keyboard.press('End');
-    const tipFim = await P.$eval('#ini-visitas [data-vm-tip]', t => t.textContent);
+    await P.focus('#vis-modulo [data-vm-g]'); await P.keyboard.press('End');
+    const tipFim = await P.$eval('#vis-modulo [data-vm-tip]', t => t.textContent);
     await P.keyboard.press('ArrowLeft'); await P.keyboard.press('ArrowLeft'); await P.keyboard.press('ArrowLeft');
-    const tipPico = await P.$eval('#ini-visitas [data-vm-tip]', t => t.textContent);
+    const tipPico = await P.$eval('#vis-modulo [data-vm-tip]', t => t.textContent);
     const pico = await P.evaluate(() => VM.ev.pico);
     chk(tipFim.includes(fmt(ESP.ontem)) && tipPico.includes(fmt(pico.inicio)) && tipPico.includes(String(pico.visitas)), 'tooltip pelo teclado (setas): ontem e, 3 dias antes, o pico', tipFim + ' | ' + tipPico);
-    chk(await P.$$eval('#ini-visitas .vm-pto.pico', p => p.length) === 1 && /pico:/.test(txt), 'destaque discreto do pico (um ponto + legenda)');
-    const yZero = await P.$$eval('#ini-visitas .vm-g-y span', s => s.map(x => x.textContent.trim()));
+    chk(await P.$$eval('#vis-modulo .vm-pto.pico', p => p.length) === 1 && /pico:/.test(txt), 'destaque discreto do pico (um ponto + legenda)');
+    const yZero = await P.$$eval('#vis-modulo .vm-g-y span', s => s.map(x => x.textContent.trim()));
     chk(yZero[0] === '0' && yZero.length === 5, 'eixo vertical começa em zero', JSON.stringify(yZero));
-    await P.click('#ini-visitas .vm-num summary');
-    const ntab = await P.$$eval('#ini-visitas .vm-num tbody tr', r => r.length);
+    await P.click('#vis-modulo .vm-num summary');
+    const ntab = await P.$$eval('#vis-modulo .vm-num tbody tr', r => r.length);
     chk(ntab === 30, 'alternativa em texto: "Ver os números" com os 30 dias', String(ntab));
-    await P.click('#ini-visitas .vm-num summary');
+    await P.click('#vis-modulo .vm-num summary');
     // ---------- rótulos do gráfico: mesmo tamanho em 1366 e 1920 ----------
-    const rot = () => P.evaluate(() => [...document.querySelectorAll('#ini-visitas .vm-g-x span, #ini-visitas .vm-g-y span, #ini-visitas .vm-g-leg')].map(e => getComputedStyle(e).fontSize));
+    const rot = () => P.evaluate(() => [...document.querySelectorAll('#vis-modulo .vm-g-x span, #vis-modulo .vm-g-y span, #vis-modulo .vm-g-leg')].map(e => getComputedStyle(e).fontSize));
     const r1366 = await rot();
-    if (PRINTS) { await tema('light'); await foto('vis-home-1366-claro.png', '#ini-visitas'); await tema('dark'); await P.waitForTimeout(100); await foto('vis-home-1366-escuro.png', '#ini-visitas'); await foto('vis-home-1366-escuro-pagina.png'); await tema('light'); }
+    if (PRINTS) { await tema('light'); await foto('vis-tela-modulo-1366-claro.png', '#vis-modulo'); await tema('dark'); await P.waitForTimeout(100); await foto('vis-tela-modulo-1366-escuro.png', '#vis-modulo'); await foto('vis-tela-modulo-1366-escuro-pagina.png'); await tema('light'); }
     await P.setViewportSize({ width: 1920, height: 1080 }); await P.waitForTimeout(400);
     const r1920 = await rot();
     chk(JSON.stringify(r1366) === JSON.stringify(r1920) && r1366.every(s => parseFloat(s) >= 12 && parseFloat(s) <= 14), 'rótulos do gráfico com o mesmo tamanho em 1366 e 1920 px (12–14 px, HTML)', JSON.stringify([r1366, r1920]));
-    chk(await P.evaluate(() => [...document.querySelectorAll('#ini-visitas *')].filter(e => e.offsetParent && e.childNodes.length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).every(e => parseFloat(getComputedStyle(e).fontSize) >= 12)), 'nenhum texto do módulo abaixo de 12 px');
-    if (PRINTS) { await foto('vis-home-1920-claro.png', '#ini-visitas'); await tema('dark'); await P.waitForTimeout(100); await foto('vis-home-1920-escuro.png', '#ini-visitas'); await tema('light'); }
+    chk(await P.evaluate(() => [...document.querySelectorAll('#vis-modulo *')].filter(e => e.offsetParent && e.childNodes.length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).every(e => parseFloat(getComputedStyle(e).fontSize) >= 12)), 'nenhum texto do módulo abaixo de 12 px');
+    if (PRINTS) { await foto('vis-tela-modulo-1920-claro.png', '#vis-modulo'); await tema('dark'); await P.waitForTimeout(100); await foto('vis-tela-modulo-1920-escuro.png', '#vis-modulo'); await tema('light'); }
     await P.setViewportSize({ width: 1366, height: 900 }); await P.waitForTimeout(300);
     // ---------- filtro muda gráfico e ranking juntos ----------
     const pedidos = []; const ouvir = r => { if (/\/api\/visitas\/(evolucao|projetos)\?/.test(r.url())) pedidos.push(r.url()); }; P.on('request', ouvir);
-    await P.selectOption('#ini-visitas [data-vm-per]', '7d'); await esperarModulo('#ini-visitas');
+    await P.selectOption('#vis-modulo [data-vm-per]', '7d'); await esperarModulo('#vis-modulo');
     P.off('request', ouvir);
-    const st7 = await P.evaluate(() => ({ n: VM.ev.pontos.length, de: VM.ev.de, ate: VM.ev.ate, pde: VM.pj.de, pate: VM.pj.ate, x: document.querySelectorAll('#ini-visitas .vm-g-x span').length }));
+    const st7 = await P.evaluate(() => ({ n: VM.ev.pontos.length, de: VM.ev.de, ate: VM.ev.ate, pde: VM.pj.de, pate: VM.pj.ate, x: document.querySelectorAll('#vis-modulo .vm-g-x span').length }));
     R = await rank();
     chk(pedidos.length === 2 && pedidos.every(u => /periodo=7d/.test(u)) && st7.n === 7 && st7.de === ESP.de7 && st7.pde === ESP.de7 && st7.ate === ESP.ontem && st7.pate === ESP.ontem, 'filtro 7 dias: gráfico e ranking pedidos com o MESMO período', JSON.stringify([pedidos, st7]));
     chk(JSON.stringify(R.map(r => [r.c, r.n])) === JSON.stringify(ESP.top7.slice(0, 10)) && R[0].c === 'F026-P0003' && R[0].top, 'ranking de 7 dias muda junto (o projeto que cresceu na semana vira o 1º)', JSON.stringify(R.slice(0, 3)));
-    chk((await P.locator('#ini-visitas').innerText()).includes(`De ${fmt(ESP.de7)} a ${fmt(ESP.ontem)}`), 'as datas do período mudam junto');
+    chk((await P.locator('#vis-modulo').innerText()).includes(`De ${fmt(ESP.de7)} a ${fmt(ESP.ontem)}`), 'as datas do período mudam junto');
     // comparar com o período anterior: segunda linha discreta
-    await P.check('#ini-visitas [data-vm-comparar]'); await P.waitForTimeout(150);
-    chk(await P.$$eval('#ini-visitas polyline.ant', p => p.length) >= 1 && /período anterior/.test(await P.locator('#ini-visitas .vm-g-leg').innerText()), '"Comparar com período anterior": segunda linha tracejada e legenda');
-    await P.uncheck('#ini-visitas [data-vm-comparar]');
-    await P.selectOption('#ini-visitas [data-vm-per]', '30d'); await esperarModulo('#ini-visitas');
+    await P.check('#vis-modulo [data-vm-comparar]'); await P.waitForTimeout(150);
+    chk(await P.$$eval('#vis-modulo polyline.ant', p => p.length) >= 1 && /período anterior/.test(await P.locator('#vis-modulo .vm-g-leg').innerText()), '"Comparar com período anterior": segunda linha tracejada e legenda');
+    await P.uncheck('#vis-modulo [data-vm-comparar]');
+    await P.selectOption('#vis-modulo [data-vm-per]', '30d'); await esperarModulo('#vis-modulo');
     // ---------- ver todos, busca, ordem, CSV, não identificadas ----------
-    await P.click('#ini-visitas [data-vm-todos="1"]'); await P.waitForFunction(() => document.querySelectorAll('#ini-visitas .vm-row').length > 10, null, { timeout: 8000 });
-    const nTodos = await P.$$eval('#ini-visitas .vm-row', r => r.length);
+    await P.click('#vis-modulo [data-vm-todos="1"]'); await P.waitForFunction(() => document.querySelectorAll('#vis-modulo .vm-row').length > 10, null, { timeout: 8000 });
+    const nTodos = await P.$$eval('#vis-modulo .vm-row', r => r.length);
     chk(nTodos === ESP.top30.length, `"Ver todos os projetos": lista completa (${nTodos})`);
-    await P.fill('#ini-visitas [data-vm-busca]', 'sawaya'); await P.waitForFunction(() => document.querySelectorAll('#ini-visitas .vm-row').length === 1, null, { timeout: 5000 }).catch(() => {});
+    await P.fill('#vis-modulo [data-vm-busca]', 'sawaya'); await P.waitForFunction(() => document.querySelectorAll('#vis-modulo .vm-row').length === 1, null, { timeout: 5000 }).catch(() => {});
     R = await rank();
-    chk(R.length === 1 && R[0].c === 'F026-P0003' && (await P.$eval('#ini-visitas [data-vm-busca]', i => document.activeElement === i)), 'busca por arquiteto/autoria dentro da lista completa (o campo não perde o foco)', JSON.stringify(R));
-    await P.fill('#ini-visitas [data-vm-busca]', ''); await P.waitForFunction(n => document.querySelectorAll('#ini-visitas .vm-row').length === n, nTodos, { timeout: 5000 }).catch(() => {});
-    await P.selectOption('#ini-visitas [data-vm-ordem]', 'menos'); await P.waitForTimeout(500);
+    chk(R.length === 1 && R[0].c === 'F026-P0003' && (await P.$eval('#vis-modulo [data-vm-busca]', i => document.activeElement === i)), 'busca por arquiteto/autoria dentro da lista completa (o campo não perde o foco)', JSON.stringify(R));
+    await P.fill('#vis-modulo [data-vm-busca]', ''); await P.waitForFunction(n => document.querySelectorAll('#vis-modulo .vm-row').length === n, nTodos, { timeout: 5000 }).catch(() => {});
+    await P.selectOption('#vis-modulo [data-vm-ordem]', 'menos'); await P.waitForTimeout(500);
     R = await rank();
     chk(R.length === nTodos && R[0].n <= R[R.length - 1].n && R[0].n === ESP.top30[ESP.top30.length - 1][1], 'ordenação "menos visitados"', JSON.stringify(R.slice(0, 2)));
-    await P.selectOption('#ini-visitas [data-vm-ordem]', 'crescimento'); await P.waitForTimeout(500);
+    await P.selectOption('#vis-modulo [data-vm-ordem]', 'crescimento'); await P.waitForTimeout(500);
     chk((await rank()).length === nTodos, 'ordenação "maior crescimento"');
-    const csv = await P.$eval('#ini-visitas [data-vm-csv]', a => a.getAttribute('href'));
+    const csv = await P.$eval('#vis-modulo [data-vm-csv]', a => a.getAttribute('href'));
     const csvR = await P.evaluate(async h => { const r = await fetch(h); return { s: r.status, t: (await r.text()).slice(0, 200) }; }, csv);
     chk(/periodo=30d/.test(csv) && csvR.s === 200 && /posição;código;projeto/.test(csvR.t), 'exportar CSV do ranking do período', JSON.stringify(csvR));
-    await P.click('#ini-visitas .vm-ni summary');
-    const ni = await P.locator('#ini-visitas .vm-ni').innerText();
+    await P.click('#vis-modulo .vm-ni summary');
+    const ni = await P.locator('#vis-modulo .vm-ni').innerText();
     chk(/Páginas não identificadas: 1 página/.test(ni) && /\/acervo\/projetos\/residencia-sem-codigo\//.test(ni) && /Casa Tarumã – CAMP/.test(ni) && !(await rank()).some(r => r.n === 0), '"não identificadas" (mesmo título de um projeto) recolhida, com as visualizações, sem atribuir a projeto', ni.slice(0, 300));
-    chk(/Fora do ranking também: [\d.]+ visualizações em 5 outras páginas/.test(await P.locator('#ini-visitas').innerText()), 'o que ficou fora do ranking é dito (outras páginas do site)');
-    await P.click('#ini-visitas [data-vm-todos="0"]'); await P.waitForFunction(() => document.querySelectorAll('#ini-visitas .vm-row').length === 10, null, { timeout: 5000 }).catch(() => {});
+    chk(/Fora do ranking também: [\d.]+ visualizações em 5 outras páginas/.test(await P.locator('#vis-modulo').innerText()), 'o que ficou fora do ranking é dito (outras páginas do site)');
+    await P.click('#vis-modulo [data-vm-todos="0"]'); await P.waitForFunction(() => document.querySelectorAll('#vis-modulo .vm-row').length === 10, null, { timeout: 5000 }).catch(() => {});
     // ---------- linha clicável ----------
-    await P.click('#ini-visitas .vm-row .vm-nome'); await P.waitForTimeout(500);
+    await P.click('#vis-modulo .vm-row .vm-nome'); await P.waitForTimeout(500);
     chk(/^#projeto\/F\d{3}-P\d{4}$/.test(await P.evaluate(() => location.hash)), 'a linha inteira abre o projeto no painel', await P.evaluate(() => location.hash));
     await P.evaluate(() => nav('painel')); await esperarModulo('#ini-visitas');
     // ---------- tela Visitas ao site: o mesmo componente + detalhes do mesmo período ----------

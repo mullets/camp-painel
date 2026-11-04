@@ -1,7 +1,8 @@
 // 03/11 (Rafael: "para colocar o analytics no nosso painel, adapte essa solução para nós" / "faça ele no dashboard") e 04/11 (especificação
-// "Visitas ao site": "É na página de Dashboard"): a Home tem o módulo completo de visitas logo abaixo do "Ritmo das últimas 2 semanas"
-// (evolução + projetos mais visitados, o mesmo componente da tela Visitas ao site), e a tela Visitas ao site acrescenta canais, origem,
-// cidades, aparelhos e pesquisas no Google do mesmo período. O teste completo dos critérios de aceite é tests/navegador_visitas_redesenho.js.
+// "Visitas ao site": "É na página de Dashboard"); 05/11 (plano de redesenho §12): a Home tem o RESUMO das visitas logo abaixo do gráfico de
+// folhas conferidas (total, evolução e top 5, com "Ver análise completa de visitas"); a tela Visitas ao site tem o módulo completo (evolução +
+// projetos mais visitados, ver todos, CSV…) e acrescenta canais, origem, cidades, aparelhos e pesquisas no Google do mesmo período.
+// Os critérios de aceite estão em tests/navegador_visitas_redesenho.js e tests/navegador_redesenho_relatorios.js.
 // Uso: bash tests/rodar_um.sh tests/navegador_visitas_site.js
 const { execFileSync } = require('child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_MOD || 'playwright');
@@ -35,16 +36,16 @@ con.commit()`, DB]);
   await pg.waitForSelector('#ini-visitas .vm-rank', { timeout: 15000 }).catch(() => {});
   const h = (await pg.textContent('#ini-visitas').catch(() => '')) || '';
   chk(await pg.evaluate(() => { const r = document.getElementById('ini-ritmo'), v = document.getElementById('ini-visitas'); return !!(r && v && r.closest('section').nextElementSibling === v.closest('section')); }),
-    'Home: Visitas ao site fica logo abaixo do Ritmo das últimas 2 semanas');
-  chk(/Evolução das visitas/.test(h) && /Projetos mais visitados/.test(h) && /Visitas no período/.test(h) && /Média de visitas por dia/.test(h), 'Home: o módulo completo (evolução com indicadores + projetos mais visitados)', h.slice(0, 200));
+    'Home: Visitas ao site fica logo abaixo do gráfico de folhas conferidas por dia');
+  chk(/Projetos mais visitados/.test(h) && /Visitas no período/.test(h) && /Média por dia/.test(h) && /Ver análise completa de visitas/.test(h) && !(await pg.$('#ini-visitas [data-vm-todos], #ini-visitas [data-vm-csv]')), 'Home: só o resumo (total e média ao lado do gráfico, top projetos e o link para a análise completa)', h.slice(0, 200));
   chk(!(await pg.$('#ini-visitas svg text')) && (await pg.$$eval('#ini-visitas polyline.lin', p => p.length)) >= 1, 'Home: gráfico de linha, sem texto dentro do SVG');
   chk(await pg.evaluate(() => [...document.querySelectorAll('#ini-visitas .vm-g-x span, #ini-visitas .vm-g-y span')].every(e => parseFloat(getComputedStyle(e).fontSize) >= 12 && parseFloat(getComputedStyle(e).fontSize) <= 14)), 'Home: rótulos do gráfico entre 12 e 14 px (não esticam)');
   chk((await pg.$$eval('#ini-visitas .vm-row', r => r.length)) === 1 && !/Burle Marx/.test(await pg.textContent('#ini-visitas .vm-rank')), 'Home: só a página de projeto no ranking (arquiteto fora)');
   await pg.click('#ini-visitas [data-vm-ir]');
   await pg.waitForFunction(() => /Cidades/.test((document.getElementById('vis-corpo') || {}).textContent || ''), null, { timeout: 10000 }).catch(() => {});
   const t = (await pg.textContent('#v-visitas').catch(() => '')) || '';
-  chk((await pg.evaluate(() => location.hash)) === '#visitas', '"Canais, cidades e pesquisas no Google" abre a tela Visitas ao site');
-  chk(/Evolução das visitas/.test(t) && /Projetos mais visitados/.test(t), 'tela: o mesmo componente da Home');
+  chk((await pg.evaluate(() => location.hash)) === '#visitas', '"Ver análise completa de visitas" abre a tela Visitas ao site');
+  chk(/Evolução das visitas/.test(t) && /Projetos mais visitados/.test(t) && /Média de visitas por dia/.test(t), 'tela: o módulo completo (evolução com indicadores + projetos mais visitados)');
   chk(/Google e outras buscas/.test(t) && /celular/.test(t) && /São Paulo, Brazil/.test(t) && /google \/ organic/.test(t), 'tela: canais, aparelhos, cidades e origem do período');
   chk(/acervo burle marx/.test(t) && /10%/.test(t) && /3,5/.test(t), 'tela: pesquisas no Google com taxa de clique e posição', t.slice(-400));
   await pg.selectOption('#vis-modulo [data-vm-per]', '7d'); await pg.waitForTimeout(1200);
