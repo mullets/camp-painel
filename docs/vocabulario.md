@@ -502,3 +502,9 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
   Rodapé: **Salvar e próxima folha** (na última: **Salvar e concluir**; tecla Enter; antes "Está certo e próxima" — e "Salvar correção",
   que fazia o mesmo com campo mudado) · **✓ Confirmar folha** (grava e fica na folha) · **Voltar para a conferir** (folha já conferida) ·
   **Relatar problema** · **Fechar**. Abrir a folha NÃO a confere.
+- **Editar projeto** (painel ao lado): **Sobre a edição** (recolhível); **Informações públicas** (Nome do projeto, Ano "0 = sem data", Ano
+  final, Cidade, Cliente "Só se estiver escrito num documento (carimbo, contrato, memorial). Não deduza.", Autoria do projeto, Papel do
+  titular do fundo, Âmbito e conteúdo); **Programa / uso**; **Natureza do trabalho**; **Modalidade**; **Situação da obra** ("(escolha um)");
+  cada lista com "Buscar em …", "Nenhum termo com essa busca." e o resumo do que está marcado ("nada marcado"); **Só no painel** ("não vai
+  ao site"). Rodapé: **Cancelar** · **Salvar alterações** ("Salvando…"). Os termos são os da taxonomia do site (`/api/vocabulario/tipologia`),
+  nunca os do protótipo.

@@ -188,4 +188,7 @@ vem do `#pd` (`container: pjpg`): com a revisão aberta ao lado, a coluna da dir
   `[data-rev-usar]`/`[data-rev-sug-aceitar]`, `.rev-campos`, `.rv-lido`, `.rv-mais`) → `.rv-rodape.rev-acoes` (fixo no pé). Duas colunas
   quando o painel tem ≥ 840 px (`container: gaveta`). Primeiro `[data-rev-item="conferida"]` do rodapé = o botão azul (Enter);
   `[data-rev-ficar]` = Confirmar folha.
-`tests/navegador_projeto_interno.js` confere.
+- **Editar projeto** (`editarProjeto`, `.drawer-ed`): `form.ed-form` > `.ed-sobre` + `details.ed-sec` (Informações públicas, Só no painel:
+  `.ed-grupo`) + `taxonomiaHTML` por faceta (`details.tp-facet.ed-sec` com `.tp-filtro` `data-sem-alteracao`, `.tp-gr` > `.tp-exp[aria-expanded]`
+  + `.tp-filhos`, `input[type=hidden]#ep-<coluna>`) + `.ed-rodape` (fixo: `[data-ed-cancelar]`, `[data-ed-salvar]`). Salvar usa
+  `salvarNoDrawer` (Salvando… / erro em `#d-erro`, sem fechar). `tests/navegador_projeto_interno.js` confere.

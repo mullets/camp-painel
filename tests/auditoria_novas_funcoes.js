@@ -1308,9 +1308,12 @@ const memLista=(k,dflt)=>{try{const v=JSON.parse(w.localStorage.getItem('camp.li
   chk(!!d.getElementById('termo-pop')&&/Fundo/.test(txt('#termo-pop')),'[H2] passar o mouse sobre o termo deveria abrir o balão'); d.getElementById('termo-pop')?.remove(); ab.remove();
   okl.push('H2 pendências: glossário em ordem, 1 marca por caixa, gatilhos certos, balão no mouse'); w.route_to('painel'); }
 // ---------- [H1 pendências] "?" nas janelas laterais, foco depois do "Entendi", "?" nas páginas de detalhe, passos no celular ----------
-{ await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_projeto',valor:null})}); await w.carregarPreferenciasAjuda(); await sleep(200);
-  await w.editarProjeto('F026-P0001'); await sleep(600); const da=d.getElementById('d-ajuda');
-  chk(da&&!da.hidden&&!!d.querySelector('#d-body > .ajuda-caixa[data-ajuda="editar_projeto"]'),'[H1] "Editar projeto" deveria ter o "?" e, na 1ª vez, a caixa "Como funciona"');
+{ await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_projeto',valor:null})}); await J(adm,'/api/auth/eu/preferencias',{method:'PUT',body:JSON.stringify({chave:'ajuda.editar_fundo',valor:null})}); await w.carregarPreferenciasAjuda(); await sleep(200);
+  // redesenho da página do projeto §5.3 (04/11/2026): em "Editar projeto" a caixa grande deu lugar a "Sobre a edição" (recolhível); o "?" continua
+  await w.editarProjeto('F026-P0001'); await sleep(600);
+  chk(!d.getElementById('d-ajuda').hidden&&!d.querySelector('#d-body > .ajuda-caixa')&&!!d.querySelector('#d-body .ed-sobre'),'[H1/§5.3] "Editar projeto": o "?" continua e, no lugar da caixa grande, "Sobre a edição"'); w.closeDrawer(true); await sleep(200);
+  await w.editarFundo('F026'); await sleep(600); const da=d.getElementById('d-ajuda');
+  chk(da&&!da.hidden&&!!d.querySelector('#d-body > .ajuda-caixa[data-ajuda="editar_fundo"]'),'[H1] "Editar fundo" deveria ter o "?" e, na 1ª vez, a caixa "Como funciona"');
   d.querySelector('#d-body > .ajuda-caixa [data-ajuda-fechar]').click(); await sleep(400);
   chk(!d.querySelector('#d-body > .ajuda-caixa')&&d.activeElement===d.getElementById('d-title'),'[H1] "Entendi" na janela deveria fechar a caixa e pôr o foco no título da janela');
   da.click(); await sleep(100); chk(!!d.querySelector('#d-body > .ajuda-caixa'),'[H1] o "?" da janela deveria reabrir a caixa'); w.closeDrawer(true);

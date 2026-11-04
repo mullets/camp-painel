@@ -1838,7 +1838,48 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 .rev-cheia .rv-folha{font-size:var(--fs-sec)}
 .rev-cheia .drawer .db{gap:8px}
 .rev-cheia .rv-alertas{max-height:96px;overflow:auto}
+/* ===== Redesenho da página do projeto §5 — painel "Editar projeto" (04/11/2026) ===== */
+.drawer-ed .drawer .dh{position:sticky;top:0;z-index:6;background:var(--surface)}
+.drawer-ed .drawer .dh h2{font-size:var(--fs-sec)}
+.ed-form{display:grid;gap:14px}
+.ed-sobre{border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:var(--r-md);background:var(--blue-soft);padding:8px 12px}
+.ed-sobre>summary{cursor:pointer;font-weight:600;color:var(--ink);min-height:28px;display:flex;align-items:center;gap:6px}
+.ed-sobre p{margin:6px 0 2px;font-size:var(--fs-2nd);color:var(--ink)}
+.ed-sec{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:0}
+.ed-sec>summary.ed-sec-cab{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 10px;padding:12px 14px;min-height:var(--toque)}
+.ed-sec>summary.ed-sec-cab::-webkit-details-marker{display:none}
+.ed-sec>summary.ed-sec-cab::marker{content:''}
+.ed-sec.ed-grupo{display:block;padding:0;gap:0}
 .mt-recolhido>summary::marker{content:''}
+.ed-sec-tit{font-size:var(--fs-sub);font-weight:600;color:var(--ink)}
+.ed-sec-tit::before{content:'▸';display:inline-block;width:1.1em;color:var(--ink3);transition:transform .12s}
+.ed-sec[open]>summary .ed-sec-tit::before{transform:rotate(90deg)}
+.tp-resumo-c{font-size:var(--fs-2nd);color:var(--ink2);min-width:0;overflow-wrap:anywhere}
+.ed-sec-corpo,.tp-corpo{padding:0 14px 14px;display:grid;gap:10px}
+.ed-sec .field{margin:0}
+.ed-outros{display:grid;gap:14px}
+.tp-busca input{width:100%;padding:8px 10px;min-height:40px;border:1px solid var(--line-forte);border-radius:var(--r);background:var(--surface);color:var(--ink);font:inherit}
+.tp-facet .tp-lista{max-height:min(46vh,360px);overflow:auto;border:1px solid var(--line2);border-radius:var(--r);padding:4px 6px;display:block;overscroll-behavior:contain}
+.tp-facet .tp-op{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-tab);min-height:34px}
+.tp-facet .tp-op:hover{background:var(--hover)}
+.tp-facet .tp-op:has(input:checked){background:var(--sel);color:var(--sel-ink);font-weight:600}
+.tp-facet .tp-op input{width:18px;height:18px;flex:none;margin:0}
+.tp-gr-cab{display:flex;align-items:center;gap:2px}
+.tp-gr-cab .tp-op{flex:1;min-width:0;font-weight:600}
+.tp-gr-n{font-size:var(--fs-xs);color:var(--ink3);font-variant-numeric:tabular-nums;padding-right:6px;white-space:nowrap}
+.tp-exp{flex:none;width:32px;height:32px;border:0;background:none;border-radius:var(--r-sm);color:var(--ink2);cursor:pointer;display:grid;place-items:center}
+.tp-exp:hover{background:var(--hover)}
+.tp-exp span{display:inline-block;transition:transform .12s}
+.tp-exp[aria-expanded="true"] span{transform:rotate(90deg)}
+.tp-filhos{padding-left:34px}
+.tp-sem{margin:0}
+.ed-check{display:flex;align-items:center;gap:8px}
+.ed-fixo{margin:0}
+.ed-rodape{position:sticky;bottom:0;z-index:5;display:flex;justify-content:flex-end;gap:10px;background:var(--surface);border-top:1px solid var(--line);margin:0 -20px -16px;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px))}
+.ed-rodape .btn{min-height:var(--toque);padding-left:18px;padding-right:18px;font-size:var(--fs-body)}
+.ed-rodape .btn.pri[aria-busy="true"]{cursor:progress;opacity:.85}
+.drawer-ed #d-erro:empty{display:none}
+@media (prefers-reduced-motion:reduce){.ed-sec-tit::before,.tp-exp span{transition:none}}
 </style>
 </head>
 <body>
@@ -3213,7 +3254,7 @@ const AJUDA_PAGINAS={
  direitos:{v:1,serve:'Registrar se a família ou o titular autorizou a CAMP a publicar o fundo, e em que condições.',passos:['Escolha a situação (autorizado, restrito, em negociação…).','Se autorizado, anexe o termo assinado (PDF) ou informe o documento.','Escolha a resolução máxima das imagens no site e a licença.','Salve. Sem direitos autorizados, nada do fundo é publicado.'],cores:[],cuidados:'',quem:'Admin.'},
  novo_projeto:{v:1,serve:'Reservar o próximo número P de um fundo e criar o projeto com o nome e o que se sabe dele.',passos:['Escolha o fundo: o código mostra qual número P o projeto vai receber.','Escreva o nome como está nas folhas (ex.: Residência Tarumã). Ano e cidade só se estiverem escritos.','Se aparecer um projeto parecido, confira se não é o mesmo antes de criar outro.','Criar reserva o número para sempre: ele não volta, mesmo que o projeto seja apagado depois.'],cores:[],cuidados:'Para muitos projetos de uma vez, use no fundo Mais ⋯ → Importar inventário (planilha).',quem:'Admin.'},
  novo_fundo:{v:1,serve:'Reservar o próximo código de fundo (F0xx) para um arquiteto ou escritório que entrou no acervo.',passos:['Escreva o nome do fundo como o acervo é conhecido (ex.: Carlos Henrique Heck).','A sigla de 3 letras vai no nome dos arquivos e nas etiquetas: escolha com cuidado.','Depois de criar, registre a entrada do acervo e os direitos na página do fundo.'],cores:[],cuidados:'O código do fundo nunca muda e nunca é reaproveitado.',quem:'Admin.'},
- editar_projeto:{v:1,serve:'Corrigir os dados do projeto: nome, ano, cidade, cliente, programa.',passos:['Mude só o que tem certeza.','Ano desconhecido: deixe vazio (aparece "sem data").','Salve. Se o projeto já está no site, o painel atualiza a página.'],cores:[],cuidados:'',quem:'Operador e admin.'},
+ editar_projeto:{v:1,serve:'Corrigir os dados do projeto: nome, ano, cidade, cliente, programa / uso, natureza do trabalho, modalidade e situação da obra.',passos:['Mude só o que tem certeza.','Ano desconhecido: 0 (aparece "sem data").','Programa / uso é O QUE a obra é (residência, escola…); Natureza do trabalho é a INTERVENÇÃO (obra nova, reforma, restauro…). Use a busca de cada lista; as categorias abrem e fecham.','"Salvar alterações", no rodapé. Se o projeto já está no site, o painel atualiza a página. Se o servidor recusar, o motivo aparece no alto do painel e nada se perde.'],cores:[],cuidados:'',quem:'Operador e admin.'},
  editar_fundo:{v:1,serve:'Corrigir os dados do fundo: nome, sigla, período e descrição.',passos:['O código F0xx nunca muda.','A sigla vai no nome dos arquivos e nas etiquetas: mude só se ainda não há etiquetas impressas.','Salve. Se o fundo já está no site, o nome é atualizado lá.'],cores:[],cuidados:'',quem:'Admin.'},
  editar_folha:{v:1,serve:'Corrigir os dados de uma folha: título, tipo, escala, número da folha.',passos:['Compare com a imagem e mude só o que tem certeza.','Salve. Se a folha já está no site, o painel atualiza lá.'],cores:[],cuidados:'',quem:'Operador e admin.'},
  painel:{v:3,titulo:'Entenda esta página',serve:'O resumo do dia: o que precisa de você agora e se as máquinas estão funcionando.',
@@ -3348,7 +3389,7 @@ function guardarVistasLocal(){try{localStorage.setItem('camp.ajuda.vistas.'+((EU
 /* H1: "?" e caixa também nas janelas laterais (revisar folha, publicar, decisão, direitos, editar) */
 const DRAWER_AJUDA_DE={abrirRevisaoItem:'revisao',abrirPublicacaoGuiada:'publicar',abrirDecisao:'decisao',editarDireitos:'direitos',editarProjeto:'editar_projeto',editarFundo:'editar_fundo',editarItem:'editar_folha'};
 function ajudaNoDrawer(){const k=window.DRAWER_AJUDA;window.DRAWER_AJUDA=null;const b=document.getElementById('d-ajuda');if(!b)return;b.hidden=!k||!AJUDA_PAGINAS[k];b.dataset.k=k||'';
-  if(k&&AJUDA_PAGINAS[k]&&EU&&AJUDA_VISTAS!==null&&AJUDA_VISTAS['ajuda.'+k]!==String(AJUDA_PAGINAS[k].v))document.getElementById('d-body').insertAdjacentHTML('afterbegin',caixaAjudaHTML(k,false))}
+  if(k&&k!=='editar_projeto'&&AJUDA_PAGINAS[k]&&EU&&AJUDA_VISTAS!==null&&AJUDA_VISTAS['ajuda.'+k]!==String(AJUDA_PAGINAS[k].v))document.getElementById('d-body').insertAdjacentHTML('afterbegin',caixaAjudaHTML(k,false))}
 document.getElementById('d-ajuda').addEventListener('click',()=>{const k=document.getElementById('d-ajuda').dataset.k;if(!k)return;const atual=document.querySelector('#d-body > .ajuda-caixa');if(atual){atual.remove();return}document.getElementById('d-body').insertAdjacentHTML('afterbegin',caixaAjudaHTML(k,false));const h=document.querySelector('#d-body > .ajuda-caixa h2');if(h)h.focus()});
 Object.entries(DRAWER_AJUDA_DE).forEach(([fn,k])=>{const orig=window[fn];if(typeof orig!=='function')return;const w=function(...a){window.DRAWER_AJUDA=k;return orig.apply(this,a)};w.toString=()=>orig.toString();window[fn]=w});
 async function entendiAjuda(k){AJUDA_FORCADA.delete(k);AJUDA_VISTAS=AJUDA_VISTAS||{};AJUDA_VISTAS['ajuda.'+k]=String(AJUDA_PAGINAS[k].v);garantirCaixaAjuda();guardarVistasLocal();
@@ -6613,19 +6654,64 @@ async function registrarAutoria(code){
 let TIPO_VOC=null;
 async function vocTipologia(){if(!TIPO_VOC){try{TIPO_VOC=await API('/api/vocabulario/tipologia')}catch(_){TIPO_VOC={facetas:{},colunas:{}}}}return TIPO_VOC}
 function separarTermos(v){return String(v||'').split(';').map(x=>x.trim()).filter(Boolean)}
-async function tipologiaCamposHTML(p){const voc=await vocTipologia(),fac=voc.facetas||{};
-  return Object.entries(voc.colunas||{}).map(([col,ch])=>{const f=fac[ch];if(!f)return '';const atual=separarTermos(p[col]),tem=new Set(atual.map(x=>x.toLowerCase())),nomes=new Set();
-    const opc=(nome,grupo)=>{nomes.add(nome.toLowerCase());return `<label class="tp-op${grupo?' tp-grupo':''}"><input type="${f.multiplo?'checkbox':'radio'}" name="tp-${col}" value="${escHtml(nome)}"${tem.has(nome.toLowerCase())?' checked':''}> ${escHtml(nome)}</label>`};
-    const corpo=f.grupos.map(g=>g.filhos.length?`<fieldset class="tp-fs"><legend>${opc(g.nome,true)}</legend>${g.filhos.map(x=>opc(x.nome)).join('')}</fieldset>`:opc(g.nome)).join('');
-    const fora=atual.filter(x=>!nomes.has(x.toLowerCase()));
-    return `<details class="tp-facet field" data-tp-col="${col}"><summary>${escHtml(f.rotulo)}: <b class="tp-resumo">${escHtml(atual.join('; ')||'—')}</b></summary>${f.grupos.length>8?`<input type="search" class="tp-filtro" placeholder="filtrar a lista" aria-label="Filtrar ${escHtml(f.rotulo)}">`:''}${fora.length?`<p class="help tp-fora">Fora da lista do site (escolha um termo da lista para substituir): ${escHtml(fora.join('; '))}</p>`:''}<div class="tp-lista">${!f.multiplo?`<label class="tp-op"><input type="radio" name="tp-${col}" value=""${atual.length?'':' checked'}> — não informado</label>`:''}${corpo}</div><input type="hidden" id="ep-${col}" value="${escHtml(atual.join('; '))}" data-orig="${escHtml(p[col]||'')}">${f.origem==='copia'?'<small class="help">Lista copiada do site (o espelho ainda não tem os termos; sincronize para usar os do site).</small>':''}</details>`}).join('')}
+/* Redesenho da página do projeto §5 (04/11/2026): "Editar projeto" num painel lateral organizado — cabeçalho com o código, "Sobre a edição"
+   recolhível, "Informações públicas" num grupo, Programa / uso e Natureza do trabalho SEPARADOS (cada um com busca, categorias que abrem e
+   fecham e caixas de marcar; a lista é a taxonomia do site, /api/vocabulario/tipologia, e o tipo de seleção — várias ou uma — vem dela),
+   Modalidade e Situação da obra, "Só no painel" e o rodapé fixo Cancelar · Salvar alterações. Campos, regras e obrigatoriedade são os de
+   sempre (nenhum campo novo obrigatório; o servidor valida ano e título); salvar mostra "Salvando…", o erro fica no painel e ele não fecha. */
+function taxonomiaHTML(col,f,p){const atual=separarTermos(p[col]),tem=new Set(atual.map(x=>x.toLowerCase())),nomes=new Set(),tipo=f.multiplo?'checkbox':'radio',id=`tp-${col}`;
+  const opc=(nome,grupo)=>{nomes.add(nome.toLowerCase());return `<label class="tp-op${grupo?' tp-grupo':''}"><input type="${tipo}" name="tp-${col}" value="${escHtml(nome)}"${tem.has(nome.toLowerCase())?' checked':''}> <span>${escHtml(nome)}</span></label>`};
+  const grupos=f.grupos.map((g,i)=>{if(!g.filhos.length)return opc(g.nome);const marcados=g.filhos.filter(x=>tem.has(x.nome.toLowerCase())).length,aberto=marcados>0;
+    return `<div class="tp-gr" data-tp-gr><div class="tp-gr-cab"><button type="button" class="tp-exp" aria-expanded="${aberto}" aria-controls="${id}-g${i}" aria-label="${escHtml(`${aberto?'Recolher':'Abrir'} ${g.nome} (${g.filhos.length} termos)`)}"><span aria-hidden="true">▸</span></button>${opc(g.nome,true)}<small class="tp-gr-n">${marcados?`<b>${fmtN(marcados)}</b> de `:''}${fmtN(g.filhos.length)}</small></div><div class="tp-filhos" id="${id}-g${i}"${aberto?'':' hidden'}>${g.filhos.map(x=>opc(x.nome)).join('')}</div></div>`}).join('');
+  const fora=atual.filter(x=>!nomes.has(x.toLowerCase())),busca=f.grupos.length+f.grupos.reduce((s,g)=>s+g.filhos.length,0)>8;
+  return `<details class="tp-facet ed-sec" data-tp-col="${col}" open><summary class="ed-sec-cab"><span class="ed-sec-tit">${escHtml(f.rotulo)}</span><span class="tp-resumo-c">${f.multiplo?'':'(escolha um) '}<b class="tp-resumo">${escHtml(atual.join('; ')||'nada marcado')}</b></span></summary><div class="tp-corpo">`
+    +(fora.length?`<p class="help tp-fora">Fora da lista do site (escolha um termo da lista para substituir): ${escHtml(fora.join('; '))}</p>`:'')
+    +(busca?`<label class="tp-busca"><span class="sr">Buscar em ${escHtml(f.rotulo)}</span><input type="search" class="tp-filtro" data-sem-alteracao placeholder="Buscar em ${escHtml(f.rotulo.toLowerCase())}" autocomplete="off"></label><p class="help tp-sem" hidden role="status">Nenhum termo com essa busca.</p>`:'')
+    +`<div class="tp-lista" role="group" aria-label="${escHtml(f.rotulo)}">${!f.multiplo?`<label class="tp-op"><input type="radio" name="tp-${col}" value=""${atual.length?'':' checked'}> <span>— não informado</span></label>`:''}${grupos}</div>`
+    +`<input type="hidden" id="ep-${col}" value="${escHtml(atual.join('; '))}" data-orig="${escHtml(p[col]||'')}">${f.origem==='copia'?'<small class="help">Lista copiada do site (o espelho ainda não tem os termos; sincronize para usar os do site).</small>':''}</div></details>`}
+async function tipologiaCamposHTML(p,cols){const voc=await vocTipologia(),fac=voc.facetas||{};
+  return Object.entries(voc.colunas||{}).filter(([col])=>!cols||cols.includes(col)).map(([col,ch])=>fac[ch]?taxonomiaHTML(col,fac[ch],p):'').join('')}
 document.addEventListener('change',e=>{const det=e.target.closest&&e.target.closest('details.tp-facet');if(!det||!e.target.name||!e.target.name.startsWith('tp-'))return;const col=det.dataset.tpCol,v=[...det.querySelectorAll(`input[name="tp-${col}"]:checked`)].map(x=>x.value).filter(Boolean),h=document.getElementById('ep-'+col);
-  if(h){h.value=v.join('; ');h.dispatchEvent(new Event('input',{bubbles:true}))}det.querySelector('.tp-resumo').textContent=v.join('; ')||'—'});
-document.addEventListener('input',e=>{if(!e.target.classList||!e.target.classList.contains('tp-filtro'))return;const q=e.target.value.toLowerCase().trim(),det=e.target.closest('details');det.querySelectorAll('.tp-op').forEach(l=>{const fs=l.closest('.tp-fs');l.hidden=!!q&&!l.textContent.toLowerCase().includes(q)&&!(fs&&fs.querySelector('legend').textContent.toLowerCase().includes(q))})});
-async function editarProjeto(code){const d=await API(`/api/projetos/${code}/detalhe`);const p=d.projeto;openDrawer(`Editar ${code}`,code,`<div class="cfg"><div id="d-erro"></div><fieldset class="ed-grupo"><legend>Aparece na página pública</legend><label class="field">Nome do projeto<input id="ep-titulo" value="${escHtml(p.titulo||'')}"></label><div id="ep-parecidos" data-ep-proj="${escHtml(code)}"></div><div class="grid g2"><label class="field">Ano (0 = sem data)<input id="ep-ano" type="number" min="0" max="2100" value="${escHtml(p.ano)}"></label><label class="field">Ano final<input id="ep-ano_fim" type="number" min="0" max="2100" value="${escHtml(p.ano_fim||'')}"></label></div><label class="field">Cidade<input id="ep-cidade" list="dl-cidades" data-cidade autocomplete="off" value="${escHtml(p.cidade||'')}"><small class="help cid-sug" hidden></small></label><label class="field">Cliente (só se lido no documento)<input id="ep-cliente" value="${escHtml(p.cliente||'')}"></label>${await tipologiaCamposHTML(p)}<label class="field">Autoria do projeto<input id="ep-autoria" value="${escHtml(p.autoria||'')}" placeholder="vazio = o titular do fundo; vários autores separados por ;"><small class="help">Preencha quando o projeto é de outra pessoa ou de uma equipe (ex.: concurso, coautoria, consultoria).</small></label><label class="field">Papel do titular do fundo neste projeto<select id="ep-papel_no_projeto"><option value="">—</option>${Object.entries(PAPEL_PROJETO).concat(p.papel_no_projeto&&!PAPEL_PROJETO[p.papel_no_projeto]?[[p.papel_no_projeto,p.papel_no_projeto]]:[]).map(([v,t])=>`<option value="${escHtml(v)}"${p.papel_no_projeto===v?' selected':''}>${escHtml(t)}</option>`).join('')}</select></label><label class="field">Âmbito e conteúdo<textarea id="ep-ambito_conteudo" rows="3">${escHtml(p.ambito_conteudo||'')}</textarea></label></fieldset><fieldset class="ed-grupo"><legend>Só no painel</legend><label class="field">Endereço da obra<input id="ep-endereco_obra" value="${escHtml(p.endereco_obra||'')}"></label><label class="field">Contagem física esperada<input id="ep-contagem_esperada" type="number" value="${escHtml(p.contagem_esperada||'')}"></label><label class="field"><span><input type="checkbox" id="ep-lote_teste" ${p.lote_teste?'checked':''}> Lote de teste (fora do inventário)</span></label></fieldset><div class="act"><button class="btn pri" onclick="salvarProjeto('${code}')">Salvar</button><button class="btn" onclick="closeDrawer()">Cancelar</button></div><small style="color:var(--ink3)">Código e fundo não são editáveis.</small></div>`);document.getElementById('d-open').style.display='none'}
-async function salvarProjeto(code){if(!validarCampos(document.getElementById('drawer')))return;const b={};for(const k of ['natureza','modalidade','situacao_obra']){const el=document.getElementById('ep-'+k);if(el&&el.value!==(el.dataset.orig||''))b[k]=el.value}   /* B3: só manda faceta que mudou (vazio limpa) */
+  if(h){h.value=v.join('; ');h.dispatchEvent(new Event('input',{bubbles:true}))}det.querySelector('.tp-resumo').textContent=v.join('; ')||'nada marcado';
+  det.querySelectorAll('[data-tp-gr]').forEach(g=>{const n=g.querySelectorAll('.tp-filhos input:checked').length,t=g.querySelectorAll('.tp-filhos input').length,s=g.querySelector('.tp-gr-n');if(s)s.innerHTML=(n?`<b>${fmtN(n)}</b> de `:'')+fmtN(t)})});
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.tp-exp');if(!b)return;e.preventDefault();const g=b.closest('[data-tp-gr]'),l=g&&g.querySelector('.tp-filhos');if(!l)return;const abre=l.hidden;l.hidden=!abre;b.setAttribute('aria-expanded',String(abre));
+  const nome=(g.querySelector('.tp-grupo span')||{}).textContent||'';b.setAttribute('aria-label',`${abre?'Recolher':'Abrir'} ${nome} (${l.querySelectorAll('.tp-op').length} termos)`)});
+document.addEventListener('input',e=>{if(!e.target.classList||!e.target.classList.contains('tp-filtro'))return;const q=LST.normal(e.target.value).trim(),det=e.target.closest('details');let n=0;
+  det.querySelectorAll('.tp-lista>.tp-op').forEach(l=>{const ok=!q||LST.normal(l.textContent).includes(q);l.hidden=!ok;if(ok)n++});
+  det.querySelectorAll('[data-tp-gr]').forEach(g=>{const casaGrupo=!!q&&LST.normal((g.querySelector('.tp-grupo')||{}).textContent||'').includes(q),fs=[...g.querySelectorAll('.tp-filhos .tp-op')];let k=0;
+    fs.forEach(l=>{const ok=!q||casaGrupo||LST.normal(l.textContent).includes(q);l.hidden=!ok;if(ok)k++});g.hidden=!!q&&!k&&!casaGrupo;if(!g.hidden)n++;
+    const l=g.querySelector('.tp-filhos'),b=g.querySelector('.tp-exp');if(q&&k&&l){l.hidden=false;if(b)b.setAttribute('aria-expanded','true')}
+    else if(!q&&l&&b){const aberto=!!g.querySelector('.tp-filhos input:checked');l.hidden=!aberto;b.setAttribute('aria-expanded',String(aberto))}});
+  const s=det.querySelector('.tp-sem');if(s)s.hidden=n>0});
+function edSobreAberto(v){try{if(v!==undefined)localStorage.setItem('camp.edSobre',v?'1':'0');return localStorage.getItem('camp.edSobre')!=='0'}catch(_){return true}}
+document.addEventListener('toggle',e=>{const d=e.target;if(d&&d.classList&&d.classList.contains('ed-sobre'))edSobreAberto(d.open)},true);
+async function editarProjeto(code){let d;try{d=await API(`/api/projetos/${code}/detalhe`)}catch(e){toast(e.message);return}const p=d.projeto,C=escHtml(code),tax=await tipologiaCamposHTML(p,['tipologia']),nat=await tipologiaCamposHTML(p,['natureza']),outros=await tipologiaCamposHTML(p,['modalidade','situacao_obra']);
+  if(!openDrawer('Editar projeto',code,`<form class="cfg ed-form" id="ed-form" data-ep-proj="${C}" onsubmit="return false"><div id="d-erro"></div>
+    <details class="ed-sobre"${edSobreAberto()?' open':''}><summary><span aria-hidden="true">ⓘ</span> Sobre a edição</summary><p>As mudanças atualizam os dados cadastrais deste projeto no painel. O que está em "Informações públicas", Programa / uso, Natureza do trabalho, Modalidade e Situação da obra também vai para a página pública (se o projeto já tem página). Mude só o que tem certeza; ano desconhecido: 0 (aparece "sem data"). O código e o fundo não mudam aqui.</p></details>
+    <details class="ed-sec ed-grupo" open><summary class="ed-sec-cab"><span class="ed-sec-tit">Informações públicas</span></summary><div class="ed-sec-corpo">
+      <label class="field">Nome do projeto<input id="ep-titulo" value="${escHtml(p.titulo||'')}" autocomplete="off"></label><div id="ep-parecidos" data-ep-proj="${C}"></div>
+      <div class="grid g2"><label class="field">Ano<input id="ep-ano" type="number" min="0" max="2100" inputmode="numeric" value="${escHtml(p.ano)}" aria-describedby="ep-ano-ajuda"><small class="help" id="ep-ano-ajuda">0 = sem data</small></label><label class="field">Ano final<input id="ep-ano_fim" type="number" min="0" max="2100" inputmode="numeric" value="${escHtml(p.ano_fim||'')}" aria-describedby="ep-anofim-ajuda"><small class="help" id="ep-anofim-ajuda">só se a obra durou mais de um ano</small></label></div>
+      <label class="field">Cidade<input id="ep-cidade" list="dl-cidades" data-cidade autocomplete="off" value="${escHtml(p.cidade||'')}"><small class="help cid-sug" hidden></small></label>
+      <label class="field">Cliente<input id="ep-cliente" value="${escHtml(p.cliente||'')}" aria-describedby="ep-cliente-ajuda"><small class="help" id="ep-cliente-ajuda">Só se estiver escrito num documento (carimbo, contrato, memorial). Não deduza.</small></label>
+      <label class="field">Autoria do projeto<input id="ep-autoria" value="${escHtml(p.autoria||'')}" placeholder="vazio = o titular do fundo; vários autores separados por ;" aria-describedby="ep-autoria-ajuda"><small class="help" id="ep-autoria-ajuda">Preencha quando o projeto é de outra pessoa ou de uma equipe (ex.: concurso, coautoria, consultoria).</small></label>
+      <label class="field">Papel do titular do fundo neste projeto<select id="ep-papel_no_projeto"><option value="">—</option>${Object.entries(PAPEL_PROJETO).concat(p.papel_no_projeto&&!PAPEL_PROJETO[p.papel_no_projeto]?[[p.papel_no_projeto,p.papel_no_projeto]]:[]).map(([v,t])=>`<option value="${escHtml(v)}"${p.papel_no_projeto===v?' selected':''}>${escHtml(t)}</option>`).join('')}</select></label>
+      <label class="field">Âmbito e conteúdo<textarea id="ep-ambito_conteudo" rows="3">${escHtml(p.ambito_conteudo||'')}</textarea></label></div></details>
+    ${tax}${nat}${outros?`<div class="ed-outros">${outros}</div>`:''}
+    <details class="ed-sec ed-grupo"><summary class="ed-sec-cab"><span class="ed-sec-tit">Só no painel</span><span class="tp-resumo-c">não vai ao site</span></summary><div class="ed-sec-corpo">
+      <label class="field">Endereço da obra<input id="ep-endereco_obra" value="${escHtml(p.endereco_obra||'')}"></label>
+      <label class="field">Contagem física esperada<input id="ep-contagem_esperada" type="number" min="0" inputmode="numeric" value="${escHtml(p.contagem_esperada||'')}"></label>
+      <label class="field ed-check"><input type="checkbox" id="ep-lote_teste" ${p.lote_teste?'checked':''}> <span>Lote de teste (fora do inventário)</span></label></div></details>
+    <p class="help ed-fixo">Código <span class="code">${C}</span> e fundo <span class="code">${escHtml(p.fundo_codigo)}</span> não são editáveis.</p>
+    <div class="ed-rodape" role="group" aria-label="Salvar a edição"><button class="btn" type="button" data-ed-cancelar>Cancelar</button><button class="btn pri" type="button" data-ed-salvar="${C}">Salvar alterações</button></div></form>`))return;
+  mainEl.classList.add('drawer-ed');document.getElementById('d-open').style.display='none'}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-ed-cancelar],[data-ed-salvar]');if(!b)return;e.preventDefault();if(b.hasAttribute('data-ed-cancelar'))closeDrawer();else salvarProjeto(b.dataset.edSalvar,b)});
+async function salvarProjeto(code,botao){const dr=document.getElementById('drawer');
+  if(!validarCampos(dr)){const inv=dr.querySelector('.invalid,:invalid');const det=inv&&inv.closest('details');if(det)det.open=true;return}
+  const b={};for(const k of ['natureza','modalidade','situacao_obra']){const el=document.getElementById('ep-'+k);if(el&&el.value!==(el.dataset.orig||''))b[k]=el.value}   /* B3: só manda faceta que mudou (vazio limpa) */
   for(const k of ['titulo','ano','ano_fim','cidade','endereco_obra','cliente','tipologia','autoria','papel_no_projeto','ambito_conteudo','contagem_esperada']){const el=document.getElementById('ep-'+k);if(!el)continue;if(k==='tipologia'&&el.dataset.orig!==undefined){if(el.value!==(el.dataset.orig||''))b[k]=el.value;continue}let v=el.value;if(['ano','ano_fim','contagem_esperada'].includes(k))v=v===''?null:+v;else v=v===''?null:v;if(v!==null)b[k]=v}b.lote_teste=document.getElementById('ep-lote_teste').checked;
-  await salvarNoDrawer(async()=>{const r=await API('/api/projetos/'+code,{method:'PATCH',body:JSON.stringify(b)});const st=r.site;toast(r.campos.length?`Salvo: ${r.campos.map(rotulo).join(', ')}${st&&st.erro?' · a página pública NÃO recebeu (fica na lista do que falta enviar)':st&&(st.enviados||[]).length?' · página pública atualizada':''}`:'Nada mudou');limparAlteracoes('drawer');closeDrawer(true);showProjeto(code)})}
+  const bt=botao||document.querySelector('[data-ed-salvar]');if(bt){bt.dataset.rot=bt.dataset.rot||bt.textContent;bt.textContent='Salvando…'}
+  const r=await salvarNoDrawer(async()=>{const r=await API('/api/projetos/'+code,{method:'PATCH',body:JSON.stringify(b)});const st=r.site;toast(r.campos.length?`Salvo: ${r.campos.map(rotulo).join(', ')}${st&&st.erro?' · a página pública NÃO recebeu (fica na lista do que falta enviar)':st&&(st.enviados||[]).length?' · página pública atualizada':''}`:'Nada mudou');limparAlteracoes('drawer');closeDrawer(true);showProjeto(code);return r},bt);
+  if(!r&&bt&&bt.isConnected){bt.textContent=bt.dataset.rot||'Salvar alterações';const er=document.getElementById('d-erro');if(er&&er.scrollIntoView)er.scrollIntoView({block:'nearest'})}}
 let PUB_REFRESH=null;
 const PUB_EXPLICA={no_ar:'Publicado: qualquer visitante vê as páginas.',rascunho:'Rascunho: está no site, mas só a equipe vê.',fora_do_ar:'Despublicado: retirado do público de propósito (privado no site).',nao_publicado:'Não publicado: existe só no painel.'};
 const PUB_TAG={no_ar:'g',rascunho:'b',fora_do_ar:'r',nao_publicado:''};

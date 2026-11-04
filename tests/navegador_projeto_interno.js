@@ -210,6 +210,50 @@ const dialogo = pg => pg.evaluate(() => { const o = document.getElementById('con
     chk(await abriu(pg, D(9)), '§7.7 pelo teclado: Enter no número da folha abre a revisão');
     await pg.evaluate(() => closeDrawer(true));
 
+    // ---------- 8) Editar projeto ----------
+    await pg.click('#pd .pj-cab .act button:has-text("Editar")');
+    await pg.waitForSelector('#d-body [data-ed-salvar]', { timeout: 8000 });
+    const ed = await pg.evaluate(() => ({ titulo: document.getElementById('d-title').textContent, sub: document.getElementById('d-sub').textContent, nome: document.getElementById('ep-titulo').value, ano: document.getElementById('ep-ano').value, cidade: document.getElementById('ep-cidade').value,
+      secoes: [...document.querySelectorAll('#d-body details.tp-facet')].map(x => x.dataset.tpCol), pub: !!document.querySelector('#d-body details.ed-sec .ed-sec-tit'),
+      sobre: !!document.querySelector('#d-body .ed-sobre'), caixaGrande: !!document.querySelector('#d-body > .ajuda-caixa') }));
+    chk(ed.titulo === 'Editar projeto' && ed.sub === P && ed.nome === 'Edifício Página Interna' && ed.ano === '1974' && ed.cidade === 'Santos', '§5.2 "Editar projeto" com o código e os campos do projeto certo', JSON.stringify(ed));
+    chk(ed.secoes.join(',') === 'tipologia,natureza,modalidade,situacao_obra' && ed.sobre && !ed.caixaGrande, '§5.3–5.6 "Sobre a edição" (sem a caixa grande) e Programa / uso separado de Natureza do trabalho', JSON.stringify(ed));
+    const rodE = await pg.evaluate(() => { const r = document.querySelector('#d-body .ed-rodape').getBoundingClientRect(); return { b: r.bottom, vh: innerHeight }; });
+    chk(rodE.b <= rodE.vh + 1, '§5.7 "Salvar alterações" no rodapé, à vista sem rolar', JSON.stringify(rodE));
+    const voc = await pg.evaluate(() => fetch('/api/vocabulario/tipologia').then(r => r.json()));
+    const nTermos = voc.facetas.programa.grupos.reduce((s, g) => s + 1 + g.filhos.length, 0);
+    chk(await pg.evaluate(() => document.querySelectorAll('#d-body details[data-tp-col="tipologia"] .tp-op').length) === nTermos, `§5.5 Programa / uso usa a taxonomia real (${nTermos} termos de /api/vocabulario/tipologia)`);
+    chk(await pg.evaluate(() => [...document.querySelectorAll('#d-body details[data-tp-col="tipologia"] .tp-filhos')].every(x => x.hidden)), '§5.5 as categorias começam recolhidas (nada marcado)');
+    await pg.fill('#d-body details[data-tp-col="tipologia"] .tp-filtro', 'praia');
+    const busca = await pg.evaluate(() => { const d = document.querySelector('#d-body details[data-tp-col="tipologia"]'); return [...d.querySelectorAll('.tp-op')].filter(l => l.offsetParent && !l.closest('[hidden]')).map(l => l.textContent.trim()); });
+    chk(busca.includes('Casa de praia') && busca.length <= 4, '§5.5 busca na taxonomia ("praia" → Casa de praia, categoria aberta)', JSON.stringify(busca));
+    chk(!(await pg.evaluate(() => temAlteracoes('drawer'))), 'buscar na lista não conta como alteração');
+    await pg.click('#d-body details[data-tp-col="tipologia"] .tp-op:has-text("Casa de praia")');
+    await pg.fill('#d-body details[data-tp-col="tipologia"] .tp-filtro', '');
+    const exp = await pg.evaluate(() => { const g = [...document.querySelectorAll('#d-body details[data-tp-col="tipologia"] [data-tp-gr]')].find(x => /Habitação/.test(x.textContent)); const b = g.querySelector('.tp-exp'); return { aberto: !g.querySelector('.tp-filhos').hidden, aria: b.getAttribute('aria-expanded'), n: (g.querySelector('.tp-gr-n') || {}).textContent }; });
+    chk(exp.aberto && exp.aria === 'true' && /1 de/.test(exp.n), '§5.5 a categoria com termo marcado fica aberta e diz "1 de N"', JSON.stringify(exp));
+    await pg.click('#d-body details[data-tp-col="tipologia"] [data-tp-gr]:has-text("Habitação") .tp-exp');
+    chk(await pg.evaluate(() => { const g = [...document.querySelectorAll('#d-body details[data-tp-col="tipologia"] [data-tp-gr]')].find(x => /Habitação/.test(x.textContent)); return g.querySelector('.tp-filhos').hidden && g.querySelector('.tp-exp').getAttribute('aria-expanded') === 'false'; }), '§5.5 recolher a categoria (botão com aria-expanded)');
+    const natT = voc.facetas.natureza.grupos[1].nome;
+    await pg.click(`#d-body details[data-tp-col="natureza"] .tp-op:has-text("${natT}")`);
+    chk(await pg.evaluate(() => /Casa de praia/.test(document.getElementById('ep-tipologia').value) && document.getElementById('ep-natureza').value.length > 0), '§5.6 programa e natureza preenchem campos separados');
+    // Cancelar com alteração pergunta
+    await pg.click('#d-body [data-ed-cancelar]');
+    chk(await espera(async () => /Sair sem salvar/.test(await dialogo(pg))), '§5.7 Cancelar com alteração pergunta');
+    await pg.click('#conf-ov [data-conf="nao"]'); await pg.waitForTimeout(300);
+    // erro do servidor: não fecha, mostra o motivo e mantém o que foi digitado
+    await pg.fill('#ep-titulo', 'T100_Casa Verde');
+    await pg.click('#d-body [data-ed-salvar]');
+    chk(await espera(() => pg.evaluate(() => !!document.querySelector('#d-erro .estado-erro'))), '§5.7 erro do servidor aparece no painel');
+    chk(await pg.evaluate(() => mainEl.classList.contains('with-drawer') && /Casa de praia/.test(document.getElementById('ep-tipologia').value) && document.getElementById('ep-titulo').value === 'T100_Casa Verde' && !document.querySelector('[data-ed-salvar]').disabled && /Salvar alterações/.test(document.querySelector('[data-ed-salvar]').textContent)), '§5.7 com erro o painel NÃO fecha e nada do que foi digitado se perde');
+    chk(um('SELECT COALESCE(tipologia,\'\') FROM projeto WHERE codigo=?', P) === '', 'com erro nada foi gravado');
+    await pg.fill('#ep-titulo', 'Edifício Página Interna');
+    await pg.click('#d-body [data-ed-salvar]');
+    chk(await espera(() => /Casa de praia/.test(um('SELECT tipologia FROM projeto WHERE codigo=?', P)) && um('SELECT natureza FROM projeto WHERE codigo=?', P) === natT), '§5.7 "Salvar alterações" grava programa e natureza', JSON.stringify([um('SELECT tipologia FROM projeto WHERE codigo=?', P), um('SELECT natureza FROM projeto WHERE codigo=?', P)]));
+    chk(await espera(() => pg.evaluate(() => !mainEl.classList.contains('with-drawer'))), 'depois de salvar, o painel fecha');
+    await pg.evaluate(c => editarProjeto(c), P); await pg.waitForSelector('#d-body [data-ed-salvar]');
+    chk(await pg.evaluate(t => { const x = [...document.querySelectorAll('#d-body details[data-tp-col="tipologia"] input')].find(i => i.value === 'Casa de praia'), n = [...document.querySelectorAll('#d-body details[data-tp-col="natureza"] input')].find(i => i.value === t); return !!(x && x.checked && n && n.checked); }, natT), '§9 reabrir o formulário mostra o que foi salvo');
+    await pg.evaluate(() => closeDrawer(true));
     // 1920: a grade aparece na 1ª tela
     await pg.setViewportSize({ width: 1920, height: 1080 }); await abrirProjeto(pg, 'itens');
     chk(await pg.evaluate(() => { const t = document.querySelector('#pd .thumb'); return t && t.getBoundingClientRect().top < innerHeight; }), '§9 a galeria aparece na 1ª tela (1920×1080) sem percorrer cartões');
@@ -233,6 +277,9 @@ const dialogo = pg => pg.evaluate(() => { const o = document.getElementById('con
     await cel.pg.evaluate(c => abrirRevisaoItem(c), D(9)); await abriu(cel.pg, D(9));
     const dr = await cel.pg.evaluate(() => { const d = document.getElementById('drawer'); return { w: d.getBoundingClientRect().width, vw: innerWidth, lado: d.scrollWidth - d.clientWidth }; });
     chk(dr.w >= dr.vw - 1 && dr.lado <= 0, '§7.8 390 px: "Revisar folha" ocupa a largura toda, sem rolagem lateral', JSON.stringify(dr));
+    await cel.pg.evaluate(c => { closeDrawer(true); editarProjeto(c) }, P); await cel.pg.waitForSelector('#d-body [data-ed-salvar]');
+    const de = await cel.pg.evaluate(() => { const d = document.getElementById('drawer'), r = document.querySelector('[data-ed-salvar]').getBoundingClientRect(); return { w: d.getBoundingClientRect().width, vw: innerWidth, lado: d.scrollWidth - d.clientWidth, b: r.bottom, vh: innerHeight }; });
+    chk(de.w >= de.vw - 1 && de.lado <= 0 && de.b <= de.vh + 1, '§7.8 390 px: "Editar projeto" ocupa a largura toda, "Salvar alterações" à vista', JSON.stringify(de));
     await cel.ctx.close();
   } catch (e) { chk(false, 'o teste rodou até o fim', e.stack); }
   finally { await br.close(); }
