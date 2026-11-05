@@ -208,7 +208,7 @@ def estado_geral(con, *, qnap_montado: bool | None, site_http: dict | None, back
     elif rp.get("configurada"):
         partes.append({"id": "replica", "nivel": {"ok": "ok", "aviso": "atencao", "critico": "critico"}.get(rp.get("nivel")),
                        "texto": {"ok": "cópia do acervo em dia", "aviso": "cópia do acervo atrasada"}.get(rp.get("nivel"), "cópia do acervo parada")})
-    else:                                                # UX-02: sem réplica, as imagens têm uma cópia só: o topo fica vermelho
+    elif replica.avisar_sem_copia(con):                  # UX-02: sem réplica, as imagens têm uma cópia só: o topo fica vermelho (05/11: só se ligado)
         partes.append({"id": "replica", "nivel": "critico", "texto": "imagens com uma cópia só"})
     if backup is not None:                               # a mesma regra do alerta "Cópia de segurança atrasada" (alertas.avaliar)
         if not backup.get("existe"):

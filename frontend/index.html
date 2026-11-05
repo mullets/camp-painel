@@ -7277,7 +7277,7 @@ function iniSaudeLinhas(e,qi,p){const L=[],admin=EU&&['admin','master'].includes
   // cópias das imagens (réplica, UX-02): nunca "em dia" sem a data da última cópia certa
   const rp=PAINEL_REP,dt=rp&&((rp.ultima_valida&&rp.ultima_valida.gravado_em)||rp.gravado_em);
   if(!rp){if(admin)add('replica','Cópias das imagens','c','Não consegui medir as cópias das imagens agora.','',null)}
-  else if(!rp.configurada){if(admin)add('replica','Cópias das imagens','r','Suas imagens têm só uma cópia: as digitalizações estão só no QNAP. Veja Preservação em Máquinas.',rp.texto||'',null)}
+  else if(!rp.configurada){if(admin&&rp.avisar_sem_copia)add('replica','Cópias das imagens','r','Suas imagens têm só uma cópia: as digitalizações estão só no QNAP. Veja Preservação em Máquinas.',rp.texto||'',null)}   /* 05/11: só com replica.avisar_sem_copia=1 */
   else if(!rp.nivel)add('replica','Cópias das imagens','c','Cópia do acervo sem medida agora.'+(dt?` Última cópia certa: ${iniQuando(dt)}.`:''),rp.texto||'',null);
   else if(rp.nivel==='ok'&&!dt)add('replica','Cópias das imagens','c','Não sei quando foi a última cópia certa: sem essa data, não dá para dizer que está em dia.',rp.texto||'',null);
   else add('replica','Cópias das imagens',cor(parte('replica'),rp.nivel==='critico'?'r':rp.nivel==='aviso'?'a':'g'),`${rp.nivel==='critico'?'A cópia do acervo parou.':rp.nivel==='aviso'?'Cópia do acervo atrasada.':'Cópia do acervo em dia.'} Última cópia certa: ${dt?iniQuando(dt):'nenhuma registrada'}.`,rp.nivel==='ok'?'':rp.texto||'',null);
