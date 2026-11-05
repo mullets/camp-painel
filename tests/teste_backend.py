@@ -13534,7 +13534,15 @@ def filho(modo):
         est = x.get("/api/estacoes?fresco=1").json(); pv = est.get("preservacao") or {}
         ver("sem réplica: Preservação VERMELHA, 'Suas imagens têm só uma cópia'", pv.get("nivel") == "critico" and pv.get("titulo") == "Suas imagens têm só uma cópia" and "replica.raiz" in (pv.get("texto") or ""), str(pv)[:240])
         partes = {p_["id"]: p_ for p_ in (est.get("estado_geral") or {}).get("partes", [])}
-        ver("sem réplica: o topo fica vermelho (crítico), mesmo com o resto ok", (est.get("estado_geral") or {}).get("nivel") == "critico" and (partes.get("replica") or {}).get("nivel") == "critico", str(est.get("estado_geral"))[:300])
+        # 05/11 (Rafael: "tire essa mensagem de imagens com uma cópia só"): por padrão o topo e o painel inicial não avisam; Preservação continua
+        ver("05/11: sem réplica e com o padrão (replica.avisar_sem_copia=0), o topo NÃO mostra 'imagens com uma cópia só'",
+            "replica" not in partes and (est.get("estado_geral") or {}).get("nivel") != "critico", str(est.get("estado_geral"))[:300])
+        rp0 = x.get("/api/replica").json()
+        ver("05/11: /api/replica diz que não é para avisar (a lista 'Está tudo funcionando?' esconde a linha)", rp0.get("avisar_sem_copia") is False, str(rp0)[:200])
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='replica.avisar_sem_copia'"); c.commit()
+        est = x.get("/api/estacoes?fresco=1").json()
+        partes = {p_["id"]: p_ for p_ in (est.get("estado_geral") or {}).get("partes", [])}
+        ver("sem réplica e com o aviso ligado (=1): o topo fica vermelho (crítico), mesmo com o resto ok", (est.get("estado_geral") or {}).get("nivel") == "critico" and (partes.get("replica") or {}).get("nivel") == "critico", str(est.get("estado_geral"))[:300])
         ver("sem réplica: nenhum e-mail de 'Cópia do acervo parada' (não medido, com o motivo)", (alertas.avaliar(c, estado_backup=lambda: {"existe": False}).get("replica") or {}).get("nivel") == "nao_medido")
         import shutil as _shu                                   # 03/11: o disco do destino é SIMULADO (50% livre); antes media o disco real da
         _shu.disk_usage = lambda p_: _shu._ntuple_diskusage(1000 * 2**30, 500 * 2**30, 500 * 2**30)   # máquina e falhava com pouco espaço livre

@@ -15,6 +15,15 @@ def estado(con, agora: datetime | None = None) -> dict:
     return estado_de((r[0] if r else "") or "", agora)
 
 
+def avisar_sem_copia(con) -> bool:
+    """05/11 (Rafael): sem réplica configurada, só avisa "imagens com uma cópia só" com replica.avisar_sem_copia=1 (padrão 0, migração 217)."""
+    try:
+        r = con.execute("SELECT valor FROM configuracao WHERE chave='replica.avisar_sem_copia'").fetchone()
+    except Exception:  # noqa: BLE001  (banco sem a migração 217: não avisa)
+        return False
+    return bool(r) and str(r[0]).strip() == "1"
+
+
 def estado_de(raiz: str, agora: datetime | None = None) -> dict:
     """A mesma regra, a partir do caminho (sem banco): a tela Máquinas a roda como sonda em segundo plano (lê arquivo no QNAP)."""
     if not raiz.strip():
