@@ -12748,8 +12748,10 @@ def filho(modo):
         ver("tela: não devolve a chave da conta de serviço", "PRIVATE KEY" not in a.text and "private_key" not in a.text)
         ver("tela: período inválido = 400", op.get("/api/visitas?periodo=xx").status_code == 400 and op.get("/api/visitas?periodo=livre&de=ontem&ate=hoje").status_code == 400)
         ver("buscar agora e diagnóstico só para admin", op.post("/api/visitas/coletar").status_code == 403 and op.get("/api/visitas/diagnostico").status_code == 403)
-        agora = datetime(2026, 11, 5, 7, 0)
-        ver("coleta automática: depois da hora do dia, se ainda não houve hoje", visitas.precisa_coletar(c, agora) and not visitas.precisa_coletar(c, datetime(2026, 11, 5, 5, 0))
+        # 05/11/2026: a data fixa era a do dia real em que o teste rodou, e as coletas acima ficam com a data real: "já houve hoje" e o teste falhava.
+        # Um dia que nunca é hoje (o mesmo teste, sem depender do relógio).
+        agora = datetime(2001, 1, 15, 7, 0)
+        ver("coleta automática: depois da hora do dia, se ainda não houve hoje", visitas.precisa_coletar(c, agora) and not visitas.precisa_coletar(c, datetime(2001, 1, 15, 5, 0))
             and not visitas.precisa_coletar(c, datetime.now().replace(hour=23)))
         c.close()
         print("\n".join(res))
