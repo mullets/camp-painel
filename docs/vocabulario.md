@@ -500,7 +500,9 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
   **Mover para antes** / **Mover para depois**. Ao soltar: "**Ordem salva**" com **Desfazer** ("Ordem desfeita"); erro: "A ordem não foi
   salva: … As folhas voltaram para onde estavam."; nas pontas: "Esta já é a primeira/última folha da série.". Nunca dizer "renumerar" nem
   "mudar o código": a ordem é só a posição na tela; o código D não muda. Histórico: "ordem das folhas mudada" ("N folhas mudaram de lugar
-  (os códigos não mudam)") e "folhas de volta à ordem do código".
+  (os códigos não mudam)") e "folhas de volta à ordem do código". No site (contrato 1.8), a ordem vale na página do projeto
+  (e no anterior/próxima da folha): Histórico "ordem das folhas enviada ao site"; se o site recusar, fica a pendência "A ordem das
+  folhas escolhida no painel ainda não chegou ao site" (ou "O site ainda não tem a rota da ordem das folhas…: atualize o site").
 - **Revisar folha** (painel ao lado): **Folha NN** + selo + "por Nome" · código · projeto; **‹ Anterior** · "**N de M** · X conferidas" ·
   **Próxima ›**. Avisos em grupos: **Impede publicar** ("resolva antes de publicar") e **Aviso do CAMP Vision** ("confira; não impede
   publicar"); sem nada: "Nada apontado.". Barra: **Girar à esquerda**, **Girar 90°**, **Girar 180°**, **Espelhar**, **Recortar e alinhar**,
