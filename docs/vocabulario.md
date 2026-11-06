@@ -493,6 +493,14 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
 - **Cartão da folha**: **Folha NN** (ou o número D quando a folha não tem nº), o tipo, o selo `a conferir` / `conferida` / `corrigida` /
   `retida` (com ícone; "conferida" só com a revisão gravada) e o menu ⋯ (**Revisar folha**, **Abrir a página da folha**, **Relatar
   problema**). Filtros: os de sempre + **Tipo** ("Todos os tipos"); **Grade** / **Lista**.
+- **Ordem das folhas** (06/11/2026, "organizar as fotos arrastando"): o select **Ordem** tem **código** · **nº de folha** · **tipo** ·
+  **definida à mão**. Na "definida à mão" (operador e admin, sem filtro): a alça ⠿ ("Mudar a ordem: Folha NN. Setas movem para antes ou
+  depois; ou arraste"), a dica "Arraste as folhas para mudar a ordem (ou use as setas na alça ⠿)." e, com ordem gravada, **Voltar à ordem
+  do código** (pergunta "Voltar à ordem do código?"). Com filtro: "Para mudar a ordem, mostre **Todas** (sem filtro)." No ⋯ da folha:
+  **Mover para antes** / **Mover para depois**. Ao soltar: "**Ordem salva**" com **Desfazer** ("Ordem desfeita"); erro: "A ordem não foi
+  salva: … As folhas voltaram para onde estavam."; nas pontas: "Esta já é a primeira/última folha da série.". Nunca dizer "renumerar" nem
+  "mudar o código": a ordem é só a posição na tela; o código D não muda. Histórico: "ordem das folhas mudada" ("N folhas mudaram de lugar
+  (os códigos não mudam)") e "folhas de volta à ordem do código".
 - **Revisar folha** (painel ao lado): **Folha NN** + selo + "por Nome" · código · projeto; **‹ Anterior** · "**N de M** · X conferidas" ·
   **Próxima ›**. Avisos em grupos: **Impede publicar** ("resolva antes de publicar") e **Aviso do CAMP Vision** ("confira; não impede
   publicar"); sem nada: "Nada apontado.". Barra: **Girar à esquerda**, **Girar 90°**, **Girar 180°**, **Espelhar**, **Recortar e alinhar**,

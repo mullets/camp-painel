@@ -208,7 +208,7 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None,
         if tinha_site:      # CAMP-014: a folha tinha registro no site: o endereço antigo precisa redirecionar para o novo
             from . import redir_site
             redir_site.registrar(con, c, novo, "item", motivo or "folha movida", ator)
-        con.execute("""UPDATE item SET codigo=?, projeto_codigo=?, sequencial=?, codigo_anterior=?,
+        con.execute("""UPDATE item SET codigo=?, projeto_codigo=?, sequencial=?, codigo_anterior=?, ordem_manual=NULL,
                        tainacan_item_id=NULL, status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
                        atualizado_em=datetime('now') WHERE codigo=?""", (novo, destino, seq, c, c))
         lote_antigo = it["lote_id"] if soltar_lote and it["lote_id"] and con.execute(
