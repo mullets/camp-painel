@@ -23,6 +23,7 @@ MODOS_RAPIDOS |= {"dup_formatos"}   # CAMP-DUP-FORMATOS: limpeza das folhas repe
 MODOS_RAPIDOS |= {"dup_formatos_regra"}   # CAMP-DUP-FORMATOS 2ª rodada: só junta pastas de formato diferentes; --despublicar + 301 (linha própria)
 MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no projeto (item.ordem_manual; linha própria)
+MODOS_RAPIDOS |= {"ordem_folhas_site"}   # a ordem das folhas escolhida no painel vai ao site (contrato 1.8; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -15772,6 +15773,97 @@ def filho(modo):
         ver("limpar de novo (nada a limpar) não grava evento repetido", op.delete(URL).json().get("limpas") == 0)
         ver("a outra folha (outro projeto) nunca ganhou posição", (connect().execute("SELECT ordem_manual FROM item WHERE codigo=?", (OUTRA,)).fetchone()[0]) is None)
         for l in res: print(l)
+    elif modo == "ordem_folhas_site":
+        # 06/11 ("sim! mas lá é caso não tenha a ordem seguir como segue hoje"): a ordem das folhas escolhida no painel vai ao site
+        # (contrato 1.8, POST camp/v1/painel/ordem-folhas). Só as folhas que já estão no site; limpar manda "__limpar__"; publicar uma folha
+        # leva a posição só quando ela tem uma; site antigo (404 rest_no_route) não quebra nada e a pendência espera o site.
+        init_db(); _aplicar_migracoes_real()
+        import json
+        from app import auth, publicador as pub, reenvio_pendencias as rp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F089','Fundo Ordem Site','OST',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F089',1),('F089',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F089-P0001','F089',1,'Casa Ordem',1990,9000),('F089-P0002','F089',2,'Sem ordem',1991,9500)")
+        P = "F089-P0001"; D = [f"{P}-1990-S03-D{q:05d}" for q in range(1, 5)]
+        for q, cod in enumerate(D, 1):
+            no_site = q <= 3                                      # D1, D2, D3 já no site; D4 ainda não
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,tainacan_item_id,status_site) VALUES (?,?,'S03',?,?,'campvision',?,?)",
+                      (cod, P, q, f"Foto {q}", 9100 + q if no_site else None, "no_ar" if no_site else "nao_publicado"))
+        D_OUTRO = "F089-P0002-1991-S03-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,'F089-P0002','S03',1,'Foto sem ordem','campvision')", (D_OUTRO,))
+        c.commit(); c.close()
+        chamadas, site = [], {"rota": True}
+        class WPOrdem:
+            n = 9200
+            def __init__(self, *a, **k): pass
+            def gravar_ordem_folhas(self, projeto_id, ordem):
+                if not site["rota"]:
+                    return None                                   # site antigo: 404 rest_no_route
+                chamadas.append((projeto_id, dict(ordem)))
+                return {"ok": True, "gravados": [int(k) for k, v in ordem.items() if v != "__limpar__"], "limpos": [int(k) for k, v in ordem.items() if v == "__limpar__"], "erros": []}
+            def criar_item(self, cid, titulo, status="draft", descricao=""):
+                WPOrdem.n += 1; return {"id": WPOrdem.n, "slug": "x", "url": "u"}
+            def definir_metadado(self, *a): pass
+            def patch_item(self, *a, **k): pass
+            def gravar_metadados_lote(self, *a): return None
+        pub.WP = WPOrdem
+        pub.item_existente_no_site = lambda *a, **k: None
+        pub.item_orfao_no_site = lambda *a, **k: None
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        URL = f"/api/projetos/{P}/ordem-folhas"
+        pend = lambda: connect().execute("SELECT valor_painel FROM divergencia_site WHERE entidade='projeto' AND codigo=? AND campo='pendente_ordem_folhas_no_site' AND resolvida=0", (P,)).fetchone()
+        r = op.put(URL, json={"ordem": [D[2], D[0], D[3], D[1]]})
+        ver("gravar a ordem: 200 e avisa que vai ao site", r.status_code == 200 and r.json().get("vai_ao_site") is True, r.text[:200])
+        ver("o site recebe UMA chamada com o dossiê e só as folhas que já estão no site (D4 não), com a posição do painel",
+            chamadas == [(9000, {"9103": 0, "9101": 1, "9102": 3})], str(chamadas))
+        ver("site confirmou: sem pendência e com evento no histórico do projeto", pend() is None
+            and connect().execute("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='site_ordem_folhas'", (P,)).fetchone()[0] == 1)
+        chamadas.clear()
+        r = op.put(URL, json={"ordem": [D[2], D[0], D[3], D[1]]})
+        ver("gravar a mesma ordem de novo não manda nada ao site", r.status_code == 200 and chamadas == [], str(chamadas))
+        r = op.delete(URL)
+        ver("voltar à ordem do código: o site recebe \"__limpar__\" em todas as folhas que estão lá",
+            r.status_code == 200 and chamadas == [(9000, {"9101": "__limpar__", "9102": "__limpar__", "9103": "__limpar__"})] and pend() is None, str(chamadas))
+        chamadas.clear()
+        ver("limpar de novo (nada a limpar) não manda nada", op.delete(URL).status_code == 200 and chamadas == [])
+        # site antigo: a ordem é gravada no painel, nada quebra, a pendência espera; quando o site tiver a rota, o reenvio manda
+        site["rota"] = False
+        r = op.put(URL, json={"ordem": [D[1], D[0]]})
+        ver("site antigo (sem a rota): a ordem fica gravada no painel (200) e nada vai", r.status_code == 200
+            and [x[0] for x in connect().execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY ordem_manual", (P,))][:2] == [D[1], D[0]] and chamadas == [])
+        p_ = pend()
+        ver("site antigo: fica a pendência do projeto dizendo para atualizar o site", p_ is not None and "atualize o site" in (p_[0] or ""), str(p_ and p_[0]))
+        site["rota"] = True
+        rr = rp.rodada(10, 30.0, "teste")
+        ver("site atualizado: a rodada de reenvio manda a ordem de agora e fecha a pendência",
+            chamadas == [(9000, {"9102": 0, "9101": 1, "9103": 2})] and pend() is None and any("F089-P0001" in x for x in rr["enviadas"]), f"{chamadas} {rr}")
+        chamadas.clear()
+        # publicar uma folha: com posição, a posição vai junto; sem posição, nada (como antes)
+        r1 = pub.criar_folha_no_site(D[3], "t", enviar_imagem=False)
+        ver("publicar folha COM posição: a posição dela vai junto (só ela)", r1.get("item_id") and chamadas == [(9000, {str(r1["item_id"]): 3})] and r1.get("ordem_no_projeto") == 3, f"{r1} {chamadas}")
+        chamadas.clear()
+        r2 = pub.criar_folha_no_site(D_OUTRO, "t", enviar_imagem=False)
+        ver("publicar folha SEM posição (projeto sem ordem): nenhuma chamada de ordem", r2.get("item_id") and not r2.get("erro") and chamadas == [] and "ordem_no_projeto" not in r2, f"{r2} {chamadas}")
+        k = connect(); k.execute("UPDATE item SET ordem_manual=0 WHERE codigo=?", (D_OUTRO,)); k.execute("UPDATE item SET tainacan_item_id=NULL, status_site='nao_publicado' WHERE codigo=?", (D_OUTRO,)); k.commit(); k.close()
+        site["rota"] = False
+        r3 = pub.criar_folha_no_site(D_OUTRO, "t", enviar_imagem=False)
+        ver("site antigo ao publicar folha com posição: a folha sobe mesmo assim e a pendência do projeto fica",
+            r3.get("item_id") and not r3.get("erro") and connect().execute("SELECT 1 FROM divergencia_site WHERE codigo='F089-P0002' AND campo='pendente_ordem_folhas_no_site' AND resolvida=0").fetchone() is not None, str(r3))
+        site["rota"] = True
+        # "enviar correções sozinho" desligado: a pendência fica para o botão de reenvio; nada sai na hora
+        k = connect(); k.execute("INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('site.enviar_correcoes_sozinho','0')"); k.commit(); k.close()
+        chamadas.clear()
+        r = op.put(URL, json={"ordem": [D[0], D[1]]})
+        ver("envio automático desligado: grava, deixa a pendência e não chama o site", r.status_code == 200 and chamadas == [] and pend() is not None, str(chamadas))
+        # projeto sem nenhuma folha no site: nada a mandar, sem pendência
+        k = connect(); k.execute("UPDATE item SET tainacan_item_id=NULL, status_site='nao_publicado' WHERE projeto_codigo=?", (P,)); k.execute("UPDATE divergencia_site SET resolvida=1 WHERE codigo=?", (P,)); k.commit(); k.close()
+        r = op.put(URL, json={"ordem": [D[3], D[2]]})
+        ver("projeto sem folha no site: a ordem fica só no painel, sem pendência", r.status_code == 200 and r.json().get("vai_ao_site") is False and pend() is None, r.text[:200])
+        for l in res: print(l)
 
     return 0
 
@@ -17619,6 +17711,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ordem das folhas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Ordem das folhas no site (contrato 1.8): só as folhas no site, limpar manda __limpar__, publicar leva a posição só quando há, site antigo não quebra")
+rc, out = rodar("ordem_folhas_site", f"{tmp}/ordem_folhas_site.db")
+if rc != 0: ok(False, f"teste ordem_folhas_site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ordem das folhas no site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

@@ -8,11 +8,11 @@ import unicodedata
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, ordem_site
 from .db import connect
 
 router = APIRouter(prefix="/api", tags=["projetos"])
@@ -594,7 +594,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     codigos_site = {x["codigo"] for x in itens_site}
     itens = itens_site + [x for x in itens_local if x["codigo"] not in codigos_site]
     # Ordem escolhida à mão (arrastar na grade): as folhas com posição primeiro, na posição; as outras depois, na ordem de antes (estável).
-    # Campo novo e opcional (ordem_manual, NULL = ordem do código); só vale para a tela, não vai ao site.
+    # Campo novo e opcional (ordem_manual, NULL = ordem do código). Vai ao site pelo ordem_site.py (contrato 1.8).
     if any(x.get("ordem_manual") is not None for x in itens):
         itens.sort(key=lambda x: (0, x["ordem_manual"]) if x.get("ordem_manual") is not None else (1, 0))
     from .rotas_revisao import _qnap_prontos_raiz, jpg_da_folha_no_qnap
@@ -845,9 +845,10 @@ def _ordem_atual(con, codigo: str) -> list[str]:
 
 
 @router.put("/projetos/{codigo}/ordem-folhas")
-def gravar_ordem_folhas(codigo: str, d: OrdemFolhas, u: dict = Depends(auth.exige("operador"))) -> dict:
+def gravar_ordem_folhas(codigo: str, d: OrdemFolhas, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
     """Grava a ordem escolhida à mão. `ordem` = códigos das folhas DESTE projeto, na ordem nova (sem repetir). As que não vierem na lista
-    ficam depois das listadas, na ordem em que já estavam. Folha de outro projeto (ou que não existe) recusa tudo: nada é gravado."""
+    ficam depois das listadas, na ordem em que já estavam. Folha de outro projeto (ou que não existe) recusa tudo: nada é gravado.
+    Contrato 1.8: com folhas já no site, a ordem nova vai ao site em segundo plano (ordem_site; pendência no mesmo commit)."""
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
@@ -871,15 +872,19 @@ def gravar_ordem_folhas(codigo: str, d: OrdemFolhas, u: dict = Depends(auth.exig
         if mudou or not tinha:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'ordem_folhas',?,?)",
                         (codigo, u["email"], json.dumps({"antes": antes, "depois": nova, "mudaram_de_lugar": mudou, "tinha_ordem": bool(tinha)}, ensure_ascii=False)))
+        site = (mudou or not tinha) and ordem_site.marcar(con, codigo)
         con.commit()
-        return {"ok": True, "ordem": nova, "mudaram_de_lugar": mudou}
+        if site:
+            tarefas.add_task(ordem_site.enviar_depois, codigo, u["email"])
+        return {"ok": True, "ordem": nova, "mudaram_de_lugar": mudou, "vai_ao_site": bool(site)}
     finally:
         con.close()
 
 
 @router.delete("/projetos/{codigo}/ordem-folhas")
-def limpar_ordem_folhas(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
-    """Volta à ordem do código: todas as folhas do projeto ficam sem posição escolhida (NULL). Nenhum código muda."""
+def limpar_ordem_folhas(codigo: str, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Volta à ordem do código: todas as folhas do projeto ficam sem posição escolhida (NULL). Nenhum código muda.
+    Contrato 1.8: no site, as folhas recebem "__limpar__" (voltam à ordem de sempre), em segundo plano."""
     con = connect()
     try:
         if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
@@ -889,8 +894,11 @@ def limpar_ordem_folhas(codigo: str, u: dict = Depends(auth.exige("operador"))) 
         if n:
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'ordem_folhas_limpa',?,?)",
                         (codigo, u["email"], json.dumps({"antes": antes, "folhas": n}, ensure_ascii=False)))
+        site = bool(n) and ordem_site.marcar(con, codigo)
         con.commit()
-        return {"ok": True, "ordem": _ordem_atual(con, codigo), "limpas": n}
+        if site:
+            tarefas.add_task(ordem_site.enviar_depois, codigo, u["email"])
+        return {"ok": True, "ordem": _ordem_atual(con, codigo), "limpas": n, "vai_ao_site": bool(site)}
     finally:
         con.close()
 

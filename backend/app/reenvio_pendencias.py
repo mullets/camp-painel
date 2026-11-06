@@ -12,6 +12,7 @@ que a tela usa, e nunca cria no site o que já está lá:
 - projeto· pendente_metadados_no_site  -> atualizar_dossie_no_site com os campos editados desde o último envio confirmado
 - projeto· pendente_metadado_<nome>    -> grava esse metadado com o valor de agora
 - projeto· pendente_capa_no_site       -> capa_no_site (a capa escolhida agora; sem escolha, volta à capa automática)
+- projeto· pendente_ordem_folhas_no_site -> ordem_site.enviar (a ordem das folhas de agora; sem ordem, "__limpar__" em todas)
 - agente · pendente_hub_no_site        -> enviar_agente_ao_hub com biografia, fontes, datas e retrato de agora (retrato já subido
                                           não sobe de novo; só apaga no site o que foi apagado no painel depois do último envio)
 - agente · pendente_renomear_no_site   -> renomear_agente_no_site com o nome de agora
@@ -30,7 +31,7 @@ from .db import connect
 
 FIXOS = {("fundo", "pendente_criar_no_site"), ("fundo", "pendente_renomear_no_site"), ("fundo", "pendente_descricao_no_site"),
          ("projeto", "pendente_criar_no_site"), ("projeto", "pendente_metadados_no_site"), ("projeto", "pendente_capa_no_site"),
-         ("agente", "pendente_hub_no_site"), ("agente", "pendente_renomear_no_site")}
+         ("agente", "pendente_hub_no_site"), ("agente", "pendente_renomear_no_site"), ("projeto", "pendente_ordem_folhas_no_site")}
 PREFIXO_METADADO = "pendente_metadado_"
 NOMES_ENTIDADE = {"fundo": "fundo", "projeto": "projeto", "agente": "arquiteto"}
 # ordem na rodada: o que os outros usam vai antes (termo do fundo, nome do arquiteto, dossiê) e o resto depois
@@ -347,6 +348,15 @@ def _projeto_capa(codigo: str, ator: str) -> str:
     return "capa do projeto"
 
 
+def _projeto_ordem(codigo: str, ator: str) -> str:
+    from . import ordem_site
+    r = ordem_site.enviar(codigo, ator)
+    _erro(r)
+    if r.get("nada"):
+        raise NadaAEnviar("nenhuma folha do projeto está no site; a posição vai junto com cada folha")
+    return "ordem das folhas"
+
+
 def meta_hub_agente(aid: int) -> dict:
     """O que vai à página do arquiteto agora: o preenchido (biografia, fontes, datas, retrato) e "__limpar__" só para o que foi
     APAGADO no painel depois do último envio confirmado (evento site_hub_arquiteto). Retrato já subido não sobe de novo."""
@@ -418,6 +428,7 @@ def reenviar(p: dict, ator: str) -> str:
     fn = {("fundo", "pendente_criar_no_site"): _fundo_criar, ("fundo", "pendente_renomear_no_site"): _fundo_renomear,
           ("fundo", "pendente_descricao_no_site"): _fundo_descricao, ("projeto", "pendente_criar_no_site"): _projeto_criar,
           ("projeto", "pendente_metadados_no_site"): _projeto_metadados, ("projeto", "pendente_capa_no_site"): _projeto_capa,
+          ("projeto", "pendente_ordem_folhas_no_site"): _projeto_ordem,
           ("agente", "pendente_hub_no_site"): _agente_hub, ("agente", "pendente_renomear_no_site"): _agente_renomear}[(e, campo)]
     return fn(c, ator)
 

@@ -1126,6 +1126,8 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
             out["reaproveitado"] = {"item_id": iid, "como": existente["como"], "status": existente.get("status")}
             if media_da_folha(con, codigo):                       # já tem imagem lá: não sobe outra
                 out["item_id"] = iid; out["imagem"] = "já estava no site"
+                from . import ordem_site as _os
+                _os.na_criacao_da_folha(con, wp, i, iid, out)     # contrato 1.8: só se a folha tem posição escolhida no painel
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_item_reaproveitado',?,?)", (codigo, ator, json.dumps(out, ensure_ascii=False)))
                 con.commit(); con.close()
                 return out
@@ -1183,6 +1185,9 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
                     wp.definir_metadado(iid, mid_f, valor_f); out["metadados"].append(nome_f)
                 except Exception as e:  # noqa: BLE001
                     _pendencia(con, "item", codigo, f"pendente_metadado_{nome_f}", str(e)[:200])
+        # 06/11 (contrato 1.8): a posição escolhida no painel (ordem das folhas do projeto). Sem posição, nada vai (o site segue a regra de sempre).
+        from . import ordem_site as _os
+        _os.na_criacao_da_folha(con, wp, i, iid, out)
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado

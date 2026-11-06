@@ -305,6 +305,16 @@ class WP:
             raise RuntimeError(f"O site recusou os metadados: {r.status_code} {r.text[:200]}")
         return r.json()
 
+    def gravar_ordem_folhas(self, projeto_id: int, ordem: dict) -> dict | None:
+        """Contrato 1.8: posição de cada folha na página do projeto (ordem escolhida no painel; ver ordem_site.py).
+        `ordem` = {"<id da folha>": posição | "__limpar__"}. None = o site ainda não tem a rota (404 rest_no_route)."""
+        r = self.h.post("/wp-json/camp/v1/painel/ordem-folhas", json={"projeto": int(projeto_id), "ordem": ordem})
+        if r.status_code == 404 and "rest_no_route" in r.text:
+            return None
+        if r.status_code >= 400:
+            raise RuntimeError(f"O site recusou a ordem das folhas: {r.status_code} {r.text[:200]}")
+        return r.json()
+
     def pagina_por_slug(self, slug: str) -> list[dict]:
         """21/10: páginas do WordPress com este slug (publicadas, rascunho ou privadas). Usado para achar a página do arquiteto."""
         r = self._get("/wp-json/wp/v2/pages", slug=slug, status="publish,draft,private,pending", context="edit", per_page=20)
