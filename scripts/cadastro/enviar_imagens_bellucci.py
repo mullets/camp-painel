@@ -19,7 +19,7 @@ from pathlib import Path
 
 BASE = "http://127.0.0.1:8000"
 FUNDO = "F015"
-# conjunto do Drive -> (identificação da ficha, título do projeto). Validações da CAMP de 05/11/2026 (ficha de José Augusto).
+# conjunto do Drive -> (identificação da ficha, título do projeto). Validações da CAMP de 05/11/2026 (ficha de José Augusto) e quiz de 06/11.
 MAPA = {
     "Capela São Jorge Ivai": ("JAB-008", "Igreja Matriz de São Jorge (Capela São Jorge do Ivaí)"),
     "Casa do Arquiteto": ("JAB-018", "Residência José Augusto Bellucci — Rua Cardoso de Almeida, 2060"),
@@ -35,9 +35,16 @@ MAPA = {
     "Sociedade Harmonia de Tenis": ("JAB-010", "Clube Harmonia de Tênis"),
     "Teatro Brasileiro de Comedia": ("JAB-067", "Teatro Brasileiro de Comédia"),
     "Virginia": ("JAB-069", "Edifício Virgínia — Virginia Matarazzo Ippolito e Andrea Ippolito"),
+    # 06/11: respostas do Rafael no quiz (conjuntos sem obra na ficha)
+    "Casa para o Suiço": ("JAB-116", "Residência Otto Brosig"),
+    "Estudio Americano - SP": ("JAB-063", "Companhia Cinematográfica Vera Cruz — estúdios"),
+    "Metalurgica Matarazzo": ("JAB-051", "Metalúrgica Matarazzo — fábrica — Rua Caetano Pinto, 418"),
+    "Casas Pacaembu, Sumare e regiao": ("JAB-024", "Residência Jorge Vannucchi"),
+    "Predio com a torre (da Bandeira)": ("JAB-009", "Edifício Alvorada"),
 }
-SEM_PROJETO = {"Arquiteto e escritorio", "Casa para o Suiço", "Casa Uberaba", "Casas Agua Branca", "Casas Pacaembu, Sumare e regiao", "Companhia Metropolitana",
-               "Desenhos de criação", "Desenhos do Arquiteto", "Estudio Americano - SP", "Metalurgica Matarazzo", "Predio com a torre (da Bandeira)", "sabesp"}
+# não enviados: documentação do arquiteto (quiz: "não é obra") e os que ficaram "não sei" no quiz de 06/11
+SEM_PROJETO = {"Arquiteto e escritorio", "Desenhos de criação", "Desenhos do Arquiteto",          # documentação do arquiteto
+               "Casa Uberaba", "Casas Agua Branca", "Companhia Metropolitana", "sabesp"}           # não sei
 EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff")
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
