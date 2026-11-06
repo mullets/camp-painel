@@ -22,6 +22,7 @@ MODOS_RAPIDOS |= {"visitas_redesenho"}
 MODOS_RAPIDOS |= {"dup_formatos"}   # CAMP-DUP-FORMATOS: limpeza das folhas repetidas por formato + defesa na importação (linha própria)
 MODOS_RAPIDOS |= {"dup_formatos_regra"}   # CAMP-DUP-FORMATOS 2ª rodada: só junta pastas de formato diferentes; --despublicar + 301 (linha própria)
 MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
+MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no projeto (item.ordem_manual; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -15695,6 +15696,82 @@ def filho(modo):
         ver("pedir a prévia com s= não grava nada", (k.execute("SELECT COALESCE(giro_manual,0) FROM item WHERE codigo=?", (D1,)).fetchone()[0]) == 0)
         for l in res: print(l)
         k.close()
+    elif modo == "ordem_folhas":
+        # 06/11 ("queria poder organizar as fotos arrastando pra nova ordem"): ordem das folhas escolhida à mão, numa coluna própria
+        # (item.ordem_manual). O código D nunca muda; folha de outro projeto recusa tudo; voltar à ordem do código limpa a coluna.
+        import json
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        # banco de antes desta mudança: todas as migrações menos a 218, com folhas; depois a 218 sobe por cima (e de novo: idempotente)
+        import app.db as _db
+        init_db()
+        c = connect(); c.execute("CREATE TABLE IF NOT EXISTS migracao (nome TEXT PRIMARY KEY, aplicada_em TEXT DEFAULT (datetime('now')))")
+        for arq in sorted(_db.MIGRACOES.glob("*.sql")):
+            if arq.name.startswith("218_"): continue
+            c.execute("BEGIN"); _db.executar_script_idempotente(c, arq.read_text(encoding="utf-8")); c.execute("INSERT INTO migracao (nome) VALUES (?)", (arq.name,)); c.commit()
+        ver("banco antigo: sem a coluna antes da migração", "ordem_manual" not in [r[1] for r in c.execute("PRAGMA table_info(item)")])
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F088','Fundo Ordem','ORD',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F088',1),('F088',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F088-P0001','F088',1,'Casa Ordem',1990),('F088-P0002','F088',2,'Outra',1991)")
+        D = [f"F088-P0001-1990-S03-D{q:05d}" for q in range(1, 6)]
+        for q, cod in enumerate(D, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,'S03',?,?,'campvision')", (cod, "F088-P0001", q, f"Foto {q}"))
+        OUTRA = "F088-P0002-1991-S03-D00001"
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,'S03',1,'Foto de lá','campvision')", (OUTRA, "F088-P0002"))
+        c.commit(); c.close()
+        _aplicar_migracoes_real(); _aplicar_migracoes_real()
+        c = connect()
+        ver("banco antigo migrado: coluna ordem_manual criada, folhas existentes sem ordem (NULL) e com o mesmo código",
+            "ordem_manual" in [r[1] for r in c.execute("PRAGMA table_info(item)")] and c.execute("SELECT COUNT(*) FROM item WHERE ordem_manual IS NOT NULL").fetchone()[0] == 0
+            and [r[0] for r in c.execute("SELECT codigo FROM item WHERE projeto_codigo='F088-P0001' ORDER BY codigo")] == D)
+        c.close()
+        from app import auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        for em, nome, papel in (("op@camp.arq.br", "Op", "operador"), ("le@camp.arq.br", "Le", "leitura")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        op, le = cli("op@camp.arq.br"), cli("le@camp.arq.br")
+        P = "F088-P0001"; URL = f"/api/projetos/{P}/ordem-folhas"
+        lista = lambda: [x["codigo"] for x in op.get(f"/api/projetos/{P}/detalhe").json()["itens"]]
+        ver("sem ordem escolhida: a lista segue o código", lista() == D, str(lista()))
+        ver("leitura não muda a ordem (403)", le.put(URL, json={"ordem": D[::-1]}).status_code == 403)
+        nova = [D[3], D[0], D[4], D[1], D[2]]
+        r = op.put(URL, json={"ordem": nova}); j = r.json()
+        ver("operador grava a ordem nova e recebe a ordem de volta", r.status_code == 200 and j.get("ordem") == nova, f"{r.status_code} {j}")
+        ver("a lista do projeto (grade) segue a ordem gravada", lista() == nova, str(lista()))
+        c = connect()
+        ver("nenhum código mudou (só a posição)", sorted(r_[0] for r_ in c.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (P,))) == D
+            and [r_[0] for r_ in c.execute("SELECT sequencial FROM item WHERE projeto_codigo=? ORDER BY ordem_manual", (P,))] == [4, 1, 5, 2, 3])
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='ordem_folhas' ORDER BY id DESC", (P,)).fetchone()
+        ver("histórico do projeto registra quem mudou a ordem (antes e depois)", ev and ev[0] == "op@camp.arq.br" and json.loads(ev[1])["depois"] == nova and json.loads(ev[1])["antes"] == D, str(ev))
+        c.close()
+        hist = op.get(f"/api/projetos/{P}/detalhe").json()["eventos"]
+        ver("o evento aparece no Histórico do projeto", any(e["tipo"] == "ordem_folhas" for e in hist))
+        it = op.get(f"/api/itens/{D[0]}").json()
+        ver("página da folha: anterior/próxima seguem a ordem nova (D1 está entre D4 e D5)", it["anterior"] == D[3] and it["proxima"] == D[4] and it["posicao"] == 2, f"{it['anterior']} {it['proxima']} {it['posicao']}")
+        r = op.put(URL, json={"ordem": [D[1], OUTRA]})
+        ver("folha de OUTRO projeto: recusada com o motivo, e nada muda", r.status_code == 400 and OUTRA in r.text and "não é deste projeto" in r.text and lista() == nova, f"{r.status_code} {r.text[:200]}")
+        r = op.put(URL, json={"ordem": [D[1], "F088-P0001-1990-S03-D09999"]})
+        ver("folha que não existe: recusada", r.status_code == 400 and lista() == nova)
+        r = op.put(URL, json={"ordem": [D[1], D[1]]})
+        ver("folha repetida na lista: recusada", r.status_code == 400 and lista() == nova)
+        ver("lista vazia: recusada (para limpar há a rota própria)", op.put(URL, json={"ordem": []}).status_code == 400)
+        ver("projeto que não existe: 404", op.put("/api/projetos/F088-P0099/ordem-folhas", json={"ordem": [D[0]]}).status_code == 404)
+        r = op.put(URL, json={"ordem": [D[2], D[1]]})
+        ver("as que não vieram na lista ficam depois, na ordem em que estavam", r.status_code == 200 and lista() == [D[2], D[1], D[3], D[0], D[4]], str(lista()))
+        c = connect(); c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem) VALUES (?,?,'S03',6,'Foto nova','campvision')", (f"{P}-1990-S03-D00006", P)); c.commit(); c.close()
+        ver("folha nova (chegou depois) entra no fim, sem quebrar a ordem", lista() == [D[2], D[1], D[3], D[0], D[4], f"{P}-1990-S03-D00006"], str(lista()))
+        ver("leitura não volta à ordem do código (403)", le.delete(URL).status_code == 403)
+        r = op.delete(URL)
+        ver("Voltar à ordem do código: limpa e a lista volta ao código", r.status_code == 200 and r.json().get("limpas") == 5 and lista() == D + [f"{P}-1990-S03-D00006"], f"{r.status_code} {r.text[:200]} {lista()}")
+        c = connect()
+        ver("depois de limpar, nenhuma folha com posição; evento ordem_folhas_limpa no histórico",
+            c.execute("SELECT COUNT(*) FROM item WHERE ordem_manual IS NOT NULL").fetchone()[0] == 0
+            and c.execute("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='ordem_folhas_limpa'", (P,)).fetchone()[0] == 1)
+        c.close()
+        ver("limpar de novo (nada a limpar) não grava evento repetido", op.delete(URL).json().get("limpas") == 0)
+        ver("a outra folha (outro projeto) nunca ganhou posição", (connect().execute("SELECT ordem_manual FROM item WHERE codigo=?", (OUTRA,)).fetchone()[0]) is None)
+        for l in res: print(l)
 
     return 0
 
@@ -15780,6 +15857,8 @@ else:
         ok(jpg["1"] == "https://camp.arq.br/u/a-scaled.jpg", "migração 028: ID de anexo trocado pelo endereço real quando o espelho tem")
         ok(jpg["2"] is None and jpg["3"] is None, "migração 028: ID sem URL conhecida e HTML viram vazio (a tela usa o documento do site)")
         ok(jpg["4"] == "/mnt/qnap/acervos/a.jpg" and jpg["5"] == "https://camp.arq.br/u/b.jpg", "migração 028: caminho local e URL existentes NÃO são tocados")
+        ok("ordem_manual" in [r[1] for r in c.execute("PRAGMA table_info(item)")] and c.execute("SELECT COUNT(*) FROM item WHERE ordem_manual IS NOT NULL").fetchone()[0] == 0,
+           "migração 218: item.ordem_manual criada e as folhas antigas sem ordem escolhida (seguem o código)")
 
 print("3) Guarda de rede das rotas sem login")
 rc, out = rodar("rede", f"{tmp}/rede.db")
@@ -17532,6 +17611,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Regra dura das folhas repetidas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Ordem das folhas escolhida à mão (arrastar na grade): grava, recusa folha de outro projeto, a lista segue, voltar à ordem do código, banco antigo")
+rc, out = rodar("ordem_folhas", f"{tmp}/ordem_folhas.db")
+if rc != 0: ok(False, f"teste ordem_folhas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ordem das folhas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

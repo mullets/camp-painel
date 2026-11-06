@@ -525,7 +525,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                i.endereco_folha, i.cliente_folha,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
                i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por,
-               i.duplicata_conferida_em, i.duplicata_conferida_de, i.parceiros, i.foto_ano, i.foto_estagio, i.foto_fotografo
+               i.duplicata_conferida_em, i.duplicata_conferida_de, i.parceiros, i.foto_ano, i.foto_estagio, i.foto_fotografo, i.ordem_manual
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -566,6 +566,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "revisao": local.get("revisao"), "revisado_por": local.get("revisado_por"), "lote_id": local.get("lote_id"), "pendencias": local.get("pendencias"), "giro_manual": local.get("giro_manual"),
                 "recorte": local.get("recorte"), "alinhamento": local.get("alinhamento"),
                 "duplicata_conferida_em": local.get("duplicata_conferida_em"), "duplicata_conferida_de": local.get("duplicata_conferida_de"),
+                "ordem_manual": local.get("ordem_manual"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -592,6 +593,10 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     # Folhas do site + as locais que ainda NÃO estão no site (ex.: lote novo importado para um projeto que já tem folhas publicadas).
     codigos_site = {x["codigo"] for x in itens_site}
     itens = itens_site + [x for x in itens_local if x["codigo"] not in codigos_site]
+    # Ordem escolhida à mão (arrastar na grade): as folhas com posição primeiro, na posição; as outras depois, na ordem de antes (estável).
+    # Campo novo e opcional (ordem_manual, NULL = ordem do código); só vale para a tela, não vai ao site.
+    if any(x.get("ordem_manual") is not None for x in itens):
+        itens.sort(key=lambda x: (0, x["ordem_manual"]) if x.get("ordem_manual") is not None else (1, 0))
     from .rotas_revisao import _qnap_prontos_raiz, jpg_da_folha_no_qnap
     try:
         raiz_prontos = _qnap_prontos_raiz()
@@ -719,7 +724,7 @@ def item(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                        (_colecao_config(con, "tainacan.itens_collection_id", 8013), codigo)).fetchone()
     if not i:
         con.close(); raise HTTPException(404, "Folha não existe")
-    vizinhos = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY serie_codigo, sequencial", (i["projeto_codigo"],))]
+    vizinhos = [r[0] for r in con.execute(ORDEM_FOLHAS_SQL, (i["projeto_codigo"],))]   # anterior/próxima seguem a ordem escolhida à mão, se houver
     k = vizinhos.index(codigo)
     agentes = [dict(r) for r in con.execute("SELECT a.forma_autorizada, ia.papel, ia.fonte FROM item_agente ia JOIN agente a ON a.id=ia.agente_id WHERE ia.item_codigo=?", (codigo,))]
     from .rotas_revisao import imagem_site_pendente
@@ -825,6 +830,69 @@ def editar(codigo: str, d: EdicaoProjeto, u: dict = Depends(auth.exige("admin"))
         from .publicador import atualizar_dossie_no_site
         site = atualizar_dossie_no_site(codigo, mud, u["email"])
     return {"ok": True, "campos": list(mud), "site": site}
+
+
+# Ordem das folhas na página do projeto (arrastar na grade). O código (D0xxxx) nunca muda: item.ordem_manual é só a posição de exibição.
+ORDEM_FOLHAS_SQL = "SELECT codigo FROM item WHERE projeto_codigo=? ORDER BY (ordem_manual IS NULL), ordem_manual, serie_codigo, sequencial"
+
+
+class OrdemFolhas(BaseModel):
+    ordem: list[str]
+
+
+def _ordem_atual(con, codigo: str) -> list[str]:
+    return [r[0] for r in con.execute(ORDEM_FOLHAS_SQL, (codigo,))]
+
+
+@router.put("/projetos/{codigo}/ordem-folhas")
+def gravar_ordem_folhas(codigo: str, d: OrdemFolhas, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Grava a ordem escolhida à mão. `ordem` = códigos das folhas DESTE projeto, na ordem nova (sem repetir). As que não vierem na lista
+    ficam depois das listadas, na ordem em que já estavam. Folha de outro projeto (ou que não existe) recusa tudo: nada é gravado."""
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+        ordem = [str(c).strip() for c in d.ordem]
+        if not ordem:
+            raise HTTPException(400, "A lista da ordem veio vazia. Para voltar à ordem do código, use \"Voltar à ordem do código\".")
+        if len(set(ordem)) != len(ordem):
+            rep_ = sorted({c for c in ordem if ordem.count(c) > 1})
+            raise HTTPException(400, f"Folha repetida na ordem: {', '.join(rep_[:5])}. Nada foi gravado.")
+        antes = _ordem_atual(con, codigo)
+        doprojeto = set(antes)
+        fora = [c for c in ordem if c not in doprojeto]
+        if fora:
+            raise HTTPException(400, f"{'Estas folhas não são' if len(fora) > 1 else 'Esta folha não é'} deste projeto: {', '.join(fora[:5])}{' …' if len(fora) > 5 else ''}. Nada foi gravado.")
+        listadas = set(ordem)
+        nova = ordem + [c for c in antes if c not in listadas]
+        tinha = con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND ordem_manual IS NOT NULL", (codigo,)).fetchone()[0]
+        con.executemany("UPDATE item SET ordem_manual=? WHERE codigo=? AND projeto_codigo=?", [(k, c, codigo) for k, c in enumerate(nova)])
+        mudou = sum(1 for a, b in zip(antes, nova) if a != b)
+        if mudou or not tinha:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'ordem_folhas',?,?)",
+                        (codigo, u["email"], json.dumps({"antes": antes, "depois": nova, "mudaram_de_lugar": mudou, "tinha_ordem": bool(tinha)}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "ordem": nova, "mudaram_de_lugar": mudou}
+    finally:
+        con.close()
+
+
+@router.delete("/projetos/{codigo}/ordem-folhas")
+def limpar_ordem_folhas(codigo: str, u: dict = Depends(auth.exige("operador"))) -> dict:
+    """Volta à ordem do código: todas as folhas do projeto ficam sem posição escolhida (NULL). Nenhum código muda."""
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM projeto WHERE codigo=?", (codigo,)).fetchone():
+            raise HTTPException(404, "Projeto não existe")
+        antes = _ordem_atual(con, codigo)
+        n = con.execute("UPDATE item SET ordem_manual=NULL WHERE projeto_codigo=? AND ordem_manual IS NOT NULL", (codigo,)).rowcount
+        if n:
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'ordem_folhas_limpa',?,?)",
+                        (codigo, u["email"], json.dumps({"antes": antes, "folhas": n}, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "ordem": _ordem_atual(con, codigo), "limpas": n}
+    finally:
+        con.close()
 
 
 @router.get("/vocabulario/tipologia")
