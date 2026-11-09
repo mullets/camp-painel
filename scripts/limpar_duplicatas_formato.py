@@ -20,7 +20,8 @@ No servidor do painel:
                     "Não é duplicata" (ação nao_e da tela Duplicatas); com --aplicar --corrigir-marcas, são desfeitas. Marca de pessoa: nunca.
 
 REGRA DURA (04/11/2026, depois da simulação real): só junta folhas de pastas de FORMATO/VERSÃO diferentes (TIFF × DNG × JPG × JPG LIMPO,
-"em alta" × "para internet"); da mesma pasta, nunca (vira incerto). As marcas antigas "já é cópia de X" não juntam pranchas, só informam.
+"em alta" × "para internet"); da mesma pasta, nunca (vira incerto) — exceto o MESMO nome de arquivo em outro formato (IMG_0012.jpg ×
+IMG_0012.dng × IMG_0012.tif na mesma pasta, 09/11/2026). As marcas antigas "já é cópia de X" não juntam pranchas, só informam.
 
 O que faz ao aplicar: cada cópia vira "duplicata de" a folha que fica (tipo 'mesma_folha', conferida, com evento no histórico),
 pela MESMA função da tela Duplicatas do projeto (app.duplicatas._marcar), com o ator "limpeza de formatos". NUNCA apaga folha nem
