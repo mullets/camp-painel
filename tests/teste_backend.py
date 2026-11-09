@@ -20,6 +20,7 @@ MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", 
 MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
 MODOS_RAPIDOS |= {"visitas_redesenho"}
 MODOS_RAPIDOS |= {"dup_formatos"}   # CAMP-DUP-FORMATOS: limpeza das folhas repetidas por formato + defesa na importação (linha própria)
+MODOS_RAPIDOS |= {"dup_mesma_pasta_ext"}   # CAMP-DUP 09/11/2026: o mesmo arquivo em JPG/DNG/TIF na MESMA pasta (linha própria)
 MODOS_RAPIDOS |= {"dup_formatos_regra"}   # CAMP-DUP-FORMATOS 2ª rodada: só junta pastas de formato diferentes; --despublicar + 301 (linha própria)
 MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no projeto (item.ordem_manual; linha própria)
@@ -15301,6 +15302,187 @@ def filho(modo):
         d2021 = fr.menor_distancia(fr.dhash_rotacoes(prontos / f"_campvision/preview/{P}/{D(20)}.jpg"), fr.dhash_rotacoes(prontos / f"_campvision/preview/{P}/{D(21)}.jpg"))
         ver("importação: duas fotos novas parecidas (dHash ≤ 6) da MESMA pasta não viram cópia uma da outra", d2021 <= 6 and feitas == [], (d2021, feitas))
         for l in res: print(l)
+    elif modo == "dup_mesma_pasta_ext":
+        # CAMP-DUP (09/11/2026): o Rafael aplicou a limpeza no F001 e ainda vê a mesma foto 2–3 vezes (JPG, DNG, TIF). A exportação da câmera
+        # deixa IMG_0012.jpg, IMG_0012.dng e IMG_0012.tif na MESMA pasta; a regra dura ("da mesma pasta, nunca") e o pareamento pelo nome
+        # (que pulava a mesma subpasta) nunca as juntavam. Exceção estreita: o MESMO nome com outra extensão de formato junta (TIFF fica);
+        # sequência (IMG_0012 × IMG_0013) e o mesmo formato continuam separados; a imagem muito diferente rebaixa para incerto.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, shutil, random as _rd, io as _io, contextlib, importlib.util
+        from pathlib import Path as _P
+        from PIL import Image, ImageDraw
+        from app import folhas_repetidas as fr, publicador
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:500]}")
+        base = _P(os.environ["CAMP_DB_PATH"]).resolve().parent
+        db = str(_P(os.environ["CAMP_DB_PATH"]).resolve())
+        prontos = base / "prontos_dupext"; shutil.rmtree(prontos, ignore_errors=True)
+        P = "F001-P0040"; D = lambda n: f"{P}-1977-S03-D{n:05d}"
+        def prancha(k, j=0):
+            rnd = _rd.Random(k * 7919)
+            im = Image.new("L", (600, 420), 255); dr = ImageDraw.Draw(im)
+            for _ in range(16):
+                x0, y0 = rnd.randint(0, 560), rnd.randint(0, 380)
+                dr.rectangle((x0, y0, x0 + rnd.randint(20, 220), y0 + rnd.randint(20, 170)), fill=rnd.randint(0, 200))
+            if j:              # foto seguinte da mesma sequência: a mesma cena com 2 manchas a mais (dHash 1–6)
+                rnd = _rd.Random(j * 31 + k)
+                for _ in range(2):
+                    x0, y0 = rnd.randint(0, 560), rnd.randint(0, 380); dr.rectangle((x0, y0, x0 + 40, y0 + 30), fill=rnd.choice([0, 255]))
+            return im
+        def previa(n, im):
+            rel = f"_campvision/preview/{P}/{D(n)}.jpg"; (prontos / rel).parent.mkdir(parents=True, exist_ok=True); im.convert("RGB").save(prontos / rel, "JPEG", quality=90)
+            return rel
+        c = connect()
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='qnap.prontos_raiz'", (str(prontos),))
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','AMA',1)")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F001',40)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES (?,'F001',40,'Residência Teste',1977,8840)", (P,))
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Fotos',?,'/nao/existe/dupext','revisao')", (P,)).lastrowid
+        ent = "100 - Scanners/F001 - AMA Arnaldo Martino/P0040 - Residencia/Fotos/"
+        itens = [(1, "IMG_0012.jpg", prancha(1)), (2, "img_0012.dng", prancha(1)), (3, "IMG_0012.TIF", prancha(1)),   # a mesma foto em 3 formatos
+                 (4, "IMG_0013.jpg", prancha(1, 2)), (5, "IMG_0014.jpg", prancha(1, 3)),                             # sequência (parecidas)
+                 (6, "IMG_0020.jpg", prancha(5)), (7, "IMG_0020.dng", prancha(9)),                                   # mesmo nome, imagem MUITO diferente
+                 (8, "IMG_0030.jpg", prancha(7)), (9, "IMG_0030.jpeg", prancha(7))]                                  # o mesmo formato (.jpg × .jpeg)
+        for n, orig, im in itens:
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,arquivo_origem,pendencias) VALUES (?,?,?,?,?,'campvision',?,'pendente',?,?)",
+                      (D(n), P, "S03", n, f"Foto {n}", lote, ent + orig, _j.dumps({"previa": previa(n, im), "bloqueios": [], "sinais": []})))
+        for n, wid in ((1, 9101), (3, 9103)):      # no site: o JPG (cópia) e o TIF (o que fica)
+            c.execute("UPDATE item SET status_site='no_ar', tainacan_item_id=? WHERE codigo=?", (wid, D(n)))
+        c.commit(); c.close()
+        hs = {n: fr.dhash_rotacoes(prontos / f"_campvision/preview/{P}/{D(n)}.jpg") for n, _, _ in itens}
+        ver("cenário: a sequência IMG_0012/13/14 é parecida (dHash ≤ 6) e IMG_0020 .jpg × .dng é muito diferente (dHash > LIMIAR_DUVIDA)",
+            fr.menor_distancia(hs[1], hs[4]) <= 6 and fr.menor_distancia(hs[4], hs[5]) <= 6 and fr.LIMIAR_DUVIDA < fr.menor_distancia(hs[6], hs[7]) < 64,
+            (fr.menor_distancia(hs[1], hs[4]), fr.menor_distancia(hs[4], hs[5]), fr.menor_distancia(hs[6], hs[7])))
+        o = lambda n: next(ent + x for k, x, _ in itens if k == n)
+        ver("conflito: IMG_0012.jpg × img_0012.dng × IMG_0012.TIF (mesma pasta) podem ser a mesma prancha; IMG_0012 × IMG_0013 e .jpg × .jpeg não",
+            fr.conflito(o(1), o(2)) is None and fr.conflito(o(1), o(3)) is None and fr.conflito(o(2), o(3)) is None
+            and fr.conflito(o(1), o(4)) and fr.conflito(o(8), o(9), True) and fr.conflito(o(4), o(5)),
+            [fr.conflito(o(1), o(2)), fr.conflito(o(1), o(4)), fr.conflito(o(8), o(9))])
+        ver("folha com várias origens (contrato 2.8, versoes): o nome de uma delas basta; o mesmo arquivo listado nas duas não é 'outro formato'",
+            (lambda f: bool(f(o(3) + " | " + o(1), o(2))) and not f(o(3) + " | " + o(1), o(1)))(getattr(fr, "mesmo_arquivo_outro_formato", lambda *a: None)), "")
+        site = {9101: "publish", 9103: "publish"}
+        chamadas = []
+        class WPFalso:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st):
+                chamadas.append((cid, wid, st)); site[wid] = st; return {"id": wid, "status": st}
+        publicador.WP = WPFalso
+        spec = importlib.util.spec_from_file_location("limpar_dup_ext", str(RAIZ / "scripts" / "limpar_duplicatas_formato.py"))
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        def script(*a):
+            buf = _io.StringIO(); rc = 0
+            sys.argv = ["limpar", "--db", db, "--projeto", P, "--listar", "80", *a]
+            with contextlib.redirect_stdout(buf):
+                try:
+                    rc = mod.main()
+                except SystemExit as e:
+                    rc = e.code if isinstance(e.code, int) else (print(e.code) or 1)
+                except Exception as e:  # noqa: BLE001
+                    rc = 99; print(f"ERRO: {e!r}")
+            return rc, buf.getvalue()
+        def col(n, k):
+            k_ = sqlite3.connect(db); v = k_.execute(f"SELECT {k} FROM item WHERE codigo=?", (D(n),)).fetchone(); k_.close(); return v[0] if v else "(sem folha)"
+        ler = lambda arq: _j.loads(_P(arq).read_text(encoding="utf-8")) if _P(arq).is_file() else {"projetos": {}}
+        Dn = lambda cod: int(cod[-5:])
+        # ---------- 1. simular ----------
+        rc, out = script("--despublicar", "--plano", str(base / "e1.json"))
+        pl = ler(base / "e1.json").get("projetos", {}).get(P, {})
+        k_ = sqlite3.connect(f"file:{db}?mode=ro", uri=True); k_.row_factory = sqlite3.Row
+        an = mod.analisar(k_, P, prontos, True); k_.close()
+        grupos = [[Dn(x) for x in g] for g in an["r"]["grupos"]]
+        ver("IMG_0012 .jpg/.dng/.TIF na mesma pasta: UM grupo, e a que fica é o TIFF (D3)", len(grupos) == 1 and grupos[0][0] == 3 and sorted(grupos[0]) == [1, 2, 3], (grupos, out[-600:]))
+        ver("o porquê diz 'mesmo arquivo em outro formato (IMG_0012 …)'", "mesmo arquivo em outro formato (IMG_0012" in out, out[out.find("por quê"):][:200])
+        ver("a sequência IMG_0012/IMG_0013/IMG_0014 (mesma pasta, parecidas) NÃO se junta; .jpg × .jpeg (o mesmo formato) também não",
+            all(not ({4, 5, 8, 9} & set(g)) for g in grupos), grupos)
+        inc = {frozenset((Dn(a), Dn(b))): m for a, b, m in an["r"]["incertos"]}
+        ver("IMG_0020 .jpg × .dng com a imagem muito diferente: INCERTO (não entra no plano), com o porquê",
+            frozenset((6, 7)) in inc and "mesmo arquivo em outro formato" in inc[frozenset((6, 7))] and "imagem é diferente" in inc[frozenset((6, 7))]
+            and all(not ({6, 7} & {Dn(x) for x in [d["original"], *d["copias"]]}) for d in pl.get("decisoes", [])), inc)
+        dec = sorted((Dn(d["original"]), sorted(Dn(x) for x in d["copias"])) for d in pl.get("decisoes", []))
+        desp = sorted((Dn(x["copia"]), Dn(x["fica"])) for x in pl.get("despublicar", []))
+        ver("plano: D2 (DNG) vira cópia de D3 (TIF); D1 (JPG, no site) sai do site com 301 → D3", dec == [(3, [2])] and desp == [(1, 3)], (dec, desp))
+        # ---------- 2. aplicar com --despublicar ----------
+        rc, out2 = script("--aplicar", "--plano", str(base / "e1.json"), "--despublicar")
+        ver("aplicar: D2 cópia de D3, D1 fora do site (privada) e 301 → D3; o TIF continua no ar",
+            rc == 0 and col(2, "duplicata_de") == D(3) and col(1, "status_site") == "fora_do_ar" and chamadas == [(publicador.COL_ACERVO, 9101, "private")]
+            and site[9103] == "publish" and col(3, "status_site") == "no_ar", out2[-400:])
+        # ---------- 3. a 2ª rodada (depois de aplicar), com uma foto nova em JPG+TIF ----------
+        k = connect()
+        for n, orig in ((10, "IMG_0040.jpg"), (11, "IMG_0040.tif")):
+            k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,arquivo_origem,pendencias) VALUES (?,?,?,?,?,'campvision',?,'pendente',?,?)",
+                      (D(n), P, "S03", n, f"Foto {n}", lote, ent + orig, _j.dumps({"previa": previa(n, prancha(11)), "bloqueios": [], "sinais": []})))
+        k.commit(); k.close()
+        n_ch = len(chamadas)
+        rc, out3 = script("--despublicar", "--plano", str(base / "e2.json"))
+        pl3 = ler(base / "e2.json").get("projetos", {}).get(P, {})
+        dec3 = sorted((Dn(d["original"]), sorted(Dn(x) for x in d["copias"])) for d in pl3.get("decisoes", []))
+        ver("2ª rodada: só o que falta — D10 (JPG novo) → D11 (TIF) e D1 (já fora do site) vira cópia de D3; D2 (já cópia) não entra; nada a despublicar de novo",
+            rc == 0 and dec3 == [(3, [1]), (11, [10])] and not pl3.get("despublicar") and "já é cópia de D3" in out3, (dec3, pl3.get("despublicar"), out3[-500:]))
+        rc, out4 = script("--aplicar", "--plano", str(base / "e2.json"), "--despublicar")
+        ver("2ª rodada aplicada: D1 e D10 viram cópia; o site não é chamado de novo",
+            rc == 0 and col(1, "duplicata_de") == D(3) and col(10, "duplicata_de") == D(11) and len(chamadas) == n_ch, out4[-400:])
+        rc, out5 = script("--plano", str(base / "e3.json"))
+        pl5 = ler(base / "e3.json").get("projetos", {}).get(P, {})
+        ver("3ª rodada: nada mais a fazer, e as marcas JPG/DNG → TIF da mesma pasta NÃO viram 'marca antiga suspeita' (o --corrigir-marcas as desfaria)",
+            rc == 0 and not pl5.get("decisoes") and not pl5.get("publicadas_despublicar_e_301") and not pl5.get("marcas_suspeitas"), (pl5.get("marcas_suspeitas"), out5[-400:]))
+        # ---------- 3b. cópia JÁ marcada que continua no site (CAMP Vision, limpeza ou pessoa): --despublicar tira com 301 para a raiz ----------
+        k = connect()
+        novos = [(30, "IMG_0060.tif", 60, None, "no_ar", 9130), (31, "IMG_0060.jpg", 60, 30, "no_ar", 9131),        # marcada (CAMP Vision), no site
+                 (33, "IMG_0061.tif", 61, None, "rascunho", 9133), (32, "IMG_0061.jpg", 61, 33, "no_ar", 9132),    # a raiz só em rascunho
+                 (35, "IMG_0071.jpg", 71, None, "no_ar", 9135), (34, "IMG_0070.jpg", 71, 35, "no_ar", 9134),       # marca SUSPEITA (sequência)
+                 (38, "IMG_0080.tif", 80, None, "no_ar", 9138), (37, "IMG_0080.jpg", 80, 38, None, None),           # cadeia D36 → D37 → D38
+                 (36, "IMG_0080.dng", 80, 37, "no_ar", 9136)]
+        for n, orig, img, de, st, wid in novos:
+            k.execute("""INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,arquivo_origem,pendencias,duplicata_de,tipo_duplicata,status_site,tainacan_item_id)
+                         VALUES (?,?,?,?,?,'campvision',?,'conferida',?,?,?,?,?,?)""",
+                      (D(n), P, "S03", n, f"Foto {n}", lote, ent + orig, _j.dumps({"previa": previa(n, prancha(img)), "bloqueios": [], "sinais": []}),
+                       D(de) if de else None, "perceptual" if de else None, st or "nao_publicado", wid))
+            if wid:
+                site[wid] = "publish" if st == "no_ar" else "draft"
+        k.commit(); k.close()
+        def redirs():
+            k_ = sqlite3.connect(db); v = [tuple(r) for r in k_.execute("SELECT codigo_antigo, codigo_novo FROM redirecionamento ORDER BY 1")]; k_.close(); return v
+        def foto():
+            k_ = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            t = [list(r) for tb in ("item", "redirecionamento") for r in k_.execute(f"SELECT * FROM {tb} ORDER BY rowid")]; k_.close(); return t
+        r0, n_ch = redirs(), len(chamadas)
+        antes = foto()
+        rc, o6 = script("--plano", str(base / "e4.json"))
+        pl6 = ler(base / "e4.json").get("projetos", {}).get(P, {})
+        ver("sem --despublicar: lista a 'cópia já marcada ainda no site' (D31, D32, D36; a suspeita D34 não) e não mexe em nada",
+            rc == 0 and "CÓPIA JÁ MARCADA AINDA NO SITE: 3" in o6 and sorted(Dn(x["copia"]) for x in pl6.get("copias_marcadas_no_site", [])) == [31, 32, 36]
+            and not pl6.get("despublicar") and foto() == antes and len(chamadas) == n_ch, o6[o6.find("CÓPIA JÁ"):][:400])
+        rc, o7 = script("--despublicar", "--plano", str(base / "e5.json"))
+        pl7 = ler(base / "e5.json").get("projetos", {}).get(P, {})
+        desp7 = sorted((Dn(x["copia"]), Dn(x["fica"])) for x in pl7.get("despublicar", []))
+        ant7 = sorted((Dn(x["copia"]), Dn(x["fica"])) for x in pl7.get("publique_a_principal_antes", []))
+        ver("--despublicar simulado: D31 → D30 e D36 → D38 (a RAIZ da cadeia, não D37); D32 espera a principal D33 (rascunho); D34 (marca suspeita) fica de fora",
+            rc == 0 and desp7 == [(31, 30), (36, 38)] and ant7 == [(32, 33)] and "cópia já marcada ainda no site" in o7 and foto() == antes
+            and 34 in [Dn(x["codigo"]) for x in pl7.get("marcas_suspeitas", [])], (desp7, ant7, o7[-500:]))
+        rc, o8 = script("--aplicar", "--plano", str(base / "e5.json"), "--despublicar")
+        ver("aplicado: D31 e D36 saem do site (privadas) com 301 para D30 e D38; a marca continua; D32 e D34 continuam no ar",
+            rc == 0 and sorted(chamadas[n_ch:]) == [(publicador.COL_ACERVO, 9131, "private"), (publicador.COL_ACERVO, 9136, "private")]
+            and col(31, "status_site") == "fora_do_ar" and col(36, "status_site") == "fora_do_ar" and col(31, "duplicata_de") == D(30) and col(36, "duplicata_de") == D(37)
+            and sorted(set(redirs()) - set(r0)) == [(D(31), D(30)), (D(36), D(38))] and col(32, "status_site") == "no_ar" and col(34, "status_site") == "no_ar", o8[-500:])
+        rc, o9 = script("--aplicar", "--plano", str(base / "e5.json"), "--despublicar")
+        ver("o mesmo plano de novo: RECUSADO (o banco mudou)", rc == 3 and "RECUSADO" in o9, o9[-200:])
+        n2 = len(chamadas)
+        rc, o10 = script("--desfazer", str(base / "e5.desfazer.json"), "--aplicar")
+        ver("desfazer --aplicar: D31 e D36 voltam ao site (publish) e ao 'no ar', e os 301 saem",
+            rc == 0 and sorted(chamadas[n2:]) == [(publicador.COL_ACERVO, 9131, "publish"), (publicador.COL_ACERVO, 9136, "publish")]
+            and col(31, "status_site") == "no_ar" and col(36, "status_site") == "no_ar" and redirs() == r0, o10[-400:])
+        # ---------- 4. importação (defesa): a foto nova em JPG + TIF na mesma pasta entra com o JPG como cópia ----------
+        k = connect()
+        lote2 = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Fotos 2',?,'/nao/existe/dupext2','revisao')", (P,)).lastrowid
+        for n, orig, im in ((20, "IMG_0050.jpg", prancha(20)), (21, "IMG_0050.tif", prancha(20)), (22, "IMG_0051.jpg", prancha(20, 4))):
+            k.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,arquivo_origem,pendencias) VALUES (?,?,?,?,?,'campvision',?,'pendente',?,?)",
+                      (D(n), P, "S03", n, f"Foto {n}", lote2, ent + "novas/" + orig, _j.dumps({"previa": previa(n, im)})))
+        from app import importador_lote
+        feitas = importador_lote.marcar_repetidas_por_imagem(k, P, [D(20), D(21), D(22)], "teste", lote2)
+        k.rollback(); k.close()
+        ver("importação: IMG_0050.jpg entra como cópia de IMG_0050.tif (mesma pasta); IMG_0051 (a foto seguinte) não",
+            [(Dn(f["codigo"]), Dn(f["copia_de"])) for f in feitas] == [(20, 21)], feitas)
+        for l in res: print(l)
     elif modo == "recorte_alinhamento":
         # 19/10: recortar e alinhar a folha na revisão. O painel guarda os parâmetros E gera um JPG corrigido (no diretório de dados do painel),
         # que passa a ser a imagem da folha (prévia, miniatura, pedido em JPG, site). O TIF e a prévia do CAMP Vision nunca mudam.
@@ -17703,6 +17885,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Regra dura das folhas repetidas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Folhas repetidas: o mesmo arquivo em JPG/DNG/TIF na MESMA pasta (CAMP-DUP 09/11/2026): junta, TIFF fica; sequência não; 2ª rodada")
+rc, out = rodar("dup_mesma_pasta_ext", f"{tmp}/dup_mesma_pasta_ext.db")
+if rc != 0: ok(False, f"teste dup_mesma_pasta_ext não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Mesmo arquivo em outro formato: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Ordem das folhas escolhida à mão (arrastar na grade): grava, recusa folha de outro projeto, a lista segue, voltar à ordem do código, banco antigo")
 rc, out = rodar("ordem_folhas", f"{tmp}/ordem_folhas.db")

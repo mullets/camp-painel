@@ -13,7 +13,9 @@ Casa "a mesma prancha" (dentro do mesmo projeto):
          — mesma posição em duas subpastas com o mesmo número de arquivos, se o dHash confirmar a ≤ 12 bits.
   incerto (só listado, nunca entra no plano) — a posição casa e não há imagem para confirmar, ou a imagem não confirma.
 REGRA DURA (04/11/2026, depois da simulação real do F001, que juntava D3–D7 DNG do P0030 e fotos em sequência do P0001): duas folhas só
-são a mesma prancha se vierem de pastas de FORMATO/VERSÃO diferentes (`conflito`). Da mesma pasta, nunca (vira incerto); o mesmo formato
+são a mesma prancha se vierem de pastas de FORMATO/VERSÃO diferentes (`conflito`). Da mesma pasta, nunca (vira incerto) — a única exceção
+(09/11/2026) é o MESMO nome de arquivo com outra extensão de formato (IMG_0012.jpg × IMG_0012.dng × IMG_0012.tif, exportação da câmera):
+par forte "mesmo arquivo em outro formato", desde que a imagem não diga o contrário (dHash > LIMIAR_DUVIDA vira incerto); o mesmo formato
 em pastas diferentes (TIFF × TIFF), só pelo md5; sem arquivo de origem, só pelo md5. Um grupo tem no máximo uma folha por pasta/formato:
 junta-se pelo par mais forte primeiro (md5 > mesmo nome > menor dHash) e o par que violaria a regra vai para os incertos. As marcas
 antigas `duplicata_de` (CAMP Vision ou pessoa) não juntam nada: só informam; a de MÁQUINA que liga duas folhas da mesma pasta é listada
@@ -210,13 +212,45 @@ def pasta_chave(arquivo_origem) -> str | None:
     return norm(str(_caminho(os_[0]).parent)) or "(raiz do lote)"
 
 
+EXT_FORMATO = {".tif": "tif", ".tiff": "tif", ".dng": "dng", ".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
+
+
+def _arquivos_por_nome(arquivo_origem) -> dict[tuple[str, str], dict[str, str]]:
+    """{(pasta normalizada, nome do arquivo sem extensão, minúsculo): {formato: extensão como veio}} de TODAS as origens da folha
+    (só os formatos de imagem conhecidos: TIFF, DNG, JPG, PNG)."""
+    out: dict[tuple[str, str], dict[str, str]] = {}
+    for o in origens(arquivo_origem):
+        c = _caminho(o)
+        f = EXT_FORMATO.get(c.suffix.lower())
+        if f and c.stem.strip():
+            out.setdefault((norm(str(c.parent)) or "(raiz do lote)", c.stem.strip().lower()), {})[f] = c.suffix
+    return out
+
+
+def mesmo_arquivo_outro_formato(origem_a, origem_b) -> str | None:
+    """CAMP-DUP (09/11/2026): a exportação da câmera/scanner que deixa, na MESMA pasta, IMG_0012.jpg, IMG_0012.dng e IMG_0012.tif — o
+    mesmo nome de arquivo, só a extensão de FORMATO muda. É a ÚNICA exceção à regra dura "da mesma pasta, nunca". Devolve o rótulo
+    ("IMG_0012 .tif/.jpg") ou None. IMG_0012 × IMG_0013 (sequência) e .jpg × .jpeg (o mesmo formato) não entram."""
+    na, nb = _arquivos_por_nome(origem_a), _arquivos_por_nome(origem_b)
+    for chave in sorted(set(na) & set(nb)):
+        fa, fb = na[chave], nb[chave]
+        if fa and fb and not set(fa) & set(fb):
+            nome = next((_caminho(o).stem.strip() for o in origens(origem_a) if _caminho(o).stem.strip().lower() == chave[1]), chave[1])
+            exts = {**fa, **fb}
+            return f"{nome} " + "/".join(exts[f].lower() for f in ("tif", "dng", "jpg", "png") if f in exts)
+    return None
+
+
 def conflito(origem_a, origem_b, md5_igual: bool = False) -> str | None:
     """REGRA DURA: duas folhas só podem ser a mesma prancha se vierem de pastas de FORMATO/VERSÃO diferentes (TIFF × DNG × JPG ×
     JPG LIMPO; "em alta" × "para internet"). Devolve o motivo do NÃO (ou None quando podem ser a mesma prancha):
-      - a mesma pasta (fotos parecidas em sequência, pranchas de um mesmo jogo): NUNCA, nem pelo md5;
+      - a mesma pasta (fotos parecidas em sequência, pranchas de um mesmo jogo): NUNCA, nem pelo md5 — exceto o MESMO nome de arquivo em
+        outro formato (IMG_0012.jpg × IMG_0012.dng × IMG_0012.tif: `mesmo_arquivo_outro_formato`);
       - o mesmo formato em pastas diferentes (TIFF × TIFF): só se o arquivo for o mesmo (md5);
       - sem arquivo de origem conhecido: só o mesmo arquivo (md5)."""
     pa, pb = pasta_chave(origem_a), pasta_chave(origem_b)
+    if mesmo_arquivo_outro_formato(origem_a, origem_b):   # IMG_0012.jpg × IMG_0012.dng × IMG_0012.tif na mesma pasta: a mesma prancha
+        return None
     if pa is None or pb is None:
         return None if md5_igual else "sem a pasta de origem, só o mesmo arquivo (md5) junta"
     if pa == pb:
@@ -252,6 +286,8 @@ def marcas_suspeitas(itens: list) -> list[dict]:
         if not de or de not in por_cod or marca_de_pessoa(i):
             continue
         pa = pasta_chave(i["arquivo_origem"])
+        if mesmo_arquivo_outro_formato(i["arquivo_origem"], por_cod[de]["arquivo_origem"]):
+            continue                               # IMG_0012.jpg → IMG_0012.tif: a mesma foto em outro formato, a marca está certa
         if pa is not None and pa == pasta_chave(por_cod[de]["arquivo_origem"]):
             tipo = _campo(i, "tipo_duplicata") or ""
             out.append({"codigo": i["codigo"], "de": de, "tipo": tipo, "pasta": subpasta(i["arquivo_origem"]),
@@ -306,6 +342,24 @@ def agrupar(itens: list, md5: dict[str, str], hashes: dict[str, list[str]]) -> d
                     pares.append((1, 64, a, b, "mesmo nome em outra pasta de formato"))
                 else:
                     incertos.append((a, b, "mesmo nome em outra subpasta" + (f", mas a imagem é diferente (dHash {d})" if d < 64 else ", sem imagem para confirmar")))
+    incertos_fmt = []                              # o mesmo nome em outro formato, mas a imagem diz que é outra: incerto mesmo acima de LIMIAR_DUVIDA
+    por_nome = defaultdict(list)                   # CAMP-DUP (09/11/2026): IMG_0012.jpg/.dng/.tif na MESMA pasta (exportação da câmera)
+    for c in cods:
+        for chave in _arquivos_por_nome(ori[c]):
+            por_nome[chave].append(c)
+    vistos_nome = set()
+    for g in por_nome.values():
+        for x, a in enumerate(g):
+            for b in g[x + 1:]:
+                rot = frozenset((a, b)) not in vistos_nome and mesmo_arquivo_outro_formato(ori[a], ori[b])
+                if not rot:
+                    continue
+                vistos_nome.add(frozenset((a, b)))
+                d = menor_distancia(hashes.get(a), hashes.get(b))
+                if d <= LIMIAR_DUVIDA or d == 64:
+                    pares.append((1, d, a, b, f"mesmo arquivo em outro formato ({rot}" + (f", dHash {d})" if d < 64 else ")")))
+                else:
+                    incertos_fmt.append((a, b, f"mesmo arquivo em outro formato ({rot}), mas a imagem é diferente (dHash {d})"))
     por_sub = defaultdict(list)
     for c in cods:
         os_ = origens(ori[c])
@@ -364,6 +418,11 @@ def agrupar(itens: list, md5: dict[str, str], hashes: dict[str, list[str]]) -> d
             continue                               # (as duas já estão em grupos diferentes: a imagem já separou)
         d = menor_distancia(hashes.get(a), hashes.get(b))
         if LIMIAR_DUVIDA < d < 64:
+            continue
+        vistos.add(frozenset((a, b)))
+        inc.append((a, b, m))
+    for a, b, m in incertos_fmt:                   # a imagem desmente o nome: lista para uma pessoa olhar (nunca entra no plano)
+        if uf.achar(a) == uf.achar(b) or frozenset((a, b)) in vistos:
             continue
         vistos.add(frozenset((a, b)))
         inc.append((a, b, m))
