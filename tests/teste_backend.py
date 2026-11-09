@@ -15425,6 +15425,52 @@ def filho(modo):
         pl5 = ler(base / "e3.json").get("projetos", {}).get(P, {})
         ver("3ª rodada: nada mais a fazer, e as marcas JPG/DNG → TIF da mesma pasta NÃO viram 'marca antiga suspeita' (o --corrigir-marcas as desfaria)",
             rc == 0 and not pl5.get("decisoes") and not pl5.get("publicadas_despublicar_e_301") and not pl5.get("marcas_suspeitas"), (pl5.get("marcas_suspeitas"), out5[-400:]))
+        # ---------- 3b. cópia JÁ marcada que continua no site (CAMP Vision, limpeza ou pessoa): --despublicar tira com 301 para a raiz ----------
+        k = connect()
+        novos = [(30, "IMG_0060.tif", 60, None, "no_ar", 9130), (31, "IMG_0060.jpg", 60, 30, "no_ar", 9131),        # marcada (CAMP Vision), no site
+                 (33, "IMG_0061.tif", 61, None, "rascunho", 9133), (32, "IMG_0061.jpg", 61, 33, "no_ar", 9132),    # a raiz só em rascunho
+                 (35, "IMG_0071.jpg", 71, None, "no_ar", 9135), (34, "IMG_0070.jpg", 71, 35, "no_ar", 9134),       # marca SUSPEITA (sequência)
+                 (38, "IMG_0080.tif", 80, None, "no_ar", 9138), (37, "IMG_0080.jpg", 80, 38, None, None),           # cadeia D36 → D37 → D38
+                 (36, "IMG_0080.dng", 80, 37, "no_ar", 9136)]
+        for n, orig, img, de, st, wid in novos:
+            k.execute("""INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,arquivo_origem,pendencias,duplicata_de,tipo_duplicata,status_site,tainacan_item_id)
+                         VALUES (?,?,?,?,?,'campvision',?,'conferida',?,?,?,?,?,?)""",
+                      (D(n), P, "S03", n, f"Foto {n}", lote, ent + orig, _j.dumps({"previa": previa(n, prancha(img)), "bloqueios": [], "sinais": []}),
+                       D(de) if de else None, "perceptual" if de else None, st or "nao_publicado", wid))
+            if wid:
+                site[wid] = "publish" if st == "no_ar" else "draft"
+        k.commit(); k.close()
+        def redirs():
+            k_ = sqlite3.connect(db); v = [tuple(r) for r in k_.execute("SELECT codigo_antigo, codigo_novo FROM redirecionamento ORDER BY 1")]; k_.close(); return v
+        def foto():
+            k_ = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            t = [list(r) for tb in ("item", "redirecionamento") for r in k_.execute(f"SELECT * FROM {tb} ORDER BY rowid")]; k_.close(); return t
+        r0, n_ch = redirs(), len(chamadas)
+        antes = foto()
+        rc, o6 = script("--plano", str(base / "e4.json"))
+        pl6 = ler(base / "e4.json").get("projetos", {}).get(P, {})
+        ver("sem --despublicar: lista a 'cópia já marcada ainda no site' (D31, D32, D36; a suspeita D34 não) e não mexe em nada",
+            rc == 0 and "CÓPIA JÁ MARCADA AINDA NO SITE: 3" in o6 and sorted(Dn(x["copia"]) for x in pl6.get("copias_marcadas_no_site", [])) == [31, 32, 36]
+            and not pl6.get("despublicar") and foto() == antes and len(chamadas) == n_ch, o6[o6.find("CÓPIA JÁ"):][:400])
+        rc, o7 = script("--despublicar", "--plano", str(base / "e5.json"))
+        pl7 = ler(base / "e5.json").get("projetos", {}).get(P, {})
+        desp7 = sorted((Dn(x["copia"]), Dn(x["fica"])) for x in pl7.get("despublicar", []))
+        ant7 = sorted((Dn(x["copia"]), Dn(x["fica"])) for x in pl7.get("publique_a_principal_antes", []))
+        ver("--despublicar simulado: D31 → D30 e D36 → D38 (a RAIZ da cadeia, não D37); D32 espera a principal D33 (rascunho); D34 (marca suspeita) fica de fora",
+            rc == 0 and desp7 == [(31, 30), (36, 38)] and ant7 == [(32, 33)] and "cópia já marcada ainda no site" in o7 and foto() == antes
+            and 34 in [Dn(x["codigo"]) for x in pl7.get("marcas_suspeitas", [])], (desp7, ant7, o7[-500:]))
+        rc, o8 = script("--aplicar", "--plano", str(base / "e5.json"), "--despublicar")
+        ver("aplicado: D31 e D36 saem do site (privadas) com 301 para D30 e D38; a marca continua; D32 e D34 continuam no ar",
+            rc == 0 and sorted(chamadas[n_ch:]) == [(publicador.COL_ACERVO, 9131, "private"), (publicador.COL_ACERVO, 9136, "private")]
+            and col(31, "status_site") == "fora_do_ar" and col(36, "status_site") == "fora_do_ar" and col(31, "duplicata_de") == D(30) and col(36, "duplicata_de") == D(37)
+            and sorted(set(redirs()) - set(r0)) == [(D(31), D(30)), (D(36), D(38))] and col(32, "status_site") == "no_ar" and col(34, "status_site") == "no_ar", o8[-500:])
+        rc, o9 = script("--aplicar", "--plano", str(base / "e5.json"), "--despublicar")
+        ver("o mesmo plano de novo: RECUSADO (o banco mudou)", rc == 3 and "RECUSADO" in o9, o9[-200:])
+        n2 = len(chamadas)
+        rc, o10 = script("--desfazer", str(base / "e5.desfazer.json"), "--aplicar")
+        ver("desfazer --aplicar: D31 e D36 voltam ao site (publish) e ao 'no ar', e os 301 saem",
+            rc == 0 and sorted(chamadas[n2:]) == [(publicador.COL_ACERVO, 9131, "publish"), (publicador.COL_ACERVO, 9136, "publish")]
+            and col(31, "status_site") == "no_ar" and col(36, "status_site") == "no_ar" and redirs() == r0, o10[-400:])
         # ---------- 4. importação (defesa): a foto nova em JPG + TIF na mesma pasta entra com o JPG como cópia ----------
         k = connect()
         lote2 = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Fotos 2',?,'/nao/existe/dupext2','revisao')", (P,)).lastrowid

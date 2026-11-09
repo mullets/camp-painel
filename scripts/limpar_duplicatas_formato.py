@@ -16,6 +16,8 @@ No servidor do painel:
   --despublicar     cópias JÁ PUBLICADAS (grupo certo): na simulação mostra o plano; com --aplicar, deixa a cópia privada no site
                     (a mesma rotina do painel: publicador.esconder_folha_no_site) e grava o redirecionamento 301 cópia → a que fica
                     (redir_site.registrar; o coletor de 10 min envia ao site). Só se a que fica estiver PUBLICADA (senão: "publique antes").
+                    Também a "cópia já marcada ainda no site" (duplicata_de de CAMP Vision, limpeza ou pessoa, mas publicada): 301 para a
+                    raiz da cadeia; a marca suspeita (mesma pasta) fica de fora.
   --corrigir-marcas marcas antigas de MÁQUINA (CAMP Vision) que ligam duas folhas da MESMA pasta: na simulação entram no plano como
                     "Não é duplicata" (ação nao_e da tela Duplicatas); com --aplicar --corrigir-marcas, são desfeitas. Marca de pessoa: nunca.
 
@@ -162,10 +164,29 @@ def analisar(con, proj: str, raiz: Path | None, usar_imagens: bool) -> dict | No
             decisoes.append({"acao": "marcar", "original": orig, "copias": livres})
     viram = sum(len(d["copias"]) for d in decisoes)
     suspeitas = r["marcas_suspeitas"]
+    # CAMP-DUP (09/11/2026): a folha JÁ marcada como cópia (CAMP Vision, esta limpeza ou uma pessoa) que continua publicada no site.
+    # Com --despublicar sai do site com 301 para a RAIZ da cadeia (raiz_da_cadeia), só se a raiz estiver no ar; marca suspeita não entra.
+    sus_cods = {x["codigo"] for x in suspeitas}
+    marcadas_no_site = []
+    for i in itens:
+        c = i["codigo"]
+        if not i["duplicata_de"] or not fr.no_site(i) or not i["tainacan_item_id"] or c in sus_cods:
+            continue
+        raiz = fr.raiz_da_cadeia(con, c)
+        if raiz == c:
+            continue
+        o = con.execute("SELECT status_site, tainacan_item_id, duplicata_de FROM item WHERE codigo=?", (raiz,)).fetchone()
+        x = {"copia": c, "fica": raiz, "situacao": i["status_site"], "site_id": i["tainacan_item_id"], "ja_marcada": True, "marcada_de": i["duplicata_de"]}
+        marcadas_no_site.append(x)
+        if o and o["status_site"] == "no_ar" and o["tainacan_item_id"] and not o["duplicata_de"]:
+            despublicar.append({**x, "fica_site_id": o["tainacan_item_id"]})
+        else:
+            principal_antes.append({**x, "fica_situacao": (o["status_site"] if o else None) or "nao_publicado"})
     return {"titulo": p["titulo"] if p else "", "itens": itens, "por_cod": por_cod, "r": r, "decisoes": decisoes, "publicadas": publicadas,
             "pulados": pulados, "ja_copias": ja_copias, "folhas": len(itens), "pranchas": len(itens) - sum(len(g) - 1 for g in r["grupos"]),
             "viram_copia": viram, "lidas": lidas, "falhas": falhas, "guardar_md5": guardar_md5, "guardar_phash": guardar_phash,
-            "carimbo": carimbo(con, proj), "despublicar": despublicar, "principal_antes": principal_antes, "suspeitas": suspeitas}
+            "carimbo": carimbo(con, proj), "despublicar": despublicar, "principal_antes": principal_antes, "suspeitas": suspeitas,
+            "marcadas_no_site": marcadas_no_site}
 
 
 def mostrar(proj: str, a: dict, listar: int, despublicar: bool = False, corrigir_marcas: bool = False) -> None:
@@ -176,6 +197,7 @@ def mostrar(proj: str, a: dict, listar: int, despublicar: bool = False, corrigir
     print(f"{nome}: {a['folhas']} folhas → {a['pranchas']} pranchas; ficam {ficam}, {a['viram_copia']} viram cópia"
           + (f"; {len(a['ja_copias'])} já eram cópia" if a["ja_copias"] else "")
           + (f" (das que ficam, {len(a['publicadas'])} repetida(s) já no site: ver abaixo)" if a["publicadas"] else "")
+          + (f"; {len(a['marcadas_no_site'])} cópia(s) já marcada(s) ainda no site" if a["marcadas_no_site"] else "")
           + (f"; {len(a['suspeitas'])} MARCA(S) ANTIGA(S) SUSPEITA(S)" if a["suspeitas"] else "")
           + (f"; {len(r['incertos'])} incerto(s)" if r["incertos"] else ""))
     if not r["grupos"]:
@@ -194,15 +216,21 @@ def mostrar(proj: str, a: dict, listar: int, despublicar: bool = False, corrigir
               " (simule com --despublicar para ver o plano):")
         for x in a["publicadas"]:
             print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id'] or '?'} do site) → redirecionar para {x['fica']}")
-    elif a["publicadas"]:
+    if a["marcadas_no_site"] and not despublicar:
+        print(f"   CÓPIA JÁ MARCADA AINDA NO SITE: {len(a['marcadas_no_site'])} — NÃO mexo (simule com --despublicar para tirar do site com 301 para a principal):")
+        for x in a["marcadas_no_site"]:
+            print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id']} do site; cópia de {d_curto(x['marcada_de'])}) → redirecionar para {x['fica']}")
+    if despublicar and (a["publicadas"] or a["marcadas_no_site"]):
         if a["despublicar"]:
             print(f"   --despublicar (só com --aplicar): {len(a['despublicar'])} cópia(s) JÁ NO SITE saem do site (ficam privadas) e redirecionam (301) para a que fica:")
             for x in a["despublicar"]:
-                print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id']} do site) → 301 para {x['fica']} (no ar, item {x['fica_site_id']})")
+                print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id']} do site" + ("; cópia já marcada ainda no site" if x.get("ja_marcada") else "")
+                      + f") → 301 para {x['fica']} (no ar, item {x['fica_site_id']})")
         if a["principal_antes"]:
             print(f"   PUBLIQUE A PRINCIPAL ANTES: {len(a['principal_antes'])} cópia(s) no site cuja folha que fica NÃO está no ar (não despublico):")
             for x in a["principal_antes"]:
-                print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id'] or '?'} do site): publique {x['fica']} ({x['fica_situacao']}) antes")
+                print(f"     {d_curto(x['copia'])} ({x['situacao']}, item {x['site_id'] or '?'} do site" + ("; cópia já marcada" if x.get("ja_marcada") else "")
+                      + f"): publique {x['fica']} ({x['fica_situacao']}) antes")
     for g in a["pulados"]:
         print(f"   grupo só de cópias ({', '.join(d_curto(c) for c in g)}): não mexo; confira na tela Duplicatas do projeto.")
     if a["suspeitas"]:
@@ -241,7 +269,7 @@ def simular(a, db: str) -> int:
     plano = {"tipo": "limpeza_formatos", "versao": 2, "gerado_em": datetime.now().isoformat(timespec="seconds"), "banco": db,
              "com_imagens": usar, "despublicar": bool(a.despublicar), "corrigir_marcas": bool(a.corrigir_marcas),
              "aviso": "PROPOSTA. Nada foi aplicado. Para aplicar: --aplicar --plano <este arquivo>.", "projetos": {}}
-    tot = {"folhas": 0, "pranchas": 0, "viram": 0, "publicadas": 0, "incertos": 0, "sem_imagem": 0, "suspeitas": 0, "despublicar": 0, "principal_antes": 0}
+    tot = {"marcadas_no_site": 0, "folhas": 0, "pranchas": 0, "viram": 0, "publicadas": 0, "incertos": 0, "sem_imagem": 0, "suspeitas": 0, "despublicar": 0, "principal_antes": 0}
     for proj in projetos:
         an = analisar(con, proj, raiz, usar)
         if not an:
@@ -249,11 +277,11 @@ def simular(a, db: str) -> int:
         mostrar(proj, an, a.listar, a.despublicar, a.corrigir_marcas)
         r = an["r"]
         tot["folhas"] += an["folhas"]; tot["pranchas"] += an["pranchas"]; tot["viram"] += an["viram_copia"]
-        tot["publicadas"] += len(an["publicadas"]); tot["incertos"] += len(r["incertos"]); tot["sem_imagem"] += r["incertos_sem_imagem"]
+        tot["publicadas"] += len(an["publicadas"]); tot["marcadas_no_site"] += len(an["marcadas_no_site"]); tot["incertos"] += len(r["incertos"]); tot["sem_imagem"] += r["incertos_sem_imagem"]
         tot["suspeitas"] += len(an["suspeitas"]); tot["despublicar"] += len(an["despublicar"]); tot["principal_antes"] += len(an["principal_antes"])
         plano["projetos"][proj] = {
             "titulo": an["titulo"], "carimbo": an["carimbo"], "folhas": an["folhas"], "pranchas": an["pranchas"],
-            "decisoes": an["decisoes"], "publicadas_despublicar_e_301": an["publicadas"],
+            "decisoes": an["decisoes"], "publicadas_despublicar_e_301": an["publicadas"], "copias_marcadas_no_site": an["marcadas_no_site"],
             "incertos": [{"a": x, "b": y, "motivo": m} for x, y, m in r["incertos"]],
             "despublicar": an["despublicar"] if a.despublicar else [], "publique_a_principal_antes": an["principal_antes"],
             "marcas_suspeitas": an["suspeitas"],
@@ -265,6 +293,7 @@ def simular(a, db: str) -> int:
           + (f" · {tot['publicadas']} repetida(s) já no site (não mexo)" if not a.despublicar else
              f" · {tot['publicadas']} repetida(s) já no site: {tot['despublicar']} saem do site com 301 ao aplicar com --despublicar,"
              f" {tot['principal_antes']} esperam a principal ser publicada")
+          + (f" · {tot['marcadas_no_site']} cópia(s) já marcada(s) ainda no site" if tot["marcadas_no_site"] else "")
           + f" · {tot['suspeitas']} marca(s) antiga(s) suspeita(s)" + (" (viram 'Não é duplicata' ao aplicar com --corrigir-marcas)" if a.corrigir_marcas and tot["suspeitas"] else "")
           + f" · {tot['incertos']} par(es) incerto(s) (não entram)")
     if not usar:
@@ -434,13 +463,16 @@ def _despublicar(projs: dict, desfazer: dict, gravar) -> tuple[int, list[str]]:
     for proj, x in projs.items():
         for e in x.get("despublicar") or []:
             c, fica = e["copia"], e["fica"]
+            ja = bool(e.get("ja_marcada"))         # cópia JÁ marcada que continua no site: a marca e a raiz têm de ser as mesmas da simulação
             con = abrir(desfazer["banco"], escrita=True)
             try:
                 ic = _linha(con, c, ("status_site", "tainacan_item_id", "duplicata_de", "projeto_codigo"))
                 io = _linha(con, fica, ("status_site", "tainacan_item_id", "duplicata_de", "projeto_codigo"))
+                raiz_agora = fr.raiz_da_cadeia(con, c) if ja else None
             finally:
                 con.close()
-            if not ic or ic["projeto_codigo"] != proj or ic["duplicata_de"] or ic["status_site"] not in ("no_ar", "rascunho") or str(ic["tainacan_item_id"]) != str(e["site_id"]):
+            marca_mudou = (ic.get("duplicata_de") != e.get("marcada_de") or raiz_agora != fica) if ja else bool(ic.get("duplicata_de"))
+            if not ic or ic["projeto_codigo"] != proj or marca_mudou or ic["status_site"] not in ("no_ar", "rascunho") or str(ic["tainacan_item_id"]) != str(e["site_id"]):
                 nao.append(f"{d_curto(c)} mudou desde a simulação (não mexo)"); continue
             if not io or io["status_site"] != "no_ar" or not io["tainacan_item_id"] or io["duplicata_de"]:
                 nao.append(f"{d_curto(c)}: publique {d_curto(fica)} antes"); continue
@@ -457,7 +489,7 @@ def _despublicar(projs: dict, desfazer: dict, gravar) -> tuple[int, list[str]]:
                 apontavam = [r[0] for r in con.execute("SELECT codigo_antigo FROM redirecionamento WHERE codigo_novo=?", (c,))]
                 redir_site.registrar(con, c, fica, "item", MOTIVO_301, ATOR)
                 con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,?,?,?)",
-                            (c, "duplicata_formato_despublicada", ATOR, json.dumps({"fica": fica, "site_id": e["site_id"], "estava": ic["status_site"],
+                            (c, "duplicata_formato_despublicada", ATOR, json.dumps({"fica": fica, "site_id": e["site_id"], "estava": ic["status_site"], "ja_marcada": ja,
                                                                                    "redirecionamento": f"{c} → {fica} (301)"}, ensure_ascii=False)))
                 con.commit()
             except Exception:
@@ -465,7 +497,7 @@ def _despublicar(projs: dict, desfazer: dict, gravar) -> tuple[int, list[str]]:
                 raise
             finally:
                 con.close()
-            desfazer["despublicadas"].setdefault(proj, []).append({"copia": c, "fica": fica, "site_id": e["site_id"], "estava": ic["status_site"],
+            desfazer["despublicadas"].setdefault(proj, []).append({"copia": c, "fica": fica, "site_id": e["site_id"], "estava": ic["status_site"], "ja_marcada": ja,
                                                                    "redir_antes": dict(redir_antes) if redir_antes else None, "redir_apontavam": apontavam})
             gravar()
             tiradas += 1
