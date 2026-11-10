@@ -7,6 +7,7 @@ que a tela usa, e nunca cria no site o que já está lá:
 - fundo  · pendente_criar_no_site      -> criar_fundo_no_site, depois de procurar no site o termo com o mesmo nome (não duplica)
 - fundo  · pendente_renomear_no_site   -> renomear_fundo_no_site com o nome de agora
 - fundo  · pendente_descricao_no_site  -> atualizar_descricao_fundo_no_site ("Sobre o acervo" de agora; vazio o site ignora)
+- fundo  · pendente_sem_legendas_no_site -> legendas_site.enviar ("sem legendas" de agora: "1" ou "__limpar__"; contrato 1.9)
 - projeto· pendente_criar_no_site      -> procura o dossiê no site pelo código (espelho, depois o próprio site); achou: liga e completa
                                           os metadados; não achou: criar_dossie_no_site. Busca que falha = não cria.
 - projeto· pendente_metadados_no_site  -> atualizar_dossie_no_site com os campos editados desde o último envio confirmado
@@ -31,7 +32,8 @@ from .db import connect
 
 FIXOS = {("fundo", "pendente_criar_no_site"), ("fundo", "pendente_renomear_no_site"), ("fundo", "pendente_descricao_no_site"),
          ("projeto", "pendente_criar_no_site"), ("projeto", "pendente_metadados_no_site"), ("projeto", "pendente_capa_no_site"),
-         ("agente", "pendente_hub_no_site"), ("agente", "pendente_renomear_no_site"), ("projeto", "pendente_ordem_folhas_no_site")}
+         ("agente", "pendente_hub_no_site"), ("agente", "pendente_renomear_no_site"), ("projeto", "pendente_ordem_folhas_no_site"),
+         ("fundo", "pendente_sem_legendas_no_site")}
 PREFIXO_METADADO = "pendente_metadado_"
 NOMES_ENTIDADE = {"fundo": "fundo", "projeto": "projeto", "agente": "arquiteto"}
 # ordem na rodada: o que os outros usam vai antes (termo do fundo, nome do arquiteto, dossiê) e o resto depois
@@ -191,6 +193,15 @@ def _fundo_descricao(codigo: str, ator: str) -> str:
     if not r.get("enviado"):
         raise NadaAEnviar("o fundo ainda não está no site; o texto de agora vai quando ele for criado")
     return "texto do fundo (Sobre o acervo)"
+
+
+def _fundo_sem_legendas(codigo: str, ator: str) -> str:
+    from . import legendas_site
+    r = legendas_site.enviar(codigo, ator)
+    _erro(r)
+    if r.get("nada"):
+        raise NadaAEnviar("o fundo ainda não está no site; vai junto do \"Enviar fundo ao site\"")
+    return "sem legendas nas imagens do site"
 
 
 def _projeto(codigo: str):
@@ -426,7 +437,7 @@ def reenviar(p: dict, ator: str) -> str:
     if e == "projeto" and campo.startswith(PREFIXO_METADADO):
         return _projeto_metadado(c, campo[len(PREFIXO_METADADO):], ator)
     fn = {("fundo", "pendente_criar_no_site"): _fundo_criar, ("fundo", "pendente_renomear_no_site"): _fundo_renomear,
-          ("fundo", "pendente_descricao_no_site"): _fundo_descricao, ("projeto", "pendente_criar_no_site"): _projeto_criar,
+          ("fundo", "pendente_descricao_no_site"): _fundo_descricao, ("fundo", "pendente_sem_legendas_no_site"): _fundo_sem_legendas, ("projeto", "pendente_criar_no_site"): _projeto_criar,
           ("projeto", "pendente_metadados_no_site"): _projeto_metadados, ("projeto", "pendente_capa_no_site"): _projeto_capa,
           ("projeto", "pendente_ordem_folhas_no_site"): _projeto_ordem,
           ("agente", "pendente_hub_no_site"): _agente_hub, ("agente", "pendente_renomear_no_site"): _agente_renomear}[(e, campo)]

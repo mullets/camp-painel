@@ -518,3 +518,11 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
   cada lista com "Buscar em …", "Nenhum termo com essa busca." e o resumo do que está marcado ("nada marcado"); **Só no painel** ("não vai
   ao site"). Rodapé: **Cancelar** · **Salvar alterações** ("Salvando…"). Os termos são os da taxonomia do site (`/api/vocabulario/tipologia`),
   nunca os do protótipo.
+
+## Fundo sem legendas no site (10/11/2026, contrato painel ↔ site 1.9)
+- Caixa no "Editar" do fundo, grupo "Aparece na página pública": **Sem legendas nas imagens do site** — "As fotos e desenhos deste fundo
+  aparecem no site sem o texto embaixo da imagem (título, ano). A ficha de cada folha e o crédito da foto continuam."
+- Ao salvar: "· as legendas do site mudam em seguida" (fundo no site) ou "· vale no site quando o fundo for enviado ao site".
+- Histórico: **"sem legendas nas imagens" enviado ao site**; divergência do "Enviar fundo ao site": **Sem legendas nas imagens do site**.
+- Site antigo: "O site ainda não conhece "sem legendas" (plugin da CAMP 1.23.24): atualize o site; vai quando ele tiver".
+- "Legenda" aqui é só o texto embaixo da imagem no site. Não confundir com "ler e legendar" do CAMP Vision (dados lidos da folha).
