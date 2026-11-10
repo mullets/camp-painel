@@ -110,8 +110,8 @@ async def enviar_folha(codigo: str, request: Request, tarefas: BackgroundTasks, 
         ja = con.execute("SELECT codigo FROM item WHERE projeto_codigo=? AND md5=?", (codigo, md5)).fetchone()
         if ja:
             raise HTTPException(409, f"Esta imagem já está no projeto: {ja[0]}.")
-        seq = max(FAIXA_PAINEL, con.execute("SELECT COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=? AND sequencial>?",
-                                            (codigo, FAIXA_PAINEL)).fetchone()[0]) + 1
+        from .retirados import maior_sequencial        # CAMP-DUP: o D de uma folha retirada nunca é reusado
+        seq = max(FAIXA_PAINEL, maior_sequencial(con, codigo, FAIXA_PAINEL)) + 1
         a_cod = int(p["ano"]) if p["ano"] else 0
         cod = f"{codigo}-{a_cod:04d}-{serie}-D{seq:05d}"
         if con.execute("SELECT 1 FROM item WHERE codigo=?", (cod,)).fetchone():

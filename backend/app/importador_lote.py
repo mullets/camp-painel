@@ -379,6 +379,23 @@ def marcar_repetidas_por_imagem(con, proj: str, novos: list[str], ator: str, lot
     return feitas
 
 
+def _e_retirada(d: dict, cod: str, seq: int, ret: dict, preparo: dict) -> bool:
+    """CAMP-DUP: a folha do pacote é uma que foi RETIRADA do sistema (scripts/retirar_copias.py)? Pelo código, pelo número D (nunca é
+    reusado: outra série no mesmo D também não entra) ou pelo mesmo arquivo (md5 ou arquivo de origem)."""
+    if cod in ret["codigos"] or seq in ret["sequenciais"]:
+        return True
+    md5 = (str(d.get("md5") or "").strip().lower() or (preparo.get(cod) or {}).get("md5") or "")
+    if md5 and md5 in ret["md5"]:
+        return True
+    origem = d.get("arquivo_origem")
+    lista = origem if isinstance(origem, list) else str(origem or "").split(" | ")
+    for o in lista:
+        o = (o.get("arquivo_origem") if isinstance(o, dict) else o) or ""
+        if str(o).strip() and str(o).strip() in ret["origens"]:
+            return True
+    return False
+
+
 def importar_lote(con, lote_id: int, ator: str) -> dict:
     """NÃO faz commit (quem chama controla a transação)."""
     lote = con.execute("SELECT * FROM lista_processamento WHERE id=?", (lote_id,)).fetchone()
@@ -426,6 +443,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     esperando = puladas_colisao = 0
     recodificadas: list[dict] = []
     religadas: list[dict] = []
+    from .retirados import chaves as _chaves_retiradas
+    ret_ = _chaves_retiradas(con, proj)                    # CAMP-DUP: folha RETIRADA do sistema (cópia de outro formato) nunca volta
+    puladas_retiradas: list[str] = []
     for d in docs:
         cod = str(d.get("codigo") or "")
         m = CODIGO_DOCUMENTO.match(cod)
@@ -433,6 +453,9 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
             problemas.append(f"{cod or '(sem código)'}: código inválido, de outro projeto ou de série desconhecida")
             continue
         serie, seq = m.group(4), int(m.group(5))
+        if ret_["codigos"] and _e_retirada(d, cod, seq, ret_, preparo):
+            puladas_retiradas.append(cod)                   # o mesmo código, o mesmo D (o número nunca é reusado) ou o mesmo arquivo (md5/origem)
+            continue
         cob = cobertas.get(cod)
         if cob:
             if cob["situacao"] == "pendente":
@@ -597,6 +620,8 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
               "pacote_sha": assinatura_pacote(pacote)}             # campo novo, opcional: a varredura mantém a importação enquanto o pacote não mudar
     if recodificadas:
         resumo["recodificadas_pela_releitura"] = recodificadas
+    if puladas_retiradas:                                          # campo novo, opcional (CAMP-DUP): folhas retiradas que o pacote ainda traz
+        resumo["retiradas_ignoradas"] = puladas_retiradas
     if repetidas:                                                  # campo novo, opcional (CAMP-DUP-FORMATOS): códigos novos que são a mesma prancha de outra folha
         resumo["repetidas_por_formato"] = repetidas
     if religadas:                                                  # campo novo, opcional: folhas que já estavam no projeto e só ganharam a imagem de volta
@@ -639,7 +664,7 @@ def importar_lote(con, lote_id: int, ator: str) -> dict:
     )
     from .estacao_eventos import conferir_contagem      # CAMP-017: o que a estação disse que enviou × o que chegou (só aviso)
     _n = lambda v: len(v) if isinstance(v, (list, tuple, set, dict)) else int(v or 0)  # noqa: E731
-    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora))
+    cf = conferir_contagem(con, proj, lote_id, _n(criados) + _n(atualizados) + _n(ignoradas) + _n(retirados) + _n(movidas_fora) + len(puladas_retiradas))
     if cf:
         resumo["contagem_estacao"] = cf
     from .rotas_revisao import conferir_so_avisos, conferir_sem_aviso, AUTOMATICO
@@ -676,7 +701,8 @@ def abrir_colisao(con, lote, proj: str, colisoes: list[dict], docs: list) -> int
     from .decisoes import abrir
     n = con.execute("SELECT COUNT(*) FROM decisao WHERE tipo='lote_colide' AND chave LIKE ?", (f"lote_colide:{lote['id']}:%",)).fetchone()[0]
     p = con.execute("SELECT fundo_codigo, titulo FROM projeto WHERE codigo=?", (proj,)).fetchone()
-    folhas = con.execute("SELECT COUNT(*), COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (proj,)).fetchone()
+    from .retirados import maior_sequencial
+    folhas = (con.execute("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", (proj,)).fetchone()[0], maior_sequencial(con, proj))
     ctx = {"lote_id": lote["id"], "lote_nome": lote["nome"], "pasta": lote["pasta_qnap"], "projeto_codigo": proj, "projeto_titulo": p["titulo"] if p else None,
            "folhas_no_projeto": folhas[0], "maior_d": folhas[1], "folhas_no_lote": len(docs), "colisoes": colisoes}
     did, _ = abrir(con, "lote_colide", f"lote_colide:{lote['id']}:{n + 1}", p["fundo_codigo"] if p else proj[:4], lote["nome"] or proj, ctx, "campvision")
@@ -702,7 +728,8 @@ def aplicar_colisao(con, d, ctx: dict, acao: str, ator: str) -> dict:
             mm = CODIGO_DOCUMENTO.match(str(x.get("codigo") or "")) if isinstance(x, dict) else None
             if mm:
                 pacote_max = max(pacote_max, int(mm.group(5)))
-        prox = max(con.execute("SELECT COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (proj,)).fetchone()[0], pacote_max) + 1
+        from .retirados import maior_sequencial         # CAMP-DUP: o D de uma folha retirada nunca é reusado
+        prox = max(maior_sequencial(con, proj), pacote_max) + 1
         ren = {}
         for c in colisoes:
             mm = CODIGO_DOCUMENTO.match(c["codigo"])

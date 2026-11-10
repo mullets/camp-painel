@@ -26,6 +26,7 @@ MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Materia
 MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no projeto (item.ordem_manual; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas_site"}   # a ordem das folhas escolhida no painel vai ao site (contrato 1.8; linha própria)
 MODOS_RAPIDOS |= {"copias_aprovar"}   # cópias (duplicata_de) não impedem aprovar lote nem contam na lista de Projetos (linha própria)
+MODOS_RAPIDOS |= {"retirar_copias"}   # CAMP-DUP 10/11/2026: retirar do sistema as cópias, fica a JPG original (linha própria)
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
 
 
@@ -15334,6 +15335,185 @@ def filho(modo):
         ver("desfazer --aplicar volta as 11 folhas EXATAMENTE como estavam antes da limpeza (duplicata, conferência, revisão, pendências)",
             r8.returncode == 0 and estado() == est1, (r8.stdout + r8.stderr)[-400:])
         for l in res: print(l)
+    elif modo == "retirar_copias":
+        # CAMP-DUP (10/11/2026), pedido do Rafael: "Não quero que fique cópias! Deixe só as JPGs originais, o que não era ignore e tire do
+        # sistema AGORA." scripts/retirar_copias.py: simula por padrão; fica a JPG original; as outras viram lápide (item_retirado) e somem
+        # do painel; o D nunca é reusado; a importação não as traz de volta; a do site sai com 301 só se a JPG estiver no ar; desfazer exato.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, hashlib, io as _io, contextlib, importlib.util
+        from pathlib import Path as _P
+        from app import publicador, importador_lote, retirados, auth
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:500]}")
+        base = _P(os.environ["CAMP_DB_PATH"]).resolve().parent
+        db = str(_P(os.environ["CAMP_DB_PATH"]).resolve())
+        P, P1 = "F001-P0012", "F001-P0001"
+        D = lambda n, p=P, s="S01": f"{p}-1970-{s}-D{n:05d}"
+        c = connect()
+        c.execute("UPDATE configuracao SET valor='/nao/montado/retirar' WHERE chave='qnap.prontos_raiz'")
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F001','Arnaldo Martino','AMA',1)")
+        for n_, p_, t_ in ((12, P, "Casa Teste"), (1, P1, "Fotos da obra")):
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F001',?)", (n_,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,'F001',?,?,1970)", (p_, n_, t_))
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa',?,'/nao/existe/retirar','revisao')", (P,)).lastrowid
+        ent = "100 - Scanners/F001 - AMA Arnaldo Martino/P0012 - Casa/"
+        fol = {1: "Outros/avulsa.jpg", 2: "TIFF/scan 001.tif", 3: "DNG/scan 001.dng", 4: "JPG/scan 001.jpg",          # A: fica a JPG D4
+               5: "TIFF/scan 002.tif", 6: "JPG/scan 002.jpg", 7: "DNG/scan 002.dng",                                   # B: D5 no site, JPG D6 não
+               8: "TIFF/scan 003.tif", 9: "JPG LIMPO/scan 003 limpo.jpg",                                             # C: só JPG LIMPO
+               10: "TIFF/scan 004.tif", 11: "DNG/scan 004.dng"}                                                       # D: sem JPG (D11 é o maior D)
+        for n, o in fol.items():
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,arquivo_origem,md5) VALUES (?,?,?,?,?,'campvision',?,'pendente',?,?)",
+                      (D(n), P, "S01", n, None if n == 4 else f"Prancha {n}", lote, ent + o, f"{n:02d}" * 16))
+        c.execute("UPDATE item SET titulo='Planta térrea' WHERE codigo=?", (D(2),))
+        c.execute("UPDATE item SET duplicata_de=?, tipo_duplicata='perceptual' WHERE codigo=?", (D(2), D(3)))          # marca antiga (outra pasta): entra na cadeia
+        c.execute("UPDATE item SET status_site='no_ar', tainacan_item_id=7005 WHERE codigo=?", (D(5),))
+        c.execute("UPDATE projeto SET capa_item=? WHERE codigo=?", (D(2), P))
+        c.execute("INSERT INTO erro (gravidade,categoria,origem,codigo,descricao) VALUES ('aviso','duplicata','campvision',?,'parece cópia')", (D(3),))
+        c.execute("INSERT INTO revisao_campo (item_codigo,campo,valor_lido,valor_final,resultado,por) VALUES (?,?,?,?,?,?)", (D(2), "titulo", "x", "Planta térrea", "corrigido", "bia"))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,fundo_detectado,projeto_detectado,metadados,json) VALUES (7005,8013,'publish','Prancha 5',?,'F001',?,'{}','{}')", (D(5), P))
+        e1 = "100 - Scanners/F001 - AMA Arnaldo Martino/P0001 - Fotos/"
+        for n, o, rev in ((1, "fotos em alta/IMG_1.jpg", "pendente"), (2, "fotos para internet/IMG_1.jpg", "conferida")):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,arquivo_origem) VALUES (?,?,?,?,?,'campvision',?,?)",
+                      (D(n, P1), P1, "S01", n, f"Foto {n}", rev, e1 + o))
+        c.commit(); c.close()
+        site, chamadas = {7005: "publish"}, []
+        class WPFalso:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st):
+                chamadas.append((cid, wid, st)); site[wid] = st; return {"id": wid, "status": st}
+        publicador.WP = WPFalso
+        spec = importlib.util.spec_from_file_location("retirar_copias", str(RAIZ / "scripts" / "retirar_copias.py"))
+        mod = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(mod)
+        except Exception as e:  # noqa: BLE001 — sem o script, cada verificação abaixo falha
+            print(f"FALHA|o script scripts/retirar_copias.py existe e carrega|{e!r}")
+        def script(*a, projetos=(P, P1)):
+            buf = _io.StringIO(); rc = 0
+            sys.argv = ["retirar", "--db", db, "--sem-imagens", *[x for p_ in projetos for x in ("--projeto", p_)], *a]
+            with contextlib.redirect_stdout(buf):
+                try:
+                    rc = mod.main()
+                except SystemExit as e:
+                    rc = e.code if isinstance(e.code, int) else (print(e.code) or 1)
+                except Exception as e:  # noqa: BLE001
+                    rc = 99; print(f"ERRO: {e!r}")
+            return rc, buf.getvalue()
+        TABS = ("item", "erro", "revisao_campo", "projeto", "redirecionamento")
+        def foto(tabs=TABS + ("evento",)):
+            k_ = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            ordem = {"item": "codigo", "revisao_campo": "item_codigo, campo"}      # a folha que volta ganha outro rowid (o código é o mesmo)
+            t = [list(r) for tb in tabs for r in k_.execute(f"SELECT * FROM {tb} ORDER BY {ordem.get(tb, 'rowid')}")]
+            try: t += [list(r) for r in k_.execute("SELECT codigo FROM item_retirado ORDER BY 1")]
+            except sqlite3.Error: pass
+            k_.close(); return hashlib.sha256(_j.dumps(t, default=str).encode()).hexdigest()
+        def col(cod, k):
+            k_ = sqlite3.connect(db); v = k_.execute(f"SELECT {k} FROM item WHERE codigo=?", (cod,)).fetchone(); k_.close(); return v[0] if v else "(sem folha)"
+        def q(sql, *a):
+            k_ = sqlite3.connect(db)
+            try: return k_.execute(sql, a).fetchall()
+            except sqlite3.Error as e: return [("erro", str(e))]
+            finally: k_.close()
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        cli = TestClient(app, raise_server_exceptions=False); cli.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        def no_detalhe(p_):
+            r_ = cli.get(f"/api/projetos/{p_}/detalhe").json()
+            return {x.get("codigo") or x.get("codigo_detectado") for x in r_.get("itens") or []}
+        ler = lambda arq: _j.loads(_P(arq).read_text(encoding="utf-8")) if _P(arq).is_file() else {"projetos": {}}
+        # ---------- 1. simular (padrão) ----------
+        antes = foto()
+        rc, out = script("--plano", str(base / "r1.json"))
+        ver("simular é o padrão: não altera o banco nem chama o site", rc == 0 and foto() == antes and not chamadas, out[-500:])
+        for linha in ("P0012: fica D4 (JPG) · retira D2 (TIFF), D3 (DNG)", "P0012: fica D6 (JPG) · retira D7 (DNG)", "P0012: fica D9 (JPG LIMPO) · retira D8 (TIFF)",
+                      "P0012: fica D10 (TIFF) · retira D11 (DNG)  [sem JPG", "P0001: fica D1 (JPG em alta) · retira D2 (JPG para internet)", "PRECISA PUBLICAR A JPG ANTES: D5 (TIFF · no site)"):
+            ver(f"a simulação mostra '{linha}'", linha in out, out[:1500])
+        ver("totais: 5 pranchas, 6 retiradas, 1 precisa publicar a JPG, 1 sem JPG", "TOTAL: 5 prancha(s) com cópias → ficam 5 (a JPG original), retiram-se 6 cópia(s) (0 saem do site com 301) · 1 precisam publicar a JPG antes · 1 grupo(s) sem JPG" in out, out[out.find("TOTAL"):][:400])
+        # ---------- 2. RECUSADO quando o banco mudou ----------
+        k_ = sqlite3.connect(db); k_.execute("UPDATE item SET titulo='mudou' WHERE codigo=?", (D(1),)); k_.commit(); k_.close()
+        antes2 = foto()
+        rc, out2 = script("--aplicar", "--plano", str(base / "r1.json"))
+        ver("plano VELHO: RECUSADO, nada muda, nenhum backup", rc == 3 and "RECUSADO" in out2 and foto() == antes2 and not list((base / "backups").glob("camp-*.db*")), out2[-300:])
+        # ---------- 3. aplicar ----------
+        est0, est_t = foto(TABS), {tb: foto((tb,)) for tb in TABS}
+        linhas0 = {r[0]: r for r in q("SELECT * FROM item ORDER BY codigo")}
+        rc, _ = script("--plano", str(base / "r2.json"))
+        rc, out3 = script("--aplicar", "--plano", str(base / "r2.json"))
+        fora = [D(2), D(3), D(7), D(8), D(11), D(2, P1)]
+        ver("aplicar: as cópias saem do painel (nenhuma linha em item) e viram lápide em item_retirado",
+            rc == 0 and all(col(x, "codigo") == "(sem folha)" for x in fora) and sorted(r[0] for r in q("SELECT codigo FROM item_retirado")) == sorted(fora), out3[-600:])
+        ver("a JPG original vira a principal (sem 'cópia de'); sem JPG fica a principal de hoje; JPG LIMPO quando não há JPG; 'em alta' no P0001",
+            all(col(x, "duplicata_de") is None and col(x, "codigo") == x for x in (D(4), D(6), D(9), D(10), D(1, P1))), [col(x, "duplicata_de") for x in (D(4), D(6), D(9), D(10), D(1, P1))])
+        ver("a do site (D5) com a JPG fora do ar: fica, ainda publicada, como cópia de D6 (precisa publicar a JPG antes); o site não foi chamado",
+            col(D(5), "duplicata_de") == D(6) and col(D(5), "status_site") == "no_ar" and not chamadas, (col(D(5), "duplicata_de"), chamadas))
+        ver("some do detalhe do projeto e das contagens (9 → 5 folhas no P0012; 2 → 1 no P0001)",
+            no_detalhe(P) == {D(1), D(4), D(5), D(6), D(9), D(10)} and no_detalhe(P1) == {D(1, P1)} and q("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", P)[0][0] == 6, no_detalhe(P))
+        lap = q("SELECT linha, dependentes, fica FROM item_retirado WHERE codigo=?", D(3))
+        ver("lápide guarda a linha inteira, o que dependia dela (problema) e a que fica",
+            lap and _j.loads(lap[0][0])["arquivo_origem"].endswith("DNG/scan 001.dng") and _j.loads(lap[0][1])["linhas"]["erro"] and lap[0][2] == D(4), lap[:1])
+        ver("o que dependia da cópia sai junto (problema, revisão) e a capa passa para a JPG; o histórico (evento) fica",
+            not q("SELECT 1 FROM erro WHERE codigo=?", D(3)) and not q("SELECT 1 FROM revisao_campo WHERE item_codigo=?", D(2))
+            and q("SELECT capa_item FROM projeto WHERE codigo=?", P)[0][0] == D(4) and q("SELECT COUNT(*) FROM evento WHERE tipo='folha_retirada'")[0][0] == 6)
+        ver("a JPG herda o título da principal antiga quando o dela está vazio", col(D(4), "titulo") == "Planta térrea", col(D(4), "titulo"))
+        ver("backup antes de mexer e arquivo de desfazer gravado", len(list((base / "backups").glob("camp-*.db*"))) == 1 and (base / "r2.desfazer.json").is_file() and "--desfazer" in out3)
+        ver("número D de folha retirada nunca é reusado: maior D do P0012 continua 11 (o D11 foi retirado)", retirados.maior_sequencial(sqlite3.connect(db), P) == 11)
+        async def _lan(scope, receive, send):
+            if scope["type"] == "http": scope = {**scope, "client": ("192.168.15.40", 50000)}
+            await app(scope, receive, send)
+        ctx = TestClient(_lan, raise_server_exceptions=False).get("/api/estacoes/contexto", params={"fundo": "F001"})
+        md_ = {x["codigo"]: x["maior_d"] for x in (ctx.json().get("projetos") or [])} if ctx.status_code == 200 else {}
+        ver("a estação continua a numeração depois do D retirado (maior_d = 11, não 10)", md_.get(P) == 11, f"{ctx.status_code} {md_}")
+        # ---------- 4. desfazer exato ----------
+        arq_d = str(base / "r2.desfazer.json")
+        a4 = foto()
+        rc, out4 = script("--desfazer", arq_d, projetos=())
+        ver("desfazer simula por padrão", rc == 0 and foto() == a4 and "6 folha(s) voltam" in out4, out4[-300:])
+        rc, out5 = script("--desfazer", arq_d, "--aplicar", projetos=())
+        dif = [tb for tb in TABS if foto((tb,)) != est_t[tb]]
+        nomes_ = [r[1] for r in q("PRAGMA table_info(item)")]
+        dif += [(r[0][-6:], [(nomes_[j], linhas0[r[0]][j], v) for j, v in enumerate(r) if v != linhas0[r[0]][j]]) for r in q("SELECT * FROM item ORDER BY codigo") if r[0] in linhas0 and tuple(r) != tuple(linhas0[r[0]])]
+        ver("desfazer --aplicar volta tudo EXATAMENTE (folhas, problemas, revisão, capa) e tira as lápides",
+            rc == 0 and foto(TABS) == est0 and not q("SELECT 1 FROM item_retirado"), f"diferem: {dif} {out5[-300:]}")
+        # ---------- 5. de novo; publicar a JPG; a do site sai com 301 ----------
+        rc, _ = script("--plano", str(base / "r3.json")); rc, _ = script("--aplicar", "--plano", str(base / "r3.json"))
+        k_ = sqlite3.connect(db); k_.execute("UPDATE item SET status_site='no_ar', tainacan_item_id=7006 WHERE codigo=?", (D(6),)); k_.commit(); k_.close()
+        site[7006] = "publish"
+        rc, out6 = script("--plano", str(base / "r4.json"))
+        ver("com a JPG no ar, a simulação propõe tirar D5 do site com 301", "fica D6 (JPG · no site) · retira D5 (TIFF · sai do site, 301)" in out6 and not chamadas, out6[:900])
+        rc, out7 = script("--aplicar", "--plano", str(base / "r4.json"))
+        ver("aplicar: D5 sai do site (privada, nada apagado), 301 D5 → D6 na fila do site e é retirada",
+            chamadas == [(publicador.COL_ACERVO, 7005, "private")] and q("SELECT codigo_novo, criado_por FROM redirecionamento WHERE codigo_antigo=?", D(5)) == [(D(6), "retirar cópias")]
+            and col(D(5), "codigo") == "(sem folha)" and q("SELECT 1 FROM item_retirado WHERE codigo=?", D(5)), f"{chamadas} {out7[-400:]}")
+        ver("o item do site da retirada (espelho wp_item) não aparece no detalhe do projeto", D(5) not in no_detalhe(P), no_detalhe(P))
+        rc, out8 = script("--desfazer", str(base / "r4.desfazer.json"), "--aplicar", projetos=())
+        ver("desfazer: D5 volta ao painel e ao site (publish) e o 301 sai",
+            rc == 0 and col(D(5), "status_site") == "no_ar" and site[7005] == "publish" and not q("SELECT 1 FROM redirecionamento WHERE codigo_antigo=?", D(5)) and col(D(5), "duplicata_de") == D(6), out8[-300:])
+        rc, _ = script("--plano", str(base / "r5.json")); rc, _ = script("--aplicar", "--plano", str(base / "r5.json"))
+        # ---------- 6. reimportar o mesmo lote não recria as retiradas ----------
+        pasta = base / "F001-P0012 - Casa Teste"; (pasta / "catalogacao").mkdir(parents=True, exist_ok=True)
+        tpl = _j.loads((RAIZ / "tests" / "contrato" / "pacote_tainacan.json").read_text(encoding="utf-8"))
+        def doc(cod, origem, md5=None):
+            d_ = _j.loads(_j.dumps(tpl["documentos"][0])); d_.pop("versoes", None)
+            d_.update({"codigo": cod, "projeto_codigo": P, "fundo_codigo": "F001", "duplicata_de": None, "tipo_duplicata": "", "publicavel": True, "bloqueios": [],
+                       "ressalvas": [], "titulo": "Lida de novo", "arquivos": [f"F001 - AMA Arnaldo Martino/01 - Projetos/{P} - Casa Teste/JPG/{cod}.jpg"],
+                       "arquivo_origem": [{"arquivo_origem": ent + origem}], "md5": md5 or ""})
+            return d_
+        docs = [doc(D(11), fol[11]), doc(D(3, s="S03"), "DNG/outro.dng"), doc(D(13), fol[8]), doc(D(14), "novos/x.jpg", f"{7:02d}" * 16), doc(D(12), "novos/nova.jpg")]
+        pac = {**{k_: v for k_, v in tpl.items() if k_ not in ("documentos", "itens", "retirados")}, "projeto_codigo": P, "projeto_nome": "Casa Teste", "fundo_codigo": "F001",
+               "documentos": docs, "retirados": []}
+        (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps(pac, ensure_ascii=False), encoding="utf-8")
+        k = connect()
+        k.execute("UPDATE lista_processamento SET pasta_qnap=? WHERE id=?", (str(pasta), lote)); k.commit()
+        try:
+            r_ = importador_lote.importar_lote(k, lote, "teste"); k.commit()
+        except Exception as e:  # noqa: BLE001
+            r_ = {"erro": repr(e)}
+        k.close()
+        ver("reimportar o lote: a retirada não volta (mesmo código D11, mesmo D3 em outra série, mesmo arquivo de origem do D8, mesmo md5 do D7); a nova D12 entra",
+            all(col(x, "codigo") == "(sem folha)" for x in (D(11), D(3, s="S03"), D(13), D(14))) and col(D(12), "codigo") == D(12)
+            and sorted(r_.get("retiradas_ignoradas") or []) == sorted([D(11), D(3, s="S03"), D(13), D(14)]), str(r_)[:400])
+        for l in res: print(l)
     elif modo == "dup_formatos_regra":
         # CAMP-DUP-FORMATOS, 2ª rodada (04/11/2026): a simulação REAL do F001 juntava pranchas diferentes e parecidas (P0030: D3 ← D4–D7, todas DNG
         # da mesma pasta; P0013 D25 ← D26 e P0033 D42 ← D50, TIFF × TIFF; P0021 D6 ← D9 DNG; P0001 fotos em sequência da mesma pasta "fotos em alta")
@@ -18139,6 +18319,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Chu Ming / sem legendas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Retirar cópias: fica a JPG original; as outras saem do sistema (lápide), D nunca reusado, importação não as traz de volta, 301 do site, desfazer exato")
+rc, out = rodar("retirar_copias", f"{tmp}/retirar_copias.db")
+if rc != 0: ok(False, f"teste retirar_copias não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Retirar cópias: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
