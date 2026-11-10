@@ -493,6 +493,13 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
 - **Cartão da folha**: **Folha NN** (ou o número D quando a folha não tem nº), o tipo, o selo `a conferir` / `conferida` / `corrigida` /
   `retida` (com ícone; "conferida" só com a revisão gravada) e o menu ⋯ (**Revisar folha**, **Abrir a página da folha**, **Relatar
   problema**). Filtros: os de sempre + **Tipo** ("Todos os tipos"); **Grade** / **Lista**.
+- **Cópias** (10/11/2026, Rafael: "fotos repetidas 2–3 vezes: JPG, DNG e TIF. Deixe só uma."): a folha marcada como cópia de outra
+  (duplicata) não aparece na grade/lista nem entra nas contas da página (**Folhas (N)**, "N folhas", "**Conferidas X de N**", a barra da
+  conferência, "**N de M**" da revisão). O cartão da folha que fica mostra **+N cópias (DNG, JPG)** (os formatos quando o painel sabe; âmbar
+  quando alguma cópia ainda espera conferência), que abre **Conferir as duplicatas lado a lado**. O filtro **Cópias (N)** mostra só as
+  cópias, cada uma com o selo **cópia de Dxxxxx**. Nada é apagado: a cópia só não vai ao site. Nunca "excluída" nem "apagada".
+  A cópia sem conferir não impede **Aprovar lote** nem conta em "Faltam conferir" (projeto, Fila, Material novo); no resumo do lote
+  aparece à parte: "**N cópias sem conferir** (não impedem aprovar)". Na lista de Projetos, "N folhas" também não conta as cópias.
 - **Ordem das folhas** (06/11/2026, "organizar as fotos arrastando"): o select **Ordem** tem **código** · **nº de folha** · **tipo** ·
   **definida à mão**. Na "definida à mão" (operador e admin, sem filtro): a alça ⠿ ("Mudar a ordem: Folha NN. Setas movem para antes ou
   depois; ou arraste"), a dica "Arraste as folhas para mudar a ordem (ou use as setas na alça ⠿)." e, com ordem gravada, **Voltar à ordem

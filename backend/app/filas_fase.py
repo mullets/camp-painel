@@ -35,6 +35,10 @@ def importado_sem_folhas(resultado) -> bool:
 # e a Fila, o chip do projeto e o Próximo passo diziam "Pronto para publicar". Conta-se pelo estado real (nada é gravado).
 # As duas colunas para o SELECT de lista_processamento com o apelido `l`:
 SQL_PROJETO_NO_AR = "(SELECT px.status_site='no_ar' FROM projeto px WHERE px.codigo=l.projeto_codigo)"
+# 10/11 (Rafael: "fotos repetidas 2–3 vezes: JPG, DNG e TIF. Deixe só uma."): a cópia (duplicata_de) não é folha "a conferir" do lote:
+# não vai ao site, não impede aprovar (como já não impedia publicar) e fica como está. A MESMA conta na Fila, no projeto e no aprovar.
+SQL_PENDENTES_LOTE = ("(SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente'"
+                      " AND i.duplicata_de IS NULL)")
 SQL_FORA_DO_SITE = ("(SELECT COUNT(*) FROM item ix WHERE ix.lote_id=l.id AND ix.projeto_codigo=l.projeto_codigo AND COALESCE(ix.retida,0)=0"
                     " AND ix.duplicata_de IS NULL AND COALESCE(ix.status_site,'nao_publicado') IN ('nao_publicado','rascunho'))")
 
@@ -93,7 +97,7 @@ def lote_ativo_por_projeto(con) -> dict:
     por_projeto: dict = {}
     for l in con.execute(f"""SELECT l.id, l.projeto_codigo AS pc, l.etapa, l.aprovado_em, l.resultado, {SQL_PROJETO_NO_AR} AS no_ar, {SQL_FORA_DO_SITE} AS fora,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS it,
-                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS pen
+                                   {SQL_PENDENTES_LOTE} AS pen
                             FROM lista_processamento l WHERE l.descartado_em IS NULL ORDER BY l.id DESC"""):
         d = {"fase": fase_da_lista(l["etapa"], l["it"], l["pen"], l["aprovado_em"], l["resultado"], l["no_ar"], l["fora"]), "itens_pendentes": l["pen"], "itens_total": l["it"], "lote_id": l["id"]}
         por_projeto[l["pc"]] = _preferir_lote(por_projeto.get(l["pc"]), d)

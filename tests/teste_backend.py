@@ -25,6 +25,7 @@ MODOS_RAPIDOS |= {"dup_formatos_regra"}   # CAMP-DUP-FORMATOS 2ª rodada: só ju
 MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no projeto (item.ordem_manual; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas_site"}   # a ordem das folhas escolhida no painel vai ao site (contrato 1.8; linha própria)
+MODOS_RAPIDOS |= {"copias_aprovar"}   # cópias (duplicata_de) não impedem aprovar lote nem contam na lista de Projetos (linha própria)
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
 
 
@@ -665,6 +666,62 @@ def filho(modo):
         ver("script --aplicar (nome com acento trocado): grava 1 e manda '1'", rc == 0 and chamadas == [(906, {"_camp_sem_legendas": "1"})], (saida, chamadas))
         rc, saida = rodar_main(fs, ["--fundo", "silveira"])
         ver("script: nome que acha mais de um fundo é recusado", rc == 2 and "F006" in saida and "F040" in saida, saida)
+        c.close()
+        for l in res: print(l)
+    elif modo == "copias_aprovar":
+        # 10/11/2026 (Rafael: "fotos repetidas 2–3 vezes: JPG, DNG e TIF. Deixe só uma."): a cópia (duplicata_de) ainda sem conferir não
+        # impede aprovar o lote (a publicação já a ignorava), não entra no "faltam conferir" (projeto, Fila, Material novo) e fica como
+        # está (não vira conferida). A lista de Projetos mostra "N folhas" sem as cópias; "tem material" segue contando qualquer folha.
+        init_db(); aplicar_migracoes()
+        from app import auth
+        from app.filas_fase import lote_ativo_por_projeto
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F087','Fundo Cópias','CPS',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F087',1),('F087',2)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F087-P0001','F087',1,'Casa Cópias',1980),('F087-P0002','F087',2,'Vazio',1981)")
+        P = "F087-P0001"; D = [f"{P}-1980-S01-D{q:05d}" for q in range(1, 5)]
+        lid = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Lote cópias',?,'/x/cps','revisao')", (P,)).lastrowid
+        # D1 TIFF (fica, a conferir) · D2 DNG e D3 JPG: cópias da D1, a conferir · D4 já conferida
+        for q, (rev, dup) in enumerate([("pendente", None), ("pendente", D[0]), ("pendente", D[0]), ("conferida", None)], 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,lote_id,revisao,duplicata_de,status_site) VALUES (?,?,'S01',?,?,'campvision',?,?,?,'nao_publicado')",
+                      (D[q - 1], P, q, f"Planta {q}", lid, rev, dup))
+        c.commit()
+        def lote():
+            return next(x for x in adm.get(f"/api/projetos/{P}/revisao").json()["lotes"] if x["id"] == lid)
+        l0 = lote()
+        ver("revisão do projeto: 1 a conferir (a D1); as 2 cópias à parte (copias_pendentes), total continua 4",
+            l0["itens"]["pendente"] == 1 and l0["itens"].get("copias_pendentes") == 2 and l0["itens"]["total"] == 4 and l0["motivo"] == "Faltam conferir 1 folha(s)", l0["itens"])
+        pt = l0["itens"]["partes"]
+        ver("partes somam o total, com as cópias sem conferir numa parte própria", sum(pt.values()) == 4 and pt.get("copia_pendente") == 2 and pt["pendente"] == 1, pt)
+        r = adm.post(f"/api/lotes/{lid}/aprovar")
+        ver("com a D1 a conferir, aprovar recusa dizendo 1 (não 3)", r.status_code == 400 and "Faltam conferir 1 folha" in r.text, f"{r.status_code} {r.text[:200]}")
+        c.execute("UPDATE item SET revisao='conferida' WHERE codigo=?", (D[0],)); c.commit()
+        l1 = lote()
+        ver("conferida a D1: o lote pode ser aprovado (fase aprovar), mesmo com as cópias sem conferir", l1["pode_aprovar"] and l1["fase"] == "aprovar" and l1["itens"]["pendente"] == 0, l1)
+        fa = lote_ativo_por_projeto(c).get(P) or {}
+        ver("Fila/Projetos (lote_ativo_por_projeto): fase aprovar, 0 a conferir", fa.get("fase") == "aprovar" and fa.get("itens_pendentes") == 0, fa)
+        fl = adm.get("/api/filas").json(); fl = fl if isinstance(fl, list) else (fl.get("itens") or [])
+        mn = [x for x in fl if x.get("id") == lid]
+        ver("Material novo (/api/filas): o lote aparece com 0 a conferir e fase aprovar", mn and mn[0].get("itens_pendentes") == 0 and mn[0].get("fase") == "aprovar",
+            {k: mn[0].get(k) for k in ("itens_pendentes", "itens_total", "fase")} if mn else fl[:1])
+        r = adm.post(f"/api/lotes/{lid}/aprovar")
+        ver("aprovar o lote: 200", r.status_code == 200 and r.json().get("ok"), f"{r.status_code} {r.text[:200]}")
+        ver("as cópias ficam como estavam: a conferir e ainda cópias da D1 (nada marcado como conferido)",
+            [tuple(x) for x in c.execute("SELECT revisao, duplicata_de FROM item WHERE codigo IN (?,?) ORDER BY codigo", (D[1], D[2]))] == [("pendente", D[0]), ("pendente", D[0])])
+        # lista de Projetos
+        lp = {x["codigo"]: x for x in adm.get("/api/projetos?fundo=F087").json()["itens"]}
+        ver("lista de Projetos: \"folhas\" = 2 (sem as cópias) e folhas_total = 4", lp[P]["folhas"] == 2 and lp[P].get("folhas_total") == 4, lp[P])
+        sem = {x["codigo"] for x in adm.get("/api/projetos?fundo=F087&material=sem").json()["itens"]}
+        com = {x["codigo"] for x in adm.get("/api/projetos?fundo=F087&material=com").json()["itens"]}
+        ver("filtro de material segue contando qualquer folha (P0001 com material; P0002 sem)", P in com and P not in sem and "F087-P0002" in sem, f"{com} {sem}")
+        ordem = [x["codigo"] for x in adm.get("/api/projetos?fundo=F087&ordem=folhas").json()["itens"]]
+        ver("ordem por nº de folhas usa o número mostrado", ordem[0] == P, ordem)
         c.close()
         for l in res: print(l)
     elif modo == "ux38_arquiteto_dados":
@@ -11115,9 +11172,10 @@ def filho(modo):
         e7 = erro(E(7), "metadado", "corrigir"); c.commit()
         r = op.post(f"/api/lotes/{lote2}/conferir-todas"); j = r.json() if r.status_code == 200 else {}
         ver("CAMP-094: confere só as 2 sem aviso", j.get("conferidas") == 2 and [q("SELECT revisao FROM item WHERE codigo=?", E(n))[0] for n in (1, 2)] == ["conferida"] * 2, r.text[:300])
-        ver("CAMP-094: sinal, duplicata, autoria, espelho a confirmar e problema aberto ficam a conferir, e a resposta diz quais e por quê",
+        ver("CAMP-094: sinal, duplicata, autoria, espelho a confirmar e problema aberto ficam a conferir, e a resposta diz quais e por quê "
+            "(a cópia não é conferida sozinha, mas não conta em 'restam': cópia não trava aprovar o lote)",
             sorted(x["codigo"] for x in j.get("ficaram") or []) == [E(n) for n in range(3, 8)] and all(q("SELECT revisao FROM item WHERE codigo=?", E(n))[0] == "pendente" for n in range(3, 8))
-            and j.get("restam") == 5, str(j.get("ficaram")))
+            and {x["codigo"]: x["motivo"] for x in j.get("ficaram") or []}.get(E(4)) == "duplicata" and j.get("restam") == 4, f"{j.get('ficaram')} restam={j.get('restam')}")
         ver("CAMP-094: nenhum problema é fechado", sit(e7) == "aberto")
         # ---------- CAMP-095: duas pessoas na mesma folha ----------
         auth.criar_usuario("Op2", "op2@camp.arq.br", "senha-operador-456", "operador", forcar_troca=False)
@@ -15060,14 +15118,15 @@ def filho(modo):
         ver("operador pode decidir; leitura não grava (403) e projeto inexistente dá 404",
             op.get(URL).json().get("pode_decidir") is True and le.post(URL + "/decisoes", json={"decisoes": [{"acao": "confirmar", "original": D(1), "copias": [D(2)]}]}).status_code == 403
             and op.get("/api/projetos/F099-P0099/duplicatas").status_code == 404 and col(D(2), "duplicata_conferida_em") is None)
-        pend0 = _contagem(c, lote)["pendente"]
+        pend0, cop0 = _contagem(c, lote)["pendente"], _contagem(c, lote)["copias_pendentes"]
         # ---------- confirmar ----------
         x = dec({"acao": "confirmar", "original": D(1), "copias": [D(2), D(3), D(4)]})
         xj = x.json()
         ver("'Confirmar' o grupo: as 3 cópias ficam conferidas (quem e de qual original), a cadeia aponta direto para a original",
             x.status_code == 200 and xj.get("feitas") == 1 and xj.get("conferidas") == 3 and all(col(D(n), "duplicata_conferida_de") == D(1) and col(D(n), "duplicata_conferida_por") == "op@camp.arq.br" for n in (2, 3, 4)) and col(D(4), "duplicata_de") == D(1), x.text[:300])
-        ver("confirmar conta como folha conferida na revisão do lote (as 3 cópias deixam de travar 'Aprovar o lote')",
-            all(col(D(n), "revisao") == "conferida" for n in (2, 3, 4)) and _contagem(c, lote)["pendente"] == pend0 - 3 and col(D(1), "revisao") == "pendente", f"{pend0} -> {_contagem(c, lote)['pendente']}")
+        ver("confirmar conta como folha conferida na revisão do lote (as 3 cópias saem de 'cópias sem conferir'; cópia nunca trava 'Aprovar o lote')",
+            all(col(D(n), "revisao") == "conferida" for n in (2, 3, 4)) and _contagem(c, lote)["copias_pendentes"] == cop0 - 3 and _contagem(c, lote)["pendente"] == pend0
+            and col(D(1), "revisao") == "pendente", f"pendente {pend0} -> {_contagem(c, lote)['pendente']}; copias_pendentes {cop0} -> {_contagem(c, lote)['copias_pendentes']}")
         ev = c.execute("SELECT COUNT(*) FROM evento WHERE tipo='duplicata_marcada' AND codigo IN (?,?,?) AND json_extract(detalhe,'$.conferida')=1 AND ator='op@camp.arq.br'", (D(2), D(3), D(4))).fetchone()[0]
         ver("histórico: um 'duplicata_marcada' (conferida) por cópia, com quem fez; o problema de duplicata de D2 fecha", ev == 3 and c.execute("SELECT situacao FROM erro WHERE codigo=?", (D(2),)).fetchone()[0] == "corrigido", f"eventos={ev}")
         # ---------- várias decisões: uma recusada não desfaz as outras ----------
@@ -18064,6 +18123,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ordem das folhas no site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Cópias (duplicata_de): não impedem aprovar o lote nem entram no \"faltam conferir\"; ficam como estão; lista de Projetos sem as cópias")
+rc, out = rodar("copias_aprovar", f"{tmp}/copias_aprovar.db")
+if rc != 0: ok(False, f"teste copias_aprovar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cópias no lote: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Chu Ming: biografia por script (simula; --aplicar pelo caminho da tela) e fundo sem legendas no site (contrato 1.9: '1'/'__limpar__', site antigo não quebra)")
 rc, out = rodar("chu_bio_legendas", f"{tmp}/chu_bio_legendas.db")

@@ -616,14 +616,14 @@ _SQL_MINIATURA = """COALESCE((SELECT i.codigo FROM item i WHERE i.lote_id=l.id A
 @router.get("/filas")
 def listar_filas(leve: bool = False, u: dict = Depends(auth.exige("leitura"))) -> list[dict]:
     con = connect()
-    from .filas_fase import SQL_FORA_DO_SITE
+    from .filas_fase import SQL_FORA_DO_SITE, SQL_PENDENTES_LOTE
     rows = con.execute(f"""SELECT l.*, p.titulo AS projeto_titulo, p.fundo_codigo, f.titulo AS fundo, p.autorizado_site, p.lote_teste,
                                  p.status_site AS projeto_status_site, {SQL_FORA_DO_SITE} AS fora_do_site,
                                  p.autoria AS projeto_autoria, p.papel_no_projeto AS projeto_papel, p.ano AS projeto_ano,   -- redesenho: autoria SÓ a registrada no projeto
                                  {_SQL_MINIATURA} AS miniatura,
                                  (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=l.projeto_codigo) AS folhas_painel,
                                  (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
-                                 (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
+                                 {SQL_PENDENTES_LOTE} AS itens_pendentes
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                           WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL   -- UX-05: os mesmos lotes das contagens
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()

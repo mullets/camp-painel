@@ -157,13 +157,13 @@ def lotes(con) -> list[dict]:
     lendo = projetos_lendo_agora(con)
     from .dispensa_lote import validas
     dispensados = validas(con)                       # UX-35: lote com erro dispensado (para todos) enquanto o erro for o mesmo
-    from .filas_fase import SQL_FORA_DO_SITE
+    from .filas_fase import SQL_FORA_DO_SITE, SQL_PENDENTES_LOTE
     for r in con.execute(f"""SELECT l.id, l.nome, l.pasta_qnap, l.etapa, l.aprovado_em, l.resultado, l.atualizado_em, l.criado_em, l.projeto_codigo, l.folhas_esperadas, l.folhas_encontradas,
                                    {SQL_FORA_DO_SITE} AS fora_do_site,
                                    COALESCE(l.etapa_desde, l.criado_em) AS parado_desde,
                                    p.titulo AS projeto_titulo, p.fundo_codigo, p.status_site,
                                    (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
-                                   (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
+                                   {SQL_PENDENTES_LOTE} AS itens_pendentes
                               FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo
                              WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL"""):
         d = dict(r)
