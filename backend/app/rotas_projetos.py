@@ -525,7 +525,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                i.endereco_folha, i.cliente_folha,
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
                i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por,
-               i.duplicata_conferida_em, i.duplicata_conferida_de, i.parceiros, i.foto_ano, i.foto_estagio, i.foto_fotografo, i.ordem_manual
+               i.duplicata_conferida_em, i.duplicata_conferida_de, i.parceiros, i.foto_ano, i.foto_estagio, i.foto_fotografo, i.ordem_manual,
+               i.arquivo_origem AS _arquivo_origem
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -567,6 +568,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "recorte": local.get("recorte"), "alinhamento": local.get("alinhamento"),
                 "duplicata_conferida_em": local.get("duplicata_conferida_em"), "duplicata_conferida_de": local.get("duplicata_conferida_de"),
                 "ordem_manual": local.get("ordem_manual"),
+                "_arquivo_origem": local.get("_arquivo_origem"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -603,6 +605,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     except Exception:  # noqa: BLE001
         raiz_prontos = None
     from .parceiros import ler as _ler_parc
+    from .folhas_repetidas import ROTULO_FORMATO, rank_formato
     for d in itens:
         if "parceiros" in d:                            # CAMP-127: os parceiros de cada folha (lista), para a ação em lote "Confirmar: X, parceiro"
             d["parceiros"] = _ler_parc(d.get("parceiros"))
@@ -617,6 +620,12 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             except ValueError:
                 d["recorte"] = None
         jpg = d.pop("_arquivo_jpg", None)
+        # 10/11 (Rafael: "fotos repetidas 2–3 vezes: JPG, DNG e TIF"): o formato do arquivo de origem (TIFF, DNG, JPG…), só para a página do
+        # projeto dizer "+2 cópias (DNG, JPG)" no cartão da folha que fica. Campo novo e opcional; o caminho em si não sai daqui.
+        ao = d.pop("_arquivo_origem", None)
+        fo = rank_formato(ao)[0] if ao else 4
+        if fo < 4:
+            d["formato"] = ROTULO_FORMATO[fo]
         # lote anterior ao preview do CAMP Vision: se o JPG da folha existe no QNAP, a tela pode mostrar a imagem para conferir ('@jpg' = o servidor usa arquivo_jpg)
         if jpg and raiz_prontos and isinstance(d.get("pendencias"), dict) and not d["pendencias"].get("previa") and jpg_da_folha_no_qnap(raiz_prontos, jpg):
             d["pendencias"]["previa"] = "@jpg"
