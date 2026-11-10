@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from . import auth
@@ -46,6 +46,7 @@ class EdicaoFundo(BaseModel):
     status_site: str | None = None
     motivo_fora_do_ar: str | None = None
     mostrar_doador: bool | None = None   # B1: o site pode mostrar o nome de quem entregou o acervo
+    sem_legendas: bool | None = None     # contrato 1.9: imagens do fundo sem legenda no site (None = não mexe)
 
 
 def _validar_sigla(con, sigla: str, ignorar: str | None = None):
@@ -191,7 +192,7 @@ def reservar(d: NovoFundo, u: dict = Depends(auth.exige("admin"))):
 
 
 @router.patch("/fundos/{codigo}")
-def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) -> dict:
+def editar(codigo: str, d: EdicaoFundo, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     f = con.execute("SELECT * FROM fundo WHERE codigo=?", (codigo,)).fetchone()
     if not f:
@@ -220,12 +221,20 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
             campos.append(f"{k}=?"); vals.append(v); mud[k] = v
     if d.mostrar_doador is not None and int(d.mostrar_doador) != (f["mostrar_doador"] or 0):
         campos.append("mostrar_doador=?"); vals.append(int(d.mostrar_doador)); mud["mostrar_doador"] = int(d.mostrar_doador)
+    if d.sem_legendas is not None and int(d.sem_legendas) != (f["sem_legendas"] or 0):   # NULL (nunca escolhido) = desligado: desmarcado não muda nada
+        campos.append("sem_legendas=?"); vals.append(int(d.sem_legendas)); mud["sem_legendas"] = int(d.sem_legendas)
     if not campos:
         con.close(); return {"ok": True, "mudou": False}
     campos.append("atualizado_em=datetime('now')")
     con.execute(f"UPDATE fundo SET {', '.join(campos)} WHERE codigo=?", (*vals, codigo))
     _evento(con, "fundo", codigo, "editado", u["email"], {"antes": {k: f[k] for k in mud}, "depois": mud})
+    legendas = None   # contrato 1.9: "segundo_plano" (fundo no site: pendência no mesmo commit, envio depois) | "com_o_fundo"
+    if "sem_legendas" in mud:
+        from . import legendas_site
+        legendas = "segundo_plano" if legendas_site.marcar(con, codigo) else "com_o_fundo"
     con.commit(); con.close()
+    if legendas == "segundo_plano":
+        tarefas.add_task(legendas_site.enviar_depois, codigo, u["email"])
     site = None
     if "titulo" in mud:
         from .publicador import renomear_fundo_no_site
@@ -233,7 +242,7 @@ def editar(codigo: str, d: EdicaoFundo, u: dict = Depends(auth.exige("admin"))) 
     desc = None
     if set(mud) & CAMPOS_DESCRICAO_SITE:   # B1: o texto do fundo no site acompanha a edição
         desc = _descricao_no_site(codigo, u["email"])
-    return {"ok": True, "mudou": True, "campos": list(mud), "site": site, "descricao_site": desc}
+    return {"ok": True, "mudou": True, "campos": list(mud), "site": site, "descricao_site": desc, "sem_legendas_site": legendas}
 
 
 CAMPOS_DESCRICAO_SITE = {"data_inicio", "data_fim", "dimensao_suporte", "historia_arquivistica", "procedencia", "condicoes_acesso",

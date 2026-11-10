@@ -25,6 +25,7 @@ MODOS_RAPIDOS |= {"dup_formatos_regra"}   # CAMP-DUP-FORMATOS 2ª rodada: só ju
 MODOS_RAPIDOS |= {"material_novo_filas", "projetos_lista"}   # redesenho Material novo (04/11/2026): campos opcionais de /api/filas (linha própria)   # Visitas ao site: evolução + projetos mais visitados (especificação do Rafael; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no projeto (item.ordem_manual; linha própria)
 MODOS_RAPIDOS |= {"ordem_folhas_site"}   # a ordem das folhas escolhida no painel vai ao site (contrato 1.8; linha própria)
+MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -510,6 +511,160 @@ def filho(modo):
             and chamadas[-1][1].get("_camp_arq_falecimento") == "2022" and chamadas[-1][1].get("_camp_bio") == "Arquiteto.", chamadas)
         f = fundo_site.faltas_arquiteto(c, c.execute("SELECT * FROM agente WHERE id=?", (sid,)).fetchone())
         ver("o que falta: as datas agora vão ao site (site=True), não 'fica só no painel'", f and f[0]["campo"] == "datas" and f[0]["site"] is True, f)
+        c.close()
+        for l in res: print(l)
+    elif modo == "chu_bio_legendas":
+        # 10/11/2026 (Rafael: "[minibio] Suba no perfil da Chu Ming Silveira. Os acervos e itens dela deixe sem legendas.").
+        # (a) scripts/gravar_biografia.py: lê docs/biografias/chu-ming-silveira.md, acha o arquiteto sem diferença de acento, SIMULA por padrão,
+        #     --aplicar grava pelo PATCH /api/agentes (fonte exigida, evento, envio ao hub); restrição de direitos registrada = não grava.
+        # (b) fundo "sem legendas" (contrato 1.9): coluna fundo.sem_legendas, caixa no Editar do fundo, "1"/"__limpar__" no hub, pendência
+        #     e envio em segundo plano, junto do "Enviar fundo ao site" só quando há valor, site antigo não quebra; scripts/fundo_sem_legendas.py.
+        init_db(); aplicar_migracoes()
+        import importlib.util, io, contextlib
+        from pathlib import Path as _P
+        from app import auth, publicador, fundo_site, reenvio_pendencias
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:400]}")
+        def carregar(nome):
+            spec = importlib.util.spec_from_file_location(nome, str(_P(__file__).resolve().parents[1] / "scripts" / f"{nome}.py"))
+            m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+        def rodar_main(m, args):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = m.main(args)
+            return rc, buf.getvalue()
+        c = connect()
+        cols = [r[1] for r in c.execute("PRAGMA table_info(fundo)")]
+        ver("migração 219: fundo.sem_legendas existe (rodar 2x não quebra)", "sem_legendas" in cols, cols)
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F006','Chu Ming Silveira','CMS',1,906)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F013','João Xavier','JXA',1,913)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F040','Maria Silveira Nova','MSN',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F041','Ana Restrita','ANR',1,941)")
+        c.execute("INSERT OR REPLACE INTO direitos_fundo (fundo_codigo,situacao) VALUES ('F041','restrito')")
+        chu = c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Chu Ming Silveira')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F006',?,'produtor')", (chu,))
+        jx = c.execute("INSERT INTO agente (tipo, forma_autorizada, historia, fonte_historia) VALUES ('pessoa','João Xavier','Arquiteto.','Livro X')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F013',?,'produtor')", (jx,))
+        c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Maria Silveira Nova')")
+        ar = c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Ana Restrita')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo, agente_id, papel) VALUES ('F041',?,'produtor')", (ar,))
+        c.commit()
+        ver("fundos de antes ficam com sem_legendas NULL (nunca escolhido)", c.execute("SELECT COUNT(*) FROM fundo WHERE sem_legendas IS NOT NULL").fetchone()[0] == 0)
+        chamadas = []
+        site = {"antigo": False}
+        class WPF:
+            def __init__(s, *a, **k): pass
+            def gravar_hub(s, termo, meta):
+                chamadas.append((termo, dict(meta)))
+                ign = ["_camp_sem_legendas"] if site["antigo"] and "_camp_sem_legendas" in meta else []
+                return {"ok": True, "page_id": 5, "gravados": [k for k in meta if k not in ign], "ignorados": ign}
+            def criar_termo(s, *a, **k): return {"id": 1}
+            def upload_media(s, *a, **k): return {"id": 7}
+        publicador.WP = WPF
+        c.execute("INSERT INTO wp_taxonomia (id, nome, slug) VALUES (11,'Fundos','fundos'),(12,'Arquitetos','arquitetos')"); c.commit()
+
+        # ---------- (a) biografia ----------
+        gb = carregar("gravar_biografia")
+        arq = str(_P(__file__).resolve().parents[1] / "docs" / "biografias" / "chu-ming-silveira.md")
+        texto, fonte = gb.ler_arquivo(arq)
+        ver("arquivo: fonte citada como pedida", fonte == "Minibio enviada para a CAMP (versão vB), assinada CS, São Paulo, 15/10/2026", fonte)
+        ver("arquivo: o texto começa no 1º parágrafo da minibio, sem o título 'MINIBIO' nem a assinatura",
+            texto.startswith("Chu Ming Silveira (Xangai, 04/04/1941 - São Paulo, 18/06/1997) foi uma importante arquiteta") and "MINIBIO" not in texto
+            and "CS - São Paulo" not in texto and texto.endswith("em grande parte reproduzida neste acervo CAMP."), texto[:120])
+        ver("arquivo: 5 parágrafos, sem espaço duplo, 'orelhões' sem espaço antes do ponto",
+            texto.count("\n\n") == 4 and "  " not in texto and "“orelhões”." in texto and "O teto principal inclinado" in texto, texto.count("\n\n"))
+        ver("acha o arquiteto sem diferença de acento/maiúscula ('chú  MING silveira')", gb.achar_agente(c, "chú  MING silveira").get("agente") is not None
+            and gb.achar_agente(c, "chú  MING silveira")["agente"]["id"] == chu)
+        amb = gb.achar_agente(c, "silveira")
+        ver("nome que acha mais de um arquiteto: recusa e lista os candidatos", "erro" in amb and len(amb["candidatos"]) == 2, amb)
+        ver("pelo id também acha", gb.achar_agente(c, str(chu))["agente"]["forma_autorizada"] == "Chu Ming Silveira")
+        rc, saida = rodar_main(gb, ["--agente", "Chu Ming Silveira", "--arquivo", arq])
+        a0 = c.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (chu,)).fetchone()
+        ver("sem --aplicar só SIMULA: mostra arquiteto, texto novo e fonte; nada gravado e nada ao site",
+            rc == 0 and "SIMULAÇÃO" in saida and "Chu Ming Silveira (id" in saida and "Fonte nova: Minibio" in saida and a0["historia"] is None and not chamadas, (rc, saida[-300:], chamadas))
+        rc, saida = rodar_main(gb, ["--agente", "chu ming", "--arquivo", arq, "--aplicar", "--ator", "rafa@camp.arq.br"])
+        a1 = c.execute("SELECT historia, fonte_historia FROM agente WHERE id=?", (chu,)).fetchone()
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='agente' AND codigo=? AND tipo='editado'", (str(chu),)).fetchone()
+        ver("--aplicar grava história e fonte EXATAMENTE como no arquivo", rc == 0 and a1["historia"] == texto and a1["fonte_historia"] == fonte, (rc, saida[-300:]))
+        ver("--aplicar registra o evento 'editado' com o ator", ev is not None and ev["ator"] == "rafa@camp.arq.br", ev and dict(ev))
+        hub = [m for t, m in chamadas if t == 906]
+        ver("--aplicar manda a biografia à página do arquiteto (mesmo caminho da tela: _camp_bio e _camp_bio_fontes no hub do F006)",
+            hub and hub[-1].get("_camp_bio") == texto and hub[-1].get("_camp_bio_fontes") == fonte, chamadas)
+        chamadas.clear(); rc, saida = rodar_main(gb, ["--agente", "Chu Ming Silveira", "--arquivo", arq, "--aplicar"])
+        ver("rodar de novo: nada a fazer, nada ao site", rc == 0 and "Nada a fazer" in saida and not chamadas, saida[-200:])
+        rc, saida = rodar_main(gb, ["--agente", "Ana Restrita", "--arquivo", arq, "--aplicar"])
+        ver("fundo com restrição de direitos REGISTRADA: mostra e NÃO grava", rc == 3 and "restrição de direitos registrada" in saida
+            and c.execute("SELECT historia FROM agente WHERE id=?", (ar,)).fetchone()[0] is None, (rc, saida[-300:]))
+        rc, saida = rodar_main(gb, ["--agente", "Ana Restrita", "--arquivo", arq, "--aplicar", "--mesmo-com-restricao"])
+        ver("com --mesmo-com-restricao (decisão de pessoa) grava", rc == 0 and c.execute("SELECT historia FROM agente WHERE id=?", (ar,)).fetchone()[0] == texto, saida[-200:])
+        sem_fonte = _P(os.environ["CAMP_DB_PATH"]).parent / "sem_fonte.md"; sem_fonte.write_text("# x\n\n---\n\nTexto.\n", encoding="utf-8")
+        rc, saida = rodar_main(gb, ["--agente", "Chu Ming Silveira", "--arquivo", str(sem_fonte), "--aplicar"])
+        ver("arquivo sem 'Fonte:' é recusado (história exige fonte citada)", rc == 2 and "Fonte" in saida, saida)
+
+        # ---------- (b) sem legendas ----------
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        chamadas.clear(); fundo_site.enviar_fundo("F013", "teste")
+        ver("Enviar fundo ao site de fundo nunca escolhido: _camp_sem_legendas NÃO vai (payload como antes)",
+            chamadas and all("_camp_sem_legendas" not in m for _t, m in chamadas), chamadas)
+        chamadas.clear(); r = x.patch("/api/fundos/F013", json={"sem_legendas": False, "procedencia": None})
+        ver("caixa desmarcada num fundo nunca escolhido: nada muda e nada vai ao site", r.status_code == 200 and r.json().get("mudou") is False and not chamadas,
+            (r.text[:200], chamadas))
+        chamadas.clear(); r = x.patch("/api/fundos/F006", json={"sem_legendas": True})
+        f6 = c.execute("SELECT sem_legendas FROM fundo WHERE codigo='F006'").fetchone()[0]
+        ver("marcar: grava 1 e responde que vai ao site em segundo plano", r.status_code == 200 and f6 == 1 and r.json().get("sem_legendas_site") == "segundo_plano"
+            and "sem_legendas" in r.json().get("campos", []), r.text[:300])
+        ver("marcar: o envio (segundo plano) manda SÓ {'_camp_sem_legendas': '1'} ao hub do termo do fundo", chamadas == [(906, {"_camp_sem_legendas": "1"})], chamadas)
+        ver("marcar: evento 'editado' com sem_legendas e evento 'site_sem_legendas'; pendência fechada",
+            c.execute("SELECT COUNT(*) FROM evento WHERE entidade='fundo' AND codigo='F006' AND tipo='editado' AND detalhe LIKE '%sem_legendas%'").fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='fundo' AND codigo='F006' AND tipo='site_sem_legendas'").fetchone()[0] == 1
+            and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F006' AND campo='pendente_sem_legendas_no_site' AND resolvida=0").fetchone()[0] == 0)
+        chamadas.clear(); fundo_site.enviar_fundo("F006", "teste")
+        m6 = [m for t, m in chamadas if t == 906 and "_camp_sem_legendas" in m]
+        ver("Enviar fundo ao site com a caixa marcada leva '_camp_sem_legendas': '1'", m6 and m6[0]["_camp_sem_legendas"] == "1", chamadas)
+        d = fundo_site.divergencia(c, "F006")
+        ver("depois do envio, a divergência está em dia", not d["pendente"], d)
+        chamadas.clear(); r = x.patch("/api/fundos/F006", json={"sem_legendas": False})
+        ver("desmarcar: grava 0 e manda '__limpar__' (vazio nunca apaga no hub)", r.status_code == 200 and chamadas == [(906, {"_camp_sem_legendas": "__limpar__"})]
+            and c.execute("SELECT sem_legendas FROM fundo WHERE codigo='F006'").fetchone()[0] == 0, chamadas)
+        d = fundo_site.divergencia(c, "F006")
+        ver("a divergência (comparada com o último 'Enviar fundo ao site') mostra 'Sem legendas nas imagens do site' saindo",
+            any(mm["rotulo"] == "Sem legendas nas imagens do site" and mm["tipo"] == "saiu" for mm in d["mudancas"]), d)
+        chamadas.clear(); fundo_site.enviar_fundo("F006", "teste")
+        ver("Enviar fundo ao site depois de desmarcar leva '__limpar__'", any(m.get("_camp_sem_legendas") == "__limpar__" for _t, m in chamadas), chamadas)
+        chamadas.clear(); r = x.patch("/api/fundos/F040", json={"sem_legendas": True})
+        ver("fundo que ainda não está no site: grava no painel, nada vai agora (vai junto do 'Enviar fundo ao site')",
+            r.status_code == 200 and r.json().get("sem_legendas_site") == "com_o_fundo" and not chamadas
+            and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F040' AND resolvida=0").fetchone()[0] == 0, (r.text[:200], chamadas))
+        # site antigo: devolve a chave em "ignorados"
+        site["antigo"] = True
+        chamadas.clear(); r = x.patch("/api/fundos/F006", json={"sem_legendas": True})
+        pend = c.execute("SELECT valor_painel FROM divergencia_site WHERE codigo='F006' AND campo='pendente_sem_legendas_no_site' AND resolvida=0").fetchone()
+        ver("site antigo (chave em 'ignorados'): a gravação no painel vale e a pendência fica com 'atualize o site'",
+            r.status_code == 200 and pend is not None and "atualize o site" in pend[0], (r.text[:200], pend and pend[0]))
+        chamadas.clear(); r6 = fundo_site.enviar_fundo("F006", "teste")
+        ver("site antigo: 'Enviar fundo ao site' continua OK (texto, biografia), com aviso, sem pendência de texto",
+            r6["ok"] and r6.get("avisos") and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F006' AND campo='pendente_descricao_no_site' AND resolvida=0").fetchone()[0] == 0, r6)
+        site["antigo"] = False
+        p = dict(c.execute("SELECT * FROM divergencia_site WHERE codigo='F006' AND campo='pendente_sem_legendas_no_site' AND resolvida=0").fetchone())
+        ver("a pendência é um tipo que a rodada de reenvio conhece", reenvio_pendencias._tipo_conhecido("fundo", "pendente_sem_legendas_no_site"))
+        chamadas.clear(); feito = reenvio_pendencias.reenviar(p, "teste")
+        ver("site atualizado: a rodada de reenvio manda o valor de agora e fecha a pendência", chamadas == [(906, {"_camp_sem_legendas": "1"})]
+            and c.execute("SELECT COUNT(*) FROM divergencia_site WHERE codigo='F006' AND campo='pendente_sem_legendas_no_site' AND resolvida=0").fetchone()[0] == 0, (feito, chamadas))
+        # script do servidor
+        fs = carregar("fundo_sem_legendas")
+        chamadas.clear(); rc, saida = rodar_main(fs, ["--fundo", "chu ming", "--desligar"])
+        ver("script sem --aplicar só SIMULA (acha 'chu ming' sem acento; nada muda, nada vai)", rc == 0 and "SIMULAÇÃO" in saida and "F006" in saida
+            and c.execute("SELECT sem_legendas FROM fundo WHERE codigo='F006'").fetchone()[0] == 1 and not chamadas, saida)
+        chamadas.clear(); rc, saida = rodar_main(fs, ["--fundo", "F006", "--desligar", "--aplicar"])
+        ver("script --desligar --aplicar: grava 0 pelo caminho da tela e manda '__limpar__' na hora", rc == 0 and chamadas == [(906, {"_camp_sem_legendas": "__limpar__"})]
+            and c.execute("SELECT sem_legendas FROM fundo WHERE codigo='F006'").fetchone()[0] == 0, (saida, chamadas))
+        chamadas.clear(); rc, saida = rodar_main(fs, ["--fundo", "Chú Ming Silveira", "--aplicar"])
+        ver("script --aplicar (nome com acento trocado): grava 1 e manda '1'", rc == 0 and chamadas == [(906, {"_camp_sem_legendas": "1"})], (saida, chamadas))
+        rc, saida = rodar_main(fs, ["--fundo", "silveira"])
+        ver("script: nome que acha mais de um fundo é recusado", rc == 2 and "F006" in saida and "F040" in saida, saida)
         c.close()
         for l in res: print(l)
     elif modo == "ux38_arquiteto_dados":
@@ -17909,6 +18064,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ordem das folhas no site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Chu Ming: biografia por script (simula; --aplicar pelo caminho da tela) e fundo sem legendas no site (contrato 1.9: '1'/'__limpar__', site antigo não quebra)")
+rc, out = rodar("chu_bio_legendas", f"{tmp}/chu_bio_legendas.db")
+if rc != 0: ok(False, f"teste chu_bio_legendas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Chu Ming / sem legendas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

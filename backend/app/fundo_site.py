@@ -11,7 +11,8 @@ import json
 from .db import connect
 
 ROTULOS = {"_camp_bio": "Biografia", "_camp_bio_fontes": "Fontes da biografia", "_camp_foto_id": "Foto",
-           "_camp_arq_nascimento": "Nascimento", "_camp_arq_falecimento": "Falecimento", "_camp_arq_atuacao": "Período de atuação"}
+           "_camp_arq_nascimento": "Nascimento", "_camp_arq_falecimento": "Falecimento", "_camp_arq_atuacao": "Período de atuação",
+           "_camp_sem_legendas": "Sem legendas nas imagens do site"}
 
 
 def _produtor(con, codigo: str):
@@ -24,6 +25,8 @@ def meta_desejado(con, codigo: str) -> dict:
     from .publicador import campos_hub_fundo
     meta, _ = campos_hub_fundo(con, codigo)
     out = {k: v for k, v in meta.items() if (v or "").strip()}
+    from .legendas_site import do_fundo, LIMPAR
+    out.update({k: v for k, v in do_fundo(con, codigo).items() if v != LIMPAR})   # contrato 1.9: ligado entra na divergência; desligado "sai"
     a = _produtor(con, codigo)
     if a:
         if (a["historia"] or "").strip():
@@ -289,6 +292,23 @@ def estado(con, codigo: str) -> dict:
             "pagina": pagina_arquiteto(con, codigo), "divergencia": divergencia(con, codigo)}
 
 
+def _legendas_resultado(codigo: str, r, out: dict) -> None:
+    """Contrato 1.9: o site gravou o texto; "sem legendas" foi aceito? Site antigo (chave em "ignorados") não é falha do envio do
+    fundo: fica a pendência própria com "atualize o site" e um aviso; aceito fecha a pendência."""
+    from . import legendas_site, publicador
+    c2 = connect()
+    try:
+        try:
+            legendas_site.conferir_resposta(r)
+            publicador._resolver_pendencia(c2, "fundo", codigo, legendas_site.CAMPO)
+        except RuntimeError as e:
+            publicador._pendencia(c2, "fundo", codigo, legendas_site.CAMPO, str(e)[:300])
+            out.setdefault("avisos", []).append(str(e)[:300])
+        c2.commit()
+    finally:
+        c2.close()
+
+
 def enviar_fundo(codigo: str, ator: str) -> dict:
     """Cria/atualiza o termo e o hub do fundo com tudo o que está preenchido (inclusive biografia, fontes e foto do titular). Nunca levanta (menos F000)."""
     from . import publicador
@@ -302,12 +322,17 @@ def enviar_fundo(codigo: str, ator: str) -> dict:
         f = con.execute("SELECT tainacan_term_id FROM fundo WHERE codigo=?", (codigo,)).fetchone()
         termo = f["tainacan_term_id"] if f else None
         hub = {k: v for k, v in campos_hub_filtrados(con, codigo).items()}
+        from . import legendas_site
+        legendas = legendas_site.do_fundo(con, codigo)   # contrato 1.9: só quando há valor escolhido ("1" ou "__limpar__")
+        hub.update(legendas)
     finally:
         con.close()
     out["passos"].append("campos do hub (procedência, entrada, acesso...)")
     if termo and hub:
         try:
-            publicador.WP().gravar_hub(termo, hub)       # só o preenchido: o site ignora vazio, então nada de texto à mão é sobrescrito
+            r = publicador.WP().gravar_hub(termo, hub)       # só o preenchido: o site ignora vazio, então nada de texto à mão é sobrescrito
+            if legendas:
+                _legendas_resultado(codigo, r, out)
         except Exception as e:  # noqa: BLE001
             out["erros"].append(str(e)[:300])
             c2 = connect()
