@@ -175,7 +175,8 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None,
     continuava contando no lote de lá ("Faltam conferir 1 de 7") e o lote nunca podia ser aprovado. Mover o LOTE inteiro não solta."""
     d = _destino_valido(con, destino)
     ano = int(d["ano"] or 0)
-    seq = con.execute("SELECT COALESCE(MAX(sequencial),0) FROM item WHERE projeto_codigo=?", (destino,)).fetchone()[0]
+    from .retirados import maior_sequencial              # CAMP-DUP: o D de uma folha retirada nunca é reusado
+    seq = maior_sequencial(con, destino)
     movidos, duplicatas, ignorados = [], [], []
     linhas = []
     for c in dict.fromkeys(codigos):                                   # sem repetir, na ordem dada

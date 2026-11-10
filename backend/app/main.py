@@ -564,6 +564,11 @@ def contexto_estacoes(request: Request, fundo: str | None = None) -> dict:
              WHERE fundo_codigo=?
              ORDER BY numero
         """, (fundo,)).fetchall()]
+        from .retirados import maiores_por_projeto          # CAMP-DUP: o D de uma folha retirada nunca é reusado pela estação
+        ret = maiores_por_projeto(con)
+        for p_ in resposta["projetos"]:
+            if ret.get(p_["codigo"], 0) > (p_["maior_d"] or 0):
+                p_["maior_d"] = ret[p_["codigo"]]
     con.close()
     return resposta
 

@@ -536,6 +536,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     itens_por_codigo = {x["codigo"]: x for x in itens_local}
 
     itens_cid = _colecao_config(con, "tainacan.itens_collection_id", 8013)
+    from .retirados import chaves as _chaves_retiradas
+    retiradas_ = _chaves_retiradas(con, codigo)["codigos"]
     itens_site = []
     for w in con.execute("""
         SELECT id, colecao_id, status, titulo, slug, url, documento_url, thumb_url,
@@ -548,6 +550,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
          ORDER BY codigo_detectado, id
     """, (codigo, p["fundo_codigo"], itens_cid, codigo + "-%")).fetchall():
         d = dict(w)
+        if d.get("codigo_detectado") in retiradas_:
+            continue                        # CAMP-DUP: folha RETIRADA do sistema (cópia de outro formato; o item privado continua no site)
         local = itens_por_codigo.get(d.get("codigo_detectado"))
         mdw = json.loads(d.get("metadados") or "{}")
         d["metadados_site"] = mdw

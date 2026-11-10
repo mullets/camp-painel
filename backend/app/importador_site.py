@@ -128,6 +128,9 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
             continue
         partes = cod.split("-")
         serie, seq = partes[3], int(partes[4][1:])
+        from .retirados import retirado as _retirado
+        if _retirado(con, cod):                    # CAMP-DUP: folha retirada do sistema (cópia de outro formato): o item do site não a recria
+            continue
         titulo = RE_SUFIXO_TITULO.sub("", md.get("Título") or it["titulo"] or "").strip() or None
         status = STATUS.get(it["status"], "nao_publicado")
         ex = con.execute("SELECT codigo FROM item WHERE codigo=?", (cod,)).fetchone()
