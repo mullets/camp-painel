@@ -127,7 +127,8 @@ def _pagina_publica_projeto(con, codigo: str, titulo: str, cidade: str | None) -
 
 _SELECT_PROJETOS = """SELECT p.codigo, p.titulo, p.fundo_codigo, f.titulo AS fundo, p.ano, p.cidade, p.status_site, p.autorizado_site,
                     p.tainacan_item_id, p.atualizado_em, p.ano_fim, p.autoria, p.papel_no_projeto,
-                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas,
+                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo AND i.duplicata_de IS NULL) AS folhas,
+                    (SELECT COUNT(*) FROM item i WHERE i.projeto_codigo=p.codigo) AS folhas_total,
                     (SELECT GROUP_CONCAT(DISTINCT serie_codigo) FROM item i WHERE i.projeto_codigo=p.codigo) AS series
              FROM projeto p JOIN fundo f ON f.codigo=p.fundo_codigo WHERE p.mesclado_em IS NULL AND p.descartado_em IS NULL"""
 _ORDENS = {"codigo": "p.codigo", "recentes": "p.atualizado_em DESC, p.codigo", "nome": "p.titulo COLLATE NOCASE, p.codigo", "folhas": "folhas DESC, p.codigo",
@@ -218,17 +219,18 @@ def _filtro_projetos(fases: dict, fundo, q, status, com_folhas, situacao, autori
     per = _periodo(periodo)
     if per == ("sem_data",): w += " AND (p.ano IS NULL OR p.ano=0)"
     elif per: w += " AND p.ano>0 AND p.ano<=? AND MAX(p.ano, COALESCE(p.ano_fim, p.ano))>=?"; par += [per[1], per[0]]   # a obra de 1958–61 entra em 1950 e em 1960
-    if material == "com": w += " AND folhas > 0"
-    elif material == "sem": w += " AND folhas = 0"
+    # 10/11: "folhas" (o número da lista) não conta as cópias (duplicata_de); "tem material" continua sendo ter qualquer folha (folhas_total)
+    if material == "com": w += " AND folhas_total > 0"
+    elif material == "sem": w += " AND folhas_total = 0"
     elif material == "sem_imagem": w += " AND " + _SEM_IMAGEM
     if pendencias == "com":
         cods = [c for c, f in fases.items() if f["fase"] in PRECISAM_DE_GENTE]
         w += " AND (" + COM_PROBLEMA + (" OR p.codigo IN (" + ",".join("?" * len(cods)) + ")" if cods else "") + ")"; par += cods
-    if com_folhas is True: w += " AND folhas > 0"
-    if com_folhas is False: w += " AND folhas = 0"
+    if com_folhas is True: w += " AND folhas_total > 0"
+    if com_folhas is False: w += " AND folhas_total = 0"
     if situacao == "publicado": w += " AND p.status_site='no_ar'"
     elif situacao == "nao_publicado": w += " AND p.status_site<>'no_ar'"
-    elif situacao == "sem_folhas": w += " AND folhas = 0"
+    elif situacao == "sem_folhas": w += " AND folhas_total = 0"
     elif situacao == "com_problema": w += " AND " + COM_PROBLEMA          # #101: problema em aberto no projeto ou numa folha dele
     elif situacao == "pronto":       # CAMP-149: "Pronto para publicar" (CAMP-146): lote conferido (aprovar/publicar) ou, sem lote em andamento, folhas fora do site
         prontos = [c for c, f in fases.items() if f["fase"] in ("aprovar", "publicar")]

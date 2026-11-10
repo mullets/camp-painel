@@ -81,11 +81,11 @@ def proximo_passo(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict
         if curar_lotes(con, codigo):                     # CAMP-122 (P1): "erro" que é só aviso [Minor] não para o lote
             con.commit()
         lotes = []
-        from .filas_fase import SQL_PROJETO_NO_AR, SQL_FORA_DO_SITE
+        from .filas_fase import SQL_PROJETO_NO_AR, SQL_FORA_DO_SITE, SQL_PENDENTES_LOTE
         for l in con.execute(f"""SELECT l.id, l.nome, l.etapa, l.aprovado_em, l.aprovado_por, l.atualizado_em, l.folhas_esperadas, l.folhas_encontradas, l.status_json, l.resultado,
                                        {SQL_PROJETO_NO_AR} AS _no_ar, {SQL_FORA_DO_SITE} AS _fora,
                                        (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo) AS itens_total,
-                                       (SELECT COUNT(*) FROM item i WHERE i.lote_id=l.id AND i.projeto_codigo=l.projeto_codigo AND i.revisao='pendente') AS itens_pendentes
+                                       {SQL_PENDENTES_LOTE} AS itens_pendentes
                                 FROM lista_processamento l WHERE l.projeto_codigo=? AND l.descartado_em IS NULL ORDER BY l.id DESC""", (codigo,)):
             # CAMP-078 (20/10, exaustão): lote descartado não é trabalho (a Fila já o tirava); o cartão Folhas continuava "o CAMP Vision está lendo"
             d = dict(l)
@@ -344,11 +344,18 @@ def _contagem(con, lote_id: int) -> dict:
     # CAMP-130 (20/10, F026-P0009): "12 conferidas · 22 corrigidas · 3 retidas" somava 37 num lote de 34 (a retida também conta como
     # conferida ou corrigida). `partes` (campo novo, opcional) divide as folhas sem sobrepor e soma o total: a retida conta só como retida.
     partes = {"pendente": 0, "sem_mudanca": 0, "corrigida": 0, "retida": 0}
-    for r in con.execute(f"SELECT revisao, status_site, COALESCE(retida,0), COUNT(*) FROM item WHERE {_DO_LOTE} GROUP BY revisao, status_site, COALESCE(retida,0)", (lote_id,)):
+    # 10/11: a cópia (duplicata_de) ainda sem conferir não conta como "a conferir" e não impede aprovar (a publicação já a ignorava);
+    # fica como está (não vira conferida). Conta à parte: `copias_pendentes` e partes["copia_pendente"] (campos novos, opcionais).
+    c["copias_pendentes"] = 0
+    for r in con.execute(f"SELECT revisao, status_site, COALESCE(retida,0), COUNT(*), duplicata_de IS NOT NULL FROM item WHERE {_DO_LOTE} GROUP BY revisao, status_site, COALESCE(retida,0), duplicata_de IS NOT NULL", (lote_id,)):
         c["total"] += r[3]
-        c[r[0]] += r[3]
         if r[1] == "bloqueado":
             c["bloqueadas"] += r[3]
+        if r[4] and r[0] == "pendente":
+            c["copias_pendentes"] += r[3]
+            partes["copia_pendente"] = partes.get("copia_pendente", 0) + r[3]
+            continue
+        c[r[0]] += r[3]
         if r[2]:
             c["retidas"] += r[3]
             partes["retida"] += r[3]
@@ -1082,7 +1089,7 @@ def conferir_sem_pendencia(lote_id: int, u: dict = Depends(auth.exige("operador"
                 continue
             con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (u["email"], i["codigo"]))
             marcadas += 1
-        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente' AND duplicata_de IS NULL", (lote_id,)).fetchone()[0]   # a cópia não conta
         _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote", u["email"], {"lote_id": lote_id, "conferidas": marcadas, "restam": restam})
         con.commit()
         return {"conferidas": marcadas, "restam": restam}
@@ -1144,7 +1151,7 @@ def conferir_sem_aviso(con, lote_id: int, ator: str, automatico: bool = False, p
             continue
         con.execute("UPDATE item SET revisao='conferida', revisado_por=?, revisado_em=datetime('now'), atualizado_em=datetime('now') WHERE codigo=?", (ator, i["codigo"]))
         marcadas += 1; conferidas.append(i["codigo"])
-    restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+    restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente' AND duplicata_de IS NULL", (lote_id,)).fetchone()[0]   # a cópia não conta
     if automatico:
         if marcadas:
             _evento(con, "projeto", l["projeto_codigo"], "conferida_automaticamente", ator, {"lote_id": lote_id, "conferidas": conferidas,
@@ -1206,7 +1213,7 @@ def desfazer_conferir_todas(lote_id: int, d: DesfazerConferirTodas, u: dict = De
             voltaram.append(cod)
         if voltaram:
             _evento(con, "projeto", l["projeto_codigo"], "revisao_em_lote_desfeita", u["email"], {"lote_id": lote_id, "voltaram": voltaram})
-        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente'", (lote_id,)).fetchone()[0]
+        restam = con.execute(f"SELECT COUNT(*) FROM item WHERE {_DO_LOTE} AND revisao='pendente' AND duplicata_de IS NULL", (lote_id,)).fetchone()[0]   # a cópia não conta
         con.commit()
         return {"voltaram": len(voltaram), "ficaram": ficaram, "restam": restam}
     except HTTPException:

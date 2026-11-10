@@ -4028,7 +4028,7 @@ function ativarPaginacao(el,{por=50,modo='paginas'}={}){
 const PAG_ALVOS=[['#fundos-body',50,'paginas'],['#loc-body',50,'paginas'],['#usr-body',50,'paginas'],['#v-solicitacoes tbody',50,'paginas'],['#v-arquitetos tbody',50,'paginas'],['.project-series .thumbs',60,'mais']];
 function ativarPaginacoes(){PAG_ALVOS.forEach(([sel,por,modo])=>document.querySelectorAll(sel).forEach(el=>ativarPaginacao(el,{por,modo})))}
 let _pgT=0;new MutationObserver(()=>{clearTimeout(_pgT);_pgT=setTimeout(ativarPaginacoes,150)}).observe(document.body,{childList:true,subtree:true});
-function situacaoProjetoHTML(p){return situacaoTag(situacaoDe(p.fase,p.status_site,+p.folhas||0))}
+function situacaoProjetoHTML(p){return situacaoTag(situacaoDe(p.fase,p.status_site,+(p.folhas_total??p.folhas)||0))}
 const PROJ_FOLHAS={};   // CAMP-149: folhas de cada projeto já visto na lista (a barra de seleção soma)
 /* ===== Redesenho Projetos (04/11/2026, documento do Rafael §8–13) =====
    "Qual projeto quero localizar, consultar ou administrar?" — os componentes da lista operacional (LST, docs/UI.md) com os dados e as
@@ -4069,7 +4069,7 @@ function projMaisItens(p){const c=escHtml(p.codigo),it=[],mi=(cls,txt,at)=>`<but
   it.push(mi('','Imprimir etiqueta da pasta',`data-proj-acao="etiqueta" data-codigo="${c}"`),mi('','Exportar (CSV)',`data-proj-acao="exportar" data-codigo="${c}"`));
   if(noAr&&pode('projetos.lote'))it.push(mi('perigo-txt','Voltar para rascunho…',`data-proj-acao="rascunho" data-codigo="${c}"`));
   return it}
-const linhaProjetoHTML=p=>{PROJ_FOLHAS[p.codigo]=+p.folhas||0;const c=escHtml(p.codigo),tit=escHtml(p.titulo||p.codigo),sit=situacaoDe(p.fase,p.status_site,+p.folhas||0),dt=projDataTxt(p),as=projAutores(p.autoria);
+const linhaProjetoHTML=p=>{PROJ_FOLHAS[p.codigo]=+p.folhas||0;const c=escHtml(p.codigo),tit=escHtml(p.titulo||p.codigo),sit=situacaoDe(p.fase,p.status_site,+(p.folhas_total??p.folhas)||0),dt=projDataTxt(p),as=projAutores(p.autoria);
   const pub=PROJ_PUB[p.status_site]||'não publicado',site=sit==='no_site'?'':`<span class="pj-site" title="${escHtml(PROJ_PUB_DICA[p.status_site]||PROJ_PUB_DICA.nao_publicado)}">Site: <b>${escHtml(pub)}</b></span>`;
   const selo=p.metas&&p.metas.total?`<span class="tag mt-selo${p.metas.feitas>=p.metas.total?' g':''}" title="Objetivos do projeto cumpridos: ${escHtml(fmtN(p.metas.feitas))} de ${escHtml(fmtN(p.metas.total))} (não impedem publicar)">objetivos ${fmtN(p.metas.feitas)}/${fmtN(p.metas.total)}</span>`:'';
   const estreito=`<span class="proj-meta pj-estreito"><span class="code pj-e-cod">${c}</span>${p.cidade?`<span class="pj-cidade">${escHtml(p.cidade)}</span>`:''}<span class="pj-e-data">${dt?escHtml(dt):'sem data'}</span><span class="pj-e-fundo">Fundo ${escHtml(p.fundo_codigo||'')} · ${escHtml(p.fundo||'')}</span><span class="pj-e-arq">${as.length?escHtml(as.join('; ')):'autoria não registrada'}</span><span class="pj-e-n">${escHtml(qtd(+p.folhas||0,'folha','folhas'))}</span></span>`;
@@ -4084,7 +4084,7 @@ const linhaProjetoHTML=p=>{PROJ_FOLHAS[p.codigo]=+p.folhas||0;const c=escHtml(p.
 // H12: o que falta em cada projeto, na língua de quem trabalha (o mesmo caminho do Próximo passo da página do projeto)
 function proximoPassoLista(p){const n=+p.itens_pendentes||0,f=p.fase;
   const t=f==='importar'?'falta importar as folhas':f==='conferir'?`${qtd(n,'folha falta','folhas faltam')} conferir`:f==='aprovar'?'falta aprovar o lote':f==='publicar'?'falta publicar':f==='erro'?'o CAMP Vision parou com erro':f==='processando'?'o CAMP Vision está lendo':
-    p.status_site==='no_ar'?'':!+p.folhas?'nenhuma folha ainda':'veja o que falta para publicar';
+    p.status_site==='no_ar'?'':!+(p.folhas_total??p.folhas)?'nenhuma folha ainda':'veja o que falta para publicar';
   return t?`<small class="help sit-frase">${escHtml(t)}</small>`:''}
 async function exportarProjetosTodos(){   // o filtro atual inteiro, não só a página que está na tela
   toast(`Preparando a exportação de ${fmtN(PROJ_TOTAL)} projetos…`);const rows=[];
@@ -5626,7 +5626,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-pp]');if(b
    Agora as partes não se sobrepõem e somam o total ("34 folhas: 9 sem mudança · 22 corrigidas · 3 retidas"); o que se sobrepõe vem como "das quais". */
 function revChipsHTML(c){const p=c.partes;
   if(!p)return `<div class="rev-chips">${c.pendente?`<span class="tag a">${escHtml(c.pendente)} a conferir</span>`:''}${c.conferida?`<span class="tag g">${escHtml(c.conferida)} conferida(s)</span>`:''}${c.corrigida?`<span class="tag b">${escHtml(c.corrigida)} corrigida(s)</span>`:''}${c.retidas?`<span class="tag a">${escHtml(c.retidas)} retida(s) por você</span>`:''}</div>`;
-  const t=[p.pendente?['a',`${fmtN(p.pendente)} a conferir`]:null,p.sem_mudanca?['g',`${fmtN(p.sem_mudanca)} sem mudança`]:null,p.corrigida?['b',qtd(p.corrigida,'corrigida','corrigidas')]:null,p.retida?['a',qtd(p.retida,'retida','retidas')+' <small>(não vão ao site)</small>']:null].filter(Boolean);
+  const t=[p.pendente?['a',`${fmtN(p.pendente)} a conferir`]:null,p.sem_mudanca?['g',`${fmtN(p.sem_mudanca)} sem mudança`]:null,p.corrigida?['b',qtd(p.corrigida,'corrigida','corrigidas')]:null,p.retida?['a',qtd(p.retida,'retida','retidas')+' <small>(não vão ao site)</small>']:null,p.copia_pendente?['',qtd(p.copia_pendente,'cópia sem conferir','cópias sem conferir')+' <small>(não impedem aprovar)</small>']:null].filter(Boolean);
   return `<div class="rev-chips" data-rev-partes><b class="rev-total">${qtd(c.total,'folha','folhas')}:</b> ${t.map(([k,x])=>`<span class="tag ${k}">${x}</span>`).join(' ')}${c.bloqueadas?` <small class="help">· das quais ${qtd(c.bloqueadas,'bloqueada','bloqueadas')} para o site</small>`:''}</div>`}
 async function carregarRevisaoLote(code){
   const box=document.getElementById('pj-revisao');if(!box)return;
