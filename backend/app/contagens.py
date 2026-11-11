@@ -118,7 +118,8 @@ def pedem_acao(con, n: dict, decisoes: list[dict], usuario_id: int | None = None
     n["pedem_acao"] = {"precisa_de_voce": n["decisoes"] - esc_dec + n["material_novo"] + n["erros_bloqueantes"] - esc_bloq, "decisoes": n["decisoes"],
                        # UX-70: o menu "Material novo" = a aba "Precisam de você" (lotes que dependem de uma pessoa); sem o campo, como antes
                        "material_novo": n.get("lotes_precisam_de_voce", n["material_novo"]), "problemas": n["erros_pedem_acao"] - esc_prob, "pedidos": n["pedidos_abertos"],
-                       "emprestimos": n["emprestimos_atrasados"], "inscricoes": _inscricoes_novas(con)}
+                       "emprestimos": n["emprestimos_atrasados"], "inscricoes": _inscricoes_novas(con),
+                       "decisoes_escondidas": esc_dec}   # 11/11 (campo novo, opcional): decisões que esta pessoa deixou para depois ("Agora não")
     return n["pedem_acao"]
 
 
@@ -130,6 +131,16 @@ def _inscricoes_novas(con) -> int:
         return 0
 
 
+def alinhar_precisa_de_voce(con, n: dict, papel: str, usuario_id: int | None = None, fila: dict | None = None) -> int:
+    """O "Precisa de você" do menu = as linhas da fila da Home desta pessoa (sem Melhorar a base). `n` precisa das listas (com_listas)."""
+    if fila is None:
+        from . import pendencias as pd
+        fila = pd.fila_da_home(pd.tarefas(con, papel, n, por_grupo=1, usuario_id=usuario_id, com_base=False), papel)
+    pa = n.setdefault("pedem_acao", {})
+    pa["precisa_de_voce"] = int(fila["pedem_atencao"])
+    return pa["precisa_de_voce"]
+
+
 def precisa_de_voce(n: dict) -> int:
     """O número do "Precisa de você": o mesmo de pedem_acao (sem ele, a soma sem escondidos)."""
     pa = n.get("pedem_acao")
@@ -138,11 +149,16 @@ def precisa_de_voce(n: dict) -> int:
     return int(n.get("decisoes") or 0) + int(n.get("material_novo") or 0) + int(n.get("erros_bloqueantes") or 0)
 
 
-def medir(con, *, n: dict | None = None, usuario_id: int | None = None) -> dict:
-    """Todas as contagens numa resposta só. `n` = contar_pendencias já calculado (evita contar duas vezes)."""
+def medir(con, *, n: dict | None = None, usuario_id: int | None = None, papel: str | None = None) -> dict:
+    """Todas as contagens numa resposta só. `n` = contar_pendencias já calculado (evita contar duas vezes).
+    11/11 (Rafael: "o Precisa de você só fala em 1 e tem vários itens na lista"): com o papel, o número do menu é o MESMO da saudação e da
+    aba "Para fazer" da Home (pendencias.fila_da_home: pedem_atencao), não mais uma soma à parte que deixava de fora leitura interrompida,
+    lote sem processar, aviso do CAMP Vision e o que espera um admin."""
     if n is None:
         from .pendencias import contar_pendencias
-        n = contar_pendencias(con, usuario_id=usuario_id)
+        n = contar_pendencias(con, usuario_id=usuario_id, com_listas=bool(papel))
+    if papel and "_lotes" in n:
+        alinhar_precisa_de_voce(con, n, papel, usuario_id)
     out = {k: v for k, v in n.items() if not k.startswith("_")}
     ns = no_site(con)
     out.update({

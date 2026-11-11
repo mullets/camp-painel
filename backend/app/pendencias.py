@@ -310,7 +310,7 @@ def _acao(rotulo: str, tipo: str, alvo) -> dict:
     return {"rotulo": rotulo, "tipo": tipo, "alvo": alvo}
 
 
-def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_id: int | None = None, ordem: str = "padrao") -> list[dict]:
+def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_id: int | None = None, ordem: str = "padrao", com_base: bool = True) -> list[dict]:
     """Grupos na ordem Decidir → Conferir → Aprovar e publicar → Problemas que bloqueiam → Pedidos. Cada linha: sev (r|a|b), titulo, codigo, detalhe, acao."""
     n = n or contar_pendencias(con, com_listas=True)
     admin = papel in ("admin", "master")
@@ -491,7 +491,7 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
 
     # 6) melhorar a base (qualidade_base): fila única com prioridade; "Agora não" esconde por 7 dias só para esta pessoa
     from . import qualidade_base as qb
-    tq = qb.tarefas_qualidade(con, usuario_id)
+    tq = qb.tarefas_qualidade(con, usuario_id) if com_base else []   # 11/11: para só contar "Precisa de você" a base não entra
     if tq:
         fila = qb.fila_do_dia(tq)
         linhas = [{"sev": "b", "titulo": t["titulo"], "codigo": t["codigo"], "detalhe": t["detalhe"], "adiar": t["id"],
@@ -571,7 +571,7 @@ FILA_MAX = 200          # linhas por grupo enviadas à Home (o resto fica na tel
 # grupo → filtro rápido da Home (Todas · Decidir · Conferir · Publicar · Resolver · Responder · Melhorar a base)
 FILA_FILTRO = {"decidir": "decidir", "conferir": "conferir", "aprovar_publicar": "publicar", "problemas": "resolver",
                "pedidos": "responder", "emprestimos": "responder", "base": "base"}
-FILA_FILTROS = [("todas", "Todas"), ("decidir", "Decidir"), ("conferir", "Conferir"), ("publicar", "Publicar"), ("resolver", "Resolver"),
+FILA_FILTROS = [("todas", "Para fazer"), ("decidir", "Decidir"), ("conferir", "Conferir"), ("publicar", "Publicar"), ("resolver", "Resolver"),
                 ("responder", "Responder"), ("base", "Melhorar a base")]
 # o tipo de cada linha, em uma palavra (o botão já diz a ação: aqui é a natureza do trabalho)
 _TIPO_ACAO = {"decisao": "Decisão", "conferir": "Conferir", "importar": "Importar", "destino": "Verificar destino", "aprovar": "Aprovar",
@@ -596,7 +596,8 @@ def fila_da_home(grupos: list[dict], papel: str, ordem: str = "urgente") -> dict
     """A fila da Home numa lista só. Cada linha leva (campos novos, opcionais): grupo, filtro, tipo_tarefa, meu, espera_h,
     urgente (o motivo, só nas urgentes), contexto (o detalhe sem o tempo de espera, que tem coluna própria) e nivel (0 urgente,
     1 trabalho, 2 base). Os contadores dos filtros são os totais REAIS dos grupos (o "total" de cada um), não as linhas enviadas.
-    `pedem_atencao` = linhas da função desta pessoa, fora "Melhorar a base": é o número da saudação ("N coisas pedem sua atenção hoje")."""
+    `pedem_atencao` = linhas da função desta pessoa, fora "Melhorar a base": é o número da saudação ("N coisas pedem sua atenção hoje")
+    e, desde 11/11, também o do menu "Precisa de você" (contagens.medir com o papel). "Para fazer" (o antigo "Todas") = tudo menos a base."""
     ordem = ordem if ordem in FILA_ORDENS else "urgente"
     itens, cont = [], {k: 0 for k, _ in FILA_FILTROS}
     pedem, outro = 0, 0
@@ -604,8 +605,8 @@ def fila_da_home(grupos: list[dict], papel: str, ordem: str = "urgente") -> dict
         filtro = FILA_FILTRO.get(g["id"], "resolver")
         meu = _papel_faz(papel, g.get("quem") or "")
         cont[filtro] += g["total"]
-        cont["todas"] += g["total"]
-        if filtro != "base":
+        if filtro != "base":                        # 11/11 (Rafael: "só fala em 1 e tem vários itens na lista"): "Para fazer" não soma a base
+            cont["todas"] += g["total"]
             if meu:
                 pedem += g["total"]
             else:
