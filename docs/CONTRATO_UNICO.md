@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.9 (10/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
+Versão deste documento: **1.10 (11/11/2026)**. Contrato CV2 ↔ painel: **2.5** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -125,6 +125,15 @@ As rotas administrativas de mover/mesclar exigem **login de admin**; o CV2 não 
 - O painel NÃO muda o lote de projeto nem mexe no QNAP: o lote fica "movendo" no projeto antigo e não importa. Quem reorganiza a pasta é o CV2, pelo caminho que já existe (`--reidentificar <de>`: plano sem `--sim`, depois `--sim`; aviso por projeto).
 - O item sai da lista sozinho quando o material chega ao projeto `para` (lote de outra pasta criado depois da decisão), quando o lote passa para `para` (`/api/campvision/reidentificar` com `lote_id`) ou quando uma pessoa usa Desfazer no painel.
 - Até o CV2 ler esta rota (a implementar no campvision-new), uma pessoa roda o `comando` no servidor do CAMP Vision.
+- **NOVO 1.10 (11/11/2026, opcionais):** item com `"pessoa": true, "escolhido_em": "2026-11-11 15:20:00"` = uma PESSOA escolheu o destino
+  (no painel, depois de o CV2 não mover a pasta, ou pela decisão "É de outro projeto", que agora também entra nesta lista). O carimbo pode
+  citar outros projetos: o CV2 aceita mandar para `para` as folhas que ele deixaria "para uma pessoa decidir" quando `para` é um dos candidatos
+  delas, e tenta de novo quando `escolhido_em` muda. CV2 antigo ignora os campos (só não tenta de novo um item que já recusou).
+- **NOVO 1.10 — o CV2 diz que NÃO moveu:** no `status.json` (`pronto`) da pasta, o campo opcional
+  `"destino_painel": {"id": 3, "para": "F026-P0095", "resultado": "nao_aplicado", "motivo": "…", "candidatos": ["F026-P0095", "F026-P0201"], "em": "2026-11-11T15:30:00"}`
+  (contrato CV2 2.9), além do `motivo` "UX-43: …" de antes. O painel mostra o motivo e os candidatos em "Verificar destino" e a pessoa
+  escolhe (`POST /api/destino-automatico/{id}/escolher {"para": "F0xx-P0yyy"}`, admin; o próprio projeto = "É deste projeto").
+  Some quando o CV2 aplica (ele apaga o campo).
 
 ## 6. Painel ↔ site
 

@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"ficha_etapas", "precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"destino_recusado", "ficha_etapas", "precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"giro_site_previa"}   # 11/11/2026: foto de cabeça para baixo no site (prévia de outro código)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
@@ -8470,6 +8470,81 @@ def filho(modo):
         ver("projeto já preenchido: tipo, natureza, ano e cidade feitos", sum(1 for e in ok_["etapas"] if e["feito"]) == 4 and ok_["faltam"] == 2, str(ok_["faltam"]))
         ver("projeto que não existe: None (a rota dá 404)", etapas(c, "F050-P0099") is None)
         c.close()
+        for l in res: print(l)
+    elif modo == "destino_recusado":
+        # 11/11 (Rafael, F010-P0174 "Concurso Público/Votorantim"): o painel mandou a pasta para F010-P0731 (projeto que ele criou) e o CAMP
+        # Vision NÃO moveu (o carimbo "PAÇO MUNICIPAL / CENTRO CÍVICO - VOTORANTIM" combina com F010-P0201 e F010-P0731). O lote ficava
+        # "movendo" para sempre, sem botão nenhum, e ainda aparecia "Lote enviado pela estação e sem processar: veja se o CAMP Vision está ligado".
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, destino_auto as da, destino_lote as dl, decisoes, estacao_eventos as ev
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F010','Francisco Segnini Jr','FSJ',1)")
+        for n_, t_, o_ in ((174, "Residência Silva", None), (201, "Paço Municipal e Centro Cívico de Votorantim", None), (731, "Concurso PúblicoVotorantim", "automatico"), (300, "Outra obra", "automatico")):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F010',?)", (n_,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,origem) VALUES (?,?,?,?,1987,?)", (f"F010-P0{n_}", "F010", n_, t_, o_))
+        res_cv = _j.dumps({"origem": "campvision2"})
+        st = {"status": "pronto", "motivo": "UX-43: o CAMP Vision não reorganizou para F010-P0731: a simulação não bate com o destino pedido: 5 folha(s) “PAÇO MUNICIPAL / CENTRO CÍVICO - VOTORANTIM”: precisam de uma pessoa (F010-P0201 × F010-P0731)"}
+        l1 = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado, status_json) VALUES ('F010-P0174 - Concurso PúblicoVotorantim','F010-P0174','/x/F010-P0174 - Concurso PúblicoVotorantim','revisao',?,?)",
+                       (res_cv, _j.dumps(st, ensure_ascii=False))).lastrowid
+        d1 = c.execute("INSERT INTO destino_auto (lote_id, acao, projeto_antigo, projeto_novo, nome_pasta, pasta_qnap, em) VALUES (?, 'criar', 'F010-P0174', 'F010-P0731', 'F010-P0174 - Concurso PúblicoVotorantim', '/x', datetime('now','-6 days'))", (l1,)).lastrowid
+        c.execute("INSERT INTO estacao_evento (chave, estacao_id, projeto_codigo, evento, total_arquivos, recebido_em) VALUES ('k1','mac-1','F010-P0174','enviado',23,datetime('now','-50 hours'))")
+        c.commit()
+        a = dl.avaliar(c, c.execute("SELECT * FROM lista_processamento WHERE id=?", (l1,)).fetchone())
+        au = a["automatico"] or {}
+        cands = [x["codigo"] for x in (au.get("recusa") or {}).get("candidatos") or []]
+        ver("o CAMP Vision antigo recusou (motivo no status.json): o lote fica 'recusado', não 'movendo'", au.get("estado") == "recusado", str(au.get("estado")))
+        ver("os dois projetos possíveis aparecem, com o título", cands == ["F010-P0201", "F010-P0731"] and (au["recusa"]["candidatos"][0]["titulo"] or "").startswith("Paço"), str(au.get("recusa"))[:200])
+        ver("o motivo diz que o CAMP Vision não moveu e pede para escolher", "não moveu a pasta para F010-P0731" in (a["motivo"] or "") and "Escolha o projeto certo" in a["motivo"], a["motivo"])
+        ver("o aviso 'lote enviado e sem processar' não aparece (a pasta espera o destino)", not any(x["projeto_codigo"] == "F010-P0174" for x in ev.sem_processar(c)))
+        # a pessoa escolhe F010-P0201 pela rota (admin)
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-oper-123456", "operador", forcar_troca=False)
+        def cli(em, s):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": s}); return x
+        adm, op = cli("ad@camp.arq.br", "senha-admin-12345"), cli("op@camp.arq.br", "senha-oper-123456")
+        from unittest import mock as _mk
+        def dests():                                   # a rota do CAMP Vision só responde na LAN: aqui a chamada é direta
+            with _mk.patch.object(da, "exigir_estacao", lambda r: "127.0.0.1"):
+                return da.destinos_para_o_cv(None)["destinos"]
+        ver("operador não escolhe (403)", op.post(f"/api/destino-automatico/{d1}/escolher", json={"para": "F010-P0201"}).status_code == 403)
+        ver("projeto de outro fundo ou inexistente: 400", adm.post(f"/api/destino-automatico/{d1}/escolher", json={"para": "F010-P0999"}).status_code == 400)
+        r = adm.post(f"/api/destino-automatico/{d1}/escolher", json={"para": "F010-P0201"})
+        ver("escolher F010-P0201 responde 200 e diz que o CAMP Vision move sozinho", r.status_code == 200 and "move sozinho" in r.json().get("mensagem", ""), r.text[:200])
+        k = connect()
+        row = k.execute("SELECT * FROM destino_auto WHERE id=?", (d1,)).fetchone()
+        ver("a decisão passa a F010-P0201 (mover), com quem escolheu", row["projeto_novo"] == "F010-P0201" and row["acao"] == "mover" and row["escolhido_por"] == "ad@camp.arq.br" and row["estado"] == "movendo", dict(row).__repr__()[:200])
+        ver("o projeto F010-P0731 criado pelo painel e vazio é descartado", k.execute("SELECT descartado_em FROM projeto WHERE codigo='F010-P0731'").fetchone()[0] is not None)
+        au2 = da.do_lote(k, l1)
+        ver("a recusa antiga não vale mais (era para P0731): volta a 'movendo', escolhido por uma pessoa", au2["estado"] == "movendo" and au2.get("escolhido_por") == "ad@camp.arq.br", str(au2)[:200])
+        k.close()
+        dst = dests()
+        ver("o CAMP Vision recebe o pedido novo, marcado como escolha de pessoa", [(x["de"], x["para"], x.get("pessoa")) for x in dst] == [("F010-P0174", "F010-P0201", True)], str(dst)[:300])
+        # contrato 2.9: recusa estruturada mais nova que a escolha volta a valer
+        k = connect()
+        st2 = {"status": "pronto", "destino_painel": {"id": d1, "para": "F010-P0201", "resultado": "nao_aplicado", "motivo": "3 folha(s) “X”: o carimbo manda para F010-P0300, não para F010-P0201",
+                                                     "candidatos": ["F010-P0300"], "em": "2099-01-01T00:00:00"}}
+        k.execute("UPDATE lista_processamento SET status_json=? WHERE id=?", (_j.dumps(st2, ensure_ascii=False), l1)); k.commit()
+        au3 = da.do_lote(k, l1)
+        ver("recusa nova (campo destino_painel) depois da escolha: recusado de novo, com os candidatos dela", au3["estado"] == "recusado" and [x["codigo"] for x in au3["recusa"]["candidatos"]] == ["F010-P0300", "F010-P0201"], str(au3)[:250])
+        k.close()
+        # "É deste projeto": desfaz e libera a importação
+        r = adm.post(f"/api/destino-automatico/{d1}/escolher", json={"para": "F010-P0174"})
+        k = connect()
+        a4 = dl.avaliar(k, k.execute("SELECT * FROM lista_processamento WHERE id=?", (l1,)).fetchone(), completo=False)
+        ver("'É deste projeto' libera o lote para importar e sai da lista do CAMP Vision", r.status_code == 200 and a4["liberado"] and not dests(), r.text[:200])
+        # decisão "É de outro projeto" (lote sem decisão do painel): entra na lista do CAMP Vision
+        l2 = k.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('P0174 - Pasta X','F010-P0174','/x/P0174 - Pasta X','revisao',?)", (res_cv,)).lastrowid
+        k.commit()
+        did = dl.abrir_decisao(k, k.execute("SELECT * FROM lista_processamento WHERE id=?", (l2,)).fetchone(), "op@camp.arq.br", "conferi", "F010-P0201"); k.commit()
+        decisoes.resolver(k, did, "outro_projeto", None, "ad@camp.arq.br", valor="F010-P0201"); k.commit()
+        dst2 = dests()
+        ver("decisão 'É de outro projeto': o CAMP Vision recebe o pedido e move sozinho (antes: só anotava)", any(x["lote_id"] == l2 and x["para"] == "F010-P0201" and x.get("pessoa") for x in dst2), str(dst2)[:300])
+        k.close()
         for l in res: print(l)
     elif modo == "importado_sem_folhas":
         # 23/10 (Precisa de você): "clico em Importar, ele atualiza, sai da lista e volta pro fim dela, e dá 0 folhas importadas".
@@ -17472,6 +17547,14 @@ else:
 print("114b2e) 'Completar a ficha' em etapas: uma pergunta por dado, as respostas mais usadas primeiro (fundo, depois acervo)")
 rc, out = rodar("ficha_etapas", f"{tmp}/fichaetapas.db")
 if rc != 0: ok(False, f"teste da ficha em etapas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b2f) Verificar destino: o CAMP Vision não moveu a pasta → a pessoa escolhe o projeto e o CAMP Vision move sozinho")
+rc, out = rodar("destino_recusado", f"{tmp}/destinorecusado.db")
+if rc != 0: ok(False, f"teste do destino recusado não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

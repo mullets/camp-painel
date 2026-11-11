@@ -335,8 +335,56 @@ def do_lote(con, lote_id: int) -> dict | None:
     if not r:
         return None
     t = con.execute("SELECT titulo FROM projeto WHERE codigo=?", (r["projeto_novo"],)).fetchone()
+    e = estado(con, r)
+    rec = recusa(con, r) if e == "movendo" else None
     return {"id": r["id"], "acao": r["acao"], "para": r["projeto_novo"], "para_titulo": t[0] if t else r["titulo_criado"], "criado": r["acao"] == "criar",
-            "nota": r["nota"], "em": r["em"], "estado": estado(con, r)}
+            "nota": r["nota"], "em": r["em"], "estado": "recusado" if rec else e,
+            # 11/11 (campos novos, opcionais): o CAMP Vision não moveu (motivo e projetos possíveis) e quem escolheu o destino
+            **({"recusa": rec} if rec else {}),
+            **({"escolhido_por": _col(r, "escolhido_por"), "escolhido_em": _col(r, "escolhido_em")} if _col(r, "escolhido_por") else {})}
+
+
+def _col(r, k: str):
+    return r[k] if k in r.keys() else None
+
+
+_COD = re.compile(r"F\d{3}-P\d{4}")
+
+
+def recusa(con, r) -> dict | None:
+    """11/11: o CAMP Vision tentou e NÃO moveu a pasta (o carimbo não bate só com o destino). Vem no status.json da pasta, que o painel
+    guarda em lista_processamento.status_json: o campo `destino_painel` (contrato CV2 2.9: {id, para, resultado, motivo, candidatos, em})
+    ou, no CAMP Vision antigo, o `motivo` "UX-43: o CAMP Vision não reorganizou para ...". Depois que uma pessoa escolhe de novo, só vale uma
+    recusa mais nova que a escolha. {motivo, candidatos: [{codigo, titulo}]} ou None."""
+    l = con.execute("SELECT status_json FROM lista_processamento WHERE id=?", (r["lote_id"],)).fetchone()
+    try:
+        st = json.loads((l["status_json"] if l else None) or "{}")
+    except (ValueError, TypeError):
+        st = {}
+    if not isinstance(st, dict):
+        return None
+    escolhido = _col(r, "escolhido_em")
+    dp, motivo, cods = st.get("destino_painel"), None, []
+    if isinstance(dp, dict) and dp.get("resultado") == "nao_aplicado" and str(dp.get("para") or "").upper() == r["projeto_novo"]:
+        if escolhido and str(dp.get("em") or "").replace("T", " ") < escolhido:
+            return None                                    # recusa de antes da escolha da pessoa: o CAMP Vision ainda vai tentar de novo
+        motivo, cods = str(dp.get("motivo") or ""), [str(x).upper() for x in (dp.get("candidatos") or [])]
+    else:
+        m = str(st.get("motivo") or "")
+        if escolhido or not m.startswith("UX-43") or "não reorganizou" not in m or r["projeto_novo"] not in m:
+            return None
+        motivo = m.split(f"{r['projeto_novo']}: ", 1)[-1]
+        cods = _COD.findall(motivo)
+    cand, vistos = [], set()
+    for c in cods + [r["projeto_novo"]]:
+        if c in vistos or c == r["projeto_antigo"] or c[:4] != r["projeto_antigo"][:4]:
+            continue
+        vistos.add(c)
+        p = con.execute("SELECT codigo, titulo FROM projeto WHERE codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL", (c,)).fetchone()
+        if p:
+            cand.append({"codigo": p["codigo"], "titulo": p["titulo"]})
+    motivo = re.sub(r"^a simulação não bate com o destino pedido:\s*", "", motivo or "").strip()
+    return {"motivo": motivo or "o CAMP Vision não conseguiu mover a pasta", "candidatos": cand}
 
 
 def rodada(teto: int = TETO, por: str = ATOR, lotes: list[int] | None = None, forcar: bool = False, progresso=None) -> dict:
@@ -371,6 +419,71 @@ def rodada(teto: int = TETO, por: str = ATOR, lotes: list[int] | None = None, fo
     return out
 
 
+def _descartar_criado(con, r, por: str) -> str | None:
+    """O projeto que o painel criou para o lote (acao 'criar') e que continua vazio é descartado; o número P continua gasto. Sem commit."""
+    if r["acao"] != "criar":
+        return None
+    p = con.execute("SELECT codigo, origem, descartado_em, mesclado_em, tainacan_item_id, wp_page_id FROM projeto WHERE codigo=?", (r["projeto_novo"],)).fetchone()
+    if not p or p["descartado_em"] or p["mesclado_em"]:
+        return None
+    if p["tainacan_item_id"] or p["wp_page_id"] or con.execute("SELECT 1 FROM item WHERE projeto_codigo=? LIMIT 1", (p["codigo"],)).fetchone() \
+            or con.execute("SELECT 1 FROM lista_processamento WHERE projeto_codigo=? LIMIT 1", (p["codigo"],)).fetchone():
+        raise HTTPException(409, f"O projeto {p['codigo']} criado pelo painel já tem material: não dá mais para desfazer.")
+    mot = f"criado pelo painel para o lote {r['lote_id']} e desfeito"
+    con.execute("UPDATE projeto SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now') WHERE codigo=?",
+                (por, mot, p["codigo"]))
+    _evento(con, "projeto", p["codigo"], "projeto_descartado", por, {"motivo": mot, "lotes": [], "folhas": []})
+    return p["codigo"]
+
+
+def pessoa_escolheu(con, l, para: str, por: str) -> int:
+    """11/11: uma pessoa disse para qual projeto a pasta do lote vai (decisão "É de outro projeto" ou a escolha depois de o CAMP Vision
+    não mover). Entra na lista que o CAMP Vision lê (GET /api/campvision/destinos, com pessoa=true), que move a pasta sozinho. Sem commit."""
+    from .destino_lote import nome_da_pasta
+    r = con.execute("SELECT * FROM destino_auto WHERE lote_id=?", (l["id"],)).fetchone()
+    if r:
+        if r["projeto_novo"] != para and r["estado"] != "desfeito":
+            _descartar_criado(con, r, por)
+        con.execute("""UPDATE destino_auto SET projeto_novo=?, acao=CASE WHEN projeto_novo=? THEN acao ELSE 'mover' END, estado='movendo',
+                       escolhido_por=?, escolhido_em=datetime('now'), em=datetime('now'), desfeito_em=NULL, desfeito_por=NULL WHERE id=?""",
+                    (para, para, por, r["id"]))
+        did = r["id"]
+    else:
+        did = con.execute("""INSERT INTO destino_auto (lote_id, acao, projeto_antigo, projeto_novo, nome_pasta, pasta_qnap, estado, autor, escolhido_por, escolhido_em)
+                             VALUES (?, 'mover', ?, ?, ?, ?, 'movendo', ?, ?, datetime('now'))""",
+                          (l["id"], l["projeto_codigo"], para, nome_da_pasta(l), l["pasta_qnap"], por, por)).lastrowid
+    det = {"lote_id": l["id"], "projeto": l["projeto_codigo"], "para": para, "escolhido_por": por}
+    for ent, cod in (("lista", l["id"]), ("projeto", l["projeto_codigo"]), ("projeto", para)):
+        _evento(con, ent, cod, EVENTO + "_escolhido", por, det)
+    return did
+
+
+def escolher(con, did: int, para: str, por: str) -> dict:
+    """Depois de o CAMP Vision não mover a pasta: a pessoa escolhe entre os projetos possíveis, ou diz que é do próprio projeto. Sem commit."""
+    from .destino_lote import confirmar
+    r = con.execute("SELECT * FROM destino_auto WHERE id=?", (did,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Esta decisão do painel não existe")
+    if estado(con, r) == "concluido":
+        raise HTTPException(409, f"O CAMP Vision já reorganizou a pasta em {r['projeto_novo']}.")
+    l = con.execute("SELECT * FROM lista_processamento WHERE id=?", (r["lote_id"],)).fetchone()
+    if not l or l["descartado_em"] or l["aprovado_em"]:
+        raise HTTPException(409, "Este lote já foi encerrado.")
+    para = (para or "").strip().upper()
+    if para == r["projeto_antigo"]:
+        out = desfazer(con, did, por) if r["estado"] != "desfeito" else {"ok": True, "descartado": None}
+        confirmar(con, l, por, f"escolhido no painel: a pasta é deste projeto (o CAMP Vision não a moveu para {r['projeto_novo']})")
+        return {**out, "mensagem": f"Anotado: a pasta é de {para}. O lote já pode ser importado."
+                + (f" O projeto {out['descartado']} foi descartado; o número não é reusado." if out.get("descartado") else "")}
+    p = con.execute("SELECT codigo, titulo FROM projeto WHERE codigo=? AND fundo_codigo=? AND mesclado_em IS NULL AND descartado_em IS NULL",
+                    (para, r["projeto_antigo"][:4])).fetchone()
+    if not p:
+        raise HTTPException(400, f"O projeto {para} não existe neste fundo (ou foi juntado/descartado).")
+    pessoa_escolheu(con, l, para, por)
+    return {"ok": True, "lote_id": r["lote_id"], "para": para,
+            "mensagem": f"Anotado: a pasta vai para {para} (“{p['titulo']}”). O CAMP Vision move sozinho na próxima volta (em geral, minutos)."}
+
+
 def desfazer(con, did: int, por: str) -> dict:
     """Volta o lote para "Verificar destino" (uma pessoa decide; o painel não decide de novo). Projeto criado e ainda vazio é descartado:
     o número P continua gasto. Só enquanto o CAMP Vision não reorganizou a pasta e o lote não tem folhas. Sem commit."""
@@ -383,18 +496,7 @@ def desfazer(con, did: int, por: str) -> dict:
         raise HTTPException(409, f"O CAMP Vision já reorganizou a pasta em {r['projeto_novo']}: não dá mais para desfazer aqui. Se estiver errado, mova o lote pelo projeto.")
     if con.execute("SELECT 1 FROM item WHERE lote_id=? LIMIT 1", (r["lote_id"],)).fetchone():
         raise HTTPException(409, "O lote já tem folhas: não dá mais para desfazer.")
-    descartado = None
-    if r["acao"] == "criar":
-        p = con.execute("SELECT codigo, origem, descartado_em, mesclado_em, tainacan_item_id, wp_page_id FROM projeto WHERE codigo=?", (r["projeto_novo"],)).fetchone()
-        if p and not p["descartado_em"] and not p["mesclado_em"]:
-            if p["tainacan_item_id"] or p["wp_page_id"] or con.execute("SELECT 1 FROM item WHERE projeto_codigo=? LIMIT 1", (p["codigo"],)).fetchone() \
-                    or con.execute("SELECT 1 FROM lista_processamento WHERE projeto_codigo=? LIMIT 1", (p["codigo"],)).fetchone():
-                raise HTTPException(409, f"O projeto {p['codigo']} criado pelo painel já tem material: não dá mais para desfazer.")
-            mot = f"criado pelo painel para o lote {r['lote_id']} e desfeito"
-            con.execute("UPDATE projeto SET descartado_em=datetime('now'), descartado_por=?, descartado_motivo=?, atualizado_em=datetime('now') WHERE codigo=?",
-                        (por, mot, p["codigo"]))
-            _evento(con, "projeto", p["codigo"], "projeto_descartado", por, {"motivo": mot, "lotes": [], "folhas": []})
-            descartado = p["codigo"]
+    descartado = _descartar_criado(con, r, por)
     con.execute("UPDATE destino_auto SET estado='desfeito', desfeito_em=datetime('now'), desfeito_por=? WHERE id=?", (por, did))
     det = {"lote_id": r["lote_id"], "projeto": r["projeto_antigo"], "para": r["projeto_novo"], "acao": r["acao"], "nome_pasta": r["nome_pasta"],
            **({"descartado": descartado} if descartado else {})}
@@ -498,6 +600,26 @@ def desfazer_rota(did: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
+class Escolha(BaseModel):
+    para: str
+
+
+@router.post("/destino-automatico/{did}/escolher")
+def escolher_rota(did: int, d: Escolha, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """11/11 (rota nova): a pessoa escolhe o projeto certo depois de o CAMP Vision não mover a pasta."""
+    con = connect()
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        out = escolher(con, did, d.para, u["email"])
+        con.commit()
+        return out
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
 @router.get("/campvision/destinos")
 def destinos_para_o_cv(request: Request) -> dict:
     """Para o CAMP Vision (rede local ou X-Camp-Token; só leitura): as pastas que o painel decidiu que são de outro projeto e que o
@@ -512,7 +634,9 @@ def destinos_para_o_cv(request: Request) -> dict:
             t = con.execute("SELECT titulo FROM projeto WHERE codigo=?", (r["projeto_novo"],)).fetchone()
             out.append({"id": r["id"], "lote_id": r["lote_id"], "pasta": r["pasta_qnap"], "nome_pasta": r["nome_pasta"], "de": r["projeto_antigo"],
                         "para": r["projeto_novo"], "para_titulo": t[0] if t else r["titulo_criado"], "criado": r["acao"] == "criar",
-                        "desde": r["em"], "comando": f"vigia.py --reidentificar {r['projeto_antigo']}"})
+                        "desde": r["em"], "comando": f"vigia.py --reidentificar {r['projeto_antigo']}",
+                        # 11/11 (campos novos, opcionais; CONTRATO_UNICO 1.4): uma pessoa escolheu o destino (o carimbo pode citar outros projetos)
+                        **({"pessoa": True, "escolhido_em": _col(r, "escolhido_em")} if _col(r, "escolhido_por") else {})})
         return {"destinos": out}
     finally:
         con.close()
