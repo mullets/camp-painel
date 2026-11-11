@@ -15,6 +15,7 @@ def ok(cond, msg):
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"ficha_etapas", "precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
+MODOS_RAPIDOS |= {"giro_site_previa"}   # 11/11/2026: foto de cabeça para baixo no site (prévia de outro código)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
@@ -1898,6 +1899,35 @@ def filho(modo):
         ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
         c.close()
         for l in res: print(l)
+    elif modo == "giro_site_previa":
+        # 11/11/2026 (F001-P0001 D90001 de cabeça para baixo no site, de pé no painel): a imagem que sobe ao site sai da MESMA origem
+        # que a revisão mostra. Prévia do CAMP Vision com o nome de OUTRO código (folha recodificada) não vale: a revisão mostra o JPG
+        # e o giro da pessoa é sobre ele; prévia (já girada) + giro = foto virada.
+        init_db(); aplicar_migracoes()
+        from pathlib import Path as _P
+        import json as _j, shutil as _sh
+        from app.db import connect
+        from app.imagem_site import imagem_para_o_site
+        from app import ajuste_imagem
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _P(os.environ.get("CAMP_TMP_PRONTOS") or "/tmp/camp_giro_site"); _sh.rmtree(raiz, ignore_errors=True)
+        pv_dir = raiz / "_campvision" / "preview" / "F001-P0001"; pv_dir.mkdir(parents=True); (raiz / "F001 - Fundo" / "JPG").mkdir(parents=True)
+        velho = pv_dir / "F001-P0001-0000-S03-D00012.jpg"; velho.write_bytes(b"p")
+        certo = pv_dir / "F001-P0001-0000-S03-D90002.jpg"; certo.write_bytes(b"q")
+        jpg = raiz / "F001 - Fundo" / "JPG" / "d90001.jpg"; jpg.write_bytes(b"a")
+        k = connect(); k.execute("INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('qnap.prontos_raiz', ?)", (str(raiz),)); k.commit()
+        def linha(cod, previa):
+            return {"codigo": cod, "arquivo_jpg": "F001 - Fundo/JPG/d90001.jpg", "pendencias": _j.dumps({"previa": previa})}
+        recod = linha("F001-P0001-0000-S03-D90001", "_campvision/preview/F001-P0001/F001-P0001-0000-S03-D00012.jpg")
+        ver("folha recodificada: a prévia do código antigo NÃO sobe; sobe o JPG da folha", imagem_para_o_site(k, recod) == str(jpg.resolve()), str(imagem_para_o_site(k, recod)))
+        ver("o site e a revisão usam a mesma imagem de origem", imagem_para_o_site(k, recod) == str(ajuste_imagem.origem_da_folha(raiz, recod)))
+        prop = linha("F001-P0001-0000-S03-D90002", "_campvision/preview/F001-P0001/F001-P0001-0000-S03-D90002.jpg")
+        ver("prévia da própria folha: continua subindo a prévia", imagem_para_o_site(k, prop) == str(certo.resolve()) == str(ajuste_imagem.origem_da_folha(raiz, prop)))
+        sem_cod = {"arquivo_jpg": "F001 - Fundo/JPG/d90001.jpg", "pendencias": _j.dumps({"previa": "_campvision/preview/F001-P0001/F001-P0001-0000-S03-D00012.jpg"})}
+        ver("linha sem código (chamadas antigas): comportamento de antes", imagem_para_o_site(k, sem_cod) == str(velho.resolve()))
+        for l in res: print(l)
+        k.close()
     elif modo == "protocolos":
         # 02/11/2026 · protocolos (contrato 1.7): formato único, o do site quando vem, calculado quando não vem; telas, busca e avisos.
         init_db(); aplicar_migracoes()
@@ -17656,6 +17686,12 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("124c) Protocolos: pedidos, inscrições e downloads, na tela, na busca e nos avisos (contrato 1.7)")
+rc, out = rodar("giro_site_previa", f"{tmp}/giro_site.db")
+if rc != 0: ok(False, f"teste giro_site_previa não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 rc, out = rodar("protocolos", f"{tmp}/prot.db")
 if rc != 0: ok(False, f"teste dos protocolos não rodou -> {out[-1500:]}")
 else:
