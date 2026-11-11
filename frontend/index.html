@@ -1902,7 +1902,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 #ficha .fc-perg{font-size:1.35rem;margin:4px 0;color:var(--ink);font-weight:700;text-transform:none;letter-spacing:0}#ficha .fc-fim h3{font-size:1.35rem;color:var(--ink);text-transform:none;letter-spacing:0;margin:6px 0}.fc-ajuda{color:var(--ink2);margin:0 0 12px}.fc-ops{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin:0 0 12px}
 .fc-op{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);font:inherit;cursor:pointer;min-height:44px}
 .fc-op:hover{border-color:var(--blue)}.fc-op small{color:var(--ink3);font-size:var(--fs-sm2)}.fc-op[aria-pressed="true"]{border:2px solid var(--blue);background:var(--blue-soft)}
-.fc-campo{display:flex;gap:8px;align-items:center;margin:0 0 12px}.fc-campo input{font:inherit;padding:8px 10px;max-width:260px}.fc-todas{margin:0 0 12px}.fc-todas summary{cursor:pointer;color:var(--blue)}
+.fc-intro{margin:0 0 12px;padding:10px 12px;border-radius:var(--r-md);background:var(--green-soft);color:var(--ink)}.fc-campo{display:flex;gap:8px;align-items:center;margin:0 0 12px}.fc-campo input{font:inherit;padding:8px 10px;max-width:260px}.fc-todas{margin:0 0 12px}.fc-todas summary{cursor:pointer;color:var(--blue)}
 .fc-bts{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}.fc-fim{text-align:center;padding:18px 0}.fc-medalha{font-size:2.6rem;margin:0;color:var(--amber)}
 </style>
 </head>
@@ -2812,7 +2812,7 @@ function avisoResultadoLote(acao,r,projeto){const pode=EU&&['admin','master'].in
   else if(acao==='conferir')h=`<b>✔ ${qtd(r.conferidas||0,'folha conferida','folhas conferidas')} sozinha${r.conferidas===1?'':'s'} (nada apontado pelo CAMP Vision).</b> ${r.restam?`${qtd(r.restam,'precisa','precisam')} de olho humano.<div class="act"><button class="btn sm pri" data-pp="conferir" data-projeto="${pj}">Conferir as que faltam</button></div>`:'Próximo passo: aprovar o lote.'}`;
   else if(acao==='todas'){const f=(r.ficaram||[]).length;h=`<b>✔ ${qtd(r.conferidas||0,'folha marcada','folhas marcadas')} como conferida${r.conferidas===1?'':'s'}.</b> ${f?`${qtd(f,'folha com aviso ficou','folhas com aviso ficaram')} para revisão manual.`:'Próximo passo: aprovar o lote.'}`
     +((r.codigos||[]).length?`<div class="act"><button class="btn sm" data-desfazer-todas="1">Desfazer</button></div>`:'')}   /* UX-11: os códigos ficam em ULTIMO_LOTE (nunca no HTML) */
-  else if(acao==='aprovar')h=`<b>✔ Lote aprovado.</b> ${pode?`Próximo passo: publicar.<div class="act"><button class="btn sm pri" data-pp="publicar" data-projeto="${pj}">Publicar</button></div>`:'Próximo passo: um administrador publica.'}`;
+  else if(acao==='aprovar'){fichaAoTerminar(projeto);h=`<b>✔ Lote aprovado.</b> ${pode?`Próximo passo: publicar.<div class="act"><button class="btn sm pri" data-pp="publicar" data-projeto="${pj}">Publicar</button></div>`:'Próximo passo: um administrador publica.'}`}
   else if(acao==='reabrir')h='<b>✔ Revisão reaberta:</b> as folhas voltam a poder ser editadas.';
   if(h)avisoNoLugar(h,{antes:document.getElementById('pj-proximo')||'#pd',id:'lote'})}
 async function mostrarSenhaTemporaria(senha,u,horas){await confirmar({titulo:'Senha temporária',alvo:[u&&u.nome,u&&u.email].filter(Boolean).join(' · '),html:`<p>Passe esta senha para a pessoa agora: ela não aparece de novo. No primeiro acesso, o painel pede para trocar.${horas>0?` Ela vale ${+horas} h; depois disso, gere outra em Nova senha.`:''}</p><div class="senha-temp" id="senha-temp">${escHtml(senha)}</div><p style="margin-top:8px"><button type="button" class="btn sm" data-copiar-senha>Copiar</button></p>`,botao:'Anotei',soOk:true})}
@@ -5590,14 +5590,14 @@ const PJ_METAS_ABERTO=new Set();
    modalidade, situação, ano, cidade), com as respostas mais usadas no fundo e no acervo como botões grandes; a lista completa do site fica
    a um clique. Cada resposta grava na hora (PATCH /api/projetos, a validação de sempre); "Pular" deixa para depois. */
 let FICHA=null;
-async function abrirFicha(code){let r;try{r=await API('/api/projetos/'+encodeURIComponent(code)+'/ficha-etapas')}catch(e){toast(e.message);return}
-  const i=r.etapas.findIndex(e=>!e.feito);FICHA={code,r,i:i<0?r.etapas.length:i,sel:null,mudou:false};
+async function abrirFicha(code,o={}){let r=o.r;if(!r){try{r=await API('/api/projetos/'+encodeURIComponent(code)+'/ficha-etapas')}catch(e){toast(e.message);return}}
+  const i=r.etapas.findIndex(e=>!e.feito);FICHA={code,r,i:i<0?r.etapas.length:i,sel:null,mudou:false,auto:!!o.auto};
   openDrawer('Completar a ficha',`${code} · ${r.titulo||''}`,'<div id="ficha" aria-live="polite"></div>');fichaDesenhar()}
 function fichaSel(){const e=FICHA.r.etapas[FICHA.i];if(FICHA.sel===null)FICHA.sel=[...(e.atual||[])];return FICHA.sel}
 function fichaDesenhar(){const el=document.getElementById('ficha');if(!el||!FICHA)return;const E=FICHA.r.etapas,tot=E.length,ok=E.filter(e=>e.feito).length,i=FICHA.i;
   const topo=`<div class="fc-prog" role="progressbar" aria-label="Dados preenchidos" aria-valuemin="0" aria-valuemax="${tot}" aria-valuenow="${ok}"><span style="width:${Math.round(100*ok/tot)}%"></span></div><p class="fc-cont"><b>${fmtN(ok)} de ${fmtN(tot)}</b> dados do projeto preenchidos</p>`
     +`<ol class="fc-passos" aria-label="Perguntas">${E.map((e,k)=>`<li class="${e.feito?'feito':''}${k===i?' atual':''}" title="${escHtml(e.pergunta)}">${e.feito?'✓':k+1}<span class="sr"> ${escHtml(e.pergunta)}${e.feito?' (preenchido)':''}</span></li>`).join('')}</ol>`;
-  if(i>=tot){const tudo=ok===tot;el.innerHTML=topo+`<div class="fc-fim"><p class="fc-medalha" aria-hidden="true">★</p><h3>${tudo?'Ficha completa!':'Por agora é isso.'}</h3><p>${tudo?'Todos os dados do projeto estão preenchidos: a página dele no site fica completa.':`${qtd(tot-ok,'dado ficou','dados ficaram')} para depois. Dá para voltar quando souber.`}</p><div class="act"><button type="button" class="btn pri" data-ficha-fechar>Fechar</button></div></div>`;return}
+  if(i>=tot){const tudo=ok===tot;el.innerHTML=topo+`<div class="fc-fim"><p class="fc-medalha" aria-hidden="true">★</p><h3>${tudo?'Ficha completa!':'Por agora é isso.'}</h3><p>${tudo?'Todos os dados do projeto estão preenchidos: a página dele no site fica completa.':`${qtd(tot-ok,'dado ficou','dados ficaram')} para depois. Dá para voltar quando souber.`}</p><div class="act">${FICHA.auto?'<button type="button" class="btn pri" data-ficha-proximo>Ver o próximo passo ›</button>':'<button type="button" class="btn pri" data-ficha-fechar>Fechar</button>'}</div></div>`;return}
   const e=E[i],sel=fichaSel(),tem=new Set(sel.map(x=>x.toLowerCase()));
   const dica=f=>f.das_folhas?'é o ano nas folhas':f.n_fundo?`${qtd(f.n_fundo,'projeto','projetos')} deste fundo`:f.n?`${qtd(f.n,'projeto','projetos')} no acervo`:'';
   const ops=(e.frequentes||[]).map(f=>`<button type="button" class="fc-op" data-ficha-op="${escHtml(f.nome)}" aria-pressed="${tem.has(String(f.nome).toLowerCase())}"><b>${escHtml(f.nome)}</b>${dica(f)?`<small>${escHtml(dica(f))}</small>`:''}</button>`).join('');
@@ -5605,7 +5605,7 @@ function fichaDesenhar(){const el=document.getElementById('ficha');if(!el||!FICH
     :e.tipo==='texto'?`<label class="fc-campo"><span>Cidade</span><input id="fc-valor" type="text" maxlength="120" value="${escHtml(sel[0]||'')}" autocomplete="off"></label>`:'';
   const lista=e.faceta?`<details class="fc-todas" data-ficha-lista><summary>Não está aqui? Ver a lista completa do site</summary><div data-ficha-lista-corpo><p class="help">Carregando…</p></div></details>`:'';
   const mult=e.faceta&&e.multiplo;
-  el.innerHTML=topo+`<p class="help">Pergunta ${fmtN(i+1)} de ${fmtN(tot)}${e.feito?' · já preenchida, pode mudar':''}</p><h3 class="fc-perg">${escHtml(e.pergunta)}</h3><p class="fc-ajuda">${escHtml(e.ajuda)}${mult?' Pode marcar mais de um.':''}</p>`
+  el.innerHTML=topo+(FICHA.auto&&!FICHA.mudou?`<p class="fc-intro"><b>✔ Folhas conferidas.</b> Agora a ficha do projeto: ${qtd(FICHA.r.faltam,'pergunta rápida','perguntas rápidas')}, as respostas mais usadas primeiro.</p>`:'')+`<p class="help">Pergunta ${fmtN(i+1)} de ${fmtN(tot)}${e.feito?' · já preenchida, pode mudar':''}</p><h3 class="fc-perg">${escHtml(e.pergunta)}</h3><p class="fc-ajuda">${escHtml(e.ajuda)}${mult?' Pode marcar mais de um.':''}</p>`
     +(ops?`<p class="help">Mais usadas primeiro:</p><div class="fc-ops" role="group" aria-label="Respostas mais usadas">${ops}</div>`:'')+campo+lista
     +`<div class="fc-bts"><span>${i>0?'<button type="button" class="btn sm" data-ficha-ir="-1">‹ Voltar</button>':''}</span><span><button type="button" class="btn sm" data-ficha-ir="1">Não sei · pular</button> <button type="button" class="btn sm pri" data-ficha-salvar>Salvar e seguir ›</button></span></div>`;
   const inp=document.getElementById('fc-valor');if(inp)inp.focus()}
@@ -5617,7 +5617,7 @@ async function fichaSalvar(){const e=FICHA.r.etapas[FICHA.i],v=fichaValor();if(!
   const b=document.querySelector('[data-ficha-salvar]');if(b){b.disabled=true;b.textContent='Salvando…'}
   try{await API('/api/projetos/'+encodeURIComponent(FICHA.code),{method:'PATCH',body:JSON.stringify(corpo)})}catch(x){toast(x.message);if(b){b.disabled=false;b.textContent='Salvar e seguir ›'}return}
   e.feito=true;e.atual=e.faceta?separarTermos(v):[v];FICHA.mudou=true;toast('✓ Salvo');fichaAndar(1,true)}
-document.addEventListener('click',ev=>{const t=ev.target.closest&&ev.target.closest('[data-ficha-abrir],[data-ficha-op],[data-ficha-ir],[data-ficha-salvar],[data-ficha-fechar]');if(!t)return;
+document.addEventListener('click',ev=>{const t=ev.target.closest&&ev.target.closest('[data-ficha-abrir],[data-ficha-op],[data-ficha-ir],[data-ficha-salvar],[data-ficha-fechar],[data-ficha-proximo]');if(!t)return;
   if(t.dataset.fichaAbrir){ev.preventDefault();ev.stopPropagation();abrirFicha(t.dataset.fichaAbrir);return}
   if(!FICHA)return;const e=FICHA.r.etapas[FICHA.i];
   if(t.hasAttribute('data-ficha-op')){const nome=t.dataset.fichaOp;
@@ -5627,7 +5627,17 @@ document.addEventListener('click',ev=>{const t=ev.target.closest&&ev.target.clos
     const h=document.getElementById('ep-'+e.coluna);if(h){h.value=sel.join('; ');document.querySelectorAll(`input[name="tp-${e.coluna}"]`).forEach(c=>{c.checked=sel.some(x=>x.toLowerCase()===c.value.toLowerCase())})}return}
   if(t.dataset.fichaIr){fichaAndar(+t.dataset.fichaIr);return}
   if(t.hasAttribute('data-ficha-salvar')){fichaSalvar();return}
-  if(t.hasAttribute('data-ficha-fechar')){const c=FICHA.code,m=FICHA.mudou;closeDrawer(true);if(m&&window.PROJETO_PJ===c)showProjeto(c)}});   /* a página por baixo mostra os objetivos novos */
+  if(t.hasAttribute('data-ficha-fechar')){const c=FICHA.code,m=FICHA.mudou;closeDrawer(true);if(m&&window.PROJETO_PJ===c)showProjeto(c)}   /* a página por baixo mostra os objetivos novos */
+  if(t.hasAttribute('data-ficha-proximo')){const c=FICHA.code;closeDrawer(true);const ir=()=>{const e=document.getElementById('pj-proximo');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})};
+    if(window.PROJETO_PJ===c&&(location.hash||'').startsWith('#projeto/'))showProjeto(c).then(ir);else{nav('projeto/'+c);setTimeout(ir,900)}}});   /* 11/11: da ficha automática para o Aprovar/Publicar */
+/* 11/11 (Rafael: "quando terminamos de aprovar as folhas, preencher elas, já pode cair no quiz automaticamente"): ao conferir a ÚLTIMA folha
+   (e ao aprovar o lote), se faltam dados do projeto, "Completar a ficha" abre sozinho. Uma vez por projeto nesta sessão; só para quem grava
+   a ficha (admin). No fim, "Ver o próximo passo" leva ao Aprovar/Publicar da página do projeto. */
+const FICHA_AUTO_FEITA=new Set();
+async function fichaAoTerminar(code){if(!code||FICHA_AUTO_FEITA.has(code)||!(EU&&['admin','master'].includes(EU.papel)))return;FICHA_AUTO_FEITA.add(code);
+  let r;try{r=await API('/api/projetos/'+encodeURIComponent(code)+'/ficha-etapas')}catch(_){return}
+  if(!r||!r.faltam)return;await new Promise(ok=>setTimeout(ok,1200));   /* um respiro para ver "conferência concluída" antes */
+  if(document.getElementById('ficha')&&mainEl.classList.contains('with-drawer'))return;abrirFicha(code,{auto:true,r})}   /* a ficha já está aberta na tela */
 document.addEventListener('toggle',async ev=>{const d=ev.target;if(!d||!d.matches||!d.matches('details[data-ficha-lista]')||!d.open||!FICHA)return;const c=d.querySelector('[data-ficha-lista-corpo]');if(!c||c.dataset.ok)return;
   const e=FICHA.r.etapas[FICHA.i];c.innerHTML=await tipologiaCamposHTML({[e.coluna]:fichaSel().join('; ')},[e.coluna]);c.dataset.ok='1'},true);
 document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target&&ev.target.id==='fc-valor'){ev.preventDefault();fichaSalvar()}});
@@ -5910,7 +5920,7 @@ function fimPassoHTML(code){return `<div class="fim-passo" data-fim-passo="${esc
 async function fimConferenciaPasso(code){const box=[...document.querySelectorAll('[data-fim-passo]')].find(x=>x.dataset.fimPasso===code);if(!box||!code)return;
   try{const [r,g]=await Promise.all([API('/api/projetos/'+encodeURIComponent(code)+'/proximo-passo'),API('/api/projetos/'+encodeURIComponent(code)+'/publicacao').catch(()=>null)]);
     if(g){window.PUB_G=window.PUB_G||{};window.PUB_G[code]=g}if(!box.isConnected)return;
-    box.innerHTML=r.lote?proximoPassoHTML(r,code):proximoPassoSemLoteHTML(code,g)}
+    box.innerHTML=r.lote?proximoPassoHTML(r,code):proximoPassoSemLoteHTML(code,g);fichaAoTerminar(code)}   /* 11/11: a ficha abre sozinha */
   catch(e){if(box.isConnected)box.innerHTML=`<p class="help">Não consegui ver o próximo passo (${escHtml(e.message)}). Ele está na página do projeto.</p>`}}
 document.addEventListener('keydown',e=>{
   if(!revTeclas())return;   /* gaveta "Revisar folha" aberta, ou a tela de conferir sem gaveta por cima */
