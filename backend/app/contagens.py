@@ -19,7 +19,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-ERROS_ABERTOS = "situacao IN ('aberto','em_correcao')"
+# 11/11 (Rafael: "tudo que for de CONVIDADO pode ignorar, não precisamos tomar decisões; só liste em projetos e fundo, nunca vamos publicar"):
+# o F000 · Convidado (material de terceiros, nunca vai ao site) fica fora de toda fila de trabalho: problemas, decisões, O que fazer agora, Fila.
+SEM_CONVIDADO_ERRO = "COALESCE(codigo,'') NOT LIKE 'F000%'"
+ERROS_ABERTOS = "situacao IN ('aberto','em_correcao') AND " + SEM_CONVIDADO_ERRO
 ERROS_PEDEM_ACAO = ERROS_ABERTOS + " AND gravidade<>'aviso'"     # UX-19: o que bloqueia ou pede correção (os avisos têm aba própria)
 ERROS_AVISOS = ERROS_ABERTOS + " AND gravidade='aviso'"
 PEDIDOS_ABERTOS = "situacao NOT IN ('entregue','recusada')"

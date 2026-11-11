@@ -106,7 +106,7 @@ def tarefas_qualidade(con, usuario_id: int | None = None) -> list[dict]:
                     "titulo": f"{_nome('Arquiteto', a['forma_autorizada'])} sem fonte",
                     "detalhe": "Toda biografia precisa dizer de onde veio a informação" + (" · a página dele já está publicada" if pub else "")})
     esconder = adiadas(con, usuario_id)
-    out = [t for t in out if t["id"] not in esconder]
+    out = [t for t in out if t["id"] not in esconder and not str(t.get("codigo") or "").upper().startswith("F000")]   # 11/11: Convidado fora
     out.sort(key=lambda t: (-t["prioridade"], -t["impacto"], t["id"]))
     return out
 
