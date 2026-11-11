@@ -626,6 +626,7 @@ def listar_filas(leve: bool = False, u: dict = Depends(auth.exige("leitura"))) -
                                  {SQL_PENDENTES_LOTE} AS itens_pendentes
                           FROM lista_processamento l JOIN projeto p ON p.codigo=l.projeto_codigo JOIN fundo f ON f.codigo=p.fundo_codigo
                           WHERE l.descartado_em IS NULL AND p.mesclado_em IS NULL AND p.descartado_em IS NULL   -- UX-05: os mesmos lotes das contagens
+                            AND p.fundo_codigo<>'F000'   -- 11/11: Convidado fica só em Projetos e no fundo
                           ORDER BY CASE l.etapa WHEN 'erro' THEN 0 WHEN 'revisao' THEN 1 WHEN 'processando' THEN 2 WHEN 'enviado' THEN 3 WHEN 'rascunho' THEN 4 ELSE 5 END, l.atualizado_em DESC""").fetchall()
     from .qualidade_base import adiadas
     from .pendencias import chave_adiar_lote

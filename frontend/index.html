@@ -5002,7 +5002,7 @@ function faseDoLote(l){if(!l)return null;if(l.fase)return l.fase;const e=l.etapa
 function situacaoDoProjeto(code,d){d=d||window.PJ_D||{};const S=window.SL&&window.SL.code===code?window.SL:{},lotes=(S.revisao&&S.revisao.lotes)||[],la=lotes.find(x=>faseDoLote(x)!=='publicado')||lotes[0],fl=faseDoLote(la),pl=PJ_PLANO[code];
   if(fl==='erro'||(pl&&!pl.ja_publicado&&(pl.bloqueios||[]).some(b=>['direitos','bloqueios','titulo'].includes(b.id))))return 'problema';
   return situacaoDe(fl,(d.projeto||{}).status_site,(d.itens||pjItens(code)||[]).length)}
-function pendenciasProjeto(d){if(!d||!d.projeto)return null;const code=d.projeto.codigo,S=window.SL&&window.SL.code===code?window.SL:null,g=(window.PUB_G||{})[code];
+function pendenciasProjeto(d){if(!d||!d.projeto)return null;if(String(d.projeto.codigo).slice(0,4)==='F000')return [];   /* 11/11: Convidado não tem pendência (nunca vai ao site) */const code=d.projeto.codigo,S=window.SL&&window.SL.code===code?window.SL:null,g=(window.PUB_G||{})[code];
   if(!S||!S.revisao||!S.cv||!S.consenso||!S.parado||!g)return null;
   const its=pjItens(code),c=contagemFolhas(its),lotes=(S.revisao.lotes)||[],todos=(S.revisao.todos)||lotes,cv=window.CV_SAIDAS&&window.CV_SAIDAS.projeto_codigo===code?window.CV_SAIDAS:null,out=[];
   const add=(chave,texto,n,alvo)=>{if(n)out.push({chave,texto,n,alvo})};

@@ -56,7 +56,8 @@ def listar(situacao: str = "pendente", u: dict = Depends(auth.exige("leitura")))
     con = connect()
     try:
         ordem = "criada_em, id" if situacao == "pendente" else "resolvida_em DESC, id DESC LIMIT 30"
-        itens = [_linha(r) for r in con.execute(f"SELECT * FROM decisao WHERE situacao=? ORDER BY {ordem}", (situacao,))]
+        sem_convidado = " AND COALESCE(fundo_codigo,'')<>'F000'" if situacao == "pendente" else ""   # 11/11: Convidado não pede decisão
+        itens = [_linha(r) for r in con.execute(f"SELECT * FROM decisao WHERE situacao=?{sem_convidado} ORDER BY {ordem}", (situacao,))]
         for d in itens:
             d["projetos"] = _resumo_projetos(con, _codigos_citados(d))
         return {"itens": itens, "total": len(itens)}

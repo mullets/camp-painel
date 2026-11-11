@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
@@ -8337,6 +8337,47 @@ def filho(modo):
         fase2 = lote_ativo_por_projeto(c)[P1]["fase"]
         ver("ao decidir 'adicionar no fim', o painel traz as 2 folhas sozinho e o lote vai para conferir", n_b == 2 and fase2 == "conferir", f"{n_b} {fase2}")
         c.close()
+        for l in res: print(l)
+    elif modo == "convidado_fora_das_filas":
+        # 11/11 (Rafael): "tudo que for de CONVIDADO pode ignorar, não precisamos tomar decisões; só liste em projetos e fundo, nunca vamos publicar".
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from app import pendencias
+        from app.rotas_decisoes import listar as listar_decisoes
+        from app.rotas_operacao import listar_filas, listar_erros
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F000','Convidado','CNV',1)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F050','Rino Levi','RLV',1)")
+        raiz = _P(tempfile.mkdtemp())
+        for f in ("F000", "F050"):
+            pj = f"{f}-P0001"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,1)", (f,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,1,'Casa',1970)", (pj, f))
+            pasta = raiz / f; (pasta / "catalogacao").mkdir(parents=True)
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"versao": 2, "projeto_codigo": pj, "documentos": [{"codigo": f"{pj}-1970-S01-D00001", "titulo": "F1"}]}), encoding="utf-8")
+            c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('lote',?,?,'revisao')", (pj, str(pasta)))
+            c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem) VALUES ('divergencia',?,?,'Casa',?,'campvision')",
+                      (f"div:{f}", f, _j.dumps({"projeto_codigo": pj, "campo": "ano", "valor_cv": "1971", "valor_cadastro": "1970"})))
+            c.execute("INSERT INTO erro (gravidade, categoria, origem, codigo, descricao) VALUES ('bloqueia','outro','revisao',?,'falta algo')", (pj,))
+        c.commit()
+        n = pendencias.contar_pendencias(c, com_listas=True)
+        ver("contadores: só o F050 pede importar, decidir e resolver", n["lotes_importar"] == 1 and n["decisoes"] == 1 and n["erros_bloqueantes"] == 1,
+            f"importar={n['lotes_importar']} decisoes={n['decisoes']} bloq={n['erros_bloqueantes']}")
+        cods = {i["codigo"] for g in pendencias.tarefas(c, "admin", n) for i in g["itens"] if i.get("codigo")}
+        ver("O que fazer agora não mostra nada do Convidado", not any(str(x).startswith("F000") for x in cods) and any(str(x).startswith("F050") for x in cods), str(sorted(cods)))
+        c.close()
+        dl = listar_decisoes("pendente", u={"id": None})
+        ver("Decisões: a do Convidado não aparece", [d.get("fundo_codigo") or (d.get("fundo")) for d in dl["itens"]] and all("F000" not in _j.dumps(d, ensure_ascii=False) for d in dl["itens"]) and dl["total"] == 1, str(dl["total"]))
+        fl = listar_filas(u={"id": None})
+        ver("Fila (Material novo): só o lote do F050", [x["projeto_codigo"] for x in fl] == ["F050-P0001"], str([x["projeto_codigo"] for x in fl]))
+        er = listar_erros(u={"id": None})
+        ver("Problemas abertos: só o do F050", [x["codigo"] for x in er] == ["F050-P0001"], str([x["codigo"] for x in er]))
+        k = connect()
+        ver("o projeto do Convidado continua na lista de projetos do fundo", k.execute("SELECT COUNT(*) FROM projeto WHERE fundo_codigo='F000'").fetchone()[0] == 1)
+        k.close()
         for l in res: print(l)
     elif modo == "importado_sem_folhas":
         # 23/10 (Precisa de você): "clico em Importar, ele atualiza, sai da lista e volta pro fim dela, e dá 0 folhas importadas".
@@ -17314,6 +17355,14 @@ else:
 print("114b3a) Lote cujas folhas esperam a decisão 'números repetidos' não pede mais Importar (o trabalho está em Decisões)")
 rc, out = rodar("importar_espera_decisao", f"{tmp}/importesperadec.db")
 if rc != 0: ok(False, f"teste do lote esperando decisão não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b2c) F000 · Convidado fica fora de toda fila de trabalho (O que fazer agora, Decisões, Problemas, Fila, contadores)")
+rc, out = rodar("convidado_fora_das_filas", f"{tmp}/convidado.db")
+if rc != 0: ok(False, f"teste do Convidado fora das filas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

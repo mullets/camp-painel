@@ -208,7 +208,7 @@ def fundos_travados(con) -> list[dict]:
     out = []
     for f in con.execute("""SELECT f.codigo, f.sigla, f.titulo, COUNT(DISTINCT p.codigo) AS projetos
                               FROM fundo f JOIN projeto p ON p.fundo_codigo=f.codigo
-                             WHERE f.ativo=1 AND p.status_site!='no_ar' AND p.mesclado_em IS NULL AND p.descartado_em IS NULL
+                             WHERE f.ativo=1 AND f.codigo<>'F000' AND p.status_site!='no_ar' AND p.mesclado_em IS NULL AND p.descartado_em IS NULL
                                AND EXISTS (SELECT 1 FROM item i WHERE i.projeto_codigo=p.codigo)
                              GROUP BY f.codigo ORDER BY projetos DESC, f.codigo"""):
         msg = direitos_permitem_publicar(con, f["codigo"])
@@ -220,7 +220,7 @@ def fundos_travados(con) -> list[dict]:
 def _decisoes(con) -> list[dict]:
     out = []
     for d in con.execute("""SELECT d.*, (SELECT COUNT(*) FROM decisao_chave c WHERE c.decisao_id=d.id) AS chaves_extra
-                              FROM decisao d WHERE d.situacao='pendente' ORDER BY d.criada_em, d.id"""):
+                              FROM decisao d WHERE d.situacao='pendente' AND COALESCE(d.fundo_codigo,'')<>'F000' ORDER BY d.criada_em, d.id"""):   # 11/11: Convidado não pede decisão
         try:
             ctx = json.loads(d["contexto"] or "{}")
         except ValueError:
@@ -243,7 +243,7 @@ def contar_pendencias(con, *, com_listas: bool = False, usuario_id: int | None =
     prontos_publicar, publicando_parcial, travados_direitos, travados_projetos, erros_bloqueantes, pedidos_aguardando,
     lotes_processando, lotes_lendo, lotes_na_fila, lotes_erro, publicando, material_novo, esperam_admin}.
     decisoes = perguntas abertas; decisoes_pastas = quantas vezes elas chegaram (a mesma pergunta repetida pela estação vira UMA decisão, com várias chaves)."""
-    L = [l for l in lotes(con) if not l.get("dispensado")]   # UX-35: o lote dispensado sai das listas e das contagens de TODOS
+    L = [l for l in lotes(con) if not l.get("dispensado") and l.get("fundo_codigo") != "F000"]   # UX-35: o lote dispensado sai das listas e das contagens de TODOS; 11/11: Convidado também
     if usuario_id:                                  # os lotes que ESTA pessoa adiou ("Agora não") saem da lista e das contagens dela
         from .qualidade_base import adiadas
         fora = adiadas(con, usuario_id)
@@ -405,7 +405,8 @@ def tarefas(con, papel: str, n: dict | None = None, por_grupo: int = 3, usuario_
 
     # 4) problemas que bloqueiam: erro bloqueante aberto e lote parado com erro no CAMP Vision
     linhas = []
-    for e in con.execute(f"""SELECT id, codigo, descricao, criado_em FROM erro WHERE situacao IN ('aberto','em_correcao') AND {TRAVA_SQL}
+    from .contagens import SEM_CONVIDADO_ERRO
+    for e in con.execute(f"""SELECT id, codigo, descricao, criado_em FROM erro WHERE situacao IN ('aberto','em_correcao') AND {TRAVA_SQL} AND {SEM_CONVIDADO_ERRO}
                             ORDER BY criado_em"""):      # 21/10 (4.1): só o que trava um projeto; problema de folha deixa só a folha de fora
         no_ar = con.execute("SELECT 1 FROM projeto WHERE status_site='no_ar' AND (?=codigo OR ? LIKE codigo||'-%')", (e["codigo"], e["codigo"])).fetchone()
         linhas.append({"sev": "r", "titulo": e["descricao"], "codigo": e["codigo"],
