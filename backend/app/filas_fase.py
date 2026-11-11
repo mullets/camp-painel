@@ -18,7 +18,8 @@ PRECISAM_DE_GENTE = ("erro", "importar", "conferir", "aprovar", "publicar")
 def importado_sem_folhas(resultado) -> bool:
     """23/10 ("clico em Importar, dá 0 folhas importadas e o lote volta para o fim da lista"): o pacote JÁ foi importado e não trouxe
     folha nova para este lote (todas retiradas pelo CAMP Vision, ou já estavam no projeto). Importar de novo não muda nada: não é trabalho.
-    Uma decisão "lote colide" ainda esperando continua pedindo gente (vai em Decidir)."""
+    11/11: o mesmo quando as folhas esperam a decisão "números repetidos" (lote_colide). O trabalho está em Decisões, que já conta a pergunta
+    no projeto e na fila de Decisões; ao decidir (adicionar ou substituir), o painel importa sozinho e o lote volta com as folhas para conferir."""
     if isinstance(resultado, str):
         import json
         try:
@@ -26,7 +27,7 @@ def importado_sem_folhas(resultado) -> bool:
         except ValueError:
             return False
     imp = (resultado or {}).get("importacao") if isinstance(resultado, dict) else None
-    return isinstance(imp, dict) and not imp.get("esperando_decisao")
+    return isinstance(imp, dict)
 
 
 # UX-36 (F026-P0030: "por que ele fica pedindo para publicar se já está publicado?"): um lote aprovado cujo projeto JÁ está no site e cujas
