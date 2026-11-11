@@ -38,6 +38,10 @@ def _pode_importar(con, l, pacote: dict | None = None) -> tuple[bool, str | None
         return False, "O lote já foi aprovado: reabra a revisão para importar de novo."
     if con.execute("SELECT 1 FROM item WHERE lote_id=? LIMIT 1", (l["id"],)).fetchone():
         return False, "As folhas deste lote já foram importadas (e movidas para outro projeto)."
+    # 11/11 (Rafael, F009: "esse importar tá me irritando: nada muda e nenhuma é feita"): as folhas do lote repetem números de outro lote e
+    # esperam a decisão "números repetidos". Importar de novo não traz nada até alguém decidir; ao decidir, o painel já traz as folhas sozinho.
+    if con.execute("SELECT 1 FROM decisao WHERE situacao='pendente' AND tipo='lote_colide' AND chave LIKE ? LIMIT 1", (f"lote_colide:{l['id']}:%",)).fetchone():
+        return False, "As folhas deste lote repetem números de outro lote e esperam uma decisão em Decisões. Ao decidir, o painel traz as folhas sozinho."
     pasta = Path(l["pasta_qnap"] or "")
     if not pasta.is_dir():
         return False, "O painel não acha a pasta do lote no QNAP (o QNAP está montado?). Avise quem cuida do servidor."

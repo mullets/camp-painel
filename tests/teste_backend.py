@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
@@ -8294,6 +8294,49 @@ def filho(modo):
         fora = [d_["codigo"] for l_ in fq["lotes"] for d_ in l_["documentos"]]
         ver("'Encontradas no QNAP, ainda não catalogadas' não lista mais as 7 (são as folhas do site)", not [c_ for c_ in fora if c_ in {N(n) for n in range(1, 8)}], str(fora)[:300])
         k.close()
+        for l in res: print(l)
+    elif modo == "importar_espera_decisao":
+        # 11/11 (Rafael, F009: "esse importar tá me irritando: nada muda e nenhuma é feita"): o lote só traz folhas com números que o projeto
+        # já usa. Elas esperam a decisão "números repetidos"; o painel seguia pedindo "Importar", e importar dava "Nada mudou" para sempre.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, tempfile
+        from pathlib import Path as _P
+        from app import importador_lote, pendencias, decisoes
+        from app.filas_fase import lote_ativo_por_projeto
+        from app.rotas_revisao import _pode_importar
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F050','Rino Levi','RLV',1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F050',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F050-P0001','F050',1,'Casa Alfa',1972)")
+        raiz = _P(tempfile.mkdtemp()); P1 = "F050-P0001"
+        def lote(nome, docs):
+            pasta = raiz / nome; (pasta / "catalogacao").mkdir(parents=True)
+            (pasta / "catalogacao" / "pacote_tainacan.json").write_text(_j.dumps({"versao": 2, "projeto_codigo": P1, "documentos": docs}), encoding="utf-8")
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,?,'revisao')", (nome, P1, str(pasta))).lastrowid
+        D = lambda n: {"codigo": f"{P1}-1972-S01-D{n:05d}", "titulo": f"Folha {n}", "publicavel": True, "ano": "1972"}
+        la = lote("lote A", [D(1), D(2)]); importador_lote.importar_lote(c, la, "t")
+        c.execute("UPDATE item SET revisao='conferida' WHERE lote_id=?", (la,))
+        c.execute("UPDATE lista_processamento SET aprovado_em=datetime('now') WHERE id=?", (la,))
+        lb = lote("lote B", [D(1), D(2)]); r = importador_lote.importar_lote(c, lb, "t"); c.commit()
+        ver("o lote B só repete números: nada entra e as 2 folhas esperam a decisão", r["criadas"] == 0 and r.get("esperando_decisao") == 2, str(r)[:200])
+        pode, motivo = _pode_importar(c, c.execute("SELECT * FROM lista_processamento WHERE id=?", (lb,)).fetchone())
+        ver("o painel não oferece mais Importar e diz que a decisão está em Decisões", not pode and "Decisões" in (motivo or ""), motivo)
+        from app.filas_fase import fase_da_lista
+        rb = c.execute("SELECT etapa, aprovado_em, resultado FROM lista_processamento WHERE id=?", (lb,)).fetchone()
+        fase = fase_da_lista(rb["etapa"], 0, 0, rb["aprovado_em"], rb["resultado"])
+        ver("o lote B não fica na fase Importar (importar de novo não muda nada)", fase != "importar", fase)
+        imp = [x for g in pendencias.tarefas(c, "admin") if g["id"] == "conferir" for x in g["itens"] if (x.get("acao") or {}).get("tipo") == "importar"]
+        ver("nem em 'Precisa de você'", not imp, str(imp)[:200])
+        did = c.execute("SELECT id FROM decisao WHERE tipo='lote_colide' AND situacao='pendente'").fetchone()
+        ver("a pergunta continua aberta em Decisões", did is not None)
+        decisoes.resolver(c, did[0], "adicionar_ao_fim", None, "t")
+        c.commit()
+        n_b = c.execute("SELECT COUNT(*) FROM item WHERE lote_id=?", (lb,)).fetchone()[0]
+        fase2 = lote_ativo_por_projeto(c)[P1]["fase"]
+        ver("ao decidir 'adicionar no fim', o painel traz as 2 folhas sozinho e o lote vai para conferir", n_b == 2 and fase2 == "conferir", f"{n_b} {fase2}")
+        c.close()
         for l in res: print(l)
     elif modo == "importado_sem_folhas":
         # 23/10 (Precisa de você): "clico em Importar, ele atualiza, sai da lista e volta pro fim dela, e dá 0 folhas importadas".
@@ -17263,6 +17306,14 @@ else:
 print("114b2) Folha lida sem ano que já foi ao site: a leitura com o ano devolve a imagem, sem trocar o código nem repetir a folha (F009-P0092)")
 rc, out = rodar("ano_lido_depois", f"{tmp}/anolido.db")
 if rc != 0: ok(False, f"teste do ano lido depois não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b3a) Lote cujas folhas esperam a decisão 'números repetidos' não pede mais Importar (o trabalho está em Decisões)")
+rc, out = rodar("importar_espera_decisao", f"{tmp}/importesperadec.db")
+if rc != 0: ok(False, f"teste do lote esperando decisão não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:
