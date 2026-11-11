@@ -918,6 +918,20 @@ def limpar_ordem_folhas(codigo: str, tarefas: BackgroundTasks, u: dict = Depends
         con.close()
 
 
+@router.get("/projetos/{codigo}/ficha-etapas")
+def ficha_etapas(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
+    """11/11: "Completar a ficha" em etapas (campo/rota novos, opcionais): uma pergunta por vez, as respostas mais usadas primeiro."""
+    from .ficha_etapas import etapas
+    con = connect()
+    try:
+        r = etapas(con, codigo)
+        if r is None:
+            raise HTTPException(404, "Projeto não existe")
+        return r
+    finally:
+        con.close()
+
+
 @router.get("/vocabulario/tipologia")
 def vocabulario_tipologia(u: dict = Depends(auth.exige("leitura"))) -> dict:
     """B3: as 4 facetas com os termos do site (grupos e filhos), para o projeto escolher da lista."""
