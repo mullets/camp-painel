@@ -7216,7 +7216,7 @@ function iniAlertasHTML(al){return (al||[]).map(a=>`<div class="ini-alerta" role
 function iniKpisHTML(p){const admin=EU&&['admin','master'].includes(EU.papel);
   const k=(cls,v,l,dd,rota,ex)=>`<button type="button" class="ini-kpi ${cls}" data-ini-rota="${rota}" title="${escHtml(ex)}" aria-label="${escHtml(`${fmtN(v)} ${l} (${dd}): abrir a lista`)}"><span class="v">${fmtN(v)}</span><span class="l">${escHtml(l)}</span><span class="d">${escHtml(dd)}</span><span class="ir" aria-hidden="true">→</span></button>`;
   /* UX-18: com zero decisões o cartão nem aparece (Decisões continua no menu) */
-  const ks=[...(+p.decisoes?[k(iniGrupoMeu('admin')?'warn':'warn ini-outro',p.decisoes,p.decisoes===1?'decisão pendente':'decisões pendentes',p.decisoes_estacao?'o CAMP Vision está parado esperando':'esperando resposta','decisoes',INI_EXPLICA.decisoes)]:[]),
+  const ks=[...(+p.decisoes?[k(iniGrupoMeu('admin')?'warn':'warn ini-outro',p.decisoes,p.decisoes===1?'decisão pendente':'decisões pendentes',p.decisoes_estacao?'o CAMP Vision está parado esperando':(p.pedem_acao&&+p.pedem_acao.decisoes_escondidas)?`${fmtN(+p.pedem_acao.decisoes_escondidas)} deixada${+p.pedem_acao.decisoes_escondidas===1?'':'s'} para depois por você (Agora não)`:'esperando resposta','decisoes',INI_EXPLICA.decisoes)]:[]),
     k('',p.lotes_conferir,p.lotes_conferir===1?'lote para conferir':'lotes para conferir',`${qtd(p.folhas_conferir,'folha','folhas')} no total`,'filas/conferir',INI_EXPLICA.conferir),
     admin?k(p.esperam_admin?'go':'',p.esperam_admin,p.esperam_admin===1?'lote espera um admin':'lotes esperam um admin',`${fmtN(p.lotes_aprovar)} para aprovar · ${fmtN(p.lotes_publicar)} para publicar`,'filas/admin',INI_EXPLICA.admin)
       :k('',p.lotes_importar,p.lotes_importar===1?'lote para importar':'lotes para importar','o CAMP Vision leu; falta trazer as folhas','filas/importar',INI_EXPLICA.importar),
@@ -7257,7 +7257,7 @@ function iniTarefasHTML(d){PAINEL_ACOES=[];const f=d.fila;
   return `<div class="ini-fila-barra">${iniFiltrosHTML(f)}</div>
   <div class="ini-status" id="ini-fila-status" role="status" aria-live="polite">${st?escHtml(st.txt):''}</div>
   <div class="ini-lista" id="ini-lista">${iniListaHTML(f)}</div>`}
-function iniListaHTML(f){const its=iniFilaItens(),vis=its.filter(i=>INI_FILTRO==='todas'||i.filtro===INI_FILTRO),mostrar=INI_VER_TODOS?vis:vis.slice(0,INI_LIMITE);PAINEL_ACOES=[];
+function iniListaHTML(f){const its=iniFilaItens(),vis=its.filter(i=>INI_FILTRO==='todas'?i.filtro!=='base':i.filtro===INI_FILTRO),   /* 11/11: "Para fazer" sem Melhorar a base (o mesmo número do menu e da saudação) */mostrar=INI_VER_TODOS?vis:vis.slice(0,INI_LIMITE);PAINEL_ACOES=[];
   const nomeF=Object.fromEntries((f.filtros||[]).map(x=>[x.id,x]));let ult=null,h='';
   mostrar.forEach((i,ix)=>{const k=PAINEL_ACOES.push(i)-1;
     if(f.ordem==='tipo'&&i.filtro!==ult){ult=i.filtro;const fx=nomeF[i.filtro];h+=`<div class="ini-tgh" data-ini-grupo-titulo="${escHtml(i.filtro)}">${escHtml(fx?fx.rotulo:i.filtro)} <span class="ini-quem">${fmtN(fx?fx.n:0)}</span></div>`}
@@ -7266,8 +7266,8 @@ function iniListaHTML(f){const its=iniFilaItens(),vis=its.filter(i=>INI_FILTRO==
   const tb=(f.grupos||{}).base;if(INI_FILTRO==='base'&&tb&&tb.tipos)h=`<div class="ini-tipos">${escHtml(tb.tipos.map(x=>`${fmtN(x.n)} ${x.rotulo}`).join(' · '))}</div>`+h;   /* quanto falta de cada tipo */
   /* "Ver todos os itens da fila": nada é truncado sem aviso. "Melhorar a base" manda só a amostra do dia (o resto fica em Qualidade da base) */
   const pe=[];if(vis.length>INI_LIMITE)pe.push(`<button type="button" class="ini-mais" data-ini-vertodos aria-expanded="${INI_VER_TODOS}">${INI_VER_TODOS?'Mostrar só os primeiros':`Ver todos os itens da fila (${fmtN(vis.length)})`}</button>`);
-  const G=f.grupos||{},links=Object.entries(G).filter(([id,g])=>(INI_FILTRO==='todas'?g.total>g.enviadas:(iniFilaItens().find(x=>x.grupo===id)||{}).filtro===INI_FILTRO)&&g.rota&&g.rotulo);
-  links.forEach(([id,g])=>pe.push(`<button type="button" class="ini-mais" data-ini-rota="${escHtml(g.rota)}">${g.total>g.enviadas&&id==='base'?`Mais ${fmtN(g.total-g.enviadas)} para melhorar a base · `:''}${escHtml(g.rotulo)} →</button>`));
+  const G=f.grupos||{},links=Object.entries(G).filter(([id,g])=>(INI_FILTRO==='todas'?(id==='base'||g.total>g.enviadas):(iniFilaItens().find(x=>x.grupo===id)||{}).filtro===INI_FILTRO)&&g.rota&&g.rotulo);
+  links.forEach(([id,g])=>pe.push(id==='base'&&INI_FILTRO==='todas'?`<button type="button" class="ini-mais" data-ini-filtro="base">Quando sobrar tempo: ${qtd(g.total,'tarefa','tarefas')} em Melhorar a base →</button>`:`<button type="button" class="ini-mais" data-ini-rota="${escHtml(g.rota)}">${g.total>g.enviadas&&id==='base'?`Mais ${fmtN(g.total-g.enviadas)} para melhorar a base · `:''}${escHtml(g.rotulo)} →</button>`));
   return h+(pe.length?`<div class="ini-fila-pe">${pe.join('')}</div>`:'')}
 function iniListaDesenhar(){const el=document.getElementById('ini-lista'),f=PAINEL_D&&PAINEL_D.fila;if(!el||!f)return;el.innerHTML=iniListaHTML(f);
   document.querySelectorAll('[data-ini-filtro]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.iniFiltro===INI_FILTRO)))}

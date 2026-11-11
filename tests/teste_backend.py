@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
@@ -8379,6 +8379,33 @@ def filho(modo):
         ver("o projeto do Convidado continua na lista de projetos do fundo", k.execute("SELECT COUNT(*) FROM projeto WHERE fundo_codigo='F000'").fetchone()[0] == 1)
         k.close()
         for l in res: print(l)
+    elif modo == "precisa_de_voce_um_numero":
+        # 11/11 (Rafael): "preciso entender melhor o Precisa de você, mas só fala em 1 e tem vários itens na lista". O menu dizia 1, a saudação 2
+        # e a aba "Todas" 1.521 (1.519 de Melhorar a base). Agora menu = saudação = "Para fazer"; a base fica na aba dela.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from app import pendencias as pd
+        from app.contagens import medir
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F050','Rino Levi','RLV',1),('F051','Sem Sigla',NULL,1)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F050',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F050-P0001','F050',1,'Casa',1970)")
+        c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, resultado) VALUES ('lote','F050-P0001','/nao/existe','erro','{}')")
+        c.execute("INSERT INTO decisao (tipo, chave, fundo_codigo, titulo, contexto, origem) VALUES ('divergencia','div:1','F050','Casa',?,'campvision')",
+                  (_j.dumps({"projeto_codigo": "F050-P0001", "campo": "ano", "valor_cv": "1971", "valor_cadastro": "1970"}),))
+        c.commit()
+        m = medir(c, papel="admin")
+        n = pd.contar_pendencias(c, com_listas=True)
+        fila = pd.fila_da_home(pd.tarefas(c, "admin", n, por_grupo=pd.FILA_MAX), "admin")
+        para_fazer = next(x["n"] for x in fila["filtros"] if x["id"] == "todas")
+        base = next(x["n"] for x in fila["filtros"] if x["id"] == "base")
+        ver("o lote parado com erro e a decisão: 2 coisas na fila", fila["pedem_atencao"] == 2, str(fila["pedem_atencao"]))
+        ver("o menu 'Precisa de você' diz o mesmo número da fila (antes: 1, sem o lote com erro)", m["precisa_de_voce"] == m["pedem_acao"]["precisa_de_voce"] == 2, str(m["precisa_de_voce"]))
+        ver("'Para fazer' = o mesmo número; Melhorar a base fica à parte", para_fazer == 2 and base >= 1, f"para_fazer={para_fazer} base={base}")
+        c.close()
+        for l in res: print(l)
     elif modo == "importado_sem_folhas":
         # 23/10 (Precisa de você): "clico em Importar, ele atualiza, sai da lista e volta pro fim dela, e dá 0 folhas importadas".
         # O pacote só tinha folhas retiradas pelo CAMP Vision: importar não traz nada, e a varredura do QNAP apagava a marca "já importado".
@@ -13560,7 +13587,7 @@ def filho(modo):
         op.delete(f"/api/hoje/tarefas/erro:{eb[0]}/agora-nao")
         ver("Desfazer / Mostrar de novo: volta para a lista", any(i.get("adiar") == f"erro:{eb[0]}" for i in itens(op)) and op.get("/api/erros/ignorados").json()["total"] == 0)
         op.post(f"/api/hoje/tarefas/decisao:{did}/agora-nao")
-        ver("decisão também se esconde (decisao:N)", not any(i.get("adiar") == f"decisao:{did}" for i in itens(op)) and op.get("/api/pendencias").json()["pedem_acao"]["precisa_de_voce"] == p0["precisa_de_voce"] - 1)
+        ver("decisão também se esconde (decisao:N) e o cartão diz quantas foram deixadas para depois", not any(i.get("adiar") == f"decisao:{did}" for i in itens(op)) and op.get("/api/pendencias").json()["pedem_acao"].get("decisoes_escondidas") == 1)
         r = op.post(f"/api/erros/{eb[1]}/ignorar", json={})
         ver("Não mostrar mais num bloqueio sem justificativa: pede a justificativa (400)", r.status_code == 400, r.text[:120])
         ver("quem só lê não ignora (403)", le.post(f"/api/erros/{eb[1]}/ignorar", json={"justificativa": "x y z"}).status_code == 403)
@@ -13673,7 +13700,7 @@ def filho(modo):
         mesmo("material novo (Máquinas: lotes esperando importar e conferir)", {"pendencias": pend.get("material_novo"), "estacoes.pipeline": g(est, "pipeline", "aguardando_revisao"),
                                                                                  "painel": g(pai, "pendencias", "material_novo"), "esperado": 2})
         mesmo("Precisa de você (menu e saudação)", {"pendencias": pend.get("precisa_de_voce"), "painel.pendencias": g(pai, "pendencias", "precisa_de_voce"),
-                                                     "painel.contagens": g(pai, "contagens", "precisa_de_voce"), "esperado": 3})
+                                                     "painel.contagens": g(pai, "contagens", "precisa_de_voce"), "fila da Home (11/11)": g(pai, "fila", "pedem_atencao")})
         mesmo("lotes em revisão (etapa)", {"painel.filas": g(pai, "filas", "revisao"), "contagens": g(pai, "contagens", "lotes_etapa", "revisao"), "esperado": 5})
         ver("cada resposta diz quando foi medida (medido_em)", all(v for v in (pend.get("medido_em"), g(pai, "contagens", "medido_em"), g(est, "contagens", "medido_em"),
                                                                               g(rel, "contagens", "medido_em"), errc.get("medido_em"), g(est, "site", "http", "medido_em"))),
@@ -13706,7 +13733,8 @@ def filho(modo):
         _adiar(c, uid_, f"erro:{eid_}"); c.commit()
         pend2 = x.get("/api/pendencias").json(); pai2 = x.get("/api/painel").json()
         mesmo("Precisa de você depois de esconder um problema (UX-03)", {"pendencias": pend2.get("precisa_de_voce"), "pedem_acao": g(pend2, "pedem_acao", "precisa_de_voce"),
-                                                                          "painel.pendencias": g(pai2, "pendencias", "precisa_de_voce"), "painel.pedem_acao": g(pai2, "pendencias", "pedem_acao", "precisa_de_voce"), "esperado": 2})
+                                                                          "painel.pendencias": g(pai2, "pendencias", "precisa_de_voce"), "painel.pedem_acao": g(pai2, "pendencias", "pedem_acao", "precisa_de_voce"), "fila da Home (11/11)": g(pai2, "fila", "pedem_atencao")})
+        ver("esconder o problema tira 1 do Precisa de você", g(pai2, "fila", "pedem_atencao") == g(pai, "fila", "pedem_atencao") - 1, f"{g(pai, 'fila', 'pedem_atencao')} -> {g(pai2, 'fila', 'pedem_atencao')}")
         # UX-01 (27/10, Home × Material novo): lote do CAMP Vision cuja pasta não parece do projeto ("Verificar destino") e um "movendo" (UX-43):
         # não são "para importar" em nenhuma rota; pedem você (como na aba "Precisam de você" do Material novo); a Home não oferece "Importar".
         import json as _j
@@ -13731,7 +13759,7 @@ def filho(modo):
         mesmo("menu Material novo = aba 'Precisam de você' (UX-70)", {"filas (aba)": gente3, "pendencias.pedem_acao": g(pend3, "pedem_acao", "material_novo"),
                                                                    "painel.pedem_acao": g(pai3, "pendencias", "pedem_acao", "material_novo"), "esperado": gente3})
         mesmo("Precisa de você com os de Verificar destino", {"pendencias": pend3.get("precisa_de_voce"), "painel.pendencias": g(pai3, "pendencias", "precisa_de_voce"),
-                                                              "painel.contagens": g(pai3, "contagens", "precisa_de_voce"), "esperado": 4})
+                                                              "painel.contagens": g(pai3, "contagens", "precisa_de_voce"), "fila da Home (11/11)": g(pai3, "fila", "pedem_atencao")})
         it3 = {i_["acao"]["alvo"]: i_ for g_ in pai3.get("tarefas") or [] if g_["id"] == "conferir" for i_ in g_["itens"] if i_.get("acao")}
         ver("Home: os dois lotes travados têm 'Verificar destino' (não 'Importar')", all((it3.get(L_) or {}).get("acao", {}).get("tipo") == "destino" for L_ in (ls_, lm_))
             and "movendo para " + p14 in (it3.get(lm_) or {}).get("detalhe", ""), str({L_: it3.get(L_) for L_ in (ls_, lm_)}))
@@ -14306,8 +14334,8 @@ def filho(modo):
                   {"sev": "a", "titulo": "c1", "detalhe": "3 de 3 folhas a conferir · parado há 3 dias", "espera_h": 72, "parado_h": 72, "acao": {"tipo": "conferir"}}]},
               {"id": "base", "titulo": "Melhorar a base", "quem": "qualquer", "total": 30, "itens": [{"sev": "b", "titulo": "b1", "detalhe": "x", "acao": {"tipo": "rota"}}]}]
         _fa = _pd.fila_da_home(_G, "admin", "urgente")
-        ver("Redesenho §8: filtros com o total REAL dos grupos (base 30, não as linhas enviadas) e 'Todas' = soma",
-            _fa["contagens"]["todas"] == 33 and _fa["contagens"]["decidir"] == 2 and _fa["contagens"]["conferir"] == 1 and _fa["contagens"]["base"] == 30, str(_fa["contagens"]))
+        ver("Redesenho §8: filtros com o total REAL dos grupos (base 30, não as linhas enviadas) e 'Para fazer' = soma sem a base (11/11)",
+            _fa["contagens"]["todas"] == 3 and _fa["contagens"]["decidir"] == 2 and _fa["contagens"]["conferir"] == 1 and _fa["contagens"]["base"] == 30, str(_fa["contagens"]))
         ver("Redesenho §5: a saudação conta o que é da função da pessoa, fora 'Melhorar a base' (admin: 3; operador: 1, a decisão é de admin)",
             _fa["pedem_atencao"] == 3 and _pd.fila_da_home(_G, "operador")["pedem_atencao"] == 1 and _pd.fila_da_home(_G, "operador")["de_outro_papel"] == 2)
         ver("Redesenho §8: mais urgente primeiro = Urgente, depois o resto pelo tempo de espera, a base no fim",
@@ -17363,6 +17391,14 @@ else:
 print("114b2c) F000 · Convidado fica fora de toda fila de trabalho (O que fazer agora, Decisões, Problemas, Fila, contadores)")
 rc, out = rodar("convidado_fora_das_filas", f"{tmp}/convidado.db")
 if rc != 0: ok(False, f"teste do Convidado fora das filas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b2d) 'Precisa de você': o menu, a saudação e a aba 'Para fazer' dizem o mesmo número (Melhorar a base à parte)")
+rc, out = rodar("precisa_de_voce_um_numero", f"{tmp}/precisaumnum.db")
+if rc != 0: ok(False, f"teste do número único do Precisa de você não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

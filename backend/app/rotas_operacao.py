@@ -93,6 +93,10 @@ def painel(ordem: str = "padrao", fila: str = "urgente", u: dict = Depends(auth.
     grupos = pd.tarefas(con, u["papel"], n, por_grupo=pd.FILA_MAX, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
     d["tarefas"] = pd.tarefas_resumidas(grupos)
     d["fila"] = pd.fila_da_home(grupos, u["papel"], fila)
+    from .contagens import alinhar_precisa_de_voce   # 11/11: o menu, a saudação e "Para fazer" com o MESMO número
+    alinhar_precisa_de_voce(con, n, u["papel"], u["id"], d["fila"])
+    d["pendencias"]["pedem_acao"] = n["pedem_acao"]
+    d["pendencias"]["precisa_de_voce"] = cont["precisa_de_voce"] = n["pedem_acao"]["precisa_de_voce"]
     d["caminho"] = pd.caminho(con, n)
     d["no_site"] = pd.no_site(con)
     d["hoje_frases"] = pd.atividade_hoje(con)
@@ -109,7 +113,7 @@ def pendencias(u: dict = Depends(auth.exige("leitura"))) -> dict:
     from .contagens import medir
     con = connect()
     try:
-        return medir(con, usuario_id=u.get("id"))   # 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa; UX-05: + no site, etapas, medido_em
+        return medir(con, usuario_id=u.get("id"), papel=u.get("papel"))   # 11/11: o número do menu = o da fila da Home; 23/10: o "Agora não" de um lote tira o lote da contagem desta pessoa; UX-05: + no site, etapas, medido_em
     finally:
         con.close()
 
