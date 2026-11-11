@@ -13,7 +13,7 @@ def ok(cond, msg):
 
 # Modo rápido (python tests/teste_backend.py --rapido): só o que protege a subida do painel (migrações, rede, contrato com o CAMP Vision,
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
-MODOS_RAPIDOS = {"precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
+MODOS_RAPIDOS = {"ficha_etapas", "precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
@@ -8404,6 +8404,41 @@ def filho(modo):
         ver("o lote parado com erro e a decisão: 2 coisas na fila", fila["pedem_atencao"] == 2, str(fila["pedem_atencao"]))
         ver("o menu 'Precisa de você' diz o mesmo número da fila (antes: 1, sem o lote com erro)", m["precisa_de_voce"] == m["pedem_acao"]["precisa_de_voce"] == 2, str(m["precisa_de_voce"]))
         ver("'Para fazer' = o mesmo número; Melhorar a base fica à parte", para_fazer == 2 and base >= 1, f"para_fazer={para_fazer} base={base}")
+        c.close()
+        for l in res: print(l)
+    elif modo == "ficha_etapas":
+        # 11/11 (Rafael): "precisamos gamificar isso; faz em etapas: depois das folhas já irmos para tipo de habitação etc., com as respostas
+        # mais frequentes primeiro". GET /api/projetos/{c}/ficha-etapas: uma pergunta por dado, as respostas mais usadas (fundo, depois acervo).
+        init_db(); _aplicar_migracoes_real()
+        from app.ficha_etapas import etapas
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F050','Rino Levi','RLV',1),('F051','Oswaldo Bratke','OBR',1)")
+        dados = [("F050", 1, "Residência unifamiliar", "São Paulo"), ("F050", 2, "Residência unifamiliar; Casa bonita", "São Paulo"), ("F050", 3, "Escola", "Santos"),
+                 ("F051", 1, "Escola", "Campinas"), ("F051", 2, "Escola", "Campinas"), ("F051", 3, "Escola", "Campinas"), ("F051", 4, "Hospital", "Campinas")]
+        for f, n, tip, cid in dados:
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tipologia,cidade,natureza) VALUES (?,?,?,?,1970,?,?,'Edificação (obra nova)')", (f"{f}-P000{n}", f, n, f"Obra {n}", tip, cid))
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F050',9)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F050-P0009','F050',9,'Casa nova',0)")
+        for d_ in (1, 2, 3):
+            c.execute("INSERT INTO item (codigo, projeto_codigo, serie_codigo, sequencial) VALUES (?, 'F050-P0009', 'S01', ?)", (f"F050-P0009-{'1961' if d_ < 3 else '1962'}-S01-D0000{d_}", d_))
+        c.commit()
+        r = etapas(c, "F050-P0009")
+        E = {e["id"]: e for e in r["etapas"]}
+        ver("as perguntas vêm na ordem dos objetivos: tipo, natureza, modalidade, situação, ano, cidade",
+            [e["id"] for e in r["etapas"]] == ["programa", "natureza", "modalidade", "situacao_obra", "ano", "cidade"], str([e["id"] for e in r["etapas"]]))
+        fr = [x["nome"] for x in E["programa"]["frequentes"]]
+        ver("tipo da obra: primeiro o que o FUNDO mais usa (Residência unifamiliar, 2), depois o acervo (Escola, 4 no total)", fr[:3] == ["Residência unifamiliar", "Escola", "Hospital"], str(fr))
+        ver("termo fora da lista do site não vira sugestão", "Casa bonita" not in fr, str(fr))
+        ver("ano: o das folhas, o mais frequente primeiro", [x["nome"] for x in E["ano"]["frequentes"]][:2] == ["1961", "1962"], str(E["ano"]["frequentes"]))
+        ver("cidade: as do fundo primeiro", [x["nome"] for x in E["cidade"]["frequentes"]][:2] == ["São Paulo", "Santos"], str(E["cidade"]["frequentes"]))
+        ver("modalidade sem uso no acervo: os primeiros termos da lista do site", E["modalidade"]["frequentes"] and not E["modalidade"]["feito"], str(E["modalidade"]["frequentes"])[:120])
+        ver("conta o que falta (as 6)", r["faltam"] == 6 and r["total"] == 6, f"{r['faltam']}/{r['total']}")
+        ok_ = etapas(c, "F050-P0001")
+        ver("projeto já preenchido: tipo, natureza, ano e cidade feitos", sum(1 for e in ok_["etapas"] if e["feito"]) == 4 and ok_["faltam"] == 2, str(ok_["faltam"]))
+        ver("projeto que não existe: None (a rota dá 404)", etapas(c, "F050-P0099") is None)
         c.close()
         for l in res: print(l)
     elif modo == "importado_sem_folhas":
@@ -17399,6 +17434,14 @@ else:
 print("114b2d) 'Precisa de você': o menu, a saudação e a aba 'Para fazer' dizem o mesmo número (Melhorar a base à parte)")
 rc, out = rodar("precisa_de_voce_um_numero", f"{tmp}/precisaumnum.db")
 if rc != 0: ok(False, f"teste do número único do Precisa de você não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("114b2e) 'Completar a ficha' em etapas: uma pergunta por dado, as respostas mais usadas primeiro (fundo, depois acervo)")
+rc, out = rodar("ficha_etapas", f"{tmp}/fichaetapas.db")
+if rc != 0: ok(False, f"teste da ficha em etapas não rodou -> {out[-1500:]}")
 else:
     for l in out.splitlines():
         if "|" in l:

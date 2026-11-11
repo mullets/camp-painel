@@ -1895,6 +1895,15 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
 .ed-rodape .btn.pri[aria-busy="true"]{cursor:progress;opacity:.85}
 .drawer-ed #d-erro:empty{display:none}
 @media (prefers-reduced-motion:reduce){.ed-sec-tit::before,.tp-exp span{transition:none}}
+/* 11/11 · Completar a ficha em etapas (uma pergunta por vez, as respostas mais usadas primeiro) */
+.fc-prog{height:8px;background:var(--surface2);border-radius:99px;overflow:hidden;border:1px solid var(--line)}.fc-prog span{display:block;height:100%;background:var(--green);transition:width .3s}
+.fc-cont{margin:6px 0 10px;color:var(--ink2)}.fc-passos{display:flex;gap:6px;list-style:none;margin:0 0 14px;padding:0}.fc-passos li{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);background:var(--surface);font-size:var(--fs-sm2);color:var(--ink2)}
+.fc-passos li.feito{background:var(--green-soft);border-color:var(--green);color:var(--green)}.fc-passos li.atual{border:2px solid var(--blue);color:var(--blue);font-weight:700}
+#ficha .fc-perg{font-size:1.35rem;margin:4px 0;color:var(--ink);font-weight:700;text-transform:none;letter-spacing:0}#ficha .fc-fim h3{font-size:1.35rem;color:var(--ink);text-transform:none;letter-spacing:0;margin:6px 0}.fc-ajuda{color:var(--ink2);margin:0 0 12px}.fc-ops{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin:0 0 12px}
+.fc-op{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);font:inherit;cursor:pointer;min-height:44px}
+.fc-op:hover{border-color:var(--blue)}.fc-op small{color:var(--ink3);font-size:var(--fs-sm2)}.fc-op[aria-pressed="true"]{border:2px solid var(--blue);background:var(--blue-soft)}
+.fc-campo{display:flex;gap:8px;align-items:center;margin:0 0 12px}.fc-campo input{font:inherit;padding:8px 10px;max-width:260px}.fc-todas{margin:0 0 12px}.fc-todas summary{cursor:pointer;color:var(--blue)}
+.fc-bts{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}.fc-fim{text-align:center;padding:18px 0}.fc-medalha{font-size:2.6rem;margin:0;color:var(--amber)}
 </style>
 </head>
 <body>
@@ -5569,12 +5578,60 @@ function metasHTML(code,o){o=o||{};const m=metasDe(code);if(!m)return '';
   const li=x=>`<li class="mt-item${x.feito?' feito':''}" data-meta="${escHtml(x.id)}"><span class="mt-ico" aria-hidden="true">${x.feito?'✓':'○'}</span><span class="mt-txt">${x.feito?escHtml(x.texto):`<b>${escHtml(x.falta||x.texto)}</b>`}${x.progresso&&x.progresso[1]>1?` <small class="mt-n">${fmtN(x.progresso[0])} de ${fmtN(x.progresso[1])}</small>`:''}<span class="sr">${x.feito?' (feito)':' (falta)'}</span></span>${!x.feito&&x.acao&&podeMeta(x.acao)?`<button type="button" class="btn sm mt-ir" data-pp-cond="${escHtml(x.acao.tipo)}" data-alvo="${escHtml(x.acao.alvo||'')}">${escHtml(x.acao.rotulo)}</button>`:''}</li>`;
   const todos=o.soAbertos?abertos:abertos.concat(L.filter(x=>x.feito)),VIS=o.soAbertos?todos.length:4,resto=todos.slice(VIS);   /* os 4 primeiros que faltam à vista; o resto recolhido (a página não cresce) */
   const lista=todos.slice(0,VIS).map(li).join('')+(resto.length?`<li class="mt-mais"><details><summary>Ver ${resto.length===1?'o outro objetivo':`os outros ${fmtN(resto.length)} objetivos`}</summary><ul class="mt-lista">${resto.map(li).join('')}</ul></details></li>`:'');
-  const cabH=`<div class="mt-cab"><h3 class="mt-tit">${escHtml(cab)}</h3><span class="mt-cont"><b>${fmtN(f)} de ${fmtN(t)}</b> ${t===1?'objetivo':'objetivos'}</span></div><progress class="mt-barra" max="${t}" value="${f}" aria-label="${escHtml(cab)}: ${f} de ${t}">${f} de ${t}</progress>`,
+  const nDados=(m.objetivos||[]).filter(x=>!x.feito&&METAS_DADOS.includes(x.id)&&x.id!=='titulo').length,fichaBt=nDados&&EU&&['admin','master'].includes(EU.papel)?`<button type="button" class="btn sm pri fc-abrir" data-ficha-abrir="${escHtml(code)}">Completar a ficha: ${qtd(nDados,'pergunta rápida','perguntas rápidas')}</button>`:'';   /* 11/11 */
+  const cabH=`<div class="mt-cab"><h3 class="mt-tit">${escHtml(cab)}</h3><span class="mt-cont"><b>${fmtN(f)} de ${fmtN(t)}</b> ${t===1?'objetivo':'objetivos'}</span>${fichaBt}</div><progress class="mt-barra" max="${t}" value="${f}" aria-label="${escHtml(cab)}: ${f} de ${t}">${f} de ${t}</progress>`,
     corpo=`<ul class="mt-lista">${lista}</ul>${o.nota===false?'':`<p class="mt-nota">${escHtml(o.nota||'Não impedem publicar: o projeto pode ir ao site como está e ser completado depois.')}</p>`}`;
   /* redesenho da página do projeto §3.3: no Próximo passo os objetivos ficam recolhidos (a barra e o "N de M" à vista); a página lembra se a pessoa abriu */
   if(o.recolher)return `<details class="metas mt-recolhido" data-metas-de="${escHtml(code)}"${PJ_METAS_ABERTO.has(code)?' open':''}><summary aria-label="${escHtml(cab)}: ${f} de ${t}. Mostrar a lista">${cabH}</summary>${corpo}</details>`;
   return `<section class="metas" aria-label="${escHtml(cab)}">${cabH}${corpo}</section>`}
 const PJ_METAS_ABERTO=new Set();
+/* 11/11 (Rafael: "precisamos gamificar isso, porque não estão preenchendo tudo corretamente; faz em etapas: depois das folhas já irmos para
+   tipo de habitação etc., com as respostas mais frequentes primeiro"): "Completar a ficha" pergunta UM dado por vez (tipo da obra, natureza,
+   modalidade, situação, ano, cidade), com as respostas mais usadas no fundo e no acervo como botões grandes; a lista completa do site fica
+   a um clique. Cada resposta grava na hora (PATCH /api/projetos, a validação de sempre); "Pular" deixa para depois. */
+let FICHA=null;
+async function abrirFicha(code){let r;try{r=await API('/api/projetos/'+encodeURIComponent(code)+'/ficha-etapas')}catch(e){toast(e.message);return}
+  const i=r.etapas.findIndex(e=>!e.feito);FICHA={code,r,i:i<0?r.etapas.length:i,sel:null,mudou:false};
+  openDrawer('Completar a ficha',`${code} · ${r.titulo||''}`,'<div id="ficha" aria-live="polite"></div>');fichaDesenhar()}
+function fichaSel(){const e=FICHA.r.etapas[FICHA.i];if(FICHA.sel===null)FICHA.sel=[...(e.atual||[])];return FICHA.sel}
+function fichaDesenhar(){const el=document.getElementById('ficha');if(!el||!FICHA)return;const E=FICHA.r.etapas,tot=E.length,ok=E.filter(e=>e.feito).length,i=FICHA.i;
+  const topo=`<div class="fc-prog" role="progressbar" aria-label="Dados preenchidos" aria-valuemin="0" aria-valuemax="${tot}" aria-valuenow="${ok}"><span style="width:${Math.round(100*ok/tot)}%"></span></div><p class="fc-cont"><b>${fmtN(ok)} de ${fmtN(tot)}</b> dados do projeto preenchidos</p>`
+    +`<ol class="fc-passos" aria-label="Perguntas">${E.map((e,k)=>`<li class="${e.feito?'feito':''}${k===i?' atual':''}" title="${escHtml(e.pergunta)}">${e.feito?'✓':k+1}<span class="sr"> ${escHtml(e.pergunta)}${e.feito?' (preenchido)':''}</span></li>`).join('')}</ol>`;
+  if(i>=tot){const tudo=ok===tot;el.innerHTML=topo+`<div class="fc-fim"><p class="fc-medalha" aria-hidden="true">★</p><h3>${tudo?'Ficha completa!':'Por agora é isso.'}</h3><p>${tudo?'Todos os dados do projeto estão preenchidos: a página dele no site fica completa.':`${qtd(tot-ok,'dado ficou','dados ficaram')} para depois. Dá para voltar quando souber.`}</p><div class="act"><button type="button" class="btn pri" data-ficha-fechar>Fechar</button></div></div>`;return}
+  const e=E[i],sel=fichaSel(),tem=new Set(sel.map(x=>x.toLowerCase()));
+  const dica=f=>f.das_folhas?'é o ano nas folhas':f.n_fundo?`${qtd(f.n_fundo,'projeto','projetos')} deste fundo`:f.n?`${qtd(f.n,'projeto','projetos')} no acervo`:'';
+  const ops=(e.frequentes||[]).map(f=>`<button type="button" class="fc-op" data-ficha-op="${escHtml(f.nome)}" aria-pressed="${tem.has(String(f.nome).toLowerCase())}"><b>${escHtml(f.nome)}</b>${dica(f)?`<small>${escHtml(dica(f))}</small>`:''}</button>`).join('');
+  const campo=e.tipo==='ano'?`<label class="fc-campo"><span>Ano</span><input id="fc-valor" type="number" min="1800" max="2100" inputmode="numeric" value="${escHtml(sel[0]||'')}"></label>`
+    :e.tipo==='texto'?`<label class="fc-campo"><span>Cidade</span><input id="fc-valor" type="text" maxlength="120" value="${escHtml(sel[0]||'')}" autocomplete="off"></label>`:'';
+  const lista=e.faceta?`<details class="fc-todas" data-ficha-lista><summary>Não está aqui? Ver a lista completa do site</summary><div data-ficha-lista-corpo><p class="help">Carregando…</p></div></details>`:'';
+  const mult=e.faceta&&e.multiplo;
+  el.innerHTML=topo+`<p class="help">Pergunta ${fmtN(i+1)} de ${fmtN(tot)}${e.feito?' · já preenchida, pode mudar':''}</p><h3 class="fc-perg">${escHtml(e.pergunta)}</h3><p class="fc-ajuda">${escHtml(e.ajuda)}${mult?' Pode marcar mais de um.':''}</p>`
+    +(ops?`<p class="help">Mais usadas primeiro:</p><div class="fc-ops" role="group" aria-label="Respostas mais usadas">${ops}</div>`:'')+campo+lista
+    +`<div class="fc-bts"><span>${i>0?'<button type="button" class="btn sm" data-ficha-ir="-1">‹ Voltar</button>':''}</span><span><button type="button" class="btn sm" data-ficha-ir="1">Não sei · pular</button> <button type="button" class="btn sm pri" data-ficha-salvar>Salvar e seguir ›</button></span></div>`;
+  const inp=document.getElementById('fc-valor');if(inp)inp.focus()}
+function fichaValor(){const e=FICHA.r.etapas[FICHA.i];if(e.tipo==='ano'||e.tipo==='texto'){const v=(document.getElementById('fc-valor')||{}).value;return String(v||'').trim()}
+  const h=document.getElementById('ep-'+e.coluna);if(h)return h.value;return fichaSel().join('; ')}
+function fichaAndar(d,soFaltam){const E=FICHA.r.etapas;let i=FICHA.i+d;if(soFaltam)while(i<E.length&&E[i].feito)i++;FICHA.i=Math.max(0,Math.min(E.length,i));FICHA.sel=null;fichaDesenhar()}   /* depois de salvar vai para o próximo que falta; Voltar e Pular andam um */
+async function fichaSalvar(){const e=FICHA.r.etapas[FICHA.i],v=fichaValor();if(!v){toast('Escolha uma resposta ou use "Não sei · pular".');return}
+  const corpo={[e.coluna]:e.tipo==='ano'?+v:v};if(e.tipo==='ano'&&!(+v>=1800&&+v<=2100)){toast('Ano entre 1800 e 2100.');return}
+  const b=document.querySelector('[data-ficha-salvar]');if(b){b.disabled=true;b.textContent='Salvando…'}
+  try{await API('/api/projetos/'+encodeURIComponent(FICHA.code),{method:'PATCH',body:JSON.stringify(corpo)})}catch(x){toast(x.message);if(b){b.disabled=false;b.textContent='Salvar e seguir ›'}return}
+  e.feito=true;e.atual=e.faceta?separarTermos(v):[v];FICHA.mudou=true;toast('✓ Salvo');fichaAndar(1,true)}
+document.addEventListener('click',ev=>{const t=ev.target.closest&&ev.target.closest('[data-ficha-abrir],[data-ficha-op],[data-ficha-ir],[data-ficha-salvar],[data-ficha-fechar]');if(!t)return;
+  if(t.dataset.fichaAbrir){ev.preventDefault();ev.stopPropagation();abrirFicha(t.dataset.fichaAbrir);return}
+  if(!FICHA)return;const e=FICHA.r.etapas[FICHA.i];
+  if(t.hasAttribute('data-ficha-op')){const nome=t.dataset.fichaOp;
+    if(e.tipo==='ano'||e.tipo==='texto'){const inp=document.getElementById('fc-valor');if(inp)inp.value=nome;fichaSalvar();return}
+    if(!e.multiplo){FICHA.sel=[nome];const h=document.getElementById('ep-'+e.coluna);if(h)h.value=nome;fichaSalvar();return}   /* uma resposta só: o clique já grava */
+    const sel=fichaSel(),k=sel.findIndex(x=>x.toLowerCase()===nome.toLowerCase());if(k>=0)sel.splice(k,1);else sel.push(nome);t.setAttribute('aria-pressed',String(k<0));
+    const h=document.getElementById('ep-'+e.coluna);if(h){h.value=sel.join('; ');document.querySelectorAll(`input[name="tp-${e.coluna}"]`).forEach(c=>{c.checked=sel.some(x=>x.toLowerCase()===c.value.toLowerCase())})}return}
+  if(t.dataset.fichaIr){fichaAndar(+t.dataset.fichaIr);return}
+  if(t.hasAttribute('data-ficha-salvar')){fichaSalvar();return}
+  if(t.hasAttribute('data-ficha-fechar')){const c=FICHA.code,m=FICHA.mudou;closeDrawer(true);if(m&&window.PROJETO_PJ===c)showProjeto(c)}});   /* a página por baixo mostra os objetivos novos */
+document.addEventListener('toggle',async ev=>{const d=ev.target;if(!d||!d.matches||!d.matches('details[data-ficha-lista]')||!d.open||!FICHA)return;const c=d.querySelector('[data-ficha-lista-corpo]');if(!c||c.dataset.ok)return;
+  const e=FICHA.r.etapas[FICHA.i];c.innerHTML=await tipologiaCamposHTML({[e.coluna]:fichaSel().join('; ')},[e.coluna]);c.dataset.ok='1'},true);
+document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target&&ev.target.id==='fc-valor'){ev.preventDefault();fichaSalvar()}});
+
 document.addEventListener('toggle',e=>{const d=e.target;if(d&&d.matches&&d.matches('details[data-metas-de]')){if(d.open)PJ_METAS_ABERTO.add(d.dataset.metasDe);else PJ_METAS_ABERTO.delete(d.dataset.metasDe)}},true);
 function proximoPassoHTML(r,code,pagina){   // pagina=true: dentro do bloco Próximo passo da página do projeto (CAMP-147); sem: o quadro do fim da conferência
   const l=r.lote;if(!l)return '';
