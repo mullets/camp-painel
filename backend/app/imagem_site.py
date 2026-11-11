@@ -43,10 +43,15 @@ def imagem_para_o_site(con, item) -> str | None:
         previa = (json.loads(item["pendencias"] or "{}") or {}).get("previa") if item["pendencias"] else None
     except (ValueError, TypeError):
         previa = None
+    k = item.keys() if hasattr(item, "keys") else ()
+    codigo = item["codigo"] if "codigo" in k else None
     if previa and raiz:
         base = (raiz / "_campvision" / "preview").resolve()
         alvo = (raiz / previa).resolve()
-        if base in alvo.parents and alvo.suffix.lower() in (".jpg", ".jpeg") and alvo.is_file():
+        # 11/11/2026: a MESMA regra da rota da prévia (rotas_revisao.previa / ajuste_imagem.origem_da_folha): a prévia só vale se é
+        # desta folha (nome = código). Folha recodificada (ex.: D00012 -> D90001) guarda a prévia do código antigo; a revisão mostra
+        # o JPG da folha e a pessoa gira a partir DELE. Subir a prévia (já girada pelo CAMP Vision) + esse giro virava a foto no site.
+        if base in alvo.parents and alvo.suffix.lower() in (".jpg", ".jpeg") and (codigo is None or alvo.stem == codigo) and alvo.is_file():
             return str(alvo)
     jpg = item["arquivo_jpg"]
     if not jpg or str(jpg).startswith("http"):
