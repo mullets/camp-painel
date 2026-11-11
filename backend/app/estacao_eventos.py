@@ -87,6 +87,11 @@ def sem_processar(con) -> list[dict]:
                            (e["projeto_codigo"], e["recebido_em"])).fetchone()
         if lote:
             continue
+        try:                                           # 11/11: a pasta espera o destino (Verificar destino), que já aparece com o motivo certo
+            if con.execute("SELECT 1 FROM destino_auto WHERE projeto_antigo=? AND estado='movendo' LIMIT 1", (e["projeto_codigo"],)).fetchone():
+                continue
+        except Exception:  # noqa: BLE001 - banco antes da migração 197
+            pass
         out.append({"id": e["id"], "projeto_codigo": e["projeto_codigo"], "projeto_titulo": e["projeto_titulo"], "estacao_id": e["estacao_id"], "operador": e["operador"],
                     "total_arquivos": e["total_arquivos"], "enviado_em": e["recebido_em"], "horas": round(e["horas"], 1)})
     return out

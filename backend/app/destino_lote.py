@@ -123,7 +123,14 @@ def avaliar(con, l, pacote: dict | None = None, completo: bool = True) -> dict:
     auto = out["automatico"] = do_lote(con, l["id"])
     if auto and not out["liberado"]:
         alvo = f"{auto['para']} (“{auto['para_titulo']}”{', projeto criado pelo painel' if auto['criado'] else ''})"
-        out["motivo"] = (f"movendo para {alvo}: o CAMP Vision vai reorganizar a pasta" if auto["estado"] == "movendo" else
+        quem = f"escolhido por {auto['escolhido_por']}" if auto.get("escolhido_por") else "decidido pelo painel"
+        if auto["estado"] == "recusado":               # 11/11: o CAMP Vision NÃO moveu: diz por quê; a pessoa escolhe (botões na tela)
+            out["motivo"] = f"o CAMP Vision não moveu a pasta para {auto['para']}: {auto['recusa']['motivo']}. Escolha o projeto certo"
+            out["motivo_curto"] = f"o CAMP Vision não moveu a pasta para {auto['para']}: escolha o projeto certo"
+            if completo:
+                out["sugestoes"] = sugestoes(con, l, p["fundo_codigo"], pasta, n)
+            return out
+        out["motivo"] = (f"movendo para {alvo} ({quem}): o CAMP Vision vai reorganizar a pasta" if auto["estado"] == "movendo" else
                          f"o painel moveu este lote para {alvo} e o CAMP Vision já reorganizou a pasta; se ainda sobrou material aqui, escolha “É deste projeto”")
         out["motivo_curto"] = (f"movendo para {auto['para']} (o CAMP Vision vai reorganizar a pasta)" if auto["estado"] == "movendo" else
                                f"o CAMP Vision já levou a pasta para {auto['para']}; se sobrou material aqui, escolha “É deste projeto”")
@@ -198,4 +205,6 @@ def resolver_decisao(con, d, ctx: dict, acao: str, valor: str | None, ator: str)
     _evento(con, "lista", str(l["id"]), "destino_outro_projeto", ator, det)
     _evento(con, "projeto", l["projeto_codigo"], "destino_outro_projeto", ator, det)
     _evento(con, "projeto", destino, "destino_outro_projeto", ator, det)
-    return {"mensagem": f"Anotado: a pasta é de {destino}. O lote não importa em {l['projeto_codigo']}; peça ao CAMP Vision para reidentificar a pasta."}
+    from .destino_auto import pessoa_escolheu         # 11/11: o CAMP Vision move a pasta sozinho (antes: "peça ao CAMP Vision para reidentificar")
+    pessoa_escolheu(con, l, destino, ator)
+    return {"mensagem": f"Anotado: a pasta é de {destino}. O CAMP Vision move a pasta sozinho na próxima volta; depois o lote aparece em {destino}."}
