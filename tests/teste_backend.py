@@ -15,7 +15,7 @@ def ok(cond, msg):
 # sincronização, backup e as regras novas de segurança); o pacote inteiro passa de 5 minutos. atualizar.sh usa este modo antes do restart.
 MODOS_RAPIDOS = {"destino_recusado", "ficha_etapas", "precisa_de_voce_um_numero", "convidado_fora_das_filas", "importar_espera_decisao", "sync_uma_por_vez", "ux41_datas_site", "ux40_enviar_fila", "ux39_dispensar_interrompida", "dup_nao_trava", "ux38_arquiteto_dados", "ux35_dispensar", "ux25_etiquetas", "ux33_numeros", "ux08_aviso_exif", "ux34_historico", "ux16_downloads", "ux14_relatorios", "ux13_usuarios", "parecido_desligado", "releitura_tipos", "agora_nao_lote", "importado_sem_folhas", "ano_lido_depois", "importar_sozinho", "conferir_so_avisos", "publicar_um_passo", "publicar_sem_travar", "site_renova", "metadados_lote", "divergencias_corrigir", "correcao_automatica", "folhas_enviadas", "arquiteto_site", "fotos_dados", "melhorias_acervo_novo", "camp136_serie", "camp124_alteracoes_site", "camp017_painel", "importar_067", "exaustao_d", "ler_pasta_agora", "versao", "atualizar_rapido", "lote_complemento", "novo", "antigo", "rede", "lock", "sync", "backup", "campvision", "contrato_cv2", "aviso_cv_14_10", "cv_s99", "cv22_leitor", "cv_erros_livro", "cp42", "cp35_metadados", "camp046_autoria", "camp047_s08", "camp048_imagem_publica", "camp050_lgpd", "camp013_coletor", "camp014_redir", "camp015_fundo_site", "camp017_eventos", "camp051_tipos", "camp008_reconciliacao", "camp009_reidentificar", "camp024_legado", "nome_de_pasta", "tipo_multiplo", "banco_livre", "projeto_divergente", "recorte_alinhamento", "problemas_ux", "parceiros", "duplicatas_revisao", "tirar_folha", "cv_ux", "pj2", "camp068_marcas", "camp069_outro_projeto", "camp120_marca", "exaustao_c", "ux01_destino", "ux29_duplicata", "ux12_desempenho", "ux22_avisos", "ux15_titulo_tecnico", "ux23_fundos_colunas", "ux06_contagem", "ux19_pedem_acao", "ux20_massa", "ux03_ignorar", "ux05_contagens", "ux07_alertas", "ux02_preservacao", "ux_home", "ux24_maquinas", "ux04_lotes", "ux09_travados", "ux17_clique_duplo", "ux36_publicado_em_dia", "ux37_sugestao_quebrada", "ux44_recorte_auto", "ux43_destino_auto", "publicacao_paciente", "publicacao_sem_duplicar", "sync_incremental", "ux47_reenvio_pendencias", "ler_de_novo_destrava", "apagar_lote_vazio", "mudar_de_fundo", "cor_original", "fotos_qnap", "entrega_por_email", "relatorio_cv", "inscricao_aviso", "contatos_emkt", "visitas_site", "sender_transacional", "inscricoes_residencia", "protocolos"}
 MODOS_RAPIDOS |= {"ux59_orientacao", "ux71_avisos", "ux66_girar", "ux69_boot"}   # UX-66/69/71/59 (conferência e carga do painel)
-MODOS_RAPIDOS |= {"giro_site_previa"}   # 11/11/2026: foto de cabeça para baixo no site (prévia de outro código)
+MODOS_RAPIDOS |= {"giro_site_previa", "imagem_que_falta"}   # 11/11/2026: foto de cabeça para baixo no site (prévia de outro código)
 MODOS_RAPIDOS |= {"ux62_publicar_conferido", "ux67_nomes_pasta", "ux68_decisoes"}   # UX-62/67/68 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux63_minor_exif", "ux64_problemas_ruido", "ux70_contadores", "ux60_resposta_quebrada"}   # UX-63/64/70/60 (linha própria: menos conflito com outros ramos)
 MODOS_RAPIDOS |= {"ux73_publicar_com_metas"}   # UX-73 (publicar como está, com metas; linha própria)
@@ -1898,6 +1898,64 @@ def filho(modo):
         ver("POST /api/pedidos/coletar (admin) responde mesmo sem o site configurado (erro registrado)", r.status_code == 200 and r.json()["erro"], r.text[:160])
         ver("GET /api/pedidos/coleta traz o estado", x.get("/api/pedidos/coleta").json()["ultima"] is not None)
         c.close()
+        for l in res: print(l)
+    elif modo == "imagem_que_falta":
+        # 12/11/2026 (F034-P0004 D00012): folha "publicada" no painel e "Ainda não digitalizado" no site (item sem imagem).
+        # O painel acha essas folhas, sobe a imagem e liga ao item; "Atualizar imagem no site" deixa de recusar.
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil as _sh
+        from pathlib import Path as _P
+        from PIL import Image as _Im
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        import app.publicador as pub
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        raiz = _P(os.environ.get("CAMP_TMP_PRONTOS") or "/tmp/camp_img_falta"); _sh.rmtree(raiz, ignore_errors=True); (raiz / "F099" / "JPG").mkdir(parents=True)
+        for n in (1, 2):
+            _Im.new("RGB", (600, 400), (200, 180, 150)).save(raiz / "F099" / "JPG" / f"d{n}.jpg", "JPEG")
+        c = connect()
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('qnap.prontos_raiz', ?)", (str(raiz),))
+        c.execute("INSERT INTO fundo (codigo,titulo) VALUES ('F099','Fundo de teste')"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F099',1)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tainacan_item_id) VALUES ('F099-P0001','F099',1,'Casa de teste',1970,6001)")
+        for n, wid, doc in ((1, 7001, ""), (2, 7002, "https://camp.arq.br/x.jpg")):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,arquivo_jpg,tainacan_item_id,status_site) VALUES (?,?,?,?,?,'importado',?,?,'no_ar')",
+                      (f"F099-P0001-1970-S01-D0000{n}", "F099-P0001", "S01", n, f"Foto {n}", f"F099/JPG/d{n}.jpg", wid))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,documento_url,thumb_url,json) VALUES (?,8013,'publish','t',?,?,?,'{}')",
+                      (wid, f"F099-P0001-1970-S01-D0000{n}", doc, doc))
+        c.commit()
+        ver("acha a folha que está no site sem imagem (e só ela)", pub.imagens_que_faltam(c) == ["F099-P0001-1970-S01-D00001"], str(pub.imagens_que_faltam(c)))
+        c.close()
+        chamadas = []
+        class SiteFalso:
+            def upload_media(self, caminho, titulo="", nome=None):
+                chamadas.append(("upload", _P(caminho).is_file(), nome)); return {"id": 9100 + len(chamadas), "source_url": "https://camp.arq.br/wp-content/uploads/n.jpg"}
+            def definir_documento(self, col, iid, mid): chamadas.append(("documento", col, iid, mid)); return {}
+            def substituir_midia(self, mid, caminho, nome=None): chamadas.append(("substituir", mid)); return {"id": mid, "source_url": "https://camp.arq.br/s.jpg"}
+            def patch_item(self, *a, **k): chamadas.append(("patch",) + a); return {}
+        pub.WP = SiteFalso
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"),): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = adm.post("/api/site/imagens-que-faltam")
+        j = r.json() if r.status_code == 200 else {}
+        ver("o botão envia a imagem que falta", r.status_code == 200 and j.get("enviadas") == ["F099-P0001-1970-S01-D00001"] and not j.get("falhas"), r.text[:300])
+        ver("sobe o arquivo e liga ao item certo como documento e miniatura", [x[0] for x in chamadas] == ["upload", "documento"] and chamadas[0][1] and chamadas[1][1:3] == (8013, 7001), str(chamadas))
+        c = connect()
+        ver("depois de enviar, a folha sai da lista e o painel guarda o anexo", pub.imagens_que_faltam(c) == [] and c.execute("SELECT site_media_id FROM item WHERE codigo='F099-P0001-1970-S01-D00001'").fetchone()[0] == 9101)
+        # "Atualizar imagem no site" numa folha no site sem anexo conhecido: antes recusava ("Não achei a imagem desta folha no site")
+        c.execute("UPDATE item SET site_media_id=NULL WHERE codigo='F099-P0001-1970-S01-D00001'"); c.execute("UPDATE wp_item SET documento_url='', thumb_url='' WHERE id=7001"); c.commit(); c.close()
+        chamadas.clear()
+        try:
+            g = pub.girar_imagem_no_site("F099-P0001-1970-S01-D00001", 0); erro = ""
+        except Exception as e:  # noqa: BLE001
+            g, erro = None, str(e)
+        ver("girar/atualizar imagem de folha sem anexo no site: sobe e liga em vez de recusar", g is not None and [x[0] for x in chamadas] == ["upload", "documento"], erro or str(chamadas))
+        # anexo conhecido, mas o item não aponta para ele: troca o arquivo e religa (não cria anexo novo)
+        c = connect(); c.execute("UPDATE wp_item SET documento_url='', thumb_url='' WHERE id=7001"); c.commit(); c.close()
+        chamadas.clear()
+        pub.girar_imagem_no_site("F099-P0001-1970-S01-D00001", 0)
+        ver("anexo existe mas o item está sem imagem: troca o arquivo e religa, sem anexo novo", [x[0] for x in chamadas] == ["substituir", "documento"], str(chamadas))
         for l in res: print(l)
     elif modo == "giro_site_previa":
         # 11/11/2026 (F001-P0001 D90001 de cabeça para baixo no site, de pé no painel): a imagem que sobe ao site sai da MESMA origem
@@ -17769,6 +17827,12 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("124c) Protocolos: pedidos, inscrições e downloads, na tela, na busca e nos avisos (contrato 1.7)")
+rc, out = rodar("imagem_que_falta", f"{tmp}/img_falta.db")
+if rc != 0: ok(False, f"teste imagem_que_falta não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"{nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 rc, out = rodar("giro_site_previa", f"{tmp}/giro_site.db")
 if rc != 0: ok(False, f"teste giro_site_previa não rodou -> {out[-1500:]}")
 else:
