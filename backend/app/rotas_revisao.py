@@ -1577,6 +1577,27 @@ def atualizar_imagem_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))
         con.close()
 
 
+@router.post("/site/imagens-que-faltam")
+def enviar_imagens_que_faltam(limite: int = 30, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """12/11/2026: folhas que estão no site SEM imagem (o espelho diz: sem documento e sem miniatura). Sobe a imagem de cada uma
+    (a mesma que a revisão mostra) e liga ao item. Até `limite` por vez; o resto fica para o próximo clique."""
+    from . import publicador
+    con = connect()
+    try:
+        cods = publicador.imagens_que_faltam(con)
+    finally:
+        con.close()
+    lim = max(1, min(int(limite or 30), 100))
+    enviadas, falhas = [], []
+    for cod in cods[:lim]:
+        try:
+            publicador.enviar_imagem_que_falta(cod, u["email"])
+            enviadas.append(cod)
+        except Exception as e:  # noqa: BLE001
+            falhas.append({"codigo": cod, "erro": str(e)[:240]})
+    return {"ok": not falhas, "enviadas": enviadas, "falhas": falhas, "total": len(cods), "restam": max(0, len(cods) - lim)}
+
+
 @router.get("/itens/{codigo}/ajuste")
 def ver_ajuste(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     """O recorte/ângulo gravados e a orientação (giro/espelho) da folha: a tela de recortar parte daqui (o giro pode ter mudado a caixa)."""

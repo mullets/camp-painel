@@ -786,6 +786,83 @@ def _versao_recorte() -> str:
     return VERSAO
 
 
+def _item_sem_imagem_no_espelho(con, item_id) -> bool:
+    """12/11/2026: o espelho do site (wp_item) diz que o item não tem imagem (nem documento, nem miniatura)."""
+    if not item_id:
+        return False
+    r = con.execute("SELECT documento_url, thumb_url FROM wp_item WHERE id=?", (int(item_id),)).fetchone()
+    return bool(r) and not (r["documento_url"] or r["thumb_url"])
+
+
+def _marcar_imagem_no_espelho(item_id: int, url: str | None, codigo: str) -> None:
+    c = connect()
+    try:
+        c.execute("UPDATE wp_item SET documento_url=?, thumb_url=? WHERE id=?", (url, url, item_id))
+        _resolver_pendencia(c, "item", codigo, "pendente_imagem_no_site")
+        c.commit()
+    finally:
+        c.close()
+
+
+def enviar_imagem_que_falta(codigo: str, ator: str, giro: int | None = None, ajuste: tuple | None = None) -> dict:
+    """12/11/2026 (F034-P0004 D00012 "Ainda não digitalizado" no site e "publicado" no painel): folha que já está no site SEM imagem.
+    Sobe a imagem de agora (a mesma que a revisão mostra, até 1920 px) e liga ao item como documento e miniatura.
+    Se o painel já conhece um anexo da folha, troca o arquivo dele e religa (não cria outro). Levanta RuntimeError com frase em português."""
+    con = connect()
+    try:
+        i = con.execute("""SELECT i.*, p.fundo_codigo, p.titulo AS projeto_titulo, p.codigo AS proj, p.tainacan_item_id AS dossie_id, p.capa_item,
+                                  s.nome AS serie_nome FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo
+                           LEFT JOIN serie s ON s.codigo=i.serie_codigo WHERE i.codigo=?""", (codigo,)).fetchone()
+        if not i:
+            raise RuntimeError("Folha não existe")
+        if not i["tainacan_item_id"]:
+            raise RuntimeError("Esta folha ainda não está no site: a imagem vai junto quando ela for publicada")
+        media = media_da_folha(con, codigo)
+        caminho, lado = imagem_pronta_para_o_site(con, i, giro, ajuste)
+        if not caminho:
+            raise RuntimeError("A imagem desta folha não está no QNAP: sem ela não dá para mandar a imagem ao site")
+    finally:
+        con.close()
+    wp = WP()
+    nome = nome_arquivo_site(i["titulo"] or i["tipo_documento"] or i["serie_nome"], i["projeto_titulo"], codigo)
+    m = None
+    if media:
+        try:
+            m = wp.substituir_midia(media, caminho, nome=nome)
+            if int(m.get("id") or media) != int(media):
+                m = None
+        except RuntimeError:
+            m = None                                   # o anexo sumiu do site: sobe um novo
+    if m is None:
+        p_num = codigo.split("-")[1] if "-" in codigo else ""
+        titulo = f"{(i['titulo'] or i['tipo_documento'] or i['serie_nome'])} — {p_num} — {i['projeto_titulo']}"
+        m = wp.upload_media(caminho, titulo, nome=nome)
+    mid = int(m["id"])
+    wp.definir_documento(COL_ACERVO, int(i["tainacan_item_id"]), mid)
+    if i["dossie_id"] and i["capa_item"] == codigo:
+        try:
+            wp.patch_item(COL_PROJETOS, i["dossie_id"], _thumbnail_id=mid)
+        except Exception:  # noqa: BLE001  (a capa volta no próximo envio da capa)
+            pass
+    c = connect()
+    try:
+        c.execute("UPDATE item SET site_media_id=?, site_imagem_lado=?, site_imagem_recorte=? WHERE codigo=?", (mid, lado, _versao_recorte(), codigo))
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'site_imagem_enviada',?,?)",
+                  (codigo, ator, json.dumps({"anexo": mid, "url": m.get("source_url")}, ensure_ascii=False)))
+        c.commit()
+    finally:
+        c.close()
+    _marcar_imagem_no_espelho(int(i["tainacan_item_id"]), m.get("source_url"), codigo)
+    return {"media_id": mid, "url": m.get("source_url"), "lado_px": lado}
+
+
+def imagens_que_faltam(con) -> list[str]:
+    """Códigos das folhas do painel cujo item no site não tem imagem (pelo espelho)."""
+    return [r[0] for r in con.execute("""SELECT i.codigo FROM item i JOIN wp_item w ON w.id=i.tainacan_item_id
+                                         WHERE w.colecao_id=? AND COALESCE(w.documento_url,'')='' AND COALESCE(w.thumb_url,'')=''
+                                         ORDER BY i.codigo""", (COL_ACERVO,)).fetchall()]
+
+
 def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) -> dict:
     """Girar folha já publicada: troca o ARQUIVO do anexo da imagem no site pela imagem girada `giro` graus (sentido horário,
     o mesmo giro_manual que a folha vai ter), MANTENDO o ID do anexo (o item do Tainacan, a capa do projeto e os links continuam valendo).
@@ -799,16 +876,24 @@ def girar_imagem_no_site(codigo: str, giro: int, ajuste: tuple | None = None) ->
             raise RuntimeError("Folha não existe")
         media = media_da_folha(con, codigo)
         if not media:
+            if i["tainacan_item_id"]:          # 12/11/2026: o item está no site SEM imagem: em vez de recusar, sobe a de agora e liga
+                con.close(); con = None
+                return enviar_imagem_que_falta(codigo, "painel", giro, ajuste)
             raise RuntimeError("Não achei a imagem desta folha no site (o anexo não está registrado no painel). Sincronize com o site e tente de novo")
+        sem_img_no_site = _item_sem_imagem_no_espelho(con, i["tainacan_item_id"])
         caminho, lado_pub = imagem_pronta_para_o_site(con, i, giro, ajuste)
         if not caminho:
             raise RuntimeError("A imagem desta folha não está no QNAP: sem ela não dá para mandar a versão girada ao site")
     finally:
-        con.close()
+        if con is not None:
+            con.close()
     nome = nome_arquivo_site(i["titulo"] or i["tipo_documento"] or i["serie_nome"], i["projeto_titulo"], codigo)
     m = WP().substituir_midia(media, caminho, nome=nome)
     if int(m.get("id") or media) != int(media):
         raise RuntimeError(f"O site devolveu outro anexo ({m.get('id')}) em vez de trocar o arquivo do anexo {media}")
+    if sem_img_no_site and i["tainacan_item_id"]:      # 12/11/2026: o anexo existe mas o item não aponta para ele: religa
+        WP().definir_documento(COL_ACERVO, int(i["tainacan_item_id"]), int(media))
+        _marcar_imagem_no_espelho(int(i["tainacan_item_id"]), m.get("source_url"), codigo)
     try:
         c2 = connect(); c2.execute("UPDATE item SET site_imagem_lado=?, site_imagem_recorte=? WHERE codigo=?", (lado_pub, _versao_recorte(), codigo)); c2.commit(); c2.close()
     except Exception:  # noqa: BLE001  (só informativo)
@@ -1191,6 +1276,9 @@ def criar_folha_no_site(codigo: str, ator: str, enviar_imagem: bool = True) -> d
         caminho_img, lado = imagem_pronta_para_o_site(con, i) if enviar_imagem else (None, None)
         if caminho_img:
             out["lado_max_px"] = lado
+        elif enviar_imagem:      # 12/11/2026: antes subia sem imagem e sem aviso ("publicado" no painel, "Ainda não digitalizado" no site)
+            _pendencia(con, "item", codigo, "pendente_imagem_no_site", "A folha foi ao site sem imagem: o arquivo não estava no QNAP. Use “Enviar as imagens que faltam”.")
+            out["imagem"] = "sem imagem local"
         if caminho_img:
             try:
                 m = wp.upload_media(caminho_img, titulo, nome=nome_arquivo_site(i["titulo"] or i["tipo_documento"] or i["serie_nome"], i["projeto_titulo"], codigo))

@@ -8996,10 +8996,16 @@ function renderPrevia(d){const admin=EU&&['admin','master'].includes(EU.papel),l
    +listaPrevia('Itens que entrariam',d.itens_novos_amostra.map(x=>li(x.codigo,x.titulo)),d.itens_novos)
    +listaPrevia('Projetos que entrariam',d.projetos_novos_amostra.map(x=>li(x.codigo,x.titulo)),d.projetos_novos)
    +listaPrevia('Itens do site sem imagem',d.site_sem_imagem.map(x=>li(x.codigo||('id '+x.id),`${x.status} · ${x.titulo||''}`)),d.site_sem_imagem_total)
+   +(d.site_sem_imagem_no_painel?`<div class="act" id="imgs-faltam" style="margin:6px 0 14px"><button class="btn sm pri" onclick="enviarImagensQueFaltam(this)">Enviar as imagens que faltam (${escHtml(d.site_sem_imagem_no_painel)})</button><small class="help">Sobe ao site a imagem de cada folha que está lá sem imagem (a mesma da revisão, até 1920 px).</small></div>`:'')
    +listaPrevia('Itens do site sem código detectável',d.sem_codigo.map(x=>li('id '+x.id,x.titulo)),d.sem_codigo_total)
    +listaPrevia('Folhas do site cujo projeto não existe no painel',d.item_sem_projeto.map(x=>li(x.codigo,'id '+x.id)))
    +listaPrevia('Projetos do site com fundo desconhecido',d.fundo_desconhecido.map(x=>li(x.fundo||'?',x.titulo)))
    +(admin&&(d.itens_novos||d.projetos_novos)?`<div class="act"><button class="btn pri" id="imp-exec" onclick="executarImportacao()">Importar ${d.projetos_novos} projeto(s) e ${d.itens_novos} item(ns)</button></div><small class="help">Só entra o que está listado acima. Se algo mudar antes de confirmar, o painel recusa e pede a prévia de novo.</small>`:'')}
+async function enviarImagensQueFaltam(b){b.disabled=true;const t=b.textContent;b.textContent='Enviando…';
+  try{const r=await API('/api/site/imagens-que-faltam',{method:'POST'});
+    toast(`${r.enviadas.length} imagem(ns) enviada(s) ao site`+(r.falhas.length?` · ${r.falhas.length} não foram: ${r.falhas.slice(0,3).map(f=>f.codigo+' ('+f.erro+')').join('; ')}`:'')+(r.restam?` · faltam ${r.restam}: clique de novo`:''));
+    previaImportacao()}
+  catch(e){toast('Não deu para enviar: '+(e.message||e));b.disabled=false;b.textContent=t}}
 async function previaImportacao(){const el=document.getElementById('imp-corpo');if(!el)return;el.innerHTML='<div class="state-row"><span class="skeleton-line"></span><div>Comparando…</div></div>';try{IMP_PREVIA=await API('/api/importacao/previa');el.innerHTML=renderPrevia(IMP_PREVIA)}catch(e){el.innerHTML=`<div class="empty">${escHtml(e.message)}</div>`}}
 async function executarImportacao(){const d=IMP_PREVIA;if(!d)return;if(!await confirmar({titulo:'Trazer do site para o painel?',texto:`${qtd(d.projetos_novos,'projeto','projetos')} e ${qtd(d.itens_novos,'folha','folhas')} que existem só no site passam a fazer parte do catálogo do painel. Nada muda no site.`,botao:'Trazer para o painel'}))return;try{const r=await API('/api/importacao/executar',{method:'POST',body:JSON.stringify({esperado_itens_novos:d.itens_novos,esperado_projetos_novos:d.projetos_novos})});toast(`Importado: ${r.projetos_novos} projeto(s) e ${r.itens_novos} item(ns)`);previaImportacao()}catch(e){toast(e.message);previaImportacao()}}
 function painelBackup(b){b=b||{};const admin=EU&&['admin','master'].includes(EU.papel);

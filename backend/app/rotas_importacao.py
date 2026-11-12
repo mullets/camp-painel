@@ -48,10 +48,20 @@ def _previa() -> dict:
         "fundo_desconhecido": [{"id": i, "titulo": t, "fundo": f} for i, t, f in corte(n["fundo_desconhecido"])],
         "item_sem_projeto": [{"id": i, "codigo": c} for i, c in corte(n["item_sem_projeto"])],
         "site_sem_imagem_total": len(sem_img),
+        "site_sem_imagem_no_painel": _qtd_que_faltam(),      # 12/11/2026: destas, as que o painel sabe reenviar (folha ligada ao item)
         "site_sem_imagem": [{"id": r["id"], "codigo": r["codigo_detectado"], "status": r["status"], "titulo": r["titulo"]} for r in corte(sem_img)],
         "locais_sem_item_no_site": locais_sem_site, "total_local": total_local, "total_site": total_site, "espelho_em": ult,
         "limite_listas": LIMITE,
     }
+
+
+def _qtd_que_faltam() -> int:
+    from .publicador import imagens_que_faltam
+    c = connect()
+    try:
+        return len(imagens_que_faltam(c))
+    finally:
+        c.close()
 
 
 @router.get("/importacao/previa")
