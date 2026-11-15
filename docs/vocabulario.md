@@ -537,3 +537,8 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
 - Histórico: **"sem legendas nas imagens" enviado ao site**; divergência do "Enviar fundo ao site": **Sem legendas nas imagens do site**.
 - Site antigo: "O site ainda não conhece "sem legendas" (plugin da CAMP 1.23.24): atualize o site; vai quando ele tiver".
 - "Legenda" aqui é só o texto embaixo da imagem no site. Não confundir com "ler e legendar" do CAMP Vision (dados lidos da folha).
+
+## Copiar folhas e seleção de folhas (15/11/2026)
+- Ações (Mais ⋯ do projeto): **Copiar folhas para outro projeto** e **Copiar um lote para outro projeto**; botões **Copiar as folhas marcadas** / **Copiar o lote**; confirmação **Copiar as folhas?** / **Criar o projeto e copiar?** (botões **Copiar** / **Criar e copiar**). Resultado: "**N folhas copiadas para F0xx-P0yyy**" (+ "(projeto novo)") com **Abrir o destino**. Sempre dizer que "as folhas daqui não mudam".
+- Destino: **Novo projeto… (o destino ainda não existe)**, com **Fundo (arquiteto)** só no copiar (mover é só no mesmo fundo). Parecido no fundo: **Usar este** / **É outro projeto mesmo: criar novo**.
+- Toda lista de folhas com caixa usa o mesmo componente: miniatura, código (D) e título, **Selecionar todos** · **Limpar** e "**N de M folhas marcadas**"; Shift+clique marca o intervalo. Não usar "Marcar todas"/"Desmarcar" em lista nova.
