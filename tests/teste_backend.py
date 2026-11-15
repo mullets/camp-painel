@@ -1647,7 +1647,7 @@ def filho(modo):
         from app.publicacao import condicoes_projeto, ELEGIVEL_LOCAL
         from app.publicacao_guiada import plano
         _vcopia = (_P(__file__).parent / "contrato" / "VERSAO").read_text(encoding="utf-8").strip()
-        ver("UX-08: o painel implementa o contrato da cópia literal (2.8 desde 04/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.8" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
+        ver("UX-08: o painel implementa o contrato da cópia literal (2.9 desde 11/11), a mesma versão da cópia literal do CV2 em tests/contrato/VERSAO", ctr.CONTRATO_PAINEL == "2.9" == _vcopia, f"{ctr.CONTRATO_PAINEL} × {_vcopia}")
         c = connect()
         c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F026','Sami Bussab','SBU',1)"); c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F026',1)")
         c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,autorizado_site) VALUES ('F026-P0001','F026',1,'Tarumã',1972,'São Paulo',1)")
@@ -7155,6 +7155,31 @@ def filho(modo):
         auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
         adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
         ver("o painel implementa a MESMA versão dos exemplos copiados do CV2", ctr.CONTRATO_PAINEL == (EX / "VERSAO").read_text(encoding="utf-8").strip(), ctr.CONTRATO_PAINEL)
+        # contrato 2.9 (§23 da cópia literal): o `destino_painel` do exemplo do CV2, como está no texto, é lido pelo painel (recusa com candidatos)
+        _doc = (EX / "contrato-painel.md").read_text(encoding="utf-8")
+        import re as _re29
+        _m29 = _re29.search(r'`destino_painel`.*?`(\{"id": 3, "para": "F010-P0731".*?\})`', _doc, _re29.S)
+        try:   # o exemplo quebra linha no meio do motivo (markdown): junta as linhas antes de ler
+            _dp = _j.loads(_re29.sub(r"\s*\n\s*", " ", _m29.group(1))) if _m29 else None
+        except ValueError:
+            _dp = None
+        ver("contrato 2.9: a cópia literal traz o exemplo de destino_painel {id, para, resultado, motivo, candidatos, em}",
+            isinstance(_dp, dict) and set(_dp) == {"id", "para", "resultado", "motivo", "candidatos", "em"}, str(_dp)[:200])
+        ver("contrato 2.9: a cópia literal pede ao painel os mesmos campos que /api/campvision/destinos manda na escolha da pessoa (pessoa, escolhido_em)",
+            '"pessoa": true' in _doc and '"escolhido_em"' in _doc, "")
+        if isinstance(_dp, dict):
+            from app import destino_auto as _da
+            k_ = connect(); k_.execute("INSERT OR IGNORE INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F010','Fundo Dez','FDZ',1)")
+            for n_, tit_ in ((174, "Concurso Público/Votorantim"), (201, "Paço Municipal"), (731, "Centro Cívico")):
+                k_.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F010',?)", (n_,))
+                k_.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo) VALUES (?,?,?,?)", (f"F010-P{n_:04d}", "F010", n_, tit_))
+            lid_ = k_.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa, status_json) VALUES ('L29','F010-P0174','/x/F010-P0174 - Concurso','revisao',?)",
+                              (_j.dumps({"status": "pronto", "destino_painel": _dp}),)).lastrowid
+            k_.commit()
+            rc_ = _da.recusa(k_, {"lote_id": lid_, "projeto_antigo": "F010-P0174", "projeto_novo": "F010-P0731"})
+            k_.close()
+            ver("contrato 2.9: o destino_painel do exemplo vira recusa no painel, com os candidatos do carimbo",
+                bool(rc_) and [x["codigo"] for x in rc_["candidatos"]] == ["F010-P0201", "F010-P0731"] and "pessoa" in rc_["motivo"], str(rc_)[:250])
         rq = http_["reservar"]; r = lan.post(rq["caminho"], json=rq["corpo"])
         import re as _re
         ver("reservar com o corpo REAL do CV2 devolve um código novo daquele fundo, com o título enviado", r.status_code == 200 and bool(_re.fullmatch(r"F026-P\d{4}", r.json().get("codigo", ""))) and r.json().get("titulo") == rq["corpo"]["titulo"], f"{r.status_code} {r.text[:160]}")
