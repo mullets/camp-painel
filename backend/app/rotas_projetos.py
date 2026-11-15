@@ -1100,6 +1100,11 @@ def criar_no_site(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
 class Publicacao(BaseModel):
     acao: str                 # publicar | rascunho | tirar_do_ar
     incluir_folhas: bool = True
+    somente: list[str] | None = None   # opcional (despublicar como tarefa): só estes códigos — "tentar de novo só o que falhou"
+
+
+# o que a tarefa em segundo plano mostra (chip do topo e cartão): "Despublicando F002-P0147 · 37 de 120"
+TITULO_TAREFA = {"publicar": "Publicando", "rascunho": "Voltando para rascunho", "tirar_do_ar": "Despublicando"}
 
 
 RESULTADO = {"publish": "publicados", "draft": "voltaram para rascunho", "private": "despublicados"}
@@ -1151,20 +1156,43 @@ def projeto_fechado(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> di
 
 
 @router.post("/projetos/{codigo}/publicar")
-def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin"))) -> dict:
+def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")), tarefa: int = 0):
     """Escreve no Tainacan o status do dossiê e das folhas.
 
     Três fases, para nunca segurar transação do banco durante a rede: (1) ler e validar; (2) falar com o WordPress;
     (3) gravar o resultado local numa conexão nova e curta. Publicar exige todas as condições de publicacao.condicoes_projeto.
+    ?tarefa=1 (despublicar projeto grande, 15/11): valida NA HORA (404/403/409 como antes) e roda as fases 2 e 3 em segundo plano
+    (tarefas.iniciar): devolve 202 {tarefa_id}; um 2º clique com a tarefa rodando devolve a mesma ({ja_rodando: true}). Sem o
+    parâmetro, o comportamento antigo (síncrono) fica igual para quem ainda chama assim.
     """
-    from .publicacao import conferida_sql, condicoes_projeto, motivos_bloqueio, persistir_resultado, status_recusa
-    from .wp import WP
+    prep = _preparar_publicacao(codigo, d, u)
+    if not prep["alvos"] and not prep["esconder"]:
+        return {"ok": False, "alterados": 0, "total": 0, "falhas": [],
+                "mensagem": "Este projeto ainda não tem registros no site: envie as folhas ao site (como rascunho) antes de mudar a publicação."}
+    if not tarefa:
+        return _executar_publicacao(codigo, d, u, prep)
+    return iniciar_publicacao_tarefa(codigo, d, u, prep)
+
+
+def iniciar_publicacao_tarefa(codigo: str, d: Publicacao, u: dict, prep: dict, fim=None):
+    """A mesma publicação, como tarefa (o tipo é um só por projeto: publicar e despublicar o mesmo projeto ao mesmo tempo não acontece)."""
+    from . import tarefas
+    wp = _conectar_wp()        # sem a senha do site: 503 NA HORA, com a explicação (não uma tarefa que falha depois)
+
+    def rodar(p) -> dict:
+        r = _executar_publicacao(codigo, d, u, prep, p, wp)
+        r = fim(r) if fim else r
+        return {**r, "projeto": codigo, "acao": d.acao}
+    return tarefas.iniciar("publicacao_site", codigo, u, rodar, titulo=f"{TITULO_TAREFA.get(d.acao, d.acao)} {codigo}")
+
+
+def _preparar_publicacao(codigo: str, d: Publicacao, u: dict) -> dict:
+    """Fase 1: ler e validar (conexão fechada antes da rede). Levanta 400/403/404/409 como sempre."""
+    from .publicacao import conferida_sql, condicoes_projeto, motivos_bloqueio, status_recusa
     alvo = {"publicar": "publish", "rascunho": "draft", "tirar_do_ar": "private"}.get(d.acao)
     if not alvo:
         raise HTTPException(400, "Ação inválida")
-    st_painel = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar"}[alvo]
-
-    # fase 1: ler e validar (conexão fechada antes da rede)
+    so = {c.strip().upper() for c in (d.somente or []) if c and c.strip()} or None
     con = connect()
     try:
         p = con.execute("SELECT * FROM projeto WHERE codigo=?", (codigo,)).fetchone()
@@ -1178,7 +1206,7 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
         if alvo != "publish" and u["papel"] != "master" and p["status_site"] == "no_ar":
             raise HTTPException(403, "Despublicar o que já está publicado exige o admin master")
         alvos = []
-        if p["tainacan_item_id"]:
+        if p["tainacan_item_id"] and (so is None or codigo in so):
             col = con.execute("SELECT colecao_id FROM wp_item WHERE id=?", (p["tainacan_item_id"],)).fetchone()
             alvos.append(("projeto", codigo, col[0] if col else 8007, p["tainacan_item_id"]))
         esconder = []   # folha retida que tem registro no site: publicar NUNCA a publica; ela vai (ou volta) para privado
@@ -1188,34 +1216,61 @@ def publicar(codigo: str, d: Publicacao, u: dict = Depends(auth.exige("admin")))
                                       AND {conferida_sql("i.")}
                                       AND NOT EXISTS (SELECT 1 FROM erro eb WHERE eb.codigo=i.codigo AND eb.situacao IN ('aberto','em_correcao')
                                                       AND eb.gravidade='bloqueia' AND eb.categoria<>'autoria_divergente')""", (codigo,)):   # 21/10 (4.1): folha com bloqueio fica de fora
+                if so is not None and i[0] not in so:
+                    continue
                 if i[3] and alvo == "publish":
                     esconder.append(("item", i[0], i[2] or 8013, i[1]))
                 else:
                     alvos.append(("item", i[0], i[2] or 8013, i[1]))
     finally:
         con.close()
-    if not alvos and not esconder:
-        return {"ok": False, "alterados": 0, "total": 0, "falhas": [],
-                "mensagem": "Este projeto ainda não tem registros no site: envie as folhas ao site (como rascunho) antes de mudar a publicação."}
+    return {"alvo": alvo, "alvos": alvos, "esconder": esconder}
 
-    # fase 2: rede
+
+def _conectar_wp():
+    from .wp import WP
     try:
-        wp = WP()
+        return WP()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(503, f"Não consegui acessar o WordPress ({str(e)[:160]}). Confira a senha de aplicação em Configurações.")
+
+
+def _executar_publicacao(codigo: str, d: Publicacao, u: dict, prep: dict, progresso=None, wp=None) -> dict:
+    """Fases 2 (rede) e 3 (gravar local). Com progresso (tarefa): "N de M folhas" e a folha atual; as falhas ficam listadas."""
+    from .publicacao import persistir_resultado
+    alvo, alvos, esconder = prep["alvo"], prep["alvos"], prep["esconder"]
+    st_painel = {"publish": "no_ar", "draft": "rascunho", "private": "fora_do_ar"}[alvo]
+
+    # fase 2: rede
+    wp = wp or _conectar_wp()
+    verbo = TITULO_TAREFA.get(d.acao, d.acao)
+    if progresso:
+        progresso.total(sum(1 for t in alvos + esconder if t[0] == "item"))
     sucessos, falhas, escondidas = [], [], []
     for tipo, cod, cid, wid in alvos:
+        if progresso:
+            progresso.passo(f"{verbo} a página do projeto" if tipo == "projeto" else f"{verbo} as folhas", cod)
         try:
             wp.atualizar_status_item(cid, wid, alvo)
             sucessos.append((tipo, cod, wid))
         except Exception as e:  # noqa: BLE001
             falhas.append({"codigo": cod, "erro": str(e)[:240]})
+            if progresso:
+                progresso.log(f"{cod}: não consegui ({str(e)[:120]})")
+        if progresso and tipo == "item":
+            progresso.feita()
     for tipo, cod, cid, wid in esconder:   # 21/10: folha retida estava sendo publicada junto com o projeto
+        if progresso:
+            progresso.passo("Escondendo as folhas retidas", cod)
         try:
             wp.atualizar_status_item(cid, wid, "private")
             escondidas.append((tipo, cod, wid))
         except Exception as e:  # noqa: BLE001
             falhas.append({"codigo": cod, "erro": "folha retida, não consegui escondê-la no site: " + str(e)[:200]})
+        if progresso:
+            progresso.feita()
+    if progresso:
+        progresso.passo("Registrando no painel")
 
     # fase 3: gravar o resultado local
     erro_db = persistir_resultado(sucessos, st_painel, alvo, "projeto", codigo, f"site_{d.acao}", u["email"],

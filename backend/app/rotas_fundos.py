@@ -567,11 +567,13 @@ def _msg_hub(base: str, hub: dict) -> str:
 class StatusFundo(BaseModel):
     acao: str            # no_ar | rascunho | fora_do_ar
     motivo: str | None = None
+    somente: list[str] | None = None   # opcional (tarefa): só estes códigos — "tentar de novo só o que falhou"
 
 
 @router.post("/fundos/{codigo}/status-site")
-def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("master"))) -> dict:
-    """Propaga para TODOS os dossiês e folhas do fundo no Tainacan. Exige master."""
+def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("master")), tarefa: int = 0):
+    """Propaga para TODOS os dossiês e folhas do fundo no Tainacan. Exige master.
+    ?tarefa=1 (15/11): valida na hora e propaga em segundo plano (202 {tarefa_id}, "N de M", 2º clique = a mesma tarefa)."""
     if d.acao not in ("no_ar", "rascunho", "fora_do_ar"):
         raise HTTPException(400, "Ação inválida")
     if d.acao == "fora_do_ar" and not d.motivo:
@@ -591,8 +593,15 @@ def status_site(codigo: str, d: StatusFundo, u: dict = Depends(auth.exige("maste
             con.commit()
     finally:
         con.close()
+    if tarefa:
+        from . import tarefas
+        verbo = {"no_ar": "Publicando", "rascunho": "Voltando para rascunho", "fora_do_ar": "Despublicando"}[d.acao]
+
+        def rodar(p) -> dict:
+            return {**propagar_status_fundo(codigo, d.acao, u["email"], p, d.somente), "fundo": codigo, "acao": d.acao}
+        return tarefas.iniciar("publicacao_fundo", codigo, u, rodar, titulo=f"{verbo} o fundo {codigo}")
     try:
-        return propagar_status_fundo(codigo, d.acao, u["email"])
+        return propagar_status_fundo(codigo, d.acao, u["email"], somente=d.somente)
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001

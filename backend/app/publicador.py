@@ -533,7 +533,7 @@ def renomear_agente_no_site(agente_id: int, novo_nome: str, ator: str) -> dict:
 
 
 @_nunca_convidado
-def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
+def propagar_status_fundo(codigo: str, acao: str, ator: str, progresso=None, somente=None) -> dict:
     """Propaga status remoto sem manter transação SQLite aberta durante chamadas de rede.
 
     Em WAL, uma conexão que leu dados e depois tenta virar escritora pode receber
@@ -541,7 +541,9 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
     1) lemos e fechamos o banco;
     2) atualizamos WordPress/Tainacan sem conexão SQLite aberta;
     3) abrimos uma conexão nova, curta, só para persistir o resultado local.
+    progresso (tarefa, 15/11): "N de M" e o registro atual. somente: só estes códigos (tentar de novo só o que falhou).
     """
+    so = {str(c).strip().upper() for c in (somente or []) if str(c).strip()} or None
     alvo = {"no_ar": "publish", "rascunho": "draft", "fora_do_ar": "private"}[acao]
     st_painel = acao
     feitos, falhas, tentados = 0, [], 0
@@ -607,9 +609,16 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
         alvos = []
 
     sucessos = []
+    if so is not None:
+        alvos = [a for a in alvos if a[1] in so]
+    if progresso:
+        progresso.total(len(alvos))
     if not falhas:
+        verbo = {"publish": "Publicando", "draft": "Voltando para rascunho", "private": "Despublicando"}[alvo]
         for tipo, cod, wid, cid, st in alvos:
             tentados += 1
+            if progresso:
+                progresso.passo(f"{verbo} o fundo {codigo}", cod)
             try:
                 wp.atualizar_status_item(cid, wid, st)
                 sucessos.append((tipo, cod, wid, st))
@@ -621,6 +630,8 @@ def propagar_status_fundo(codigo: str, acao: str, ator: str) -> dict:
                     "tainacan_item_id": wid,
                     "erro": str(e)[:220],
                 })
+            if progresso:
+                progresso.feita()
 
     completo = tentados > 0 and not falhas and feitos == tentados
 
