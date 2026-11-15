@@ -141,12 +141,56 @@ def copiar(con, codigos: list[str], destino: str, ator: str, motivo: str | None)
                     (novo, ator, json.dumps({"de": c, "para": novo, "motivo": motivo}, ensure_ascii=False)))
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('item',?,'copiada_para',?,?)",
                     (c, ator, json.dumps({"de": c, "para": novo, "motivo": motivo}, ensure_ascii=False)))
-        copiadas.append({"de": c, "para": novo})
+        copiadas.append({"de": c, "para": novo, "projeto_de": it["projeto_codigo"]})
     if copiadas:
-        de = sorted({x["de"][:10] for x in copiadas})
+        de = sorted({x["projeto_de"] for x in copiadas})
         con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folhas_copiadas',?,?)",
-                    (destino, ator, json.dumps({"de": de, "folhas": len(copiadas), "motivo": motivo}, ensure_ascii=False)))
+                    (destino, ator, json.dumps({"de": de, "folhas": len(copiadas), "motivo": motivo,
+                                                "por_projeto": {p: sum(1 for x in copiadas if x["projeto_de"] == p) for p in de}}, ensure_ascii=False)))
+        # 15/11 (Rafael: "dizendo que tal projeto foi copiado para x projeto"): o histórico do projeto de ORIGEM também diz para onde foram
+        for p in de:
+            if p != destino:
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'folhas_copiadas_para',?,?)",
+                            (p, ator, json.dumps({"para": destino, "folhas": sum(1 for x in copiadas if x["projeto_de"] == p), "motivo": motivo}, ensure_ascii=False)))
+    for x in copiadas:
+        x.pop("projeto_de", None)
     return {"copiadas": copiadas, "ignorados": ignorados, "destino": destino, "fundo": d["fundo_codigo"]}
+
+
+def _projeto_do_codigo(cod: str) -> str:
+    m = re.match(r"^(F\d{3}-P\d{4})-", cod or "")
+    return m.group(1) if m else (cod or "")[:10]
+
+
+def resumo_copias(con, codigo: str) -> dict:
+    """De onde vieram e para onde foram as cópias deste projeto (item.copiada_de nos dois sentidos), para a página do projeto.
+    {copias_de: [{projeto, titulo, folhas}], copias_para: [...], por_folha: {codigo_da_original: [codigos das cópias]}}.
+    A origem é o projeto ATUAL da folha original (se ela foi movida depois) ou, se ela não existe mais, o prefixo do código guardado."""
+    if "copiada_de" not in _colunas(con, "item"):
+        return {"copias_de": [], "copias_para": [], "por_folha": {}}
+    titulos = {}
+
+    def titulo(p):
+        if p not in titulos:
+            r = con.execute("SELECT titulo FROM projeto WHERE codigo=?", (p,)).fetchone()
+            titulos[p] = r[0] if r else None
+        return titulos[p]
+    de = {}
+    for cod, orig, proj_orig in con.execute("""SELECT i.codigo, i.copiada_de, o.projeto_codigo FROM item i LEFT JOIN item o ON o.codigo=i.copiada_de
+                                                WHERE i.projeto_codigo=? AND i.copiada_de IS NOT NULL""", (codigo,)):
+        p = proj_orig or _projeto_do_codigo(orig)
+        if p != codigo:
+            de[p] = de.get(p, 0) + 1
+    para, por_folha = {}, {}
+    for cod, proj, orig in con.execute("""SELECT c.codigo, c.projeto_codigo, c.copiada_de FROM item c
+                                           WHERE c.copiada_de IN (SELECT codigo FROM item WHERE projeto_codigo=?)
+                                              OR (c.copiada_de LIKE ? AND NOT EXISTS (SELECT 1 FROM item o WHERE o.codigo=c.copiada_de))
+                                           ORDER BY c.codigo""", (codigo, codigo + "-%")):
+        por_folha.setdefault(orig, []).append(cod)
+        if proj != codigo:
+            para[proj] = para.get(proj, 0) + 1
+    fmt = lambda m: [{"projeto": p, "titulo": titulo(p), "folhas": n} for p, n in sorted(m.items())]
+    return {"copias_de": fmt(de), "copias_para": fmt(para), "por_folha": por_folha}
 
 
 def criar_destino(con, n: NovoDestino, u: dict, fundo_obrigatorio: str | None = None, para: str = "copiar") -> dict:

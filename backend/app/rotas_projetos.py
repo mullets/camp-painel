@@ -528,7 +528,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                i.revisao, i.revisado_por, i.lote_id, i.pendencias, i.tipo_lido, i.giro_manual, i.codigo_anterior, i.recorte, i.alinhamento,
                i.tainacan_item_id AS tainacan_item_id_salvo, i.arquivo_jpg AS _arquivo_jpg, i.retida, i.retida_motivo, i.retida_por,
                i.duplicata_conferida_em, i.duplicata_conferida_de, i.parceiros, i.foto_ano, i.foto_estagio, i.foto_fotografo, i.ordem_manual,
-               i.arquivo_origem AS _arquivo_origem
+               i.arquivo_origem AS _arquivo_origem, i.copiada_de
           FROM item i
          WHERE i.projeto_codigo=?
          ORDER BY i.serie_codigo, i.sequencial
@@ -578,6 +578,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
                 "duplicata_conferida_em": local.get("duplicata_conferida_em"), "duplicata_conferida_de": local.get("duplicata_conferida_de"),
                 "ordem_manual": local.get("ordem_manual"),
                 "_arquivo_origem": local.get("_arquivo_origem"),
+                "copiada_de": local.get("copiada_de"),
                 "origem_catalogacao": "local+site",
             })
         else:
@@ -695,6 +696,14 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     pub = _pagina_publica_projeto(con, codigo, p["titulo"], p["cidade"])
     from .parceiros import resumo_projeto as _parceiros_do_projeto
     parceiros_projeto = _parceiros_do_projeto(con, codigo)              # 19/10: "Parceiros neste projeto" (distintos, com as disciplinas)
+    # 15/11 (Rafael: "dizendo que tal projeto foi copiado para x projeto"): de onde vieram e para onde foram as cópias (item.copiada_de nos
+    # dois sentidos). Campos novos e opcionais: copias_de / copias_para no projeto; copiada_para (códigos das cópias) em cada folha original.
+    from .copiar import resumo_copias
+    copias = resumo_copias(con, codigo)
+    for d in itens:
+        cps = copias["por_folha"].get(d.get("codigo"))
+        if cps:
+            d["copiada_para"] = cps
     con.close()
 
     md_completos = {k: v for k, v in md.items() if v not in (None, "", [], {})}
@@ -724,7 +733,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
             "fonte_visual": fonte_visual, "alteracoes_site": alteracoes_site, "site_url": site_url, "site_url_origem": pub["origem"], "pagina_status": pub["status"],
             "tainacan_url": site["url"] if site else None, "metadados_site": md_completos,
             "erros": erros, "pedidos": pedidos, "eventos": eventos, "livro_cv": livro_cv, "filas": filas, "parceiros": parceiros_projeto,
-            "decisoes_pendentes": decisoes_pend}
+            "decisoes_pendentes": decisoes_pend, "copias_de": copias["copias_de"], "copias_para": copias["copias_para"]}
 
 
 @router.get("/itens/{codigo}")

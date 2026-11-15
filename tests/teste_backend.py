@@ -31,6 +31,7 @@ MODOS_RAPIDOS |= {"retirar_copias"}   # CAMP-DUP 10/11/2026: retirar do sistema 
 MODOS_RAPIDOS |= {"despublicar_tarefa"}   # 15/11/2026: despublicar projeto/fundo grande vira tarefa em segundo plano (linha própria)
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
 MODOS_RAPIDOS |= {"copiar_folhas"}   # 15/11/2026: copiar folhas para outro projeto, com projeto novo na hora (linha própria)
+MODOS_RAPIDOS |= {"copias_visiveis"}   # 15/11/2026: o projeto mostra de onde vieram e para onde foram as cópias (linha própria)
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 
 
@@ -17050,6 +17051,79 @@ def filho(modo):
         ver("tela: 'Copiar folhas para outro projeto', 'Copiar um lote' e 'Novo projeto…' no destino", "data-mais=\"copiar\"" in html.replace("'", '"') or "it('copiar'" in html)
         c.close()
         for l in res: print(l)
+    elif modo == "copias_visiveis":
+        # 15/11/2026 (Rafael: o CAMP Vision dividiu o "Memorial Residências" nas casas; quer manter as casas E ter cópias no memorial,
+        # "dizendo que tal projeto foi copiado para x projeto"): a página do projeto diz de onde vieram e para onde foram as cópias
+        # (copias_de / copias_para no detalhe, com título e quantas folhas), cada folha original lista as cópias (copiada_para), a cópia
+        # mostra a original (copiada_de) e o histórico dos DOIS projetos registra a cópia.
+        init_db(); aplicar_migracoes()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        for f in ("F010", "F014"):
+            c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo) VALUES (?,?)", (f, "Arquiteto " + f))
+        for f, n in (("F010", 732), ("F010", 735), ("F010", 736), ("F014", 63)):
+            c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, n))
+        for cod, t in (("F010-P0732", "Memorial Residências"), ("F010-P0735", "Casa de praia Yves E. Josquim"), ("F010-P0736", "Casa Moraes"),
+                       ("F014-P0063", "Casa Outro Fundo")):
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, cod[:4], int(cod[-4:]), t))
+        D = lambda p, n: f"{p}-1970-S01-D{n:05d}"
+        for p, n in (("F010-P0735", 3), ("F010-P0736", 2), ("F014-P0063", 1)):
+            for k in range(1, n + 1):
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,status_site,revisao) VALUES (?,?,?,?,?,?,?)",
+                          (D(p, k), p, "S01", k, f"Planta {k}", "nao_publicado", "conferida"))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r1 = adm.post("/api/itens/copiar", json={"itens": [D("F010-P0735", k) for k in (1, 2, 3)] + [D("F010-P0736", 1), D("F010-P0736", 2)], "destino": "F010-P0732"})
+        r2 = adm.post("/api/itens/copiar", json={"itens": [D("F010-P0735", 1)], "destino": "F014-P0063"})
+        ver("copiou (5 folhas de duas casas para o memorial; 1 para outro fundo)", r1.status_code == 200 and len(r1.json()["copiadas"]) == 5
+            and r2.status_code == 200 and len(r2.json()["copiadas"]) == 1, r1.text[:200] + r2.text[:200])
+        det = lambda p: adm.get(f"/api/projetos/{p}/detalhe").json()
+        m, casa, casa2 = det("F010-P0732"), det("F010-P0735"), det("F010-P0736")
+        ver("destino: copias_de lista cada projeto de origem com título e quantas folhas",
+            m.get("copias_de") == [{"projeto": "F010-P0735", "titulo": "Casa de praia Yves E. Josquim", "folhas": 3},
+                                   {"projeto": "F010-P0736", "titulo": "Casa Moraes", "folhas": 2}] and m.get("copias_para") == [], str(m.get("copias_de")) + str(m.get("copias_para")))
+        ver("origem: copias_para lista cada destino com título e quantas folhas (inclusive em outro fundo)",
+            casa.get("copias_para") == [{"projeto": "F010-P0732", "titulo": "Memorial Residências", "folhas": 3},
+                                        {"projeto": "F014-P0063", "titulo": "Casa Outro Fundo", "folhas": 1}] and casa.get("copias_de") == [],
+            str(casa.get("copias_para")))
+        ver("a outra casa: 2 folhas copiadas para o memorial", casa2.get("copias_para") == [{"projeto": "F010-P0732", "titulo": "Memorial Residências", "folhas": 2}], str(casa2.get("copias_para")))
+        fm = {x["codigo"]: x for x in m["itens"]}; fc = {x["codigo"]: x for x in casa["itens"]}
+        ver("cada cópia no destino diz de qual folha veio (copiada_de)", sorted(x.get("copiada_de") or "" for x in fm.values())
+            == sorted([D("F010-P0735", k) for k in (1, 2, 3)] + [D("F010-P0736", 1), D("F010-P0736", 2)]), str([x.get("copiada_de") for x in fm.values()]))
+        ver("cada original lista as cópias (copiada_para), nos dois destinos",
+            fc[D("F010-P0735", 1)].get("copiada_para") == ["F010-P0732-1970-S01-D90001", "F014-P0063-1970-S01-D90001"]
+            and fc[D("F010-P0735", 3)].get("copiada_para") == ["F010-P0732-1970-S01-D90003"], str({k: v.get("copiada_para") for k, v in fc.items()}))
+        ver("folha sem cópia não ganha o campo", all("copiada_para" not in x for x in det("F014-P0063")["itens"]), str(det("F014-P0063")["itens"])[:200])
+        # cópia dentro do MESMO projeto não conta como "de outro projeto"
+        adm.post("/api/itens/copiar", json={"itens": [D("F010-P0736", 1)], "destino": "F010-P0736"})
+        casa2 = det("F010-P0736")
+        ver("cópia no mesmo projeto não aparece como 'de/para outro projeto'", casa2.get("copias_de") == [] and casa2.get("copias_para") == [{"projeto": "F010-P0732", "titulo": "Memorial Residências", "folhas": 2}],
+            str(casa2.get("copias_de")) + str(casa2.get("copias_para")))
+        # a original movida depois: a origem é o projeto atual dela
+        c.execute("UPDATE item SET projeto_codigo='F010-P0735', sequencial=9, codigo='F010-P0735-1970-S01-D00009' WHERE codigo=?", (D("F010-P0736", 2),))
+        c.execute("UPDATE item SET copiada_de='F010-P0735-1970-S01-D00009' WHERE copiada_de=?", (D("F010-P0736", 2),)); c.commit()
+        m = det("F010-P0732")
+        ver("original movida: a origem é o projeto onde ela está agora", {x["projeto"]: x["folhas"] for x in m.get("copias_de") or []} == {"F010-P0735": 4, "F010-P0736": 1}, str(m.get("copias_de")))
+        # histórico dos dois lados (eventos de projeto)
+        ev = lambda p, t: [_j.loads(r[0]) for r in c.execute("SELECT detalhe FROM evento WHERE entidade='projeto' AND codigo=? AND tipo=? ORDER BY id", (p, t))]
+        ver("histórico do destino: 'folhas_copiadas' com quantas de cada origem", ev("F010-P0732", "folhas_copiadas")[0].get("por_projeto") == {"F010-P0735": 3, "F010-P0736": 2},
+            str(ev("F010-P0732", "folhas_copiadas")))
+        ver("histórico da origem: 'folhas_copiadas_para' com o destino e quantas folhas",
+            [(x["para"], x["folhas"]) for x in ev("F010-P0735", "folhas_copiadas_para")] == [("F010-P0732", 3), ("F014-P0063", 1)]
+            and [(x["para"], x["folhas"]) for x in ev("F010-P0736", "folhas_copiadas_para")] == [("F010-P0732", 2)], str(ev("F010-P0735", "folhas_copiadas_para")))
+        ver("o histórico na página da origem mostra a cópia", any(e["tipo"] == "folhas_copiadas_para" for e in det("F010-P0735")["eventos"]))
+        ver("cópia no mesmo projeto não grava 'copiou para' nele mesmo", len(ev("F010-P0736", "folhas_copiadas_para")) == 1, str(ev("F010-P0736", "folhas_copiadas_para")))
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: caixas 'Folhas copiadas de/para outros projetos' e frases do histórico",
+            "Folhas copiadas de outros projetos" in html and "Folhas copiadas para outros projetos" in html and "folhas_copiadas_para:" in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "ordem_folhas":
         # 06/11 ("queria poder organizar as fotos arrastando pra nova ordem"): ordem das folhas escolhida à mão, numa coluna própria
         # (item.ordem_manual). O código D nunca muda; folha de outro projeto recusa tudo; voltar à ordem do código limpa a coluna.
@@ -19164,6 +19238,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Copiar folhas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Cópias visíveis (15/11, Rafael: \"dizendo que tal projeto foi copiado para x projeto\"): de onde vieram e para onde foram, nos dois projetos")
+rc, out = rodar("copias_visiveis", f"{tmp}/copias_visiveis.db")
+if rc != 0: ok(False, f"teste copias_visiveis não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cópias visíveis: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 rc, out = rodar("despublicar_tarefa", f"{tmp}/despublicar_tarefa.db")
 if rc != 0: ok(False, f"teste despublicar_tarefa não rodou -> {out[-1500:]}")
