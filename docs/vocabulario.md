@@ -223,6 +223,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Operador e leitura não veem nomes de sistema: nada de "Tainacan", "WordPress" ou "logado no WordPress" nos textos deles. Diga "o site", "a página pública", "só a equipe vê" (rascunho) e "retirado do público" (despublicado). O `check_ui` reprova "logado no WordPress".
 - A tela "Máquinas e site" e o resumo de máquinas do topo (o botão **Estado dos sistemas**) são só para admin. O alerta que impede o trabalho (QNAP, CAMP Vision, site) aparece para todos (redesenho §4).
 - Em texto novo, prefira "página pública" / "publicado" a "no site" quando falar do que o visitante vê (exceção: a situação **No site**, acima).
+- Mover folhas, mover um lote ou mesclar (15/11/2026): o resultado diz "**N folhas retiradas do público no projeto antigo**" (o registro antigo fica privado no site; nada é apagado), "**N folhas saem do público no projeto antigo em segundo plano**" (lote grande) e "**N folhas ainda por retirar do público (o painel tenta de novo sozinho)**" (site sem resposta).
 
 ## Conferência (UX-10, 27/10/2026)
 - **Tela cheia** / **Sair da tela cheia**: o botão (e a tecla F) da gaveta "Revisar folha". "Iniciar conferência" / "Continuar conferência"
