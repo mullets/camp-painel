@@ -6,6 +6,8 @@
 //  3) "Novo projeto…" em OUTRO fundo (lista de fundos): confirma, cria o projeto com o próximo P do fundo e copia; a mensagem diz onde;
 //     o banco tem as cópias no projeto novo e a original intacta;
 //  4) o mesmo componente em "Mover folhas" (miniaturas; "Novo projeto…" sem escolher fundo: mover é só no mesmo fundo);
+//  3b) cópias visíveis: "Folhas copiadas de/para outros projetos" na Visão geral dos dois projetos, selos "cópia de …"/"copiada para …" nos
+//      cartões, a linha no Revisar folha e o histórico dos dois lados (print copias-de-1366.png do destino);
 //  5) print 1366 claro do seletor; nenhum erro de JavaScript.
 // Uso: bash tests/rodar_um.sh tests/navegador_copiar_folhas.js   (ou com CAMP_DB_PATH/CAMP_BASE de um servidor próprio)
 const { execFileSync } = require('child_process');
@@ -102,13 +104,42 @@ async function abrirAcao(pg, acao) {
     const txt = await pg.textContent('#conf-ov');
     chk(new RegExp(esperado).test(txt) && /5 folhas/.test(txt) && /não mudam/.test(txt), 'a confirmação diz o projeto novo (próximo P do fundo), quantas folhas e que as daqui não mudam', txt.slice(0, 300));
     await pg.click('#conf-ov [data-conf="sim"]');
-    chk(await espera(async () => new RegExp(`5 folhas copiadas para ${esperado}`).test(await pg.evaluate(() => (document.getElementById('toast') || {}).textContent || ''))), `mensagem: "5 folhas copiadas para ${esperado} (projeto novo)"`,
+    chk(await espera(async () => new RegExp(`5 folhas copiadas de ${P} para ${esperado}`).test(await pg.evaluate(() => (document.getElementById('toast') || {}).textContent || ''))), `mensagem com os dois projetos: "5 folhas copiadas de ${P} para ${esperado} (projeto novo)"`,
       await pg.evaluate(() => (document.getElementById('toast') || {}).textContent || ''));
     chk(um("SELECT fundo_codigo FROM projeto WHERE codigo=?", esperado) === 'F023' && +um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND copiada_de LIKE ?", esperado, P + '-%') === 5,
       'o banco tem o projeto novo no outro fundo com as 5 cópias');
     chk(+um("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", P) === 5 && +um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND revisao='pendente' AND status_site='nao_publicado'", P) === 5,
       'as 5 originais continuam no projeto, como estavam');
     chk(+um("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND codigo LIKE ?", esperado, esperado + '-1976-S03-D9%') === 5, 'as cópias têm o código do destino (faixa do painel, D90001+)');
+    // 3b) cópias visíveis nos dois projetos (15/11, Rafael: "dizendo que tal projeto foi copiado para x projeto")
+    const abrirPj = async (c, aba) => { await pg.evaluate(([c, a]) => { closeDrawer(true); nav('projeto/' + c); showProjeto(c, a); }, [c, aba]);
+      await pg.waitForSelector('#pd .pj-folhas .thumb', { timeout: 15000, state: 'attached' }); await pg.waitForTimeout(500); };
+    const txtSel = sel => pg.evaluate(s => [...document.querySelectorAll(s)].map(x => x.textContent.replace(/\s+/g, ' ').trim()).join(' | '), sel);
+    await abrirPj(esperado, 'itens');
+    const caixaDe = await txtSel('#pd .pj-vg-lado .pj-copias-proj');
+    chk(/Folhas copiadas de outros projetos/.test(caixaDe) && /5 folhas de Casa das Fotos a Copiar \(F026-P0173\)/.test(caixaDe) && !/copiadas para outros/.test(caixaDe),
+      'destino (Visão geral): "Folhas copiadas de outros projetos" com "5 folhas de Casa das Fotos a Copiar (F026-P0173)"', caixaDe);
+    chk(await pg.$eval(`#pd .pj-copias-proj a[href="#projeto/${P}"]`, a => !!a).catch(() => false), 'destino: o projeto de origem tem link');
+    const tagsDe = await pg.$$eval('#pd .pj-folhas .thumb a.pj-copiada-de', x => x.map(a => [a.textContent.trim(), a.getAttribute('href')]));
+    chk(tagsDe.length === 5 && tagsDe.some(([t, h]) => t === `cópia de ${P} · D00001` && h === '#item/' + D(1)), 'destino: cada cartão com o selo "cópia de F026-P0173 · D00001" (link para a original)', JSON.stringify(tagsDe));
+    if (PRINTS) { await pg.evaluate(() => { const t = document.getElementById('toast'); if (t) t.classList.remove('on'); document.querySelector('#pd .pj-copias-proj').scrollIntoView({ block: 'center' }); }); await pg.waitForTimeout(300);
+      await pg.screenshot({ path: path.join(PRINTS, 'copias-de-1366.png') }); }
+    await pg.evaluate(() => document.querySelector('#pd .pj-folhas .thumb[data-rev-abrir]').click());
+    chk(await espera(async () => /Cópia de F026-P0173 · D0000\d \(a original continua lá\)/.test(await txtSel('#d-body .rv-copia-proj'))), 'Revisar folha (cópia): "Cópia de F026-P0173 · D0000N (a original continua lá)"', await txtSel('#d-body .rv-copia-proj'));
+    await abrirPj(P, 'itens');
+    const caixaPara = await txtSel('#pd .pj-vg-lado .pj-copias-proj');
+    chk(new RegExp(`Folhas copiadas para outros projetos.*5 folhas copiadas para Casa Copiada no Outro Fundo \\(${esperado}\\)`).test(caixaPara) && !/copiadas de outros/.test(caixaPara),
+      `origem (Visão geral): "Folhas copiadas para outros projetos" com "5 folhas copiadas para Casa Copiada no Outro Fundo (${esperado})"`, caixaPara);
+    const tagsPara = await pg.$$eval('#pd .pj-folhas .thumb a.pj-copiada-para', x => x.map(a => a.textContent.trim()));
+    chk(tagsPara.length === 5 && tagsPara.every(t => t === `copiada para ${esperado}`), `origem: cada cartão com o selo "copiada para ${esperado}"`, JSON.stringify(tagsPara));
+    await pg.evaluate(() => document.querySelector('#pd .pj-folhas .thumb[data-rev-abrir]').click());
+    chk(await espera(async () => new RegExp(`Copiada para ${esperado} · D9000\\d`).test(await txtSel('#d-body .rv-copia-proj'))), 'Revisar folha (original): "Copiada para … · D9000N"', await txtSel('#d-body .rv-copia-proj'));
+    await pg.evaluate(c => { closeDrawer(true); showProjeto(c, 'historico'); }, P); await pg.waitForTimeout(800);
+    const hist = await txtSel('#pd .hist');
+    chk(new RegExp(`copiou folhas do projeto ${P} para outro projeto.*Copiou 5 folhas para ${esperado}`).test(hist), `histórico da origem: "copiou folhas do projeto … para outro projeto" · "Copiou 5 folhas para ${esperado}"`, hist.slice(0, 300));
+    await pg.evaluate(c => { showProjeto(c, 'historico'); }, esperado); await pg.waitForTimeout(800);
+    const histD = await txtSel('#pd .hist');
+    chk(new RegExp(`Recebeu 5 folhas copiadas de ${P}`).test(histD), `histórico do destino: "Recebeu 5 folhas copiadas de ${P}"`, histD.slice(0, 300));
     // 4) o mesmo componente no Mover
     await abrirAcao(pg, 'mover');
     chk(await pg.$$eval('#d-body .sf-it .sf-mini img', x => x.length) === 5 && !!(await pg.$('#d-body [data-sf-todas]')), 'Mover folhas: as mesmas miniaturas e "Selecionar todos"');
