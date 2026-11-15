@@ -78,6 +78,7 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
     equiv = {r[0]: r[1] for r in con.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
 
     # ---- projetos ----
+    from . import tipologia as tp   # CAMP-FIX 15/11: facetas sem o caminho do pai ("Habitação > Residência unifamiliar" -> "Residência unifamiliar")
     for it in ([] if so_itens else con.execute("SELECT * FROM wp_item WHERE colecao_id=?", (COL_PROJETOS,)).fetchall()):
         md = json.loads(it["metadados"] or "{}")
         cod, f, p = detectar_codigo(md.get("Código de Catalogação", ""), it["titulo"] or "", it["slug"] or "")
@@ -104,17 +105,17 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
                            situacao_obra=COALESCE(NULLIF(situacao_obra,''),?),
                            atualizado_em=datetime('now') WHERE codigo=?""",
                         (it["id"], status, int(status == "no_ar"), md.get("Cidade"), md.get("Endereço"), md.get("Cliente (divulgável)"),
-                         md.get("Programa / uso"), md.get("Descrição"), ano, md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")),
-                         md.get("Natureza do trabalho") or None, md.get("Modalidade") or None, md.get("Situação da obra") or None, p))
+                         tp.normalizar(md.get("Programa / uso")), md.get("Descrição"), ano, md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")),
+                         tp.normalizar(md.get("Natureza do trabalho")), tp.normalizar(md.get("Modalidade")), tp.normalizar(md.get("Situação da obra")), p))
             n["projetos_atualizados"] += 1
         else:
             con.execute("""INSERT INTO projeto (codigo, fundo_codigo, numero, titulo, ano, cidade, endereco_obra, cliente, tipologia,
                            ambito_conteudo, autorizado_site, status_site, tainacan_item_id, autoria, papel_no_projeto,
                            natureza, modalidade, situacao_obra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (p, f, numero, titulo, ano, md.get("Cidade"), md.get("Endereço"), md.get("Cliente (divulgável)"),
-                         md.get("Programa / uso"), md.get("Descrição"), int(status == "no_ar"), status, it["id"],
+                         tp.normalizar(md.get("Programa / uso")), md.get("Descrição"), int(status == "no_ar"), status, it["id"],
                          md.get("Autoria do projeto") or None, papel_do_site(md.get("Papel no projeto")),
-                         md.get("Natureza do trabalho") or None, md.get("Modalidade") or None, md.get("Situação da obra") or None))
+                         tp.normalizar(md.get("Natureza do trabalho")), tp.normalizar(md.get("Modalidade")), tp.normalizar(md.get("Situação da obra"))))
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('projeto',?,'importado','site',?)",
                         (p, json.dumps({"tainacan_id": it["id"]})))
             n["projetos_novos"] += 1

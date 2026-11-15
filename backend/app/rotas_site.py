@@ -70,6 +70,8 @@ def enviar_correcoes_pendentes(tarefa: int = 1, u: dict = Depends(auth.exige("ad
     from . import fila_correcao_site as fila, tarefas
 
     def rodar(p) -> dict:
+        # CAMP-FIX 15/11: antes de contar, fecha o que já está igual no site (só banco local): não conta no total nem como falha
+        ja_iguais = fila.fechar_sem_diferenca(u["email"]) if not fila_desligada() else []
         con = connect()
         try:
             antes = fila.contar(con)
@@ -78,9 +80,13 @@ def enviar_correcoes_pendentes(tarefa: int = 1, u: dict = Depends(auth.exige("ad
         p.total(min(antes["prontas"], fila.LOTE_MAX))
         p.passo("Enviando ao site as correções que estão esperando")
 
-        def andou(codigo, ok, erro, na_fila=False):
+        def andou(codigo, ok, erro, na_fila=False, igual=False):
             p.passo("Enviando ao site as correções que estão esperando", codigo)
             # UX-47: erro passageiro (site lento) não é falha: a escrita continua na fila e sai na próxima tentativa
+            # CAMP-FIX 15/11: nada diferente do site não é falha: "já estava igual no site"
+            if igual:
+                p.feita(1, f"{codigo}: já estava igual no site")
+                return
             p.feita(1, f"{codigo}: {'enviada' if ok else ('o site não respondeu a tempo, continua na fila: ' if na_fila else 'falhou: ') + limpar(erro)}")
 
         r = fila.executar_pendentes(limite=fila.LOTE_MAX, orcamento_s=900.0, forcar_manual=True, ator=u["email"],
@@ -94,25 +100,42 @@ def enviar_correcoes_pendentes(tarefa: int = 1, u: dict = Depends(auth.exige("ad
         try:
             depois = fila.contar(con)
             falhas = [{"codigo": f["codigo"], "erro": limpar(f["erro"])} for f in r["falhas"]]
+            iguais = ja_iguais + list(r.get("iguais") or [])
             con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('site','correcoes','site_correcoes_enviadas',?,?)",
-                        (u["email"], json.dumps({"enviadas": len(r["enviadas"]), "falharam": len(falhas),
+                        (u["email"], json.dumps({"enviadas": len(r["enviadas"]), "falharam": len(falhas), "ja_iguais": len(iguais),
                                                  "ainda_na_fila": depois["total"], "manual": True,
                                                  "falhas": falhas[:50]}, ensure_ascii=False)))
             con.commit()
         finally:
             con.close()
-        n_env, n_fal = len(r["enviadas"]), len(falhas)
-        msg = (f"Envio ao site: {n_env} {'enviada' if n_env == 1 else 'enviadas'}, {n_fal} {'falhou' if n_fal == 1 else 'falharam'}, "
-               f"{depois['total']} ainda na fila")
-        if not n_env and not n_fal:
-            msg = f"Nada saiu nesta rodada: nenhuma correção pronta para enviar ({depois['total']} ainda na fila)"
-        return {"ok": not falhas, "mensagem": msg, "enviadas": r["enviadas"], "falhas": falhas,
+        n_env, n_fal, n_ig = len(r["enviadas"]), len(falhas), len(iguais)
+        esperando = depois["total"] - depois["prontas"]
+        # CAMP-FIX 15/11: "ainda na fila" explicado: as que falharam esperam a próxima tentativa; as prontas que sobraram passaram do teto da rodada
+        resto = f"{depois['total']} ainda na fila"
+        detalhes = []
+        if esperando:
+            detalhes.append(f"{esperando} {'espera' if esperando == 1 else 'esperam'} a próxima tentativa")
+        if depois["prontas"]:
+            detalhes.append(f"{depois['prontas']} {'pode' if depois['prontas'] == 1 else 'podem'} sair já: no máximo {fila.LOTE_MAX} por rodada, envie de novo")
+        if detalhes:
+            resto += f" ({'; '.join(detalhes)})"
+        ig = f", {n_ig} {'já estava igual' if n_ig == 1 else 'já estavam iguais'} no site" if n_ig else ""
+        msg = f"Envio ao site: {n_env} {'enviada' if n_env == 1 else 'enviadas'}{ig}, {n_fal} {'falhou' if n_fal == 1 else 'falharam'}, {resto}"
+        if not n_env and not n_fal and not n_ig:
+            msg = f"Nada saiu nesta rodada: nenhuma correção pronta para enviar ({resto})"
+        return {"ok": not falhas, "mensagem": msg, "enviadas": r["enviadas"], "falhas": falhas, "ja_iguais": iguais,
                 "na_fila": [{"codigo": x["codigo"], "erro": limpar(x["erro"])} for x in r.get("na_fila") or []],
                 "ainda_na_fila": depois["total"], "esperando_proxima_tentativa": depois["total"] - depois["prontas"],
                 "proxima_em": depois["proxima_em"]}
 
     with _INICIO_RODADA:                        # dois cliques ao mesmo tempo: uma tarefa só
         return tarefas.iniciar("enviar_correcoes", "site", u, rodar)
+
+
+def fila_desligada() -> bool:
+    """site.enviar_correcoes_sozinho = 0: o botão não mexe em nada (nem fecha as que já estão iguais)."""
+    from .alteracoes_site import enviar_sozinho
+    return not enviar_sozinho()
 
 
 def limpar(erro) -> str:

@@ -74,10 +74,19 @@ def _norm(t: str) -> str:
     return " ".join(unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode().lower().split())
 
 
+def _ultimo_nivel(x: str) -> str:
+    """CAMP-FIX 15/11: o site devolve o termo filho com o caminho ("Habitação > Residência unifamiliar", value_as_string do Tainacan);
+    a importação gravava assim e o envio não achava o termo. O termo é o último nível do caminho."""
+    for sep in (">", "›"):
+        if sep in x:
+            x = x.rsplit(sep, 1)[-1]
+    return x.strip()
+
+
 def separar(valor: str | None) -> list[str]:
     vistos, out = set(), []
-    for x in str(valor or "").replace(",", ";").split(";"):
-        x = x.strip()
+    for x in str(valor or "").replace(",", ";").replace("|", ";").split(";"):
+        x = _ultimo_nivel(x)
         if x and _norm(x) not in vistos:
             vistos.add(_norm(x)); out.append(x)
     return out
@@ -137,3 +146,9 @@ def ids_do_site(con, chave: str, valor: str | None) -> list[int] | None:
             return None
         ids.append(t[1])
     return ids
+
+
+def normalizar(valor: str | None) -> str | None:
+    """O valor de uma faceta como o painel guarda: nomes separados por "; ", sem o caminho do pai (vazio: None)."""
+    v = "; ".join(separar(valor))
+    return v or None

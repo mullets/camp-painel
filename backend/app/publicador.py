@@ -378,8 +378,77 @@ def gravar_metadado_dossie(con, wp, iid: int, nome: str, valor) -> None:
         raise MetadadoAusente(f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): o valor não foi gravado.")
     col = {v_: k_ for k_, v_ in CAMPOS_PROJETO_SITE.items()}.get(nome)
     if col in ("tipologia", "natureza", "modalidade", "situacao_obra"):
-        valor = _valor_para_site(con, col, valor, tipo)   # B3: taxonomia do site recebe id(s)
+        valor = _valor_para_site(con, col, valor, tipo, wp)   # B3: taxonomia do site recebe id(s)
+    elif nome in TAXONOMIAS_DOSSIE:
+        valor = _termo_do_dossie(con, wp, iid, nome, valor)   # CAMP-FIX 15/11: Fundo/Arquiteto vão pelo id do termo, nunca pelo nome
     wp.definir_metadado(iid, mid, valor)
+
+
+# CAMP-FIX 15/11 (F024-P0001/P0002: "Tainacan recusou metadado 8403 … termo não encontrado … 'Paulo Mendes da Rocha'"): os metadados
+# Fundo e Arquiteto do dossiê são de taxonomia (Fundos 8019 e Arquitetos 8021 no site, termos fechados). Mandar o NOME só funciona se o
+# Tainacan achar o termo; o painel resolve antes o id (espelho, depois o próprio site) e, sem termo, diz o que fazer em vez do 400 cru.
+# O painel NÃO cria aqui o termo do arquiteto/fundo: criar esse termo cria a página do arquiteto no site (auto_create_hub), e isso é o
+# "Enviar fundo ao site" (criar_fundo_no_site), que a pessoa pede na tela.
+TAXONOMIAS_DOSSIE = {"Fundo": "Fundos", "Arquiteto": "Arquitetos"}
+
+
+class TermoAusente(RuntimeError):
+    """O termo (arquiteto ou fundo) não existe no site: nada foi gravado nesse metadado; a mensagem diz o que fazer."""
+
+
+def _nome_termo(t) -> str:
+    return " ".join(str(t or "").split()).casefold()
+
+
+def termo_no_site(con, wp, taxonomia_nome: str, nome: str) -> int | None:
+    """Id do termo `nome` na taxonomia do site: primeiro o espelho (sem diferença de maiúsculas/espaços), depois a lista de termos do
+    próprio site (o que achar lá entra no espelho). Não achou: None. Falha ao ler o site sobe (quem chama não grava às cegas)."""
+    tid = _tax(con, taxonomia_nome)
+    if not tid or not str(nome or "").strip():
+        return None
+    alvo = _nome_termo(nome)
+    for r in con.execute("SELECT id, nome FROM wp_termo WHERE taxonomia_id=?", (tid,)).fetchall():
+        if _nome_termo(r[1]) == alvo:
+            return int(r[0])
+    listar = getattr(wp, "termos", None)
+    if not listar:
+        return None
+    for t in listar(tid) or []:
+        if t.get("id") and _nome_termo(t.get("name")) == alvo:
+            con.execute("INSERT OR REPLACE INTO wp_termo (id, taxonomia_id, nome, slug, pai_id, json) VALUES (?,?,?,?,?,?)",
+                        (int(t["id"]), tid, t.get("name"), t.get("slug"), int(t.get("parent") or 0) or None, json.dumps(t, ensure_ascii=False)))
+            return int(t["id"])
+    return None
+
+
+def espelhar_taxonomia(con, wp, taxonomia_nome: str) -> int:
+    """Relê do site todos os termos de UMA taxonomia (com o pai) e atualiza o espelho; devolve quantos. Sem a taxonomia no espelho ou
+    sem `wp.termos`: 0. Falha ao ler o site sobe."""
+    tid = _tax(con, taxonomia_nome)
+    listar = getattr(wp, "termos", None)
+    if not tid or not listar:
+        return 0
+    n = 0
+    for t in list(listar(tid) or []):
+        if not t.get("id"):
+            continue
+        con.execute("INSERT OR REPLACE INTO wp_termo (id, taxonomia_id, nome, slug, pai_id, json) VALUES (?,?,?,?,?,?)",
+                    (int(t["id"]), tid, t.get("name"), t.get("slug"), int(t.get("parent") or 0) or None, json.dumps(t, ensure_ascii=False)))
+        n += 1
+    return n
+
+
+def _termo_do_dossie(con, wp, iid: int, nome: str, valor):
+    """Fundo/Arquiteto: id do termo como vai ao site. Já é id (número): vai como está. Nome: resolve; sem termo no site: TermoAusente."""
+    if isinstance(valor, int) or str(valor).strip().isdigit():
+        return int(valor)
+    tid = termo_no_site(con, wp, TAXONOMIAS_DOSSIE[nome], str(valor))
+    if tid:
+        return tid
+    r = con.execute("SELECT fundo_codigo FROM projeto WHERE tainacan_item_id=? ORDER BY codigo LIMIT 1", (iid,)).fetchone()
+    fundo = r[0] if r else "do projeto"
+    quem = "O arquiteto" if nome == "Arquiteto" else "O fundo"
+    raise TermoAusente(f"{quem} “{valor}” não existe no site: envie o fundo {fundo} ao site primeiro (Fundos → {fundo} → Enviar fundo ao site)")
 
 
 COL_ACERVO = 8013
@@ -402,12 +471,16 @@ def papel_do_site(texto: str | None) -> str | None:
     return t
 
 
-def _valor_para_site(con, campo: str, v, tipo_meta: str | None):
-    """B3: faceta de tipologia num metadado de taxonomia vai como id(s) do termo no site (o Tainacan não aceita termo novo)."""
+def _valor_para_site(con, campo: str, v, tipo_meta: str | None, wp=None):
+    """B3: faceta de tipologia num metadado de taxonomia vai como id(s) do termo no site (o Tainacan não aceita termo novo).
+    CAMP-FIX 15/11: valor com o caminho do pai ("Habitação > Residência unifamiliar") vale o último nível; termo que falta no espelho
+    é procurado na lista do próprio site (com `wp`) antes de recusar. O painel não cria termo nessas taxonomias (são do plugin do site)."""
     from . import tipologia as tp
     chave = tp.COLUNAS.get(campo)
     if chave and "axonomy" in str(tipo_meta or ""):
         ids = tp.ids_do_site(con, chave, v)
+        if ids is None and wp is not None and espelhar_taxonomia(con, wp, tp.FACETAS[chave][2]):
+            ids = tp.ids_do_site(con, chave, v)
         if ids is None:
             raise RuntimeError(f"{tp.FACETAS[chave][1]}: “{v}” não existe na taxonomia do site (sincronize ou escolha da lista)")
         return ids if tp.FACETAS[chave][4] else (ids[0] if ids else "")
@@ -455,7 +528,7 @@ def atualizar_dossie_no_site(codigo: str, campos: dict, ator: str) -> dict:
             if campo in campos:
                 mid, tipo_meta = _meta(con, COL_PROJETOS, nome)
                 if mid:
-                    wp.definir_metadado(p["tainacan_item_id"], mid, _valor_para_site(con, campo, p[campo], tipo_meta))
+                    wp.definir_metadado(p["tainacan_item_id"], mid, _valor_para_site(con, campo, p[campo], tipo_meta, wp))
                     out["enviados"].append(nome)
                 else:
                     _pendencia(con, "projeto", codigo, f"pendente_metadado_{nome}", f"O site não tem o metadado “{nome}” (nem pelo nome, nem pelo ID conhecido): a mudança não foi gravada.")
