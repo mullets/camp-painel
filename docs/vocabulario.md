@@ -369,7 +369,13 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   (só admin/master) "**Enviar as N agora**" ("Enviar a correção agora" com uma; "Enviar 50 das N agora" acima de 50, o teto da rodada).
   Confirmação: "Manda agora ao site as N correções que estão esperando. Uma rodada só; o reenvio automático continua desligado."
 - Resultado: "**Enviadas** · **falharam** · **ainda na fila**", com cada folha que falhou e o motivo. Folha que falhou "**espera a próxima
-  tentativa**" (não sai de novo no clique seguinte). "**Nada a enviar**: o painel não vê diferença desta folha para o site."
+  tentativa**" (não sai de novo no clique seguinte).
+- CAMP-FIX (15/11/2026): folha em que o painel não vê diferença para o site **não é falha**: a correção fecha e sai da fila. Resultado:
+  "**Enviadas** · **já estavam iguais no site** · **falharam** · **ainda na fila**"; no andamento, "{código}: **já estava igual no site**";
+  na mensagem, "N já estavam iguais no site". "ainda na fila" explica o resto: "(N esperam a próxima tentativa; N podem sair já: no
+  máximo 50 por rodada, envie de novo)". No Histórico da folha: "**correção fechada: já estava igual no site**".
+- Termo que o site não tem (CAMP-FIX 15/11/2026): "**O arquiteto “Nome” não existe no site: envie o fundo F0xx ao site primeiro
+  (Fundos → F0xx → Enviar fundo ao site)**" (o mesmo para o fundo). O painel procura o termo pelo nome no site antes de dizer isso.
 - "Escritas pendentes" conta toda gravação no site que falhou (fundo, projeto, arquiteto, folha). UX-47 (28/10/2026): o botão manda as
   correções de folhas e também as escritas pendentes de fundos, projetos e arquitetos (criar o fundo ou o dossiê sem duplicar, nome,
   "Sobre o acervo", dados e capa do projeto, página do arquiteto), sempre com o valor de agora no painel. A contagem diz
@@ -384,7 +390,7 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
   (leva vários minutos) e tira do painel o que saiu do site; o painel faz isso sozinho uma vez por dia." Em "Última conferência":
   "**só o que mudou: N itens**" quando a última foi incremental. Tarefas: "Sincronizar tudo com o site" / "Sincronizando tudo com o site";
   passo "Lendo do site o que mudou desde a última sincronização"; fim "Sincronizado só o que mudou: N itens do site, N divergências."
-- No Histórico de ações: "{quem} mandou ao site as correções e escritas que estavam esperando" · "N enviadas, N falharam, N ainda na fila".
+- No Histórico de ações: "{quem} mandou ao site as correções e escritas que estavam esperando" · "N enviadas, N já estavam iguais no site, N falharam, N ainda na fila" (a parte "iguais" só quando há).
 
 ## Publicação paciente com o site lento (27/10/2026)
 - No acompanhamento da publicação: "**Folha X: o site demorou (…). Tentando de novo em N s (tentativa 2 de 3)**"; quando o painel

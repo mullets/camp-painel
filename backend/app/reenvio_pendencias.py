@@ -342,6 +342,7 @@ def _projeto_metadado(codigo: str, nome: str, ator: str) -> str:
     con = connect()
     try:
         pub.gravar_metadado_dossie(con, wp, p["tainacan_item_id"], nome, valor)
+        con.commit()                        # termo achado no site entra no espelho (publicador.termo_no_site)
     finally:
         con.close()
     pub.renovar_no_site(wp, p["tainacan_item_id"], codigo, projeto=True)

@@ -32,6 +32,7 @@ MODOS_RAPIDOS |= {"despublicar_tarefa"}   # 15/11/2026: despublicar projeto/fund
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
 MODOS_RAPIDOS |= {"copiar_folhas"}   # 15/11/2026: copiar folhas para outro projeto, com projeto novo na hora (linha própria)
 MODOS_RAPIDOS |= {"copias_visiveis"}   # 15/11/2026: o projeto mostra de onde vieram e para onde foram as cópias (linha própria)
+MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar" não é falha; termos de taxonomia resolvidos; Programa/uso com caminho (linha própria)
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 
 
@@ -1256,7 +1257,7 @@ def filho(modo):
         for cod in F[:4]:
             c.execute("UPDATE item SET escala='1:100' WHERE codigo=?", (cod,))
             c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'editado','op@camp.arq.br',?)", (cod, json.dumps({"antes": {"escala": "1:50"}})))
-        # a 5ª está na fila, mas o painel não vê nada diferente do site: não pode ser reenviada
+        # a 5ª está na fila, mas o painel não vê nada diferente do site: não vai ao site e (CAMP-FIX 15/11) fecha como "já estava igual"
         c.execute("UPDATE item SET espelho_manual=1 WHERE codigo=?", (F[4],))
         c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel) VALUES ('item',?,'pendente_Escala_no_site','o site respondeu 502')", (F[0],))
         c.commit()
@@ -1304,24 +1305,26 @@ def filho(modo):
                 break
             _t.sleep(0.1)
         rr = t.get("resultado") or {}
-        ver("a tarefa terminou com a contagem: 3 enviadas, 2 falharam, 2 ainda na fila", len(rr.get("enviadas") or []) == 3 and len(rr.get("falhas") or []) == 2 and rr.get("ainda_na_fila") == 2
-            and "3 enviadas, 2 falharam, 2 ainda na fila" in (rr.get("mensagem") or ""), t)
-        ver("andamento contado item a item (5 de 5)", t.get("total") == 5 and t.get("feitas") == 5, (t.get("total"), t.get("feitas")))
+        ver("a tarefa terminou com a contagem: 3 enviadas, 1 já igual, 1 falhou, 1 ainda na fila", len(rr.get("enviadas") or []) == 3 and len(rr.get("falhas") or []) == 1 and rr.get("ainda_na_fila") == 1
+            and rr.get("ja_iguais") == [F[4]] and "3 enviadas, 1 já estava igual no site, 1 falhou, 1 ainda na fila (1 espera a próxima tentativa)" in (rr.get("mensagem") or ""), t)
+        ver("andamento contado item a item (4 de 4: a que já estava igual não entra)", t.get("total") == 4 and t.get("feitas") == 4, (t.get("total"), t.get("feitas")))
         fila = {r[0]: dict(r) for r in c.execute("SELECT * FROM fila_correcao_site")}
         ver("as que o site aceitou saíram da fila", all(cod not in fila for cod in F[:3]), list(fila))
         ver("a que o site recusou ficou na fila com o motivo (e a próxima tentativa adiada)", F[3] in fila and "502" in (fila[F[3]]["ultimo_erro"] or "") and fila[F[3]]["tentativas"] == 1, fila.get(F[3]))
         fal = {x["codigo"]: x["erro"] for x in rr.get("falhas") or []}
         ver("a tela recebe cada falha com o motivo legível", "o site respondeu 502" in (fal.get(F[3]) or "") and not (fal.get(F[3]) or "").startswith("RuntimeError")
-            and "Nada a enviar" in (fal.get(F[4]) or "") and len(t.get("falhas") or []) == 2, fal)
+            and F[4] not in fal and len(t.get("falhas") or []) == 1, fal)
         por_wid = {}
         for x in chamadas:
             por_wid[x[1]] = por_wid.get(x[1], 0) + 1
         ver("uma rodada só: cada folha foi ao site UMA vez", por_wid == {401: 1, 402: 1, 403: 1, 404: 1}, por_wid)
-        ver("o que o site já tem não é reenviado (a 5ª folha não foi ao site e não sai da fila como se tivesse ido)", 405 not in por_wid and F[4] in fila, (por_wid, list(fila)))
+        ev5 = [x[0] for x in c.execute("SELECT tipo FROM evento WHERE entidade='item' AND codigo=? AND tipo LIKE 'site_%'", (F[4],))]
+        ver("o que o site já tem não é reenviado: a 5ª não foi ao site, saiu da fila como 'já estava igual' (não como enviada)",
+            405 not in por_wid and F[4] not in fila and "site_correcao_ja_igual" in ev5 and "site_alteracoes_enviadas" not in ev5, (por_wid, list(fila), ev5))
         ver("a escrita pendente antiga da folha que o site aceitou sai da lista", c.execute("SELECT resolvida FROM divergencia_site WHERE codigo=? AND campo='pendente_Escala_no_site'", (F[0],)).fetchone()[0] == 1)
         ev = c.execute("SELECT ator, detalhe FROM evento WHERE tipo='site_correcoes_enviadas'").fetchall()
         d = json.loads(ev[0]["detalhe"]) if ev else {}
-        ver("Histórico de ações: quem mandou, quantas enviadas, quantas falharam", len(ev) == 1 and ev[0]["ator"] == "adm@camp.arq.br" and d.get("enviadas") == 3 and d.get("falharam") == 2 and d.get("ainda_na_fila") == 2, [dict(x) for x in ev])
+        ver("Histórico de ações: quem mandou, quantas enviadas, quantas já iguais, quantas falharam", len(ev) == 1 and ev[0]["ator"] == "adm@camp.arq.br" and d.get("enviadas") == 3 and d.get("falharam") == 1 and d.get("ja_iguais") == 1 and d.get("ainda_na_fila") == 1, [dict(x) for x in ev])
         h = cli["adm"].get("/api/eventos", params={"grupo": "publicacoes"}).json()
         lista_h = h.get("eventos") or h.get("itens") or [] if isinstance(h, dict) else h
         ver("o evento aparece no Histórico de ações (grupo Publicações)", any(e.get("tipo") == "site_correcoes_enviadas" for e in lista_h), str(h)[:300])
@@ -1337,7 +1340,136 @@ def filho(modo):
             _t.sleep(0.1)
         ver("logo depois, de novo: a que falhou espera a próxima tentativa (não martela o site) e nada sai", tid2 != tid and len(chamadas) == n and "Nada saiu nesta rodada" in ((t2.get("resultado") or {}).get("mensagem") or ""), t2.get("resultado"))
         ct = _fila.contar(c)
-        ver("contagem para a tela: 2 na fila, 0 prontas (as duas esperam a próxima tentativa)", ct["total"] == 2 and ct["prontas"] == 0 and ct["proxima_em"], ct)
+        ver("contagem para a tela: 1 na fila, 0 prontas (espera a próxima tentativa)", ct["total"] == 1 and ct["prontas"] == 0 and ct["proxima_em"], ct)
+        c.close()
+        for l in res: print(l)
+    elif modo == "envio_correcoes_fix":
+        # CAMP-FIX 15/11/2026 (Rafael, "Enviar as 18 agora": "2 enviadas, 48 falharam, 66 ainda na fila"). Site FALSO: nada sai do processo.
+        # A) ~40 folhas "Nada a enviar: o painel não vê diferença" contavam como falha e ficavam na fila;
+        # B) F024-P0001/P0002: "Tainacan recusou metadado 8403 … termo não encontrado … 'Paulo Mendes da Rocha'" (ia o NOME do arquiteto);
+        # C) F002-P0147: "Programa / uso: 'Habitação > Residência unifamiliar' não existe na taxonomia do site" (caminho do pai, vindo do site);
+        # D) a mensagem e a contagem da tela não explicavam o que ficou na fila.
+        init_db(); aplicar_migracoes()
+        import json, time as _t
+        from app import auth, publicador as _pub, fila_correcao_site as _fila, tipologia as _tp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:500]}")
+        CP, TX = _pub.COL_PROJETOS, "Tainacan\\Metadata_Types\\Taxonomy"
+        c = connect()
+        # ---- A: folhas na fila
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F009','Fundo Nove','NOV',1,909)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F009',92)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES ('F009-P0092','F009',92,'Casa',1981,'no_ar',9200)")
+        F = [f"F009-P0092-1981-S01-D0001{k}" for k in range(5, 9)]
+        for k, cod in enumerate(F, 1):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,escala,origem,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,'1:50','campvision','conferida','no_ar',?)",
+                      (cod, "F009-P0092", 14 + k, f"Planta {k}", 9200 + k))
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'site_item_criado','x','{}')", (cod,))
+        c.execute("INSERT OR IGNORE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (702,?,'Escala','Tainacan\\Metadata_Types\\Text')", (_pub.COL_ACERVO,))
+        # F[0]: correção de verdade (escala editada depois do envio)
+        c.execute("UPDATE item SET escala='1:100' WHERE codigo=?", (F[0],))
+        c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'editado','op@camp.arq.br',?)", (F[0], json.dumps({"antes": {"escala": "1:50"}})))
+        # F[1], F[2]: a trigger pôs na fila, mas nenhuma correção do painel (ex.: a sincronização gravou o valor que veio do próprio site)
+        for cod in F[1:3]:
+            c.execute("UPDATE item SET titulo=titulo||' (site)' WHERE codigo=?", (cod,))
+        # F[3]: a rodada ANTIGA já tinha dado "Nada a enviar" (falha, esperando a próxima tentativa daqui a 1 h)
+        c.execute("UPDATE item SET titulo=titulo||' (site)' WHERE codigo=?", (F[3],))
+        c.execute("""UPDATE fila_correcao_site SET tentativas=1, proxima_em=datetime('now','+1 hour'),
+                     ultimo_erro='RuntimeError: Nada a enviar: o painel não vê diferença desta folha para o site' WHERE item_codigo=?""", (F[3],))
+        ver("antes: 4 folhas na fila", c.execute("SELECT COUNT(*) FROM fila_correcao_site").fetchone()[0] == 4)
+        ct0 = _fila.contar(c)
+        ver("D: a contagem da tela não conta como 'esperando' a que a rodada antiga deu como 'Nada a enviar'", ct0["folhas"] == 3 and ct0["total"] - ct0["prontas"] == 0, ct0)
+        # ---- B: arquiteto sem termo ligado no painel (F024: o termo do fundo existe; o do arquiteto não está no espelho)
+        c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (10,'Fundos')"); c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (11,'Arquitetos')")
+        c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (20,'Tipologia — Programa / uso')"); c.execute("INSERT INTO wp_taxonomia (id,nome) VALUES (21,'Tipologia — Natureza do trabalho')")
+        for mid, nome, tipo in ((811, "Código de Catalogação", "Tainacan\\Metadata_Types\\Text"), (8400, "Fundo", TX), (8403, "Arquiteto", TX),
+                                (8405, "Programa / uso", TX), (8406, "Natureza do trabalho", TX)):
+            c.execute("INSERT OR REPLACE INTO wp_metadado (id,colecao_id,nome,tipo) VALUES (?,?,?,?)", (mid, CP, nome, tipo))
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F024','Fundo Paulo Mendes da Rocha','PMR',1,924)")
+        aid = c.execute("INSERT INTO agente (tipo,forma_autorizada) VALUES ('pessoa','Paulo Mendes da Rocha')").lastrowid
+        c.execute("INSERT INTO fundo_agente (fundo_codigo,agente_id,papel) VALUES ('F024',?,'produtor')", (aid,))
+        for n, iid in ((1, 94199), (2, 94372)):
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F024',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,cidade,status_site,tainacan_item_id) VALUES (?,?,?,?,1960,'São Paulo','no_ar',?)",
+                      (f"F024-P000{n}", "F024", n, f"Casa {n}", iid))
+            c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel) VALUES ('projeto',?,'pendente_metadado_Arquiteto','400 antigo')", (f"F024-P000{n}",))
+        # ---- C: Programa / uso com o caminho do pai (importado do site); Natureza com o espelho da taxonomia vazio
+        c.execute("INSERT INTO wp_termo (id,taxonomia_id,nome,pai_id) VALUES (50,20,'Habitação',NULL)")
+        c.execute("INSERT INTO wp_termo (id,taxonomia_id,nome,pai_id) VALUES (51,20,'Residência unifamiliar',50)")
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,tainacan_term_id) VALUES ('F002','Fundo Dois','DOI',1,902)")
+        c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F002',147)")
+        c.execute("""INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,tipologia,natureza,status_site,tainacan_item_id)
+                     VALUES ('F002-P0147','F002',147,'Residência',1970,'Habitação > Residência unifamiliar','Reforma / ampliação','no_ar',14700)""")
+        for campo in ("pendente_metadado_Programa / uso", "pendente_metadado_Natureza do trabalho"):
+            c.execute("INSERT INTO divergencia_site (entidade,codigo,campo,valor_painel) VALUES ('projeto','F002-P0147',?,'erro antigo')", (campo,))
+        c.commit()
+        site = {"termos": {11: [], 21: [{"id": 60, "name": "Reforma / ampliação", "parent": 0}]}}
+        chamadas = []
+        class WPFalso:
+            def __init__(self, *a, **k): pass
+            def termos(self, tid): chamadas.append(("termos", tid)); return list(site["termos"].get(tid, []))
+            def patch_item(self, *a, **k): return {}
+            def definir_metadado(self, wid, mid, valor):
+                chamadas.append(("meta", wid, mid, valor))
+                if mid in (8400, 8403, 8405, 8406) and not (isinstance(valor, int) or (isinstance(valor, list) and all(isinstance(x, int) for x in valor))):
+                    raise RuntimeError(f"Tainacan recusou metadado {mid} do item {wid}: 400 Valores inválidos metadata_type_error: termo não encontrado value '{valor}'")
+                return {}
+        _pub.WP = WPFalso
+        _pub.renovar_no_site = lambda *a, **k: True
+        auth.criar_usuario("adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        cli = TestClient(app, raise_server_exceptions=False); cli.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        def rodada():
+            tid = cli.post("/api/site/correcoes-pendentes/enviar?tarefa=1").json().get("tarefa_id")
+            t = {}
+            for _ in range(300):
+                t = cli.get(f"/api/tarefas/{tid}").json()
+                if t.get("estado") != "rodando":
+                    break
+                _t.sleep(0.1)
+            return t
+        t = rodada()
+        rr = t.get("resultado") or {}
+        fal = {x["codigo"]: x["erro"] for x in rr.get("falhas") or []}
+        fila = {r[0]: dict(r) for r in c.execute("SELECT * FROM fila_correcao_site")}
+        # A
+        ver("A: as folhas sem diferença para o site NÃO são falha", not any(cod in fal for cod in F[1:]) and not any("Nada a enviar" in e for e in fal.values()), fal)
+        ver("A: fecham como 'já estavam iguais no site' (inclusive a que a rodada antiga deixou esperando 1 h)", sorted(rr.get("ja_iguais") or []) == sorted(F[1:]), rr.get("ja_iguais"))
+        ver("A: e saem da fila (a correção de verdade foi enviada e também saiu)", not fila and F[0] in (rr.get("enviadas") or []), (list(fila), rr.get("enviadas")))
+        ver("A: nada das folhas sem diferença foi ao site", not [x for x in chamadas if x[0] == "meta" and x[1] in (9202, 9203, 9204)], chamadas)
+        ver("A: Histórico da folha: 'site_correcao_ja_igual' (não 'site_alteracoes_enviadas')",
+            c.execute("SELECT COUNT(*) FROM evento WHERE tipo='site_correcao_ja_igual'").fetchone()[0] == 3
+            and not c.execute("SELECT 1 FROM evento WHERE tipo='site_alteracoes_enviadas' AND codigo IN (?,?,?)", tuple(F[1:])).fetchone())
+        # B
+        eb = [fal.get(f"F024-P000{n} (projeto)") or "" for n in (1, 2)]
+        ver("B: o nome do arquiteto nunca vai ao metadado 8403", not [x for x in chamadas if x[0] == "meta" and x[2] == 8403], chamadas)
+        ver("B: mensagem clara em vez do 400 cru: 'O arquiteto … não existe no site: envie o fundo F024 ao site primeiro'",
+            all("O arquiteto “Paulo Mendes da Rocha” não existe no site: envie o fundo F024 ao site primeiro" in e and "400" not in e for e in eb), eb)
+        ver("B: o painel procurou o termo no próprio site antes de recusar", ("termos", 11) in chamadas, chamadas)
+        # C
+        mc = [x for x in chamadas if x[0] == "meta" and x[1] == 14700]
+        ver("C: 'Habitação > Residência unifamiliar' vai como o id do termo filho (51)", ("meta", 14700, 8405, [51]) in mc, mc)
+        ver("C: termo que faltava no espelho foi lido do site (Natureza: id 60) e entrou no espelho", ("meta", 14700, 8406, [60]) in mc
+            and c.execute("SELECT 1 FROM wp_termo WHERE id=60 AND taxonomia_id=21").fetchone(), mc)
+        ver("C: nenhuma falha 'não existe na taxonomia do site' para F002-P0147", not any("F002-P0147" in k for k in fal), fal)
+        nz = getattr(_tp, "normalizar", lambda v: v)
+        ver("C: importação do site guarda a faceta sem o caminho do pai", nz("Habitação > Residência unifamiliar") == "Residência unifamiliar"
+            and nz("Habitação > Casa de praia, Cultura > Museu") == "Casa de praia; Museu" and nz("") is None)
+        # D
+        msg = rr.get("mensagem") or ""
+        ver("D: mensagem: enviadas, já iguais, falharam e o que ficou na fila explicado",
+            msg.startswith("Envio ao site: 3 enviadas, 3 já estavam iguais no site, 2 falharam, 2 ainda na fila (2 esperam a próxima tentativa)"), msg)
+        ver("D: andamento conta só o que foi tentado (as já iguais não inflam o total)", t.get("total") == t.get("feitas") == 5, (t.get("total"), t.get("feitas")))
+        ct = _fila.contar(c)
+        ver("D: contagem da tela depois: só as 2 escritas de verdade esperando (nenhuma folha)", ct["folhas"] == 0 and ct["total"] == 2 and ct["prontas"] == 0, ct)
+        # B depois do "Enviar fundo ao site" (o termo passa a existir no site): a próxima tentativa manda o id
+        site["termos"][11] = [{"id": 777, "name": "Paulo Mendes da Rocha", "slug": "paulo-mendes-da-rocha"}]
+        c.execute("UPDATE reenvio_pendencia_site SET proxima_em=datetime('now','-1 minute')"); c.commit()
+        t2 = rodada()
+        r2 = t2.get("resultado") or {}
+        ver("B: com o termo no site, vai o id (777) e as duas pendências fecham", [x for x in chamadas if x[0] == "meta" and x[2] == 8403] == [("meta", 94199, 8403, 777), ("meta", 94372, 8403, 777)]
+            and not r2.get("falhas") and not c.execute("SELECT 1 FROM divergencia_site WHERE campo='pendente_metadado_Arquiteto' AND resolvida=0").fetchone(), (r2, chamadas[-4:]))
         c.close()
         for l in res: print(l)
     elif modo == "ux47_reenvio_pendencias":
