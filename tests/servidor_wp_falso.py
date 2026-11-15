@@ -66,11 +66,20 @@ def folha_falsa(codigo, ator, enviar_imagem=True, *a, **k):
             con.close()
 
 
+_FALHOU: set = set()
+
+
 class WPFalso:
     def __init__(self, *a, **k):
         pass
 
     def atualizar_status_item(self, cid, wid, alvo):
+        # 15/11 (despublicar como tarefa): WP_FALSO_ESPERA_S = segundos por chamada (site lento); WP_FALSO_FALHA_1X = ids que falham na 1ª vez
+        import time as _t
+        _t.sleep(float(os.environ.get("WP_FALSO_ESPERA_S") or 0))
+        if str(wid) in (os.environ.get("WP_FALSO_FALHA_1X") or "").split(",") and wid not in _FALHOU:
+            _FALHOU.add(wid)
+            raise RuntimeError("o site não respondeu (504)")
         con = connect()
         try:
             con.execute("UPDATE wp_pagina SET status=? WHERE id=?", (alvo, wid))   # a página do projeto passa a abrir para todos
@@ -103,6 +112,7 @@ class WPFalso:
 from app import fundo_site  # noqa: E402
 fundo_site.enviar_fundo = lambda codigo, ator: {"ok": True, "passos": ["termo do fundo e do arquiteto"], "erros": []}   # sem termo/hub reais
 publicador.criar_dossie_no_site, publicador.criar_folha_no_site, _wp.WP = dossie_falso, folha_falsa, WPFalso
+publicador.WP = WPFalso   # 15/11: o fundo inteiro (propagar_status_fundo) usa o WP importado no publicador
 pagina_publica.confirmar = lambda codigo, palpite: {"url": None, "como": None}
 
 if __name__ == "__main__":

@@ -2717,16 +2717,17 @@ function mudarAviso(a,html,tipo,ms){if(!a)return;if(html!=null)a.querySelector('
 document.addEventListener('click',e=>{const x=e.target.closest('[data-aviso-fechar]');if(x)x.closest('.aviso-local')?.remove()});
 // --- nível 3: tarefas no servidor ---
 const PUB_ETAPA_TXT={dossie:'Criando o dossiê no site',folhas:'Enviando as folhas',autorizar:'Liberando para publicação',publicar:'Publicando'};
+function unidadeTarefa(t){return t.tipo==='publicacao_site'?' folhas':''}
 function nomeTarefa(t){return !t.tipo||t.tipo==='publicar'?`${t.estado==='rodando'?'Publicando':'Publicar'} ${t.projeto_codigo}`:(t.titulo||'Tarefa')}
 function etapaTarefaTexto(t){return PUB_ETAPA_TXT[t.etapa]||(t.etapa&&t.etapa!=='fim'?t.etapa:'')}
 /* 27/10 (Rafael: "tá escrito errado, espaçamento errado"): a etapa atual numa linha própria (bloco), nunca grudada no texto de antes */
 function andamentoTarefaHTML(t){const tot=+t.total||0,f=+t.feitas||0,pct=tot?Math.min(100,Math.round(100*f/tot)):0,et=etapaTarefaTexto(t);
-  const resto=[tot?`<b>${fmtN(f)} de ${fmtN(tot)}</b>`:'',t.decorrido_s!=null?`${duracaoTexto(t.decorrido_s)} até agora`:'',t.faltam_s?`faltam cerca de ${duracaoTexto(t.faltam_s)}`:''].filter(Boolean).join(' · ');
+  const resto=[tot?`<b>${fmtN(f)} de ${fmtN(tot)}${unidadeTarefa(t)}</b>`:'',t.decorrido_s!=null?`${duracaoTexto(t.decorrido_s)} até agora`:'',t.faltam_s?`faltam cerca de ${duracaoTexto(t.faltam_s)}`:''].filter(Boolean).join(' · ');
   const agora=et?`<span class="tarefa-etapa">${escHtml(et)}</span>${t.folha_atual?` · agora: <span class="code">${escHtml(t.folha_atual)}</span>`:''}`:'';
   return `${tot?`<div class="tarefa-barra" role="progressbar" aria-label="Andamento" aria-valuemin="0" aria-valuemax="${tot}" aria-valuenow="${f}"><i style="width:${pct}%"></i></div>`:''}<div class="tarefa-agora">${[agora,resto?`<span class="tarefa-tempo">${resto}</span>`:''].filter(Boolean).join(' · ')}</div>`}
 function fimTarefaTexto(t){const r=t.resultado||{},d=t.decorrido_s!=null?`, ${duracaoTexto(t.decorrido_s)}`:'';
   const base=!t.tipo||t.tipo==='publicar'?(t.estado==='ok'?(r.folhas_publicadas!=null?`${t.projeto_codigo} publicado: ${qtd(+t.feitas||0,'folha atualizada','folhas atualizadas')} · ${fmtN(r.folhas_publicadas)} no site no total`:`${t.projeto_codigo} publicado (dossiê + ${qtd(+t.feitas||0,'folha','folhas')})`):`${t.projeto_codigo}: a publicação não terminou. ${r.mensagem||''}`)
-    :(r.mensagem||(t.estado==='ok'?`${t.titulo||'Tarefa'}: pronto`:`${t.titulo||'Tarefa'}: não terminou`));
+    :(r.mensagem?(['publicacao_site','publicacao_fundo'].includes(t.tipo)&&t.projeto_codigo?`${t.projeto_codigo}: ${r.mensagem}`:r.mensagem):(t.estado==='ok'?`${t.titulo||'Tarefa'}: pronto`:`${t.titulo||'Tarefa'}: não terminou`));
   return pluraisTexto(String(base).trim().replace(/\.$/,''))+d}
 /* "5057 item(ns) do site, 142 divergência(s)" (mensagens antigas do servidor) -> "5057 itens do site, 142 divergências" (o mesmo de normalizarPlurais) */
 function pluraisTexto(v){return String(v).replace(/(\d[\d.]*)\s+(\p{L}+)\((n?s)\)/gu,(m,num,pal,suf)=>num.replace(/\./g,'')==='1'?`${num} ${pal}`:`${num} ${pluralDe(pal,suf)}`).replace(/(\p{L}+)\((n?s)\)/gu,(m,pal,suf)=>pluralDe(pal,suf))}
@@ -2779,7 +2780,7 @@ function desenharChipTarefas(){const c=document.getElementById('tarefas-chip');i
   /* UX-22: "✔ F009-P0019 publicado…" ficava preso no topo até a pessoa clicar. Agora o que deu certo some sozinho em 8 s (com a aba à vista)
      e continua em Tarefas e avisos recentes; o que falhou (✖) fica até a pessoa fechar */
   clearTimeout(CHIP_FECHAR);CHIP_FECHAR=null;if(!R.length&&N.length&&N.every(t=>t.estado==='ok')&&!document.hidden)CHIP_FECHAR=setTimeout(()=>{if(!document.hidden)marcarTarefasVistas()},8000);
-  if(R.length){const t=R[0];c.className='tarefas-chip';c.hidden=false;c.innerHTML=`<button type="button" class="abrir" data-tarefas-abrir title="Ver o andamento">⏳ ${R.length>1?`${R.length} tarefas em andamento`:`${escHtml(nomeTarefa(t))}${+t.total?` · ${fmtN(t.feitas)} de ${fmtN(t.total)}`:''}`}</button>`}
+  if(R.length){const t=R[0];c.className='tarefas-chip';c.hidden=false;c.innerHTML=`<button type="button" class="abrir" data-tarefas-abrir title="Ver o andamento">⏳ ${R.length>1?`${R.length} tarefas em andamento`:`${escHtml(nomeTarefa(t))}${+t.total?` · ${fmtN(t.feitas)} de ${fmtN(t.total)}${unidadeTarefa(t)}`:''}`}</button>`}
   else if(N.length){const t=N[0],ok=t.estado==='ok';c.className='tarefas-chip '+(ok?'ok':'erro');c.hidden=false;c.innerHTML=`<button type="button" class="abrir" data-tarefas-abrir title="Ver o que aconteceu">${ok?'✔':'✖'} ${escHtml(fimTarefaTexto(t))}${N.length>1?` · e mais ${N.length-1}`:''}</button><button type="button" class="x" data-tarefas-visto aria-label="Já vi, fechar o aviso" title="Já vi">×</button>`}
   else{c.hidden=true;c.innerHTML=''}
   const dw=document.querySelector('#d-body [data-tarefas-lista]');if(dw)dw.innerHTML=tarefasListaHTML()}
@@ -4563,7 +4564,7 @@ async function executarMais(acao,code){const res=document.getElementById('mx-res
   else if(acao==='lote'){url=`/api/filas/${encodeURIComponent(v('mx-lote'))}/mover-para`;body={projeto_codigo:dest,motivo:mot}}
   else if(acao==='serie'){const itens=[...document.querySelectorAll('.mx-it:checked')].map(x=>x.value);if(!itens.length){res.textContent='Marque pelo menos uma folha.';return}url='/api/itens/serie';body={itens,serie:v('mx-serie'),tipo:v('mx-tipo')||null,motivo:mot}}
   else if(acao==='descartar'){if(!mot||mot.length<3){res.textContent='Explique o motivo.';return}url=`/api/filas/${encodeURIComponent(v('mx-lote'))}/descartar`;body={motivo:mot,duplicata_de:v('mx-dup')?+v('mx-dup'):null}}
-  else if(acao==='despublicar'){url=`/api/projetos/${encodeURIComponent(code)}/despublicar`;body={}}
+  else if(acao==='despublicar'){closeDrawer(true);await mudarPublicacaoTarefa(`/api/projetos/${encodeURIComponent(code)}/despublicar`,{},code,'tirar_do_ar');carregarProjetosAPI();if(window.PROJETO_PJ===code)showProjeto(code);return}
   else if(acao==='descartar_projeto'){if(!mot||mot.length<3){res.textContent='Explique o motivo (ex.: não é uma obra, pasta errada).';return}
     if(!await confirmar({titulo:'Descartar este projeto?',alvo:code,texto:'O projeto e as folhas dele deixam de aparecer no painel e nunca vão ao site. Nada é apagado.',botao:'Descartar',perigo:true,digitar:code}))return;
     url=`/api/projetos/${encodeURIComponent(code)}/descartar`;body={motivo:mot}}
@@ -5462,7 +5463,7 @@ async function publicarDiretoAgora(code){
 document.addEventListener('click',async e=>{const p=e.target.closest('[data-pjs-publicar]');if(p&&!p.disabled){publicarDireto(p.dataset.pjsPublicar);return}
   const a=e.target.closest('[data-pjs-atualizar]');if(a){atualizarNoAr(a.dataset.pjsAtualizar);return}
   const u=e.target.closest('[data-pjs-desfazer]');if(u){const code=u.dataset.pjsDesfazer;u.disabled=true;
-    try{await API(`/api/projetos/${encodeURIComponent(code)}/publicar`,{method:'POST',body:JSON.stringify({acao:'rascunho'})});delete PUB_FIM[code];toast('Desfeito: o projeto voltou para rascunho (só a equipe vê)')}catch(err){toast(err.message)}
+    const t=await mudarPublicacaoTarefa(`/api/projetos/${encodeURIComponent(code)}/publicar`,{acao:'rascunho'},code,'rascunho');if(t&&t.estado==='ok'){delete PUB_FIM[code];toast('Desfeito: o projeto voltou para rascunho (só a equipe vê)')}
     showProjeto(code)}});
 async function abrirPublicacaoGuiada(code){
   try{const at=await API('/api/projetos/'+encodeURIComponent(code)+'/tarefa');if(at.tarefa&&at.tarefa.estado==='rodando'){openDrawer('Publicar',code,tarefaPubHTML(code,at.tarefa));acompanharTarefaPub(code,at.tarefa.id);return}}catch(_){}
@@ -6809,19 +6810,24 @@ async function statusFundoSite(code,acao){
   let motivo=null;
   if(acao==='fora_do_ar'){const r=await confirmar({titulo:`Despublicar o fundo ${code} inteiro?`,texto:'A página do arquiteto, os projetos e as folhas deixam de ser públicos (ficam privados no site). Dá para publicar de novo depois.',motivo:'obrigatorio',motivoRotulo:'Motivo (fica registrado)',digitar:code,perigo:true,botao:'Despublicar o fundo'});if(!r)return;motivo=r.motivo}
   else if(!await confirmar(acao==='no_ar'?{titulo:`Publicar o fundo ${code}?`,texto:'Os projetos autorizados e as folhas sem problema ficam visíveis para todos.',botao:'Publicar o fundo'}:{titulo:`Voltar TODO o fundo ${code} para rascunho?`,texto:'A página do arquiteto, os projetos e as folhas deixam de ser públicos, mas continuam no site para revisão.',digitar:code,perigo:true,botao:'Voltar para rascunho'}))return;
-  toast('Aplicando no site…');
-  try{
-    const r=await API(`/api/fundos/${code}/status-site`,{method:'POST',body:JSON.stringify({acao,motivo})});
+  await statusFundoTarefa(code,acao,{acao,motivo})}
+/* 15/11: o fundo inteiro é uma chamada ao site por registro: vira tarefa (andamento no topo; as falhas ficam listadas e dá para repetir só elas) */
+async function statusFundoTarefa(code,acao,body){
+  let r;try{r=await API(`/api/fundos/${code}/status-site?tarefa=1`,{method:'POST',body:JSON.stringify(body)})}catch(e){erroPublicacaoFundo(code,acao,e);return}
+  if(r&&r.tarefa_id){if(r.ja_rodando)toast('Já está rodando: o andamento fica no topo da página.');vigiarTarefas();const t=await seguirTarefa(r.tarefa_id,{});if(!t){showFundo(code);return}r={...(t.resultado||{}),falhas:t.falhas&&t.falhas.length?t.falhas:((t.resultado||{}).falhas||[])};if(t.estado==='ok')r.ok=true}
+  resultadoFundo(code,acao,body,r||{});showFundo(code);carregarFundosAPI()}
+let FUNDO_REPETIR=null;
+function resultadoFundo(code,acao,body,r){
     if(r.ok){
       toast(r.mensagem||`${r.alterados} item(ns) alterados`);if(r.ignorados_total)mostrarIgnorados(code,r);
     }else{
-      const primeiro=r.erro||(r.falhas&&r.falhas[0]?.erro)||'A publicação não foi concluída.';
+      const primeiro=r.erro||(r.falhas&&r.falhas[0]?.erro)||r.mensagem||'A publicação não foi concluída.',cods=[...new Set((r.falhas||[]).map(x=>x.codigo).filter(c=>c&&c!==code))];
+      FUNDO_REPETIR=cods.length?{code,acao,body:{...body,somente:cods}}:null;
       toast(`Publicação não concluída: ${primeiro}`);
-      openDrawer('Falha ao publicar fundo',code,`<div class="stale-note"><span class="status-dot bad"></span><span><b>A publicação não foi concluída.</b> O estado geral do fundo não foi alterado.</span></div><dl class="kv"><dt>Tentados</dt><dd>${escHtml(r.tentados??0)}</dd><dt>Alterados</dt><dd>${escHtml(r.alterados??0)}</dd><dt>Falhas</dt><dd>${escHtml(r.falhas?.length??0)}</dd><dt>Primeiro erro</dt><dd>${escHtml(primeiro)}</dd></dl>${blocoIgnorados(r)}${r.falhas?.length?`<div class="panel" style="margin-top:12px"><div class="pb"><ul class="list">${r.falhas.slice(0,20).map(x=>`<li><div class="t"><b>${escHtml(x.codigo||code)}</b><small>${escHtml(x.erro||'falhou')}</small></div></li>`).join('')}</ul></div></div>`:''}`);
+      openDrawer('Falha ao publicar fundo',code,`<div class="stale-note"><span class="status-dot bad"></span><span><b>A publicação não foi concluída.</b> O estado geral do fundo não foi alterado.</span></div><dl class="kv"><dt>Tentados</dt><dd>${escHtml(r.tentados??0)}</dd><dt>Alterados</dt><dd>${escHtml(r.alterados??0)}</dd><dt>Falhas</dt><dd>${escHtml(r.falhas?.length??0)}</dd><dt>Primeiro erro</dt><dd>${escHtml(primeiro)}</dd></dl>${blocoIgnorados(r)}${r.falhas?.length?`<div class="panel" style="margin-top:12px"><div class="pb"><ul class="list">${r.falhas.slice(0,20).map(x=>`<li><div class="t"><b>${escHtml(x.codigo||code)}</b><small>${escHtml(x.erro||'falhou')}</small></div></li>`).join('')}</ul></div></div>`:''}${FUNDO_REPETIR?`<div class="act"><button class="btn primary" data-fundo-repetir>Tentar de novo só ${cods.length===1?'esta':'estas '+fmtN(cods.length)}</button></div>`:''}`);
     }
-    showFundo(code);carregarFundosAPI();
-  }catch(e){erroPublicacaoFundo(code,acao,e)}
 }
+document.addEventListener('click',e=>{if(!e.target.closest('[data-fundo-repetir]')||!FUNDO_REPETIR)return;const x=FUNDO_REPETIR;FUNDO_REPETIR=null;closeDrawer(true);statusFundoTarefa(x.code,x.acao,x.body)});
 async function criarNoSite(tipo,code){toast('Criando página pública…');try{const r=await API(`/api/${tipo}/${code}/criar-no-site`,{method:'POST'});toast(r.erro?'Falhou: '+r.erro:'Página pública criada');if(tipo==='projetos')showProjeto(code);else showFundo(code)}catch(e){toast(e.message)}}
 /* B4: autoria do projeto diferente do titular do fundo. O papel é o do titular (o arquiteto do fundo) neste projeto. */
 const PAPEL_PROJETO={autor:'Autor',coautor:'Coautoria',consultor:'Consultor',colaborador:'Colaborador',terceiros:'Projeto de terceiros'};
@@ -6952,20 +6958,35 @@ function acaoCondicao(tipo,alvo){
 function alvoProjetoAtual(){const m=(location.hash||'').match(/^#projeto\/([^/]+)/);return m?m[1]:null}
 const _closeDrawerBase=closeDrawer;
 closeDrawer=function(force){const r=_closeDrawerBase(force);if(r!==false&&PUB_REFRESH){const c=PUB_REFRESH;PUB_REFRESH=null;setTimeout(()=>typeof c==='function'?c():carregarPublicacao(c),500)}return r};
-async function resultadoPublicacao(code,acao,r){
+let PUB_REPETIR=null;
+async function resultadoPublicacao(code,acao,r,repetir){
   if(r.ok){toast(r.mensagem||'Publicação atualizada');return}
-  const falhas=(r.falhas||[]).slice(0,30);
-  openDrawer('A publicação não foi concluída',code,`<div class="stale-note"><span class="status-dot bad"></span><span><b>${escHtml(r.mensagem||'Nada foi alterado.')}</b></span></div>${falhas.length?`<ul class="list">${falhas.map(x=>`<li><span class="code">${escHtml(x.codigo)}</span><div class="t"><small>${escHtml(x.erro)}</small></div></li>`).join('')}</ul>`:''}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}
+  const todas=r.falhas||[],falhas=todas.slice(0,30),cods=[...new Set(todas.map(x=>x.codigo).filter(Boolean))];
+  PUB_REPETIR=repetir&&cods.length?{...repetir,code,acao,cods}:null;
+  openDrawer('A publicação não foi concluída',code,`<div class="stale-note"><span class="status-dot bad"></span><span><b>${escHtml(r.mensagem||'Nada foi alterado.')}</b></span></div>${falhas.length?`<ul class="list">${falhas.map(x=>`<li><span class="code">${escHtml(x.codigo)}</span><div class="t"><small>${escHtml(x.erro)}</small></div></li>`).join('')}</ul>${todas.length>falhas.length?`<small class="help">… e mais ${fmtN(todas.length-falhas.length)}.</small>`:''}`:''}<div class="act">${PUB_REPETIR?`<button class="btn primary" data-pub-repetir>Tentar de novo só ${cods.length===1?'esta':'estas '+fmtN(cods.length)}</button>`:''}<button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}
+document.addEventListener('click',async e=>{if(!e.target.closest('[data-pub-repetir]')||!PUB_REPETIR)return;const x=PUB_REPETIR;PUB_REPETIR=null;closeDrawer(true);
+  await mudarPublicacaoTarefa(x.url,{...(x.body||{}),somente:x.cods},x.code,x.acao);if(window.PROJETO_PJ===x.code)showProjeto(x.code)});
 async function erroPublicacao(code,acao,e){
   let lista='';
   if(acao==='publicar'){try{const g=await API(`/api/projetos/${encodeURIComponent(code)}/publicacao`);const falta=g.condicoes.filter(c=>c.bloqueia&&!c.ok);if(falta.length)lista=`<h3 class="sub-h">O que falta</h3><ul class="checklist">${falta.map(c=>itemChecklist(c,g.pode_agir)).join('')}</ul>`}catch(_){}}
+  if(e.status===408){openDrawer('O painel parou de esperar a resposta',code,`<div class="stale-note"><span class="status-dot warn"></span><span>${escHtml(e.message)}</span></div><div class="act"><button class="btn" onclick="closeDrawer(true);showProjeto('${escHtml(code)}')">Ver a situação do projeto</button><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`);return}
   openDrawer(acao==='publicar'?'Não foi possível publicar':'Não foi possível alterar a publicação',code,`<div class="stale-note"><span class="status-dot bad"></span><span>${escHtml(e.message)}</span></div>${lista}<div class="act"><button class="btn" onclick="closeDrawer(true)">Fechar</button></div>`)}
 async function publicarProjeto(code,acao,btn){
  if(btn&&btn.getAttribute('aria-disabled')==='true'){explicarBloqueioPublicacao(code,acao);return}
   const msg={publicar:{titulo:`Publicar ${code} agora?`,texto:'A página do projeto e todas as folhas sem problema ficam visíveis para o público.',botao:'Publicar'},rascunho:{titulo:`Voltar ${code} para rascunho?`,texto:'A página e as folhas deixam de ser públicas, mas continuam salvas para revisão.',botao:'Voltar para rascunho'},tirar_do_ar:{titulo:`Despublicar ${code}?`,texto:'A página e as folhas deixam de ser públicas (ficam privadas no site). Dá para publicar de novo depois.',botao:'Despublicar',perigo:true}}[acao];
-  if(!await confirmar(msg))return;toast('Atualizando publicação…');
-  try{await resultadoPublicacao(code,acao,await API(`/api/projetos/${code}/publicar`,{method:'POST',body:JSON.stringify({acao})}))}catch(e){await erroPublicacao(code,acao,e)}
+  if(!await confirmar(msg))return;
+  await mudarPublicacaoTarefa(`/api/projetos/${encodeURIComponent(code)}/publicar`,{acao},code,acao);
   showProjeto(code);carregarFundosAPI()}
+/* 15/11 (Rafael, F002-P0147: "A operação demorou demais"): mudar a publicação de um projeto grande é uma chamada ao site por folha
+   e passava de 1 min. Agora é tarefa em segundo plano (?tarefa=1): o andamento ("Despublicando F002-P0147 · 37 de 120 folhas") fica
+   no topo, o 2º clique só acompanha a mesma tarefa e, no fim, as folhas que falharam ficam listadas com "Tentar de novo só estas". */
+async function mudarPublicacaoTarefa(url,body,code,acao){
+  let r;try{r=await API(url+(url.includes('?')?'&':'?')+'tarefa=1',{method:'POST',body:JSON.stringify(body||{})})}catch(e){await erroPublicacao(code,acao,e);return null}
+  if(!r||!r.tarefa_id){await resultadoPublicacao(code,acao,r||{});return null}   // nada a fazer no site (ex.: projeto sem registros): resposta na hora
+  if(r.ja_rodando)toast('Já está rodando: o andamento fica no topo da página.');
+  vigiarTarefas();const t=await seguirTarefa(r.tarefa_id,{antes:'#pd',id:'pub-'+code});
+  if(t&&t.estado!=='ok')await resultadoPublicacao(code,acao,{...(t.resultado||{}),falhas:t.falhas&&t.falhas.length?t.falhas:((t.resultado||{}).falhas||[])},{url,body});
+  return t}
 const GUIA_FUNDO=[
  ['Reservar o fundo','Fundos → "Novo fundo": o código (F0xx) e a sigla de 3 letras não mudam depois.'],
  ['Escrever a história e a procedência','Abra o fundo → Editar. Só entra história com a fonte citada.'],
@@ -8623,7 +8644,7 @@ function exportarErros(){const L=ERR_LISTA,cab=['Projeto','Nome do projeto','Ond
 async function criarErro(){const err=document.getElementById('ne-err');err.textContent='';try{const r=await API('/api/erros',{method:'POST',body:JSON.stringify({codigo:document.getElementById('ne-cod').value,gravidade:document.getElementById('ne-grav').value,categoria:document.getElementById('ne-cat').value,descricao:document.getElementById('ne-desc').value,origem:document.getElementById('ne-orig').value,relatado_por:document.getElementById('ne-orig').value==='site'?document.getElementById('ne-quem').value:null})});closeModal();toast('Problema registrado');
     if(r&&r.publicado_com_bloqueio){const adm=EU&&['admin','master'].includes(EU.papel);
       if(adm&&await confirmar({titulo:`${r.projeto} está publicado e agora tem um problema que bloqueia`,texto:'Despublicar tira a página e as folhas do ar até resolver (dá para publicar de novo depois). Manter publicado deixa um aviso vermelho na página do projeto até o problema ser resolvido.',botao:'Despublicar até resolver',cancelar:'Manter publicado',perigo:true})){
-        try{await API('/api/projetos/'+encodeURIComponent(r.projeto)+'/publicar',{method:'POST',body:JSON.stringify({acao:'tirar_do_ar'})});toast(r.projeto+' foi despublicado')}catch(e2){toast('Não consegui despublicar: '+e2.message)}}
+        const t=await mudarPublicacaoTarefa('/api/projetos/'+encodeURIComponent(r.projeto)+'/publicar',{acao:'tirar_do_ar'},r.projeto,'tirar_do_ar');if(t&&t.estado==='ok')toast(r.projeto+' foi despublicado')}
       else if(!adm)toast(r.projeto+' está publicado com um problema bloqueante: avise um administrador')}
     carregarErros();carregarPainel()}catch(e){err.textContent=e.message}}
 function diasDesde(ts){const t=Date.parse(String(ts||'').replace(' ','T')+(/Z|[+-]\d\d:?\d\d$/.test(String(ts||''))?'':'Z'));return isNaN(t)?0:Math.floor((Date.now()-t)/86400000)}
@@ -9369,7 +9390,7 @@ const API=async(path,opt={})=>{
     if(!r.ok)throw Object.assign(new Error(mensagemErroAPI(r.status,j.erro||(typeof j.detail==='string'?j.detail:'')||r.statusText)),{status:r.status,dados:j});
     if(escrita&&!/^\/api\/auth\//.test(path)){try{MARCA.escritas++}catch(_){}setTimeout(()=>vigiarMarca(true),400)}   // CAMP-120: o que a própria pessoa fez não vira "o projeto mudou" (a marca é relida e vira a nova base)
     return j;
-  }catch(e){if(e.name==='AbortError')throw Object.assign(new Error('A operação demorou demais. Tente novamente.'),{status:408});if(e instanceof TypeError&&!e.status)throw Object.assign(new Error('Sem resposta do painel: a rede caiu ou o servidor está fora. Tente de novo em instantes.'),{status:0});throw e}
+  }catch(e){if(e.name==='AbortError')throw Object.assign(new Error(escrita?'O painel parou de esperar a resposta (mais de 1 min), mas a ação pode continuar no servidor. Não repita agora: recarregue a página daqui a pouco e confira a situação e o Histórico (ou Tarefas e avisos recentes, no menu do seu nome).':'A operação demorou demais. Tente novamente.'),{status:408});if(e instanceof TypeError&&!e.status)throw Object.assign(new Error('Sem resposta do painel: a rede caiu ou o servidor está fora. Tente de novo em instantes.'),{status:0});throw e}
   finally{clearTimeout(timeout);clearTimeout(tLento);if(chave)API_EM_CURSO.delete(chave);if(botao){botao.disabled=false;botao.classList.remove('busy');botao.removeAttribute('aria-busy');if(rot0!==null&&botao.textContent===TRAB){botao.innerHTML=rot0;botao.style.minWidth=''}}}})();
   if(chave)API_EM_CURSO.set(chave,p);
   return p;

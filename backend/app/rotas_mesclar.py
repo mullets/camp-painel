@@ -8,11 +8,18 @@ from .db import connect
 router = APIRouter(prefix="/api", tags=["mesclar"])
 
 
+class Despublicacao(BaseModel):
+    somente: list[str] | None = None
+
+
 @router.post("/projetos/{codigo}/despublicar")
-def despublicar(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
+def despublicar(codigo: str, u: dict = Depends(auth.exige("admin")), tarefa: int = 0, d: Despublicacao | None = None):
     """Tira o projeto do ar: itens e página do projeto viram 'private' no Tainacan e o status vira fora_do_ar. É o 'tirar_do_ar' do Publicar, com o nome certo.
-    A regra de quem pode é a mesma do Publicar: despublicar o que está PÚBLICO exige o admin master."""
-    from .rotas_projetos import Publicacao, publicar
+    A regra de quem pode é a mesma do Publicar: despublicar o que está PÚBLICO exige o admin master.
+    ?tarefa=1 (15/11, F002-P0147: "A operação demorou demais"): uma chamada ao site por folha passa de 60 s em projeto grande; agora
+    valida na hora e despublica em segundo plano (202 {tarefa_id}; 2º clique = a mesma tarefa). Corpo opcional {somente: [...]}: só
+    os códigos que falharam da outra vez. Sem ?tarefa=1, igual a antes."""
+    from .rotas_projetos import Publicacao, _preparar_publicacao, iniciar_publicacao_tarefa, publicar
     con = connect()
     try:
         p = con.execute("SELECT tainacan_item_id FROM projeto WHERE codigo=?", (codigo,)).fetchone()
@@ -22,7 +29,18 @@ def despublicar(codigo: str, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(409, "Este projeto não tem nada no site para despublicar.")
     finally:
         con.close()
-    r = publicar(codigo, Publicacao(acao="tirar_do_ar"), u)
+    pub = Publicacao(acao="tirar_do_ar", somente=(d.somente if d else None))
+    if tarefa:
+        prep = _preparar_publicacao(codigo, pub, u)
+        if not prep["alvos"]:
+            raise HTTPException(409, "Este projeto não tem nada publicado no site para despublicar.")
+
+        def fim(r: dict) -> dict:
+            if r.get("ok") and not r.get("alterados"):
+                return {**r, "ok": False, "mensagem": r.get("mensagem") or "Este projeto não tem nada publicado no site para despublicar."}
+            return r
+        return iniciar_publicacao_tarefa(codigo, pub, u, prep, fim)
+    r = publicar(codigo, pub, u)
     if r.get("ok") and not r.get("alterados"):
         raise HTTPException(409, r.get("mensagem") or "Este projeto não tem nada publicado no site para despublicar.")
     return r

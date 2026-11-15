@@ -26,6 +26,8 @@ TITULOS = {
     "enviar_correcoes": "Enviar correções ao site",
     "reprocessar_recorte": "Reprocessar imagens públicas com recorte automático",
     "destino_automatico": "Verificar destino pelo painel",
+    "publicacao_site": "Mudar a publicação do projeto",
+    "publicacao_fundo": "Mudar a publicação do fundo",
 }
 
 
@@ -72,8 +74,16 @@ def _rodar(tid: int, fn) -> None:
         _THREADS.pop(tid, None)
 
 
+_TRAVA = threading.Lock()     # dois cliques quase juntos: só um cria a tarefa (o outro recebe a mesma, "já rodando")
+
+
 def iniciar(tipo: str, alvo: str, u: dict, fn, titulo: str | None = None) -> JSONResponse:
     """Começa a tarefa (ou devolve a que já está rodando para o mesmo tipo e alvo). fn(progresso) -> {ok, mensagem, ...}."""
+    with _TRAVA:
+        return _iniciar(tipo, alvo, u, fn, titulo)
+
+
+def _iniciar(tipo: str, alvo: str, u: dict, fn, titulo: str | None) -> JSONResponse:
     con = connect()
     try:
         ativa = con.execute("SELECT id FROM tarefa_publicacao WHERE tipo=? AND projeto_codigo=? AND estado='rodando' ORDER BY id DESC LIMIT 1",

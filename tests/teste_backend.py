@@ -28,6 +28,7 @@ MODOS_RAPIDOS |= {"ordem_folhas"}   # arrastar folhas para mudar a ordem no proj
 MODOS_RAPIDOS |= {"ordem_folhas_site"}   # a ordem das folhas escolhida no painel vai ao site (contrato 1.8; linha própria)
 MODOS_RAPIDOS |= {"copias_aprovar"}   # cópias (duplicata_de) não impedem aprovar lote nem contam na lista de Projetos (linha própria)
 MODOS_RAPIDOS |= {"retirar_copias"}   # CAMP-DUP 10/11/2026: retirar do sistema as cópias, fica a JPG original (linha própria)
+MODOS_RAPIDOS |= {"despublicar_tarefa"}   # 15/11/2026: despublicar projeto/fundo grande vira tarefa em segundo plano (linha própria)
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
 
 
@@ -4937,6 +4938,100 @@ def filho(modo):
         ver("folha sem JPG nenhum: 404 'Sem prévia'", adm.get(f"/api/itens/{PJ}-1970-S01-D00003/previa").status_code == 404)
         det = {x["codigo"]: x for x in adm.get(f"/api/projetos/{PJ}/detalhe").json()["itens"]}
         ver("a lista do projeto marca previa só nas folhas que têm imagem (a tela decide por isso)", det[f"{PJ}-1970-S01-D00001"]["pendencias"].get("previa") == "@jpg" and not det[f"{PJ}-1970-S01-D00002"]["pendencias"].get("previa") and not det[f"{PJ}-1970-S01-D00003"]["pendencias"].get("previa"), str({k_: v_["pendencias"].get("previa") for k_, v_ in det.items()}))
+        for l in res: print(l)
+    elif modo == "despublicar_tarefa":
+        # 15/11 (Rafael, F002-P0147): despublicar projeto grande dava "A operação demorou demais" (a tela desiste em 60 s; uma chamada ao site
+        # por folha). Agora vira tarefa em segundo plano: responde na hora, não duplica, conta "N de M", lista as falhas e repete só elas.
+        init_db(); _aplicar_migracoes_real()
+        import time as _tm
+        from app import auth, wp as _wp
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{det}")
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo,status_site) VALUES ('F093','Fundo Grande','GRA',1,'no_ar')")
+        def proj(n, folhas, wid0):
+            cod = f"F093-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F093',?)", (n,))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo) VALUES (?,8007,'publish','d')", (wid0,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano,status_site,tainacan_item_id) VALUES (?,'F093',?,?,1970,'no_ar',?)", (cod, n, f"Casa {n}", wid0))
+            for q in range(1, folhas + 1):
+                ic, iw = f"{cod}-1970-S01-D{q:05d}", wid0 + q
+                c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo) VALUES (?,8013,'publish','f')", (iw,))
+                c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,revisao,pendencias,tainacan_item_id,status_site) VALUES (?,?,'S01',?,?,'importado','conferida','{}',?,'no_ar')", (ic, cod, q, f"Folha {q}", iw))
+            return cod
+        PG, PS, PV = proj(1, 12, 10000), proj(2, 3, 20000), proj(3, 2, 30000)
+        c.commit(); c.close()
+        for em, nome, papel in (("master@camp.arq.br", "Mestre", "master"), ("adm@camp.arq.br", "Adm", "admin")): auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        mst, adm = cli("master@camp.arq.br"), cli("adm@camp.arq.br")
+        ch = {"chamadas": [], "falha": set(), "espera": 0.15}
+        class WPLento:
+            def __init__(self): pass
+            def atualizar_status_item(self, cid, wid, alvo):
+                _tm.sleep(ch["espera"]); ch["chamadas"].append(wid)
+                if wid in ch["falha"]: raise RuntimeError("o site respondeu 504")
+        from app import publicador as _pub
+        _wp.WP = _pub.WP = WPLento
+        k = connect(); sql = lambda q, *a: k.execute(q, a).fetchone()[0]
+        def esperar(cl, tid, ate=30):
+            t0 = _tm.monotonic()
+            while _tm.monotonic() - t0 < ate:
+                t = cl.get(f"/api/tarefas/{tid}").json()
+                if t["estado"] != "rodando": return t
+                _tm.sleep(0.1)
+            return cl.get(f"/api/tarefas/{tid}").json()
+        # permissão igual: despublicar o que está público exige master (na hora, sem criar tarefa)
+        r403 = adm.post(f"/api/projetos/{PG}/despublicar?tarefa=1", json={})
+        ver("admin (não master) despublicando projeto público: 403 na hora, sem tarefa", r403.status_code == 403 and sql("SELECT COUNT(*) FROM tarefa_publicacao") == 0, f"{r403.status_code} {r403.text[:80]}")
+        ver("projeto que não existe: 404 na hora", mst.post("/api/projetos/F093-P0099/despublicar?tarefa=1", json={}).status_code == 404)
+        # 1) responde na hora, com a tarefa (12 folhas + página × 0,15 s ≈ 2 s no site falso)
+        ch["falha"] = {10000 + 4, 10000 + 9}
+        t0 = _tm.monotonic(); r = mst.post(f"/api/projetos/{PG}/despublicar?tarefa=1", json={}); dt = _tm.monotonic() - t0; tid = (r.json() or {}).get("tarefa_id")
+        ver("despublicar?tarefa=1 responde NA HORA (202 + tarefa_id), sem esperar o site", r.status_code == 202 and tid and dt < 1.0, f"{r.status_code} {dt:.2f}s {r.text[:80]}")
+        if not tid:                                    # sem a tarefa (código antigo: espera o site e responde 200 no fim) o resto não se aplica
+            for l in res: print(l)
+            return 0
+        dup = mst.post(f"/api/projetos/{PG}/despublicar?tarefa=1", json={})
+        ver("clicar de novo com a tarefa rodando devolve a MESMA tarefa (já rodando), sem despublicar duas vezes", dup.status_code == 200 and dup.json().get("tarefa_id") == tid and dup.json().get("ja_rodando") is True, dup.text[:120])
+        pub = mst.post(f"/api/projetos/{PG}/publicar?tarefa=1", json={"acao": "tirar_do_ar"})
+        ver("o Despublicar do quadro de publicação (/publicar) também cai na mesma tarefa", pub.json().get("tarefa_id") == tid, pub.text[:120])
+        _tm.sleep(0.9); meio = mst.get(f"/api/tarefas/{tid}").json()
+        ver("no meio: rodando, 'Despublicando F093-P0001', N de 12 folhas e a folha atual", meio["estado"] == "rodando" and meio["total"] == 12 and 1 <= meio["feitas"] < 12 and meio["titulo"] == f"Despublicando {PG}" and bool(meio["folha_atual"]) and meio["etapa"].startswith("Despublicando"),
+            str({k_: meio.get(k_) for k_ in ("estado", "titulo", "etapa", "feitas", "total", "folha_atual")}))
+        chip = mst.get("/api/tarefas").json()
+        ver("o chip do topo lista a tarefa rodando", any(t_["id"] == tid for t_ in chip["rodando"]), str([t_["id"] for t_ in chip["rodando"]]))
+        fim = esperar(mst, tid)
+        fal = sorted(f_["codigo"] for f_ in fim.get("falhas") or [])
+        ver("termina com o resumo: 'falhou' com as 2 folhas que o site recusou e o motivo; 13 chamadas ao site (sem repetir)",
+            fim["estado"] == "falhou" and fal == [f"{PG}-1970-S01-D00004", f"{PG}-1970-S01-D00009"] and all("504" in f_["erro"] for f_ in fim["falhas"]) and len(ch["chamadas"]) == 13 and fim["feitas"] == 12,
+            f"{fim['estado']} {fal} chamadas={len(ch['chamadas'])} feitas={fim['feitas']}")
+        ver("o resultado diz quantas foram e quantas falharam", "11 de 13" in (fim["resultado"] or {}).get("mensagem", "") and "falharam" in fim["resultado"]["mensagem"], str(fim.get("resultado"))[:160])
+        ver("estado final igual ao de antes: projeto fora_do_ar; as que deram certo fora_do_ar; as 2 que falharam continuam no_ar",
+            sql("SELECT status_site FROM projeto WHERE codigo=?", PG) == "fora_do_ar" and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site='fora_do_ar'", PG) == 10
+            and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site='no_ar'", PG) == 2 and sql("SELECT status FROM wp_item WHERE id=10001") == "private")
+        ver("o mesmo evento de sempre no Histórico (site_tirar_do_ar, quem fez)", sql("SELECT COUNT(*) FROM evento WHERE entidade='projeto' AND codigo=? AND tipo='site_tirar_do_ar' AND ator='master@camp.arq.br'", PG) == 1)
+        # 2) tentar de novo SÓ as que falharam
+        ch["falha"], antes = set(), len(ch["chamadas"])
+        r2 = mst.post(f"/api/projetos/{PG}/despublicar?tarefa=1", json={"somente": fal}); t2 = esperar(mst, r2.json()["tarefa_id"])
+        ver("tentar de novo só as que falharam: 2 chamadas ao site (não as 13), termina ok e todas ficam fora_do_ar",
+            r2.status_code == 202 and t2["estado"] == "ok" and len(ch["chamadas"]) - antes == 2 and t2["total"] == 2 and sql("SELECT COUNT(*) FROM item WHERE projeto_codigo=? AND status_site<>'fora_do_ar'", PG) == 0,
+            f"{t2['estado']} chamadas={len(ch['chamadas']) - antes} {t2.get('resultado')}")
+        # 3) chamada antiga (sem ?tarefa=1) continua respondendo como antes, com o resultado completo
+        ch["espera"] = 0.0
+        old = mst.post(f"/api/projetos/{PS}/despublicar", json={})
+        ver("cliente antigo (sem ?tarefa=1): 200 com {ok, alterados, mensagem} como antes", old.status_code == 200 and old.json().get("ok") is True and old.json().get("alterados") == 4 and sql("SELECT status_site FROM projeto WHERE codigo=?", PS) == "fora_do_ar", old.text[:160])
+        old2 = mst.post(f"/api/projetos/{PV}/publicar", json={"acao": "tirar_do_ar"})
+        ver("/publicar sem ?tarefa=1 também como antes", old2.status_code == 200 and old2.json().get("alterados") == 3, old2.text[:120])
+        # 4) fundo inteiro como tarefa
+        ch["espera"] = 0.05
+        rf = mst.post("/api/fundos/F093/status-site?tarefa=1", json={"acao": "fora_do_ar", "motivo": "teste"}); tf = esperar(mst, rf.json().get("tarefa_id"))
+        ver("o fundo inteiro também vira tarefa: 202 na hora, 'Despublicando o fundo F093', 20 de 20 e o fundo fica despublicado",
+            rf.status_code == 202 and tf["estado"] == "ok" and tf["titulo"] == "Despublicando o fundo F093" and tf["total"] == 20 and tf["feitas"] == 20 and sql("SELECT status_site FROM fundo WHERE codigo='F093'") == "fora_do_ar",
+            f"{rf.status_code} {tf.get('estado')} {tf.get('titulo')} {tf.get('feitas')}/{tf.get('total')} {str(tf.get('resultado'))[:100]}")
+        ver("o fundo continua exigindo o master (admin: 403 sem tarefa)", adm.post("/api/fundos/F093/status-site?tarefa=1", json={"acao": "fora_do_ar", "motivo": "x"}).status_code == 403)
         for l in res: print(l)
     elif modo == "tarefa_publicacao":
         init_db(); _aplicar_migracoes_real()
@@ -18689,6 +18784,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Retirar cópias: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Despublicar projeto grande (15/11, F002-P0147 \"demorou demais\"): vira tarefa, responde na hora, não duplica, N de M, falhas listadas e repetidas sozinhas; fundo também")
+rc, out = rodar("despublicar_tarefa", f"{tmp}/despublicar_tarefa.db")
+if rc != 0: ok(False, f"teste despublicar_tarefa não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Despublicar como tarefa: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

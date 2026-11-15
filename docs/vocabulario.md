@@ -158,6 +158,9 @@ estreita só com ícones; o nome do item, o número e a tecla aparecem na dica a
 - Cartão de tarefa (27/10): título ("⏳ Publicando F009-P0092"), depois "**começou 15:08 · Rafael**" (o NOME cadastrado, nunca o
   e-mail; só a hora quando é hoje, "26/10, 15:08" de outro dia), a etapa atual numa linha própria em destaque ("**Publicando** · 23 s até
   agora") e a lista de passos com a hora ("15:08 · Projeto liberado para publicação"), sem repetir a etapa atual.
+- Mudar a publicação de um projeto ou fundo (Publicar, Voltar para rascunho, Despublicar) é tarefa (15/11): chip "⏳ Despublicando F002-P0147 · 37 de 120 folhas";
+  o 2º clique diz "Já está rodando: o andamento fica no topo da página."; as que falharam ficam listadas com **Tentar de novo só estas N**.
+  Escrita que passa de 1 min sem resposta nunca diz "Tente novamente": "O painel parou de esperar a resposta (mais de 1 min), mas a ação pode continuar no servidor. Não repita agora…".
 - A sincronização automática com o site é do painel ("O painel (automático)"): não aparece em "Suas tarefas" nem no chip do topo.
   Em Máquinas → Catálogo local × site: "**conferindo agora**" enquanto roda e, com intervalo abaixo de 60 min, "A conferência completa
   leva vários minutos: recomendado a cada 60 min (ajuste o intervalo da sincronização automática em Configurações)."
