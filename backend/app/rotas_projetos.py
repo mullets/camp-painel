@@ -538,6 +538,7 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
     itens_cid = _colecao_config(con, "tainacan.itens_collection_id", 8013)
     from .retirados import chaves as _chaves_retiradas
     retiradas_ = _chaves_retiradas(con, codigo)["codigos"]
+    from .mover_site import antigo_do_site
     itens_site = []
     for w in con.execute("""
         SELECT id, colecao_id, status, titulo, slug, url, documento_url, thumb_url,
@@ -553,6 +554,8 @@ def detalhe(codigo: str, u: dict = Depends(auth.exige("leitura"))) -> dict:
         if d.get("codigo_detectado") in retiradas_:
             continue                        # CAMP-DUP: folha RETIRADA do sistema (cópia de outro formato; o item privado continua no site)
         local = itens_por_codigo.get(d.get("codigo_detectado"))
+        if not local and antigo_do_site(con, d.get("id"), d.get("codigo_detectado")):
+            continue                        # 15/11: registro antigo de folha movida/recodificada (privado no site): não é folha "só no site" daqui
         mdw = json.loads(d.get("metadados") or "{}")
         d["metadados_site"] = mdw
         if local:

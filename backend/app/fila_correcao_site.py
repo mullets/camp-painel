@@ -82,6 +82,11 @@ def executar_pendentes(limite: int = 12, orcamento_s: float = 25.0, forcar_manua
         inicio, teto = time.monotonic(), max(0, min(LOTE_MAX, limite))
         r1 = reenvio_pendencias.rodada(teto, orcamento_s, ator or ATOR, ao_terminar_item)
         r2 = _rodada(enviar, teto - r1["tentadas"], orcamento_s - (time.monotonic() - inicio), ator or ATOR, ao_terminar_item)
+        try:                    # 15/11: registro antigo de folha movida que o site não deixou privado na hora (app.mover_site)
+            from . import mover_site
+            mover_site.esconder_pendentes(ator or ATOR, limite=max(1, teto))
+        except Exception:  # noqa: BLE001
+            pass
         return {"enviadas": r1["enviadas"] + r2["enviadas"], "falhas": r1["falhas"] + r2["falhas"], "na_fila": r1["na_fila"]}
     finally:
         _RODADA.release()

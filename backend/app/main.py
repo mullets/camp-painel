@@ -189,6 +189,11 @@ async def _coleta_pedidos_site_periodica() -> None:
                     await asyncio.to_thread(redir_site.enviar_pendentes)
                 except ImportError:
                     pass
+                try:            # 15/11: registros antigos de folhas movidas que ainda estão públicos no site (nunca levanta)
+                    from . import mover_site
+                    await asyncio.to_thread(mover_site.esconder_pendentes)
+                except ImportError:
+                    pass
         except Exception as e:  # noqa: BLE001  (nunca derruba o painel)
             log_registrar(logging.ERROR, "coleta_pedidos_site", f"Falha no coletor de pedidos do site: {type(e).__name__}")
         await asyncio.sleep(max(1, minutos) * 60 if minutos > 0 else 300)

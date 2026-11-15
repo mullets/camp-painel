@@ -48,6 +48,24 @@ def _tipo(v: str | None):
     return None
 
 
+def registro_antigo(wp_id, cod: str, nv: dict, ligados: dict) -> str | None:
+    """15/11 (Rafael: "no antigo ficaram as imagens no site, e no painel ficam como 'só no site'"): este item do site é o registro ANTIGO
+    de uma folha que mudou de código? Devolve o porquê (não importa) ou None (importa como sempre). `nv` = mover_site.nao_voltam(con);
+    `ligados` = {tainacan_item_id: código da folha do painel ligada a ele}.
+    - ligado a OUTRA folha do painel (recodificar/mudar série mantêm o item; o metadado do site pode ainda ter o código velho): nunca recria;
+    - registro antigo de folha movida (site_registro_antigo ou evento 'folha_movida'): nem recria nem religa;
+    - código com redirecionamento 301 para outro código e nenhuma folha ligada a este item: não recria."""
+    wid = int(wp_id) if str(wp_id or "").isdigit() else None
+    dono = ligados.get(wid) if wid is not None else None
+    if dono is not None:
+        return None if dono == cod else f"o item do site já é da folha {dono}"
+    if wid is not None and wid in nv["ids"]:
+        return f"registro antigo da folha {nv['ids'][wid] or cod}, que foi movida"
+    if cod in nv["codigos"]:
+        return f"o código {cod} redireciona para {nv['codigos'][cod]}"
+    return None
+
+
 def executar(log=print, simular: bool = False, projeto: str | None = None, item: str | None = None, so_itens: bool = False) -> dict:
     """simular=True roda EXATAMENTE o mesmo código, mas desfaz tudo no fim (prévia fiel do que a importação faria).
     projeto/item restringem às folhas daquele projeto ou àquela folha; so_itens NÃO mexe em projetos (importar uma folha
@@ -55,7 +73,7 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
     con = connect()
     n = {"projetos_novos": 0, "projetos_atualizados": 0, "itens_novos": 0, "itens_atualizados": 0,
          "sem_codigo": [], "fundo_desconhecido": [], "item_sem_projeto": [],
-         "projetos_novos_lista": [], "itens_novos_lista": []}
+         "projetos_novos_lista": [], "itens_novos_lista": [], "registro_antigo": []}
     fundos = {r[0] for r in con.execute("SELECT codigo FROM fundo")}
     equiv = {r[0]: r[1] for r in con.execute("SELECT nome_site, fundo_codigo FROM fundo_termo_site")}
 
@@ -108,6 +126,9 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
     # ---- itens ----
     proj_por_wp = {r[1]: r[0] for r in con.execute("SELECT codigo, tainacan_item_id FROM projeto WHERE tainacan_item_id IS NOT NULL")}
     projetos = {r[0] for r in con.execute("SELECT codigo FROM projeto")}
+    from .mover_site import nao_voltam
+    nv = nao_voltam(con)          # 15/11: registros antigos de folhas movidas/recodificadas não voltam como folha "só no site"
+    ligados = {r[0]: r[1] for r in con.execute("SELECT tainacan_item_id, codigo FROM item WHERE tainacan_item_id IS NOT NULL")}
     for it in con.execute("SELECT * FROM wp_item WHERE colecao_id=?", (COL_ACERVO,)).fetchall():
         md = json.loads(it["metadados"] or "{}")
         cod, f, p = detectar_codigo(md.get("Código do documento", ""), it["titulo"] or "", it["slug"] or "")
@@ -134,6 +155,10 @@ def executar(log=print, simular: bool = False, projeto: str | None = None, item:
         titulo = RE_SUFIXO_TITULO.sub("", md.get("Título") or it["titulo"] or "").strip() or None
         status = STATUS.get(it["status"], "nao_publicado")
         ex = con.execute("SELECT codigo FROM item WHERE codigo=?", (cod,)).fetchone()
+        motivo_antigo = registro_antigo(it["id"], cod, nv, ligados)
+        if motivo_antigo:              # nem recria (fantasma "só no site" no projeto antigo) nem religa outra folha a ele
+            n["registro_antigo"].append((it["id"], cod, motivo_antigo))
+            continue
         if ex:
             con.execute("""UPDATE item SET tainacan_item_id=?, status_site=?, arquivo_jpg=CASE WHEN arquivo_jpg IS NULL OR arquivo_jpg NOT GLOB '*[^0-9]*' OR arquivo_jpg LIKE '<%' THEN ? ELSE arquivo_jpg END,
                            atualizado_em=datetime('now') WHERE codigo=?""", (it["id"], status, _arquivo_preview(it["documento_url"]), cod))

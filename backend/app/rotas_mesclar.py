@@ -104,8 +104,10 @@ def desfazer_descarte(lid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
 # MOVER folhas e MESCLAR projetos. O código da folha é a chave primária ({projeto}-{ano}-{série}-D{seq}) e aparece em
 # item_agente, item_localizacao, pedido_releitura, item.duplicata_de e erro.codigo: tudo é trocado numa transação só,
 # com a checagem de chave estrangeira adiada até o fim. Ou move tudo, ou não move nada.
-# Folha PÚBLICA no site (no_ar): pela tela, o painel a deixa privada no site antes de mover (28/10); pelo CAMP Vision, recusa. Folha que já tinha registro no site (rascunho/privado)
-# é movida e perde o vínculo (o registro antigo fica privado no site; ao publicar o destino, ela sobe com o código novo).
+# Folha PÚBLICA no site (no_ar): pela tela (mover folhas, mover lote, mesclar), move e o painel deixa o registro antigo privado no site logo
+# depois (15/11; antes só o mover folhas, e antes de mover); pelo CAMP Vision, recusa. Toda folha que tinha registro no site é movida e perde
+# o vínculo: o registro antigo entra em site_registro_antigo (app.mover_site), fica privado no site (pendência repetida sozinha se o site
+# estiver fora) e a importação do site não o traz de volta como "só no site". Ao publicar o destino, ela sobe com o código novo.
 # ---------------------------------------------------------------------------------------------------------------------
 import json as _json
 import re
@@ -209,7 +211,7 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None,
             ignorados.append({"codigo": c, "motivo": "já está no destino"}); continue
         _mesmo_fundo(con, it["projeto_codigo"], d, f"a folha {c}")
         if it["status_site"] == "no_ar":
-            if it["tainacan_item_id"] and not publicada_ok:   # (a simulação do mover da tela passa: ao aplicar, a rota a esconde no site antes)
+            if it["tainacan_item_id"] and not publicada_ok:   # (as rotas da tela passam: o registro antigo sai do público depois do commit; o CAMP Vision recusa)
                 raise HTTPException(409, f"A folha {c} está publicada no site. Despublique esta folha (ou o projeto) antes de mover; as outras folhas podem ser movidas.")
             _status_velho(con, c, ator)                                # marcada como publicada mas sem registro no site: status velho, não trava
         igual = None
@@ -225,8 +227,12 @@ def _mover(con, codigos: list[str], destino: str, ator: str, motivo: str | None,
             raise HTTPException(409, f"O código {novo} já existe; nada foi movido.")
         tinha_site = it["tainacan_item_id"]
         if tinha_site:      # CAMP-014: a folha tinha registro no site: o endereço antigo precisa redirecionar para o novo
-            from . import redir_site
+            from . import mover_site, redir_site
             redir_site.registrar(con, c, novo, "item", motivo or "folha movida", ator)
+            # 15/11 (Rafael: "no antigo ficaram as imagens no site… Devia tirar de ambos"): o registro antigo sai do público, seja qual for a
+            # situação da folha no painel (status velho não importa). Entra aqui, na transação do mover (todo caminho passa por aqui); quem
+            # chama esconde no site DEPOIS do commit (mover_site.depois_de_mover) e o que falhar fica pendente, repetido sozinho.
+            mover_site.registrar(con, tinha_site, c, novo, motivo or "folha movida", ator)
         con.execute("""UPDATE item SET codigo=?, projeto_codigo=?, sequencial=?, codigo_anterior=?, ordem_manual=NULL,
                        tainacan_item_id=NULL, status_site=CASE WHEN tainacan_item_id IS NOT NULL THEN 'nao_publicado' ELSE status_site END,
                        atualizado_em=datetime('now') WHERE codigo=?""", (novo, destino, seq, c, c))
@@ -265,10 +271,15 @@ def _transacao(fn, simular: bool = False):
 
 
 def _enviar_redirecionamentos() -> None:
-    """Segundo plano: envia ao site o que a fila de redirecionamentos tem. Nunca levanta."""
+    """Segundo plano: envia ao site o que a fila de redirecionamentos tem (e repete os registros antigos ainda públicos). Nunca levanta."""
     try:
         from . import redir_site
         redir_site.enviar_pendentes()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import mover_site
+        mover_site.esconder_pendentes()
     except Exception:  # noqa: BLE001
         pass
 
@@ -276,10 +287,10 @@ def _enviar_redirecionamentos() -> None:
 @router.get("/site/redirecionamentos")
 def status_redirecionamentos(u: dict = Depends(auth.exige("operador"))) -> dict:
     """CAMP-014 · quantos redirecionamentos já estão no site, quantos faltam e quantos falharam."""
-    from . import redir_site
+    from . import mover_site, redir_site
     con = connect()
     try:
-        return redir_site.status(con)
+        return {**redir_site.status(con), "registros_antigos": mover_site.contar(con)}   # 15/11: registros antigos de folhas movidas (privados / ainda por tirar)
     finally:
         con.close()
 
@@ -293,28 +304,25 @@ def enviar_redirecionamentos(u: dict = Depends(auth.exige("admin"))) -> dict:
 
 @router.post("/itens/mover")
 def mover_itens(d: MoverItens, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou)."""
+    """Move as folhas escolhidas para outro projeto, renumerando no destino (D continua de onde o destino parou).
+    Folha publicada não trava (28/10). 15/11: move primeiro e só depois deixa o registro antigo privado no site (site sem resposta não
+    impede mais o mover: fica pendente e o painel tenta de novo sozinho). `site_antigo` diz quantos saíram do público e quantos faltam."""
     if not d.itens:
         raise HTTPException(400, "Escolha pelo menos uma folha.")
-    escondidas = []
-    if not d.simular:                    # 28/10: folha publicada não trava mais o mover: o painel a deixa privada no site antes (nada é apagado)
-        from .publicador import esconder_folha_no_site
-        con = connect()
-        try:
-            no_ar = [x[0] for x in con.execute(f"SELECT codigo FROM item WHERE codigo IN ({','.join('?' * len(d.itens))}) AND status_site='no_ar' AND tainacan_item_id IS NOT NULL",
-                                              list(d.itens))]
-        finally:
-            con.close()
-        if no_ar:                        # confere ANTES (simulando) se o mover passa: não esconde nada no site para depois recusar
-            _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True, publicada_ok=True), simular=True)
-        for c in no_ar:
-            if esconder_folha_no_site(c, u["email"], "folha movida para " + d.destino):
-                escondidas.append(c)
-    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True, publicada_ok=d.simular), simular=d.simular)
+    r = _transacao(lambda con: _mover(con, d.itens, d.destino, u["email"], d.motivo, soltar_lote=True, publicada_ok=True), simular=d.simular)
     if d.simular:
         return {**r, "simulado": True}
-    if escondidas:
-        r["escondidas_no_site"] = escondidas
+    return _depois_de_mover(r, u["email"], tarefas)
+
+
+def _depois_de_mover(r: dict, ator: str, tarefas: BackgroundTasks) -> dict:
+    """Depois do COMMIT: o registro antigo no site sai do público (poucas na hora, muitas em segundo plano) e os 301 vão ao site."""
+    from . import mover_site
+    s = mover_site.depois_de_mover(r.get("movidos") or [], ator, tarefas)
+    lista = s.pop("lista_escondidas", None)
+    if lista:
+        r["escondidas_no_site"] = lista
+    r["site_antigo"] = s
     tarefas.add_task(_enviar_redirecionamentos)
     return r
 
@@ -400,7 +408,7 @@ def _atualizar_series_no_site(codigos: list[str], ator: str) -> None:
             pass
 
 
-def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> dict:
+def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None, publicada_ok: bool = False) -> dict:
     """Mescla o projeto de origem no destino (transação já aberta por quem chama). Usada pela rota e pelo CAMP Vision (CAMP-009)."""
     o = con.execute("SELECT codigo, status_site, mesclado_em, descartado_em FROM projeto WHERE codigo=?", (origem,)).fetchone()
     if not o:
@@ -416,7 +424,7 @@ def _mesclar(con, origem: str, destino: str, ator: str, motivo: str | None) -> d
             raise HTTPException(409, f"O projeto {origem} está público no site. Despublique antes de mesclar.")
     _mesmo_fundo(con, origem, _destino_valido(con, destino), f"o projeto {origem}")
     cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE projeto_codigo=?", (origem,))]
-    r = _mover(con, cods, destino, ator, motivo or f"mesclado em {destino}") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
+    r = _mover(con, cods, destino, ator, motivo or f"mesclado em {destino}", publicada_ok=publicada_ok) if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
     lotes = [x[0] for x in con.execute("SELECT id FROM lista_processamento WHERE projeto_codigo=?", (origem,))]
     con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE projeto_codigo=?", (destino, origem))
     con.execute("UPDATE pedido_releitura SET projeto_codigo=? WHERE projeto_codigo=?", (destino, origem))
@@ -434,12 +442,11 @@ def mesclar_em(origem: str, d: Destino, tarefas: BackgroundTasks, u: dict = Depe
     if origem == d.destino:
         raise HTTPException(400, "Origem e destino são o mesmo projeto.")
 
-    res = _transacao(lambda con: _mesclar(con, origem, d.destino, u["email"], d.motivo))
-    tarefas.add_task(_enviar_redirecionamentos)
-    return res
+    res = _transacao(lambda con: _mesclar(con, origem, d.destino, u["email"], d.motivo, publicada_ok=True))
+    return _depois_de_mover(res, u["email"], tarefas)
 
 
-def _mover_lote(con, lid: int, destino: str, ator: str, motivo: str | None) -> dict:
+def _mover_lote(con, lid: int, destino: str, ator: str, motivo: str | None, publicada_ok: bool = False) -> dict:
     """Passa o lote e as folhas dele para outro projeto (transação já aberta por quem chama)."""
     l = con.execute("SELECT id, projeto_codigo, descartado_em FROM lista_processamento WHERE id=?", (lid,)).fetchone()
     if not l:
@@ -450,7 +457,7 @@ def _mover_lote(con, lid: int, destino: str, ator: str, motivo: str | None) -> d
         raise HTTPException(400, "O lote já está nesse projeto.")
     _mesmo_fundo(con, l["projeto_codigo"], _destino_valido(con, destino), f"o lote {lid}")
     cods = [r[0] for r in con.execute("SELECT codigo FROM item WHERE lote_id=?", (lid,))]
-    r = _mover(con, cods, destino, ator, motivo or f"lote {lid} movido") if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
+    r = _mover(con, cods, destino, ator, motivo or f"lote {lid} movido", publicada_ok=publicada_ok) if cods else {"movidos": [], "duplicatas": [], "ignorados": []}
     con.execute("UPDATE lista_processamento SET projeto_codigo=?, atualizado_em=datetime('now') WHERE id=?", (destino, lid))
     con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('lista',?,'lote_movido',?,?)",
                 (str(lid), ator, _json.dumps({"de": l["projeto_codigo"], "para": destino, "folhas": len(r["movidos"]), "motivo": motivo}, ensure_ascii=False)))
@@ -460,9 +467,8 @@ def _mover_lote(con, lid: int, destino: str, ator: str, motivo: str | None) -> d
 @router.post("/filas/{lid}/mover-para")
 def mover_lote(lid: int, d: MoverLote, tarefas: BackgroundTasks, u: dict = Depends(auth.exige("admin"))) -> dict:
     """O lote caiu no projeto errado: passa o lote e as folhas dele para o projeto certo."""
-    res = _transacao(lambda con: _mover_lote(con, lid, d.projeto_codigo, u["email"], d.motivo))
-    tarefas.add_task(_enviar_redirecionamentos)
-    return res
+    res = _transacao(lambda con: _mover_lote(con, lid, d.projeto_codigo, u["email"], d.motivo, publicada_ok=True))
+    return _depois_de_mover(res, u["email"], tarefas)
 
 
 @router.post("/itens/{codigo}/duplicata-de")

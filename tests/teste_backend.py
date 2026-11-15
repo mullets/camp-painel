@@ -30,6 +30,7 @@ MODOS_RAPIDOS |= {"copias_aprovar"}   # cópias (duplicata_de) não impedem apro
 MODOS_RAPIDOS |= {"retirar_copias"}   # CAMP-DUP 10/11/2026: retirar do sistema as cópias, fica a JPG original (linha própria)
 MODOS_RAPIDOS |= {"despublicar_tarefa"}   # 15/11/2026: despublicar projeto/fundo grande vira tarefa em segundo plano (linha própria)
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
+MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -6976,15 +6977,20 @@ def filho(modo):
         pub1 = f"{PP}-1970-S01-D00001"
         sm = adm.post("/api/itens/mover", json={"itens": [pub1], "destino": PX, "simular": True})
         ver("28/10: simular o mover de folha pública: mostra o que faria, sem tocar no site", sm.status_code == 200 and sm.json().get("simulado") is True and not _st_mv, sm.text[:200])
+        # 15/11 (Rafael: "Devia tirar de ambos"): site fora do ar NÃO impede mais o mover (antes: 502 e nada movido). Move, e o registro
+        # antigo fica pendente de sair do público; a próxima tentativa o deixa privado.
         _pubm.WP = _WPRecusaMv
-        rv = adm.post("/api/itens/mover", json={"itens": [pub1], "destino": PX})
-        ver("28/10: o site recusou esconder: 502 e NADA é movido", rv.status_code == 502 and sql("SELECT status_site FROM item WHERE codigo=?", pub1) == "no_ar", rv.text[:200])
-        _pubm.WP = _WPGravaMv
         rv = adm.post("/api/itens/mover", json={"itens": [pub1], "destino": PX, "motivo": "é do outro projeto"})
         mvd = (rv.json().get("movidos") or [{}])[0] if rv.status_code == 200 else {}
-        ver("28/10: mover folha PUBLICADA: o painel a deixa privada no site (nada apagado), move e registra o redirecionamento",
-            rv.status_code == 200 and (777, "private") in _st_mv and rv.json().get("escondidas_no_site") == [pub1] and str(mvd.get("para", "")).startswith(PX)
-            and mvd.get("tinha_registro_no_site") is True, rv.text[:300] + " " + str(_st_mv))
+        ver("15/11: o site recusou esconder: a folha é movida mesmo assim e o registro antigo fica pendente (site_antigo.pendentes = 1)",
+            rv.status_code == 200 and str(mvd.get("para", "")).startswith(PX) and (rv.json().get("site_antigo") or {}).get("pendentes") == 1
+            and sql("SELECT COUNT(*) FROM site_registro_antigo WHERE wp_id=777 AND escondido_em IS NULL") == 1, rv.text[:300])
+        _pubm.WP = _WPGravaMv
+        from app import mover_site as _msv
+        _msv.esconder(None, "teste", forcar=True)
+        ver("28/10+15/11: mover folha PUBLICADA: o registro antigo fica privado no site (nada apagado) e o redirecionamento é registrado",
+            (777, "private") in _st_mv and mvd.get("tinha_registro_no_site") is True and sql("SELECT COUNT(*) FROM site_registro_antigo WHERE wp_id=777 AND escondido_em IS NOT NULL") == 1
+            and sql("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo=?", pub1) == mvd.get("para"), str(_st_mv))
         _pubm.WP = _wp_orig
         # 4) MOVER LOTE para o projeto certo
         ml = adm.post(f"/api/filas/{LW}/mover-para", json={"projeto_codigo": PX2})
@@ -7076,13 +7082,17 @@ def filho(modo):
             and sql("SELECT projeto_codigo FROM item WHERE codigo=?", novo) == PB and sql("SELECT codigo_anterior FROM item WHERE codigo=?", novo) == a2, r.text[:240])
         ver("a folha movida sai do lote de revisão da origem (as outras continuam)", sql("SELECT COUNT(*) FROM item WHERE lote_id=? AND projeto_codigo=?", LA, PA) == 1 and sql("SELECT COUNT(*) FROM item WHERE codigo=?", a2) == 0)
         r = adm.post("/api/itens/mover", json={"itens": [a1], "destino": PB})
-        ver("projeto publicado: a folha que ESTÁ no site é recusada (409, despublique antes)", r.status_code == 409 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", a1) == PA, r.text[:200])
+        # 15/11 (Rafael: "Devia tirar de ambos"): a folha publicada também é movida; o registro antigo sai do público depois (aqui o site não
+        # tem senha: fica pendente e o painel tenta de novo sozinho). Antes: 502/409 e nada movido.
+        ver("projeto publicado: a folha que ESTÁ no site também é movida; o registro antigo fica pendente de sair do público (site indisponível aqui)",
+            r.status_code == 200 and (r.json().get("site_antigo") or {}).get("pendentes") == 1 and sql("SELECT COUNT(*) FROM item WHERE codigo=?", a1) == 0
+            and sql("SELECT COUNT(*) FROM site_registro_antigo WHERE wp_id=901 AND escondido_em IS NULL") == 1, r.text[:200])
         # 5) histórico dos DOIS projetos
         ha = [e for e in adm.get(f"/api/projetos/{PA}/detalhe").json()["eventos"] if e["tipo"] == "folha_movida"]
         hb = [e for e in adm.get(f"/api/projetos/{PB}/detalhe").json()["eventos"] if e["tipo"] == "folha_movida"]
         hc = [e for e in adm.get(f"/api/projetos/{PC}/detalhe").json()["eventos"] if e["tipo"] == "folha_movida"]
-        ver("histórico: a folha movida aparece no projeto de origem e no de destino (e não num terceiro)", len(ha) == 1 and len(hb) == 1 and not hc
-            and _j.loads(ha[0]["detalhe"])["de"] == a2 and hb[0]["codigo"] == novo, f"origem={len(ha)} destino={len(hb)} outro={len(hc)}")
+        ver("histórico: a folha movida aparece no projeto de origem e no de destino (e não num terceiro)", len(ha) == 2 and len(hb) == 2 and not hc
+            and {_j.loads(e["detalhe"])["de"] for e in ha} == {a1, a2} and novo in {e["codigo"] for e in hb}, f"origem={len(ha)} destino={len(hb)} outro={len(hc)}")
         # 6) só admin
         ver("só admin move (operador 403, também na prévia)", op.post("/api/itens/mover", json={"itens": [a3], "destino": PB}).status_code == 403
             and op.post("/api/itens/mover", json={"itens": [a3], "destino": PB, "simular": True}).status_code == 403 and sql("SELECT projeto_codigo FROM item WHERE codigo=?", a3) == PA)
@@ -15740,6 +15750,204 @@ def filho(modo):
         ver("desfazer --aplicar volta as 11 folhas EXATAMENTE como estavam antes da limpeza (duplicata, conferência, revisão, pendências)",
             r8.returncode == 0 and estado() == est1, (r8.stdout + r8.stderr)[-400:])
         for l in res: print(l)
+    elif modo == "mover_lote_site":
+        # 15/11/2026 (Rafael, real): "Movi um lote inteiro de um projeto para outro; no antigo ficaram as imagens no site, e no painel ficam
+        # como 'só no site'. Devia tirar de ambos." Todo caminho de mover (lote, folhas, mesclar) deixa privado no site o registro antigo
+        # (status do painel velho não importa), com 301; site fora = pendência repetida sozinha; a importação do site não recria fantasma;
+        # scripts/consertar_mover_site.py arruma o que já foi movido (simula, RECUSADO, aplica, desfaz).
+        init_db(); _aplicar_migracoes_real()
+        import json as _j, hashlib, io as _io, contextlib, importlib.util
+        from pathlib import Path as _P
+        from app import publicador, importador_site, auth, mover_site, fila_correcao_site
+        from fastapi.testclient import TestClient
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:500]}")
+        db = str(_P(os.environ["CAMP_DB_PATH"]).resolve())
+        base = _P(db).parent
+        c = connect()
+        c.execute("INSERT INTO fundo (codigo,titulo,sigla,ativo) VALUES ('F090','Fundo Mover','FMV',1)")
+        def proj(n, titulo):
+            cod = f"F090-P{n:04d}"
+            c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES ('F090',?)", (n,))
+            c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES (?,?,?,?,1970)", (cod, "F090", n, titulo))
+            return cod
+        PA, PB, PC, PD = proj(1, "Casa Antiga"), proj(2, "Casa Certa"), proj(3, "Casa Repetida"), proj(4, "Casa Grande")
+        def lote(p, nome):
+            return c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES (?,?,'/x','revisao')", (nome, p)).lastrowid
+        def folha(p, q, lid=None, status="nao_publicado", tid=None, site="publish", origem="campvision"):
+            cod = f"{p}-1970-S01-D{q:05d}"
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,folha,origem,lote_id,revisao,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,?,?,?,'conferida',?,?)",
+                      (cod, p, q, f"Prancha {q}", str(q), origem, lid, status, tid))
+            if tid:
+                c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,fundo_detectado,projeto_detectado,metadados,json) VALUES (?,8013,?,?,?,'F090',?,?,'{}')",
+                          (tid, site, f"Prancha {q}", cod, p, _j.dumps({"Código do documento": cod})))
+            return cod
+        L1 = lote(PA, "Lote errado")
+        a1 = folha(PA, 1, L1, "no_ar", 5001)                     # publicada (painel sabe)
+        a2 = folha(PA, 2, L1, "nao_publicado", 5002)             # status VELHO no painel; no site está público
+        a3 = folha(PA, 3, L1)                                    # nunca foi ao site
+        a9 = folha(PA, 9)                                        # fica no projeto antigo
+        L2 = lote(PA, "Outro lote errado")
+        a4 = folha(PA, 4, L2, "no_ar", 5004)
+        c4 = folha(PC, 21, None, "rascunho", 5006, site="publish")  # mesclar: status velho 'rascunho', público no site
+        LG = lote(PD, "Lote grande")
+        grandes = [folha(PD, 100 + q, LG, "no_ar", 6000 + q) for q in range(1, 10)]     # 9 folhas: em segundo plano
+        c.commit(); c.close()
+        site = {}
+        estado = {"cai": False}
+        chamadas = []
+        class WPFalso:
+            def __init__(self, *a, **k): pass
+            def atualizar_status_item(self, cid, wid, st):
+                if estado["cai"]: raise RuntimeError("o site não respondeu (503)")
+                chamadas.append((wid, st)); site[wid] = st; return {"id": wid, "status": st}
+        publicador.WP = WPFalso
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        def q(sql, *a):
+            k_ = sqlite3.connect(db)
+            try: return k_.execute(sql, a).fetchall()
+            except sqlite3.Error as e: return [("erro", str(e))]
+            finally: k_.close()
+        def um(sql, *a):
+            r_ = q(sql, *a); return r_[0][0] if r_ else None
+        def no_detalhe(p_):
+            r_ = adm.get(f"/api/projetos/{p_}/detalhe").json()
+            return {x.get("codigo"): x.get("origem_catalogacao") for x in r_.get("itens") or []}
+        # ---------- 1. mover LOTE com folhas publicadas (uma com status velho) ----------
+        r = adm.post(f"/api/filas/{L1}/mover-para", json={"projeto_codigo": PB, "motivo": "lote no projeto errado"})
+        j = r.json() if r.status_code == 200 else {}
+        novos = {m_["de"]: m_["para"] for m_ in j.get("movidos") or []}
+        ver("mover lote com folha publicada: não recusa mais (antes 409 'Despublique'); as 3 folhas vão para o destino",
+            r.status_code == 200 and set(novos) == {a1, a2, a3} and um("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PB) == 3, r.text[:300])
+        ver("o registro antigo das DUAS folhas que tinham site fica privado no site (também a de status velho no painel)",
+            (5001, "private") in chamadas and (5002, "private") in chamadas and len(chamadas) == 2, chamadas)
+        ver("a resposta diz quantas saíram do público no projeto antigo (site_antigo.escondidas = 2, pendentes = 0)",
+            (j.get("site_antigo") or {}).get("escondidas") == 2 and (j.get("site_antigo") or {}).get("pendentes") == 0, j.get("site_antigo"))
+        ver("301 do código antigo para o novo nas duas e o mapa explícito marca os registros antigos como privados",
+            um("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo=?", a1) == novos.get(a1) and um("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo=?", a2) == novos.get(a2)
+            and um("SELECT COUNT(*) FROM site_registro_antigo WHERE wp_id IN (5001,5002) AND escondido_em IS NOT NULL") == 2
+            and um("SELECT status FROM wp_item WHERE id=5002") == "private", q("SELECT * FROM site_registro_antigo"))
+        # ---------- 2. a importação do site NÃO recria as folhas no projeto antigo ----------
+        k_ = sqlite3.connect(db); k_.execute("UPDATE wp_item SET status='publish' WHERE id IN (5001,5002)"); k_.commit(); k_.close()   # espelho velho
+        n_imp = importador_site.executar(log=lambda *_: None)
+        ver("importar do site depois do mover: nenhuma folha 'só no site' volta ao projeto antigo",
+            um("SELECT COUNT(*) FROM item WHERE projeto_codigo=?", PA) == 2 and um("SELECT COUNT(*) FROM item WHERE codigo IN (?,?)", a1, a2) == 0
+            and {x[0] for x in n_imp.get("registro_antigo") or []} >= {5001, 5002}, (q("SELECT codigo FROM item WHERE projeto_codigo=?", PA), n_imp.get("registro_antigo")))
+        ver("a página do projeto antigo não mostra o registro antigo como folha do site",
+            a1 not in no_detalhe(PA) and a2 not in no_detalhe(PA) and a9 in no_detalhe(PA), no_detalhe(PA))
+        nv = mover_site.nao_voltam(sqlite3.connect(db))
+        ver("o mapa explícito (mover_site.nao_voltam) tem os ids antigos e os códigos com 301",
+            {5001, 5002} <= set(nv["ids"]) and nv["codigos"].get(a1) == novos.get(a1), nv)
+        # ---------- 3. site FORA DO AR: move mesmo assim, fica pendente, a rodada de reenvio esconde ----------
+        estado["cai"] = True
+        r = adm.post(f"/api/filas/{L2}/mover-para", json={"projeto_codigo": PB})
+        j = r.json() if r.status_code == 200 else {}
+        ver("site fora do ar: o lote é movido mesmo assim e o registro antigo fica pendente (site_antigo.pendentes = 1)",
+            r.status_code == 200 and (j.get("site_antigo") or {}).get("pendentes") == 1 and um("SELECT projeto_codigo FROM lista_processamento WHERE id=?", L2) == PB
+            and um("SELECT tentativas FROM site_registro_antigo WHERE wp_id=5004 AND escondido_em IS NULL") == 1 and (5004, "private") not in chamadas, r.text[:300])
+        estado["cai"] = False
+        mover_site.esconder_pendentes()
+        ver("antes da hora da próxima tentativa, a rodada automática espera (não martela o site)", (5004, "private") not in chamadas, chamadas)
+        k_ = sqlite3.connect(db); k_.execute("UPDATE site_registro_antigo SET proxima_em=datetime('now','-1 minute') WHERE wp_id=5004"); k_.commit(); k_.close()
+        fila_correcao_site.executar_pendentes(forcar_manual=True)
+        ver("a rodada de reenvio deixa o registro pendente privado e fecha a pendência",
+            (5004, "private") in chamadas and um("SELECT escondido_em IS NOT NULL FROM site_registro_antigo WHERE wp_id=5004") == 1, q("SELECT * FROM site_registro_antigo WHERE wp_id=5004"))
+        # ---------- 4. mesclar (status velho 'rascunho', público no site) ----------
+        r = adm.post(f"/api/projetos/{PC}/mesclar-em", json={"destino": PB, "motivo": "mesmo projeto"})
+        ver("mesclar: o registro antigo da folha (status velho no painel) fica privado no site, com 301",
+            r.status_code == 200 and (5006, "private") in chamadas and (r.json().get("site_antigo") or {}).get("escondidas") == 1
+            and um("SELECT COUNT(*) FROM redirecionamento WHERE codigo_antigo=?", c4) == 1, r.text[:300])
+        # ---------- 5. lote GRANDE: em segundo plano (a tela não espera N chamadas ao site) ----------
+        r = adm.post(f"/api/filas/{LG}/mover-para", json={"projeto_codigo": PB})
+        j = r.json() if r.status_code == 200 else {}
+        ver("lote grande (9 folhas no site): a resposta não espera o site (em_segundo_plano = 9) e o segundo plano deixa todas privadas",
+            r.status_code == 200 and (j.get("site_antigo") or {}).get("em_segundo_plano") == 9 and all((6000 + n_, "private") in chamadas for n_ in range(1, 10))
+            and um("SELECT COUNT(*) FROM site_registro_antigo WHERE wp_id BETWEEN 6001 AND 6009 AND escondido_em IS NOT NULL") == 9, j.get("site_antigo"))
+        st = adm.get("/api/site/redirecionamentos").json()
+        ver("o estado dos redirecionamentos mostra os registros antigos (privados / ainda por tirar)", (st.get("registros_antigos") or {}).get("escondidos") == 13, st)
+        # ---------- 6. conserto do que foi movido ANTES (scripts/consertar_mover_site.py) ----------
+        c = connect()
+        PE, PF = proj(5, "Velho"), proj(6, "Novo")
+        e1n, e2n, e3n = f"{PF}-1970-S01-D00001", f"{PF}-1970-S01-D00002", f"{PF}-1970-S01-D00003"
+        e1o, e2o, e3o = f"{PE}-1970-S01-D00001", f"{PE}-1970-S01-D00002", f"{PE}-1970-S01-D00003"
+        for nv_, ov_, tid_ in ((e1n, e1o, None), (e2n, e2o, None), (e3n, e3o, 5300)):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,codigo_anterior,status_site,tainacan_item_id) VALUES (?,?,'S01',?,?,'campvision',?,?,?)",
+                      (nv_, PF, int(nv_[-5:]), "Movida", ov_, "no_ar" if tid_ else "nao_publicado", tid_))
+        # o mover antigo (antes do conserto): evento com o id antigo, 301 só na primeira; o site continuou público
+        for ov_, nv_, tid_ in ((e1o, e1n, 5100), (e2o, e2n, 5101)):
+            c.execute("INSERT INTO evento (entidade,codigo,tipo,ator,detalhe) VALUES ('item',?,'folha_movida','x',?)", (nv_, _j.dumps({"de": ov_, "para": nv_, "tainacan_item_id_antigo": tid_})))
+            c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,fundo_detectado,projeto_detectado,metadados,json) VALUES (?,8013,'publish','Movida',?,'F090',?,?,'{}')",
+                      (tid_, ov_, PE, _j.dumps({"Código do documento": ov_})))
+        c.execute("INSERT INTO redirecionamento (codigo_antigo,codigo_novo,entidade,motivo,criado_por) VALUES (?,?,'item','folha movida','x')", (e1o, e1n))
+        # fantasmas que a importação antiga criou no projeto velho: um do registro movido, um do item que é de outra folha (recodificada)
+        for ov_, tid_ in ((e1o, 5100), (e3o, 5300)):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,origem,status_site,tainacan_item_id) VALUES (?,?,'S01',?,'Fantasma','importado','no_ar',?)",
+                      (ov_, PE, int(ov_[-5:]), tid_))
+        c.execute("INSERT INTO wp_item (id,colecao_id,status,titulo,codigo_detectado,fundo_detectado,projeto_detectado,metadados,json) VALUES (5300,8013,'publish','Recodificada',?,'F090',?,?,'{}')",
+                  (e3n, PF, _j.dumps({"Código do documento": e3o})))
+        c.execute("INSERT INTO item_agente (item_codigo, agente_id, papel) SELECT ?, id, 'autor' FROM agente LIMIT 1", (e1o,)) if um("SELECT COUNT(*) FROM agente") else None
+        c.commit(); c.close()
+        spec = importlib.util.spec_from_file_location("consertar_mover_site", str(RAIZ / "scripts" / "consertar_mover_site.py"))
+        mod = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(mod)
+        except Exception as e:  # noqa: BLE001
+            print(f"FALHA|o script scripts/consertar_mover_site.py existe e carrega|{e!r}")
+        def script(*a, filtro=("--projeto", PE)):
+            buf = _io.StringIO(); rc = 0
+            sys.argv = ["consertar", "--db", db, *filtro, *a]
+            with contextlib.redirect_stdout(buf):
+                try:
+                    rc = mod.main()
+                except SystemExit as e:
+                    rc = e.code if isinstance(e.code, int) else (print(e.code) or 1)
+                except Exception as e:  # noqa: BLE001
+                    rc = 99; print(f"ERRO: {e!r}")
+            return rc, buf.getvalue()
+        TABS = ("item", "redirecionamento", "site_registro_antigo", "wp_item", "evento", "item_agente")
+        def foto():
+            k_ = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            t = [list(r) for tb in TABS for r in k_.execute(f"SELECT * FROM {tb} ORDER BY {'codigo' if tb == 'item' else 'rowid'}")]
+            t += [list(r) for r in k_.execute("SELECT codigo FROM item_retirado ORDER BY 1")]
+            k_.close(); return hashlib.sha256(_j.dumps(t, default=str).encode()).hexdigest()
+        ch0, antes = len(chamadas), foto()
+        rc, out = script("--plano", str(base / "m1.json"))
+        ver("conserto: simular é o padrão (não muda o banco nem chama o site)", rc == 0 and foto() == antes and len(chamadas) == ch0, out[-600:])
+        ver("conserto: lista por projeto o fantasma, os registros antigos ainda públicos e o 301 que falta; o item de outra folha não sai do público",
+            f"FANTASMA {e1o}" in out and f"FANTASMA {e3o}" in out and "SITE item 5100" in out and "SITE item 5101" in out and f"301 {e2o} → {e2n}" in out
+            and "SITE item 5300" not in out and f"{PE}:" in out, out[:1500])
+        k_ = sqlite3.connect(db); k_.execute("UPDATE item SET titulo='mudou' WHERE codigo=?", (e1o,)); k_.commit(); k_.close()
+        antes2 = foto()
+        rc, out2 = script("--aplicar", "--plano", str(base / "m1.json"))
+        ver("conserto: plano VELHO é RECUSADO e nada muda", rc == 3 and "RECUSADO" in out2 and foto() == antes2 and len(chamadas) == ch0, out2[-300:])
+        rc, _ = script("--plano", str(base / "m2.json"))
+        est = {tb: [list(r) for r in q(f"SELECT * FROM {tb} ORDER BY rowid")] for tb in ("redirecionamento", "site_registro_antigo")}
+        itens0 = sorted(map(list, q("SELECT * FROM item WHERE projeto_codigo IN (?,?) ORDER BY codigo", PE, PF)))
+        rc, out3 = script("--aplicar", "--plano", str(base / "m2.json"))
+        ver("conserto aplicado: os fantasmas saem do painel (lápide em item_retirado) e a página do projeto velho fica vazia de 'só no site'",
+            rc == 0 and um("SELECT COUNT(*) FROM item WHERE codigo IN (?,?)", e1o, e3o) == 0 and um("SELECT COUNT(*) FROM item_retirado WHERE codigo IN (?,?)", e1o, e3o) == 2
+            and not [k for k, v in no_detalhe(PE).items() if v == "site"], (out3[-600:], no_detalhe(PE)))
+        ver("conserto aplicado: registros antigos 5100 e 5101 privados no site; o 5300 (da folha recodificada, publicada) intocado",
+            (5100, "private") in chamadas and (5101, "private") in chamadas and (5300, "private") not in chamadas and site.get(5300) is None, chamadas[ch0:])
+        ver("conserto aplicado: 301 que faltava registrado, mapa explícito completo, backup e arquivo de desfazer",
+            um("SELECT codigo_novo FROM redirecionamento WHERE codigo_antigo=?", e2o) == e2n and um("SELECT COUNT(*) FROM site_registro_antigo WHERE wp_id IN (5100,5101) AND escondido_em IS NOT NULL") == 2
+            and list((base / "backups").glob("camp-*.db*")) and (base / "m2.desfazer.json").is_file(), q("SELECT * FROM site_registro_antigo WHERE wp_id>=5100"))
+        importador_site.executar(log=lambda *_: None)
+        ver("depois do conserto a importação do site não recria os fantasmas", um("SELECT COUNT(*) FROM item WHERE codigo IN (?,?,?)", e1o, e2o, e3o) == 0, q("SELECT codigo FROM item WHERE projeto_codigo=?", PE))
+        rc, out4 = script("--plano", str(base / "m3.json"))
+        ver("simular de novo depois do conserto: nada mais a fazer", rc == 0 and "TOTAL: 0 projeto(s)" in out4, out4[-300:])
+        arq_d = str(base / "m2.desfazer.json")
+        a5 = foto()
+        rc, out5 = script("--desfazer", arq_d, filtro=())
+        ver("desfazer simula por padrão", rc == 0 and foto() == a5 and "2 folha(s) fantasma voltam" in out5, out5[-300:])
+        rc, out6 = script("--desfazer", arq_d, "--aplicar", filtro=())
+        ver("desfazer volta tudo: fantasmas no painel como estavam, 301 e mapa como antes, site de volta a público",
+            rc == 0 and sorted(map(list, q("SELECT * FROM item WHERE projeto_codigo IN (?,?) ORDER BY codigo", PE, PF))) == itens0
+            and {tb: [list(r) for r in q(f"SELECT * FROM {tb} ORDER BY rowid")] for tb in ("redirecionamento", "site_registro_antigo")} == est
+            and site.get(5100) == "publish" and site.get(5101) == "publish", out6[-500:])
+        for l in res: print(l)
     elif modo == "retirar_copias":
         # CAMP-DUP (10/11/2026), pedido do Rafael: "Não quero que fique cópias! Deixe só as JPGs originais, o que não era ignore e tire do
         # sistema AGORA." scripts/retirar_copias.py: simula por padrão; fica a JPG original; as outras viram lápide (item_retirado) e somem
@@ -18792,6 +19000,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Despublicar como tarefa: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Mover lote/folhas (15/11, Rafael: \"no antigo ficaram as imagens no site… Devia tirar de ambos\"): registro antigo privado + 301, pendência se o site cair, sem fantasma \"só no site\", conserto")
+rc, out = rodar("mover_lote_site", f"{tmp}/mover_lote_site.db")
+if rc != 0: ok(False, f"teste mover_lote_site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Mover e o site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

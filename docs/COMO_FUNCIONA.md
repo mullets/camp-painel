@@ -2293,20 +2293,22 @@ Corpo `{itens: [...], destino: "F026-P0012", motivo}`. Lista vazia → 400. Fun�
 3. Carrega as folhas (404 se alguma não existe), sem repetição, e ordena por série e D.
 4. Para cada folha:
    - já está no destino → `ignorados`;
-   - `status_site='no_ar'`: com `tainacan_item_id` → **409** "está pública no site. Despublique o projeto antes"; sem registro → `_status_velho` corrige para `nao_publicado` (evento `status_site_corrigido`) e segue;
+   - `status_site='no_ar'`: com `tainacan_item_id` → pelas rotas da tela (mover folhas, mover lote, mesclar: `publicada_ok=True`) **move**; pelo CAMP Vision → **409** "está publicada no site. Despublique…"; sem registro → `_status_velho` corrige para `nao_publicado` (evento `status_site_corrigido`) e segue;
    - **mesma folha já no destino** (mesmo `titulo` e mesma `folha`, e a de lá não é duplicata) → marca como duplicata (`mesma_folha`) da de lá; **não copia** → `duplicatas`;
    - senão: `seq += 1`; código novo `{destino}-{ano}-{série}-D{seq:05d}`, onde `ano` = ano do destino ou `_ano_da_folha` (1.4); código já existente → 409 e nada é movido;
    - `UPDATE item SET codigo, projeto_codigo, sequencial, codigo_anterior=<antigo>, tainacan_item_id=NULL`, e `status_site='nao_publicado'` se tinha registro no site (o registro antigo fica privado no site; ao publicar o destino, a folha sobe com o código novo);
    - `_trocar_codigo(con, antigo, novo)`;
    - evento `folha_movida` (de, para, motivo, `tainacan_item_id_antigo`).
-5. Resposta `{movidos: [{de, para, tinha_registro_no_site}], duplicatas, ignorados}`.
+   - folha com registro no site (qualquer situação no painel, inclusive status velho): 301 (`redir_site.registrar`) e linha em `site_registro_antigo` (migração 222, `app.mover_site.registrar`), na mesma transação.
+5. Resposta `{movidos: [{de, para, tinha_registro_no_site}], duplicatas, ignorados}` + `site_antigo {escondidas, pendentes, em_segundo_plano}` (campo opcional, só nas rotas da tela).
+6. **Registro antigo no site** (15/11/2026, Rafael: "no antigo ficaram as imagens no site, e no painel ficam como 'só no site'"): depois do COMMIT, `mover_site.depois_de_mover` deixa cada registro antigo **privado** no site (nada é apagado): até 8 na hora, mais que isso em segundo plano. Site sem resposta não impede o mover: a linha fica com `escondido_em` vazio, `tentativas`, `ultimo_erro` e `proxima_em` (espera dobrando até 1 h) e é repetida pelo coletor de 10 min, pela rodada de reenvio (`fila_correcao_site.executar_pendentes`) e pelo envio dos redirecionamentos. A importação do site (`importador_site.registro_antigo`, mapa `mover_site.nao_voltam`: tabela + eventos `folha_movida` + 301 de folha) e a página do projeto (`mover_site.antigo_do_site`) **nunca** trazem esse registro de volta como folha "só no site". O que foi movido antes disso: `scripts/consertar_mover_site.py` (simula por padrão; `--aplicar --plano`, RECUSADO se o banco mudou, backup, `--desfazer`).
 
 ### B.10.2 Mesclar projetos: `POST /api/projetos/{origem}/mesclar-em`
 
 Corpo `{destino, motivo}`. Para quando o mesmo projeto foi cadastrado duas vezes.
 
 1. Origem = destino → 400; origem inexistente → 404; origem já mesclada → 409.
-2. Origem `no_ar` com algo no site (projeto ou folhas com `tainacan_item_id`) → 409 "Despublique antes de mesclar".
+2. Origem `no_ar` com algo no site (projeto ou folhas com `tainacan_item_id`) → 409 "Despublique antes de mesclar". Folha publicada de um projeto que não está `no_ar` é movida e o registro antigo sai do público (B.10.1, item 6).
 3. Destino válido.
 4. `_mover` de **todas** as folhas da origem (motivo padrão "mesclado em <destino>").
 5. Todos os lotes (`lista_processamento.projeto_codigo`) e pedidos de releitura passam para o destino.
@@ -2318,7 +2320,7 @@ Corpo `{destino, motivo}`. Para quando o mesmo projeto foi cadastrado duas vezes
 Corpo `{projeto_codigo, motivo}`. O lote caiu no projeto errado.
 
 1. Lote inexistente → 404; descartado → 409; já está nesse projeto → 400; destino válido.
-2. `_mover` das folhas do lote (motivo padrão "lote N movido").
+2. `_mover` das folhas do lote (motivo padrão "lote N movido"); folha publicada não trava e o registro antigo sai do público (B.10.1, item 6).
 3. `lista_processamento.projeto_codigo` = destino. Evento `lote_movido` (de, para, folhas, motivo).
 
 Atenção: a pasta no QNAP e o `pacote_tainacan.json` continuam com o código antigo. Se o CV2 mandar um novo aviso para essa pasta, `_ler_pasta` acha pela `pasta_qnap` o lote existente (que agora é do destino) e só atualiza contagem/status; a importação automática falha com 400 "O pacote é do projeto X, e o lote é de Y" (devolvida em `importacao.erro`), e as folhas já movidas não são tocadas. O certo é o CV2 reorganizar a pasta (`vigia.py --reidentificar`).
