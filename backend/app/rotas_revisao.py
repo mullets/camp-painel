@@ -13,6 +13,7 @@ from .db import connect
 from .publicador import CREDITO_AUTORIA_NAO_CONFIRMADA
 from .importador_lote import CODIGO_DOCUMENTO, fala_de_projeto_divergente, importar_lote, ler_pacote, tirar_projeto_divergente
 from .rotas_operacao import _qnap_prontos_raiz
+from .imagem_site import previa_da_folha
 
 router = APIRouter(prefix="/api", tags=["revisao"])
 
@@ -1394,7 +1395,7 @@ def previa(codigo: str, t: int = 0, o: int = 0, s: int = 0, u: dict = Depends(au
     if rel and rel != "@jpg":
         base = (raiz / "_campvision" / "preview").resolve()
         cand = (raiz / rel).resolve()
-        if base in cand.parents and cand.suffix.lower() in (".jpg", ".jpeg") and cand.stem == codigo and cand.is_file():
+        if base in cand.parents and cand.suffix.lower() in (".jpg", ".jpeg") and previa_da_folha(cand.stem, i) and cand.is_file():   # cópia: a prévia da original
             alvo = cand
     if alvo is None:                                   # lote anterior ao preview do CAMP Vision: o JPG da folha no QNAP (sempre DENTRO da raiz dos prontos)
         alvo = jpg_da_folha_no_qnap(raiz, i["arquivo_jpg"] if i else None)
@@ -1434,7 +1435,7 @@ def previa(codigo: str, t: int = 0, o: int = 0, s: int = 0, u: dict = Depends(au
 
 
 # ---------------- 19/10 · recorte e alinhamento manual ----------------
-_COLS_AJUSTE = ("i.codigo, i.pendencias, i.giro_manual, i.arquivo_jpg, i.espelhado, i.espelho_manual, i.recorte, i.alinhamento, i.imagem_corrigida, i.sem_recorte_auto")
+_COLS_AJUSTE = ("i.codigo, i.pendencias, i.giro_manual, i.arquivo_jpg, i.espelhado, i.espelho_manual, i.recorte, i.alinhamento, i.imagem_corrigida, i.sem_recorte_auto, i.copiada_de")
 
 
 def _regravar_ajuste(con, i, giro: int, esp: bool, rec, ang) -> str | None:

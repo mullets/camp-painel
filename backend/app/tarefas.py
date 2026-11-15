@@ -28,6 +28,7 @@ TITULOS = {
     "destino_automatico": "Verificar destino pelo painel",
     "publicacao_site": "Mudar a publicação do projeto",
     "publicacao_fundo": "Mudar a publicação do fundo",
+    "copiar_folhas": "Copiar folhas para outro projeto",
 }
 
 

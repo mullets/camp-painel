@@ -2325,6 +2325,19 @@ Corpo `{projeto_codigo, motivo}`. O lote caiu no projeto errado.
 
 Atenção: a pasta no QNAP e o `pacote_tainacan.json` continuam com o código antigo. Se o CV2 mandar um novo aviso para essa pasta, `_ler_pasta` acha pela `pasta_qnap` o lote existente (que agora é do destino) e só atualiza contagem/status; a importação automática falha com 400 "O pacote é do projeto X, e o lote é de Y" (devolvida em `importacao.erro`), e as folhas já movidas não são tocadas. O certo é o CV2 reorganizar a pasta (`vigia.py --reidentificar`).
 
+### B.10.3a Copiar folhas e criar o destino na hora (`copiar.py`, 15/11/2026)
+
+Pedido do Rafael: "copiar para outro lote, e ter a opção de criar esse lote, seja no mesmo arquiteto ou em outro". Tela: projeto → **Mais ⋯ → Copiar folhas para outro projeto** / **Copiar um lote para outro projeto**; mover, mover lote, copiar e copiar lote têm **Novo projeto…** no destino.
+
+- `POST /api/itens/copiar` `{itens[], destino | novo_projeto{fundo_codigo, titulo, ano, cidade, confirmar_novo}, motivo, simular}` (admin; `?tarefa=1` = segundo plano, em partes de 25, a tela usa a partir de 40 folhas). `POST /api/filas/{lid}/copiar-para` `{projeto_codigo | novo_projeto, motivo, simular}`: todas as folhas do lote (menos as duplicatas); o lote fica onde está.
+- A cópia é uma folha NOVA no destino: `{destino}-{ano do destino}-{série}-D9xxxx`. O D sai da **faixa do painel** (D90001+, a das folhas enviadas pelo painel: o CAMP Vision nunca numera ali) e o maior D conta folhas, folhas retiradas, `codigo_anterior` e `redirecionamento.codigo_antigo` do destino: número nunca reusado. Entre fundos é permitido (o prefixo é o do destino).
+- Vai junto: catálogo (título, tipo, série, datas, carimbo, dados da foto, parceiros, autoria em `item_agente`), `arquivo_jpg`/`pendencias` (a mesma imagem) e giro/espelho/recorte. Não vai: registro/publicação no site (`nao_publicado`, ou `bloqueado` se a original estava), conferência (`pendente`), lote, duplicata, retenção, ordem. `item.copiada_de` (migração 223) = código da original. Eventos `folha_copiada` (cópia), `copiada_para` (original), `folhas_copiadas` (projeto destino).
+- Imagem: a prévia do CAMP Vision vale para a folha se o nome é o código dela **ou o `copiada_de`** (`imagem_site.previa_da_folha`, usado pela prévia, pelo recorte e pelo envio ao site). O painel não copia arquivo no QNAP; `fotos_qnap` nunca grava uma cópia no QNAP.
+- Não copia: folha que é duplicata (copie a original); a mesma folha de novo para o mesmo destino (`ignorados` com `copia`).
+- Duplicatas: a importação só compara folhas do MESMO projeto, então a cópia em outro projeto nunca é marcada. No mesmo projeto, a sugestão de duplicatas não junta a cópia com a original (cópia de propósito).
+- Projeto novo: `copiar.criar_destino` → `projetos_novos.criar_projeto` (o contador oficial da reserva das estações; nunca reusa número), com a conferência de parecidos do Novo projeto (409 `{parecidos}`; "É outro projeto mesmo" manda `confirmar_novo`) e a recusa de nome de pasta (422). Tudo numa transação com a cópia/movimento.
+- Mover para projeto novo: `POST /api/itens/mover-novo-projeto` `{itens, novo_projeto, motivo}` e `POST /api/filas/{lid}/mover-novo-projeto` `{novo_projeto, motivo}`: o projeto novo tem de ser do MESMO fundo (409; Convidado pode ir a qualquer um); o resto é o mover de sempre (`_mover`/`_mover_lote` + `_depois_de_mover`).
+
 ### B.10.4 Recodificar projeto: `POST /api/projetos/{c}/recodificar`
 
 Corpo `{novo: "F014-P0009", motivo}`. Para número P errado, **no mesmo fundo**.
