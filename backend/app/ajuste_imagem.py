@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 
 from .config import settings
+from .imagem_site import previa_da_folha as _previa_da_folha   # a folha copiada usa a prévia da original (15/11/2026)
 
 ANGULO_MAX = 10.0
 LADO_MIN = 0.05          # o recorte não pode ficar menor que 5% da largura/altura
@@ -185,7 +186,6 @@ def origem_da_folha(raiz: Path, item) -> Path | None:
     """A imagem que a pessoa vê na revisão (antes do ajuste): a prévia do CAMP Vision (só de dentro de _campvision/preview);
     senão o JPG da folha no QNAP (só de dentro da raiz dos prontos). A mesma regra da rota da prévia."""
     k = item.keys() if hasattr(item, "keys") else ()
-    codigo = item["codigo"] if "codigo" in k else None
     try:
         rel = (json.loads(item["pendencias"] or "{}") or {}).get("previa") or ""
     except (ValueError, TypeError):
@@ -194,7 +194,7 @@ def origem_da_folha(raiz: Path, item) -> Path | None:
         try:
             base = (raiz / "_campvision" / "preview").resolve()
             cand = (raiz / rel).resolve()
-            if base in cand.parents and cand.suffix.lower() in (".jpg", ".jpeg") and (codigo is None or cand.stem == codigo) and cand.is_file():
+            if base in cand.parents and cand.suffix.lower() in (".jpg", ".jpeg") and _previa_da_folha(cand.stem, item) and cand.is_file():
                 return cand
         except OSError:
             pass

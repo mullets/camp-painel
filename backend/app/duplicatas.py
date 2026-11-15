@@ -36,7 +36,7 @@ TIPO_ROTULO = {"exata": "o CAMP Vision achou a imagem idêntica", "perceptual": 
 _COLS = """i.codigo, i.projeto_codigo, i.serie_codigo, i.sequencial, i.titulo, COALESCE(i.tipos_documento, i.tipo_documento) AS tipo_documento,
            i.folha, i.revisao, i.lote_id, i.status_site, i.retida, i.pendencias, i.giro_manual, COALESCE(i.espelho_manual, i.espelhado) AS espelhar,
            i.recorte, i.alinhamento, i.duplicata_de, i.tipo_duplicata, i.md5, i.tainacan_item_id,
-           i.duplicata_conferida_em, i.duplicata_conferida_por, i.duplicata_conferida_de"""
+           i.duplicata_conferida_em, i.duplicata_conferida_por, i.duplicata_conferida_de, i.copiada_de"""
 
 
 def _norm(t) -> str:
@@ -129,19 +129,26 @@ def montar(con, codigo: str) -> dict:
             "sugestoes": sugestoes(linhas, thumbs, motivos)}
 
 
+def _tem(r, campo: str) -> bool:
+    return campo in (r.keys() if hasattr(r, "keys") else r)
+
+
 def sugestoes(linhas, thumbs: dict, motivos: dict) -> list[dict]:
     """Folhas que NINGUÉM marcou como duplicata mas parecem ser: o mesmo arquivo (md5) ou mesmo tipo + mesma folha + mesmo título.
     Folha que uma pessoa já disse que não é duplicata (duplicata_conferida_em sem duplicata_de) não volta a ser sugerida."""
     livres = [r for r in linhas if not r["duplicata_de"] and not r["duplicata_conferida_em"]]
     usados, out = set(), []
+    # 15/11/2026: a folha COPIADA de propósito (item.copiada_de) para o mesmo projeto não é sugerida como duplicata da original
+    sem_copia = lambda g: [r for r in g if not (_tem(r, "copiada_de") and r["copiada_de"] in {x["codigo"] for x in g})]
     por_md5: dict[str, list] = {}
     for r in livres:
         if (r["md5"] or "").strip():
             por_md5.setdefault(r["md5"].strip().lower(), []).append(r)
     for g in por_md5.values():
+        usados.update(r["codigo"] for r in g if len(g) > 1)
+        g = sem_copia(g)
         if len(g) > 1:
             out.append({"motivo": "o arquivo é idêntico (mesmo md5)", "folhas": [_item(r, thumbs, motivos) for r in g]})
-            usados.update(r["codigo"] for r in g)
     chaves: dict[tuple, list] = {}
     for r in livres:
         if r["codigo"] in usados:
@@ -150,6 +157,7 @@ def sugestoes(linhas, thumbs: dict, motivos: dict) -> list[dict]:
         if tipo and folha:
             chaves.setdefault((tipo, folha, _norm(r["titulo"])), []).append(r)
     for (_, _, tit), g in chaves.items():
+        g = sem_copia(g)
         if len(g) > 1:
             out.append({"motivo": "mesmo tipo, mesmo número de folha" + (" e mesmo título" if tit else ""), "folhas": [_item(r, thumbs, motivos) for r in g]})
     return out

@@ -36,6 +36,16 @@ def lado_publico(con, fundo_codigo: str) -> int:
     return min(LADO_PUBLICO, lado_maximo_do_fundo(con, fundo_codigo) or LADO_PUBLICO)
 
 
+def previa_da_folha(stem: str, item) -> bool:
+    """A prévia do CAMP Vision vale para a folha se o nome dela é o código da folha — ou, para a folha COPIADA de outra (item.copiada_de,
+    15/11/2026), o código da original: a cópia usa a mesma imagem (o painel nunca copia arquivo no QNAP)."""
+    k = item.keys() if hasattr(item, "keys") else ()
+    codigo = item["codigo"] if "codigo" in k else None
+    if codigo is None or stem == codigo:
+        return True
+    return "copiada_de" in k and bool(item["copiada_de"]) and stem == item["copiada_de"]
+
+
 def imagem_para_o_site(con, item) -> str | None:
     """`item` é uma linha com arquivo_jpg e pendencias. Devolve o caminho a subir, ou None se não há imagem."""
     raiz = raiz_prontos(con)
@@ -43,15 +53,13 @@ def imagem_para_o_site(con, item) -> str | None:
         previa = (json.loads(item["pendencias"] or "{}") or {}).get("previa") if item["pendencias"] else None
     except (ValueError, TypeError):
         previa = None
-    k = item.keys() if hasattr(item, "keys") else ()
-    codigo = item["codigo"] if "codigo" in k else None
     if previa and raiz:
         base = (raiz / "_campvision" / "preview").resolve()
         alvo = (raiz / previa).resolve()
         # 11/11/2026: a MESMA regra da rota da prévia (rotas_revisao.previa / ajuste_imagem.origem_da_folha): a prévia só vale se é
         # desta folha (nome = código). Folha recodificada (ex.: D00012 -> D90001) guarda a prévia do código antigo; a revisão mostra
         # o JPG da folha e a pessoa gira a partir DELE. Subir a prévia (já girada pelo CAMP Vision) + esse giro virava a foto no site.
-        if base in alvo.parents and alvo.suffix.lower() in (".jpg", ".jpeg") and (codigo is None or alvo.stem == codigo) and alvo.is_file():
+        if base in alvo.parents and alvo.suffix.lower() in (".jpg", ".jpeg") and previa_da_folha(alvo.stem, item) and alvo.is_file():
             return str(alvo)
     jpg = item["arquivo_jpg"]
     if not jpg or str(jpg).startswith("http"):

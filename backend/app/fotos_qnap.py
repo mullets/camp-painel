@@ -94,6 +94,8 @@ def enviar(codigo: str, ator: str) -> dict:
                            WHERE i.codigo=?""", (codigo,)).fetchone()
         if not i or not e_do_painel(codigo):
             return {"ok": False, "erro": "não é uma folha enviada pelo painel"}
+        if "copiada_de" in i.keys() and i["copiada_de"]:           # 15/11/2026: a cópia usa a imagem da original; o painel nunca grava a cópia no QNAP
+            return {"ok": False, "erro": "é cópia de outra folha: a imagem é a da original"}
         pend = _pend(i)
         try:
             raiz = _raiz(con)
@@ -143,7 +145,7 @@ def enviar(codigo: str, ator: str) -> dict:
 
 def pendentes(con, limite: int = 20) -> list[str]:
     """Folhas do painel que ainda não estão no QNAP (nunca tentadas ou que falharam)."""
-    return [r[0] for r in con.execute(f"""SELECT codigo FROM item WHERE origem='manual' AND sequencial>{FAIXA_PAINEL} AND duplicata_de IS NULL
+    return [r[0] for r in con.execute(f"""SELECT codigo FROM item WHERE origem='manual' AND sequencial>{FAIXA_PAINEL} AND duplicata_de IS NULL AND copiada_de IS NULL
                                             AND (pendencias IS NULL OR NOT json_valid(pendencias) OR json_extract(pendencias,'$.qnap') IS NULL)
                                           ORDER BY criado_em LIMIT ?""", (limite,))]
 

@@ -30,6 +30,7 @@ MODOS_RAPIDOS |= {"copias_aprovar"}   # cópias (duplicata_de) não impedem apro
 MODOS_RAPIDOS |= {"retirar_copias"}   # CAMP-DUP 10/11/2026: retirar do sistema as cópias, fica a JPG original (linha própria)
 MODOS_RAPIDOS |= {"despublicar_tarefa"}   # 15/11/2026: despublicar projeto/fundo grande vira tarefa em segundo plano (linha própria)
 MODOS_RAPIDOS |= {"chu_bio_legendas"}   # biografia da Chu Ming por script e fundo "sem legendas" no site (contrato 1.9; linha própria)
+MODOS_RAPIDOS |= {"copiar_folhas"}   # 15/11/2026: copiar folhas para outro projeto, com projeto novo na hora (linha própria)
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 
 
@@ -16886,6 +16887,169 @@ def filho(modo):
         ver("pedir a prévia com s= não grava nada", (k.execute("SELECT COALESCE(giro_manual,0) FROM item WHERE codigo=?", (D1,)).fetchone()[0]) == 0)
         for l in res: print(l)
         k.close()
+    elif modo == "copiar_folhas":
+        # 15/11/2026 (Rafael: "Preciso criar uma opção de copiar para outro lote, e ter a opção de criar esse lote, seja no mesmo arquiteto ou em
+        # outro"): copiar folhas para outro projeto (mesmo fundo ou outro), com códigos NOVOS do destino na faixa do painel (D90001+), nunca
+        # reusando número; a original não muda; a cópia usa a mesma imagem (o painel não copia arquivo no QNAP) e pode ir ao site; projeto novo
+        # criado na hora pelo contador oficial; mover para projeto novo só no mesmo fundo; cópia não vira duplicata sozinha.
+        init_db(); aplicar_migracoes()
+        import json as _j, shutil as _sh, time as _t
+        from pathlib import Path as _P
+        from PIL import Image as _Im
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        raiz = _P(os.environ.get("CAMP_TMP_PRONTOS") or "/tmp/camp_copiar"); _sh.rmtree(raiz, ignore_errors=True)
+        pv = raiz / "_campvision" / "preview" / "F097-P0001"; pv.mkdir(parents=True); (raiz / "F097" / "JPG").mkdir(parents=True)
+        D = lambda n, p="F097-P0001", a=1970: f"{p}-{a}-S01-D{n:05d}"
+        _Im.new("RGB", (900, 600), (200, 180, 150)).save(pv / f"{D(1)}.jpg", "JPEG")
+        _Im.new("RGB", (600, 400), (150, 150, 150)).save(raiz / "F097" / "JPG" / "d3.jpg", "JPEG")
+        c = connect()
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor) VALUES ('qnap.prontos_raiz', ?)", (str(raiz),))
+        for f, t, n in (("F097", "Arquiteto A", 2), ("F098", "Arquiteto B", 5)):
+            c.execute("INSERT INTO fundo (codigo,titulo) VALUES (?,?)", (f, t))
+            for k in range(1, n + 1):
+                c.execute("INSERT INTO numero_p (fundo_codigo,numero) VALUES (?,?)", (f, k))
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F097-P0001','F097',1,'Casa Original',1970)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F097-P0002','F097',2,'Edifício Destino',1980)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F098-P0005','F098',5,'Clube Outro Fundo',1990)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa','F097-P0001','/nao/existe/casa','revisao')").lastrowid
+        ins = lambda cod, **kw: c.execute(f"INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,{','.join(kw)}) VALUES (?,?,?,?,{','.join('?' * len(kw))})",
+                                          (cod, cod[:10], "S01", int(cod[-5:]), *kw.values()))
+        ins(D(1), titulo="Planta térrea", tipo_documento="Planta", folha="01", md5="m5a", giro_manual=90, tainacan_item_id=555, status_site="no_ar",
+            revisao="conferida", revisado_por="ana", lote_id=lote, origem="campvision", arquivo_jpg="F097/JPG/nao-existe.jpg",
+            pendencias=_j.dumps({"previa": f"_campvision/preview/F097-P0001/{D(1)}.jpg", "sinais": [], "bloqueios": []}), foto_fotografo="Fulano")
+        ins(D(2), titulo="Planta térrea", folha="01", duplicata_de=D(1), tipo_duplicata="exata", lote_id=lote, md5="m5a")
+        ins(D(3), titulo="Fachada", tipo_documento="Planta", folha="02", md5="m5c", arquivo_jpg="F097/JPG/d3.jpg", lote_id=lote, revisao="conferida")
+        ag = c.execute("INSERT INTO agente (tipo, forma_autorizada) VALUES ('pessoa','Arquiteto A')").lastrowid
+        c.execute("INSERT INTO item_agente (item_codigo, agente_id, papel, fonte) VALUES (?,?,'autor','carimbo')", (D(1), ag))
+        # números que já existiram no destino: uma folha retirada (D90003) e o código anterior de uma folha que saiu de lá (D90005)
+        c.execute("INSERT INTO item_retirado (codigo, projeto_codigo, sequencial, motivo, linha) VALUES (?, 'F097-P0002', 90003, 'teste', '{}')", (D(90003, "F097-P0002", 1980),))
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,codigo_anterior) VALUES (?,?,?,?,?)",
+                  (D(7, "F097-P0001"), "F097-P0001", "S01", 7, D(90005, "F097-P0002", 1980)))
+        c.commit()
+        for em, nome, papel in (("adm@camp.arq.br", "Adm", "admin"), ("op@camp.arq.br", "Op", "operador")):
+            auth.criar_usuario(nome, em, "senha-longa-12345", papel, forcar_troca=False)
+        def cli(em):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": em, "senha": "senha-longa-12345"}); return x
+        adm, op = cli("adm@camp.arq.br"), cli("op@camp.arq.br")
+        q = lambda s, *a: c.execute(s, a).fetchone()
+        linha = lambda cod: dict(q("SELECT * FROM item WHERE codigo=?", cod) or {})
+        antes = linha(D(1)); n_itens = q("SELECT COUNT(*) FROM item")[0]
+        ver("operador não copia (403)", op.post("/api/itens/copiar", json={"itens": [D(1)], "destino": "F097-P0002"}).status_code == 403)
+        r = adm.post("/api/itens/copiar", json={"itens": [D(1), D(3)], "destino": "F097-P0002", "simular": True}); j = r.json() if r.status_code == 200 else {}
+        novo1, novo3 = D(90006, "F097-P0002", 1980), D(90007, "F097-P0002", 1980)
+        ver("simular mostra os códigos novos (faixa do painel, depois da retirada D90003 e do código que já existiu D90005) e não grava nada",
+            r.status_code == 200 and j.get("simulado") and [x["para"] for x in j.get("copiadas", [])] == [novo1, novo3] and q("SELECT COUNT(*) FROM item")[0] == n_itens, r.text[:300])
+        r = adm.post("/api/itens/copiar", json={"itens": [D(1), D(2), D(3)], "destino": "F097-P0002", "motivo": "teste"}); j = r.json() if r.status_code == 200 else {}
+        ver("copia no mesmo fundo: códigos novos do destino; a duplicata (cópia de outra) fica de fora com o motivo",
+            r.status_code == 200 and [x["para"] for x in j.get("copiadas", [])] == [novo1, novo3]
+            and [x["codigo"] for x in j.get("ignorados", [])] == [D(2)] and "copie a original" in j["ignorados"][0]["motivo"], r.text[:300])
+        depois = linha(D(1))
+        ver("a original NÃO muda (código, registro no site, publicação, conferência, lote)", depois == antes and q("SELECT COUNT(*) FROM item WHERE codigo=?", D(1))[0] == 1, str({k: (antes.get(k), depois.get(k)) for k in antes if antes.get(k) != depois.get(k)}))
+        cp = linha(novo1)
+        ver("a cópia leva o catálogo e a imagem (título, tipo, folha, giro, dados da foto, prévia, md5)",
+            cp.get("titulo") == "Planta térrea" and cp.get("tipo_documento") == "Planta" and cp.get("folha") == "01" and cp.get("giro_manual") == 90
+            and cp.get("foto_fotografo") == "Fulano" and cp.get("pendencias") == antes["pendencias"] and cp.get("md5") == "m5a", str(cp))
+        ver("a cópia NÃO leva o site, a conferência, o lote nem a marca de duplicata (nasce 'não publicado' e 'a conferir')",
+            cp.get("tainacan_item_id") is None and cp.get("status_site") == "nao_publicado" and cp.get("revisao") == "pendente" and cp.get("revisado_por") is None
+            and cp.get("lote_id") is None and cp.get("duplicata_de") is None and cp.get("copiada_de") == D(1), str(cp))
+        ver("a autoria da folha vai junto", q("SELECT COUNT(*) FROM item_agente WHERE item_codigo=? AND agente_id=?", novo1, ag)[0] == 1)
+        ver("histórico nos dois lados: 'folha_copiada' na cópia e 'copiada_para' na original",
+            q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='folha_copiada' AND detalhe LIKE ?", novo1, f"%{D(1)}%")[0] == 1
+            and q("SELECT COUNT(*) FROM evento WHERE codigo=? AND tipo='copiada_para' AND detalhe LIKE ?", D(1), f"%{novo1}%")[0] == 1)
+        r = adm.post("/api/itens/copiar", json={"itens": [D(1)], "destino": "F097-P0002"}); j = r.json() if r.status_code == 200 else {}
+        ver("copiar de novo a mesma folha para o mesmo projeto não cria outra cópia", r.status_code == 200 and not j.get("copiadas")
+            and (j.get("ignorados") or [{}])[0].get("copia") == novo1, r.text[:200])
+        # imagem: a cópia usa a prévia da original (nome = código da original) e pode ir ao site
+        from app.imagem_site import imagem_para_o_site
+        import app.publicador as pub
+        ver("a prévia da cópia abre (a mesma imagem da original; nada copiado no QNAP)", adm.get(f"/api/itens/{novo1}/previa").status_code == 200
+            and len(list(pv.iterdir())) == 1)
+        ver("publicar a cópia: a imagem que sobe é a prévia da original", imagem_para_o_site(c, q("SELECT * FROM item WHERE codigo=?", novo1)) == str((pv / f"{D(1)}.jpg").resolve()))
+        try:
+            cam, lado = pub.imagem_pronta_para_o_site(c, q("SELECT i.*, p.fundo_codigo FROM item i JOIN projeto p ON p.codigo=i.projeto_codigo WHERE i.codigo=?", novo1))
+        except Exception as e:  # noqa: BLE001
+            cam, lado = None, str(e)
+        c.commit()     # (a imagem pública pode gravar o plano do recorte automático nesta conexão)
+        ver("publicar a cópia: o derivado público (≤ 1920 px, com o giro) é gerado", bool(cam) and _P(cam).is_file() and lado, f"{cam} {lado}")
+        ver("folha sem prévia (só o JPG): a cópia usa o JPG da original", imagem_para_o_site(c, q("SELECT * FROM item WHERE codigo=?", novo3)) == str((raiz / "F097" / "JPG" / "d3.jpg").resolve()))
+        # outro fundo: o prefixo vem do destino
+        r = adm.post("/api/itens/copiar", json={"itens": [D(1)], "destino": "F098-P0005"}); j = r.json() if r.status_code == 200 else {}
+        ver("copia para OUTRO fundo (mover não deixa): código com o prefixo e o ano do destino", r.status_code == 200
+            and [x["para"] for x in j.get("copiadas", [])] == ["F098-P0005-1990-S01-D90001"] and j.get("fundo") == "F098", r.text[:200])
+        r = adm.post("/api/itens/mover", json={"itens": [D(3)], "destino": "F098-P0005"})
+        ver("mover para outro fundo continua recusado (409)", r.status_code == 409 and "Fundos não se misturam" in r.text, r.text[:200])
+        # projeto novo na hora, em outro fundo
+        np_ = {"fundo_codigo": "F098", "titulo": "Residência Copiada", "ano": 1975, "cidade": "Santos"}
+        r = adm.post("/api/itens/copiar", json={"itens": [D(1), D(3)], "novo_projeto": np_}); j = r.json() if r.status_code == 200 else {}
+        pc = (j.get("projeto_criado") or {}).get("codigo")
+        ver("'Novo projeto…' em outro fundo: cria o próximo P do fundo pelo contador oficial e copia para ele",
+            r.status_code == 200 and pc == "F098-P0006" and tuple(q("SELECT titulo, ano, cidade FROM projeto WHERE codigo='F098-P0006'")) == ("Residência Copiada", 1975, "Santos")
+            and q("SELECT COUNT(*) FROM numero_p WHERE fundo_codigo='F098' AND numero=6")[0] == 1
+            and [x["para"] for x in j.get("copiadas", [])] == ["F098-P0006-1975-S01-D90001", "F098-P0006-1975-S01-D90002"], r.text[:300])
+        ver("o projeto criado fica no histórico ('criado')", q("SELECT COUNT(*) FROM evento WHERE codigo='F098-P0006' AND tipo='criado'")[0] == 1)
+        n_p = q("SELECT COUNT(*) FROM projeto")[0]
+        r = adm.post("/api/itens/copiar", json={"itens": [D(3)], "novo_projeto": {**np_, "titulo": "Residencia Copiada"}})
+        ver("nome parecido com um projeto do fundo: 409 com a lista dos parecidos e nada é criado nem copiado",
+            r.status_code == 409 and (r.json().get("parecidos") or [{}])[0].get("codigo") == "F098-P0006" and q("SELECT COUNT(*) FROM projeto")[0] == n_p, r.text[:300])
+        r = adm.post("/api/itens/copiar", json={"itens": [D(3)], "novo_projeto": {**np_, "titulo": "Residencia Copiada", "confirmar_novo": True}})
+        ver("'É outro projeto mesmo': cria o seguinte (P0007), número nunca reusado", r.status_code == 200 and r.json()["projeto_criado"]["codigo"] == "F098-P0007", r.text[:200])
+        r = adm.post("/api/itens/copiar", json={"itens": [D(3)], "novo_projeto": {**np_, "titulo": "F098-P0001 - 12 Folhas", "confirmar_novo": True}})
+        ver("nome de pasta/código não vira projeto (422, como no Novo projeto)", r.status_code == 422, r.text[:200])
+        # duplicatas: cópia em outro projeto não é marcada; no mesmo projeto, a cópia de propósito não é sugerida como duplicata da original
+        from app.duplicatas import montar
+        ver("a cópia em outro projeto não vira duplicata (nem marcada, nem sugerida)", q("SELECT COUNT(*) FROM item WHERE copiada_de IS NOT NULL AND duplicata_de IS NOT NULL")[0] == 0
+            and montar(c, "F098-P0005")["sugestoes"] == [])
+        r = adm.post("/api/itens/copiar", json={"itens": [D(3)], "destino": "F097-P0001"}); j = r.json() if r.status_code == 200 else {}
+        sug = montar(c, "F097-P0001")["sugestoes"]
+        ver("copiar dentro do MESMO projeto: folha nova (D90001) e a sugestão de duplicatas não junta a cópia com a original",
+            r.status_code == 200 and [x["para"] for x in j.get("copiadas", [])] == [D(90001)] and not any(D(90001) in [f["codigo"] for f in g["folhas"]] for g in sug), str(sug)[:300])
+        # copiar o lote inteiro: o lote fica
+        r = adm.post(f"/api/filas/{lote}/copiar-para", json={"projeto_codigo": "F098-P0005"}); j = r.json() if r.status_code == 200 else {}
+        ver("copiar o lote: todas as folhas do lote (sem as duplicatas) vão para o destino; o lote e as folhas dele ficam onde estão",
+            r.status_code == 200 and j.get("lote") == lote and [x["de"] for x in j.get("copiadas", [])] == [D(3)]
+            and [x["codigo"] for x in j.get("ignorados", [])] == [D(1)] and q("SELECT projeto_codigo FROM lista_processamento WHERE id=?", lote)[0] == "F097-P0001"
+            and q("SELECT COUNT(*) FROM item WHERE lote_id=?", lote)[0] == 3, r.text[:300])
+        # muitas folhas: tarefa em segundo plano
+        c.commit()
+        r = adm.post("/api/itens/copiar?tarefa=1", json={"itens": [D(1), D(3)], "destino": "F097-P0002"})
+        ver("tarefa: devolve 202 com o número da tarefa", r.status_code == 202 and r.json().get("tarefa_id"), r.text[:200])
+        r = adm.post("/api/itens/copiar?tarefa=1", json={"itens": [D(1), D(3)], "novo_projeto": {"fundo_codigo": "F097", "titulo": "Galpão Tarefa"}})
+        tid = r.json().get("tarefa_id") if r.status_code == 202 else None
+        t = {}
+        for _ in range(100):
+            t = adm.get(f"/api/tarefas/{tid}").json() if tid else {}
+            if t.get("estado") != "rodando":
+                break
+            _t.sleep(0.1)
+        ver("tarefa com projeto novo termina e copia (F097-P0003)", t.get("estado") == "ok" and q("SELECT COUNT(*) FROM item WHERE projeto_codigo='F097-P0003'")[0] == 2, f'{r.status_code} {r.text[:200]} {str(t)[:200]}')
+        # mover para projeto novo: só no mesmo fundo
+        n_np = q("SELECT COUNT(*) FROM numero_p")[0]
+        r = adm.post("/api/itens/mover-novo-projeto", json={"itens": [D(3)], "novo_projeto": {"fundo_codigo": "F098", "titulo": "Outro Fundo Não"}})
+        ver("mover para projeto novo de OUTRO fundo: 409 e nenhum número gasto", r.status_code == 409 and "Copiar" in r.text and q("SELECT COUNT(*) FROM numero_p")[0] == n_np, r.text[:200])
+        r = adm.post("/api/itens/mover-novo-projeto", json={"itens": [D(3)], "novo_projeto": {"fundo_codigo": "F097", "titulo": "Anexo Movido", "ano": 1971}}); j = r.json() if r.status_code == 200 else {}
+        ver("mover para projeto novo do mesmo fundo: cria F097-P0004 e move (código antigo guardado)", r.status_code == 200 and j.get("destino") == "F097-P0004"
+            and [x["de"] for x in j.get("movidos", [])] == [D(3)] and q("SELECT codigo_anterior FROM item WHERE projeto_codigo='F097-P0004'")[0] == D(3), r.text[:300])
+        ver("as cópias da folha movida continuam valendo (a imagem continua a da original)", imagem_para_o_site(c, q("SELECT * FROM item WHERE codigo=?", novo3)) == str((raiz / "F097" / "JPG" / "d3.jpg").resolve()))
+        r = adm.post(f"/api/filas/{lote}/mover-novo-projeto", json={"novo_projeto": {"fundo_codigo": "F098", "titulo": "Lote Outro Fundo"}})
+        ver("mover o LOTE para projeto novo de outro fundo: 409", r.status_code == 409, r.text[:200])
+        c.execute("UPDATE item SET tainacan_item_id=NULL, status_site='nao_publicado' WHERE codigo=?", (D(1),)); c.commit()   # (o registro antigo no site é o teste mover_lote_site)
+        r = adm.post(f"/api/filas/{lote}/mover-novo-projeto", json={"novo_projeto": {"fundo_codigo": "F097", "titulo": "Lote Movido"}}); j = r.json() if r.status_code == 200 else {}
+        ver("mover o LOTE para projeto novo do mesmo fundo: cria e passa o lote", r.status_code == 200 and q("SELECT projeto_codigo FROM lista_processamento WHERE id=?", lote)[0] == j.get("para") == "F097-P0005", r.text[:300])
+        # o painel nunca grava a cópia no QNAP (folha enviada pelo painel = origem manual na faixa do painel)
+        from app import fotos_qnap
+        c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,origem,arquivo_jpg) VALUES (?,?,?,?,?,?)", (D(90099, "F098-P0005", 1990), "F098-P0005", "S01", 90099, "manual", "x.jpg")); c.commit()
+        r = adm.post("/api/itens/copiar", json={"itens": [D(90099, "F098-P0005", 1990)], "destino": "F097-P0002"}); j = r.json() if r.status_code == 200 else {}
+        cpm = (j.get("copiadas") or [{}])[0].get("para")
+        ver("cópia de folha enviada pelo painel: nunca entra na fila de gravar no QNAP", bool(cpm) and cpm not in fotos_qnap.pendentes(c, 100)
+            and fotos_qnap.enviar(cpm, "t").get("ok") is False, f"{cpm} {fotos_qnap.pendentes(c, 100)}")
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: 'Copiar folhas para outro projeto', 'Copiar um lote' e 'Novo projeto…' no destino", "data-mais=\"copiar\"" in html.replace("'", '"') or "it('copiar'" in html)
+        c.close()
+        for l in res: print(l)
     elif modo == "ordem_folhas":
         # 06/11 ("queria poder organizar as fotos arrastando pra nova ordem"): ordem das folhas escolhida à mão, numa coluna própria
         # (item.ordem_manual). O código D nunca muda; folha de outro projeto recusa tudo; voltar à ordem do código limpa a coluna.
@@ -18994,6 +19158,13 @@ else:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Retirar cópias: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Despublicar projeto grande (15/11, F002-P0147 \"demorou demais\"): vira tarefa, responde na hora, não duplica, N de M, falhas listadas e repetidas sozinhas; fundo também")
+rc, out = rodar("copiar_folhas", f"{tmp}/copiar_folhas.db")
+if rc != 0: ok(False, f"teste copiar_folhas não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Copiar folhas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
 rc, out = rodar("despublicar_tarefa", f"{tmp}/despublicar_tarefa.db")
 if rc != 0: ok(False, f"teste despublicar_tarefa não rodou -> {out[-1500:]}")
 else:

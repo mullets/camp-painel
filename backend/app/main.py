@@ -56,6 +56,8 @@ app.include_router(rotas_revisao)
 from .rotas_publicar_tudo import router as rotas_publicar_tudo
 app.include_router(rotas_publicar_tudo)
 from .rotas_mesclar import router as rotas_mesclar
+from .copiar import router as rotas_copiar   # 15/11/2026: copiar folhas para outro projeto (com projeto novo na hora)
+app.include_router(rotas_copiar)
 app.include_router(rotas_mesclar)
 from .rotas_consenso import router as rotas_consenso
 app.include_router(rotas_consenso)
