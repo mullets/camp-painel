@@ -549,3 +549,18 @@ Horas sempre no fuso de São Paulo: "às 14:05 (há 3 min)", "em 03/11 às 21:40
 - Cópias visíveis nos dois projetos (15/11/2026, Rafael: "dizendo que tal projeto foi copiado para x projeto"): na Visão geral, coluna da direita, **Folhas copiadas de outros projetos** ("**6 folhas de** Casa de praia Yves E. Josquim (F010-P0735)") no destino e **Folhas copiadas para outros projetos** ("**6 folhas copiadas para** Memorial Residências (F010-P0732)") na origem, cada projeto com link. No cartão da folha: selo **cópia de F0xx-P0yyy · Dnnnnn** (a cópia, com link para a original; o projeto no selo a distingue do **cópia de Dxxxxx** das duplicatas) e **copiada para F0xx-P0yyy** (a original). No **Revisar folha**: "Cópia de F0xx-P0yyy · Dnnnnn (a original continua lá)" / "Copiada para …". Histórico: "**Recebeu N folhas copiadas de F0xx-P0yyy**" (destino) e "**Copiou N folhas para F0xx-P0yyy**" (origem).
 - Destino: **Novo projeto… (o destino ainda não existe)**, com **Fundo (arquiteto)** só no copiar (mover é só no mesmo fundo). Parecido no fundo: **Usar este** / **É outro projeto mesmo: criar novo**.
 - Toda lista de folhas com caixa usa o mesmo componente: miniatura, código (D) e título, **Selecionar todos** · **Limpar** e "**N de M folhas marcadas**"; Shift+clique marca o intervalo. Não usar "Marcar todas"/"Desmarcar" em lista nova.
+
+## Clima das salas do acervo (16/11/2026)
+Temperatura e umidade dos sensores Tuya (Wi-Fi), lidas da nuvem da Tuya em segundo plano (`clima.py`). Nasce desligado (`clima.coleta_min` = 0).
+| Valor interno (NÃO muda) | Texto na tela | O que significa |
+|---|---|---|
+| `ok` | **Dentro da faixa** | temperatura e umidade dentro da faixa desejada (`clima.temp_min`/`temp_max`, `clima.umid_min`/`umid_max`) |
+| `aviso` | **Fora da faixa** | passou do limite |
+| `critico` | **Muito fora da faixa** | passou do limite por mais de 3 °C ou 10 pontos de umidade |
+| (sem nível) | **Sem leitura recente** | a última leitura tem mais de 3 horas: a tela não diz que está tudo bem |
+- Nome da página de parede (tablet): **Clima do acervo** (`/clima`, sem login, só na rede do escritório).
+- "Faixa desejada: 18 a 24 °C · 40 a 60 % de umidade"; "Lido há 3 min"; "bateria fraca" (20 % ou menos); "Sem conexão com o painel".
+- Nunca "Tuya" na página de parede: quem olha o tablet quer saber da sala, não do fabricante. Em Configurações o nome aparece (é onde entram as credenciais).
+- Faixa do site na mesma página: "N pessoas no site agora" (Google Analytics, últimos 30 min; traço quando não há leitura de menos de 20 min),
+  "visitantes em 7 dias" (as pessoas da coleta diária das Visitas ao site), "N acervos no site" (fundos publicados) e "N folhas em M projetos"
+  (a mesma conta do painel, `contagens.no_site`).

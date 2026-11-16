@@ -34,6 +34,7 @@ MODOS_RAPIDOS |= {"copiar_folhas"}   # 15/11/2026: copiar folhas para outro proj
 MODOS_RAPIDOS |= {"copias_visiveis"}   # 15/11/2026: o projeto mostra de onde vieram e para onde foram as cópias (linha própria)
 MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar" não é falha; termos de taxonomia resolvidos; Programa/uso com caminho (linha própria)
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
+MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -2122,6 +2123,170 @@ def filho(modo):
         ver("linha sem código (chamadas antigas): comportamento de antes", imagem_para_o_site(k, sem_cod) == str(velho.resolve()))
         for l in res: print(l)
         k.close()
+    elif modo == "clima":
+        # 16/11/2026: clima das salas do acervo (sensores Tuya Wi-Fi) lido da nuvem da Tuya em segundo plano; nasce desligado (migração 224).
+        # A Tuya aqui é FALSA (httpx.MockTransport) e confere a assinatura de cada chamada como a de verdade faz.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import hashlib as _hl, hmac as _hm, json as _j, httpx
+        from fastapi import HTTPException, Request
+        from fastapi.testclient import TestClient
+        from app import auth, clima, rotas_clima
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        um = lambda q, *a: (lambda r: tuple(r) if r else None)(c.execute(q, a).fetchone())
+        cfg = {r[0]: (r[1], r[2]) for r in c.execute("SELECT chave, valor, sensivel FROM configuracao WHERE chave LIKE 'clima.%'")}
+        ver("migração 224: nasce desligado (clima.coleta_min = 0) e sem credenciais", cfg.get("clima.coleta_min") == ("0", 0) and cfg.get("clima.tuya_access_id") == ("", 0) and clima.coleta_min(c) == 0, cfg)
+        ver("migração 224: o segredo da Tuya é sensível; faixa padrão 18–24 °C e 40–60 %", cfg.get("clima.tuya_access_secret") == ("", 1)
+            and clima.faixa(c) == {"temp_min": 18.0, "temp_max": 24.0, "umid_min": 40.0, "umid_max": 60.0}, clima.faixa(c))
+        SEGREDO, AID = "segredo-tuya-de-teste", "id-de-teste"
+        tuya = {"chamadas": [], "modo": "normal", "assinaturas_erradas": 0}
+        A = {"id": "sensorA", "name": "Reserva técnica", "category": "wsdcg", "online": True, "status": [{"code": "va_temperature", "value": 235}, {"code": "va_humidity", "value": 58}, {"code": "battery_percentage", "value": 80}]}
+        B = {"id": "sensorB", "name": "Sala de digitalização", "category": "wsdcg", "online": True, "status": [{"code": "temp_current", "value": 2710}, {"code": "humidity_value", "value": 553}, {"code": "battery_state", "value": "low"}]}
+        C = {"id": "sensorC", "name": "Depósito", "category": "wsdcg", "online": False, "status": [{"code": "va_temperature", "value": 190}, {"code": "va_humidity", "value": 70}]}
+        TOMADA = {"id": "tomada1", "name": "Tomada", "category": "cz", "online": True, "status": [{"code": "switch_1", "value": True}]}
+        def falsa(req):
+            caminho = req.url.raw_path.decode()
+            tuya["chamadas"].append(caminho)
+            tok = req.headers.get("access_token", "")
+            texto = f"GET\n{_hl.sha256(b'').hexdigest()}\n\n{caminho}"
+            certo = _hm.new(SEGREDO.encode(), f"{req.headers.get('client_id')}{tok}{req.headers.get('t')}{texto}".encode(), _hl.sha256).hexdigest().upper()
+            if req.headers.get("sign") != certo or req.headers.get("sign_method") != "HMAC-SHA256" or req.headers.get("client_id") != AID:
+                tuya["assinaturas_erradas"] += 1
+                return httpx.Response(200, json={"success": False, "code": 1004, "msg": "sign invalid"})
+            if caminho.startswith("/v1.0/token"):
+                return httpx.Response(200, json={"success": True, "result": {"access_token": "tok-1", "expire_time": 7200}})
+            if tok != "tok-1":
+                return httpx.Response(200, json={"success": False, "code": 1010, "msg": "token invalid"})
+            if tuya["modo"] == "erro":
+                return httpx.Response(200, json={"success": False, "code": 28841105, "msg": f"No permissions. secret={SEGREDO}"})
+            if caminho.startswith("/v1.0/iot-01/associated-users/devices"):
+                if tuya["modo"] == "sem_contas":
+                    return httpx.Response(200, json={"success": False, "code": 1106, "msg": "permission deny"})
+                if "last_row_key=p2" in caminho:
+                    return httpx.Response(200, json={"success": True, "result": {"devices": [C, TOMADA], "has_more": False, "last_row_key": ""}})
+                return httpx.Response(200, json={"success": True, "result": {"devices": [A, B], "has_more": True, "last_row_key": "p2"}})
+            if caminho.startswith("/v2.0/cloud/thing/device"):
+                return httpx.Response(200, json={"success": True, "result": [{"id": "sensorA", "customName": "Reserva técnica", "category": "wsdcg", "isOnline": True}]})
+            if caminho.startswith("/v1.0/iot-03/devices/status"):
+                return httpx.Response(200, json={"success": True, "result": [{"id": "sensorA", "status": [{"code": "va_temperature", "value": 241}, {"code": "va_humidity", "value": 61}]}]})
+            if caminho.endswith("/sensorB/specification"):
+                return httpx.Response(200, json={"success": True, "result": {"status": [{"code": "temp_current", "values": _j.dumps({"unit": "℃", "scale": 2})}, {"code": "humidity_value", "values": _j.dumps({"scale": 1})}]}})
+            if caminho.endswith("/specification"):
+                return httpx.Response(200, json={"success": True, "result": {"status": [{"code": "va_temperature", "values": _j.dumps({"scale": 1})}, {"code": "va_humidity", "values": _j.dumps({"scale": 0})}]}})
+            return httpx.Response(404, json={"success": False, "msg": "rota desconhecida"})
+        clima._cliente = lambda: httpx.Client(transport=httpx.MockTransport(falsa), timeout=5)
+        # 1) sem credenciais: não chama a Tuya, guarda o motivo
+        r = clima.coletar()
+        ver("sem credenciais: não chama a Tuya e diz o que falta", tuya["chamadas"] == [] and "credenciais" in (r.get("erro") or ""), r)
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='clima.tuya_access_id'", (AID,))
+        c.execute("UPDATE configuracao SET valor=? WHERE chave='clima.tuya_access_secret'", (SEGREDO,)); c.commit()
+        # 2) coleta normal: duas páginas, assinatura conferida, escala do aparelho, tomada ignorada, sensor fora do ar sem leitura nova
+        r = clima.coletar()
+        leit = {x[0]: x[1:] for x in c.execute("SELECT sensor_id, temperatura_c, umidade_pct, bateria_pct FROM clima_leitura")}
+        ver("coleta: a Tuya (falsa) aceitou a assinatura de todas as chamadas", tuya["assinaturas_erradas"] == 0 and r.get("erro") is None and r.get("sensores") == 3, (r, tuya["chamadas"]))
+        ver("coleta: leu as duas páginas de aparelhos", any("last_row_key=p2" in x for x in tuya["chamadas"]), tuya["chamadas"])
+        ver("sensor A: 235 → 23,5 °C, 58 %, bateria 80 %", leit.get("sensorA") == (23.5, 58.0, 80.0), leit)
+        ver("sensor B: usa a escala que a Tuya informa (2710 → 27,1 °C; 553 → 55,3 %) e bateria 'low' → 10 %", leit.get("sensorB") == (27.1, 55.3, 10.0), leit)
+        ver("tomada não vira sensor; sensor fora do ar é conhecido mas não ganha leitura nova",
+            um("SELECT COUNT(*) FROM clima_sensor")[0] == 3 and "tomada1" not in leit and "sensorC" not in leit and um("SELECT online FROM clima_sensor WHERE id='sensorC'")[0] == 0, leit)
+        n_spec = sum(1 for x in tuya["chamadas"] if x.endswith("/specification"))
+        clima.coletar()
+        ver("a escala é pedida uma vez por sensor, não a cada coleta", sum(1 for x in tuya["chamadas"] if x.endswith("/specification")) == n_spec == 3, n_spec)
+        ver("o token é reaproveitado entre as coletas", sum(1 for x in tuya["chamadas"] if x.startswith("/v1.0/token")) == 1, tuya["chamadas"])
+        # 3) interpretar sem escala: costume da Tuya e bom senso
+        ver("sem escala: 245 → 24,5 °C; umidade 553 → 55,3 %; sem medida → None",
+            clima.interpretar([{"code": "va_temperature", "value": 245}, {"code": "va_humidity", "value": 553}]) == {"temperatura_c": 24.5, "umidade_pct": 55.3, "bateria_pct": None}
+            and clima.interpretar([{"code": "switch_1", "value": True}])["temperatura_c"] is None)
+        # 4) a regra única do nível: caso que DEVE avisar e caso parecido que NÃO deve
+        fx = clima.faixa(c)
+        ver("nível: 24,0 °C e 60 % (no limite) = ok; 25 °C = aviso; 27,1 °C = crítico; umidade 71 % = crítico; 65 % = aviso; sem medida = None",
+            [clima.nivel(fx, 24.0, 60.0), clima.nivel(fx, 25.0, 50.0), clima.nivel(fx, 27.1, 50.0), clima.nivel(fx, 20.0, 71.0), clima.nivel(fx, 20.0, 65.0), clima.nivel(fx, None, None)]
+            == ["ok", "aviso", "critico", "critico", "aviso", None])
+        # 5) rotas: login, papéis, e o segredo nunca sai
+        auth.criar_usuario("Leitor", "leitor@camp.arq.br", "senha-bem-longa-123", "leitura", forcar_troca=False)
+        auth.criar_usuario("Oper", "oper@camp.arq.br", "senha-bem-longa-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-bem-longa-123", "admin", forcar_troca=False)
+        def entra(email):
+            k = TestClient(app, raise_server_exceptions=False); k.post("/api/auth/login", json={"email": email, "senha": "senha-bem-longa-123"}); return k
+        anon, lei, op, adm = TestClient(app, raise_server_exceptions=False), entra("leitor@camp.arq.br"), entra("oper@camp.arq.br"), entra("adm@camp.arq.br")
+        ver("GET /api/clima exige login", anon.get("/api/clima").status_code == 401)
+        r = lei.get("/api/clima"); d = r.json() if r.status_code == 200 else {}
+        sa = {x["id"]: x for x in d.get("sensores", [])}
+        ver("GET /api/clima (leitura): os 3 sensores, última leitura, nível e série de 24 h", r.status_code == 200 and set(sa) == {"sensorA", "sensorB", "sensorC"}
+            and sa["sensorA"]["temperatura_c"] == 23.5 and sa["sensorA"]["nivel"] == "ok" and sa["sensorB"]["nivel"] == "critico" and len(sa["sensorA"]["serie"]) == 2
+            and sa["sensorC"]["sem_leitura_recente"] is True and sa["sensorC"]["nivel"] is None and d["configurado"] is True and d["ligado"] is False, r.text[:300])
+        ver("o segredo da Tuya não aparece em /api/clima", SEGREDO not in r.text)
+        ver("POST /api/clima/coletar: operador 403, admin 200", op.post("/api/clima/coletar").status_code == 403 and adm.post("/api/clima/coletar").status_code == 200)
+        import time as _t
+        for _ in range(50):
+            if not clima.em_andamento(): break
+            _t.sleep(0.1)
+        ver("GET /api/clima/serie: série do sensor; sensor desconhecido = 404", len(lei.get("/api/clima/serie?sensor=sensorA&dias=7").json().get("serie", [])) >= 2 and lei.get("/api/clima/serie?sensor=nao-existe").status_code == 404)
+        ver("PUT sensor: operador 403; admin troca o nome mostrado (o da Tuya fica)", op.put("/api/clima/sensores/sensorA", json={"nome": "X"}).status_code == 403
+            and adm.put("/api/clima/sensores/sensorA", json={"nome": "Reserva técnica 1"}).status_code == 200
+            and um("SELECT nome, nome_tuya FROM clima_sensor WHERE id='sensorA'") == ("Reserva técnica 1", "Reserva técnica"))
+        clima.coletar()
+        ver("a coleta seguinte não desfaz o nome trocado no painel", um("SELECT nome FROM clima_sensor WHERE id='sensorA'")[0] == "Reserva técnica 1")
+        adm.put("/api/clima/sensores/sensorB", json={"ativo": False}); nb = um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='sensorB'")[0]; clima.coletar()
+        ver("sensor desativado: some da tela e não guarda leitura nova", "sensorB" not in {x["id"] for x in lei.get("/api/clima").json()["sensores"]} and um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='sensorB'")[0] == nb)
+        # 6) tablet de parede: sem login, SÓ na rede local, nunca pelo túnel; sem configuração na resposta
+        def req(ip, h=None):
+            return Request({"type": "http", "client": (ip, 1), "method": "GET", "path": "/api/clima/parede", "headers": [(k.lower().encode(), v.encode()) for k, v in (h or {}).items()]})
+        def tenta(ip, h=None):
+            try: return rotas_clima.parede(req(ip, h))
+            except HTTPException as e: return e.status_code
+        pa = tenta("192.168.15.77")
+        ver("parede: abre na rede local sem login, com temperatura, umidade e faixa", isinstance(pa, dict) and pa["sensores"][0]["nome"] and pa["faixa"]["temp_max"] == 24.0 and any(x["temperatura_c"] == 23.5 for x in pa["sensores"]), str(pa)[:200])
+        ver("parede: não devolve id do aparelho, credencial nem configuração", isinstance(pa, dict) and "configurado" not in pa and all("id" not in x for x in pa["sensores"]) and SEGREDO not in _j.dumps(pa) and AID not in _j.dumps(pa))
+        ver("parede: IP público 403; pelo túnel (cabeçalho de proxy) 403", tenta("8.8.8.8") == 403 and tenta("127.0.0.1", {"CF-Connecting-IP": "8.8.8.8"}) == 403 and tenta("192.168.15.77", {"X-Forwarded-For": "1.1.1.1"}) == 403)
+        ver("parede pelo cliente de teste (não é rede local): 403", anon.get("/api/clima/parede").status_code == 403)
+        pg = anon.get("/clima")
+        ver("GET /clima: página leve, sem login, em JavaScript antigo (tablet velho: sem =>, let, const, fetch, crases)",
+            pg.status_code == 200 and "Clima do acervo" in pg.text and not __import__("re").search(r"=>|\blet\s|\bconst\s|\bfetch\(|`", pg.text.split("<script>")[1]), pg.status_code)
+        # 6b) números do site na parede: pessoas agora (GA4 falso, em segundo plano), visitantes em 7 dias e o que está no site
+        from app import site_agora, ga4_direto, contagens
+        ver("parede.site_agora_min nasce 0 (desligado) e, sem leitura, 'agora' é None", site_agora.intervalo_min(c) == 0 and pa["site"]["agora"] is None and pa["site"]["visitas_7d"] is None, pa.get("site"))
+        r = site_agora.coletar()
+        ver("pessoas agora sem o Google Analytics configurado: guarda o motivo, não levanta", r["pessoas"] is None and "não está configurado" in (r["erro"] or ""), r)
+        _cfg0, _ag0 = ga4_direto.configurado, ga4_direto.GA4.agora
+        ga4_direto.configurado = lambda con: {"propriedade": "1", "conta": {"client_email": "x@y", "private_key": "CHAVE-SECRETA"}}
+        ga4_direto.GA4.agora = lambda self: 7
+        r = site_agora.coletar()
+        c.execute("INSERT OR REPLACE INTO visita_periodo (chave, de, ate, usuarios, sessoes, visualizacoes) VALUES ('7d','2026-11-09','2026-11-15',1234,1500,5210)")
+        c.execute("INSERT OR REPLACE INTO fundo (codigo, titulo, sigla, ativo, status_site) VALUES ('F901','Fundo no site','ZZA',1,'no_ar'), ('F902','Fundo fora','ZZB',1,'nao_publicado')"); c.commit()
+        pa = tenta("192.168.15.77")
+        ver("parede: 7 pessoas no site agora, 1.234 visitantes em 7 dias e os fundos no site pela conta do painel", r == {"pessoas": 7, "erro": None} and pa["site"]["agora"]["pessoas"] == 7
+            and pa["site"]["visitas_7d"]["pessoas"] == 1234 and pa["site"]["no_site"]["fundos"] == contagens.no_site(c)["fundos"]["no_ar"] >= 1
+            and set(pa["site"]["no_site"]) == {"fundos", "projetos", "folhas"}, pa.get("site"))
+        def _quebra(self): raise RuntimeError("GA4 recusou (429)")
+        ga4_direto.GA4.agora = _quebra
+        r = site_agora.coletar(); pa = tenta("192.168.15.77")
+        ver("Google Analytics recusou: a parede mostra traço (None), nunca o número velho como se fosse de agora", r["pessoas"] is None and "429" in r["erro"] and pa["site"]["agora"] is None and "CHAVE-SECRETA" not in _j.dumps(pa), (r, pa.get("site")))
+        ga4_direto.GA4.agora = lambda self: 3; site_agora.coletar()
+        c.execute("UPDATE site_agora SET quando=datetime('now','-30 minutes')"); c.commit()
+        ver("leitura de 30 min atrás não é 'agora'", tenta("192.168.15.77")["site"]["agora"] is None)
+        ga4_direto.configurado, ga4_direto.GA4.agora = _cfg0, _ag0
+        # 7) leitura velha não mostra nível (não finge que está tudo bem)
+        c.execute("UPDATE clima_leitura SET lido_em=datetime('now','-4 hours') WHERE sensor_id='sensorA'"); c.commit()
+        sa = {x["id"]: x for x in clima.resumo(c)["sensores"]}["sensorA"]
+        ver("leitura de mais de 3 h: 'sem leitura recente' e sem nível", sa["sem_leitura_recente"] is True and sa["nivel"] is None, sa)
+        # 8) a Tuya recusa: nada quebra, o erro fica guardado SEM o segredo e as leituras antigas continuam
+        n0 = um("SELECT COUNT(*) FROM clima_leitura")[0]; tuya["modo"] = "erro"
+        r = clima.coletar(); ult = um("SELECT erro FROM clima_coleta ORDER BY id DESC LIMIT 1")[0]
+        ver("Tuya recusou: erro guardado, sem exceção, leituras antigas intactas", "No permissions" in (ult or "") and um("SELECT COUNT(*) FROM clima_leitura")[0] == n0, ult)
+        ver("o erro guardado e o /api/clima não trazem o segredo", SEGREDO not in (ult or "") and SEGREDO not in lei.get("/api/clima").text, ult)
+        # 9) projeto da Tuya sem a rota das contas ligadas: usa a lista do projeto + status em lote
+        tuya["modo"] = "sem_contas"; r = clima.coletar()
+        ver("sem a rota das contas ligadas: lê pela lista do projeto (24,1 °C, 61 %)", r.get("erro") is None and r.get("sensores") == 1
+            and um("SELECT temperatura_c, umidade_pct FROM clima_leitura WHERE sensor_id='sensorA' ORDER BY id DESC LIMIT 1") == (24.1, 61.0), r)
+        # 10) rede caída: nunca levanta
+        def caiu(req): raise httpx.ConnectError("sem rede")
+        clima._cliente = lambda: httpx.Client(transport=httpx.MockTransport(caiu), timeout=5); clima._token.clear()
+        r = clima.coletar()
+        ver("sem rede: a coleta guarda 'a Tuya não respondeu' e não levanta", "não respondeu" in (r.get("erro") or ""), r)
+        for l in res: print(l)
     elif modo == "protocolos":
         # 02/11/2026 · protocolos (contrato 1.7): formato único, o do site quando vem, calculado quando não vem; telas, busca e avisos.
         init_db(); aplicar_migracoes()
@@ -19226,6 +19391,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Sender.net: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Clima das salas do acervo: sensores Tuya (nuvem falsa), faixa, tablet de parede só na rede local")
+rc, out = rodar("clima", f"{tmp}/clima.db")
+if rc != 0: ok(False, f"teste clima não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Clima: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Relatório do CAMP Vision e gasto por fundo (diário do CV2, contrato 2.6)")
 rc, out = rodar("relatorio_cv", f"{tmp}/relatorio_cv.db")

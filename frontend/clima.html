@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="robots" content="noindex">
+<title>Clima do acervo · CAMP</title>
+<!-- Página de parede para tablet antigo: sem o painel inteiro, sem login (só rede do escritório), JavaScript e CSS antigos de propósito
+     (Android 4+: sem flexbox/grid, sem fetch, sem let/const). Dados: GET /api/clima/parede. Ver backend/app/rotas_clima.py. -->
+<style>
+html,body{margin:0;padding:0;height:100%;background:#0d1117;color:#e6edf3;font-family:Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+#topo{position:absolute;left:0;right:0;top:0;padding:1.2% 2.5%;color:#8b949e}
+#topo b{color:#e6edf3;font-weight:500}
+#hora{float:right;color:#e6edf3}
+#salas{position:absolute;left:1.5%;right:1.5%;top:10%;bottom:29%}
+.sala{float:left;height:100%;box-sizing:border-box;-webkit-box-sizing:border-box;padding:0 1%}
+.cx{height:100%;box-sizing:border-box;-webkit-box-sizing:border-box;background:#161b22;border:1px solid #30363d;border-top:.5em solid #3d444d;border-radius:.6em;padding:2.5% 6%;position:relative;overflow:hidden}
+.cx.ok{border-top-color:#3fb950}
+.cx.aviso{border-top-color:#d29922}
+.cx.critico{border-top-color:#f85149}
+.nome{color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.temp{font-weight:300;line-height:1.05;margin-top:.1em;white-space:nowrap}
+.temp small{font-size:.4em;color:#8b949e}
+.umid{white-space:nowrap}
+.umid small{color:#8b949e}
+.estado{margin-top:.3em;color:#8b949e}
+.ok .estado{color:#3fb950}.aviso .estado{color:#d29922}.critico .estado{color:#f85149}
+.dia{color:#8b949e;margin-top:.2em;font-size:.85em;white-space:nowrap}
+canvas{position:absolute;left:0;right:0;bottom:0;width:100%;height:18%}
+#pe{position:absolute;left:0;right:0;bottom:0;padding:1.2% 2.5%;color:#8b949e}
+#quando{float:right}
+#aviso{position:absolute;left:8%;right:8%;top:30%;text-align:center;color:#c9d1d9;line-height:1.5}
+.fora{color:#f85149}
+#site{position:absolute;left:2.5%;right:2.5%;bottom:9%;height:17%}
+.num{float:left;width:25%;height:100%;box-sizing:border-box;-webkit-box-sizing:border-box;padding:0 1%}
+.num div{height:100%;box-sizing:border-box;-webkit-box-sizing:border-box;background:#161b22;border:1px solid #30363d;border-radius:.6em;padding:.25em .9em;overflow:hidden}
+.num b{display:block;font-weight:300;font-size:1.9em;line-height:1.15;white-space:nowrap}
+.num span{color:#8b949e;white-space:nowrap;font-size:.72em}
+</style>
+</head>
+<body>
+<div id="topo"><span id="hora"></span><b>Clima do acervo</b> · CAMP</div>
+<div id="salas"></div>
+<div id="aviso"></div>
+<div id="site"></div>
+<div id="pe"><span id="quando"></span><span id="faixa"></span></div>
+<script>
+(function () {
+  var DADOS = null, FALHAS = 0, RECEBIDO = 0;
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function num(v, casas) { return v == null ? '–' : Number(v).toFixed(casas).replace('.', ','); }
+  function ha(s) {
+    if (s == null) return '';
+    if (s < 90) return 'agora';
+    if (s < 5400) return 'há ' + Math.round(s / 60) + ' min';
+    if (s < 172800) return 'há ' + Math.round(s / 3600) + ' h';
+    return 'há ' + Math.round(s / 86400) + ' dias';
+  }
+  var ESTADO = { ok: 'Dentro da faixa', aviso: 'Fora da faixa', critico: 'Muito fora da faixa' };
+
+  function medidas() {
+    var w = window.innerWidth || document.documentElement.clientWidth, h = window.innerHeight || document.documentElement.clientHeight;
+    var n = DADOS && DADOS.sensores ? DADOS.sensores.length : 1, base = Math.min(w / 40, h / 26);
+    document.body.style.fontSize = Math.max(12, Math.round(base)) + 'px';
+    return { w: w, h: h, n: n, base: base };
+  }
+
+  function grafico(c, serie, fx) {
+    if (!c.getContext || !serie || serie.length < 2) return;
+    var w = c.width = c.offsetWidth, h = c.height = c.offsetHeight, g = c.getContext('2d'), i, v = [], min = 1e9, max = -1e9;
+    for (i = 0; i < serie.length; i++) if (serie[i].temperatura_c != null) { v.push(serie[i].temperatura_c); min = Math.min(min, serie[i].temperatura_c); max = Math.max(max, serie[i].temperatura_c); }
+    if (v.length < 2) return;
+    min = Math.min(min, fx.temp_min) - .5; max = Math.max(max, fx.temp_max) + .5;
+    function y(t) { return h - (t - min) / (max - min) * h; }
+    g.fillStyle = 'rgba(63,185,80,.10)'; g.fillRect(0, y(fx.temp_max), w, y(fx.temp_min) - y(fx.temp_max));
+    g.beginPath(); g.strokeStyle = '#58a6ff'; g.lineWidth = Math.max(2, h / 28);
+    for (i = 0; i < v.length; i++) { var x = i / (v.length - 1) * w; if (i) g.lineTo(x, y(v[i])); else g.moveTo(x, y(v[i])); }
+    g.stroke();
+  }
+
+  function desenhar() {
+    var m = medidas(), d = DADOS, ss = d ? d.sensores : [], i, s, html = '', cols, linhas;
+    el('aviso').innerHTML = '';
+    if (!d) { el('aviso').innerHTML = FALHAS ? '<span class="fora">Sem conexão com o painel.</span><br>Tentando de novo…' : 'Carregando…'; el('salas').innerHTML = ''; return; }
+    if (!ss.length) {
+      el('salas').innerHTML = '';
+      el('aviso').innerHTML = d.ligado ? (d.com_erro ? '<span class="fora">O painel não conseguiu ler os sensores.</span><br>Avise o Rafael.' : 'Nenhum sensor de temperatura encontrado ainda.')
+                                       : 'A leitura dos sensores está desligada.<br>Ligue em Configurações do painel.';
+    }
+    cols = ss.length <= 3 ? ss.length : Math.ceil(ss.length / 2); linhas = ss.length <= 3 ? 1 : 2;
+    for (i = 0; i < ss.length; i++) {
+      s = ss[i];
+      var niv = s.sem_leitura_recente ? '' : (s.nivel || ''), estado = s.sem_leitura_recente ? 'Sem leitura recente' + (s.idade_s != null ? ' (' + ha(s.idade_s) + ')' : '') : (ESTADO[niv] || '');
+      var tf = Math.min(m.base * (linhas === 1 ? (cols === 1 ? 7 : cols === 2 ? 5.2 : 3.8) : 2.6), m.h * .61 / linhas * (linhas === 1 ? .26 : .3));
+      html += '<div class="sala" style="width:' + (100 / cols) + '%;height:' + (100 / linhas) + '%;padding-bottom:' + (linhas > 1 ? '1.2%' : '0') + '"><div class="cx ' + niv + '">' +
+        '<div class="nome" style="font-size:' + (linhas === 1 && cols < 3 ? 1.5 : 1.1) + 'em">' + esc(s.nome) + '</div>' +
+        '<div class="temp" style="font-size:' + Math.round(tf) + 'px">' + num(s.temperatura_c, 1) + '<small> °C</small></div>' +
+        '<div class="umid" style="font-size:' + Math.round(tf * .42) + 'px">' + num(s.umidade_pct, 0) + '<small> % de umidade</small></div>' +
+        '<div class="estado">' + esc(estado) + (s.bateria_pct != null && s.bateria_pct <= 20 ? ' · <span class="fora">bateria fraca</span>' : '') + '</div>' +
+        (linhas === 1 && s.dia && s.dia.temp_min != null ? '<div class="dia">Em 24 h: ' + num(s.dia.temp_min, 1) + ' a ' + num(s.dia.temp_max, 1) + ' °C · ' + num(s.dia.umid_min, 0) + ' a ' + num(s.dia.umid_max, 0) + ' %</div>' : '') +
+        '<canvas></canvas></div></div>';
+    }
+    if (ss.length) el('salas').innerHTML = html;
+    var cs = el('salas').getElementsByTagName('canvas');
+    for (i = 0; i < cs.length; i++) grafico(cs[i], ss[i].serie, d.faixa);
+    el('faixa').innerHTML = 'Faixa desejada: ' + num(d.faixa.temp_min, 0) + ' a ' + num(d.faixa.temp_max, 0) + ' °C · ' + num(d.faixa.umid_min, 0) + ' a ' + num(d.faixa.umid_max, 0) + ' % de umidade';
+    site(); rodape();
+  }
+
+  function mil(v) { return v == null ? '–' : String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function caixa(valor, texto) { return '<div class="num"><div><b>' + valor + '</b><span>' + texto + '</span></div></div>'; }
+  function site() {
+    var s = DADOS && DADOS.site;
+    if (!s) { el('site').innerHTML = ''; return; }
+    el('site').innerHTML =
+      caixa(s.agora ? mil(s.agora.pessoas) : '–', s.agora && s.agora.pessoas === 1 ? 'pessoa no site agora' : 'pessoas no site agora') +
+      caixa(s.visitas_7d ? mil(s.visitas_7d.pessoas) : '–', 'visitantes em 7 dias') +
+      caixa(mil(s.no_site.fundos), s.no_site.fundos === 1 ? 'acervo no site' : 'acervos no site') +
+      caixa(mil(s.no_site.folhas), 'folhas em ' + mil(s.no_site.projetos) + (s.no_site.projetos === 1 ? ' projeto' : ' projetos'));
+  }
+
+  function rodape() {
+    var agora = new Date(), hh = agora.getHours(), mm = agora.getMinutes();
+    el('hora').innerHTML = (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+    if (FALHAS > 2) { el('quando').innerHTML = '<span class="fora">Sem conexão com o painel</span>'; return; }
+    if (!DADOS || DADOS.idade_coleta_s == null) { el('quando').innerHTML = ''; return; }
+    var idade = DADOS.idade_coleta_s + Math.round((new Date().getTime() - RECEBIDO) / 1000);
+    el('quando').innerHTML = (DADOS.com_erro ? '<span class="fora">Última leitura falhou</span> · ' : '') + 'Lido ' + ha(idade);
+  }
+
+  function buscar() {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/clima/parede?_=' + new Date().getTime(), true);
+    x.timeout = 15000;
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status === 200) { try { DADOS = JSON.parse(x.responseText); FALHAS = 0; RECEBIDO = new Date().getTime(); } catch (e) { FALHAS++; } }
+      else FALHAS++;
+      desenhar();
+    };
+    try { x.send(); } catch (e) { FALHAS++; desenhar(); }
+  }
+
+  window.onresize = desenhar;
+  desenhar(); buscar();
+  setInterval(buscar, 60000);
+  setInterval(rodape, 20000);
+  setInterval(function () { if (FALHAS === 0) window.location.reload(); }, 6 * 3600 * 1000);   /* de 6 em 6 h recarrega: pega a versão nova e limpa a memória do tablet */
+})();
+</script>
+</body>
+</html>
