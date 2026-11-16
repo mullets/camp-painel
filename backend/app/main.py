@@ -105,6 +105,8 @@ from .destino_auto import router as rotas_destino_auto   # UX-43
 app.include_router(rotas_destino_auto)
 from .titulos_pasta import router as rotas_titulos_pasta   # UX-67
 app.include_router(rotas_titulos_pasta)
+from .rotas_clima import router as rotas_clima   # clima das salas (sensores Tuya)
+app.include_router(rotas_clima)
 
 
 @app.on_event("startup")
@@ -132,6 +134,8 @@ async def _startup() -> None:
     asyncio.create_task(_resumo_diario_periodico())
     asyncio.create_task(_retrato_qualidade_periodico())   # Tarefas de hoje: retrato do índice a cada hora
     asyncio.create_task(_aquecer_sondas())                # UX-12: a 1ª abertura de Máquinas já encontra as estações medidas
+    asyncio.create_task(_coleta_clima_periodica())        # clima das salas (sensores Tuya); clima.coleta_min = 0 (padrão) desliga
+    asyncio.create_task(_site_agora_periodica())          # tablet de parede: pessoas no site agora; parede.site_agora_min = 0 (padrão) desliga
 
 
 async def _aquecer_sondas() -> None:
@@ -964,6 +968,46 @@ async def _coleta_visitas_periodica() -> None:
         except Exception:  # noqa: BLE001  (nunca derruba o painel; cada coleta registra o próprio erro em visita_coleta)
             pass
         await asyncio.sleep(1200)
+
+
+async def _site_agora_periodica() -> None:
+    """Pessoas no site agora (Google Analytics) para o tablet de parede, a cada N minutos ('parede.site_agora_min'; 0 = desligado, o padrão)."""
+    import asyncio
+    from . import site_agora
+    await asyncio.sleep(50)
+    while True:
+        minutos = 0
+        try:
+            con = connect()
+            try:
+                minutos = site_agora.intervalo_min(con)
+            finally:
+                con.close()
+            if minutos > 0:
+                await asyncio.to_thread(site_agora.coletar)
+        except Exception:  # noqa: BLE001  (nunca derruba o painel; o erro de cada leitura fica em site_agora)
+            pass
+        await asyncio.sleep(max(minutos, 1) * 60 if minutos > 0 else 300)
+
+
+async def _coleta_clima_periodica() -> None:
+    """Lê temperatura e umidade dos sensores Tuya a cada N minutos (configuração 'clima.coleta_min'; 0 = desligado, o padrão), em segundo plano."""
+    import asyncio
+    from . import clima
+    await asyncio.sleep(45)
+    while True:
+        minutos = 0
+        try:
+            con = connect()
+            try:
+                minutos = clima.coleta_min(con)
+            finally:
+                con.close()
+            if minutos > 0:
+                await asyncio.to_thread(clima.coletar)
+        except Exception as e:  # noqa: BLE001  (nunca derruba o painel; cada coleta guarda o próprio erro em clima_coleta)
+            log_registrar(logging.ERROR, "clima_coleta", f"Falha na leitura do clima: {type(e).__name__}")
+        await asyncio.sleep(max(minutos, 2) * 60 if minutos > 0 else 300)
 
 
 async def _coleta_qnap_periodica() -> None:
