@@ -92,18 +92,18 @@ canvas{position:absolute;left:0;right:0;bottom:0;width:100%;height:18%}
     for (i = 0; i < ss.length; i++) {
       s = ss[i];
       var niv = s.sem_leitura_recente ? '' : (s.nivel || ''), estado = s.sem_leitura_recente ? 'Sem leitura recente' + (s.idade_s != null ? ' (' + ha(s.idade_s) + ')' : '') : (ESTADO[niv] || '');
-      var tf = Math.min(m.base * (linhas === 1 ? (cols === 1 ? 7 : cols === 2 ? 5.2 : 3.8) : 2.6), m.h * .61 / linhas * (linhas === 1 ? .26 : .3));
+      var tf = Math.min(m.base * (linhas === 1 ? (cols === 1 ? 7 : cols === 2 ? 5.2 : 3.8) : 2.6), m.h * .61 / linhas * (linhas === 1 ? .26 : .34));
       html += '<div class="sala" style="width:' + (100 / cols) + '%;height:' + (100 / linhas) + '%;padding-bottom:' + (linhas > 1 ? '1.2%' : '0') + '"><div class="cx ' + niv + '">' +
-        '<div class="nome" style="font-size:' + (linhas === 1 && cols < 3 ? 1.5 : 1.1) + 'em">' + esc(s.nome) + '</div>' +
+        '<div class="nome" style="font-size:' + (linhas === 1 ? (cols < 3 ? 1.5 : 1.1) : .8) + 'em">' + esc(s.nome) + '</div>' +
         '<div class="temp" style="font-size:' + Math.round(tf) + 'px">' + num(s.temperatura_c, 1) + '<small> °C</small></div>' +
-        '<div class="umid" style="font-size:' + Math.round(tf * .42) + 'px">' + num(s.umidade_pct, 0) + '<small> % de umidade</small></div>' +
-        '<div class="estado">' + esc(estado) + (s.bateria_pct != null && s.bateria_pct <= 20 ? ' · <span class="fora">bateria fraca</span>' : '') + '</div>' +
+        '<div class="umid" style="font-size:' + Math.round(tf * (linhas === 1 ? .42 : .34)) + 'px">' + num(s.umidade_pct, 0) + '<small> % de umidade</small></div>' +
+        '<div class="estado"' + (linhas > 1 ? ' style="font-size:.75em;margin-top:0"' : '') + '>' + esc(estado) + (s.bateria_pct != null && s.bateria_pct <= 20 ? ' · <span class="fora">bateria fraca</span>' : '') + '</div>' +
         (linhas === 1 && s.dia && s.dia.temp_min != null ? '<div class="dia">Em 24 h: ' + num(s.dia.temp_min, 1) + ' a ' + num(s.dia.temp_max, 1) + ' °C · ' + num(s.dia.umid_min, 0) + ' a ' + num(s.dia.umid_max, 0) + ' %</div>' : '') +
-        '<canvas></canvas></div></div>';
+        (linhas === 1 ? '<canvas></canvas>' : '') + '</div></div>';
     }
     if (ss.length) el('salas').innerHTML = html;
     var cs = el('salas').getElementsByTagName('canvas');
-    for (i = 0; i < cs.length; i++) grafico(cs[i], ss[i].serie, d.faixa);
+    for (i = 0; i < cs.length && linhas === 1; i++) grafico(cs[i], ss[i].serie, d.faixa);
     el('faixa').innerHTML = 'Faixa desejada: ' + num(d.faixa.temp_min, 0) + ' a ' + num(d.faixa.temp_max, 0) + ' °C · ' + num(d.faixa.umid_min, 0) + ' a ' + num(d.faixa.umid_max, 0) + ' % de umidade';
     site(); rodape();
   }
