@@ -2214,9 +2214,9 @@ def filho(modo):
         ver("GET /api/clima exige login", anon.get("/api/clima").status_code == 401)
         r = lei.get("/api/clima"); d = r.json() if r.status_code == 200 else {}
         sa = {x["id"]: x for x in d.get("sensores", [])}
-        ver("GET /api/clima (leitura): os 3 sensores, última leitura, nível e série de 24 h", r.status_code == 200 and set(sa) == {"sensorA", "sensorB", "sensorC"}
+        ver("GET /api/clima (leitura): só os sensores com leitura (o desconectado que nunca leu não ocupa a tela), nível e série de 24 h", r.status_code == 200 and set(sa) == {"sensorA", "sensorB"}
             and sa["sensorA"]["temperatura_c"] == 23.5 and sa["sensorA"]["nivel"] == "ok" and sa["sensorB"]["nivel"] == "critico" and len(sa["sensorA"]["serie"]) == 2
-            and sa["sensorC"]["sem_leitura_recente"] is True and sa["sensorC"]["nivel"] is None and d["configurado"] is True and d["ligado"] is False, r.text[:300])
+            and d["configurado"] is True and d["ligado"] is False, r.text[:300])
         ver("o segredo da Tuya não aparece em /api/clima", SEGREDO not in r.text)
         ver("POST /api/clima/coletar: operador 403, admin 200", op.post("/api/clima/coletar").status_code == 403 and adm.post("/api/clima/coletar").status_code == 200)
         import time as _t
@@ -2268,6 +2268,19 @@ def filho(modo):
         c.execute("UPDATE site_agora SET quando=datetime('now','-30 minutes')"); c.commit()
         ver("leitura de 30 min atrás não é 'agora'", tenta("192.168.15.77")["site"]["agora"] is None)
         ga4_direto.configurado, ga4_direto.GA4.agora = _cfg0, _ag0
+        # 6c) 16/11: só os sensores escolhidos (clima.sensores); a conta do app tem aparelhos de outros lugares
+        ver("migração 225: clima.sensores nasce vazio (todos)", um("SELECT valor, sensivel FROM configuracao WHERE chave='clima.sensores'") == ("", 0))
+        adm.put("/api/clima/sensores/sensorB", json={"ativo": True}); clima.coletar()
+        ver("lista vazia: todos os que têm leitura aparecem", {x["id"] for x in clima.resumo(c)["sensores"]} == {"sensorA", "sensorB"})
+        c.execute("UPDATE configuracao SET valor=' reserva técnica ' WHERE chave='clima.sensores'"); c.commit()
+        nb = um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='sensorB'")[0]; na = um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='sensorA'")[0]; clima.coletar()
+        ver("clima.sensores = nome do app (sem ligar para maiúsculas): só ele aparece e só ele ganha leitura, mesmo renomeado no painel",
+            [x["id"] for x in clima.resumo(c)["sensores"]] == ["sensorA"] and um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='sensorB'")[0] == nb
+            and um("SELECT COUNT(*) FROM clima_leitura WHERE sensor_id='sensorA'")[0] == na + 1 and [x["nome"] for x in tenta("192.168.15.77")["sensores"]] == ["Reserva técnica 1"])
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='clima.sensores'"); c.commit()
+        c.execute("UPDATE clima_leitura SET lido_em=datetime('now','-8 days') WHERE sensor_id='sensorB'"); c.commit()
+        ver("sensor sem leitura há mais de 7 dias some da tela; o de 4 h atrás continua (como 'sem leitura recente')", "sensorB" not in {x["id"] for x in clima.resumo(c)["sensores"]})
+        c.execute("DELETE FROM clima_leitura WHERE sensor_id='sensorB' AND lido_em < datetime('now','-7 days')"); c.commit()
         # 7) leitura velha não mostra nível (não finge que está tudo bem)
         c.execute("UPDATE clima_leitura SET lido_em=datetime('now','-4 hours') WHERE sensor_id='sensorA'"); c.commit()
         sa = {x["id"]: x for x in clima.resumo(c)["sensores"]}["sensorA"]

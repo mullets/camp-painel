@@ -29,6 +29,7 @@ TEMPO_S = 12                   # limite de cada chamada à Tuya
 MARGEM_TEMP_C = 3.0            # fora da faixa por mais que isto = crítico
 MARGEM_UMID = 10.0
 VELHA_S = 3 * 3600             # leitura mais velha que isto = sensor "sem leitura recente"
+SOME_S = 7 * 86400             # sem leitura há mais que isto (ou nunca): o sensor some da tela
 
 _lock = threading.Lock()
 _token: dict = {}              # {"chave": (id, base), "valor": str, "vence": monotonic}
@@ -201,6 +202,15 @@ def nivel(fx: dict, temperatura: float | None, umidade: float | None) -> str | N
     return ("ok", "aviso", "critico")[int(pior)]
 
 
+def escolhidos(con) -> set[str]:
+    """Nomes (ou ids) em `clima.sensores`, em minúsculas; vazio = todos."""
+    return {x.strip().lower() for x in _cfg(con, "clima.sensores").split(",") if x.strip()}
+
+
+def _entra(so: set[str], sensor_id: str, *nomes) -> bool:
+    return not so or sensor_id.lower() in so or any((n or "").strip().lower() in so for n in nomes)
+
+
 def _registrar_coleta(sensores: int, erro: str | None, duracao_ms: int) -> dict:
     con = connect()
     try:
@@ -221,7 +231,8 @@ def coletar() -> dict:
         con = connect()
         try:
             aid, seg, regiao = _cfg(con, "clima.tuya_access_id"), _cfg(con, "clima.tuya_access_secret"), _cfg(con, "clima.tuya_regiao", "us")
-            conhecidos = {r["id"]: dict(r) for r in con.execute("SELECT id, escalas, ativo FROM clima_sensor")}
+            conhecidos = {r["id"]: dict(r) for r in con.execute("SELECT id, nome, escalas, ativo FROM clima_sensor")}
+            so = escolhidos(con)
         finally:
             con.close()
         if not aid or not seg:
@@ -236,6 +247,8 @@ def coletar() -> dict:
                     if not did or (bruto["temperatura_c"] is None and bruto["umidade_pct"] is None):
                         continue                                   # não é sensor de clima (tomada, lâmpada…)
                     ja = conhecidos.get(did)
+                    if not _entra(so, did, d.get("name"), (ja or {}).get("nome")):
+                        continue                                   # fora da lista de clima.sensores: nem guarda
                     if ja and ja["escalas"]:
                         esc = json.loads(ja["escalas"] or "{}")
                     else:
@@ -285,14 +298,18 @@ def serie(con, sensor_id: str, dias: int = 1, pontos: int = 120) -> list[dict]:
 
 def resumo(con, com_serie: bool = True) -> dict:
     fx = faixa(con)
-    sensores = []
+    sensores, so = [], escolhidos(con)
     for s in con.execute("SELECT id, nome, nome_tuya, online, ativo, visto_em FROM clima_sensor WHERE ativo=1 ORDER BY nome COLLATE NOCASE, id"):
         u = con.execute("""SELECT lido_em, temperatura_c, umidade_pct, bateria_pct,
                                   CAST((julianday('now') - julianday(lido_em)) * 86400 AS INTEGER) AS idade_s
                              FROM clima_leitura WHERE sensor_id=? ORDER BY id DESC LIMIT 1""", (s["id"],)).fetchone()
         mm = con.execute("""SELECT MIN(temperatura_c), MAX(temperatura_c), MIN(umidade_pct), MAX(umidade_pct) FROM clima_leitura
                              WHERE sensor_id=? AND lido_em >= datetime('now','-1 days')""", (s["id"],)).fetchone()
-        velha = bool(u is None or u["idade_s"] > VELHA_S)
+        if not _entra(so, s["id"], s["nome"], s["nome_tuya"]):
+            continue                                       # fora da lista de clima.sensores
+        if u is None or u["idade_s"] > SOME_S:
+            continue                                       # nunca leu, ou parou há mais de 7 dias (aparelho desligado, de outro lugar): não ocupa a tela
+        velha = bool(u["idade_s"] > VELHA_S)
         item = {"id": s["id"], "nome": s["nome"], "nome_tuya": s["nome_tuya"], "online": bool(s["online"]),
                 "lido_em": u["lido_em"] if u else None, "idade_s": u["idade_s"] if u else None, "sem_leitura_recente": velha,
                 "temperatura_c": u["temperatura_c"] if u else None, "umidade_pct": u["umidade_pct"] if u else None,
