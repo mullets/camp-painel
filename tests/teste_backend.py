@@ -17630,7 +17630,7 @@ def filho(modo):
 
     elif modo == "amigos_painel":
         # 18/11/2026 · Amigos da CAMP no painel (contrato 1.11): coleta incremental do site (cliente FALSO), pagamento à mão calcula a
-        # validade, pago → vencido sozinho, mudanças voltam ao site (vazio não apaga), e-mails com prévia e fila (carteiro FALSO; nenhum
+        # validade, pago → vencido sozinho, mudanças voltam ao site (vazio não apaga), e-mails com prévia e fila sempre pelo Sender do site (site FALSO; nenhum
         # e-mail de verdade), lembretes automáticos desligados por padrão e "simular" só lista, dados pessoais só para admin.
         init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
         import json as _j, smtplib as _smtp, datetime as _dt
@@ -17727,31 +17727,73 @@ def filho(modo):
         quem = {s["id"]: (s["modelo"], s["marco"]) for s in rs["seriam"]}
         ver("simular: lista quem receberia (renovação 30 dias para Beto) e NÃO envia", quem.get(a2["id"]) == ("lembrete_renovacao", 30) and c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0] == 0, rs)
         ver("simular guarda a última simulação", _j.loads(am._estado(c, "lembretes_simulacao"))["n"] == len(rs["seriam"]))
-        # e-mail: SMTP do painel configurado (carteiro falso)
+        # e-mail: SEMPRE pelo Sender do site (Rafael, 18/11/2026), pela rota POST /painel/apoios/{id}/email (contrato 1.12; site FALSO).
+        # O SMTP do painel fica configurado de propósito: não pode ser usado (SMTP de verdade e email_envio.enviar explodem).
         for k_, v_ in (("smtp.host", "smtp.exemplo.com"), ("smtp.remetente", "amigos@camp.arq.br")):
             c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
         c.commit()
-        enviados = []
-        def carteiro(con_, canal_, para, nome, assunto, texto): enviados.append((canal_, para, assunto, texto))
+        usou_smtp = []
+        def _smtp_proibido(*a, **k): usou_smtp.append(1); raise AssertionError("e-mail dos Amigos pelo SMTP do painel")
+        am.email_envio.enviar = _smtp_proibido
+        site_estado = {"modo": "ok"}
+        enviados = []                                                           # (caminho, corpo) dos POST …/email
+        def site_email(path, corpo):
+            if not path.endswith("/email"):
+                return Resp(200, {"ok": True, "registro": {}})
+            enviados.append((path, corpo)); m_ = site_estado["modo"]
+            if m_ == "antigo": return Resp(404, {"code": "rest_no_route", "message": "Nenhuma rota"})
+            if m_ == "sem_template": return Resp(409, {"code": "camp_sender_sem_template", "message": "Falta o template", "data": {"status": 409}})
+            if m_ == "sem_chave": return Resp(409, {"code": "camp_sender_sem_chave", "message": "Sender desligado"})
+            if corpo.get("simular"): return Resp(200, {"ok": True, "simulado": True})
+            return Resp(200, {"ok": True, "enviado": True, "sender": {"id": f"EM-{len(enviados)}", "status": "enviado"}})
+        SITE = WPF([], site_email)
+        reais = lambda: [e_ for e_ in enviados if not e_[1].get("simular")]
+        ult = lambda: c.execute("SELECT * FROM amigo_email ORDER BY id DESC LIMIT 1").fetchone()
         c.execute("UPDATE configuracao SET valor='ligado' WHERE chave='amigos.lembretes_auto'"); c.commit()
         rl = am.rodar_lembretes(c)
-        f1 = am.processar_fila(c, enviar=carteiro)
-        ver("ligado: o lembrete vai para a fila e sai pelo e-mail do painel (SMTP)", rl["enfileirados"] >= 1 and f1["enviados"] >= 1 and any(e[1] == "beto@x.com" and "vence em 10/11/2027" in e[2] and e[0] == "smtp" for e in enviados), (rl, enviados))
+        f1 = am.processar_fila(c, wp=SITE)
+        e1 = next((e_ for e_ in reais() if e_[1].get("para") == "beto@x.com"), (None, {}))
+        ver("ligado: o lembrete vai para a fila e sai pelo Sender do site (POST /painel/apoios/802/email, TR17 com 20 dias)", rl["enfileirados"] >= 1 and f1["enviados"] >= 1
+            and e1[0] == "/wp-json/camp/v1/painel/apoios/802/email" and e1[1]["modelo"] == "amigo_lembrete_30" and e1[1]["variaveis"]["validade"] == "10/11/2027" and e1[1]["variaveis"]["dias"] == "20", (rl, enviados))
+        ver("enviado: canal sender e o id do Sender no histórico", tuple(c.execute("SELECT canal, sender_id, modelo_site FROM amigo_email WHERE para='beto@x.com' AND situacao='enviado'").fetchone() or ()) == ("sender", "EM-1", "amigo_lembrete_30"))
+        ver("SMTP do painel configurado e NÃO usado", not usou_smtp)
         n_antes = c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0]
         am.rodar_lembretes(c); am._HOJE = _dt.date(2027, 10, 25); am.rodar_lembretes(c)
         ver("o mesmo lembrete nunca sai duas vezes", c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0] == n_antes)
         am._HOJE = _dt.date(2027, 11, 4); am.rodar_lembretes(c)
         ver("marco seguinte (7 dias) é outro lembrete", c.execute("SELECT COUNT(*) FROM amigo_email WHERE chave LIKE 'renovacao:%:7'").fetchone()[0] == 1)
+        enviados.clear(); am.processar_fila(c, wp=SITE)
+        ver("7 dias ou menos: template TR18 (amigo_lembrete_7)", [e_[1]["modelo"] for e_ in reais()] == ["amigo_lembrete_7"] and reais()[0][1]["variaveis"]["dias"] == "6", enviados)
         c.execute("UPDATE configuracao SET valor='desligado' WHERE chave='amigos.lembretes_auto'"); c.commit()
         am._HOJE = _dt.date(2026, 11, 18)
-        pv = am.previa(c, [a2["id"], a3["id"]], "boas_vindas")
-        ver("prévia: canal, quantos têm e-mail, texto com código e fundador", pv["canal"] == "smtp" and pv["com_email"] == 2 and any("Z9Y8X7" in e["texto"] and "Fundador nº 2" in e["texto"] for e in pv["exemplos"]), pv)
-        am.processar_fila(c, enviar=carteiro); enviados.clear()
-        am.enfileirar(c, [a2["id"]], "recibo", "", "", "adm@camp.arq.br"); am.processar_fila(c, enviar=carteiro)
-        ver("recibo: valor pago, data e meio", enviados and "R$ 1.500" in enviados[0][3] and "10/11/2026" in enviados[0][3] and "Pix" in enviados[0][3], enviados)
-        def falha(*a): raise am.email_envio.EnvioErro("SMTPRecipientsRefused: recusado")
-        am.enfileirar(c, [a3["id"]], "livre", "Oi {nome}", "Texto para {nome_completo}", "adm@camp.arq.br"); f2 = am.processar_fila(c, enviar=falha)
-        ver("falha no envio fica registrada (falhou + histórico)", f2["falhas"] == 1 and tuple(c.execute("SELECT situacao, assunto FROM amigo_email ORDER BY id DESC LIMIT 1").fetchone()) == ("falhou", "Oi Carla") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND tipo='email_falhou'").fetchone()[0] == 1)
+        enviados.clear()
+        pv = am.previa(c, [a2["id"], a3["id"]], "boas_vindas", wp=SITE)
+        ex_ = next((e_ for e_ in pv["exemplos"] if e_["id"] == a2["id"]), {})
+        ver("prévia: Sender, template TR12, variáveis que vão (código, frase do fundador) e o site confirma o template (simular, nada sai)",
+            pv["canal"] == "sender" and pv["com_email"] == 2 and ex_.get("template") == "TR12" and ex_["variaveis"]["codigo"] == "Z9Y8X7" and ex_["variaveis"]["fundador"] == "Você é o Amigo Fundador nº 2."
+            and "Z9Y8X7" in ex_["texto"] and pv["site"] == [{"template": "TR12", "rotulo": "Pagamento confirmado: boas-vindas", "pronto": True, "mensagem": ""}] and enviados and not reais(), pv)
+        enviados.clear()
+        am.enfileirar(c, [a2["id"]], "recibo", "", "", "adm@camp.arq.br"); am.processar_fila(c, wp=SITE)
+        v_ = reais()[0][1] if reais() else {}
+        ver("recibo: TR20 com valor pago, data e meio nas variáveis", v_.get("modelo") == "amigo_recibo" and v_["variaveis"]["valor_pago"] == "R$ 1.500" and v_["variaveis"]["pago_em"] == "10/11/2026" and v_["variaveis"]["meio"] == "Pix", enviados)
+        # template sem ID no site: nada sai, a mensagem diz qual TR configurar e onde; fica no histórico de cada pessoa
+        site_estado["modo"] = "sem_template"
+        pv2 = am.previa(c, [a3["id"]], "livre", "Oi {nome}", "Texto para {nome_completo}", wp=SITE)
+        ver("prévia com template faltando: avisa o TR21 e onde configurar", pv2["site"] and not pv2["site"][0]["pronto"] and "TR21" in pv2["site"][0]["mensagem"] and "Apoios → Mercado Pago → E-mails pelo Sender" in pv2["site"][0]["mensagem"], pv2["site"])
+        am.enfileirar(c, [a3["id"]], "livre", "Oi {nome}", "Texto para {nome_completo}", "adm@camp.arq.br"); f2 = am.processar_fila(c, wp=SITE)
+        ver("template não configurado: não enviado, falhou com TR21 + onde, e entra no histórico", f2["falhas"] == 1 and f2["enviados"] == 0 and ult()["situacao"] == "falhou" and ult()["assunto"] == "Oi Carla"
+            and "TR21" in ult()["erro"] and "E-mails pelo Sender" in ult()["erro"] and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND tipo='email_falhou' AND detalhe LIKE '%TR21%'").fetchone()[0] == 1, dict(ult()))
+        ver("texto livre vai com assunto e texto já preenchidos como variáveis", {k_: v_ for k_, v_ in enviados[-1][1]["variaveis"].items() if k_ != "protocolo"} == {"nome": "Carla", "assunto": "Oi Carla", "texto": "Texto para Carla"}, enviados[-1:])
+        site_estado["modo"] = "sem_chave"
+        am.enfileirar(c, [a2["id"]], "recibo", "", "", "adm@camp.arq.br"); am.processar_fila(c, wp=SITE)
+        ver("Sender desligado no site (sem token): não enviado e diz o que fazer", ult()["situacao"] == "falhou" and "Sender está desligado" in ult()["erro"], ult()["erro"])
+        site_estado["modo"] = "antigo"
+        pv3 = am.previa(c, [a2["id"]], "recibo", wp=SITE)
+        am.enfileirar(c, [a2["id"]], "recibo", "", "", "adm@camp.arq.br"); am.processar_fila(c, wp=SITE)
+        ver("site antigo (sem a rota): a prévia e o histórico dizem \"atualize o site\" e nada sai", "Atualize o site" in pv3["site"][0]["mensagem"] and ult()["situacao"] == "falhou" and "Atualize o site" in ult()["erro"], (pv3["site"], ult()["erro"]))
+        site_estado["modo"] = "ok"; enviados.clear()
+        am.enfileirar(c, [a2["id"]], "recibo", "", "", "adm@camp.arq.br"); am.processar_fila(c)      # sem a senha do site: não há canal
+        ver("sem a senha do site: nada sai (nem pelo SMTP) e o motivo fica no histórico", ult()["situacao"] == "falhou" and "senha do site" in ult()["erro"] and not enviados and not usou_smtp, ult()["erro"])
         # mudar a categoria (Rafael: "tenho que conseguir mudar a categoria da pessoa pelo admin")
         am.mudar(c, a2["id"], {"categoria": "amigo", "modalidade": "mensal"}, "adm@camp.arq.br")
         p2 = _j.loads(um(802)["pendente_site"])
@@ -17772,8 +17814,10 @@ def filho(modo):
         ver("cobrança com Mercado Pago desligado e sem Pix: não envia e diz por quê", rc1["na_fila"] == 0 and rc1["erros"] and "desligado" in rc1["erros"][0]["erro"] and um(802)["cobranca_em"] is None, rc1)
         c.execute("UPDATE configuracao SET valor='Pix (CNPJ) 00.000.000/0001-00' WHERE chave='amigos.cobranca_pix'"); c.commit()
         enviados.clear()
-        rc2 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", wp=WPF([], mp_desligado)); am.processar_fila(c, enviar=carteiro)
-        ver("cobrança manual: e-mail com valor, categoria, prazo e as instruções de Pix", rc2["manual"] == 1 and enviados and "Pix (CNPJ) 00.000.000/0001-00" in enviados[-1][3] and "R$ 1.500 por ano" in enviados[-1][3] and "Guardião" in enviados[-1][3] and "Pagar até: 25/11/2026" in enviados[-1][3], (rc2, enviados[-1:]))
+        rc2 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", wp=WPF([], mp_desligado)); am.processar_fila(c, wp=SITE)
+        vc_ = reais()[-1][1] if reais() else {"variaveis": {}}
+        ver("cobrança manual: TR15 pelo Sender com valor, categoria, prazo e as instruções de Pix (sem link)", rc2["manual"] == 1 and vc_.get("modelo") == "amigo_cobranca" and vc_["variaveis"]["pix"] == "Pix (CNPJ) 00.000.000/0001-00"
+            and vc_["variaveis"]["valor"] == "R$ 1.500 por ano" and vc_["variaveis"]["categoria"] == "Guardião" and vc_["variaveis"]["vence"] == "25/11/2026" and vc_["variaveis"]["link"] == "" and "Pix (CNPJ)" in vc_["variaveis"]["pagamento"], (rc2, enviados[-1:]))
         ver("cobrança pede ao site o link com categoria, modalidade e valor do ano", cob_posts and cob_posts[-1][0] == "/wp-json/camp/v1/painel/apoios/802/cobranca" and cob_posts[-1][1] == {"categoria": "guardiao", "modalidade": "anual", "valor": 1500.0}, cob_posts[-1:])
         ver("cobrança registrada: data, tipo manual, prazo e histórico", um(802)["cobranca_tipo"] == "manual" and um(802)["cobranca_vence"] == "2026-11-25" and um(802)["cobranca_em"]
             and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='cobranca'", (str(a2["id"]),)).fetchone()[0] == 1)
@@ -17782,14 +17826,17 @@ def filho(modo):
         # Mercado Pago ligado: link do site
         def mp_ligado(path, corpo): cob_posts.append((path, corpo)); return Resp(200, {"ok": True, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=PREF9", "valor": 1500})
         enviados.clear()
-        rc4 = am.cobrar(c, [a2["id"], a3["id"]], "adm@camp.arq.br", forcar=True, wp=WPF([], mp_ligado)); am.processar_fila(c, enviar=carteiro)
-        ver("forçar: cobra de novo; com Mercado Pago ligado o e-mail leva o link (adoção não é cobrada)", rc4["mp"] == 1 and rc4["na_fila"] == 1 and any("pref_id=PREF9" in e[3] for e in enviados) and um(802)["cobranca_tipo"] == "mp", (rc4, enviados))
+        rc4 = am.cobrar(c, [a2["id"], a3["id"]], "adm@camp.arq.br", forcar=True, wp=WPF([], mp_ligado)); am.processar_fila(c, wp=SITE)
+        ver("forçar: cobra de novo; com Mercado Pago ligado o e-mail leva o link (adoção não é cobrada)", rc4["mp"] == 1 and rc4["na_fila"] == 1 and reais() and "pref_id=PREF9" in reais()[-1][1]["variaveis"]["link"]
+            and reais()[-1][1]["variaveis"]["pix"] == "" and um(802)["cobranca_tipo"] == "mp" and not usou_smtp, (rc4, enviados[-1:]))
         def mp_falso(path, corpo): return Resp(200, {"ok": True, "link": "https://golpe.example.com/pagar"})
         c.execute("UPDATE configuracao SET valor='' WHERE chave='amigos.cobranca_pix'"); c.commit()
         rc5 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", forcar=True, wp=WPF([], mp_falso))
         ver("link que não é do Mercado Pago é recusado", rc5["na_fila"] == 0 and rc5["erros"], rc5)
+        am._wp = lambda: SITE                                                   # daqui em diante, "o site" é sempre o falso
         pc = am.previa_cobranca(c, [a2["id"]])
-        ver("prévia da cobrança: quem recebe e quem já foi cobrado há pouco", pc["com_email"] == 1 and pc["repetidas"] and pc["exemplo"]["assunto"].startswith("Amigos da CAMP: pagamento de"), pc)
+        ver("prévia da cobrança: quem recebe, quem já foi cobrado há pouco e o template TR15 com as variáveis", pc["com_email"] == 1 and pc["repetidas"] and pc["exemplo"]["assunto"].startswith("Amigos da CAMP: pagamento de")
+            and pc["exemplo"]["template"] == "TR15" and "vence" in pc["exemplo"]["variaveis"], pc)
         # telas e papéis
         auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
         auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
@@ -17819,9 +17866,15 @@ def filho(modo):
         ver("pagamento pela tela: vencido volta a pago; a validade antiga ainda valia nessa data, então soma 12 meses a ela", rp.status_code == 200 and um(801)["situacao"] == "pago" and um(801)["validade"] == "2028-05-01", rp.text[:200])
         ver("e-mail livre sem texto: 400", x.post("/api/amigos/email/previa", json={"ids": [a1["id"]], "modelo": "livre"}).status_code == 400)
         enviados.clear()
-        am._enviar = carteiro; am._fila_em_segundo_plano = lambda: am.processar_fila()
+        am._fila_em_segundo_plano = lambda: am.processar_fila()
+        ver("sem a senha do site: Enviar e-mail recusa (409) e diz que sai pelo Sender do site", x.post("/api/amigos/email/enviar", json={"ids": [a1["id"]], "modelo": "recibo"}).status_code == 409 and not enviados)
+        c.execute("UPDATE configuracao SET valor='senha-falsa' WHERE chave='wp.app_password'"); c.commit()
+        pr_ = x.post("/api/amigos/email/previa", json={"ids": [a1["id"]], "modelo": "recibo"}).json()
+        ver("prévia pela tela: canal Sender, variáveis e o site confere o template", pr_["canal"] == "sender" and pr_["exemplos"][0]["variaveis"]["nome"] == "Ana" and pr_["site"][0]["pronto"] and not reais(), pr_)
+        enviados.clear()
         re_ = x.post("/api/amigos/email/enviar", json={"ids": [a1["id"], a2["id"]], "modelo": "lembrete_renovacao"})
-        ver("enviar a vários: entra na fila e sai um por pessoa", re_.status_code == 200 and re_.json()["na_fila"] == 2 and sorted(e[1] for e in enviados) == ["ana@x.com", "beto@x.com"], (re_.text, enviados))
+        ver("enviar a vários: entra na fila e sai um pedido ao site por pessoa", re_.status_code == 200 and re_.json()["na_fila"] == 2 and sorted(e_[1]["para"] for e_ in reais()) == ["ana@x.com", "beto@x.com"]
+            and sorted(e_[0] for e_ in reais()) == ["/wp-json/camp/v1/painel/apoios/801/email", "/wp-json/camp/v1/painel/apoios/802/email"] and not usou_smtp, (re_.text, enviados))
         ver("valores por ano: gravar 2028 e abrir 2029 copiando", x.put("/api/amigos/valores/2028", json=[{"categoria": "amigo", "nome": "Amigo", "anual": 500, "mensal": 50}]).status_code == 200
             and x.post("/api/amigos/valores/2029/copiar").status_code == 200 and am.precos(c)[2029]["amigo"]["anual"] == 500 and x.post("/api/amigos/valores/2029/copiar").status_code == 409)
         am._HOJE = _dt.date(2028, 3, 1)
@@ -19816,7 +19869,7 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Mover e o site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
-print("Amigos da CAMP no painel: coleta do site, pagamento à mão, vencido, volta ao site, e-mails (carteiro falso), lembretes, papéis")
+print("Amigos da CAMP no painel: coleta do site, pagamento à mão, vencido, volta ao site, e-mails sempre pelo Sender do site (site falso), lembretes, papéis")
 rc, out = rodar("amigos_painel", f"{tmp}/amigos_painel.db")
 if rc != 0: ok(False, f"teste amigos_painel não rodou -> {out[-1500:]}")
 else:
