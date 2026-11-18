@@ -13,8 +13,9 @@ de trabalho da equipe:
   a tradução está em DO_SITE/PARA_SITE). Pago com a validade passada vira vencido sozinho (e vai ao site).
 - Pagamento registrado à mão (Pix, transferência, dinheiro…): marca pago e calcula a validade por `amigos.validade_regra`
   (12_meses a partir do pagamento, padrão, ou do fim da validade atual quando ainda vale; fim_do_ano = 31/12).
-- E-mails: modelos com prévia; envio em fila (`amigo_email`), um por vez, pelo SMTP do painel (smtp.*, email_envio); sem SMTP, pelo
-  e-mail do site (POST /painel/pedido/enviar, wp_mail). O Sender.net não é usado aqui. Lembretes automáticos (renovação N dias antes e
+- E-mails: modelos com prévia; envio em fila (`amigo_email`), um por vez, SEMPRE pelo Sender (Rafael, 18/11/2026: "sempre Sender"),
+  pela rota do site POST /painel/apoios/{id}/email (contrato 1.12) com o template TR do modelo (SENDER). Nunca pelo SMTP do painel nem
+  pelo wp_mail: site antigo, Sender sem chave ou template sem ID = nada sai e o histórico diz o que fazer. Lembretes automáticos (renovação N dias antes e
   vencido) atrás de `amigos.lembretes_auto` = desligado (padrão) | simular | ligado; a chave do lembrete (modelo:amigo:validade:marco)
   é única: o mesmo lembrete nunca sai duas vezes.
 - Dados pessoais: só admin e master; nada de nome/e-mail no log técnico (só contagens e ids). LGPD: apagar pessoa anonimiza.
@@ -288,7 +289,7 @@ def coletar(con=None, wp=None) -> dict:
     con = con or connect()
     out = {"lidos": 0, "novos": 0, "atualizados": 0, "sem_rota": False, "erro": None}
     try:
-        wp = wp or __import__("app.wp", fromlist=["WP"]).WP()
+        wp = wp or _wp()
         desde = _estado(con, "desde")
         agora = None
         for pagina in range(1, 51):
@@ -371,7 +372,7 @@ def enviar_pendentes(con=None, wp=None, so: int | None = None) -> dict:
         rows = con.execute(q, (so,) if so else ()).fetchall()
         if not rows:
             return out
-        wp = wp or __import__("app.wp", fromlist=["WP"]).WP()
+        wp = wp or _wp()
         for r in rows:
             corpo = json.loads(r["pendente_site"])
             try:
@@ -607,40 +608,141 @@ def montar(con, r, modelo: str, assunto: str = "", texto: str = "") -> dict:
     return {"assunto": " ".join(a.format_map(v).split())[:200], "texto": t.format_map(v)}
 
 
+# Sempre Sender (18/11/2026). modelo do painel → chave do template no site (Camp_AAP_MP::PAINEL) e TR; o lembrete de renovação usa
+# o TR17 com mais de 7 dias para vencer e o TR18 com 7 ou menos. As variáveis de cada template são exatamente as que o site aceita.
+TEMPLATES_SITE = {
+    "amigo_boas_vindas": ("TR12", "Pagamento confirmado: boas-vindas", ("nome", "categoria", "validade", "codigo", "fundador", "protocolo", "link")),
+    "amigo_cobranca":    ("TR15", "Cobrança", ("nome", "categoria", "valor", "vence", "pagamento", "link", "pix", "protocolo")),
+    "amigo_pendente":    ("TR16", "Pagamento pendente", ("nome", "categoria", "valor", "link", "protocolo")),
+    "amigo_lembrete_30": ("TR17", "Lembrete de renovação (faltam mais de 7 dias)", ("nome", "categoria", "validade", "dias", "valor", "link", "protocolo")),
+    "amigo_lembrete_7":  ("TR18", "Lembrete de renovação (faltam 7 dias ou menos)", ("nome", "categoria", "validade", "dias", "valor", "link", "protocolo")),
+    "amigo_vencido":     ("TR19", "Aviso de vencimento", ("nome", "categoria", "validade", "valor", "link", "protocolo")),
+    "amigo_recibo":      ("TR20", "Recibo simples", ("nome", "nome_completo", "valor_pago", "pago_em", "meio", "categoria", "validade", "protocolo")),
+    "amigo_livre":       ("TR21", "Texto livre", ("nome", "assunto", "texto", "protocolo")),
+}
+SENDER = {"boas_vindas": "amigo_boas_vindas", "cobranca": "amigo_cobranca", "cobranca_pendente": "amigo_pendente",
+          "lembrete_renovacao": "amigo_lembrete_30", "aviso_vencido": "amigo_vencido", "recibo": "amigo_recibo", "livre": "amigo_livre"}
+ONDE_TEMPLATES = "na administração do site, Apoios → Mercado Pago → E-mails pelo Sender (avise quem cuida do site)"
+ROTULO_CANAL = {"sender": "Sender (pelo site)"}
+SEM_SITE = "os e-mails dos Amigos saem pelo Sender do site: falta a senha do site (Application Password) em Configurações"
+
+
+def _wp():
+    """Cliente do site (os testes trocam por um falso)."""
+    return __import__("app.wp", fromlist=["WP"]).WP()
+
+
 def canal(con) -> str:
-    """smtp (o e-mail do painel, smtp.* em Configurações) primeiro; sem ele, o e-mail do site (wp_mail). Nada: ''."""
-    if email_envio.configurado(email_envio.configuracao(con)):
-        return "smtp"
-    if _cfg(con, "wp.app_password", settings.WP_APP_PASSWORD):
-        return "site"
-    return ""
+    """Sempre o Sender, pelo site: precisa da senha do site. Sem ela: ''. O SMTP do painel não é usado nos Amigos."""
+    return "sender" if _cfg(con, "wp.app_password", settings.WP_APP_PASSWORD) else ""
 
 
-ROTULO_CANAL = {"smtp": "e-mail do painel", "site": "e-mail do site"}
+def para_sender(con, r, modelo: str, assunto: str = "", texto: str = "") -> tuple[str, dict]:
+    """(chave do template no site, variáveis que vão ao Sender) para um Amigo e um modelo do painel."""
+    if modelo not in SENDER:
+        raise HTTPException(400, "Modelo de e-mail inválido")
+    v = variaveis(con, r)
+    chave = SENDER[modelo]
+    out = {"nome": v["nome"], "nome_completo": v["nome_completo"], "categoria": v["categoria"], "valor": v["valor"], "validade": v["validade"],
+           "codigo": v["codigo"], "protocolo": v["protocolo"], "link": v["link"], "pago_em": v["pago_em"], "valor_pago": v["valor_pago"], "meio": v["meio"]}
+    if modelo == "boas_vindas":
+        out["fundador"] = f"Você é o Amigo Fundador nº {r['fundador']}." if r["fundador"] else ""
+    elif modelo == "cobranca":
+        mp = r["cobranca_tipo"] == "mp" and bool(r["cobranca_link"])
+        out.update(vence=v["vence_cobranca"], pagamento=v["pagamento"], link=r["cobranca_link"] if mp else "",
+                   pix="" if mp else _cfg(con, "amigos.cobranca_pix"))
+    elif modelo == "lembrete_renovacao":
+        val = _data(r["validade"])
+        dias = (val - hoje()).days if val else None
+        out["dias"] = str(dias) if dias is not None else ""
+        if dias is not None and dias <= 7:
+            chave = "amigo_lembrete_7"
+    elif modelo == "livre":
+        m = montar(con, r, modelo, assunto, texto)
+        out.update(assunto=m["assunto"], texto=m["texto"])
+    return chave, {k: out.get(k, "") for k in TEMPLATES_SITE[chave][2]}
 
 
-def _enviar(con, c: str, para: str, nome: str, assunto: str, texto: str) -> None:
-    """Um e-mail. Levanta email_envio.EnvioErro com mensagem segura."""
-    responder = _cfg(con, "amigos.responder_para")
-    if c == "smtp":
-        email_envio.enviar(email_envio.configuracao(con), para, assunto, texto, responder_para=responder or None)
-    elif c == "site":
-        from . import entrega
+class SiteErro(Exception):
+    """Envio pelo site/Sender que não saiu. `parar`: o resto da fila espera a próxima rodada (limite do site)."""
+    def __init__(self, msg: str, parar: bool = False):
+        super().__init__(msg)
+        self.parar = parar
+
+
+def _msg_site(resp, chave: str) -> str:
+    """Mensagem para a equipe a partir da resposta do site (contrato 1.12)."""
+    tr, rot = TEMPLATES_SITE.get(chave, ("", ""))[:2]
+    txt = getattr(resp, "text", "") or ""
+    try:
+        d = resp.json() or {}
+    except ValueError:
+        d = {}
+    d = d if isinstance(d, dict) else {}
+    cod = str(d.get("code") or "")
+    if resp.status_code == 404 and ("rest_no_route" in txt or cod == "rest_no_route"):
+        return "não enviado: o site ainda não manda os e-mails dos Amigos pelo Sender. Atualize o site (plugin da CAMP 1.25.12 ou mais novo)"
+    if cod == "camp_sender_sem_template":
+        return f"não enviado: falta o template {tr} ({rot}) do Sender no site. Crie no Sender e cole o ID {ONDE_TEMPLATES}"
+    if cod == "camp_sender_sem_chave":
+        return "não enviado: o Sender está desligado no site (sem o token). Preencha o token do Sender em Configurações → E-mail e avisos e envie ao site"
+    if cod == "camp_apoio_nao_existe":
+        return "não enviado: este registro não existe mais no site"
+    msg = str(d.get("message") or "")[:200]
+    if cod == "camp_sender_falhou":
+        return f"não enviado: o Sender recusou ({msg or resp.status_code})"
+    return f"não enviado: o site respondeu {resp.status_code}{': ' + msg if msg else ''}"
+
+
+def _enviar_sender(con, wp, a, para: str, chave: str, vars_: dict, simular: bool = False) -> str:
+    """Um e-mail pelo site → Sender. Devolve o id do Sender. Levanta SiteErro com mensagem segura (sem token)."""
+    corpo = {"modelo": chave, "variaveis": vars_, "para": para, "nome": (a["nome"] or "") if a else ""}
+    if simular:
+        corpo["simular"] = True
+    sid = int(a["site_id"]) if a and a["site_id"] else 0
+    try:
+        resp = wp.h.post(f"{ROTA}/{sid}/email", json=corpo)
+    except Exception as e:  # noqa: BLE001
+        raise SiteErro(f"não enviado: não consegui falar com o site ({type(e).__name__})") from e
+    if resp.status_code == 200:
         try:
-            entrega._enviar_site(con, para, nome, assunto, texto, responder, None)
-        except entrega.EnvioErro as e:
-            raise email_envio.EnvioErro(str(e)) from e
-    else:
-        raise email_envio.EnvioErro("o envio de e-mail não está configurado (SMTP em Configurações, ou a senha do site)")
+            d = resp.json() or {}
+        except ValueError:
+            d = {}
+        if not simular and not (isinstance(d, dict) and d.get("enviado")):
+            raise SiteErro("não enviado: o site não confirmou o envio pelo Sender")
+        return str(((d.get("sender") or {}) if isinstance(d, dict) else {}).get("id") or "")
+    if resp.status_code == 429:
+        raise SiteErro("não enviado agora: o site limitou os envios (429); fica na fila", parar=True)
+    raise SiteErro(_msg_site(resp, chave))
 
 
-def previa(con, ids: list[int], modelo: str, assunto: str = "", texto: str = "") -> dict:
+def conferir_site(con, wp, rows, modelo: str, assunto: str = "", texto: str = "") -> list[dict]:
+    """Pergunta ao site (simular, nada sai) se cada template que este envio usaria está pronto. Um pedido por template."""
+    vistos, out = {}, []
+    for r in rows:
+        chave, vars_ = para_sender(con, r, modelo, assunto, texto)
+        if chave not in vistos:
+            vistos[chave] = (r, vars_)
+    for chave, (r, vars_) in vistos.items():
+        tr, rot = TEMPLATES_SITE[chave][:2]
+        try:
+            _enviar_sender(con, wp, r, r["email"], chave, vars_, simular=True)
+            out.append({"template": tr, "rotulo": rot, "pronto": True, "mensagem": ""})
+        except SiteErro as e:
+            out.append({"template": tr, "rotulo": rot, "pronto": False, "mensagem": str(e)})
+    return out
+
+
+def previa(con, ids: list[int], modelo: str, assunto: str = "", texto: str = "", wp=None) -> dict:
     rows = _linhas(con, ids)
     com = [r for r in rows if email_envio.ENDERECO.match(r["email"] or "")]
     exemplos = []
     for r in com[:3]:
         m = montar(con, r, modelo, assunto, texto)
-        exemplos.append({"id": r["id"], "nome": r["nome"], "para": r["email"], **m})
+        chave, vars_ = para_sender(con, r, modelo, assunto, texto)
+        exemplos.append({"id": r["id"], "nome": r["nome"], "para": r["email"], **m, "template": TEMPLATES_SITE[chave][0],
+                         "rotulo_template": TEMPLATES_SITE[chave][1], "variaveis": vars_})
     if not com and rows:
         montar(con, rows[0], modelo, assunto, texto)          # valida o modelo/texto mesmo sem destinatário
     semana = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
@@ -648,9 +750,18 @@ def previa(con, ids: list[int], modelo: str, assunto: str = "", texto: str = "")
     if com:
         rep = con.execute(f"SELECT COUNT(DISTINCT amigo_id) FROM amigo_email WHERE modelo=? AND situacao<>'falhou' AND criado_em>=? AND amigo_id IN ({','.join('?' * len(com))})",
                           (modelo, semana, *[r["id"] for r in com])).fetchone()[0]
-    c = canal(con)
+    c = canal(con) if wp is None else "sender"
     return {"total": len(rows), "com_email": len(com), "sem_email": [r["nome"] for r in rows if r not in com][:50], "exemplos": exemplos,
-            "canal": c, "rotulo_canal": ROTULO_CANAL.get(c, ""), "repetidos_7_dias": rep}
+            "canal": c, "rotulo_canal": ROTULO_CANAL.get(c, ""), "repetidos_7_dias": rep, "site": _conferir_seguro(con, wp, com, c, modelo, assunto, texto)}
+
+
+def _conferir_seguro(con, wp, com, c, modelo, assunto="", texto="") -> list[dict]:
+    if not com or not c:
+        return []
+    try:
+        return conferir_site(con, wp or _wp(), com, modelo, assunto, texto)
+    except Exception:  # noqa: BLE001  (a prévia nunca quebra por causa do site)
+        return []
 
 
 def _linhas(con, ids: list[int]):
@@ -666,37 +777,52 @@ def enfileirar(con, ids: list[int], modelo: str, assunto: str, texto: str, ator:
         if not email_envio.ENDERECO.match(r["email"] or ""):
             continue
         m = montar(con, r, modelo, assunto, texto)
-        cur = con.execute("INSERT OR IGNORE INTO amigo_email (amigo_id, modelo, assunto, corpo, para, chave, criado_por) VALUES (?,?,?,?,?,?,?)",
-                          (r["id"], modelo, m["assunto"], m["texto"], r["email"], chave.format(id=r["id"]) if chave else None, ator))
+        ms, vars_ = para_sender(con, r, modelo, assunto, texto)
+        cur = con.execute("INSERT OR IGNORE INTO amigo_email (amigo_id, modelo, assunto, corpo, para, chave, criado_por, modelo_site, variaveis) VALUES (?,?,?,?,?,?,?,?,?)",
+                          (r["id"], modelo, m["assunto"], m["texto"], r["email"], chave.format(id=r["id"]) if chave else None, ator, ms,
+                           json.dumps(vars_, ensure_ascii=False)))
         n += cur.rowcount
     con.commit()
     return n
 
 
-def processar_fila(con=None, limite: int = 60, enviar=None) -> dict:
-    """Manda os e-mails na fila, um por vez. Registra cada envio no histórico do Amigo. Nunca levanta."""
+def processar_fila(con=None, limite: int = 60, wp=None) -> dict:
+    """Manda os e-mails na fila, um por vez, SEMPRE pelo Sender do site (POST /painel/apoios/{id}/email). Registra cada envio
+    (ou o motivo de não ter saído: site antigo, Sender sem chave, template sem ID) no histórico do Amigo. Nunca levanta."""
     fechar = con is None
     con = con or connect()
-    enviar = enviar or _enviar
     out = {"enviados": 0, "falhas": 0}
     try:
-        c = canal(con)
+        c = "sender" if wp is not None else canal(con)
         for e in con.execute("SELECT * FROM amigo_email WHERE situacao='na_fila' ORDER BY id LIMIT ?", (limite,)).fetchall():
-            a = con.execute("SELECT nome FROM amigo WHERE id=?", (e["amigo_id"],)).fetchone()
+            a = con.execute("SELECT * FROM amigo WHERE id=?", (e["amigo_id"],)).fetchone()
+            chave = e["modelo_site"] or ""
             try:
                 if not c:
-                    raise email_envio.EnvioErro("o envio de e-mail não está configurado (SMTP em Configurações, ou a senha do site)")
-                enviar(con, c, e["para"], (a["nome"] if a else "") or "", e["assunto"], e["corpo"])
-            except email_envio.EnvioErro as err:
-                msg = str(err)[:240]
-                if "(429)" in msg:            # o site limita 60 por hora: o resto fica na fila para a próxima rodada
+                    raise SiteErro("não enviado: " + SEM_SITE)
+                if not a:
+                    raise SiteErro("não enviado: o Amigo não existe mais no painel")
+                try:
+                    vars_ = json.loads(e["variaveis"]) if e["variaveis"] else None
+                except ValueError:
+                    vars_ = None
+                if not chave or vars_ is None:          # entrou na fila antes do "sempre Sender": monta agora
+                    chave, vars_ = para_sender(con, a, e["modelo"], e["assunto"] or "", e["corpo"] or "") if e["modelo"] != "livre" else \
+                        ("amigo_livre", {"nome": variaveis(con, a)["nome"], "assunto": e["assunto"] or "", "texto": e["corpo"] or "", "protocolo": a["protocolo"] or ""})
+                wp = wp or _wp()
+                sid = _enviar_sender(con, wp, a, e["para"], chave, vars_)
+            except (SiteErro, HTTPException) as err:
+                msg = str(getattr(err, "detail", None) or err)[:240]
+                if getattr(err, "parar", False):        # o site limita: o resto fica na fila para a próxima rodada
                     break
-                con.execute("UPDATE amigo_email SET situacao='falhou', canal=?, erro=? WHERE id=?", (c or None, msg, e["id"]))
-                _evento(con, e["amigo_id"], "email_falhou", e["criado_por"] or "painel", {"modelo": e["modelo"], "canal": c, "erro": msg})
+                con.execute("UPDATE amigo_email SET situacao='falhou', canal=?, erro=?, modelo_site=COALESCE(modelo_site, ?) WHERE id=?",
+                            (c or None, msg, chave or None, e["id"]))
+                _evento(con, e["amigo_id"], "email_falhou", e["criado_por"] or "painel", {"modelo": e["modelo"], "canal": c, "template": TEMPLATES_SITE.get(chave, ("",))[0], "erro": msg})
                 out["falhas"] += 1
             else:
-                con.execute("UPDATE amigo_email SET situacao='enviado', canal=?, erro=NULL, enviado_em=datetime('now') WHERE id=?", (c, e["id"]))
-                _evento(con, e["amigo_id"], "email_enviado", e["criado_por"] or "painel", {"modelo": e["modelo"], "canal": c, "assunto": e["assunto"]})
+                con.execute("UPDATE amigo_email SET situacao='enviado', canal=?, erro=NULL, enviado_em=datetime('now'), sender_id=?, modelo_site=? WHERE id=?",
+                            (c, sid or None, chave, e["id"]))
+                _evento(con, e["amigo_id"], "email_enviado", e["criado_por"] or "painel", {"modelo": e["modelo"], "canal": c, "template": TEMPLATES_SITE[chave][0], "assunto": e["assunto"]})
                 out["enviados"] += 1
             con.commit()
     except Exception as err:  # noqa: BLE001
@@ -731,12 +857,14 @@ def previa_cobranca(con, ids: list[int]) -> dict:
     com = [r for r in rows if email_envio.ENDERECO.match(r["email"] or "")]
     ex = None
     if com:
-        ex = {"para": com[0]["email"], **montar(con, com[0], "cobranca")}
+        chave, vars_ = para_sender(con, com[0], "cobranca")
+        ex = {"para": com[0]["email"], **montar(con, com[0], "cobranca"), "template": TEMPLATES_SITE[chave][0],
+              "rotulo_template": TEMPLATES_SITE[chave][1], "variaveis": vars_}
     c = canal(con)
     return {"total": len(rows), "com_email": len(com), "sem_email": [r["nome"] for r in rows if r not in com][:50], "exemplo": ex,
             "repetidas": [{"id": r["id"], "nome": r["nome"], "em": r["cobranca_em"]} for r in com if _cobranca_recente(con, r)],
             "canal": c, "rotulo_canal": ROTULO_CANAL.get(c, ""), "pix": bool(_cfg(con, "amigos.cobranca_pix")), "prazo_dias": prazo_cobranca(con),
-            "intervalo_dias": intervalo_cobranca(con)}
+            "intervalo_dias": intervalo_cobranca(con), "site": _conferir_seguro(con, None, com[:1], c, "cobranca")}
 
 
 def _link_mp(con, wp, r) -> tuple[str | None, str]:
@@ -745,7 +873,7 @@ def _link_mp(con, wp, r) -> tuple[str | None, str]:
         return None, "registrado só no painel"
     if wp is None:
         try:
-            wp = __import__("app.wp", fromlist=["WP"]).WP()
+            wp = _wp()
         except Exception:  # noqa: BLE001
             return None, "sem a senha do site"
     corpo = {"categoria": r["categoria"], "modalidade": r["modalidade"] or "anual"}
@@ -778,8 +906,8 @@ def cobrar(con, ids: list[int], ator: str, forcar: bool = False, wp=None) -> dic
     """Cobrança: link do Mercado Pago (pelo site) ou, com o pagamento online desligado, as instruções de Pix do painel; vai por
     e-mail (fila). A mesma pessoa não é cobrada de novo antes de `amigos.cobranca_intervalo_dias` sem `forcar`."""
     out = {"na_fila": 0, "mp": 0, "manual": 0, "repetidas": [], "sem_email": [], "erros": []}
-    if not canal(con):
-        raise HTTPException(409, "O envio de e-mail não está configurado: preencha o SMTP em Configurações (ou a senha do site).")
+    if not canal(con) and wp is None:
+        raise HTTPException(409, "Os e-mails dos Amigos saem pelo Sender do site: preencha a senha do site (Application Password) em Configurações.")
     pix = _cfg(con, "amigos.cobranca_pix")
     for r in _linhas(con, ids):
         if r["tipo"] != "amigo":
@@ -1176,7 +1304,7 @@ def email_enviar(d: EmailPedido, u: dict = Depends(auth.exige("admin"))) -> dict
     con = connect()
     try:
         if not canal(con):
-            raise HTTPException(409, "O envio de e-mail não está configurado: preencha o SMTP em Configurações (ou a senha do site).")
+            raise HTTPException(409, "Os e-mails dos Amigos saem pelo Sender do site: preencha a senha do site (Application Password) em Configurações.")
         n = enfileirar(con, d.ids, d.modelo, d.assunto or "", d.texto or "", u["email"])
     finally:
         con.close()
@@ -1253,7 +1381,9 @@ def detalhe(aid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         d = _linha(con, r)
         d["erro_site"] = r["erro_site"]
         d["pagamentos"] = [dict(p) for p in con.execute("SELECT id, chave, data, valor, meio, nota, origem, status, criado_por FROM amigo_pagamento WHERE amigo_id=? ORDER BY data DESC, id DESC", (aid,))]
-        d["emails"] = [dict(e) for e in con.execute("SELECT id, modelo, assunto, situacao, canal, erro, criado_por, criado_em, enviado_em FROM amigo_email WHERE amigo_id=? ORDER BY id DESC LIMIT 50", (aid,))]
+        d["emails"] = [dict(e) for e in con.execute("SELECT id, modelo, assunto, situacao, canal, erro, criado_por, criado_em, enviado_em, modelo_site, sender_id FROM amigo_email WHERE amigo_id=? ORDER BY id DESC LIMIT 50", (aid,))]
+        for e in d["emails"]:
+            e["template"] = TEMPLATES_SITE.get(e.pop("modelo_site") or "", ("",))[0]
         d["historico"] = [dict(e) for e in con.execute("SELECT tipo, ator, detalhe, quando FROM evento WHERE entidade='amigo' AND codigo=? ORDER BY id DESC LIMIT 100", (str(aid),))]
         return d
     finally:
