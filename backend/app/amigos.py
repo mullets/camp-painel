@@ -1044,6 +1044,17 @@ def _linha(con, r) -> dict:
     return d
 
 
+def _com_emkt(con, linhas: list[dict], emkt: str | None) -> list[dict]:
+    """18/11/2026 (CAMP-SENDER): "aceita e-mails" (sim | cancelou | nao) pela lista de e-mails da CAMP; filtro sim/nao."""
+    from . import contatos_emkt
+    m = contatos_emkt.mapa_aceite(con)
+    for d in linhas:
+        d["aceita_emails"] = m.get((d.get("email") or "").strip().lower(), "nao") if d.get("email") else "nao"
+    if emkt in ("sim", "nao", "cancelou"):
+        linhas = [d for d in linhas if d["aceita_emails"] == emkt]
+    return linhas
+
+
 def _filtro(aba: str, situacao, categoria, ano, vencendo, q) -> tuple[str, list]:
     onde, vals = (["tipo='amigo'"] if aba == "amigos" else ["tipo IN ('projeto','arquiteto')"]), []
     if situacao and situacao not in ("todos", "todas"):
@@ -1086,7 +1097,7 @@ def numeros(con) -> dict:
 
 @router.get("")
 def listar(aba: str = "amigos", situacao: str | None = None, categoria: str | None = None, ano: int | None = None, vencendo: int = 0,
-           q: str | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+           q: str | None = None, emkt: str | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
     if aba not in ("amigos", "adocoes"):
         raise HTTPException(400, "Aba inválida")
     con = connect()
@@ -1106,7 +1117,7 @@ def listar(aba: str = "amigos", situacao: str | None = None, categoria: str | No
                                                                 ("adocoes", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo'"),
                                                                 ("adocoes_novas", "SELECT COUNT(*) FROM amigo WHERE tipo<>'amigo' AND status_pedido='novo'"))}
         cats = _tabela_do_ano(con, hoje().year)
-        return {"itens": [_linha(con, r) for r in rows], "resumo": resumo, "numeros": numeros(con), "anos": anos, "totais": tot,
+        return {"itens": _com_emkt(con, [_linha(con, r) for r in rows], emkt), "resumo": resumo, "numeros": numeros(con), "anos": anos, "totais": tot,
                 "categorias": [{"categoria": k, "nome": v["nome"]} for k, v in cats.items()],
                 "ultima_busca": dict(ult) if ult else None, "minutos": coleta_min(con), "lembretes": modo_lembretes(con)}
     finally:
@@ -1115,7 +1126,7 @@ def listar(aba: str = "amigos", situacao: str | None = None, categoria: str | No
 
 @router.get("/exportar.csv")
 def exportar(aba: str = "amigos", situacao: str | None = None, categoria: str | None = None, ano: int | None = None, vencendo: int = 0,
-             q: str | None = None, ids: str | None = None, u: dict = Depends(auth.exige("admin"))):
+             q: str | None = None, ids: str | None = None, emkt: str | None = None, u: dict = Depends(auth.exige("admin"))):
     """Exporta TUDO do filtro (ou só os selecionados, `ids=1,2,3`). Sem log de dados pessoais."""
     con = connect()
     try:
@@ -1127,12 +1138,12 @@ def exportar(aba: str = "amigos", situacao: str | None = None, categoria: str | 
             rows = con.execute(f"SELECT * FROM amigo WHERE {w} ORDER BY nome", vals).fetchall()
         buf = io.StringIO()
         wr = csv.writer(buf, delimiter=";")
-        wr.writerow(["protocolo", "tipo", "nome", "empresa", "email", "telefone", "categoria", "modalidade", "situacao", "valor", "pago_em", "valor_pago", "validade", "codigo", "origem"])
-        for r in rows:
-            d = _linha(con, r)
+        wr.writerow(["protocolo", "tipo", "nome", "empresa", "email", "telefone", "categoria", "modalidade", "situacao", "valor", "pago_em", "valor_pago", "validade", "codigo", "origem", "aceita_emails"])
+        for d in _com_emkt(con, [_linha(con, r) for r in rows], None if ids else emkt):
+            r = d
             wr.writerow([r["protocolo"] or "", r["tipo"], r["nome"], r["empresa"] or "", r["email"] or "", r["telefone"] or "", d["categoria_nome"], r["modalidade"] or "",
                          r["situacao"] or r["status_pedido"], f"{d['valor_previsto']:.2f}".replace(".", ",") if d["valor_previsto"] else "",
-                         r["pago_em"] or "", f"{r['ultimo_valor']:.2f}".replace(".", ",") if r["ultimo_valor"] else "", r["validade"] or "", r["codigo"] or "", d["origem_txt"]])
+                         r["pago_em"] or "", f"{r['ultimo_valor']:.2f}".replace(".", ",") if r["ultimo_valor"] else "", r["validade"] or "", r["codigo"] or "", d["origem_txt"], d["aceita_emails"]])
     finally:
         con.close()
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",

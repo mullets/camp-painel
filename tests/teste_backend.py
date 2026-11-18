@@ -36,6 +36,7 @@ MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
+MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.14; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -13860,7 +13861,7 @@ def filho(modo):
         print("\n".join(res))
     elif modo == "contatos_emkt":
         # 03/11 (Rafael: "mostrar no painel quem aceitou receber e-mails da CAMP, para exportar a lista para o Sender.net"): inscrições com
-        # emkt + cadastros de download com o aceite consentimento_base; um por e-mail; LGPD (anonimizado/apagado não entra); quem saiu não volta.
+        # emkt + cadastros de download com a caixa consentimento_emkt (desde 18/11; antes contava consentimento_base); um por e-mail; LGPD (anonimizado/apagado não entra); quem saiu não volta.
         init_db(); _aplicar_migracoes_real()
         import csv as _csv, io as _io, json as _j
         from app import auth
@@ -13875,12 +13876,12 @@ def filho(modo):
             c.execute("INSERT INTO inscricao (site_id,tipo,curso_id,curso,nome,email,emkt,criado_no_site) VALUES (?,?,?,?,?,?,?,?)",
                       (sid, tipo, "res", "Residência em Acervos", nome, email, emkt, q))
         for oid, nome, email, inst, resp, anon, apag, q in (
-                (11, "Carla Dias Souza", "carla@exemplo.org", "USP", {"consentimento_base": "on"}, 0, 0, "2026-11-02 08:00:00"),
+                (11, "Carla Dias Souza", "carla@exemplo.org", "USP", {"consentimento_emkt": "on"}, 0, 0, "2026-11-02 08:00:00"),
                 (12, "Davi Melo", "davi@exemplo.org", "", {"uso_pretendido": "pesquisa"}, 0, 0, "2026-11-02 09:00:00"),
-                (13, "Eva", "eva@exemplo.org", "", {"consentimento_base": "on"}, 1, 0, "2026-11-02 09:00:00"),
-                (14, "Fábio", "fabio@exemplo.org", "", {"consentimento_base": "on"}, 0, 1, "2026-11-02 09:00:00"),
-                (15, "Gil Prado", "gil@exemplo.org", "FAU", {"consentimento_base": ["on"]}, 0, 0, "2026-11-03 09:00:00"),
-                (16, "Hugo", "hugo@exemplo.org", "", {"consentimento_base": ""}, 0, 0, "2026-11-03 09:00:00")):
+                (13, "Eva", "eva@exemplo.org", "", {"consentimento_emkt": "on"}, 1, 0, "2026-11-02 09:00:00"),
+                (14, "Fábio", "fabio@exemplo.org", "", {"consentimento_emkt": "on"}, 0, 1, "2026-11-02 09:00:00"),
+                (15, "Gil Prado", "gil@exemplo.org", "FAU", {"consentimento_emkt": ["on"]}, 0, 0, "2026-11-03 09:00:00"),
+                (16, "Hugo", "hugo@exemplo.org", "", {"consentimento_emkt": ""}, 0, 0, "2026-11-03 09:00:00")):
             c.execute("""INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,instituicao,resposta_json,anonimizada,apagada)
                          VALUES (4,?,?,?,?,?,?,?,?)""", (oid, q, nome, email, inst, _j.dumps(resp), anon, apag))
         c.commit()
@@ -13896,7 +13897,7 @@ def filho(modo):
         cl = next((p for p in d["itens"] if p["email"] == "carla@exemplo.org"), {})
         ver("mesmo e-mail (maiúsculas diferentes) vira uma linha só, com as duas origens e os dados mais recentes", len(cl.get("origens", [])) == 2
             and cl.get("instituicao") == "USP" and cl.get("nome") == "Carla Dias Souza" and cl.get("consentiu_em", "").startswith("2026-11-02"), str(cl))
-        ver("contagem por origem", d["total"] == 3 and d["por_origem"].get("cadastro de download") == 2 and d["por_origem"].get("inscrição") == 1 and d["por_origem"].get("avise-me") == 1, str(d["por_origem"]))
+        ver("contagem por origem", d["total"] == 3 and d["por_origem"].get("download") == 2 and d["por_origem"].get("inscricao") == 1 and d["por_origem"].get("interesse") == 1, str(d["por_origem"]))
         r = adm.get("/api/contatos-email.csv")
         linhas = list(_csv.reader(_io.StringIO(r.content.decode("utf-8-sig"))))
         ver("CSV no formato do Sender.net: email, firstname, lastname…", r.status_code == 200 and linhas[0][:3] == ["email", "firstname", "lastname"] and len(linhas) == 4
@@ -13906,12 +13907,111 @@ def filho(modo):
         d2 = adm.get("/api/contatos-email").json()
         ver("quem saiu não aparece na lista nem no CSV, e aparece em 'saíram'", d2["total"] == 2 and "gil@exemplo.org" not in adm.get("/api/contatos-email.csv").text
             and [p["email"] for p in d2["fora"]] == ["gil@exemplo.org"] and d2["fora"][0]["fora"]["motivo"] == "pediu para sair")
-        c.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,resposta_json) VALUES (4,17,'2026-11-04 10:00:00','Gil Prado','gil@exemplo.org',?)", (_j.dumps({"consentimento_base": "on"}),)); c.commit()
+        c.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,resposta_json) VALUES (4,17,'2026-11-04 10:00:00','Gil Prado','gil@exemplo.org',?)", (_j.dumps({"consentimento_emkt": "on"}),)); c.commit()
         ver("quem saiu não volta sozinho num cadastro novo", "gil@exemplo.org" not in [p["email"] for p in adm.get("/api/contatos-email").json()["itens"]])
         adm.post("/api/contatos-email/devolver", json={"email": "gil@exemplo.org"})
         ver("devolver à lista", "gil@exemplo.org" in [p["email"] for p in adm.get("/api/contatos-email").json()["itens"]])
         ver("e-mail inválido: 400", adm.post("/api/contatos-email/tirar", json={"email": "x"}).status_code == 400)
         ver("operador não vê nem exporta (403)", op.get("/api/contatos-email").status_code == 403 and op.get("/api/contatos-email.csv").status_code == 403)
+        print("\n".join(res))
+    elif modo == "emkt_sender":
+        # 18/11/2026 CAMP-SENDER (Rafael: "quem aceitou receber e-mails da CAMP… seria bom saber e conseguir filtrar. E cadastrar esses no
+        # mailing: pelo site, aceitou → direto no Sender"): busca a lista do site (contrato 1.14, site FALSO), situação no Sender por e-mail,
+        # filtros (origem, período, situação, busca), CSV com filtro e dos selecionados, só a caixa de e-mails conta (LGPD), coluna/filtro nos
+        # Amigos, "apagar esta pessoa" tira a cópia, só admin.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import csv as _csv, io as _io, json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, contatos_emkt as ce, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração: emkt.coleta_min = 60, não sensível", tuple(c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='emkt.coleta_min'").fetchone() or ()) == ("60", 0))
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        gets = []
+        class H:
+            def __init__(s, resps): s.resps = resps
+            def get(s, path, params=None):
+                gets.append((path, dict(params or {}))); return s.resps.pop(0)
+        class WPF:
+            def __init__(s, resps): s.h = H(resps)
+        itens = [
+            {"id": "post-11", "nome": "Ana Lima", "email": "Ana@Exemplo.org", "origem": "agendamento", "origem_nome": "Visita ou biblioteca", "aceite_em": "2026-11-10 10:00:00", "versao": "2026-11-02", "situacao": "inscrito", "sender_em": "2026-11-10 10:01:00", "erro": ""},
+            {"id": "post-12", "nome": "Ana Lima", "email": "ana@exemplo.org", "origem": "pedido", "origem_nome": "Pedido do acervo", "aceite_em": "2026-11-12 09:00:00", "versao": "2026-11-02", "situacao": "pendente", "erro": "na fila"},
+            {"id": "post-13", "nome": "Bruno Sá", "email": "bruno@exemplo.org", "origem": "contato", "aceite_em": "2026-11-05 08:00:00", "versao": "2026-11-02", "situacao": "erro", "erro": "HTTP 422: email"},
+            {"id": "post-14", "nome": "Cia Reis", "email": "cia@exemplo.org", "origem": "apoio", "aceite_em": "2026-10-01 08:00:00", "versao": "2026-11-02", "situacao": "cancelou", "erro": "no Sender: unsubscribed"},
+            {"id": "ff-9", "nome": "Davi Melo", "email": "davi@exemplo.org", "origem": "download", "aceite_em": "2026-11-15 08:00:00", "versao": "2026-11-02", "situacao": "pendente", "erro": "grupo não configurado"},
+            {"id": "x-1", "email": "invalido@exemplo.org"}, {"id": "post-15", "email": "sem-arroba"}]
+        o = ce.sincronizar(c, WPF([Resp(200, {"ok": True, "agora": "2026-11-18T12:00:00+00:00", "grupo": "aK2ylz", "itens": itens})]))
+        ver("busca no site: grava 5 (ignora id e e-mail inválidos), sem desde na 1ª", o["lidos"] == 5 and o["novos"] == 5 and not o["erro"] and gets[0] == ("/wp-json/camp/v1/painel/emkt", {}), (o, gets))
+        o2 = ce.sincronizar(c, WPF([Resp(200, {"ok": True, "agora": "2026-11-18T13:00:00+00:00", "itens": [dict(itens[1], situacao="inscrito", erro="")]})]))
+        ver("2ª busca usa desde = agora − 2 min e atualiza a situação", gets[1][1].get("desde", "").startswith("2026-11-18T11:58") and o2["novos"] == 0
+            and c.execute("SELECT situacao FROM emkt_site WHERE site_id='post-12'").fetchone()[0] == "inscrito", gets[1])
+        o3 = ce.sincronizar(c, WPF([Resp(404, {"code": "rest_no_route"})]))
+        ver("site antigo (404): sem_rota, nada muda", o3["sem_rota"] and c.execute("SELECT COUNT(*) FROM emkt_site").fetchone()[0] == 5, o3)
+        o4 = ce.sincronizar(c, WPF([Resp(500, {})]))
+        ver("site com erro: registra o erro, não levanta", bool(o4["erro"]) and "500" in o4["erro"], o4)
+        # cadastro de download: só a caixa de e-mails conta (a obrigatória da base de pesquisadores NÃO é aceite de e-mail)
+        for oid, nome, email, resp in ((31, "Eva Base", "eva@exemplo.org", {"consentimento_base": "on"}),
+                                       (32, "Fábio Emkt", "fabio@exemplo.org", {"consentimento_base": "on", "consentimento_emkt": "on"})):
+            c.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,resposta_json) VALUES (4,?,'2026-11-16 10:00:00',?,?,?)", (oid, nome, email, _j.dumps(resp)))
+        c.execute("INSERT INTO amigo (tipo,nome,email,emkt,situacao) VALUES ('amigo','Gil Amigo','gil@exemplo.org',1,'pago')")
+        c.execute("INSERT INTO amigo (tipo,nome,email,emkt,situacao) VALUES ('amigo','Hugo Sem','hugo@exemplo.org',0,'pago')")
+        c.execute("INSERT INTO amigo (tipo,nome,email,emkt,situacao) VALUES ('amigo','Cia Reis','cia@exemplo.org',1,'pago')")
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        adm, op = cli("adm@camp.arq.br", "senha-longa-12345"), cli("op@camp.arq.br", "senha-operador-123")
+        d = adm.get("/api/contatos-email").json()
+        em = {p["email"]: p for p in d["itens"]}
+        ver("lista: site + download com a caixa + Amigo com emkt; sem quem só aceitou a base de pesquisadores", sorted(em) == ["ana@exemplo.org", "bruno@exemplo.org", "cia@exemplo.org", "davi@exemplo.org", "fabio@exemplo.org", "gil@exemplo.org"], sorted(em))
+        a_ = em.get("ana@exemplo.org", {})
+        ver("mesmo e-mail em 2 formulários: uma linha, 2 origens, aceite mais recente, situação inscrito, versão do texto",
+            sorted(a_.get("origens") or []) == ["Pedido do acervo", "Visita ou biblioteca"] and a_.get("consentiu_em", "").startswith("2026-11-12") and a_.get("situacao_sender") == "inscrito" and a_.get("versao") == "2026-11-02", a_)
+        ver("situações: erro (com o motivo), cancelou ganha de 'aceitou no painel', sem dado do site",
+            em.get("bruno@exemplo.org", {}).get("situacao_sender") == "erro" and "422" in em.get("bruno@exemplo.org", {}).get("erro_sender", "")
+            and em.get("cia@exemplo.org", {}).get("situacao_sender") == "cancelou" and em.get("gil@exemplo.org", {}).get("situacao_sender") == "sem", {k: v.get("situacao_sender") for k, v in em.items()})
+        ver("contagens por situação e grupo do site", d["por_situacao"] == {"inscrito": 1, "pendente": 1, "erro": 1, "cancelou": 1, "sem": 2} and d["grupo"] == "aK2ylz" and d["total"] == 6, (d["por_situacao"], d["grupo"]))
+        f = lambda qs: [p["email"] for p in adm.get("/api/contatos-email?" + qs).json().get("itens", [])]
+        ver("filtro origem", f("origem=download") == ["fabio@exemplo.org", "davi@exemplo.org"], f("origem=download"))
+        ver("filtro período", f("de=2026-11-10&ate=2026-11-15") == ["davi@exemplo.org", "ana@exemplo.org"], f("de=2026-11-10&ate=2026-11-15"))
+        ver("filtro situação + filtrados", f("situacao=pendente") == ["davi@exemplo.org"] and adm.get("/api/contatos-email?situacao=sem").json()["filtrados"] == 2)
+        ver("busca por nome", f("q=bruno") == ["bruno@exemplo.org"])
+        ver("filtro inválido: 400", adm.get("/api/contatos-email?situacao=x").status_code == 400 and adm.get("/api/contatos-email?de=18/11").status_code == 400)
+        r = adm.get("/api/contatos-email.csv?origem=download")
+        ln = list(_csv.reader(_io.StringIO(r.content.decode("utf-8-sig"))))
+        ver("CSV com o filtro e a situação no Sender", r.status_code == 200 and ln[0][-1] == "situacao_sender" and [x[0] for x in ln[1:]] == ["fabio@exemplo.org", "davi@exemplo.org"], ln[:3])
+        r = adm.post("/api/contatos-email.csv", json={"emails": ["BRUNO@exemplo.org", "gil@exemplo.org", "ninguem@x.org"]})
+        ln = list(_csv.reader(_io.StringIO(r.content.decode("utf-8-sig"))))
+        ver("CSV dos selecionados (POST, e-mails fora da URL)", r.status_code == 200 and sorted(x[0] for x in ln[1:]) == ["bruno@exemplo.org", "gil@exemplo.org"], ln)
+        ver("exportar fica no histórico (sem e-mail)", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='contatos_email' AND tipo='exportada' AND detalhe NOT LIKE '%@%'").fetchone()[0] == 2)
+        # "Sincronizar agora" pelo painel (site FALSO)
+        _wp0 = ce._wp
+        ce._wp = lambda: WPF([Resp(200, {"ok": True, "agora": "2026-11-18T14:00:00+00:00", "itens": [dict(itens[2], situacao="inscrito", erro="")]})])
+        rs = adm.post("/api/contatos-email/sincronizar")
+        ver("Sincronizar agora: busca tudo (sem desde)", rs.status_code == 200 and rs.json()["lidos"] == 1 and "desde" not in gets[-1][1]
+            and adm.get("/api/contatos-email?q=bruno").json()["itens"][0]["situacao_sender"] == "inscrito", (rs.status_code, rs.text[:200]))
+        ce._wp = lambda: WPF([Resp(404, {})])
+        ver("Sincronizar agora com site antigo: 409 'atualize o site'", adm.post("/api/contatos-email/sincronizar").status_code == 409)
+        ce._wp = _wp0
+        # Amigos: coluna e filtro "aceita e-mails"
+        am = adm.get("/api/amigos").json()
+        ac = {x["email"]: x.get("aceita_emails") for x in am["itens"]}
+        ver("Amigos: coluna aceita e-mails (sim · cancelou · não)", ac == {"gil@exemplo.org": "sim", "hugo@exemplo.org": "nao", "cia@exemplo.org": "cancelou"}, ac)
+        ver("Amigos: filtro emkt=sim", [x["email"] for x in adm.get("/api/amigos?emkt=sim").json()["itens"]] == ["gil@exemplo.org"])
+        ver("Amigos: CSV com a coluna aceita_emails", "aceita_emails" in adm.get("/api/amigos/exportar.csv").text.splitlines()[0])
+        # LGPD
+        loc = lgpd.apagar_pessoa_local(c, "Ana@exemplo.org")
+        ver("apagar esta pessoa: some a cópia da lista do site", loc.get("lista_email") == 2 and not c.execute("SELECT 1 FROM emkt_site WHERE email='ana@exemplo.org'").fetchone(), loc)
+        ver("operador não vê, não exporta, não sincroniza (403)", op.get("/api/contatos-email").status_code == 403 and op.post("/api/contatos-email.csv", json={"emails": []}).status_code == 403
+            and op.post("/api/contatos-email/sincronizar").status_code == 403)
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='emkt.coleta_min'"); c.commit()
+        ver("busca automática desligada com emkt.coleta_min = 0", ce.rodada() == {"desligado": True})
         print("\n".join(res))
     elif modo == "fotos_qnap":
         # 28/10 (Rafael: "subi fotos pelo próprio painel, ele tem que enviar na HORA para o QNAP na pasta certa" / "devia automaticamente já
@@ -19717,6 +19817,15 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Lista de e-mail: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Quem aceita e-mails da CAMP: lista do site, situação no Sender, filtros, CSV, Amigos, LGPD")
+rc, out = rodar("emkt_sender", f"{tmp}/emkt_sender.db")
+if rc != 0: ok(False, f"teste emkt_sender não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Quem aceita e-mails: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 25, "Quem aceita e-mails: todas as verificações rodaram")
 
 print("Fotos do painel no QNAP: gravadas na pasta do projeto na hora, releitura pedida, legenda aplicada")
 rc, out = rodar("fotos_qnap", f"{tmp}/fotos_qnap.db")

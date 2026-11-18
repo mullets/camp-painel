@@ -9,7 +9,7 @@ execFileSync('python3', ['-c', `
 import sqlite3,sys,json
 con=sqlite3.connect(sys.argv[1])
 con.execute("INSERT INTO inscricao (site_id,tipo,curso_id,curso,nome,email,emkt) VALUES (9701,'inscricao','res','Residência','Lia Teste','lia@exemplo.org',1)")
-con.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,resposta_json) VALUES (4,9702,'2026-11-03 10:00:00','Rui Teste','rui@exemplo.org',?)",(json.dumps({"consentimento_base":"on"}),))
+con.execute("INSERT INTO uso_download (form_id,origem_id,recebida_em,nome,email,resposta_json) VALUES (4,9702,'2026-11-03 10:00:00','Rui Teste','rui@exemplo.org',?)",(json.dumps({"consentimento_emkt":"on"}),))
 con.commit()`, DB]);
 (async () => {
   const br = await chromium.launch(); const erros = [];

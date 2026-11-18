@@ -135,8 +135,10 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_ins = inscricoes.apagar_por_email(con, em)
     from . import amigos       # 18/11/2026: Amigos da CAMP e adoções (anonimiza; os valores pagos ficam para a receita)
     n_am = amigos.anonimizar_por_email(con, em)
+    from . import contatos_emkt   # 18/11/2026: a cópia da lista de e-mails do site (o site apaga a pessoa no Sender)
+    n_emkt = contatos_emkt.apagar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt}
 
 
 def chamar_site(con, email: str) -> dict:

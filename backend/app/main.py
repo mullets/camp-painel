@@ -207,6 +207,11 @@ async def _coleta_pedidos_site_periodica() -> None:
                 await asyncio.to_thread(amigos.rodada)
             except Exception:  # noqa: BLE001
                 pass
+            try:                # 18/11/2026: quem aceita e-mails da CAMP e a situação no Sender (contrato 1.14; emkt.coleta_min; nunca levanta)
+                from . import contatos_emkt
+                await asyncio.to_thread(contatos_emkt.rodada)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:  # noqa: BLE001  (nunca derruba o painel)
             log_registrar(logging.ERROR, "coleta_pedidos_site", f"Falha no coletor de pedidos do site: {type(e).__name__}")
         await asyncio.sleep(max(1, minutos) * 60 if minutos > 0 else 300)
