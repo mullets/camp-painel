@@ -36,6 +36,7 @@ MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
+MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -17891,6 +17892,147 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem nome nem e-mail de Amigo", not any(t in log_ for t in ("ana@x.com", "beto@x.com", "Beto Reis", "Ana Lima", "carla@x.com")))
         for l in res: print(l)
+    elif modo == "emails_enviados":
+        # CAMP-EMAIL 18/11/2026 · E-mails enviados: junta as fontes do painel (Downloads, Amigos, entrega, inscrição, alertas, resumo) e os
+        # e-mails do site (rota GET /painel/emails, contrato 1.14; cliente FALSO, nenhum e-mail sai), busca incremental, motivo da falha
+        # na entrega, filtros, CSV, números do topo, só admin/master (403 para operador e leitura) e o apagar pessoa (LGPD) limpa as linhas.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j, smtplib as _smtp
+        from fastapi import HTTPException as _HE
+        from fastapi.testclient import TestClient
+        from app import auth, emails_enviados as ee, entrega as _en, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        class _SemSMTP:
+            def __init__(s, *a, **k): raise AssertionError("teste tentou abrir SMTP de verdade")
+        _smtp.SMTP = _smtp.SMTP_SSL = _SemSMTP
+        c = connect()
+        cf = c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='emails.coleta_min'").fetchone()
+        ver("migração 228: busca a cada 15 min, não sensível; email_site e entrega_link.erro existem", tuple(cf) == ("15", 0) and "erro" in {r[1] for r in c.execute("PRAGMA table_info(entrega_link)")}
+            and c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='email_site'").fetchone()[0] == 1, tuple(cf) if cf else None)
+        # ---- fontes do painel
+        uid = c.execute("INSERT INTO uso_download (form_id, origem_id, recebida_em, nome, email, uso, material_codigo) VALUES (1,1,datetime('now','-1 day'),'Ana Lima','ana@x.com','pesquisa','F026-P0001')").lastrowid
+        c.execute("INSERT INTO uso_email (uso_id, enviado_por, assunto, ok, erro, enviado_em) VALUES (?,?,?,1,NULL,datetime('now','-3 hours'))", (uid, "adm@camp.arq.br", "Sobre o seu pedido"))
+        c.execute("INSERT INTO uso_email (uso_id, enviado_por, assunto, ok, erro, enviado_em) VALUES (?,?,?,0,'Servidor SMTP recusou (535)',datetime('now','-2 hours'))", (uid, "adm@camp.arq.br", "Sobre o seu pedido 2"))
+        aid = c.execute("INSERT INTO amigo (tipo, protocolo, categoria, nome, email, situacao) VALUES ('amigo','CAMP-2026-000901','amigo','Beto Reis','beto@x.com','pago')").lastrowid
+        c.execute("INSERT INTO amigo_email (amigo_id, modelo, assunto, para, situacao, canal, erro, criado_por, enviado_em, modelo_site, variaveis, sender_id) VALUES (?,?,?,?,?,?,?,?,datetime('now','-1 hours'),?,?,?)",
+                  (aid, "recibo", "Recibo", "beto@x.com", "enviado", "site", None, "adm@camp.arq.br", "amigo_recibo", _j.dumps({"nome": "Beto", "valor_pago": "R$ 450,00"}), "em-77"))
+        c.execute("INSERT INTO amigo_email (amigo_id, modelo, assunto, para, situacao, canal, erro, criado_por, enviado_em) VALUES (?,?,?,?,?,?,?,?,datetime('now','-50 minutes'))",
+                  (aid, "cobranca", "Cobrança", "beto@x.com", "falhou", "site", "não enviado: falta o template TR15 (Cobrança) do Sender no site", "adm@camp.arq.br"))
+        sid = c.execute("INSERT INTO solicitacao (solicitante, email, finalidade, origem) VALUES ('Carla Dias','carla@x.com','pesquisa','site')").lastrowid
+        c.execute("INSERT INTO entrega_link (solicitacao_id, token_hash, arquivos, para, canal, criado_por, expira_em, criado_em) VALUES (?,?,?,?,?,?,?,datetime('now','-4 hours'))", (sid, "h1", "[]", "carla@x.com", "sender", "adm@camp.arq.br", "2026-12-01 23:59:59"))
+        # entrega que FALHA de verdade pelo aprovar_e_enviar (sem QNAP: montagem e envio trocados por falsos; nenhum e-mail sai)
+        import tempfile as _tf, pathlib as _pl
+        _arq = _pl.Path(_tf.mkdtemp()) / "a.tif"; _arq.write_bytes(b"x")
+        _en.canal_configurado = lambda con: {"canal": "sender", "prontos": ["sender"]}
+        _en.montar = lambda con, sid_: {"arquivos": [{"origem": str(_arq), "gerar": False, "codigo": "F001-P0001-1950-S01-D00001", "titulo": "Planta", "formato": "tif", "resolucao": "", "nome": "a.tif"}], "fora": []}
+        _en.textos = lambda *a, **k: {"assunto": "x", "texto": "x", "variaveis": {"link": "https://x"}}
+        def _recusa(*a, **k): raise _en.EnvioErro("O Sender.net recusou o envio (401): token inválido")
+        _en.enviar = _recusa
+        try:
+            _en.aprovar_e_enviar(c, sid, {"email": "adm@camp.arq.br"}); _st = None
+        except _HE as e_:
+            _st = e_.status_code
+        fl = c.execute("SELECT erro, revogado_em FROM entrega_link WHERE solicitacao_id=? ORDER BY id DESC LIMIT 1", (sid,)).fetchone()
+        ver("entrega que falha: 502, link cancelado e o motivo guardado em entrega_link.erro", _st == 502 and fl["revogado_em"] and "recusou o envio (401)" in (fl["erro"] or ""), (_st, dict(fl) if fl else None))
+        c.execute("INSERT INTO inscricao (site_id, nome, email, protocolo) VALUES (555,'Davi Melo','davi@x.com','CAMP-2026-000555')")
+        c.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('inscricao','555','aviso_situacao_falhou','adm@camp.arq.br',?)", (_j.dumps({"situacao": "selecionada", "canal": "site", "para": "davi@x.com", "erro": "O site respondeu 500"}),))
+        c.execute("INSERT INTO alerta_envio (assunto, tipo, para, titulo, ok, erro) VALUES ('qnap','critico','equipe@camp.arq.br','CAMP: QNAP fora',1,NULL)")
+        c.execute("INSERT INTO alerta_envio (assunto, tipo, ok, erro) VALUES ('qnap','suprimido',1,'já avisado há menos de 6 h')")
+        c.execute("INSERT INTO resumo_diario_envio (dia, para, ok, erro, conteudo) VALUES ('2026-11-17','equipe@camp.arq.br',1,NULL,'{\"importadas\": 3}')")
+        c.commit()
+        # ---- o site (FALSO)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        gets = []
+        class H:
+            def __init__(s, paginas): s.paginas = paginas
+            def get(s, path, params=None):
+                gets.append((path, dict(params or {}))); return s.paginas[(params or {}).get("pagina", 1) - 1]
+        class WPF:
+            def __init__(s, paginas): s.h = H(paginas)
+        I1 = {"chave": "101:solicitacao_recebida", "registro_id": 101, "registro": "camp_solicitacao", "protocolo": "CAMP-2026-000101", "tipo": "solicitacao_recebida", "template": "TR04",
+              "para": "Eva@X.com", "nome": "Eva Paz", "canal": "sender", "situacao": "enviado", "motivo": "", "sender_id": "em-1", "tentativas": 1, "em": "2026-11-18T13:00:00Z"}
+        I2 = {"chave": "102:visita_solicitada", "registro_id": 102, "registro": "camp_agendamento", "protocolo": "CAMP-2026-000102", "tipo": "visita_solicitada", "template": "TR06",
+              "para": "ana@x.com", "nome": "Ana Lima", "canal": "simples", "situacao": "nao_sender", "motivo": "o Sender recusou: HTTP 401: Unauthenticated", "em": "2026-11-18T14:00:00Z"}
+        I3 = {"chave": "103:aviso_equipe", "registro_id": 103, "registro": "camp_contato", "tipo": "aviso_equipe", "para": "", "nome": "equipe da CAMP", "canal": "simples", "situacao": "falhou",
+              "motivo": "o aviso à equipe não saiu: Could not connect", "em": "2026-11-18T15:05:00Z"}
+        o = ee.coletar(c, WPF([Resp(200, {"itens": [I1, I2], "mais": True, "agora": "2026-11-18T16:00:00Z"}), Resp(200, {"itens": [I3], "mais": False})]))
+        ver("busca no site: 2 páginas, 3 e-mails gravados, sem desde na 1ª vez", o["lidos"] == 3 and o["novos"] == 3 and not o["erro"] and [g[1]["pagina"] for g in gets] == [1, 2]
+            and all(g[0] == "/wp-json/camp/v1/painel/emails" and "desde" not in g[1] for g in gets), (o, gets))
+        e1 = c.execute("SELECT * FROM email_site WHERE chave='101:solicitacao_recebida'").fetchone()
+        ver("gravado com data em UTC, e-mail em minúsculas, TR e id do Sender", (e1["enviado_em"], e1["para"], e1["template"], e1["sender_id"], e1["canal"]) == ("2026-11-18 13:00:00", "eva@x.com", "TR04", "em-1", "sender"), dict(e1))
+        gets.clear()
+        o2 = ee.coletar(c, WPF([Resp(200, {"itens": [dict(I1, tentativas=2)], "mais": False, "agora": "2026-11-18T17:00:00Z"})]))
+        ver("busca incremental: manda desde (agora − 2 min) e atualiza sem duplicar", gets[0][1].get("desde", "").startswith("2026-11-18T15:58") and o2["novos"] == 0 and o2["lidos"] == 1
+            and c.execute("SELECT COUNT(*) FROM email_site").fetchone()[0] == 3 and c.execute("SELECT tentativas FROM email_site WHERE chave='101:solicitacao_recebida'").fetchone()[0] == 2, (gets, o2))
+        o3 = ee.coletar(c, WPF([Resp(404, {"code": "rest_no_route"})]))
+        ver("site antigo (404): sem erro, marca 'sem rota'", o3["sem_rota"] and not o3["erro"] and ee._estado(c, "sem_rota") == "1", o3)
+        o4 = ee.coletar(c, WPF([Resp(500, {})]))
+        ver("site com erro: guarda o erro da busca (sem levantar)", o4["erro"] and "500" in ee._estado(c, "ultimo_erro"), o4)
+        ee.coletar(c, WPF([Resp(200, {"itens": [], "mais": False, "agora": "2026-11-18T17:30:00Z"})]))
+        # ---- a lista unificada
+        tudo = ee.todas(c)
+        por = {x["fonte"]: x for x in tudo}
+        ver("lista junta todas as fontes (Downloads, Amigos, entrega, inscrição, alerta, resumo, site); o suprimido não entra",
+            {x["origem"] for x in tudo} >= {"downloads", "amigos", "entrega", "inscricao", "alerta", "resumo", "formulario", "visita"} and not any("menos de 6 h" in x["motivo"] for x in tudo), sorted({x["origem"] for x in tudo}))
+        ver("canais: Downloads/alertas pelo SMTP do painel, Amigos pelo Sender, entrega TR09 pelo Sender, inscrição pelo e-mail simples do site",
+            por["uso"]["canal"] == "smtp" and por["alerta"]["canal"] == "smtp" and por["amigo"]["canal"] == "sender" and por["entrega"]["canal"] == "sender" and por["entrega"]["template"] == "TR09" and por["inscricao"]["canal"] == "site",
+            [(k, v["canal"]) for k, v in por.items()])
+        am_ = [x for x in tudo if x["fonte"] == "amigo"]
+        ver("Amigos: TR20 com as variáveis enviadas e o id do Sender; a falha traz o motivo", any(x["template"] == "TR20" and x["detalhe"]["variaveis"]["valor_pago"] == "R$ 450,00" and x["sender_id"] == "em-77" for x in am_)
+            and any(x["situacao"] == "falhou" and "TR15" in x["motivo"] and x["template"] == "TR15" for x in am_), am_)
+        en_ = sorted((x["situacao"], x["motivo"][:40]) for x in tudo if x["fonte"] == "entrega")
+        ver("entrega: a enviada fica 'Enviado'; a que falhou, 'Falhou' com o motivo", [s_ for s_, _ in en_] == ["enviado", "falhou"] and "recusou o envio (401)" in en_[1][1], en_)
+        st_ = {x["id"]: x for x in tudo if x["fonte"] == "site"}
+        vs = [x for x in st_.values() if x["modelo"] == "visita_solicitada"][0]
+        ver("site: 'Não saiu pelo Sender' com o motivo, canal e-mail simples do site, origem Visita", (vs["situacao"], vs["canal"], vs["origem"], vs["template"]) == ("nao_sender", "site", "visita", "TR06") and "401" in vs["motivo"], vs)
+        ver("site: aviso à equipe que falhou, sem e-mail da pessoa", any(x["modelo"] == "aviso_equipe" and x["situacao"] == "falhou" and x["para"] == "" for x in st_.values()))
+        ver("da mais nova para a mais velha", [x["em"] for x in tudo] == sorted([x["em"] for x in tudo], reverse=True))
+        # ---- telas e papéis
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        rotas_ = [("get", "/api/emails"), ("get", "/api/emails/exportar.csv"), ("post", "/api/emails/sincronizar")]
+        x0 = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x0.get("/api/emails").status_code == 401)
+        for em_, rot_ in (("le@camp.arq.br", "leitura"), ("op@camp.arq.br", "operador")):
+            xx = TestClient(app, raise_server_exceptions=False); xx.post("/api/auth/login", json={"email": em_, "senha": "senha-longa-12345"})
+            sts = [getattr(xx, m_)(u_).status_code for m_, u_ in rotas_]
+            ver(f"{rot_}: 403 em todas as rotas dos e-mails enviados (dados pessoais)", sts == [403, 403, 403], sts)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.get("/api/emails?periodo=todos")
+        d = r.json() if r.status_code == 200 else {}
+        ver("admin: lista com tudo, por situação e números do topo", r.status_code == 200 and d["total"] == len(tudo) and d["por_situacao"].get("nao_sender") == 1 and set(d["numeros"]) == {"hoje_enviados", "sete_enviados", "sete_falhas", "sete_nao_sender"}
+            and d["numeros"]["sete_falhas"] >= 3, (r.status_code, d.get("total"), d.get("por_situacao"), d.get("numeros")))
+        f = lambda q_: [i["fonte"] for i in x.get("/api/emails?periodo=todos&" + q_).json()["itens"]]   # noqa: E731
+        ver("filtros: canal, origem, situação e modelo", set(f("canal=smtp")) == {"uso", "alerta", "resumo"} and set(f("origem=entrega")) == {"entrega"} and set(f("situacao=nao_sender")) == {"site"}
+            and f("modelo=amigo_recibo") == ["amigo"], (f("canal=smtp"), f("situacao=nao_sender")))
+        ver("busca por e-mail, nome e protocolo", set(f("q=ANA@x.com")) == {"uso", "site"} and f("q=CAMP-2026-000555") == ["inscricao"] and f("q=Carla") == ["entrega", "entrega"], (f("q=ANA@x.com"), f("q=Carla")))
+        ver("período inválido: 400", x.get("/api/emails?periodo=sempre").status_code == 400 and x.get("/api/emails?de=ontem").status_code == 400)
+        cs = x.get("/api/emails/exportar.csv?periodo=todos&canal=smtp")
+        ver("CSV: cabeçalho e só as linhas do filtro", cs.status_code == 200 and cs.text.startswith("﻿data_utc;destinatario;") and cs.text.count("\n") == 1 + len(f("canal=smtp")) and "ana@x.com" in cs.text, cs.text[:200])
+        ver("sincronizar sem a senha do site: 409", x.post("/api/emails/sincronizar").status_code == 409)
+        c.execute("UPDATE configuracao SET valor='senha-falsa' WHERE chave='wp.app_password'"); c.commit()
+        ee._wp = lambda: WPF([Resp(200, {"itens": [dict(I1, chave="104:pdf_disponivel", tipo="pdf_disponivel", template="TR05")], "mais": False, "agora": "2026-11-18T18:00:00Z"})])
+        rs = x.post("/api/emails/sincronizar")
+        ver("Sincronizar agora: busca no site e grava o novo", rs.status_code == 200 and rs.json()["novos"] == 1 and c.execute("SELECT COUNT(*) FROM email_site").fetchone()[0] == 4, rs.text[:200])
+        # ---- LGPD
+        out_ = lgpd.apagar_pessoa_local(c, "ana@x.com")
+        lgpd.apagar_pessoa_local(c, "carla@x.com"); lgpd.apagar_pessoa_local(c, "davi@x.com"); lgpd.apagar_pessoa_local(c, "beto@x.com")
+        ver("LGPD: apagar pessoa limpa e-mail e nome nas linhas do site e conta", out_.get("email_enviado", 0) >= 1 and tuple(c.execute("SELECT para, nome FROM email_site WHERE chave='102:visita_solicitada'").fetchone()) == (None, "(removido)"), out_)
+        ver("LGPD: entrega, Amigos e aviso de inscrição sem o e-mail", c.execute("SELECT COUNT(*) FROM entrega_link WHERE para IS NOT NULL").fetchone()[0] == 0
+            and c.execute("SELECT COUNT(*) FROM amigo_email WHERE para IS NOT NULL").fetchone()[0] == 0 and "davi@x.com" not in (c.execute("SELECT detalhe FROM evento WHERE entidade='inscricao'").fetchone()[0] or ""))
+        ee.coletar(c, WPF([Resp(200, {"itens": [I2], "mais": False, "agora": "2026-11-18T19:00:00Z"})]))
+        ver("LGPD: a busca seguinte não traz o e-mail de volta", tuple(c.execute("SELECT para, nome FROM email_site WHERE chave='102:visita_solicitada'").fetchone()) == (None, "(removido)"))
+        lista_ = _j.dumps(x.get("/api/emails?periodo=todos").json(), ensure_ascii=False)
+        ver("LGPD: nenhum dos e-mails apagados aparece na tela", not any(t in lista_ for t in ("ana@x.com", "carla@x.com", "davi@x.com", "beto@x.com")), [t for t in ("ana@x.com", "carla@x.com", "davi@x.com", "beto@x.com") if t in lista_])
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem e-mail nem nome", not any(t in log_ for t in ("ana@x.com", "eva@x.com", "Eva Paz", "Ana Lima", "beto@x.com")))
+        for l in res: print(l)
     return 0
 
 
@@ -19877,6 +20019,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos da CAMP: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 45, "Amigos da CAMP: todas as verificações rodaram")
+
+print("E-mails enviados: todas as fontes do painel e do site (site falso), busca incremental, filtros, CSV, papéis e LGPD")
+rc, out = rodar("emails_enviados", f"{tmp}/emails_enviados.db")
+if rc != 0: ok(False, f"teste emails_enviados não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"E-mails enviados: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 28, "E-mails enviados: todas as verificações rodaram")
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
