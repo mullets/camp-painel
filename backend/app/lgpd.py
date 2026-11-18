@@ -133,8 +133,10 @@ def apagar_pessoa_local(con, email: str) -> dict:
                         (REMOVIDO, REMOVIDO, f"%{em}%")).rowcount
     from . import inscricoes   # 02/11/2026: inscrições da Residência e o PDF do currículo também
     n_ins = inscricoes.apagar_por_email(con, em)
+    from . import amigos       # 18/11/2026: Amigos da CAMP e adoções (anonimiza; os valores pagos ficam para a receita)
+    n_am = amigos.anonimizar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am}
 
 
 def chamar_site(con, email: str) -> dict:

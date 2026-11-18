@@ -69,6 +69,8 @@ from .rotas_pedidos import router as rotas_pedidos   # Sobras #12: antes de rota
 app.include_router(rotas_pedidos)
 from .inscricoes import router as rotas_inscricoes   # 02/11/2026: inscrições da Residência (contrato 1.6)
 app.include_router(rotas_inscricoes)
+from .amigos import router as rotas_amigos   # 18/11/2026: Amigos da CAMP (contrato 1.11)
+app.include_router(rotas_amigos)
 from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página pública de download do pedido entregue por e-mail
 app.include_router(rotas_entrega)
 from .contatos_emkt import router as rotas_contatos_emkt   # 03/11/2026: quem aceitou receber e-mails da CAMP → CSV para o Sender.net
@@ -200,6 +202,11 @@ async def _coleta_pedidos_site_periodica() -> None:
                     await asyncio.to_thread(mover_site.esconder_pendentes)
                 except ImportError:
                     pass
+            try:                # 18/11/2026: Amigos da CAMP (contrato 1.11), no ritmo próprio (amigos.coleta_min; nunca levanta)
+                from . import amigos
+                await asyncio.to_thread(amigos.rodada)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:  # noqa: BLE001  (nunca derruba o painel)
             log_registrar(logging.ERROR, "coleta_pedidos_site", f"Falha no coletor de pedidos do site: {type(e).__name__}")
         await asyncio.sleep(max(1, minutos) * 60 if minutos > 0 else 300)

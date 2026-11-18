@@ -112,6 +112,18 @@ c.execute("INSERT INTO pedido_releitura (projeto_codigo, item_codigo, pedido_por
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='qnap.coleta_min'")
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='uso.coleta_min'")
 c.execute("UPDATE configuracao SET valor='0' WHERE chave='site.coleta_pedidos_min'")
+c.execute("UPDATE configuracao SET valor='0' WHERE chave='amigos.coleta_min'")
+# Amigos da CAMP (18/11/2026): alguns registros como se tivessem vindo do site (nomes fictícios), para a tela e o teste de navegador
+for _sid, _nome, _cat, _mod, _sit, _val, _pg in ((7001, "Ana Teste Lima", "amigo", "anual", "pago", "date('now','+200 days')", "date('now','-165 days')"),
+                                              (7002, "Bruno Teste Reis", "guardiao", "anual", "pago", "date('now','+12 days')", "date('now','-353 days')"),
+                                              (7003, "Carla Teste Sá", "estudante", "mensal", "pendente", "NULL", "NULL"),
+                                              (7004, "Davi Teste Melo", "patrono", "anual", "vencido", "date('now','-20 days')", "date('now','-385 days')")):
+    _aid = c.execute(f"""INSERT INTO amigo (site_id, tipo, protocolo, categoria, modalidade, nome, email, situacao, situacao_site, validade, pago_em, ultimo_valor, origem_pagamento, criado_no_site)
+                         VALUES (?, 'amigo', ?, ?, ?, ?, ?, ?, ?, {_val}, {_pg}, CASE WHEN {_pg} IS NULL THEN NULL ELSE 450 END, CASE WHEN {_pg} IS NULL THEN NULL ELSE 'site' END, datetime('now','-30 days'))""",
+                     (_sid, f"CAMP-2026-00{_sid}", _cat, _mod, _nome, f"amigo{_sid}@exemplo.com", _sit, {"pago": "ativo", "pendente": "aguardando", "vencido": "vencido"}[_sit])).lastrowid
+    if _sit != "pendente":
+        c.execute("INSERT INTO amigo_pagamento (amigo_id, chave, data, valor, meio, origem) SELECT ?, ?, pago_em, 450, 'pix', 'mp' FROM amigo WHERE id=?", (_aid, f"mp-{_sid}", _aid))
+c.execute("INSERT INTO amigo (site_id, tipo, protocolo, nome, empresa, email, faixa, status_pedido, criado_no_site) VALUES (7010, 'arquiteto', 'CAMP-2026-007010', 'Eva Teste', 'Construtora Exemplo', 'eva@exemplo.com', 'R$ 60 mil a R$ 100 mil', 'novo', datetime('now','-3 days'))")
 c.execute("UPDATE configuracao SET valor='-1' WHERE chave='qnap.reconciliacao_hora'")
 # histórico do QNAP (7 dias, ~17 GB/dia) e a última coleta completa, para o cartão do painel inicial
 for i in range(8):

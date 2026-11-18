@@ -35,6 +35,7 @@ MODOS_RAPIDOS |= {"copias_visiveis"}   # 15/11/2026: o projeto mostra de onde vi
 MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar" não é falha; termos de taxonomia resolvidos; Programa/uso com caminho (linha própria)
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
+MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -17627,6 +17628,216 @@ def filho(modo):
         ver("projeto sem folha no site: a ordem fica só no painel, sem pendência", r.status_code == 200 and r.json().get("vai_ao_site") is False and pend() is None, r.text[:200])
         for l in res: print(l)
 
+    elif modo == "amigos_painel":
+        # 18/11/2026 · Amigos da CAMP no painel (contrato 1.11): coleta incremental do site (cliente FALSO), pagamento à mão calcula a
+        # validade, pago → vencido sozinho, mudanças voltam ao site (vazio não apaga), e-mails com prévia e fila (carteiro FALSO; nenhum
+        # e-mail de verdade), lembretes automáticos desligados por padrão e "simular" só lista, dados pessoais só para admin.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j, smtplib as _smtp, datetime as _dt
+        from fastapi.testclient import TestClient
+        from app import auth, amigos as am, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        class _SemSMTP:
+            def __init__(s, *a, **k): raise AssertionError("teste tentou abrir SMTP de verdade")
+        _smtp.SMTP = _smtp.SMTP_SSL = _SemSMTP                                  # nenhum e-mail de verdade sai deste teste
+        c = connect()
+        cfg = {r[0]: (r[1], r[2]) for r in c.execute("SELECT chave, valor, sensivel FROM configuracao WHERE chave LIKE 'amigos.%'")}
+        ver("migração 226: lembretes automáticos nascem desligados, validade 12 meses, nada sensível",
+            cfg.get("amigos.lembretes_auto") == ("desligado", 0) and cfg.get("amigos.validade_regra") == ("12_meses", 0) and all(v[1] == 0 for v in cfg.values()) and am.modo_lembretes(c) == "desligado", cfg)
+        ver("valores de 2027 iguais aos do site (Amigo R$ 450/ano, R$ 45/mês)", am.precos(c)[2027]["amigo"] == {"categoria": "amigo", "nome": "Amigo", "anual": 450, "mensal": 45}, am.precos(c).get(2027))
+        am._HOJE = _dt.date(2026, 11, 18)
+        class Resp:
+            def __init__(s, code, dados=None, text=""): s.status_code, s._d, s.text = code, dados, text or _j.dumps(dados)
+            def json(s): return s._d
+        gets, posts = [], []
+        P1 = {"itens": [
+                {"id": 801, "tipo": "amigo", "protocolo": "CAMP-2026-000801", "categoria": "amigo", "modalidade": "anual", "nome": "Ana Lima", "email": "ana@x.com", "telefone": "11 9",
+                 "status": "fechado", "situacao_pagamento": "ativo", "valor_cobrado": 450, "validade": "2027-05-02T02:59:59+00:00", "codigo": "A1B2C3", "fundador": 1,
+                 "pagamentos": [{"id": "777", "status": "approved", "valor": 450, "meio": "pix", "data": "2026-05-01T10:00:00-03:00"}], "criado_em": "2026-05-01T12:00:00+00:00"},
+                {"id": 802, "tipo": "amigo", "categoria": "guardiao", "modalidade": "anual", "nome": "Beto Reis", "email": "beto@x.com", "status": "novo", "situacao_pagamento": "aguardando", "criado_em": "2026-11-10T12:00:00+00:00"},
+                {"id": 803, "tipo": "projeto", "nome": "Carla", "email": "carla@x.com", "perfil": "pf", "faixa_nome": "R$ 12 mil a R$ 20 mil", "mensagem": "Quero apoiar", "status": "novo", "criado_em": "2026-11-11T12:00:00+00:00"}],
+              "mais": True, "agora": "2026-11-18T12:00:00+00:00", "total": 4, "categorias": {"amigo": {"nome": "Amigo", "anual": 450, "mensal": 45}}, "fundadores": {"limite": 100, "usados": 1}}
+        P2 = {"itens": [{"id": 804, "tipo": "arquiteto", "nome": "Davi", "empresa": "Construtora X", "email": "davi@x.com", "status": "proposta", "criado_em": "2026-11-12T12:00:00+00:00"}], "mais": False, "agora": "2026-11-18T12:00:05+00:00"}
+        class H:
+            def __init__(s, paginas, post=None): s.paginas, s.post_resp = paginas, post
+            def get(s, path, params=None):
+                gets.append((path, dict(params or {}))); return s.paginas[(params or {}).get("pagina", 1) - 1]
+            def post(s, path, json=None):
+                posts.append((path, json)); return s.post_resp(path, json) if callable(s.post_resp) else s.post_resp
+        class WPF:
+            def __init__(s, *a, **k): s.h = H(*a, **k)
+        o = am.coletar(c, WPF([Resp(200, P1), Resp(200, P2)]))
+        ver("coleta: lê as 2 páginas, grava os 4 (Amigos e adoções)", o["lidos"] == 4 and o["novos"] == 4 and not o["erro"] and [g[1]["pagina"] for g in gets] == [1, 2] and all(g[0] == "/wp-json/camp/v1/painel/apoios" and "desde" not in g[1] for g in gets), (o, gets))
+        um = lambda sid: c.execute("SELECT * FROM amigo WHERE site_id=?", (sid,)).fetchone()
+        a1, a2, a3 = um(801), um(802), um(803)
+        ver("situação traduzida do site (ativo → pago, aguardando → pendente; adoção sem situação de pagamento)", (a1["situacao"], a2["situacao"], a3["situacao"], a3["status_pedido"]) == ("pago", "pendente", None, "novo"), (a1["situacao"], a2["situacao"], a3["situacao"]))
+        ver("validade no dia de São Paulo, código e fundador do site", (a1["validade"], a1["codigo"], a1["fundador"]) == ("2027-05-01", "A1B2C3", 1), (a1["validade"], a1["codigo"]))
+        ver("pagamento do Mercado Pago guardado e a data do último pagamento", [tuple(x_) for x_ in c.execute("SELECT chave, valor, origem FROM amigo_pagamento WHERE amigo_id=?", (a1["id"],)).fetchall()] == [("mp-777", 450.0, "mp")] and a1["pago_em"] == "2026-05-01", a1["pago_em"])
+        ver("próxima coleta só do que mudou: desde = começo desta volta − 2 min", am._estado(c, "desde").startswith("2026-11-18T11:58:00"), am._estado(c, "desde"))
+        gets.clear(); o2 = am.coletar(c, WPF([Resp(200, {"itens": [dict(P1["itens"][1], telefone="11 8")], "mais": False, "agora": "2026-11-18T13:00:00+00:00"})]))
+        ver("coleta incremental manda o desde e atualiza sem duplicar", gets[0][1].get("desde", "").startswith("2026-11-18T11:58") and o2["novos"] == 0 and o2["atualizados"] == 1 and c.execute("SELECT COUNT(*) FROM amigo").fetchone()[0] == 4 and um(802)["telefone"] == "11 8", (gets, o2))
+        n_col = c.execute("SELECT COUNT(*) FROM amigo_coleta").fetchone()[0]
+        o3 = am.coletar(c, WPF([Resp(404, {"code": "rest_no_route"})]))
+        ver("site antigo (404): silêncio, sem erro e sem registrar falha", o3["sem_rota"] and not o3["erro"] and c.execute("SELECT COUNT(*) FROM amigo_coleta").fetchone()[0] == n_col, o3)
+        # pagamento à mão: validade = pagamento + 12 meses (padrão)
+        r = am.registrar_pagamento(c, a2["id"], "2026-11-10", 1500, "pix", "Pix na recepção", "adm@camp.arq.br")
+        a2 = um(802); pend = _j.loads(a2["pendente_site"])
+        ver("pagamento à mão: pago, validade 12 meses depois do pagamento", (r["situacao"], a2["situacao"], a2["validade"], a2["pago_em"], a2["origem_pagamento"]) == ("pago", "pago", "2027-11-10", "2026-11-10", "manual"), dict(a2))
+        ver("vai ao site: situação ativo, validade e o pagamento (com id do painel)", pend["situacao"] == "ativo" and pend["validade"] == "2027-11-10" and pend["pagamentos"][0]["id"].startswith("painel-") and pend["pagamentos"][0]["valor"] == 1500, pend)
+        ver("histórico registra o pagamento", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='pagamento_manual'", (str(a2["id"]),)).fetchone()[0] == 1)
+        ver("renovação antecipada não perde dias (validade 01/05/2027, paga 01/04/2027 → 01/05/2028)", am.nova_validade(c, _dt.date(2027, 4, 1), _dt.date(2027, 5, 1)) == _dt.date(2028, 5, 1))
+        c.execute("UPDATE configuracao SET valor='fim_do_ano' WHERE chave='amigos.validade_regra'")
+        ver("regra fim_do_ano: até 31/12 (já valendo até lá: 31/12 do ano seguinte)", am.nova_validade(c, _dt.date(2026, 11, 10), None) == _dt.date(2026, 12, 31) and am.nova_validade(c, _dt.date(2026, 12, 20), _dt.date(2026, 12, 31)) == _dt.date(2027, 12, 31))
+        c.execute("UPDATE configuracao SET valor='12_meses' WHERE chave='amigos.validade_regra'"); c.commit()
+        # enquanto não foi ao site, a coleta não desfaz o que o painel decidiu
+        am.coletar(c, WPF([Resp(200, {"itens": [P1["itens"][1]], "mais": False})]))
+        ver("coleta com mudança pendente não sobrescreve situação/validade do painel", (um(802)["situacao"], um(802)["validade"]) == ("pago", "2027-11-10"), dict(um(802)))
+        # falha ao mandar: site antigo
+        o4 = am.enviar_pendentes(c, WPF([], Resp(404, {"code": "rest_no_route"}, '{"code":"rest_no_route"}')))
+        ver("site sem a rota de volta: mudança fica guardada com o motivo", o4["falhas"] == 1 and um(802)["pendente_site"] and "avise quem cuida do site" in (um(802)["erro_site"] or ""), (o4, um(802)["erro_site"]))
+        posts.clear()
+        o5 = am.enviar_pendentes(c, WPF([], Resp(200, {"ok": True, "gravados": ["situacao", "validade", "pagamentos"], "registro": {"codigo": "Z9Y8X7", "fundador": 2}})))
+        ver("envio ao site: POST /painel/apoios/802 com o pendente; limpa e guarda código e fundador", o5["enviados"] == 1 and posts[0][0] == "/wp-json/camp/v1/painel/apoios/802" and posts[0][1]["situacao"] == "ativo" and um(802)["pendente_site"] is None and (um(802)["codigo"], um(802)["fundador"]) == ("Z9Y8X7", 2), (o5, posts))
+        chave = pend["pagamentos"][0]["id"]
+        volta = dict(P1["itens"][1], situacao_pagamento="ativo", validade="2027-11-11T02:59:59+00:00", codigo="Z9Y8X7", pagamentos=[{"id": chave, "status": "approved", "valor": 1500, "meio": "pix", "data": "2026-11-10"}])
+        am.coletar(c, WPF([Resp(200, {"itens": [volta], "mais": False})]))
+        ver("pagamento que voltou do site não duplica", c.execute("SELECT COUNT(*) FROM amigo_pagamento WHERE amigo_id=?", (a2["id"],)).fetchone()[0] == 1 and um(802)["situacao"] == "pago")
+        # mudar no painel: notas vazias não apagam no site por engano ("__limpar__" explícito)
+        am.mudar(c, a3["id"], {"status_pedido": "em_contato", "notas": "Ligar na segunda"}, "adm@camp.arq.br")
+        am.mudar(c, a3["id"], {"notas": ""}, "adm@camp.arq.br")
+        p3 = _j.loads(um(803)["pendente_site"])
+        ver("status e notas vão ao site; apagar notas manda \"__limpar__\" (vazio nunca apaga)", p3 == {"status": "em_contato", "notas": "__limpar__"}, p3)
+        try:
+            am.mudar(c, a1["id"], {"situacao": "quitado"}, "x"); ok_ = False
+        except Exception as e_:
+            ok_ = getattr(e_, "status_code", 0) == 400
+        ver("situação fora da lista: 400", ok_)
+        # pago → vencido sozinho
+        am._HOJE = _dt.date(2027, 5, 2)
+        n = am.vencer(c)
+        ver("validade passou: pago vira vencido sozinho e avisa o site", n == 1 and um(801)["situacao"] == "vencido" and _j.loads(um(801)["pendente_site"]) == {"situacao": "vencido"}, (n, um(801)["situacao"]))
+        ver("vencido entra no histórico", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='vencido'", (str(a1["id"]),)).fetchone()[0] == 1)
+        am._HOJE = _dt.date(2027, 10, 21)          # Beto vence em 2027-11-10: 20 dias
+        # lembretes automáticos
+        ver("lembretes desligados (padrão): nada vai para a fila", am.rodar_lembretes(c)["enfileirados"] == 0 and c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0] == 0)
+        c.execute("UPDATE configuracao SET valor='simular' WHERE chave='amigos.lembretes_auto'"); c.commit()
+        rs = am.rodar_lembretes(c)
+        quem = {s["id"]: (s["modelo"], s["marco"]) for s in rs["seriam"]}
+        ver("simular: lista quem receberia (renovação 30 dias para Beto) e NÃO envia", quem.get(a2["id"]) == ("lembrete_renovacao", 30) and c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0] == 0, rs)
+        ver("simular guarda a última simulação", _j.loads(am._estado(c, "lembretes_simulacao"))["n"] == len(rs["seriam"]))
+        # e-mail: SMTP do painel configurado (carteiro falso)
+        for k_, v_ in (("smtp.host", "smtp.exemplo.com"), ("smtp.remetente", "amigos@camp.arq.br")):
+            c.execute("UPDATE configuracao SET valor=? WHERE chave=?", (v_, k_))
+        c.commit()
+        enviados = []
+        def carteiro(con_, canal_, para, nome, assunto, texto): enviados.append((canal_, para, assunto, texto))
+        c.execute("UPDATE configuracao SET valor='ligado' WHERE chave='amigos.lembretes_auto'"); c.commit()
+        rl = am.rodar_lembretes(c)
+        f1 = am.processar_fila(c, enviar=carteiro)
+        ver("ligado: o lembrete vai para a fila e sai pelo e-mail do painel (SMTP)", rl["enfileirados"] >= 1 and f1["enviados"] >= 1 and any(e[1] == "beto@x.com" and "vence em 10/11/2027" in e[2] and e[0] == "smtp" for e in enviados), (rl, enviados))
+        n_antes = c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0]
+        am.rodar_lembretes(c); am._HOJE = _dt.date(2027, 10, 25); am.rodar_lembretes(c)
+        ver("o mesmo lembrete nunca sai duas vezes", c.execute("SELECT COUNT(*) FROM amigo_email").fetchone()[0] == n_antes)
+        am._HOJE = _dt.date(2027, 11, 4); am.rodar_lembretes(c)
+        ver("marco seguinte (7 dias) é outro lembrete", c.execute("SELECT COUNT(*) FROM amigo_email WHERE chave LIKE 'renovacao:%:7'").fetchone()[0] == 1)
+        c.execute("UPDATE configuracao SET valor='desligado' WHERE chave='amigos.lembretes_auto'"); c.commit()
+        am._HOJE = _dt.date(2026, 11, 18)
+        pv = am.previa(c, [a2["id"], a3["id"]], "boas_vindas")
+        ver("prévia: canal, quantos têm e-mail, texto com código e fundador", pv["canal"] == "smtp" and pv["com_email"] == 2 and any("Z9Y8X7" in e["texto"] and "Fundador nº 2" in e["texto"] for e in pv["exemplos"]), pv)
+        am.processar_fila(c, enviar=carteiro); enviados.clear()
+        am.enfileirar(c, [a2["id"]], "recibo", "", "", "adm@camp.arq.br"); am.processar_fila(c, enviar=carteiro)
+        ver("recibo: valor pago, data e meio", enviados and "R$ 1.500" in enviados[0][3] and "10/11/2026" in enviados[0][3] and "Pix" in enviados[0][3], enviados)
+        def falha(*a): raise am.email_envio.EnvioErro("SMTPRecipientsRefused: recusado")
+        am.enfileirar(c, [a3["id"]], "livre", "Oi {nome}", "Texto para {nome_completo}", "adm@camp.arq.br"); f2 = am.processar_fila(c, enviar=falha)
+        ver("falha no envio fica registrada (falhou + histórico)", f2["falhas"] == 1 and tuple(c.execute("SELECT situacao, assunto FROM amigo_email ORDER BY id DESC LIMIT 1").fetchone()) == ("falhou", "Oi Carla") and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND tipo='email_falhou'").fetchone()[0] == 1)
+        # mudar a categoria (Rafael: "tenho que conseguir mudar a categoria da pessoa pelo admin")
+        am.mudar(c, a2["id"], {"categoria": "amigo", "modalidade": "mensal"}, "adm@camp.arq.br")
+        p2 = _j.loads(um(802)["pendente_site"])
+        ver("mudar categoria e modalidade: valor segue a tabela do ano (R$ 45/mês), histórico e vai ao site", (um(802)["categoria"], um(802)["modalidade"]) == ("amigo", "mensal") and am.valor_previsto(c, um(802)) == 45 and p2.get("categoria") == "amigo" and p2.get("modalidade") == "mensal"
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='editado' AND detalhe LIKE '%categoria%'", (str(a2["id"]),)).fetchone()[0] == 1, p2)
+        try:
+            am.mudar(c, a2["id"], {"categoria": "diamante"}, "x"); ok_ = False
+        except Exception as e_:
+            ok_ = getattr(e_, "status_code", 0) == 400
+        ver("categoria fora da tabela: 400", ok_)
+        am.mudar(c, a2["id"], {"categoria": "guardiao", "modalidade": "anual"}, "adm@camp.arq.br")
+        am.enviar_pendentes(c, WPF([], Resp(200, {"ok": True, "registro": {}})))
+        # cobrança: Mercado Pago desligado no site → sem texto de Pix não cobra; com Pix vai a cobrança manual
+        cob_posts = []
+        def mp_desligado(path, corpo): cob_posts.append((path, corpo)); return Resp(409, {"code": "camp_mp_desligado", "message": "O pagamento online (Mercado Pago) está desligado no site."})
+        c.execute("UPDATE amigo SET situacao='vencido' WHERE id=?", (a3["id"],)); c.commit()
+        rc1 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", wp=WPF([], mp_desligado))
+        ver("cobrança com Mercado Pago desligado e sem Pix: não envia e diz por quê", rc1["na_fila"] == 0 and rc1["erros"] and "desligado" in rc1["erros"][0]["erro"] and um(802)["cobranca_em"] is None, rc1)
+        c.execute("UPDATE configuracao SET valor='Pix (CNPJ) 00.000.000/0001-00' WHERE chave='amigos.cobranca_pix'"); c.commit()
+        enviados.clear()
+        rc2 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", wp=WPF([], mp_desligado)); am.processar_fila(c, enviar=carteiro)
+        ver("cobrança manual: e-mail com valor, categoria, prazo e as instruções de Pix", rc2["manual"] == 1 and enviados and "Pix (CNPJ) 00.000.000/0001-00" in enviados[-1][3] and "R$ 1.500 por ano" in enviados[-1][3] and "Guardião" in enviados[-1][3] and "Pagar até: 25/11/2026" in enviados[-1][3], (rc2, enviados[-1:]))
+        ver("cobrança pede ao site o link com categoria, modalidade e valor do ano", cob_posts and cob_posts[-1][0] == "/wp-json/camp/v1/painel/apoios/802/cobranca" and cob_posts[-1][1] == {"categoria": "guardiao", "modalidade": "anual", "valor": 1500.0}, cob_posts[-1:])
+        ver("cobrança registrada: data, tipo manual, prazo e histórico", um(802)["cobranca_tipo"] == "manual" and um(802)["cobranca_vence"] == "2026-11-25" and um(802)["cobranca_em"]
+            and c.execute("SELECT COUNT(*) FROM evento WHERE entidade='amigo' AND codigo=? AND tipo='cobranca'", (str(a2["id"]),)).fetchone()[0] == 1)
+        rc3 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", wp=WPF([], mp_desligado))
+        ver("a mesma pessoa não é cobrada de novo em poucos dias sem confirmar", rc3["na_fila"] == 0 and [r_["id"] for r_ in rc3["repetidas"]] == [a2["id"]], rc3)
+        # Mercado Pago ligado: link do site
+        def mp_ligado(path, corpo): cob_posts.append((path, corpo)); return Resp(200, {"ok": True, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=PREF9", "valor": 1500})
+        enviados.clear()
+        rc4 = am.cobrar(c, [a2["id"], a3["id"]], "adm@camp.arq.br", forcar=True, wp=WPF([], mp_ligado)); am.processar_fila(c, enviar=carteiro)
+        ver("forçar: cobra de novo; com Mercado Pago ligado o e-mail leva o link (adoção não é cobrada)", rc4["mp"] == 1 and rc4["na_fila"] == 1 and any("pref_id=PREF9" in e[3] for e in enviados) and um(802)["cobranca_tipo"] == "mp", (rc4, enviados))
+        def mp_falso(path, corpo): return Resp(200, {"ok": True, "link": "https://golpe.example.com/pagar"})
+        c.execute("UPDATE configuracao SET valor='' WHERE chave='amigos.cobranca_pix'"); c.commit()
+        rc5 = am.cobrar(c, [a2["id"]], "adm@camp.arq.br", forcar=True, wp=WPF([], mp_falso))
+        ver("link que não é do Mercado Pago é recusado", rc5["na_fila"] == 0 and rc5["erros"], rc5)
+        pc = am.previa_cobranca(c, [a2["id"]])
+        ver("prévia da cobrança: quem recebe e quem já foi cobrado há pouco", pc["com_email"] == 1 and pc["repetidas"] and pc["exemplo"]["assunto"].startswith("Amigos da CAMP: pagamento de"), pc)
+        # telas e papéis
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-longa-12345", "leitura", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x.get("/api/amigos").status_code == 401)
+        xl = TestClient(app, raise_server_exceptions=False); xl.post("/api/auth/login", json={"email": "le@camp.arq.br", "senha": "senha-longa-12345"})
+        rotas_ = [("get", "/api/amigos"), ("get", "/api/amigos/valores"), ("get", "/api/amigos/lembretes"), ("post", "/api/amigos/sincronizar"), ("post", "/api/amigos/cobranca/previa"), ("post", "/api/amigos/cobranca/enviar"), ("post", "/api/amigos/email/enviar")]
+        ver("leitura: 403 em todas as rotas dos Amigos", all(getattr(xl, m_)(u_, **({"json": {"ids": [1], "modelo": "recibo"}} if m_ == "post" else {})).status_code == 403 for m_, u_ in rotas_))
+        x.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não vê os Amigos (dados pessoais): 403 na lista, no detalhe, no CSV e no e-mail",
+            all(s_ == 403 for s_ in (x.get("/api/amigos").status_code, x.get(f"/api/amigos/{a1['id']}").status_code, x.get("/api/amigos/exportar.csv").status_code,
+                                     x.post("/api/amigos/email/previa", json={"ids": [a1["id"]], "modelo": "recibo"}).status_code, x.patch(f"/api/amigos/{a1['id']}", json={"notas": "x"}).status_code)))
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r = x.get("/api/amigos")
+        d = r.json()
+        ver("admin: lista dos Amigos com números do topo (ativos, receita do ano, pendente, vencendo)", r.status_code == 200 and len(d["itens"]) == 2 and d["numeros"]["receita_ano"] == 1950 and d["numeros"]["ativos"] == 1 and "pendente_valor" in d["numeros"], d.get("numeros"))
+        ver("aba adoções separada", [i["nome"] for i in x.get("/api/amigos?aba=adocoes").json()["itens"]] == ["Davi", "Carla"])
+        ver("filtros: situação e vencendo em 30 dias", [i["site_id"] for i in x.get("/api/amigos?situacao=vencido").json()["itens"]] == [801] and x.get("/api/amigos?vencendo=1").json()["itens"] == [])
+        ver("busca por protocolo", [i["site_id"] for i in x.get("/api/amigos?q=CAMP 2026 000801").json()["itens"]] == [801])
+        csv_ = x.get("/api/amigos/exportar.csv")
+        ver("CSV exporta tudo do filtro", csv_.status_code == 200 and csv_.text.lstrip("﻿").splitlines()[0].startswith("protocolo;tipo;nome") and len(csv_.text.strip().splitlines()) == 3, csv_.text[:200])
+        dt_ = x.get(f"/api/amigos/{a2['id']}").json()
+        ver("detalhe: pagamentos, e-mails e histórico", len(dt_["pagamentos"]) == 1 and len(dt_["emails"]) >= 3 and any(h["tipo"] == "pagamento_manual" for h in dt_["historico"]), list(dt_)[:5])
+        ver("pagamento pela tela: valor inválido 400", x.post(f"/api/amigos/{a1['id']}/pagamento", json={"data": "2026-11-17", "valor": 0, "meio": "pix"}).status_code == 400)
+        rp = x.post(f"/api/amigos/{a1['id']}/pagamento", json={"data": "2026-11-17", "valor": 450, "meio": "dinheiro", "nota": "na loja"})
+        ver("pagamento pela tela: vencido volta a pago; a validade antiga ainda valia nessa data, então soma 12 meses a ela", rp.status_code == 200 and um(801)["situacao"] == "pago" and um(801)["validade"] == "2028-05-01", rp.text[:200])
+        ver("e-mail livre sem texto: 400", x.post("/api/amigos/email/previa", json={"ids": [a1["id"]], "modelo": "livre"}).status_code == 400)
+        enviados.clear()
+        am._enviar = carteiro; am._fila_em_segundo_plano = lambda: am.processar_fila()
+        re_ = x.post("/api/amigos/email/enviar", json={"ids": [a1["id"], a2["id"]], "modelo": "lembrete_renovacao"})
+        ver("enviar a vários: entra na fila e sai um por pessoa", re_.status_code == 200 and re_.json()["na_fila"] == 2 and sorted(e[1] for e in enviados) == ["ana@x.com", "beto@x.com"], (re_.text, enviados))
+        ver("valores por ano: gravar 2028 e abrir 2029 copiando", x.put("/api/amigos/valores/2028", json=[{"categoria": "amigo", "nome": "Amigo", "anual": 500, "mensal": 50}]).status_code == 200
+            and x.post("/api/amigos/valores/2029/copiar").status_code == 200 and am.precos(c)[2029]["amigo"]["anual"] == 500 and x.post("/api/amigos/valores/2029/copiar").status_code == 409)
+        am._HOJE = _dt.date(2028, 3, 1)
+        ver("valor previsto segue o ano (2028: R$ 500)", am.valor_previsto(c, um(801)) == 500)
+        am._HOJE = _dt.date(2026, 11, 18)
+        ver("regras: modo dos lembretes inválido 400; válido grava", x.put("/api/amigos/regras", json={"lembretes_auto": "sempre"}).status_code == 400 and x.put("/api/amigos/regras", json={"lembretes_auto": "simular", "lembrete_dias": "45, 10"}).status_code == 200 and am.lembrete_dias(c) == [45, 10])
+        ver("simulação pela tela lista e não envia", x.get("/api/amigos/lembretes").status_code == 200 and "seriam" in x.get("/api/amigos/lembretes").json())
+        ver("novo Amigo registrado só no painel", x.post("/api/amigos", json={"nome": "Eva Pix", "email": "eva@x.com", "categoria": "estudante"}).status_code == 200 and tuple(c.execute("SELECT origem, site_id, situacao FROM amigo WHERE nome='Eva Pix'").fetchone()) == ("painel", None, "pendente"))
+        # LGPD
+        lgpd.apagar_pessoa_local(c, "ana@x.com")
+        am.coletar(c, WPF([Resp(200, {"itens": [P1["itens"][0]], "mais": False})]))
+        ver("LGPD: apagar pessoa anonimiza e a coleta não traz o nome de volta (os valores pagos ficam)", (um(801)["nome"], um(801)["email"], um(801)["anonimizado"]) == ("(removido)", None, 1) and c.execute("SELECT COUNT(*) FROM amigo_pagamento WHERE amigo_id=?", (a1["id"],)).fetchone()[0] == 2, dict(um(801)))
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem nome nem e-mail de Amigo", not any(t in log_ for t in ("ana@x.com", "beto@x.com", "Beto Reis", "Ana Lima", "carla@x.com")))
+        for l in res: print(l)
     return 0
 
 
@@ -19604,6 +19815,15 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Mover e o site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Amigos da CAMP no painel: coleta do site, pagamento à mão, vencido, volta ao site, e-mails (carteiro falso), lembretes, papéis")
+rc, out = rodar("amigos_painel", f"{tmp}/amigos_painel.db")
+if rc != 0: ok(False, f"teste amigos_painel não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Amigos da CAMP: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 45, "Amigos da CAMP: todas as verificações rodaram")
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
