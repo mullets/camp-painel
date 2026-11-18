@@ -209,6 +209,11 @@ async def _coleta_pedidos_site_periodica() -> None:
                 await asyncio.to_thread(amigos.rodada)
             except Exception:  # noqa: BLE001
                 pass
+            try:                # 18/11/2026: quem aceita e-mails da CAMP e a situação no Sender (contrato 1.15; emkt.coleta_min; nunca levanta)
+                from . import contatos_emkt
+                await asyncio.to_thread(contatos_emkt.rodada)
+            except Exception:  # noqa: BLE001
+                pass
             try:                # CAMP-EMAIL: e-mails que o site mandou (contrato 1.14), no ritmo próprio (emails.coleta_min; nunca levanta)
                 from . import emails_enviados
                 await asyncio.to_thread(emails_enviados.rodada)
