@@ -2,7 +2,7 @@
 
 Rafael (03/11): "mostrar no painel quem aceitou receber e-mails da CAMP, para exportar a lista para o Sender.net".
 Rafael (18/11): "quem aceitou receber e-mails da CAMP… seria bom saber e conseguir filtrar. E cadastrar esses no mailing: pelo site,
-aceitou → direto no Sender". O SITE inscreve sozinho no grupo do Sender (plugin 1.25.15, contrato 1.14); o painel busca a lista do
+aceitou → direto no Sender". O SITE inscreve sozinho no grupo do Sender (plugin 1.25.15, contrato 1.15); o painel busca a lista do
 site (GET /wp-json/camp/v1/painel/emkt?desde=, tabela emkt_site) a cada emkt.coleta_min minutos ou em "Sincronizar agora".
 
 Fontes (uma linha por e-mail; só quem marcou a caixa OPCIONAL de e-mails — LGPD: consentimento livre):
@@ -164,7 +164,7 @@ def mapa_aceite(con) -> dict[str, str]:
     return m
 
 
-# ---------------------------------------------------------------- busca no site (contrato 1.14)
+# ---------------------------------------------------------------- busca no site (contrato 1.15)
 def _estado(con, chave: str, padrao: str = "") -> str:
     r = con.execute("SELECT valor FROM emkt_estado WHERE chave=?", (chave,)).fetchone()
     return (r[0] if r and r[0] is not None else "") or padrao

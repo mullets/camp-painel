@@ -482,10 +482,11 @@ def aprovar_e_enviar(con, sid: int, ator: dict, mensagem: str = "", canal: str |
         responder = _cfg(con, "entrega.responder_para")
         envio_id = enviar(con, canal, para, s["solicitante"] or "", t, responder, None if teste else _pedido_site_id(con, sid))
     except (EnvioErro, OSError) as e:
-        con.execute("UPDATE entrega_link SET revogado_em=datetime('now') WHERE id=?", (lid,))
+        msg = str(e) if isinstance(e, EnvioErro) else f"Não consegui preparar os arquivos ({type(e).__name__})"
+        # CAMP-EMAIL: o motivo fica guardado (tela E-mails enviados); antes só o link era cancelado
+        con.execute("UPDATE entrega_link SET revogado_em=datetime('now'), erro=? WHERE id=?", (msg[:500], lid))
         con.commit()
         shutil.rmtree(dest, ignore_errors=True)
-        msg = str(e) if isinstance(e, EnvioErro) else f"Não consegui preparar os arquivos ({type(e).__name__})"
         raise HTTPException(502, f"{msg}. Nada foi enviado e o pedido não mudou.")
     total = sum(a["tamanho"] or 0 for a in arquivos)
     resumo = f"{len(arquivos)} arquivo(s), {_fmt_tamanho(total)} · enviado por e-mail ({CANAIS[canal]}) para {para} · link até {_data_br(expira)}"

@@ -1,5 +1,5 @@
 -- CAMP-SENDER (18/11/2026, Rafael: "quem aceitou receber e-mails da CAMP… seria bom saber e conseguir filtrar. E cadastrar esses
--- no mailing: pelo site, aceitou → direto no Sender"). O site inscreve sozinho no grupo do Sender (plugin 1.25.15, contrato 1.14)
+-- no mailing: pelo site, aceitou → direto no Sender"). O site inscreve sozinho no grupo do Sender (plugin 1.25.15, contrato 1.15)
 -- e conta ao painel pela rota GET /wp-json/camp/v1/painel/emkt: quem aceitou, de onde, quando, a versão do texto e a situação
 -- no Sender (inscrito, pendente, erro, cancelou). Esta tabela é a cópia dessa lista (um registro do site por linha).
 -- LGPD: "apagar esta pessoa" apaga as linhas dela aqui (lgpd.apagar_pessoa_local).

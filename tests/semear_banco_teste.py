@@ -124,6 +124,18 @@ for _sid, _nome, _cat, _mod, _sit, _val, _pg in ((7001, "Ana Teste Lima", "amigo
     if _sit != "pendente":
         c.execute("INSERT INTO amigo_pagamento (amigo_id, chave, data, valor, meio, origem) SELECT ?, ?, pago_em, 450, 'pix', 'mp' FROM amigo WHERE id=?", (_aid, f"mp-{_sid}", _aid))
 c.execute("INSERT INTO amigo (site_id, tipo, protocolo, nome, empresa, email, faixa, status_pedido, criado_no_site) VALUES (7010, 'arquiteto', 'CAMP-2026-007010', 'Eva Teste', 'Construtora Exemplo', 'eva@exemplo.com', 'R$ 60 mil a R$ 100 mil', 'novo', datetime('now','-3 days'))")
+# E-mails enviados (CAMP-EMAIL, 18/11/2026): alguns e-mails como se o site tivesse mandado (nomes fictícios), um Amigo e um alerta
+c.execute("UPDATE configuracao SET valor='0' WHERE chave='emails.coleta_min'")
+for _ch, _reg, _tipo, _tpl, _para, _nome, _canal, _sit, _mot, _sid, _h in (
+        ("8101:solicitacao_recebida", "camp_solicitacao", "solicitacao_recebida", "TR04", "lia@exemplo.com", "Lia Teste Prado", "sender", "enviado", None, "em-8101", 1),
+        ("8102:visita_solicitada", "camp_agendamento", "visita_solicitada", "TR06", "rui@exemplo.com", "Rui Teste Gomes", "simples", "nao_sender", "o Sender recusou: HTTP 401: Unauthenticated", None, 3),
+        ("8103:inscricao_recebida", "camp_inscricao", "inscricao_recebida", "TR08", "ivo@exemplo.com", "Ivo Teste Luz", "simples", "falhou", "template TR08 sem ID; o e-mail simples também falhou: SMTP recusou", None, 30)):
+    c.execute("""INSERT INTO email_site (chave, registro_id, registro, protocolo, tipo, template, para, nome, canal, situacao, motivo, sender_id, tentativas, enviado_em)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,datetime('now', ?))""", (_ch, int(_ch.split(":")[0]), _reg, f"CAMP-2026-00{_ch.split(':')[0]}", _tipo, _tpl, _para, _nome, _canal, _sit, _mot, _sid, f"-{_h} hours"))
+c.execute("""INSERT INTO amigo_email (amigo_id, modelo, assunto, para, situacao, canal, criado_por, enviado_em, modelo_site, variaveis, sender_id)
+             SELECT id, 'recibo', 'Recibo do Amigos da CAMP', email, 'enviado', 'site', 'rafael@camp.arq.br', datetime('now','-2 hours'), 'amigo_recibo',
+                    '{"nome": "Ana", "valor_pago": "R$ 450,00", "protocolo": "CAMP-2026-007001"}', 'em-7001' FROM amigo WHERE site_id=7001""")
+c.execute("INSERT INTO alerta_envio (assunto, tipo, para, titulo, ok, erro, enviado_em) VALUES ('qnap', 'critico', 'equipe@exemplo.com', 'CAMP: o QNAP não responde', 0, 'SMTP não configurado (Configurações → E-mail e avisos)', datetime('now','-5 hours'))")
 c.execute("UPDATE configuracao SET valor='-1' WHERE chave='qnap.reconciliacao_hora'")
 # histórico do QNAP (7 dias, ~17 GB/dia) e a última coleta completa, para o cartão do painel inicial
 for i in range(8):
