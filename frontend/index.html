@@ -4308,7 +4308,10 @@ function copiasTagHTML(L){if(!L||!L.length)return '';const fs=[...new Set(L.map(
   return `<button type="button" class="tag mini pj-copias${pend?' a':''}" data-dupv-abrir="${escHtml(window.PROJETO_PJ||'')}" title="${pend?'As cópias ainda esperam conferência: conferir as duplicatas lado a lado':'Conferir as duplicatas lado a lado'}">+${escHtml(qtd(L.length,'cópia','cópias'))}${fs.length?` (${escHtml(fs.join(', '))})`:''}</button>`}
 /* CAMP-129 (P8, F026-P0009): a grade ordenada pelo código mostrava os nºs fora de ordem (5, 6, 315…324, 7, 325, 02, 8, 03…), duas "Planta ·
    folha 306" sem aviso, folhas sem nº sem destaque e as retidas misturadas sem o motivo. */
-function numFolha(it){const m=String((it&&it.folha)||'').match(/\d+/);return m?parseInt(m[0],10):null}
+/* 18/11 (F002-P0002, "não entendo pq os repetidos"): folha vinda do site com o código antigo de catálogo ("F018-S00060") não é nº de folha:
+   antes o 1º número ("018", do fundo) virava o nº 18 de todas as fotos e cada uma aparecia como repetida de todas. Código assim = sem nº. */
+const RE_FOLHA_CODIGO=/^\s*(folha\s+)?F\d{2,4}\s*-\s*[A-Z]\d{3,}/i;
+function numFolha(it){const t=String((it&&it.folha)||'');if(RE_FOLHA_CODIGO.test(t))return null;const m=t.match(/\d+/);return m?parseInt(m[0],10):null}
 /* 06/11 ("queria poder organizar as fotos arrastando pra nova ordem"): a ordem "definida à mão" (item.ordem_manual) é do PROJETO; a escolha do
    select fica neste navegador, por projeto. Projeto com ordem definida abre nela, a não ser que a pessoa tenha escolhido outra ali. */
 function pjTemOrdemManual(its){return (its||window.ITENS_PJ||[]).some(i=>i.ordem_manual!=null)}
@@ -5379,7 +5382,7 @@ async function carregarQualidadeCV(){carregarRelatorioCV();const c=document.getE
   catch(e){c.innerHTML='<div class="panel"><div class="pb"></div></div>';tabelaErro?c.innerHTML=`<div class="panel"><div class="pb"><p class="help"><span class="tag r">não consegui carregar</span> ${escHtml(e.message)} <button class="btn sm" onclick="carregarQualidadeCV()">Tentar de novo</button></p></div></div>`:0}}
 function capP8HTML(it,codigo,revisavel){const o=[],rep=(window.NREP_PJ||{})[codigo];   /* CAMP-129 */
   if(it.retida)o.push(`<span class="ret-motivo" title="Motivo da retenção">${escHtml(it.retida_motivo||'sem motivo registrado')}</span>`);
-  if(rep&&rep.length)o.push(`<span class="tag a mini nrep" title="Outra folha com o mesmo tipo e o mesmo nº">nº repetido</span> ${rep.map(c=>revisavel?`<button type="button" class="lnk code nrep-lnk" data-rev-abrir="${escHtml(c)}">${escHtml(String(c).split('-').pop())}</button>`:`<a class="lnk code nrep-lnk" href="#item/${escHtml(c)}">${escHtml(String(c).split('-').pop())}</a>`).join(' ')}`);
+  if(rep&&rep.length)o.push(`<span class="tag a mini nrep" title="Outra folha com o mesmo tipo e o mesmo nº">nº repetido</span> ${rep.slice(0,3).map(c=>revisavel?`<button type="button" class="lnk code nrep-lnk" data-rev-abrir="${escHtml(c)}">${escHtml(String(c).split('-').pop())}</button>`:`<a class="lnk code nrep-lnk" href="#item/${escHtml(c)}">${escHtml(String(c).split('-').pop())}</a>`).join(' ')}${rep.length>3?` <small class="help">+${rep.length-3}</small>`:''}`);
   if(folhaSemNumero(it))o.push('<span class="tag mini semnum" title="As outras folhas desta série têm nº; esta não">sem nº</span>');
   return o.length?` <span class="cap-p8">${o.join(' ')}</span>`:''}
 function cardItemProjeto(it){
