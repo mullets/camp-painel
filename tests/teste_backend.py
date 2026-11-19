@@ -38,6 +38,7 @@ MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
 MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
+MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 
 
@@ -17560,6 +17561,34 @@ def filho(modo):
         html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
         ver("tela: caixas 'Folhas copiadas de/para outros projetos' e frases do histórico",
             "Folhas copiadas de outros projetos" in html and "Folhas copiadas para outros projetos" in html and "folhas_copiadas_para:" in html)
+        c.close()
+        for l in res: print(l)
+    elif modo == "fila_nome_fundo":
+        # 19/11/2026 (Rafael: "vamos pôr o nome do arquiteto embaixo, do lado do fundo dele"): cada linha da fila da Home com código
+        # de projeto/fundo leva fundo_nome (o título do fundo) e a tela mostra ao lado do código.
+        init_db(); aplicar_migracoes()
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app import auth
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det)[:300]}")
+        c = connect()
+        c.execute("INSERT OR IGNORE INTO fundo (codigo,titulo) VALUES ('F010','Ricardo Julião')")
+        c.execute("INSERT OR IGNORE INTO numero_p (fundo_codigo,numero) VALUES ('F010',735)")
+        c.execute("INSERT INTO projeto (codigo,fundo_codigo,numero,titulo,ano) VALUES ('F010-P0735','F010',735,'Casa de praia Yves',1970)")
+        lote = c.execute("INSERT INTO lista_processamento (nome, projeto_codigo, pasta_qnap, etapa) VALUES ('Casa de praia Yves','F010-P0735','/x','revisao')").lastrowid
+        for k in (1, 2):
+            c.execute("INSERT INTO item (codigo,projeto_codigo,serie_codigo,sequencial,titulo,status_site,revisao,lote_id) VALUES (?,?,?,?,?,?,?,?)",
+                      (f"F010-P0735-1970-S01-D{k:05d}", "F010-P0735", "S01", k, "Planta", "nao_publicado", "pendente", lote))
+        c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        adm = TestClient(app, raise_server_exceptions=False); adm.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        d = adm.get("/api/painel").json()
+        linhas = [i for i in (d.get("fila") or {}).get("itens", []) if str(i.get("codigo") or "").startswith("F010-P0735")]
+        ver("a linha do projeto F010-P0735 está na fila da Home", bool(linhas), str((d.get("fila") or {}).get("itens"))[:300])
+        ver("a linha leva fundo_nome = título do fundo", bool(linhas) and all(i.get("fundo_nome") == "Ricardo Julião" for i in linhas), str(linhas)[:300])
+        html = (RAIZ / "frontend" / "index.html").read_text(encoding="utf-8")
+        ver("tela: o nome do fundo aparece ao lado do código", 'class="ini-fundo"' in html and "i.fundo_nome" in html)
         c.close()
         for l in res: print(l)
     elif modo == "ordem_folhas":

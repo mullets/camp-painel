@@ -641,6 +641,25 @@ def fila_da_home(grupos: list[dict], papel: str, ordem: str = "urgente") -> dict
             "pedem_atencao": pedem, "de_outro_papel": outro, "ordem": ordem, "regra": FILA_REGRA, "grupos": resto}
 
 
+_RE_COD_FUNDO = re.compile(r"^(F\d{3})(?:-|$)")
+
+
+def com_nome_do_fundo(con, fila: dict) -> dict:
+    """19/11 (Rafael: "vamos pôr o nome do arquiteto embaixo, do lado do fundo dele"): cada linha da fila com código de fundo ou projeto
+    ganha `fundo_nome` (campo novo, opcional), o nome do fundo (arquiteto/escritório), para a Home mostrar ao lado do código."""
+    itens = (fila or {}).get("itens") or []
+    cods = {m.group(1) for i in itens if (m := _RE_COD_FUNDO.match(str(i.get("codigo") or "")))}
+    if not cods:
+        return fila
+    q = ",".join("?" * len(cods))
+    nomes = {r[0]: r[1] for r in con.execute(f"SELECT codigo, titulo FROM fundo WHERE codigo IN ({q})", sorted(cods))}
+    for i in itens:
+        m = _RE_COD_FUNDO.match(str(i.get("codigo") or ""))
+        if m and nomes.get(m.group(1)):
+            i["fundo_nome"] = nomes[m.group(1)]
+    return fila
+
+
 def tarefas_resumidas(grupos: list[dict], por_grupo: int = 3) -> list[dict]:
     """O campo antigo "tarefas" do /api/painel, igual a antes (3 linhas por grupo), a partir dos grupos completos."""
     return [{**g, "itens": g["itens"][:por_grupo]} for g in grupos]
