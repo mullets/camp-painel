@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.15 (18/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
+Versão deste documento: **1.18 (19/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -209,6 +209,16 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
   - `POST /painel/pessoa/apagar` (aplicar) também apaga a pessoa no Sender e a resposta ganha `"sender":{"status":"apagado|nao_estava|sem_chave|erro|simular","erro"}` (opcional; site antigo não traz).
   - Volta: 1x por dia o site confere no Sender os inscritos (`GET /v2/subscribers/{email}`); descadastrado/bounce/spam ou apagado lá = `cancelou`.
   - Painel: tela **Quem aceita e-mails da CAMP** (só admin), busca a cada `emkt.coleta_min` (60) minutos e em "Sincronizar agora"; site antigo (404) = "atualize o site", nada muda. Ordem de deploy: qualquer uma.
+- **NOVO 1.16** (Área do Amigo no site, 18/11/2026; site plugin 1.26.0, `Camp_AAP_Amigo`; painel: AINDA NÃO usa, campos ignorados). OPCIONAL; `edit_pages`.
+  - `POST /painel/apoios` `{ref_painel, nome, email, telefone?, categoria, modalidade?, situacao?, validade?, teste?}` → `{ok, criado, registro, duplicados[]}`: cria no site o Amigo registrado só no painel; idempotente por `ref_painel`.
+  - `POST /painel/apoios/{id}/acesso` `{acao:"revogar"|"enviar_link"}`: revoga o código dos links de pagar/renovar e as sessões; ou manda o link de acesso (TR22).
+  - `GET|POST /painel/apoios/valores` `{valores:{categoria:{anual,mensal}}}`: os valores de "Valores e regras" passam a valer no site (`"__limpar__"` volta aos do código).
+  - `registro` ganha `link_pagar`, `link_renovar`, `link_conta`, `cobranca_modo`, `cobranca_vence`, `ultimo_acesso`, `teste`, `fonte`, `email_normalizado`, `pedido_categoria`, `nao_renovar`, `aceita_livre`. `POST /painel/apoios/{id}` aceita `teste`, `email`, `nome`, `telefone`, `cobranca_vence`; `/cobranca` aceita `vence` e devolve `link_site`, `modo`. Em `/email`, `{{link}}` do Mercado Pago vira o endereço do site; `amigo_livre` a quem desligou → 409 `camp_email_amigo_recusou`.
+- **NOVO 1.17** (site plugin 1.27.0): cada item de `pagamentos[]` dos apoios ganha `categoria` e `modalidade` de quando o pagamento entrou (vazio nos antigos). OPCIONAL.
+- **NOVO 1.18** (ingressos da visita guiada à Residência João Marino, 19/11/2026; site plugin 1.28.1, `Camp_AAP_Ingressos`; painel `app/ingressos.py`, migração 230). OPCIONAL dos dois lados; `edit_pages`.
+  - `GET /painel/ingressos?desde=<ISO>&todas=1` (SÓ LEITURA) → `{itens:[{id, ref:"CAMP-INGRESSO-JM-AAAAMMDD-HHMM-n", casa, visita, data, hora, nome, email, telefone, pessoas, entraram, preco, total, situacao:"pago|gratuito|reservado|processando|recusado|cancelado", amigo_id, desconto:{categoria,pct,qtd,valor,via}|null, pagamentos[{id,valor,meio,data}], codigo, link, modo, criado_em, confirmado_em, alterado_em}], turmas:[{chave:"AAAA-MM-DD|HH:MM", data, hora, vagas, ocupadas, livres}], config:{preco, vagas, horarios, descontos, ativo}, agora}`. Sem `todas`: só pagos e gratuitos. Com `desde`: o que mudou desde então.
+  - `POST /painel/ingressos/{id}/reenviar` → `{ok, registro}`: manda o ingresso (com o QR) de novo; 404 não existe, 409 não pago.
+  - Painel: tela **Ingressos** (só admin), busca a cada `ingressos.coleta_min` (10) minutos e em "Sincronizar agora"; contas por turma, lista da porta, CSV, reenviar. Site antigo (404) = aviso "atualize o site". LGPD: apagar pessoa anonimiza (valores ficam). Ordem de deploy: qualquer uma.
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.
 

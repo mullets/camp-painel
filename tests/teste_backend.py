@@ -37,6 +37,7 @@ MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar t
 MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
 MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
+MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 
 
@@ -17992,6 +17993,99 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem nome nem e-mail de Amigo", not any(t in log_ for t in ("ana@x.com", "beto@x.com", "Beto Reis", "Ana Lima", "carla@x.com")))
         for l in res: print(l)
+    elif modo == "ingressos_painel":
+        # CAMP-INGRESSOS 19/11/2026 · Ingressos da visita guiada à Residência João Marino: busca no site (GET /painel/ingressos, contrato
+        # 1.18; cliente FALSO), incremental, turmas e vagas, contas do mês por turma, filtros, CSV para o Excel, reenviar, papéis e LGPD.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, ingressos as ig, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cf = c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='ingressos.coleta_min'").fetchone()
+        ver("migração 230: busca a cada 10 min, não sensível; tabelas ingresso e ingresso_turma", tuple(cf) == ("10", 0) and c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('ingresso','ingresso_turma','ingresso_estado')").fetchone()[0] == 3, tuple(cf) if cf else None)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        gets, posts = [], []
+        class H:
+            def __init__(s, r, rp=None): s.r, s.rp = r, rp
+            def get(s, path, params=None): gets.append((path, dict(params or {}))); return s.r
+            def post(s, path, json=None): posts.append((path, json)); return s.rp
+        class WPF:
+            def __init__(s, r, rp=None): s.h = H(r, rp)
+        A = {"id": 501, "ref": "CAMP-INGRESSO-JM-20261128-1000-501", "casa": "JM", "visita": "Visita guiada à Residência João Marino", "data": "2026-11-28", "hora": "10:00",
+             "nome": "Ana Lima", "email": "Ana@X.com", "telefone": "11 9999-0000", "pessoas": 2, "entraram": 1, "preco": 120, "total": 216, "situacao": "pago", "amigo_id": 77,
+             "desconto": {"categoria": "amigo", "pct": 20, "qtd": 1, "valor": 96, "via": "codigo"}, "pagamentos": [{"id": "555", "valor": 216, "meio": "bank_transfer", "data": "2026-11-20T10:00:00-03:00"}],
+             "codigo": "3F9A1C22", "link": "https://camp.arq.br/ingresso/3f9a1c22b7e04d5aa61c09e1/", "modo": "producao", "criado_em": "2026-11-20T12:58:00Z", "confirmado_em": "2026-11-20T13:00:00Z", "alterado_em": "2026-11-20T13:00:00Z"}
+        B = dict(A, id=502, ref="CAMP-INGRESSO-JM-20261128-1000-502", nome="Beto Reis", email="beto@x.com", pessoas=1, entraram=0, total=120, desconto=None, amigo_id=0, codigo="AAAA1111")
+        C = dict(A, id=503, ref="CAMP-INGRESSO-JM-20261129-1500-503", data="2026-11-29", hora="15:00", nome="Carla Dias", email="carla@x.com", pessoas=1, entraram=0, total=0, situacao="gratuito",
+                 desconto={"categoria": "patrono", "pct": 100, "qtd": 1, "valor": 0, "via": "sessao"}, pagamentos=[], codigo="BBBB2222")
+        D = dict(A, id=504, ref="CAMP-INGRESSO-JM-20261128-1300-504", hora="13:00", nome="Davi Melo", email="davi@x.com", pessoas=3, total=360, situacao="reservado", desconto=None, pagamentos=[], codigo="CCCC3333")
+        T = [{"chave": "2026-11-28|10:00", "data": "2026-11-28", "hora": "10:00", "vagas": 15, "ocupadas": 3, "livres": 12},
+             {"chave": "2026-11-28|13:00", "data": "2026-11-28", "hora": "13:00", "vagas": 15, "ocupadas": 3, "livres": 12},
+             {"chave": "2026-11-29|15:00", "data": "2026-11-29", "hora": "15:00", "vagas": 15, "ocupadas": 1, "livres": 14},
+             {"chave": "2026-12-26|10:00", "data": "2026-12-26", "hora": "10:00", "vagas": 15, "ocupadas": 0, "livres": 15}]
+        o = ig.coletar(c, WPF(Resp(200, {"itens": [A, B, C, D], "turmas": T, "config": {"preco": 120, "vagas": 15, "horarios": ["10:00", "13:00", "15:00"]}, "agora": "2026-11-20T14:00:00Z"})))
+        ver("busca no site: 4 ingressos e 4 turmas, pede todas e sem desde na 1ª vez", o["lidos"] == 4 and o["novos"] == 4 and not o["erro"] and gets[0][0] == "/wp-json/camp/v1/painel/ingressos" and gets[0][1] == {"todas": 1}
+            and c.execute("SELECT COUNT(*) FROM ingresso_turma").fetchone()[0] == 4, (o, gets))
+        a1 = c.execute("SELECT * FROM ingresso WHERE site_id=501").fetchone()
+        ver("gravado: e-mail em minúsculas, datas em UTC, desconto e pagamentos", (a1["email"], a1["confirmado_em"], a1["total"], _j.loads(a1["desconto"])["pct"]) == ("ana@x.com", "2026-11-20 13:00:00", 216.0, 20), dict(a1))
+        gets.clear()
+        o2 = ig.coletar(c, WPF(Resp(200, {"itens": [dict(B, entraram=1)], "turmas": T[:3], "agora": "2026-11-20T15:00:00Z"})))
+        ver("busca incremental: manda desde (agora − 2 min), atualiza sem duplicar e troca as turmas", gets[0][1].get("desde", "").startswith("2026-11-20T13:58") and o2["novos"] == 0
+            and c.execute("SELECT COUNT(*) FROM ingresso").fetchone()[0] == 4 and c.execute("SELECT entraram FROM ingresso WHERE site_id=502").fetchone()[0] == 1 and c.execute("SELECT COUNT(*) FROM ingresso_turma").fetchone()[0] == 3, (gets, o2))
+        ver("site antigo (404): sem erro, marca 'sem rota'", ig.coletar(c, WPF(Resp(404, {})))["sem_rota"] and ig._estado(c, "sem_rota") == "1")
+        ver("site com erro: guarda o erro, sem levantar", ig.coletar(c, WPF(Resp(500, {})))["erro"] and "500" in ig._estado(c, "ultimo_erro"))
+        ig.coletar(c, WPF(Resp(200, {"itens": [], "turmas": T[:3], "agora": "2026-11-20T15:30:00Z"})))
+        # ---- contas do mês
+        m = ig.do_mes(c, "2026-11")
+        t10 = [t for t in m["turmas"] if t["chave"] == "2026-11-28|10:00"][0]
+        ver("mês: só pagos e gratuitos (o reservado fica de fora)", sorted(x["id"] for x in m["itens"]) == [501, 502, 503], [x["id"] for x in m["itens"]])
+        ver("turma 28/11 10h: 2 compras, 3 pessoas, 12 livres, 2 entraram, bruto 360, desconto 24, recebido 336", (t10["compras"], t10["pessoas"], t10["livres"], t10["entraram"], t10["bruto"], t10["desconto"], t10["total"], t10["amigos"]) == (2, 3, 12, 2, 360.0, 24.0, 336.0, 1), t10)
+        ver("turma sem venda aparece com as vagas (28/11 13h)", any(t["chave"] == "2026-11-28|13:00" and t["compras"] == 0 and t["livres"] == 15 for t in m["turmas"]), m["turmas"])
+        ver("totais do mês: 4 pessoas, recebido 336, descontos 144 (Patrono gratuito), 2 compras com Amigo", (m["totais"]["pessoas"], m["totais"]["total"], m["totais"]["desconto"], m["totais"]["amigos"]) == (4, 336.0, 144.0, 2), m["totais"])
+        ver("filtros: situação e busca por referência", [x["id"] for x in ig.do_mes(c, "2026-11", "reservado")["itens"]] == [504] and [x["id"] for x in ig.do_mes(c, "2026-11", "todas", "20261129")["itens"]] == [503])
+        x1 = [x for x in m["itens"] if x["id"] == 501][0]
+        ver("linha: categoria do Amigo, meio e referência do Mercado Pago", (x1["amigo"], x1["meio"], x1["ref"]) == ("Amigo (20%)", "Pix", "CAMP-INGRESSO-JM-20261128-1000-501"), x1)
+        # ---- telas e papéis
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x0 = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x0.get("/api/ingressos").status_code == 401)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não vê, não exporta, não sincroniza, não reenvia (403)", all(r_.status_code == 403 for r_ in (op.get("/api/ingressos"), op.get("/api/ingressos/exportar.csv"), op.post("/api/ingressos/sincronizar"), op.post("/api/ingressos/501/reenviar"))))
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r_ = x.get("/api/ingressos?mes=2026-11")
+        ver("tela: mês, turmas, itens, situações, meses e estado da busca", r_.status_code == 200 and r_.json()["mes"] == "2026-11" and len(r_.json()["itens"]) == 3 and "2026-11" in r_.json()["meses"] and "site" in r_.json(), r_.text[:200])
+        ver("mês inválido: 400", x.get("/api/ingressos?mes=nov").status_code == 400)
+        cs = x.get("/api/ingressos/exportar.csv?mes=2026-11")
+        ver("CSV: BOM, separador ;, data dd/mm/aaaa, valores com vírgula, referência", cs.status_code == 200 and cs.text.startswith("﻿Data;Hora;Nome") and "28/11/2026;10:00;Ana Lima" in cs.text and "216,00" in cs.text and "CAMP-INGRESSO-JM-20261128-1000-501" in cs.text, cs.text[:300])
+        c.execute("UPDATE ingresso SET nome='=HIPERLINK(1)' WHERE site_id=502"); c.commit()
+        ver("CSV: nome começando com = não vira fórmula", "'=HIPERLINK(1)" in x.get("/api/ingressos/exportar.csv?mes=2026-11").text)
+        ver("reenviar sem a senha do site: 409", x.post("/api/ingressos/501/reenviar").status_code == 409)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        ig._wp = lambda: WPF(Resp(200, {}), Resp(200, {"ok": True, "registro": dict(A, entraram=2)}))
+        rr = x.post("/api/ingressos/501/reenviar")
+        ver("reenviar: chama a rota do site e atualiza o registro", rr.status_code == 200 and rr.json()["ok"] and posts[-1][0] == "/wp-json/camp/v1/painel/ingressos/501/reenviar" and c.execute("SELECT entraram FROM ingresso WHERE site_id=501").fetchone()[0] == 2, rr.text[:200])
+        ig._wp = lambda: WPF(Resp(200, {}), Resp(409, {}))
+        ver("reenviar ingresso não pago: 409 com mensagem", x.post("/api/ingressos/504/reenviar").status_code == 409)
+        ver("reenviar ingresso que não existe: 404", x.post("/api/ingressos/999/reenviar").status_code == 404)
+        ig._wp = lambda: WPF(Resp(200, {"itens": [dict(A, id=505, ref="CAMP-INGRESSO-JM-20261128-1500-505", hora="15:00", nome="Eva", email="eva@x.com")], "turmas": T[:3], "agora": "2026-11-20T16:00:00Z"}))
+        rs = x.post("/api/ingressos/sincronizar")
+        ver("Sincronizar agora: busca e grava o novo", rs.status_code == 200 and rs.json()["novos"] == 1, rs.text[:200])
+        # ---- LGPD
+        out_ = lgpd.apagar_pessoa_local(c, "ana@x.com")
+        a2 = c.execute("SELECT nome, email, telefone, total FROM ingresso WHERE site_id=501").fetchone()
+        ver("LGPD: apagar pessoa anonimiza o comprador e mantém o valor", out_.get("ingresso") == 1 and tuple(a2) == ("(removido)", None, None, 216.0), (out_, tuple(a2)))
+        ig.coletar(c, WPF(Resp(200, {"itens": [A], "turmas": T[:3], "agora": "2026-11-20T17:00:00Z"})))
+        ver("LGPD: a busca seguinte não traz o nome nem o e-mail de volta", tuple(c.execute("SELECT nome, email FROM ingresso WHERE site_id=501").fetchone()) == ("(removido)", None))
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@x.com", "Ana Lima", "beto@x.com", "Beto Reis")))
+        for l in res: print(l)
     elif modo == "emails_enviados":
         # CAMP-EMAIL 18/11/2026 · E-mails enviados: junta as fontes do painel (Downloads, Amigos, entrega, inscrição, alertas, resumo) e os
         # e-mails do site (rota GET /painel/emails, contrato 1.14; cliente FALSO, nenhum e-mail sai), busca incremental, motivo da falha
@@ -20137,6 +20231,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"E-mails enviados: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 28, "E-mails enviados: todas as verificações rodaram")
+
+print("Ingressos da visita guiada à Residência João Marino: busca no site (site falso), turmas e vagas, contas do mês, CSV, reenviar, papéis e LGPD")
+rc, out = rodar("ingressos_painel", f"{tmp}/ingressos_painel.db")
+if rc != 0: ok(False, f"teste ingressos_painel não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ingressos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Ingressos: todas as verificações rodaram")
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
