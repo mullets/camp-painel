@@ -92,7 +92,7 @@ def painel(ordem: str = "padrao", fila: str = "urgente", u: dict = Depends(auth.
     # ?fila=urgente|antigo|recente|tipo, a ordem é do servidor); "tarefas" continua igual a antes (3 linhas por grupo) para quem já o lê.
     grupos = pd.tarefas(con, u["papel"], n, por_grupo=pd.FILA_MAX, usuario_id=u["id"], ordem=ordem)   # UX-09: ?ordem=parado = mais parado primeiro
     d["tarefas"] = pd.tarefas_resumidas(grupos)
-    d["fila"] = pd.fila_da_home(grupos, u["papel"], fila)
+    d["fila"] = pd.com_nome_do_fundo(con, pd.fila_da_home(grupos, u["papel"], fila))   # 19/11: nome do arquiteto ao lado do código
     from .contagens import alinhar_precisa_de_voce   # 11/11: o menu, a saudação e "Para fazer" com o MESMO número
     alinhar_precisa_de_voce(con, n, u["papel"], u["id"], d["fila"])
     d["pendencias"]["pedem_acao"] = n["pedem_acao"]
