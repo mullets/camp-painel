@@ -141,8 +141,10 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_em = emails_enviados.apagar_por_email(con, em)
     from . import ingressos   # CAMP-INGRESSOS 19/11/2026: compradores de ingresso (anonimiza; os valores ficam para a receita)
     n_ing = ingressos.anonimizar_por_email(con, em)
+    from . import cobrancas   # CAMP-COB 19/11/2026: quem recebeu cobrança avulsa (anonimiza; valores e referência do Mercado Pago ficam)
+    n_cob = cobrancas.anonimizar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "cobranca_avulsa": n_cob}
 
 
 def chamar_site(con, email: str) -> dict:

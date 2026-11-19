@@ -40,6 +40,7 @@ MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails env
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
+MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18115,6 +18116,142 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@x.com", "Ana Lima", "beto@x.com", "Beto Reis")))
         for l in res: print(l)
+    elif modo == "cobranca_avulsa":
+        # CAMP-COB 19/11/2026 · Cobranças avulsas pelo Mercado Pago (contrato 1.19; site FALSO, nenhuma chamada real): criar → link do site,
+        # o que aparece no extrato (título, external_reference, statement_descriptor), e-mail só pelo Sender (template faltando = não enviado),
+        # busca marca paga com o id do pagamento, cancelar, novo link, CSV para conferir com o extrato, filtros, papéis (403) e LGPD.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, cobrancas as cb, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cf = c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='cobrancas.coleta_min'").fetchone()
+        ver("migração 231: busca a cada 10 min, não sensível; tabelas cobranca_avulsa e estado", cf is not None and tuple(cf) == ("10", 0) and c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('cobranca_avulsa','cobranca_avulsa_estado')").fetchone()[0] == 2, tuple(cf) if cf else None)
+        c.execute("INSERT OR IGNORE INTO fundo (codigo, titulo) VALUES ('F014','Fundo Teste')")
+        c.commit()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados if dados is not None else {}
+            def json(s): return s._d
+        chamadas = []
+        SITE = {}                                            # (método, caminho) → Resp ou função(corpo) → Resp
+        class H:
+            def get(s, path, params=None):
+                chamadas.append(("GET", path, dict(params or {})))
+                r = SITE.get(("GET", path), Resp(404, {"code": "rest_no_route"})); return r(params) if callable(r) else r
+            def post(s, path, json=None):
+                chamadas.append(("POST", path, json))
+                r = SITE.get(("POST", path), Resp(404, {"code": "rest_no_route"})); return r(json) if callable(r) else r
+        class WPF:
+            def __init__(s): s.h = H()
+        cb._wp = lambda: WPF()
+        def reg(sid, ref, sit="aberta", **kw):
+            x = {"id": sid, "ref_painel": ref, "external_reference": f"CAMP-COB-{sid}", "protocolo": f"CAMP-COB-{sid}", "nome": "Maria Doadora", "email": "maria@x.com",
+                 "telefone": "", "valor": 2000.0, "finalidade": "doacao_acervo", "finalidade_nome": "Doação de acervo — tratamento/digitalização",
+                 "descricao": "Tratamento do acervo de Fulano – 1ª parcela", "vence": "", "vinculo": "F014", "situacao": sit,
+                 "link": f"https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-{sid}", "preferencia_id": f"pref-{sid}", "modo": "producao",
+                 "mp": {"titulo": "CAMP · Doação de acervo — tratamento/digitalização · Tratamento do acervo de Fulano – 1ª parcela", "statement_descriptor": "CAMP DOACAO ACERVO", "external_reference": f"CAMP-COB-{sid}"},
+                 "pagamento": None, "pagamentos": [], "historico": ["2026-11-19 20:00 UTC · criada pelo painel (R$ 2.000,00, Doação de acervo — tratamento/digitalização)"],
+                 "criado_em": "2026-11-19T20:00:00+00:00", "cancelada_em": "", "alterado_em": "2026-11-19T20:00:00+00:00"}
+            x.update(kw); return x
+        def criar_site(corpo):
+            sid = 700 + int(corpo["ref_painel"].split("-")[-1])
+            return Resp(200, {"ok": True, "criado": True, "id": sid, "link": reg(sid, corpo["ref_painel"])["link"], "external_reference": f"CAMP-COB-{sid}", "registro": reg(sid, corpo["ref_painel"], valor=corpo["valor"], descricao=corpo["descricao"])})
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x0 = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x0.get("/api/cobrancas").status_code == 401)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não vê, não cria, não exporta, não envia, não cancela (403)", all(r_.status_code == 403 for r_ in (op.get("/api/cobrancas"), op.post("/api/cobrancas", json={}), op.get("/api/cobrancas/exportar.csv"), op.post("/api/cobrancas/1/email"), op.post("/api/cobrancas/1/cancelar"), op.post("/api/cobrancas/1/novo-link"), op.get("/api/cobrancas/1"), op.post("/api/cobrancas/sincronizar"))))
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        NOVA = {"nome": "Maria Doadora", "email": "Maria@X.com", "telefone": "11 9999-0000", "valor": 2000, "finalidade": "doacao_acervo", "descricao": "Tratamento do acervo de Fulano – 1ª parcela", "vinculo": "F014"}
+        ver("sem a senha do site: 409 e nada gravado", x.post("/api/cobrancas", json=NOVA).status_code == 409 and c.execute("SELECT COUNT(*) FROM cobranca_avulsa").fetchone()[0] == 0)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        ver("validação: finalidade, valor, vínculo que não existe, vencimento passado (400)", all(x.post("/api/cobrancas", json=dict(NOVA, **k)).status_code == 400 for k in ({"finalidade": "x"}, {"valor": 0}, {"vinculo": "F999"}, {"vence": "2020-01-01"}, {"descricao": ""})) and not chamadas)
+        # ---- criar → link
+        SITE[("POST", cb.ROTA)] = criar_site
+        r_ = x.post("/api/cobrancas", json=NOVA)
+        d = r_.json() if r_.status_code == 200 else {}
+        co = d.get("cobranca") or {}
+        ver("criar: chama POST /painel/cobrancas com ref_painel e os dados, devolve o link", r_.status_code == 200 and not d.get("erro") and chamadas[-1][1] == "/wp-json/camp/v1/painel/cobrancas"
+            and chamadas[-1][2]["ref_painel"] == f"painel-cob-{co.get('id')}" and chamadas[-1][2]["valor"] == 2000 and chamadas[-1][2]["finalidade"] == "doacao_acervo" and chamadas[-1][2]["vinculo"] == "F014"
+            and co.get("link", "").startswith("https://www.mercadopago.com.br/") and co.get("situacao") == "aberta", r_.text[:300])
+        C1 = co.get("id")
+        ver("extrato: título, external_reference e statement_descriptor como no Mercado Pago", co.get("extrato", {}).get("external_reference") == "CAMP-COB-701" and co["extrato"]["statement_descriptor"] == "CAMP DOACAO ACERVO"
+            and co["extrato"]["titulo"].startswith("CAMP · Doação de acervo") and co.get("vinculo") == "F014" and co.get("email") == "maria@x.com", co.get("extrato"))
+        ver("texto para WhatsApp com valor, link e referência", "R$ 2.000,00" in co.get("mensagem", "") and co.get("link", "x") in co.get("mensagem", "") and "CAMP-COB-701" in co.get("mensagem", ""), co.get("mensagem"))
+        ver("histórico: criado e link (sem e-mail de quem paga)", [h["tipo"] for h in co.get("historico", [])][-2:] == ["link", "criado"] and "maria@x.com" not in _j.dumps(co.get("historico")), co.get("historico"))
+        # ---- site recusa / Mercado Pago desligado / site antigo
+        SITE[("POST", cb.ROTA)] = Resp(409, {"code": "camp_mp_desligado", "message": "x", "data": {"status": 409}})
+        r2 = x.post("/api/cobrancas", json=dict(NOVA, valor=150))
+        ver("Mercado Pago desligado no site: fica Sem link com o motivo", r2.status_code == 200 and r2.json()["cobranca"]["situacao"] == "sem_link" and "Mercado Pago está desligado" in (r2.json()["erro"] or ""), r2.text[:300])
+        C2 = r2.json()["cobranca"]["id"]
+        SITE[("POST", cb.ROTA)] = Resp(404, {"code": "rest_no_route"})
+        r3 = x.post(f"/api/cobrancas/{C2}/novo-link")
+        ver("site antigo (404): Gerar novo link diz para atualizar o site", r3.status_code == 409 and "1.29.0" in r3.text, (r3.status_code, r3.text[:200]))
+        SITE[("POST", cb.ROTA)] = criar_site
+        r3 = x.post(f"/api/cobrancas/{C2}/novo-link")
+        ver("Gerar novo link sem cobrança no site: cria com a MESMA ref_painel (não duplica)", r3.status_code == 200 and r3.json()["cobranca"]["situacao"] == "aberta" and chamadas[-1][2]["ref_painel"] == f"painel-cob-{C2}", r3.text[:200])
+        # ---- e-mail só pelo Sender
+        SITE[("POST", f"{cb.ROTA}/701/email")] = Resp(409, {"code": "camp_sender_sem_template", "message": "Falta o template TR27", "data": {"status": 409, "template": "TR27"}})
+        e1 = x.post(f"/api/cobrancas/{C1}/email")
+        ver("e-mail sem o template TR27 no site: não enviado, diz qual template e onde", e1.status_code == 409 and "não enviado" in e1.json()["erro"] and "TR27" in e1.json()["erro"] and "wp-admin" not in e1.json()["erro"]
+            and c.execute("SELECT email_enviado_em FROM cobranca_avulsa WHERE id=?", (C1,)).fetchone()[0] is None, e1.text[:300])
+        ver("histórico anota o e-mail que não saiu", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='cobranca_avulsa' AND codigo=? AND tipo='email_falhou'", (str(C1),)).fetchone()[0] == 1)
+        SITE[("POST", f"{cb.ROTA}/701/email")] = Resp(409, {"code": "camp_sender_sem_chave", "data": {"status": 409}})
+        ver("Sender sem chave no site: não enviado", "Sender está desligado" in x.post(f"/api/cobrancas/{C1}/email").json()["erro"])
+        SITE[("POST", f"{cb.ROTA}/701/email")] = Resp(200, {"ok": True, "enviado": True, "template": "TR27", "sender": {"id": "em-9", "status": "enviado"}})
+        e2 = x.post(f"/api/cobrancas/{C1}/email")
+        ver("e-mail pelo Sender (rota do site /email): enviado e anotado", e2.status_code == 200 and e2.json()["enviado"] and chamadas[-1][1] == "/wp-json/camp/v1/painel/cobrancas/701/email"
+            and c.execute("SELECT email_enviado_em FROM cobranca_avulsa WHERE id=?", (C1,)).fetchone()[0], e2.text[:200])
+        # ---- busca: marca paga com o id do pagamento
+        pago = reg(701, f"painel-cob-{C1}", "paga", pagamento={"id": "123456789", "status": "approved", "valor": 2000.0, "liquido": 1900.02, "tarifa": 99.98, "meio": "bank_transfer", "metodo": "pix", "pago_em": "2026-11-20T10:00:00.000-03:00", "criado": ""},
+                   pagamentos=[{"id": "123456789", "status": "approved", "valor": 2000.0}], alterado_em="2026-11-20T13:00:00+00:00")
+        SITE[("GET", cb.ROTA)] = Resp(200, {"itens": [pago], "mp_ativo": True, "modo": "producao", "agora": "2026-11-20T14:00:00Z"})
+        o = cb.coletar(c)
+        p1 = c.execute("SELECT * FROM cobranca_avulsa WHERE id=?", (C1,)).fetchone()
+        ver("busca no site: marca paga com o id do pagamento, data, líquido e meio", o["lidos"] == 1 and o["novos"] == 0 and (p1["situacao"], p1["mp_pagamento_id"], p1["pago_em"], p1["valor_liquido"], p1["meio"]) == ("paga", "123456789", "2026-11-20 13:00:00", 1900.02, "pix"), (o, dict(p1)))
+        ver("histórico: pago (com o id do Mercado Pago)", c.execute("SELECT COUNT(*) FROM evento WHERE entidade='cobranca_avulsa' AND codigo=? AND tipo='pago' AND detalhe LIKE '%123456789%'", (str(C1),)).fetchone()[0] == 1)
+        chamadas.clear(); cb.coletar(c)
+        ver("busca incremental: manda desde (agora − 2 min)", chamadas[0][2].get("desde", "").startswith("2026-11-20T13:58"), chamadas[:1])
+        ver("paga: não cancela, não gera link, não manda cobrança (409)", all(x.post(f"/api/cobrancas/{C1}/{a}").status_code == 409 for a in ("cancelar", "novo-link", "email")))
+        SITE[("GET", cb.ROTA)] = Resp(404, {})
+        ver("site antigo na busca: sem erro, marca 'sem rota'", cb.coletar(c)["sem_rota"] and cb._estado(c, "sem_rota") == "1")
+        # ---- cancelar e novo link
+        SITE[("POST", f"{cb.ROTA}/702")] = lambda corpo: Resp(200, {"ok": True, "acao": corpo["acao"], "mp_expirou": True, "registro": reg(702, f"painel-cob-{C2}", "cancelada" if corpo["acao"] == "cancelar" else "aberta", preferencia_id="pref-702b" if corpo["acao"] == "novo_link" else "pref-702")})
+        k1 = x.post(f"/api/cobrancas/{C2}/cancelar")
+        ver("cancelar: pede ao site (acao cancelar) e fica cancelada", k1.status_code == 200 and k1.json()["cobranca"]["situacao"] == "cancelada" and chamadas[-1][1:] == ("/wp-json/camp/v1/painel/cobrancas/702", {"acao": "cancelar"}), k1.text[:200])
+        ver("cancelada: e-mail não sai (409)", x.post(f"/api/cobrancas/{C2}/email").status_code == 409)
+        k2 = x.post(f"/api/cobrancas/{C2}/novo-link", json={"vence": "2099-12-31"})
+        ver("Gerar novo link: acao novo_link com o vencimento novo; volta a aberta", k2.status_code == 200 and k2.json()["cobranca"]["situacao"] == "aberta" and chamadas[-1][2] == {"acao": "novo_link", "vence": "2099-12-31"} and k2.json()["cobranca"]["vence"] == "2099-12-31", k2.text[:200])
+        c.execute("UPDATE cobranca_avulsa SET vence='2020-01-01' WHERE id=?", (C2,)); c.commit()
+        ver("aberta com vencimento passado aparece vencida", x.get(f"/api/cobrancas/{C2}").json()["situacao"] == "vencida")
+        # ---- lista, filtros, números e CSV
+        l = x.get("/api/cobrancas").json()
+        ver("lista: 2 cobranças, números (1 paga R$ 2.000, líquido 1.900,02; 1 vencida)", len(l["itens"]) == 2 and l["numeros"]["pagas"] == 1 and l["numeros"]["pagas_valor"] == 2000.0 and l["numeros"]["pagas_liquido"] == 1900.02 and l["numeros"]["vencidas"] == 1, l["numeros"])
+        ver("filtros: situação, finalidade, busca pelo id do pagamento e período", [i["id"] for i in x.get("/api/cobrancas?situacao=paga").json()["itens"]] == [C1]
+            and len(x.get("/api/cobrancas?finalidade=patrocinio").json()["itens"]) == 0 and [i["id"] for i in x.get("/api/cobrancas?q=123456789").json()["itens"]] == [C1]
+            and len(x.get("/api/cobrancas?de=2099-01-01").json()["itens"]) == 0 and x.get("/api/cobrancas?de=ontem").status_code == 400)
+        cs = x.get("/api/cobrancas/exportar.csv")
+        cab = cs.text.splitlines()[0] if cs.status_code == 200 else ""
+        ver("CSV: BOM, ; e as colunas do extrato (título, external_reference, statement_descriptor, id do pagamento, pago em, líquido)", cs.status_code == 200 and cs.text.startswith("﻿Criada em;") and all(k_ in cab for k_ in ("Título no Mercado Pago", "external_reference", "statement_descriptor", "ID do pagamento no Mercado Pago", "Pago em", "Líquido recebido"))
+            and "CAMP-COB-701" in cs.text and "123456789" in cs.text and "1900,02" in cs.text and "CAMP DOACAO ACERVO" in cs.text, cs.text[:400])
+        c.execute("UPDATE cobranca_avulsa SET nome='=HIPERLINK(1)' WHERE id=?", (C2,)); c.commit()
+        ver("CSV: nome começando com = não vira fórmula", "'=HIPERLINK(1)" in x.get("/api/cobrancas/exportar.csv").text)
+        ver("cobrança que não existe: 404", x.get("/api/cobrancas/9999").status_code == 404 and x.post("/api/cobrancas/9999/email").status_code == 404)
+        # ---- LGPD
+        out_ = lgpd.apagar_pessoa_local(c, "maria@x.com")
+        a2 = c.execute("SELECT nome, email, telefone, valor, mp_pagamento_id FROM cobranca_avulsa WHERE id=?", (C1,)).fetchone()
+        ver("LGPD: apagar pessoa anonimiza e mantém valor e pagamento", out_.get("cobranca_avulsa", 0) >= 1 and tuple(a2) == ("(removido)", None, None, 2000.0, "123456789"), (out_, tuple(a2)))
+        SITE[("GET", cb.ROTA)] = Resp(200, {"itens": [pago], "agora": "2026-11-20T17:00:00Z"})
+        cb.coletar(c)
+        ver("LGPD: a busca seguinte não traz o nome nem o e-mail de volta", tuple(c.execute("SELECT nome, email FROM cobranca_avulsa WHERE id=?", (C1,)).fetchone()) == ("(removido)", None))
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem nome nem e-mail de quem paga", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Doadora")))
+        for l_ in res: print(l_)
     elif modo == "emails_enviados":
         # CAMP-EMAIL 18/11/2026 · E-mails enviados: junta as fontes do painel (Downloads, Amigos, entrega, inscrição, alertas, resumo) e os
         # e-mails do site (rota GET /painel/emails, contrato 1.14; cliente FALSO, nenhum e-mail sai), busca incremental, motivo da falha
@@ -20269,6 +20406,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ingressos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Ingressos: todas as verificações rodaram")
+
+print("Cobranças avulsas pelo Mercado Pago: criar com link (site falso), extrato, e-mail só pelo Sender, busca marca paga, cancelar, novo link, CSV, papéis e LGPD")
+rc, out = rodar("cobranca_avulsa", f"{tmp}/cobranca_avulsa.db")
+if rc != 0: ok(False, f"teste cobranca_avulsa não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cobranças avulsas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 30, "Cobranças avulsas: todas as verificações rodaram")
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)

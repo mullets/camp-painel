@@ -73,6 +73,8 @@ from .amigos import router as rotas_amigos   # 18/11/2026: Amigos da CAMP (contr
 app.include_router(rotas_amigos)
 from .ingressos import router as rotas_ingressos   # CAMP-INGRESSOS 19/11/2026: ingressos da visita guiada (contrato 1.18)
 app.include_router(rotas_ingressos)
+from .cobrancas import router as rotas_cobrancas   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (contrato 1.19)
+app.include_router(rotas_cobrancas)
 from .emails_enviados import router as rotas_emails   # CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais; contrato 1.14)
 app.include_router(rotas_emails)
 from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página pública de download do pedido entregue por e-mail
@@ -219,6 +221,11 @@ async def _coleta_pedidos_site_periodica() -> None:
             try:                # CAMP-INGRESSOS: ingressos da visita guiada (contrato 1.18), no ritmo próprio (ingressos.coleta_min; nunca levanta)
                 from . import ingressos
                 await asyncio.to_thread(ingressos.rodada)
+            except Exception:  # noqa: BLE001
+                pass
+            try:                # CAMP-COB: situação das cobranças avulsas (contrato 1.19), no ritmo próprio (cobrancas.coleta_min; nunca levanta)
+                from . import cobrancas
+                await asyncio.to_thread(cobrancas.rodada)
             except Exception:  # noqa: BLE001
                 pass
             try:                # CAMP-EMAIL: e-mails que o site mandou (contrato 1.14), no ritmo próprio (emails.coleta_min; nunca levanta)
