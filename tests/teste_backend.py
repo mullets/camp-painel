@@ -39,6 +39,7 @@ MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (con
 MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
 MODOS_RAPIDOS |= {"ingressos_detalhe"}   # CAMP-INGRESSOS 20/11/2026: tipos (meia, Amigo…), lista por data e reenviar ingresso/cobrança só pelo Sender (site falso; contrato 1.22)
+MODOS_RAPIDOS |= {"ingressos_por_pessoa"}   # CAMP-INGRESSOS 20/11/2026: lista de presença por pessoa e reenvio por ingresso (site falso; contrato 1.24; linha própria)
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
@@ -18285,6 +18286,111 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@x.com", "Ana Lima", "eva@x.com", "Eva Souza")))
         for l in res: print(l)
+    elif modo == "ingressos_por_pessoa":
+        # CAMP-INGRESSOS 20/11/2026 · Rafael: "Nome e e-mail para enviar o ingresso dessa pessoa. E envia todos os ingressos separados para quem
+        # comprou também". Contrato 1.24 (site 1.33.0): lista de presença com uma linha POR PESSOA (compra antiga = "comprador + N"), CSV,
+        # "Reenviar ingresso (a esta pessoa)" / "Reenviar ao comprador" / "Reenviar todos ao comprador" SÓ pelo Sender, papéis e LGPD. Site FALSO.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from datetime import datetime as _dt, timedelta as _td
+        from fastapi.testclient import TestClient
+        from app import auth, ingressos as ig, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        ver("migração 234: tabela ingresso_pessoa", c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='ingresso_pessoa'").fetchone()[0] == 1)
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        posts = []
+        class H:
+            def __init__(s, r, rp=None): s.r, s.rp = r, rp
+            def get(s, path, params=None): return s.r
+            def post(s, path, json=None):
+                posts.append((path, json))
+                return s.rp(path, json) if callable(s.rp) else s.rp
+        class WPF:
+            def __init__(s, r, rp=None): s.h = H(r, rp)
+        dia = (_dt.now(ig.FUSO) + _td(days=4)).strftime("%Y-%m-%d")
+        base = {"casa": "JM", "visita": "Visita guiada à Residência João Marino", "data": dia, "hora": "10:00", "telefone": "11 9999-0000", "entraram": 0, "preco": 120,
+                "pagamentos": [], "modo": "producao", "criado_em": "2026-11-20T12:58:00Z", "confirmado_em": "2026-11-20T13:00:00Z", "alterado_em": "2026-11-20T13:00:00Z", "amigo_id": 0, "desconto": None}
+        pes = [{"n": 1, "nome": "Rafael Mullets", "email": "rafa@x.com", "tipo": "amigo", "tipo_nome": "Amigo da CAMP (desconto)", "motivo": "", "codigo": "AAAA0001", "link": "https://camp.arq.br/ingresso/a1/", "entrou": False, "eh_comprador": True, "envios": [{"em": "2026-11-20T13:00:00+00:00", "para": "comprador", "via": "sender"}]},
+               {"n": 2, "nome": "Maria Souza", "email": "maria@x.com", "tipo": "meia", "tipo_nome": "Meia-entrada", "motivo": "estudante", "motivo_nome": "Estudante", "codigo": "BBBB0002", "link": "https://camp.arq.br/ingresso/b2/", "entrou": True, "entrou_em": "2026-11-20T13:10:00+00:00", "eh_comprador": False,
+                "envios": [{"em": "2026-11-20T13:00:00+00:00", "para": "pessoa", "via": "sender"}, {"em": "2026-11-20T13:00:01+00:00", "para": "comprador", "via": "sender"}]},
+               {"n": 3, "nome": "Lia", "email": "", "tipo": "inteira", "tipo_nome": "Inteira", "motivo": "", "codigo": "CCCC0003", "link": "https://camp.arq.br/ingresso/c3/", "entrou": False, "eh_comprador": False, "envios": []}]
+        PX = dict(base, id=701, ref="R701", nome="Rafael Mullets", email="rafa@x.com", pessoas=3, total=276, situacao="pago", codigo="PPPP0701", meias=1, amigo_id=77,
+                  desconto={"categoria": "amigo", "pct": 20, "qtd": 1, "valor": 96, "via": "codigo"},
+                  tipos=[{"tipo": "inteira", "nome": "Inteira", "qtd": 1, "valor": 120}, {"tipo": "meia", "nome": "Meia-entrada", "qtd": 1, "valor": 60}, {"tipo": "amigo", "nome": "Amigo da CAMP (20% de desconto)", "qtd": 1, "valor": 96, "pct": 20, "categoria": "amigo"}],
+                  ingressos=pes)
+        LG = dict(base, id=702, ref="R702", nome="Beto Antigo", email="beto@x.com", pessoas=2, total=240, situacao="pago", codigo="LLLL0702")     # site antigo: sem `ingressos`
+        T = [{"chave": f"{dia}|10:00", "data": dia, "hora": "10:00", "vagas": 15, "ocupadas": 5, "livres": 10}]
+        o = ig.coletar(c, WPF(Resp(200, {"itens": [PX, LG], "turmas": T, "config": {"preco": 120, "vagas": 15}, "agora": "2026-11-20T14:00:00Z"})))
+        ver("busca: 2 compras; 3 pessoas gravadas da compra nova, nenhuma da antiga", o["novos"] == 2 and c.execute("SELECT COUNT(*) FROM ingresso_pessoa WHERE site_id=701").fetchone()[0] == 3
+            and c.execute("SELECT COUNT(*) FROM ingresso_pessoa WHERE site_id=702").fetchone()[0] == 0, o)
+        L = ig.lista(c, dia)
+        ln = L["linhas"]
+        por = {(l["id"], l["n"]): l for l in ln}
+        ver("lista de presença: uma linha por pessoa (3) + compra antiga em uma linha 'comprador + N'", len(ln) == 4 and por[(702, 0)]["legado"] and por[(702, 0)]["pessoas"] == 2 and por[(702, 0)]["nome"] == "Beto Antigo"
+            and L["totais"]["linhas"] == 4 and L["totais"]["pessoas"] == 5, [(l["id"], l["n"], l["nome"]) for l in ln])
+        m_ = por[(701, 2)]
+        ver("linha da pessoa: nome, e-mail, tipo, motivo da meia, código do ingresso, pedido/comprador, pago, entrou", m_["nome"] == "Maria Souza" and m_["email"] == "maria@x.com" and m_["tipo"] == "meia"
+            and m_["motivo_nome"] == "Estudante" and m_["codigo"] == "BBBB0002" and m_["ref"] == "R701" and m_["comprador"] == "Rafael Mullets" and m_["pago"] and m_["entrou"], m_)
+        ver("Amigo por pessoa: o ingresso com desconto de Amigo é do comprador; Lia não", por[(701, 1)]["eh_amigo"] and not por[(701, 3)]["eh_amigo"] and por[(701, 1)]["eh_comprador"])
+        ver("ações por pessoa: reenviar à pessoa só para quem tem e-mail próprio (Maria); Lia e o comprador não", m_["pode_reenviar_pessoa"] and not por[(701, 3)]["pode_reenviar_pessoa"] and not por[(701, 1)]["pode_reenviar_pessoa"])
+        ver("filtros por pessoa: tipo meia = Maria; busca 'lia' = Lia (a compra vem junto); só Amigos = Rafael",
+            [(l["id"], l["n"]) for l in ig.lista(c, dia, tipo="meia")["linhas"]] == [(701, 2)] and [(l["id"], l["n"]) for l in ig.lista(c, dia, q="lia")["linhas"]] == [(701, 3)]
+            and [x["id"] for x in ig.lista(c, dia, q="lia")["itens"]] == [701] and [(l["id"], l["n"]) for l in ig.lista(c, dia, amigo="1")["linhas"]] == [(701, 1)])
+        # telas
+        auth.criar_usuario("Adm", "adm2@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op2@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op2@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm2@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador: 403 na lista e no reenvio por pessoa (dados pessoais só admin)", op.get(f"/api/ingressos/lista?turma={dia}").status_code == 403 and op.post("/api/ingressos/701/reenviar", json={"pessoa": 2}).status_code == 403)
+        rl = x.get("/api/ingressos/lista", params={"turma": dia})
+        ver("API lista: linhas por pessoa e motivos", rl.status_code == 200 and len(rl.json()["linhas"]) == 4 and rl.json()["motivos"]["professor"] == "Professor(a)", rl.text[:200])
+        cs = x.get("/api/ingressos/lista.csv", params={"turma": dia}).text
+        ver("CSV da lista: uma linha por pessoa, com motivo da meia e comprador", cs.count("\r\n") == 5 and "Maria Souza;maria@x.com" in cs and ";Estudante;Rafael Mullets;" in cs and "Motivo da meia-entrada" in cs and "Beto Antigo" in cs, cs[:500])
+        dt_ = x.get("/api/ingressos/701").json()
+        ver("detalhe do pedido: ingressos de cada pessoa", [p["n"] for p in dt_.get("ingressos", [])] == [1, 2, 3] and x.get("/api/ingressos/702").json().get("ingressos") == [])
+        # reenvios
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        ok_site = lambda p, j: Resp(200, {"ok": True, "enviado": True, "enviados": 1 if j.get("pessoa") else 3, "template": "TR23", "destino": j.get("para", "comprador"), "sender": {"id": "em-1"}, "registro": PX})
+        ig._wp = lambda: WPF(Resp(200, {}), ok_site)
+        r1 = x.post("/api/ingressos/701/reenviar", json={"pessoa": 2, "para": "pessoa"})
+        ver("Reenviar ingresso (a esta pessoa): pede ao site só o ingresso 2, à pessoa, SÓ pelo Sender", r1.status_code == 200 and posts[-1] == ("/wp-json/camp/v1/painel/ingressos/701/reenviar", {"so_sender": True, "pessoa": 2, "para": "pessoa"})
+            and r1.json()["mensagem"] == "Ingresso 2 reenviado à pessoa por e-mail", r1.text[:200])
+        n0 = len(posts)
+        r2 = x.post("/api/ingressos/701/reenviar", json={"pessoa": 3, "para": "pessoa"})
+        ver("pessoa sem e-mail: 409 sem chamar o site, diz para reenviar ao comprador", r2.status_code == 409 and "Reenviar ao comprador" in r2.json().get("erro", "") and len(posts) == n0, r2.text[:200])
+        r3 = x.post("/api/ingressos/701/reenviar", json={"pessoa": 3, "para": "comprador"})
+        ver("Reenviar ao comprador (o ingresso de Lia)", r3.status_code == 200 and posts[-1][1] == {"so_sender": True, "pessoa": 3, "para": "comprador"} and "ao comprador" in r3.json()["mensagem"], r3.text[:200])
+        r4 = x.post("/api/ingressos/701/reenviar")
+        ver("Reenviar todos ao comprador: sem pessoa; o site manda um e-mail por ingresso", r4.status_code == 200 and posts[-1][1] == {"so_sender": True} and r4.json()["mensagem"] == "3 ingressos reenviados ao comprador, um por e-mail", r4.text[:200])
+        n0 = len(posts)
+        ver("pessoa que não está no pedido: 404 sem chamar o site", x.post("/api/ingressos/701/reenviar", json={"pessoa": 9}).status_code == 404 and len(posts) == n0)
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(409, {"code": "camp_sender_sem_template", "message": "Falta o template TR23", "data": {"status": 409, "template": "TR23"}}))
+        r5 = x.post("/api/ingressos/701/reenviar", json={"pessoa": 2})
+        ver("sem o template TR23: 409 'não enviado' com o template que falta", r5.status_code == 409 and "falta o template TR23" in r5.json().get("erro", ""), r5.text[:200])
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(409, {"code": "camp_ing_pessoa_sem_email", "message": "sem e-mail", "data": {"status": 409}}))
+        ver("site diz que a pessoa está sem e-mail: 409 com mensagem", (lambda r_: r_.status_code == 409 and "não deixou e-mail" in r_.json()["erro"])(x.post("/api/ingressos/701/reenviar", json={"pessoa": 2})))
+        evs = [(e["tipo"], _j.loads(e["detalhe"])) for e in c.execute("SELECT tipo, detalhe FROM evento WHERE entidade='ingresso' AND codigo='701' ORDER BY id")]
+        ver("histórico: cada reenvio diz qual ingresso e para quem, sem e-mail nem nome", any(t == "ingresso_reenviado" and d.get("pessoa") == 2 and d.get("para") == "pessoa" for t, d in evs)
+            and any(d.get("todos") == 3 for t, d in evs) and not c.execute("SELECT COUNT(*) FROM evento WHERE entidade='ingresso' AND (detalhe LIKE '%maria@%' OR detalhe LIKE '%Maria%')").fetchone()[0], evs[-3:])
+        # LGPD
+        r_ = lgpd.apagar_pessoa_local(c, "MARIA@x.com")
+        mp = c.execute("SELECT nome, email, anonimizado, tipo, codigo FROM ingresso_pessoa WHERE site_id=701 AND n=2").fetchone()
+        ver("LGPD apagar pessoa: a pessoa do ingresso perde nome e e-mail (tipo e código ficam)", r_.get("ingresso_pessoa") == 1 and tuple(mp) == (ig.REMOVIDO, None, 1, "meia", "BBBB0002"), (r_, tuple(mp)))
+        ig.coletar(c, WPF(Resp(200, {"itens": [PX], "turmas": T, "agora": "2026-11-20T15:00:00Z"})))
+        ver("LGPD: a próxima busca no site não traz o nome dela de volta", tuple(c.execute("SELECT nome, email FROM ingresso_pessoa WHERE site_id=701 AND n=2").fetchone()) == (ig.REMOVIDO, None))
+        r_ = lgpd.apagar_pessoa_local(c, "rafa@x.com")
+        ver("LGPD apagar o comprador: a compra e o ingresso dele (mesmo e-mail)", r_.get("ingresso") == 1 and r_.get("ingresso_pessoa") == 1
+            and c.execute("SELECT nome FROM ingresso_pessoa WHERE site_id=701 AND n=1").fetchone()[0] == ig.REMOVIDO and c.execute("SELECT nome FROM ingresso_pessoa WHERE site_id=701 AND n=3").fetchone()[0] == "Lia", r_)
+        ver("LGPD: a pessoa apagada sem e-mail não recebe mais (409 sem chamar o site)", (lambda n0: x.post("/api/ingressos/701/reenviar", json={"pessoa": 2}).status_code == 409 and len(posts) == n0)(len(posts)))
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem nome nem e-mail das pessoas", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Souza", "Lia,", "rafa@x.com")))
+        for l in res: print(l)
     elif modo == "doacoes_acervo_painel":
         # CAMP-DOA-ACERVO 20/11/2026 · Intenções de doação de acervo do site (contrato 1.20; cliente FALSO): busca incremental, site antigo,
         # lista "pedem ação", detalhe, mudar etapa/nota/cobrança pelo site (o site valida), etapas automáticas recusadas, fotos repassadas,
@@ -20810,6 +20916,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ingressos (detalhe): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 42, "Ingressos (detalhe): todas as verificações rodaram")
+
+print("Ingressos por pessoa: lista de presença com uma linha por pessoa, CSV, reenviar à pessoa / ao comprador / todos ao comprador só pelo Sender, LGPD (site falso)")
+rc, out = rodar("ingressos_por_pessoa", f"{tmp}/ingressos_por_pessoa.db")
+if rc != 0: ok(False, f"teste ingressos_por_pessoa não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ingressos (por pessoa): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Ingressos (por pessoa): todas as verificações rodaram")
 
 print("Cobranças avulsas pelo Mercado Pago: criar com link (site falso), extrato, e-mail só pelo Sender, busca marca paga, cancelar, novo link, CSV, papéis e LGPD")
 rc, out = rodar("cobranca_avulsa", f"{tmp}/cobranca_avulsa.db")

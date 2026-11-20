@@ -16,6 +16,10 @@ acompanhar e fazer as contas:
   datas com contas por tipo e situação, lista de presença de cada data/turma (filtros, impressão, CSV), "Reenviar ingresso" (TR23) e
   "Reenviar cobrança" (TR29, link novo do Mercado Pago se o antigo venceu) SÓ pelo Sender, um a um ou em lote; tudo no histórico
   (tabela evento, entidade 'ingresso'). Site antigo: os tipos saem de pessoas/meias/desconto; a cobrança diz "atualize o site".
+- Um ingresso por pessoa (20/11/2026, Rafael: "Nome e e-mail para enviar o ingresso dessa pessoa. E envia todos os ingressos separados para
+  quem comprou também"; contrato 1.24 `ingressos`, OPCIONAL, site 1.33.0, migração 234 `ingresso_pessoa`): a lista de presença tem uma linha
+  POR PESSOA (nome, e-mail, tipo, motivo da meia, código do ingresso, pedido/comprador, pago, Amigo); compra antiga = uma linha "comprador + N".
+  "Reenviar ingresso (a esta pessoa)" e "Reenviar todos ao comprador" (um e-mail por ingresso), SÓ pelo Sender (TR23). LGPD cobre as pessoas.
 """
 from __future__ import annotations
 
@@ -46,6 +50,8 @@ SITUACOES = {"pago": "Pago", "gratuito": "Gratuito (Amigo)", "reservado": "Aguar
 VALEM = ("pago", "gratuito")          # contam nas vagas, nas pessoas e na receita
 CATEGORIAS = {"estudante": "Estudante / Professor", "amigo": "Amigo", "guardiao": "Guardião", "patrono": "Patrono"}
 VERSAO_SITE = "1.31.0"                # plugin do site com o contrato 1.22 (cobrança e reenvio só pelo Sender)
+MOTIVOS = {"estudante": "Estudante", "professor": "Professor(a)", "idoso": "Pessoa com 60 anos ou mais", "pcd": "Pessoa com deficiência (ou acompanhante)",
+           "id_jovem": "Jovem de baixa renda (ID Jovem)", "outro": "Outro direito previsto em lei"}
 TIPOS = {"inteira": "Inteira", "meia": "Meia-entrada", "amigo": "Amigo da CAMP (desconto)", "gratuidade": "Gratuidade (Amigo da CAMP)"}
 PENDENTES = ("reservado", "processando")
 COBRAVEIS = ("reservado", "recusado", "cancelado")     # dá para reenviar a cobrança (o site confere vagas e abre link novo se venceu)
@@ -160,11 +166,54 @@ def _gravar(con, x: dict) -> int:
     if velho and velho["anonimizado"]:
         vals.update(nome=REMOVIDO, email=None, telefone=None)
     cols = list(vals)
+    if isinstance(x.get("ingressos"), list):                   # contrato 1.24 (OPCIONAL): um ingresso por pessoa
+        _gravar_pessoas(con, sid, x["ingressos"])
     if velho:
         con.execute(f"UPDATE ingresso SET {', '.join(c + '=?' for c in cols)}, visto_em=datetime('now') WHERE site_id=?", (*vals.values(), sid))
         return 0
     con.execute(f"INSERT INTO ingresso (site_id, {', '.join(cols)}) VALUES (?, {', '.join('?' * len(cols))})", (sid, *vals.values()))
     return 1
+
+
+def _gravar_pessoas(con, sid: int, lista_: list) -> None:
+    """Troca as pessoas da compra pelas do site. Pessoa anonimizada aqui (LGPD) não recebe nome nem e-mail de volta."""
+    try:
+        anon = {r[0] for r in con.execute("SELECT n FROM ingresso_pessoa WHERE site_id=? AND anonimizado=1", (sid,))}
+    except Exception:  # noqa: BLE001  (banco sem a migração 234)
+        return
+    con.execute("DELETE FROM ingresso_pessoa WHERE site_id=?", (sid,))
+    for p in lista_:
+        if not isinstance(p, dict) or _int(p.get("n")) <= 0:
+            continue
+        n = _int(p.get("n"))
+        tipo = str(p.get("tipo") or "")
+        mot = str(p.get("motivo") or "")
+        envs = [{"em": _utc(e.get("em")), "para": _txt(e.get("para"), 12), "via": _txt(e.get("via"), 12)} for e in (p.get("envios") or [])[-10:] if isinstance(e, dict)]
+        an = n in anon
+        con.execute("INSERT OR REPLACE INTO ingresso_pessoa (site_id, n, nome, email, tipo, motivo, codigo, link, entrou, entrou_em, eh_comprador, envios, anonimizado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (sid, n, REMOVIDO if an else (_txt(p.get("nome"), 200) or None), None if an else (_txt(p.get("email"), 200).lower() or None),
+                     tipo if tipo in TIPOS else "inteira", mot if tipo == "meia" and mot in MOTIVOS else None, _txt(p.get("codigo"), 12),
+                     _txt(p.get("link"), 300), 1 if p.get("entrou") else 0, _utc(p.get("entrou_em")) or None, 1 if p.get("eh_comprador") else 0,
+                     json.dumps(envs, ensure_ascii=False) if envs else None, 1 if an else 0))
+
+
+def pessoas_das_compras(con, sids) -> dict:
+    """{site_id: [pessoa…]} (contrato 1.24). Banco sem a migração 234 ou compra antiga: sem chave."""
+    ids = sorted({int(i) for i in sids})
+    out: dict = {}
+    if not ids:
+        return out
+    try:
+        for i in range(0, len(ids), 400):
+            parte = ids[i:i + 400]
+            for r in con.execute(f"SELECT * FROM ingresso_pessoa WHERE site_id IN ({','.join('?' * len(parte))}) ORDER BY site_id, n", parte):
+                out.setdefault(r["site_id"], []).append({"n": r["n"], "nome": r["nome"] or "", "email": r["email"] or "", "tipo": r["tipo"], "tipo_nome": TIPOS.get(r["tipo"], r["tipo"]),
+                                                         "motivo": r["motivo"] or "", "motivo_nome": MOTIVOS.get(r["motivo"] or "", ""), "codigo": r["codigo"] or "", "link": r["link"] or "",
+                                                         "entrou": bool(r["entrou"]), "eh_comprador": bool(r["eh_comprador"]), "anonimizado": bool(r["anonimizado"]),
+                                                         "envios": json.loads(r["envios"]) if r["envios"] else []})
+    except Exception:  # noqa: BLE001
+        return {}
+    return out
 
 
 def coletar(con=None, wp=None) -> dict:
@@ -366,9 +415,16 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
     vagas_padrao = _int(cfg.get("vagas")) or 15
     turmas: dict[str, dict] = {}
     for t in con.execute("SELECT * FROM ingresso_turma WHERE data LIKE ? ORDER BY data, hora", (mes + "-%",)):
-        turmas[t["chave"]] = {"chave": t["chave"], "data": t["data"], "hora": t["hora"], "vagas": t["vagas"], "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos()}
+        turmas[t["chave"]] = {"chave": t["chave"], "data": t["data"], "hora": t["hora"], "vagas": t["vagas"], "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0}
+    por_meio: dict[str, float] = {}
+    for x in (y for y in todas_l if y["situacao"] in PENDENTES):     # tela: pendentes de cada turma (reserva em pagamento)
+        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0})
+        t["pendentes"] += x["pessoas"]
     for x in (y for y in todas_l if y["situacao"] in VALEM):
-        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos()})
+        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos(), "pagos": 0, "gratuitos": 0, "pendentes": 0})
+        t["pagos" if x["situacao"] == "pago" else "gratuitos"] += x["pessoas"]
+        if x["total"] and x["meio"]:
+            por_meio[x["meio"]] = round(por_meio.get(x["meio"], 0.0) + float(x["total"]), 2)
         t["compras"] += 1
         t["pessoas"] += x["pessoas"]
         t["entraram"] += x["entraram"]
@@ -388,6 +444,7 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
         for k, v in t["por_tipo"].items():
             tot["por_tipo"][k] = tot["por_tipo"].get(k, 0) + v
     tot["amigos_cadastro"] = sum(1 for x in todas_l if x["situacao"] in VALEM and x["amigo_cadastro"] and x["amigo_cadastro"]["ativo"])
+    tot["por_meio"] = por_meio                                   # recebido por meio (Pix, cartão…), para a tela
     return {"mes": mes, "itens": itens, "turmas": ts, "totais": tot, "situacoes": SITUACOES, "tipos": TIPOS, "config": cfg}
 
 
@@ -439,9 +496,30 @@ def datas(con, mes: str = "") -> dict:
 FILTROS_SITUACAO = {"valem": "Pagos e gratuitos", "pendentes": "Aguardando pagamento", "todas": "Todas as situações"}
 
 
+def _linhas_pessoa(x: dict, pessoas: list) -> list[dict]:
+    """Linhas da lista de presença de uma compra: uma POR PESSOA (contrato 1.24) ou, compra antiga, uma só "comprador + N"."""
+    base = {"id": x["id"], "data": x["data"], "hora": x["hora"], "ref": x["ref"], "pedido_codigo": x["codigo"], "comprador": x["nome"], "comprador_email": x["email"],
+            "telefone": x["telefone"], "situacao": x["situacao"], "situacao_nome": x["situacao_nome"], "pago": x["situacao"] in VALEM, "total": x["total"], "meio": x["meio"],
+            "link_pagamento_ate": x["link_pagamento_ate"], "pode_cobrar": x["pode_cobrar"], "pode_reenviar": x["pode_reenviar"], "amigo_txt": _amigo_txt(x),
+            "amigo_compra": x["amigo"], "amigo_cadastro": x["amigo_cadastro"]}
+    if not pessoas:
+        return [dict(base, legado=True, n=0, nome=x["nome"], email=x["email"], pessoas=x["pessoas"], tipo="", tipo_nome=x["tipos_txt"], motivo="", motivo_nome="",
+                     codigo=x["codigo"], entrou=x["entraram"] >= x["pessoas"] > 0, entraram=x["entraram"], eh_comprador=True, por_tipo=x["por_tipo"],
+                     eh_amigo=x["eh_amigo"], pode_reenviar_pessoa=False)]
+    out = []
+    for p in pessoas:
+        out.append(dict(base, legado=False, n=p["n"], nome=p["nome"], email=p["email"], pessoas=1, tipo=p["tipo"], tipo_nome=p["tipo_nome"], motivo=p["motivo"],
+                        motivo_nome=p["motivo_nome"], codigo=p["codigo"], link=p["link"], entrou=p["entrou"], entraram=1 if p["entrou"] else 0, eh_comprador=p["eh_comprador"],
+                        por_tipo={p["tipo"]: 1}, eh_amigo=p["tipo"] in ("amigo", "gratuidade") or (p["eh_comprador"] and bool(x["amigo_cadastro"] and x["amigo_cadastro"]["ativo"])),
+                        envios=p["envios"], anonimizado=p["anonimizado"],
+                        pode_reenviar_pessoa=x["situacao"] in VALEM and bool(p["email"]) and not p["eh_comprador"]))
+    return out
+
+
 def lista(con, turma: str, situacao: str = "todas", tipo: str = "", amigo: str = "", q: str = "") -> dict:
-    """Lista de presença de uma data (AAAA-MM-DD) ou turma (AAAA-MM-DD|HH:MM): cada compra com o comprador, tipos, Amigo, pagamento,
-    pedido e entrada. situacao: todas (padrão) | valem | pendentes | uma das SITUACOES; tipo: inteira|meia|amigo|gratuidade; amigo=1."""
+    """Lista de presença de uma data (AAAA-MM-DD) ou turma (AAAA-MM-DD|HH:MM): uma linha por PESSOA (`linhas`; compra antiga = "comprador + N")
+    e as compras (`itens`) com o comprador, tipos, Amigo, pagamento, pedido e entrada. situacao: todas (padrão) | valem | pendentes | uma das
+    SITUACOES; tipo: inteira|meia|amigo|gratuidade; amigo=1; q procura no nome/e-mail da pessoa e do comprador, telefone, pedido e códigos."""
     turma = (turma or "").strip()
     m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})(?:\|(\d{2}:\d{2}))?", turma)
     if not m:
@@ -457,22 +535,28 @@ def lista(con, turma: str, situacao: str = "todas", tipo: str = "", amigo: str =
         itens = [x for x in itens if x["situacao"] in PENDENTES]
     elif situacao in SITUACOES:
         itens = [x for x in itens if x["situacao"] == situacao]
+    pes = pessoas_das_compras(con, [x["id"] for x in itens])
+    linhas = [l for x in itens for l in _linhas_pessoa(x, pes.get(x["id"], []))]
     if tipo in TIPOS:
-        itens = [x for x in itens if x["por_tipo"].get(tipo)]
+        linhas = [l for l in linhas if l["por_tipo"].get(tipo)]
     if amigo in ("1", "sim"):
-        itens = [x for x in itens if x["eh_amigo"]]
+        linhas = [l for l in linhas if l["eh_amigo"]]
     if q:
         qq = q.strip().lower()
-        itens = [x for x in itens if qq in f"{x['nome']} {x['email']} {x['telefone']} {x['ref']} {x['codigo']}".lower()]
+        linhas = [l for l in linhas if qq in f"{l['nome']} {l['email']} {l['comprador']} {l['comprador_email']} {l['telefone']} {l['ref']} {l['codigo']} {l['pedido_codigo']}".lower()]
+    ficam = {l["id"] for l in linhas}
+    itens = [x for x in itens if x["id"] in ficam]
+    for x in itens:
+        x["ingressos"] = pes.get(x["id"], [])
     tot = {"compras": len(itens), "pessoas": sum(x["pessoas"] for x in itens), "entraram": sum(x["entraram"] for x in itens),
-           "amigos": sum(1 for x in itens if x["eh_amigo"]), "por_tipo": _zerar_tipos(),
+           "amigos": sum(1 for x in itens if x["eh_amigo"]), "por_tipo": _zerar_tipos(), "linhas": len(linhas),
            "pagos": sum(x["pessoas"] for x in itens if x["situacao"] == "pago"), "gratuitos": sum(x["pessoas"] for x in itens if x["situacao"] == "gratuito"),
            "pendentes": sum(x["pessoas"] for x in itens if x["situacao"] in PENDENTES)}
     for x in itens:
         for k, v in x["por_tipo"].items():
             tot["por_tipo"][k] = tot["por_tipo"].get(k, 0) + v
     horas = sorted({x["hora"] for x in todos} | {t["hora"] for t in con.execute("SELECT hora FROM ingresso_turma WHERE data=?", (data,))})
-    return {"turma": turma, "data": data, "hora": hora or "", "horas": horas, "itens": itens, "totais": tot, "tipos": TIPOS,
+    return {"turma": turma, "data": data, "hora": hora or "", "horas": horas, "itens": itens, "linhas": linhas, "totais": tot, "tipos": TIPOS, "motivos": MOTIVOS,
             "situacoes": {**FILTROS_SITUACAO, **SITUACOES}}
 
 
@@ -484,6 +568,17 @@ def anonimizar_por_email(con, email: str) -> int:
     try:
         return con.execute("UPDATE ingresso SET nome=?, email=NULL, telefone=NULL, anonimizado=1 WHERE lower(email)=?", (REMOVIDO, em)).rowcount
     except Exception:  # noqa: BLE001  (banco sem a migração 230)
+        return 0
+
+
+def anonimizar_pessoas_por_email(con, email: str) -> int:
+    """LGPD (apagar pessoa): a pessoa de um ingresso (contrato 1.24) perde nome e e-mail; ficam tipo, código e entrada. Não faz commit."""
+    em = (email or "").strip().lower()
+    if not em:
+        return 0
+    try:
+        return con.execute("UPDATE ingresso_pessoa SET nome=?, email=NULL, anonimizado=1 WHERE lower(email)=?", (REMOVIDO, em)).rowcount
+    except Exception:  # noqa: BLE001  (banco sem a migração 234)
         return 0
 
 
@@ -575,12 +670,14 @@ def lista_csv(turma: str, situacao: str = "todas", tipo: str = "", amigo: str = 
         d = lista(con, turma, situacao, tipo, amigo, q)
     finally:
         con.close()
+    # uma linha por pessoa (contrato 1.24); compra antiga: uma linha com o comprador e as N pessoas
     cab = ["Data", "Hora", "Nome", "E-mail", "Telefone", "Pessoas", "Inteiras", "Meias-entradas", "Amigo com desconto", "Gratuidades", "Amigo da CAMP",
-           "Situação", "Código do ingresso", "Pedido (referência)", "Entraram", "Presença"]
+           "Situação", "Código do ingresso", "Pedido (referência)", "Entraram", "Motivo da meia-entrada", "Comprador", "Presença"]
     nome = "lista-presenca-joao-marino-" + d["data"] + (("-" + d["hora"].replace(":", "h")) if d["hora"] else "") + ".csv"
-    return _csv(cab, [("/".join(reversed(x["data"].split("-"))), x["hora"], x["nome"], x["email"], x["telefone"], x["pessoas"],
-                       x["por_tipo"].get("inteira", 0), x["por_tipo"].get("meia", 0), x["por_tipo"].get("amigo", 0), x["por_tipo"].get("gratuidade", 0),
-                       _amigo_txt(x), x["situacao_nome"], x["codigo"], x["ref"], x["entraram"], "") for x in d["itens"]], nome)
+    return _csv(cab, [("/".join(reversed(l["data"].split("-"))), l["hora"], l["nome"], l["email"], l["telefone"], l["pessoas"],
+                       l["por_tipo"].get("inteira", 0), l["por_tipo"].get("meia", 0), l["por_tipo"].get("amigo", 0), l["por_tipo"].get("gratuidade", 0),
+                       l["amigo_txt"] if (l["legado"] or l["eh_comprador"]) else ("Amigo (desconto)" if l["eh_amigo"] else ""), l["situacao_nome"], l["codigo"], l["ref"], l["entraram"],
+                       l["motivo_nome"], "" if l["legado"] else l["comprador"], "") for l in d["linhas"]], nome)
 
 
 @router.post("/sincronizar")
@@ -611,18 +708,31 @@ def _json(r) -> dict:
 ACOES = {"ingresso": ("reenviar", TPL_INGRESSO, "ingresso_reenviado"), "cobranca": ("cobranca", TPL_COBRANCA, "cobranca_reenviada")}
 
 
-def _executar(con, sid: int, acao: str, ator: str) -> tuple[int, str, dict]:
-    """Pede ao site um reenvio. Devolve (status HTTP para a tela, mensagem, extra). Grava o histórico. Nunca levanta (fora 404/409 da checagem)."""
+def _executar(con, sid: int, acao: str, ator: str, pessoa: int = 0, para: str = "") -> tuple[int, str, dict]:
+    """Pede ao site um reenvio. Devolve (status HTTP para a tela, mensagem, extra). Grava o histórico. Nunca levanta (fora 404/409 da checagem).
+    Contrato 1.24: pessoa = n reenvia SÓ o ingresso daquela pessoa (para "pessoa", padrão, ou "comprador"); sem pessoa numa compra por pessoa,
+    o site manda todos os ingressos a quem comprou, um por e-mail."""
     caminho, tpl, ev_ok = ACOES[acao]
     r = con.execute("SELECT site_id, email, situacao FROM ingresso WHERE site_id=?", (sid,)).fetchone()
     if not r:
         return 404, "Ingresso não encontrado no painel", {}
-    if not r["email"]:
+    para = para if para in ("pessoa", "comprador") else "pessoa"
+    corpo = {"so_sender": True} if acao == "ingresso" else {}
+    pes = pessoas_das_compras(con, [sid]).get(sid, []) if acao == "ingresso" else []
+    if pessoa:
+        p = next((x for x in pes if x["n"] == int(pessoa)), None)
+        if acao != "ingresso" or not p:
+            return 404, "Esta pessoa não está neste pedido no painel", {}
+        if para == "pessoa" and not p["email"]:
+            return 409, ("não enviado: os dados desta pessoa foram apagados a pedido dela" if p["anonimizado"] else
+                         "não enviado: esta pessoa não deixou e-mail. Use Reenviar ao comprador"), {}
+        corpo.update(pessoa=int(pessoa), para=para)
+    if (not pessoa or para == "comprador") and not r["email"]:
         return 409, "não enviado: este pedido está sem e-mail (dados apagados a pedido da pessoa)", {}
     if not _tem_site(con):
         return 409, "Falta a senha do site (Application Password) em Configurações", {}
     try:
-        resp = _wp().h.post(f"{ROTA}/{int(sid)}/{caminho}", json={"so_sender": True} if acao == "ingresso" else {})
+        resp = _wp().h.post(f"{ROTA}/{int(sid)}/{caminho}", json=corpo)
     except Exception as e:  # noqa: BLE001
         registrar(logging.WARNING, "ingressos_reenvio", "Reenvio de ingresso: o site não respondeu", site_id=int(sid), erro=type(e).__name__)
         return 502, "não enviado: o site não respondeu. Tente de novo em instantes", {}
@@ -643,7 +753,11 @@ def _executar(con, sid: int, acao: str, ator: str) -> tuple[int, str, dict]:
     elif cod == "camp_sender_falhou":
         msg = "não enviado: o Sender recusou o e-mail. Tente de novo mais tarde"
     elif cod == "camp_ing_email":
-        msg = "não enviado: o e-mail do comprador é inválido"
+        msg = "não enviado: o e-mail de destino é inválido"
+    elif cod == "camp_ing_pessoa_sem_email":
+        msg = "não enviado: esta pessoa não deixou e-mail no site. Use Reenviar ao comprador"
+    elif cod == "camp_ing_pessoa_nao_existe":
+        msg, st = "Esta pessoa não existe mais neste pedido no site", 404
     elif cod in ("camp_ing_pago",):
         msg = "não enviado: esta compra já está paga, não há o que cobrar. Use Reenviar ingresso"
     elif cod == "camp_ing_em_analise":
@@ -660,25 +774,33 @@ def _executar(con, sid: int, acao: str, ator: str) -> tuple[int, str, dict]:
         msg = "Este ingresso não está pago: não há o que reenviar" if acao == "ingresso" else "não enviado: o site recusou a cobrança"
     elif st >= 400:
         msg, st = f"não enviado: o site respondeu {st}", 502
+    quem = {"pessoa": int(pessoa), "para": para} if pessoa else ({"para": "comprador", "todos": len(pes)} if pes else {})
     if msg:
-        _evento(con, sid, "reenvio_falhou", ator, {"acao": acao, "template": tpl[0], "erro": msg[:300]})
+        _evento(con, sid, "reenvio_falhou", ator, {"acao": acao, "template": tpl[0], **quem, "erro": msg[:300]})
         con.commit()
         return (st if st in (404, 409) else 502), msg, {}
     if isinstance(d.get("registro"), dict):
         _gravar(con, d["registro"])
     extra = {"novo_link": bool(d.get("novo_link")), "canal": "sender" if d.get("enviado") else "site"}
-    _evento(con, sid, ev_ok, ator, {"acao": acao, "template": tpl[0], **extra, "sender_id": str((d.get("sender") or {}).get("id") or "")})
+    if "enviados" in d:
+        extra["enviados"] = _int(d.get("enviados"))
+    _evento(con, sid, ev_ok, ator, {"acao": acao, "template": tpl[0], **extra, **quem, "sender_id": str((d.get("sender") or {}).get("id") or "")})
     con.commit()
-    registrar(logging.INFO, "ingressos_reenvio", "Reenvio de ingresso pelo painel", site_id=int(sid), acao=acao)
+    registrar(logging.INFO, "ingressos_reenvio", "Reenvio de ingresso pelo painel", site_id=int(sid), acao=acao, pessoa=int(pessoa))
+    if acao == "ingresso" and pessoa:
+        return 200, f"Ingresso {int(pessoa)} reenviado " + ("à pessoa" if para == "pessoa" else "ao comprador") + " por e-mail", extra
+    if acao == "ingresso" and pes:
+        n_ = extra.get("enviados") or len(pes)
+        return 200, f"{n_} ingressos reenviados ao comprador, um por e-mail" if n_ != 1 else "1 ingresso reenviado ao comprador", extra
     if acao == "ingresso":
         return 200, "Ingresso reenviado por e-mail", extra
     return 200, "Cobrança reenviada por e-mail" + (" com um link novo do Mercado Pago" if extra["novo_link"] else ""), extra
 
 
-def _uma(site_id: int, acao: str, u: dict) -> dict:
+def _uma(site_id: int, acao: str, u: dict, pessoa: int = 0, para: str = "") -> dict:
     con = connect()
     try:
-        st, msg, extra = _executar(con, int(site_id), acao, u["email"])
+        st, msg, extra = _executar(con, int(site_id), acao, u["email"], pessoa, para)
         if st != 200:
             raise HTTPException(st, msg)
         return {"ok": bool(extra.get("ok", True)), "mensagem": msg, **extra}
@@ -790,6 +912,7 @@ def detalhe(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         x = _linha(r, amigos_por_email(con, [r["email"]]))
         x["historico_site"] = json.loads(r["historico"]) if "historico" in _cols(r) and r["historico"] else []
         x["aviso_equipe"] = json.loads(r["aviso_equipe"]) if "aviso_equipe" in _cols(r) and r["aviso_equipe"] else []
+        x["ingressos"] = pessoas_das_compras(con, [site_id]).get(int(site_id), [])   # contrato 1.24: um por pessoa ([] = compra antiga)
         x["eventos"] = [{"quando": e["quando"], "tipo": e["tipo"], "ator": e["ator"], "detalhe": json.loads(e["detalhe"] or "{}")}
                         for e in con.execute("SELECT quando, tipo, ator, detalhe FROM evento WHERE entidade='ingresso' AND codigo=? ORDER BY id DESC LIMIT 50", (str(int(site_id)),))]
         return x
@@ -797,10 +920,17 @@ def detalhe(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
+class Reenvio(BaseModel):
+    pessoa: int = 0          # contrato 1.24: só o ingresso desta pessoa (n)
+    para: str = "pessoa"     # pessoa | comprador
+
+
 @router.post("/{site_id}/reenviar")
-def reenviar(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Pede ao site para mandar de novo o ingresso (com o QR) ao comprador, SÓ pelo Sender (TR23). Sem template: não sai e a tela diz o que falta."""
-    return _uma(site_id, "ingresso", u)
+def reenviar(site_id: int, corpo: Reenvio | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Pede ao site para mandar de novo o ingresso (com o QR), SÓ pelo Sender (TR23). Sem template: não sai e a tela diz o que falta.
+    Sem corpo: ao comprador (compra por pessoa: todos, um por e-mail). {pessoa: n, para: pessoa|comprador}: só o ingresso daquela pessoa."""
+    c = corpo or Reenvio()
+    return _uma(site_id, "ingresso", u, max(0, c.pessoa), c.para)
 
 
 @router.post("/{site_id}/cobranca")

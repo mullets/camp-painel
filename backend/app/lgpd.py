@@ -141,12 +141,13 @@ def apagar_pessoa_local(con, email: str) -> dict:
     n_em = emails_enviados.apagar_por_email(con, em)
     from . import ingressos   # CAMP-INGRESSOS 19/11/2026: compradores de ingresso (anonimiza; os valores ficam para a receita)
     n_ing = ingressos.anonimizar_por_email(con, em)
+    n_ing_p = ingressos.anonimizar_pessoas_por_email(con, em)   # 20/11/2026: as pessoas de cada ingresso (contrato 1.24)
     from . import cobrancas   # CAMP-COB 19/11/2026: quem recebeu cobrança avulsa (anonimiza; valores e referência do Mercado Pago ficam)
     n_cob = cobrancas.anonimizar_por_email(con, em)
     from . import doacoes_acervo   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo (anonimiza; etapa e valores ficam)
     n_doa = doacoes_acervo.anonimizar_por_email(con, em)
     con.commit()
-    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "cobranca_avulsa": n_cob, "doacao_acervo": n_doa}
+    return {"uso_download": uso, "solicitacao": n_ped, "eventos": n_ev, "erro_relatado_por": erros, "inscricao": n_ins, "amigo": n_am, "lista_email": n_emkt, "email_enviado": n_em, "ingresso": n_ing, "ingresso_pessoa": n_ing_p, "cobranca_avulsa": n_cob, "doacao_acervo": n_doa}
 
 
 def chamar_site(con, email: str) -> dict:
