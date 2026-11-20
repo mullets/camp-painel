@@ -40,6 +40,7 @@ MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails env
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
+MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
 
 
@@ -18116,6 +18117,98 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@x.com", "Ana Lima", "beto@x.com", "Beto Reis")))
         for l in res: print(l)
+    elif modo == "doacoes_acervo_painel":
+        # CAMP-DOA-ACERVO 20/11/2026 · Intenções de doação de acervo do site (contrato 1.20; cliente FALSO): busca incremental, site antigo,
+        # lista "pedem ação", detalhe, mudar etapa/nota/cobrança pelo site (o site valida), etapas automáticas recusadas, fotos repassadas,
+        # papéis e LGPD.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da, lgpd
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cf = c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='doacoes_acervo.coleta_min'").fetchone()
+        ver("migração 232: busca a cada 10 min, não sensível; tabelas doacao_acervo e estado", tuple(cf) == ("10", 0) and c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('doacao_acervo','doacao_acervo_estado')").fetchone()[0] == 2, tuple(cf) if cf else None)
+        class Resp:
+            def __init__(s, code, dados=None, content=b"", headers=None): s.status_code, s._d, s.content, s.headers = code, dados, content, headers or {}
+            def json(s): return s._d
+        gets, posts = [], []
+        class H:
+            def __init__(s, r, rp=None): s.r, s.rp = r, rp
+            def get(s, path, params=None): gets.append((path, dict(params or {}))); return s.r
+            def post(s, path, json=None): posts.append((path, json)); return s.rp
+        class WPF:
+            def __init__(s, r, rp=None): s.h = H(r, rp)
+        A = {"id": 601, "protocolo": "CAMP-2026-000601", "recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Maria Herdeira", "email": "Maria@X.com", "telefone": "11 98888-7777",
+             "relacao": "familia", "relacao_nome": "Sou familiar ou herdeiro(a)", "autor": "Escritório Fulano", "descricao": "40 rolos e 6 caixas", "tipos": ["desenhos"], "tipos_nomes": ["Plantas, desenhos e croquis"],
+             "quantidade_estimativa_faixa": "51_500", "faixa_nome": "De 51 a 500 itens", "local": "Campinas/SP", "fotos_link": "", "sem_fotos": False, "fotos": [{"n": 0, "tipo": "image/jpeg", "tamanho": 2000}, {"n": 1, "tipo": "image/png", "tamanho": 2000}],
+             "direitos": "herdeiro", "marketing": False, "etapa": "em_analise", "etapa_nome": "Em análise", "valor": 0, "assinado_em": "", "notas": [], "cobranca": None, "amigo": None, "pode_cobrar": False,
+             "historico": ["2026-11-20 12:00 UTC · intenção recebida"], "anonimizado": False, "alterado_em": "2026-11-20T12:00:00+00:00"}
+        B = dict(A, id=602, protocolo="CAMP-2026-000602", nome="João Guarda", email="joao@x.com", autor="Arquiteto Beltrano", etapa="paga", etapa_nome="Contribuição paga · Amigo por 12 meses", valor=1500,
+                 assinado_em="2026-11-18", fotos=[], amigo={"id": 77, "validade": "2027-11-20", "validade_br": "20/11/2027"}, cobranca={"id": 9, "situacao": "paga", "situacao_nome": "Paga", "valor": 1500, "link": "", "external_reference": "CAMP-COB-9", "pago_em": "2026-11-20T10:00:00-03:00"})
+        o = da.coletar(c, WPF(Resp(200, {"itens": [A, B], "etapas": da.ETAPAS, "faixas": da.FAIXAS, "minimo": 1000, "formulario": "https://camp.arq.br/intencao-de-doacao-de-acervo/", "agora": "2026-11-20T14:00:00Z"})))
+        ver("busca no site: 2 intenções, sem desde na 1ª vez", o["lidos"] == 2 and o["novos"] == 2 and not o["erro"] and gets[0] == ("/wp-json/camp/v1/painel/doacoes-acervo", {}), (o, gets))
+        a1 = c.execute("SELECT * FROM doacao_acervo WHERE site_id=601").fetchone()
+        ver("gravado: e-mail em minúsculas, UTC, faixa, etapa; fotos só contadas (não guardadas)", (a1["email"], a1["recebida_em"], a1["faixa"], a1["etapa"]) == ("maria@x.com", "2026-11-20 12:00:00", "51_500", "em_analise")
+            and _j.loads(a1["dados"])["n_fotos"] == 2 and "fotos" not in _j.loads(a1["dados"]), dict(a1))
+        gets.clear()
+        o2 = da.coletar(c, WPF(Resp(200, {"itens": [dict(A, etapa="visita", etapa_nome="Visita agendada")], "agora": "2026-11-20T15:00:00Z"})))
+        ver("busca incremental: manda desde (agora − 2 min), atualiza sem duplicar", gets[0][1].get("desde", "").startswith("2026-11-20T13:58") and o2["novos"] == 0 and c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == 2
+            and c.execute("SELECT etapa FROM doacao_acervo WHERE site_id=601").fetchone()[0] == "visita", (gets, o2))
+        ver("site antigo (404): sem erro, marca 'sem rota'", da.coletar(c, WPF(Resp(404, {})))["sem_rota"] and da._estado(c, "sem_rota") == "1")
+        ver("site com erro: guarda o erro, sem levantar", da.coletar(c, WPF(Resp(500, {})))["erro"] and "500" in da._estado(c, "ultimo_erro"))
+        ver("lista 'pedem ação' tem a em visita e não a paga; todas tem as duas", [x["id"] for x in da.filtrar(c, "abertas")] == [601] and len(da.filtrar(c, "")) == 2 and [x["id"] for x in da.filtrar(c, "", "beltrano")] == [602])
+        n_ = da.numeros(c)
+        ver("números: 1 pede ação, 1 paga (R$ 1.500)", (n_["abertas"], n_["pagas"], n_["pagas_valor"]) == (1, 1, 1500.0), n_)
+        # ---- telas e papéis
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x0 = TestClient(app, raise_server_exceptions=False)
+        ver("sem login: 401", x0.get("/api/doacoes-acervo").status_code == 401)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não vê, não muda, não vê foto (403)", all(r_.status_code == 403 for r_ in (op.get("/api/doacoes-acervo"), op.get("/api/doacoes-acervo/601"), op.post("/api/doacoes-acervo/601", json={"nota": "x"}), op.get("/api/doacoes-acervo/601/foto/0"))))
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        r_ = x.get("/api/doacoes-acervo?etapa=abertas")
+        ver("tela: itens, etapas, automáticas, números e estado da busca", r_.status_code == 200 and [i["id"] for i in r_.json()["itens"]] == [601] and r_.json()["etapas_auto"] == ["cobranca", "paga"] and "site" in r_.json() and r_.json()["numeros"]["abertas"] == 1, r_.text[:200])
+        d_ = x.get("/api/doacoes-acervo/601").json()
+        ver("detalhe: respostas, faixa e fotos (só o número de cada)", d_["descricao"] == "40 rolos e 6 caixas" and d_["faixa_nome"] == "De 51 a 500 itens" and d_["fotos"] == [{"n": 0}, {"n": 1}], d_)
+        ver("intenção que não existe: 404", x.get("/api/doacoes-acervo/999").status_code == 404)
+        ver("mudar sem a senha do site: 409", x.post("/api/doacoes-acervo/601", json={"nota": "x"}).status_code == 409)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        np_ = len(posts)
+        ver("etapa automática (paga) recusada sem chamar o site", x.post("/api/doacoes-acervo/601", json={"etapa": "paga"}).status_code == 400 and len(posts) == np_)
+        ver("ação desconhecida e nada para mudar: 400", x.post("/api/doacoes-acervo/601", json={"acao": "apagar"}).status_code == 400 and x.post("/api/doacoes-acervo/601", json={}).status_code == 400 and len(posts) == np_)
+        da._wp = lambda: WPF(Resp(200, {}), Resp(200, {"ok": True, "registro": dict(A, etapa="aprovada", etapa_nome="Aprovada", notas=[{"em": "20/11/2026 15:00", "quem": "painel (Adm)", "texto": "material ótimo"}])}))
+        rr = x.post("/api/doacoes-acervo/601", json={"etapa": "aprovada", "nota": "material ótimo", "caixas": 6, "valor": ""})
+        ver("mudar: vai ao site (etapa, nota, número como texto, autor do painel; vazio não vai) e grava o que voltou", rr.status_code == 200 and posts[-1][0] == "/wp-json/camp/v1/painel/doacoes-acervo/601"
+            and posts[-1][1] == {"etapa": "aprovada", "nota": "material ótimo", "caixas": "6", "autor_painel": "Adm"} and rr.json()["etapa"] == "aprovada" and rr.json()["notas"][0]["texto"] == "material ótimo", (posts[-1], rr.text[:200]))
+        da._wp = lambda: WPF(Resp(200, {}), Resp(409, {"code": "camp_doa_sem_contrato", "message": "Só depois do contrato assinado pelas partes."}))
+        rc_ = x.post("/api/doacoes-acervo/601", json={"acao": "gerar_cobranca"})
+        ver("gerar cobrança antes do contrato: 409 com a explicação do site", rc_.status_code == 409 and "contrato assinado" in (rc_.json().get("erro") or rc_.json().get("detail") or ""), rc_.text[:200])
+        da._wp = lambda: WPF(Resp(200, {}), Resp(404, {"code": "rest_no_route"}))
+        ver("site sem a rota: 409 dizendo para atualizar o site", x.post("/api/doacoes-acervo/601", json={"nota": "y"}).status_code == 409)
+        COB = {"id": 10, "situacao": "aberta", "situacao_nome": "Aberta", "valor": 1500, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=p", "external_reference": "CAMP-COB-10", "pago_em": ""}
+        da._wp = lambda: WPF(Resp(200, {}), Resp(200, {"ok": True, "registro": dict(A, etapa="cobranca", etapa_nome="Cobrança enviada (Mercado Pago)", valor=1500, assinado_em="2026-11-19", cobranca=COB)}))
+        rg = x.post("/api/doacoes-acervo/601", json={"etapa": "contrato_assinado", "assinado_em": "2026-11-19", "valor": "1500", "acao": "gerar_cobranca"})
+        ver("gerar cobrança com contrato: etapa cobrança, link e referência CAMP-COB guardados", rg.status_code == 200 and rg.json()["etapa"] == "cobranca" and rg.json()["cobranca"]["external_reference"] == "CAMP-COB-10" and posts[-1][1]["acao"] == "gerar_cobranca", rg.text[:200])
+        da._wp = lambda: WPF(Resp(200, None, b"\xff\xd8\xffJPEG", {"content-type": "image/jpeg"}))
+        f_ = x.get("/api/doacoes-acervo/601/foto/0")
+        ver("foto: repassada do site, sem cache", f_.status_code == 200 and f_.headers["content-type"] == "image/jpeg" and f_.content.startswith(b"\xff\xd8") and "no-store" in f_.headers.get("cache-control", "") and gets[-1][0] == "/wp-json/camp/v1/painel/doacoes-acervo/601/foto/0", dict(f_.headers))
+        da._wp = lambda: WPF(Resp(200, None, b"<html>", {"content-type": "text/html"}))
+        ver("foto: resposta que não é imagem vira 404; número fora de 0–4: 404", x.get("/api/doacoes-acervo/601/foto/1").status_code == 404 and x.get("/api/doacoes-acervo/601/foto/9").status_code == 404)
+        # ---- LGPD
+        out_ = lgpd.apagar_pessoa_local(c, "maria@x.com")
+        a2 = c.execute("SELECT nome, email, telefone, autor, etapa, valor, dados FROM doacao_acervo WHERE site_id=601").fetchone()
+        ver("LGPD: apagar pessoa anonimiza a intenção; etapa e valor ficam", out_.get("doacao_acervo") == 1 and (a2["nome"], a2["email"], a2["telefone"], a2["autor"], a2["etapa"], a2["valor"]) == ("(removido)", None, None, None, "cobranca", 1500.0)
+            and _j.loads(a2["dados"])["descricao"] == "" and _j.loads(a2["dados"])["n_fotos"] == 0, (out_, tuple(a2)[:6]))
+        da.coletar(c, WPF(Resp(200, {"itens": [A], "agora": "2026-11-20T17:00:00Z"})))
+        ver("LGPD: a busca seguinte não traz os dados de volta", tuple(c.execute("SELECT nome, email FROM doacao_acervo WHERE site_id=601").fetchone()) == ("(removido)", None) and "Escritório Fulano" not in c.execute("SELECT dados FROM doacao_acervo WHERE site_id=601").fetchone()[0])
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "joao@x.com", "João Guarda")))
+        for l in res: print(l)
     elif modo == "cobranca_avulsa":
         # CAMP-COB 19/11/2026 · Cobranças avulsas pelo Mercado Pago (contrato 1.19; site FALSO, nenhuma chamada real): criar → link do site,
         # o que aparece no extrato (título, external_reference, statement_descriptor), e-mail só pelo Sender (template faltando = não enviado),
@@ -20415,6 +20508,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Cobranças avulsas: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 30, "Cobranças avulsas: todas as verificações rodaram")
+
+print("Intenções de doação de acervo: busca no site (site falso), pedem ação, mudar etapa/nota/cobrança pelo site, etapas automáticas, fotos repassadas, papéis e LGPD")
+rc, out = rodar("doacoes_acervo_painel", f"{tmp}/doacoes_acervo_painel.db")
+if rc != 0: ok(False, f"teste doacoes_acervo_painel não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações de acervo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Doações de acervo: todas as verificações rodaram")
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
