@@ -34,6 +34,12 @@ e-mail (TR27), se a caixa estiver marcada.
 - Se a doação já está em cobrança quando todos assinam, a etapa não volta: o painel só guarda a data da assinatura.
 - Se alguém recusar na Autentique, a doação mostra "Recusado na Autentique" e a etapa não muda: fale com a pessoa.
 
+## Onde fica a assinatura
+
+Não precisa marcar nada no PDF. A Autentique acrescenta uma **página de assinaturas** no fim (quem assinou, data e hora, código de
+verificação) e o painel pede o **rodapé de autenticação em todas as páginas** (`footer: BOTTOM`), para que nenhuma página do meio
+possa ser trocada.
+
 ## Quem recebe e-mail da Autentique
 
 - **Quem doa não recebe e-mail da Autentique**: entra no documento só pelo nome, e o link vai no e-mail da CAMP (TR30). Assim a pessoa

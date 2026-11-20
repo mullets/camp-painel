@@ -4,7 +4,7 @@ acervo, o contrato é criado sozinho na Autentique (plano grátis: 10 documentos
 
 - API GraphQL v2: POST https://api.autentique.com.br/v2/graphql, `Authorization: Bearer <token>` (docs.autentique.com.br/api).
   · Testar conexão: `query { me { name email subscription { documents credits } } }` (só lê).
-  · Criar: mutation `createDocument(document, signers, file)` em multipart (graphql-multipart-request-spec: `operations`, `map`, `file`).
+  · Criar: mutation `createDocument(document, signers, file)` (document.footer = BOTTOM: rodapé em todas as páginas) em multipart (graphql-multipart-request-spec: `operations`, `map`, `file`).
     Quem doa entra por NOME (não por e-mail): assim a Autentique NÃO manda e-mail a ela e devolve `link { short_link }`, que vai no NOSSO
     e-mail TR30 (rota enviar-contrato de sempre do site). Quem assina pela CAMP (opcional, `autentique.assinante_camp`) entra por e-mail:
     esse recebe o link da própria Autentique.
@@ -159,7 +159,9 @@ def criar_documento(tk: str, nome_doc: str, pdf: bytes, nome_arquivo: str, nome_
     signers = [{"name": nome_doador[:120] or "Quem doa o acervo", "action": "SIGN"}]
     if email_camp:
         signers.append({"email": email_camp, "action": "SIGN"})
-    ops = {"query": M_CRIAR, "variables": {"document": {"name": nome_doc[:180]}, "signers": signers, "file": None}}
+    # Rodapé de autenticação em todas as páginas (Rafael 20/11/2026: "rodapé em todas"): ninguém troca uma página do meio.
+    doc_in = {"name": nome_doc[:180], "footer": "BOTTOM"}
+    ops = {"query": M_CRIAR, "variables": {"document": doc_in, "signers": signers, "file": None}}
     arq = re.sub(r"[^\w.\- ]", "_", nome_arquivo or "contrato.pdf")[:100] or "contrato.pdf"
     if not arq.lower().endswith(".pdf"):
         arq += ".pdf"
