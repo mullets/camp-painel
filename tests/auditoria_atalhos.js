@@ -13,7 +13,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) pr
   const anunciado={}; d.querySelectorAll('#nav button[data-v]').forEach(b=>{const k=b.querySelector('kbd'); anunciado[b.dataset.v]=k?k.textContent.trim():null});
   // 2) o que cada tecla FAZ (dígitos e letras, maiúscula ou minúscula)
   const faz={};
-  const TECLAS=['0','z',...Object.values(JSON.parse(w.eval('JSON.stringify(NAV_ATALHOS)'))).map(x=>x.toLowerCase())];   // as teclas vêm da TABELA (um atalho novo nunca escapa da auditoria); '0' e 'z' são controles que não fazem nada
+  const TECLAS=['0','y',...Object.values(JSON.parse(w.eval('JSON.stringify(NAV_ATALHOS)'))).map(x=>x.toLowerCase())];   // as teclas vêm da TABELA (um atalho novo nunca escapa da auditoria); '0' e 'y' são controles que não fazem nada (CAMP-EMAIL 20/11: o Z virou Ingressos; o Y, que era Quem aceita e-mails, ficou livre)
   for(const k of TECLAS){ w.location.hash='#config'; await sleep(250); tecla(k); await sleep(450); const r=rota(); faz[k]=(r==='config'&&!(k==='c'||k==='9'))?null:r; if(k==='c')faz[k]=r; }
   const ordem=[...d.querySelectorAll('#nav button[data-v]')].map(b=>b.dataset.v);
   for(const [view,k] of Object.entries(anunciado)){
@@ -30,7 +30,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const chk=(ok,m)=>{ if(!ok) pr
   { const ANTES={painel:'1',projetos:'2',fundos:'3',solicitacoes:'4',estacoes:'5',decisoes:'D',filas:'N',erros:'P',arquitetos:'I',localizacao:'W',estante:'X',etiquetas:'T',emprestimos:'O',relatorios:'L',uso:'U',auditoria:'A',qualidade:'Q',config:'C',caminho:'M',glossario:'G'};   // UX-28: as teclas de antes da reorganização
     Object.entries(ANTES).forEach(([v,k])=>chk(anunciado[v]===k,`UX-28: a tecla de "${v}" era ${k}, agora é ${anunciado[v]}`)); }
   chk(w.eval('JSON.stringify(NAV_ATALHOS)')===JSON.stringify(Object.fromEntries(ordem.map(v=>[v,anunciado[v]]))),'o menu mostra teclas diferentes da tabela NAV_ATALHOS');
-  chk(!faz['0']&&!faz['z'],'teclas não anunciadas (0, z) não deveriam abrir nada: '+faz['0']+' / '+faz['z']);
+  chk(!faz['0']&&!faz['y'],'teclas não anunciadas (0, y) não deveriam abrir nada: '+faz['0']+' / '+faz['y']);
   // minúscula/maiúscula e sem tecla acidental com Ctrl/⌘
   w.location.hash='#painel'; await sleep(250); tecla('P',{shiftKey:true}); await sleep(450); chk(rota()==='erros','P maiúsculo deveria abrir Problemas (item do "Mais", com o "Mais" fechado): '+rota());
   w.location.hash='#painel'; await sleep(250); tecla('3',{metaKey:true}); await sleep(450); chk(rota()==='painel','⌘3 NÃO pode abrir Fundos (é atalho do navegador): '+rota());

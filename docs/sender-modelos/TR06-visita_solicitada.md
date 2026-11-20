@@ -45,7 +45,7 @@ Referência: {{protocolo}}
 2. Use o layout do **TR08 · Inscrição recebida** como base (é o que está funcionando): logo da CAMP no topo, texto, botão laranja, rodapé com endereço e "responda este e-mail se tiver dúvida".
 3. Escreva as variáveis **exatamente** como na tabela, com chaves duplas: `{{nome}}`. Letras minúsculas, sem espaço, sem acento.
 4. Salve e copie o **ID** do e-mail (o código curto que o Sender mostra, como `egx4Z6`).
-5. No **painel da CAMP**: Administração → **E-mails do site** → cole o ID na linha **TR06** e clique em **Salvar**.
+5. No **painel da CAMP**: menu **E-mails** → aba **Modelos do Sender** → cole o ID na linha **TR06** e clique em **Salvar**.
 6. Teste: na mesma linha, **Enviar teste** (vai para o seu e-mail, com valores de exemplo) antes de usar com o público.
 
 ## Regras gerais

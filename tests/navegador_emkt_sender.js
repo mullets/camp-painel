@@ -23,12 +23,12 @@ con.commit()`, DB]);
   pg.on('pageerror', e => erros.push('pageerror: ' + e.message));
   await pg.goto(BASE + '/');
   await pg.evaluate(() => fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'rafael@camp.arq.br', senha: 'senha-bem-longa-123' }) }));
-  await pg.goto(BASE + '/#emkt'); await pg.reload();
+  await pg.goto(BASE + '/#emails/aceite'); await pg.reload();   // CAMP-EMAIL 20/11: agora é a aba Quem aceita e-mails da tela E-mails
   await pg.waitForSelector('#ek-lista .ek-ck', { timeout: 10000 }).catch(() => {});
   const n = async () => (await pg.$$('#ek-lista .ek-ck')).length;
-  chk(!!(await pg.$('nav button[data-v="emkt"]')), 'item "Quem aceita e-mails da CAMP" no menu');
-  const h1 = (await pg.textContent('#v-emkt h1').catch(() => '')) || '';
-  chk(/^Quem aceita e-mails da CAMP/.test(h1.trim()), 'título da tela', h1);
+  chk(!(await pg.$('nav button[data-v="emkt"]')) && !!(await pg.$('nav button[data-v="emails"]')), 'sem item próprio no menu: fica em E-mails');
+  const h1 = (await pg.textContent('#v-emails h1').catch(() => '')) || '';
+  chk(h1.trim() === 'E-mails' && await pg.$eval('#em-tab-aceite', b => b.getAttribute('aria-selected')) === 'true' && await pg.$eval('#em-p-aceite', p => !p.hidden), 'tela E-mails, aba Quem aceita e-mails aberta', h1);
   const k = (await pg.textContent('#ek-kpis').catch(() => '')) || '';
   chk(/4\s*aceitam e-mails/.test(k) && /1\s*no Sender/.test(k) && /2\s*ainda não entraram/.test(k) && /1\s*cancelaram/.test(k), 'números do topo por situação', k.slice(0, 200));
   chk(await n() === 4, '4 pessoas na lista');
