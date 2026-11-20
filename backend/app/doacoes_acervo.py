@@ -32,6 +32,11 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
   ficam em `dados` (sem coluna nova). O detalhe mostra (só admin) e a equipe corrige documento e endereço: vão ao site no POST …/{id} de
   sempre, validados aqui do mesmo jeito (dígitos verificadores, CEP de 8 dígitos, UF). O texto para o contrato ganha "CPF: …"/"CNPJ: …",
   "Endereço: …" e as perguntas novas. LGPD apaga documento e endereço. Site antigo: sem os campos, nada muda (o texto só omite as linhas).
+- CAMP-DOA-IMPORTAR (contrato 1.27, site 1.36.0; Rafael: "pode registrar todos, mas não enviaremos email, e a raquel já tá aí"). "Importar
+  ficha (CSV do Google Forms)": o CSV da antiga "Ficha de Doação de Acervo" é lido AQUI (BOM, campos com várias linhas, carimbo de
+  Brasília), SIMULADO por padrão (linha a linha: vai criar / vai completar (campos vazios) / já igual, com os avisos) e, em "Importar",
+  cada linha vai ao site em POST …/importar (cria a intenção, origem ficha_google, NENHUM e-mail; ou completa só o vazio da que já existe,
+  achada pelo e-mail). Idempotente pela chave (e-mail + carimbo). O CSV não fica guardado; nada de nome/CPF no log técnico.
 """
 from __future__ import annotations
 
@@ -173,6 +178,7 @@ def _gravar(con, x: dict) -> int:
         for k in PESSOAIS_DADOS:
             d[k] = ""
         d["endereco"] = None
+        d["ficha"] = []                                  # CAMP-DOA-IMPORTAR: as respostas da ficha têm CPF, endereço, nome
         d["notas"] = []
         d["n_fotos"] = 0
     vals = {
@@ -380,6 +386,8 @@ def endereco_txt(e) -> str:
     partes = [x for x in (rua, g("bairro"), cid) if x]
     if not partes and g("texto"):
         partes = [g("texto")]
+        if len(_digitos(cep)) == 8 and re.search(_digitos(cep)[:5] + r"-?" + _digitos(cep)[5:], g("texto")):
+            cep = ""                                     # o texto livre já traz o CEP
     return " — ".join(x for x in (*partes, cep) if x)
 
 
@@ -446,6 +454,7 @@ def anonimizar_por_email(con, email: str) -> int:
         for k in PESSOAIS_DADOS:
             d[k] = ""
         d["endereco"] = None
+        d["ficha"] = []
         d["notas"], d["n_fotos"] = [], 0
         con.execute("UPDATE doacao_acervo SET nome=?, email=NULL, telefone=NULL, autor=NULL, local=NULL, dados=?, anonimizado=1 WHERE site_id=?",
                     (REMOVIDO, json.dumps(d, ensure_ascii=False), sid))
@@ -533,6 +542,264 @@ def sincronizar(u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
+# ---------------------------------------------------------------- CAMP-DOA-IMPORTAR: ficha antiga do Google Forms (CSV)
+FICHA_CABECALHO = ("Carimbo de data/hora", "Nome completo", "Nome do arquiteto(a) ou titular do acervo", "CPF ou CNPJ", "Endereço completo", "Telefone", "E-mail",
+                   "Descrição geral do acervo", "Quantidade aproximada de itens", "Período temporal do acervo (ex: 1960–1990)", "Estado de conservação",
+                   "Formato dos itens", "Situação dos direitos autorais", "Propriedade do Acervo", "Transferência de Uso Institucional",
+                   "Autorização Ampla de Uso Institucional, Editorial e Comercial", "Irrevogabilidade da Doação", "Responsabilidade por Danos Preexistentes",
+                   "Valor da contribuição")
+FICHA_TERMOS = FICHA_CABECALHO[13:18]
+FICHA_TITULO = "FICHA DE DOAÇÃO (Google Forms)"
+MAX_CSV = 2 * 1024 * 1024
+VERSAO_IMPORTAR_SITE = "1.36.0"
+ETAPAS_IMPORTAR = [k for k in ETAPAS if k not in ETAPAS_AUTO]
+
+
+def _norm(t) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", " ", t).strip()
+
+
+def _codigo_de(texto: str, lista: dict, extra: dict | None = None) -> str:
+    """Texto livre → código da lista do site quando o texto É o rótulo (ou o código); senão ""."""
+    n = _norm(texto)
+    if not n:
+        return ""
+    for k, v in lista.items():
+        if n in (_norm(v), _norm(k)):
+            return k
+    return (extra or {}).get(n, "")
+
+
+def _valor_ficha(v) -> float | None:
+    """"2.000,00" · "R$ 1.000,00" · "1000" · "1.500" → número; texto ("Já combinado", "Material") → None."""
+    t = str(v or "").strip()
+    if not t or not re.fullmatch(r"(?:R\$\s*)?[\d.,\s]+", t, re.I):
+        return None
+    n = _valor_br(re.sub(r"(?<=\d)\.(?=\d{3}(?:\D|$))", "", t) if "," not in t else t)
+    return n if n and n > 0 else None
+
+
+def _carimbo(v) -> str:
+    """"27/07/2026 14:03:42" (Brasília) → ISO com fuso; inválido → ""."""
+    m = re.fullmatch(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*", str(v or ""))
+    if not m:
+        return ""
+    try:
+        d = datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)), int(m.group(4) or 0), int(m.group(5) or 0), int(m.group(6) or 0), tzinfo=ZoneInfo("America/Sao_Paulo"))
+    except ValueError:
+        return ""
+    return d.isoformat()
+
+
+def ler_ficha_csv(texto: str) -> list[dict]:
+    """O CSV da ficha (BOM, campos entre aspas com várias linhas) → [{linha, <coluna>: valor}]. Cabeçalho diferente → ValueError."""
+    import csv
+    import io
+    t = (texto or "").lstrip("﻿")
+    rd = csv.reader(io.StringIO(t, newline=""))
+    try:
+        cab = [c.strip() for c in next(rd)]
+    except StopIteration:
+        raise ValueError("O arquivo está vazio.") from None
+    faltam = [c for c in FICHA_CABECALHO if c not in cab]
+    if faltam:
+        raise ValueError("Este CSV não é a Ficha de Doação de Acervo do Google Forms: faltam as colunas " + ", ".join(f"“{c}”" for c in faltam[:4]) + (" e outras" if len(faltam) > 4 else "") + ".")
+    out = []
+    for i, row in enumerate(rd, start=2):
+        if not any(str(c).strip() for c in row):
+            continue
+        d = {c: (row[j].strip() if j < len(row) else "") for j, c in enumerate(cab)}
+        d["linha"] = i
+        out.append(d)
+    return out
+
+
+def _chave_ficha(email: str, carimbo_bruto: str) -> str:
+    return hashlib.sha256(f"{(email or '').strip().lower()}|{(carimbo_bruto or '').strip()}".encode()).hexdigest()[:32]
+
+
+def _mapear_linha(L: dict) -> tuple[dict, list[str]]:
+    """Uma linha da ficha → o que vai ao site (campos do contrato 1.27) + avisos. Não inventa: o que não casa fica como texto."""
+    av = []
+    email = L.get("E-mail", "").strip().lower()
+    if not email:
+        av.append("sem e-mail: não dá para achar a pessoa no painel; vai como intenção nova")
+    elif not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        av.append("e-mail ilegível: vai como intenção nova, sem e-mail")
+        email = ""
+    car = _carimbo(L.get("Carimbo de data/hora"))
+    if not car:
+        av.append("data do carimbo não lida (esperado dd/mm/aaaa hh:mm:ss)")
+    doc = _digitos(L.get("CPF ou CNPJ"))
+    if L.get("CPF ou CNPJ", "").strip():
+        if len(doc) == 11 and not cpf_ok(doc):
+            av.append("CPF com dígitos verificadores errados: guardado como veio, confira")
+        elif len(doc) == 14 and not cnpj_ok(doc):
+            av.append("CNPJ com dígitos verificadores errados: guardado como veio, confira")
+        elif len(doc) not in (11, 14):
+            av.append("CPF ou CNPJ não lido (nem 11 nem 14 números): fica só na ficha")
+            doc = ""
+    end_t = L.get("Endereço completo", "").strip()
+    m = re.search(r"(?<!\d)(\d{5})-?(\d{3})(?!\d)", end_t)
+    cep = (m.group(1) + m.group(2)) if m else ""
+    if end_t and not cep:
+        av.append("CEP não encontrado no endereço (o endereço fica em texto)")
+    corpo = {"nome": _txt(L.get("Nome completo"), 150), "email": email, "telefone": _txt(L.get("Telefone"), 40),
+             "autor": _txt(L.get("Nome do arquiteto(a) ou titular do acervo"), 200), "descricao": str(L.get("Descrição geral do acervo") or "").strip()[:4000],
+             "periodo": _txt(L.get("Período temporal do acervo (ex: 1960–1990)"), 80), "formato": _txt(L.get("Formato dos itens"), 300),
+             "documento": doc, "endereco": {k: v for k, v in (("texto", end_t[:500]), ("cep", cep)) if v}}
+    for col, cod_k, txt_k, lista, extra, rot in (
+            ("Quantidade aproximada de itens", "quantidade_estimativa_faixa", "quantidade_texto", FAIXAS, {}, "Quantidade"),
+            ("Estado de conservação", "conservacao", "conservacao_texto", CONSERVACAO, {"bom": "boa", "bem conservado": "boa", "otimo": "boa", "danificado": "danificados", "nao sei": "nao_sei"}, "Conservação"),
+            ("Situação dos direitos autorais", "direitos", "direitos_texto", DIREITOS, {"nao sei": "nao_sei"}, "Direitos autorais")):
+        v = str(L.get(col) or "").strip()
+        if not v:
+            continue
+        k = _codigo_de(v, lista, extra)
+        if k:
+            corpo[cod_k] = k
+        else:
+            corpo[txt_k] = v[:300]
+            av.append(f"{rot}: “{v[:60]}” não é uma das opções do site; guardado como texto")
+    vb = str(L.get("Valor da contribuição") or "").strip()
+    vn = _valor_ficha(vb)
+    if vn is not None:
+        corpo["valor_proposto"] = vn
+    elif vb:
+        av.append(f"Valor da contribuição “{vb[:40]}” não é um número: fica só na ficha (valor não preenchido)")
+    corpo["ficha"] = [{"pergunta": c, "resposta": str(L.get(c) or "").strip()} for c in FICHA_CABECALHO[1:] if str(L.get(c) or "").strip()]
+    corpo["recebida_em"] = car
+    corpo["chave"] = _chave_ficha(email, L.get("Carimbo de data/hora", ""))
+    return {k: v for k, v in corpo.items() if v not in ("", None, [], {})}, av
+
+
+def _vazio(v) -> bool:
+    return v in (None, "", [], {}) or (isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0)
+
+
+def _plano_linha(con, L: dict) -> dict:
+    corpo, av = _mapear_linha(L)
+    out = {"linha": L["linha"], "nome": corpo.get("nome", ""), "email": corpo.get("email", ""), "carimbo": L.get("Carimbo de data/hora", ""), "avisos": av,
+           "etapa": "em_analise", "corpo": corpo, "completar": [], "diferencas": []}
+    ja = con.execute("SELECT 1 FROM evento WHERE entidade='doacao_acervo' AND tipo='ficha_importada' AND detalhe LIKE ?", (f'%"chave": "{corpo["chave"]}"%',)).fetchone()
+    r = con.execute("SELECT * FROM doacao_acervo WHERE lower(email)=? AND anonimizado=0 ORDER BY site_id LIMIT 1", (corpo["email"],)).fetchone() if corpo.get("email") else None
+    if not r:
+        out["acao"] = "igual" if ja else "criar"
+        out["ja_importado"] = bool(ja)
+        return out
+    d = json.loads(r["dados"] or "{}")
+    out["site_id"], out["protocolo"], out["ja_importado"] = r["site_id"], r["protocolo"] or "", bool(ja)
+    atual = dict(d, valor=r["valor"])
+    rot = {"telefone": "Telefone", "documento": "CPF ou CNPJ", "autor": "Arquiteto ou titular", "descricao": "Descrição", "periodo": "Período", "formato": "Formato dos itens",
+           "quantidade_estimativa_faixa": "Quantidade", "quantidade_texto": "Quantidade", "conservacao": "Conservação", "conservacao_texto": "Conservação",
+           "direitos": "Direitos autorais", "direitos_texto": "Direitos autorais", "valor_proposto": "Valor proposto", "ficha": "Respostas da ficha", "nome": "Nome"}
+    for k, v in corpo.items():
+        if k in rot:
+            if _vazio(atual.get(k)):
+                out["completar"].append(rot[k])
+            elif k not in ("ficha",) and str(atual.get(k)).strip().lower() != str(v).strip().lower() and not (k == "documento" and _digitos(atual.get(k)) == v):
+                out["diferencas"].append(rot[k])
+    e0 = d.get("endereco") if isinstance(d.get("endereco"), dict) else {}
+    e1 = corpo.get("endereco") or {}
+    if e1.get("texto") and not e0.get("texto") and not e0.get("logradouro"):
+        out["completar"].append("Endereço")
+    elif e1.get("texto") and (e0.get("texto") or e0.get("logradouro")) and _norm(e1["texto"]) != _norm(e0.get("texto") or endereco_txt(e0)):
+        out["diferencas"].append("Endereço")
+    if e1.get("cep") and not e0.get("cep"):
+        out["completar"].append("CEP")
+    elif e1.get("cep") and e0.get("cep") != e1["cep"]:
+        out["diferencas"].append("CEP")
+    if corpo.get("valor_proposto") and _vazio(r["valor"]):
+        out["completar"].append("Contribuição (valor)")
+    out["completar"] = list(dict.fromkeys(out["completar"]))
+    out["diferencas"] = list(dict.fromkeys(out["diferencas"]))
+    for x_ in out["diferencas"]:
+        av.append(f"{x_}: a ficha diz outra coisa; o painel mantém o que já está (confira)")
+    out["acao"] = "igual" if (ja or not out["completar"]) else "completar"
+    return out
+
+
+ACAO_NOME = {"criar": "vai criar", "completar": "vai completar (campos vazios)", "igual": "já igual"}
+
+
+class ImportarFicha(BaseModel):
+    csv: str
+    aplicar: bool = False
+    etapas: dict[str, str] | None = None    # {"<linha>": etapa} só para as que vão ser criadas (padrão em_analise)
+
+
+@router.post("/importar")
+def importar_ficha(b: ImportarFicha, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """SIMULA por padrão (nada muda): linha a linha, o que faria e os avisos. Com aplicar: cada linha vai ao site (cria sem e-mail ou completa
+    o vazio), o registro devolvido fica aqui e a linha não é importada de novo (chave e-mail + carimbo)."""
+    if len(b.csv.encode("utf-8", "ignore")) > MAX_CSV:
+        raise HTTPException(400, "O arquivo passa de 2 MB: confira se é o CSV da ficha.")
+    try:
+        linhas = ler_ficha_csv(b.csv)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, "Não deu para ler o CSV: salve de novo como CSV (UTF-8) no Google Planilhas.") from e
+    con = connect()
+    try:
+        plano = [_plano_linha(con, L) for L in linhas]
+        etapas = {str(k): str(v) for k, v in (b.etapas or {}).items()}
+        for p in plano:
+            e_ = etapas.get(str(p["linha"]))
+            if e_ and p["acao"] == "criar":
+                if e_ not in ETAPAS_IMPORTAR:
+                    raise HTTPException(400, f"Linha {p['linha']}: etapa desconhecida")
+                p["etapa"] = e_
+        feitos = 0
+        if b.aplicar:
+            if not _tem_site(con):
+                raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+            autor = _txt((u or {}).get("nome") or (u or {}).get("email") or "painel", 60)
+            w = _wp()
+            for p in plano:
+                if p["acao"] == "igual":
+                    p["resultado"] = "nada a fazer"
+                    continue
+                corpo = dict(p["corpo"], autor_painel=autor, etapa=p["etapa"])
+                if p["acao"] == "completar":
+                    corpo["completar_id"] = int(p["site_id"])
+                    corpo.pop("etapa", None)
+                try:
+                    resp = w.h.post(f"{ROTA}/importar", json=corpo)
+                except Exception as e:  # noqa: BLE001
+                    registrar(logging.WARNING, "doacoes_acervo_importar", "Importar ficha: o site não respondeu", linha=p["linha"], erro=type(e).__name__)
+                    p["resultado"] = "erro: o site não respondeu; tente de novo (as linhas já importadas não se repetem)"
+                    continue
+                d = _json(resp)
+                if resp.status_code == 404 and str(d.get("code") or "") in ("", "rest_no_route"):
+                    raise HTTPException(409, f"O site ainda não importa a ficha: avise quem cuida do site (plugin da CAMP {VERSAO_IMPORTAR_SITE} ou mais novo). "
+                                             + (f"{feitos} linha(s) já foram importadas." if feitos else "Nada foi importado."))
+                if resp.status_code >= 400 or not isinstance(d.get("registro"), dict):
+                    p["resultado"] = "erro: " + (_txt(d.get("message"), 200) or f"o site respondeu {resp.status_code}")
+                    continue
+                _gravar(con, d["registro"])
+                sid = int(d["registro"].get("id") or 0)
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'ficha_importada',?,?)",
+                            (str(sid), (u or {}).get("email") or "painel", json.dumps({"chave": p["corpo"]["chave"], "acao": p["acao"], "linha": p["linha"],
+                                                                                         "completados": d.get("completados") or []}, ensure_ascii=False)))
+                con.commit()
+                feitos += 1
+                p["site_id"] = sid
+                p["protocolo"] = _txt(d["registro"].get("protocolo"), 40)
+                p["resultado"] = "já estava importada" if d.get("ja_importado") else ("criada (nenhum e-mail enviado)" if p["acao"] == "criar" else "completada")
+            registrar(logging.INFO, "doacoes_acervo_importar", "Ficha do Google Forms importada", linhas=len(plano), feitas=feitos)
+        for p in plano:
+            p["acao_nome"] = ACAO_NOME[p["acao"]]
+            p.pop("corpo", None)
+        res = {k: sum(1 for p in plano if p["acao"] == k) for k in ACAO_NOME}
+        return {"simulado": not b.aplicar, "aplicado": bool(b.aplicar), "feitos": feitos, "linhas": plano, "resumo": res,
+                "avisos": sum(len(p["avisos"]) for p in plano), "etapas": {k: ETAPAS[k] for k in ETAPAS_IMPORTAR}}
+    finally:
+        con.close()
+
+
 @router.get("/{sid}")
 def detalhe(sid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
@@ -596,6 +863,7 @@ CONHECIDAS = {k for k, _ in PERGUNTAS} | {k for k, _ in PESSOAIS_EXTRA} | {
     "etapa", "etapa_nome", "aprovada_em", "contrato_link", "assinado_em", "contrato_enviado_em", "contrato_prazo", "avisos", "valor", "minimo", "caixas",
     "rolos", "volume", "quantidade_catalogada", "fundo", "notas", "cobranca", "amigo", "pode_cobrar", "historico", "anonimizado", "alterado_em",
     "documento_tipo", "endereco", "valor_combinar",
+    "origem", "ficha", "quantidade_texto", "conservacao_texto", "direitos_texto", "formato", "importado_em",   # CAMP-DOA-IMPORTAR: vão na seção da ficha
 }
 
 
@@ -713,6 +981,16 @@ def texto_contrato(con, sid: int, notas: bool = False) -> str:
     if form:
         form[-1] = form[-1].rstrip("\n")
     out += _bloco("FORMULÁRIO (pergunta e resposta)", form)
+    # 3b. CAMP-DOA-IMPORTAR: a ficha antiga (Google Forms), pergunta → resposta, com a data do carimbo
+    ficha = [q for q in (d.get("ficha") or []) if isinstance(q, dict) and str(q.get("pergunta") or "").strip()]
+    if ficha and not anon:
+        fl = [um("Enviada em", _data_br(r["recebida_em"] or d.get("recebida_em"), hora=True)) + "\n"]
+        fl += [str(q["pergunta"]).strip() + "\n" + "\n".join("  " + l for l in str(q.get("resposta") or "").splitlines() if l.strip()) + "\n"
+               for q in ficha if str(q.get("resposta") or "").strip()]
+        fl[-1] = fl[-1].rstrip("\n")
+        out += _bloco(FICHA_TITULO, fl)
+    elif ficha and anon:
+        out += _bloco(FICHA_TITULO, [f"Respostas: {TEXTO_LGPD}"])
     # 4. dados combinados (equipe)
     cob = d.get("cobranca") if isinstance(d.get("cobranca"), dict) else None
     au = _aut_info(con, sid)

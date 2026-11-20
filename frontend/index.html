@@ -2411,7 +2411,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
   </section>
   <section class="content" id="v-doacoes">
     <div class="hdr"><div><h1>Doações de acervo</h1><p class="sub">Intenções de doação de acervo enviadas pelo formulário do site (Intenção de doação de acervo). Aqui a equipe acompanha as etapas: análise, visita, aprovação, contrato, cobrança da contribuição (só depois do contrato assinado pelas partes) e recebimento. Com a contribuição paga, a pessoa vira Amiga da CAMP por 12 meses, sem renovação automática. Tem dados pessoais: só admin e master veem.</p></div>
-      <div class="act"><button type="button" class="btn" id="doa-sinc">Sincronizar agora</button><a class="btn" id="doa-form" href="https://camp.arq.br/intencao-de-doacao-de-acervo/" target="_blank" rel="noopener">Ver o formulário no site</a></div></div>
+      <div class="act"><button type="button" class="btn" id="doa-sinc">Sincronizar agora</button><button type="button" class="btn" id="doa-importar">Importar ficha (CSV do Google Forms)</button><a class="btn" id="doa-form" href="https://camp.arq.br/intencao-de-doacao-de-acervo/" target="_blank" rel="noopener">Ver o formulário no site</a></div></div>
     <p class="help" id="doa-busca" aria-live="polite"></p>
     <div class="hoje-kpis" id="doa-kpis"></div>
     <div class="panel"><div class="filterbar"><input id="doa-q" type="search" placeholder="nome, e-mail, arquiteto ou escritório, protocolo, cidade" aria-label="Buscar"><select id="doa-etapa" class="btn" aria-label="Etapa"></select><span class="help" id="doa-cnt"></span></div>
@@ -9029,6 +9029,29 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(a==='cobrar'){const r=await confirmar({titulo:'Gerar cobrança no Mercado Pago',alvo:(box.querySelector('.tag')||{}).textContent||'',texto:'O site abre o pagamento da contribuição (Pix ou cartão) e manda o link por e-mail (TR27), se o modelo do Sender estiver configurado. Confirme que o contrato já foi enviado para assinatura.',botao:'Gerar cobrança',cancelar:'Voltar',botaoOcupado:'Abrindo…',acao:()=>API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(Object.assign({},corpo,{acao:'gerar_cobranca'}))})});if(r&&r.resultado){doaDrawer(r.resultado);toast('Cobrança aberta: o link do Mercado Pago está pronto'+(r.resultado.email_cobranca?'. '+r.resultado.email_cobranca.mensagem:''));carregarDoacoes()}return}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('#doa-lista tr[data-doa-abrir]')){e.preventDefault();doaAbrir(e.target.dataset.doaAbrir)}});
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa-sel')doaAvisoBloco()});
+/* CAMP-DOA-IMPORTAR (contrato 1.27; Rafael: "pode registrar todos, mas não enviaremos email, e a raquel já tá aí"): o CSV da antiga Ficha de
+   Doação de Acervo. Escolher o arquivo SIMULA (nada muda); "Importar" aplica: cria no site (nenhum e-mail) ou completa só o vazio de quem já
+   está (pelo e-mail). Dados da pessoa só em texto (escHtml); a etapa de cada linha vai em data-linha (número da linha). */
+const DOA_IMP={csv:'',r:null};
+function doaImportarAbrir(){DOA_IMP.csv='';DOA_IMP.r=null;openDrawer('Importar ficha (CSV do Google Forms)','',`<div class="cfg doa-imp">
+  <p class="help">A antiga “Ficha de Doação de Acervo”, baixada do Google Planilhas como CSV. Primeiro o painel <b>simula</b>: mostra o que faria em cada linha e não muda nada. <b>Nenhum e-mail é enviado</b>, nem na importação.</p>
+  <label class="field">Arquivo CSV<input type="file" id="doa-imp-arq" accept=".csv,text/csv"></label>
+  <div id="doa-imp-res" aria-live="polite"></div></div>`)}
+function doaImportarMostrar(r){const box=document.getElementById('doa-imp-res');if(!box)return;DOA_IMP.r=r;const et=r.etapas||{},rs=r.resumo||{};
+  const linhas=(r.linhas||[]).map(p=>{const sel=p.acao==='criar'&&!r.aplicado?`<select class="doa-imp-etapa" data-linha="${+p.linha}" aria-label="Etapa da linha ${+p.linha}">${Object.entries(et).map(([k,l])=>`<option value="${escHtml(k)}"${k===p.etapa?' selected':''}>${escHtml(l)}</option>`).join('')}</select>`:escHtml(p.protocolo||'');
+    const tag=p.acao==='criar'?'g':(p.acao==='completar'?'a':'');
+    return `<div class="panel cob-previa"><p><b>Linha ${+p.linha}</b> · ${escHtml(p.nome||'—')} · <span class="mono">${escHtml(p.email||'sem e-mail')}</span>${p.carimbo?` · <small>${escHtml(p.carimbo)}</small>`:''}</p>
+    <p><span class="tag ${tag}">${escHtml(p.acao_nome)}</span>${(p.completar||[]).length?` <small>preenche: ${escHtml(p.completar.join(', '))}</small>`:''}${p.resultado?` <small><b>${escHtml(p.resultado)}</b></small>`:''}</p>
+    ${p.acao==='criar'&&!r.aplicado?`<label class="field">Etapa${sel}</label>`:''}${(p.avisos||[]).length?`<p><small><b>Avisos</b></small></p><ul class="doa-imp-av">${p.avisos.map(a=>`<li><small>${escHtml(a)}</small></li>`).join('')}</ul>`:''}</div>`}).join('');
+  box.innerHTML=`<p><b>${r.aplicado?'Importado':'Simulação'}</b> · ${qtd(rs.criar||0,'vai criar','vão criar')} · ${qtd(rs.completar||0,'vai completar','vão completar')} · ${qtd(rs.igual||0,'já igual','já iguais')} · ${qtd(r.avisos||0,'aviso','avisos')}</p>
+  ${linhas||'<p class="help">Nenhuma linha.</p>'}
+  ${r.aplicado?'':((rs.criar||0)+(rs.completar||0)?'<div class="act"><button type="button" class="btn pri" id="doa-imp-aplicar" data-trabalhando="Importando…">Importar</button></div><p class="help">Linhas novas entram no site na etapa escolhida; quem já está no painel (mesmo e-mail) só ganha o que estava vazio. Importar de novo não duplica.</p>':'<p class="help">Nada a importar: todas as linhas já estão no painel.</p>')}`}
+async function doaImportar(aplicar){const etapas={};document.querySelectorAll('.doa-imp-etapa').forEach(s=>{etapas[s.dataset.linha]=s.value});
+  try{const r=await API('/api/doacoes-acervo/importar',{method:'POST',body:JSON.stringify({csv:DOA_IMP.csv,aplicar:!!aplicar,etapas})});doaImportarMostrar(r);if(aplicar){toast(`Importado: ${qtd(r.feitos||0,'linha','linhas')}. Nenhum e-mail foi enviado.`);carregarDoacoes()}}catch(err){const box=document.getElementById('doa-imp-res');if(box)box.textContent=err.message;toast(err.message)}}
+document.addEventListener('click',e=>{const t=e.target;if(!t.closest)return;if(t.closest('#doa-importar')){doaImportarAbrir();return}if(t.closest('#doa-imp-aplicar')){doaImportar(true)}});
+document.addEventListener('change',e=>{if(!e.target||e.target.id!=='doa-imp-arq')return;const f=e.target.files&&e.target.files[0];if(!f)return;
+  if(f.size>2*1024*1024){toast('O arquivo passa de 2 MB: confira se é o CSV da ficha.');return}
+  const rd=new FileReader();rd.onload=()=>{DOA_IMP.csv=String(rd.result||'');limparAlteracoes&&limparAlteracoes('drawer');doaImportar(false)};rd.onerror=()=>toast('Não deu para ler o arquivo.');rd.readAsText(f,'utf-8')});
 /* CAMP-DOA-TEXTO (20/11/2026, Rafael: "preciso poder em formato texto, copiar todos dados do formulario que ela preencheu e suas respostas,
    pergunta e resposta, com os dados dela, valor que vai doar e etc que eh pra enviar para fazer o contrato."): o texto vem pronto do painel
    (GET …/{id}/texto; notas internas só com a caixa marcada). Copia; se o navegador não deixar, o texto fica selecionado na caixa abaixo.
