@@ -7,7 +7,7 @@ POST /wp-json/camp/v1/painel/sender) e TR10–TR29 na administração do site. A
   modelos (TR, área, nome, quando sai, para quem, variáveis, o que acontece sem ID, ID atual, situação), de onde vem a chave do Sender
   (site | plugin; nunca o token) e a chave de emergência. POST /painel/sender {"templates": {chave: ID}} grava um ID (vazio não muda,
   "__limpar__" deixa sem ID, regra do hub). POST /painel/sender/teste {chave, para} manda o modelo com valores de exemplo.
-- Site antigo (sem "catalogo"): a tela mostra o que dá (TR04–TR29 com os IDs que o site devolver) e pede "atualize o site".
+- Site antigo (sem "catalogo"): a tela mostra o que dá (TR04–TR31 com os IDs que o site devolver) e pede "atualize o site".
 - TR04–TR09: ao gravar aqui, a configuração antiga do painel (sender.tr04_… em Configurações) passa a ter o mesmo valor, para que o botão
   "Enviar a configuração do Sender ao site" nunca devolva ao site um ID velho.
 - "Último envio" e falhas em 30 dias vêm de E-mails enviados (emails_enviados.todas: email_site + o que saiu do painel).
@@ -70,8 +70,10 @@ CATALOGO_PAINEL = [
     ("TR27", "cobranca_avulsa", "Cobranças e doações", "Cobrança avulsa", "nao_sai"),
     ("TR28", "doacao_recebida", "Cobranças e doações", "Intenção de doação de acervo recebida", "simples"),
     ("TR29", "ingresso_cobranca", "Ingressos", "Ingresso da visita: link de pagamento", "nao_sai"),
+    ("TR30", "contrato_assinatura", "Cobranças e doações", "Contrato para assinatura", "nao_sai"),      # CAMP-DOA-CONTRATO (contrato 1.25)
+    ("TR31", "doacao_andamento", "Cobranças e doações", "Andamento da doação", "nao_sai"),              # CAMP-DOA-AVISOS (contrato 1.25)
 ]
-CRITICOS = {"amigo_acesso", "amigo_cobranca", "cobranca_avulsa", "amigo_boas_vindas"}
+CRITICOS = {"amigo_acesso", "amigo_cobranca", "cobranca_avulsa", "amigo_boas_vindas", "contrato_assinatura"}
 CAMPOS_MODELO = ("tr", "chave", "area", "nome", "quando", "para", "variaveis", "sem_id", "sem_id_texto", "critico", "id", "id_padrao", "situacao")
 SITUACOES = ("ativo", "sem_id", "sem_chave", "emergencia")
 ATUALIZE = "Atualize o site (plugin da CAMP 1.32.0 ou mais novo) para ver e configurar todos os modelos aqui."

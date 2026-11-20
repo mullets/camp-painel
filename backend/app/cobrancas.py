@@ -11,6 +11,9 @@ acervo, ex. 2 mil reais, criar a cobrança para pagar com o Mercado Pago, e quer
   GET /painel/cobrancas?desde=… a cada `cobrancas.coleta_min` (10; 0 desliga) e em "Sincronizar agora".
 - E-mail ao pagador SÓ pelo Sender (site, TR27 "Cobrança avulsa"): sem template ou sem chave, nada sai e a tela diz o que falta.
 - Cancelar (expira o link no Mercado Pago) e Gerar novo link. LGPD: apagar pessoa anonimiza (os valores ficam). Log técnico sem nome/e-mail.
+- CAMP-DOA-CONTRATO (contrato 1.25, site 1.34.0): "link do contrato para assinatura" opcional na criação. Com ele, "Enviar por e-mail" manda
+  ANTES o e-mail do contrato (TR30, POST …/{id}/email-contrato) e depois o da cobrança (TR27): dois e-mails. Sem o TR30 (ou site antigo)
+  nada sai. O TR30 de um mesmo link sai uma vez (reenviar a cobrança não repete o contrato).
 """
 from __future__ import annotations
 
@@ -50,6 +53,9 @@ SITUACOES = {"aberta": "Aberta", "em_analise": "Pagamento em análise", "paga": 
 MEIOS = {"credit_card": "Cartão de crédito", "debit_card": "Cartão de débito", "bank_transfer": "Pix", "pix": "Pix", "account_money": "Saldo do Mercado Pago",
          "ticket": "Boleto", "prepaid_card": "Cartão pré-pago"}
 TEMPLATE = ("TR27", "Cobrança avulsa")
+TEMPLATE_CONTRATO = ("TR30", "Contrato para assinatura")
+VERSAO_SITE_CONTRATO = "1.34.0"
+RE_LINK = re.compile(r"^https?://[^\s/]+\.[^\s]+$", re.I)
 ONDE_TEMPLATE = "na administração do site, Apoios → Mercado Pago → E-mails pelo Sender (avise quem cuida do site)"
 MSG_SITE_ANTIGO = f"O site ainda não cria cobranças avulsas: avise quem cuida do site (plugin da CAMP {VERSAO_SITE} ou mais novo)."
 
@@ -273,6 +279,14 @@ def rodada(force: bool = False) -> dict:
         con.close()
 
 
+def _col(r, k: str):
+    """Coluna que pode faltar num banco sem a migração 235."""
+    try:
+        return r[k]
+    except (IndexError, KeyError):
+        return None
+
+
 # ---------------------------------------------------------------- linha para a tela
 def _linha(r) -> dict:
     sit = situacao_efetiva(r)
@@ -285,6 +299,7 @@ def _linha(r) -> dict:
                         "pagamento_id": r["mp_pagamento_id"] or ""},
             "pago_em": r["pago_em"] or "", "valor_pago": r["valor_pago"], "valor_liquido": r["valor_liquido"], "tarifa": r["tarifa"],
             "meio": MEIOS.get(r["meio"] or "", r["meio"] or ""), "email_enviado_em": r["email_enviado_em"] or "",
+            "contrato_link": _col(r, "contrato_link") or "", "contrato_email_link": _col(r, "contrato_email_link") or "",
             "criado_em": r["criado_em"] or "", "criado_por": r["criado_por_nome"] or "", "cancelada_em": r["cancelada_em"] or ""}
 
 
@@ -400,6 +415,7 @@ class NovaCobranca(BaseModel):
     descricao: str
     vence: str | None = None
     vinculo: str | None = None
+    contrato_link: str | None = None     # CAMP-DOA-CONTRATO: link do contrato para assinatura (opcional, http/https)
 
 
 def _validar(con, b: NovaCobranca) -> dict:
@@ -429,7 +445,10 @@ def _validar(con, b: NovaCobranca) -> dict:
             tipo = "fundo"
         else:
             raise HTTPException(400, f"Vínculo {vin} não encontrado: escolha um fundo ou projeto da lista")
-    return {"nome": nome, "email": email, "telefone": _txt(b.telefone, 40) or None, "valor": valor, "finalidade": b.finalidade, "descricao": desc,
+    cl = (b.contrato_link or "").strip()
+    if cl and (not RE_LINK.match(cl) or len(cl) > 500):
+        raise HTTPException(400, "Link do contrato para assinatura: um endereço que comece com http:// ou https://")
+    return {"contrato_link": cl or None, "nome": nome, "email": email, "telefone": _txt(b.telefone, 40) or None, "valor": valor, "finalidade": b.finalidade, "descricao": desc,
             "vence": vence or None, "vinculo_tipo": tipo, "vinculo_codigo": vin or None}
 
 
@@ -527,7 +546,10 @@ def criar(b: NovaCobranca, u: dict = Depends(auth.exige("admin"))) -> dict:
                            FINALIDADES[d["finalidade"]][1], u["id"], u["nome"]))
         cid = cur.lastrowid
         con.execute("UPDATE cobranca_avulsa SET ref_painel=? WHERE id=?", (f"painel-cob-{cid}", cid))
-        _evento(con, cid, "criado", u["email"], {"valor": d["valor"], "finalidade": d["finalidade"], "vence": d["vence"], "vinculo": d["vinculo_codigo"]})
+        if d["contrato_link"]:
+            con.execute("UPDATE cobranca_avulsa SET contrato_link=? WHERE id=?", (d["contrato_link"], cid))
+        _evento(con, cid, "criado", u["email"], {"valor": d["valor"], "finalidade": d["finalidade"], "vence": d["vence"], "vinculo": d["vinculo_codigo"],
+                                                 **({"contrato_link": True} if d["contrato_link"] else {})})
         con.commit()
         erro = _pedir_link(con, _um(con, cid), u["email"])
         if erro and erro.startswith("O site recusou os dados"):
@@ -655,6 +677,7 @@ def enviar_email(cid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(409, "Esta cobrança está sem link: use Gerar novo link antes de enviar")
         if not r["email"]:
             raise HTTPException(409, "Sem e-mail de quem paga")
+        contrato = _enviar_contrato(con, r, u)        # e-mail 1 (TR30), antes e separado; sem ele, nada sai
         resp = _post_site(con, r, "/email", {}, "enviar o e-mail")
         d = _json(resp)
         cod = str(d.get("code") or "")
@@ -670,13 +693,45 @@ def enviar_email(cid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
         elif resp.status_code >= 400:
             msg = "não enviado: o Sender recusou o e-mail" if cod == "camp_sender_falhou" else f"não enviado: o site respondeu {resp.status_code}"
         if msg:
-            _evento(con, cid, "email_falhou", u["email"], {"template": TEMPLATE[0], "erro": msg})
+            _evento(con, cid, "email_falhou", u["email"], {"template": TEMPLATE[0], "modelo": "cobranca_avulsa", "erro": msg})
             con.commit()
+            if contrato:
+                msg = "O e-mail do contrato saiu, mas o da cobrança não: " + msg.removeprefix("não enviado: ") + ". Depois de arrumar, use Enviar por e-mail de novo (o contrato não é repetido)."
             raise HTTPException(409 if resp.status_code in (404, 409) else 502, msg)
         con.execute("UPDATE cobranca_avulsa SET email_enviado_em=datetime('now') WHERE id=?", (cid,))
-        _evento(con, cid, "email_enviado", u["email"], {"template": TEMPLATE[0], "canal": "sender", "sender_id": str((d.get("sender") or {}).get("id") or "")})
+        _evento(con, cid, "email_enviado", u["email"], {"template": TEMPLATE[0], "modelo": "cobranca_avulsa", "canal": "sender", "sender_id": str((d.get("sender") or {}).get("id") or "")})
         con.commit()
-        registrar(logging.INFO, "cobranca_email", "Cobrança avulsa enviada pelo Sender", cobranca=cid)
-        return {"ok": True, "enviado": True, "template": TEMPLATE[0], "cobranca": _detalhe(con, cid)}
+        registrar(logging.INFO, "cobranca_email", "Cobrança avulsa enviada pelo Sender", cobranca=cid, contrato=bool(contrato))
+        return {"ok": True, "enviado": True, "template": TEMPLATE[0], "contrato_enviado": bool(contrato), "cobranca": _detalhe(con, cid)}
     finally:
         con.close()
+
+
+def _enviar_contrato(con, r, u) -> bool:
+    """Com link de contrato ainda não mandado: TR30 pelo site ANTES da cobrança. True = saiu agora; False = não havia o que mandar.
+    Qualquer falha levanta (e nada da cobrança sai): sem TR30, sem chave, site antigo."""
+    link = _col(r, "contrato_link") or ""
+    if not link or link == (_col(r, "contrato_email_link") or ""):
+        return False
+    resp = _post_site(con, r, "/email-contrato", {"contrato_link": link}, "enviar o contrato")
+    d = _json(resp)
+    cod = str(d.get("code") or "")
+    msg = None
+    if resp.status_code == 404 and cod in ("", "rest_no_route"):
+        msg = f"nada foi enviado: o site ainda não manda o contrato para assinatura. Avise quem cuida do site (plugin da CAMP {VERSAO_SITE_CONTRATO} ou mais novo)"
+    elif cod == "camp_sender_sem_template":
+        msg = f"nada foi enviado: falta o template {TEMPLATE_CONTRATO[0]} ({TEMPLATE_CONTRATO[1]}) do Sender. Crie no Sender e cole o ID em E-mails → Modelos do Sender"
+    elif cod == "camp_sender_sem_chave":
+        msg = "nada foi enviado: o Sender está desligado no site (sem o token). Avise quem cuida do site"
+    elif resp.status_code >= 400:
+        msg = "nada foi enviado: o Sender recusou o e-mail do contrato" if cod == "camp_sender_falhou" else f"nada foi enviado: o site respondeu {resp.status_code} ao enviar o contrato"
+    if msg:
+        _evento(con, r["id"], "email_falhou", u["email"], {"template": TEMPLATE_CONTRATO[0], "modelo": "contrato_assinatura", "erro": msg})
+        con.commit()
+        raise HTTPException(409 if resp.status_code in (404, 409) else 502, msg)
+    con.execute("UPDATE cobranca_avulsa SET contrato_email_link=? WHERE id=?", (link, r["id"]))
+    _evento(con, r["id"], "email_enviado", u["email"], {"template": TEMPLATE_CONTRATO[0], "modelo": "contrato_assinatura", "canal": "sender",
+                                                        "sender_id": str((d.get("sender") or {}).get("id") or "")})
+    con.commit()
+    return True
+

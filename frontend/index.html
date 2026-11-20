@@ -3793,7 +3793,7 @@ async function carregarVisitasConfig(){const el=document.getElementById('cfg-vis
 async function carregarConfig(){try{
   const [cs,est]=await Promise.all([API('/api/config'),API('/api/estacoes').catch(()=>null)]),podeEditar=EU&&EU.papel==='master';window.CFG_EST=est;
   document.getElementById('cfg-hint').textContent=podeEditar?'você é admin master':'só o admin master altera';
-  const unicos=[...new Map(cs.map(x=>[x.chave,x])).values()].filter(x=>!['estacao.contex.ip','campvision.ip'].includes(x.chave)&&!/^sender\.tr0\d_/.test(x.chave));   /* CAMP-SENDER: os IDs dos modelos (TR04–TR29) ficam em E-mails → Modelos do Sender */
+  const unicos=[...new Map(cs.map(x=>[x.chave,x])).values()].filter(x=>!['estacao.contex.ip','campvision.ip'].includes(x.chave)&&!/^sender\.tr0\d_/.test(x.chave));   /* CAMP-SENDER: os IDs dos modelos (TR04–TR31) ficam em E-mails → Modelos do Sender */
   unicos.sort((a,b)=>{const ga=grupoConfig(a.chave),gb=grupoConfig(b.chave);return ga[1]-gb[1]||ordemConfig(a.chave)-ordemConfig(b.chave)||a.chave.localeCompare(b.chave)});
   const grupos={};
   for(const item of unicos){const g=grupoConfig(item.chave)[0];(grupos[g]||(grupos[g]=[])).push(item)}
@@ -3821,7 +3821,7 @@ document.getElementById('cfg-body').addEventListener('click',async e=>{const b=e
   toast(erros.length?`${sec.dataset.cfgSecao}: ${ok} salvo(s), ${erros.length} com erro`:`${sec.dataset.cfgSecao}: ${qtd(ok,'alteração salva','alterações salvas')}`);
   if(!erros.length){if(![...document.querySelectorAll('.cfg-secao')].some(s2=>cfgMudados(s2).length))limparAlteracoes('config');carregarConfig()}});
 /* 01/11/2026 (Sender.net, contrato 1.5): a configuração do Sender.net mora no painel e vai ao site por este botão (o token nunca aparece) */
-const CFG_SENDER_SITE='<div class="act cfg-sender-site"><p class="help cfg-sender-modelos" data-pode="rota.emails">Os IDs de todos os e-mails do Sender (modelos TR04–TR29), com o teste de cada um, ficam em <a href="#emails/modelos">E-mails → Modelos do Sender</a>.</p><p class="help">Manda ao site a chave (token) do Sender.net. O token não aparece aqui.</p><button type="button" class="btn" data-cfg-sender>Enviar a configuração do Sender ao site</button><p class="help cfg-sender-res" aria-live="polite"></p></div>';
+const CFG_SENDER_SITE='<div class="act cfg-sender-site"><p class="help cfg-sender-modelos" data-pode="rota.emails">Os IDs de todos os e-mails do Sender (modelos TR04–TR31), com o teste de cada um, ficam em <a href="#emails/modelos">E-mails → Modelos do Sender</a>.</p><p class="help">Manda ao site a chave (token) do Sender.net. O token não aparece aqui.</p><button type="button" class="btn" data-cfg-sender>Enviar a configuração do Sender ao site</button><p class="help cfg-sender-res" aria-live="polite"></p></div>';
 function cfgSenderFrase(r){const n=Object.keys(r.templates||{}).length;return `O site recebeu: Sender.net ${r.ativo?'ligado':'desligado'} · ${r.token_preenchido?'token preenchido':'sem token'} · ${qtd(n,'e-mail transacional','e-mails transacionais')}.`+(r.ativo&&!r.token_preenchido?' Sem o token, o site continua com o e-mail de sempre.':'')}
 document.getElementById('cfg-body').addEventListener('click',async e=>{const b=e.target.closest('[data-cfg-sender]');if(!b||b.disabled)return;const sec=b.closest('.cfg-secao'),out=sec.querySelector('.cfg-sender-res');
   if(cfgMudados(sec).length){out.textContent='Salve as alterações desta seção antes de enviar ao site.';return}
@@ -8874,16 +8874,18 @@ function cobNova(){const fins=(COB.d&&COB.d.finalidades)||{};openDrawer('Nova co
   <label class="field">Descrição * (o que é; aparece no Mercado Pago)<textarea id="cob-n-desc" maxlength="600" rows="3" placeholder="Tratamento do acervo de Fulano – 1ª parcela"></textarea></label>
   <label class="field">Vencimento (opcional; o link para de aceitar pagamento no fim do dia)<input id="cob-n-vence" type="date"></label>
   <label class="field">Vínculo com fundo ou projeto (opcional)<input id="cob-n-vinc" list="cob-n-vinc-lista" placeholder="nome ou código do fundo ou projeto" autocomplete="off" spellcheck="false"><datalist id="cob-n-vinc-lista"></datalist><span class="help">Escolha na lista: fica o código (ex.: F014 ou F014-P0004), para achar depois de onde veio o dinheiro.</span></label>
+  <label class="field">Link do contrato para assinatura (opcional)<input id="cob-n-contrato" type="url" maxlength="500" placeholder="https://" autocomplete="off" spellcheck="false"><span class="help">Clicksign, D4Sign, gov.br, DocuSign… Com o link, “Enviar por e-mail” manda antes o e-mail do contrato (TR30) e depois o da cobrança (TR27), separados.</span></label>
   <div class="panel cob-previa" id="cob-n-previa" aria-live="polite"></div>
   <div class="act"><button type="button" class="btn pri" data-cob-acao="criar" data-trabalhando="Criando no Mercado Pago…">Criar cobrança</button></div></div>`);document.getElementById('d-open').style.display='none';cobPrevia();setTimeout(()=>document.getElementById('cob-n-nome')?.focus(),50)}
 function cobCodigoVinculo(v){const m=String(v||'').trim().toUpperCase().match(/^(F\d{3}(?:-P\d{4})?)\b/);return m?m[1]:''}
 async function cobAbrir(id){try{const x=await API('/api/cobrancas/'+id);cobDrawer(x)}catch(e){toast(e.message)}}
 function cobDrawer(x){const e=x.extrato||{},pg=x.situacao==='paga'||x.situacao==='estornada',fim=pg||x.situacao==='cancelada';
   const tel=String(x.telefone||'').replace(/\D/g,''),wa='https://wa.me/'+(tel.length>=10?(tel.startsWith('55')?tel:'55'+tel):'')+'?text='+encodeURIComponent(x.mensagem||'');
-  const hist=(x.historico||[]).map(h=>{const dt=h.detalhe||{};const t={criado:'criada',link:'link do Mercado Pago gerado',novo_link:'novo link gerado'+(dt.vence?' (vence '+cobData(dt.vence)+')':''),cancelado:'cancelada',sem_link:'sem link: '+(dt.erro||''),situacao:'situação: '+(((COB.d||{}).situacoes||{})[dt.para]||dt.para),pago:'paga no Mercado Pago (pagamento '+(dt.pagamento_mp||'')+')',email_enviado:'cobrança enviada por e-mail pelo Sender ('+(dt.template||'TR27')+')',email_falhou:dt.erro||'e-mail não enviado'}[h.tipo]||h.tipo;return `<li><small>${escHtml(fmtDataHora(h.quando))} · ${escHtml(h.ator)}</small><br>${escHtml(t)}</li>`}).join('');
+  const hist=(x.historico||[]).map(h=>{const dt=h.detalhe||{};const t={criado:'criada',link:'link do Mercado Pago gerado',novo_link:'novo link gerado'+(dt.vence?' (vence '+cobData(dt.vence)+')':''),cancelado:'cancelada',sem_link:'sem link: '+(dt.erro||''),situacao:'situação: '+(((COB.d||{}).situacoes||{})[dt.para]||dt.para),pago:'paga no Mercado Pago (pagamento '+(dt.pagamento_mp||'')+')',email_enviado:(dt.template==='TR30'?'contrato para assinatura enviado por e-mail pelo Sender (TR30)':'cobrança enviada por e-mail pelo Sender ('+(dt.template||'TR27')+')'),email_falhou:dt.erro||'e-mail não enviado'}[h.tipo]||h.tipo;return `<li><small>${escHtml(fmtDataHora(h.quando))} · ${escHtml(h.ator)}</small><br>${escHtml(t)}</li>`}).join('');
   openDrawer('Cobrança avulsa',e.external_reference||'sem referência ainda',`<div class="cfg cob-det" data-cob-id="${x.id}" data-cob-alvo="${escHtml((e.external_reference||'')+' · '+cobBRL(x.valor)+' · '+(x.nome||''))}">
   <p><span class="tag ${COB_TAG[x.situacao]||''}">${escHtml(x.situacao_nome)}</span> <b>${escHtml(cobBRL(x.valor))}</b> · ${escHtml(x.finalidade_nome)}${x.vence?' · vence '+escHtml(cobData(x.vence)):''}</p>
   <p>${escHtml(x.descricao)}</p><p><small>${escHtml(x.nome||'—')} · <span class="mono">${escHtml(x.email||'—')}</span>${x.telefone?' · '+escHtml(x.telefone):''}${x.vinculo?' · vínculo <span class="mono">'+escHtml(x.vinculo)+'</span>':''}</small></p>
+  ${x.contrato_link?`<p class="help">Link do contrato para assinatura: <a href="${escHtml(x.contrato_link)}" target="_blank" rel="noopener noreferrer">${escHtml(x.contrato_link)}</a> · ${x.contrato_email_link===x.contrato_link?'e-mail do contrato já enviado (TR30)':'o e-mail do contrato (TR30) sai antes do da cobrança'}</p>`:''}
   ${x.erro&&!x.link?`<p class="help"><span class="tag r">sem link</span> ${escHtml(x.erro)}</p>`:''}
   ${x.link&&!fim?`<label class="field">Link do pagamento<input id="cob-link" readonly value="${escHtml(x.link)}"></label><div class="act"><button type="button" class="btn pri" data-cob-acao="copiar-link">Copiar link</button><button type="button" class="btn" data-cob-acao="copiar-texto">Copiar texto para WhatsApp</button><a class="btn" href="${escHtml(wa)}" target="_blank" rel="noopener">Abrir no WhatsApp</a><button type="button" class="btn" data-cob-acao="email" data-trabalhando="Enviando…">Enviar por e-mail</button></div>${x.email_enviado_em?`<p class="help">Enviada por e-mail em ${escHtml(fmtDataHora(x.email_enviado_em))}.</p>`:''}`:''}
   <div class="panel cob-previa"><b>No extrato do Mercado Pago</b><br>${cobExtratoHTML(e)||'<small>Ainda sem dados do Mercado Pago.</small>'}${x.modo==='teste'?'<br><span class="tag a">criada em modo de teste</span>':''}</div>
@@ -8897,11 +8899,11 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(t.closest('#cob-sinc')){const b=t.closest('#cob-sinc');b.disabled=true;try{const r=await API('/api/cobrancas/sincronizar',{method:'POST'});toast(r.erro?`A busca falhou: ${r.erro}`:r.sem_rota?'O site ainda não cria cobranças avulsas: avise quem cuida do site.':`Sincronizado: ${qtd(r.lidos||0,'cobrança atualizada','cobranças atualizadas')}`);carregarCobrancas()}catch(err){toast(err.message)}finally{b.disabled=false}return}
   const ab=t.closest('[data-cob-abrir]');if(ab&&t.closest('#v-cobrancas')){cobAbrir(ab.dataset.cobAbrir);return}
   const ac=t.closest('[data-cob-acao]');if(!ac)return;const a=ac.dataset.cobAcao,box=t.closest('.cob-det'),id=box&&box.dataset.cobId;
-  if(a==='criar'){const v=k=>(document.getElementById(k)||{}).value||'';try{const r=await API('/api/cobrancas',{method:'POST',body:JSON.stringify({nome:v('cob-n-nome'),email:v('cob-n-email'),telefone:v('cob-n-tel')||null,valor:Number(String(v('cob-n-valor')).replace(',','.'))||0,finalidade:v('cob-n-fin'),descricao:v('cob-n-desc'),vence:v('cob-n-vence')||null,vinculo:cobCodigoVinculo(v('cob-n-vinc'))||null})});
+  if(a==='criar'){const v=k=>(document.getElementById(k)||{}).value||'';try{const r=await API('/api/cobrancas',{method:'POST',body:JSON.stringify({nome:v('cob-n-nome'),email:v('cob-n-email'),telefone:v('cob-n-tel')||null,valor:Number(String(v('cob-n-valor')).replace(',','.'))||0,finalidade:v('cob-n-fin'),descricao:v('cob-n-desc'),vence:v('cob-n-vence')||null,vinculo:cobCodigoVinculo(v('cob-n-vinc'))||null,contrato_link:v('cob-n-contrato').trim()||null})});
     closeDrawer(true);cobDrawer(r.cobranca);toast(r.erro?'Cobrança gravada, mas sem link: '+r.erro:'Cobrança criada: o link do Mercado Pago está pronto');carregarCobrancas()}catch(err){toast(err.message)}return}
   if(a==='copiar-link'){cobCopiar(document.getElementById('cob-link').value,'Link copiado');return}
   if(a==='copiar-texto'){cobCopiar(document.getElementById('cob-msg').value,'Texto copiado: cole no WhatsApp');return}
-  if(a==='email'){try{await API(`/api/cobrancas/${id}/email`,{method:'POST'});toast('Cobrança enviada por e-mail pelo Sender');cobAbrir(id)}catch(err){toast(err.message);cobAbrir(id)}return}
+  if(a==='email'){try{const r=await API(`/api/cobrancas/${id}/email`,{method:'POST'});toast(r.contrato_enviado?'Enviados dois e-mails pelo Sender: o contrato (TR30) e a cobrança (TR27)':'Cobrança enviada por e-mail pelo Sender');cobAbrir(id)}catch(err){toast(err.message);cobAbrir(id)}return}
   if(a==='novo-link'){const ve=(document.getElementById('cob-vence')||{}).value||'';try{const r=await API(`/api/cobrancas/${id}/novo-link`,{method:'POST',body:JSON.stringify({vence:ve||null})});cobDrawer(r.cobranca);toast('Novo link gerado: o anterior deixou de valer');carregarCobrancas()}catch(err){toast(err.message)}return}
   if(a==='consultar'){try{const r=await API(`/api/cobrancas/${id}/consultar`,{method:'POST'});cobDrawer(r.cobranca);toast('Situação: '+r.cobranca.situacao_nome);carregarCobrancas()}catch(err){toast(err.message)}return}
   if(a==='cancelar'){const r=await confirmar({titulo:'Cancelar cobrança',alvo:box.dataset.cobAlvo||'',texto:'O link do Mercado Pago deixa de aceitar pagamento. Se a pessoa já pagou, o pagamento continua aparecendo aqui.',perigo:true,botao:'Cancelar cobrança',cancelar:'Voltar',botaoOcupado:'Cancelando…',acao:()=>API(`/api/cobrancas/${id}/cancelar`,{method:'POST'})});if(r&&r.resultado){cobDrawer(r.resultado.cobranca);toast(r.resultado.aviso||'Cobrança cancelada');carregarCobrancas()}return}});
@@ -8911,7 +8913,10 @@ document.addEventListener('change',e=>{const id=e.target&&e.target.id;if(id==='c
   else if(id==='cob-n-vinc'){clearTimeout(tv);const inp=e.target,q=inp.value.trim();if(q.length<2||cobCodigoVinculo(q)===q.toUpperCase())return;tv=setTimeout(async()=>{try{const r=await API('/api/busca?'+new URLSearchParams({q,limite:15}));if(inp.value.trim()!==q)return;document.getElementById('cob-n-vinc-lista').innerHTML=(r.resultados||[]).filter(x=>x.tipo==='fundo'||x.tipo==='projeto').map(x=>`<option value="${escHtml(x.codigo+' · '+x.titulo)}"></option>`).join('')}catch(_){}},250)}})}
 /* CAMP-DOA-ACERVO (20/11/2026, Rafael: "Vamos pôr a parte de doação de acervo no site! … com infos no painel administrativo, e
    estágios."): intenções de doação de acervo do formulário do site (contrato 1.20). Lista, etapas, notas, contrato, valor, volume,
-   fotos gerais (repassadas do site) e a cobrança da contribuição (o site só abre com o contrato assinado pelas partes). */
+   fotos gerais (repassadas do site) e a cobrança da contribuição.
+   CAMP-DOA-CONTRATO (contrato 1.25): "Enviar contrato para assinatura" mostra a prévia (para quem, e-mail 1 = contrato TR30 com o link,
+   e-mail 2 = cobrança TR27 com o valor, "Gerar a cobrança junto" marcada com R$ 1.000 ou mais) e manda os dois, separados.
+   CAMP-DOA-AVISOS: ao mudar a etapa, "Avisar a pessoa por e-mail" (TR31) com o texto pronto da etapa (editável) e uma mensagem. */
 let DOA={etapa:'abertas',q:'',d:null};
 const DOA_TAG={em_analise:'b',info:'a',visita:'a',aprovada:'g',nao_aprovada:'',contrato_enviado:'a',contrato_assinado:'g',cobranca:'a',paga:'g',recebido:'g',arquivada:''};
 const DOA_FLUXO=['em_analise','info','visita','aprovada','contrato_enviado','contrato_assinado','cobranca','paga','recebido'];
@@ -8938,6 +8943,8 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   const notas=(x.notas||[]).slice().reverse().map(n=>`<li><small><b>${escHtml(n.em)} · ${escHtml(n.quem)}</b></small><br>${escHtml(n.texto)}</li>`).join('');
   const hist=(x.historico||[]).slice().reverse().map(h=>`<li><small>${escHtml(h)}</small></li>`).join('');
   const campo=(id,rot,val,tipo,extra)=>`<label class="field">${escHtml(rot)}<input id="doa-${id}" type="${tipo||'text'}" value="${escHtml(val==null?'':String(val))}"${extra||''}></label>`;
+  const fechada=['paga','recebido','nao_aprovada','arquivada'].includes(x.etapa)||an;
+  const mails=(x.emails||[]).map(e=>{const d=e.detalhe||{};return `<li><small>${escHtml(fmtDataHora(e.quando))} · ${escHtml(e.ator)}</small><br>${escHtml((d.template?d.template+' · ':'')+(d.nome_modelo||d.modelo||'')+(d.etapa_nome?': '+d.etapa_nome:''))} — ${e.tipo==='email_enviado'?'enviado pelo Sender':escHtml('não saiu'+(d.erro?': '+d.erro:''))}</li>`}).join('');
   openDrawer('Intenção de doação de acervo',x.protocolo||'',`<div class="cfg doa-det" data-doa-id="${x.id}">
   <p><span class="tag ${DOA_TAG[x.etapa]||''}">${escHtml(x.etapa_nome)}</span>${x.valor?` · contribuição <b>${escHtml(doaBRL(x.valor))}</b>`:''}${x.assinado_em?` · contrato assinado em ${escHtml(doaData(x.assinado_em))}`:''}</p>
   <ul class="doa-etapas" aria-label="Etapas">${trilha}</ul>
@@ -8948,8 +8955,10 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   ${x.amigo?`<p><span class="tag g">Amigo da CAMP</span> até ${escHtml(x.amigo.validade_br||doaData(x.amigo.validade))} (pela doação, sem renovação automática)</p>`:''}
   <h3>Andamento</h3>
   <label class="field">Etapa<select id="doa-etapa-sel">${opts}</select></label>
+  <div id="doa-aviso" hidden></div>
   <p class="help">“Cobrança enviada” e “Contribuição paga” o sistema marca sozinho. Para “Contrato assinado pelas partes”, informe antes a data em que as duas partes assinaram.</p>
-  ${campo('contrato','Link do contrato (assinatura eletrônica)',x.contrato_link,'url',' placeholder="https://"')}
+  ${campo('contrato','Link do contrato para assinatura',x.contrato_link,'url',' placeholder="https://" maxlength="500" autocomplete="off" spellcheck="false"')}
+  <p class="help">Clicksign, D4Sign, gov.br, DocuSign… Clique em Salvar para guardar.${x.contrato_link?` <a href="${escHtml(x.contrato_link)}" target="_blank" rel="noopener noreferrer">Abrir o contrato</a>`:''}${x.contrato_enviado_em?` · enviado para assinatura em ${escHtml(fmtDataHora(x.contrato_enviado_em))}`:''}</p>
   ${campo('assinado','Data em que as duas partes assinaram',x.assinado_em,'date')}
   ${campo('valor','Contribuição acordada no contrato (R$, mínimo 1.000)',x.valor||'','number',' min="1000" step="0.01" inputmode="decimal"')}
   <details><summary>Volume e catalogação (equipe)</summary>
@@ -8957,11 +8966,21 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   ${campo('catalogada','Quantidade catalogada (ao fim da catalogação)',x.quantidade_catalogada,'number',' min="0" step="1"')}${campo('fundo','Código do fundo no acervo (quando recebido)',x.fundo,'text',' maxlength="4" placeholder="F0xx"')}
   <p class="help">A diferença entre a estimativa de quem ofereceu e a quantidade catalogada é esperada: não é erro do doador.</p></details>
   <label class="field">Nova nota interna<textarea id="doa-nota" rows="3" maxlength="2000"></textarea></label>
-  <div class="act"><button type="button" class="btn pri" data-doa-acao="salvar" data-trabalhando="Salvando…">Salvar</button>${x.pode_cobrar?`<button type="button" class="btn" data-doa-acao="cobrar" data-trabalhando="Abrindo no Mercado Pago…">${cob?'Gerar novo link de pagamento':'Gerar cobrança no Mercado Pago'}</button>`:''}</div>
-  ${!x.pode_cobrar&&!cob&&x.etapa!=='paga'&&x.etapa!=='recebido'?'<p class="help">A cobrança só abre com o contrato assinado pelas partes (etapa e data) e a contribuição informada.</p>':''}
+  <div class="act"><button type="button" class="btn pri" data-doa-acao="salvar" data-trabalhando="Salvando…">Salvar</button>${fechada?'':'<button type="button" class="btn" data-doa-acao="contrato">Enviar contrato para assinatura</button>'}${x.pode_cobrar?`<button type="button" class="btn" data-doa-acao="cobrar" data-trabalhando="Abrindo no Mercado Pago…">${cob?'Gerar novo link de pagamento':'Gerar cobrança no Mercado Pago'}</button>`:''}</div>
+  ${!x.pode_cobrar&&!cob&&x.etapa!=='paga'&&x.etapa!=='recebido'?'<p class="help">A cobrança abre depois de enviar o contrato para assinatura, com a contribuição informada (mínimo R$ 1.000).</p>':''}
   ${notas?`<p><b>Notas internas</b></p><ul class="doa-notas">${notas}</ul>`:''}
-  <details><summary>Histórico</summary><ul class="cob-hist">${hist||'<li>—</li>'}</ul></details></div>`)}
-async function doaMudar(id,corpo,ok){try{const x=await API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(x);toast(ok);carregarDoacoes()}catch(err){toast(err.message)}}
+  ${mails?`<details><summary>E-mails desta doação</summary><ul class="cob-hist">${mails}</ul></details>`:''}
+  <details><summary>Histórico</summary><ul class="cob-hist">${hist||'<li>—</li>'}</ul></details></div>`);doaAvisoBloco()}
+/* CAMP-DOA-AVISOS: bloco do aviso, conforme a etapa escolhida (some em Em análise, contrato e cobrança: eles têm os e-mails deles). */
+function doaAvisoBloco(){const box=document.getElementById('doa-aviso'),sel=document.getElementById('doa-etapa-sel'),det=document.querySelector('.doa-det');if(!box||!sel||!det)return;
+  const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(det.dataset.doaId))||{},k=sel.value,textos=(DOA.d&&DOA.d.aviso_textos)||{},padrao=(DOA.d&&DOA.d.aviso_padrao)||[];
+  if(!textos[k]||k===x.etapa){box.hidden=true;box.innerHTML='';return}
+  if(box.dataset.etapa===k&&!box.hidden)return;
+  box.dataset.etapa=k;box.hidden=false;
+  box.innerHTML=`<div class="panel cob-previa"><label class="conf-opcao"><input type="checkbox" id="doa-avisar"${padrao.includes(k)?' checked':''}><span><b>Avisar a pessoa por e-mail</b><small>Sai pelo Sender (modelo TR31 · Andamento da doação). Sem o modelo, a etapa muda e nada sai.</small></span></label>
+  <label class="field">Texto do aviso (pronto para esta etapa; pode editar)<textarea id="doa-aviso-texto" rows="3" maxlength="3000">${escHtml(textos[k])}</textarea></label>
+  <label class="field">Mensagem (opcional; vai depois do texto)<textarea id="doa-aviso-msg" rows="2" maxlength="2000"></textarea></label></div>`}
+async function doaMudar(id,corpo,ok){try{const x=await API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(corpo)});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(x);toast(x.aviso?x.aviso.mensagem:x.email_cobranca?ok+'. '+x.email_cobranca.mensagem:ok);carregarDoacoes()}catch(err){toast(err.message)}}
 document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)return;
   if(t.closest('#doa-sinc')){const b=t.closest('#doa-sinc');b.disabled=true;try{const r=await API('/api/doacoes-acervo/sincronizar',{method:'POST'});toast(r.erro?`A busca falhou: ${r.erro}`:r.sem_rota?'O site ainda não tem as intenções de doação: avise quem cuida do site.':`Sincronizado: ${qtd(r.lidos||0,'intenção atualizada','intenções atualizadas')}`);carregarDoacoes()}catch(err){toast(err.message)}b.disabled=false;return}
   const ab=t.closest('[data-doa-abrir]');if(ab&&t.closest('#v-doacoes')){doaAbrir(ab.dataset.doaAbrir);return}
@@ -8970,11 +8989,28 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(a==='copiar'){const l=v('link');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Link copiado'),()=>toast('Selecione o link e copie à mão'));return}
   if(a==='consultar'){doaMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
   const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{};
-  const corpo={contrato_link:v('contrato'),assinado_em:v('assinado'),valor:v('valor'),caixas:v('caixas'),rolos:v('rolos'),volume:v('volume'),quantidade_catalogada:v('catalogada'),fundo:v('fundo'),nota:v('nota')};
+  const corpo={contrato_link:v('contrato')||(x.contrato_link?'__limpar__':''),assinado_em:v('assinado'),valor:v('valor'),caixas:v('caixas'),rolos:v('rolos'),volume:v('volume'),quantidade_catalogada:v('catalogada'),fundo:v('fundo'),nota:v('nota')};
   const sel=v('etapa-sel');if(sel&&sel!==x.etapa)corpo.etapa=sel;
+  if(a==='contrato'){doaEnviarContrato(id,box);return}
+  const avi=document.getElementById('doa-avisar');if(avi&&avi.checked&&corpo.etapa){corpo.avisar=true;corpo.aviso_texto=v('aviso-texto');corpo.mensagem=v('aviso-msg')}
   if(a==='salvar'){doaMudar(id,corpo,'Intenção de doação atualizada');return}
-  if(a==='cobrar'){const r=await confirmar({titulo:'Gerar cobrança no Mercado Pago',alvo:(box.querySelector('.tag')||{}).textContent||'',texto:'O site abre o pagamento da contribuição (Pix ou cartão) e manda o link por e-mail, se o modelo do Sender estiver configurado. Confirme que o contrato foi assinado pelas duas partes.',botao:'Gerar cobrança',cancelar:'Voltar',botaoOcupado:'Abrindo…',acao:()=>API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(Object.assign({},corpo,{acao:'gerar_cobranca'}))})});if(r&&r.resultado){doaDrawer(r.resultado);toast('Cobrança aberta: o link do Mercado Pago está pronto');carregarDoacoes()}return}});
+  if(a==='cobrar'){const r=await confirmar({titulo:'Gerar cobrança no Mercado Pago',alvo:(box.querySelector('.tag')||{}).textContent||'',texto:'O site abre o pagamento da contribuição (Pix ou cartão) e manda o link por e-mail (TR27), se o modelo do Sender estiver configurado. Confirme que o contrato já foi enviado para assinatura.',botao:'Gerar cobrança',cancelar:'Voltar',botaoOcupado:'Abrindo…',acao:()=>API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(Object.assign({},corpo,{acao:'gerar_cobranca'}))})});if(r&&r.resultado){doaDrawer(r.resultado);toast('Cobrança aberta: o link do Mercado Pago está pronto'+(r.resultado.email_cobranca?'. '+r.resultado.email_cobranca.mensagem:''));carregarDoacoes()}return}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('#doa-lista tr[data-doa-abrir]')){e.preventDefault();doaAbrir(e.target.dataset.doaAbrir)}});
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa-sel')doaAvisoBloco()});
+/* CAMP-DOA-CONTRATO: prévia do envio (para quem, e-mail 1 e e-mail 2) e o envio. Dados da pessoa só como texto escapado. */
+async function doaEnviarContrato(id,box){const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{},v=k=>((document.getElementById('doa-'+k)||{}).value||'').trim();
+  const link=v('contrato'),vtxt=v('valor'),valor=Number(String(vtxt).replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||Number(x.valor)||0,min=(DOA.d&&DOA.d.minimo)||1000;
+  if(!/^https?:\/\/[^\s\/]+\.[^\s]+$/i.test(link)){toast('Informe o link do contrato para assinatura (começa com http:// ou https://)');document.getElementById('doa-contrato')?.focus();return}
+  const html=`<div class="doa-envio"><p><b>Para:</b> ${escHtml(x.nome||'—')} · <span class="mono">${escHtml(x.email||'sem e-mail')}</span></p>
+  <div class="panel cob-previa"><b>E-mail 1 · Contrato para assinatura</b> <small>(TR30, pelo Sender)</small><br><small>Link: <a href="${escHtml(link)}" target="_blank" rel="noopener noreferrer">${escHtml(link)}</a>${valor?' · valor combinado '+escHtml(doaBRL(valor)):''}</small>
+  <label class="field">Assinar até (opcional)<input id="doa-env-prazo" type="date"></label></div>
+  <div class="panel cob-previa"><b>E-mail 2 · Cobrança no Mercado Pago</b> <small>(TR27, pelo Sender, separado)</small><br><small>Valor: ${valor?escHtml(doaBRL(valor)):'— (informe a contribuição)'}. Pix ou cartão; o link vence em 30 dias.</small>
+  <label class="conf-opcao"><input type="checkbox" id="doa-env-cob"${valor>=min?' checked':''}><span><b>Gerar a cobrança junto</b><small>${valor>=min?'Abre o pagamento e manda o e-mail 2 logo depois do contrato.':'A contribuição precisa ser de R$ 1.000 ou mais.'}</small></span></label></div>
+  <p class="help">Sem o modelo TR30 no Sender nada sai. A etapa passa a “Contrato enviado para assinatura”.</p></div>`;
+  const r=await confirmar({titulo:'Enviar contrato para assinatura',alvo:x.protocolo||'',html,botao:'Enviar',cancelar:'Voltar',botaoOcupado:'Enviando…',
+    acao:()=>API('/api/doacoes-acervo/'+id+'/enviar-contrato',{method:'POST',body:JSON.stringify({contrato_link:link,valor:vtxt||null,prazo:(document.getElementById('doa-env-prazo')||{}).value||null,gerar_cobranca:!!(document.getElementById('doa-env-cob')||{}).checked})})});
+  if(!(r&&r.resultado))return;const o=r.resultado;limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(o.doacao);carregarDoacoes();
+  const partes=[o.contrato&&o.contrato.mensagem,o.cobranca&&o.cobranca.mensagem,o.email_cobranca&&o.email_cobranca.mensagem].filter(Boolean);toast(partes.join(' '))}
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa'){DOA.etapa=e.target.value;carregarDoacoes()}});
 {let tq;document.addEventListener('input',e=>{if(e.target&&e.target.id==='doa-q'){clearTimeout(tq);tq=setTimeout(()=>{DOA.q=e.target.value.trim();carregarDoacoes()},300)}})}
 /* CAMP-EMAIL (18/11/2026, Rafael: "temos um painel no admin de e-mails enviados? com log e tudo?"): todos os e-mails, de todos os
