@@ -41,7 +41,8 @@ REMOVIDO = "(removido)"
 
 CANAIS = {"sender": "Sender", "site": "E-mail simples do site", "smtp": "SMTP do painel"}
 ORIGENS = {"formulario": "Formulário do site", "visita": "Visita", "inscricao": "Inscrição", "amigos": "Amigos da CAMP",
-           "entrega": "Entrega de material", "downloads": "Downloads (uso do acervo)", "alerta": "Alerta interno", "resumo": "Resumo do dia", "ingressos": "Ingressos"}
+           "entrega": "Entrega de material", "downloads": "Downloads (uso do acervo)", "alerta": "Alerta interno", "resumo": "Resumo do dia", "ingressos": "Ingressos",
+           "cobrancas": "Cobranças e doações"}
 SITUACOES = {"enviado": "Enviado", "falhou": "Falhou", "nao_sender": "Não saiu pelo Sender", "na_fila": "Na fila"}
 # chave do e-mail => (TR, nome). As do site são as de Camp_AAP_Sender::padroes(); as do painel, as daqui.
 MODELOS = {
@@ -57,7 +58,10 @@ MODELOS = {
     "inscricao_situacao": ("", "Situação da inscrição"), "uso_livre": ("", "E-mail escrito no painel"),
     "copia_simples": ("", "Cópia simples ao visitante"), "aviso_equipe": ("", "Aviso à equipe"), "aviso_equipe_ingresso": ("", "Ingressos (aviso à equipe)"),
     "alerta": ("", "Alerta crítico ou resolvido"), "pedido_novo": ("", "Aviso de pedido novo"), "resumo": ("", "Resumo do dia"),
+    "cobranca_avulsa": ("TR27", "Cobrança avulsa"), "doacao_recebida": ("TR28", "Intenção de doação de acervo recebida"),
+    "contrato_assinatura": ("TR30", "Contrato para assinatura"), "doacao_andamento": ("TR31", "Andamento da doação"),
 }
+TR_MODELO = {tr: k for k, (tr, _n) in MODELOS.items() if tr}   # cobrança avulsa antiga: o evento só tem "template"
 REGISTRO_ORIGEM = {"camp_solicitacao": "formulario", "camp_contato": "formulario", "camp_agendamento": "visita", "camp_inscricao": "inscricao",
                    "camp_apoio": "amigos", "camp_equip_oferta": "formulario", "camp_ingresso": "ingressos"}
 REGISTRO_NOME = {"camp_solicitacao": "pedido do site", "camp_contato": "mensagem pelo contato", "camp_agendamento": "pedido de visita",
@@ -308,6 +312,23 @@ def todas(con, desde: str = "", ate: str = "") -> list[dict]:
         for r in con.execute("SELECT * FROM resumo_diario_envio WHERE enviado_em BETWEEN ? AND ?", (d0, d1)):
             out.append(_linha("resumo", r["dia"], r["enviado_em"], r["para"], "", f"Resumo do dia {r['dia']}", "resumo", "smtp", "resumo",
                               "enviado" if r["ok"] else "falhou", r["erro"], link="#estacoes/alertas", detalhe={"numeros": _json(r["conteudo"])}))
+    # CAMP-DOA-CONTRATO 20/11/2026: e-mails das cobranças avulsas (TR30, TR27) e das doações de acervo (TR30, TR27, TR31), registrados como
+    # evento (sem nome nem e-mail: vêm da linha da cobrança/doação, então o "apagar pessoa" vale aqui também).
+    for ent, tab, link in (("cobranca_avulsa", "cobranca_avulsa", "#cobrancas"), ("doacao_acervo", "doacao_acervo", "#doacoes")):
+        if tab not in t:
+            continue
+        chave_tab = "id" if tab == "cobranca_avulsa" else "site_id"
+        prot = "external_reference" if tab == "cobranca_avulsa" else "protocolo"
+        for r in con.execute(f"""SELECT e.id, e.codigo, e.tipo, e.ator, e.detalhe, e.quando, x.nome AS x_nome, x.email AS x_email, x.{prot} AS x_prot
+                                 FROM evento e LEFT JOIN {tab} x ON CAST(x.{chave_tab} AS TEXT)=e.codigo
+                                 WHERE e.entidade=? AND e.tipo IN ('email_enviado','email_falhou') AND e.quando BETWEEN ? AND ?""", (ent, d0, d1)):
+            d = _json(r["detalhe"])
+            modelo = str(d.get("modelo") or TR_MODELO.get(str(d.get("template") or ""), ""))
+            assunto = MODELOS.get(modelo, ("", modelo))[1] + (f": {d['etapa_nome']}" if d.get("etapa_nome") else "")
+            out.append(_linha(ent, r["id"], r["quando"], r["x_email"], r["x_nome"], assunto, modelo, "sender", "cobrancas",
+                              "enviado" if r["tipo"] == "email_enviado" else "falhou", d.get("erro"), sender_id=d.get("sender_id") or None,
+                              protocolo=r["x_prot"], link=link, ligado=("Cobrança avulsa nº " if ent == "cobranca_avulsa" else "Doação de acervo nº ") + str(r["codigo"]),
+                              detalhe={"enviado_por": r["ator"], "etapa": d.get("etapa") or "", "link_contrato": d.get("link_contrato") or ""}))
     if "email_site" in t:
         for r in con.execute("SELECT * FROM email_site WHERE enviado_em BETWEEN ? AND ?", (d0, d1)):
             reg = r["registro"] or ""

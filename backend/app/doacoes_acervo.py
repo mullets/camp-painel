@@ -10,6 +10,14 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
 - Fotos gerais: o painel só repassa (GET …/{id}/foto/{n}); não guarda.
 - Tela Doações de acervo (só admin e master: dados pessoais). LGPD: apagar pessoa anonimiza (etapa e valores ficam). Sem nome ou e-mail
   no log técnico.
+- CAMP-DOA-CONTRATO (contrato 1.25, site 1.34.0). Rafael: "No painel preciso poder pôr o link do contrato pra assinatura, e gerar a cobrança
+  no mercado livre quando enviar o contrato pra assinatura em e-mails separados". "Enviar contrato para assinatura": 1º
+  POST …/{id}/enviar-contrato (o site manda SÓ o TR30 com o link e passa a etapa a "Contrato enviado"); depois, se pedido,
+  POST …/{id} {acao: gerar_cobranca} (abre o Mercado Pago e manda o TR27): dois e-mails, nessa ordem. Sem TR30 nada sai. A cobrança
+  passa a abrir com o contrato ENVIADO (decisão do Rafael); pago só pela API do Mercado Pago, como antes.
+- CAMP-DOA-AVISOS (contrato 1.25): ao mudar a etapa, "Avisar a pessoa por e-mail" (TR31, só pelo Sender; texto pronto por etapa,
+  editável, + mensagem). Sem TR31: a etapa muda e nada sai. Pagamento confirmado avisa sozinho com doacao.avisar_pagamento (padrão 1).
+- Todo e-mail da doação (TR30, TR27, TR31) fica no histórico (site) e em E-mails → Enviados (tabela evento, entidade doacao_acervo).
 """
 from __future__ import annotations
 
@@ -40,6 +48,22 @@ ETAPAS = {
 }
 ETAPAS_AUTO = ("cobranca", "paga")
 FAIXAS = {"ate_50": "Até 50 itens", "51_500": "De 51 a 500 itens", "mais_500": "Mais de 500 itens", "nao_sei": "Não sei informar"}
+# CAMP-DOA-AVISOS: etapas com aviso opcional (as mesmas do site; o site manda os textos dele em `aviso_textos`, que valem por cima)
+AVISO_TEXTOS = {
+    "info": "Para continuarmos a análise da sua proposta, precisamos de mais algumas informações. Vamos falar com você por e-mail ou WhatsApp; se preferir, responda este e-mail.",
+    "visita": "Agendamos uma visita para conhecer o acervo. Confirmaremos com você a data, o horário e quem vai da CAMP.",
+    "aprovada": "Boa notícia: a CAMP aprovou a proposta de doação do acervo. O próximo passo é o contrato, que enviaremos para você ler e assinar.",
+    "nao_aprovada": "Agradecemos muito a confiança. Depois de avaliar a proposta, a CAMP não poderá receber este acervo neste momento.",
+    "paga": "Recebemos a contribuição para a preservação do acervo. Obrigado! Você passa a ser Amigo da CAMP por 12 meses.",
+    "recebido": "O acervo chegou à CAMP. Agora começam a conservação, o acondicionamento e a catalogação. Avisaremos quando houver novidades.",
+    "arquivada": "Arquivamos a sua proposta de doação. Se quiser retomar a conversa, é só responder este e-mail.",
+}
+AVISO_PADRAO = ["info", "visita", "aprovada", "nao_aprovada", "paga", "recebido"]   # marcadas por padrão (arquivada fica desmarcada)
+TPL = {"contrato_assinatura": ("TR30", "Contrato para assinatura"), "cobranca_avulsa": ("TR27", "Cobrança avulsa"), "doacao_andamento": ("TR31", "Andamento da doação")}
+ONDE_TEMPLATE = "em E-mails → Modelos do Sender"
+VERSAO_CONTRATO_SITE = "1.34.0"
+MSG_SITE_SEM_CONTRATO = f"O site ainda não manda o contrato para assinatura: avise quem cuida do site (plugin da CAMP {VERSAO_CONTRATO_SITE} ou mais novo). Nada foi enviado."
+RE_LINK = re.compile(r"^https?://[^\s/]+\.[^\s]+$", re.I)
 ABERTAS = ("em_analise", "info", "visita", "aprovada", "contrato_enviado", "contrato_assinado", "cobranca")   # pedem ação da equipe
 MINIMO = 1000.0
 
@@ -135,11 +159,34 @@ def _gravar(con, x: dict) -> int:
         "dados": json.dumps(d, ensure_ascii=False), "anonimizado": 1 if anon else 0, "alterado_em": _utc(x.get("alterado_em")) or None,
     }
     cols = list(vals)
+    _avisos_do_site(con, sid, x)
     if velho:
         con.execute(f"UPDATE doacao_acervo SET {', '.join(c + '=?' for c in cols)}, visto_em=datetime('now') WHERE site_id=?", (*vals.values(), sid))
         return 0
     con.execute(f"INSERT INTO doacao_acervo (site_id, {', '.join(cols)}) VALUES (?, {', '.join('?' * len(cols))})", (sid, *vals.values()))
     return 1
+
+
+def _evento_email(con, sid: int, modelo: str, ok: bool, ator: str, extra: dict | None = None) -> None:
+    """Um e-mail da doação (TR30/TR27/TR31) para o histórico do painel e E-mails → Enviados (sem nome nem e-mail: vêm da linha da doação)."""
+    tr, nome = TPL.get(modelo, ("", modelo))
+    d = {"template": tr, "modelo": modelo, "nome_modelo": nome, "canal": "sender", **(extra or {})}
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,?,?,?)",
+                (str(int(sid)), "email_enviado" if ok else "email_falhou", ator, json.dumps(d, ensure_ascii=False)))
+
+
+def _avisos_do_site(con, sid: int, x: dict) -> None:
+    """Os avisos de etapa (TR31) que o site registrou (`avisos`, 1.25; o de pagamento sai sozinho lá) viram e-mails aqui, uma vez cada."""
+    for a in x.get("avisos") or []:
+        if not isinstance(a, dict) or not a.get("em"):
+            continue
+        chave = f"aviso:{_txt(a.get('em'), 40)}:{_txt(a.get('etapa'), 30)}"
+        if con.execute("SELECT 1 FROM evento WHERE entidade='doacao_acervo' AND codigo=? AND detalhe LIKE ?", (str(sid), f'%"chave": "{chave}"%')).fetchone():
+            continue
+        et = _txt(a.get("etapa"), 30)
+        _evento_email(con, sid, "doacao_andamento", bool(a.get("enviado")), "sistema" if a.get("auto") else "site",
+                      {"chave": chave, "etapa": et, "etapa_nome": ETAPAS.get(et, et), "sender_id": _txt(a.get("sender_id"), 80),
+                       "erro": _txt(a.get("erro"), 300), "em_site": _utc(a.get("em"))})
 
 
 def coletar(con=None, wp=None) -> dict:
@@ -168,7 +215,7 @@ def coletar(con=None, wp=None) -> dict:
             if isinstance(x, dict):
                 out["lidos"] += 1
                 out["novos"] += _gravar(con, x)
-        listas = {k: d[k] for k in ("etapas", "relacoes", "tipos", "faixas", "conservacao", "direitos", "minimo", "formulario") if k in d}
+        listas = {k: d[k] for k in ("etapas", "relacoes", "tipos", "faixas", "conservacao", "direitos", "minimo", "formulario", "aviso_textos", "aviso_padrao") if k in d}
         if listas:
             _estado_set(con, "listas", json.dumps(listas, ensure_ascii=False))
         agora = d.get("agora")
@@ -303,6 +350,15 @@ def _erro_site(r) -> HTTPException:
     return HTTPException(502, f"O site respondeu {r.status_code}")
 
 
+def _avisar_pagamento(con) -> bool:
+    return _cfg(con, "doacao.avisar_pagamento", "1").strip() not in ("0", "", "false", "nao", "não")
+
+
+def _historico_emails(con, sid: int) -> list[dict]:
+    return [{"quando": e["quando"], "tipo": e["tipo"], "ator": e["ator"], "detalhe": json.loads(e["detalhe"] or "{}")}
+            for e in con.execute("SELECT quando, tipo, ator, detalhe FROM evento WHERE entidade='doacao_acervo' AND codigo=? AND tipo IN ('email_enviado','email_falhou') ORDER BY id DESC LIMIT 50", (str(sid),))]
+
+
 def _um(con, sid: int):
     r = con.execute("SELECT * FROM doacao_acervo WHERE site_id=?", (sid,)).fetchone()
     if not r:
@@ -314,8 +370,10 @@ def _um(con, sid: int):
 def listar(etapa: str = "", q: str = "", u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
+        listas = json.loads(_estado(con, "listas") or "{}") or {}
+        textos = {**AVISO_TEXTOS, **{k: str(v) for k, v in (listas.get("aviso_textos") or {}).items() if k in AVISO_TEXTOS}}
         return {"itens": filtrar(con, etapa, q), "etapas": ETAPAS, "etapas_auto": list(ETAPAS_AUTO), "faixas": FAIXAS, "minimo": MINIMO, "numeros": numeros(con),
-                "listas": json.loads(_estado(con, "listas") or "{}") or {},
+                "listas": listas, "aviso_textos": textos, "aviso_padrao": AVISO_PADRAO, "avisar_pagamento": _avisar_pagamento(con),
                 "site": {"ultima_busca": _estado(con, "ultima_busca") or None, "erro": _estado(con, "ultimo_erro") or None,
                          "sem_rota": _estado(con, "sem_rota") == "1", "minutos": coleta_min(con), "tem_senha": _tem_site(con)}}
     finally:
@@ -337,7 +395,9 @@ def sincronizar(u: dict = Depends(auth.exige("admin"))) -> dict:
 def detalhe(sid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
-        return _detalhe(_um(con, sid))
+        x = _detalhe(_um(con, sid))
+        x["emails"] = _historico_emails(con, sid)
+        return x
     finally:
         con.close()
 
@@ -354,6 +414,10 @@ class Mudanca(BaseModel):
     quantidade_catalogada: str | int | None = None
     fundo: str | None = None
     acao: str | None = None          # gerar_cobranca | consultar
+    avisar: bool | None = None       # CAMP-DOA-AVISOS: avisar a pessoa por e-mail (TR31) da etapa nova
+    aviso_texto: str | None = None   # o texto pronto da etapa, editado
+    mensagem: str | None = None      # nota da equipe, vai depois do texto
+    aviso_link: str | None = None    # opcional (https)
 
 
 @router.post("/{sid}")
@@ -364,7 +428,13 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
         _um(con, sid)
         if not _tem_site(con):
             raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
-        corpo = {k: (str(v) if not isinstance(v, str) else v) for k, v in b.model_dump().items() if v is not None and str(v).strip() != ""}
+        dados_b = b.model_dump()
+        avisar = bool(dados_b.pop("avisar", None))
+        aviso = {k: _txt(dados_b.pop(k, None), 3000 if k != "aviso_link" else 500) for k in ("aviso_texto", "mensagem", "aviso_link")}
+        corpo = {k: (str(v) if not isinstance(v, str) else v) for k, v in dados_b.items() if v is not None and str(v).strip() != ""}
+        cl = (corpo.get("contrato_link") or "").strip()
+        if cl and cl != "__limpar__" and not RE_LINK.match(cl):
+            raise HTTPException(400, "Link do contrato para assinatura: um endereço que comece com http:// ou https://")
         if corpo.get("etapa") and corpo["etapa"] not in ETAPAS:
             raise HTTPException(400, "Etapa desconhecida")
         if corpo.get("etapa") in ETAPAS_AUTO:
@@ -373,7 +443,12 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(400, "Ação desconhecida")
         if not corpo:
             raise HTTPException(400, "Nada para mudar")
+        if avisar:
+            if corpo.get("etapa") not in AVISO_TEXTOS:
+                raise HTTPException(400, "Esta etapa não tem aviso por e-mail (Em análise, contrato e cobrança já têm os e-mails deles)")
+            corpo.update({"avisar": True, **{k: v for k, v in aviso.items() if v}})
         corpo["autor_painel"] = _txt((u or {}).get("nome") or (u or {}).get("email") or "painel", 60)
+        corpo["avisar_pagamento"] = "1" if _avisar_pagamento(con) else "0"
         try:
             resp = _wp().h.post(f"{ROTA}/{int(sid)}", json=corpo)
         except Exception as e:  # noqa: BLE001
@@ -384,10 +459,160 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
         d = _json(resp)
         if isinstance(d.get("registro"), dict):
             _gravar(con, d["registro"])
-            con.commit()
+        email_cob = _email_cobranca(con, sid, corpo, d, u)
+        con.commit()
         registrar(logging.INFO, "doacoes_acervo_mudanca", "Intenção de doação atualizada pelo painel", site_id=int(sid),
                   etapa=corpo.get("etapa") or "", acao=corpo.get("acao") or "")
-        return _detalhe(_um(con, sid))
+        x = _detalhe(_um(con, sid))
+        x["emails"] = _historico_emails(con, sid)
+        if avisar:
+            x["aviso"] = _aviso_resposta(d)
+        if email_cob is not None:
+            x["email_cobranca"] = email_cob
+        return x
+    finally:
+        con.close()
+
+
+def _aviso_resposta(d: dict) -> dict:
+    """O que a tela diz do aviso (TR31). Site antigo não manda "aviso": a etapa mudou e nada saiu."""
+    a = d.get("aviso") if isinstance(d.get("aviso"), dict) else None
+    if a is None:
+        return {"enviado": False, "mensagem": f"Etapa mudada, mas o aviso não saiu: o site ainda não manda o aviso de andamento (plugin da CAMP {VERSAO_CONTRATO_SITE} ou mais novo)."}
+    if a.get("enviado"):
+        return {"enviado": True, "mensagem": "Etapa mudada e a pessoa foi avisada por e-mail (TR31 pelo Sender)."}
+    cod = str(a.get("codigo") or "")
+    if cod == "camp_sender_sem_template":
+        return {"enviado": False, "falta": "TR31", "mensagem": f"Etapa mudada, mas o aviso não saiu: falta o template TR31 (Andamento da doação) do Sender. Crie no Sender e cole o ID {ONDE_TEMPLATE}."}
+    if cod == "camp_sender_sem_chave":
+        return {"enviado": False, "mensagem": "Etapa mudada, mas o aviso não saiu: o Sender está desligado no site (sem o token). Avise quem cuida do site."}
+    return {"enviado": False, "mensagem": "Etapa mudada, mas o aviso não saiu: " + (_txt(a.get("erro"), 200) or "o Sender recusou")}
+
+
+def _email_cobranca(con, sid: int, corpo: dict, d: dict, u: dict) -> dict | None:
+    """Depois de gerar_cobranca: o e-mail TR27 (1.25, `email_cobranca`) vai para os e-mails da doação. Site antigo: None (não diz)."""
+    if corpo.get("acao") != "gerar_cobranca" or not isinstance(d.get("email_cobranca"), dict):
+        return None
+    e = d["email_cobranca"]
+    ok = bool(e.get("enviado"))
+    _evento_email(con, sid, "cobranca_avulsa", ok, (u or {}).get("email") or "painel",
+                  {"sender_id": _txt(e.get("sender_id"), 80), "erro": _txt(e.get("erro"), 300)})
+    if ok:
+        return {"enviado": True, "mensagem": "E-mail da cobrança enviado (TR27 pelo Sender)."}
+    falta = "falta o template TR27 (Cobrança avulsa) do Sender" if e.get("codigo") == "camp_sender_sem_template" else (_txt(e.get("erro"), 200) or "o Sender recusou")
+    return {"enviado": False, "mensagem": f"A cobrança foi gerada, mas o e-mail dela não saiu: {falta}. Copie o link e mande, ou use Gerar novo link de pagamento depois de arrumar."}
+
+
+def _valor_br(v):
+    """2000 · "2000" · "2.000,00" · "R$ 1.500,50" → float; inválido → None."""
+    if isinstance(v, (int, float)):
+        return _num(v)
+    t = re.sub(r"[^\d,.]", "", str(v or ""))
+    if "," in t:
+        t = t.replace(".", "").replace(",", ".")
+    return _num(t) if t else None
+
+
+class EnvioContrato(BaseModel):
+    contrato_link: str | None = None
+    valor: str | float | None = None
+    prazo: str | None = None
+    gerar_cobranca: bool = False
+
+
+def _msg_envio_erro(r) -> tuple[int, str]:
+    d = _json(r)
+    cod = str(d.get("code") or "")
+    if r.status_code == 404 and cod in ("", "rest_no_route"):
+        return 409, MSG_SITE_SEM_CONTRATO
+    if cod == "camp_sender_sem_template":
+        return 409, f"Nada foi enviado: falta o template TR30 (Contrato para assinatura) do Sender. Crie no Sender e cole o ID {ONDE_TEMPLATE}."
+    if cod == "camp_sender_sem_chave":
+        return 409, "Nada foi enviado: o Sender está desligado no site (sem o token). Avise quem cuida do site."
+    if cod == "camp_sender_email":
+        return 409, "Nada foi enviado: a pessoa não tem e-mail válido."
+    if cod == "camp_sender_falhou":
+        return 502, "Nada foi enviado: o Sender recusou o e-mail do contrato. Tente de novo em instantes."
+    if cod == "camp_doa_nao_existe":
+        return 404, "Esta intenção de doação não existe mais no site."
+    if cod in ("camp_doa_sem_link", "camp_doa_etapa", "camp_doa_ja_paga", "camp_doa_sem_valor", "camp_valor"):
+        return (400 if cod == "camp_valor" else 409), (_txt(d.get("message"), 300) or "O site recusou.")
+    if cod == "camp_mp_desligado":
+        return 409, "Nada foi enviado: o Mercado Pago está desligado no site (sem a chave), e a cobrança não abriria. Avise quem cuida do site."
+    return 502, f"Nada foi enviado: o site respondeu {r.status_code}"
+
+
+@router.post("/{sid}/enviar-contrato")
+def enviar_contrato(sid: int, b: EnvioContrato, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """E-mail 1 (TR30, o contrato com o link) e, se pedido, e-mail 2 (a cobrança do Mercado Pago, TR27), separados e nessa ordem.
+    Sem o e-mail 1, nada sai. Se o 1 sai e a cobrança falha, a resposta diz e o "Gerar cobrança" continua lá."""
+    con = connect()
+    try:
+        r = _um(con, sid)
+        if not _tem_site(con):
+            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+        link = (b.contrato_link or "").strip() or (json.loads(r["dados"] or "{}").get("contrato_link") or "")
+        if not link:
+            raise HTTPException(400, "Informe o link do contrato para assinatura")
+        if not RE_LINK.match(link) or len(link) > 500:
+            raise HTTPException(400, "Link do contrato para assinatura: um endereço que comece com http:// ou https://")
+        valor = _valor_br(b.valor) if b.valor not in (None, "") else r["valor"]
+        if b.valor not in (None, "") and valor is None:
+            raise HTTPException(400, "Contribuição: um valor em reais, como 2000 ou 2.000,00")
+        if b.gerar_cobranca and (valor or 0) < MINIMO:
+            raise HTTPException(400, "Para gerar a cobrança junto, informe a contribuição (mínimo R$ 1.000)")
+        prazo = (b.prazo or "").strip()
+        if prazo and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", prazo):
+            raise HTTPException(400, "Prazo para assinar: uma data (AAAA-MM-DD)")
+        autor = _txt((u or {}).get("nome") or (u or {}).get("email") or "painel", 60)
+        corpo = {"contrato_link": link, "cobranca": bool(b.gerar_cobranca), "autor_painel": autor, "avisar_pagamento": "1" if _avisar_pagamento(con) else "0"}
+        if b.valor not in (None, ""):
+            corpo["valor"] = str(valor)
+        if prazo:
+            corpo["prazo"] = prazo
+        w = _wp()
+        try:
+            resp = w.h.post(f"{ROTA}/{int(sid)}/enviar-contrato", json=corpo)
+        except Exception as e:  # noqa: BLE001
+            registrar(logging.WARNING, "doacoes_acervo_contrato", "Envio do contrato: o site não respondeu", site_id=int(sid), erro=type(e).__name__)
+            raise HTTPException(502, "O site não respondeu agora: nada foi enviado. Tente de novo em instantes") from e
+        if resp.status_code >= 400:
+            st, msg = _msg_envio_erro(resp)
+            if str(_json(resp).get("code") or "").startswith("camp_sender_"):
+                _evento_email(con, sid, "contrato_assinatura", False, (u or {}).get("email") or "painel", {"erro": msg})
+                con.commit()
+            raise HTTPException(st, msg)
+        d1 = _json(resp)
+        if isinstance(d1.get("registro"), dict):
+            _gravar(con, d1["registro"])
+        _evento_email(con, sid, "contrato_assinatura", True, (u or {}).get("email") or "painel",
+                      {"sender_id": _txt((d1.get("sender") or {}).get("id") if isinstance(d1.get("sender"), dict) else "", 80), "link_contrato": link[:500]})
+        con.commit()
+        out = {"contrato": {"enviado": True, "mensagem": "E-mail do contrato enviado (TR30 pelo Sender)."}, "cobranca": None, "email_cobranca": None}
+        if b.gerar_cobranca:
+            c2 = {"acao": "gerar_cobranca", "autor_painel": autor, "avisar_pagamento": corpo["avisar_pagamento"]}
+            try:
+                r2 = w.h.post(f"{ROTA}/{int(sid)}", json=c2)
+            except Exception as e:  # noqa: BLE001
+                registrar(logging.WARNING, "doacoes_acervo_contrato", "Cobrança depois do contrato: o site não respondeu", site_id=int(sid), erro=type(e).__name__)
+                r2 = None
+            if r2 is None or r2.status_code >= 400:
+                det = _erro_site(r2).detail if r2 is not None else "o site não respondeu"
+                out["cobranca"] = {"gerada": False, "mensagem": f"O contrato foi enviado, mas a cobrança não foi gerada: {det} Use Gerar cobrança no Mercado Pago para tentar de novo."}
+                con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,?,?,?)",
+                            (str(int(sid)), "cobranca_falhou", (u or {}).get("email") or "painel", json.dumps({"erro": det}, ensure_ascii=False)))
+            else:
+                d2 = _json(r2)
+                if isinstance(d2.get("registro"), dict):
+                    _gravar(con, d2["registro"])
+                out["cobranca"] = {"gerada": True, "mensagem": "Cobrança gerada no Mercado Pago."}
+                out["email_cobranca"] = _email_cobranca(con, sid, c2, d2, u) or {"enviado": None, "mensagem": "O site não disse se o e-mail da cobrança saiu: confira o histórico."}
+            con.commit()
+        registrar(logging.INFO, "doacoes_acervo_contrato", "Contrato enviado para assinatura pelo painel", site_id=int(sid), cobranca=bool(b.gerar_cobranca))
+        x = _detalhe(_um(con, sid))
+        x["emails"] = _historico_emails(con, sid)
+        out["doacao"] = x
+        return out
     finally:
         con.close()
 

@@ -45,6 +45,7 @@ MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
 MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
+MODOS_RAPIDOS |= {"doacoes_contrato"}   # CAMP-DOA-CONTRATO/AVISOS 20/11/2026: contrato para assinatura (TR30) + cobrança (TR27) separados, aviso de etapa (TR31) (site falso; contrato 1.25; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18457,7 +18458,7 @@ def filho(modo):
         da._wp = lambda: WPF(Resp(200, {}), Resp(200, {"ok": True, "registro": dict(A, etapa="aprovada", etapa_nome="Aprovada", notas=[{"em": "20/11/2026 15:00", "quem": "painel (Adm)", "texto": "material ótimo"}])}))
         rr = x.post("/api/doacoes-acervo/601", json={"etapa": "aprovada", "nota": "material ótimo", "caixas": 6, "valor": ""})
         ver("mudar: vai ao site (etapa, nota, número como texto, autor do painel; vazio não vai) e grava o que voltou", rr.status_code == 200 and posts[-1][0] == "/wp-json/camp/v1/painel/doacoes-acervo/601"
-            and posts[-1][1] == {"etapa": "aprovada", "nota": "material ótimo", "caixas": "6", "autor_painel": "Adm"} and rr.json()["etapa"] == "aprovada" and rr.json()["notas"][0]["texto"] == "material ótimo", (posts[-1], rr.text[:200]))
+            and posts[-1][1] == {"etapa": "aprovada", "nota": "material ótimo", "caixas": "6", "autor_painel": "Adm", "avisar_pagamento": "1"} and rr.json()["etapa"] == "aprovada" and rr.json()["notas"][0]["texto"] == "material ótimo", (posts[-1], rr.text[:200]))
         da._wp = lambda: WPF(Resp(200, {}), Resp(409, {"code": "camp_doa_sem_contrato", "message": "Só depois do contrato assinado pelas partes."}))
         rc_ = x.post("/api/doacoes-acervo/601", json={"acao": "gerar_cobranca"})
         ver("gerar cobrança antes do contrato: 409 com a explicação do site", rc_.status_code == 409 and "contrato assinado" in (rc_.json().get("erro") or rc_.json().get("detail") or ""), rc_.text[:200])
@@ -18482,6 +18483,181 @@ def filho(modo):
         from app.log_tecnico import LOG_FILE
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "joao@x.com", "João Guarda")))
+        for l in res: print(l)
+    elif modo == "doacoes_contrato":
+        # CAMP-DOA-CONTRATO e CAMP-DOA-AVISOS 20/11/2026 (contrato 1.25; site FALSO, nada sai de verdade). Rafael: "No painel preciso poder pôr o
+        # link do contrato pra assinatura, e gerar a cobrança no mercado livre quando enviar o contrato pra assinatura em e-mails separados".
+        # Enviar contrato: TR30 e depois a cobrança (TR27), nessa ordem; caixa desmarcada = só o contrato; sem TR30 nada sai; site antigo
+        # (sem a rota ou sem o campo) = frase clara; cobrança que falha depois do contrato; link http(s); aviso de etapa (TR31) marcado,
+        # desmarcado, sem TR31, em análise sem aviso, site antigo; aviso automático do pagamento; E-mails → Enviados; cobrança avulsa com
+        # link de contrato (TR30 antes do TR27, uma vez); catálogo do painel com TR30 e TR31.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da, cobrancas as cb, emails_enviados as ee, emails_site as es
+        from app.main import app
+        res = []
+        def em_(r): d_ = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}; return str(d_.get("erro") or d_.get("detail") or "")
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cf = c.execute("SELECT valor, sensivel FROM configuracao WHERE chave='doacao.avisar_pagamento'").fetchone()
+        cols = {r_[1] for r_ in c.execute("PRAGMA table_info(cobranca_avulsa)")}
+        ver("migração 235: doacao.avisar_pagamento = 1 (não sensível); cobrança avulsa com contrato_link", cf is not None and tuple(cf) == ("1", 0) and {"contrato_link", "contrato_email_link"} <= cols, (tuple(cf) if cf else None, cols))
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.headers, s.content = code, dados, {}, b""
+            def json(s): return s._d
+        posts, R = [], {}
+        A = {"id": 601, "protocolo": "CAMP-2026-000601", "recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Maria Herdeira", "email": "maria@x.com", "telefone": "11 98888-7777",
+             "autor": "Escritório Fulano", "descricao": "rolos", "tipos_nomes": ["Plantas"], "quantidade_estimativa_faixa": "51_500", "local": "Campinas/SP", "fotos": [],
+             "etapa": "aprovada", "etapa_nome": "Aprovada", "valor": 0, "contrato_link": "", "notas": [], "cobranca": None, "pode_cobrar": False, "historico": [], "avisos": [], "alterado_em": "2026-11-20T12:00:00+00:00"}
+        COB = {"id": 10, "situacao": "aberta", "situacao_nome": "Aberta", "valor": 2000, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=p", "external_reference": "CAMP-COB-10", "pago_em": ""}
+        def reg(**k): return dict(A, **k)
+        class H:
+            def get(s, path, params=None): return R.get(("GET", path), Resp(404, {"code": "rest_no_route"}))
+            def post(s, path, json=None):
+                posts.append((path, dict(json or {})))
+                r_ = R.get(("POST", path), Resp(404, {"code": "rest_no_route"}))
+                return r_(json) if callable(r_) else r_
+        class WPF:
+            def __init__(s): s.h = H()
+        da._wp = lambda: WPF(); cb._wp = lambda: WPF()
+        da._gravar(c, A); c.commit()
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        RD, RC = "/wp-json/camp/v1/painel/doacoes-acervo/601", "/wp-json/camp/v1/painel/doacoes-acervo/601/enviar-contrato"
+        def emails_doa(): return [(_j.loads(e["detalhe"])["template"], e["tipo"]) for e in c.execute("SELECT tipo, detalhe FROM evento WHERE entidade='doacao_acervo' AND tipo LIKE 'email_%' ORDER BY id")]
+        LINK = "https://app.clicksign.com/sign/abc"
+        # ---- papéis e validação (nada vai ao site)
+        ver("operador não envia contrato (403)", op.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK}).status_code == 403 and not posts)
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": "javascript:alert(1)"})
+        ver("link do contrato só http(s): 400 sem chamar o site", r_.status_code == 400 and "http" in em_(r_) and not posts, r_.text[:200])
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "valor": "500", "gerar_cobranca": True})
+        ver("cobrança junto com menos de R$ 1.000: 400 sem chamar o site", r_.status_code == 400 and not posts, r_.text[:200])
+        r_ = x.post("/api/doacoes-acervo/601", json={"contrato_link": "ftp://x.y/z"})
+        ver("salvar link do contrato que não é http(s): 400", r_.status_code == 400 and not posts, r_.text[:200])
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(contrato_link=j.get("contrato_link", ""))})
+        r_ = x.post("/api/doacoes-acervo/601", json={"contrato_link": LINK})
+        ver("salvar o link do contrato para assinatura: vai ao site e volta gravado", r_.status_code == 200 and posts[-1][1].get("contrato_link") == LINK and r_.json()["contrato_link"] == LINK, r_.text[:200])
+        # ---- 1) enviar: TR30 e depois a cobrança (TR27), nessa ordem
+        posts.clear()
+        R[("POST", RC)] = lambda j: Resp(200, {"ok": True, "enviado": True, "template": "TR30", "sender": {"id": "em-30"}, "registro": reg(etapa="contrato_enviado", etapa_nome="Contrato enviado para assinatura", valor=2000, contrato_link=LINK, pode_cobrar=True)})
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="contrato_enviado", etapa_nome="Contrato enviado para assinatura", valor=2000, contrato_link=LINK, cobranca=COB), "email_cobranca": {"enviado": True, "template": "TR27", "sender_id": "em-27"}})
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "valor": "2.000,00", "prazo": "2030-01-10", "gerar_cobranca": True})
+        j_ = r_.json() if r_.status_code == 200 else {}
+        p0_ = posts[0][1] if posts else {}
+        ver("enviar com a cobrança: o site recebe 1º o contrato (TR30) e depois gerar_cobranca (TR27)", r_.status_code == 200 and [p_[0] for p_ in posts] == [RC, RD] and (posts[1][1] if len(posts) > 1 else {}).get("acao") == "gerar_cobranca", ([p_[0] for p_ in posts], r_.text[:200]))
+        ver("pedido do contrato: link, valor, prazo, cobranca=true (o site confere antes) e doacao.avisar_pagamento", p0_.get("contrato_link") == LINK and p0_.get("valor") == "2000.0" and p0_.get("prazo") == "2030-01-10"
+            and p0_.get("cobranca") is True and p0_.get("avisar_pagamento") == "1", p0_)
+        ver("resposta: contrato enviado, cobrança gerada, e-mail da cobrança enviado; etapa Contrato enviado", j_.get("contrato", {}).get("enviado") and j_.get("cobranca", {}).get("gerada") and j_.get("email_cobranca", {}).get("enviado")
+            and j_.get("doacao", {}).get("etapa") == "contrato_enviado" and (j_.get("doacao", {}).get("cobranca") or {}).get("external_reference") == "CAMP-COB-10", r_.text[:300])
+        ver("os dois e-mails no histórico do painel, na ordem (TR30, TR27)", emails_doa() == [("TR30", "email_enviado"), ("TR27", "email_enviado")] and [e_["detalhe"]["template"] for e_ in j_.get("doacao", {}).get("emails", [])] == ["TR27", "TR30"], emails_doa())
+        lin = [l_ for l_ in ee.todas(c) if l_["fonte"] == "doacao_acervo"]
+        ver("E-mails → Enviados: TR30 e TR27 da doação, para o e-mail dela, origem Cobranças e doações", sorted(l_["template"] for l_ in lin) == ["TR27", "TR30"] and all(l_["para"] == "maria@x.com" and l_["origem"] == "cobrancas" and l_["situacao"] == "enviado" and l_["protocolo"] == "CAMP-2026-000601" for l_ in lin), lin[:1])
+        # ---- 2) caixa desmarcada: só o contrato
+        posts.clear(); n0 = len(emails_doa())
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "gerar_cobranca": False})
+        p0_ = posts[0][1] if posts else {}
+        ver("“Gerar a cobrança junto” desmarcada: só o e-mail do contrato (uma chamada; sem gerar_cobranca)", r_.status_code == 200 and [p_[0] for p_ in posts] == [RC] and p0_.get("cobranca") is False and r_.json().get("cobranca", 0) is None
+            and emails_doa()[n0:] == [("TR30", "email_enviado")], ([p_[0] for p_ in posts], emails_doa()[n0:]))
+        # ---- 3) sem TR30: nada sai
+        posts.clear(); n0 = len(emails_doa())
+        R[("POST", RC)] = Resp(409, {"code": "camp_sender_sem_template", "message": "Falta o template TR30", "data": {"status": 409, "template": "TR30"}})
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "valor": "2000", "gerar_cobranca": True})
+        ver("sem o TR30: 409 dizendo que falta o TR30; a cobrança nem é pedida", r_.status_code == 409 and "TR30" in em_(r_) and "Nada foi enviado" in em_(r_) and [p_[0] for p_ in posts] == [RC], (r_.status_code, r_.text[:200], posts))
+        ver("sem o TR30: fica como falha nos e-mails da doação", emails_doa()[n0:] == [("TR30", "email_falhou")], emails_doa()[n0:])
+        # ---- 4) site antigo: sem a rota / sem o campo
+        posts.clear()
+        R.pop(("POST", RC))
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "valor": "2000", "gerar_cobranca": True})
+        ver("site sem a rota enviar-contrato: 409 'atualize o site (1.34.0)', sem erro e sem cobrança", r_.status_code == 409 and "1.34.0" in em_(r_) and [p_[0] for p_ in posts] == [RC], r_.text[:200])
+        R[("POST", RC)] = lambda j: Resp(200, {"ok": True, "enviado": True, "registro": reg(etapa="contrato_enviado", valor=2000)})
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="contrato_enviado", valor=2000, cobranca=COB)})
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "gerar_cobranca": True})
+        ver("site que não manda email_cobranca: cobrança gerada e a tela diz para conferir o histórico (sem erro)", r_.status_code == 200 and r_.json()["cobranca"]["gerada"] and r_.json()["email_cobranca"]["enviado"] is None and "histórico" in r_.json()["email_cobranca"]["mensagem"], r_.text[:300])
+        # ---- 5) contrato sai, cobrança falha
+        R[("POST", RD)] = Resp(409, {"code": "camp_mp_desligado", "message": "x"})
+        r_ = x.post("/api/doacoes-acervo/601/enviar-contrato", json={"contrato_link": LINK, "gerar_cobranca": True})
+        ver("contrato saiu e a cobrança falhou: 200 dizendo o que houve e que dá para tentar Gerar cobrança", r_.status_code == 200 and r_.json()["contrato"]["enviado"] and r_.json()["cobranca"]["gerada"] is False
+            and "Mercado Pago" in r_.json()["cobranca"]["mensagem"] and "Gerar cobrança" in r_.json()["cobranca"]["mensagem"], r_.text[:300])
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="contrato_enviado", valor=2000, cobranca=COB), "email_cobranca": {"enviado": False, "codigo": "camp_sender_sem_template", "erro": "x"}})
+        r_ = x.post("/api/doacoes-acervo/601", json={"acao": "gerar_cobranca"})
+        ver("Gerar cobrança de novo sem o TR27: cobrança gerada e a tela diz que o e-mail dela não saiu (falta o TR27)", r_.status_code == 200 and r_.json()["email_cobranca"]["enviado"] is False and "TR27" in r_.json()["email_cobranca"]["mensagem"], r_.text[:300])
+        # ---- 6) aviso de etapa (TR31)
+        lt = x.get("/api/doacoes-acervo").json()
+        ver("tela: textos prontos por etapa (sem Em análise, contrato e cobrança) e as marcadas por padrão", "em_analise" not in lt["aviso_textos"] and "contrato_enviado" not in lt["aviso_textos"] and "cobranca" not in lt["aviso_textos"]
+            and lt["aviso_padrao"] == ["info", "visita", "aprovada", "nao_aprovada", "paga", "recebido"] and lt["avisar_pagamento"] is True, lt.get("aviso_padrao"))
+        AV = {"em": "2026-11-20T15:00:00+00:00", "etapa": "info", "enviado": True, "auto": False, "sender_id": "em-31"}
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="info", etapa_nome="Aguardando informações do proponente", avisos=[AV]), "aviso": {"enviado": True, "template": "TR31", "etapa": "info", "sender_id": "em-31"}})
+        posts.clear(); n0 = len(emails_doa())
+        r_ = x.post("/api/doacoes-acervo/601", json={"etapa": "info", "avisar": True, "aviso_texto": "Precisamos de fotos.", "mensagem": "Mande 3 fotos dos rolos."})
+        ver("marcado: o site recebe avisar, o texto editado e a mensagem; a tela diz que a pessoa foi avisada", r_.status_code == 200 and posts[-1][1].get("avisar") is True and posts[-1][1].get("aviso_texto") == "Precisamos de fotos." and posts[-1][1].get("mensagem") == "Mande 3 fotos dos rolos."
+            and r_.json()["aviso"]["enviado"] and "avisada" in r_.json()["aviso"]["mensagem"], (posts[-1] if posts else None, r_.text[:200]))
+        da._gravar(c, reg(etapa="info", avisos=[AV])); c.commit()
+        ver("o aviso vira um e-mail TR31 (uma vez, mesmo buscando de novo)", emails_doa()[n0:] == [("TR31", "email_enviado")], emails_doa()[n0:])
+        posts.clear()
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="visita", etapa_nome="Visita agendada")})
+        r_ = x.post("/api/doacoes-acervo/601", json={"etapa": "visita"})
+        ver("desmarcado: a etapa muda e o painel não pede aviso", r_.status_code == 200 and "avisar" not in posts[-1][1] and "aviso" not in r_.json(), posts[-1][1] if posts else None)
+        AV2 = {"em": "2026-11-20T16:00:00+00:00", "etapa": "aprovada", "enviado": False, "codigo": "camp_sender_sem_template", "erro": "falta o template TR31"}
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="aprovada", avisos=[AV, AV2]), "aviso": {"enviado": False, "template": "TR31", "codigo": "camp_sender_sem_template", "erro": "falta o template TR31"}})
+        n0 = len(emails_doa())
+        r_ = x.post("/api/doacoes-acervo/601", json={"etapa": "aprovada", "avisar": True})
+        ver("sem o TR31: a etapa muda, nada sai e a tela diz que falta o TR31", r_.status_code == 200 and r_.json()["etapa"] == "aprovada" and r_.json()["aviso"]["enviado"] is False and "TR31" in r_.json()["aviso"]["mensagem"]
+            and emails_doa()[n0:] == [("TR31", "email_falhou")], (r_.text[:200], emails_doa()[n0:]))
+        posts.clear()
+        r_ = x.post("/api/doacoes-acervo/601", json={"etapa": "em_analise", "avisar": True})
+        ver("Em análise não tem aviso: 400 sem chamar o site", r_.status_code == 400 and not posts, r_.text[:200])
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="recebido")})
+        r_ = x.post("/api/doacoes-acervo/601", json={"etapa": "recebido", "avisar": True})
+        ver("site antigo (sem 'aviso'): a etapa muda e a tela diz que o aviso não saiu (atualize o site)", r_.status_code == 200 and r_.json()["aviso"]["enviado"] is False and "1.34.0" in r_.json()["aviso"]["mensagem"], r_.text[:200])
+        AV3 = {"em": "2026-11-21T10:00:00+00:00", "etapa": "paga", "enviado": True, "auto": True, "sender_id": "em-p"}
+        R[("GET", "/wp-json/camp/v1/painel/doacoes-acervo")] = Resp(200, {"itens": [reg(etapa="paga", avisos=[AV, AV2, AV3])], "agora": "2026-11-21T10:05:00Z"})
+        n0 = len(emails_doa())
+        da.coletar(c, WPF())
+        e_ = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='doacao_acervo' AND tipo='email_enviado' ORDER BY id DESC LIMIT 1").fetchone()
+        ver("pagamento confirmado: o aviso automático do site (TR31) entra nos e-mails, uma vez, como do sistema", emails_doa()[n0:] == [("TR31", "email_enviado")] and e_["ator"] == "sistema" and _j.loads(e_["detalhe"])["etapa"] == "paga", emails_doa()[n0:])
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='doacao.avisar_pagamento'"); c.commit()
+        posts.clear(); x.post("/api/doacoes-acervo/601", json={"nota": "x"})
+        ver("doacao.avisar_pagamento desligado vai ao site junto da mudança", posts and posts[-1][1].get("avisar_pagamento") == "0", posts[-1][1] if posts else None)
+        # ---- 7) cobrança avulsa com link de contrato: TR30 antes do TR27, uma vez
+        RCB = "/wp-json/camp/v1/painel/cobrancas"
+        R[("POST", RCB)] = lambda j: Resp(200, {"ok": True, "criado": True, "id": 801, "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=p801", "external_reference": "CAMP-COB-801",
+                                               "registro": {"id": 801, "situacao": "aberta", "link": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=p801", "external_reference": "CAMP-COB-801"}})
+        base = {"nome": "Paulo Doador", "email": "paulo@x.com", "valor": 2500, "finalidade": "doacao_acervo", "descricao": "Tratamento do acervo de Paulo"}
+        r_ = x.post("/api/cobrancas", json=dict(base, contrato_link="javascript:x"))
+        ver("cobrança avulsa: link do contrato que não é http(s) recusado (400)", r_.status_code == 400 and "http" in em_(r_), r_.text[:200])
+        r_ = x.post("/api/cobrancas", json=dict(base, contrato_link="https://d4sign.com.br/x/1"))
+        cid = r_.json()["cobranca"]["id"] if r_.status_code == 200 else 0
+        ver("cobrança avulsa criada com o link do contrato (guardado e na tela)", r_.status_code == 200 and r_.json()["cobranca"]["contrato_link"] == "https://d4sign.com.br/x/1", r_.text[:200])
+        R[("POST", f"{RCB}/801/email-contrato")] = Resp(409, {"code": "camp_sender_sem_template", "data": {"template": "TR30"}})
+        R[("POST", f"{RCB}/801/email")] = Resp(200, {"ok": True, "enviado": True, "sender": {"id": "e27"}})
+        posts.clear()
+        r_ = x.post(f"/api/cobrancas/{cid}/email")
+        ver("cobrança avulsa sem o TR30: 409 com o modelo que falta e o TR27 nem é pedido", r_.status_code == 409 and "TR30" in em_(r_) and [p_[0] for p_ in posts] == [f"{RCB}/801/email-contrato"], (r_.text[:200], posts))
+        R[("POST", f"{RCB}/801/email-contrato")] = Resp(200, {"ok": True, "enviado": True, "template": "TR30", "sender": {"id": "e30"}})
+        posts.clear()
+        r_ = x.post(f"/api/cobrancas/{cid}/email")
+        ver("cobrança avulsa: e-mail do contrato (TR30) e depois o da cobrança (TR27), dois pedidos", r_.status_code == 200 and r_.json().get("contrato_enviado") and [p_[0] for p_ in posts] == [f"{RCB}/801/email-contrato", f"{RCB}/801/email"]
+            and (posts[0][1] if posts else {}) == {"contrato_link": "https://d4sign.com.br/x/1"}, (r_.text[:200], posts))
+        posts.clear()
+        r_ = x.post(f"/api/cobrancas/{cid}/email")
+        ver("reenviar a cobrança não repete o contrato", r_.status_code == 200 and not r_.json().get("contrato_enviado") and [p_[0] for p_ in posts] == [f"{RCB}/801/email"], posts)
+        lc = sorted(l_["template"] for l_ in ee.todas(c) if l_["fonte"] == "cobranca_avulsa" and l_["situacao"] == "enviado")
+        ver("E-mails → Enviados: TR30 e os TR27 da cobrança avulsa, para quem paga", lc == ["TR27", "TR27", "TR30"] and all(l_["para"] == "paulo@x.com" for l_ in ee.todas(c) if l_["fonte"] == "cobranca_avulsa"), lc)
+        # ---- 8) catálogo do painel (site antigo) e guia do TR30/TR31
+        cat = {m_["chave"]: m_ for m_ in es._catalogo_antigo({}, True, False)}
+        ver("catálogo do painel (site antigo): TR30 contrato_assinatura (crítico) e TR31 doacao_andamento", cat.get("contrato_assinatura", {}).get("tr") == "TR30" and cat["contrato_assinatura"]["critico"] and cat.get("doacao_andamento", {}).get("tr") == "TR31", list(cat)[-3:])
+        g30 = (RAIZ / "docs/sender-modelos/TR30-contrato_assinatura.md").read_text(encoding="utf-8") if (RAIZ / "docs/sender-modelos/TR30-contrato_assinatura.md").exists() else ""
+        g31 = (RAIZ / "docs/sender-modelos/TR31-doacao_andamento.md").read_text(encoding="utf-8") if (RAIZ / "docs/sender-modelos/TR31-doacao_andamento.md").exists() else ""
+        ver("guias TR30 e TR31 com todas as variáveis", all("{{" + v_ + "}}" in g30 for v_ in ("nome", "link_contrato", "valor", "prazo", "protocolo")) and all("{{" + v_ + "}}" in g31 for v_ in ("nome", "acervo", "protocolo", "etapa", "mensagem", "link")))
+        g28 = (RAIZ / "docs/sender-modelos/TR28-doacao_recebida.md").read_text(encoding="utf-8")
+        ver("guia TR28 com tudo o que a pessoa preenche", all("{{" + v_ + "}}" in g28 for v_ in ("telefone", "local", "descricao", "fotos_link", "email", "nome_completo", "relacao", "tipos", "periodo", "conservacao", "direitos", "novidades")))
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "paulo@x.com", "Paulo Doador")))
         for l in res: print(l)
     elif modo == "emails_site":
         # CAMP-SENDER 20/11/2026 · E-mails do site (Rafael: "uma página de configuração de TODOS os e-mails transacionais do site"):
@@ -18603,15 +18779,15 @@ def filho(modo):
         # 6) site antigo (sem catálogo) e site sem a rota
         site["novo"] = False
         r = ad.get("/api/emails-site"); d = r.json()
-        ver("site antigo: mostra TR04–TR29 com os IDs que o site devolve e pede 'atualize o site'", r.status_code == 200 and d["site_antigo"] and "Atualize o site" in d["aviso"] and len(d["modelos"]) == 26
-            and {m["chave"]: m["id"] for m in d["modelos"]}["amigo_acesso"] == "aCe22X" and d["modelos"][-1]["tr"] == "TR29", d.get("aviso"))
+        ver("site antigo: mostra TR04–TR31 com os IDs que o site devolve e pede 'atualize o site'", r.status_code == 200 and d["site_antigo"] and "Atualize o site" in d["aviso"] and len(d["modelos"]) == 28
+            and {m["chave"]: m["id"] for m in d["modelos"]}["amigo_acesso"] == "aCe22X" and d["modelos"][-1]["tr"] == "TR31", d.get("aviso"))
         r = ad.put("/api/emails-site/amigo_acesso", json={"id": ""})
         ver("site antigo: deixar sem ID dá 409 'atualize o site'", r.status_code == 409 and "tualize o site" in r.text, r.text)
         r = ad.post("/api/emails-site/amigo_acesso/teste", json={})
         ver("site antigo: teste dá 409 'atualize o site'", r.status_code == 409 and "tualize o site" in r.text, r.text)
         site["status"] = 404
         r = ad.get("/api/emails-site"); d = r.json()
-        ver("site sem a rota (404): a tela abre com o aviso, sem quebrar", r.status_code == 200 and d["site"] == "sem_rota" and "Atualize o site" in d["aviso"] and len(d["modelos"]) == 26)
+        ver("site sem a rota (404): a tela abre com o aviso, sem quebrar", r.status_code == 200 and d["site"] == "sem_rota" and "Atualize o site" in d["aviso"] and len(d["modelos"]) == 28)
         es._wp = lambda: (_ for _ in ()).throw(RuntimeError("Application Password não configurada"))
         r = ad.get("/api/emails-site"); d = r.json()
         ver("site sem senha configurada: a tela abre com a frase do erro", r.status_code == 200 and d["site"] == "erro" and "Application Password" in d["aviso"])
@@ -20943,6 +21119,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações de acervo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Doações de acervo: todas as verificações rodaram")
+
+print("Doações de acervo · contrato e avisos: TR30 e depois a cobrança (TR27), caixa desmarcada, sem TR30, site antigo, aviso de etapa TR31, cobrança avulsa com contrato")
+rc, out = rodar("doacoes_contrato", f"{tmp}/doacoes_contrato.db")
+if rc != 0: ok(False, f"teste doacoes_contrato não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (contrato e avisos): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 37, "Doações (contrato e avisos): todas as verificações rodaram")
 
 print("E-mails do site: catálogo do site (site falso), salvar ID (válido/inválido/limpar), TR04–TR09 espelhados, teste, guia, site antigo e papéis")
 rc, out = rodar("emails_site", f"{tmp}/emails_site.db")

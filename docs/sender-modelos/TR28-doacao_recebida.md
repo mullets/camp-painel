@@ -13,13 +13,27 @@ Quem apresentou o acervo.
 `CAMP | Recebemos sua intenção de doação de acervo`
 
 ## Variáveis
+As cinco primeiras sempre vêm preenchidas. As outras (desde 20/11/2026) trazem **tudo o que a pessoa preencheu** e podem vir vazias: deixe cada uma **sozinha na sua linha**.
+
 | Variável | O que é | Exemplo |
 |---|---|---|
 | `{{nome}}` | Primeiro nome | Helena |
-| `{{acervo}}` | Arquiteto ou escritório do acervo | Fulano de Tal |
+| `{{acervo}}` | Arquiteto, escritório ou pessoa a quem o acervo pertenceu | Fulano de Tal |
 | `{{protocolo}}` | Referência | CAMP-2026-000990 |
-| `{{quantidade}}` | Faixa estimada de documentos | de 100 a 500 documentos |
-| `{{fotos}}` | Fotos gerais enviadas | 3 foto(s) |
+| `{{quantidade}}` | Faixa estimada (não é contagem) | De 51 a 500 itens |
+| `{{fotos}}` | Fotos gerais enviadas (só a quantidade; as fotos não vão no e-mail) | 3 foto(s) |
+| `{{nome_completo}}` | Nome completo | Helena Souza Prado |
+| `{{email}}` | E-mail informado | helena@exemplo.com |
+| `{{telefone}}` | Telefone / WhatsApp | (11) 98888-7777 |
+| `{{relacao}}` | Relação com o acervo | Sou familiar ou herdeiro(a) |
+| `{{descricao}}` | O que há no acervo (texto da pessoa) | Cerca de 40 rolos de plantas e 6 caixas |
+| `{{tipos}}` | Tipos de material | Plantas, desenhos e croquis; Fotografias, slides ou negativos |
+| `{{periodo}}` | Período dos documentos | 1960–1990 |
+| `{{conservacao}}` | Conservação | Regular |
+| `{{local}}` | Onde está guardado (cidade/UF) | Campinas/SP |
+| `{{fotos_link}}` | Link das fotos (se mandou link) | https://drive.google.com/… |
+| `{{direitos}}` | O que sabe dos direitos autorais | Sou herdeiro(a), mas os direitos precisam ser confirmados |
+| `{{novidades}}` | Quer receber novidades da CAMP | sim |
 
 ## Texto sugerido
 ```
@@ -27,10 +41,25 @@ Olá, {{nome}}.
 
 Recebemos sua apresentação do acervo relacionado a {{acervo}}. Obrigado pelo contato e pela confiança na CAMP.
 
-Quantidade estimada: {{quantidade}}
-Fotos gerais: {{fotos}}
-
 Nossa equipe vai avaliar as informações. Você não precisa fazer inventário nem contar os documentos agora.
+
+O que você nos enviou:
+Nome: {{nome_completo}}
+E-mail: {{email}}
+Telefone / WhatsApp: {{telefone}}
+Relação com o acervo: {{relacao}}
+Arquiteto, escritório ou pessoa: {{acervo}}
+O que há no acervo:
+{{descricao}}
+Tipos de material: {{tipos}}
+Quantidade estimada: {{quantidade}}
+Período: {{periodo}}
+Conservação: {{conservacao}}
+Onde está guardado: {{local}}
+Fotos gerais: {{fotos}}
+Link das fotos: {{fotos_link}}
+Direitos autorais: {{direitos}}
+Quer receber novidades da CAMP: {{novidades}}
 
 Este envio não formaliza uma doação nem autoriza publicação ou transferência de direitos. Se houver interesse de ambas as partes, entraremos em contato.
 
@@ -38,7 +67,8 @@ Referência: {{protocolo}}
 ```
 
 ## Atenção
-- Sem ID sai o e-mail simples do site, com o mesmo conteúdo.
+- Sem ID sai o e-mail simples do site, com o mesmo conteúdo e o mesmo resumo ("O que você nos enviou", sem as linhas vazias).
+- As fotos nunca vão anexadas: só a quantidade.
 
 ## Como cadastrar
 
