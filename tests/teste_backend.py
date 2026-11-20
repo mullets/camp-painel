@@ -47,6 +47,8 @@ MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas
 MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
 MODOS_RAPIDOS |= {"doacoes_contrato"}   # CAMP-DOA-CONTRATO/AVISOS 20/11/2026: contrato para assinatura (TR30) + cobrança (TR27) separados, aviso de etapa (TR31) (site falso; contrato 1.25; linha própria)
 MODOS_RAPIDOS |= {"autentique_doacao"}   # CAMP-AUTENTIQUE 20/11/2026: contrato da doação criado na Autentique (PDF), link no TR30, assinado sozinho (Autentique e site falsos; linha própria)
+MODOS_RAPIDOS |= {"doacoes_cpf"}   # CAMP-DOA-CPF 20/11/2026: CPF/CNPJ, endereço e valor proposto da intenção de doação (contrato 1.26; linha própria)
+MODOS_RAPIDOS |= {"doacoes_importar"}   # CAMP-DOA-IMPORTAR 20/11/2026: ficha antiga do Google Forms (CSV) → simular, importar sem e-mail, idempotente (linha própria)
 MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
 
 
@@ -18573,6 +18575,247 @@ def filho(modo):
             "Ana", "ana@x.com", "97777", "Autor Sigiloso", "sigilosa", "Sigilosa", "drive.example.com/ana", "999.888", "nota da Ana", "NOTAS INTERNAS", "campo_novo", "(removido)")), td)
         ver("anonimizada: etapa e valor continuam (não são dados pessoais)", "Etapa: Contrato enviado para assinatura" in td and "R$ 2.500,00" in td, td[-300:])
         for l in res: print(l)
+    elif modo == "doacoes_cpf":
+        # CAMP-DOA-CPF 20/11/2026 (contrato 1.26; site FALSO). Rafael: "coloque no formulario do site, importante.. rg nao precisa, nem estado civil
+        # e nacionalidade.." e "o valor de doação é bom vir do formulário do site já". O registro do site traz documento, documento_tipo, endereco,
+        # valor_proposto e valor_combinar (OPCIONAIS): guardados, mostrados (só admin), no texto para o contrato (formatados), corrigidos pela
+        # equipe (validados aqui e mandados ao site no POST de sempre), apagados pelo LGPD; site antigo sem os campos não quebra nada.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' / ')[:400]}")
+        c = connect()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.headers, s.content = code, dados, {}, b""
+            def json(s): return s._d
+        posts, R = [], {}
+        class H:
+            def get(s, path, params=None): return R.get(("GET", path), Resp(404, {"code": "rest_no_route"}))
+            def post(s, path, json=None):
+                posts.append((path, dict(json or {})))
+                r_ = R.get(("POST", path), Resp(404, {"code": "rest_no_route"}))
+                return r_(json) if callable(r_) else r_
+        class WPF:
+            def __init__(s): s.h = H()
+        da._wp = lambda: WPF()
+        END = {"cep": "13010001", "logradouro": "Rua das Flores Fictícias", "numero": "100", "complemento": "apto 4", "bairro": "Centro", "cidade": "Campinas", "uf": "SP"}
+        A = {"id": 801, "protocolo": "CAMP-2026-000801", "recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Pessoa Fictícia", "email": "ficticia@x.com", "telefone": "11 90000-0000",
+             "documento": "52998224725", "documento_tipo": "cpf", "endereco": END, "valor_proposto": 2500.0, "valor_combinar": False,
+             "relacao": "familia", "autor": "Escritório Fictício", "descricao": "rolos", "tipos_nomes": ["Plantas"], "quantidade_estimativa_faixa": "51_500", "local": "Campinas/SP",
+             "fotos": [], "etapa": "em_analise", "valor": 2500, "notas": [], "cobranca": None, "historico": [], "avisos": [], "alterado_em": "2026-11-20T12:00:00+00:00"}
+        B = dict(A, id=802, protocolo="CAMP-2026-000802", email="cnpj@x.com", documento="11222333000181", documento_tipo="cnpj", valor_proposto=None, valor_combinar=True, valor=0)
+        V = {k_: v_ for k_, v_ in A.items() if k_ not in ("documento", "documento_tipo", "endereco", "valor_proposto", "valor_combinar")}
+        V.update(id=803, protocolo="CAMP-2026-000803", email="antiga@x.com")   # site antigo: sem os campos novos
+        for x_ in (A, B, V):
+            da._gravar(c, x_)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        dd = _j.loads(c.execute("SELECT dados FROM doacao_acervo WHERE site_id=801").fetchone()[0])
+        ver("campos do site guardados (documento, tipo, endereço, valor proposto)", dd.get("documento") == "52998224725" and dd.get("documento_tipo") == "cpf" and dd.get("endereco") == END
+            and dd.get("valor_proposto") == 2500.0 and dd.get("valor_combinar") is False, dd)
+        r_ = x.get("/api/doacoes-acervo/801"); d_ = r_.json() if r_.status_code == 200 else {}
+        ver("detalhe (admin): CPF formatado, endereço e valor proposto prontos para a tela", d_.get("documento_fmt") == "CPF: 529.982.247-25"
+            and d_.get("endereco_fmt") == "Rua das Flores Fictícias, 100, apto 4 — Centro — Campinas/SP — CEP 13010-001" and d_.get("valor_proposto_fmt") == "R$ 2.500,00" and len(d_.get("ufs") or []) == 27, d_)
+        ver("operador não vê (403)", op.get("/api/doacoes-acervo/801").status_code == 403 and op.get("/api/doacoes-acervo/801/texto").status_code == 403)
+        t = x.get("/api/doacoes-acervo/801/texto").json().get("texto", "")
+        pessoa = t.split("DADOS DA PESSOA")[1].split("FORMULÁRIO")[0] if "DADOS DA PESSOA" in t and "FORMULÁRIO" in t else ""
+        ver("texto: 'CPF: 123.456.789-09' e 'Endereço: Rua X, 123, apto 4 — Bairro — Cidade/UF — CEP 01234-567' em DADOS DA PESSOA",
+            "CPF: 529.982.247-25" in pessoa and "Endereço: Rua das Flores Fictícias, 100, apto 4 — Centro — Campinas/SP — CEP 13010-001" in pessoa, pessoa)
+        form = t.split("FORMULÁRIO (pergunta e resposta)")[1].split("DADOS COMBINADOS")[0] if "FORMULÁRIO" in t and "DADOS COMBINADOS" in t else ""
+        PARES = [("CPF ou CNPJ", "529.982.247-25"), ("CEP", "13010-001"), ("Rua, avenida (logradouro)", "Rua das Flores Fictícias"), ("Número", "100"), ("Complemento", "apto 4"),
+                 ("Bairro", "Centro"), ("Cidade", "Campinas"), ("UF", "SP"), ("Valor da contribuição de preservação", "R$ 2.500,00")]
+        falta = [p_ for p_, r2 in PARES if f"{p_}\n  {r2}" not in form]
+        ver("texto: as perguntas novas com os rótulos do site, logo depois do telefone", not falta and form.index("Telefone / WhatsApp\n") < form.index("CPF ou CNPJ\n") < form.index("Qual é sua relação"), (falta, form[:400]))
+        ver("texto: valor proposto pela pessoa ao lado da contribuição acordada", "Contribuição acordada: R$ 2.500,00" in t and "Valor proposto pela pessoa: R$ 2.500,00" in t, t[-300:])
+        tb = x.get("/api/doacoes-acervo/802/texto").json().get("texto", "")
+        ver("texto: CNPJ formatado; 'A combinar com a equipe'", "CNPJ: 11.222.333/0001-81" in tb and "Valor da contribuição de preservação\n  A combinar com a equipe" in tb and "Valor proposto pela pessoa: A combinar com a equipe" in tb, tb[:500])
+        r_ = x.get("/api/doacoes-acervo/803"); tv = x.get("/api/doacoes-acervo/803/texto")
+        ver("site antigo sem os campos: detalhe e texto funcionam, sem as linhas", r_.status_code == 200 and r_.json().get("documento_fmt") == "" and r_.json().get("endereco_fmt") == ""
+            and tv.status_code == 200 and all(p_ not in tv.json().get("texto", "") for p_ in ("CPF", "CNPJ", "Endereço", "CEP", "Valor proposto", "Valor da contribuição")), tv.text[:400])
+        # a equipe corrige: validado aqui, mandado ao site no POST de sempre
+        RD = "/wp-json/camp/v1/painel/doacoes-acervo/801"
+        n0 = len(posts)
+        r_ = x.post("/api/doacoes-acervo/801", json={"documento": "529.982.247-26"})
+        ver("CPF com dígito errado: 400 e nada vai ao site", r_.status_code == 400 and "dígitos verificadores" in r_.text and len(posts) == n0, r_.text[:200])
+        r_ = x.post("/api/doacoes-acervo/801", json={"endereco": {"cep": "1234"}})
+        r2_ = x.post("/api/doacoes-acervo/801", json={"endereco": {"uf": "ZZ"}})
+        ver("CEP sem 8 números e UF desconhecida: 400 e nada vai ao site", r_.status_code == 400 and "CEP" in r_.text and r2_.status_code == 400 and "UF" in r2_.text and len(posts) == n0, (r_.text[:200], r2_.text[:200]))
+        NOVO_END = dict(END, cep="01001000", numero="200", complemento="", cidade="São Paulo")
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": dict(A, documento="11222333000181", documento_tipo="cnpj", endereco=NOVO_END)})
+        r_ = x.post("/api/doacoes-acervo/801", json={"documento": "11.222.333/0001-81", "endereco": {"cep": "01001-000", "numero": "200", "complemento": "__limpar__", "cidade": "São Paulo", "bairro": ""}})
+        corpo = posts[-1][1] if len(posts) > n0 else {}
+        ver("correção vai ao site: documento só dígitos e só as partes mudadas do endereço (vazio não vai; __limpar__ vai)", r_.status_code == 200 and posts[-1][0] == RD
+            and corpo.get("documento") == "11222333000181" and corpo.get("endereco") == {"cep": "01001000", "numero": "200", "complemento": "__limpar__", "cidade": "São Paulo"}, (r_.text[:200], corpo))
+        d2 = r_.json() if r_.status_code == 200 else {}
+        ver("registro devolvido pelo site guardado; resposta diz que salvou", d2.get("documento_fmt") == "CNPJ: 11.222.333/0001-81" and (d2.get("endereco") or {}).get("cep") == "01001000"
+            and (d2.get("dados_pessoais") or {}).get("salvo") is True, d2.get("dados_pessoais"))
+        R[("POST", "/wp-json/camp/v1/painel/doacoes-acervo/803")] = Resp(200, {"ok": True, "registro": V})
+        r_ = x.post("/api/doacoes-acervo/803", json={"documento": "52998224725"})
+        ver("site antigo ignora a correção: a tela avisa que não guardou", r_.status_code == 200 and (r_.json().get("dados_pessoais") or {}).get("salvo") is False and "1.35.0" in r_.json()["dados_pessoais"]["mensagem"], r_.text[:300])
+        r_ = x.post("/api/doacoes-acervo/801", json={"documento": "52998224725"})
+        ver("operador não corrige (403)", op.post("/api/doacoes-acervo/801", json={"documento": "52998224725"}).status_code == 403)
+        # LGPD
+        n_ = da.anonimizar_por_email(c, "ficticia@x.com"); c.commit()
+        dz = _j.loads(c.execute("SELECT dados FROM doacao_acervo WHERE site_id=801").fetchone()[0])
+        tz = x.get("/api/doacoes-acervo/801/texto").json().get("texto", "")
+        ver("LGPD: documento e endereço apagados; o texto não traz nada", n_ == 1 and not dz.get("documento") and not dz.get("documento_tipo") and not dz.get("endereco")
+            and not any(s_ in _j.dumps(dz, ensure_ascii=False) + tz for s_ in ("11222333000181", "52998224725", "529.982", "11.222.333", "Flores", "01001")), (dz, tz))
+        A2 = dict(A, documento="11222333000181", endereco=NOVO_END)
+        da._gravar(c, A2); c.commit()                    # o site manda de novo (ainda sem saber): anonimizada não recebe os dados de volta
+        dz = _j.loads(c.execute("SELECT dados FROM doacao_acervo WHERE site_id=801").fetchone()[0])
+        ver("LGPD: anonimizada não recebe documento/endereço de volta do site", not dz.get("documento") and not dz.get("endereco"), dz)
+        for l in res: print(l)
+    elif modo == "doacoes_importar":
+        # CAMP-DOA-IMPORTAR 20/11/2026 (contrato 1.27; site FALSO; CSV FICTÍCIO com o cabeçalho da ficha). Rafael: "pode registrar todos, mas não
+        # enviaremos email, e a raquel já tá aí". Leitura do CSV (BOM, campos com várias linhas, carimbo), CPF/CNPJ, valor, simular × importar,
+        # idempotência (e-mail + carimbo), quem já está só ganha o vazio, nova vai ao site SEM e-mail, texto para o contrato com a ficha, LGPD.
+        init_db(); _aplicar_migracoes_real()
+        import csv as _csv, io as _io, json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' / ')[:400]}")
+        c = connect()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.headers, s.content = code, dados, {}, b""
+            def json(s): return s._d
+        posts, SITE = [], {"prox": 900, "chaves": {}}
+        def site_importar(j):
+            if j.get("chave") in SITE["chaves"]:
+                return Resp(200, {"ok": True, "criado": False, "ja_importado": True, "completados": [], "registro": SITE["chaves"][j["chave"]]})
+            if j.get("completar_id"):
+                reg = dict(EXIST)
+                for k_, v_ in j.items():
+                    if k_ not in ("chave", "completar_id", "autor_painel", "recebida_em", "endereco") and not reg.get(k_):
+                        reg[k_] = v_
+                if not (reg.get("endereco") or {}).get("logradouro"):
+                    reg["endereco"] = dict(reg.get("endereco") or {}, **(j.get("endereco") or {}))
+                reg["historico"] = ["painel: dados da ficha (Google Forms) importados"]
+            else:
+                SITE["prox"] += 1
+                reg = {k_: v_ for k_, v_ in j.items() if k_ not in ("chave", "autor_painel")}
+                reg.update(id=SITE["prox"], protocolo=f"CAMP-2026-{SITE['prox']:06d}", origem="ficha_google", valor=j.get("valor_proposto") or 0,
+                           alterado_em="2026-11-20T12:00:00+00:00", fotos=[])
+            SITE["chaves"][j["chave"]] = reg
+            return Resp(200, {"ok": True, "criado": not j.get("completar_id"), "ja_importado": False, "completados": [], "registro": reg})
+        R = {("POST", "/wp-json/camp/v1/painel/doacoes-acervo/importar"): site_importar}
+        class H:
+            def get(s, path, params=None): return Resp(404, {"code": "rest_no_route"})
+            def post(s, path, json=None):
+                posts.append((path, dict(json or {})))
+                r_ = R.get(("POST", path), Resp(404, {"code": "rest_no_route"}))
+                return r_(json) if callable(r_) else r_
+        class WPF:
+            def __init__(s): s.h = H()
+        da._wp = lambda: WPF()
+        # quem já está no painel (pessoa fictícia; a ficha a acha pelo e-mail, com outra caixa e espaços)
+        EXIST = {"id": 851, "protocolo": "CAMP-2026-000851", "recebida_em": "2026-11-01T12:00:00+00:00", "nome": "Rita Fictícia", "email": "rita.ficticia@exemplo.com",
+                 "telefone": "11 91111-2222", "documento": "", "endereco": None, "autor": "Ateliê Fictício", "descricao": "pastas", "etapa": "info", "valor": 0,
+                 "fotos": [], "notas": [], "historico": [], "avisos": [], "alterado_em": "2026-11-01T12:00:00+00:00"}
+        da._gravar(c, EXIST)
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        CAB = list(da.FICHA_CABECALHO)
+        def linha(**k): return [k.get(cc, "") for cc in CAB]
+        L1 = linha(**{"Carimbo de data/hora": "27/07/2026 14:03:42", "Nome completo": "Bruno Inventado", "Nome do arquiteto(a) ou titular do acervo": "Escritório Imaginário",
+                      "CPF ou CNPJ": "529.982.247-25", "Endereço completo": "Rua Inventada, 10\nApto 3 - Bairro Falso\nSão Paulo/SP 01001-000", "Telefone": "(11) 90000-0001",
+                      "E-mail": "bruno@exemplo.com", "Descrição geral do acervo": "Plantas\ne croquis", "Quantidade aproximada de itens": "Mais de 500 itens",
+                      "Período temporal do acervo (ex: 1960–1990)": "1960–1990", "Estado de conservação": "Bom", "Formato dos itens": "Papel",
+                      "Situação dos direitos autorais": "Sou titular dos direitos patrimoniais", "Propriedade do Acervo": "Declaro que sou proprietário",
+                      "Transferência de Uso Institucional": "Concordo", "Autorização Ampla de Uso Institucional, Editorial e Comercial": "Concordo, com ressalvas:\nsó uso educativo",
+                      "Irrevogabilidade da Doação": "Concordo", "Responsabilidade por Danos Preexistentes": "Ciente", "Valor da contribuição": "R$ 2.000,00"})
+        L2 = linha(**{"Carimbo de data/hora": "28/07/2026 09:15:00", "Nome completo": "Rita Fictícia", "CPF ou CNPJ": "11.222.333/0001-81", "Endereço completo": "Av. Imaginária 500, Campinas",
+                      "Telefone": "11 98888-0000", "E-mail": "  Rita.Ficticia@Exemplo.com ", "Formato dos itens": "Rolos", "Estado de conservação": "Precisa de restauro",
+                      "Situação dos direitos autorais": "Ainda vamos ver com a família", "Propriedade do Acervo": "Sim", "Valor da contribuição": "1000"})
+        L3 = linha(**{"Carimbo de data/hora": "29/07/2026 18:00:00", "Nome completo": "Sem Email Fictício", "CPF ou CNPJ": "123.456.789-00", "Valor da contribuição": "Já combinado"})
+        L4 = linha(**{"Carimbo de data/hora": "30/07/2026 08:00:00", "Nome completo": "Carla Imaginária", "E-mail": "carla@exemplo.com", "Valor da contribuição": "Material"})
+        buf = _io.StringIO(); _csv.writer(buf, lineterminator="\r\n").writerows([CAB, L1, L2, L3, L4])
+        CSV = "﻿" + buf.getvalue()
+        # leitura
+        lidas = da.ler_ficha_csv(CSV)
+        ver("CSV: BOM, campos entre aspas com várias linhas, 4 linhas", len(lidas) == 4 and lidas[0]["Endereço completo"] == "Rua Inventada, 10\nApto 3 - Bairro Falso\nSão Paulo/SP 01001-000"
+            and lidas[0]["Carimbo de data/hora"] == "27/07/2026 14:03:42" and lidas[0]["linha"] == 2, [l_.get("Nome completo") for l_ in lidas])
+        ver("carimbo de Brasília → ISO com fuso", da._carimbo("27/07/2026 14:03:42") == "2026-07-27T14:03:42-03:00" and da._carimbo("31/02/2026 10:00:00") == "" and da._carimbo("ontem") == "")
+        try:
+            da.ler_ficha_csv("a,b\n1,2\n"); cab_ok = False
+        except ValueError as e_:
+            cab_ok = "Ficha de Doação" in str(e_)
+        ver("CSV que não é a ficha: recusado com frase clara", cab_ok)
+        ver("CPF e CNPJ: dígitos verificadores", da.cpf_ok("52998224725") and not da.cpf_ok("12345678900") and not da.cpf_ok("11111111111") and da.cnpj_ok("11222333000181") and not da.cnpj_ok("11222333000182"))
+        ver("valor: '2.000,00', 'R$ 1.000,00', '1000', '1.500' → número; texto → nada", (da._valor_ficha("2.000,00"), da._valor_ficha("R$ 1.000,00"), da._valor_ficha("1000"), da._valor_ficha("1.500"),
+            da._valor_ficha("Já combinado"), da._valor_ficha("Material"), da._valor_ficha("")) == (2000.0, 1000.0, 1000.0, 1500.0, None, None, None))
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador não importa (403)", op.post("/api/doacoes-acervo/importar", json={"csv": CSV}).status_code == 403)
+        n_antes = c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0]
+        r_ = x.post("/api/doacoes-acervo/importar", json={"csv": CSV}); j_ = r_.json() if r_.status_code == 200 else {}
+        P_ = {p_["linha"]: p_ for p_ in j_.get("linhas", [])}
+        ver("simulação (padrão): nada vai ao site, nada muda no painel", r_.status_code == 200 and j_.get("simulado") is True and not posts
+            and c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == n_antes, r_.text[:300])
+        ver("simulação: vai criar / vai completar (campos vazios), linha a linha", [P_.get(i, {}).get("acao_nome") for i in (2, 3, 4, 5)] == ["vai criar", "vai completar (campos vazios)", "vai criar", "vai criar"]
+            and j_.get("resumo") == {"criar": 3, "completar": 1, "igual": 0}, j_.get("resumo"))
+        av3, av4, av5, av2 = (" | ".join(P_.get(i, {}).get("avisos", [])) for i in (3, 4, 5, 2))
+        ver("avisos: CPF inválido, sem e-mail, valor que não é número, texto que não é opção do site", "CPF com dígitos verificadores errados" in av4 and "sem e-mail" in av4
+            and "Já combinado" in av4 and "Material" in av5 and "Precisa de restauro" in av3 and "Ainda vamos ver" in av3 and "CPF" not in av2, (av2, av3, av4, av5))
+        ver("existente: o que falta e as diferenças (telefone diferente não é sobrescrito)", {"CPF ou CNPJ", "Formato dos itens", "Respostas da ficha", "Endereço", "Contribuição (valor)"} <= set(P_.get(3, {}).get("completar", []))
+            and "Telefone" in P_.get(3, {}).get("diferencas", []) and "Telefone" not in P_.get(3, {}).get("completar", []), P_.get(3))
+        r_ = x.post("/api/doacoes-acervo/importar", json={"csv": CSV, "aplicar": True, "etapas": {"2": "visita", "4": "paga"}})
+        ver("etapa automática (paga) recusada antes de mandar qualquer coisa", r_.status_code == 400 and not posts, r_.text[:200])
+        r_ = x.post("/api/doacoes-acervo/importar", json={"csv": CSV, "aplicar": True, "etapas": {"2": "visita"}}); j_ = r_.json() if r_.status_code == 200 else {}
+        cri = [p_ for p_ in posts if not p_[1].get("completar_id")]; comp = [p_ for p_ in posts if p_[1].get("completar_id")]
+        ver("importar: 3 criadas no site e 1 completada, cada uma uma chamada à rota nova", r_.status_code == 200 and j_.get("feitos") == 4 and len(cri) == 3 and len(comp) == 1
+            and all(p_[0] == "/wp-json/camp/v1/painel/doacoes-acervo/importar" for p_ in posts), r_.text[:300])
+        b1 = next((p_[1] for p_ in cri if p_[1].get("email") == "bruno@exemplo.com"), {})
+        ver("mapeamento da linha nova: carimbo, documento só dígitos, faixa, conservação 'Bom' → boa, direitos → código, valor, etapa escolhida",
+            b1.get("recebida_em") == "2026-07-27T14:03:42-03:00" and b1.get("documento") == "52998224725" and b1.get("quantidade_estimativa_faixa") == "mais_500"
+            and b1.get("conservacao") == "boa" and b1.get("direitos") == "titular" and b1.get("valor_proposto") == 2000.0 and b1.get("etapa") == "visita" and b1.get("formato") == "Papel", b1)
+        ver("endereço: um texto só (endereco.texto) e o CEP extraído; nenhuma parte inventada", b1.get("endereco") == {"texto": "Rua Inventada, 10\nApto 3 - Bairro Falso\nSão Paulo/SP 01001-000", "cep": "01001000"}, b1.get("endereco"))
+        fq = [q_["pergunta"] for q_ in b1.get("ficha", [])]
+        ver("ficha: os cinco termos com as perguntas exatas e a resposta do valor", all(t_ in fq for t_ in da.FICHA_TERMOS) and "Valor da contribuição" in fq
+            and {"pergunta": "Autorização Ampla de Uso Institucional, Editorial e Comercial", "resposta": "Concordo, com ressalvas:\nsó uso educativo"} in b1.get("ficha", []), fq)
+        b3 = next((p_[1] for p_ in cri if p_[1].get("nome") == "Sem Email Fictício"), {})
+        ver("valor que não é número: sem valor_proposto, a resposta fica na ficha", "valor_proposto" not in b3 and {"pergunta": "Valor da contribuição", "resposta": "Já combinado"} in b3.get("ficha", [])
+            and b3.get("documento") == "12345678900" and b3.get("etapa") == "em_analise", b3)
+        c2 = comp[0][1] if comp else {}
+        ver("existente: completa pelo id do site (achada pelo e-mail sem caixa/espaço), sem etapa", c2.get("completar_id") == 851 and "etapa" not in c2 and c2.get("documento") == "11222333000181", c2)
+        ver("nenhuma chamada de e-mail: só a rota de importar foi chamada", all("email" not in p_[0] and "sender" not in p_[0] and "enviar" not in p_[0] for p_ in posts))
+        dx = _j.loads(c.execute("SELECT dados FROM doacao_acervo WHERE site_id=851").fetchone()[0])
+        ver("existente no painel: ganhou o vazio, manteve o resto (telefone) e a nota do site", dx.get("telefone") == "11 91111-2222" and dx.get("documento") == "11222333000181"
+            and dx.get("formato") == "Rolos" and "dados da ficha (Google Forms) importados" in " ".join(dx.get("historico") or []), dx)
+        nb = c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0]
+        n_posts = len(posts)
+        r_ = x.post("/api/doacoes-acervo/importar", json={"csv": CSV}); j_ = r_.json() if r_.status_code == 200 else {}
+        r2_ = x.post("/api/doacoes-acervo/importar", json={"csv": CSV, "aplicar": True})
+        ver("idempotente: importar de novo = 'já igual' em todas, nada vai ao site, nada duplica", j_.get("resumo") == {"criar": 0, "completar": 0, "igual": 4} and r2_.status_code == 200
+            and len(posts) == n_posts and c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == nb == n_antes + 3, (j_.get("resumo"), len(posts) - n_posts))
+        sid_b = next((p_["site_id"] for p_ in r2_.json().get("linhas", []) if p_.get("email") == "bruno@exemplo.com"), None) if r2_.status_code == 200 else None
+        t = x.get(f"/api/doacoes-acervo/{sid_b}/texto").json().get("texto", "") if sid_b else ""
+        fsec = t.split(da.FICHA_TITULO)[1].split("DADOS COMBINADOS")[0] if da.FICHA_TITULO in t else ""
+        ver("texto para o contrato: CPF, endereço (texto) e a seção da ficha com cada pergunta → resposta e a data",
+            "CPF: 529.982.247-25" in t and "Endereço: Rua Inventada, 10 Apto 3 - Bairro Falso São Paulo/SP 01001-000" in t
+            and "Enviada em: 27/07/2026 14:03" in fsec and "Irrevogabilidade da Doação\n  Concordo" in fsec and "Valor da contribuição\n  R$ 2.000,00" in fsec
+            and "Autorização Ampla de Uso Institucional, Editorial e Comercial\n  Concordo, com ressalvas:\n  só uso educativo" in fsec, t[:900])
+        r_ = x.post("/api/doacoes-acervo/importar", json={"csv": "não,é\n1,2"})
+        ver("CSV errado: 400 com frase", r_.status_code == 400 and "Ficha de Doação" in r_.text, r_.text[:200])
+        R.clear()
+        CSV2 = CSV.replace("carla@exemplo.com", "nova.ficticia@exemplo.com")
+        r_ = x.post("/api/doacoes-acervo/importar", json={"csv": CSV2, "aplicar": True})
+        ver("site antigo (sem a rota): 409 'atualize o site' e nada muda", r_.status_code == 409 and "1.36.0" in r_.text and c.execute("SELECT COUNT(*) FROM doacao_acervo").fetchone()[0] == nb, r_.text[:200])
+        # LGPD
+        da.anonimizar_por_email(c, "bruno@exemplo.com"); c.commit()
+        dz = _j.loads(c.execute("SELECT dados FROM doacao_acervo WHERE site_id=?", (sid_b,)).fetchone()[0]) if sid_b else {}
+        tz = x.get(f"/api/doacoes-acervo/{sid_b}/texto").json().get("texto", "") if sid_b else ""
+        ver("LGPD: ficha, endereço em texto e documento apagados", not dz.get("ficha") and not dz.get("endereco") and not dz.get("documento")
+            and not any(s_ in _j.dumps(dz, ensure_ascii=False) + tz for s_ in ("Rua Inventada", "52998224725", "529.982", "proprietário", "Bruno")), (dz, tz[:300]))
+        for l in res: print(l)
     elif modo == "doacoes_contrato":
         # CAMP-DOA-CONTRATO e CAMP-DOA-AVISOS 20/11/2026 (contrato 1.25; site FALSO, nada sai de verdade). Rafael: "No painel preciso poder pôr o
         # link do contrato pra assinatura, e gerar a cobrança no mercado livre quando enviar o contrato pra assinatura em e-mails separados".
@@ -21452,6 +21695,24 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Autentique: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 40, "Autentique: todas as verificações rodaram")
+
+print("Doações de acervo · CPF/CNPJ, endereço e valor proposto (contrato 1.26): guardados, detalhe só admin, texto formatado, correção validada e mandada ao site, site antigo, LGPD")
+rc, out = rodar("doacoes_cpf", f"{tmp}/doacoes_cpf.db")
+if rc != 0: ok(False, f"teste doacoes_cpf não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (CPF/endereço): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 16, "Doações (CPF/endereço): todas as verificações rodaram")
+
+print("Doações de acervo · importar a ficha antiga (CSV do Google Forms): leitura, CPF/CNPJ, valor, simular × importar, idempotente, existente só o vazio, sem e-mail, texto, LGPD")
+rc, out = rodar("doacoes_importar", f"{tmp}/doacoes_importar.db")
+if rc != 0: ok(False, f"teste doacoes_importar não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (importar ficha): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Doações (importar ficha): todas as verificações rodaram")
 
 print("E-mails do site: catálogo do site (site falso), salvar ID (válido/inválido/limpar), TR04–TR09 espelhados, teste, guia, site antigo e papéis")
 rc, out = rodar("emails_site", f"{tmp}/emails_site.db")

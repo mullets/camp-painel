@@ -34,6 +34,9 @@ As cinco primeiras sempre vêm preenchidas. As outras (desde 20/11/2026) trazem 
 | `{{fotos_link}}` | Link das fotos (se mandou link) | https://drive.google.com/… |
 | `{{direitos}}` | O que sabe dos direitos autorais | Sou herdeiro(a), mas os direitos precisam ser confirmados |
 | `{{novidades}}` | Quer receber novidades da CAMP | sim |
+| `{{endereco}}` | Endereço da pessoa (desde o site 1.35.0) | Rua das Flores, 100, apto 4 — Centro — Campinas/SP — CEP 13010-001 |
+| `{{documento_mascarado}}` | CPF ou CNPJ **mascarado** (o número inteiro nunca vai no e-mail) | \*\*\*.456.789-\*\* |
+| `{{valor_proposto}}` | Valor da contribuição escolhido no formulário | R$ 2.500,00 (ou "A combinar com a equipe") |
 
 ## Texto sugerido
 ```
@@ -60,6 +63,9 @@ Fotos gerais: {{fotos}}
 Link das fotos: {{fotos_link}}
 Direitos autorais: {{direitos}}
 Quer receber novidades da CAMP: {{novidades}}
+CPF ou CNPJ: {{documento_mascarado}}
+Endereço: {{endereco}}
+Valor da contribuição de preservação: {{valor_proposto}}
 
 Este envio não formaliza uma doação nem autoriza publicação ou transferência de direitos. Se houver interesse de ambas as partes, entraremos em contato.
 
@@ -69,6 +75,7 @@ Referência: {{protocolo}}
 ## Atenção
 - Sem ID sai o e-mail simples do site, com o mesmo conteúdo e o mesmo resumo ("O que você nos enviou", sem as linhas vazias).
 - As fotos nunca vão anexadas: só a quantidade.
+- O CPF/CNPJ nunca vai inteiro: só `{{documento_mascarado}}`. Nada é cobrado com este e-mail (a cobrança só vai junto com o contrato).
 
 ## Como cadastrar
 
