@@ -1771,6 +1771,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 .doa-fotos{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}.doa-fotos a{display:block;width:110px;height:82px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--bg2,#f1f3f5)}.doa-fotos img{width:100%;height:100%;object-fit:cover}
 #doa-aut{padding:10px 14px;margin:12px 0}#doa-aut>summary{cursor:pointer}#doa-aut ol{margin:6px 0;padding-left:20px}.doa-env-pdf{margin:2px 0 6px 28px}
 .doa-det .act{flex-wrap:wrap;align-items:flex-end}.doa-notas{margin:6px 0;padding-left:18px}
+.doa-texto textarea{width:100%;font-family:var(--mono);font-size:var(--fs-sm2);white-space:pre}   /* CAMP-DOA-TEXTO */
 @media (max-width:900px){#v-doacoes .doa-local{display:none}}
 /* CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais) */
 #em-p-enviados .filterbar select{max-width:200px}#em-p-enviados #em-q{flex:1 1 260px;min-width:170px}
@@ -8981,6 +8982,10 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   <label class="field">Nova nota interna<textarea id="doa-nota" rows="3" maxlength="2000"></textarea></label>
   <div class="act"><button type="button" class="btn pri" data-doa-acao="salvar" data-trabalhando="Salvando…">Salvar</button>${fechada?'':'<button type="button" class="btn" data-doa-acao="contrato">Enviar contrato para assinatura</button>'}${x.pode_cobrar?`<button type="button" class="btn" data-doa-acao="cobrar" data-trabalhando="Abrindo no Mercado Pago…">${cob?'Gerar novo link de pagamento':'Gerar cobrança no Mercado Pago'}</button>`:''}</div>
   ${!x.pode_cobrar&&!cob&&x.etapa!=='paga'&&x.etapa!=='recebido'?'<p class="help">A cobrança abre depois de enviar o contrato para assinatura, com a contribuição informada (mínimo R$ 1.000).</p>':''}
+  <div class="panel cob-previa doa-texto"><b>Dados para o contrato</b><br><small class="help">Os dados da pessoa, cada pergunta do formulário com a resposta e o que foi combinado, em texto simples, para colar no e-mail ou no documento do contrato.</small>
+  <label class="conf-opcao"><input type="checkbox" id="doa-texto-notas"><span><b>Incluir notas internas</b><small>Deixe desmarcado ao mandar para fora da CAMP.</small></span></label>
+  <div class="act"><button type="button" class="btn" data-doa-acao="texto" data-trabalhando="Copiando…">Copiar dados para o contrato</button></div>
+  <label class="field" id="doa-texto-campo" hidden>Texto para o contrato (se não colar, selecione aqui e copie)<textarea id="doa-texto" rows="14" readonly spellcheck="false"></textarea></label></div>
   ${notas?`<p><b>Notas internas</b></p><ul class="doa-notas">${notas}</ul>`:''}
   ${mails?`<details><summary>E-mails desta doação</summary><ul class="cob-hist">${mails}</ul></details>`:''}
   <details><summary>Histórico</summary><ul class="cob-hist">${hist||'<li>—</li>'}</ul></details></div>`);doaAvisoBloco()}
@@ -9001,6 +9006,7 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   const v=k=>((document.getElementById('doa-'+k)||{}).value||'').trim();
   if(a==='copiar'){const l=v('link');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Link copiado'),()=>toast('Selecione o link e copie à mão'));return}
   if(a==='consultar'){doaMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
+  if(a==='texto'){await doaTexto(id,true);return}
   if(a==='conferir-assinatura'){try{const r=await API('/api/doacoes-acervo/'+id+'/conferir-assinatura',{method:'POST'});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(r.doacao);toast(r.resultado.mensagem);carregarDoacoes()}catch(err){toast(err.message)}return}
   const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{};
   const corpo={contrato_link:v('contrato')||(x.contrato_link?'__limpar__':''),assinado_em:v('assinado'),valor:v('valor'),caixas:v('caixas'),rolos:v('rolos'),volume:v('volume'),quantidade_catalogada:v('catalogada'),fundo:v('fundo'),nota:v('nota')};
@@ -9011,6 +9017,17 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   if(a==='cobrar'){const r=await confirmar({titulo:'Gerar cobrança no Mercado Pago',alvo:(box.querySelector('.tag')||{}).textContent||'',texto:'O site abre o pagamento da contribuição (Pix ou cartão) e manda o link por e-mail (TR27), se o modelo do Sender estiver configurado. Confirme que o contrato já foi enviado para assinatura.',botao:'Gerar cobrança',cancelar:'Voltar',botaoOcupado:'Abrindo…',acao:()=>API('/api/doacoes-acervo/'+id,{method:'POST',body:JSON.stringify(Object.assign({},corpo,{acao:'gerar_cobranca'}))})});if(r&&r.resultado){doaDrawer(r.resultado);toast('Cobrança aberta: o link do Mercado Pago está pronto'+(r.resultado.email_cobranca?'. '+r.resultado.email_cobranca.mensagem:''));carregarDoacoes()}return}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('#doa-lista tr[data-doa-abrir]')){e.preventDefault();doaAbrir(e.target.dataset.doaAbrir)}});
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa-sel')doaAvisoBloco()});
+/* CAMP-DOA-TEXTO (20/11/2026, Rafael: "preciso poder em formato texto, copiar todos dados do formulario que ela preencheu e suas respostas,
+   pergunta e resposta, com os dados dela, valor que vai doar e etc que eh pra enviar para fazer o contrato."): o texto vem pronto do painel
+   (GET …/{id}/texto; notas internas só com a caixa marcada). Copia; se o navegador não deixar, o texto fica selecionado na caixa abaixo.
+   Só .value (nada de HTML com os dados da pessoa). */
+async function doaTexto(id,copiar){const campo=document.getElementById('doa-texto-campo'),ta=document.getElementById('doa-texto'),comNotas=!!(document.getElementById('doa-texto-notas')||{}).checked;if(!campo||!ta)return;
+  let t;try{t=(await API('/api/doacoes-acervo/'+(+id)+'/texto'+(comNotas?'?notas=1':''))).texto||''}catch(err){toast(err.message);return}
+  ta.value=t;campo.hidden=false;if(!copiar)return;
+  let ok=false;try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(t);ok=true}}catch(_){ok=false}
+  if(!ok){ta.focus();ta.select();try{ok=!!(document.execCommand&&document.execCommand('copy'))}catch(_){ok=false}}
+  toast(ok?'Dados copiados: cole no e-mail ou no documento do contrato'+(comNotas?' (com as notas internas)':''):'Não deu para copiar sozinho: o texto está selecionado na caixa abaixo; copie com Ctrl+C')}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-texto-notas'){const campo=document.getElementById('doa-texto-campo'),det=e.target.closest('.doa-det');if(campo&&!campo.hidden&&det)doaTexto(det.dataset.doaId,false)}});
 /* CAMP-DOA-CONTRATO: prévia do envio (para quem, e-mail 1 e e-mail 2) e o envio. Dados da pessoa só como texto escapado. */
 async function doaEnviarContrato(id,box){const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{},v=k=>((document.getElementById('doa-'+k)||{}).value||'').trim();
   const link=v('contrato'),vtxt=v('valor'),valor=Number(String(vtxt).replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||Number(x.valor)||0,min=(DOA.d&&DOA.d.minimo)||1000;
