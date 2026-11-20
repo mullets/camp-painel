@@ -18893,6 +18893,8 @@ def filho(modo):
             and ca[0]["files"]["file"][1] == PDF and ca[0]["files"]["file"][2] == "application/pdf" and ca[0]["auth"] == f"Bearer {TK}", (ops.get("query", "")[:80], ca[0]["data"]["map"] if ca else None))
         ver("quem doa entra por NOME (a Autentique não manda e-mail; devolve o link) e quem assina pela CAMP por e-mail",
             sg == [{"name": "Joana Doadora", "action": "SIGN"}, {"email": "rafael@camp.arq.br", "action": "SIGN"}] and "CAMP-2026-000701" in ops["variables"]["document"]["name"], sg)
+        ver("rodapé de autenticação em todas as páginas (Rafael: \"rodapé em todas\"): document.footer = BOTTOM",
+            (ops.get("variables") or {}).get("document", {}).get("footer") == "BOTTOM", (ops.get("variables") or {}).get("document"))
         AUT.clear(); posts.clear()
         R[("POST", RC)] = TR30_OK
         R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="cobranca", contrato_link=LINK_AUT)})
