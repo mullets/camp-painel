@@ -41,7 +41,7 @@ REMOVIDO = "(removido)"
 
 CANAIS = {"sender": "Sender", "site": "E-mail simples do site", "smtp": "SMTP do painel"}
 ORIGENS = {"formulario": "Formulário do site", "visita": "Visita", "inscricao": "Inscrição", "amigos": "Amigos da CAMP",
-           "entrega": "Entrega de material", "downloads": "Downloads (uso do acervo)", "alerta": "Alerta interno", "resumo": "Resumo do dia"}
+           "entrega": "Entrega de material", "downloads": "Downloads (uso do acervo)", "alerta": "Alerta interno", "resumo": "Resumo do dia", "ingressos": "Ingressos"}
 SITUACOES = {"enviado": "Enviado", "falhou": "Falhou", "nao_sender": "Não saiu pelo Sender", "na_fila": "Na fila"}
 # chave do e-mail => (TR, nome). As do site são as de Camp_AAP_Sender::padroes(); as do painel, as daqui.
 MODELOS = {
@@ -55,13 +55,13 @@ MODELOS = {
     "amigo_lembrete_7": ("TR18", "Lembrete de renovação (faltam 7 dias ou menos)"), "amigo_vencido": ("TR19", "Aviso de vencimento"),
     "amigo_recibo": ("TR20", "Recibo simples"), "amigo_livre": ("TR21", "Texto livre"),
     "inscricao_situacao": ("", "Situação da inscrição"), "uso_livre": ("", "E-mail escrito no painel"),
-    "copia_simples": ("", "Cópia simples ao visitante"), "aviso_equipe": ("", "Aviso à equipe"),
+    "copia_simples": ("", "Cópia simples ao visitante"), "aviso_equipe": ("", "Aviso à equipe"), "aviso_equipe_ingresso": ("", "Ingressos (aviso à equipe)"),
     "alerta": ("", "Alerta crítico ou resolvido"), "pedido_novo": ("", "Aviso de pedido novo"), "resumo": ("", "Resumo do dia"),
 }
 REGISTRO_ORIGEM = {"camp_solicitacao": "formulario", "camp_contato": "formulario", "camp_agendamento": "visita", "camp_inscricao": "inscricao",
-                   "camp_apoio": "amigos", "camp_equip_oferta": "formulario"}
+                   "camp_apoio": "amigos", "camp_equip_oferta": "formulario", "camp_ingresso": "ingressos"}
 REGISTRO_NOME = {"camp_solicitacao": "pedido do site", "camp_contato": "mensagem pelo contato", "camp_agendamento": "pedido de visita",
-                 "camp_inscricao": "inscrição", "camp_apoio": "apoio (Amigos ou adoção)", "camp_equip_oferta": "oferta de equipamento"}
+                 "camp_inscricao": "inscrição", "camp_apoio": "apoio (Amigos ou adoção)", "camp_equip_oferta": "oferta de equipamento", "camp_ingresso": "ingresso"}
 # modelo do Amigo no painel => chave do template no site (o mesmo de amigos.SENDER; linhas antigas da fila não têm modelo_site)
 SENDER_AMIGOS = {"boas_vindas": "amigo_boas_vindas", "cobranca": "amigo_cobranca", "cobranca_pendente": "amigo_pendente",
                  "lembrete_renovacao": "amigo_lembrete_30", "aviso_vencido": "amigo_vencido", "recibo": "amigo_recibo", "livre": "amigo_livre"}
