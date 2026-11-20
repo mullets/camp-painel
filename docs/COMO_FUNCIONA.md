@@ -83,6 +83,7 @@ bash tests/rodar_um.sh tests/auditoria_painel.js
    - [C.9 Google Analytics: Site Kit × GA4 direto](#c9-google-analytics-site-kit--ga4-direto)
    - [C.10 Relatórios para prestação de contas (rotas_relatorios.py)](#c10-relatórios-para-prestação-de-contas-rotasrelatoriospy)
    - [C.11 Exportação EAD 2002 / CSV / BagIt (exportacao.py)](#c11-exportação-ead-2002--csv--bagit-exportacaopy)
+   - [C.12 Doações de acervo: assinatura eletrônica pela Autentique (autentique.py)](#c12-doações-de-acervo-assinatura-eletrônica-pela-autentique-autentiquepy-camp-autentique)
 - [Parte D — Telas, acervo e desenvolvimento](#parte-d--telas-acervo-e-desenvolvimento)
    - [D.1 O frontend (frontend/index.html)](#d1-o-frontend-frontendindexhtml)
    - [D.2 As telas do menu, uma a uma](#d2-as-telas-do-menu-uma-a-uma)
@@ -3407,6 +3408,18 @@ Passo a passo de `gerar_bag`:
 6. Grava o evento `exportado_bagit` (pasta, quantos TIFF, quais faltam, bytes).
 7. A tarefa termina `ok` só se nenhum TIFF faltou. Senão termina `falhou`, com a lista em `falhas`, mas o pacote fica gravado. A tela mostra a pasta no fim.
 
+
+## C.12 Doações de acervo: assinatura eletrônica pela Autentique (`autentique.py`, CAMP-AUTENTIQUE)
+
+Guia para quem configura: `docs/autentique.md`. Nada muda no contrato com o site: o painel usa as rotas de sempre (contrato 1.25).
+
+- **Configuração** (tela Doações de acervo → **Assinatura eletrônica (Autentique)**, só admin e master): `autentique.token` (sensível: nunca volta à tela nem ao log; a lista geral de Configurações mostra `••••••••`), `autentique.ligado` (padrão `0`) e `autentique.assinante_camp` (opcional). Rotas: `GET/PUT /api/doacoes-acervo/autentique/config` (devolve só `configurada`, `ligado`, `ativo`, `assinante_camp`, `pendentes`), `POST /api/doacoes-acervo/autentique/testar` (`query { me { … } }`, só lê, não gasta documento). Ligar sem token: 400.
+- **Enviar contrato com PDF**: com a Autentique ligada e com token, `GET /api/doacoes-acervo` traz `autentique.ativo = true` e a prévia oferece **Anexar o PDF do contrato** (PDF, até 5 MB, o limite do plano grátis). `POST /api/doacoes-acervo/{id}/enviar-contrato` com `pdf_base64` + `pdf_nome`: valida valor/prazo **antes** (não gasta documento à toa), cria o documento na Autentique (`createDocument` em multipart: quem doa por **nome**, para a Autentique não mandar e-mail e devolver `link.short_link`; quem assina pela CAMP por e-mail), grava em `doacao_autentique` (situação `criado`) e usa o link como `contrato_link` no POST `…/enviar-contrato` do site (TR30). TR30 saiu → `pendente`. Falhou na Autentique → nada sai (502 com a frase). Falhou o TR30 → o documento fica `criado` e, mandando o mesmo PDF de novo (mesmo `pdf_sha256`), é reaproveitado.
+- **Conferência**: `doacoes_acervo.rodada()` (no ritmo de `doacoes_acervo.coleta_min`, depois da busca no site) chama `conferir_pendentes()`: para cada documento `pendente`, `query { document(id) { signatures { … signed rejected } } }`. Só conta assinatura com ação (o dono da conta, sem ação, não conta). Todos assinaram → `POST /wp-json/camp/v1/painel/doacoes-acervo/{id}` com `etapa=contrato_assinado` e `assinado_em` = dia da última assinatura (horário de Brasília) e uma nota; se a doação já passou dessa etapa (cobrança, paga, recebido), vai só a data; Não aprovada/Arquivada: nada vai ao site. Recusa → `recusado` (a etapa não muda). Problema (Autentique ou site sem resposta) → fica `pendente` com `erro`, e a próxima rodada tenta de novo; nunca levanta. Botão **Conferir assinatura agora**: `POST /api/doacoes-acervo/{id}/conferir-assinatura`.
+- **Eventos** (`evento`, entidade `doacao_acervo`): `autentique_criado`, `autentique_enviado`, `autentique_assinado`, `autentique_recusado` (sem nome, e-mail ou token).
+- Tabela `doacao_autentique` (migração 236): `site_id`, `documento_id`, `link`, `pdf_sha256`, `assinantes` (JSON só com `public_id`, `papel`, datas), `situacao` (`criado` · `pendente` · `assinado` · `recusado`), `assinado_em`, `conferido_em`, `erro`.
+- Testes: modo `autentique_doacao` em `tests/teste_backend.py` (Autentique e site falsos) e `tests/navegador_autentique.js` (portas 8830/8831; a Autentique falsa entra por `CAMP_AUTENTIQUE_URL`, variável só de teste).
+
 ---
 
 ### Resumo das chaves de configuração desta parte
@@ -4391,6 +4404,7 @@ Usam Chromium de verdade e um servidor **próprio** em outra porta (nunca a 8765
 | `tests/navegador_tarefas_hoje.js` | "Melhorar a base", "Agora não", qualidade da base, melhorias, ficha do arquiteto pela rota, celular, nenhum erro de console | 8880 |
 | `tests/notificacoes_ui.js` | Estações → Alertas → "Quem recebe cada aviso" | 8890 |
 | `tests/revisao_pos_cv_ui.js` | folha de contatos, duplicata, Espelhar, consenso do lote | 8861 |
+| `tests/navegador_autentique.js` | Doações de acervo com a Autentique: token, Testar conexão, PDF na prévia, TR30 com o link da Autentique, Conferir assinatura agora (site e Autentique falsos) | 8830 (falsos na 8831) |
 | `tests/sobras_ui.js` | itens do cartão "Sobras" (pedidos, recodificar…) com o WP falso | 8781 |
 
 Receita típica (do cabeçalho de `decisoes_tipos_ui.js`):

@@ -46,6 +46,7 @@ MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: inten
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
 MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
 MODOS_RAPIDOS |= {"doacoes_contrato"}   # CAMP-DOA-CONTRATO/AVISOS 20/11/2026: contrato para assinatura (TR30) + cobrança (TR27) separados, aviso de etapa (TR31) (site falso; contrato 1.25; linha própria)
+MODOS_RAPIDOS |= {"autentique_doacao"}   # CAMP-AUTENTIQUE 20/11/2026: contrato da doação criado na Autentique (PDF), link no TR30, assinado sozinho (Autentique e site falsos; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18659,6 +18660,221 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "paulo@x.com", "Paulo Doador")))
         for l in res: print(l)
+    elif modo == "autentique_doacao":
+        # CAMP-AUTENTIQUE 20/11/2026 (Autentique FALSA e site FALSO: nenhuma chamada de verdade). Rafael: "Enviar contrato para assinatura"
+        # cria o contrato na Autentique (PDF anexado) e o link dela vai no TR30; quando todos assinam, a doação passa a "Contrato assinado
+        # pelas partes" sozinha. Prova: configuração (token sensível, ligar sem token), Testar conexão, PDF escondido sem token/desligado e
+        # link colado funcionando, criar com PDF → TR30 com o link da Autentique, erro da Autentique = nada sai, reaproveitar o documento
+        # quando o e-mail falha, conferência só marca com TODOS assinados (dono sem ação não conta), recusa, etapa adiantada, e o token
+        # nunca aparece em resposta nem no log.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import base64 as _b64, json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da, autentique as au
+        from app.main import app
+        res, textos = [], []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        def em_(r): d_ = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}; return str(d_.get("erro") or d_.get("detail") or "")
+        TK = "tok-autentique-SEGREDO-1234567890abcdef"
+        c = connect()
+        cf = {r_[0]: (r_[1], r_[2]) for r_ in c.execute("SELECT chave, valor, sensivel FROM configuracao WHERE chave LIKE 'autentique.%'")}
+        ver("migração 236: token sensível e vazio, desligada, assinante da CAMP vazio; tabela doacao_autentique",
+            cf.get("autentique.token") == ("", 1) and cf.get("autentique.ligado") == ("0", 0) and cf.get("autentique.assinante_camp") == ("", 0)
+            and c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='doacao_autentique'").fetchone()[0] == 1, cf)
+        # ---- Autentique falsa (httpx trocado)
+        class RA:
+            def __init__(s, code, dados): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        AUT, AQ = [], {}                 # chamadas feitas; respostas por tipo ("me", "criar", "doc")
+        class CliFalso:
+            def __enter__(s): return s
+            def __exit__(s, *a): return False
+            def post(s, url, headers=None, json=None, data=None, files=None):
+                tipo = "criar" if data else ("me" if "me {" in (json or {}).get("query", "") else "doc")
+                AUT.append({"url": url, "auth": (headers or {}).get("Authorization"), "tipo": tipo, "json": json, "data": data, "files": files})
+                r_ = AQ.get(tipo, RA(500, {}))
+                if isinstance(r_, Exception): raise r_
+                return r_(json, data) if callable(r_) else r_
+        au._cliente = lambda: CliFalso()
+        # ---- site falso
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d, s.headers, s.content = code, dados, {}, b""
+            def json(s): return s._d
+        posts, R = [], {}
+        A = {"id": 701, "protocolo": "CAMP-2026-000701", "recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Joana Doadora", "email": "joana@x.com", "telefone": "11 9",
+             "autor": "Escritório Beltrano", "fotos": [], "etapa": "aprovada", "valor": 2000, "contrato_link": "", "notas": [], "historico": [], "avisos": [], "alterado_em": "2026-11-20T12:00:00+00:00"}
+        def reg(**k): return dict(A, **k)
+        class H:
+            def get(s, path, params=None): return R.get(("GET", path), Resp(404, {"code": "rest_no_route"}))
+            def post(s, path, json=None):
+                posts.append((path, dict(json or {})))
+                r_ = R.get(("POST", path), Resp(404, {"code": "rest_no_route"}))
+                return r_(json) if callable(r_) else r_
+        class WPF:
+            def __init__(s): s.h = H()
+        da._wp = lambda: WPF()
+        da._gravar(c, A); c.commit()
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        auth.criar_usuario("Mas", "mas@camp.arq.br", "senha-longa-12345", "master", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "mas@camp.arq.br", "senha": "senha-longa-12345"})
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        def chama(m, url, **kw):
+            r_ = getattr(x, m)(url, **kw); textos.append(r_.text); return r_
+        RD, RC = "/wp-json/camp/v1/painel/doacoes-acervo/701", "/wp-json/camp/v1/painel/doacoes-acervo/701/enviar-contrato"
+        PDF = b"%PDF-1.4\n% contrato de teste\n" + b"0" * 2000 + b"\n%%EOF\n"
+        P64 = _b64.b64encode(PDF).decode()
+        LINK_AUT = "https://assina.ae/AbCd1234"
+        def criado(j, d):
+            return RA(200, {"data": {"createDocument": {"id": "doc-aut-1", "name": "x", "signatures": [
+                {"public_id": "dono", "name": "CAMP", "email": "conta@camp.arq.br", "action": None, "link": None},
+                {"public_id": "sig-doador", "name": "Joana Doadora", "email": None, "action": {"name": "SIGN"}, "link": {"short_link": LINK_AUT}},
+                {"public_id": "sig-camp", "name": None, "email": "rafael@camp.arq.br", "action": {"name": "SIGN"}, "link": None}]}}})
+        TR30_OK = lambda j: Resp(200, {"ok": True, "enviado": True, "sender": {"id": "em-30"}, "registro": reg(etapa="contrato_enviado", contrato_link=j.get("contrato_link", ""))})
+        # ---- 1) desligada / sem token: PDF escondido e o link colado funciona como antes
+        lt = chama("get", "/api/doacoes-acervo").json()
+        ver("sem token: a tela não oferece o PDF (autentique.ativo = false)", lt.get("autentique", {}).get("ativo") is False, lt.get("autentique"))
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": P64, "pdf_nome": "contrato.pdf"})
+        ver("sem token: PDF recusado (409) sem chamar a Autentique nem o site", r_.status_code == 409 and "Autentique" in em_(r_) and not AUT and not posts, r_.text[:200])
+        R[("POST", RC)] = TR30_OK
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"contrato_link": "https://app.clicksign.com/sign/abc"})
+        ver("sem token: o link colado segue igual (TR30 com o link, nada na Autentique)", r_.status_code == 200 and [p_[0] for p_ in posts] == [RC] and posts[0][1].get("contrato_link") == "https://app.clicksign.com/sign/abc" and not AUT, r_.text[:200])
+        # ---- 2) configuração (só admin; token sensível)
+        ver("operador não vê nem muda a configuração da Autentique (403)", op.get("/api/doacoes-acervo/autentique/config").status_code == 403 and op.put("/api/doacoes-acervo/autentique/config", json={"token": TK}).status_code == 403)
+        r_ = chama("put", "/api/doacoes-acervo/autentique/config", json={"ligado": True})
+        ver("ligar sem token: 400", r_.status_code == 400 and "token" in em_(r_), r_.text[:200])
+        r_ = chama("put", "/api/doacoes-acervo/autentique/config", json={"token": "curto"})
+        ver("token com cara errada: 400", r_.status_code == 400, r_.text[:200])
+        c.execute("UPDATE configuracao SET valor='1' WHERE chave='autentique.ligado'"); c.commit()
+        lt = chama("get", "/api/doacoes-acervo").json()
+        ver("ligada mas sem token: PDF continua escondido", lt.get("autentique", {}).get("ativo") is False, lt.get("autentique"))
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='autentique.ligado'"); c.commit()
+        r_ = chama("put", "/api/doacoes-acervo/autentique/config", json={"token": TK, "assinante_camp": "Rafael@CAMP.arq.br"})
+        j_ = r_.json() if r_.status_code == 200 else {}
+        ver("salvar o token: configurada sim, ainda desligada; a resposta não traz o token", r_.status_code == 200 and j_.get("configurada") is True and j_.get("ativo") is False
+            and j_.get("assinante_camp") == "rafael@camp.arq.br" and TK not in r_.text, r_.text[:200])
+        ev = c.execute("SELECT detalhe FROM evento WHERE entidade='config' AND codigo='autentique.token'").fetchone()
+        ver("histórico da configuração diz 'definido', nunca o token", ev is not None and "definido" in ev[0] and TK not in ev[0], ev[0] if ev else None)
+        lt = chama("get", "/api/doacoes-acervo").json()
+        ver("com token mas desligada: PDF escondido", lt.get("autentique", {}).get("ativo") is False)
+        r_ = chama("put", "/api/doacoes-acervo/autentique/config", json={"ligado": True})
+        lt = chama("get", "/api/doacoes-acervo").json()
+        ver("ligada com token: a prévia oferece o PDF", r_.status_code == 200 and r_.json().get("ativo") is True and lt.get("autentique", {}).get("ativo") is True, r_.text[:200])
+        cfg_admin = chama("get", "/api/config")
+        ver("Configurações (lista geral) mostra o token mascarado", cfg_admin.status_code == 200 and TK not in cfg_admin.text and any(i_["chave"] == "autentique.token" and i_["valor"] == "••••••••" for i_ in cfg_admin.json()), cfg_admin.status_code)
+        # ---- 3) Testar conexão
+        AQ["me"] = RA(200, {"data": {"me": {"name": "CAMP Arquivo", "email": "conta@camp.arq.br", "subscription": {"documents": 10, "credits": 0}}}})
+        r_ = chama("post", "/api/doacoes-acervo/autentique/testar", json={})
+        ver("Testar conexão: query me com Bearer <token>, na URL da API v2; resposta com a conta e sem o token",
+            r_.status_code == 200 and AUT and AUT[-1]["url"] == "https://api.autentique.com.br/v2/graphql" and AUT[-1]["auth"] == f"Bearer {TK}" and AUT[-1]["tipo"] == "me"
+            and "CAMP Arquivo" in r_.json().get("mensagem", "") and TK not in r_.text, r_.text[:200])
+        AQ["me"] = RA(401, {"message": "Unauthenticated."})
+        r_ = chama("post", "/api/doacoes-acervo/autentique/testar", json={})
+        ver("Testar conexão com token recusado: frase clara (token)", r_.status_code == 409 and "token" in em_(r_).lower() and TK not in r_.text, r_.text[:200])
+        import httpx as _hx
+        AQ["me"] = _hx.ReadTimeout("x")
+        r_ = chama("post", "/api/doacoes-acervo/autentique/testar", json={})
+        ver("Autentique demorando: frase clara (20 s)", r_.status_code == 502 and "20 s" in em_(r_), r_.text[:200])
+        ver("o cliente usa tempo curto (≤ 20 s)", au.TEMPO_S <= 20)
+        # ---- 4) erros da Autentique: nada sai
+        AUT.clear(); posts.clear()
+        AQ["criar"] = RA(200, {"errors": [{"message": "unavailable_credits", "path": ["createDocument"]}], "data": {"createDocument": None}})
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": P64, "pdf_nome": "contrato.pdf"})
+        ver("limite do mês na Autentique: 502 'documentos do mês', nada vai ao site", r_.status_code == 502 and "documentos do mês" in em_(r_) and "Nada foi enviado" in em_(r_) and not posts and len(AUT) == 1, r_.text[:200])
+        AQ["criar"] = RA(401, {"message": "Unauthenticated."})
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": P64})
+        ver("token recusado ao criar: frase do token, nada vai ao site", r_.status_code == 502 and "token" in em_(r_) and not posts, r_.text[:200])
+        AUT.clear()
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": _b64.b64encode(b"GIF89a nao e pdf").decode()})
+        ver("arquivo que não é PDF: 400 sem chamar a Autentique", r_.status_code == 400 and "PDF" in em_(r_) and not AUT and not posts, r_.text[:200])
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": _b64.b64encode(b"%PDF-" + b"0" * (au.MAX_PDF + 1)).decode()})
+        ver("PDF acima do limite do plano (5 MB): 400 sem chamar a Autentique", r_.status_code == 400 and "5 MB" in em_(r_) and not AUT and not posts, r_.text[:200])
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": P64, "valor": "500", "gerar_cobranca": True})
+        ver("validação antes de gastar documento: cobrança < R$ 1.000 = 400 sem chamar a Autentique", r_.status_code == 400 and not AUT and not posts, r_.text[:200])
+        ver("erros não criaram documento no painel", c.execute("SELECT COUNT(*) FROM doacao_autentique").fetchone()[0] == 0)
+        # ---- 5) criar com PDF; o e-mail (TR30) falha → nada sai; de novo com o mesmo PDF reaproveita o documento
+        AQ["criar"] = criado
+        R[("POST", RC)] = Resp(409, {"code": "camp_sender_sem_template", "message": "Falta o template TR30"})
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": P64, "pdf_nome": "Contrato Joana.pdf"})
+        ver("criou na Autentique mas o TR30 falhou: 409 do TR30 (nada saiu)", r_.status_code == 409 and "TR30" in em_(r_), r_.text[:200])
+        ca = [a_ for a_ in AUT if a_["tipo"] == "criar"]
+        ops = _j.loads(ca[0]["data"]["operations"]) if ca else {}
+        sg = (ops.get("variables") or {}).get("signers") or []
+        ver("createDocument em multipart: operations (mutation createDocument + variáveis), map {file: [variables.file]} e o PDF em 'file'",
+            ca and "createDocument(document: $document, signers: $signers, file: $file)" in ops.get("query", "") and _j.loads(ca[0]["data"]["map"]) == {"file": ["variables.file"]}
+            and ca[0]["files"]["file"][1] == PDF and ca[0]["files"]["file"][2] == "application/pdf" and ca[0]["auth"] == f"Bearer {TK}", (ops.get("query", "")[:80], ca[0]["data"]["map"] if ca else None))
+        ver("quem doa entra por NOME (a Autentique não manda e-mail; devolve o link) e quem assina pela CAMP por e-mail",
+            sg == [{"name": "Joana Doadora", "action": "SIGN"}, {"email": "rafael@camp.arq.br", "action": "SIGN"}] and "CAMP-2026-000701" in ops["variables"]["document"]["name"], sg)
+        AUT.clear(); posts.clear()
+        R[("POST", RC)] = TR30_OK
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa="cobranca", contrato_link=LINK_AUT)})
+        r_ = chama("post", "/api/doacoes-acervo/701/enviar-contrato", json={"pdf_base64": P64, "pdf_nome": "Contrato Joana.pdf", "valor": "2000", "gerar_cobranca": True})
+        j_ = r_.json() if r_.status_code == 200 else {}
+        ver("de novo com o mesmo PDF: reaproveita o documento (não cria outro na Autentique)", r_.status_code == 200 and not [a_ for a_ in AUT if a_["tipo"] == "criar"]
+            and c.execute("SELECT COUNT(*) FROM doacao_autentique").fetchone()[0] == 1, (r_.text[:200], [a_["tipo"] for a_ in AUT]))
+        ver("o TR30 leva o link de assinatura da Autentique como contrato_link; depois a cobrança, como sempre", [p_[0] for p_ in posts] == [RC, RD] and posts[0][1].get("contrato_link") == LINK_AUT
+            and posts[1][1].get("acao") == "gerar_cobranca", posts)
+        la = dict(c.execute("SELECT * FROM doacao_autentique").fetchone() or {})
+        ver("documento guardado na doação: id da Autentique, pendente, assinantes sem nome nem e-mail", la.get("documento_id") == "doc-aut-1" and la.get("situacao") == "pendente"
+            and [a_["public_id"] for a_ in _j.loads(la.get("assinantes") or "[]")] == ["sig-doador", "sig-camp"] and "Joana" not in la["assinantes"] and "rafael@" not in la["assinantes"], la)
+        ver("resposta: contrato criado na Autentique e TR30 enviado; detalhe com a assinatura pendente", "Autentique" in j_.get("contrato", {}).get("mensagem", "")
+            and (j_.get("doacao", {}).get("autentique") or {}).get("situacao") == "pendente" and TK not in r_.text, r_.text[:300])
+        # ---- 6) conferência: só com TODOS assinados
+        def doc(sigs): return RA(200, {"data": {"document": {"id": "doc-aut-1", "name": "x", "signatures": sigs}}})
+        DONO = {"public_id": "dono", "name": "CAMP", "email": "conta@camp.arq.br", "action": None, "signed": None, "rejected": None}
+        S_D = {"public_id": "sig-doador", "name": "Joana Doadora", "email": None, "action": {"name": "SIGN"}, "signed": {"created_at": "2026-11-21 10:00:00"}, "rejected": None}
+        S_C0 = {"public_id": "sig-camp", "name": "R", "email": "rafael@camp.arq.br", "action": {"name": "SIGN"}, "signed": None, "rejected": None}
+        S_C1 = dict(S_C0, signed={"created_at": "2026-11-22T13:30:00.000000Z"})
+        AQ["doc"] = doc([DONO, S_D, S_C0])
+        posts.clear()
+        o = da.conferir_pendentes(c, WPF())
+        ver("conferência: 1 de 2 assinou → continua pendente e nada vai ao site", o.get("conferidos") == 1 and o.get("assinados") == 0 and not posts
+            and c.execute("SELECT situacao FROM doacao_autentique").fetchone()[0] == "pendente", (o, posts))
+        ver("a consulta usa document(id) com signed/rejected", AUT[-1]["tipo"] == "doc" and 'document(id: "doc-aut-1")' in AUT[-1]["json"]["query"] and "signed { created_at }" in AUT[-1]["json"]["query"], AUT[-1]["json"]["query"][:120])
+        c.execute("UPDATE doacao_acervo SET etapa='contrato_enviado' WHERE site_id=701"); c.commit()
+        R[("POST", RD)] = lambda j: Resp(200, {"ok": True, "registro": reg(etapa=j.get("etapa", "contrato_enviado"), assinado_em=j.get("assinado_em", ""))})
+        AQ["doc"] = doc([DONO, S_D, S_C1])
+        r_ = chama("post", "/api/doacoes-acervo/701/conferir-assinatura")
+        j_ = r_.json() if r_.status_code == 200 else {}
+        ver("Conferir assinatura agora, todos assinaram: etapa contrato_assinado com assinado_em = última assinatura (dono sem ação não conta)",
+            r_.status_code == 200 and posts and posts[-1][0] == RD and posts[-1][1].get("etapa") == "contrato_assinado" and posts[-1][1].get("assinado_em") == "2026-11-22"
+            and j_.get("resultado", {}).get("situacao") == "assinado" and j_.get("doacao", {}).get("etapa") == "contrato_assinado", (r_.text[:200], posts[-1] if posts else None))
+        ev = c.execute("SELECT ator, detalhe FROM evento WHERE entidade='doacao_acervo' AND codigo='701' AND tipo='autentique_assinado'").fetchone()
+        ver("assinatura registrada no histórico da doação (painel) e nota no site", ev is not None and '"assinado_em": "2026-11-22"' in ev[1] and "Autentique" in posts[-1][1].get("nota", ""), ev[1] if ev else None)
+        n_ = len(posts); o = da.conferir_pendentes(c, WPF())
+        ver("assinado não é conferido de novo", o.get("conferidos") == 0 and len(posts) == n_, o)
+        # ---- 7) doação já em cobrança: só a data; recusa; rodada automática
+        c.execute("INSERT INTO doacao_autentique (site_id, documento_id, link, assinantes, situacao) VALUES (701,'doc-aut-2','https://assina.ae/x2',?, 'pendente')",
+                  (_j.dumps([{"public_id": "sig-doador"}, {"public_id": "sig-camp"}]),))
+        c.execute("UPDATE doacao_acervo SET etapa='cobranca', assinado_em=NULL WHERE site_id=701"); c.commit()
+        posts.clear()
+        r_ = da.rodada(force=True)
+        ver("rodada automática confere a Autentique; doação já em cobrança: manda só a data (a etapa não volta)", (r_.get("autentique") or {}).get("assinados") == 1 and posts
+            and "etapa" not in posts[-1][1] and posts[-1][1].get("assinado_em") == "2026-11-22", (r_, posts[-1] if posts else None))
+        c.execute("INSERT INTO doacao_autentique (site_id, documento_id, link, assinantes, situacao) VALUES (701,'doc-aut-3','https://assina.ae/x3',?, 'pendente')",
+                  (_j.dumps([{"public_id": "sig-doador"}, {"public_id": "sig-camp"}]),)); c.commit()
+        AQ["doc"] = doc([DONO, dict(S_D, signed=None, rejected={"created_at": "2026-11-23 09:00:00"}), S_C1])
+        posts.clear(); o = da.conferir_pendentes(c, WPF())
+        ver("recusado na Autentique: marca recusado, nada vai ao site", not posts and c.execute("SELECT situacao FROM doacao_autentique WHERE documento_id='doc-aut-3'").fetchone()[0] == "recusado", o)
+        c.execute("INSERT INTO doacao_autentique (site_id, documento_id, link, assinantes, situacao) VALUES (701,'doc-aut-4','https://assina.ae/x4','[]', 'pendente')"); c.commit()
+        AQ["doc"] = RA(500, None)
+        o = da.conferir_pendentes(c, WPF())
+        e4 = c.execute("SELECT situacao, erro FROM doacao_autentique WHERE documento_id='doc-aut-4'").fetchone()
+        ver("Autentique fora do ar na rodada: não levanta, guarda o problema e segue pendente", o.get("erros") == 1 and e4[0] == "pendente" and e4[1] and TK not in e4[1], (o, tuple(e4)))
+        dt = chama("get", "/api/doacoes-acervo/701")
+        ver("detalhe mostra a assinatura (situação, quantos assinaram) sem o token", dt.status_code == 200 and (dt.json().get("autentique") or {}).get("documento_id") == "doc-aut-4" and TK not in dt.text, dt.text[:200])
+        # ---- 8) desligar: PDF some e a rodada não confere
+        chama("put", "/api/doacoes-acervo/autentique/config", json={"ligado": False})
+        n_ = len(AUT)
+        ver("desligada: a rodada não chama a Autentique", da.conferir_pendentes(c, WPF()).get("desligado") is True and len(AUT) == n_)
+        r_ = chama("put", "/api/doacoes-acervo/autentique/config", json={"token": "__limpar__"})
+        ver("apagar o token: configurada não", r_.status_code == 200 and r_.json().get("configurada") is False and c.execute("SELECT valor FROM configuracao WHERE chave='autentique.token'").fetchone()[0] == "", r_.text[:200])
+        # ---- 9) o token nunca aparece
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("o token nunca aparece em nenhuma resposta da API", len(textos) >= 20 and not any(TK in t_ for t_ in textos), len(textos))
+        ver("log técnico sem o token, sem nome nem e-mail", TK not in log_ and "Joana" not in log_ and "joana@x.com" not in log_ and "rafael@camp" not in log_)
+        for l in res: print(l)
     elif modo == "emails_site":
         # CAMP-SENDER 20/11/2026 · E-mails do site (Rafael: "uma página de configuração de TODOS os e-mails transacionais do site"):
         # catálogo vindo do site (contrato 1.23; cliente FALSO, nada sai de verdade), salvar ID (válido/inválido/limpar), TR04–TR09 espelhados na
@@ -21128,6 +21344,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (contrato e avisos): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 37, "Doações (contrato e avisos): todas as verificações rodaram")
+
+print("Doações de acervo · Autentique: configuração (token sensível), Testar conexão, PDF → contrato na Autentique e link no TR30, erro = nada sai, assinado por todos → etapa (Autentique e site falsos)")
+rc, out = rodar("autentique_doacao", f"{tmp}/autentique_doacao.db")
+if rc != 0: ok(False, f"teste autentique_doacao não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Autentique: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 40, "Autentique: todas as verificações rodaram")
 
 print("E-mails do site: catálogo do site (site falso), salvar ID (válido/inválido/limpar), TR04–TR09 espelhados, teste, guia, site antigo e papéis")
 rc, out = rodar("emails_site", f"{tmp}/emails_site.db")
