@@ -18,9 +18,17 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
 - CAMP-DOA-AVISOS (contrato 1.25): ao mudar a etapa, "Avisar a pessoa por e-mail" (TR31, só pelo Sender; texto pronto por etapa,
   editável, + mensagem). Sem TR31: a etapa muda e nada sai. Pagamento confirmado avisa sozinho com doacao.avisar_pagamento (padrão 1).
 - Todo e-mail da doação (TR30, TR27, TR31) fica no histórico (site) e em E-mails → Enviados (tabela evento, entidade doacao_acervo).
+- CAMP-AUTENTIQUE (20/11/2026, sem mudar o contrato com o site): com a Autentique ligada e com token (autentique.py), a prévia oferece
+  "Anexar o PDF do contrato". O painel cria o documento na Autentique (quem doa por nome → link; quem assina pela CAMP, opcional, por
+  e-mail), guarda o id em `doacao_autentique` e usa o link de assinatura como `contrato_link` no enviar-contrato de sempre (TR30). Falhou
+  na Autentique: nada sai. Na rodada (e em "Conferir assinatura agora"), os documentos pendentes são conferidos; todos assinaram →
+  POST …/{id} {etapa: contrato_assinado, assinado_em: data da última assinatura} (só a data se a doação já passou dessa etapa).
 """
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import json
 import logging
 import re
@@ -30,7 +38,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, autentique as aut
 from .config import settings
 from .db import connect
 from .log_tecnico import registrar
@@ -257,7 +265,9 @@ def rodada(force: bool = False) -> dict:
         con.commit()
         if not _tem_site(con):
             return {"sem_site": True}
-        return coletar(con)
+        out = coletar(con)
+        out["autentique"] = conferir_pendentes(con)
+        return out
     except Exception as e:  # noqa: BLE001
         registrar(logging.WARNING, "doacoes_acervo_rodada", "Rodada das intenções de doação com problema", erro=type(e).__name__)
         return {"erro": type(e).__name__}
@@ -359,6 +369,14 @@ def _historico_emails(con, sid: int) -> list[dict]:
             for e in con.execute("SELECT quando, tipo, ator, detalhe FROM evento WHERE entidade='doacao_acervo' AND codigo=? AND tipo IN ('email_enviado','email_falhou') ORDER BY id DESC LIMIT 50", (str(sid),))]
 
 
+def _completo(con, sid: int) -> dict:
+    """O detalhe da tela: registro, e-mails da doação e a assinatura na Autentique (sem token)."""
+    x = _detalhe(_um(con, sid))
+    x["emails"] = _historico_emails(con, sid)
+    x["autentique"] = _aut_info(con, sid)
+    return x
+
+
 def _um(con, sid: int):
     r = con.execute("SELECT * FROM doacao_acervo WHERE site_id=?", (sid,)).fetchone()
     if not r:
@@ -374,6 +392,7 @@ def listar(etapa: str = "", q: str = "", u: dict = Depends(auth.exige("admin")))
         textos = {**AVISO_TEXTOS, **{k: str(v) for k, v in (listas.get("aviso_textos") or {}).items() if k in AVISO_TEXTOS}}
         return {"itens": filtrar(con, etapa, q), "etapas": ETAPAS, "etapas_auto": list(ETAPAS_AUTO), "faixas": FAIXAS, "minimo": MINIMO, "numeros": numeros(con),
                 "listas": listas, "aviso_textos": textos, "aviso_padrao": AVISO_PADRAO, "avisar_pagamento": _avisar_pagamento(con),
+                "autentique": {"ativo": aut.ativo(con), "max_pdf": aut.MAX_PDF},
                 "site": {"ultima_busca": _estado(con, "ultima_busca") or None, "erro": _estado(con, "ultimo_erro") or None,
                          "sem_rota": _estado(con, "sem_rota") == "1", "minutos": coleta_min(con), "tem_senha": _tem_site(con)}}
     finally:
@@ -395,9 +414,7 @@ def sincronizar(u: dict = Depends(auth.exige("admin"))) -> dict:
 def detalhe(sid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
-        x = _detalhe(_um(con, sid))
-        x["emails"] = _historico_emails(con, sid)
-        return x
+        return _completo(con, sid)
     finally:
         con.close()
 
@@ -463,8 +480,7 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
         con.commit()
         registrar(logging.INFO, "doacoes_acervo_mudanca", "Intenção de doação atualizada pelo painel", site_id=int(sid),
                   etapa=corpo.get("etapa") or "", acao=corpo.get("acao") or "")
-        x = _detalhe(_um(con, sid))
-        x["emails"] = _historico_emails(con, sid)
+        x = _completo(con, sid)
         if avisar:
             x["aviso"] = _aviso_resposta(d)
         if email_cob is not None:
@@ -518,6 +534,8 @@ class EnvioContrato(BaseModel):
     valor: str | float | None = None
     prazo: str | None = None
     gerar_cobranca: bool = False
+    pdf_base64: str | None = None    # CAMP-AUTENTIQUE: o PDF do contrato (em vez do link), criado na Autentique
+    pdf_nome: str | None = None
 
 
 def _msg_envio_erro(r) -> tuple[int, str]:
@@ -551,10 +569,11 @@ def enviar_contrato(sid: int, b: EnvioContrato, u: dict = Depends(auth.exige("ad
         r = _um(con, sid)
         if not _tem_site(con):
             raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
-        link = (b.contrato_link or "").strip() or (json.loads(r["dados"] or "{}").get("contrato_link") or "")
-        if not link:
-            raise HTTPException(400, "Informe o link do contrato para assinatura")
-        if not RE_LINK.match(link) or len(link) > 500:
+        pdf = _pdf_do_corpo(con, b) if b.pdf_base64 else None
+        link = "" if pdf else ((b.contrato_link or "").strip() or (json.loads(r["dados"] or "{}").get("contrato_link") or ""))
+        if not pdf and not link:
+            raise HTTPException(400, "Informe o link do contrato para assinatura" + (" ou anexe o PDF do contrato" if aut.ativo(con) else ""))
+        if not pdf and (not RE_LINK.match(link) or len(link) > 500):
             raise HTTPException(400, "Link do contrato para assinatura: um endereço que comece com http:// ou https://")
         valor = _valor_br(b.valor) if b.valor not in (None, "") else r["valor"]
         if b.valor not in (None, "") and valor is None:
@@ -565,6 +584,10 @@ def enviar_contrato(sid: int, b: EnvioContrato, u: dict = Depends(auth.exige("ad
         if prazo and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", prazo):
             raise HTTPException(400, "Prazo para assinar: uma data (AAAA-MM-DD)")
         autor = _txt((u or {}).get("nome") or (u or {}).get("email") or "painel", 60)
+        doc_aut = None
+        if pdf:                                  # CAMP-AUTENTIQUE: o documento nasce na Autentique; o link dela vai no TR30. Falhou: nada sai.
+            doc_aut = _criar_na_autentique(con, r, pdf, b.pdf_nome or "", (u or {}).get("email") or "painel")
+            link = doc_aut["link"]
         corpo = {"contrato_link": link, "cobranca": bool(b.gerar_cobranca), "autor_painel": autor, "avisar_pagamento": "1" if _avisar_pagamento(con) else "0"}
         if b.valor not in (None, ""):
             corpo["valor"] = str(valor)
@@ -585,10 +608,15 @@ def enviar_contrato(sid: int, b: EnvioContrato, u: dict = Depends(auth.exige("ad
         d1 = _json(resp)
         if isinstance(d1.get("registro"), dict):
             _gravar(con, d1["registro"])
+        if doc_aut:
+            con.execute("UPDATE doacao_autentique SET situacao='pendente' WHERE id=?", (doc_aut["linha"],))
+            con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'autentique_enviado',?,?)",
+                        (str(int(sid)), (u or {}).get("email") or "painel", json.dumps({"documento_id": doc_aut["id"], "reaproveitado": doc_aut["reaproveitado"]}, ensure_ascii=False)))
         _evento_email(con, sid, "contrato_assinatura", True, (u or {}).get("email") or "painel",
                       {"sender_id": _txt((d1.get("sender") or {}).get("id") if isinstance(d1.get("sender"), dict) else "", 80), "link_contrato": link[:500]})
         con.commit()
-        out = {"contrato": {"enviado": True, "mensagem": "E-mail do contrato enviado (TR30 pelo Sender)."}, "cobranca": None, "email_cobranca": None}
+        out = {"contrato": {"enviado": True, "mensagem": "Contrato criado na Autentique e e-mail com o link de assinatura enviado (TR30 pelo Sender)." if doc_aut
+                            else "E-mail do contrato enviado (TR30 pelo Sender)."}, "cobranca": None, "email_cobranca": None}
         if b.gerar_cobranca:
             c2 = {"acao": "gerar_cobranca", "autor_painel": autor, "avisar_pagamento": corpo["avisar_pagamento"]}
             try:
@@ -609,10 +637,252 @@ def enviar_contrato(sid: int, b: EnvioContrato, u: dict = Depends(auth.exige("ad
                 out["email_cobranca"] = _email_cobranca(con, sid, c2, d2, u) or {"enviado": None, "mensagem": "O site não disse se o e-mail da cobrança saiu: confira o histórico."}
             con.commit()
         registrar(logging.INFO, "doacoes_acervo_contrato", "Contrato enviado para assinatura pelo painel", site_id=int(sid), cobranca=bool(b.gerar_cobranca))
-        x = _detalhe(_um(con, sid))
-        x["emails"] = _historico_emails(con, sid)
-        out["doacao"] = x
+        out["doacao"] = _completo(con, sid)
         return out
+    finally:
+        con.close()
+
+
+# ---------------------------------------------------------------- CAMP-AUTENTIQUE: assinatura eletrônica
+SIT_AUT = {"criado": "Criado na Autentique (o e-mail ainda não saiu)", "pendente": "Aguardando assinaturas", "assinado": "Assinado por todos",
+           "recusado": "Recusado na Autentique"}
+ETAPAS_ANTES_ASSINADO = ("em_analise", "info", "visita", "aprovada", "contrato_enviado")   # passam a contrato_assinado
+ETAPAS_FECHADAS = ("nao_aprovada", "arquivada")                                             # não mexe no site (só registra aqui)
+
+
+def _pdf_do_corpo(con, b: "EnvioContrato") -> bytes:
+    if not aut.ativo(con):
+        raise HTTPException(409, "A assinatura eletrônica (Autentique) está desligada ou sem o token: cole o link do contrato. Nada foi enviado.")
+    try:
+        pdf = base64.b64decode(re.sub(r"^data:[^,]*,", "", b.pdf_base64 or "").strip(), validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, "O PDF do contrato chegou incompleto: anexe de novo.") from e
+    if not pdf.startswith(b"%PDF-"):
+        raise HTTPException(400, "Anexe o contrato em PDF (outro tipo de arquivo não vai para a Autentique).")
+    if len(pdf) > aut.MAX_PDF:
+        raise HTTPException(400, "O PDF do contrato passa de 5 MB, o limite do plano grátis da Autentique: diminua o arquivo ou cole o link.")
+    return pdf
+
+
+def _criar_na_autentique(con, r, pdf: bytes, nome_arq: str, ator: str) -> dict:
+    """Cria (ou reaproveita, se o mesmo PDF já foi criado e o e-mail não saiu) o documento. Erro → HTTPException (nada foi enviado)."""
+    sid = int(r["site_id"])
+    if r["anonimizado"]:
+        raise HTTPException(409, "Os dados desta pessoa foram apagados (LGPD): não dá para mandar contrato.")
+    sha = hashlib.sha256(pdf).hexdigest()
+    v = con.execute("SELECT id, documento_id, link FROM doacao_autentique WHERE site_id=? AND situacao='criado' AND pdf_sha256=? ORDER BY id DESC LIMIT 1",
+                    (sid, sha)).fetchone()
+    if v and v["link"]:
+        return {"linha": v["id"], "id": v["documento_id"], "link": v["link"], "reaproveitado": True}
+    nome_doc = f"Contrato de doação de acervo · {r['protocolo'] or sid}"
+    try:
+        d = aut.criar_documento(aut.token(con), nome_doc, pdf, nome_arq, r["nome"] or "", aut.assinante_camp(con))
+    except aut.ErroAutentique as e:
+        registrar(logging.WARNING, "autentique_criar", "Autentique não criou o contrato", site_id=sid)
+        raise HTTPException(502, f"{e} Nada foi enviado.") from e
+    if not RE_LINK.match(d["link"]) or len(d["link"]) > 500:
+        raise HTTPException(502, "A Autentique devolveu um link de assinatura estranho. Nada foi enviado: confira o documento na Autentique.")
+    cur = con.execute("INSERT INTO doacao_autentique (site_id, documento_id, link, pdf_sha256, assinantes, situacao, criado_por) VALUES (?,?,?,?,?, 'criado', ?)",
+                      (sid, d["id"], d["link"], sha, json.dumps(d["assinantes"], ensure_ascii=False), ator))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'autentique_criado',?,?)",
+                (str(sid), ator, json.dumps({"documento_id": d["id"], "assinantes": len(d["assinantes"])}, ensure_ascii=False)))
+    con.commit()                                  # o documento existe na Autentique: fica guardado mesmo se o e-mail falhar (reaproveita)
+    registrar(logging.INFO, "autentique_criar", "Contrato criado na Autentique", site_id=sid)
+    return {"linha": cur.lastrowid, "id": d["id"], "link": d["link"], "reaproveitado": False}
+
+
+def _aut_info(con, sid: int) -> dict | None:
+    try:
+        v = con.execute("SELECT * FROM doacao_autentique WHERE site_id=? ORDER BY id DESC LIMIT 1", (int(sid),)).fetchone()
+    except Exception:  # noqa: BLE001  (banco sem a migração 236)
+        return None
+    if not v:
+        return None
+    a = json.loads(v["assinantes"] or "[]")
+    return {"documento_id": v["documento_id"], "situacao": v["situacao"], "situacao_nome": SIT_AUT.get(v["situacao"], v["situacao"]),
+            "link": v["link"] or "", "assinantes": len(a), "assinaram": sum(1 for x in a if x.get("assinado_em")),
+            "assinado_em": v["assinado_em"] or "", "criado_em": v["criado_em"], "conferido_em": v["conferido_em"] or "", "erro": v["erro"] or ""}
+
+
+def _conferir_um(con, v, wp=None, ator: str = "sistema") -> dict:
+    """Confere um documento pendente. Todos assinaram → etapa contrato_assinado + assinado_em pelo site de sempre. Levanta ErroAutentique."""
+    sid = int(v["site_id"])
+    sigs = aut.consultar(aut.token(con), v["documento_id"])
+    nossos = {x.get("public_id"): x for x in json.loads(v["assinantes"] or "[]")}
+    if nossos:
+        sigs = [s_ for s_ in sigs if s_["public_id"] in nossos] or sigs
+    for s_ in sigs:
+        if s_["public_id"] in nossos:
+            nossos[s_["public_id"]].update({"assinado_em": aut.data_iso(s_["assinado_em"]), "recusado_em": aut.data_iso(s_["recusado_em"])})
+    lista = list(nossos.values()) if nossos else [{"public_id": s_["public_id"], "assinado_em": aut.data_iso(s_["assinado_em"])} for s_ in sigs]
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    con.execute("UPDATE doacao_autentique SET assinantes=?, conferido_em=?, erro=NULL WHERE id=?", (json.dumps(lista, ensure_ascii=False), agora, v["id"]))
+    if any(s_["recusado_em"] for s_ in sigs):
+        con.execute("UPDATE doacao_autentique SET situacao='recusado' WHERE id=?", (v["id"],))
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'autentique_recusado',?,?)",
+                    (str(sid), ator, json.dumps({"documento_id": v["documento_id"]}, ensure_ascii=False)))
+        con.commit()
+        return {"situacao": "recusado", "mensagem": "Alguém recusou o contrato na Autentique. A etapa não mudou: fale com a pessoa."}
+    if not sigs or not all(s_["assinado_em"] for s_ in sigs):
+        con.commit()
+        n = sum(1 for s_ in sigs if s_["assinado_em"])
+        return {"situacao": "pendente", "mensagem": f"Ainda faltam assinaturas na Autentique ({n} de {len(sigs)} assinaram)."}
+    dia = max(aut.data_iso(s_["assinado_em"]) for s_ in sigs)
+    r = _um(con, sid)
+    corpo = None
+    if r["etapa"] in ETAPAS_ANTES_ASSINADO:
+        corpo = {"etapa": "contrato_assinado", "assinado_em": dia}
+    elif r["etapa"] not in ETAPAS_FECHADAS and not r["assinado_em"]:
+        corpo = {"assinado_em": dia}             # já em cobrança/paga/recebido: só a data (a etapa não volta)
+    if corpo:
+        corpo.update({"nota": f"Contrato assinado por todos na Autentique em {dia[8:10]}/{dia[5:7]}/{dia[:4]} (documento {v['documento_id']}).",
+                      "autor_painel": "Autentique (painel)", "avisar_pagamento": "1" if _avisar_pagamento(con) else "0"})
+        resp = (wp or _wp()).h.post(f"{ROTA}/{sid}", json=corpo)
+        if resp.status_code >= 400:
+            raise aut.ErroAutentique(f"Todos assinaram, mas o site não aceitou a etapa agora: {_erro_site(resp).detail}")
+        d = _json(resp)
+        if isinstance(d.get("registro"), dict):
+            _gravar(con, d["registro"])
+    con.execute("UPDATE doacao_autentique SET situacao='assinado', assinado_em=? WHERE id=?", (dia, v["id"]))
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('doacao_acervo',?,'autentique_assinado',?,?)",
+                (str(sid), ator, json.dumps({"documento_id": v["documento_id"], "assinado_em": dia, "etapa": (corpo or {}).get("etapa", "")}, ensure_ascii=False)))
+    con.commit()
+    registrar(logging.INFO, "autentique_assinado", "Contrato assinado por todos na Autentique", site_id=sid)
+    return {"situacao": "assinado", "assinado_em": dia, "mensagem": "Todos assinaram na Autentique: " + (
+        "a doação passou a Contrato assinado pelas partes." if corpo and corpo.get("etapa") else "a data da assinatura foi guardada.")}
+
+
+def conferir_pendentes(con, wp=None) -> dict:
+    """Na rodada: confere os documentos pendentes (só com a Autentique ligada e com token). Nunca levanta."""
+    out = {"conferidos": 0, "assinados": 0, "erros": 0}
+    try:
+        if not aut.ativo(con):
+            return {"desligado": True}
+        for v in con.execute("SELECT * FROM doacao_autentique WHERE situacao='pendente' ORDER BY id LIMIT 30").fetchall():
+            try:
+                rr = _conferir_um(con, v, wp)
+                out["conferidos"] += 1
+                out["assinados"] += rr["situacao"] == "assinado"
+            except Exception as e:  # noqa: BLE001
+                out["erros"] += 1
+                msg = str(e)[:300] if isinstance(e, (aut.ErroAutentique, HTTPException)) else type(e).__name__
+                con.execute("UPDATE doacao_autentique SET erro=?, conferido_em=datetime('now') WHERE id=?", (msg, v["id"]))
+                con.commit()
+                registrar(logging.WARNING, "autentique_conferir", "Conferência da assinatura na Autentique com problema", site_id=int(v["site_id"]), erro=type(e).__name__)
+    except Exception as e:  # noqa: BLE001
+        registrar(logging.WARNING, "autentique_conferir", "Conferência das assinaturas com problema", erro=type(e).__name__)
+        out["erro"] = type(e).__name__
+    return out
+
+
+class ConfigAutentique(BaseModel):
+    token: str | None = None           # vazio/None = não mexe; "__limpar__" apaga
+    ligado: bool | None = None
+    assinante_camp: str | None = None
+
+
+def _aut_config(con) -> dict:
+    return {"configurada": bool(aut.token(con)), "ligado": aut.ligado(con), "ativo": aut.ativo(con), "assinante_camp": aut.assinante_camp(con),
+            "pendentes": con.execute("SELECT COUNT(*) FROM doacao_autentique WHERE situacao='pendente'").fetchone()[0]}
+
+
+def _set_cfg(con, chave: str, valor: str, ator: str, sensivel: bool) -> None:
+    antes = _cfg(con, chave)
+    if antes == valor:
+        return
+    con.execute("UPDATE configuracao SET valor=?, atualizado_em=datetime('now'), atualizado_por=? WHERE chave=?", (valor, ator, chave))
+    a, d = (("definido" if antes else ""), ("definido" if valor else "")) if sensivel else (antes, valor)
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('config',?,'alterada',?,?)",
+                (chave, ator, json.dumps({"antes": {"valor": a}, "depois": {"valor": d}}, ensure_ascii=False)))
+
+
+@router.get("/autentique/config")
+def autentique_config(u: dict = Depends(auth.exige("admin"))) -> dict:
+    con = connect()
+    try:
+        return _aut_config(con)
+    finally:
+        con.close()
+
+
+@router.put("/autentique/config")
+def autentique_salvar(b: ConfigAutentique, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Token (sensível; nunca volta), ligar/desligar e o e-mail de quem assina pela CAMP. Ligar sem token: 400."""
+    con = connect()
+    try:
+        ator = (u or {}).get("email") or "painel"
+        tk = (b.token or "").strip()
+        if tk and tk != "__limpar__" and (len(tk) < 20 or len(tk) > 500 or re.search(r"\s", tk)):
+            raise HTTPException(400, "Esse não parece um token da Autentique: copie de novo em perfil → API na Autentique (sem espaços).")
+        em = (b.assinante_camp or "").strip().lower() if b.assinante_camp is not None else None
+        if em and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", em):
+            raise HTTPException(400, "E-mail de quem assina pela CAMP: um e-mail válido (ou deixe vazio).")
+        novo_tk = "" if tk == "__limpar__" else (tk or aut.token(con))
+        if b.ligado and not novo_tk:
+            raise HTTPException(400, "Para ligar, cole antes o token da API da Autentique.")
+        if tk:
+            _set_cfg(con, "autentique.token", novo_tk, ator, True)
+        if b.ligado is not None:
+            _set_cfg(con, "autentique.ligado", "1" if b.ligado and novo_tk else "0", ator, False)
+        elif tk == "__limpar__":
+            _set_cfg(con, "autentique.ligado", "0", ator, False)
+        if em is not None:
+            _set_cfg(con, "autentique.assinante_camp", em, ator, False)
+        con.commit()
+        return _aut_config(con)
+    finally:
+        con.close()
+
+
+class TesteAutentique(BaseModel):
+    token: str | None = None           # o que está no campo (antes de salvar); vazio = o guardado
+
+
+@router.post("/autentique/testar")
+def autentique_testar(b: TesteAutentique | None = None, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Testar conexão: `me` na Autentique (só lê; não gasta documento). Nunca devolve o token."""
+    con = connect()
+    try:
+        tk = ((b.token if b else "") or "").strip() or aut.token(con)
+    finally:
+        con.close()
+    try:
+        d = aut.testar(tk)
+    except aut.ErroAutentique as e:
+        raise HTTPException(409 if "token" in str(e).lower() else 502, str(e)) from e
+    docs = d.get("documentos")
+    return {"ok": True, "mensagem": f"Conexão com a Autentique funcionando (conta {d['conta'] or d['email'] or 'sem nome'})."
+            + (f" Documentos do plano: {docs}." if docs not in (None, "") else ""), "conta": d["conta"], "email": d["email"], "documentos": docs}
+
+
+@router.post("/{sid}/conferir-assinatura")
+def conferir_assinatura(sid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Conferir assinatura agora (o mesmo da rodada, para uma doação)."""
+    con = connect()
+    try:
+        _um(con, sid)
+        if not aut.token(con):
+            raise HTTPException(409, "Falta o token da Autentique: cole em Assinatura eletrônica (Autentique).")
+        v = con.execute("SELECT * FROM doacao_autentique WHERE site_id=? ORDER BY id DESC LIMIT 1", (int(sid),)).fetchone()
+        if not v:
+            raise HTTPException(404, "Esta doação não tem contrato na Autentique.")
+        if v["situacao"] == "criado":
+            res = {"situacao": "criado", "mensagem": "O contrato foi criado na Autentique, mas o e-mail com o link ainda não saiu: use Enviar contrato para assinatura."}
+        elif v["situacao"] != "pendente":
+            res = {"situacao": v["situacao"], "mensagem": SIT_AUT.get(v["situacao"], v["situacao"]) + "."}
+        else:
+            if not _tem_site(con):
+                raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+            try:
+                res = _conferir_um(con, v, ator=(u or {}).get("email") or "painel")
+            except aut.ErroAutentique as e:
+                con.execute("UPDATE doacao_autentique SET erro=?, conferido_em=datetime('now') WHERE id=?", (str(e)[:300], v["id"]))
+                con.commit()
+                raise HTTPException(502, str(e)) from e
+            except Exception as e:  # noqa: BLE001
+                registrar(logging.WARNING, "autentique_conferir", "Conferir assinatura: o site não respondeu", site_id=int(sid), erro=type(e).__name__)
+                raise HTTPException(502, "O site não respondeu agora: tente de novo em instantes") from e
+        return {"resultado": res, "doacao": _completo(con, sid)}
     finally:
         con.close()
 

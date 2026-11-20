@@ -1769,6 +1769,7 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 #v-doacoes .doa-dt{white-space:nowrap;font-size:var(--fs-sm)}.doa-det dl{display:grid;grid-template-columns:minmax(120px,34%) 1fr;gap:4px 12px;margin:8px 0}.doa-det dt{color:var(--muted);font-size:var(--fs-sm)}.doa-det dd{margin:0;word-break:break-word}
 .doa-etapas{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 10px;padding:0;list-style:none}.doa-etapas li{font-size:var(--fs-sm);padding:2px 8px;border-radius:var(--r-lg);background:var(--bg2,#f1f3f5);color:var(--muted)}.doa-etapas li.at{background:var(--pri,#1f3b57);color:#fff}.doa-etapas li.feita{color:var(--fg,#222)}
 .doa-fotos{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}.doa-fotos a{display:block;width:110px;height:82px;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--bg2,#f1f3f5)}.doa-fotos img{width:100%;height:100%;object-fit:cover}
+#doa-aut{padding:10px 14px;margin:12px 0}#doa-aut>summary{cursor:pointer}#doa-aut ol{margin:6px 0;padding-left:20px}.doa-env-pdf{margin:2px 0 6px 28px}
 .doa-det .act{flex-wrap:wrap;align-items:flex-end}.doa-notas{margin:6px 0;padding-left:18px}
 @media (max-width:900px){#v-doacoes .doa-local{display:none}}
 /* CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais) */
@@ -2417,6 +2418,16 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
       <thead><tr><th>Recebida</th><th>Quem oferece</th><th>Acervo</th><th>Quantidade estimada</th><th class="doa-local">Onde está</th><th>Etapa</th></tr></thead>
       <tbody id="doa-lista"><tr><td class="empty">Carregando…</td></tr></tbody>
     </table></div></div>
+    <details class="panel" id="doa-aut"><summary><b>Assinatura eletrônica (Autentique)</b> <span class="help" id="doa-aut-sit"></span></summary>
+      <p class="help">Com ela ligada, “Enviar contrato para assinatura” aceita o PDF do contrato: o painel cria o documento na Autentique e o link de assinatura vai no e-mail do contrato (TR30). Quando todos assinam, a doação passa sozinha a “Contrato assinado pelas partes”, com a data da última assinatura. Desligada, só o link colado funciona, como antes.</p>
+      <ol class="help"><li>Crie a conta da CAMP em autentique.com.br (plano grátis: 10 documentos por mês, PDF de até 5 MB).</li><li>Na Autentique, abra o perfil → API e gere o token.</li><li>Cole o token aqui, clique em Testar conexão, marque Ligada e clique em Salvar.</li></ol>
+      <label class="field">Token da API da Autentique<input id="doa-aut-token" type="password" maxlength="500" autocomplete="off" spellcheck="false" placeholder="cole o token aqui"></label>
+      <label class="field">E-mail de quem assina pela CAMP (opcional)<input id="doa-aut-camp" type="email" maxlength="200" autocomplete="off" spellcheck="false" placeholder="vazio: só quem doa assina"></label>
+      <p class="help">Quem doa recebe o link só no e-mail da CAMP (TR30); a Autentique não manda e-mail a essa pessoa. Quem assina pela CAMP recebe o link da própria Autentique.</p>
+      <label class="conf-opcao"><input type="checkbox" id="doa-aut-ligado"><span><b>Ligada</b><small>Mostra “Anexar o PDF do contrato” ao enviar o contrato e confere as assinaturas sozinha.</small></span></label>
+      <div class="act"><button type="button" class="btn pri" id="doa-aut-salvar" data-trabalhando="Salvando…">Salvar</button><button type="button" class="btn" id="doa-aut-testar" data-trabalhando="Testando…">Testar conexão</button><button type="button" class="btn" id="doa-aut-apagar">Apagar o token</button></div>
+      <p class="help" id="doa-aut-res" aria-live="polite"></p>
+    </details>
     <p class="help">A quantidade é a estimativa de quem oferece (faixa), não uma contagem: serve para planejar espaço e retirada. A contagem certa vem depois da catalogação (campo Quantidade catalogada). A cobrança aparece também em Cobranças avulsas.</p>
   </section>
   <section class="content" id="v-emails">
@@ -8929,6 +8940,7 @@ async function carregarDoacoes(){const tb=document.getElementById('doa-lista');i
   document.getElementById('doa-etapa').innerHTML=[['abertas','Pedem ação'],['','Todas as etapas'],...Object.entries(d.etapas||{})].map(([k,l])=>`<option value="${escHtml(k)}"${k===DOA.etapa?' selected':''}>${escHtml(l)}</option>`).join('');
   if(d.listas&&d.listas.formulario)document.getElementById('doa-form').href=d.listas.formulario;
   document.getElementById('doa-cnt').textContent=qtd((d.itens||[]).length,'intenção','intenções');
+  const as_=document.getElementById('doa-aut-sit');if(as_)as_.textContent=d.autentique&&d.autentique.ativo?'· ligada':'· desligada';
   const st=d.site||{};document.getElementById('doa-busca').innerHTML=!st.tem_senha?'<span class="tag a">sem a senha do site</span> Falta a senha do site em Configurações: sem ela as intenções de doação não entram.':st.sem_rota?'<span class="tag a">site sem o formulário novo</span> O site ainda não tem as intenções de doação de acervo: avise quem cuida do site (plugin da CAMP 1.30.0 ou mais novo).':(st.ultima_busca?`Última busca no site: ${escHtml(fmtQuandoCurto(st.ultima_busca))}${st.minutos?` · busca sozinha a cada ${st.minutos} min`:''}${st.erro?` · <span class="tag r">erro</span> ${escHtml(st.erro)}`:''}`:'Ainda não buscou no site: use Sincronizar agora.');
   const it=d.itens||[];
   tb.innerHTML=it.length?it.map(x=>`<tr data-doa-abrir="${x.id}" tabindex="0"><td class="doa-dt">${escHtml(doaData(x.recebida_em))}<br><small class="mono">${escHtml(x.protocolo)}</small></td><td>${escHtml(x.nome||'—')}<br><small class="mono">${escHtml(x.email||'')}</small></td><td>${escHtml(x.autor||'—')}<br><small>${escHtml((x.tipos_nomes||[]).join(' · '))}</small></td><td>${escHtml(x.faixa_nome||'—')}<br><small>${x.n_fotos?escHtml(qtd(x.n_fotos,'foto','fotos')):x.fotos_link?'link de fotos':x.sem_fotos?'ainda sem fotos':''}</small></td><td class="doa-local">${escHtml(x.local||'')}</td><td><span class="tag ${DOA_TAG[x.etapa]||''}">${escHtml(x.etapa_nome)}</span>${x.valor?`<br><small>${escHtml(doaBRL(x.valor))}</small>`:''}${x.amigo_ate?`<br><small>Amigo até ${escHtml(doaData(x.amigo_ate))}</small>`:''}</td></tr>`).join('')
@@ -8943,7 +8955,7 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   const notas=(x.notas||[]).slice().reverse().map(n=>`<li><small><b>${escHtml(n.em)} · ${escHtml(n.quem)}</b></small><br>${escHtml(n.texto)}</li>`).join('');
   const hist=(x.historico||[]).slice().reverse().map(h=>`<li><small>${escHtml(h)}</small></li>`).join('');
   const campo=(id,rot,val,tipo,extra)=>`<label class="field">${escHtml(rot)}<input id="doa-${id}" type="${tipo||'text'}" value="${escHtml(val==null?'':String(val))}"${extra||''}></label>`;
-  const fechada=['paga','recebido','nao_aprovada','arquivada'].includes(x.etapa)||an;
+  const fechada=['paga','recebido','nao_aprovada','arquivada'].includes(x.etapa)||an,au=x.autentique;
   const mails=(x.emails||[]).map(e=>{const d=e.detalhe||{};return `<li><small>${escHtml(fmtDataHora(e.quando))} · ${escHtml(e.ator)}</small><br>${escHtml((d.template?d.template+' · ':'')+(d.nome_modelo||d.modelo||'')+(d.etapa_nome?': '+d.etapa_nome:''))} — ${e.tipo==='email_enviado'?'enviado pelo Sender':escHtml('não saiu'+(d.erro?': '+d.erro:''))}</li>`}).join('');
   openDrawer('Intenção de doação de acervo',x.protocolo||'',`<div class="cfg doa-det" data-doa-id="${x.id}">
   <p><span class="tag ${DOA_TAG[x.etapa]||''}">${escHtml(x.etapa_nome)}</span>${x.valor?` · contribuição <b>${escHtml(doaBRL(x.valor))}</b>`:''}${x.assinado_em?` · contrato assinado em ${escHtml(doaData(x.assinado_em))}`:''}</p>
@@ -8958,7 +8970,8 @@ function doaDrawer(x){const et=(DOA.d&&DOA.d.etapas)||{},auto=(DOA.d&&DOA.d.etap
   <div id="doa-aviso" hidden></div>
   <p class="help">“Cobrança enviada” e “Contribuição paga” o sistema marca sozinho. Para “Contrato assinado pelas partes”, informe antes a data em que as duas partes assinaram.</p>
   ${campo('contrato','Link do contrato para assinatura',x.contrato_link,'url',' placeholder="https://" maxlength="500" autocomplete="off" spellcheck="false"')}
-  <p class="help">Clicksign, D4Sign, gov.br, DocuSign… Clique em Salvar para guardar.${x.contrato_link?` <a href="${escHtml(x.contrato_link)}" target="_blank" rel="noopener noreferrer">Abrir o contrato</a>`:''}${x.contrato_enviado_em?` · enviado para assinatura em ${escHtml(fmtDataHora(x.contrato_enviado_em))}`:''}</p>
+  <p class="help">${DOA.d&&DOA.d.autentique&&DOA.d.autentique.ativo?'Ou anexe o PDF em Enviar contrato para assinatura: o painel cria o contrato na Autentique. ':''}Clicksign, D4Sign, gov.br, DocuSign… Clique em Salvar para guardar.${x.contrato_link?` <a href="${escHtml(x.contrato_link)}" target="_blank" rel="noopener noreferrer">Abrir o contrato</a>`:''}${x.contrato_enviado_em?` · enviado para assinatura em ${escHtml(fmtDataHora(x.contrato_enviado_em))}`:''}</p>
+  ${au?`<div class="panel cob-previa"><b>Assinatura eletrônica (Autentique)</b><br><small>${escHtml(au.situacao_nome)} · ${escHtml(String(au.assinaram))} de ${escHtml(String(au.assinantes))} assinaram${au.assinado_em?' · assinado em '+escHtml(doaData(au.assinado_em)):''}${au.conferido_em?' · conferido '+escHtml(fmtQuandoCurto(au.conferido_em)):''}</small>${au.erro?`<br><small><span class="tag r">erro</span> ${escHtml(au.erro)}</small>`:''}${au.situacao==='pendente'?'<div class="act"><button type="button" class="btn" data-doa-acao="conferir-assinatura" data-trabalhando="Conferindo…">Conferir assinatura agora</button></div>':''}</div>`:''}
   ${campo('assinado','Data em que as duas partes assinaram',x.assinado_em,'date')}
   ${campo('valor','Contribuição acordada no contrato (R$, mínimo 1.000)',x.valor||'','number',' min="1000" step="0.01" inputmode="decimal"')}
   <details><summary>Volume e catalogação (equipe)</summary>
@@ -8988,6 +9001,7 @@ document.addEventListener('click',async e=>{const t=e.target;if(!t.closest)retur
   const v=k=>((document.getElementById('doa-'+k)||{}).value||'').trim();
   if(a==='copiar'){const l=v('link');(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(l):Promise.reject()).then(()=>toast('Link copiado'),()=>toast('Selecione o link e copie à mão'));return}
   if(a==='consultar'){doaMudar(id,{acao:'consultar'},'Situação do pagamento consultada');return}
+  if(a==='conferir-assinatura'){try{const r=await API('/api/doacoes-acervo/'+id+'/conferir-assinatura',{method:'POST'});limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(r.doacao);toast(r.resultado.mensagem);carregarDoacoes()}catch(err){toast(err.message)}return}
   const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{};
   const corpo={contrato_link:v('contrato')||(x.contrato_link?'__limpar__':''),assinado_em:v('assinado'),valor:v('valor'),caixas:v('caixas'),rolos:v('rolos'),volume:v('volume'),quantidade_catalogada:v('catalogada'),fundo:v('fundo'),nota:v('nota')};
   const sel=v('etapa-sel');if(sel&&sel!==x.etapa)corpo.etapa=sel;
@@ -9000,18 +9014,46 @@ document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa-sel
 /* CAMP-DOA-CONTRATO: prévia do envio (para quem, e-mail 1 e e-mail 2) e o envio. Dados da pessoa só como texto escapado. */
 async function doaEnviarContrato(id,box){const x=(DOA.d&&DOA.d.itens||[]).find(i=>String(i.id)===String(id))||{},v=k=>((document.getElementById('doa-'+k)||{}).value||'').trim();
   const link=v('contrato'),vtxt=v('valor'),valor=Number(String(vtxt).replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||Number(x.valor)||0,min=(DOA.d&&DOA.d.minimo)||1000;
-  if(!/^https?:\/\/[^\s\/]+\.[^\s]+$/i.test(link)){toast('Informe o link do contrato para assinatura (começa com http:// ou https://)');document.getElementById('doa-contrato')?.focus();return}
+  const aut=(DOA.d&&DOA.d.autentique)||{},comPdf=!!aut.ativo,maxPdf=aut.max_pdf||5242880,linkOk=/^https?:\/\/[^\s\/]+\.[^\s]+$/i.test(link);
+  if(!linkOk&&(link||!comPdf)){toast('Informe o link do contrato para assinatura (começa com http:// ou https://)'+(comPdf?' ou deixe vazio e anexe o PDF':''));document.getElementById('doa-contrato')?.focus();return}
+  /* CAMP-AUTENTIQUE: com a Autentique ligada e com token, o contrato pode ir como PDF (o painel cria o documento lá e o link dela vai no TR30) */
+  const linkHtml=`<a href="${escHtml(link)}" target="_blank" rel="noopener noreferrer">${escHtml(link)}</a>`;
+  const modoHtml=comPdf?`<div class="conf-opcoes" role="radiogroup" aria-label="Como vai o contrato"><label class="conf-opcao"><input type="radio" name="doa-env-modo" value="pdf"${linkOk?'':' checked'}><span><b>Anexar o PDF do contrato</b><small>O painel cria o contrato na Autentique e o link de assinatura vai neste e-mail. Só PDF, até ${escHtml(String(Math.round(maxPdf/1048576)))} MB. Quando todos assinarem, a etapa muda sozinha.</small></span></label>
+  <input id="doa-env-pdf" class="doa-env-pdf" type="file" accept="application/pdf,.pdf" aria-label="PDF do contrato">
+  <label class="conf-opcao"><input type="radio" name="doa-env-modo" value="link"${linkOk?' checked':' disabled'}><span><b>Usar o link colado</b><small>${linkOk?linkHtml:'Para usar um link, cole no campo Link do contrato para assinatura.'}</small></span></label></div>`:'';
   const html=`<div class="doa-envio"><p><b>Para:</b> ${escHtml(x.nome||'—')} · <span class="mono">${escHtml(x.email||'sem e-mail')}</span></p>
-  <div class="panel cob-previa"><b>E-mail 1 · Contrato para assinatura</b> <small>(TR30, pelo Sender)</small><br><small>Link: <a href="${escHtml(link)}" target="_blank" rel="noopener noreferrer">${escHtml(link)}</a>${valor?' · valor combinado '+escHtml(doaBRL(valor)):''}</small>
+  <div class="panel cob-previa"><b>E-mail 1 · Contrato para assinatura</b> <small>(TR30, pelo Sender)</small><br><small>${comPdf?'':'Link: '+linkHtml}${valor?(comPdf?'':' · ')+'valor combinado '+escHtml(doaBRL(valor)):''}</small>${modoHtml}
   <label class="field">Assinar até (opcional)<input id="doa-env-prazo" type="date"></label></div>
   <div class="panel cob-previa"><b>E-mail 2 · Cobrança no Mercado Pago</b> <small>(TR27, pelo Sender, separado)</small><br><small>Valor: ${valor?escHtml(doaBRL(valor)):'— (informe a contribuição)'}. Pix ou cartão; o link vence em 30 dias.</small>
   <label class="conf-opcao"><input type="checkbox" id="doa-env-cob"${valor>=min?' checked':''}><span><b>Gerar a cobrança junto</b><small>${valor>=min?'Abre o pagamento e manda o e-mail 2 logo depois do contrato.':'A contribuição precisa ser de R$ 1.000 ou mais.'}</small></span></label></div>
   <p class="help">Sem o modelo TR30 no Sender nada sai. A etapa passa a “Contrato enviado para assinatura”.</p></div>`;
   const r=await confirmar({titulo:'Enviar contrato para assinatura',alvo:x.protocolo||'',html,botao:'Enviar',cancelar:'Voltar',botaoOcupado:'Enviando…',
-    acao:()=>API('/api/doacoes-acervo/'+id+'/enviar-contrato',{method:'POST',body:JSON.stringify({contrato_link:link,valor:vtxt||null,prazo:(document.getElementById('doa-env-prazo')||{}).value||null,gerar_cobranca:!!(document.getElementById('doa-env-cob')||{}).checked})})});
+    acao:async()=>{const corpo={valor:vtxt||null,prazo:(document.getElementById('doa-env-prazo')||{}).value||null,gerar_cobranca:!!(document.getElementById('doa-env-cob')||{}).checked};
+      const modo=comPdf?((document.querySelector('input[name="doa-env-modo"]:checked')||{}).value||'pdf'):'link';
+      if(modo==='pdf'){const f=((document.getElementById('doa-env-pdf')||{}).files||[])[0];
+        if(!f)throw new Error('Escolha o PDF do contrato (ou use o link colado).');
+        if(!/\.pdf$/i.test(f.name)&&f.type!=='application/pdf')throw new Error('Anexe o contrato em PDF.');
+        if(f.size>maxPdf)throw new Error(`O PDF passa de ${Math.round(maxPdf/1048576)} MB, o limite do plano grátis da Autentique: diminua o arquivo ou cole o link.`);
+        corpo.pdf_base64=await doaLerBase64(f);corpo.pdf_nome=f.name}
+      else corpo.contrato_link=link;
+      return API('/api/doacoes-acervo/'+id+'/enviar-contrato',{method:'POST',body:JSON.stringify(corpo)})}});
   if(!(r&&r.resultado))return;const o=r.resultado;limparAlteracoes&&limparAlteracoes('drawer');doaDrawer(o.doacao);carregarDoacoes();
   const partes=[o.contrato&&o.contrato.mensagem,o.cobranca&&o.cobranca.mensagem,o.email_cobranca&&o.email_cobranca.mensagem].filter(Boolean);toast(partes.join(' '))}
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='doa-etapa'){DOA.etapa=e.target.value;carregarDoacoes()}});
+const doaLerBase64=f=>new Promise((ok,falha)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).replace(/^data:[^,]*,/,''));r.onerror=()=>falha(new Error('Não consegui ler o PDF: escolha de novo.'));r.readAsDataURL(f)});
+/* CAMP-AUTENTIQUE: configuração (só admin; o token nunca volta à tela, só "configurado: sim/não") */
+function doaAutPreencher(c){const tk=document.getElementById('doa-aut-token');if(!tk)return;tk.value='';tk.placeholder=c.configurada?'configurado (não aparece aqui; cole outro para trocar)':'cole o token aqui';
+  document.getElementById('doa-aut-camp').value=c.assinante_camp||'';document.getElementById('doa-aut-ligado').checked=!!c.ligado;
+  document.getElementById('doa-aut-sit').textContent=c.ativo?'· ligada':c.configurada?'· desligada (token configurado)':'· desligada (sem token)';
+  document.getElementById('doa-aut-res').textContent=c.pendentes?`${qtd(c.pendentes,'contrato aguardando','contratos aguardando')} assinatura na Autentique (conferidos sozinhos a cada busca no site).`:''}
+async function doaAutCarregar(){try{doaAutPreencher(await API('/api/doacoes-acervo/autentique/config'))}catch(e){document.getElementById('doa-aut-res').textContent=e.message}}
+document.addEventListener('toggle',e=>{if(e.target&&e.target.id==='doa-aut'&&e.target.open)doaAutCarregar()},true);
+document.addEventListener('click',async e=>{const t=e.target&&e.target.closest&&e.target.closest('#doa-aut-salvar,#doa-aut-testar,#doa-aut-apagar');if(!t)return;const res=document.getElementById('doa-aut-res'),tk=document.getElementById('doa-aut-token').value.trim();
+  try{if(t.id==='doa-aut-testar'){const r=await API('/api/doacoes-acervo/autentique/testar',{method:'POST',body:JSON.stringify({token:tk||null})});res.textContent=r.mensagem;toast(r.mensagem);return}
+    if(t.id==='doa-aut-apagar'){const ok=await confirmar({titulo:'Apagar o token da Autentique?',texto:'A assinatura eletrônica fica desligada e só o link colado funciona. Os contratos já enviados continuam na Autentique, mas o painel para de conferir.',botao:'Apagar o token',cancelar:'Voltar',perigo:true});if(!ok)return;
+      doaAutPreencher(await API('/api/doacoes-acervo/autentique/config',{method:'PUT',body:JSON.stringify({token:'__limpar__'})}));toast('Token apagado: assinatura eletrônica desligada');carregarDoacoes();return}
+    const c=await API('/api/doacoes-acervo/autentique/config',{method:'PUT',body:JSON.stringify({token:tk||null,ligado:document.getElementById('doa-aut-ligado').checked,assinante_camp:document.getElementById('doa-aut-camp').value.trim()})});
+    doaAutPreencher(c);toast(c.ativo?'Assinatura eletrônica ligada':'Assinatura eletrônica salva (desligada)');carregarDoacoes()}catch(err){res.textContent=err.message;toast(err.message)}});
 {let tq;document.addEventListener('input',e=>{if(e.target&&e.target.id==='doa-q'){clearTimeout(tq);tq=setTimeout(()=>{DOA.q=e.target.value.trim();carregarDoacoes()},300)}})}
 /* CAMP-EMAIL (18/11/2026, Rafael: "temos um painel no admin de e-mails enviados? com log e tudo?"): todos os e-mails, de todos os
    canais, com o motivo das falhas e de quando não saiu pelo Sender. Só admin/master (dados pessoais). Entregue/aberto no Sender não
