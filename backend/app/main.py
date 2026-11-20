@@ -79,6 +79,8 @@ from .doacoes_acervo import router as rotas_doacoes_acervo   # CAMP-DOA-ACERVO 2
 app.include_router(rotas_doacoes_acervo)
 from .emails_enviados import router as rotas_emails   # CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais; contrato 1.14)
 app.include_router(rotas_emails)
+from .emails_site import router as rotas_emails_site   # CAMP-SENDER 20/11/2026: E-mails do site (todos os modelos TR, IDs, teste; contrato 1.23)
+app.include_router(rotas_emails_site)
 from .rotas_entrega import router as rotas_entrega   # 01/11/2026: página pública de download do pedido entregue por e-mail
 app.include_router(rotas_entrega)
 from .contatos_emkt import router as rotas_contatos_emkt   # 03/11/2026: quem aceitou receber e-mails da CAMP → CSV para o Sender.net

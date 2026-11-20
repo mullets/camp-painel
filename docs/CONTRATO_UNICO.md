@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.22 (20/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
+Versão deste documento: **1.23 (20/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -242,6 +242,10 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
   - Painel: tela **Ingressos** → aba "Por data · lista de presença": datas com contas por tipo e situação, lista de cada data/turma (filtros, busca, impressão, CSV com coluna Presença), Amigo da CAMP pelo e-mail (cadastro de Amigos do painel, adesão em dia), "Reenviar ingresso" e "Reenviar cobrança" um a um ou em lote (só admin; histórico na tabela `evento`, entidade `ingresso`). Site antigo (404 na `/cobranca`) = "atualize o site (plugin 1.31.0)". Ordem de deploy: qualquer uma (painel novo + site antigo: o reenvio do ingresso sai como antes).
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.
+- **NOVO 1.23** (todos os e-mails do Sender num lugar só, 20/11/2026; site plugin 1.32.0, `Camp_AAP_Sender::catalogo()`; painel `app/emails_site.py`, tela Administração → **E-mails do site**). OPCIONAL dos dois lados; `edit_pages`. O SITE guarda os IDs (opção `camp_aap_sender`, fonte única); o painel é o único lugar onde se mudam (a administração do site só mostra).
+  - `GET/POST /painel/sender`: resposta ganha `catalogo` (um item por modelo de `padroes()`, hoje TR04–TR29: `{tr, chave, area, nome, quando, para, variaveis[], sem_id: simples|nao_sai|login|painel|nao_usado, sem_id_texto, critico, id, id_padrao, situacao: ativo|sem_id|sem_chave|emergencia}`), `token_origem` (`site`|`plugin`|`""`; **nunca o token**), `teste: true`, `onde_configurar`. No POST, `templates` aceita qualquer modelo do catálogo; **regra do hub: ID vazio não muda nada; `"__limpar__"` deixa o modelo sem ID** (antes, vazio voltava ao padrão); um ID inválido (`^[A-Za-z0-9]{3,32}$`) recusa o pedido inteiro (400, nada muda). O painel novo manda só `{"templates": {chave: ID}}` (sem `ativo` nem token).
+  - `POST /painel/sender/teste` `{chave, para}`: o site manda o modelo a `para` pelo Sender com valores de exemplo claramente falsos (nome "Teste CAMP", protocolo `CAMP-TESTE-000000`); nunca e-mail simples. 200 `{ok, enviado, tr, chave, email_id}`; 400 modelo/e-mail inválido; 409 `motivo` `sem_chave`|`sem_template` + `erro` (frase); 502 o Sender recusou (sem o token).
+  - Site antigo: sem `catalogo`, o painel mostra TR04–TR29 com os IDs de `templates` e pede "atualize o site"; `"__limpar__"` e o teste respondem 400/404 → 409 "atualize o site". TR04–TR09 gravados pela tela nova também vão para `sender.tr04_…` (Configurações), para o botão antigo "Enviar a configuração do Sender ao site" não devolver um ID velho.
 
 ## 7. Versionamento e exemplos
 
