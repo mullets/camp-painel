@@ -4,7 +4,7 @@ Este é o ponto de entrada de TODOS os contratos entre os sistemas CAMP. Cada re
 Regra de ouro: **mudou um campo, subiu a versão do contrato e atualizou os exemplos no mesmo commit.** Campo novo é sempre OPCIONAL
 (a versão antiga do outro lado precisa continuar funcionando). Detalhes que ainda não foram promovidos para cá continuam nos documentos citados.
 
-Versão deste documento: **1.20 (20/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
+Versão deste documento: **1.21 (20/11/2026)**. Contrato CV2 ↔ painel: **2.9** (`backend/app/contrato.py`).
 Board oficial para tickets transversais: **"Camp todos sistemas"** (Trello). Os boards "CAMP Vision 2", "CAMP Estações" e "CAMP Acervos — Painel" são históricos.
 
 ## 1. Mapa dos sistemas
@@ -233,6 +233,7 @@ Autenticação: Application Password do WordPress (painel → site). Rotas do si
   - `GET /painel/doacoes-acervo/{id}/foto/{n}` → a foto geral `n` (0–4), JPG/PNG/WebP, privada (o painel só repassa, não guarda). 404 `camp_doa_foto`.
   - Pagamento da contribuição confirmado pela API do Mercado Pago → etapa `paga` e 12 meses de Amigo no site (cadastro novo na categoria Amigo, anual, sem renovação automática; quem já é Amigo pelo mesmo e-mail ganha +12 meses sobre a validade, categoria mantida). Confirmação ao proponente: Sender TR28 `doacao_recebida` (sem ID, e-mail simples).
   - Painel: tela **Doações de acervo** (só admin, atalho J), busca a cada `doacoes_acervo.coleta_min` (10) minutos e em "Sincronizar agora"; LGPD "apagar esta pessoa" anonimiza (etapa e valores ficam). Site antigo (404) = "atualize o site (plugin 1.30.0)".
+- **NOVO 1.21** (meia-entrada nos ingressos da visita, 20/11/2026; site plugin 1.30.3). OPCIONAL: o registro de `GET /painel/ingressos` (1.18) ganha `meias` (inteiro: quantos dos `pessoas` são meia-entrada, R$ 60 = metade do `preco`; `total` já vem com elas). Site antigo não manda o campo (= 0). O painel ainda não mostra a coluna (não precisa para as contas: `total` é o valor pago).
 - `POST /api/pedidos/site` (painel recebe, `X-Camp-Token` = `pedidos.token`): caminho antigo/alternativo (push); ver `docs/pedidos-do-site.md`.
 - Imagens públicas: JPEG q85 sRGB com lado maior ≤ 1920 px; o TIF e a prévia de 3000 px nunca vão ao site.
 
