@@ -43,6 +43,7 @@ MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) a
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
 MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago (site falso; contrato 1.19; linha própria)
+MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18376,6 +18377,140 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "joao@x.com", "João Guarda")))
         for l in res: print(l)
+    elif modo == "emails_site":
+        # CAMP-SENDER 20/11/2026 · E-mails do site (Rafael: "uma página de configuração de TODOS os e-mails transacionais do site"):
+        # catálogo vindo do site (contrato 1.23; cliente FALSO, nada sai de verdade), salvar ID (válido/inválido/limpar), TR04–TR09 espelhados na
+        # configuração antiga, enviar teste (ok/sem ID/site antigo), site antigo e sem rota, último envio de E-mails enviados, guia .zip, papéis,
+        # e o token nunca aparece.
+        init_db(); _aplicar_migracoes_real()
+        import io as _io, json as _j, zipfile as _zf
+        from fastapi.testclient import TestClient
+        from app import auth, emails_site as es
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s):
+                if s._d is None: raise ValueError("sem json")
+                return s._d
+        CAT = [{"tr": "TR04", "chave": "solicitacao_recebida", "area": "Pedidos e visitas", "nome": "Pedido recebido", "quando": "Pedido pelo site.", "para": "Quem pediu",
+                "variaveis": ["nome", "protocolo"], "sem_id": "simples", "sem_id_texto": "sai o e-mail simples do site", "critico": False, "id": "egx4Z6", "id_padrao": "egx4Z6", "situacao": "ativo"},
+               {"tr": "TR22", "chave": "amigo_acesso", "area": "Área do Amigo", "nome": "Link de acesso à área do Amigo", "quando": "O Amigo pede para entrar.", "para": "O Amigo",
+                "variaveis": ["nome", "link", "validade_link", "protocolo"], "sem_id": "login", "sem_id_texto": "o link de entrada não sai e a área do Amigo não abre", "critico": True, "id": "", "id_padrao": "", "situacao": "sem_id"},
+               {"tr": "TR27", "chave": "cobranca_avulsa", "area": "Cobranças e doações", "nome": "Cobrança avulsa", "quando": "Cobrança pelo painel.", "para": "A pessoa cobrada",
+                "variaveis": ["nome", "valor", "link", "protocolo"], "sem_id": "nao_sai", "sem_id_texto": "não sai nada", "critico": True, "id": "", "id_padrao": "", "situacao": "sem_id", "token": "VAZOU-123"}]
+        site = {"tpl": {"solicitacao_recebida": "egx4Z6", "amigo_acesso": "", "cobranca_avulsa": ""}, "novo": True, "status": 200, "teste": None}
+        gets, posts = [], []
+        def estado():
+            cat = [dict(m, id=site["tpl"].get(m["chave"], ""), situacao="ativo" if site["tpl"].get(m["chave"]) else "sem_id") for m in CAT]
+            d = {"ok": True, "ativo": False, "token_preenchido": True, "templates": dict(site["tpl"]), "sempre_sender": True, "emergencia": False, "token": "SEGREDO-SND-77"}
+            if site["novo"]:
+                d.update(catalogo=cat, token_origem="site", teste=True)
+            return d
+        class H:
+            def get(s, path, params=None):
+                gets.append(path)
+                return Resp(site["status"], estado()) if site["status"] != 404 else Resp(404, {"code": "rest_no_route"})
+            def post(s, path, json=None):
+                posts.append((path, json))
+                if site["status"] == 404 or (path.endswith("/teste") and not site["novo"]):
+                    return Resp(404, {"code": "rest_no_route"})
+                if path.endswith("/teste"):
+                    return site["teste"]
+                for k, v in (json or {}).get("templates", {}).items():
+                    if v == "__limpar__" and not site["novo"]:
+                        return Resp(400, {"ok": False, "erro": "ID de template inválido: " + k})
+                    site["tpl"][k] = "" if v == "__limpar__" else v
+                return Resp(200, estado())
+        class WPF:
+            def __init__(s): s.h = H()
+        es._wp = lambda: WPF()
+        # e-mails enviados (site) para o "último envio"
+        c.execute("""INSERT INTO email_site (chave, registro_id, registro, protocolo, tipo, template, para, nome, canal, situacao, motivo, enviado_em)
+                     VALUES ('9:solicitacao_recebida', 9, 'camp_solicitacao', 'CAMP-2026-000009', 'solicitacao_recebida', 'TR04', 'x@y.com', 'X', 'simples', 'nao_sender', 'template TR04 sem ID', datetime('now','-1 hour')),
+                            ('8:solicitacao_recebida', 8, 'camp_solicitacao', 'CAMP-2026-000008', 'solicitacao_recebida', 'TR04', 'z@y.com', 'Z', 'sender', 'enviado', '', datetime('now','-2 days'))""")
+        c.commit()
+        auth.criar_usuario("Ad", "ad@camp.arq.br", "senha-admin-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-operador-123", "operador", forcar_troca=False)
+        auth.criar_usuario("Le", "le@camp.arq.br", "senha-leitura-12345", "leitura", forcar_troca=False)
+        def cli(e, s_):
+            x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": e, "senha": s_}); return x
+        ad, op, le = cli("ad@camp.arq.br", "senha-admin-12345"), cli("op@camp.arq.br", "senha-operador-123"), cli("le@camp.arq.br", "senha-leitura-12345")
+        # 1) papéis: só admin e master
+        ver("operador e leitura: 403 em ver, salvar, testar e guia", all(r.status_code == 403 for r in (op.get("/api/emails-site"), le.get("/api/emails-site"),
+            op.put("/api/emails-site/amigo_acesso", json={"id": "abc123"}), op.post("/api/emails-site/amigo_acesso/teste", json={}), le.get("/api/emails-site/guia.zip"))) and not posts)
+        # 2) catálogo do site
+        r = ad.get("/api/emails-site"); d = r.json() if r.status_code == 200 else {}
+        ms = {m["chave"]: m for m in d.get("modelos", [])}
+        ver("carrega o catálogo do site (3 modelos, área, variáveis, situação)", r.status_code == 200 and d.get("site") == "ok" and not d.get("site_antigo") and set(ms) == {"solicitacao_recebida", "amigo_acesso", "cobranca_avulsa"}
+            and ms["amigo_acesso"]["variaveis"] == ["nome", "link", "validade_link", "protocolo"] and ms["amigo_acesso"]["sem_id"] == "login", r.text[:300])
+        ver("token: configurado, origem 'site', e o token nunca aparece (nem o campo estranho do catálogo)", d.get("token") == {"preenchido": True, "origem": "site", "conhecida": True}
+            and "SEGREDO-SND" not in r.text and "VAZOU" not in r.text and "token" not in ms["cobranca_avulsa"], r.text[:200])
+        n = d.get("numeros", {})
+        ver("números: 1 ativo, 2 faltando, 2 críticos (TR22, TR27)", (n.get("ativos"), n.get("faltando"), n.get("criticos"), n.get("criticos_lista")) == (1, 2, 2, ["TR22", "TR27"]), n)
+        e4 = ms.get("solicitacao_recebida", {}).get("envios", {})
+        ver("último envio e falhas em 30 dias (de E-mails enviados)", e4.get("ultimo_situacao") == "nao_sender" and e4.get("enviados") == 1 and e4.get("nao_sender") == 1 and "TR04 sem ID" in e4.get("ultimo_motivo", ""), e4)
+        ver("e-mail do admin vem para o teste", d.get("eu") == "ad@camp.arq.br")
+        # 3) salvar ID
+        posts.clear()
+        r = ad.put("/api/emails-site/amigo_acesso", json={"id": "aCe22X"})
+        ver("salvar ID válido: vai ao site só com o modelo (sem 'ativo' nem token) e volta o modelo", r.status_code == 200 and posts[-1] == ("/wp-json/camp/v1/painel/sender", {"templates": {"amigo_acesso": "aCe22X"}})
+            and r.json().get("modelo", {}).get("situacao") == "ativo" and site["tpl"]["amigo_acesso"] == "aCe22X", (r.text[:200], posts))
+        n_ = len(posts)
+        for ruim in ("a b", "x/../y", "ab", "abc-123", "a" * 33):
+            r = ad.put("/api/emails-site/amigo_acesso", json={"id": ruim})
+            if r.status_code != 400: break
+        ver("ID inválido: 400 e nada vai ao site", r.status_code == 400 and len(posts) == n_, r.text)
+        ver("modelo com nome estranho: 400", ad.put("/api/emails-site/../x", json={"id": "abc123"}).status_code in (400, 404, 405) and ad.put("/api/emails-site/AMIGO-X!", json={"id": "abc123"}).status_code == 400)
+        r = ad.put("/api/emails-site/amigo_acesso", json={"id": ""})
+        ver("vazio = deixar sem ID: manda '__limpar__'", r.status_code == 200 and posts[-1][1] == {"templates": {"amigo_acesso": "__limpar__"}} and site["tpl"]["amigo_acesso"] == "", r.text[:200])
+        r = ad.put("/api/emails-site/solicitacao_recebida", json={"id": "nOvo04"})
+        ver("TR04: a configuração antiga do painel acompanha (o botão antigo não volta o ID velho)", r.status_code == 200 and c.execute("SELECT valor FROM configuracao WHERE chave='sender.tr04_solicitacao_recebida'").fetchone()[0] == "nOvo04")
+        ad.put("/api/emails-site/solicitacao_recebida", json={"id": ""})
+        ver("TR04 sem ID: a configuração antiga fica vazia (não vai mais ao site)", c.execute("SELECT valor FROM configuracao WHERE chave='sender.tr04_solicitacao_recebida'").fetchone()[0] == "" and site["tpl"]["solicitacao_recebida"] == "")
+        ver("histórico registra quem mudou o quê, sem token", c.execute("SELECT COUNT(*) FROM evento WHERE tipo='sender_modelo_salvo' AND ator='ad@camp.arq.br'").fetchone()[0] == 4
+            and not c.execute("SELECT 1 FROM evento WHERE detalhe LIKE '%SEGREDO%'").fetchone())
+        # 4) enviar teste
+        site["tpl"]["amigo_acesso"] = "aCe22X"
+        site["teste"] = Resp(200, {"ok": True, "enviado": True, "tr": "TR22", "chave": "amigo_acesso", "motivo": "", "email_id": "tst-1"})
+        r = ad.post("/api/emails-site/amigo_acesso/teste", json={})
+        ver("teste OK: vai ao e-mail do admin por padrão, devolve o id do Sender", r.status_code == 200 and posts[-1] == ("/wp-json/camp/v1/painel/sender/teste", {"chave": "amigo_acesso", "para": "ad@camp.arq.br"})
+            and r.json().get("email_id") == "tst-1", (r.text, posts[-1:]))
+        r = ad.post("/api/emails-site/amigo_acesso/teste", json={"para": "outra@exemplo.org"})
+        ver("teste para outro e-mail (editável)", r.status_code == 200 and posts[-1][1]["para"] == "outra@exemplo.org")
+        ver("teste com e-mail inválido: 400, nada vai ao site", ad.post("/api/emails-site/amigo_acesso/teste", json={"para": "nao-e-email"}).status_code == 400 and posts[-1][1]["para"] == "outra@exemplo.org")
+        site["teste"] = Resp(409, {"ok": False, "enviado": False, "tr": "TR27", "motivo": "sem_template", "erro": "O modelo TR27 está sem ID: cole o ID e tente de novo."})
+        r = ad.post("/api/emails-site/cobranca_avulsa/teste", json={})
+        ver("teste sem ID: 409 com a frase do site", r.status_code == 409 and "TR27 está sem ID" in r.text, r.text)
+        site["teste"] = Resp(502, {"ok": False, "motivo": "recusado", "erro": "O Sender recusou: HTTP 422"})
+        r = ad.post("/api/emails-site/amigo_acesso/teste", json={})
+        ver("teste recusado pelo Sender: 502 com a frase", r.status_code == 502 and "Sender recusou" in r.text and "SEGREDO" not in r.text, r.text)
+        # 5) guia
+        r = ad.get("/api/emails-site/guia.zip")
+        z = _zf.ZipFile(_io.BytesIO(r.content)) if r.status_code == 200 else None
+        nomes = z.namelist() if z else []
+        t22 = z.read("TR22-amigo_acesso.md").decode() if z and "TR22-amigo_acesso.md" in nomes else ""
+        ver("guia .zip: um .md por modelo + LEIA-ME; TR22 com o texto do guia, o lugar novo do ID e as variáveis de hoje", r.status_code == 200 and "00-LEIA-ME.md" in nomes and len(nomes) == 4
+            and "Para que serve" in t22 and "E-mails do site" in t22 and "{{validade_link}}" in t22 and "SEGREDO" not in t22, nomes)
+        # 6) site antigo (sem catálogo) e site sem a rota
+        site["novo"] = False
+        r = ad.get("/api/emails-site"); d = r.json()
+        ver("site antigo: mostra TR04–TR29 com os IDs que o site devolve e pede 'atualize o site'", r.status_code == 200 and d["site_antigo"] and "Atualize o site" in d["aviso"] and len(d["modelos"]) == 26
+            and {m["chave"]: m["id"] for m in d["modelos"]}["amigo_acesso"] == "aCe22X" and d["modelos"][-1]["tr"] == "TR29", d.get("aviso"))
+        r = ad.put("/api/emails-site/amigo_acesso", json={"id": ""})
+        ver("site antigo: deixar sem ID dá 409 'atualize o site'", r.status_code == 409 and "tualize o site" in r.text, r.text)
+        r = ad.post("/api/emails-site/amigo_acesso/teste", json={})
+        ver("site antigo: teste dá 409 'atualize o site'", r.status_code == 409 and "tualize o site" in r.text, r.text)
+        site["status"] = 404
+        r = ad.get("/api/emails-site"); d = r.json()
+        ver("site sem a rota (404): a tela abre com o aviso, sem quebrar", r.status_code == 200 and d["site"] == "sem_rota" and "Atualize o site" in d["aviso"] and len(d["modelos"]) == 26)
+        es._wp = lambda: (_ for _ in ()).throw(RuntimeError("Application Password não configurada"))
+        r = ad.get("/api/emails-site"); d = r.json()
+        ver("site sem senha configurada: a tela abre com a frase do erro", r.status_code == 200 and d["site"] == "erro" and "Application Password" in d["aviso"])
+        ver("o token nunca apareceu em nenhuma resposta guardada", "SEGREDO-SND" not in _j.dumps(res))
+        for l in res: print(l)
     elif modo == "cobranca_avulsa":
         # CAMP-COB 19/11/2026 · Cobranças avulsas pelo Mercado Pago (contrato 1.19; site FALSO, nenhuma chamada real): criar → link do site,
         # o que aparece no extrato (título, external_reference, statement_descriptor), e-mail só pelo Sender (template faltando = não enviado),
@@ -20693,6 +20828,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações de acervo: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Doações de acervo: todas as verificações rodaram")
+
+print("E-mails do site: catálogo do site (site falso), salvar ID (válido/inválido/limpar), TR04–TR09 espelhados, teste, guia, site antigo e papéis")
+rc, out = rodar("emails_site", f"{tmp}/emails_site.db")
+if rc != 0: ok(False, f"teste emails_site não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"E-mails do site: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 25, "E-mails do site: todas as verificações rodaram")
 
 print("\n" + ("TUDO OK" if not falhas else f"{len(falhas)} FALHA(S)"))
 sys.exit(1 if falhas else 0)
