@@ -17,8 +17,8 @@ const lado = pg => pg.evaluate(() => { const m = document.querySelector('.main')
   await pg.goto(BASE + '/#emails'); await pg.reload();
   await pg.waitForSelector('[data-em-abrir]', { timeout: 10000 }).catch(() => {});
   await pg.waitForTimeout(500);
-  chk(await pg.$eval('#v-emails h1', e => e.childNodes[0].textContent.trim()) === 'E-mails enviados', 'título da página: E-mails enviados');
-  chk(await pg.$eval('#nav button[data-v="emails"]', b => !b.hidden), 'item "E-mails enviados" no menu para o master (Administração)');
+  chk(await pg.$eval('#v-emails h1', e => e.childNodes[0].textContent.trim()) === 'E-mails' && await pg.$eval('#em-tab-enviados', b => b.getAttribute('aria-selected')) === 'true', 'tela E-mails (CAMP-EMAIL 20/11), aba Enviados aberta');
+  chk(await pg.$eval('#nav button[data-v="emails"]', b => !b.hidden && !b.classList.contains('nav-sec')), 'item "E-mails" no menu para o master (Administração, fora do "Mais")');
   const kpis = await pg.$$eval('#em-kpis .hoje-kpi .l', ls => ls.map(l => l.textContent));
   chk(JSON.stringify(kpis) === JSON.stringify(['enviados hoje', 'enviados em 7 dias', 'falhas em 7 dias', 'não saíram pelo Sender']), 'números do topo: hoje, 7 dias, falhas, não saíram pelo Sender', JSON.stringify(kpis));
   const vals = await pg.$$eval('#em-kpis .hoje-kpi .v', vs => vs.map(v => v.textContent));

@@ -2,7 +2,7 @@
 fácil do que ficar onde está hoje."
 
 Antes os IDs dos modelos do Sender ficavam em dois lugares: TR04–TR09 em Configurações → E-mail e avisos (iam ao site por
-POST /wp-json/camp/v1/painel/sender) e TR10–TR29 na administração do site. Agora há uma tela só (Administração → E-mails do site):
+POST /wp-json/camp/v1/painel/sender) e TR10–TR29 na administração do site. Agora há uma tela só (menu E-mails → aba Modelos do Sender; CAMP-EMAIL 20/11 juntou as três telas de e-mail):
 - O SITE guarda (fonte única: opção camp_aap_sender). GET /painel/sender (contrato 1.23, campos opcionais) devolve o catálogo de todos os
   modelos (TR, área, nome, quando sai, para quem, variáveis, o que acontece sem ID, ID atual, situação), de onde vem a chave do Sender
   (site | plugin; nunca o token) e a chave de emergência. POST /painel/sender {"templates": {chave: ID}} grava um ID (vazio não muda,
@@ -291,7 +291,7 @@ def _md_modelo(m: dict) -> str:
     manda hoje; sem arquivo, gerado do catálogo."""
     arq = next(iter(sorted(GUIA_DIR.glob(f"{m['tr']}-*.md"))), None) if m.get("tr") else None
     vars_ = ", ".join("{{" + v + "}}" for v in m.get("variaveis") or [])
-    onde = (f"5. No **painel da CAMP**: Administração → **E-mails do site** → cole o ID na linha **{m['tr']}** e clique em **Salvar**. "
+    onde = (f"5. No **painel da CAMP**: menu **E-mails** → aba **Modelos do Sender** → cole o ID na linha **{m['tr']}** e clique em **Salvar**. "
             "Depois use **Enviar teste** (vai para o seu e-mail, com valores de exemplo).")
     if arq:
         t = arq.read_text(encoding="utf-8")
@@ -314,7 +314,7 @@ def _md_modelo(m: dict) -> str:
 def guia_zip(dados: dict) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        tab = ["# E-mails da CAMP no Sender", "", "Um arquivo por modelo. Onde colar o ID de qualquer modelo: painel → Administração → **E-mails do site**.", "",
+        tab = ["# E-mails da CAMP no Sender", "", "Um arquivo por modelo. Onde colar o ID de qualquer modelo: painel → menu **E-mails** → aba **Modelos do Sender**.", "",
                "| Modelo | Área | Situação | ID | Arquivo |", "|---|---|---|---|---|"]
         rot = {"ativo": "Ativo", "sem_id": "Sem ID", "sem_chave": "Sem chave do Sender", "emergencia": "Sender desligado", "": "—"}
         for m in dados["modelos"]:

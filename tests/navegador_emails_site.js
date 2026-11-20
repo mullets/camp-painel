@@ -35,14 +35,14 @@ const site = http.createServer((req, res) => { let b = ''; req.on('data', d => b
   await pg.goto(BASE + '/'); await login(pg, 'rafael@camp.arq.br', 'senha-bem-longa-123');
   for (const [k, v] of [['wp.url', `http://127.0.0.1:${PORTA}`], ['wp.app_password', 'senha-do-site-falso']])   // o painel fala só com o site falso
     await pg.evaluate(([k, v]) => fetch('/api/config/' + k, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valor: v }) }).then(r => r.status), [k, v]);
-  await pg.goto(BASE + '/#emailsite'); await pg.reload();
+  await pg.goto(BASE + '/#emails/modelos'); await pg.reload();   // CAMP-EMAIL 20/11: agora é a aba Modelos do Sender da tela E-mails
   await pg.waitForSelector('#es-lista tr[data-es-chave]', { timeout: 10000 }).catch(() => {});
   await pg.waitForTimeout(400);
-  chk(await pg.$eval('#v-emailsite h1', e => e.childNodes[0].textContent.trim()) === 'E-mails do site', 'título da página: E-mails do site');
+  chk(await pg.$eval('#v-emails h1', e => e.childNodes[0].textContent.trim()) === 'E-mails' && await pg.$eval('#em-tab-modelos', b => b.getAttribute('aria-selected')) === 'true' && await pg.$eval('#em-p-modelos', p => !p.hidden), 'tela E-mails, aba Modelos do Sender aberta');
   chk(/Administração/.test(await pg.$eval('#gcrumb', e => e.textContent).catch(() => '')), 'trilha: Administração');
   const kpis = await pg.$$eval('#es-kpis .hoje-kpi', ks => ks.map(k => k.querySelector('.v').textContent + ' ' + k.querySelector('.l').textContent));
   chk(JSON.stringify(kpis.slice(0, 3)) === JSON.stringify(['4 ativos', '4 faltando', '3 críticos']) && /^\d+ falhas em 30 dias$/.test(kpis[3] || ''), 'números do topo: ativos, faltando, críticos, falhas em 30 dias', JSON.stringify(kpis));
-  chk(/saiu pelo e-mail simples|enviado|nenhum em 30 dias/.test(await pg.$eval('tr[data-es-chave="solicitacao_recebida"] .es-env', e => e.textContent)), 'último envio do TR04 vem de E-mails enviados');
+  chk(/saiu pelo e-mail simples|enviado|nenhum em 30 dias/.test(await pg.$eval('tr[data-es-chave="solicitacao_recebida"] .es-env', e => e.textContent)), 'último envio do TR04 vem de E-mails → Enviados');
   chk(/TR15, TR22, TR27/.test(await pg.$eval('#es-kpis', e => e.textContent)), 'críticos listados: TR15, TR22, TR27');
   const areas = await pg.$$eval('#es-lista tr.es-area th', t => t.map(x => x.textContent));
   chk(JSON.stringify(areas) === JSON.stringify(['Pedidos e visitas', 'Cursos e inscrições', 'Amigos da CAMP', 'Área do Amigo', 'Ingressos', 'Cobranças e doações']), 'modelos agrupados por área, na ordem', JSON.stringify(areas));
@@ -93,24 +93,26 @@ const site = http.createServer((req, res) => { let b = ''; req.on('data', d => b
   chk(g[0] === 200 && /zip/.test(g[1]) && g[2] > 1000, 'Baixar guia dos modelos: .zip', JSON.stringify(g));
   // links de entrada
   await pg.goto(BASE + '/#emails'); await pg.waitForTimeout(800);
-  chk(await pg.$eval('#v-emails a[href="#emailsite"]', a => !a.hidden).catch(() => false), 'E-mails enviados tem o botão "E-mails do site"');
+  chk(await pg.$eval('#em-tab-modelos', a => !a.hidden && a.textContent.trim() === 'Modelos do Sender').catch(() => false), 'E-mails tem a aba "Modelos do Sender"');
   await pg.goto(BASE + '/#config'); await pg.waitForTimeout(1200);
-  chk(await pg.$eval('.cfg-sender-modelos a[href="#emailsite"]', a => !!a).catch(() => false), 'Configurações → E-mail e avisos aponta para E-mails do site');
+  chk(await pg.$eval('.cfg-sender-modelos a[href="#emails/modelos"]', a => !!a).catch(() => false), 'Configurações → E-mail e avisos aponta para E-mails → Modelos do Sender');
   chk(!(await pg.$('input[data-cfg-chave="sender.tr04_solicitacao_recebida"]')), 'Configurações não mostra mais os IDs TR04–TR09 (uma fonte só)');
   // celular
   const cel = await (await br.newContext({ viewport: { width: 390, height: 800 } })).newPage();
   cel.on('pageerror', e => erros.push('pageerror (390): ' + e.message));
-  await cel.goto(BASE + '/'); await login(cel, 'rafael@camp.arq.br', 'senha-bem-longa-123'); await cel.goto(BASE + '/#emailsite'); await cel.reload();
+  await cel.goto(BASE + '/'); await login(cel, 'rafael@camp.arq.br', 'senha-bem-longa-123'); await cel.goto(BASE + '/#emails/modelos'); await cel.reload();
   await cel.waitForSelector('#es-lista tr[data-es-chave]', { timeout: 10000 }).catch(() => {}); await cel.waitForTimeout(400);
   chk(await lado(cel) <= 0, '390 px: a tela não rola de lado', String(await lado(cel)));
   // operador não vê
   const op = await (await br.newContext({ viewport: { width: 1366, height: 900 } })).newPage();
   await op.goto(BASE + '/'); await login(op, 'operador@camp.arq.br', 'senha-operador-123'); await op.reload(); await op.waitForTimeout(1200);
   const st = await op.evaluate(() => fetch('/api/emails-site').then(r => r.status));
+  await op.goto(BASE + '/#emails/modelos'); await op.waitForTimeout(800);
+  chk(st === 403 && !(await op.$eval('#v-emails', e => e.classList.contains('on'))), 'operador: 403 na API e o endereço #emails/modelos não abre a tela', String(st));
   await op.goto(BASE + '/#emailsite'); await op.waitForTimeout(800);
-  chk(st === 403 && !(await op.$eval('#v-emailsite', e => e.classList.contains('on'))), 'operador: 403 na API e o endereço #emailsite não abre a tela', String(st));
+  chk(!(await op.$eval('#v-emails', e => e.classList.contains('on'))), 'operador: o endereço antigo #emailsite também não abre');
   await op.goto(BASE + '/#config'); await op.waitForTimeout(1200);
-  chk(await op.$eval('.cfg-sender-modelos', e => e.hidden).catch(() => true), 'operador: o link para E-mails do site some em Configurações');
+  chk(await op.$eval('.cfg-sender-modelos', e => e.hidden).catch(() => true), 'operador: o link para E-mails → Modelos do Sender some em Configurações');
   chk(!erros.length, 'sem erro de JavaScript', erros.join(' | '));
   await br.close(); site.close();
   console.log(linhas.join('\n'));

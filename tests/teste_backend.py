@@ -18493,7 +18493,7 @@ def filho(modo):
         nomes = z.namelist() if z else []
         t22 = z.read("TR22-amigo_acesso.md").decode() if z and "TR22-amigo_acesso.md" in nomes else ""
         ver("guia .zip: um .md por modelo + LEIA-ME; TR22 com o texto do guia, o lugar novo do ID e as variáveis de hoje", r.status_code == 200 and "00-LEIA-ME.md" in nomes and len(nomes) == 4
-            and "Para que serve" in t22 and "E-mails do site" in t22 and "{{validade_link}}" in t22 and "SEGREDO" not in t22, nomes)
+            and "Para que serve" in t22 and "aba **Modelos do Sender**" in t22 and "E-mails do site" not in t22 and "{{validade_link}}" in t22 and "SEGREDO" not in t22, nomes)
         # 6) site antigo (sem catálogo) e site sem a rota
         site["novo"] = False
         r = ad.get("/api/emails-site"); d = r.json()
