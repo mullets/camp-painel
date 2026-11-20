@@ -26,6 +26,12 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
 - CAMP-DOA-TEXTO (20/11/2026, sem mudar o contrato com o site): "Copiar dados para o contrato". GET …/{id}/texto (só admin) monta, em texto
   simples, cabeçalho, dados da pessoa, cada pergunta do formulário do site com a resposta, os dados combinados pela equipe e, só com
   ?notas=1, as notas internas. Anonimizada: "dados apagados (LGPD)" no lugar dos dados pessoais.
+- CAMP-DOA-CPF (contrato 1.26, site 1.35.0; Rafael: "coloque no formulario do site, importante.. rg nao precisa, nem estado civil e
+  nacionalidade.." e "o valor de doação é bom vir do formulário do site já"). O registro do site traz, OPCIONAIS, `documento` (só dígitos),
+  `documento_tipo` (cpf|cnpj), `endereco` {cep, logradouro, numero, complemento, bairro, cidade, uf}, `valor_proposto` e `valor_combinar`;
+  ficam em `dados` (sem coluna nova). O detalhe mostra (só admin) e a equipe corrige documento e endereço: vão ao site no POST …/{id} de
+  sempre, validados aqui do mesmo jeito (dígitos verificadores, CEP de 8 dígitos, UF). O texto para o contrato ganha "CPF: …"/"CNPJ: …",
+  "Endereço: …" e as perguntas novas. LGPD apaga documento e endereço. Site antigo: sem os campos, nada muda (o texto só omite as linhas).
 """
 from __future__ import annotations
 
@@ -78,6 +84,12 @@ MSG_SITE_SEM_CONTRATO = f"O site ainda não manda o contrato para assinatura: av
 RE_LINK = re.compile(r"^https?://[^\s/]+\.[^\s]+$", re.I)
 ABERTAS = ("em_analise", "info", "visita", "aprovada", "contrato_enviado", "contrato_assinado", "cobranca")   # pedem ação da equipe
 MINIMO = 1000.0
+# CAMP-DOA-CPF (contrato 1.26): dados pessoais que o LGPD apaga em `dados` (o endereço, um dict, também)
+PESSOAIS_DADOS = ("nome", "email", "telefone", "descricao", "local", "fotos_link", "autor", "documento", "documento_tipo")
+UFS = ("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO")
+ENDERECO = {"cep": 8, "logradouro": 200, "numero": 20, "complemento": 100, "bairro": 100, "cidade": 100, "uf": 2}
+COMBINAR = "A combinar com a equipe"
+VERSAO_CPF_SITE = "1.35.0"
 
 
 # ---------------------------------------------------------------- utilidades
@@ -158,8 +170,9 @@ def _gravar(con, x: dict) -> int:
     d = {k: v for k, v in x.items() if k != "fotos"}
     d["n_fotos"] = len([f for f in (x.get("fotos") or []) if isinstance(f, dict)])
     if anon:
-        for k in ("nome", "email", "telefone", "descricao", "local", "fotos_link", "autor"):
+        for k in PESSOAIS_DADOS:
             d[k] = ""
+        d["endereco"] = None
         d["notas"] = []
         d["n_fotos"] = 0
     vals = {
@@ -297,7 +310,112 @@ def _detalhe(r) -> dict:
     d = json.loads(r["dados"]) if r["dados"] else {}
     d.update(_linha(r))
     d["fotos"] = [{"n": i} for i in range(int(d.get("n_fotos") or 0))]
+    # CAMP-DOA-CPF: prontos para a tela (vazios nas intenções antigas)
+    d["documento_fmt"] = documento_txt(d)
+    d["endereco_fmt"] = endereco_txt(d.get("endereco"))
+    d["valor_proposto_fmt"] = valor_proposto_txt(d)
+    d["ufs"] = list(UFS)
     return d
+
+
+# ---------------------------------------------------------------- CAMP-DOA-CPF: documento, endereço e valor proposto
+def _digitos(v) -> str:
+    return re.sub(r"\D", "", str(v or ""))
+
+
+def cpf_ok(d: str) -> bool:
+    if not re.fullmatch(r"\d{11}", d or "") or len(set(d)) == 1:
+        return False
+    for t in (9, 10):
+        s_ = sum(int(d[i]) * (t + 1 - i) for i in range(t))
+        if (s_ * 10 % 11) % 10 != int(d[t]):
+            return False
+    return True
+
+
+def cnpj_ok(d: str) -> bool:
+    if not re.fullmatch(r"\d{14}", d or "") or len(set(d)) == 1:
+        return False
+    w = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    for t in (12, 13):
+        r_ = sum(int(d[i]) * w[i + 13 - t] for i in range(t)) % 11
+        if (0 if r_ < 2 else 11 - r_) != int(d[t]):
+            return False
+    return True
+
+
+def documento_de(v) -> tuple[str, str] | None:
+    """CPF/CNPJ com ou sem pontuação → (dígitos, "cpf"|"cnpj"); dígitos verificadores errados → None."""
+    d = _digitos(v)
+    return (d, "cpf") if cpf_ok(d) else ((d, "cnpj") if cnpj_ok(d) else None)
+
+
+def documento_fmt(d: str) -> str:
+    d = str(d or "")
+    if len(d) == 11:
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    if len(d) == 14:
+        return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+    return d
+
+
+def documento_txt(d: dict) -> str:
+    """"CPF: 123.456.789-09" / "CNPJ: 12.345.678/0001-95" ou "" (sem documento)."""
+    doc = _digitos(d.get("documento"))
+    if not doc:
+        return ""
+    tipo = str(d.get("documento_tipo") or ("cnpj" if len(doc) == 14 else "cpf")).upper()
+    return f"{tipo}: {documento_fmt(doc)}"
+
+
+def endereco_txt(e) -> str:
+    """"Rua X, 123, apto 4 — Bairro — Cidade/UF — CEP 01234-567" (partes vazias somem; sem partes, o texto livre `texto`)."""
+    if not isinstance(e, dict):
+        return ""
+    g = lambda k: _txt(e.get(k), 300)   # noqa: E731
+    rua = ", ".join(x for x in (g("logradouro"), g("numero"), g("complemento")) if x)
+    cid = "/".join(x for x in (g("cidade"), g("uf")) if x)
+    cep = _digitos(g("cep"))
+    cep = f"CEP {cep[:5]}-{cep[5:]}" if len(cep) == 8 else g("cep")
+    partes = [x for x in (rua, g("bairro"), cid) if x]
+    if not partes and g("texto"):
+        partes = [g("texto")]
+    return " — ".join(x for x in (*partes, cep) if x)
+
+
+def valor_proposto_txt(d: dict) -> str:
+    if d.get("valor_combinar"):
+        return COMBINAR
+    return _brl(d.get("valor_proposto"))
+
+
+def _validar_endereco(e: dict) -> tuple[dict, list[str]]:
+    """Partes mandadas pela equipe (vazio = não mexe; "__limpar__" apaga). Mesma regra do site."""
+    out, erros = {}, []
+    for k, n in ENDERECO.items():
+        v = str(e.get(k) or "").strip()
+        if not v:
+            continue
+        if v == "__limpar__":
+            out[k] = v
+            continue
+        if k == "cep":
+            v = _digitos(v)
+            if len(v) != 8:
+                erros.append("CEP: 8 números")
+                continue
+        elif k == "uf":
+            v = v.upper()
+            if v not in UFS:
+                erros.append("UF: a sigla do estado (ex.: SP)")
+                continue
+        else:
+            v = _txt(v, n)
+            if len(v) < (1 if k in ("numero", "complemento") else 2):
+                erros.append(f"{k}: muito curto")
+                continue
+        out[k] = v
+    return out, erros
 
 
 def filtrar(con, etapa: str = "", q: str = "") -> list[dict]:
@@ -325,8 +443,9 @@ def anonimizar_por_email(con, email: str) -> int:
     for sid in ids:
         r = con.execute("SELECT dados FROM doacao_acervo WHERE site_id=?", (sid,)).fetchone()
         d = json.loads(r[0]) if r and r[0] else {}
-        for k in ("nome", "email", "telefone", "descricao", "local", "fotos_link", "autor"):
+        for k in PESSOAIS_DADOS:
             d[k] = ""
+        d["endereco"] = None
         d["notas"], d["n_fotos"] = [], 0
         con.execute("UPDATE doacao_acervo SET nome=?, email=NULL, telefone=NULL, autor=NULL, local=NULL, dados=?, anonimizado=1 WHERE site_id=?",
                     (REMOVIDO, json.dumps(d, ensure_ascii=False), sid))
@@ -434,6 +553,15 @@ PERGUNTAS = (
     ("nome", "Seu nome completo"),
     ("email", "E-mail"),
     ("telefone", "Telefone / WhatsApp"),
+    ("documento", "CPF ou CNPJ"),                       # CAMP-DOA-CPF (site 1.35.0): rótulos exatamente como no formulário
+    ("end_cep", "CEP"),
+    ("end_logradouro", "Rua, avenida (logradouro)"),
+    ("end_numero", "Número"),
+    ("end_complemento", "Complemento"),
+    ("end_bairro", "Bairro"),
+    ("end_cidade", "Cidade"),
+    ("end_uf", "UF"),
+    ("valor_proposto", "Valor da contribuição de preservação"),
     ("relacao", "Qual é sua relação com o acervo?"),
     ("autor", "Nome do arquiteto, escritório ou pessoa a quem o acervo pertenceu"),
     ("descricao", "O que há no acervo?"),
@@ -460,12 +588,14 @@ MARKETING = {True: "Sim, quero receber novidades, eventos, publicações e infor
              False: "Não, desejo receber apenas mensagens relacionadas à minha proposta e, caso avance, ao contrato, pagamento e participação nos Amigos da CAMP."}
 # dados pessoais pedidos depois (contrato): saem em "Dados da pessoa" se o registro trouxer
 PESSOAIS_EXTRA = (("cpf_cnpj", "CPF/CNPJ"), ("cpf", "CPF"), ("cnpj", "CNPJ"), ("endereco", "Endereço"))
-PESSOAIS = {"nome", "email", "telefone", "autor", "descricao", "local", "fotos_link", "fotos"} | {k for k, _ in PESSOAIS_EXTRA}
+PESSOAIS = {"nome", "email", "telefone", "autor", "descricao", "local", "fotos_link", "fotos", "documento", "end_cep", "end_logradouro", "end_numero",
+            "end_complemento", "end_bairro", "end_cidade", "end_uf"} | {k for k, _ in PESSOAIS_EXTRA}
 # chaves do registro que já estão no texto (ou são da equipe/sistema): o resto sai como "chave: valor"
 CONHECIDAS = {k for k, _ in PERGUNTAS} | {k for k, _ in PESSOAIS_EXTRA} | {
     "id", "protocolo", "recebida_em", "relacao_nome", "tipos_nomes", "faixa_nome", "conservacao_nome", "direitos_nome", "n_fotos", "termos_versao",
     "etapa", "etapa_nome", "aprovada_em", "contrato_link", "assinado_em", "contrato_enviado_em", "contrato_prazo", "avisos", "valor", "minimo", "caixas",
     "rolos", "volume", "quantidade_catalogada", "fundo", "notas", "cobranca", "amigo", "pode_cobrar", "historico", "anonimizado", "alterado_em",
+    "documento_tipo", "endereco", "valor_combinar",
 }
 
 
@@ -530,6 +660,14 @@ def _resposta(d: dict, listas: dict, chave: str) -> str:
     if chave == "aceite":
         tv = _txt(d.get("termos_versao"), 40)
         return f"Sim (termos versão {tv})" if tv else ""
+    if chave == "documento":
+        return documento_fmt(_digitos(d.get("documento")))
+    if chave.startswith("end_"):
+        e = d.get("endereco") if isinstance(d.get("endereco"), dict) else {}
+        v = _txt(e.get(chave[4:]), 300)
+        return f"{_digitos(v)[:5]}-{_digitos(v)[5:]}" if chave == "end_cep" and len(_digitos(v)) == 8 else v
+    if chave == "valor_proposto":
+        return valor_proposto_txt(d)
     if chave == "marketing":
         return MARKETING[bool(d["marketing"])] if "marketing" in d and d["marketing"] is not None else ""
     return _valor_txt(d.get(chave))
@@ -554,7 +692,8 @@ def texto_contrato(con, sid: int, notas: bool = False) -> str:
         out += _bloco("DADOS DA PESSOA", [TEXTO_LGPD, um("Relação com o acervo", _resposta(d, listas, "relacao"))])
     else:
         out += _bloco("DADOS DA PESSOA", [um("Nome completo", r["nome"] or d.get("nome")), um("E-mail", r["email"] or d.get("email")),
-                                          um("Telefone / WhatsApp", r["telefone"] or d.get("telefone")), um("Relação com o acervo", _resposta(d, listas, "relacao")),
+                                          um("Telefone / WhatsApp", r["telefone"] or d.get("telefone")), documento_txt(d),
+                                          um("Endereço", endereco_txt(d.get("endereco"))), um("Relação com o acervo", _resposta(d, listas, "relacao")),
                                           *[um(rot, _valor_txt(d.get(k))) for k, rot in PESSOAIS_EXTRA]])
     # 3. formulário: pergunta e resposta, na ordem do site
     form = []
@@ -587,6 +726,7 @@ def texto_contrato(con, sid: int, notas: bool = False) -> str:
     out += _bloco("DADOS COMBINADOS (equipe)", [
         um("Etapa", ETAPAS.get(r["etapa"], r["etapa"])),
         um("Contribuição acordada", _brl(r["valor"] if r["valor"] is not None else d.get("valor"))),
+        um("Valor proposto pela pessoa", valor_proposto_txt(d)),
         um("Caixas (aproximado)", num(d.get("caixas"))), um("Rolos (aproximado)", num(d.get("rolos"))), um("Volume físico estimado", d.get("volume")),
         um("Quantidade catalogada", num(d.get("quantidade_catalogada"))), um("Código do fundo", d.get("fundo")),
         um("Link do contrato para assinatura", cl),
@@ -626,6 +766,8 @@ class Mudanca(BaseModel):
     volume: str | None = None
     quantidade_catalogada: str | int | None = None
     fundo: str | None = None
+    documento: str | None = None     # CAMP-DOA-CPF (contrato 1.26): CPF/CNPJ corrigido pela equipe ("__limpar__" apaga)
+    endereco: dict | None = None     # CAMP-DOA-CPF: partes do endereço corrigidas (vazio não mexe; "__limpar__" apaga)
     acao: str | None = None          # gerar_cobranca | consultar
     avisar: bool | None = None       # CAMP-DOA-AVISOS: avisar a pessoa por e-mail (TR31) da etapa nova
     aviso_texto: str | None = None   # o texto pronto da etapa, editado
@@ -643,6 +785,22 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
         dados_b = b.model_dump()
         avisar = bool(dados_b.pop("avisar", None))
+        end_b = dados_b.pop("endereco", None)
+        pessoais = {}                                        # CAMP-DOA-CPF: mesma validação do site
+        doc_b = (dados_b.pop("documento", None) or "").strip()
+        if doc_b:
+            if doc_b == "__limpar__":
+                pessoais["documento"] = doc_b
+            elif documento_de(doc_b):
+                pessoais["documento"] = documento_de(doc_b)[0]
+            else:
+                raise HTTPException(400, "CPF ou CNPJ: os dígitos verificadores não conferem. Confira os números.")
+        if isinstance(end_b, dict):
+            e_ok, e_err = _validar_endereco(end_b)
+            if e_err:
+                raise HTTPException(400, "Endereço: " + "; ".join(e_err))
+            if e_ok:
+                pessoais["endereco"] = e_ok
         aviso = {k: _txt(dados_b.pop(k, None), 3000 if k != "aviso_link" else 500) for k in ("aviso_texto", "mensagem", "aviso_link")}
         corpo = {k: (str(v) if not isinstance(v, str) else v) for k, v in dados_b.items() if v is not None and str(v).strip() != ""}
         cl = (corpo.get("contrato_link") or "").strip()
@@ -654,6 +812,7 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
             raise HTTPException(400, f"“{ETAPAS[corpo['etapa']]}” é marcada pelo sistema (gerar a cobrança / pagamento confirmado)")
         if corpo.get("acao") and corpo["acao"] not in ("gerar_cobranca", "consultar"):
             raise HTTPException(400, "Ação desconhecida")
+        corpo.update(pessoais)
         if not corpo:
             raise HTTPException(400, "Nada para mudar")
         if avisar:
@@ -677,6 +836,10 @@ def mudar(sid: int, b: Mudanca, u: dict = Depends(auth.exige("admin"))) -> dict:
         registrar(logging.INFO, "doacoes_acervo_mudanca", "Intenção de doação atualizada pelo painel", site_id=int(sid),
                   etapa=corpo.get("etapa") or "", acao=corpo.get("acao") or "")
         x = _completo(con, sid)
+        if pessoais and isinstance(d.get("registro"), dict) and "documento" not in d["registro"]:   # site antigo: ignorou os campos
+            x["dados_pessoais"] = {"salvo": False, "mensagem": f"CPF/CNPJ e endereço não foram guardados: o site ainda não tem esses campos (plugin da CAMP {VERSAO_CPF_SITE} ou mais novo). Avise quem cuida do site."}
+        elif pessoais:
+            x["dados_pessoais"] = {"salvo": True, "mensagem": "CPF/CNPJ e endereço atualizados no site."}
         if avisar:
             x["aviso"] = _aviso_resposta(d)
         if email_cob is not None:
