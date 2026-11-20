@@ -47,6 +47,7 @@ MODOS_RAPIDOS |= {"cobranca_avulsa"}   # CAMP-COB 19/11/2026: cobranças avulsas
 MODOS_RAPIDOS |= {"emails_site"}   # CAMP-SENDER 20/11/2026: E-mails do site — todos os modelos TR, IDs, teste (site falso; contrato 1.23; linha própria)
 MODOS_RAPIDOS |= {"doacoes_contrato"}   # CAMP-DOA-CONTRATO/AVISOS 20/11/2026: contrato para assinatura (TR30) + cobrança (TR27) separados, aviso de etapa (TR31) (site falso; contrato 1.25; linha própria)
 MODOS_RAPIDOS |= {"autentique_doacao"}   # CAMP-AUTENTIQUE 20/11/2026: contrato da doação criado na Autentique (PDF), link no TR30, assinado sozinho (Autentique e site falsos; linha própria)
+MODOS_RAPIDOS |= {"doacoes_texto"}   # CAMP-DOA-TEXTO 20/11/2026: "Copiar dados para o contrato" — texto simples pergunta → resposta, notas só com a caixa, LGPD (linha própria)
 
 
 _ADIANTADOS = {}      # (modo, db) -> (rc, saída) dos modos rodados em paralelo no começo (ver adiantar_em_paralelo)
@@ -18485,6 +18486,93 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("maria@x.com", "Maria Herdeira", "joao@x.com", "João Guarda")))
         for l in res: print(l)
+    elif modo == "doacoes_texto":
+        # CAMP-DOA-TEXTO 20/11/2026. Rafael: "preciso poder em formato texto, copiar todos dados do formulario que ela preencheu e suas respostas,
+        # pergunta e resposta, com os dados dela, valor que vai doar e etc que eh pra enviar para fazer o contrato." GET …/{id}/texto (só admin):
+        # cada pergunta do formulário do site com a resposta (rótulos humanos), vazio fora, valor em R$, notas só com ?notas=1, anonimizada sem
+        # dado pessoal, chave desconhecida como "chave: valor", rótulo mandado pelo site vale por cima.
+        init_db(); _aplicar_migracoes_real()
+        import json as _j
+        from fastapi.testclient import TestClient
+        from app import auth, doacoes_acervo as da
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' / ')[:400]}")
+        c = connect()
+        A = {"id": 701, "protocolo": "CAMP-2026-000701", "recebida_em": "2026-11-20T12:00:00+00:00", "nome": "Maria Herdeira", "email": "maria@x.com", "telefone": "11 98888-7777",
+             "relacao": "familia", "relacao_nome": "Sou familiar ou herdeiro(a)", "autor": "Escritório Fulano", "descricao": "40 rolos e 6 caixas\nplantas de 1970", "tipos": ["desenhos", "fotografias"],
+             "tipos_nomes": ["Plantas, desenhos e croquis", "Fotografias, slides ou negativos"], "quantidade_estimativa_faixa": "51_500", "faixa_nome": "De 51 a 500 itens", "periodo": "1960–1990",
+             "conservacao": "danificados", "conservacao_nome": "Há documentos danificados", "local": "Campinas/SP", "fotos_link": "https://drive.example.com/pasta", "sem_fotos": False,
+             "fotos": [{"n": 0, "tipo": "image/jpeg", "tamanho": 2000}, {"n": 1, "tipo": "image/png", "tamanho": 2000}], "direitos": "herdeiro",
+             "direitos_nome": "Sou herdeiro(a), mas os direitos precisam ser confirmados", "marketing": True, "termos_versao": "2026-11", "cpf_cnpj": "123.456.789-00",
+             "campo_novo": "valor extra", "etapa": "contrato_enviado", "etapa_nome": "Contrato enviado para assinatura", "valor": 2500, "contrato_link": "https://assina.example.com/doc/1",
+             "contrato_prazo": "2026-12-10", "assinado_em": "", "caixas": 6, "rolos": 40, "volume": "2 m lineares", "quantidade_catalogada": None, "fundo": "F099",
+             "notas": [{"em": "2026-11-20 13:00", "quem": "Rafael", "texto": "segredo interno da equipe"}], "pode_cobrar": True, "historico": ["x"], "anonimizado": False,
+             "cobranca": {"id": 9, "situacao": "aberta", "situacao_nome": "Aberta", "valor": 2500, "link": "https://mp.example.com/p", "external_reference": "CAMP-COB-9", "pago_em": ""},
+             "amigo": None, "alterado_em": "2026-11-20T12:00:00+00:00"}
+        B = {"id": 702, "protocolo": "CAMP-2026-000702", "recebida_em": "2026-11-20T13:00:00+00:00", "nome": "João", "email": "joao@x.com", "telefone": "", "relacao": "guarda",
+             "autor": "Arquiteto Beltrano", "descricao": "pastas", "tipos": ["maquetes"], "quantidade_estimativa_faixa": "nao_sei", "periodo": "", "conservacao": "regular", "local": "Santos/SP",
+             "fotos_link": "", "sem_fotos": True, "fotos": [], "direitos": "nao_sei", "marketing": False, "termos_versao": "", "etapa": "em_analise", "valor": 0, "contrato_link": "",
+             "caixas": None, "rolos": None, "volume": "", "fundo": "", "notas": [], "cobranca": None, "amigo": None, "anonimizado": False}
+        D = dict(A, id=703, protocolo="CAMP-2026-000703", nome="Ana Apagada", email="ana@x.com", telefone="11 97777-0000", autor="Autor Sigiloso", descricao="descrição sigilosa",
+                 local="Cidade Sigilosa/SP", fotos_link="https://drive.example.com/ana", cpf_cnpj="999.888.777-66", notas=[{"em": "x", "quem": "y", "texto": "nota da Ana"}])
+        for x_ in (A, B, D):
+            da._gravar(c, x_)
+        da._estado_set(c, "listas", _j.dumps({"conservacao": {"regular": "Regular (rótulo do site)"}}, ensure_ascii=False))
+        da.anonimizar_por_email(c, "ana@x.com"); c.commit()
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        x0 = TestClient(app, raise_server_exceptions=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("sem login: 401; operador: 403 (com e sem notas)", x0.get("/api/doacoes-acervo/701/texto").status_code == 401
+            and op.get("/api/doacoes-acervo/701/texto").status_code == 403 and op.get("/api/doacoes-acervo/701/texto?notas=1").status_code == 403)
+        ver("intenção que não existe: 404", x.get("/api/doacoes-acervo/999/texto").status_code == 404)
+        r_ = x.get("/api/doacoes-acervo/701/texto")
+        t = r_.json().get("texto", "") if r_.status_code == 200 else ""
+        ver("admin: 200, texto simples (\\n, sem \\r, sem HTML)", r_.status_code == 200 and isinstance(t, str) and "\n" in t and "\r" not in t and "<" not in t and "&lt;" not in t, r_.text[:200])
+        ver("cabeçalho: título, protocolo e data de recebimento (horário de Brasília)", t.startswith("Intenção de doação de acervo — CAMP\nProtocolo: CAMP-2026-000701\nRecebida em: 20/11/2026 09:00\n"), t[:160])
+        secs = ["DADOS DA PESSOA", "FORMULÁRIO (pergunta e resposta)", "DADOS COMBINADOS (equipe)"]
+        ver("seções na ordem: pessoa, formulário, dados combinados", all(s_ in t for s_ in secs) and [t.index(s_) for s_ in secs] == sorted(t.index(s_) for s_ in secs), t[:300])
+        pessoa = t.split("DADOS DA PESSOA")[1].split("FORMULÁRIO")[0] if "DADOS DA PESSOA" in t and "FORMULÁRIO" in t else ""
+        ver("dados da pessoa: nome, e-mail, telefone, relação e CPF/CNPJ", all(l_ in pessoa for l_ in ("Nome completo: Maria Herdeira", "E-mail: maria@x.com", "Telefone / WhatsApp: 11 98888-7777",
+            "Relação com o acervo: Sou familiar ou herdeiro(a)", "CPF/CNPJ: 123.456.789-00")), pessoa)
+        PARES = [("Seu nome completo", "Maria Herdeira"), ("E-mail", "maria@x.com"), ("Telefone / WhatsApp", "11 98888-7777"),
+                 ("Qual é sua relação com o acervo?", "Sou familiar ou herdeiro(a)"), ("Nome do arquiteto, escritório ou pessoa a quem o acervo pertenceu", "Escritório Fulano"),
+                 ("O que há no acervo?", "40 rolos e 6 caixas\n  plantas de 1970"), ("Que tipos de material ele contém?", "Plantas, desenhos e croquis; Fotografias, slides ou negativos"),
+                 ("Qual é a quantidade aproximada de material?", "De 51 a 500 itens"), ("De que período são os documentos?", "1960–1990"),
+                 ("Como está a conservação do material?", "Há documentos danificados"), ("Em qual cidade e estado o acervo está guardado?", "Campinas/SP"),
+                 ("Anexar fotos gerais", "2 fotos anexadas"), ("Compartilhar um link com fotos ou inventário", "https://drive.example.com/pasta"),
+                 ("O que você sabe sobre os direitos autorais do material?", "Sou herdeiro(a), mas os direitos precisam ser confirmados"),
+                 ("Li e compreendi os termos acima.", "Sim (termos versão 2026-11)"),
+                 ("Gostaria de receber notícias e convites da CAMP por e-mail?", "Sim, quero receber novidades, eventos, publicações e informações sobre a CAMP.")]
+        form = t.split("FORMULÁRIO (pergunta e resposta)")[1].split("DADOS COMBINADOS")[0] if secs[1] in t and secs[2] in t else ""
+        falta = [p_ for p_, r__ in PARES if f"{p_}\n  {r__}" not in form]
+        ver("formulário: cada pergunta do site com a resposta (rótulos humanos), na ordem do site", not falta and [form.index(p_ + "\n") for p_, _ in PARES] == sorted(form.index(p_ + "\n") for p_, _ in PARES), (falta, form[:300]))
+        ver("formulário: fotos só contadas, nunca os arquivos", "image/jpeg" not in t and "/foto/" not in t)
+        ver("campo desconhecido aparece como 'chave: valor'", "campo_novo: valor extra" in form, form[-200:])
+        comb = t.split("DADOS COMBINADOS (equipe)")[1] if secs[2] in t else ""
+        ver("dados combinados: etapa, valor em R$, volume, fundo, link do contrato, prazo, cobrança CAMP-COB-n", all(l_ in comb for l_ in (
+            "Etapa: Contrato enviado para assinatura", "Contribuição acordada: R$ 2.500,00", "Caixas (aproximado): 6", "Rolos (aproximado): 40", "Volume físico estimado: 2 m lineares",
+            "Código do fundo: F099", "Link do contrato para assinatura: https://assina.example.com/doc/1", "Assinar até: 10/12/2026", "Cobrança (Mercado Pago): Aberta · R$ 2.500,00 · CAMP-COB-9")), comb)
+        ver("vazio fica fora: quantidade catalogada vazia não aparece", "Quantidade catalogada" not in t and "None" not in t)
+        ver("notas internas fora por padrão", "segredo interno" not in t and "NOTAS INTERNAS" not in t and r_.json().get("notas") is False)
+        tn = x.get("/api/doacoes-acervo/701/texto?notas=1").json().get("texto", "")
+        ver("com ?notas=1: as notas internas entram no fim (data · quem: texto)", "NOTAS INTERNAS\n2026-11-20 13:00 · Rafael: segredo interno da equipe" in tn and tn.index("NOTAS INTERNAS") > tn.index(secs[2]), tn[-200:])
+        tb = x.get("/api/doacoes-acervo/702/texto").json().get("texto", "")
+        ver("registro com campos vazios: pergunta sem resposta fica fora (período, link, telefone, termos)", all(p_ not in tb for p_ in ("De que período", "Compartilhar um link", "Telefone", "Li e compreendi"))
+            and "Ainda não tenho fotos para enviar.\n  Sim" in tb and "Anexar fotos gerais" not in tb, tb)
+        ver("vazio fica fora: sem valor, caixas, fundo, contrato, cobrança; sem linha 'rótulo:' vazia nem linhas em branco repetidas",
+            all(p_ not in tb for p_ in ("Contribuição acordada", "Caixas", "Código do fundo", "Link do contrato", "Cobrança")) and "\n\n\n" not in tb
+            and not any(l_.rstrip().endswith(":") for l_ in tb.splitlines()), tb)
+        ver("código sem rótulo no registro: rótulo do site (listas) por cima, senão o do painel", "Como está a conservação do material?\n  Regular (rótulo do site)" in tb
+            and "Qual é sua relação com o acervo?\n  Sou responsável pela guarda do material" in tb and "Qual é a quantidade aproximada de material?\n  Não sei informar" in tb
+            and "Gostaria de receber notícias e convites da CAMP por e-mail?\n  Não, desejo receber apenas" in tb, tb)
+        td = x.get("/api/doacoes-acervo/703/texto?notas=1").json().get("texto", "")
+        ver("anonimizada (LGPD): 'dados apagados (LGPD)' e nenhum dado pessoal (nem com notas)", "dados apagados (LGPD)" in td and not any(s_ in td for s_ in (
+            "Ana", "ana@x.com", "97777", "Autor Sigiloso", "sigilosa", "Sigilosa", "drive.example.com/ana", "999.888", "nota da Ana", "NOTAS INTERNAS", "campo_novo", "(removido)")), td)
+        ver("anonimizada: etapa e valor continuam (não são dados pessoais)", "Etapa: Contrato enviado para assinatura" in td and "R$ 2.500,00" in td, td[-300:])
+        for l in res: print(l)
     elif modo == "doacoes_contrato":
         # CAMP-DOA-CONTRATO e CAMP-DOA-AVISOS 20/11/2026 (contrato 1.25; site FALSO, nada sai de verdade). Rafael: "No painel preciso poder pôr o
         # link do contrato pra assinatura, e gerar a cobrança no mercado livre quando enviar o contrato pra assinatura em e-mails separados".
@@ -21344,6 +21432,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (contrato e avisos): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 37, "Doações (contrato e avisos): todas as verificações rodaram")
+
+print("Doações de acervo · dados para o contrato: texto simples (pergunta → resposta, dados da pessoa, dados combinados), vazio fora, R$, notas só com a caixa, LGPD, papéis")
+rc, out = rodar("doacoes_texto", f"{tmp}/doacoes_texto.db")
+if rc != 0: ok(False, f"teste doacoes_texto não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Doações (texto para o contrato): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 18, "Doações (texto para o contrato): todas as verificações rodaram")
 
 print("Doações de acervo · Autentique: configuração (token sensível), Testar conexão, PDF → contrato na Autentique e link no TR30, erro = nada sai, assinado por todos → etapa (Autentique e site falsos)")
 rc, out = rodar("autentique_doacao", f"{tmp}/autentique_doacao.db")

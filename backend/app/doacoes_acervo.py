@@ -23,6 +23,9 @@ O formulário está no site (/intencao-de-doacao-de-acervo/, plugin 1.30.0). O s
   e-mail), guarda o id em `doacao_autentique` e usa o link de assinatura como `contrato_link` no enviar-contrato de sempre (TR30). Falhou
   na Autentique: nada sai. Na rodada (e em "Conferir assinatura agora"), os documentos pendentes são conferidos; todos assinaram →
   POST …/{id} {etapa: contrato_assinado, assinado_em: data da última assinatura} (só a data se a doação já passou dessa etapa).
+- CAMP-DOA-TEXTO (20/11/2026, sem mudar o contrato com o site): "Copiar dados para o contrato". GET …/{id}/texto (só admin) monta, em texto
+  simples, cabeçalho, dados da pessoa, cada pergunta do formulário do site com a resposta, os dados combinados pela equipe e, só com
+  ?notas=1, as notas internas. Anonimizada: "dados apagados (LGPD)" no lugar dos dados pessoais.
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -415,6 +419,198 @@ def detalhe(sid: int, u: dict = Depends(auth.exige("admin"))) -> dict:
     con = connect()
     try:
         return _completo(con, sid)
+    finally:
+        con.close()
+
+
+# ---------------------------------------------------------------- CAMP-DOA-TEXTO: dados para o contrato (texto simples)
+# Rafael (20/11/2026): "preciso poder em formato texto, copiar todos dados do formulario que ela preencheu e suas respostas, pergunta e
+# resposta, com os dados dela, valor que vai doar e etc que eh pra enviar para fazer o contrato." As perguntas são as do formulário do site
+# (camp-wordpress, class-doacao-acervo.php, Camp_AAP_Doacao_Acervo::form), na ordem dele. O registro do site já traz as respostas com o nome
+# (relacao_nome, faixa_nome, tipos_nomes…), que valem por cima das listas abaixo; chave sem rótulo sai como "chave: valor".
+TEXTO_TITULO = "Intenção de doação de acervo — CAMP"
+TEXTO_LGPD = "dados apagados (LGPD)"
+PERGUNTAS = (
+    ("nome", "Seu nome completo"),
+    ("email", "E-mail"),
+    ("telefone", "Telefone / WhatsApp"),
+    ("relacao", "Qual é sua relação com o acervo?"),
+    ("autor", "Nome do arquiteto, escritório ou pessoa a quem o acervo pertenceu"),
+    ("descricao", "O que há no acervo?"),
+    ("tipos", "Que tipos de material ele contém?"),
+    ("quantidade_estimativa_faixa", "Qual é a quantidade aproximada de material?"),
+    ("periodo", "De que período são os documentos?"),
+    ("conservacao", "Como está a conservação do material?"),
+    ("local", "Em qual cidade e estado o acervo está guardado?"),
+    ("fotos", "Anexar fotos gerais"),
+    ("fotos_link", "Compartilhar um link com fotos ou inventário"),
+    ("sem_fotos", "Ainda não tenho fotos para enviar."),
+    ("direitos", "O que você sabe sobre os direitos autorais do material?"),
+    ("aceite", "Li e compreendi os termos acima."),
+    ("marketing", "Gostaria de receber notícias e convites da CAMP por e-mail?"),
+)
+RELACOES = {"autor": "Sou o(a) autor(a) ou titular do acervo", "familia": "Sou familiar ou herdeiro(a)", "escritorio": "Represento um escritório ou instituição",
+            "guarda": "Sou responsável pela guarda do material", "outra": "Outra situação"}
+TIPOS = {"desenhos": "Plantas, desenhos e croquis", "fotografias": "Fotografias, slides ou negativos", "documentos": "Cartas, cadernos e documentos",
+         "maquetes": "Maquetes e objetos", "digitais": "Arquivos digitais", "audiovisual": "Vídeos ou áudios", "outros": "Outros / Não sei ao certo"}
+CONSERVACAO = {"boa": "Boa", "regular": "Regular", "danificados": "Há documentos danificados", "nao_sei": "Não sei avaliar"}
+DIREITOS = {"titular": "Sou titular dos direitos patrimoniais", "herdeiro": "Sou herdeiro(a), mas os direitos precisam ser confirmados",
+            "terceiro": "Os direitos pertencem a outra pessoa ou instituição", "varios": "Existem vários autores ou titulares", "nao_sei": "Não sei informar"}
+MARKETING = {True: "Sim, quero receber novidades, eventos, publicações e informações sobre a CAMP.",
+             False: "Não, desejo receber apenas mensagens relacionadas à minha proposta e, caso avance, ao contrato, pagamento e participação nos Amigos da CAMP."}
+# dados pessoais pedidos depois (contrato): saem em "Dados da pessoa" se o registro trouxer
+PESSOAIS_EXTRA = (("cpf_cnpj", "CPF/CNPJ"), ("cpf", "CPF"), ("cnpj", "CNPJ"), ("endereco", "Endereço"))
+PESSOAIS = {"nome", "email", "telefone", "autor", "descricao", "local", "fotos_link", "fotos"} | {k for k, _ in PESSOAIS_EXTRA}
+# chaves do registro que já estão no texto (ou são da equipe/sistema): o resto sai como "chave: valor"
+CONHECIDAS = {k for k, _ in PERGUNTAS} | {k for k, _ in PESSOAIS_EXTRA} | {
+    "id", "protocolo", "recebida_em", "relacao_nome", "tipos_nomes", "faixa_nome", "conservacao_nome", "direitos_nome", "n_fotos", "termos_versao",
+    "etapa", "etapa_nome", "aprovada_em", "contrato_link", "assinado_em", "contrato_enviado_em", "contrato_prazo", "avisos", "valor", "minimo", "caixas",
+    "rolos", "volume", "quantidade_catalogada", "fundo", "notas", "cobranca", "amigo", "pode_cobrar", "historico", "anonimizado", "alterado_em",
+}
+
+
+def _brl(v) -> str:
+    n = _num(v)
+    return "" if not n else "R$ " + f"{n:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".")
+
+
+def _data_br(v, hora: bool = False) -> str:
+    """'2026-11-20' / ISO / 'AAAA-MM-DD HH:MM:SS' (UTC) → dd/mm/aaaa (com hora: no horário de Brasília)."""
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    if hora:
+        try:
+            d = datetime.fromisoformat(s.replace("Z", "+00:00").replace(" ", "T"))
+            d = (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).astimezone(ZoneInfo("America/Sao_Paulo"))
+            return d.strftime("%d/%m/%Y %H:%M")
+        except ValueError:
+            pass
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", s)
+    return f"{m.group(3)}/{m.group(2)}/{m.group(1)}" if m else s
+
+
+def _valor_txt(v) -> str:
+    if isinstance(v, bool):
+        return "Sim" if v else "Não"
+    if isinstance(v, (list, tuple)):
+        return "; ".join(t for t in (_valor_txt(i) for i in v) if t)
+    if isinstance(v, dict):
+        return json.dumps(v, ensure_ascii=False) if v else ""
+    return "" if v is None else str(v).strip()
+
+
+def _rotulo(d: dict, listas: dict, chave: str, nome_chave: str, lista: str, padrao: dict) -> str:
+    cod = str(d.get(chave) or "")
+    if not cod:
+        return ""
+    return str(d.get(nome_chave) or (listas.get(lista) or {}).get(cod) or padrao.get(cod) or cod)
+
+
+def _resposta(d: dict, listas: dict, chave: str) -> str:
+    if chave == "relacao":
+        return _rotulo(d, listas, "relacao", "relacao_nome", "relacoes", RELACOES)
+    if chave == "quantidade_estimativa_faixa":
+        return _rotulo(d, listas, chave, "faixa_nome", "faixas", FAIXAS)
+    if chave == "conservacao":
+        return _rotulo(d, listas, chave, "conservacao_nome", "conservacao", CONSERVACAO)
+    if chave == "direitos":
+        return _rotulo(d, listas, chave, "direitos_nome", "direitos", DIREITOS)
+    if chave == "tipos":
+        nomes = [str(t) for t in (d.get("tipos_nomes") or []) if t]
+        if not nomes:
+            mapa = {**TIPOS, **(listas.get("tipos") or {})}
+            nomes = [str(mapa.get(t, t)) for t in (d.get("tipos") or []) if t]
+        return "; ".join(nomes)
+    if chave == "fotos":
+        n = int(d.get("n_fotos") or 0)
+        return f"{n} foto{'s' if n != 1 else ''} anexada{'s' if n != 1 else ''} (ficam no site; veja no painel)" if n > 0 else ""
+    if chave == "sem_fotos":
+        return "Sim" if d.get("sem_fotos") else ""
+    if chave == "aceite":
+        tv = _txt(d.get("termos_versao"), 40)
+        return f"Sim (termos versão {tv})" if tv else ""
+    if chave == "marketing":
+        return MARKETING[bool(d["marketing"])] if "marketing" in d and d["marketing"] is not None else ""
+    return _valor_txt(d.get(chave))
+
+
+def _bloco(titulo: str, linhas: list[str]) -> list[str]:
+    linhas = [l for l in linhas if l]
+    return ["", titulo, *linhas] if linhas else []
+
+
+def texto_contrato(con, sid: int, notas: bool = False) -> str:
+    """O resumo em texto simples (UTF-8, \\n, sem HTML) para colar no e-mail ou no documento do contrato. Notas internas só com `notas`.
+    Anonimizada (LGPD): nenhum dado pessoal, só "dados apagados (LGPD)"."""
+    r = _um(con, sid)
+    d = json.loads(r["dados"]) if r["dados"] else {}
+    anon = bool(r["anonimizado"]) or bool(d.get("anonimizado"))
+    listas = json.loads(_estado(con, "listas") or "{}") or {}
+    um = lambda rot, v: f"{rot}: {v}" if str(v or "").strip() else ""   # noqa: E731
+    out = [x for x in (TEXTO_TITULO, um("Protocolo", r["protocolo"]), um("Recebida em", _data_br(r["recebida_em"] or d.get("recebida_em"), hora=True))) if x]
+    # 2. dados da pessoa
+    if anon:
+        out += _bloco("DADOS DA PESSOA", [TEXTO_LGPD, um("Relação com o acervo", _resposta(d, listas, "relacao"))])
+    else:
+        out += _bloco("DADOS DA PESSOA", [um("Nome completo", r["nome"] or d.get("nome")), um("E-mail", r["email"] or d.get("email")),
+                                          um("Telefone / WhatsApp", r["telefone"] or d.get("telefone")), um("Relação com o acervo", _resposta(d, listas, "relacao")),
+                                          *[um(rot, _valor_txt(d.get(k))) for k, rot in PESSOAIS_EXTRA]])
+    # 3. formulário: pergunta e resposta, na ordem do site
+    form = []
+    for k, rot in PERGUNTAS:
+        if anon and k in PESSOAIS:
+            continue
+        v = _resposta(d, listas, k)
+        if v:
+            form.append(rot + "\n" + "\n".join("  " + l for l in v.splitlines() if l.strip()) + "\n")
+    if not anon:
+        for k in sorted(set(d) - CONHECIDAS):
+            v = _valor_txt(d.get(k))
+            if v:
+                form.append(f"{k}: {v}\n")
+    if anon:
+        form.insert(0, f"Respostas pessoais: {TEXTO_LGPD}\n")
+    if form:
+        form[-1] = form[-1].rstrip("\n")
+    out += _bloco("FORMULÁRIO (pergunta e resposta)", form)
+    # 4. dados combinados (equipe)
+    cob = d.get("cobranca") if isinstance(d.get("cobranca"), dict) else None
+    au = _aut_info(con, sid)
+    cl = str(d.get("contrato_link") or "")
+    amigo = d.get("amigo") if isinstance(d.get("amigo"), dict) else {}
+    num = lambda v: "" if v in (None, "") else str(v)   # noqa: E731
+    cob_txt = ""
+    if cob:
+        cob_txt = " · ".join(x for x in (str(cob.get("situacao_nome") or cob.get("situacao") or ""), _brl(cob.get("valor")),
+                                         str(cob.get("external_reference") or ""), ("paga em " + _data_br(cob.get("pago_em"))) if cob.get("pago_em") else "") if x)
+    out += _bloco("DADOS COMBINADOS (equipe)", [
+        um("Etapa", ETAPAS.get(r["etapa"], r["etapa"])),
+        um("Contribuição acordada", _brl(r["valor"] if r["valor"] is not None else d.get("valor"))),
+        um("Caixas (aproximado)", num(d.get("caixas"))), um("Rolos (aproximado)", num(d.get("rolos"))), um("Volume físico estimado", d.get("volume")),
+        um("Quantidade catalogada", num(d.get("quantidade_catalogada"))), um("Código do fundo", d.get("fundo")),
+        um("Link do contrato para assinatura", cl),
+        um("Assinatura eletrônica (Autentique)", " · ".join(x for x in ((au or {}).get("situacao_nome", ""), (au or {}).get("link", "") if (au or {}).get("link") != cl else "") if x)),
+        um("Contrato enviado para assinatura em", _data_br(d.get("contrato_enviado_em"), hora=True)),
+        um("Assinar até", _data_br(d.get("contrato_prazo"))),
+        um("Data em que as duas partes assinaram", _data_br(r["assinado_em"] or d.get("assinado_em"))),
+        um("Cobrança (Mercado Pago)", cob_txt),
+        um("Amigo da CAMP até", amigo.get("validade_br") or _data_br(amigo.get("validade"))),
+    ])
+    # 5. notas internas: só se pedido (e nunca de quem teve os dados apagados)
+    if notas and not anon:
+        ns = [n for n in (d.get("notas") or []) if isinstance(n, dict) and str(n.get("texto") or "").strip()]
+        out += _bloco("NOTAS INTERNAS", [" · ".join(x for x in (str(n.get("em") or ""), str(n.get("quem") or "")) if x) + ": " + str(n["texto"]).strip()
+                                          if (n.get("em") or n.get("quem")) else str(n["texto"]).strip() for n in ns])
+    return "\n".join(l for i, l in enumerate(out) if l or (i and out[i - 1])).strip() + "\n"
+
+
+@router.get("/{sid}/texto")
+def texto(sid: int, notas: bool = False, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """CAMP-DOA-TEXTO: o texto para o contrato (a tela só busca e copia)."""
+    con = connect()
+    try:
+        return {"texto": texto_contrato(con, sid, notas), "notas": bool(notas)}
     finally:
         con.close()
 
