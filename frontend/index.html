@@ -1706,6 +1706,27 @@ li.cv-resolvido{color:var(--ink3);text-decoration:line-through;text-decoration-c
 #v-ingressos td{vertical-align:top}#v-ingressos .ig-num{text-align:right;white-space:nowrap}#v-ingressos tfoot td{font-weight:700;border-top:2px solid var(--line)}
 #v-ingressos .ig-turma{margin-top:18px}#v-ingressos .ig-turma h2{font-size:var(--fs-lg,18px);margin:0 0 8px}
 @media (max-width:900px){#v-ingressos .ig-tel,#v-ingressos .ig-ref{display:none}}
+/* CAMP-INGRESSOS detalhe (20/11/2026): tipos (meia, Amigo…), datas, lista de presença e reenvios */
+#v-ingressos .ig-tipos{display:block;color:var(--ink2);font-size:var(--fs-sm)}
+#v-ingressos .ig-dia{border-top:1px solid var(--line);padding:12px 16px}#v-ingressos .ig-dia:first-child{border-top:0}
+#v-ingressos .ig-dia h3{margin:0 0 6px;font-size:var(--fs-base);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#v-ingressos .ig-dia-t{display:flex;flex-wrap:wrap;gap:8px}
+#v-ingressos .ig-turma-btn{display:grid;gap:2px;text-align:left;min-width:190px;padding:8px 10px;height:auto;line-height:1.35}
+#v-ingressos .ig-turma-btn small{color:var(--ink2);font-weight:400}
+#v-ingressos .ig-lista-cab{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding:12px 16px 0}
+#v-ingressos .ig-lista-cab h2{margin:0;font-size:var(--fs-lg,18px)}
+#v-ingressos .ig-resumo{margin:4px 0 0;color:var(--ink2);font-size:var(--fs-sm2)}
+#v-ingressos .ig-presenca{width:70px}#v-ingressos .ig-sel{width:32px}
+#v-ingressos .ig-msg{margin:6px 16px;font-size:var(--fs-sm2)}
+.ig-impressao-cab{display:none}
+@media print{
+  body.imprime-ig .side,body.imprime-ig .top,body.imprime-ig .content:not(#v-ingressos),body.imprime-ig .printgrid,body.imprime-ig .drawer,body.imprime-ig .toast,body.imprime-ig .ajuda-caixa,body.imprime-ig .gcrumb{display:none!important}
+  body.imprime-ig #v-ingressos{display:block!important;max-width:none;margin:0;padding:0}
+  body.imprime-ig #v-ingressos>*:not(#ig-aba-datas),body.imprime-ig #ig-aba-datas>.panel:not(#ig-lista){display:none!important}
+  body.imprime-ig #ig-lista .filterbar,body.imprime-ig #ig-lista .bulkbar,body.imprime-ig #ig-lista .ig-acoes,body.imprime-ig #ig-lista .ig-sel,body.imprime-ig #ig-lista .ig-nao-imprime{display:none!important}
+  body.imprime-ig .ig-impressao-cab{display:block;margin:0 0 8px}
+  body.imprime-ig #ig-lista{box-shadow:none;border:0}body.imprime-ig #ig-lista td,body.imprime-ig #ig-lista th{border-bottom:1px solid #999}
+}
 /* CAMP-COB 19/11/2026: cobranças avulsas pelo Mercado Pago */
 #v-cobrancas .filterbar select{max-width:220px}#v-cobrancas #cob-q{flex:1 1 240px;min-width:160px}#v-cobrancas .filterbar input[type=date]{max-width:160px}
 #v-cobrancas td{vertical-align:top}#v-cobrancas tr[data-cob-abrir]{cursor:pointer}#v-cobrancas .cob-num{text-align:right;white-space:nowrap}#v-cobrancas .cob-dt{white-space:nowrap;font-size:var(--fs-sm)}
@@ -2335,6 +2356,14 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
     <div class="hdr"><div><h1>Ingressos</h1><p class="sub">Visita guiada à Residência João Marino, vendida no site (último fim de semana de cada mês). Turmas, vagas, pessoas, entradas e valores; a lista de cada turma serve de lista da porta. Tem dados pessoais: só admin e master veem.</p></div>
       <div class="act"><button type="button" class="btn" id="ig-sinc">Sincronizar agora</button></div></div>
     <p class="help" id="ig-busca" aria-live="polite"></p>
+    <p class="help" id="ig-avisos" aria-live="polite"></p>
+    <div class="tabs" id="ig-abas" role="tablist"><button type="button" role="tab" class="on" aria-selected="true" data-ig-aba="mes">Por mês</button><button type="button" role="tab" aria-selected="false" data-ig-aba="datas">Por data · lista de presença</button></div>
+    <div id="ig-aba-datas" hidden>
+      <div class="panel"><div class="filterbar"><select id="ig-d-mes" class="btn" aria-label="Período"></select><span class="cnt" id="ig-d-cnt"></span></div>
+        <div id="ig-datas"><p class="empty">Carregando…</p></div></div>
+      <div class="panel ig-lista" id="ig-lista" hidden></div>
+    </div>
+    <div id="ig-aba-mes">
     <div class="hoje-kpis" id="ig-kpis"></div>
     <div class="panel"><div class="filterbar"><select id="ig-mes" class="btn" aria-label="Mês"></select><select id="ig-sit" class="btn" aria-label="Situação"></select><input id="ig-q" type="search" placeholder="nome, e-mail, referência ou código" aria-label="Buscar"><a class="btn sm" id="ig-csv" href="/api/ingressos/exportar.csv" download>Exportar CSV</a><span class="cnt" id="ig-cnt"></span></div>
       <div class="tw"><table>
@@ -2342,6 +2371,7 @@ body.arrastando-folha,body.arrastando-folha *{cursor:grabbing!important;user-sel
       <tbody id="ig-turmas"><tr><td class="empty">Carregando…</td></tr></tbody>
     </table></div></div>
     <div id="ig-listas"></div>
+    </div>
     <p class="help">A coluna Referência é a mesma do Mercado Pago (CAMP-INGRESSO-JM-AAAAMMDD-HHMM-n): no relatório de lá, busque CAMP-INGRESSO-JM e o mês (ex.: CAMP-INGRESSO-JM-202611). O Mercado Pago desconta a tarifa dele; aqui é o valor pago pelo visitante.</p>
   </section>
   <section class="content" id="v-cobrancas">
@@ -8618,25 +8648,115 @@ const IG_SIT_TAG={pago:'g',gratuito:'g',reservado:'a',processando:'a',recusado:'
 const igBRL=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const igData=(d,h)=>{const [a,m,dd]=String(d||'').split('-');const w=['dom','seg','ter','qua','qui','sex','sáb'][new Date(+a,+m-1,+dd).getDay()]||'';return `${w} ${dd}/${m}${h?' · '+h:''}`};
 function igFiltros(){const p=new URLSearchParams();if(IG.mes)p.set('mes',IG.mes);if(IG.sit)p.set('situacao',IG.sit);if(IG.q)p.set('q',IG.q);return p}
-async function carregarIngressos(){const tb=document.getElementById('ig-turmas');if(!tb)return;
+async function carregarIngressos(){const tb=document.getElementById('ig-turmas');if(!tb)return;if(IG.aba==='datas')igCarregarDatas();
   try{const d=await API('/api/ingressos?'+igFiltros());IG.d=d;IG.mes=d.mes;const t=d.totais||{};
-  document.getElementById('ig-kpis').innerHTML=[[fmtN(t.pessoas||0),'pessoas no mês','pagos e gratuitos'],[fmtN(t.entraram||0),'entraram','registrado na porta pelo QR'],[igBRL(t.total),'recebido','pago pelos visitantes'],[igBRL(t.desconto),'descontos de Amigo',qtd(t.amigos||0,'compra','compras')]].map(([v,l,x])=>`<div class="hoje-kpi"><div class="v">${escHtml(String(v))}</div><div class="l">${escHtml(l)}</div><div class="d">${escHtml(x)}</div></div>`).join('');
+  document.getElementById('ig-kpis').innerHTML=[[fmtN(t.pessoas||0),'pessoas no mês','pagos e gratuitos'],[fmtN(t.entraram||0),'entraram','registrado na porta pelo QR'],[igBRL(t.total),'recebido','pago pelos visitantes'],[igBRL(t.desconto),'descontos de Amigo',qtd(t.amigos||0,'compra','compras')],[igTiposTxt(t.por_tipo),'por tipo','pagos e gratuitos do mês']].map(([v,l,x])=>`<div class="hoje-kpi"><div class="v">${escHtml(String(v))}</div><div class="l">${escHtml(l)}</div><div class="d">${escHtml(x)}</div></div>`).join('');
   document.getElementById('ig-mes').innerHTML=(d.meses||[]).map(m=>`<option value="${escHtml(m)}"${m===d.mes?' selected':''}>${escHtml(m.slice(5)+'/'+m.slice(0,4))}</option>`).join('');
   document.getElementById('ig-sit').innerHTML=[['valem','Pagos e gratuitos'],['todas','Todas as situações'],...Object.entries(d.situacoes||{})].map(([k,l])=>`<option value="${escHtml(k)}"${k===IG.sit?' selected':''}>${escHtml(l)}</option>`).join('');
   document.getElementById('ig-csv').href='/api/ingressos/exportar.csv?'+igFiltros();
   document.getElementById('ig-cnt').textContent=qtd((d.itens||[]).length,'compra','compras');
   const st=d.site||{};document.getElementById('ig-busca').innerHTML=!st.tem_senha?'<span class="tag a">sem a senha do site</span> Os ingressos não entram: falta a senha do site em Configurações.':st.sem_rota?'<span class="tag a">site sem a lista de ingressos</span> O site ainda não manda os ingressos: avise quem cuida do site (plugin da CAMP 1.28.1 ou mais novo).':(st.ultima_busca?`Ingressos buscados no site ${escHtml(fmtDataHora(st.ultima_busca))}${st.minutos?` · a cada ${fmtN(st.minutos)} min`:''}${st.erro?` · <span class="tag r">a última busca falhou</span> ${escHtml(st.erro)}`:''}`:'Ainda não buscou os ingressos no site.');
+  igAvisosHTML(d.avisos||{});
   const ts=d.turmas||[];
   tb.innerHTML=ts.length?ts.map(x=>`<tr><td><a href="#ig-t-${escHtml(x.chave.replace(/[^0-9]/g,''))}">${escHtml(igData(x.data,x.hora))}</a></td><td class="ig-num">${fmtN(x.compras)}</td><td class="ig-num">${fmtN(x.pessoas)}</td><td class="ig-num">${fmtN(x.livres)}</td><td class="ig-num">${fmtN(x.entraram)}</td><td class="ig-num">${escHtml(igBRL(x.bruto))}</td><td class="ig-num">${escHtml(igBRL(x.desconto))}</td><td class="ig-num"><b>${escHtml(igBRL(x.total))}</b></td></tr>`).join('')+`<tr><td>Total do mês</td><td class="ig-num">${fmtN(t.compras||0)}</td><td class="ig-num">${fmtN(t.pessoas||0)}</td><td></td><td class="ig-num">${fmtN(t.entraram||0)}</td><td class="ig-num">${escHtml(igBRL(t.bruto))}</td><td class="ig-num">${escHtml(igBRL(t.desconto))}</td><td class="ig-num"><b>${escHtml(igBRL(t.total))}</b></td></tr>`
     :`<tr><td colspan="8" class="empty">${vazioHTML('Nenhuma turma neste mês.','Escolha outro mês. As turmas e as vendas chegam na próxima busca no site.','')}</td></tr>`;
   const por={};(d.itens||[]).forEach(x=>{(por[x.turma]=por[x.turma]||[]).push(x)});
-  document.getElementById('ig-listas').innerHTML=Object.keys(por).sort().map(k=>{const l=por[k],p=l.reduce((a,x)=>a+x.pessoas,0);return `<div class="panel ig-turma" id="ig-t-${escHtml(k.replace(/[^0-9]/g,''))}"><h2>${escHtml(igData(l[0].data,l[0].hora))} · ${qtd(p,'pessoa','pessoas')}</h2><div class="tw"><table><thead><tr><th>Nome</th><th>Pessoas</th><th>Entraram</th><th class="ig-tel">Telefone</th><th>E-mail</th><th>Amigo</th><th>Situação</th><th class="ig-ref">Referência</th><th></th></tr></thead><tbody>${l.map(x=>`<tr><td>${escHtml(x.nome||'—')}<br><small class="mono">${escHtml(x.codigo)}</small></td><td class="ig-num">${fmtN(x.pessoas)}</td><td class="ig-num">${fmtN(x.entraram)}</td><td class="ig-tel">${escHtml(x.telefone||'—')}</td><td><small class="mono">${escHtml(x.email||'—')}</small></td><td>${escHtml(x.amigo||'—')}</td><td><span class="tag ${IG_SIT_TAG[x.situacao]||''}">${escHtml(x.situacao_nome)}</span><br><small>${escHtml(igBRL(x.total))}${x.meio?' · '+escHtml(x.meio):''}</small></td><td class="ig-ref"><small class="mono">${escHtml(x.ref)}</small></td><td>${['pago','gratuito'].includes(x.situacao)&&x.email?`<button type="button" class="btn sm" data-ig-reenviar="${escHtml(x.id)}">Reenviar ingresso</button>`:''}${x.link?` <a class="btn sm" href="${escHtml(x.link)}" target="_blank" rel="noopener">Abrir</a>`:''}</td></tr>`).join('')}</tbody></table></div></div>`}).join('')}
+  document.getElementById('ig-listas').innerHTML=Object.keys(por).sort().map(k=>{const l=por[k],p=l.reduce((a,x)=>a+x.pessoas,0);return `<div class="panel ig-turma" id="ig-t-${escHtml(k.replace(/[^0-9]/g,''))}"><h2>${escHtml(igData(l[0].data,l[0].hora))} · ${qtd(p,'pessoa','pessoas')}</h2><div class="tw"><table><thead><tr><th>Nome</th><th>Pessoas</th><th>Entraram</th><th class="ig-tel">Telefone</th><th>E-mail</th><th>Amigo</th><th>Situação</th><th class="ig-ref">Referência</th><th></th></tr></thead><tbody>${l.map(x=>`<tr><td>${escHtml(x.nome||'—')}<br><small class="mono">${escHtml(x.codigo)}</small></td><td class="ig-num">${fmtN(x.pessoas)}${x.tipos_txt?`<small class="ig-tipos">${escHtml(x.tipos_txt)}</small>`:''}</td><td class="ig-num">${fmtN(x.entraram)}</td><td class="ig-tel">${escHtml(x.telefone||'—')}</td><td><small class="mono">${escHtml(x.email||'—')}</small></td><td>${igAmigoHTML(x)}</td><td><span class="tag ${IG_SIT_TAG[x.situacao]||''}">${escHtml(x.situacao_nome)}</span><br><small>${escHtml(igBRL(x.total))}${x.meio?' · '+escHtml(x.meio):''}</small></td><td class="ig-ref"><small class="mono">${escHtml(x.ref)}</small></td><td>${igAcoesHTML(x)}${x.link?` <a class="btn sm" href="${escHtml(x.link)}" target="_blank" rel="noopener">Abrir</a>`:''}</td></tr>`).join('')}</tbody></table></div></div>`}).join('')}
   catch(e){if(e.status!==401&&e.status!==428){toast(e.message);tabelaErro('#ig-turmas','Não consegui carregar os ingressos: '+e.message,'carregarIngressos()')}}}
 document.addEventListener('click',async e=>{const t=e.target;if(!t.closest||!t.closest('#v-ingressos'))return;
   if(t.closest('#ig-sinc')){const b=t.closest('#ig-sinc');b.disabled=true;try{const r=await API('/api/ingressos/sincronizar',{method:'POST'});toast(r.erro?`A busca falhou: ${r.erro}`:r.sem_rota?'O site ainda não manda os ingressos: avise quem cuida do site.':`Sincronizado: ${qtd(r.novos||0,'ingresso novo','ingressos novos')}`);carregarIngressos()}catch(err){toast(err.message)}finally{b.disabled=false}return}
-  const rv=t.closest('[data-ig-reenviar]');if(rv){rv.disabled=true;try{await API(`/api/ingressos/${rv.dataset.igReenviar}/reenviar`,{method:'POST'});toast('Ingresso reenviado por e-mail')}catch(err){toast(err.message)}finally{rv.disabled=false}}});
+  const rv=t.closest('[data-ig-reenviar],[data-ig-cobrar]');if(rv){const cob=!!rv.dataset.igCobrar,id=rv.dataset.igReenviar||rv.dataset.igCobrar;igAcao(cob?'cobranca':'ingresso',[+id],rv);return}
+  igCliqueDatas(t,e)});
 document.addEventListener('change',e=>{const id=e.target&&e.target.id;if(id==='ig-mes'){IG.mes=e.target.value;carregarIngressos()}else if(id==='ig-sit'){IG.sit=e.target.value;carregarIngressos()}});
 {let tq;document.addEventListener('input',e=>{if(e.target&&e.target.id==='ig-q'){clearTimeout(tq);tq=setTimeout(()=>{IG.q=e.target.value.trim();carregarIngressos()},300)}})}
+/* CAMP-INGRESSOS detalhe (20/11/2026, Rafael: "saber quem pagou meia, quem é Amigo etc. E abrir a data para listar as pessoas, e se precisar
+   reenviar o ingresso ou a cobrança"): tipos por compra (inteira, meia-entrada, Amigo com desconto, gratuidade), Amigo da CAMP pelo e-mail
+   (cadastro de Amigos), datas com contas, lista de presença (filtros, busca, impressão, CSV) e reenvios só pelo Sender (um a um ou em lote). */
+IG.aba='mes';IG.dmes='';IG.L={turma:'',situacao:'todas',tipo:'',amigo:'',q:'',sel:new Set(),d:null};
+const IG_TIPO_CURTO={inteira:['inteira','inteiras'],meia:['meia-entrada','meias-entradas'],amigo:['Amigo com desconto','Amigo com desconto'],gratuidade:['gratuidade','gratuidades']};
+function igTiposTxt(pt){const p=pt||{};const l=Object.keys(IG_TIPO_CURTO).filter(k=>p[k]).map(k=>`${fmtN(p[k])} ${IG_TIPO_CURTO[k][p[k]===1?0:1]}`);return l.length?l.join(' · '):'—'}
+function igAmigoHTML(x){const c=x.amigo_cadastro;let h='';if(c&&c.ativo)h=`<span class="tag g" title="Amigo da CAMP com a adesão em dia (cadastro de Amigos)">Amigo</span> <small>${escHtml(c.categoria_nome||c.categoria||'')}</small>`;else if(c)h=`<span class="tag" title="Já foi Amigo; a adesão não está em dia">Amigo (${escHtml(c.situacao||'sem adesão')})</span>`;if(x.amigo)h+=(h?'<br>':'')+`<small>desconto: ${escHtml(x.amigo)}</small>`;return h||'—'}
+function igAcoesHTML(x){return `${x.pode_reenviar?`<button type="button" class="btn sm" data-ig-reenviar="${escHtml(x.id)}">Reenviar ingresso</button>`:''}${x.pode_cobrar?` <button type="button" class="btn sm" data-ig-cobrar="${escHtml(x.id)}">Reenviar cobrança</button>`:''}`}
+async function igAcao(acao,ids,botao){if(!ids.length)return;const nome=acao==='cobranca'?'a cobrança':'o ingresso';
+  if(ids.length>1&&!await confirmar({titulo:`Reenviar ${nome} para ${qtd(ids.length,'compra','compras')}?`,texto:acao==='cobranca'?'Cada comprador recebe o link de pagamento pelo Sender. Link vencido: o site abre outro no Mercado Pago (se ainda houver vagas). Compras já pagas ficam de fora.':'Cada comprador recebe de novo o e-mail com o QR code, pelo Sender. Compras não pagas ficam de fora.',botao:'Reenviar'}))return;
+  if(botao)botao.disabled=true;
+  try{if(ids.length===1){const r=await API(`/api/ingressos/${ids[0]}/${acao==='cobranca'?'cobranca':'reenviar'}`,{method:'POST'});toast(r.mensagem||'Enviado');igMsg(r.mensagem||'Enviado',true)}
+    else{const r=await API('/api/ingressos/lote',{method:'POST',body:JSON.stringify({acao,ids})});const f=(r.resultados||[]).filter(x=>!x.ok);
+      igMsg(`${qtd(r.feitos||0,'enviado','enviados')}${r.falhas?` · ${qtd(r.falhas,'não enviado','não enviados')}: ${f.slice(0,3).map(x=>x.mensagem).join(' | ')}`:''}`,!r.falhas);toast(`${qtd(r.feitos||0,'enviado','enviados')}${r.falhas?`, ${fmtN(r.falhas)} não`:''}`);IG.L.sel.clear()}
+    if(IG.aba==='datas'&&IG.L.turma)igCarregarLista();else carregarIngressos()}
+  catch(err){toast(err.message);igMsg(err.message,false)}finally{if(botao&&document.body.contains(botao))botao.disabled=false}}
+function igMsg(txt,ok){const el=document.getElementById('ig-l-msg');if(el)el.innerHTML=`<span class="tag ${ok?'g':'r'}">${ok?'feito':'não enviado'}</span> ${escHtml(txt)}`}
+function igAbrirAba(aba){IG.aba=aba;document.querySelectorAll('#ig-abas [data-ig-aba]').forEach(b=>{const on=b.dataset.igAba===aba;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on))});
+  document.getElementById('ig-aba-mes').hidden=aba!=='mes';document.getElementById('ig-aba-datas').hidden=aba!=='datas';if(aba==='datas')igCarregarDatas()}
+async function igCarregarDatas(){const box=document.getElementById('ig-datas');if(!box)return;
+  try{const d=await API('/api/ingressos/datas'+(IG.dmes?'?mes='+encodeURIComponent(IG.dmes):''));const meses=(IG.d&&IG.d.meses)||[];
+    document.getElementById('ig-d-mes').innerHTML=[['','De hoje em diante'],...meses.map(m=>[m,m.slice(5)+'/'+m.slice(0,4)])].map(([k,l])=>`<option value="${escHtml(k)}"${k===IG.dmes?' selected':''}>${escHtml(l)}</option>`).join('');
+    const dias=d.dias||[];document.getElementById('ig-d-cnt').textContent=qtd(dias.length,'data','datas');
+    box.innerHTML=dias.length?dias.map(x=>`<div class="ig-dia"><h3><button type="button" class="btn sm" data-ig-abrir="${escHtml(x.data)}">${escHtml(igData(x.data))}</button> ${qtd(x.pessoas,'pessoa','pessoas')} · ${escHtml(igTiposTxt(x.por_tipo))}${x.pendentes?` · <span class="tag a">${qtd(x.pendentes,'aguardando pagamento','aguardando pagamento')}</span>`:''} · ${fmtN(x.livres)} de ${fmtN(x.vagas)} vagas livres</h3>
+      <div class="ig-dia-t">${x.turmas.map(t=>`<button type="button" class="btn ig-turma-btn" data-ig-abrir="${escHtml(t.chave)}"><b>${escHtml(t.hora)} · ${qtd(t.pessoas,'pessoa','pessoas')}</b><small>${escHtml(igTiposTxt(t.por_tipo))}</small><small>pagos ${fmtN(t.pagos)} · gratuitos ${fmtN(t.gratuitos)} · pendentes ${fmtN(t.pendentes)}</small><small>${fmtN(t.livres)} de ${fmtN(t.vagas)} vagas livres${t.entraram?` · ${fmtN(t.entraram)} entraram`:''}</small></button>`).join('')}</div></div>`).join('')
+      :vazioHTML('Nenhuma data de visita.','Escolha outro período. As datas e as vendas chegam na próxima busca no site.','');
+    if(IG.L.turma)igCarregarLista()}
+  catch(e){if(e.status!==401&&e.status!==428)box.innerHTML=vazioHTML('Não consegui carregar as datas.',e.message,'')}}
+function igListaParams(){const L=IG.L,p=new URLSearchParams({turma:L.turma});if(L.situacao&&L.situacao!=='todas')p.set('situacao',L.situacao);if(L.tipo)p.set('tipo',L.tipo);if(L.amigo)p.set('amigo','1');if(L.q)p.set('q',L.q);return p}
+async function igCarregarLista(){const box=document.getElementById('ig-lista');if(!box||!IG.L.turma)return;box.hidden=false;
+  try{const d=await API('/api/ingressos/lista?'+igListaParams());IG.L.d=d;const L=IG.L,t=d.totais||{},its=d.itens||[];
+    const ids=new Set(its.map(x=>x.id));[...L.sel].forEach(i=>{if(!ids.has(i))L.sel.delete(i)});
+    const tit=igData(d.data,d.hora)+(d.hora?'':' · todas as turmas');
+    box.innerHTML=`<div class="ig-impressao-cab"><b>Lista de presença · Visita guiada à Residência João Marino · ${escHtml(tit)}</b><br>${qtd(t.pessoas||0,'pessoa','pessoas')} · ${escHtml(igTiposTxt(t.por_tipo))}</div>
+      <div class="ig-lista-cab"><div><h2>Lista de presença · ${escHtml(tit)}</h2><p class="ig-resumo">${qtd(t.compras||0,'compra','compras')} · ${qtd(t.pessoas||0,'pessoa','pessoas')} (${escHtml(igTiposTxt(t.por_tipo))}) · pagos ${fmtN(t.pagos||0)} · gratuitos ${fmtN(t.gratuitos||0)} · aguardando pagamento ${fmtN(t.pendentes||0)} · ${qtd(t.amigos||0,'compra de Amigo','compras de Amigo')}</p></div>
+      <div class="act ig-nao-imprime"><button type="button" class="btn sm" id="ig-l-imprimir">Imprimir</button><a class="btn sm" id="ig-l-csv" href="/api/ingressos/lista.csv?${escHtml(igListaParams().toString())}" download>Exportar CSV</a><button type="button" class="btn sm" id="ig-l-fechar">Fechar</button></div></div>
+      <div class="filterbar"><select id="ig-l-hora" class="btn" aria-label="Turma"><option value="">Todas as turmas</option>${(d.horas||[]).map(h=>`<option value="${escHtml(h)}"${h===d.hora?' selected':''}>${escHtml(h)}</option>`).join('')}</select>
+        <select id="ig-l-sit" class="btn" aria-label="Situação">${Object.entries(d.situacoes||{}).map(([k,l])=>`<option value="${escHtml(k)}"${k===L.situacao?' selected':''}>${escHtml(l)}</option>`).join('')}</select>
+        <select id="ig-l-tipo" class="btn" aria-label="Tipo de ingresso"><option value="">Todos os tipos</option>${Object.entries(d.tipos||{}).map(([k,l])=>`<option value="${escHtml(k)}"${k===L.tipo?' selected':''}>${escHtml(l)}</option>`).join('')}</select>
+        <label class="btn sm"><input type="checkbox" id="ig-l-amigo"${L.amigo?' checked':''}> só Amigos</label>
+        <input id="ig-l-q" type="search" placeholder="nome, e-mail, telefone, pedido ou código" aria-label="Buscar na lista" value="${escHtml(L.q)}"><span class="cnt">${qtd(its.length,'compra','compras')}</span></div>
+      <div class="bulkbar${L.sel.size?' on':''}" id="ig-l-bulk" role="region" aria-label="Compras selecionadas"><span class="count">${qtd(L.sel.size,'selecionada','selecionadas')}</span><span class="spacer"></span><button type="button" class="btn sm" data-ig-lote="ingresso">Reenviar ingresso</button><button type="button" class="btn sm" data-ig-lote="cobranca">Reenviar cobrança</button></div>
+      <p class="ig-msg" id="ig-l-msg" aria-live="polite"></p>
+      <div class="tw"><table><thead><tr><th class="ig-sel"><input type="checkbox" id="ig-l-todos" aria-label="Selecionar todas"${its.length&&its.every(x=>L.sel.has(x.id))?' checked':''}></th><th>Nome</th><th>Pessoas e tipos</th><th>Amigo da CAMP</th><th>Pagamento</th><th>Pedido</th><th class="ig-tel">Telefone</th><th>E-mail</th><th class="ig-num">Entraram</th><th class="ig-presenca">Presença</th><th class="ig-acoes"></th></tr></thead>
+      <tbody>${its.length?its.map(x=>`<tr><td class="ig-sel"><input type="checkbox" data-ig-sel="${escHtml(x.id)}" aria-label="Selecionar"${L.sel.has(x.id)?' checked':''}></td><td>${escHtml(x.nome||'—')}${d.hora?'':`<br><small>${escHtml(x.hora)}</small>`}</td><td>${fmtN(x.pessoas)}<small class="ig-tipos">${escHtml(x.tipos_txt||'')}</small></td><td>${igAmigoHTML(x)}</td>
+        <td><span class="tag ${IG_SIT_TAG[x.situacao]||''}">${escHtml(x.situacao_nome)}</span><br><small>${escHtml(igBRL(x.total))}${x.meio?' · '+escHtml(x.meio):''}</small>${x.link_pagamento_ate?`<br><small>link até ${escHtml(fmtDataHora(x.link_pagamento_ate))}</small>`:''}</td>
+        <td><small class="mono">${escHtml(x.codigo)}</small><br><small class="mono">${escHtml(x.ref)}</small></td><td class="ig-tel">${escHtml(x.telefone||'—')}</td><td><small class="mono">${escHtml(x.email||'—')}</small></td><td class="ig-num">${fmtN(x.entraram)} / ${fmtN(x.pessoas)}</td><td class="ig-presenca"></td>
+        <td class="ig-acoes">${igAcoesHTML(x)} <button type="button" class="btn sm" data-ig-detalhe="${escHtml(x.id)}">Histórico</button></td></tr>`).join('')
+        :`<tr><td colspan="11" class="empty">${vazioHTML('Ninguém nesta lista.','Mude os filtros ou escolha outra data.','')}</td></tr>`}</tbody></table></div>`}
+  catch(e){if(e.status!==401&&e.status!==428)box.innerHTML=vazioHTML('Não consegui carregar a lista.',e.message,'')}}
+function igAtualizaBulk(){const b=document.getElementById('ig-l-bulk');if(!b)return;b.classList.toggle('on',IG.L.sel.size>0);b.querySelector('.count').textContent=qtd(IG.L.sel.size,'selecionada','selecionadas')}
+async function igDetalhe(id){try{const x=await API('/api/ingressos/'+id);
+  const ev=(x.eventos||[]).map(e=>`<li>${escHtml(fmtDataHora(e.quando))} · ${escHtml({ingresso_reenviado:'ingresso reenviado',cobranca_reenviada:'cobrança reenviada',reenvio_falhou:'não enviado'}[e.tipo]||e.tipo)}${e.detalhe&&e.detalhe.template?' ('+escHtml(e.detalhe.template)+')':''}${e.detalhe&&e.detalhe.novo_link?' · link novo':''}${e.detalhe&&e.detalhe.erro?' · '+escHtml(e.detalhe.erro):''} · ${escHtml(e.ator)}</li>`).join('');
+  const hs=(x.historico_site||[]).slice().reverse().map(h=>`<li>${escHtml(h)}</li>`).join('');
+  openDrawer('Pedido '+(x.codigo||x.id),igData(x.data,x.hora),`<p><b>${escHtml(x.nome||'—')}</b> · ${escHtml(x.email||'—')}${x.telefone?' · '+escHtml(x.telefone):''}</p>
+    <p>${qtd(x.pessoas,'pessoa','pessoas')}: ${escHtml(x.tipos_txt||'—')} · ${igAmigoHTML(x)}</p><p><span class="tag ${IG_SIT_TAG[x.situacao]||''}">${escHtml(x.situacao_nome)}</span> ${escHtml(igBRL(x.total))} · <span class="mono">${escHtml(x.ref)}</span></p>
+    <p>${igAvisoEquipeTxt(x.aviso_equipe)}</p><div class="act">${igAcoesHTML(x)}</div><h3>No painel</h3>${ev?`<ul>${ev}</ul>`:'<p class="help">Nenhum reenvio pelo painel.</p>'}<h3>No site</h3>${hs?`<ul>${hs}</ul>`:'<p class="help">O site ainda não manda o histórico (atualize o site).</p>'}`)}
+  catch(e){toast(e.message)}}
+/* Avisos à equipe (Rafael 20/11: "Não recebi e-mail avisando que vendeu ingresso, que pagou e quem comprou — esse é SEM Sender"): o site manda
+   por wp_mail (SMTP do site) ao pedir e ao pagar; aqui se vê quem recebe, se muda o e-mail e se manda um aviso de teste. */
+function igAvisosHTML(a){const el=document.getElementById('ig-avisos');if(!el)return;const t=a.teste;
+  el.innerHTML=a.site_sabe?`Avisos de pedido e de pagamento à equipe (e-mail do site, sem Sender) vão para <b class="mono">${escHtml(a.destino||'—')}</b>${a.email?'':' (padrão do site)'}${a.aviso_recusado?' · também os recusados':''}.
+    <button type="button" class="btn sm" id="ig-av-mudar">Mudar e-mail</button> <button type="button" class="btn sm" id="ig-av-teste">Mandar aviso de teste</button>${t?` <span id="ig-av-res">${igAvisoTesteTxt(t)}</span>`:' <span id="ig-av-res"></span>'}`
+    :'Avisos de venda à equipe: o site ainda não informa para quem vão (atualize o site, plugin da CAMP 1.31.0).'}
+function igAvisoTesteTxt(t){return t.ok?`<span class="tag g">servidor de e-mail aceitou</span> teste ${escHtml(fmtDataHora(t.em||''))} para ${escHtml(t.para||'')}. Se não chegar, o problema é a conexão de e-mail (SMTP) do site: avise quem cuida do site.`
+  :`<span class="tag r">não saiu</span> ${escHtml(t.erro||'o servidor de e-mail do site recusou')}. Avise quem cuida do site (conexão de e-mail/SMTP).`}
+function igAvisoEquipeTxt(l){const a=(l||[]).slice(-1)[0];if(!a)return 'Aviso à equipe: nenhum registrado (site antigo ou compra anterior).';const mom={pedido:'pedido novo',pago:'pagamento',gratuito:'confirmação',recusado:'recusa'}[a.momento]||a.momento;
+  return a.ok?`Aviso à equipe (${escHtml(mom)}): <span class="tag g">enviado</span> ${escHtml(fmtDataHora(a.quando))} para ${escHtml(a.para)}`:`Aviso à equipe (${escHtml(mom)}): <span class="tag r">falhou</span> ${escHtml(a.erro||'')} (${escHtml(fmtDataHora(a.quando))})`}
+async function igAvisoTeste(b){b.disabled=true;try{const r=await API('/api/ingressos/aviso-teste',{method:'POST'});const el=document.getElementById('ig-av-res');if(el)el.innerHTML=igAvisoTesteTxt(r);toast(r.ok?'Aviso de teste entregue ao servidor de e-mail do site':'O aviso de teste não saiu')}catch(err){toast(err.message)}finally{b.disabled=false}}
+async function igAvisoMudar(){const a=(IG.d&&IG.d.avisos)||{};const r=await confirmar({titulo:'E-mail dos avisos de ingresso',texto:'Quem recebe "Novo pedido de ingresso" e "Ingresso pago" (pelo e-mail do site, sem Sender). Deixe vazio para voltar ao padrão do site.',
+    campo:{rotulo:'E-mail',valor:a.email||'',maxlength:200,mono:true,placeholder:'ex.: ingressos@camp.arq.br',valida:v=>v&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)?'E-mail inválido':''},botao:'Salvar'});
+  if(!r)return;try{await API('/api/ingressos/avisos',{method:'POST',body:JSON.stringify({email_ingressos:r.valor||''})});toast('E-mail dos avisos salvo');carregarIngressos()}catch(err){toast(err.message)}}
+function igCliqueDatas(t,e){
+  const ab=t.closest('[data-ig-aba]');if(ab){igAbrirAba(ab.dataset.igAba);return}
+  const op=t.closest('[data-ig-abrir]');if(op){IG.L.turma=op.dataset.igAbrir;IG.L.sel.clear();igCarregarLista().then(()=>{const b=document.getElementById('ig-lista');if(b&&b.scrollIntoView)b.scrollIntoView({block:'start'})});return}
+  if(t.closest('#ig-l-fechar')){IG.L.turma='';IG.L.sel.clear();const b=document.getElementById('ig-lista');b.hidden=true;b.innerHTML='';return}
+  if(t.closest('#ig-l-imprimir')){document.body.classList.add('imprime-ig');const fim=()=>{document.body.classList.remove('imprime-ig');window.removeEventListener('afterprint',fim)};window.addEventListener('afterprint',fim);window.print();setTimeout(fim,1500);return}
+  const lt=t.closest('[data-ig-lote]');if(lt){igAcao(lt.dataset.igLote,[...IG.L.sel],lt);return}
+  const dt=t.closest('[data-ig-detalhe]');if(dt){igDetalhe(dt.dataset.igDetalhe);return}
+  if(t.closest('#ig-av-teste')){igAvisoTeste(t.closest('#ig-av-teste'));return}
+  if(t.closest('#ig-av-mudar')){igAvisoMudar();return}}
+document.addEventListener('change',e=>{const el=e.target;if(!el||!el.closest||!el.closest('#v-ingressos'))return;const L=IG.L;
+  if(el.id==='ig-d-mes'){IG.dmes=el.value;igCarregarDatas()}
+  else if(el.id==='ig-l-hora'){L.turma=L.turma.slice(0,10)+(el.value?'|'+el.value:'');igCarregarLista()}
+  else if(el.id==='ig-l-sit'){L.situacao=el.value;igCarregarLista()}else if(el.id==='ig-l-tipo'){L.tipo=el.value;igCarregarLista()}else if(el.id==='ig-l-amigo'){L.amigo=el.checked?'1':'';igCarregarLista()}
+  else if(el.id==='ig-l-todos'){(L.d&&L.d.itens||[]).forEach(x=>{if(el.checked)L.sel.add(x.id);else L.sel.delete(x.id)});document.querySelectorAll('#ig-lista [data-ig-sel]').forEach(c=>{c.checked=el.checked});igAtualizaBulk()}
+  else if(el.dataset&&el.dataset.igSel){const i=+el.dataset.igSel;if(el.checked)L.sel.add(i);else L.sel.delete(i);igAtualizaBulk()}});
+{let tq;document.addEventListener('input',e=>{if(e.target&&e.target.id==='ig-l-q'){clearTimeout(tq);const v=e.target.value.trim();tq=setTimeout(()=>{IG.L.q=v;igCarregarLista().then(()=>{const q=document.getElementById('ig-l-q');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}})},300)}})}
 /* CAMP-COB (19/11/2026, Rafael: "Quero poder no admin criar uma cobrança de alguém que vai doar acervo, ex. 2 mil reais, criar a cobrança
    para pagar com o Mercado Pago, e quero poder saber no extrato o que era"): cobranças avulsas (contrato 1.19). Só admin/master. O site
    abre o pagamento no Mercado Pago; a tela mostra o que aparece lá (título, referência, fatura do cartão e id do pagamento). */

@@ -38,6 +38,7 @@ MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
 MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
+MODOS_RAPIDOS |= {"ingressos_detalhe"}   # CAMP-INGRESSOS 20/11/2026: tipos (meia, Amigo…), lista por data e reenviar ingresso/cobrança só pelo Sender (site falso; contrato 1.22)
 MODOS_RAPIDOS |= {"fila_nome_fundo"}   # 19/11/2026: nome do arquiteto (fundo) ao lado do código nas linhas da Home
 MODOS_RAPIDOS |= {"emkt_sender"}   # 18/11/2026 CAMP-SENDER: quem aceita e-mails da CAMP (lista do site, situação no Sender, filtros; contrato 1.15; linha própria)
 MODOS_RAPIDOS |= {"doacoes_acervo_painel"}   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site, etapas (site falso; contrato 1.20)
@@ -18117,6 +18118,172 @@ def filho(modo):
         log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
         ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@x.com", "Ana Lima", "beto@x.com", "Beto Reis")))
         for l in res: print(l)
+    elif modo == "ingressos_detalhe":
+        # CAMP-INGRESSOS detalhe 20/11/2026 · Rafael: "saber quem pagou meia, quem é Amigo etc. E abrir a data para listar as pessoas, e se
+        # precisar reenviar o ingresso ou a cobrança". Tipos (site novo 1.22 e site antigo calculado), Amigo pelo e-mail, datas, lista de
+        # presença (filtros, CSV), reenviar ingresso/cobrança SÓ pelo Sender (template que falta), lote, histórico e papéis. Site FALSO.
+        init_db(); _aplicar_migracoes_real(); _aplicar_migracoes_real()          # 2x: idempotente
+        import json as _j
+        from datetime import datetime as _dt, timedelta as _td
+        from fastapi.testclient import TestClient
+        from app import auth, ingressos as ig
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        c = connect()
+        cols = {r_[1] for r_ in c.execute("PRAGMA table_info(ingresso)")}
+        ver("migração 233: colunas meias, tipos, link_pagamento, link_pagamento_ate, historico", {"meias", "tipos", "link_pagamento", "link_pagamento_ate", "historico"} <= cols, sorted(cols))
+        class Resp:
+            def __init__(s, code, dados=None): s.status_code, s._d = code, dados
+            def json(s): return s._d
+        posts = []
+        class H:
+            def __init__(s, r, rp=None): s.r, s.rp = r, rp
+            def get(s, path, params=None): return s.r
+            def post(s, path, json=None):
+                posts.append((path, json))
+                return s.rp(path, json) if callable(s.rp) else s.rp
+        class WPF:
+            def __init__(s, r, rp=None): s.h = H(r, rp)
+        dia = (_dt.now(ig.FUSO) + _td(days=3)).strftime("%Y-%m-%d")
+        base = {"casa": "JM", "visita": "Visita guiada à Residência João Marino", "data": dia, "hora": "10:00", "telefone": "11 9999-0000", "entraram": 0, "preco": 120,
+                "pagamentos": [], "modo": "producao", "criado_em": "2026-11-20T12:58:00Z", "confirmado_em": "2026-11-20T13:00:00Z", "alterado_em": "2026-11-20T13:00:00Z", "amigo_id": 0, "desconto": None}
+        # A: site NOVO (1.22) com tipos: 1 inteira + 1 Amigo 20%; B: site ANTIGO (sem meias/tipos) 2 inteiras; C: meias (1.21) 1 inteira + 2 meias;
+        # D: Patrono gratuito; E: reservado (link aberto); F: recusado às 13h; G: pago de quem é Amigo no cadastro do painel, sem desconto
+        A = dict(base, id=601, ref=f"CAMP-INGRESSO-JM-{dia.replace('-', '')}-1000-601", nome="Ana Lima", email="ana@x.com", pessoas=2, total=216, situacao="pago", amigo_id=77, codigo="AAAA0601",
+                 desconto={"categoria": "amigo", "pct": 20, "qtd": 1, "valor": 96, "via": "codigo"}, meias=0,
+                 tipos=[{"tipo": "inteira", "nome": "Inteira", "qtd": 1, "valor": 120}, {"tipo": "amigo", "nome": "Amigo da CAMP (20% de desconto)", "qtd": 1, "valor": 96, "pct": 20, "categoria": "amigo"}],
+                 link_pagamento="", link_pagamento_ate="", historico=["2026-11-20 13:00 UTC · pagamento confirmado pelo Mercado Pago"],
+                 aviso_equipe=[{"quando": "2026-11-20T12:58:00+00:00", "momento": "pedido", "para": "equipe@camp.arq.br", "ok": True, "erro": ""},
+                               {"quando": "2026-11-20T13:00:00+00:00", "momento": "pago", "para": "equipe@camp.arq.br", "ok": False, "erro": "Could not instantiate mail function."}])
+        B = dict(base, id=602, ref="R602", nome="Beto Reis", email="beto@x.com", pessoas=2, total=240, situacao="pago", codigo="BBBB0602")
+        C = dict(base, id=603, ref="R603", nome="Carla Dias", email="carla@x.com", pessoas=3, total=240, situacao="pago", codigo="CCCC0603", meias=2)
+        D = dict(base, id=604, ref="R604", nome="Davi Melo", email="davi@x.com", pessoas=1, total=0, situacao="gratuito", codigo="DDDD0604", desconto={"categoria": "patrono", "pct": 100, "qtd": 1, "valor": 0, "via": "sessao"})
+        E = dict(base, id=605, ref="R605", nome="Eva Souza", email="eva@x.com", pessoas=2, total=240, situacao="reservado", codigo="EEEE0605",
+                 link_pagamento="https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=605", link_pagamento_ate="2026-11-20T13:40:00Z")
+        F = dict(base, id=606, ref="R606", hora="13:00", nome="Fábio Paz", email="fabio@x.com", pessoas=1, total=120, situacao="recusado", codigo="FFFF0606", link_pagamento="https://evil.example/x")
+        G = dict(base, id=607, ref="R607", hora="13:00", nome="Gil Amigo", email="Gil@X.com", pessoas=1, total=120, situacao="pago", codigo="GGGG0607")
+        T = [{"chave": f"{dia}|10:00", "data": dia, "hora": "10:00", "vagas": 15, "ocupadas": 10, "livres": 5}, {"chave": f"{dia}|13:00", "data": dia, "hora": "13:00", "vagas": 15, "ocupadas": 1, "livres": 14},
+             {"chave": f"{dia}|15:00", "data": dia, "hora": "15:00", "vagas": 15, "ocupadas": 0, "livres": 15}]
+        o = ig.coletar(c, WPF(Resp(200, {"itens": [A, B, C, D, E, F, G], "turmas": T, "config": {"preco": 120, "vagas": 15}, "agora": "2026-11-20T14:00:00Z"})))
+        ver("busca: 7 compras gravadas", o["novos"] == 7 and not o["erro"], o)
+        # Amigos no cadastro do painel: Gil ativo (Guardião), Beto vencido
+        hoje_ = _dt.now(ig.FUSO).date()
+        c.execute("INSERT INTO amigo (tipo, nome, email, categoria, situacao, validade) VALUES ('amigo','Gil','gil@x.com','guardiao','pago',?)", ((hoje_ + _td(days=90)).isoformat(),))
+        c.execute("INSERT INTO amigo (tipo, nome, email, categoria, situacao, validade) VALUES ('amigo','Beto','beto@x.com','amigo','pago',?)", ((hoje_ - _td(days=5)).isoformat(),))
+        c.commit()
+        # ---- tipos
+        rw = {r_["site_id"]: r_ for r_ in c.execute("SELECT * FROM ingresso")}
+        tp = lambda sid: {t["tipo"]: t["qtd"] for t in ig.tipos_da_compra(rw[sid])}
+        ver("tipos vindos do site (1.22): 1 inteira + 1 Amigo 20%", tp(601) == {"inteira": 1, "amigo": 1} and rw[601]["meias"] == 0, tp(601))
+        ver("site antigo (sem meias/tipos): calculado, 2 inteiras", tp(602) == {"inteira": 2} and rw[602]["tipos"] is None, tp(602))
+        ver("meias (1.21) sem tipos: 1 inteira + 2 meias", tp(603) == {"inteira": 1, "meia": 2}, tp(603))
+        ver("Patrono 100%: gratuidade", tp(604) == {"gratuidade": 1}, tp(604))
+        ver("link de pagamento: só do Mercado Pago (o outro é descartado)", rw[605]["link_pagamento"].startswith("https://www.mercadopago.com.br/") and rw[606]["link_pagamento"] is None, (rw[605]["link_pagamento"], rw[606]["link_pagamento"]))
+        ver("histórico do site gravado", _j.loads(rw[601]["historico"])[0].endswith("pagamento confirmado pelo Mercado Pago"))
+        # ---- Amigo pelo e-mail
+        am = ig.amigos_por_email(c, ["gil@x.com", "beto@x.com", "ana@x.com"])
+        ver("Amigo pelo e-mail: Gil ativo (Guardião), Beto vencido não é ativo, Ana não está no cadastro", am["gil@x.com"]["ativo"] and am["gil@x.com"]["categoria_nome"] == "Guardião" and not am["beto@x.com"]["ativo"] and "ana@x.com" not in am, am)
+        # ---- mês: totais por tipo
+        m = ig.do_mes(c, dia[:7])
+        ver("mês: totais por tipo (pagos e gratuitos)", m["totais"]["por_tipo"] == {"inteira": 5, "meia": 2, "amigo": 1, "gratuidade": 1}, m["totais"]["por_tipo"])
+        xg = [x for x in m["itens"] if x["id"] == 607][0]
+        ver("linha: Amigo do cadastro (sem desconto) aparece; tipos em texto", xg["eh_amigo"] and xg["amigo_cadastro"]["categoria"] == "guardiao" and [x for x in m["itens"] if x["id"] == 603][0]["tipos_txt"] == "1 inteira · 2 meias-entradas", xg)
+        # ---- datas
+        ds = ig.datas(c)
+        d0 = [d for d in ds["dias"] if d["data"] == dia]
+        t10 = [t for t in d0[0]["turmas"] if t["hora"] == "10:00"][0] if d0 else {}
+        ver("datas: o dia com 3 turmas; 10h com 8 pessoas vendidas por tipo, 7 pagas, 1 gratuita, 2 pendentes, 5 livres (do site)",
+            d0 and len(d0[0]["turmas"]) == 3 and t10["pessoas"] == 8 and t10["pagos"] == 7 and t10["gratuitos"] == 1 and t10["pendentes"] == 2 and t10["livres"] == 5
+            and t10["por_tipo"] == {"inteira": 4, "meia": 2, "amigo": 1, "gratuidade": 1}, t10)
+        ver("datas: total do dia (9 pessoas; 13h: 1 paga) e mês inválido 400", d0 and d0[0]["pessoas"] == 9 and d0[0]["pendentes"] == 2, d0[0] if d0 else ds)
+        try:
+            ig.datas(c, "xx"); ver("datas: mês inválido recusado", False)
+        except Exception as e_:
+            ver("datas: mês inválido recusado", getattr(e_, "status_code", 0) == 400)
+        # ---- lista de presença
+        L = ig.lista(c, dia)
+        ver("lista do dia: todas as situações por padrão (7 compras), horas da turma", len(L["itens"]) == 7 and L["horas"] == ["10:00", "13:00", "15:00"], (len(L["itens"]), L["horas"]))
+        ver("lista: filtro turma 10h + só pagos/gratuitos = 4", len(ig.lista(c, f"{dia}|10:00", "valem")["itens"]) == 4)
+        ver("lista: filtro por tipo meia = Carla; só Amigos = Ana, Davi, Gil", [x["id"] for x in ig.lista(c, dia, tipo="meia")["itens"]] == [603] and sorted(x["id"] for x in ig.lista(c, dia, amigo="1")["itens"]) == [601, 604, 607])
+        ver("lista: pendentes = Eva; busca por telefone/código", [x["id"] for x in ig.lista(c, dia, "pendentes")["itens"]] == [605] and [x["id"] for x in ig.lista(c, dia, q="FFFF0606")["itens"]] == [606])
+        ver("lista: ações por situação (pago reenvia ingresso; reservado/recusado reenviam cobrança)", (lambda it: it[601]["pode_reenviar"] and not it[601]["pode_cobrar"] and it[605]["pode_cobrar"] and it[606]["pode_cobrar"] and not it[605]["pode_reenviar"])({x["id"]: x for x in L["itens"]}))
+        # ---- telas e papéis
+        auth.criar_usuario("Adm", "adm@camp.arq.br", "senha-longa-12345", "admin", forcar_troca=False)
+        auth.criar_usuario("Op", "op@camp.arq.br", "senha-longa-12345", "operador", forcar_troca=False)
+        op = TestClient(app, raise_server_exceptions=False); op.post("/api/auth/login", json={"email": "op@camp.arq.br", "senha": "senha-longa-12345"})
+        ver("operador: 403 em datas, lista, CSV, detalhe, reenviar, cobrança e lote", all(r_.status_code == 403 for r_ in (op.get("/api/ingressos/datas"), op.get(f"/api/ingressos/lista?turma={dia}"), op.get(f"/api/ingressos/lista.csv?turma={dia}"),
+            op.get("/api/ingressos/601"), op.post("/api/ingressos/601/reenviar"), op.post("/api/ingressos/605/cobranca"), op.post("/api/ingressos/lote", json={"acao": "ingresso", "ids": [601]}))))
+        x = TestClient(app, raise_server_exceptions=False); x.post("/api/auth/login", json={"email": "adm@camp.arq.br", "senha": "senha-longa-12345"})
+        rd = x.get("/api/ingressos/datas")
+        ver("API datas (de hoje em diante)", rd.status_code == 200 and any(d["data"] == dia for d in rd.json()["dias"]), rd.text[:200])
+        rl = x.get("/api/ingressos/lista", params={"turma": f"{dia}|10:00"})
+        ver("API lista da turma; turma inválida 400", rl.status_code == 200 and len(rl.json()["itens"]) == 5 and x.get("/api/ingressos/lista?turma=amanha").status_code == 400, rl.text[:200])
+        cs = x.get("/api/ingressos/lista.csv", params={"turma": dia})
+        ver("CSV da lista de presença: colunas de tipo, Amigo e Presença", cs.status_code == 200 and cs.text.startswith("﻿Data;Hora;Nome") and "Meias-entradas" in cs.text and "Presença" in cs.text
+            and ";1;2;0;0;" in cs.text and "Amigo (Guardião)" in cs.text and "lista-presenca-joao-marino-" in cs.headers.get("content-disposition", ""), cs.text[:400])
+        c.execute("UPDATE ingresso SET nome='=CMD()' WHERE site_id=602"); c.commit()
+        ver("CSV da lista: nome começando com = não vira fórmula", "'=CMD()" in x.get("/api/ingressos/lista.csv", params={"turma": dia}).text)
+        ver("CSV do mês ganha as colunas de tipo", "Meias-entradas" in x.get(f"/api/ingressos/exportar.csv?mes={dia[:7]}").text)
+        # ---- reenviar (só Sender) e cobrança
+        c.execute("INSERT OR REPLACE INTO configuracao (chave, valor, descricao, sensivel) VALUES ('wp.app_password','xxxx','senha do site',1)"); c.commit()
+        sem_tpl = lambda tr: Resp(409, {"code": "camp_sender_sem_template", "message": "Falta o template " + tr + " do Sender no site. Nada foi enviado.", "data": {"status": 409, "template": tr}})
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: sem_tpl("TR23"))
+        r1 = x.post("/api/ingressos/601/reenviar")
+        ver("reenviar ingresso sem o template TR23: 409 'não enviado' com o template que falta; pede so_sender ao site", r1.status_code == 409 and "falta o template TR23 (Ingresso da visita)" in r1.json().get("erro", "")
+            and posts[-1] == ("/wp-json/camp/v1/painel/ingressos/601/reenviar", {"so_sender": True}) and "wp-admin" not in r1.text, r1.text[:300])
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(200, {"ok": True, "enviado": True, "template": "TR23", "sender": {"id": "em-1", "status": "enviado"}, "registro": dict(A, entraram=1)}))
+        r2 = x.post("/api/ingressos/601/reenviar")
+        ver("reenviar ingresso com o Sender pronto: ok e atualiza o registro", r2.status_code == 200 and r2.json()["canal"] == "sender" and c.execute("SELECT entraram FROM ingresso WHERE site_id=601").fetchone()[0] == 1, r2.text[:200])
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: sem_tpl("TR29"))
+        r3 = x.post("/api/ingressos/605/cobranca")
+        ver("reenviar cobrança sem o template TR29: 409 com o template que falta", r3.status_code == 409 and "falta o template TR29 (Cobrança do ingresso)" in r3.json().get("erro", "") and posts[-1][0].endswith("/605/cobranca"), r3.text[:300])
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(404, {"code": "rest_no_route", "message": "Nenhuma rota"}))
+        r4 = x.post("/api/ingressos/605/cobranca")
+        ver("site antigo sem a rota de cobrança: 409 'atualize o site (plugin 1.31.0)'", r4.status_code == 409 and "1.31.0" in r4.json().get("erro", ""), r4.text[:200])
+        novoE = dict(E, link_pagamento="https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=605b", link_pagamento_ate="2026-11-21T14:00:00Z", historico=["novo link de pagamento pedido pelo painel"])
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(200, {"ok": True, "enviado": True, "novo_link": True, "template": "TR29", "sender": {"id": "em-2"}, "registro": novoE}))
+        r5 = x.post("/api/ingressos/605/cobranca")
+        ver("reenviar cobrança: link novo do Mercado Pago gravado e mensagem diz", r5.status_code == 200 and r5.json()["novo_link"] and "link novo" in r5.json()["mensagem"]
+            and c.execute("SELECT link_pagamento FROM ingresso WHERE site_id=605").fetchone()[0].endswith("605b"), r5.text[:200])
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(409, {"code": "camp_ing_pago", "message": "já paga", "data": {"status": 409}}))
+        ver("cobrança de compra já paga: 409 com mensagem", (lambda r_: r_.status_code == 409 and "já está paga" in r_.json()["erro"])(x.post("/api/ingressos/601/cobranca")))
+        c.execute("UPDATE ingresso SET email=NULL WHERE site_id=606"); c.commit(); n_ = len(posts)
+        ver("pedido sem e-mail (LGPD): 409 sem chamar o site", x.post("/api/ingressos/606/cobranca").status_code == 409 and len(posts) == n_)
+        # ---- lote
+        def lote_site(p, j):
+            return Resp(200, {"ok": True, "enviado": True, "registro": None}) if "/601/" in p else Resp(409, {"code": "camp_ing_nao_pago", "message": "não pago", "data": {"status": 409}})
+        ig._wp = lambda: WPF(Resp(200, {}), lote_site)
+        rl_ = x.post("/api/ingressos/lote", json={"acao": "ingresso", "ids": [601, 605, 999]})
+        ver("lote: 1 enviado, 2 não (não pago; não existe no painel), cada um com mensagem", rl_.status_code == 200 and rl_.json()["feitos"] == 1 and rl_.json()["falhas"] == 2
+            and [r_["ok"] for r_ in rl_.json()["resultados"]] == [True, False, False], rl_.text[:300])
+        ver("lote: ação inválida e lista vazia 400", x.post("/api/ingressos/lote", json={"acao": "x", "ids": [1]}).status_code == 400 and x.post("/api/ingressos/lote", json={"acao": "cobranca", "ids": []}).status_code == 400)
+        # ---- avisos à equipe (wp_mail do site, sem Sender)
+        dav = x.get("/api/ingressos/601").json().get("aviso_equipe") or []
+        ver("detalhe: avisos à equipe do site (pedido enviado; pagamento falhou com o motivo)", len(dav) == 2 and dav[0]["ok"] and not dav[1]["ok"] and "mail function" in dav[1]["erro"] and dav[1]["para"] == "equipe@camp.arq.br", dav)
+        ig._wp = lambda: WPF(Resp(200, {}), lambda p, j: Resp(200, {"ok": False, "para": "equipe@camp.arq.br", "erro": "Could not instantiate mail function.", "em": "2026-11-20T15:00:00+00:00"}) if p.endswith("/aviso-teste")
+                             else Resp(200, {"ok": True, "config": {"email_ingressos": j.get("email_ingressos", ""), "email_ingressos_destino": j.get("email_ingressos") or "equipe@camp.arq.br", "aviso_recusado": False}}))
+        at = x.post("/api/ingressos/aviso-teste")
+        ver("aviso de teste: chama o site e mostra se o wp_mail aceitou (false = falhou, com o motivo)", at.status_code == 200 and at.json()["ok"] is False and "mail function" in at.json()["erro"] and posts[-1][0].endswith("/painel/ingressos/aviso-teste"), at.text[:200])
+        ver("operador não manda aviso de teste nem muda o e-mail (403)", op.post("/api/ingressos/aviso-teste").status_code == 403 and op.post("/api/ingressos/avisos", json={"email_ingressos": "x@y.com"}).status_code == 403)
+        ver("e-mail dos avisos inválido: 400 sem chamar o site", (lambda n0: x.post("/api/ingressos/avisos", json={"email_ingressos": "nao-e-email"}).status_code == 400 and len(posts) == n0)(len(posts)))
+        av = x.post("/api/ingressos/avisos", json={"email_ingressos": "ingressos@camp.arq.br"})
+        lst_ = x.get(f"/api/ingressos?mes={dia[:7]}").json()
+        ver("muda o e-mail dos avisos pelo painel e a tela mostra quem recebe e o último teste", av.status_code == 200 and posts[-1] == ("/wp-json/camp/v1/painel/ingressos/config", {"email_ingressos": "ingressos@camp.arq.br"})
+            and lst_["avisos"]["destino"] == "ingressos@camp.arq.br" and lst_["avisos"]["teste"]["ok"] is False, (av.text[:200], lst_.get("avisos")))
+        x.post("/api/ingressos/avisos", json={"email_ingressos": ""})
+        ver("e-mail vazio volta ao padrão do site (__limpar__)", posts[-1][1] == {"email_ingressos": "__limpar__"})
+        from app import emails_enviados as ee
+        ver("E-mails enviados: avisos dos ingressos com origem própria", ee.ORIGENS.get(ee.REGISTRO_ORIGEM.get("camp_ingresso", "")) == "Ingressos" and ee.MODELOS.get("aviso_equipe_ingresso", ("", ""))[1] == "Ingressos (aviso à equipe)" if hasattr(ee, "MODELOS") else False)
+        # ---- histórico
+        dt_ = x.get("/api/ingressos/601")
+        evs = [e["tipo"] for e in dt_.json().get("eventos", [])]
+        ver("detalhe: histórico do painel (falhou, reenviado…) e do site; sem e-mail do comprador no evento", dt_.status_code == 200 and "reenvio_falhou" in evs and "ingresso_reenviado" in evs and dt_.json()["historico_site"]
+            and not c.execute("SELECT COUNT(*) FROM evento WHERE entidade='ingresso' AND detalhe LIKE '%ana@x.com%'").fetchone()[0], evs)
+        from app.log_tecnico import LOG_FILE
+        log_ = LOG_FILE.read_text(encoding="utf-8") if LOG_FILE.exists() else ""
+        ver("log técnico sem e-mail nem nome", not any(t_ in log_ for t_ in ("ana@x.com", "Ana Lima", "eva@x.com", "Eva Souza")))
+        for l in res: print(l)
     elif modo == "doacoes_acervo_painel":
         # CAMP-DOA-ACERVO 20/11/2026 · Intenções de doação de acervo do site (contrato 1.20; cliente FALSO): busca incremental, site antigo,
         # lista "pedem ação", detalhe, mudar etapa/nota/cobrança pelo site (o site valida), etapas automáticas recusadas, fotos repassadas,
@@ -20499,6 +20666,15 @@ else:
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ingressos: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
     ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 24, "Ingressos: todas as verificações rodaram")
+
+print("Ingressos, detalhe: tipos (meia, Amigo…), Amigo pelo e-mail, datas, lista de presença, reenviar ingresso/cobrança só pelo Sender (site falso)")
+rc, out = rodar("ingressos_detalhe", f"{tmp}/ingressos_detalhe.db")
+if rc != 0: ok(False, f"teste ingressos_detalhe não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Ingressos (detalhe): {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+    ok(sum(1 for l in out.splitlines() if l.startswith("ok|")) >= 42, "Ingressos (detalhe): todas as verificações rodaram")
 
 print("Cobranças avulsas pelo Mercado Pago: criar com link (site falso), extrato, e-mail só pelo Sender, busca marca paga, cancelar, novo link, CSV, papéis e LGPD")
 rc, out = rodar("cobranca_avulsa", f"{tmp}/cobranca_avulsa.db")

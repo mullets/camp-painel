@@ -10,6 +10,12 @@ acompanhar e fazer as contas:
 - A referência é a mesma do Mercado Pago (CAMP-INGRESSO-JM-AAAAMMDD-HHMM-n): no relatório de lá, a busca por
   CAMP-INGRESSO-JM-AAAAMM acha o mês.
 - LGPD: apagar pessoa anonimiza (os valores ficam para a receita). Nada de nome ou e-mail no log técnico.
+- Detalhe (20/11/2026, Rafael: "saber quem pagou meia, quem é Amigo etc. E abrir a data para listar as pessoas, e se precisar reenviar
+  o ingresso ou a cobrança"; contrato 1.21 `meias` e 1.22 `tipos`/`link_pagamento`/`historico`, tudo OPCIONAL): tipo de cada ingresso
+  (inteira, meia-entrada, Amigo com desconto, gratuidade), Amigo da CAMP pelo e-mail (cadastro de Amigos do painel, adesão em dia),
+  datas com contas por tipo e situação, lista de presença de cada data/turma (filtros, impressão, CSV), "Reenviar ingresso" (TR23) e
+  "Reenviar cobrança" (TR29, link novo do Mercado Pago se o antigo venceu) SÓ pelo Sender, um a um ou em lote; tudo no histórico
+  (tabela evento, entidade 'ingresso'). Site antigo: os tipos saem de pessoas/meias/desconto; a cobrança diz "atualize o site".
 """
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from . import auth
 from .config import settings
@@ -38,6 +45,13 @@ SITUACOES = {"pago": "Pago", "gratuito": "Gratuito (Amigo)", "reservado": "Aguar
              "recusado": "Recusado", "cancelado": "Cancelado"}
 VALEM = ("pago", "gratuito")          # contam nas vagas, nas pessoas e na receita
 CATEGORIAS = {"estudante": "Estudante / Professor", "amigo": "Amigo", "guardiao": "Guardião", "patrono": "Patrono"}
+VERSAO_SITE = "1.31.0"                # plugin do site com o contrato 1.22 (cobrança e reenvio só pelo Sender)
+TIPOS = {"inteira": "Inteira", "meia": "Meia-entrada", "amigo": "Amigo da CAMP (desconto)", "gratuidade": "Gratuidade (Amigo da CAMP)"}
+PENDENTES = ("reservado", "processando")
+COBRAVEIS = ("reservado", "recusado", "cancelado")     # dá para reenviar a cobrança (o site confere vagas e abre link novo se venceu)
+TPL_INGRESSO = ("TR23", "Ingresso da visita")
+TPL_COBRANCA = ("TR29", "Cobrança do ingresso")
+ONDE_TEMPLATE = "na administração do site, Apoios → Mercado Pago → E-mails pelo Sender (avise quem cuida do site)"
 MEIOS = {"credit_card": "Cartão de crédito", "debit_card": "Cartão de débito", "bank_transfer": "Pix", "pix": "Pix", "account_money": "Saldo do Mercado Pago", "ticket": "Boleto"}
 
 
@@ -125,6 +139,23 @@ def _gravar(con, x: dict) -> int:
         "codigo": _txt(x.get("codigo"), 12), "link": _txt(x.get("link"), 300), "modo": _txt(x.get("modo"), 10),
         "criado_em": _utc(x.get("criado_em")) or None, "confirmado_em": _utc(x.get("confirmado_em")) or None, "alterado_em": _utc(x.get("alterado_em")) or None,
     }
+    # contrato 1.21/1.22 (OPCIONAL): só grava o que o site mandou (site antigo não apaga o que já havia)
+    if "meias" in x:
+        vals["meias"] = max(0, _int(x.get("meias")))
+    if isinstance(x.get("tipos"), list):
+        tp = [{"tipo": _txt(t.get("tipo"), 20), "nome": _txt(t.get("nome"), 80), "qtd": max(0, _int(t.get("qtd"))), "valor": _num(t.get("valor")),
+               **({"pct": _int(t.get("pct"))} if t.get("pct") is not None else {}), **({"categoria": _txt(t.get("categoria"), 20)} if t.get("categoria") else {})}
+              for t in x["tipos"] if isinstance(t, dict) and _txt(t.get("tipo"), 20)]
+        vals["tipos"] = json.dumps(tp, ensure_ascii=False)
+    if "link_pagamento" in x:
+        lp = _txt(x.get("link_pagamento"), 400)
+        vals["link_pagamento"] = lp if re.match(r"^https://(www\.|sandbox\.)?mercadopago\.com(\.br)?/", lp) else None
+        vals["link_pagamento_ate"] = _utc(x.get("link_pagamento_ate")) or None
+    if isinstance(x.get("historico"), list):
+        vals["historico"] = json.dumps([_txt(h, 300) for h in x["historico"][-40:]], ensure_ascii=False)
+    if isinstance(x.get("aviso_equipe"), list):                # avisos à equipe por wp_mail (o destinatário é a equipe, não o comprador)
+        vals["aviso_equipe"] = json.dumps([{"quando": _utc(a.get("quando")), "momento": _txt(a.get("momento"), 20), "para": _txt(a.get("para"), 200),
+                                            "ok": bool(a.get("ok")), "erro": _txt(a.get("erro"), 300)} for a in x["aviso_equipe"][-20:] if isinstance(a, dict)], ensure_ascii=False)
     velho = con.execute("SELECT anonimizado FROM ingresso WHERE site_id=?", (sid,)).fetchone()
     if velho and velho["anonimizado"]:
         vals.update(nome=REMOVIDO, email=None, telefone=None)
@@ -218,17 +249,102 @@ def rodada(force: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------- contas
-def _linha(r) -> dict:
+def _cols(r) -> set:
+    try:
+        return set(r.keys())
+    except AttributeError:
+        return set()
+
+
+def tipos_da_compra(r) -> list[dict]:
+    """Ingressos da compra por tipo. Usa `tipos` do site (contrato 1.22); site antigo: calcula com pessoas, meias (1.21) e desconto.
+    Desconto de Amigo vale nas inteiras (não soma com a meia); 100% = gratuidade (Patrono)."""
+    ks = _cols(r)
+    if "tipos" in ks and r["tipos"]:
+        try:
+            tp = [t for t in json.loads(r["tipos"]) if isinstance(t, dict) and _int(t.get("qtd")) > 0]
+            return [dict(t, nome=TIPOS.get(t.get("tipo"), t.get("nome") or t.get("tipo"))) if t.get("tipo") in ("inteira", "meia", "gratuidade") else t for t in tp]
+        except (ValueError, TypeError):
+            pass
+    dc = json.loads(r["desconto"]) if r["desconto"] else None
+    pessoas = _int(r["pessoas"])
+    meias = min(pessoas, _int(r["meias"]) if "meias" in ks else 0)
+    pct = _int((dc or {}).get("pct"))
+    dq = min(max(0, pessoas - meias), _int((dc or {}).get("qtd"))) if dc and pct > 0 else 0
+    preco = float(r["preco"] or 0)
+    out = [{"tipo": "inteira", "nome": TIPOS["inteira"], "qtd": pessoas - meias - dq, "valor": round(preco, 2)},
+           {"tipo": "meia", "nome": TIPOS["meia"], "qtd": meias, "valor": round(preco / 2, 2)}]
+    if dq:
+        cat = str((dc or {}).get("categoria") or "")
+        out.append({"tipo": "gratuidade", "nome": TIPOS["gratuidade"], "qtd": dq, "valor": 0.0, "pct": 100, "categoria": cat} if pct >= 100 else
+                   {"tipo": "amigo", "nome": f"Amigo da CAMP ({pct}% de desconto)", "qtd": dq, "valor": _num((dc or {}).get("valor")), "pct": pct, "categoria": cat})
+    return [t for t in out if t["qtd"] > 0]
+
+
+def _tipos_txt(tp: list[dict]) -> str:
+    """"2 inteiras · 1 meia-entrada · 1 Amigo (20%)"."""
+    nomes = {"inteira": ("inteira", "inteiras"), "meia": ("meia-entrada", "meias-entradas"), "gratuidade": ("gratuidade", "gratuidades")}
+    partes = []
+    for t in tp:
+        q = _int(t.get("qtd"))
+        if t.get("tipo") == "amigo":
+            partes.append(f"{q} Amigo ({_int(t.get('pct'))}%)")
+        else:
+            n = nomes.get(t.get("tipo"))
+            partes.append(f"{q} {n[0] if q == 1 else n[1]}" if n else f"{q} {t.get('nome') or t.get('tipo')}")
+    return " · ".join(partes)
+
+
+def amigos_por_email(con, emails) -> dict:
+    """Cadastro de Amigos da CAMP do painel (tabela amigo) pelo e-mail: {email: {id, categoria, categoria_nome, situacao, validade, ativo}}.
+    Ativo = adesão paga e dentro da validade, ou isenta. Banco sem a migração 226: {}."""
+    ems = sorted({(e or "").strip().lower() for e in emails if e})
+    if not ems:
+        return {}
+    hoje_ = datetime.now(FUSO).strftime("%Y-%m-%d")
+    out: dict = {}
+    try:
+        for i in range(0, len(ems), 400):
+            parte = ems[i:i + 400]
+            for a in con.execute(f"SELECT id, lower(email) AS em, categoria, situacao, validade FROM amigo WHERE tipo='amigo' AND anonimizado=0 AND lower(email) IN ({','.join('?' * len(parte))}) ORDER BY id", parte):
+                ativo = a["situacao"] == "isento" or (a["situacao"] == "pago" and (not a["validade"] or a["validade"] >= hoje_))
+                ja = out.get(a["em"])
+                if ja and ja["ativo"] and not ativo:
+                    continue
+                out[a["em"]] = {"id": a["id"], "categoria": a["categoria"] or "", "categoria_nome": CATEGORIAS.get(a["categoria"] or "", a["categoria"] or ""),
+                                "situacao": a["situacao"] or "", "validade": a["validade"] or "", "ativo": bool(ativo)}
+    except Exception:  # noqa: BLE001  (banco sem a tabela de Amigos)
+        return {}
+    return out
+
+
+def _linha(r, amigos: dict | None = None) -> dict:
     dc = json.loads(r["desconto"]) if r["desconto"] else None
     pg = json.loads(r["pagamentos"]) if r["pagamentos"] else []
     meio = str((pg[-1] if pg else {}).get("meio") or "")
+    ks = _cols(r)
+    tp = tipos_da_compra(r)
+    por = {}
+    for t in tp:
+        por[t["tipo"]] = por.get(t["tipo"], 0) + _int(t.get("qtd"))
+    cad = (amigos or {}).get((r["email"] or "").lower()) if r["email"] else None
     return {"id": r["site_id"], "ref": r["ref"] or "", "data": r["data"], "hora": r["hora"], "turma": f"{r['data']}|{r['hora']}",
             "nome": r["nome"] or "", "email": r["email"] or "", "telefone": r["telefone"] or "", "pessoas": r["pessoas"], "entraram": r["entraram"],
             "bruto": round((r["preco"] or 0) * (r["pessoas"] or 0), 2), "total": r["total"] or 0.0,
             "desconto": round((r["preco"] or 0) * (r["pessoas"] or 0) - (r["total"] or 0), 2),
             "amigo": f"{CATEGORIAS.get((dc or {}).get('categoria', ''), (dc or {}).get('categoria', ''))} ({(dc or {}).get('pct', 0)}%)" if dc else "",
             "meio": "" if r["situacao"] == "gratuito" else MEIOS.get(meio, meio), "situacao": r["situacao"], "situacao_nome": SITUACOES.get(r["situacao"], r["situacao"]),
-            "codigo": r["codigo"] or "", "link": r["link"] or "", "modo": r["modo"] or "", "confirmado_em": r["confirmado_em"] or "", "criado_em": r["criado_em"] or ""}
+            "codigo": r["codigo"] or "", "link": r["link"] or "", "modo": r["modo"] or "", "confirmado_em": r["confirmado_em"] or "", "criado_em": r["criado_em"] or "",
+            # detalhe (contrato 1.21/1.22; site antigo: calculado)
+            "meias": por.get("meia", 0), "tipos": tp, "tipos_txt": _tipos_txt(tp), "por_tipo": por,
+            "amigo_cadastro": cad, "eh_amigo": bool(cad and cad["ativo"]) or bool(dc),
+            "link_pagamento": (r["link_pagamento"] or "") if "link_pagamento" in ks and r["situacao"] not in VALEM else "",
+            "link_pagamento_ate": (r["link_pagamento_ate"] or "") if "link_pagamento_ate" in ks and r["situacao"] not in VALEM else "",
+            "pode_reenviar": r["situacao"] in VALEM and bool(r["email"]), "pode_cobrar": r["situacao"] in COBRAVEIS and bool(r["email"])}
+
+
+def _zerar_tipos() -> dict:
+    return {k: 0 for k in TIPOS}
 
 
 def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
@@ -236,7 +352,9 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
     if not re.fullmatch(r"\d{4}-\d{2}", mes or ""):
         raise HTTPException(400, "Mês inválido (AAAA-MM)")
     rows = con.execute("SELECT * FROM ingresso WHERE data LIKE ? ORDER BY data, hora, nome", (mes + "-%",)).fetchall()
-    itens = [_linha(r) for r in rows]
+    am = amigos_por_email(con, [r["email"] for r in rows])
+    todas_l = [_linha(r, am) for r in rows]
+    itens = list(todas_l)
     if situacao == "valem":
         itens = [x for x in itens if x["situacao"] in VALEM]
     elif situacao in SITUACOES:
@@ -248,9 +366,9 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
     vagas_padrao = _int(cfg.get("vagas")) or 15
     turmas: dict[str, dict] = {}
     for t in con.execute("SELECT * FROM ingresso_turma WHERE data LIKE ? ORDER BY data, hora", (mes + "-%",)):
-        turmas[t["chave"]] = {"chave": t["chave"], "data": t["data"], "hora": t["hora"], "vagas": t["vagas"], "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0}
-    for x in (y for y in (_linha(r) for r in rows) if y["situacao"] in VALEM):
-        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0})
+        turmas[t["chave"]] = {"chave": t["chave"], "data": t["data"], "hora": t["hora"], "vagas": t["vagas"], "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos()}
+    for x in (y for y in todas_l if y["situacao"] in VALEM):
+        t = turmas.setdefault(x["turma"], {"chave": x["turma"], "data": x["data"], "hora": x["hora"], "vagas": vagas_padrao, "compras": 0, "pessoas": 0, "entraram": 0, "bruto": 0.0, "desconto": 0.0, "total": 0.0, "amigos": 0, "por_tipo": _zerar_tipos()})
         t["compras"] += 1
         t["pessoas"] += x["pessoas"]
         t["entraram"] += x["entraram"]
@@ -258,12 +376,104 @@ def do_mes(con, mes: str, situacao: str = "valem", q: str = "") -> dict:
         t["desconto"] = round(t["desconto"] + x["desconto"], 2)
         t["total"] = round(t["total"] + x["total"], 2)
         t["amigos"] += 1 if x["amigo"] else 0
+        for k, v in x["por_tipo"].items():
+            t["por_tipo"][k] = t["por_tipo"].get(k, 0) + v
     ts = sorted(turmas.values(), key=lambda t: t["chave"])
     for t in ts:
         t["livres"] = max(0, (t["vagas"] or vagas_padrao) - t["pessoas"])
     tot = {k: (round(sum(t[k] for t in ts), 2) if isinstance(ts[0][k], float) else sum(t[k] for t in ts)) if ts else 0
            for k in ("compras", "pessoas", "entraram", "bruto", "desconto", "total", "amigos")}
-    return {"mes": mes, "itens": itens, "turmas": ts, "totais": tot, "situacoes": SITUACOES, "config": cfg}
+    tot["por_tipo"] = _zerar_tipos()
+    for t in ts:
+        for k, v in t["por_tipo"].items():
+            tot["por_tipo"][k] = tot["por_tipo"].get(k, 0) + v
+    tot["amigos_cadastro"] = sum(1 for x in todas_l if x["situacao"] in VALEM and x["amigo_cadastro"] and x["amigo_cadastro"]["ativo"])
+    return {"mes": mes, "itens": itens, "turmas": ts, "totais": tot, "situacoes": SITUACOES, "tipos": TIPOS, "config": cfg}
+
+
+def datas(con, mes: str = "") -> dict:
+    """Datas de visita (dia → turmas) com contas: vendidos por tipo (pagos e gratuitos), pagos, gratuitos, pendentes (reservas em pagamento),
+    entraram, vagas e livres. mes vazio = de hoje em diante (São Paulo); AAAA-MM = aquele mês."""
+    if mes and not re.fullmatch(r"\d{4}-\d{2}", mes):
+        raise HTTPException(400, "Mês inválido (AAAA-MM)")
+    hoje_ = datetime.now(FUSO).strftime("%Y-%m-%d")
+    filtro, arg = ("data LIKE ?", mes + "-%") if mes else ("data >= ?", hoje_)
+    cfg = json.loads(_estado(con, "config") or "{}") or {}
+    vagas_padrao = _int(cfg.get("vagas")) or 15
+    tur: dict[str, dict] = {}
+
+    def nova(chave, data, hora, vagas=None, livres_site=None):
+        return {"chave": chave, "data": data, "hora": hora, "vagas": vagas or vagas_padrao, "livres_site": livres_site, "compras": 0, "pessoas": 0,
+                "pagos": 0, "gratuitos": 0, "pendentes": 0, "entraram": 0, "amigos": 0, "total": 0.0, "por_tipo": _zerar_tipos()}
+    for t in con.execute(f"SELECT * FROM ingresso_turma WHERE {filtro}", (arg,)):
+        tur[t["chave"]] = nova(t["chave"], t["data"], t["hora"], t["vagas"], t["livres"])
+    rows = con.execute(f"SELECT * FROM ingresso WHERE {filtro}", (arg,)).fetchall()
+    am = amigos_por_email(con, [r["email"] for r in rows])
+    for r in rows:
+        x = _linha(r, am)
+        t = tur.setdefault(x["turma"], nova(x["turma"], x["data"], x["hora"]))
+        if x["situacao"] in VALEM:
+            t["compras"] += 1
+            t["pessoas"] += x["pessoas"]
+            t["entraram"] += x["entraram"]
+            t["total"] = round(t["total"] + x["total"], 2)
+            t["pagos" if x["situacao"] == "pago" else "gratuitos"] += x["pessoas"]
+            t["amigos"] += 1 if x["eh_amigo"] else 0
+            for k, v in x["por_tipo"].items():
+                t["por_tipo"][k] = t["por_tipo"].get(k, 0) + v
+        elif x["situacao"] in PENDENTES:
+            t["pendentes"] += x["pessoas"]
+    dias: dict[str, dict] = {}
+    for t in sorted(tur.values(), key=lambda t: t["chave"]):
+        t["livres"] = t["livres_site"] if t["livres_site"] is not None else max(0, t["vagas"] - t["pessoas"])
+        d = dias.setdefault(t["data"], {"data": t["data"], "turmas": [], "pessoas": 0, "pagos": 0, "gratuitos": 0, "pendentes": 0, "entraram": 0, "vagas": 0, "livres": 0, "amigos": 0, "total": 0.0, "por_tipo": _zerar_tipos()})
+        d["turmas"].append(t)
+        for k in ("pessoas", "pagos", "gratuitos", "pendentes", "entraram", "vagas", "livres", "amigos"):
+            d[k] += t[k]
+        d["total"] = round(d["total"] + t["total"], 2)
+        for k, v in t["por_tipo"].items():
+            d["por_tipo"][k] = d["por_tipo"].get(k, 0) + v
+    return {"mes": mes, "de": "" if mes else hoje_, "dias": list(dias.values()), "tipos": TIPOS}
+
+
+FILTROS_SITUACAO = {"valem": "Pagos e gratuitos", "pendentes": "Aguardando pagamento", "todas": "Todas as situações"}
+
+
+def lista(con, turma: str, situacao: str = "todas", tipo: str = "", amigo: str = "", q: str = "") -> dict:
+    """Lista de presença de uma data (AAAA-MM-DD) ou turma (AAAA-MM-DD|HH:MM): cada compra com o comprador, tipos, Amigo, pagamento,
+    pedido e entrada. situacao: todas (padrão) | valem | pendentes | uma das SITUACOES; tipo: inteira|meia|amigo|gratuidade; amigo=1."""
+    turma = (turma or "").strip()
+    m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})(?:\|(\d{2}:\d{2}))?", turma)
+    if not m:
+        raise HTTPException(400, "Data ou turma inválida (AAAA-MM-DD ou AAAA-MM-DD|HH:MM)")
+    data, hora = m.group(1), m.group(2)
+    rows = con.execute("SELECT * FROM ingresso WHERE data=?" + (" AND hora=?" if hora else "") + " ORDER BY hora, nome COLLATE NOCASE", (data, hora) if hora else (data,)).fetchall()
+    am = amigos_por_email(con, [r["email"] for r in rows])
+    todos = [_linha(r, am) for r in rows]
+    itens = todos
+    if situacao == "valem":
+        itens = [x for x in itens if x["situacao"] in VALEM]
+    elif situacao == "pendentes":
+        itens = [x for x in itens if x["situacao"] in PENDENTES]
+    elif situacao in SITUACOES:
+        itens = [x for x in itens if x["situacao"] == situacao]
+    if tipo in TIPOS:
+        itens = [x for x in itens if x["por_tipo"].get(tipo)]
+    if amigo in ("1", "sim"):
+        itens = [x for x in itens if x["eh_amigo"]]
+    if q:
+        qq = q.strip().lower()
+        itens = [x for x in itens if qq in f"{x['nome']} {x['email']} {x['telefone']} {x['ref']} {x['codigo']}".lower()]
+    tot = {"compras": len(itens), "pessoas": sum(x["pessoas"] for x in itens), "entraram": sum(x["entraram"] for x in itens),
+           "amigos": sum(1 for x in itens if x["eh_amigo"]), "por_tipo": _zerar_tipos(),
+           "pagos": sum(x["pessoas"] for x in itens if x["situacao"] == "pago"), "gratuitos": sum(x["pessoas"] for x in itens if x["situacao"] == "gratuito"),
+           "pendentes": sum(x["pessoas"] for x in itens if x["situacao"] in PENDENTES)}
+    for x in itens:
+        for k, v in x["por_tipo"].items():
+            tot["por_tipo"][k] = tot["por_tipo"].get(k, 0) + v
+    horas = sorted({x["hora"] for x in todos} | {t["hora"] for t in con.execute("SELECT hora FROM ingresso_turma WHERE data=?", (data,))})
+    return {"turma": turma, "data": data, "hora": hora or "", "horas": horas, "itens": itens, "totais": tot, "tipos": TIPOS,
+            "situacoes": {**FILTROS_SITUACAO, **SITUACOES}}
 
 
 def anonimizar_por_email(con, email: str) -> int:
@@ -289,11 +499,36 @@ def listar(mes: str | None = None, situacao: str = "valem", q: str = "", u: dict
         d = do_mes(con, mes or _mes_padrao(), situacao, q)
         meses = [r[0] for r in con.execute("SELECT DISTINCT substr(data,1,7) FROM ingresso UNION SELECT DISTINCT substr(data,1,7) FROM ingresso_turma ORDER BY 1")]
         d["meses"] = sorted(set(meses) | {d["mes"]})
+        cfg = d.get("config") or {}
+        d["avisos"] = {"destino": cfg.get("email_ingressos_destino") or "", "email": cfg.get("email_ingressos") or "", "aviso_recusado": bool(cfg.get("aviso_recusado")),
+                       "teste": cfg.get("aviso_teste") if isinstance(cfg.get("aviso_teste"), dict) else None, "site_sabe": "email_ingressos_destino" in cfg}
         d["site"] = {"ultima_busca": _estado(con, "ultima_busca") or None, "erro": _estado(con, "ultimo_erro") or None,
                      "sem_rota": _estado(con, "sem_rota") == "1", "minutos": coleta_min(con), "tem_senha": _tem_site(con)}
         return d
     finally:
         con.close()
+
+
+def _cel(v):
+    s = f"{v:.2f}".replace(".", ",") if isinstance(v, float) else str(v if v is not None else "")
+    return "'" + s if s[:1] in ("=", "+", "-", "@") else s
+
+
+def _csv(cab: list, linhas: list, nome: str) -> Response:
+    buf = io.StringIO()
+    wr = csv.writer(buf, delimiter=";")
+    wr.writerow(cab)
+    for l in linhas:
+        wr.writerow([_cel(v) for v in l])
+    return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+def _amigo_txt(x: dict) -> str:
+    c = x.get("amigo_cadastro")
+    if c and c.get("ativo"):
+        return f"Amigo ({c.get('categoria_nome') or c.get('categoria') or 'sem categoria'})"
+    return "desconto de Amigo" if x.get("amigo") else ""
 
 
 @router.get("/exportar.csv")
@@ -304,19 +539,48 @@ def exportar(mes: str | None = None, situacao: str = "valem", u: dict = Depends(
         d = do_mes(con, mes or _mes_padrao(), situacao)
     finally:
         con.close()
+    cab = ["Data", "Hora", "Nome", "E-mail", "Telefone", "Pessoas", "Entraram", "Bruto (R$)", "Desconto Amigo (R$)", "Pago (R$)", "Amigo (categoria)", "Meio", "Situação", "Referência Mercado Pago",
+           "Inteiras", "Meias-entradas", "Amigo com desconto", "Gratuidades", "Amigo da CAMP (cadastro)"]
+    return _csv(cab, [("/".join(reversed(x["data"].split("-"))), x["hora"], x["nome"], x["email"], x["telefone"], x["pessoas"], x["entraram"],
+                       float(x["bruto"]), float(x["desconto"]), float(x["total"]), x["amigo"], x["meio"], x["situacao_nome"], x["ref"],
+                       x["por_tipo"].get("inteira", 0), x["por_tipo"].get("meia", 0), x["por_tipo"].get("amigo", 0), x["por_tipo"].get("gratuidade", 0), _amigo_txt(x))
+                      for x in d["itens"]], f"ingressos-joao-marino-{d['mes']}.csv")
 
-    def cel(v):
-        s = f"{v:.2f}".replace(".", ",") if isinstance(v, float) else str(v if v is not None else "")
-        return "'" + s if s[:1] in ("=", "+", "-", "@") else s
 
-    buf = io.StringIO()
-    wr = csv.writer(buf, delimiter=";")
-    wr.writerow(["Data", "Hora", "Nome", "E-mail", "Telefone", "Pessoas", "Entraram", "Bruto (R$)", "Desconto Amigo (R$)", "Pago (R$)", "Amigo (categoria)", "Meio", "Situação", "Referência Mercado Pago"])
-    for x in d["itens"]:
-        wr.writerow([cel(v) for v in ("/".join(reversed(x["data"].split("-"))), x["hora"], x["nome"], x["email"], x["telefone"], x["pessoas"], x["entraram"],
-                                       float(x["bruto"]), float(x["desconto"]), float(x["total"]), x["amigo"], x["meio"], x["situacao_nome"], x["ref"])])
-    return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="ingressos-joao-marino-{d["mes"]}.csv"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+@router.get("/datas")
+def ver_datas(mes: str = "", u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Datas de visita com contas por tipo e situação (sem mês: de hoje em diante)."""
+    con = connect()
+    try:
+        return datas(con, mes)
+    finally:
+        con.close()
+
+
+@router.get("/lista")
+def ver_lista(turma: str, situacao: str = "todas", tipo: str = "", amigo: str = "", q: str = "", u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Lista de presença de uma data ou turma (pessoas, tipos, Amigo, pagamento, pedido, entrada)."""
+    con = connect()
+    try:
+        return lista(con, turma, situacao, tipo, amigo, q)
+    finally:
+        con.close()
+
+
+@router.get("/lista.csv")
+def lista_csv(turma: str, situacao: str = "todas", tipo: str = "", amigo: str = "", q: str = "", u: dict = Depends(auth.exige("admin"))):
+    """Lista de presença em CSV (Excel), com uma coluna "Presença" em branco para marcar na porta."""
+    con = connect()
+    try:
+        d = lista(con, turma, situacao, tipo, amigo, q)
+    finally:
+        con.close()
+    cab = ["Data", "Hora", "Nome", "E-mail", "Telefone", "Pessoas", "Inteiras", "Meias-entradas", "Amigo com desconto", "Gratuidades", "Amigo da CAMP",
+           "Situação", "Código do ingresso", "Pedido (referência)", "Entraram", "Presença"]
+    nome = "lista-presenca-joao-marino-" + d["data"] + (("-" + d["hora"].replace(":", "h")) if d["hora"] else "") + ".csv"
+    return _csv(cab, [("/".join(reversed(x["data"].split("-"))), x["hora"], x["nome"], x["email"], x["telefone"], x["pessoas"],
+                       x["por_tipo"].get("inteira", 0), x["por_tipo"].get("meia", 0), x["por_tipo"].get("amigo", 0), x["por_tipo"].get("gratuidade", 0),
+                       _amigo_txt(x), x["situacao_nome"], x["codigo"], x["ref"], x["entraram"], "") for x in d["itens"]], nome)
 
 
 @router.post("/sincronizar")
@@ -330,27 +594,216 @@ def sincronizar(u: dict = Depends(auth.exige("admin"))) -> dict:
         con.close()
 
 
-@router.post("/{site_id}/reenviar")
-def reenviar(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
-    """Pede ao site para mandar de novo o ingresso (com o QR) ao comprador."""
+# ---------------------------------------------------------------- reenvios (só admin; SÓ pelo Sender, pelo site)
+def _evento(con, sid: int, tipo: str, ator: str, detalhe: dict | None = None) -> None:
+    """Histórico do ingresso no painel (tabela evento; sem nome nem e-mail do comprador)."""
+    con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('ingresso',?,?,?,?)", (str(int(sid)), tipo, ator, json.dumps(detalhe or {}, ensure_ascii=False)))
+
+
+def _json(r) -> dict:
+    try:
+        d = r.json() if callable(getattr(r, "json", None)) else {}
+    except ValueError:
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+ACOES = {"ingresso": ("reenviar", TPL_INGRESSO, "ingresso_reenviado"), "cobranca": ("cobranca", TPL_COBRANCA, "cobranca_reenviada")}
+
+
+def _executar(con, sid: int, acao: str, ator: str) -> tuple[int, str, dict]:
+    """Pede ao site um reenvio. Devolve (status HTTP para a tela, mensagem, extra). Grava o histórico. Nunca levanta (fora 404/409 da checagem)."""
+    caminho, tpl, ev_ok = ACOES[acao]
+    r = con.execute("SELECT site_id, email, situacao FROM ingresso WHERE site_id=?", (sid,)).fetchone()
+    if not r:
+        return 404, "Ingresso não encontrado no painel", {}
+    if not r["email"]:
+        return 409, "não enviado: este pedido está sem e-mail (dados apagados a pedido da pessoa)", {}
+    if not _tem_site(con):
+        return 409, "Falta a senha do site (Application Password) em Configurações", {}
+    try:
+        resp = _wp().h.post(f"{ROTA}/{int(sid)}/{caminho}", json={"so_sender": True} if acao == "ingresso" else {})
+    except Exception as e:  # noqa: BLE001
+        registrar(logging.WARNING, "ingressos_reenvio", "Reenvio de ingresso: o site não respondeu", site_id=int(sid), erro=type(e).__name__)
+        return 502, "não enviado: o site não respondeu. Tente de novo em instantes", {}
+    d = _json(resp)
+    cod = str(d.get("code") or "")
+    st = resp.status_code
+    msg = None
+    if st == 404 and cod in ("", "rest_no_route"):
+        msg = ("O site ainda não tem o reenvio de ingressos: avise quem cuida do site" if acao == "ingresso"
+               else f"não enviado: o site ainda não reenvia cobranças de ingresso. Avise quem cuida do site (plugin da CAMP {VERSAO_SITE} ou mais novo)")
+        st = 409
+    elif cod == "camp_ing_nao_existe" or st == 404:
+        msg, st = "Este ingresso não existe mais no site", 404
+    elif cod == "camp_sender_sem_template":
+        msg = f"não enviado: falta o template {tpl[0]} ({tpl[1]}) do Sender no site. Crie no Sender e cole o ID {ONDE_TEMPLATE}"
+    elif cod == "camp_sender_sem_chave":
+        msg = "não enviado: o Sender está desligado no site (sem o token). Avise quem cuida do site"
+    elif cod == "camp_sender_falhou":
+        msg = "não enviado: o Sender recusou o e-mail. Tente de novo mais tarde"
+    elif cod == "camp_ing_email":
+        msg = "não enviado: o e-mail do comprador é inválido"
+    elif cod in ("camp_ing_pago",):
+        msg = "não enviado: esta compra já está paga, não há o que cobrar. Use Reenviar ingresso"
+    elif cod == "camp_ing_em_analise":
+        msg = "não enviado: o pagamento está em análise no Mercado Pago. Espere a resposta antes de cobrar de novo"
+    elif cod == "camp_ing_turma_fechada":
+        msg = "não enviado: a venda desta turma já fechou"
+    elif cod == "camp_ing_sem_vagas":
+        msg = "não enviado: a turma não tem mais vagas para esta compra (" + _txt(d.get("message"), 160) + ")"
+    elif cod == "camp_mp_desligado":
+        msg = "não enviado: o Mercado Pago está desligado no site. Avise quem cuida do site"
+    elif cod == "camp_mp_falhou":
+        msg = "não enviado: o Mercado Pago não abriu o link novo agora. Tente de novo em instantes"
+    elif st == 409:
+        msg = "Este ingresso não está pago: não há o que reenviar" if acao == "ingresso" else "não enviado: o site recusou a cobrança"
+    elif st >= 400:
+        msg, st = f"não enviado: o site respondeu {st}", 502
+    if msg:
+        _evento(con, sid, "reenvio_falhou", ator, {"acao": acao, "template": tpl[0], "erro": msg[:300]})
+        con.commit()
+        return (st if st in (404, 409) else 502), msg, {}
+    if isinstance(d.get("registro"), dict):
+        _gravar(con, d["registro"])
+    extra = {"novo_link": bool(d.get("novo_link")), "canal": "sender" if d.get("enviado") else "site"}
+    _evento(con, sid, ev_ok, ator, {"acao": acao, "template": tpl[0], **extra, "sender_id": str((d.get("sender") or {}).get("id") or "")})
+    con.commit()
+    registrar(logging.INFO, "ingressos_reenvio", "Reenvio de ingresso pelo painel", site_id=int(sid), acao=acao)
+    if acao == "ingresso":
+        return 200, "Ingresso reenviado por e-mail", extra
+    return 200, "Cobrança reenviada por e-mail" + (" com um link novo do Mercado Pago" if extra["novo_link"] else ""), extra
+
+
+def _uma(site_id: int, acao: str, u: dict) -> dict:
     con = connect()
     try:
-        if not con.execute("SELECT 1 FROM ingresso WHERE site_id=?", (site_id,)).fetchone():
-            raise HTTPException(404, "Ingresso não encontrado no painel")
-        if not _tem_site(con):
-            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
-        r = _wp().h.post(f"{ROTA}/{int(site_id)}/reenviar", json={})
-        if r.status_code == 404:
-            raise HTTPException(409, "O site ainda não tem o reenvio de ingressos: avise quem cuida do site")
-        if r.status_code == 409:
-            raise HTTPException(409, "Este ingresso não está pago: não há o que reenviar")
-        if r.status_code >= 400:
-            raise HTTPException(502, f"O site respondeu {r.status_code} ao reenviar")
-        d = r.json() if callable(getattr(r, "json", None)) else {}
-        if isinstance(d, dict) and isinstance(d.get("registro"), dict):
-            _gravar(con, d["registro"])
-            con.commit()
-        registrar(logging.INFO, "ingressos_reenvio", "Ingresso reenviado pelo painel", site_id=int(site_id))
-        return {"ok": bool((d or {}).get("ok", True))}
+        st, msg, extra = _executar(con, int(site_id), acao, u["email"])
+        if st != 200:
+            raise HTTPException(st, msg)
+        return {"ok": bool(extra.get("ok", True)), "mensagem": msg, **extra}
     finally:
         con.close()
+
+
+class Lote(BaseModel):
+    acao: str
+    ids: list[int]
+
+
+@router.post("/lote")
+def lote(corpo: Lote, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Reenvio em lote (lista de presença): acao ingresso | cobranca, até 60 ingressos. Cada um segue as regras do reenvio de um."""
+    if corpo.acao not in ACOES:
+        raise HTTPException(400, "Ação inválida (ingresso ou cobranca)")
+    ids = list(dict.fromkeys(int(i) for i in corpo.ids))
+    if not ids or len(ids) > 60:
+        raise HTTPException(400, "Escolha de 1 a 60 ingressos")
+    con = connect()
+    try:
+        res = []
+        for sid in ids:
+            st, msg, extra = _executar(con, sid, corpo.acao, u["email"])
+            res.append({"id": sid, "ok": st == 200, "mensagem": msg, **extra})
+            if st == 409 and "senha do site" in msg:
+                break
+        return {"feitos": sum(1 for x in res if x["ok"]), "falhas": sum(1 for x in res if not x["ok"]), "resultados": res}
+    finally:
+        con.close()
+
+
+class AvisosCfg(BaseModel):
+    email_ingressos: str | None = None
+    aviso_recusado: bool | None = None
+
+
+def _cfg_site_atualiza(con, nova: dict) -> None:
+    cfg = json.loads(_estado(con, "config") or "{}") or {}
+    cfg.update({k: v for k, v in (nova or {}).items() if k in ("email_ingressos", "email_ingressos_destino", "aviso_recusado", "aviso_teste")})
+    _estado_set(con, "config", json.dumps(cfg, ensure_ascii=False))
+
+
+@router.post("/avisos")
+def avisos_config(corpo: AvisosCfg, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Quem recebe os avisos de ingresso à equipe (wp_mail do site, sem Sender) e se avisa também os recusados. Vazio = padrão do site."""
+    con = connect()
+    try:
+        if not _tem_site(con):
+            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+        b = {}
+        if corpo.email_ingressos is not None:
+            em = corpo.email_ingressos.strip()
+            if em and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", em):
+                raise HTTPException(400, "E-mail inválido")
+            b["email_ingressos"] = em or "__limpar__"
+        if corpo.aviso_recusado is not None:
+            b["aviso_recusado"] = corpo.aviso_recusado
+        r = _wp().h.post(f"{ROTA}/config", json=b)
+        d = _json(r)
+        if r.status_code == 404 and str(d.get("code") or "") in ("", "rest_no_route"):
+            raise HTTPException(409, f"O site ainda não tem esta configuração: avise quem cuida do site (plugin da CAMP {VERSAO_SITE} ou mais novo)")
+        if r.status_code == 400:
+            raise HTTPException(400, "O site recusou o e-mail (inválido)")
+        if r.status_code >= 400:
+            raise HTTPException(502, f"O site respondeu {r.status_code}")
+        _cfg_site_atualiza(con, d.get("config") or {})
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('ingresso','config','avisos_config',?,?)", (u["email"], json.dumps(b, ensure_ascii=False)))
+        con.commit()
+        return {"ok": True, "config": d.get("config") or {}}
+    finally:
+        con.close()
+
+
+@router.post("/aviso-teste")
+def aviso_teste(u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Pede ao site um aviso de TESTE à equipe (o mesmo caminho dos avisos de venda: wp_mail do site, sem Sender).
+    ok = o servidor de e-mail do site aceitou (não garante que chegou: se nada chegar, o problema é a conexão de SMTP do site)."""
+    con = connect()
+    try:
+        if not _tem_site(con):
+            raise HTTPException(409, "Falta a senha do site (Application Password) em Configurações")
+        r = _wp().h.post(f"{ROTA}/aviso-teste", json={})
+        d = _json(r)
+        if r.status_code == 404 and str(d.get("code") or "") in ("", "rest_no_route"):
+            raise HTTPException(409, f"O site ainda não manda o aviso de teste: avise quem cuida do site (plugin da CAMP {VERSAO_SITE} ou mais novo)")
+        if r.status_code >= 400:
+            raise HTTPException(502, f"O site respondeu {r.status_code}")
+        res = {"ok": bool(d.get("ok")), "para": _txt(d.get("para"), 200), "erro": _txt(d.get("erro"), 300), "em": _txt(d.get("em"), 40)}
+        _cfg_site_atualiza(con, {"aviso_teste": res, **({"email_ingressos_destino": res["para"]} if res["para"] else {})})
+        con.execute("INSERT INTO evento (entidade, codigo, tipo, ator, detalhe) VALUES ('ingresso','config','aviso_teste',?,?)",
+                    (u["email"], json.dumps({"ok": res["ok"], "erro": res["erro"]}, ensure_ascii=False)))
+        con.commit()
+        registrar(logging.INFO, "ingressos_aviso_teste", "Aviso de teste dos ingressos pedido pelo painel", ok=res["ok"])
+        return res
+    finally:
+        con.close()
+
+
+@router.get("/{site_id}")
+def detalhe(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Um pedido: comprador, tipos, Amigo, pagamento, histórico do site e o que o painel fez (reenvios)."""
+    con = connect()
+    try:
+        r = con.execute("SELECT * FROM ingresso WHERE site_id=?", (site_id,)).fetchone()
+        if not r:
+            raise HTTPException(404, "Ingresso não encontrado no painel")
+        x = _linha(r, amigos_por_email(con, [r["email"]]))
+        x["historico_site"] = json.loads(r["historico"]) if "historico" in _cols(r) and r["historico"] else []
+        x["aviso_equipe"] = json.loads(r["aviso_equipe"]) if "aviso_equipe" in _cols(r) and r["aviso_equipe"] else []
+        x["eventos"] = [{"quando": e["quando"], "tipo": e["tipo"], "ator": e["ator"], "detalhe": json.loads(e["detalhe"] or "{}")}
+                        for e in con.execute("SELECT quando, tipo, ator, detalhe FROM evento WHERE entidade='ingresso' AND codigo=? ORDER BY id DESC LIMIT 50", (str(int(site_id)),))]
+        return x
+    finally:
+        con.close()
+
+
+@router.post("/{site_id}/reenviar")
+def reenviar(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Pede ao site para mandar de novo o ingresso (com o QR) ao comprador, SÓ pelo Sender (TR23). Sem template: não sai e a tela diz o que falta."""
+    return _uma(site_id, "ingresso", u)
+
+
+@router.post("/{site_id}/cobranca")
+def cobranca(site_id: int, u: dict = Depends(auth.exige("admin"))) -> dict:
+    """Reenvia ao comprador o link de pagamento de uma compra não paga, SÓ pelo Sender (TR29); link vencido: o site abre outro (contrato 1.22)."""
+    return _uma(site_id, "cobranca", u)
