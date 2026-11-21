@@ -35,6 +35,7 @@ MODOS_RAPIDOS |= {"copias_visiveis"}   # 15/11/2026: o projeto mostra de onde vi
 MODOS_RAPIDOS |= {"envio_correcoes_fix"}   # CAMP-FIX 15/11/2026: "nada a enviar" não é falha; termos de taxonomia resolvidos; Programa/uso com caminho (linha própria)
 MODOS_RAPIDOS |= {"mover_lote_site"}   # 15/11/2026: mover lote/folhas/mesclar tira o registro antigo do site; nada de "só no site" (linha própria)
 MODOS_RAPIDOS |= {"clima"}   # 16/11/2026: clima das salas (sensores Tuya; nasce desligado; linha própria)
+MODOS_RAPIDOS |= {"clima_resumo"}   # CAMP-HOME-CLIMA 21/11/2026: média do clima na barra do topo (GET /api/clima/resumo; linha própria)
 MODOS_RAPIDOS |= {"amigos_painel"}   # 18/11/2026: Amigos da CAMP no painel (contrato 1.11; lembretes nascem desligados; linha própria)
 MODOS_RAPIDOS |= {"emails_enviados"}   # CAMP-EMAIL 18/11/2026: tela E-mails enviados (todos os canais; site falso; contrato 1.14; linha própria)
 MODOS_RAPIDOS |= {"ingressos_painel"}   # CAMP-INGRESSOS 19/11/2026: tela Ingressos (visita guiada à Residência João Marino; site falso; contrato 1.18)
@@ -2317,6 +2318,54 @@ def filho(modo):
         clima._cliente = lambda: httpx.Client(transport=httpx.MockTransport(caiu), timeout=5); clima._token.clear()
         r = clima.coletar()
         ver("sem rede: a coleta guarda 'a Tuya não respondeu' e não levanta", "não respondeu" in (r.get("erro") or ""), r)
+        for l in res: print(l)
+    elif modo == "clima_resumo":
+        # CAMP-HOME-CLIMA 21/11/2026: a barra do topo mostra a MÉDIA dos sensores com leitura recente, o PIOR nível e uma frase.
+        # Só lê o que o coletor guardou: aqui a Tuya explode se for chamada.
+        init_db(); _aplicar_migracoes_real()
+        from fastapi.testclient import TestClient
+        from app import auth, clima
+        from app.main import app
+        res = []
+        def ver(nome, cond, det=""): res.append(f"{'ok' if cond else 'FALHA'}|{nome}|{str(det).replace(chr(10), ' ')[:300]}")
+        def explode(*a, **k): raise AssertionError("chamou a Tuya na requisição")
+        clima._cliente = explode
+        c = connect()
+        auth.criar_usuario("Leitor", "leitor@camp.arq.br", "senha-bem-longa-123", "leitura", forcar_troca=False)
+        anon, lei = TestClient(app, raise_server_exceptions=False), TestClient(app, raise_server_exceptions=False)
+        lei.post("/api/auth/login", json={"email": "leitor@camp.arq.br", "senha": "senha-bem-longa-123"})
+        ver("GET /api/clima/resumo exige login", anon.get("/api/clima/resumo").status_code == 401)
+        def le():
+            r = lei.get("/api/clima/resumo"); return r.json() if r.status_code == 200 else {"status": r.status_code, "texto": r.text[:200]}
+        c.execute("UPDATE configuracao SET valor='10' WHERE chave='clima.coleta_min'"); c.commit()
+        ver("ligado mas sem sensor: não mostra nada", le() == {"mostrar": False}, le())
+        c.execute("INSERT INTO clima_sensor (id, nome, nome_tuya) VALUES ('devA','Arquivo','Arquivo'), ('devB','Servidor','Servidor')")
+        def leitura(sid, t, u, idade_min=5):
+            c.execute("INSERT INTO clima_leitura (sensor_id, temperatura_c, umidade_pct, lido_em) VALUES (?,?,?,datetime('now', ?))", (sid, t, u, f"-{idade_min} minutes")); c.commit()
+        leitura("devA", 22.0, 50.0); leitura("devB", 24.0, 56.0)
+        d = le()
+        ver("ok: média de todos (23,0° · 53%), nível ok, 'Tudo dentro da faixa', 2 sensores na média",
+            d.get("mostrar") is True and d.get("temperatura_c") == 23.0 and d.get("umidade_pct") == 53.0 and d.get("nivel") == "ok"
+            and d.get("frase") == "Tudo dentro da faixa" and d.get("na_media") == 2 and d.get("sensores") == 2 and d.get("sem_leitura") == 0, d)
+        ver("sem id de aparelho nem configuração da Tuya na resposta", "devA" not in str(d) and "tuya" not in str(d).lower(), d)
+        leitura("devB", 23.0, 65.0)
+        d = le()
+        ver("atenção: um sensor fora da faixa já pinta a média de âmbar e a frase diz qual ('Servidor: umidade um pouco alta (65%)')",
+            d.get("nivel") == "aviso" and d.get("frase") == "Servidor: umidade um pouco alta (65%)" and d.get("umidade_pct") == 57.5 and d.get("temperatura_c") == 22.5, d)
+        leitura("devA", 28.5, 50.0)
+        d = le()
+        ver("crítico: passou da margem (Arquivo 28,5°) ganha do aviso do outro sensor",
+            d.get("nivel") == "critico" and d.get("frase") == "Arquivo: temperatura alta demais (28,5°)", d)
+        leitura("devA", 21.0, 50.0); c.execute("UPDATE clima_leitura SET lido_em=datetime('now','-4 hours') WHERE sensor_id='devB'"); c.commit()
+        d = le()
+        ver("sensor sem leitura recente (mais de 3 h) fica fora da média; o nível é só dos que leram",
+            d.get("nivel") == "ok" and d.get("temperatura_c") == 21.0 and d.get("umidade_pct") == 50.0 and d.get("na_media") == 1 and d.get("sem_leitura") == 1, d)
+        c.execute("UPDATE clima_leitura SET lido_em=datetime('now','-5 hours') WHERE sensor_id='devA'"); c.commit()
+        d = le()
+        ver("todos sem leitura recente: cinza ('sem_leitura'), sem média e 'Sem leitura há 4 h'",
+            d.get("nivel") == "sem_leitura" and d.get("temperatura_c") is None and d.get("frase") == "Sem leitura há 4 h" and d.get("na_media") == 0, d)
+        c.execute("UPDATE configuracao SET valor='0' WHERE chave='clima.coleta_min'"); c.commit()
+        ver("desligado (clima.coleta_min = 0): não mostra nada, mesmo com sensores", le() == {"mostrar": False}, le())
         for l in res: print(l)
     elif modo == "protocolos":
         # 02/11/2026 · protocolos (contrato 1.7): formato único, o do site quando vem, calculado quando não vem; telas, busca e avisos.
@@ -21812,6 +21861,14 @@ else:
     for l in out.splitlines():
         if "|" in l:
             st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Clima: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
+
+print("Clima na barra do topo: média dos sensores, pior nível, sem leitura recente fora da média")
+rc, out = rodar("clima_resumo", f"{tmp}/clima_resumo.db")
+if rc != 0: ok(False, f"teste clima_resumo não rodou -> {out[-1500:]}")
+else:
+    for l in out.splitlines():
+        if "|" in l:
+            st_, nome, det_ = (l.split("|") + [""])[:3]; ok(st_ == "ok", f"Clima na barra: {nome}" + (f" ({det_})" if det_ and st_ != "ok" else ""))
 
 print("Relatório do CAMP Vision e gasto por fundo (diário do CV2, contrato 2.6)")
 rc, out = rodar("relatorio_cv", f"{tmp}/relatorio_cv.db")
