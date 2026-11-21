@@ -77,6 +77,8 @@ from .cobrancas import router as rotas_cobrancas   # CAMP-COB 19/11/2026: cobran
 app.include_router(rotas_cobrancas)
 from .doacoes_acervo import router as rotas_doacoes_acervo   # CAMP-DOA-ACERVO 20/11/2026: intenções de doação de acervo do site (contrato 1.20)
 app.include_router(rotas_doacoes_acervo)
+from .doacoes_central import router as rotas_doacoes_central   # CAMP-DOA-CENTRAL 21/11/2026: tarefas, arquivos e contrato assinado de cada doação
+app.include_router(rotas_doacoes_central)
 from .emails_enviados import router as rotas_emails   # CAMP-EMAIL 18/11/2026: E-mails enviados (todos os canais; contrato 1.14)
 app.include_router(rotas_emails)
 from .emails_site import router as rotas_emails_site   # CAMP-SENDER 20/11/2026: E-mails do site (todos os modelos TR, IDs, teste; contrato 1.23)
